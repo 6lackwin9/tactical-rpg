@@ -3073,14 +3073,15 @@ func _build_entry_from_action(act: CombatResolver.ScheduledAction, round_num: in
 	if act.command is AttackCommand:
 		var cmd := act.command as AttackCommand
 		entry.category = "ATTACK"
-		var target_c: Combatant = cmd.target as Combatant
+		var target_c: Combatant = cmd.target
 		if target_c:
 			entry.target_name = target_c.name
 			entry.target_is_ally = sim_allies.has(target_c)
 		else:
-			entry.target_name = str(cmd.target)
+			entry.target_name = "Target"
 
-		if cmd.range > 1:
+		var atk_range: int = cmd.source.attack_range
+		if atk_range > 1:
 			entry.skill_subtype = "Ranged Projectile"
 			entry.skill_name = "Quick Snipe" if entry.actor_is_ally else "Longbow Volley"
 		else:
@@ -3098,7 +3099,7 @@ func _build_entry_from_action(act: CombatResolver.ScheduledAction, round_num: in
 			entry.status_text = "Target HP: %d/%d" % [target_c.hp, target_c.max_hp]
 		else:
 			entry.outcome_tag = "HIT"
-		entry.detail_text = "Power: %d | Range: %d" % [cmd.power, cmd.range]
+		entry.detail_text = "Power: %d | Range: %d" % [cmd.power, atk_range]
 
 	elif act.command is MoveCommand:
 		var cmd := act.command as MoveCommand
@@ -3123,19 +3124,24 @@ func _build_entry_from_action(act: CombatResolver.ScheduledAction, round_num: in
 		entry.value_num = int(cmd.mitigation_ratio * 100.0)
 		entry.outcome_tag = "%d%% MITIGATION" % entry.value_num
 		entry.detail_text = "Damage mitigation posture active"
-		entry.status_text = "Duration: %d Blocks" % cmd.duration_blocks
+		entry.status_text = "Duration: %d Blocks" % cmd.block_cost
 
 	elif act.command is TargetCommand:
 		var cmd := act.command as TargetCommand
 		entry.category = "TARGET"
 		entry.skill_name = "Target Lock"
 		entry.skill_subtype = "Engagement Focus"
-		var target_c: Combatant = cmd.target as Combatant
-		if target_c:
+		var target_c: Combatant = null
+		if cmd.target_value is Combatant:
+			@warning_ignore("unsafe_cast")
+			target_c = cmd.target_value as Combatant
+		if target_c != null:
 			entry.target_name = target_c.name
 			entry.target_is_ally = sim_allies.has(target_c)
+		elif cmd.target_value != null:
+			entry.target_name = str(cmd.target_value)
 		else:
-			entry.target_name = str(cmd.target)
+			entry.target_name = "None"
 		entry.outcome_tag = "LOCKED"
 		entry.detail_text = "Assigned tactical target focus"
 		entry.status_text = "Target Locked"
@@ -3145,9 +3151,9 @@ func _build_entry_from_action(act: CombatResolver.ScheduledAction, round_num: in
 		entry.category = "BUFF"
 		entry.skill_name = "Focus Skill"
 		entry.skill_subtype = "Attack Multiplier"
-		entry.value_num = int(cmd.attack_multiplier * 100.0)
+		entry.value_num = int((cmd.boost_multiplier - 1.0) * 100.0)
 		entry.outcome_tag = "+%d%% ATK" % entry.value_num
-		entry.detail_text = "+%d%% Attack Power for 2 Rounds" % entry.value_num
+		entry.detail_text = "+%d%% Attack Power for %d Round(s)" % [entry.value_num, cmd.duration_rounds]
 		entry.status_text = "Empowered"
 
 	elif act.command is HoldStanceCommand:
@@ -3632,8 +3638,14 @@ func _animate_token_pulse(token: Control, pulse_col: Color) -> void:
 func _trigger_action_impact_fx(entry: ActionLogEntry) -> void:
 	var actor := _find_combatant_by_name(entry.actor_name)
 	var target := _find_combatant_by_name(entry.target_name)
-	var actor_token: Control = unit_token_nodes.get(actor) as Control if actor != null else null
-	var target_token: Control = unit_token_nodes.get(target) as Control if target != null else null
+	var actor_token: Control = null
+	if actor != null and unit_token_nodes.has(actor):
+		@warning_ignore("unsafe_cast")
+		actor_token = unit_token_nodes[actor] as Control
+	var target_token: Control = null
+	if target != null and unit_token_nodes.has(target):
+		@warning_ignore("unsafe_cast")
+		target_token = unit_token_nodes[target] as Control
 
 	match entry.category:
 		"ATTACK":
