@@ -282,7 +282,9 @@ func _setup_interactive_ui() -> void:
 	roster_panel.combatant_selected.connect(_select_combatant)
 	roster_panel.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void:
 		if grid_view and grid_view.unit_token_nodes.has(c):
-			_show_unit_hover_card(c, grid_view.unit_token_nodes[c])
+			@warning_ignore("unsafe_cast")
+			var token := grid_view.unit_token_nodes[c] as Control
+			_show_unit_hover_card(c, token)
 	)
 	roster_panel.combatant_unhovered.connect(_hide_unit_hover_card)
 
@@ -682,6 +684,7 @@ func _select_combatant(combatant: Combatant) -> void:
 
 	# Ensure hover card displays for selected unit as well
 	if grid_view and grid_view.unit_token_nodes.has(combatant):
+		@warning_ignore("unsafe_cast")
 		var tok := grid_view.unit_token_nodes[combatant] as Control
 		if is_instance_valid(tok) and tok.visible:
 			_show_unit_hover_card(combatant, tok)
@@ -1170,11 +1173,11 @@ func _start_round_2() -> void:
 	unit_ranger.hp = 0
 
 	# Prune any defeated or withdrawn enemies from roster cards for Round 2
-	for enemy in [unit_brawler, unit_scout]:
+	for enemy: Combatant in [unit_brawler, unit_scout]:
 		if roster_panel:
 			roster_panel.prune_enemy(enemy)
 
-	for enemy in [unit_skirmisher, unit_berserker, unit_archer, unit_shaman]:
+	for enemy: Combatant in [unit_skirmisher, unit_berserker, unit_archer, unit_shaman]:
 		if roster_panel and not roster_panel.roster_cards.has(enemy):
 			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
 		elif roster_panel and roster_panel.roster_cards.has(enemy):
@@ -1308,12 +1311,12 @@ func _start_round_3() -> void:
 	unit_ranger.hp = 0
 
 	# Prune defeated hostiles (Skirmisher, Berserker, Brawler, Scout) from roster cards
-	for enemy in [unit_skirmisher, unit_berserker, unit_brawler, unit_scout]:
+	for enemy: Combatant in [unit_skirmisher, unit_berserker, unit_brawler, unit_scout]:
 		if roster_panel:
 			roster_panel.prune_enemy(enemy)
 
 	# Ensure surviving hostiles have roster cards
-	for enemy in [unit_shaman, unit_archer]:
+	for enemy: Combatant in [unit_shaman, unit_archer]:
 		if roster_panel and not roster_panel.roster_cards.has(enemy):
 			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
 		elif roster_panel and roster_panel.roster_cards.has(enemy):
@@ -1587,7 +1590,9 @@ func _trigger_action_impact_fx(entry: ActionLogEntry) -> void:
 		return
 	var actor := _find_combatant_by_name(entry.actor_name)
 	var target := _find_combatant_by_name(entry.target_name)
+	@warning_ignore("unsafe_cast")
 	var actor_token: Control = grid_view.unit_token_nodes.get(actor) as Control if actor else null
+	@warning_ignore("unsafe_cast")
 	var target_token: Control = grid_view.unit_token_nodes.get(target) as Control if target else null
 
 	match entry.category:
