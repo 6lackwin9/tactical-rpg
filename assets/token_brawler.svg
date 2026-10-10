@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+  <circle cx="28" cy="28" r="26" fill="#4c1d24" stroke="#ef4444" stroke-width="3"/>
+  <circle cx="28" cy="28" r="22" fill="#2d0f14"/>
+  <!-- Spiked gauntlet / fist -->
+  <rect x="20" y="22" width="16" height="14" rx="3" fill="#dc2626" stroke="#fca5a5" stroke-width="1.5"/>
+  <polygon points="20,20 23,24 17,24" fill="#f87171"/>
+  <polygon points="28,18 31,23 25,23" fill="#f87171"/>
+  <polygon points="36,20 39,24 33,24" fill="#f87171"/>
+</svg>

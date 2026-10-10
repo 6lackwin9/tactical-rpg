@@ -17,6 +17,10 @@ class ScheduledAction:
 		start_block = p_start
 		end_block = p_end
 
+signal block_started(block: int)
+signal block_completed(block: int)
+signal log_emitted(message: String)
+
 var scheduled_actions: Array[ScheduledAction] = []
 var registered_combatants: Array[Combatant] = []
 var current_round: int = 1
@@ -66,32 +70,50 @@ static func _get_target_display_name(target_val: Variant) -> String:
 		return str(target_val)
 	return "None"
 
-func resolve_round() -> void:
-	print("\n==========================================")
-	print("=== RESOLVING 10-BLOCK ROUND %d ===" % current_round)
-	print("==========================================")
+func get_actions_at_block(block: int) -> Array[ScheduledAction]:
+	var result: Array[ScheduledAction] = []
+	for a in scheduled_actions:
+		if not a.is_cancelled and a.start_block <= block and a.end_block >= block:
+			result.append(a)
+	return result
 
-	for block: int in range(1, TOTAL_BLOCKS + 1):
-		_resolve_block(block)
+func execute_block(block: int) -> void:
+	block_started.emit(block)
+	_resolve_block(block)
+	block_completed.emit(block)
 
-	# Round Rollover & Buff Ticking
+func finish_round() -> void:
 	print("\n--- ROUND %d CONCLUDED (ROUND ROLLOVER) ---" % current_round)
 	for c: Combatant in registered_combatants:
 		if c.is_active():
 			c.tick_round_buffs()
 			var target_name: String = _get_target_display_name(c.active_target)
 			var pos_str: String = str(grid.get_position(c)) if grid != null else "N/A"
-			print("  [%s] Status: %d/%d HP | Pos: %s | Stance: %s | Target: %s" % [
+			var msg: String = "  [%s] Status: %d/%d HP | Pos: %s | Stance: %s | Target: %s" % [
 				c.name, c.hp, c.max_hp,
 				pos_str,
 				CombatTypes.stance_to_string(c.current_stance),
 				target_name
-			])
+			]
+			print(msg)
+			log_emitted.emit(msg)
 		elif c.is_withdrawn:
-			print("  [%s] Status: WITHDRAWN" % c.name)
+			var msg: String = "  [%s] Status: WITHDRAWN" % c.name
+			print(msg)
+			log_emitted.emit(msg)
 
 	scheduled_actions.clear()
 	current_round += 1
+
+func resolve_round() -> void:
+	print("\n==========================================")
+	print("=== RESOLVING 10-BLOCK ROUND %d ===" % current_round)
+	print("==========================================")
+
+	for block: int in range(1, TOTAL_BLOCKS + 1):
+		execute_block(block)
+
+	finish_round()
 
 func resolve_turn() -> void:
 	resolve_round()
