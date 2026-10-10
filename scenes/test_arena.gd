@@ -278,6 +278,21 @@ var sim_finished: bool = false
 var snapshots: Array[BlockSnapshot] = []
 var recorded_actions: Array[CombatResolver.ScheduledAction] = []
 
+# Multi-Round Timeline Traversal
+var viewed_timeline_round: int = 1
+var round_recorded_actions: Dictionary = {} # int -> Array[CombatResolver.ScheduledAction]
+var round_snapshots: Dictionary = {}        # int -> Array[BlockSnapshot]
+var btn_rnd_1: Button
+var btn_rnd_2: Button
+var btn_modal_rnd_1: Button
+var btn_modal_rnd_2: Button
+
+# Combat Grid Unit Hover Card (Replaces persistent overlapping labels)
+var grid_hover_tooltip: PanelContainer
+var hover_name_lbl: Label
+var hover_hp_lbl: Label
+var hover_status_lbl: Label
+
 func _ready() -> void:
 	print("\n=======================================================")
 	print("=== STARTING TACTICAL RPG ARENA HARNESS             ===")
@@ -823,6 +838,42 @@ func _setup_interactive_ui() -> void:
 	unit_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	grid_anchor.add_child(unit_overlay)
 
+	# Floating Unit Inspector / Hover Tooltip (replacing overlapping persistent text labels)
+	grid_hover_tooltip = PanelContainer.new()
+	grid_hover_tooltip.name = "GridHoverTooltip"
+	grid_hover_tooltip.visible = false
+	grid_hover_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grid_hover_tooltip.custom_minimum_size = Vector2(130, 46)
+	var hov_style := StyleBoxFlat.new()
+	hov_style.bg_color = Color(0.06, 0.08, 0.12, 0.96)
+	hov_style.border_color = Color(0.35, 0.55, 0.85, 0.9)
+	hov_style.set_border_width_all(1)
+	hov_style.set_corner_radius_all(4)
+	hov_style.content_margin_left = 6
+	hov_style.content_margin_right = 6
+	hov_style.content_margin_top = 4
+	hov_style.content_margin_bottom = 4
+	grid_hover_tooltip.add_theme_stylebox_override("panel", hov_style)
+	grid_anchor.add_child(grid_hover_tooltip)
+
+	var hov_vbox := VBoxContainer.new()
+	hov_vbox.add_theme_constant_override("separation", 2)
+	grid_hover_tooltip.add_child(hov_vbox)
+
+	hover_name_lbl = Label.new()
+	hover_name_lbl.add_theme_font_size_override("font_size", 9)
+	hov_vbox.add_child(hover_name_lbl)
+
+	hover_hp_lbl = Label.new()
+	hover_hp_lbl.add_theme_font_size_override("font_size", 8)
+	hover_hp_lbl.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
+	hov_vbox.add_child(hover_hp_lbl)
+
+	hover_status_lbl = Label.new()
+	hover_status_lbl.add_theme_font_size_override("font_size", 7)
+	hover_status_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.85))
+	hov_vbox.add_child(hover_status_lbl)
+
 	# 3. Right Popup Area: Tactical Forecast & Arena Intel
 	var right_popup_panel := PanelContainer.new()
 	right_popup_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1008,18 +1059,27 @@ func _setup_interactive_ui() -> void:
 	btn_reset.pressed.connect(_on_reset_pressed)
 	btns_row.add_child(btn_reset)
 
-	btn_toggle_view = Button.new()
-	btn_toggle_view.text = "👥"
-	btn_toggle_view.tooltip_text = "Toggle Combined Block View (Inspect All Units per Block)"
-	btn_toggle_view.custom_minimum_size = Vector2(26, 22)
-	btn_toggle_view.add_theme_font_size_override("font_size", 10)
-	btn_toggle_view.pressed.connect(_on_toggle_view_mode_pressed)
-	btns_row.add_child(btn_toggle_view)
+	# Round Traversal Buttons (R1 / R2) in quick view
+	btn_rnd_1 = Button.new()
+	btn_rnd_1.text = "R1"
+	btn_rnd_1.tooltip_text = "View Round 1 Timeline"
+	btn_rnd_1.custom_minimum_size = Vector2(24, 22)
+	btn_rnd_1.add_theme_font_size_override("font_size", 9)
+	btn_rnd_1.pressed.connect(func() -> void: _select_timeline_round(1))
+	btns_row.add_child(btn_rnd_1)
+
+	btn_rnd_2 = Button.new()
+	btn_rnd_2.text = "R2"
+	btn_rnd_2.tooltip_text = "View Round 2 Timeline"
+	btn_rnd_2.custom_minimum_size = Vector2(24, 22)
+	btn_rnd_2.add_theme_font_size_override("font_size", 9)
+	btn_rnd_2.pressed.connect(func() -> void: _select_timeline_round(2))
+	btns_row.add_child(btn_rnd_2)
 
 	btn_popout = Button.new()
 	btn_popout.text = "⛶"
 	btn_popout.tooltip_text = "Popout Detailed Full-Screen Timeline Suite [F / ESC]"
-	btn_popout.custom_minimum_size = Vector2(26, 22)
+	btn_popout.custom_minimum_size = Vector2(24, 22)
 	btn_popout.add_theme_font_size_override("font_size", 10)
 	btn_popout.pressed.connect(func() -> void: _toggle_timeline_modal(true))
 	btns_row.add_child(btn_popout)
@@ -1056,24 +1116,13 @@ func _setup_interactive_ui() -> void:
 	btn_next_round.pressed.connect(_on_next_round_pressed)
 	controls_vbox.add_child(btn_next_round)
 
-	var vsep1 := VSeparator.new()
-	bottom_hbox.add_child(vsep1)
-
-	# 2x2 Party Select Box (Slot 1-4 with Gold Selection & ALL button)
-	var party_box := _build_party_select_box()
-	bottom_hbox.add_child(party_box)
-
-	var vsep2 := VSeparator.new()
-	bottom_hbox.add_child(vsep2)
-
-	# Timeline Display Deck: Holds Active Track Layers View and Combined Block Inspector
+	# Timeline Display Deck: Holds Active Track Layers View
 	var timeline_deck := Control.new()
 	timeline_deck.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	timeline_deck.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	bottom_hbox.add_child(timeline_deck)
 
 	_build_timeline_tracks_ui(timeline_deck)
-	_build_combined_block_ui(timeline_deck)
 	_build_timeline_modal_ui()
 	_build_log_modal_ui()
 
@@ -1366,6 +1415,9 @@ func _build_combined_block_ui(parent: Control) -> void:
 
 func _init_interactive_simulation() -> void:
 	current_combat_round = 1
+	viewed_timeline_round = 1
+	round_recorded_actions.clear()
+	round_snapshots.clear()
 	current_sim_block = 1
 	replay_block = 1
 	combined_selected_block = 1
@@ -1499,6 +1551,7 @@ func _init_interactive_simulation() -> void:
 	recorded_actions.clear()
 	for a in sim_resolver.scheduled_actions:
 		recorded_actions.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
+	round_recorded_actions[1] = recorded_actions.duplicate()
 
 	# 6. Build visual unit tokens and roster cards
 	for ally in sim_allies:
@@ -1523,6 +1576,8 @@ func _init_interactive_simulation() -> void:
 	# 7. Capture Initial Snapshot (State 0 before block 1 executes)
 	snapshots.clear()
 	_capture_snapshot(0)
+	round_snapshots[1] = snapshots.duplicate()
+	_update_round_traversal_ui()
 
 	# 8. Setup 2x2 Party Focus Box & Default Selection
 	selected_party_hero = unit_warrior
@@ -1551,15 +1606,6 @@ func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	token_ctrl.add_child(icon)
 
-	var name_lbl := Label.new()
-	name_lbl.text = combatant.name
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.position = Vector2(-15, -13)
-	name_lbl.custom_minimum_size = Vector2(TILE_SIZE + 30, 14)
-	name_lbl.add_theme_font_size_override("font_size", 9)
-	name_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
-	token_ctrl.add_child(name_lbl)
-
 	var sel_border := ReferenceRect.new()
 	sel_border.name = "SelectionBorder"
 	sel_border.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
@@ -1575,16 +1621,73 @@ func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
 			_select_combatant(combatant)
 	)
 
+	token_ctrl.mouse_entered.connect(func() -> void:
+		_show_unit_hover_card(combatant, token_ctrl)
+	)
+	token_ctrl.mouse_exited.connect(func() -> void:
+		_hide_unit_hover_card()
+	)
+
 	overlay.add_child(token_ctrl)
 	unit_token_nodes[combatant] = token_ctrl
 
 	var pos: Vector2i = sim_grid.get_position(combatant)
-	if pos == Vector2i(-1, -1):
+	if pos == Vector2i(-1, -1) or not combatant.is_alive() or combatant.is_withdrawn:
+		token_ctrl.visible = false
 		token_ctrl.modulate.a = 0.0
 		token_ctrl.position = Vector2(0, 0)
 	else:
+		token_ctrl.visible = true
 		token_ctrl.modulate.a = 1.0
 		token_ctrl.position = Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
+
+
+func _show_unit_hover_card(c: Combatant, token: Control) -> void:
+	if grid_hover_tooltip == null or not is_instance_valid(c):
+		return
+	var is_ally: bool = sim_allies.has(c)
+	var col: Color = Color(0.4, 0.75, 1.0) if is_ally else Color(1.0, 0.45, 0.45)
+	hover_name_lbl.text = c.name
+	hover_name_lbl.add_theme_color_override("font_color", col)
+
+	var cur_snap: BlockSnapshot = null
+	var snaps: Array = round_snapshots.get(viewed_timeline_round, snapshots)
+	var cur_b: int = replay_block if combat_phase == CombatPhase.REPLAY else current_sim_block
+	if cur_b >= 0 and cur_b < snaps.size():
+		@warning_ignore("unsafe_cast")
+		cur_snap = snaps[cur_b] as BlockSnapshot
+
+	var cur_hp: int = cur_snap.hps.get(c, c.hp) if cur_snap != null else c.hp
+	var max_hp: int = cur_snap.max_hps.get(c, c.max_hp) if cur_snap != null else c.max_hp
+	var is_withdrawn: bool = cur_snap.is_withdrawn.get(c, c.is_withdrawn) if cur_snap != null else c.is_withdrawn
+	var is_alive: bool = cur_hp > 0
+	var cur_stance: CombatTypes.StanceType = cur_snap.stances.get(c, c.current_stance) if cur_snap != null else c.current_stance
+	var pos: Vector2i = cur_snap.positions.get(c, sim_grid.get_position(c)) if cur_snap != null else sim_grid.get_position(c)
+
+	if not is_alive:
+		hover_hp_lbl.text = "HP: 0/%d [DEFEATED]" % max_hp
+		hover_status_lbl.text = "Status: Fallen in battle"
+	elif is_withdrawn:
+		hover_hp_lbl.text = "HP: %d/%d [ESCAPED]" % [cur_hp, max_hp]
+		hover_status_lbl.text = "Status: Withdrawn via Exit Tile"
+	else:
+		hover_hp_lbl.text = "HP: %d/%d | Spd: %d | Rng: %d" % [cur_hp, max_hp, c.speed, c.attack_range]
+		hover_status_lbl.text = "Stance: %s | Pos: %s" % [CombatTypes.stance_to_string(cur_stance), str(pos)]
+
+	# Position adjacent to token within grid boundaries
+	var target_pos := token.position + Vector2(TILE_SIZE + 4, -4)
+	if target_pos.x + 140 > GRID_SIZE * TILE_SIZE:
+		target_pos.x = maxf(0.0, token.position.x - 142)
+	if target_pos.y + 55 > GRID_SIZE * TILE_SIZE:
+		target_pos.y = maxf(0.0, token.position.y - 45)
+	grid_hover_tooltip.position = target_pos
+	grid_hover_tooltip.z_index = 50
+	grid_hover_tooltip.visible = true
+
+
+func _hide_unit_hover_card() -> void:
+	if grid_hover_tooltip != null:
+		grid_hover_tooltip.visible = false
 
 
 func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
@@ -1782,6 +1885,7 @@ func _capture_snapshot(block_idx: int) -> void:
 		snap.attack_boost_rds[c] = c.attack_boost_rounds_remaining
 		snap.defense_mit[c] = c.defense_mitigation_ratio
 	snapshots.append(snap)
+	round_snapshots[current_combat_round] = snapshots.duplicate()
 
 
 func _restore_snapshot(snap: BlockSnapshot) -> void:
@@ -1791,19 +1895,21 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		var token := unit_token_nodes[c] as Control
 		if snap.positions.has(c):
 			var pos: Vector2i = snap.positions[c]
-			if pos == Vector2i(-1, -1):
+			var active: bool = snap.is_active.get(c, false)
+			var withdrawn: bool = snap.is_withdrawn.get(c, false)
+			var hp_val: int = snap.hps.get(c, c.hp)
+			var is_alive: bool = hp_val > 0
+
+			# Requirement 7: Remove dead or withdrawn units from board completely to eliminate token overlap
+			if pos == Vector2i(-1, -1) or not is_alive or withdrawn or not active:
+				token.visible = false
 				token.modulate.a = 0.0
 			else:
+				token.visible = true
+				token.modulate = Color.WHITE
 				var target_px := Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
 				var tw := create_tween()
 				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-				var active: bool = snap.is_active.get(c, false)
-				var withdrawn: bool = snap.is_withdrawn.get(c, false)
-				if not active:
-					token.modulate = Color(0.4, 0.4, 0.4, 0.0 if withdrawn else 0.6)
-				else:
-					token.modulate = Color.WHITE
 
 	_update_all_roster_cards(snap)
 	_update_selected_unit_panel()
@@ -2517,6 +2623,10 @@ func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> P
 # ==============================================================================
 
 func _update_combined_block_display(block: int) -> void:
+	# Deprecated: Full screen log modal and master timeline modal replace old combined block inspector
+	if combined_party_vbox == null or combined_enemy_vbox == null or combined_block_title_lbl == null:
+		return
+
 	combined_block_title_lbl.text = "COMBINED BLOCK %02d / 10" % block
 
 	for i in range(combined_chip_buttons.size()):
@@ -2815,8 +2925,8 @@ func _create_combined_unit_card(combatant: Combatant, act: CombatResolver.Schedu
 
 
 func _navigate_combined_block(delta: int) -> void:
-	combined_selected_block = clampi(combined_selected_block + delta, 1, TOTAL_BLOCKS)
-	_update_combined_block_display(combined_selected_block)
+	var target_b: int = clampi(replay_block + delta, 1, TOTAL_BLOCKS)
+	_on_ruler_block_clicked(target_b)
 
 
 # ==============================================================================
@@ -2937,21 +3047,21 @@ func _sync_visuals_after_block() -> void:
 		@warning_ignore("unsafe_cast")
 		var token := unit_token_nodes[combatant] as Control
 		var target_coord: Vector2i = sim_grid.get_position(combatant)
-		if target_coord == Vector2i(-1, -1):
+		var is_alive: bool = combatant.is_alive()
+		var is_withdrawn: bool = combatant.is_withdrawn
+		var is_act: bool = combatant.is_active() and is_alive and not is_withdrawn
+
+		# Requirement 7: Remove dead or withdrawn unit from board completely
+		if target_coord == Vector2i(-1, -1) or not is_act:
+			token.visible = false
 			token.modulate.a = 0.0
 		else:
-			if not combatant.is_active():
-				if combatant.is_withdrawn:
-					var tw := create_tween()
-					tw.tween_property(token, "modulate:a", 0.0, 0.4)
-				elif not combatant.is_alive():
-					token.modulate = Color(0.4, 0.4, 0.4, 0.6)
-			else:
-				token.modulate = Color.WHITE
-				var target_px := Vector2(target_coord.x * TILE_SIZE, target_coord.y * TILE_SIZE)
-				if token.position != target_px:
-					var tw := create_tween()
-					tw.tween_property(token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			token.visible = true
+			token.modulate = Color.WHITE
+			var target_px := Vector2(target_coord.x * TILE_SIZE, target_coord.y * TILE_SIZE)
+			if token.position != target_px:
+				var tw := create_tween()
+				tw.tween_property(token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 	_update_all_roster_cards()
 
@@ -3093,10 +3203,14 @@ func _start_round_2() -> void:
 	recorded_actions.clear()
 	for a in sim_resolver.scheduled_actions:
 		recorded_actions.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
+	round_recorded_actions[2] = recorded_actions.duplicate()
 
 	# Snapshot 0 for Round 2
 	snapshots.clear()
 	_capture_snapshot(0)
+	round_snapshots[2] = snapshots.duplicate()
+	viewed_timeline_round = 2
+	_update_round_traversal_ui()
 
 	_update_party_select_box()
 	_select_combatant(unit_warrior)
@@ -3766,41 +3880,100 @@ func _on_reset_pressed() -> void:
 
 func _on_rewind_pressed() -> void:
 	replay_block = 1
+	current_sim_block = 1
+	var snaps: Array = round_snapshots.get(viewed_timeline_round, snapshots)
+	if snaps.size() > 1:
+		@warning_ignore("unsafe_cast")
+		_restore_snapshot(snaps[1] as BlockSnapshot)
+	elif not snaps.is_empty():
+		@warning_ignore("unsafe_cast")
+		_restore_snapshot(snaps[0] as BlockSnapshot)
 	status_label.text = "Rewound to Block 1."
 	_update_timeline_tracks_display()
-	_update_combined_block_display(1)
 	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
 		_update_modal_tracks_display()
 
 
 func _on_toggle_view_mode_pressed() -> void:
-	if timeline_view_mode == TimelineViewMode.TRACK_LAYERS:
-		timeline_view_mode = TimelineViewMode.COMBINED_BLOCK
-		tracks_container.visible = false
-		combined_container.visible = true
-		btn_toggle_view.text = "🎬"
-		btn_toggle_view.tooltip_text = "Switch to Single Hero Track View"
-		_update_combined_block_display(combined_selected_block)
-	else:
-		timeline_view_mode = TimelineViewMode.TRACK_LAYERS
-		tracks_container.visible = true
-		combined_container.visible = false
-		btn_toggle_view.text = "👥"
-		btn_toggle_view.tooltip_text = "Switch to Combined Block View"
-		_update_timeline_tracks_display()
+	_toggle_timeline_modal(not timeline_modal_overlay.visible)
 
 
 func _on_ruler_block_clicked(b: int) -> void:
-	if combat_phase == CombatPhase.REPLAY:
-		replay_block = b
-		status_label.text = "Inspecting Replay Block %d." % b
-		_update_timeline_tracks_display()
-		_update_combined_block_display(b)
-	else:
-		combined_selected_block = b
-		_on_toggle_view_mode_pressed()
+	replay_block = b
+	current_sim_block = b
+	# Directly traverse through battle state for clicked block
+	var snaps: Array = round_snapshots.get(viewed_timeline_round, snapshots)
+	if b >= 0 and b < snaps.size():
+		@warning_ignore("unsafe_cast")
+		_restore_snapshot(snaps[b] as BlockSnapshot)
+	elif not snaps.is_empty():
+		@warning_ignore("unsafe_cast")
+		_restore_snapshot(snaps[0] as BlockSnapshot)
+
+	status_label.text = "Round %d • Block %02d State inspected." % [viewed_timeline_round, b]
+	_update_timeline_tracks_display()
 	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
 		_update_modal_tracks_display()
+
+
+func _update_round_traversal_ui() -> void:
+	var r1_btns: Array[Button] = []
+	if btn_rnd_1 != null: r1_btns.append(btn_rnd_1)
+	if btn_modal_rnd_1 != null: r1_btns.append(btn_modal_rnd_1)
+	for b in r1_btns:
+		var st := StyleBoxFlat.new()
+		st.set_corner_radius_all(3)
+		if viewed_timeline_round == 1:
+			st.bg_color = Color(0.18, 0.32, 0.54, 0.95)
+			st.border_color = Color(1.0, 0.85, 0.3, 1.0)
+			st.set_border_width_all(2)
+			b.add_theme_color_override("font_color", Color(1.0, 0.9, 0.35))
+		else:
+			st.bg_color = Color(0.1, 0.13, 0.18, 0.8)
+			st.border_color = Color(0.25, 0.35, 0.48, 0.6)
+			st.set_border_width_all(1)
+			b.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+		b.add_theme_stylebox_override("normal", st)
+
+	var r2_btns: Array[Button] = []
+	if btn_rnd_2 != null: r2_btns.append(btn_rnd_2)
+	if btn_modal_rnd_2 != null: r2_btns.append(btn_modal_rnd_2)
+	for b in r2_btns:
+		var st := StyleBoxFlat.new()
+		st.set_corner_radius_all(3)
+		if viewed_timeline_round == 2:
+			st.bg_color = Color(0.18, 0.32, 0.54, 0.95)
+			st.border_color = Color(1.0, 0.85, 0.3, 1.0)
+			st.set_border_width_all(2)
+			b.add_theme_color_override("font_color", Color(1.0, 0.9, 0.35))
+		else:
+			st.bg_color = Color(0.1, 0.13, 0.18, 0.8)
+			st.border_color = Color(0.25, 0.35, 0.48, 0.6)
+			st.set_border_width_all(1)
+			b.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+		b.add_theme_stylebox_override("normal", st)
+
+
+func _select_timeline_round(rd: int) -> void:
+	viewed_timeline_round = rd
+	@warning_ignore("unsafe_cast")
+	recorded_actions = round_recorded_actions.get(rd, []) as Array[CombatResolver.ScheduledAction]
+	@warning_ignore("unsafe_cast")
+	snapshots = round_snapshots.get(rd, []) as Array[BlockSnapshot]
+	_update_round_traversal_ui()
+	_update_timeline_tracks_display()
+	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+		_update_modal_tracks_display()
+
+	var snaps: Array = round_snapshots.get(rd, [])
+	var target_b: int = replay_block if combat_phase == CombatPhase.REPLAY else 1
+	if target_b >= 0 and target_b < snaps.size():
+		@warning_ignore("unsafe_cast")
+		_restore_snapshot(snaps[target_b] as BlockSnapshot)
+	elif not snaps.is_empty():
+		@warning_ignore("unsafe_cast")
+		_restore_snapshot(snaps[0] as BlockSnapshot)
+	status_label.text = "Viewing Round %d Timeline." % rd
 
 
 # ==============================================================================
@@ -3877,6 +4050,23 @@ func _build_timeline_modal_ui() -> void:
 	btn_modal_reset.add_theme_font_size_override("font_size", 10)
 	btn_modal_reset.pressed.connect(_on_reset_pressed)
 	modal_ctrls.add_child(btn_modal_reset)
+
+	# Round Traversal Buttons (R1 / R2) in modal suite
+	btn_modal_rnd_1 = Button.new()
+	btn_modal_rnd_1.text = "R1"
+	btn_modal_rnd_1.tooltip_text = "Switch Modal to Round 1 Timeline"
+	btn_modal_rnd_1.custom_minimum_size = Vector2(26, 22)
+	btn_modal_rnd_1.add_theme_font_size_override("font_size", 9)
+	btn_modal_rnd_1.pressed.connect(func() -> void: _select_timeline_round(1))
+	modal_ctrls.add_child(btn_modal_rnd_1)
+
+	btn_modal_rnd_2 = Button.new()
+	btn_modal_rnd_2.text = "R2"
+	btn_modal_rnd_2.tooltip_text = "Switch Modal to Round 2 Timeline"
+	btn_modal_rnd_2.custom_minimum_size = Vector2(26, 22)
+	btn_modal_rnd_2.add_theme_font_size_override("font_size", 9)
+	btn_modal_rnd_2.pressed.connect(func() -> void: _select_timeline_round(2))
+	modal_ctrls.add_child(btn_modal_rnd_2)
 
 	modal_phase_lbl = Label.new()
 	modal_phase_lbl.text = "PLANNING PHASE"
@@ -3994,6 +4184,13 @@ func _update_modal_tracks_display() -> void:
 	for child in modal_tracks_list.get_children():
 		child.queue_free()
 
+	# Query snapshot for active playhead in viewed round
+	var snap: BlockSnapshot = null
+	var snaps: Array = round_snapshots.get(viewed_timeline_round, snapshots)
+	if active_playhead >= 0 and active_playhead < snaps.size():
+		@warning_ignore("unsafe_cast")
+		snap = snaps[active_playhead] as BlockSnapshot
+
 	# Section 1: Hero Battlegroup Tracks (All 4 slots)
 	var ally_hdr := Label.new()
 	ally_hdr.text = "⚔ ALLIED HERO BATTLEGROUP (4 SLOTS)"
@@ -4003,26 +4200,42 @@ func _update_modal_tracks_display() -> void:
 
 	for i in range(4):
 		var ally: Combatant = sim_allies[i] if i < sim_allies.size() else null
-		var row := _create_modal_unit_track_row(ally, i + 1, true, active_playhead)
+		var row := _create_modal_unit_track_row(ally, i + 1, true, active_playhead, snap)
 		modal_tracks_list.add_child(row)
 
 	var sep := HSeparator.new()
 	modal_tracks_list.add_child(sep)
 
-	# Section 2: Hostile Opposition Tracks (Scalable up to 10 enemies)
+	# Section 2: Hostile Opposition Tracks (Requirement 5: Only show active enemies for the round)
+	var active_enemies_for_view: Array[Combatant] = []
+	var is_r1: bool = (viewed_timeline_round == 1)
+	var reinforcements_active: bool = (snap.reinforcements_spawned if snap != null else reinforcements_spawned)
+
+	for enemy in sim_enemies:
+		if is_r1:
+			if enemy in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
+				if reinforcements_active:
+					active_enemies_for_view.append(enemy)
+			else:
+				active_enemies_for_view.append(enemy)
+		else:
+			# Round 2: Brawler & Scout pruned, only surviving goblins shown
+			if not (enemy in [unit_brawler, unit_scout]):
+				active_enemies_for_view.append(enemy)
+
 	var enemy_hdr := Label.new()
-	enemy_hdr.text = "💀 HOSTILE OPPOSITION (SCALABLE UP TO 10 ENEMIES)"
+	enemy_hdr.text = "💀 HOSTILE OPPOSITION (%d Active Hostiles)" % active_enemies_for_view.size()
 	enemy_hdr.add_theme_font_size_override("font_size", 9)
 	enemy_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 	modal_tracks_list.add_child(enemy_hdr)
 
-	for i in range(sim_enemies.size()):
-		var enemy: Combatant = sim_enemies[i]
-		var row := _create_modal_unit_track_row(enemy, i + 1, false, active_playhead)
+	for i in range(active_enemies_for_view.size()):
+		var enemy: Combatant = active_enemies_for_view[i]
+		var row := _create_modal_unit_track_row(enemy, i + 1, false, active_playhead, snap)
 		modal_tracks_list.add_child(row)
 
 
-func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, active_playhead: int) -> HBoxContainer:
+func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, active_playhead: int, snap: BlockSnapshot = null) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", BLOCK_GAP)
 
@@ -4038,6 +4251,12 @@ func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: 
 	hdr_style.set_border_width_all(1)
 
 	if combatant != null:
+		var cur_hp: int = snap.hps.get(combatant, combatant.hp) if snap != null else combatant.hp
+		var max_hp: int = snap.max_hps.get(combatant, combatant.max_hp) if snap != null else combatant.max_hp
+		var is_withdrawn: bool = snap.is_withdrawn.get(combatant, combatant.is_withdrawn) if snap != null else combatant.is_withdrawn
+		var is_alive: bool = cur_hp > 0
+		var cur_stance: CombatTypes.StanceType = snap.stances.get(combatant, combatant.current_stance) if snap != null else combatant.current_stance
+
 		var team_col: Color = Color(0.2, 0.5, 0.9) if is_ally else Color(0.9, 0.35, 0.35)
 		hdr_style.bg_color = Color(0.10, 0.13, 0.19, 0.95)
 		hdr_style.border_color = team_col
@@ -4051,7 +4270,7 @@ func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: 
 		icon.custom_minimum_size = Vector2(18, 18)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		if not combatant.is_alive():
+		if not is_alive or is_withdrawn:
 			icon.modulate = Color(0.5, 0.5, 0.5, 0.6)
 		hbox.add_child(icon)
 
@@ -4060,20 +4279,28 @@ func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: 
 		hbox.add_child(vinfo)
 
 		var name_lbl := Label.new()
-		if not combatant.is_alive():
+		if not is_alive:
 			name_lbl.text = "%s 💀" % combatant.name
 			name_lbl.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35))
-		elif combatant.is_withdrawn:
+			hdr.modulate = Color(0.6, 0.6, 0.6, 0.6)
+		elif is_withdrawn:
 			name_lbl.text = "%s 💨" % combatant.name
 			name_lbl.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+			hdr.modulate = Color(0.65, 0.65, 0.65, 0.6)
 		else:
 			name_lbl.text = combatant.name
 			name_lbl.add_theme_color_override("font_color", Color.WHITE)
+			hdr.modulate = Color.WHITE
 		name_lbl.add_theme_font_size_override("font_size", 8)
 		vinfo.add_child(name_lbl)
 
 		var hp_lbl := Label.new()
-		hp_lbl.text = "%d HP | %s" % [combatant.hp, CombatTypes.stance_to_string(combatant.current_stance)]
+		if not is_alive:
+			hp_lbl.text = "0/%d HP [DEFEATED]" % max_hp
+		elif is_withdrawn:
+			hp_lbl.text = "%d/%d HP [ESCAPED]" % [cur_hp, max_hp]
+		else:
+			hp_lbl.text = "%d/%d HP | %s" % [cur_hp, max_hp, CombatTypes.stance_to_string(cur_stance)]
 		hp_lbl.add_theme_font_size_override("font_size", 7)
 		hp_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 		vinfo.add_child(hp_lbl)
