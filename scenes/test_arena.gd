@@ -4,28 +4,9 @@ extends Node2D
 # Tactical RPG - Interactive Visual Combat Arena & Headless Test Suite
 # ==============================================================================
 
-# Asset Textures (loaded dynamically at runtime)
-var tex_floor: Texture2D
-var tex_exit: Texture2D
-var tex_center: Texture2D
-var tex_warrior: Texture2D
-var tex_ranger: Texture2D
-var tex_brawler: Texture2D
-var tex_scout: Texture2D
-var tex_skirmisher: Texture2D
-var tex_archer: Texture2D
-var tex_berserker: Texture2D
-var tex_shaman: Texture2D
-
-# Character Full Sprite Textures
-var tex_sprite_warrior: Texture2D
-var tex_sprite_ranger: Texture2D
-var tex_sprite_brawler: Texture2D
-var tex_sprite_scout: Texture2D
-var tex_sprite_skirmisher: Texture2D
-var tex_sprite_archer: Texture2D
-var tex_sprite_berserker: Texture2D
-var tex_sprite_shaman: Texture2D
+# Combat Scenario & UI Controller
+var scenario: CombatScenario
+var arena_ui: CombatArenaController
 
 # Active Combatant Unit Instances & Scenario State
 var unit_warrior: Combatant
@@ -38,70 +19,64 @@ var unit_berserker: Combatant
 var unit_shaman: Combatant
 var reinforcements_spawned: bool = false
 var current_combat_round: int = 1
+
+# Simulation & Replay State
+var sim_grid: CombatGrid
+var sim_resolver: CombatResolver
+var sim_allies: Array[Combatant] = []
+var sim_enemies: Array[Combatant] = []
+var current_sim_block: int = 1
+var replay_block: int = 1
+var combined_selected_block: int = 1
+var is_auto_playing: bool = false
+var sim_finished: bool = false
+var snapshots: Array[BlockSnapshot] = []
+var recorded_actions: Array[CombatResolver.ScheduledAction] = []
+var all_action_log_entries: Array[ActionLogEntry] = []
+var active_log_entry_index: int = -1
+var pending_block_actions: Array[CombatResolver.ScheduledAction] = []
+
+# Multi-Round Timeline Traversal
+var viewed_timeline_round: int = 1
+var max_unlocked_round: int = 1
+var round_recorded_actions: Dictionary = {} # int -> Array[CombatResolver.ScheduledAction]
+var round_snapshots: Dictionary = {}        # int -> Array[BlockSnapshot]
+
+# Selection and Inspector State
+var selected_combatant: Combatant = null
+var timeline_view_mode: TimelineViewMode = TimelineViewMode.TRACK_LAYERS
+var combat_phase: CombatPhase = CombatPhase.PLANNING
+var filter_active_only: bool = false
+var selected_party_hero: Combatant = null
+var auto_play_timer: Timer
+
+# Delegated UI References
+var ui_canvas: CanvasLayer
+var grid_view: CombatGridView
+var unit_token_nodes: Dictionary:
+	get:
+		return grid_view.unit_token_nodes if grid_view else {}
+var action_log_dock: ActionLogDockUI
+var roster_panel: RosterPanelUI
+var log_rich_text: RichTextLabel
+var log_modal: CombatLogModal
+var playback_controls: PlaybackControlsUI
+var timeline_dock: TimelineDockUI
+var unit_inspector: UnitInspectorUI
+var tactical_forecast: TacticalForecastUI
+var timeline_modal: TimelineModal
+
+var status_label: Label
+var phase_badge_lbl: Label
+var btn_step_prev: Button
+var btn_play: Button
+var btn_step_next: Button
+var btn_reset_round: Button
+var btn_reset_game: Button
+var btn_popout: Button
 var btn_next_round: Button
-
-static func _load_svg_texture(res_path: String) -> Texture2D:
-	if FileAccess.file_exists(res_path):
-		var file := FileAccess.open(res_path, FileAccess.READ)
-		if file != null:
-			var svg_text: String = file.get_as_text()
-			var img := Image.new()
-			var err: Error = img.load_svg_from_buffer(svg_text.to_utf8_buffer())
-			if err == OK:
-				return ImageTexture.create_from_image(img)
-	return null
-
-func _init_textures() -> void:
-	tex_floor = _load_svg_texture("res://assets/tile_floor.svg")
-	tex_exit = _load_svg_texture("res://assets/tile_exit.svg")
-	tex_center = _load_svg_texture("res://assets/tile_center.svg")
-	tex_warrior = _load_svg_texture("res://assets/token_warrior.svg")
-	tex_ranger = _load_svg_texture("res://assets/token_ranger.svg")
-	tex_brawler = _load_svg_texture("res://assets/token_brawler.svg")
-	tex_scout = _load_svg_texture("res://assets/token_scout.svg")
-	tex_skirmisher = _load_svg_texture("res://assets/token_skirmisher.svg")
-	tex_archer = _load_svg_texture("res://assets/token_archer.svg")
-	tex_berserker = _load_svg_texture("res://assets/token_berserker.svg")
-	tex_shaman = _load_svg_texture("res://assets/token_shaman.svg")
-
-	# Load sprite assets
-	tex_sprite_warrior = _load_svg_texture("res://assets/sprite_warrior.svg")
-	tex_sprite_ranger = _load_svg_texture("res://assets/sprite_ranger.svg")
-	tex_sprite_brawler = _load_svg_texture("res://assets/sprite_brawler.svg")
-	tex_sprite_scout = _load_svg_texture("res://assets/sprite_scout.svg")
-	tex_sprite_skirmisher = _load_svg_texture("res://assets/sprite_skirmisher.svg")
-	tex_sprite_archer = _load_svg_texture("res://assets/sprite_archer.svg")
-	tex_sprite_berserker = _load_svg_texture("res://assets/sprite_berserker.svg")
-	tex_sprite_shaman = _load_svg_texture("res://assets/sprite_shaman.svg")
-
-func _get_combatant_token_texture(c: Combatant) -> Texture2D:
-	if c == null:
-		return null
-	match c.name:
-		"Warrior": return tex_warrior
-		"Ranger": return tex_ranger
-		"Enemy Brawler": return tex_brawler
-		"Fleeing Scout", "Goblin Scout": return tex_scout
-		"Goblin Skirmisher": return tex_skirmisher
-		"Goblin Archer": return tex_archer
-		"Goblin Berserker": return tex_berserker
-		"Goblin Shaman": return tex_shaman
-		_: return tex_brawler
-
-func _get_combatant_sprite_texture(c: Combatant) -> Texture2D:
-	if c == null:
-		return null
-	match c.name:
-		"Warrior": return tex_sprite_warrior
-		"Ranger": return tex_sprite_ranger
-		"Enemy Brawler": return tex_sprite_brawler
-		"Fleeing Scout", "Goblin Scout": return tex_sprite_scout
-		"Goblin Skirmisher": return tex_sprite_skirmisher
-		"Goblin Archer": return tex_sprite_archer
-		"Goblin Berserker": return tex_sprite_berserker
-		"Goblin Shaman": return tex_sprite_shaman
-		_: return tex_sprite_brawler
-
+var btn_prev_round: Button
+var btn_next_round_arrow: Button
 
 const TILE_SIZE: int = 54
 const GRID_SIZE: int = 9
@@ -120,86 +95,11 @@ enum CombatPhase {
 	REPLAY
 }
 
+func _get_combatant_token_texture(c: Combatant) -> Texture2D:
+	return scenario.get_token_texture(c) if scenario else null
 
-
-
-# Interactive UI References
-var ui_canvas: CanvasLayer
-var grid_view: CombatGridView
-var unit_token_nodes: Dictionary:
-	get:
-		return grid_view.unit_token_nodes if grid_view else {}
-var action_log_dock: ActionLogDockUI
-var roster_panel: RosterPanelUI
-var log_rich_text: RichTextLabel
-var log_modal: CombatLogModal
-var all_action_log_entries: Array[ActionLogEntry] = []
-var active_log_entry_index: int = -1
-var pending_block_actions: Array[CombatResolver.ScheduledAction] = []
-var playback_controls: PlaybackControlsUI
-var timeline_dock: TimelineDockUI
-var status_label: Label
-var phase_badge_lbl: Label
-var btn_step_prev: Button
-var btn_play: Button
-var btn_step_next: Button
-var btn_reset_round: Button
-var btn_reset_game: Button
-var auto_play_timer: Timer
-
-# Selection and Inspector State
-var selected_combatant: Combatant = null
-var timeline_view_mode: TimelineViewMode = TimelineViewMode.TRACK_LAYERS
-var combat_phase: CombatPhase = CombatPhase.PLANNING
-var filter_active_only: bool = false
-
-# Side Docks & Selection UI Components
-var unit_inspector: UnitInspectorUI
-var tactical_forecast: TacticalForecastUI
-var selected_party_hero: Combatant = null
-
-# Timeline Deck & Modal UI Components (Extracted to scripts/ui/)
-
-# Popout Modal Timeline Suite Component (Extracted to res://scripts/ui/timeline_modal.gd)
-const UNIT_MODAL_BLOCK_W: int = 94
-var btn_popout: Button
-var timeline_modal: TimelineModal
-
-# Combined Block Inspector UI Components
-var combined_container: VBoxContainer
-var combined_block_title_lbl: Label
-var combined_chip_buttons: Array[Button] = []
-var btn_combined_prev: Button
-var btn_combined_next: Button
-var btn_filter_active: Button
-var combined_party_vbox: VBoxContainer
-var combined_enemy_vbox: VBoxContainer
-var combined_party_hdr: Label
-var combined_enemy_hdr: Label
-
-# Simulation & Replay State
-var sim_grid: CombatGrid
-var sim_resolver: CombatResolver
-var sim_allies: Array[Combatant] = []
-var sim_enemies: Array[Combatant] = []
-var current_sim_block: int = 1
-var replay_block: int = 1
-var combined_selected_block: int = 1
-var is_auto_playing: bool = false
-var sim_finished: bool = false
-var snapshots: Array[BlockSnapshot] = []
-var recorded_actions: Array[CombatResolver.ScheduledAction] = []
-
-# Multi-Round Timeline Traversal (Dynamic End-of-Timeline Arrows)
-var viewed_timeline_round: int = 1
-var max_unlocked_round: int = 1
-var round_recorded_actions: Dictionary = {} # int -> Array[CombatResolver.ScheduledAction]
-var round_snapshots: Dictionary = {}        # int -> Array[BlockSnapshot]
-var btn_prev_round: Button
-var btn_next_round_arrow: Button
-var ruler_round_badge: Label
-
-# Combat Grid Unit Hover Card (Encapsulated in CombatGridView)
+func _get_combatant_sprite_texture(c: Combatant) -> Texture2D:
+	return scenario.get_sprite_texture(c) if scenario else null
 
 func _ready() -> void:
 	print("\n=======================================================")
@@ -228,167 +128,61 @@ func _ready() -> void:
 # ==============================================================================
 
 func _setup_interactive_ui() -> void:
-	_init_textures()
-	ui_canvas = CanvasLayer.new()
-	add_child(ui_canvas)
+	scenario = CombatScenario.create_default_arena_scenario()
+	arena_ui = CombatArenaController.new()
+	add_child(arena_ui)
 
-	# Main background
-	var bg := ColorRect.new()
-	bg.color = Color(0.06, 0.08, 0.11, 1.0)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ui_canvas.add_child(bg)
+	ui_canvas = arena_ui
+	grid_view = arena_ui.grid_view
+	action_log_dock = arena_ui.action_log_dock
+	roster_panel = arena_ui.roster_panel
+	log_rich_text = arena_ui.log_rich_text
+	log_modal = arena_ui.log_modal
+	playback_controls = arena_ui.playback_controls
+	timeline_dock = arena_ui.timeline_dock
+	unit_inspector = arena_ui.unit_inspector
+	tactical_forecast = arena_ui.tactical_forecast
+	timeline_modal = arena_ui.timeline_modal
 
-	# Root layout container
-	var root_margin := MarginContainer.new()
-	root_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root_margin.add_theme_constant_override("margin_left", 14)
-	root_margin.add_theme_constant_override("margin_right", 14)
-	root_margin.add_theme_constant_override("margin_top", 4)
-	root_margin.add_theme_constant_override("margin_bottom", 4)
-	ui_canvas.add_child(root_margin)
+	status_label = arena_ui.playback_controls.status_label
+	phase_badge_lbl = arena_ui.playback_controls.phase_badge_lbl
+	btn_step_prev = arena_ui.playback_controls.btn_step_prev
+	btn_play = arena_ui.playback_controls.btn_play
+	btn_step_next = arena_ui.playback_controls.btn_step_next
+	btn_reset_round = arena_ui.playback_controls.btn_reset_round
+	btn_reset_game = arena_ui.playback_controls.btn_reset_game
+	btn_popout = arena_ui.playback_controls.btn_popout
+	btn_next_round = arena_ui.playback_controls.btn_next_round
+	btn_prev_round = arena_ui.timeline_dock.btn_prev_round
+	btn_next_round_arrow = arena_ui.timeline_dock.btn_next_round_arrow
 
-	var main_vbox := VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 4)
-	root_margin.add_child(main_vbox)
-
-	# --------------------------------------------------------------------------
-	# TOP ROW: PARTY STATUS (2x2) | ACTION LOG DOCK (Center) | ENEMY STATUS (5x2)
-	# --------------------------------------------------------------------------
-	var top_hbox := HBoxContainer.new()
-	top_hbox.custom_minimum_size = Vector2(0, 84)
-	top_hbox.add_theme_constant_override("separation", 8)
-	main_vbox.add_child(top_hbox)
-
-	# Top Roster Panels (Extracted Component: RosterPanelUI)
-	roster_panel = RosterPanelUI.new()
-	top_hbox.add_child(roster_panel.party_panel)
-
-	# Top-Center: Single-Action Resolution Log Dock (Extracted Component: ActionLogDockUI)
-	action_log_dock = ActionLogDockUI.new()
-	top_hbox.add_child(action_log_dock)
-	action_log_dock.prev_pressed.connect(_on_log_prev_pressed)
-	action_log_dock.next_pressed.connect(_on_log_next_pressed)
-	action_log_dock.expand_requested.connect(func() -> void: _toggle_log_modal(true))
-	action_log_dock.entry_clicked.connect(_on_log_modal_cell_clicked)
-
-	# Maintain hidden RichTextLabel for headless test / logging compatibility
-	log_rich_text = RichTextLabel.new()
-	log_rich_text.visible = false
-	action_log_dock.add_child(log_rich_text)
-
-	# Top-Right: Enemy Hostiles Status Panel (Active Roster Grid)
-	top_hbox.add_child(roster_panel.enemy_panel)
-
-	roster_panel.combatant_selected.connect(_select_combatant)
-	roster_panel.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void:
-		if grid_view and grid_view.unit_token_nodes.has(c):
-			@warning_ignore("unsafe_cast")
-			var token := grid_view.unit_token_nodes[c] as Control
-			_show_unit_hover_card(c, token)
-	)
-	roster_panel.combatant_unhovered.connect(_hide_unit_hover_card)
-
-	# --------------------------------------------------------------------------
-	# CENTER ROW: LEFT POPUP (Inspector) | COMBAT GRID (54px) | RIGHT POPUP (Forecast)
-	# --------------------------------------------------------------------------
-	var center_hbox := HBoxContainer.new()
-	center_hbox.add_theme_constant_override("separation", 10)
-	center_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_vbox.add_child(center_hbox)
-
-	# 1. Left Popup Area: Unit Inspector & Dynamic Actions/Threat Dock (Extracted: UnitInspectorUI)
-	unit_inspector = UnitInspectorUI.new()
-	center_hbox.add_child(unit_inspector)
-
-	# 2. Center Column: Prominent Combat Grid (54px Tiles) (Extracted Component: CombatGridView)
-	grid_view = CombatGridView.new()
-	center_hbox.add_child(grid_view)
-	grid_view.setup_grid_tiles(tex_floor, tex_exit, tex_center)
-	grid_view.combatant_clicked.connect(_select_combatant)
-	grid_view.combatant_hovered.connect(func(c: Combatant, token: Control) -> void:
+	# Connect arena controller signals to session orchestration
+	arena_ui.combatant_selected.connect(_select_combatant)
+	arena_ui.combatant_hovered.connect(func(c: Combatant, token: Control) -> void:
 		_show_unit_hover_card(c, token)
 	)
-	grid_view.combatant_unhovered.connect(_hide_unit_hover_card)
-
-	# 3. Right Popup Area: Tactical Forecast & Arena Intel (Extracted: TacticalForecastUI)
-	tactical_forecast = TacticalForecastUI.new()
-	center_hbox.add_child(tactical_forecast)
-
-	# --------------------------------------------------------------------------
-	# BOTTOM ROW: PLAYBACK CONTROLS + ZERO-CLIPPING CONTINUOUS ACTIVE TRACK
-	# --------------------------------------------------------------------------
-	var bottom_panel := PanelContainer.new()
-	bottom_panel.custom_minimum_size = Vector2(0, 96)
-	var bottom_style := StyleBoxFlat.new()
-	bottom_style.bg_color = Color(0.07, 0.09, 0.14, 0.98)
-	bottom_style.border_color = Color(0.22, 0.32, 0.46, 0.9)
-	bottom_style.set_border_width_all(1)
-	bottom_style.set_corner_radius_all(6)
-	bottom_style.content_margin_left = 8
-	bottom_style.content_margin_right = 8
-	bottom_style.content_margin_top = 3
-	bottom_style.content_margin_bottom = 3
-	bottom_panel.add_theme_stylebox_override("panel", bottom_style)
-	main_vbox.add_child(bottom_panel)
-
-	var bottom_hbox := HBoxContainer.new()
-	bottom_hbox.add_theme_constant_override("separation", 10)
-	bottom_panel.add_child(bottom_hbox)
-
-	# 1. Playback Controls Bar (Extracted Component: PlaybackControlsUI)
-	playback_controls = PlaybackControlsUI.new()
-	btn_step_prev = playback_controls.btn_step_prev
-	btn_play = playback_controls.btn_play
-	btn_step_next = playback_controls.btn_step_next
-	btn_reset_round = playback_controls.btn_reset_round
-	btn_reset_game = playback_controls.btn_reset_game
-	btn_popout = playback_controls.btn_popout
-	phase_badge_lbl = playback_controls.phase_badge_lbl
-	status_label = playback_controls.status_label
-	btn_next_round = playback_controls.btn_next_round
-
-	playback_controls.step_prev_pressed.connect(_on_step_prev_pressed)
-	playback_controls.play_pressed.connect(_on_play_round_pressed)
-	playback_controls.step_next_pressed.connect(_on_step_next_pressed)
-	playback_controls.reset_round_pressed.connect(_on_reset_active_round_pressed)
-	playback_controls.reset_game_pressed.connect(_on_reset_game_pressed)
-	playback_controls.popout_pressed.connect(func() -> void: _toggle_timeline_modal(true))
-	playback_controls.next_round_pressed.connect(_on_next_round_pressed)
-	bottom_hbox.add_child(playback_controls)
-
-	# 2. Timeline Dock UI (Extracted Component: TimelineDockUI)
-	timeline_dock = TimelineDockUI.new()
-	btn_prev_round = timeline_dock.btn_prev_round
-	btn_next_round_arrow = timeline_dock.btn_next_round_arrow
-	timeline_dock.action_lookup_fn = _find_recorded_action_starting_at
-	timeline_dock.round_nav_requested.connect(_navigate_timeline_round)
-	timeline_dock.block_selected.connect(func(b: int) -> void:
+	arena_ui.combatant_unhovered.connect(_hide_unit_hover_card)
+	arena_ui.block_selected.connect(func(b: int) -> void:
 		_on_ruler_block_clicked(b)
 		if timeline_modal != null and timeline_modal.visible:
 			_update_modal_tracks_display()
 	)
-	timeline_dock.combatant_selected.connect(_select_combatant)
+	arena_ui.step_prev_pressed.connect(_on_step_prev_pressed)
+	arena_ui.play_pressed.connect(_on_play_round_pressed)
+	arena_ui.step_next_pressed.connect(_on_step_next_pressed)
+	arena_ui.reset_round_pressed.connect(_on_reset_active_round_pressed)
+	arena_ui.reset_game_pressed.connect(_on_reset_game_pressed)
+	arena_ui.next_round_pressed.connect(_on_next_round_pressed)
+	arena_ui.round_nav_requested.connect(_navigate_timeline_round)
+	arena_ui.log_entry_clicked.connect(_on_log_modal_cell_clicked)
+
+	timeline_dock.action_lookup_fn = _find_recorded_action_starting_at
 	timeline_dock.hero_view_requested.connect(func() -> void:
 		if not sim_allies.is_empty():
 			_select_combatant(sim_allies[0])
 	)
-	bottom_hbox.add_child(timeline_dock)
-
-	# Modals setup (Phase 1 extracted components)
-	log_modal = CombatLogModal.new()
-	log_modal.cell_clicked.connect(_on_log_modal_cell_clicked)
-	ui_canvas.add_child(log_modal)
-
-	timeline_modal = TimelineModal.new()
 	timeline_modal.action_lookup_fn = _find_recorded_action_starting_at
 	timeline_modal.token_texture_fn = _get_combatant_token_texture
-	timeline_modal.round_nav_requested.connect(_navigate_timeline_round)
-	timeline_modal.block_selected.connect(func(b: int) -> void:
-		_on_ruler_block_clicked(b)
-		_update_modal_tracks_display()
-	)
-	timeline_modal.combatant_selected.connect(_select_combatant)
-	ui_canvas.add_child(timeline_modal)
 
 	# Auto-play timer
 	auto_play_timer = Timer.new()
@@ -544,24 +338,7 @@ func _init_interactive_simulation() -> void:
 	round_recorded_actions[1] = recorded_actions.duplicate()
 
 	# 6. Build visual unit tokens and roster cards
-	for ally in sim_allies:
-		_create_unit_token(ally, _get_combatant_token_texture(ally))
-		_create_roster_card(ally, Color(0.2, 0.5, 0.9))
-	_add_party_placeholders()
-
-	for enemy in sim_enemies:
-		_create_unit_token(enemy, _get_combatant_token_texture(enemy))
-		_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
-		# Goblin ambush reinforcements are invisible until they appear
-		if enemy in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
-			if roster_panel and roster_panel.roster_cards.has(enemy):
-				@warning_ignore("unsafe_cast")
-				var enemy_card := roster_panel.roster_cards[enemy] as Control
-				if is_instance_valid(enemy_card):
-					enemy_card.visible = false
-	_add_enemy_placeholders()
-
-	_update_all_roster_cards()
+	arena_ui.mount_scenario(scenario, sim_grid)
 
 	# 7. Capture Initial Snapshot (State 0 before block 1 executes)
 	snapshots.clear()
@@ -792,149 +569,7 @@ func _update_combined_block_display(_block: int) -> void:
 	pass
 
 
-func _create_combined_unit_card(combatant: Combatant, act: CombatResolver.ScheduledAction, block: int, is_ally: bool, engagement_tag: String = "") -> PanelContainer:
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.custom_minimum_size = Vector2(0, 32)
-	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
-	var card_style := StyleBoxFlat.new()
-	card_style.set_corner_radius_all(3)
-	card_style.content_margin_left = 6
-	card_style.content_margin_right = 6
-	card_style.content_margin_top = 2
-	card_style.content_margin_bottom = 2
-	card_style.set_border_width_all(1)
-
-	if combatant == selected_combatant:
-		card_style.bg_color = Color(0.14, 0.2, 0.3, 0.98)
-		card_style.border_color = Color(1.0, 0.85, 0.3, 1.0)
-		card_style.set_border_width_all(2)
-	else:
-		card_style.bg_color = Color(0.09, 0.12, 0.17, 0.95)
-		card_style.border_color = Color(0.2, 0.3, 0.45, 0.8)
-
-	card.add_theme_stylebox_override("panel", card_style)
-
-	var cur_c: Combatant = combatant
-	card.gui_input.connect(func(event: InputEvent) -> void:
-		var mouse_event := event as InputEventMouseButton
-		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			_select_combatant(cur_c)
-	)
-
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 6)
-	card.add_child(hbox)
-
-	# Avatar icon
-	var icon := TextureRect.new()
-	if combatant.name == "Warrior":
-		icon.texture = tex_warrior
-	elif combatant.name == "Ranger":
-		icon.texture = tex_ranger
-	elif combatant.name == "Enemy Brawler":
-		icon.texture = tex_brawler
-	else:
-		icon.texture = tex_scout
-	icon.custom_minimum_size = Vector2(18, 18)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	hbox.add_child(icon)
-
-	# Identity Info
-	var id_vbox := VBoxContainer.new()
-	id_vbox.custom_minimum_size = Vector2(75, 0)
-	id_vbox.add_theme_constant_override("separation", 0)
-	hbox.add_child(id_vbox)
-
-	var name_lbl := Label.new()
-	name_lbl.text = combatant.name
-	name_lbl.add_theme_font_size_override("font_size", 8)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	id_vbox.add_child(name_lbl)
-
-	var stance_lbl := Label.new()
-	stance_lbl.text = CombatTypes.stance_to_string(combatant.current_stance)
-	stance_lbl.add_theme_font_size_override("font_size", 7)
-	stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95) if is_ally else Color(1.0, 0.7, 0.7))
-	id_vbox.add_child(stance_lbl)
-
-	if engagement_tag != "":
-		var tag_lbl := Label.new()
-		tag_lbl.text = engagement_tag
-		tag_lbl.add_theme_font_size_override("font_size", 7)
-		tag_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if engagement_tag.begins_with("🎯") else Color(1.0, 0.55, 0.35))
-		id_vbox.add_child(tag_lbl)
-
-	# Action Block Box
-	var act_box := PanelContainer.new()
-	act_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var box_style := StyleBoxFlat.new()
-	box_style.set_corner_radius_all(3)
-	box_style.set_border_width_all(1)
-	box_style.content_margin_left = 6
-	box_style.content_margin_right = 6
-	box_style.content_margin_top = 2
-	box_style.content_margin_bottom = 2
-
-	var act_vbox := VBoxContainer.new()
-	act_vbox.add_theme_constant_override("separation", 0)
-	act_box.add_child(act_vbox)
-
-	var act_title := Label.new()
-	act_title.add_theme_font_size_override("font_size", 8)
-	act_vbox.add_child(act_title)
-
-	var act_sub := Label.new()
-	act_sub.add_theme_font_size_override("font_size", 7)
-	act_sub.add_theme_color_override("font_color", Color(0.7, 0.8, 0.85))
-	act_vbox.add_child(act_sub)
-
-	var is_enemy_in_planning: bool = not is_ally and combat_phase != CombatPhase.REPLAY
-
-	if is_enemy_in_planning:
-		act_title.text = "🔒 Secret Action"
-		act_title.add_theme_color_override("font_color", Color(1.0, 0.55, 0.55))
-		act_sub.text = "Intent masked during planning"
-		box_style.bg_color = Color(0.18, 0.09, 0.11, 0.8)
-		box_style.border_color = Color(0.55, 0.25, 0.25, 0.8)
-	elif act != null:
-		var cmd := act.command
-		var step_in_act: int = block - act.start_block + 1
-		var total_steps: int = act.end_block - act.start_block + 1
-		var phase_desc: String = "Resolving Impact" if block == act.end_block else "Windup / Channeling"
-
-		act_title.text = "%s [%d/%d]" % [cmd.command_name, step_in_act, total_steps]
-		act_title.add_theme_color_override("font_color", Color.WHITE)
-		act_sub.text = phase_desc
-
-		if cmd is AttackCommand:
-			box_style.bg_color = Color(0.4, 0.12, 0.14, 0.9)
-			box_style.border_color = Color(0.85, 0.3, 0.3, 1.0)
-		elif cmd is DefendCommand:
-			box_style.bg_color = Color(0.12, 0.25, 0.48, 0.9)
-			box_style.border_color = Color(0.3, 0.6, 0.95, 1.0)
-		elif cmd is FocusCommand:
-			box_style.bg_color = Color(0.32, 0.14, 0.48, 0.9)
-			box_style.border_color = Color(0.75, 0.4, 0.95, 1.0)
-		elif cmd is MoveCommand:
-			box_style.bg_color = Color(0.08, 0.32, 0.44, 0.9)
-			box_style.border_color = Color(0.2, 0.8, 0.95, 1.0)
-		else:
-			box_style.bg_color = Color(0.08, 0.38, 0.24, 0.9)
-			box_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
-	else:
-		act_title.text = "· Idle Guard"
-		act_title.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-		act_sub.text = "Evasion / Stance bonus"
-		box_style.bg_color = Color(0.11, 0.14, 0.19, 0.8)
-		box_style.border_color = Color(0.2, 0.26, 0.35, 0.6)
-
-	act_box.add_theme_stylebox_override("panel", box_style)
-	hbox.add_child(act_box)
-
-	return card
 
 
 func _navigate_combined_block(delta: int) -> void:
@@ -1586,48 +1221,11 @@ func _on_log_modal_cell_clicked(entry: ActionLogEntry) -> void:
 
 
 func _trigger_action_impact_fx(entry: ActionLogEntry) -> void:
-	if not grid_view:
+	if not arena_ui:
 		return
 	var actor := _find_combatant_by_name(entry.actor_name)
 	var target := _find_combatant_by_name(entry.target_name)
-	@warning_ignore("unsafe_cast")
-	var actor_token: Control = grid_view.unit_token_nodes.get(actor) as Control if actor else null
-	@warning_ignore("unsafe_cast")
-	var target_token: Control = grid_view.unit_token_nodes.get(target) as Control if target else null
-
-	match entry.category:
-		"ATTACK":
-			if actor != null and target_token != null:
-				grid_view.animate_attacker_lunge(actor, target_token.position)
-			if target != null and target_token != null:
-				var is_mitigated: bool = ("MITIGAT" in entry.outcome_tag)
-				grid_view.animate_token_impact(target, true, is_mitigated)
-				var txt := "-%d" % entry.value_num
-				if is_mitigated:
-					txt += " [MIT]"
-				grid_view.spawn_floating_combat_text(target_token.position, txt, Color(0.4, 0.85, 1.0) if is_mitigated else Color(1.0, 0.35, 0.35))
-				if entry.outcome_tag == "DEFEATED":
-					grid_view.spawn_floating_combat_text(target_token.position + Vector2(0, -14), "💀 DEFEATED!", Color(1.0, 0.25, 0.25))
-
-		"DEFEND":
-			if actor != null and actor_token != null:
-				grid_view.animate_token_pulse(actor, Color(0.5, 0.8, 1.8))
-				grid_view.spawn_floating_combat_text(actor_token.position, "🛡 DEFEND [%d%%]" % entry.value_num, Color(0.4, 0.8, 1.0))
-
-		"BUFF":
-			if actor != null and actor_token != null:
-				grid_view.animate_token_pulse(actor, Color(1.8, 1.5, 0.4))
-				grid_view.spawn_floating_combat_text(actor_token.position, "✦ +%d%% ATK" % entry.value_num, Color(1.0, 0.85, 0.25))
-
-		"MOVE":
-			if actor != null and entry.coord_to != Vector2i(-1, -1):
-				grid_view.animate_token_move(actor, entry.coord_to)
-
-		"EVENT":
-			if "WITHDRAWN" in entry.outcome_tag and actor_token != null:
-				grid_view.spawn_floating_combat_text(actor_token.position, "⚑ WITHDRAWN!", Color(0.35, 0.95, 0.55))
-			elif "AMBUSH" in entry.outcome_tag:
-				grid_view.spawn_floating_combat_text(Vector2(200, 180), "⚠️ AMBUSH SPAWN!", Color(1.0, 0.4, 0.4))
+	arena_ui.trigger_action_fx(entry, actor, target)
 
 
 func _on_step_prev_pressed() -> void:
@@ -1732,9 +1330,6 @@ func _navigate_timeline_round(delta: int) -> void:
 
 
 func _update_round_traversal_ui() -> void:
-	if ruler_round_badge != null:
-		ruler_round_badge.text = "R%d" % viewed_timeline_round
-
 	# Requirement 3: Disable arrows if data not exposed (e.g. on load, R0 and R2 disabled)
 	var can_go_prev: bool = (viewed_timeline_round > 1)
 	var can_go_next: bool = (viewed_timeline_round < max_unlocked_round)
