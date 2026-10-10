@@ -5,6 +5,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 ---
 
 ## Table of Contents
+
 1. [Core Design Philosophy](#core-design-philosophy)
 2. [Codebase Architecture & Directory Breakdown](#codebase-architecture--directory-breakdown)
 3. [Currently Implemented Features & Functionality](#currently-implemented-features--functionality)
@@ -25,7 +26,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 
 ## Codebase Architecture & Directory Breakdown
 
-```
+```text
 tactical-rpg/
 ├── assets/                       # Custom vector SVG assets (sprites, unit tokens, grid tiles)
 ├── data/                         # [Placeholder] Game data definitions & balance tables
@@ -73,12 +74,14 @@ tactical-rpg/
 ## Currently Implemented Features & Functionality
 
 ### 1. 10-Block Simultaneous Resolution Engine
+
 - **Synchronous Execution**: Block-by-block progression from Block 1 to 10. Actions specify start blocks and duration costs.
 - **Initiative Sorting**: Multiple actions completing on the same block resolve deterministically via speed ordering `(priority * 1000) + speed`.
 - **Casualty Action Cancellation**: If an active combatant is eliminated mid-round, all future scheduled commands for that unit are cancelled immediately.
 - **Round Rollover**: Buff durations decrement cleanly, lingering stances carry over deterministically, and fallen/withdrawn units are purged from subsequent rounds.
 
 ### 2. Stance System & Matchup Multipliers
+
 - **6 Discrete Stances**: `NEUTRAL`, `OFFENSIVE`, `DEFENSIVE`, `TACTICAL`, `UTILITY`, `MOBILE`.
 - **Dynamic Combat Modifiers**:
   - `OFFENSIVE` vs `MOBILE`: $+15\%$ damage.
@@ -88,6 +91,7 @@ tactical-rpg/
   - `MOBILE`: Mobility bonuses and position repositioning.
 
 ### 3. 9x9 Spatial Grid & Spatial Rules
+
 - **Arena Geometry**: Fixed 9x9 grid (`0..8` on both axes) with landmark center at `(4, 4)`.
 - **Center-Ring Deployment**: Initial spawn radius around `(4, 4)` offset by attack range so units can engage center on Block 1.
 - **Spatial Range Gating**: Attack commands validate target distance against attacker range; out-of-range attacks fail cleanly.
@@ -95,11 +99,13 @@ tactical-rpg/
 - **Reinforcement Ingress**: Mid-round triggers (e.g. Block 4 ambush) dynamically deploy reinforcements onto grid coordinates.
 
 ### 4. Deterministic Scrubbing & Replay System
+
 - **State Snapshots (`BlockSnapshot`)**: Full state (HP, SP, stances, targets, active flags, coordinates) captured per block.
 - **Two-Way Stepping**: Jump backward and forward through blocks (`Step Prev`, `Step Next`, ruler scrub) with restored visual states.
 - **Multi-Round Historical Traversal**: Review previous completed rounds (Round 1, Round 2) without losing active simulation state.
 
 ### 5. Modular UI & Visual Feedback Framework
+
 - **Pure View Coordinator (`CombatArenaController`)**: Zero layout coupling in simulation logic.
 - **Custom SVG Visual Assets**: Custom vector graphics for characters, unit tokens, and grid tiles.
 - **Allied & Enemy Status Roster Docks**: Real-time HP bars, SP gauges, status badges, and position coordinates.
@@ -118,14 +124,17 @@ tactical-rpg/
 All features are tested headlessly without requiring a graphical window or GPU.
 
 The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **5 test suites** covering **40 individual assertions**:
+
 1. **Combat UI Framework & Behaviour Test** (8 assertions): UI dock creation, scenario mounting, token generation, inspector synchronization, tactical forecast, modal lifecycle, signal relay, and action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
 3. **9x9 Combat Grid & Withdrawal Test** (7 assertions): Center-ring deployment, spatial range gating, coordinate stepping to `(4, 4)`, exit tile escape, and casualty cleanup.
 4. **Resolution Feed Logging Test** (7 assertions): Movement, skill, defend, attack, withdrawal, and defeat log tags.
 5. **Goblin Ambush & Casualty Test** (9 assertions): Reinforcements arrival at Block 4, casualty action cancellation, multi-round rollover, and victory state.
 
-### Automated Check Script (`check_project.ps1`):
+### Automated Check Script (`check_project.ps1`)
+
 Runs in 3 phases:
+
 - `[1/3]` Validates GDScript syntax & static typing across all 27 project scripts (`--headless --check-only`).
 - `[2/3]` Verifies global class cache and asset imports (`--headless --editor --quit`).
 - `[3/3]` Executes the full headless test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
@@ -135,20 +144,27 @@ Runs in 3 phases:
 ## How to Run
 
 ### Run Validation & Tests (Headless)
+
 Run via PowerShell:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\check_project.ps1
 ```
+
 Or via Windows Batch:
+
 ```cmd
 check_project.bat
 ```
 
 ### Run Interactive Visual Arena
+
 Launch the game in windowed mode:
+
 ```cmd
 run_game.bat
 ```
+
 Or open the project in **Godot 4.7+** and press **F5** (Main Scene: `res://scenes/test_arena.tscn`).
 
 ---
@@ -158,14 +174,18 @@ Or open the project in **Godot 4.7+** and press **F5** (Main Scene: `res://scene
 The following modular systems and capabilities are planned according to the master game design specification:
 
 ### 1. Interactive Command Input & Planning Phase (Next Priority)
+
 *Status: Architecture ready, planning UI in progress.*
+
 - [ ] Interactive timeline command placement (drag/click to assign player commands onto Blocks 1–10).
 - [ ] Action Point / Stamina cost budget verification during planning.
 - [ ] Dynamic command replacement and block shifting.
 - [ ] Extraction of `CombatSession` orchestration out of `test_arena.gd` to completely decouple playback from the harness.
 
 ### 2. Enemy AI Decision Engine (`System 8`)
+
 *Status: Currently runs pre-scripted tactical scenarios; dynamic AI engine planned.*
+
 - [ ] AI Intent Evaluation: Evaluate party vulnerabilities, calculate distances, and choose targets.
 - [ ] Role Archetypes:
   - *Aggressor*: Closes distance and executes high-power offensive combos.
@@ -175,12 +195,16 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] Dynamic Flee Heuristic: Automatically triggers `MoveCommand` toward exit tiles when HP falls below 25%.
 
 ### 3. Asset Loading & Animation Test Suite (`Test Suite 2`)
+
 *Status: Planned.*
+
 - [ ] Dedicated automated test suite verifying SVG asset loads, dimensions, and texture caching.
 - [ ] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification).
 
 ### 4. Advanced Combat Rules & Combo Engine (`System 6`)
+
 *Status: Planned.*
+
 - [ ] **Chained Flow Moves**: Skills that automatically transition into compatible follow-up stances.
 - [ ] **Stance Disruption & Stagger**: Critical attacks or guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
 - [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 9x9 grid.
@@ -188,33 +212,43 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] **Status Conditions**: Bleed, Poison, Blind, Stun, and Haste.
 
 ### 5. Items & Consumable Inventory Engine (`System 7`)
+
 *Status: Planned.*
+
 - [ ] Shared party bag with consumable items and equippable gear.
 - [ ] `ItemCommand`: Consumable usage on the timeline (1–2 blocks, Utility Stance).
 - [ ] Potions, bandages, throwable bombs, and anti-toxins.
 
 ### 6. Character Progression & Stats Engine (`System 5`)
+
 *Status: Planned.*
+
 - [ ] Class archetypes (Warrior, Ranger, Rogue, Mage, Cleric).
 - [ ] Level progression, stat scaling, and attribute points.
 - [ ] Passive trait slots (e.g. counter-attack chance, bonus movement speed).
 - [ ] Equipment slots influencing timeline action speed and unlocked commands.
 
 ### 7. Region Map & Exploration Engine (`System 2`)
+
 *Status: Specification defined in `.context/GAME_DESIGN.md`.*
+
 - [ ] 2D top-down grid exploration with tile types (`SAFE` vs `DANGER`).
 - [ ] Danger step counter triggering mob encounter rolls.
 - [ ] Visible roaming elite/boss encounters with detection radii.
 - [ ] Region exit point tiles that transition to the World Map.
 
 ### 8. World Map & Travel Engine (`System 1`)
+
 *Status: Specification defined in `.context/GAME_DESIGN.md`.*
+
 - [ ] Regional node/route graph linking world biomes.
-- [ ] Travel time consumption and road encounter rolls.
+- [ ] Travel time consumption and road danger rolls.
 - [ ] Seamless multi-layer transition: World Map $\leftrightarrow$ Region Map $\leftrightarrow$ Combat Arena.
 
 ### 9. NPC, Dialogue & World Story Engine (`System 9`)
+
 *Status: Specification defined in `.context/GAME_DESIGN.md`.*
+
 - [ ] Branching dialogue trees with choices and skill checks.
 - [ ] Global quest flag registry and world state persistence.
 - [ ] Faction reputation meters and trading/merchant shops.
