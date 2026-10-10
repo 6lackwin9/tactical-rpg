@@ -6,8 +6,6 @@ extends PanelContainer
 # Full-screen multi-track timeline suite for deep synchronous block inspection
 # ==============================================================================
 
-const BlockSnapshot = preload("res://scripts/combat/block_snapshot.gd")
-
 signal round_nav_requested(delta: int)
 signal block_selected(block: int)
 signal combatant_selected(c: Combatant)

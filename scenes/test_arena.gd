@@ -120,10 +120,7 @@ enum CombatPhase {
 	REPLAY
 }
 
-const BlockSnapshot = preload("res://scripts/combat/block_snapshot.gd")
-const ActionLogEntry = preload("res://scripts/ui/action_log_entry.gd")
-const CombatLogModal = preload("res://scripts/ui/combat_log_modal.gd")
-const TimelineModal = preload("res://scripts/ui/timeline_modal.gd")
+
 
 
 # Interactive UI References

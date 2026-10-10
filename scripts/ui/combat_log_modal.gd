@@ -6,8 +6,6 @@ extends PanelContainer
 # Full-screen modal overlay displaying chronological, categorized action cells
 # ==============================================================================
 
-const ActionLogEntry = preload("res://scripts/ui/action_log_entry.gd")
-
 signal cell_clicked(entry: ActionLogEntry)
 signal modal_closed()
 
