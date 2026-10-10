@@ -78,6 +78,10 @@ func _ready() -> void:
 		print("Running in windowed mode. Initializing interactive tactical UI...\n")
 		_setup_interactive_ui()
 		_init_interactive_simulation()
+		get_tree().create_timer(1.2).timeout.connect(func() -> void:
+			if not sim_finished and not is_auto_playing:
+				_on_play_toggle_pressed()
+		)
 
 
 # ==============================================================================
