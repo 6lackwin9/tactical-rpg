@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+  <circle cx="28" cy="28" r="26" fill="#3b0f0f" stroke="#ef4444" stroke-width="3"/>
+  <circle cx="28" cy="28" r="22" fill="#200505"/>
+  <!-- Crossed Battle Axes -->
+  <line x1="16" y1="16" x2="40" y2="40" stroke="#fca5a5" stroke-width="3" stroke-linecap="round"/>
+  <line x1="40" y1="16" x2="16" y2="40" stroke="#fca5a5" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 12 16 C 14 10, 24 10, 26 16 C 24 22, 14 22, 12 16 Z" fill="#ef4444"/>
+  <path d="M 44 16 C 42 10, 32 10, 30 16 C 32 22, 42 22, 44 16 Z" fill="#ef4444"/>
+  <circle cx="28" cy="28" r="5" fill="#b91c1c"/>
+</svg>

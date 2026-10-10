@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+  <circle cx="28" cy="28" r="26" fill="#3b200b" stroke="#f59e0b" stroke-width="3"/>
+  <circle cx="28" cy="28" r="22" fill="#1f1105"/>
+  <!-- Curved Twin Daggers -->
+  <path d="M 18 16 Q 26 24 38 40" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M 38 16 Q 30 24 18 40" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <circle cx="28" cy="28" r="4" fill="#fbbf24"/>
+</svg>

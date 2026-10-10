@@ -12,12 +12,33 @@ var tex_warrior: Texture2D
 var tex_ranger: Texture2D
 var tex_brawler: Texture2D
 var tex_scout: Texture2D
+var tex_skirmisher: Texture2D
+var tex_archer: Texture2D
+var tex_berserker: Texture2D
+var tex_shaman: Texture2D
 
-# Character Placeholder Full Sprite Textures
+# Character Full Sprite Textures
 var tex_sprite_warrior: Texture2D
 var tex_sprite_ranger: Texture2D
 var tex_sprite_brawler: Texture2D
 var tex_sprite_scout: Texture2D
+var tex_sprite_skirmisher: Texture2D
+var tex_sprite_archer: Texture2D
+var tex_sprite_berserker: Texture2D
+var tex_sprite_shaman: Texture2D
+
+# Active Combatant Unit Instances & Scenario State
+var unit_warrior: Combatant
+var unit_ranger: Combatant
+var unit_brawler: Combatant
+var unit_scout: Combatant
+var unit_skirmisher: Combatant
+var unit_archer: Combatant
+var unit_berserker: Combatant
+var unit_shaman: Combatant
+var reinforcements_spawned: bool = false
+var current_combat_round: int = 1
+var btn_next_round: Button
 
 static func _load_svg_texture(res_path: String) -> Texture2D:
 	if FileAccess.file_exists(res_path):
@@ -38,12 +59,49 @@ func _init_textures() -> void:
 	tex_ranger = _load_svg_texture("res://assets/token_ranger.svg")
 	tex_brawler = _load_svg_texture("res://assets/token_brawler.svg")
 	tex_scout = _load_svg_texture("res://assets/token_scout.svg")
+	tex_skirmisher = _load_svg_texture("res://assets/token_skirmisher.svg")
+	tex_archer = _load_svg_texture("res://assets/token_archer.svg")
+	tex_berserker = _load_svg_texture("res://assets/token_berserker.svg")
+	tex_shaman = _load_svg_texture("res://assets/token_shaman.svg")
 
-	# Load placeholder sprite assets
+	# Load sprite assets
 	tex_sprite_warrior = _load_svg_texture("res://assets/sprite_warrior.svg")
 	tex_sprite_ranger = _load_svg_texture("res://assets/sprite_ranger.svg")
 	tex_sprite_brawler = _load_svg_texture("res://assets/sprite_brawler.svg")
 	tex_sprite_scout = _load_svg_texture("res://assets/sprite_scout.svg")
+	tex_sprite_skirmisher = _load_svg_texture("res://assets/sprite_skirmisher.svg")
+	tex_sprite_archer = _load_svg_texture("res://assets/sprite_archer.svg")
+	tex_sprite_berserker = _load_svg_texture("res://assets/sprite_berserker.svg")
+	tex_sprite_shaman = _load_svg_texture("res://assets/sprite_shaman.svg")
+
+func _get_combatant_token_texture(c: Combatant) -> Texture2D:
+	if c == null:
+		return null
+	match c.name:
+		"Warrior": return tex_warrior
+		"Ranger": return tex_ranger
+		"Enemy Brawler": return tex_brawler
+		"Fleeing Scout", "Goblin Scout": return tex_scout
+		"Goblin Skirmisher": return tex_skirmisher
+		"Goblin Archer": return tex_archer
+		"Goblin Berserker": return tex_berserker
+		"Goblin Shaman": return tex_shaman
+		_: return tex_brawler
+
+func _get_combatant_sprite_texture(c: Combatant) -> Texture2D:
+	if c == null:
+		return null
+	match c.name:
+		"Warrior": return tex_sprite_warrior
+		"Ranger": return tex_sprite_ranger
+		"Enemy Brawler": return tex_sprite_brawler
+		"Fleeing Scout", "Goblin Scout": return tex_sprite_scout
+		"Goblin Skirmisher": return tex_sprite_skirmisher
+		"Goblin Archer": return tex_sprite_archer
+		"Goblin Berserker": return tex_sprite_berserker
+		"Goblin Shaman": return tex_sprite_shaman
+		_: return tex_sprite_brawler
+
 
 const TILE_SIZE: int = 54
 const GRID_SIZE: int = 9
@@ -195,7 +253,8 @@ func _ready() -> void:
 	var test1_passed: bool = _run_warrior_vs_3_goblins_battle()
 	var test2_passed: bool = _run_combat_grid_and_withdrawal_test()
 	var test3_passed: bool = _run_resolution_feed_logging_test()
-	var all_tests_passed: bool = test1_passed and test2_passed and test3_passed
+	var test4_passed: bool = _run_goblin_ambush_and_casualty_test()
+	var all_tests_passed: bool = test1_passed and test2_passed and test3_passed and test4_passed
 
 	var exit_code: int = 0 if all_tests_passed else 1
 
@@ -902,6 +961,25 @@ func _setup_interactive_ui() -> void:
 	status_label.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95))
 	controls_vbox.add_child(status_label)
 
+	btn_next_round = Button.new()
+	btn_next_round.text = "⚔ ADVANCE TO ROUND 2"
+	btn_next_round.tooltip_text = "Conclude Round 1 and advance to Round 2 (Warrior Last Stand)"
+	btn_next_round.custom_minimum_size = Vector2(0, 24)
+	btn_next_round.add_theme_font_size_override("font_size", 9)
+	var next_btn_style := StyleBoxFlat.new()
+	next_btn_style.bg_color = Color(0.7, 0.45, 0.1, 0.95)
+	next_btn_style.border_color = Color(1.0, 0.85, 0.3, 1.0)
+	next_btn_style.set_border_width_all(1)
+	next_btn_style.set_corner_radius_all(4)
+	next_btn_style.content_margin_left = 6
+	next_btn_style.content_margin_right = 6
+	next_btn_style.content_margin_top = 2
+	next_btn_style.content_margin_bottom = 2
+	btn_next_round.add_theme_stylebox_override("normal", next_btn_style)
+	btn_next_round.visible = false
+	btn_next_round.pressed.connect(_on_next_round_pressed)
+	controls_vbox.add_child(btn_next_round)
+
 	var vsep1 := VSeparator.new()
 	bottom_hbox.add_child(vsep1)
 
@@ -1203,18 +1281,22 @@ func _build_combined_block_ui(parent: Control) -> void:
 # ==============================================================================
 
 func _init_interactive_simulation() -> void:
+	current_combat_round = 1
 	current_sim_block = 1
 	replay_block = 1
 	combined_selected_block = 1
 	sim_finished = false
 	is_auto_playing = false
+	reinforcements_spawned = false
 	combat_phase = CombatPhase.PLANNING
 	auto_play_timer.stop()
 	btn_play.text = "▶"
-	btn_play.tooltip_text = "Auto-Resolve Round"
+	btn_play.tooltip_text = "Auto-Resolve Round 1"
+	if btn_next_round:
+		btn_next_round.visible = false
 	phase_badge_lbl.text = "PLANNING PHASE"
 	phase_badge_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
-	status_label.text = "Set party actions, then Auto-Resolve."
+	status_label.text = "Round 1: Set party actions, then Auto-Resolve."
 
 	# Clear previous tokens
 	var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
@@ -1233,7 +1315,7 @@ func _init_interactive_simulation() -> void:
 	roster_cards.clear()
 
 	log_rich_text.clear()
-	_append_log("[color=cyan]>>> New 10-Block Tactical Battle Initialized (Pre-planned Actions Loaded).[/color]")
+	_append_log("[color=cyan]>>> New 10-Block Tactical Battle Initialized (Round 1 Pre-planned Actions Loaded).[/color]")
 
 	# 1. Initialize 9x9 Closed Arena with designated Exit at (8, 4)
 	var exit_coord := Vector2i(8, 4)
@@ -1242,63 +1324,95 @@ func _init_interactive_simulation() -> void:
 	sim_resolver.grid = sim_grid
 	sim_resolver.log_emitted.connect(_on_resolver_log_emitted)
 
-	# 2. Combatants
-	var warrior := Combatant.new("Warrior", 100, 15, 1)
-	var ranger := Combatant.new("Ranger", 80, 14, 2)
-	var brawler := Combatant.new("Enemy Brawler", 45, 12, 1)
-	var scout := Combatant.new("Fleeing Scout", 30, 16, 1)
+	# 2. Combatants (Allied Party & Enemy Forces)
+	unit_warrior = Combatant.new("Warrior", 100, 15, 1)
+	unit_ranger = Combatant.new("Ranger", 80, 14, 2)
+	unit_brawler = Combatant.new("Enemy Brawler", 45, 12, 1)
+	unit_scout = Combatant.new("Fleeing Scout", 30, 16, 1)
 
-	sim_allies = [warrior, ranger]
-	sim_enemies = [brawler, scout]
+	# Goblin Ambush Reinforcements (Arriving Block 4 after Scout exit)
+	unit_skirmisher = Combatant.new("Goblin Skirmisher", 40, 15, 1)
+	unit_archer = Combatant.new("Goblin Archer", 35, 13, 3)
+	unit_berserker = Combatant.new("Goblin Berserker", 55, 11, 1)
+	unit_shaman = Combatant.new("Goblin Shaman", 35, 12, 2)
 
-	sim_resolver.register_combatant(warrior)
-	sim_resolver.register_combatant(ranger)
-	sim_resolver.register_combatant(brawler)
-	sim_resolver.register_combatant(scout)
+	sim_allies = [unit_warrior, unit_ranger]
+	sim_enemies = [unit_brawler, unit_scout, unit_skirmisher, unit_archer, unit_berserker, unit_shaman]
 
-	# 3. Center-ring deployment
-	sim_grid.deploy_combatants(sim_allies, sim_enemies)
+	for c in [unit_warrior, unit_ranger, unit_brawler, unit_scout, unit_skirmisher, unit_archer, unit_berserker, unit_shaman]:
+		sim_resolver.register_combatant(c)
+
+	# 3. Center-ring deployment for initial combatants only
+	sim_grid.deploy_combatants(sim_allies, [unit_brawler, unit_scout])
 
 	# 4. Schedule Pre-Planned Commands for Round 1
 	# Warrior:
 	#   Block 1: Move Up to Center (4, 4) [1b]
 	#   Block 2-3: Melee Attack on Brawler [2b]
-	sim_resolver.schedule_action(warrior, MoveCommand.new(warrior, sim_grid, Vector2i(0, -1), 1), 1)
-	sim_resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 25, 2, 0, sim_grid), 2)
+	#   Block 4: Target Goblin Berserker [1b]
+	#   Block 5-6: Attack Goblin Berserker (25 power) [2b]
+	#   Block 7-8: Defend (50% mitigation against ambush) [2b]
+	#   Block 9-10: Counter-Attack Goblin Skirmisher [2b]
+	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(0, -1), 1), 1)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_brawler, 25, 2, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_warrior, TargetCommand.new(unit_warrior, unit_skirmisher, 1), 4)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_skirmisher, 25, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.5, 2, 1), 7)
+	sim_resolver.schedule_action(unit_warrior, HoldStanceCommand.new(unit_warrior, 0), 9)
 
 	# Ranger:
 	#   Block 1-2: Skill - Focus (+50% ATK for 2 rds) [2b]
 	#   Block 4: Move Up to (4, 5) [1b]
-	#   Block 5-6: Boosted Ranged Attack on Brawler [2b]
-	sim_resolver.schedule_action(ranger, FocusCommand.new(ranger, 1.5, 2, 2, 0), 1)
-	sim_resolver.schedule_action(ranger, MoveCommand.new(ranger, sim_grid, Vector2i(0, -1), 1), 4)
-	sim_resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 25, 2, 0, sim_grid), 5)
+	#   Block 5-6: Boosted Ranged Attack on Brawler (resolves Block 6 -> Brawler defeated!) [2b]
+	#   Block 7-8: Attack Archer (cancelled when Ranger falls to ambush at Block 6) [2b]
+	sim_resolver.schedule_action(unit_ranger, FocusCommand.new(unit_ranger, 1.5, 2, 2, 0), 1)
+	sim_resolver.schedule_action(unit_ranger, MoveCommand.new(unit_ranger, sim_grid, Vector2i(0, -1), 1), 4)
+	sim_resolver.schedule_action(unit_ranger, AttackCommand.new(unit_ranger, unit_brawler, 30, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_ranger, AttackCommand.new(unit_ranger, unit_archer, 25, 2, 0, sim_grid), 7)
 
 	# Enemy Brawler (Scheduled in secret):
 	#   Block 1: Target Warrior [1b]
 	#   Block 2-3: Defend (50% mitigation) [2b]
-	#   Block 4-5: Counter-Attack Warrior (20 power) [2b]
-	sim_resolver.schedule_action(brawler, TargetCommand.new(brawler, warrior, 2), 1)
-	sim_resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5, 2, 1), 2)
-	sim_resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 20, 2, 0, sim_grid), 4)
+	#   Block 4-5: Counter-Attack Warrior (15 power) [2b]
+	sim_resolver.schedule_action(unit_brawler, TargetCommand.new(unit_brawler, unit_warrior, 2), 1)
+	sim_resolver.schedule_action(unit_brawler, DefendCommand.new(unit_brawler, 0.5, 2, 1), 2)
+	sim_resolver.schedule_action(unit_brawler, AttackCommand.new(unit_brawler, unit_warrior, 15, 2, 0, sim_grid), 4)
 
 	# Fleeing Scout (Scheduled in secret):
 	#   Block 1: Move East to (6, 4) [1b]
 	#   Block 2-3: Sprint East 2 steps to (8, 4) Exit Tile -> Safely Withdraws! [2b]
-	sim_resolver.schedule_action(scout, MoveCommand.new(scout, sim_grid, Vector2i(1, 0), 1), 1)
-	sim_resolver.schedule_action(scout, MoveCommand.new(scout, sim_grid, Vector2i(1, 0), 2, 2), 2)
+	sim_resolver.schedule_action(unit_scout, MoveCommand.new(unit_scout, sim_grid, Vector2i(1, 0), 1), 1)
+	sim_resolver.schedule_action(unit_scout, MoveCommand.new(unit_scout, sim_grid, Vector2i(1, 0), 2, 2), 2)
 
-	# 5. Clone All Scheduled Actions into Permanent Archive (Preserves Replay Visibility!)
+	# Ambush Reinforcements (Scheduled for Blocks 4-10):
+	# Berserker (spawns (5, 5)):
+	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_ranger, 1), 4)
+	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_ranger, 30, 2, 0, sim_grid), 5)
+
+	# Archer (spawns (7, 5)):
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_ranger, 1), 4)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_ranger, 25, 2, 0, sim_grid), 5)
+
+	# Shaman (spawns (6, 5)):
+	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_ranger, 1), 4)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_ranger, 25, 2, 0, sim_grid), 5)
+
+	# Skirmisher (spawns (6, 4)):
+	sim_resolver.schedule_action(unit_skirmisher, MoveCommand.new(unit_skirmisher, sim_grid, Vector2i(-1, 0), 1), 4)
+	sim_resolver.schedule_action(unit_skirmisher, TargetCommand.new(unit_skirmisher, unit_warrior, 1), 5)
+	sim_resolver.schedule_action(unit_skirmisher, AttackCommand.new(unit_skirmisher, unit_warrior, 12, 2, 0, sim_grid), 7)
+
+	# 5. Clone All Scheduled Actions into Permanent Archive
 	recorded_actions.clear()
 	for a in sim_resolver.scheduled_actions:
 		recorded_actions.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
 
 	# 6. Build visual unit tokens and roster cards
 	for ally in sim_allies:
-		_create_unit_token(ally, tex_warrior if ally.name == "Warrior" else tex_ranger)
+		_create_unit_token(ally, _get_combatant_token_texture(ally))
 		_create_roster_card(ally, Color(0.2, 0.5, 0.9))
 	for enemy in sim_enemies:
-		_create_unit_token(enemy, tex_brawler if enemy.name == "Enemy Brawler" else tex_scout)
+		_create_unit_token(enemy, _get_combatant_token_texture(enemy))
 		_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
 
 	party_title_lbl.text = "⚔ PARTY MEMBERS (%d)" % sim_allies.size()
@@ -1309,11 +1423,11 @@ func _init_interactive_simulation() -> void:
 	_capture_snapshot(0)
 
 	# 8. Setup 2x2 Party Focus Box & Default Selection
-	selected_party_hero = warrior
+	selected_party_hero = unit_warrior
 	_update_party_select_box()
 
 	# Set default selected unit to Warrior
-	_select_combatant(warrior)
+	_select_combatant(unit_warrior)
 	_update_timeline_tracks_display()
 	_update_combined_block_display(1)
 
@@ -1363,7 +1477,12 @@ func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
 	unit_token_nodes[combatant] = token_ctrl
 
 	var pos: Vector2i = sim_grid.get_position(combatant)
-	token_ctrl.position = Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
+	if pos == Vector2i(-1, -1):
+		token_ctrl.modulate.a = 0.0
+		token_ctrl.position = Vector2(0, 0)
+	else:
+		token_ctrl.modulate.a = 1.0
+		token_ctrl.position = Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
 
 
 func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
@@ -1463,16 +1582,19 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		var token := unit_token_nodes[c] as Control
 		if snap.positions.has(c):
 			var pos := snap.positions[c] as Vector2i
-			var target_px := Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
-			var tw := create_tween()
-			tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-			var active: bool = snap.is_active[c] as bool
-			var withdrawn: bool = snap.is_withdrawn[c] as bool
-			if not active:
-				token.modulate = Color(0.3, 0.3, 0.3, 0.0 if withdrawn else 0.5)
+			if pos == Vector2i(-1, -1):
+				token.modulate.a = 0.0
 			else:
-				token.modulate = Color.WHITE
+				var target_px := Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
+				var tw := create_tween()
+				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+				var active: bool = snap.is_active[c] as bool
+				var withdrawn: bool = snap.is_withdrawn[c] as bool
+				if not active:
+					token.modulate = Color(0.4, 0.4, 0.4, 0.0 if withdrawn else 0.6)
+				else:
+					token.modulate = Color.WHITE
 
 	for c_variant in roster_cards.keys():
 		var c := c_variant as Combatant
@@ -1569,25 +1691,27 @@ func _update_selected_unit_panel() -> void:
 		inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
 		inspector_team_lbl.text = "Allied Hero (Party Member)"
 		inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
-		if selected_combatant.name == "Warrior":
-			inspector_avatar.texture = tex_sprite_warrior if tex_sprite_warrior != null else tex_warrior
-		else:
-			inspector_avatar.texture = tex_sprite_ranger if tex_sprite_ranger != null else tex_ranger
-		ally_actions_container.visible = true
+		inspector_avatar.texture = _get_combatant_sprite_texture(selected_combatant)
+		ally_actions_container.visible = selected_combatant.is_alive()
 		enemy_actions_container.visible = false
-		left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
+		if not selected_combatant.is_alive():
+			left_hint.text = "💀 Unit is defeated. Future commands cancelled."
+		else:
+			left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
 	else:
 		inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
 		inspector_team_lbl.text = "Hostile Enemy Unit"
 		inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-		if selected_combatant.name == "Enemy Brawler":
-			inspector_avatar.texture = tex_sprite_brawler if tex_sprite_brawler != null else tex_brawler
-		else:
-			inspector_avatar.texture = tex_sprite_scout if tex_sprite_scout != null else tex_scout
+		inspector_avatar.texture = _get_combatant_sprite_texture(selected_combatant)
 		ally_actions_container.visible = false
-		enemy_actions_container.visible = true
+		enemy_actions_container.visible = selected_combatant.is_alive()
 		_rebuild_enemy_threat_dock()
-		left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
+		if not selected_combatant.is_alive():
+			left_hint.text = "💀 Enemy hostile defeated."
+		elif selected_combatant.is_withdrawn:
+			left_hint.text = "💨 Enemy safely withdrew through escape boundary."
+		else:
+			left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
 
 	inspector_hp_bar.max_value = selected_combatant.max_hp
 	inspector_hp_bar.value = selected_combatant.hp
@@ -1638,19 +1762,48 @@ func _rebuild_enemy_threat_dock() -> void:
 			child.queue_free()
 
 	var enemy_actions: Array[Dictionary] = []
-	if selected_combatant.name == "Enemy Brawler":
-		enemy_actions = [
-			{"name": "⚔ Heavy Strike", "desc": "20 Power Melee Crush | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)},
-			{"name": "🛡 Iron Guard", "desc": "50% Mitigation Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
-			{"name": "🎯 Target Lock", "desc": "Melee Focus Engagement | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
-			{"name": "➜ Tactical Stride", "desc": "1-Tile Repositioning | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
-		]
-	else:
-		enemy_actions = [
-			{"name": "➜ Swift Retreat", "desc": "1-Tile Move toward Exit | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-			{"name": "⚡ Sprint / Dash", "desc": "2-Tile Burst toward Boundary | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.8, 0.3)},
-			{"name": "🗡 Quick Shank", "desc": "10 Power Puncture | Cost: 1 Block", "cost": 1, "color": Color(0.9, 0.35, 0.35)}
-		]
+	match selected_combatant.name:
+		"Enemy Brawler":
+			enemy_actions = [
+				{"name": "⚔ Heavy Strike", "desc": "20 Power Melee Crush | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)},
+				{"name": "🛡 Iron Guard", "desc": "50% Mitigation Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
+				{"name": "🎯 Target Lock", "desc": "Melee Focus Engagement | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
+				{"name": "➜ Tactical Stride", "desc": "1-Tile Repositioning | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
+			]
+		"Fleeing Scout", "Goblin Scout":
+			enemy_actions = [
+				{"name": "➜ Swift Retreat", "desc": "1-Tile Move toward Exit | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
+				{"name": "⚡ Sprint / Dash", "desc": "2-Tile Burst toward Boundary | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.8, 0.3)},
+				{"name": "🗡 Quick Shank", "desc": "10 Power Puncture | Cost: 1 Block", "cost": 1, "color": Color(0.9, 0.35, 0.35)}
+			]
+		"Goblin Skirmisher":
+			enemy_actions = [
+				{"name": "🗡 Twin Dagger Rush", "desc": "15 Power Rapid Flank | Cost: 1 Block", "cost": 1, "color": Color(0.95, 0.6, 0.2)},
+				{"name": "➜ Shadow Step", "desc": "Agile 1-Tile Advance | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
+				{"name": "⚔ Flank Strike", "desc": "20 Power Heavy Puncture | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
+			]
+		"Goblin Archer":
+			enemy_actions = [
+				{"name": "🏹 Piercing Volley", "desc": "25 Power Longshot (Rng 3) | Cost: 2 Blocks", "cost": 2, "color": Color(0.2, 0.85, 0.5)},
+				{"name": "🎯 Eagle Eye", "desc": "Target Lock & Ranged Focus | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
+				{"name": "➜ Reposition", "desc": "Kiting 1-Tile Step | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
+			]
+		"Goblin Berserker":
+			enemy_actions = [
+				{"name": "🪓 Brutal Cleave", "desc": "30 Power Devastating Blow | Cost: 2 Blocks", "cost": 2, "color": Color(0.95, 0.25, 0.25)},
+				{"name": "🔥 Blood Frenzy", "desc": "+25% Attack Boost Buff | Cost: 2 Blocks", "cost": 2, "color": Color(0.95, 0.5, 0.2)},
+				{"name": "⚔ Axe Slam", "desc": "20 Power Heavy Chop | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
+			]
+		"Goblin Shaman":
+			enemy_actions = [
+				{"name": "🔮 Shadow Hex", "desc": "25 Power Dark Curse (Rng 2) | Cost: 2 Blocks", "cost": 2, "color": Color(0.7, 0.4, 0.95)},
+				{"name": "💀 Tribal Ward", "desc": "50% Mystic Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
+				{"name": "✨ Mending Chant", "desc": "Restores 15 HP to Ally | Cost: 2 Blocks", "cost": 2, "color": Color(0.3, 0.9, 0.6)}
+			]
+		_:
+			enemy_actions = [
+				{"name": "⚔ Attack", "desc": "Basic Strike | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
+			]
 
 	for act in enemy_actions:
 		var card := _create_mini_action_card(act)
@@ -1795,10 +1948,15 @@ func _update_party_select_box() -> void:
 
 		if ally != null:
 			var is_selected: bool = (ally == selected_party_hero)
+			var is_alive: bool = ally.is_alive()
 			if is_selected:
 				slot_style.bg_color = Color(0.18, 0.26, 0.38, 0.98)
 				slot_style.border_color = Color(1.0, 0.85, 0.25, 1.0)
 				slot_style.set_border_width_all(2)
+			elif not is_alive:
+				slot_style.bg_color = Color(0.14, 0.08, 0.08, 0.9)
+				slot_style.border_color = Color(0.7, 0.25, 0.25, 0.8)
+				slot_style.set_border_width_all(1)
 			else:
 				slot_style.bg_color = Color(0.09, 0.12, 0.17, 0.9)
 				slot_style.border_color = Color(0.2, 0.4, 0.65, 0.7)
@@ -1809,16 +1967,22 @@ func _update_party_select_box() -> void:
 			slot_pnl.add_child(hbox)
 
 			var icon := TextureRect.new()
-			icon.texture = tex_warrior if ally.name == "Warrior" else tex_ranger
+			icon.texture = _get_combatant_token_texture(ally)
 			icon.custom_minimum_size = Vector2(16, 16)
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			if not is_alive:
+				icon.modulate = Color(0.5, 0.5, 0.5, 0.6)
 			hbox.add_child(icon)
 
 			var lbl := Label.new()
-			lbl.text = ally.name
+			if not is_alive:
+				lbl.text = "%s 💀" % ally.name
+				lbl.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35))
+			else:
+				lbl.text = ally.name
+				lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if is_selected else Color(0.85, 0.92, 1.0))
 			lbl.add_theme_font_size_override("font_size", 7)
-			lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if is_selected else Color(0.85, 0.92, 1.0))
 			hbox.add_child(lbl)
 		else:
 			slot_style.bg_color = Color(0.06, 0.08, 0.11, 0.6)
@@ -2382,7 +2546,11 @@ func _step_simulation() -> void:
 		phase_badge_lbl.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
 
 	if combat_phase == CombatPhase.RESOLVING:
-		_append_log("[color=#fde047][b]━━━ BLOCK %d RESOLUTION ━━━[/b][/color]" % current_sim_block)
+		# Mid-round ambush trigger: When Block 4 is reached in Round 1, 4 new goblins appear!
+		if current_sim_block == 4 and not reinforcements_spawned and current_combat_round == 1:
+			_spawn_goblin_reinforcements()
+
+		_append_log("[color=#fde047][b]━━━ BLOCK %d RESOLUTION (ROUND %d) ━━━[/b][/color]" % [current_sim_block, current_combat_round])
 		sim_resolver.execute_block(current_sim_block)
 		_capture_snapshot(current_sim_block)
 		_sync_visuals_after_block()
@@ -2396,10 +2564,19 @@ func _step_simulation() -> void:
 			is_auto_playing = false
 			btn_play.text = "▶"
 			btn_play.tooltip_text = "Play Replay"
-			phase_badge_lbl.text = "REPLAY & INVESTIGATION MODE"
+			phase_badge_lbl.text = "ROUND %d CONCLUDED - REPLAY MODE" % current_combat_round
 			phase_badge_lbl.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
-			status_label.text = "Round 1 resolved! Enemy actions unmasked in Replay & Combined View."
-			_append_log("\n[color=#4ade80][b]🎉 ROUND 1 RESOLVED: Replay mode active. All enemy actions unmasked.[/b][/color]")
+
+			if btn_next_round:
+				btn_next_round.visible = (current_combat_round == 1 and not is_over)
+
+			if current_combat_round == 1:
+				status_label.text = "Round 1 resolved! Ranger fell in ambush, Warrior holds at 73 HP. Click Advance to Round 2."
+				_append_log("\n[color=#4ade80][b]🎉 ROUND 1 RESOLVED: Ranger fell in the ambush, Warrior holds at 73 HP against 4 goblins! Click ADVANCE TO ROUND 2 to begin the Last Stand.[/b][/color]")
+			else:
+				status_label.text = "Round 2 resolved! Warrior's last stand concluded. Review replay."
+				_append_log("\n[color=#4ade80][b]🎉 ROUND 2 RESOLVED: Combat concluded! Review replay or Reset.[/b][/color]")
+
 			_update_timeline_tracks_display()
 			_update_combined_block_display(replay_block)
 			return
@@ -2416,7 +2593,6 @@ func _step_simulation() -> void:
 		_update_timeline_tracks_display()
 		_update_combined_block_display(replay_block)
 
-
 		if timeline_modal_overlay != null and timeline_modal_overlay.visible:
 			_update_modal_tracks_display()
 
@@ -2425,18 +2601,123 @@ func _sync_visuals_after_block() -> void:
 	for c_variant in unit_token_nodes.keys():
 		var combatant := c_variant as Combatant
 		var token := unit_token_nodes[combatant] as Control
-		if not combatant.is_active():
-			if combatant.is_withdrawn:
-				var tw := create_tween()
-				tw.tween_property(token, "modulate:a", 0.0, 0.4)
-			elif not combatant.is_alive():
-				token.modulate = Color(0.4, 0.4, 0.4, 0.6)
+		var target_coord: Vector2i = sim_grid.get_position(combatant)
+		if target_coord == Vector2i(-1, -1):
+			token.modulate.a = 0.0
 		else:
-			var target_coord: Vector2i = sim_grid.get_position(combatant)
-			var target_px := Vector2(target_coord.x * TILE_SIZE, target_coord.y * TILE_SIZE)
-			if token.position != target_px:
-				var tw := create_tween()
-				tw.tween_property(token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			if not combatant.is_active():
+				if combatant.is_withdrawn:
+					var tw := create_tween()
+					tw.tween_property(token, "modulate:a", 0.0, 0.4)
+				elif not combatant.is_alive():
+					token.modulate = Color(0.4, 0.4, 0.4, 0.6)
+			else:
+				token.modulate = Color.WHITE
+				var target_px := Vector2(target_coord.x * TILE_SIZE, target_coord.y * TILE_SIZE)
+				if token.position != target_px:
+					var tw := create_tween()
+					tw.tween_property(token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _spawn_goblin_reinforcements() -> void:
+	reinforcements_spawned = true
+	_append_log("\n[color=#ef4444][b]⚠️ AMBUSH! Scout's escape alerted the pack! 4 Goblin Reinforcements enter the arena![/b][/color]")
+	_append_log("[color=#f87171]  • Goblin Berserker (55 HP) deployed at (5, 5)[/color]")
+	_append_log("[color=#f87171]  • Goblin Skirmisher (40 HP) deployed at (6, 4)[/color]")
+	_append_log("[color=#f87171]  • Goblin Archer (35 HP) deployed at (7, 5)[/color]")
+	_append_log("[color=#f87171]  • Goblin Shaman (35 HP) deployed at (6, 5)[/color]")
+
+	sim_grid.place_combatant(unit_berserker, Vector2i(5, 5))
+	sim_grid.place_combatant(unit_skirmisher, Vector2i(6, 4))
+	sim_grid.place_combatant(unit_archer, Vector2i(7, 5))
+	sim_grid.place_combatant(unit_shaman, Vector2i(6, 5))
+
+	for c in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
+		if unit_token_nodes.has(c):
+			var token: Control = unit_token_nodes[c]
+			var coord: Vector2i = sim_grid.get_position(c)
+			token.position = Vector2(coord.x * TILE_SIZE, coord.y * TILE_SIZE)
+			var tw := create_tween()
+			tw.tween_property(token, "modulate:a", 1.0, 0.35)
+
+
+func _on_next_round_pressed() -> void:
+	_start_round_2()
+
+
+func _start_round_2() -> void:
+	current_combat_round = 2
+	sim_resolver.finish_round()
+
+	current_sim_block = 1
+	replay_block = 1
+	combined_selected_block = 1
+	sim_finished = false
+	is_auto_playing = false
+	combat_phase = CombatPhase.PLANNING
+	auto_play_timer.stop()
+	btn_play.text = "▶"
+	btn_play.tooltip_text = "Auto-Resolve Round 2"
+	if btn_next_round:
+		btn_next_round.visible = false
+
+	phase_badge_lbl.text = "ROUND 2: PLANNING PHASE"
+	phase_badge_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
+	status_label.text = "Round 2: Warrior (73 HP) stands alone against 4 goblins! Set actions or Auto-Resolve."
+
+	_append_log("\n[color=#38bdf8][b]⚔⚔⚔ COMMENCING ROUND 2: WARRIOR'S LAST STAND ⚔⚔⚔[/b][/color]")
+	_append_log("[color=#93c5fd]Surviving hero Warrior holds center at (4, 4). Pre-planned Round 2 actions loaded.[/color]")
+
+	# Schedule Pre-Planned Commands for Round 2
+	# Warrior:
+	#   Block 1-2: Cleaving Strike on Skirmisher at (4, 3) (power 25) [2b] -> Skirmisher DEFEATED!
+	#   Block 3-4: Defend (50% mitigation) [2b]
+	#   Block 5-6: Heavy Strike on Berserker at (5, 4) (power 30) [2b] -> Berserker DEFEATED!
+	#   Block 7: Move East to (5, 4) [1b]
+	#   Block 8-9: Strike on Shaman at (6, 5) (power 35) [2b] -> Shaman DEFEATED!
+	#   Block 10: Hold Stance [1b]
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_skirmisher, 25, 2, 0, sim_grid), 1)
+	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.5, 2, 1), 3)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_berserker, 30, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(1, 0), 1), 7)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_shaman, 35, 2, 0, sim_grid), 8)
+	sim_resolver.schedule_action(unit_warrior, HoldStanceCommand.new(unit_warrior, 0), 10)
+
+	# Goblin Skirmisher (15 HP at (4, 3)):
+	sim_resolver.schedule_action(unit_skirmisher, TargetCommand.new(unit_skirmisher, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_skirmisher, AttackCommand.new(unit_skirmisher, unit_warrior, 10, 1, 0, sim_grid), 2)
+
+	# Goblin Berserker (30 HP at (5, 4)):
+	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 20, 2, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 4)
+	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 20, 2, 0, sim_grid), 5)
+
+	# Goblin Archer (35 HP at (7, 5)):
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 2, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 15, 2, 0, sim_grid), 4)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 15, 2, 0, sim_grid), 6)
+
+	# Goblin Shaman (35 HP at (6, 5)):
+	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_warrior, 10, 2, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_shaman, DefendCommand.new(unit_shaman, 0.5, 2, 1), 4)
+
+	# Record Round 2 actions
+	recorded_actions.clear()
+	for a in sim_resolver.scheduled_actions:
+		recorded_actions.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
+
+	# Snapshot 0 for Round 2
+	snapshots.clear()
+	_capture_snapshot(0)
+
+	_update_party_select_box()
+	_select_combatant(unit_warrior)
+	_update_timeline_tracks_display()
+	_update_combined_block_display(1)
+	_sync_visuals_after_block()
 
 	for c_variant in roster_cards.keys():
 		var combatant := c_variant as Combatant
@@ -2779,13 +3060,12 @@ func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: 
 		hdr.add_child(hbox)
 
 		var icon := TextureRect.new()
-		if combatant.name == "Warrior": icon.texture = tex_warrior
-		elif combatant.name == "Ranger": icon.texture = tex_ranger
-		elif combatant.name == "Enemy Brawler": icon.texture = tex_brawler
-		else: icon.texture = tex_scout
+		icon.texture = _get_combatant_token_texture(combatant)
 		icon.custom_minimum_size = Vector2(18, 18)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		if not combatant.is_alive():
+			icon.modulate = Color(0.5, 0.5, 0.5, 0.6)
 		hbox.add_child(icon)
 
 		var vinfo := VBoxContainer.new()
@@ -2793,9 +3073,16 @@ func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: 
 		hbox.add_child(vinfo)
 
 		var name_lbl := Label.new()
-		name_lbl.text = combatant.name
+		if not combatant.is_alive():
+			name_lbl.text = "%s 💀" % combatant.name
+			name_lbl.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35))
+		elif combatant.is_withdrawn:
+			name_lbl.text = "%s 💨" % combatant.name
+			name_lbl.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+		else:
+			name_lbl.text = combatant.name
+			name_lbl.add_theme_color_override("font_color", Color.WHITE)
 		name_lbl.add_theme_font_size_override("font_size", 8)
-		name_lbl.add_theme_color_override("font_color", Color.WHITE)
 		vinfo.add_child(name_lbl)
 
 		var hp_lbl := Label.new()
@@ -3211,3 +3498,138 @@ func _run_resolution_feed_logging_test() -> bool:
 
 	return (has_move_log and has_skill_log and has_defend_log and 
 		has_damage_log and has_withdrawal_log and has_defeat_log and battle_resolved)
+
+
+func _run_goblin_ambush_and_casualty_test() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING GOBLIN AMBUSH & CASUALTY TEST (MULTI-RD) ===")
+	print("=======================================================")
+
+	var test_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var test_resolver := CombatResolver.new()
+	test_resolver.grid = test_grid
+
+	var warrior := Combatant.new("Warrior", 100, 15, 1)
+	var ranger := Combatant.new("Ranger", 80, 14, 2)
+	var brawler := Combatant.new("Enemy Brawler", 45, 12, 1)
+	var scout := Combatant.new("Fleeing Scout", 30, 16, 1)
+
+	var skirmisher := Combatant.new("Goblin Skirmisher", 40, 15, 1)
+	var archer := Combatant.new("Goblin Archer", 35, 13, 3)
+	var berserker := Combatant.new("Goblin Berserker", 55, 11, 1)
+	var shaman := Combatant.new("Goblin Shaman", 35, 12, 2)
+
+	var allies: Array[Combatant] = [warrior, ranger]
+	var initial_enemies: Array[Combatant] = [brawler, scout]
+	var all_enemies: Array[Combatant] = [brawler, scout, skirmisher, archer, berserker, shaman]
+
+	for c: Combatant in [warrior, ranger, brawler, scout, skirmisher, archer, berserker, shaman]:
+		test_resolver.register_combatant(c)
+
+	test_grid.deploy_combatants(allies, initial_enemies)
+
+	var init_placement_ok: bool = (test_grid.has_combatant(warrior) and test_grid.has_combatant(ranger) and
+		test_grid.has_combatant(brawler) and test_grid.has_combatant(scout) and
+		not test_grid.has_combatant(skirmisher) and not test_grid.has_combatant(archer))
+
+	# Schedule Round 1 actions:
+	test_resolver.schedule_action(warrior, MoveCommand.new(warrior, test_grid, Vector2i(0, -1), 1), 1)
+	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 25, 2, 0, test_grid), 2)
+	test_resolver.schedule_action(warrior, TargetCommand.new(warrior, skirmisher, 1), 4)
+	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, skirmisher, 25, 2, 0, test_grid), 5)
+	test_resolver.schedule_action(warrior, DefendCommand.new(warrior, 0.5, 2, 1), 7)
+	test_resolver.schedule_action(warrior, HoldStanceCommand.new(warrior, 0), 9)
+
+	test_resolver.schedule_action(ranger, FocusCommand.new(ranger, 1.5, 2, 2, 0), 1)
+	test_resolver.schedule_action(ranger, MoveCommand.new(ranger, test_grid, Vector2i(0, -1), 1), 4)
+	test_resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 30, 2, 0, test_grid), 5)
+	var ranger_future_act := AttackCommand.new(ranger, archer, 25, 2, 0, test_grid)
+	test_resolver.schedule_action(ranger, ranger_future_act, 7)
+
+	test_resolver.schedule_action(brawler, TargetCommand.new(brawler, warrior, 2), 1)
+	test_resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5, 2, 1), 2)
+	test_resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 15, 2, 0, test_grid), 4)
+
+	test_resolver.schedule_action(scout, MoveCommand.new(scout, test_grid, Vector2i(1, 0), 1), 1)
+	test_resolver.schedule_action(scout, MoveCommand.new(scout, test_grid, Vector2i(1, 0), 2, 2), 2)
+
+	# Execute Block 1..3
+	for b: int in range(1, 4):
+		test_resolver.execute_block(b)
+
+	var scout_escaped_ok: bool = scout.is_withdrawn and not scout.is_active() and not test_grid.has_combatant(scout)
+
+	# Block 4 Ambush: Reinforcements arrive on grid
+	test_grid.place_combatant(berserker, Vector2i(5, 5))
+	test_grid.place_combatant(skirmisher, Vector2i(6, 4))
+	test_grid.place_combatant(archer, Vector2i(7, 5))
+	test_grid.place_combatant(shaman, Vector2i(6, 5))
+
+	test_resolver.schedule_action(berserker, TargetCommand.new(berserker, ranger, 1), 4)
+	test_resolver.schedule_action(berserker, AttackCommand.new(berserker, ranger, 30, 2, 0, test_grid), 5)
+	test_resolver.schedule_action(archer, TargetCommand.new(archer, ranger, 1), 4)
+	test_resolver.schedule_action(archer, AttackCommand.new(archer, ranger, 25, 2, 0, test_grid), 5)
+	test_resolver.schedule_action(shaman, TargetCommand.new(shaman, ranger, 1), 4)
+	test_resolver.schedule_action(shaman, AttackCommand.new(shaman, ranger, 25, 2, 0, test_grid), 5)
+
+	test_resolver.schedule_action(skirmisher, MoveCommand.new(skirmisher, test_grid, Vector2i(-1, 0), 1), 4)
+	test_resolver.schedule_action(skirmisher, TargetCommand.new(skirmisher, warrior, 1), 5)
+	test_resolver.schedule_action(skirmisher, AttackCommand.new(skirmisher, warrior, 12, 2, 0, test_grid), 7)
+
+	# Execute Block 4..6
+	for b: int in range(4, 7):
+		test_resolver.execute_block(b)
+
+	var ranger_defeated_ok: bool = not ranger.is_alive() and ranger.hp == 0
+	var brawler_defeated_ok: bool = not brawler.is_alive() and brawler.hp == 0
+
+	var ranger_future_cancelled_ok: bool = false
+	for sa: CombatResolver.ScheduledAction in test_resolver.scheduled_actions:
+		if sa.combatant == ranger and sa.start_block == 7:
+			ranger_future_cancelled_ok = sa.is_cancelled
+			break
+
+	# Execute remaining Blocks 7..10 of Round 1
+	for b: int in range(7, 11):
+		test_resolver.execute_block(b)
+
+	var warrior_survived_r1_ok: bool = warrior.is_alive() and warrior.hp == 73
+	var r1_not_prematurely_ended: bool = not test_resolver.is_combat_resolved(allies, all_enemies)
+
+	# Rollover to Round 2
+	test_resolver.finish_round()
+	var round_2_started_ok: bool = test_resolver.current_round == 2
+
+	# Schedule Round 2 action for Warrior: Finish Skirmisher at (5, 4)
+	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, skirmisher, 25, 2, 0, test_grid), 1)
+	test_resolver.execute_block(1)
+	test_resolver.execute_block(2)
+
+	var skirmisher_defeated_r2_ok: bool = not skirmisher.is_alive() and skirmisher.hp == 0
+
+	print("\n=======================================================")
+	print("=== GOBLIN AMBUSH & CASUALTY TEST ASSERTIONS        ===")
+	print("=======================================================")
+	print("  [Ambush] Initial grid deployment (4 units): %s" % ("PASS" if init_placement_ok else "FAIL"))
+	print("  [Ambush] Scout withdrawal at Block 3: %s" % ("PASS" if scout_escaped_ok else "FAIL"))
+	print("  [Casualty] Ranger defeated at Block 6: %s" % ("PASS" if ranger_defeated_ok else "FAIL"))
+	print("  [Casualty] Ranger future actions cancelled: %s" % ("PASS" if ranger_future_cancelled_ok else "FAIL"))
+	print("  [Casualty] Brawler defeated at Block 6: %s" % ("PASS" if brawler_defeated_ok else "FAIL"))
+	print("  [Multi-Round] Warrior survived Round 1 (73 HP): %s" % ("PASS" if warrior_survived_r1_ok else "FAIL"))
+	print("  [Multi-Round] Combat active with 1 ally & 4 goblins: %s" % ("PASS" if r1_not_prematurely_ended else "FAIL"))
+	print("  [Multi-Round] Rollover to Round 2 succeeded: %s" % ("PASS" if round_2_started_ok else "FAIL"))
+	print("  [Multi-Round] Round 2 combat resolved Skirmisher: %s" % ("PASS" if skirmisher_defeated_r2_ok else "FAIL"))
+
+	warrior.clear_target()
+	ranger.clear_target()
+	brawler.clear_target()
+	scout.clear_target()
+	skirmisher.clear_target()
+	archer.clear_target()
+	berserker.clear_target()
+	shaman.clear_target()
+	test_resolver.registered_combatants.clear()
+
+	return (init_placement_ok and scout_escaped_ok and ranger_defeated_ok and
+		ranger_future_cancelled_ok and brawler_defeated_ok and warrior_survived_r1_ok and
+		r1_not_prematurely_ended and round_2_started_ok and skirmisher_defeated_r2_ok)
