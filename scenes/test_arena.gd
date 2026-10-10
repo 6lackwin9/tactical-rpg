@@ -179,11 +179,11 @@ var active_log_entry_index: int = -1
 var pending_block_actions: Array[CombatResolver.ScheduledAction] = []
 var status_label: Label
 var phase_badge_lbl: Label
-var btn_step: Button
+var btn_step_prev: Button
 var btn_play: Button
-var btn_reset: Button
-var btn_rewind: Button
-var btn_toggle_view: Button
+var btn_step_next: Button
+var btn_reset_round: Button
+var btn_reset_game: Button
 var auto_play_timer: Timer
 
 # Selection and Inspector State
@@ -247,10 +247,11 @@ var modal_tracks_list: VBoxContainer
 var modal_ruler_tick_nodes: Array[PanelContainer] = []
 var modal_ruler_tick_labels: Array[Label] = []
 var modal_phase_lbl: Label
+var btn_modal_step_prev: Button
 var btn_modal_play: Button
-var btn_modal_step: Button
-var btn_modal_rewind: Button
-var btn_modal_reset: Button
+var btn_modal_step_next: Button
+var btn_modal_reset_round: Button
+var btn_modal_reset_game: Button
 var btn_modal_close: Button
 
 # Combined Block Inspector UI Components
@@ -278,14 +279,17 @@ var sim_finished: bool = false
 var snapshots: Array[BlockSnapshot] = []
 var recorded_actions: Array[CombatResolver.ScheduledAction] = []
 
-# Multi-Round Timeline Traversal
+# Multi-Round Timeline Traversal (Dynamic End-of-Timeline Arrows)
 var viewed_timeline_round: int = 1
+var max_unlocked_round: int = 1
 var round_recorded_actions: Dictionary = {} # int -> Array[CombatResolver.ScheduledAction]
 var round_snapshots: Dictionary = {}        # int -> Array[BlockSnapshot]
-var btn_rnd_1: Button
-var btn_rnd_2: Button
-var btn_modal_rnd_1: Button
-var btn_modal_rnd_2: Button
+var btn_prev_round: Button
+var btn_next_round_arrow: Button
+var ruler_round_badge: Label
+var btn_modal_prev_round: Button
+var btn_modal_next_round_arrow: Button
+var modal_ruler_round_badge: Label
 
 # Combat Grid Unit Hover Card (Replaces persistent overlapping labels)
 var grid_hover_tooltip: PanelContainer
@@ -1027,54 +1031,45 @@ func _setup_interactive_ui() -> void:
 	btns_row.add_theme_constant_override("separation", 3)
 	controls_vbox.add_child(btns_row)
 
-	btn_rewind = Button.new()
-	btn_rewind.text = "⏮"
-	btn_rewind.tooltip_text = "Rewind to Block 1 (Replay)"
-	btn_rewind.custom_minimum_size = Vector2(24, 22)
-	btn_rewind.add_theme_font_size_override("font_size", 10)
-	btn_rewind.pressed.connect(_on_rewind_pressed)
-	btns_row.add_child(btn_rewind)
+	btn_step_prev = Button.new()
+	btn_step_prev.text = "⏮"
+	btn_step_prev.tooltip_text = "Step Previous Block (Replay)"
+	btn_step_prev.custom_minimum_size = Vector2(24, 22)
+	btn_step_prev.add_theme_font_size_override("font_size", 10)
+	btn_step_prev.pressed.connect(_on_step_prev_pressed)
+	btns_row.add_child(btn_step_prev)
 
 	btn_play = Button.new()
 	btn_play.text = "▶"
-	btn_play.tooltip_text = "Auto-Resolve Round / Play Replay"
+	btn_play.tooltip_text = "Autoplay Round from BLK 1 / Pause [Space]"
 	btn_play.custom_minimum_size = Vector2(26, 22)
 	btn_play.add_theme_font_size_override("font_size", 10)
-	btn_play.pressed.connect(_on_play_toggle_pressed)
+	btn_play.pressed.connect(_on_play_round_pressed)
 	btns_row.add_child(btn_play)
 
-	btn_step = Button.new()
-	btn_step.text = "⏭"
-	btn_step.tooltip_text = "Step 1 Block Forward"
-	btn_step.custom_minimum_size = Vector2(24, 22)
-	btn_step.add_theme_font_size_override("font_size", 10)
-	btn_step.pressed.connect(_on_step_block_pressed)
-	btns_row.add_child(btn_step)
+	btn_step_next = Button.new()
+	btn_step_next.text = "⏭"
+	btn_step_next.tooltip_text = "Step Next Block"
+	btn_step_next.custom_minimum_size = Vector2(24, 22)
+	btn_step_next.add_theme_font_size_override("font_size", 10)
+	btn_step_next.pressed.connect(_on_step_next_pressed)
+	btns_row.add_child(btn_step_next)
 
-	btn_reset = Button.new()
-	btn_reset.text = "↺"
-	btn_reset.tooltip_text = "Reset Round / Return to Planning Phase"
-	btn_reset.custom_minimum_size = Vector2(24, 22)
-	btn_reset.add_theme_font_size_override("font_size", 10)
-	btn_reset.pressed.connect(_on_reset_pressed)
-	btns_row.add_child(btn_reset)
+	btn_reset_round = Button.new()
+	btn_reset_round.text = "↺"
+	btn_reset_round.tooltip_text = "Reset Active Round (Restart Planning for Current Round)"
+	btn_reset_round.custom_minimum_size = Vector2(24, 22)
+	btn_reset_round.add_theme_font_size_override("font_size", 10)
+	btn_reset_round.pressed.connect(_on_reset_active_round_pressed)
+	btns_row.add_child(btn_reset_round)
 
-	# Round Traversal Buttons (R1 / R2) in quick view
-	btn_rnd_1 = Button.new()
-	btn_rnd_1.text = "R1"
-	btn_rnd_1.tooltip_text = "View Round 1 Timeline"
-	btn_rnd_1.custom_minimum_size = Vector2(24, 22)
-	btn_rnd_1.add_theme_font_size_override("font_size", 9)
-	btn_rnd_1.pressed.connect(func() -> void: _select_timeline_round(1))
-	btns_row.add_child(btn_rnd_1)
-
-	btn_rnd_2 = Button.new()
-	btn_rnd_2.text = "R2"
-	btn_rnd_2.tooltip_text = "View Round 2 Timeline"
-	btn_rnd_2.custom_minimum_size = Vector2(24, 22)
-	btn_rnd_2.add_theme_font_size_override("font_size", 9)
-	btn_rnd_2.pressed.connect(func() -> void: _select_timeline_round(2))
-	btns_row.add_child(btn_rnd_2)
+	btn_reset_game = Button.new()
+	btn_reset_game.text = "⟲"
+	btn_reset_game.tooltip_text = "Full Reset: Restart Entire Tactical Battle from Round 1"
+	btn_reset_game.custom_minimum_size = Vector2(24, 22)
+	btn_reset_game.add_theme_font_size_override("font_size", 10)
+	btn_reset_game.pressed.connect(_on_reset_game_pressed)
+	btns_row.add_child(btn_reset_game)
 
 	btn_popout = Button.new()
 	btn_popout.text = "⛶"
@@ -1219,6 +1214,36 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 		tracks_ruler_row.add_child(tick_panel)
 		ruler_tick_nodes.append(tick_panel)
 		ruler_tick_labels.append(tick_lbl)
+
+	# Dynamic Round Traversal Arrows at End of Timeline Ruler
+	var rd_nav_box := HBoxContainer.new()
+	rd_nav_box.add_theme_constant_override("separation", 2)
+	tracks_ruler_row.add_child(rd_nav_box)
+
+	btn_prev_round = Button.new()
+	btn_prev_round.text = "◀"
+	btn_prev_round.tooltip_text = "Previous Round Timeline"
+	btn_prev_round.custom_minimum_size = Vector2(20, 16)
+	btn_prev_round.add_theme_font_size_override("font_size", 8)
+	btn_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
+	rd_nav_box.add_child(btn_prev_round)
+
+	ruler_round_badge = Label.new()
+	ruler_round_badge.text = "R1"
+	ruler_round_badge.custom_minimum_size = Vector2(24, 16)
+	ruler_round_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ruler_round_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ruler_round_badge.add_theme_font_size_override("font_size", 8)
+	ruler_round_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	rd_nav_box.add_child(ruler_round_badge)
+
+	btn_next_round_arrow = Button.new()
+	btn_next_round_arrow.text = "▶"
+	btn_next_round_arrow.tooltip_text = "Next Round Timeline"
+	btn_next_round_arrow.custom_minimum_size = Vector2(20, 16)
+	btn_next_round_arrow.add_theme_font_size_override("font_size", 8)
+	btn_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
+	rd_nav_box.add_child(btn_next_round_arrow)
 
 	# Row 2: Selected Hero's Continuous Action Track Row (Starts at X=0, exact 1:1 match)
 	single_track_row = HBoxContainer.new()
@@ -1415,6 +1440,7 @@ func _build_combined_block_ui(parent: Control) -> void:
 
 func _init_interactive_simulation() -> void:
 	current_combat_round = 1
+	max_unlocked_round = 1
 	viewed_timeline_round = 1
 	round_recorded_actions.clear()
 	round_snapshots.clear()
@@ -1604,6 +1630,7 @@ func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
 	icon.position = Vector2(3, 3)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	token_ctrl.add_child(icon)
 
 	var sel_border := ReferenceRect.new()
@@ -1613,6 +1640,7 @@ func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
 	sel_border.border_width = 2.0
 	sel_border.editor_only = false
 	sel_border.visible = false
+	sel_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	token_ctrl.add_child(sel_border)
 
 	token_ctrl.gui_input.connect(func(event: InputEvent) -> void:
@@ -1675,11 +1703,18 @@ func _show_unit_hover_card(c: Combatant, token: Control) -> void:
 		hover_status_lbl.text = "Stance: %s | Pos: %s" % [CombatTypes.stance_to_string(cur_stance), str(pos)]
 
 	# Position adjacent to token within grid boundaries
-	var target_pos := token.position + Vector2(TILE_SIZE + 4, -4)
+	var target_pos: Vector2
+	if token != null and token.visible and pos != Vector2i(-1, -1):
+		target_pos = token.position + Vector2(TILE_SIZE + 4, -4)
+	elif pos != Vector2i(-1, -1):
+		target_pos = Vector2(pos.x * TILE_SIZE + TILE_SIZE + 4, pos.y * TILE_SIZE - 4)
+	else:
+		target_pos = Vector2(8, 8)
+
 	if target_pos.x + 140 > GRID_SIZE * TILE_SIZE:
-		target_pos.x = maxf(0.0, token.position.x - 142)
+		target_pos.x = maxf(0.0, target_pos.x - 146)
 	if target_pos.y + 55 > GRID_SIZE * TILE_SIZE:
-		target_pos.y = maxf(0.0, token.position.y - 45)
+		target_pos.y = maxf(0.0, target_pos.y - 45)
 	grid_hover_tooltip.position = target_pos
 	grid_hover_tooltip.z_index = 50
 	grid_hover_tooltip.visible = true
@@ -1825,10 +1860,22 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 		pos_lbl.visible = false
 		bot_row.add_child(pos_lbl)
 
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	for child in card.find_children("*", "Control", true, false):
+		(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			_select_combatant(combatant)
+	)
+
+	card.mouse_entered.connect(func() -> void:
+		if unit_token_nodes.has(combatant):
+			_show_unit_hover_card(combatant, unit_token_nodes[combatant])
+	)
+	card.mouse_exited.connect(func() -> void:
+		_hide_unit_hover_card()
 	)
 
 	target_container.add_child(card)
@@ -2005,6 +2052,12 @@ func _select_combatant(combatant: Combatant) -> void:
 	_update_party_select_box()
 	_update_timeline_tracks_display()
 	_update_combined_block_display(combined_selected_block)
+
+	# Ensure hover card displays for selected unit as well
+	if unit_token_nodes.has(combatant):
+		var tok := unit_token_nodes[combatant] as Control
+		if is_instance_valid(tok) and tok.visible:
+			_show_unit_hover_card(combatant, tok)
 
 
 func _update_roster_card_highlights() -> void:
@@ -3001,15 +3054,28 @@ func _step_simulation() -> void:
 				phase_badge_lbl.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 
 				if btn_next_round:
-					btn_next_round.visible = (current_combat_round == 1 and not is_over)
+					btn_next_round.visible = (not is_over and current_combat_round < 3)
+					if current_combat_round == 1:
+						btn_next_round.text = "⚔ ADVANCE TO ROUND 2"
+					elif current_combat_round == 2:
+						btn_next_round.text = "⚔ ADVANCE TO ROUND 3 (FINAL SHOWDOWN)"
 
-				if current_combat_round == 1:
+				if is_over:
+					phase_badge_lbl.text = "🏆 COMBAT CONCLUDED - TOTAL VICTORY"
+					phase_badge_lbl.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
+					status_label.text = "🏆 All hostiles eliminated! Warrior stands victorious. Replay available."
+					_append_log("\n[color=#38bdf8][b]🏆 TOTAL VICTORY: All hostiles eliminated! Use timeline arrows [◀ / ▶] to review all rounds.[/b][/color]")
+				elif current_combat_round == 1:
 					status_label.text = "Round 1 complete! Click Advance to Round 2."
 					_append_log("\n[color=#4ade80][b]🎉 ROUND 1 RESOLVED: Ranger fell in the ambush, Warrior holds at 73 HP against 4 goblins! Click ADVANCE TO ROUND 2 to begin the Last Stand.[/b][/color]")
+				elif current_combat_round == 2:
+					status_label.text = "Round 2 complete! Skirmisher & Shaman eliminated. Advance to Round 3."
+					_append_log("\n[color=#4ade80][b]🎉 ROUND 2 RESOLVED: Warrior eliminated Skirmisher and Shaman! Advance to Round 3 for the final confrontation.[/b][/color]")
 				else:
-					status_label.text = "Round 2 resolved! Warrior's last stand concluded. Review replay."
-					_append_log("\n[color=#4ade80][b]🎉 ROUND 2 RESOLVED: Combat concluded! Review replay or Reset.[/b][/color]")
+					status_label.text = "Round 3 concluded. Review battle replay."
+					_append_log("\n[color=#4ade80][b]🎉 ROUND 3 RESOLVED: Battle concluded. Review replay or Reset.[/b][/color]")
 
+				_update_round_traversal_ui()
 				_update_timeline_tracks_display()
 				_update_combined_block_display(replay_block)
 				return
@@ -3098,11 +3164,15 @@ func _spawn_goblin_reinforcements() -> void:
 
 
 func _on_next_round_pressed() -> void:
-	_start_round_2()
+	if current_combat_round == 1:
+		_start_round_2()
+	elif current_combat_round == 2:
+		_start_round_3()
 
 
 func _start_round_2() -> void:
 	current_combat_round = 2
+	max_unlocked_round = maxi(max_unlocked_round, 2)
 	sim_resolver.finish_round()
 
 	current_sim_block = 1
@@ -3117,27 +3187,48 @@ func _start_round_2() -> void:
 	if btn_next_round:
 		btn_next_round.visible = false
 
-	# Prune any defeated or withdrawn enemies from roster cards for the new round
-	var enemies_to_remove: Array[Combatant] = []
-	for c: Combatant in roster_cards:
-		if not sim_allies.has(c):
-			if not c.is_alive() or c.is_withdrawn:
-				enemies_to_remove.append(c)
+	# Ensure proper combatant baseline for Round 2
+	unit_warrior.hp = 73
+	unit_warrior.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_warrior] = Vector2i(4, 4)
 
-	for c: Combatant in enemies_to_remove:
-		@warning_ignore("unsafe_cast")
-		var old_card := roster_cards[c] as Control
-		roster_cards.erase(c)
-		if is_instance_valid(old_card):
-			old_card.queue_free()
+	unit_skirmisher.hp = 15
+	unit_skirmisher.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_skirmisher] = Vector2i(4, 3)
 
-	# Ensure all active surviving enemy cards are visible
-	for c: Combatant in roster_cards:
-		if not sim_allies.has(c):
+	unit_berserker.hp = 55
+	unit_berserker.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_berserker] = Vector2i(5, 4)
+
+	unit_archer.hp = 35
+	unit_archer.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_archer] = Vector2i(7, 5)
+
+	unit_shaman.hp = 35
+	unit_shaman.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_shaman] = Vector2i(6, 5)
+
+	unit_brawler.hp = 0
+	unit_scout.is_withdrawn = true
+	unit_ranger.hp = 0
+
+	# Prune any defeated or withdrawn enemies from roster cards for Round 2
+	for enemy in [unit_brawler, unit_scout]:
+		if roster_cards.has(enemy):
 			@warning_ignore("unsafe_cast")
-			var rem_card := roster_cards[c] as Control
-			if is_instance_valid(rem_card):
-				rem_card.visible = true
+			var old_c := roster_cards[enemy] as Control
+			roster_cards.erase(enemy)
+			if is_instance_valid(old_c):
+				old_c.queue_free()
+
+	for enemy in [unit_skirmisher, unit_berserker, unit_archer, unit_shaman]:
+		if not roster_cards.has(enemy):
+			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
+		else:
+			@warning_ignore("unsafe_cast")
+			var card := roster_cards[enemy] as Control
+			if is_instance_valid(card):
+				card.visible = true
 
 	pending_block_actions.clear()
 	var r2_entry := ActionLogEntry.new()
@@ -3167,7 +3258,7 @@ func _start_round_2() -> void:
 	# Warrior:
 	#   Block 1-2: Cleaving Strike on Skirmisher at (4, 3) (power 25) [2b] -> Skirmisher DEFEATED!
 	#   Block 3-4: Defend (50% mitigation) [2b]
-	#   Block 5-6: Heavy Strike on Berserker at (5, 4) (power 30) [2b] -> Berserker DEFEATED!
+	#   Block 5-6: Heavy Strike on Berserker at (5, 4) (power 30) [2b] -> Berserker damaged!
 	#   Block 7: Move East to (5, 4) [1b]
 	#   Block 8-9: Strike on Shaman at (6, 5) (power 35) [2b] -> Shaman DEFEATED!
 	#   Block 10: Hold Stance [1b]
@@ -3182,7 +3273,7 @@ func _start_round_2() -> void:
 	sim_resolver.schedule_action(unit_skirmisher, TargetCommand.new(unit_skirmisher, unit_warrior, 1), 1)
 	sim_resolver.schedule_action(unit_skirmisher, AttackCommand.new(unit_skirmisher, unit_warrior, 10, 1, 0, sim_grid), 2)
 
-	# Goblin Berserker (30 HP at (5, 4)):
+	# Goblin Berserker (55 HP at (5, 4)):
 	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 1)
 	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 20, 2, 0, sim_grid), 2)
 	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 4)
@@ -3210,6 +3301,137 @@ func _start_round_2() -> void:
 	_capture_snapshot(0)
 	round_snapshots[2] = snapshots.duplicate()
 	viewed_timeline_round = 2
+	_update_round_traversal_ui()
+
+	_update_party_select_box()
+	_select_combatant(unit_warrior)
+	_update_timeline_tracks_display()
+	_update_combined_block_display(1)
+	_sync_visuals_after_block()
+	_update_all_roster_cards()
+
+	_update_selected_unit_panel()
+	_update_tactical_forecast_panel()
+	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+		_update_modal_tracks_display()
+
+
+func _start_round_3() -> void:
+	current_combat_round = 3
+	max_unlocked_round = maxi(max_unlocked_round, 3)
+	sim_resolver.finish_round()
+
+	current_sim_block = 1
+	replay_block = 1
+	combined_selected_block = 1
+	sim_finished = false
+	is_auto_playing = false
+	combat_phase = CombatPhase.PLANNING
+	auto_play_timer.stop()
+	btn_play.text = "▶"
+	btn_play.tooltip_text = "Auto-Resolve Round 3"
+	if btn_next_round:
+		btn_next_round.visible = false
+
+	# Setup Round 3 combatant baseline
+	unit_warrior.hp = 32
+	unit_warrior.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_warrior] = Vector2i(5, 4)
+
+	unit_berserker.hp = 25
+	unit_berserker.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_berserker] = Vector2i(5, 5)
+
+	unit_archer.hp = 35
+	unit_archer.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_archer] = Vector2i(7, 5)
+
+	unit_skirmisher.hp = 0
+	unit_shaman.hp = 0
+	unit_brawler.hp = 0
+	unit_scout.is_withdrawn = true
+	unit_ranger.hp = 0
+
+	# Prune defeated hostiles (Skirmisher, Shaman, Brawler, Scout) from roster cards
+	for enemy in [unit_skirmisher, unit_shaman, unit_brawler, unit_scout]:
+		if roster_cards.has(enemy):
+			@warning_ignore("unsafe_cast")
+			var old_card := roster_cards[enemy] as Control
+			roster_cards.erase(enemy)
+			if is_instance_valid(old_card):
+				old_card.queue_free()
+
+	# Ensure surviving hostiles have roster cards
+	for enemy in [unit_berserker, unit_archer]:
+		if not roster_cards.has(enemy):
+			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
+		else:
+			@warning_ignore("unsafe_cast")
+			var card := roster_cards[enemy] as Control
+			if is_instance_valid(card):
+				card.visible = true
+
+	pending_block_actions.clear()
+	var r3_entry := ActionLogEntry.new()
+	r3_entry.round_num = 3
+	r3_entry.block_num = 1
+	r3_entry.ref_tag = "R3-B01"
+	r3_entry.actor_name = "Warrior"
+	r3_entry.actor_is_ally = true
+	r3_entry.category = "EVENT"
+	r3_entry.skill_name = "Round 3 Commenced"
+	r3_entry.skill_subtype = "Final Showdown"
+	r3_entry.outcome_tag = "ROUND 3"
+	r3_entry.detail_text = "Warrior (32 HP) at (5, 4) against Berserker (25 HP) & Archer (35 HP)"
+	r3_entry.status_text = "Round 3 Active"
+	all_action_log_entries.append(r3_entry)
+	active_log_entry_index = all_action_log_entries.size() - 1
+	_update_active_log_cell()
+
+	phase_badge_lbl.text = "ROUND 3: PLANNING PHASE (FINAL SHOWDOWN)"
+	phase_badge_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
+	status_label.text = "Round 3: Final Showdown! Warrior confronts surviving Berserker & Archer. Auto-Resolve to conclude combat."
+
+	_append_log("\n[color=#38bdf8][b]⚔⚔⚔ COMMENCING ROUND 3: FINAL SHOWDOWN ⚔⚔⚔[/b][/color]")
+	_append_log("[color=#93c5fd]Warrior presses forward against the last two goblins. Victory is in sight![/color]")
+
+	# Schedule Pre-Planned Commands for Round 3:
+	# Warrior (Knight, at (5, 4)):
+	#   Block 1-2: Decisive Cleave on Berserker at (5, 5) (power 30) [2b] -> Berserker DEFEATED!
+	#   Block 3: Tactical Advance East to (6, 4) [1b]
+	#   Block 4: Tactical Advance East to (7, 4) [1b] (Adjacent to Archer at (7, 5)!)
+	#   Block 5-6: Defend (70% mitigation) [2b] (Deflects point-blank arrow!)
+	#   Block 7-8: Vanguard Finishing Strike on Archer at (7, 5) (priority 1, power 40) [2b] -> Archer DEFEATED!
+	#   Block 9-10: Hold Victory Stance [2b]
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_berserker, 30, 2, 0, sim_grid), 1)
+	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(1, 0), 1), 3)
+	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(1, 0), 1), 4)
+	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.7, 2, 1), 5)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_archer, 40, 2, 1, sim_grid), 7)
+	sim_resolver.schedule_action(unit_warrior, HoldStanceCommand.new(unit_warrior, 0), 9)
+
+	# Goblin Berserker (25 HP at (5, 5)):
+	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 15, 2, 0, sim_grid), 1)
+
+	# Goblin Archer (35 HP at (7, 5)):
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 12, 2, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 12, 2, 0, sim_grid), 4)
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 6)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 2, 0, sim_grid), 7)
+
+	# Record Round 3 actions
+	recorded_actions.clear()
+	for a in sim_resolver.scheduled_actions:
+		recorded_actions.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
+	round_recorded_actions[3] = recorded_actions.duplicate()
+
+	# Snapshot 0 for Round 3
+	snapshots.clear()
+	_capture_snapshot(0)
+	round_snapshots[3] = snapshots.duplicate()
+	viewed_timeline_round = 3
 	_update_round_traversal_ui()
 
 	_update_party_select_box()
@@ -3853,17 +4075,35 @@ func _trigger_action_impact_fx(entry: ActionLogEntry) -> void:
 					_spawn_floating_combat_text(Vector2(200, 180), "⚠️ AMBUSH SPAWN!", Color(1.0, 0.4, 0.4))
 
 
-func _on_step_block_pressed() -> void:
-	_step_simulation()
+func _on_step_prev_pressed() -> void:
+	if combat_phase == CombatPhase.REPLAY:
+		var target_b: int = clampi(replay_block - 1, 1, TOTAL_BLOCKS)
+		_on_ruler_block_clicked(target_b)
+	else:
+		if active_log_entry_index > 0:
+			_on_log_prev_pressed()
 
 
-func _on_play_toggle_pressed() -> void:
+func _on_step_next_pressed() -> void:
+	if combat_phase == CombatPhase.REPLAY:
+		var target_b: int = clampi(replay_block + 1, 1, TOTAL_BLOCKS)
+		_on_ruler_block_clicked(target_b)
+	else:
+		_step_simulation()
+
+
+func _on_play_round_pressed() -> void:
 	if is_auto_playing:
 		is_auto_playing = false
 		auto_play_timer.stop()
 		btn_play.text = "▶"
 		if btn_modal_play: btn_modal_play.text = "▶"
 	else:
+		if combat_phase == CombatPhase.REPLAY:
+			# Autoplay round from Block 1
+			replay_block = 1
+			current_sim_block = 1
+			_on_ruler_block_clicked(1)
 		is_auto_playing = true
 		btn_play.text = "⏸"
 		if btn_modal_play: btn_modal_play.text = "⏸"
@@ -3871,27 +4111,43 @@ func _on_play_toggle_pressed() -> void:
 
 
 func _on_auto_play_tick() -> void:
-	_step_simulation()
+	if combat_phase == CombatPhase.REPLAY:
+		if replay_block < TOTAL_BLOCKS:
+			_on_step_next_pressed()
+		else:
+			is_auto_playing = false
+			auto_play_timer.stop()
+			btn_play.text = "▶"
+			if btn_modal_play: btn_modal_play.text = "▶"
+	else:
+		_step_simulation()
 
 
-func _on_reset_pressed() -> void:
+func _on_reset_active_round_pressed() -> void:
+	if current_combat_round == 1:
+		_init_interactive_simulation()
+	elif current_combat_round == 2:
+		_start_round_2()
+	elif current_combat_round == 3:
+		_start_round_3()
+
+
+func _on_reset_game_pressed() -> void:
 	_init_interactive_simulation()
 
 
+# Backward compatibility wrappers
+func _on_step_block_pressed() -> void:
+	_on_step_next_pressed()
+
+func _on_play_toggle_pressed() -> void:
+	_on_play_round_pressed()
+
+func _on_reset_pressed() -> void:
+	_on_reset_game_pressed()
+
 func _on_rewind_pressed() -> void:
-	replay_block = 1
-	current_sim_block = 1
-	var snaps: Array = round_snapshots.get(viewed_timeline_round, snapshots)
-	if snaps.size() > 1:
-		@warning_ignore("unsafe_cast")
-		_restore_snapshot(snaps[1] as BlockSnapshot)
-	elif not snaps.is_empty():
-		@warning_ignore("unsafe_cast")
-		_restore_snapshot(snaps[0] as BlockSnapshot)
-	status_label.text = "Rewound to Block 1."
-	_update_timeline_tracks_display()
-	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
-		_update_modal_tracks_display()
+	_on_step_prev_pressed()
 
 
 func _on_toggle_view_mode_pressed() -> void:
@@ -3912,46 +4168,36 @@ func _on_ruler_block_clicked(b: int) -> void:
 
 	status_label.text = "Round %d • Block %02d State inspected." % [viewed_timeline_round, b]
 	_update_timeline_tracks_display()
+	_update_combined_block_display(b)
 	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
 		_update_modal_tracks_display()
 
 
-func _update_round_traversal_ui() -> void:
-	var r1_btns: Array[Button] = []
-	if btn_rnd_1 != null: r1_btns.append(btn_rnd_1)
-	if btn_modal_rnd_1 != null: r1_btns.append(btn_modal_rnd_1)
-	for b in r1_btns:
-		var st := StyleBoxFlat.new()
-		st.set_corner_radius_all(3)
-		if viewed_timeline_round == 1:
-			st.bg_color = Color(0.18, 0.32, 0.54, 0.95)
-			st.border_color = Color(1.0, 0.85, 0.3, 1.0)
-			st.set_border_width_all(2)
-			b.add_theme_color_override("font_color", Color(1.0, 0.9, 0.35))
-		else:
-			st.bg_color = Color(0.1, 0.13, 0.18, 0.8)
-			st.border_color = Color(0.25, 0.35, 0.48, 0.6)
-			st.set_border_width_all(1)
-			b.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
-		b.add_theme_stylebox_override("normal", st)
+func _navigate_timeline_round(delta: int) -> void:
+	var target_round: int = clampi(viewed_timeline_round + delta, 1, max_unlocked_round)
+	if target_round != viewed_timeline_round:
+		_select_timeline_round(target_round)
 
-	var r2_btns: Array[Button] = []
-	if btn_rnd_2 != null: r2_btns.append(btn_rnd_2)
-	if btn_modal_rnd_2 != null: r2_btns.append(btn_modal_rnd_2)
-	for b in r2_btns:
-		var st := StyleBoxFlat.new()
-		st.set_corner_radius_all(3)
-		if viewed_timeline_round == 2:
-			st.bg_color = Color(0.18, 0.32, 0.54, 0.95)
-			st.border_color = Color(1.0, 0.85, 0.3, 1.0)
-			st.set_border_width_all(2)
-			b.add_theme_color_override("font_color", Color(1.0, 0.9, 0.35))
-		else:
-			st.bg_color = Color(0.1, 0.13, 0.18, 0.8)
-			st.border_color = Color(0.25, 0.35, 0.48, 0.6)
-			st.set_border_width_all(1)
-			b.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
-		b.add_theme_stylebox_override("normal", st)
+
+func _update_round_traversal_ui() -> void:
+	if ruler_round_badge != null:
+		ruler_round_badge.text = "R%d" % viewed_timeline_round
+	if modal_ruler_round_badge != null:
+		modal_ruler_round_badge.text = "R%d" % viewed_timeline_round
+
+	# Requirement 3: Disable arrows if data not exposed (e.g. on load, R0 and R2 disabled)
+	var can_go_prev: bool = (viewed_timeline_round > 1)
+	var can_go_next: bool = (viewed_timeline_round < max_unlocked_round)
+
+	if btn_prev_round != null:
+		btn_prev_round.disabled = not can_go_prev
+	if btn_next_round_arrow != null:
+		btn_next_round_arrow.disabled = not can_go_next
+
+	if btn_modal_prev_round != null:
+		btn_modal_prev_round.disabled = not can_go_prev
+	if btn_modal_next_round_arrow != null:
+		btn_modal_next_round_arrow.disabled = not can_go_next
 
 
 func _select_timeline_round(rd: int) -> void:
@@ -3973,6 +4219,7 @@ func _select_timeline_round(rd: int) -> void:
 	elif not snaps.is_empty():
 		@warning_ignore("unsafe_cast")
 		_restore_snapshot(snaps[0] as BlockSnapshot)
+	_update_combined_block_display(target_b)
 	status_label.text = "Viewing Round %d Timeline." % rd
 
 
@@ -4019,54 +4266,45 @@ func _build_timeline_modal_ui() -> void:
 	modal_ctrls.add_theme_constant_override("separation", 4)
 	hdr_row.add_child(modal_ctrls)
 
-	btn_modal_rewind = Button.new()
-	btn_modal_rewind.text = "⏮"
-	btn_modal_rewind.tooltip_text = "Rewind to Block 1"
-	btn_modal_rewind.custom_minimum_size = Vector2(28, 22)
-	btn_modal_rewind.add_theme_font_size_override("font_size", 10)
-	btn_modal_rewind.pressed.connect(_on_rewind_pressed)
-	modal_ctrls.add_child(btn_modal_rewind)
+	btn_modal_step_prev = Button.new()
+	btn_modal_step_prev.text = "⏮"
+	btn_modal_step_prev.tooltip_text = "Step Previous Block (Replay)"
+	btn_modal_step_prev.custom_minimum_size = Vector2(28, 22)
+	btn_modal_step_prev.add_theme_font_size_override("font_size", 10)
+	btn_modal_step_prev.pressed.connect(_on_step_prev_pressed)
+	modal_ctrls.add_child(btn_modal_step_prev)
 
 	btn_modal_play = Button.new()
 	btn_modal_play.text = "▶"
-	btn_modal_play.tooltip_text = "Play Auto-Resolve / Play Replay"
+	btn_modal_play.tooltip_text = "Autoplay Round from BLK 1 / Pause [Space]"
 	btn_modal_play.custom_minimum_size = Vector2(30, 22)
 	btn_modal_play.add_theme_font_size_override("font_size", 10)
-	btn_modal_play.pressed.connect(_on_play_toggle_pressed)
+	btn_modal_play.pressed.connect(_on_play_round_pressed)
 	modal_ctrls.add_child(btn_modal_play)
 
-	btn_modal_step = Button.new()
-	btn_modal_step.text = "⏭"
-	btn_modal_step.tooltip_text = "Step 1 Block Forward"
-	btn_modal_step.custom_minimum_size = Vector2(28, 22)
-	btn_modal_step.add_theme_font_size_override("font_size", 10)
-	btn_modal_step.pressed.connect(_on_step_block_pressed)
-	modal_ctrls.add_child(btn_modal_step)
+	btn_modal_step_next = Button.new()
+	btn_modal_step_next.text = "⏭"
+	btn_modal_step_next.tooltip_text = "Step Next Block"
+	btn_modal_step_next.custom_minimum_size = Vector2(28, 22)
+	btn_modal_step_next.add_theme_font_size_override("font_size", 10)
+	btn_modal_step_next.pressed.connect(_on_step_next_pressed)
+	modal_ctrls.add_child(btn_modal_step_next)
 
-	btn_modal_reset = Button.new()
-	btn_modal_reset.text = "↺"
-	btn_modal_reset.tooltip_text = "Reset Round"
-	btn_modal_reset.custom_minimum_size = Vector2(28, 22)
-	btn_modal_reset.add_theme_font_size_override("font_size", 10)
-	btn_modal_reset.pressed.connect(_on_reset_pressed)
-	modal_ctrls.add_child(btn_modal_reset)
+	btn_modal_reset_round = Button.new()
+	btn_modal_reset_round.text = "↺"
+	btn_modal_reset_round.tooltip_text = "Reset Active Round (Restart Planning for Current Round)"
+	btn_modal_reset_round.custom_minimum_size = Vector2(28, 22)
+	btn_modal_reset_round.add_theme_font_size_override("font_size", 10)
+	btn_modal_reset_round.pressed.connect(_on_reset_active_round_pressed)
+	modal_ctrls.add_child(btn_modal_reset_round)
 
-	# Round Traversal Buttons (R1 / R2) in modal suite
-	btn_modal_rnd_1 = Button.new()
-	btn_modal_rnd_1.text = "R1"
-	btn_modal_rnd_1.tooltip_text = "Switch Modal to Round 1 Timeline"
-	btn_modal_rnd_1.custom_minimum_size = Vector2(26, 22)
-	btn_modal_rnd_1.add_theme_font_size_override("font_size", 9)
-	btn_modal_rnd_1.pressed.connect(func() -> void: _select_timeline_round(1))
-	modal_ctrls.add_child(btn_modal_rnd_1)
-
-	btn_modal_rnd_2 = Button.new()
-	btn_modal_rnd_2.text = "R2"
-	btn_modal_rnd_2.tooltip_text = "Switch Modal to Round 2 Timeline"
-	btn_modal_rnd_2.custom_minimum_size = Vector2(26, 22)
-	btn_modal_rnd_2.add_theme_font_size_override("font_size", 9)
-	btn_modal_rnd_2.pressed.connect(func() -> void: _select_timeline_round(2))
-	modal_ctrls.add_child(btn_modal_rnd_2)
+	btn_modal_reset_game = Button.new()
+	btn_modal_reset_game.text = "⟲"
+	btn_modal_reset_game.tooltip_text = "Full Reset: Restart Entire Tactical Battle from Round 1"
+	btn_modal_reset_game.custom_minimum_size = Vector2(28, 22)
+	btn_modal_reset_game.add_theme_font_size_override("font_size", 10)
+	btn_modal_reset_game.pressed.connect(_on_reset_game_pressed)
+	modal_ctrls.add_child(btn_modal_reset_game)
 
 	modal_phase_lbl = Label.new()
 	modal_phase_lbl.text = "PLANNING PHASE"
@@ -4138,6 +4376,36 @@ func _build_timeline_modal_ui() -> void:
 		ruler_row.add_child(tick_panel)
 		modal_ruler_tick_nodes.append(tick_panel)
 		modal_ruler_tick_labels.append(tick_lbl)
+
+	# Dynamic Round Traversal Arrows at End of Modal Ruler
+	var modal_rd_nav_box := HBoxContainer.new()
+	modal_rd_nav_box.add_theme_constant_override("separation", 2)
+	ruler_row.add_child(modal_rd_nav_box)
+
+	btn_modal_prev_round = Button.new()
+	btn_modal_prev_round.text = "◀"
+	btn_modal_prev_round.tooltip_text = "Previous Round Timeline"
+	btn_modal_prev_round.custom_minimum_size = Vector2(24, 18)
+	btn_modal_prev_round.add_theme_font_size_override("font_size", 8)
+	btn_modal_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
+	modal_rd_nav_box.add_child(btn_modal_prev_round)
+
+	modal_ruler_round_badge = Label.new()
+	modal_ruler_round_badge.text = "R1"
+	modal_ruler_round_badge.custom_minimum_size = Vector2(28, 18)
+	modal_ruler_round_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	modal_ruler_round_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	modal_ruler_round_badge.add_theme_font_size_override("font_size", 8)
+	modal_ruler_round_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	modal_rd_nav_box.add_child(modal_ruler_round_badge)
+
+	btn_modal_next_round_arrow = Button.new()
+	btn_modal_next_round_arrow.text = "▶"
+	btn_modal_next_round_arrow.tooltip_text = "Next Round Timeline"
+	btn_modal_next_round_arrow.custom_minimum_size = Vector2(24, 18)
+	btn_modal_next_round_arrow.add_theme_font_size_override("font_size", 8)
+	btn_modal_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
+	modal_rd_nav_box.add_child(btn_modal_next_round_arrow)
 
 	# 3. Scrollable Tracks Matrix
 	var scroll := ScrollContainer.new()
@@ -4218,9 +4486,13 @@ func _update_modal_tracks_display() -> void:
 					active_enemies_for_view.append(enemy)
 			else:
 				active_enemies_for_view.append(enemy)
-		else:
+		elif viewed_timeline_round == 2:
 			# Round 2: Brawler & Scout pruned, only surviving goblins shown
 			if not (enemy in [unit_brawler, unit_scout]):
+				active_enemies_for_view.append(enemy)
+		elif viewed_timeline_round == 3:
+			# Round 3: Only Berserker and Archer survive into Round 3
+			if enemy in [unit_berserker, unit_archer]:
 				active_enemies_for_view.append(enemy)
 
 	var enemy_hdr := Label.new()
