@@ -5,7 +5,9 @@ func _ready() -> void:
 	print("=== STARTING HEADLESS COMBAT HARNESS (10-BLOCK RPG) ===")
 	print("=======================================================")
 
-	var all_tests_passed: bool = _run_warrior_vs_3_goblins_battle()
+	var test1_passed: bool = _run_warrior_vs_3_goblins_battle()
+	var test2_passed: bool = _run_combat_grid_and_withdrawal_test()
+	var all_tests_passed: bool = test1_passed and test2_passed
 
 	var exit_code: int = 0 if all_tests_passed else 1
 
@@ -165,3 +167,101 @@ func _run_warrior_vs_3_goblins_battle() -> bool:
 	return (scout_defeated_r1 and warrior_hp_r1_ok and stance_persisted and
 		focus_buff_persisted and brawler_defeated and skirmisher_defeated and
 		warrior_survived and all_goblins_down and buff_expired_after_r2)
+
+
+func _run_combat_grid_and_withdrawal_test() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING COMBAT GRID & WITHDRAWAL TEST (9x9)    ===")
+	print("=======================================================")
+
+	# 1. Initialize 9x9 Closed Arena with designated Exit at (8, 4)
+	var exit_coord := Vector2i(8, 4)
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [exit_coord])
+	var resolver := CombatResolver.new()
+	resolver.grid = grid
+
+	# 2. Combatants
+	var warrior := Combatant.new("Warrior", 100, 15, 1)
+	var ranger := Combatant.new("Ranger", 80, 14, 2)
+	var brawler := Combatant.new("Enemy Brawler", 45, 12, 1)
+	var scout := Combatant.new("Fleeing Scout", 30, 16, 1)
+
+	var allies: Array[Combatant] = [warrior, ranger]
+	var enemies: Array[Combatant] = [brawler, scout]
+
+	resolver.register_combatant(warrior)
+	resolver.register_combatant(ranger)
+	resolver.register_combatant(brawler)
+	resolver.register_combatant(scout)
+
+	# 3. Center-ring deployment
+	grid.deploy_combatants(allies, enemies)
+
+	var warrior_pos: Vector2i = grid.get_position(warrior)
+	var ranger_pos: Vector2i = grid.get_position(ranger)
+	var brawler_pos: Vector2i = grid.get_position(brawler)
+	var scout_pos: Vector2i = grid.get_position(scout)
+
+	var warrior_center_ok: bool = grid.get_distance(warrior_pos, CombatGrid.CENTER) <= warrior.attack_range
+	var ranger_center_ok: bool = grid.get_distance(ranger_pos, CombatGrid.CENTER) <= ranger.attack_range
+	var brawler_center_ok: bool = grid.get_distance(brawler_pos, CombatGrid.CENTER) <= brawler.attack_range
+	var scout_center_ok: bool = grid.get_distance(scout_pos, CombatGrid.CENTER) <= scout.attack_range
+
+	var deployment_ok: bool = warrior_center_ok and ranger_center_ok and brawler_center_ok and scout_center_ok
+
+	# 4. Range-gate verification before movement:
+	# Warrior is at (4, 5), Brawler is at (4, 3) -> distance is 2.
+	# Warrior attack range is 1. Warrior cannot target Brawler yet.
+	var initial_out_of_range: bool = not grid.can_target(warrior, brawler, warrior.attack_range)
+
+	# 5. Scheduling Round 1:
+	# Block 1: Warrior moves Up (0, -1) to (4, 4) -> now within distance 1 of Brawler (4, 3)
+	# Block 2-3: Warrior attacks Brawler (power 25)
+	# Block 4: Ranger moves Up (0, -1) from (4, 6) to (4, 5) -> distance to Brawler is 2 (within Ranger range 2!)
+	# Block 5-6: Ranger attacks Brawler (power 25) -> KO Brawler (50 total dmg >= 45 HP)!
+	# Scout attempts escape towards exit (8, 4):
+	# Scout starts at (5, 4):
+	# Block 1: Move East (1, 0) to (6, 4)
+	# Block 2-3: Sprint East (1, 0) 2 tiles: (7, 4) then (8, 4) -> EXIT REACHED!
+	# Block 4-5: Scout tries to attack Warrior (cancelled because Scout is withdrawn)
+	resolver.schedule_action(warrior, MoveCommand.new(warrior, grid, Vector2i(0, -1), 1), 1)
+	resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 25, 2, 0, grid), 2)
+
+	resolver.schedule_action(ranger, MoveCommand.new(ranger, grid, Vector2i(0, -1), 1), 4)
+	resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 25, 2, 0, grid), 5)
+
+	resolver.schedule_action(scout, MoveCommand.new(scout, grid, Vector2i(1, 0), 1), 1)
+	resolver.schedule_action(scout, MoveCommand.new(scout, grid, Vector2i(1, 0), 2, 2), 2)
+	resolver.schedule_action(scout, AttackCommand.new(scout, warrior, 10, 2, 0, grid), 4)
+
+	# Execute Round 1
+	resolver.resolve_round()
+
+	# Validate outcomes:
+	var scout_withdrawn_ok: bool = scout.is_withdrawn and not scout.is_active() and grid.withdrawn_combatants.has(scout)
+	var scout_removed_from_grid: bool = not grid.has_combatant(scout)
+	var brawler_defeated_ok: bool = brawler.hp == 0 and not brawler.is_active()
+	var combat_ended_ok: bool = resolver.is_combat_resolved(allies, enemies)
+	var warrior_pos_after: Vector2i = grid.get_position(warrior)
+	var warrior_moved_ok: bool = warrior_pos_after == Vector2i(4, 4)
+
+	print("\n================================================")
+	print("=== COMBAT GRID & WITHDRAWAL TEST ASSERTIONS ===")
+	print("================================================")
+	print("  [Grid] Center-ring deployment valid: %s" % ("PASS" if deployment_ok else "FAIL"))
+	print("  [Grid] Spatial range gate verified: %s" % ("PASS" if initial_out_of_range else "FAIL"))
+	print("  [Grid] Warrior stepped to (4, 4): %s (%s)" % [("PASS" if warrior_moved_ok else "FAIL"), str(warrior_pos_after)])
+	print("  [Grid] Fleeing Scout partially withdrawn at (8, 4): %s" % ("PASS" if scout_withdrawn_ok else "FAIL"))
+	print("  [Grid] Scout removed from active grid: %s" % ("PASS" if scout_removed_from_grid else "FAIL"))
+	print("  [Grid] Brawler eliminated by ranged team: %s" % ("PASS" if brawler_defeated_ok else "FAIL"))
+	print("  [Grid] Combat terminated (all hostiles resolved): %s" % ("PASS" if combat_ended_ok else "FAIL"))
+
+	# Cleanup
+	warrior.clear_target()
+	ranger.clear_target()
+	brawler.clear_target()
+	scout.clear_target()
+	resolver.registered_combatants.clear()
+
+	return (deployment_ok and initial_out_of_range and warrior_moved_ok and 
+		scout_withdrawn_ok and scout_removed_from_grid and brawler_defeated_ok and combat_ended_ok)

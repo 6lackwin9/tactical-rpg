@@ -20,6 +20,7 @@ class ScheduledAction:
 var scheduled_actions: Array[ScheduledAction] = []
 var registered_combatants: Array[Combatant] = []
 var current_round: int = 1
+var grid: CombatGrid = null
 
 func register_combatant(combatant: Combatant) -> void:
 	if not registered_combatants.has(combatant):
@@ -76,20 +77,35 @@ func resolve_round() -> void:
 	# Round Rollover & Buff Ticking
 	print("\n--- ROUND %d CONCLUDED (ROUND ROLLOVER) ---" % current_round)
 	for c: Combatant in registered_combatants:
-		if c.is_alive():
+		if c.is_active():
 			c.tick_round_buffs()
 			var target_name: String = _get_target_display_name(c.active_target)
-			print("  [%s] Status: %d/%d HP | Stance: %s | Target: %s" % [
+			var pos_str: String = str(grid.get_position(c)) if grid != null else "N/A"
+			print("  [%s] Status: %d/%d HP | Pos: %s | Stance: %s | Target: %s" % [
 				c.name, c.hp, c.max_hp,
+				pos_str,
 				CombatTypes.stance_to_string(c.current_stance),
 				target_name
 			])
+		elif c.is_withdrawn:
+			print("  [%s] Status: WITHDRAWN" % c.name)
 
 	scheduled_actions.clear()
 	current_round += 1
 
 func resolve_turn() -> void:
 	resolve_round()
+
+func is_combat_resolved(allies: Array[Combatant], enemies: Array[Combatant]) -> bool:
+	var active_allies: int = 0
+	for a: Combatant in allies:
+		if a.is_active():
+			active_allies += 1
+	var active_enemies: int = 0
+	for e: Combatant in enemies:
+		if e.is_active():
+			active_enemies += 1
+	return active_allies == 0 or active_enemies == 0
 
 func _resolve_block(block: int) -> void:
 	# 1. Reset transient block-level defense states
@@ -98,7 +114,7 @@ func _resolve_block(block: int) -> void:
 
 	# 2. Check and activate continuous defensive postures active during this block
 	for action in scheduled_actions:
-		if not action.is_cancelled and action.combatant.is_alive():
+		if not action.is_cancelled and action.combatant.is_active():
 			if block >= action.start_block and block <= action.end_block:
 				if action.command is DefendCommand:
 					action.combatant.defense_mitigation_ratio = (action.command as DefendCommand).mitigation_ratio
@@ -123,7 +139,7 @@ func _resolve_block(block: int) -> void:
 	for action in resolving:
 		if action.is_cancelled:
 			continue
-		if not action.combatant.is_alive():
+		if not action.combatant.is_active():
 			action.is_cancelled = true
 			continue
 
@@ -131,12 +147,12 @@ func _resolve_block(block: int) -> void:
 		action.command.execute()
 
 		# Update stance upon resolution
-		if action.combatant.is_alive() and action.command.resulting_stance != CombatTypes.StanceType.NEUTRAL:
+		if action.combatant.is_active() and action.command.resulting_stance != CombatTypes.StanceType.NEUTRAL:
 			action.combatant.set_stance(action.command.resulting_stance)
 
-		# Check for knockouts and cancel dead combatants' future scheduled actions
+		# Check for knockouts or withdrawals and cancel future actions
 		for c: Combatant in registered_combatants:
-			if not c.is_alive():
+			if not c.is_active():
 				_cancel_actions_for(c)
 
 func _cancel_actions_for(combatant: Combatant) -> void:

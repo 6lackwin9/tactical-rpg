@@ -3,11 +3,13 @@ extends BattleCommand
 
 var target: Combatant
 var power: int
+var grid: CombatGrid = null
 
-func _init(p_source: Combatant, p_target: Combatant = null, p_power: int = 25, p_block_cost: int = 2, p_priority: int = 0) -> void:
+func _init(p_source: Combatant, p_target: Combatant = null, p_power: int = 25, p_block_cost: int = 2, p_priority: int = 0, p_grid: CombatGrid = null) -> void:
 	super(p_source, p_priority, p_block_cost)
 	target = p_target
 	power = p_power
+	grid = p_grid
 	action_type = CombatTypes.ActionType.ATTACK
 	resulting_stance = CombatTypes.StanceType.OFFENSIVE
 	command_name = "Attack"
@@ -23,20 +25,29 @@ func _get_effective_target() -> Combatant:
 func can_execute() -> bool:
 	if not super.can_execute():
 		return false
+	if not source.is_active():
+		return false
 	var effective_target: Combatant = _get_effective_target()
-	if effective_target == null or not effective_target.is_alive():
+	if effective_target == null or not effective_target.is_active():
+		return false
+	if grid != null and not grid.can_target(source, effective_target, source.attack_range):
 		return false
 	return true
 
 func execute() -> void:
-	if not source.is_alive():
-		print("[%s] is knocked out and cannot act." % source.name)
+	if not source.is_active():
+		print("[%s] cannot act (defeated or withdrawn)." % source.name)
 		return
 
 	var effective_target: Combatant = _get_effective_target()
-	if effective_target == null or not effective_target.is_alive():
+	if effective_target == null or not effective_target.is_active():
 		var target_name: String = effective_target.name if effective_target != null else "None"
-		print("[%s] targeted [%s], but they cannot be targeted." % [source.name, target_name])
+		print("[%s] targeted [%s], but they are no longer in active combat." % [source.name, target_name])
+		return
+
+	if grid != null and not grid.can_target(source, effective_target, source.attack_range):
+		var dist: int = grid.get_distance(grid.get_position(source), grid.get_position(effective_target))
+		print("[%s] cannot reach [%s] (range %d vs dist %d)!" % [source.name, effective_target.name, source.attack_range, dist])
 		return
 
 	# Calculate stance matchup and buff modifiers
