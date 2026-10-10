@@ -1026,7 +1026,7 @@ func _create_mini_action_card(act: Dictionary) -> PanelContainer:
 
 	var act_name_lbl := Label.new()
 	act_name_lbl.text = str(act["name"])
-	var act_col: Color = Color(act.get("color", Color.WHITE))
+	var act_col: Color = act.get("color", Color.WHITE)
 	act_name_lbl.add_theme_color_override("font_color", act_col)
 	act_hbox.add_child(act_name_lbl)
 
@@ -1593,8 +1593,8 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 				var tw := create_tween()
 				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
-				var active: bool = bool(snap.is_active.get(c, false))
-				var withdrawn: bool = bool(snap.is_withdrawn.get(c, false))
+				var active: bool = snap.is_active.get(c, false)
+				var withdrawn: bool = snap.is_withdrawn.get(c, false)
 				if not active:
 					token.modulate = Color(0.4, 0.4, 0.4, 0.0 if withdrawn else 0.6)
 				else:
@@ -1609,11 +1609,11 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 			var stance_lbl := card.find_child("StanceLabel", true, false) as Label
 			var pos_lbl := card.find_child("PosLabel", true, false) as Label
 
-			var cur_hp: int = int(snap.hps[c])
-			var max_hp: int = int(snap.max_hps[c])
+			var cur_hp: int = snap.hps[c]
+			var max_hp: int = snap.max_hps[c]
 			var cur_stance: CombatTypes.StanceType = snap.stances[c]
-			var is_active: bool = bool(snap.is_active[c])
-			var is_withdrawn: bool = bool(snap.is_withdrawn[c])
+			var is_active: bool = snap.is_active[c]
+			var is_withdrawn: bool = snap.is_withdrawn[c]
 
 			if hp_bar:
 				hp_bar.value = cur_hp
