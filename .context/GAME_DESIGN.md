@@ -54,50 +54,54 @@ graph TD
   - Flat travel time (e.g., 3 time units per route).
   - Fixed % roll per travel leg for encounter.
 - **Future Additive Rules:** Route weather conditions, road hazards, travel supply/food consumption, merchant caravans.
-
----
-
 ### System 2: Region Map & Exploration Engine
 - **Local Topology:** A 2D top-down grid representing a specific visited region.
 - **Zone Taxonomy:**
-  - **Safe Zones:** Towns, camps, sanctuaries. Zero encounter rolls; enables party resting, trading, and dialogue.
-  - **Danger Zones:** Wilderness, dungeons, ruins. Movement incurs encounter risk or steps into active hostile zones.
+  - **Safe Zones:** Towns, settlements, sanctuaries. Zero encounter rolls; enables party resting, trading, and dialogue.
+    - Features fixed/positioned special encounters and quest dialogues.
+    - Populated with generic "mob NPCs" providing ambient interaction and rumors.
+  - **Danger Zones:** Wilderness, dungeons, ruins.
+    - **Step-Based Mob Encounters:** Standard roaming mobs trigger via step accumulation with a dice roll for rare mob encounters.
+    - **Visible Roaming Encounters:** Special, elite, or boss encounters appear as visible, positioned/moving entities on the 2D grid that initiate combat upon proximity or touch.
 - **Exit Points:**
   - Designated edge or portal tiles on the region map.
   - Stepping onto an Exit Point tile opens the World Map for travel to nearby connected regions.
 - **Phase 1 Baseline Rules:**
-  - Discrete grid step movement (Vector2i coordinates).
+  - Discrete grid step movement (`Vector2i` coordinates).
   - Tile-based zone classification (`SAFE` vs `DANGER`).
-  - Danger step counter: after $N$ steps in a danger zone, an encounter initiates.
-  - Stepping on an exit tile prompts region departure.
-- **Future Additive Rules:** Visible roaming wandering mobs, interactive terrain obstacles (bridges, locked gates), interactive loot containers.
+  - Danger step counter: after accumulating danger steps, a mob encounter initiates.
+  - Stepping on an exit tile prompts region departure to World Map.
+- **Future Additive Rules:** Interactive terrain obstacles (bridges, locked gates, puzzle switches), interactive loot chests, stealth / detection cones for roaming mobs.
 
 ---
 
 ### System 3: Combat Grid & Spatial Positioning Engine
 - **Arena Geometry:**
-  - A small, focused 2D grid (e.g., $9 \times 9$ or $11 \times 11$ tiles).
-  - **Odd-numbered grid dimension convention:** An odd width/height ensures an unambiguous exact center tile `(center_x, center_y)`.
-  - **Region Attributes:** Arena terrain type, background visuals, and environmental modifiers are inherited directly from the region where the encounter was triggered.
+  - **Fixed 9x9 Grid (0 to 8 on both axes):** Center tile is exactly `Vector2i(4, 4)`.
+  - **Region Attributes:** Arena terrain type, environmental hazards, and visual backdrop are inherited directly from the region where the encounter was triggered.
+- **Arena Boundary Types:**
+  - **Open Combat Grid (Wilderness, Open Plains):** All perimeter boundary tiles (`x == 0`, `x == 8`, `y == 0`, `y == 8`) are valid escape edges.
+  - **Closed Combat Grid (Caves, Dungeons, Walled Arenas, Ambushes):** Escape is restricted to **limited, designated exit tiles** (e.g. specific gate/door coordinates). Units must maneuver tactically across the grid to reach an exit point to retreat.
 - **Deployment & Starting Placement Rule:**
-  - Combatants spawn in a ring near the **center of the map**.
-  - **Ranged-capability offset:** Spawn distance from center is randomized slightly based on the character's attack range, ensuring **every combatant can target the center of the grid from their starting tile**.
-- **Movement Integration:**
-  - Movement is scheduled as a `MoveCommand` (1 to 2 blocks) on the 10-block timeline.
-  - Moves translate into spatial path traversal on the grid.
-- **Boundary Escape & Partial Withdrawal Rule:**
-  - Any combatant who moves onto or beyond the perimeter boundary tiles of the combat grid executes a **Withdrawal**.
-  - **Partial Withdrawal:** Individual party members or enemies can escape independently. The combat continues seamlessly for all remaining active units.
-  - Withdrawn combatants are removed from the active arena timeline without counting as casualties.
+  - Combatants spawn in a ring near the **center of the map `(4, 4)`**.
+  - **Ranged-capability offset:** Spawn distance from center is adjusted based on each combatant's attack range (e.g. melee at distance 1, ranged at distance 2–3), ensuring **every combatant can target the center of the grid from their starting tile on Block 1**.
+- **Movement Integration & Action Economy:**
+  - Movement is scheduled as `MoveCommand` on the 10-block timeline.
+  - **Move (1 Block):** Move 1 tile in cardinal directions (Up, Down, Left, Right).
+  - **Sprint / Dash (2 Blocks):** Move 2 tiles.
+  - **Natural Stance Result:** `Mobile Stance`.
+- **Perimeter Escape & Partial Withdrawal Rule:**
+  - Any combatant who moves onto a valid exit tile (or outer perimeter on Open arenas) triggers **Withdrawal**.
+  - **Partial Withdrawal:** Individual party members or enemies can escape independently without ending the fight for the rest.
+  - Withdrawn combatants are removed from the active arena timeline without counting as casualties/defeats.
 - **Combat Termination Rule:**
   - Combat officially terminates when **no hostile units remain on the combat grid** (all enemies are either defeated or have withdrawn, or all player units have withdrawn/fallen).
 - **Phase 1 Baseline Rules:**
-  - Flat $9 \times 9$ grid with impassable outer boundary except for designated escape borders.
-  - Center-based deployment with 1-tile variance based on attack range.
+  - $9 \times 9$ grid with center `(4, 4)`.
+  - Radial center-ring deployment with range offsets.
   - 1 Move block = 1 orthogonal tile step.
-  - Moving past perimeter = unit withdrawn from battle.
-- **Future Additive Rules:** Cover mechanics (half/full cover), impassable obstacles, hazardous elemental ground tiles (fire, mud, ice), height/elevation modifiers.
-
+  - Stepping on exit = unit withdrawn from active roster.
+- **Future Additive Rules:** Line-of-sight & half/full cover obstacles, knockback/forced repositioning from disruptive skills, hazardous elemental tiles (fire, poison, ice).
 ---
 
 ### System 4: 10-Block Tactical Combat & Stance Engine
