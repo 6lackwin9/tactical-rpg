@@ -120,40 +120,8 @@ enum CombatPhase {
 	REPLAY
 }
 
-class BlockSnapshot:
-	extends RefCounted
-	var block_index: int = 0
-	var round_num: int = 1
-	var reinforcements_spawned: bool = false
-	var positions: Dictionary = {}         # Combatant -> Vector2i
-	var hps: Dictionary = {}               # Combatant -> int
-	var max_hps: Dictionary = {}           # Combatant -> int
-	var stances: Dictionary = {}           # Combatant -> CombatTypes.StanceType
-	var targets: Dictionary = {}           # Combatant -> Variant
-	var is_active: Dictionary = {}         # Combatant -> bool
-	var is_withdrawn: Dictionary = {}      # Combatant -> bool
-	var attack_boost_mult: Dictionary = {} # Combatant -> float
-	var attack_boost_rds: Dictionary = {}  # Combatant -> int
-	var defense_mit: Dictionary = {}       # Combatant -> float
+# (BlockSnapshot and ActionLogEntry data models extracted to res://scripts/combat/block_snapshot.gd and res://scripts/ui/action_log_entry.gd)
 
-class ActionLogEntry:
-	extends RefCounted
-	var round_num: int = 1
-	var block_num: int = 1
-	var ref_tag: String = "R1-B01"   # R<X>-B<Y>
-	var actor_name: String = ""
-	var actor_is_ally: bool = true
-	var target_name: String = ""
-	var target_is_ally: bool = false
-	var category: String = "ATTACK"  # ATTACK, DEFEND, BUFF, MOVE, TARGET, EVENT
-	var skill_name: String = ""
-	var skill_subtype: String = ""
-	var value_num: int = 0
-	var outcome_tag: String = "HIT"
-	var detail_text: String = ""
-	var status_text: String = ""
-	var coord_from: Vector2i = Vector2i(-1, -1)
-	var coord_to: Vector2i = Vector2i(-1, -1)
 
 # Interactive UI References
 var ui_canvas: CanvasLayer
@@ -170,10 +138,7 @@ var log_step_badge: Label
 var btn_log_prev: Button
 var btn_log_next: Button
 var btn_expand_log: Button
-var log_modal_overlay: PanelContainer
-var modal_entries_vbox: VBoxContainer
-var modal_filter_btns: Dictionary = {} # String -> Button
-var current_log_filter: String = "ALL"
+var log_modal: CombatLogModal
 var all_action_log_entries: Array[ActionLogEntry] = []
 var active_log_entry_index: int = -1
 var pending_block_actions: Array[CombatResolver.ScheduledAction] = []
@@ -239,20 +204,10 @@ var track_unit_stance_lbl: Label
 var track_clips_hbox: HBoxContainer
 var enemy_classified_banner: PanelContainer
 
-# Popout Modal Timeline Suite UI Components
+# Popout Modal Timeline Suite Component (Extracted to res://scripts/ui/timeline_modal.gd)
 const UNIT_MODAL_BLOCK_W: int = 94
 var btn_popout: Button
-var timeline_modal_overlay: PanelContainer
-var modal_tracks_list: VBoxContainer
-var modal_ruler_tick_nodes: Array[PanelContainer] = []
-var modal_ruler_tick_labels: Array[Label] = []
-var modal_phase_lbl: Label
-var btn_modal_step_prev: Button
-var btn_modal_play: Button
-var btn_modal_step_next: Button
-var btn_modal_reset_round: Button
-var btn_modal_reset_game: Button
-var btn_modal_close: Button
+var timeline_modal: TimelineModal
 
 # Combined Block Inspector UI Components
 var combined_container: VBoxContainer
@@ -287,9 +242,6 @@ var round_snapshots: Dictionary = {}        # int -> Array[BlockSnapshot]
 var btn_prev_round: Button
 var btn_next_round_arrow: Button
 var ruler_round_badge: Label
-var btn_modal_prev_round: Button
-var btn_modal_next_round_arrow: Button
-var modal_ruler_round_badge: Label
 
 # Combat Grid Unit Hover Card (Replaces persistent overlapping labels)
 var grid_hover_tooltip: PanelContainer
@@ -1118,8 +1070,21 @@ func _setup_interactive_ui() -> void:
 	bottom_hbox.add_child(timeline_deck)
 
 	_build_timeline_tracks_ui(timeline_deck)
-	_build_timeline_modal_ui()
-	_build_log_modal_ui()
+	# Modals setup (Phase 1 extracted components)
+	log_modal = CombatLogModal.new()
+	log_modal.cell_clicked.connect(_on_log_modal_cell_clicked)
+	ui_canvas.add_child(log_modal)
+
+	timeline_modal = TimelineModal.new()
+	timeline_modal.action_lookup_fn = _find_recorded_action_starting_at
+	timeline_modal.token_texture_fn = _get_combatant_token_texture
+	timeline_modal.round_nav_requested.connect(_navigate_timeline_round)
+	timeline_modal.block_selected.connect(func(b: int) -> void:
+		_on_ruler_block_clicked(b)
+		_update_modal_tracks_display()
+	)
+	timeline_modal.combatant_selected.connect(_select_combatant)
+	ui_canvas.add_child(timeline_modal)
 
 	# Auto-play timer
 	auto_play_timer = Timer.new()
@@ -3108,7 +3073,7 @@ func _step_simulation() -> void:
 			_update_timeline_tracks_display()
 			_update_combined_block_display(replay_block)
 
-		if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+		if timeline_modal != null and timeline_modal.visible:
 			_update_modal_tracks_display()
 
 
@@ -3319,7 +3284,7 @@ func _start_round_2() -> void:
 
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
-	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+	if timeline_modal != null and timeline_modal.visible:
 		_update_modal_tracks_display()
 
 
@@ -3451,7 +3416,7 @@ func _start_round_3() -> void:
 
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
-	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+	if timeline_modal != null and timeline_modal.visible:
 		_update_modal_tracks_display()
 
 
@@ -3582,136 +3547,10 @@ func _find_combatant_by_name(p_name: String) -> Combatant:
 
 
 func _format_action_cell(entry: ActionLogEntry, is_modal: bool = false) -> PanelContainer:
-	var cell := PanelContainer.new()
-	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cell.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if is_modal else Control.CURSOR_ARROW
+	return CombatLogModal.format_action_cell(entry, is_modal, func(e: ActionLogEntry) -> void:
+		_on_log_modal_cell_clicked(e)
+	)
 
-	var style := StyleBoxFlat.new()
-	var cat_color: Color
-	match entry.category:
-		"ATTACK": cat_color = Color(0.92, 0.32, 0.32)
-		"DEFEND": cat_color = Color(0.35, 0.68, 1.0)
-		"BUFF": cat_color = Color(0.98, 0.78, 0.25)
-		"MOVE": cat_color = Color(0.3, 0.8, 0.95)
-		"TARGET": cat_color = Color(0.3, 0.85, 0.55)
-		"EVENT": cat_color = Color(0.75, 0.5, 0.98)
-		_: cat_color = Color(0.7, 0.75, 0.85)
-
-	style.bg_color = Color(cat_color.r * 0.12, cat_color.g * 0.12, cat_color.b * 0.15, 0.95)
-	style.border_color = cat_color.lerp(Color.WHITE, 0.15) if is_modal else cat_color
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 6
-	style.content_margin_right = 6
-	style.content_margin_top = 2
-	style.content_margin_bottom = 2
-	cell.add_theme_stylebox_override("panel", style)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 1)
-	cell.add_child(vbox)
-
-	# Row 1: Badges & Tags
-	var row1 := HBoxContainer.new()
-	row1.add_theme_constant_override("separation", 5)
-	vbox.add_child(row1)
-
-	# Reference Tag Badge [R1-B04]
-	var ref_lbl := Label.new()
-	ref_lbl.text = "[%s]" % entry.ref_tag
-	ref_lbl.add_theme_font_size_override("font_size", 9)
-	ref_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35))
-	row1.add_child(ref_lbl)
-
-	# Category + Subtype Badge
-	var type_lbl := Label.new()
-	type_lbl.text = "• %s" % entry.category
-	if not entry.skill_subtype.is_empty():
-		type_lbl.text += " (%s)" % entry.skill_subtype
-	type_lbl.add_theme_font_size_override("font_size", 8)
-	type_lbl.add_theme_color_override("font_color", cat_color)
-	row1.add_child(type_lbl)
-
-	row1.add_spacer(false)
-
-	# Outcome Badge
-	if not entry.outcome_tag.is_empty():
-		var out_lbl := Label.new()
-		out_lbl.text = "[%s]" % entry.outcome_tag
-		out_lbl.add_theme_font_size_override("font_size", 8)
-		if entry.outcome_tag == "DEFEATED":
-			out_lbl.add_theme_color_override("font_color", Color(1.0, 0.25, 0.25))
-		elif "MITIGAT" in entry.outcome_tag:
-			out_lbl.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0))
-		elif "BUFF" in entry.outcome_tag or "+" in entry.outcome_tag:
-			out_lbl.add_theme_color_override("font_color", Color(0.98, 0.82, 0.3))
-		elif entry.outcome_tag == "WITHDRAWN":
-			out_lbl.add_theme_color_override("font_color", Color(0.35, 0.95, 0.55))
-		else:
-			out_lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
-		row1.add_child(out_lbl)
-
-	# Row 2: Narrative & Target Details
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 4)
-	vbox.add_child(row2)
-
-	# Actor
-	var actor_lbl := Label.new()
-	actor_lbl.text = entry.actor_name
-	actor_lbl.add_theme_font_size_override("font_size", 9)
-	var actor_col := Color(0.4, 0.75, 1.0) if entry.actor_is_ally else Color(1.0, 0.45, 0.45)
-	actor_lbl.add_theme_color_override("font_color", actor_col)
-	row2.add_child(actor_lbl)
-
-	# Verb / Skill
-	var skill_lbl := Label.new()
-	var icon_sym := "⚔"
-	match entry.category:
-		"MOVE": icon_sym = "➜"
-		"DEFEND": icon_sym = "🛡"
-		"BUFF": icon_sym = "✦"
-		"TARGET": icon_sym = "🎯"
-		"EVENT": icon_sym = "⚡"
-	skill_lbl.text = "%s %s" % [icon_sym, entry.skill_name]
-	skill_lbl.add_theme_font_size_override("font_size", 8)
-	skill_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
-	row2.add_child(skill_lbl)
-
-	# Target (if any)
-	if not entry.target_name.is_empty():
-		var arrow_lbl := Label.new()
-		arrow_lbl.text = "➔"
-		arrow_lbl.add_theme_font_size_override("font_size", 8)
-		arrow_lbl.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
-		row2.add_child(arrow_lbl)
-
-		var target_lbl := Label.new()
-		target_lbl.text = entry.target_name
-		target_lbl.add_theme_font_size_override("font_size", 9)
-		var target_col := Color(0.4, 0.75, 1.0) if entry.target_is_ally else Color(1.0, 0.45, 0.45)
-		target_lbl.add_theme_color_override("font_color", target_col)
-		row2.add_child(target_lbl)
-
-	row2.add_spacer(false)
-
-	# Status / Detail Text
-	var detail_msg: String = entry.status_text if not entry.status_text.is_empty() else entry.detail_text
-	if not detail_msg.is_empty():
-		var stat_lbl := Label.new()
-		stat_lbl.text = detail_msg
-		stat_lbl.add_theme_font_size_override("font_size", 8)
-		stat_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
-		row2.add_child(stat_lbl)
-
-	if is_modal:
-		cell.gui_input.connect(func(ev: InputEvent) -> void:
-			var mb := ev as InputEventMouseButton
-			if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-				_on_log_modal_cell_clicked(entry)
-		)
-
-	return cell
 
 
 func _update_active_log_cell() -> void:
@@ -3769,184 +3608,15 @@ func _on_log_next_pressed() -> void:
 			_update_combined_block_display(replay_block)
 
 
-func _build_log_modal_ui() -> void:
-	log_modal_overlay = PanelContainer.new()
-	log_modal_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	log_modal_overlay.visible = false
-	log_modal_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var backdrop_style := StyleBoxFlat.new()
-	backdrop_style.bg_color = Color(0.02, 0.04, 0.07, 0.9)
-	log_modal_overlay.add_theme_stylebox_override("panel", backdrop_style)
-	ui_canvas.add_child(log_modal_overlay)
-
-	var center_margin := MarginContainer.new()
-	center_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center_margin.add_theme_constant_override("margin_left", 180)
-	center_margin.add_theme_constant_override("margin_right", 180)
-	center_margin.add_theme_constant_override("margin_top", 70)
-	center_margin.add_theme_constant_override("margin_bottom", 70)
-	log_modal_overlay.add_child(center_margin)
-
-	var modal_box := PanelContainer.new()
-	var box_style := StyleBoxFlat.new()
-	box_style.bg_color = Color(0.07, 0.09, 0.14, 0.98)
-	box_style.border_color = Color(0.28, 0.46, 0.75, 0.9)
-	box_style.set_border_width_all(2)
-	box_style.set_corner_radius_all(6)
-	box_style.content_margin_left = 12
-	box_style.content_margin_right = 12
-	box_style.content_margin_top = 10
-	box_style.content_margin_bottom = 10
-	modal_box.add_theme_stylebox_override("panel", box_style)
-	center_margin.add_child(modal_box)
-
-	var modal_vbox := VBoxContainer.new()
-	modal_vbox.add_theme_constant_override("separation", 6)
-	modal_box.add_child(modal_vbox)
-
-	# Top header bar
-	var hdr := HBoxContainer.new()
-	modal_vbox.add_child(hdr)
-
-	var title := Label.new()
-	title.text = "📜 EXPANDED ACTION STREAM LOG"
-	title.add_theme_font_size_override("font_size", 12)
-	title.add_theme_color_override("font_color", Color(0.96, 0.85, 0.35))
-	hdr.add_child(title)
-
-	var sub := Label.new()
-	sub.text = "Chronological Action Cells (R<X>-B<Y> Reference Format)"
-	sub.add_theme_font_size_override("font_size", 8)
-	sub.add_theme_color_override("font_color", Color(0.55, 0.65, 0.78))
-	hdr.add_child(sub)
-
-	hdr.add_spacer(false)
-
-	var close_btn := Button.new()
-	close_btn.text = "✕ CLOSE (ESC / L)"
-	close_btn.custom_minimum_size = Vector2(95, 22)
-	close_btn.add_theme_font_size_override("font_size", 9)
-	var cls_style := StyleBoxFlat.new()
-	cls_style.bg_color = Color(0.35, 0.12, 0.15, 0.9)
-	cls_style.border_color = Color(0.85, 0.35, 0.35, 1.0)
-	cls_style.set_border_width_all(1)
-	cls_style.set_corner_radius_all(3)
-	close_btn.add_theme_stylebox_override("normal", cls_style)
-	close_btn.pressed.connect(func() -> void: _toggle_log_modal(false))
-	hdr.add_child(close_btn)
-
-	# Filter bar
-	var filter_bar := HBoxContainer.new()
-	filter_bar.add_theme_constant_override("separation", 4)
-	modal_vbox.add_child(filter_bar)
-
-	var filter_hdr := Label.new()
-	filter_hdr.text = "Filter Stream:"
-	filter_hdr.add_theme_font_size_override("font_size", 8)
-	filter_hdr.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
-	filter_bar.add_child(filter_hdr)
-
-	var categories: Array[String] = ["ALL", "ATTACK", "DEFEND", "BUFF", "MOVE", "TARGET", "EVENT"]
-	for cat in categories:
-		var btn := Button.new()
-		btn.text = cat
-		btn.custom_minimum_size = Vector2(50, 18)
-		btn.add_theme_font_size_override("font_size", 8)
-		btn.pressed.connect(func() -> void:
-			current_log_filter = cat
-			_refresh_log_modal_content()
-		)
-		filter_bar.add_child(btn)
-		modal_filter_btns[cat] = btn
-
-	var hsep := HSeparator.new()
-	modal_vbox.add_child(hsep)
-
-	# Scrollable entries stream
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	modal_vbox.add_child(scroll)
-
-	modal_entries_vbox = VBoxContainer.new()
-	modal_entries_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	modal_entries_vbox.add_theme_constant_override("separation", 4)
-	scroll.add_child(modal_entries_vbox)
-
-
 func _toggle_log_modal(open: bool) -> void:
-	if not log_modal_overlay:
+	if log_modal == null:
 		return
-	log_modal_overlay.visible = open
 	if open:
-		log_modal_overlay.move_to_front()
-		_refresh_log_modal_content()
+		log_modal.set_entries(all_action_log_entries)
+		log_modal.open_modal()
+	else:
+		log_modal.close_modal()
 
-
-func _refresh_log_modal_content() -> void:
-	if not modal_entries_vbox:
-		return
-	for child in modal_entries_vbox.get_children():
-		child.queue_free()
-
-	# Highlight active filter button
-	for cat: String in modal_filter_btns:
-		var btn: Button = modal_filter_btns[cat]
-		if cat == current_log_filter:
-			btn.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35))
-		else:
-			btn.remove_theme_color_override("font_color")
-
-	if all_action_log_entries.is_empty():
-		var empty_lbl := Label.new()
-		empty_lbl.text = "No action cells resolved yet. Run combat blocks to populate stream."
-		empty_lbl.add_theme_font_size_override("font_size", 10)
-		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-		modal_entries_vbox.add_child(empty_lbl)
-		return
-
-	var last_round: int = -1
-	var last_block: int = -1
-
-	for entry in all_action_log_entries:
-		if current_log_filter != "ALL" and entry.category != current_log_filter:
-			continue
-
-		# Round Divider
-		if entry.round_num != last_round:
-			last_round = entry.round_num
-			last_block = -1
-			var rd_panel := PanelContainer.new()
-			var rd_style := StyleBoxFlat.new()
-			rd_style.bg_color = Color(0.12, 0.16, 0.24, 0.95)
-			rd_style.border_color = Color(0.35, 0.55, 0.85, 0.9)
-			rd_style.set_border_width_all(1)
-			rd_style.set_corner_radius_all(3)
-			rd_style.content_margin_left = 8
-			rd_style.content_margin_right = 8
-			rd_style.content_margin_top = 2
-			rd_style.content_margin_bottom = 2
-			rd_panel.add_theme_stylebox_override("panel", rd_style)
-
-			var rd_lbl := Label.new()
-			rd_lbl.text = "━━━ ROUND %d RESOLUTION STREAM ━━━" % entry.round_num
-			rd_lbl.add_theme_font_size_override("font_size", 9)
-			rd_lbl.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-			rd_panel.add_child(rd_lbl)
-			modal_entries_vbox.add_child(rd_panel)
-
-		# Block Divider
-		if entry.block_num != last_block:
-			last_block = entry.block_num
-			var blk_lbl := Label.new()
-			blk_lbl.text = "── Block %02d Actions ──" % entry.block_num
-			blk_lbl.add_theme_font_size_override("font_size", 8)
-			blk_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
-			modal_entries_vbox.add_child(blk_lbl)
-
-		var cell := _format_action_cell(entry, true)
-		modal_entries_vbox.add_child(cell)
 
 
 func _on_log_modal_cell_clicked(entry: ActionLogEntry) -> void:
@@ -4105,7 +3775,6 @@ func _on_play_round_pressed() -> void:
 		is_auto_playing = false
 		auto_play_timer.stop()
 		btn_play.text = "▶"
-		if btn_modal_play: btn_modal_play.text = "▶"
 	else:
 		if combat_phase == CombatPhase.REPLAY:
 			# Autoplay round from Block 1
@@ -4114,7 +3783,6 @@ func _on_play_round_pressed() -> void:
 			_on_ruler_block_clicked(1)
 		is_auto_playing = true
 		btn_play.text = "⏸"
-		if btn_modal_play: btn_modal_play.text = "⏸"
 		auto_play_timer.start()
 
 
@@ -4126,7 +3794,6 @@ func _on_auto_play_tick() -> void:
 			is_auto_playing = false
 			auto_play_timer.stop()
 			btn_play.text = "▶"
-			if btn_modal_play: btn_modal_play.text = "▶"
 	else:
 		_step_simulation()
 
@@ -4159,7 +3826,7 @@ func _on_rewind_pressed() -> void:
 
 
 func _on_toggle_view_mode_pressed() -> void:
-	_toggle_timeline_modal(not timeline_modal_overlay.visible)
+	_toggle_timeline_modal(not (timeline_modal != null and timeline_modal.visible))
 
 
 func _on_ruler_block_clicked(b: int) -> void:
@@ -4177,7 +3844,7 @@ func _on_ruler_block_clicked(b: int) -> void:
 	status_label.text = "Round %d • Block %02d State inspected." % [viewed_timeline_round, b]
 	_update_timeline_tracks_display()
 	_update_combined_block_display(b)
-	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+	if timeline_modal != null and timeline_modal.visible:
 		_update_modal_tracks_display()
 
 
@@ -4190,8 +3857,6 @@ func _navigate_timeline_round(delta: int) -> void:
 func _update_round_traversal_ui() -> void:
 	if ruler_round_badge != null:
 		ruler_round_badge.text = "R%d" % viewed_timeline_round
-	if modal_ruler_round_badge != null:
-		modal_ruler_round_badge.text = "R%d" % viewed_timeline_round
 
 	# Requirement 3: Disable arrows if data not exposed (e.g. on load, R0 and R2 disabled)
 	var can_go_prev: bool = (viewed_timeline_round > 1)
@@ -4202,10 +3867,8 @@ func _update_round_traversal_ui() -> void:
 	if btn_next_round_arrow != null:
 		btn_next_round_arrow.disabled = not can_go_next
 
-	if btn_modal_prev_round != null:
-		btn_modal_prev_round.disabled = not can_go_prev
-	if btn_modal_next_round_arrow != null:
-		btn_modal_next_round_arrow.disabled = not can_go_next
+	if timeline_modal != null and timeline_modal.visible:
+		_update_modal_tracks_display()
 
 
 func _select_timeline_round(rd: int) -> void:
@@ -4216,7 +3879,7 @@ func _select_timeline_round(rd: int) -> void:
 	snapshots = round_snapshots.get(rd, []) as Array[BlockSnapshot]
 	_update_round_traversal_ui()
 	_update_timeline_tracks_display()
-	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+	if timeline_modal != null and timeline_modal.visible:
 		_update_modal_tracks_display()
 
 	var snaps: Array = round_snapshots.get(rd, [])
@@ -4232,187 +3895,14 @@ func _select_timeline_round(rd: int) -> void:
 
 
 # ==============================================================================
-# SECTION 8: FULL-SCREEN POPOUT MODAL TIMELINE SUITE
+# SECTION 8: FULL-SCREEN POPOUT MODAL TIMELINE SUITE (Extracted Component Delegation)
 # ==============================================================================
 
-func _build_timeline_modal_ui() -> void:
-	timeline_modal_overlay = PanelContainer.new()
-	timeline_modal_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	timeline_modal_overlay.visible = false
-	timeline_modal_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var overlay_style := StyleBoxFlat.new()
-	overlay_style.bg_color = Color(0.04, 0.06, 0.09, 0.97)
-	overlay_style.border_color = Color(0.25, 0.45, 0.75, 0.95)
-	overlay_style.set_border_width_all(2)
-	overlay_style.set_corner_radius_all(8)
-	overlay_style.content_margin_left = 16
-	overlay_style.content_margin_right = 16
-	overlay_style.content_margin_top = 12
-	overlay_style.content_margin_bottom = 12
-	timeline_modal_overlay.add_theme_stylebox_override("panel", overlay_style)
-	ui_canvas.add_child(timeline_modal_overlay)
-
-	var modal_vbox := VBoxContainer.new()
-	modal_vbox.add_theme_constant_override("separation", 8)
-	timeline_modal_overlay.add_child(modal_vbox)
-
-	# 1. Header Bar: Title | Playback Controls | Phase Badge | Close Button
-	var hdr_row := HBoxContainer.new()
-	hdr_row.add_theme_constant_override("separation", 10)
-	modal_vbox.add_child(hdr_row)
-
-	var title_lbl := Label.new()
-	title_lbl.text = "🗂 TACTICAL TIMELINE MASTER SUITE (DETAILED EXPANDED VIEW)"
-	title_lbl.add_theme_font_size_override("font_size", 12)
-	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
-	hdr_row.add_child(title_lbl)
-
-	# Round Navigation Panel in Modal Suite (Replaces playback controls which don't belong in full screen timeline view)
-	var modal_round_nav_panel := HBoxContainer.new()
-	modal_round_nav_panel.add_theme_constant_override("separation", 6)
-	hdr_row.add_child(modal_round_nav_panel)
-
-	btn_modal_prev_round = Button.new()
-	btn_modal_prev_round.text = "◀ PREV ROUND"
-	btn_modal_prev_round.tooltip_text = "Navigate to Previous Round Timeline"
-	btn_modal_prev_round.custom_minimum_size = Vector2(95, 24)
-	btn_modal_prev_round.add_theme_font_size_override("font_size", 9)
-	btn_modal_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
-	modal_round_nav_panel.add_child(btn_modal_prev_round)
-
-	modal_ruler_round_badge = Label.new()
-	modal_ruler_round_badge.text = "ROUND 1 TIMELINE"
-	modal_ruler_round_badge.custom_minimum_size = Vector2(130, 24)
-	modal_ruler_round_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	modal_ruler_round_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	modal_ruler_round_badge.add_theme_font_size_override("font_size", 10)
-	modal_ruler_round_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
-	modal_round_nav_panel.add_child(modal_ruler_round_badge)
-
-	btn_modal_next_round_arrow = Button.new()
-	btn_modal_next_round_arrow.text = "NEXT ROUND ▶"
-	btn_modal_next_round_arrow.tooltip_text = "Navigate to Next Round Timeline"
-	btn_modal_next_round_arrow.custom_minimum_size = Vector2(95, 24)
-	btn_modal_next_round_arrow.add_theme_font_size_override("font_size", 9)
-	btn_modal_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
-	modal_round_nav_panel.add_child(btn_modal_next_round_arrow)
-
-	modal_phase_lbl = Label.new()
-	modal_phase_lbl.text = "PLANNING PHASE"
-	modal_phase_lbl.add_theme_font_size_override("font_size", 9)
-	modal_phase_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
-	modal_round_nav_panel.add_child(modal_phase_lbl)
-
-	hdr_row.add_spacer(false)
-
-	btn_modal_close = Button.new()
-	btn_modal_close.text = "✕ CLOSE [ESC]"
-	btn_modal_close.tooltip_text = "Close expanded timeline [ESC / F / Tab]"
-	btn_modal_close.custom_minimum_size = Vector2(90, 22)
-	btn_modal_close.add_theme_font_size_override("font_size", 9)
-	var close_style := StyleBoxFlat.new()
-	close_style.bg_color = Color(0.35, 0.12, 0.14, 0.9)
-	close_style.border_color = Color(0.85, 0.35, 0.35, 1.0)
-	close_style.set_border_width_all(1)
-	close_style.set_corner_radius_all(3)
-	btn_modal_close.add_theme_stylebox_override("normal", close_style)
-	btn_modal_close.pressed.connect(func() -> void: _toggle_timeline_modal(false))
-	hdr_row.add_child(btn_modal_close)
-
-	var hsep1 := HSeparator.new()
-	modal_vbox.add_child(hsep1)
-
-	# 2. Synchronous Time Ruler Row (Aligned exactly with Tracks below)
-	var ruler_row := HBoxContainer.new()
-	ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
-	modal_vbox.add_child(ruler_row)
-
-	var track_col_lbl := Label.new()
-	track_col_lbl.text = "COMBATANT"
-	track_col_lbl.custom_minimum_size = Vector2(130, 18)
-	track_col_lbl.add_theme_font_size_override("font_size", 9)
-	track_col_lbl.add_theme_color_override("font_color", Color(0.6, 0.75, 0.9))
-	ruler_row.add_child(track_col_lbl)
-
-	modal_ruler_tick_nodes.clear()
-	modal_ruler_tick_labels.clear()
-
-	for b: int in range(1, TOTAL_BLOCKS + 1):
-		var tick_panel := PanelContainer.new()
-		tick_panel.custom_minimum_size = Vector2(UNIT_MODAL_BLOCK_W, 18)
-		tick_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var tick_style := StyleBoxFlat.new()
-		tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.85)
-		tick_style.border_color = Color(0.2, 0.3, 0.42, 0.8)
-		tick_style.set_border_width_all(1)
-		tick_style.set_corner_radius_all(3)
-		tick_panel.add_theme_stylebox_override("panel", tick_style)
-
-		var tick_lbl := Label.new()
-		tick_lbl.text = "BLK %02d" % b
-		tick_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		tick_lbl.add_theme_font_size_override("font_size", 8)
-		tick_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-		tick_panel.add_child(tick_lbl)
-
-		var cur_b: int = b
-		tick_panel.gui_input.connect(func(event: InputEvent) -> void:
-			var mouse_event := event as InputEventMouseButton
-			if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-				_on_ruler_block_clicked(cur_b)
-				if timeline_modal_overlay.visible:
-					_update_modal_tracks_display()
-		)
-
-		ruler_row.add_child(tick_panel)
-		modal_ruler_tick_nodes.append(tick_panel)
-		modal_ruler_tick_labels.append(tick_lbl)
-
-	# 3. Scrollable Tracks Matrix
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	modal_vbox.add_child(scroll)
-
-	modal_tracks_list = VBoxContainer.new()
-	modal_tracks_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	modal_tracks_list.add_theme_constant_override("separation", 6)
-	scroll.add_child(modal_tracks_list)
-
-
 func _update_modal_tracks_display() -> void:
-	if not timeline_modal_overlay.visible:
+	if timeline_modal == null or not timeline_modal.visible:
 		return
 
 	var active_playhead: int = replay_block if combat_phase == CombatPhase.REPLAY else current_sim_block
-	if modal_phase_lbl != null:
-		modal_phase_lbl.text = "REPLAY BLOCK %02d / 10" % active_playhead if combat_phase == CombatPhase.REPLAY else "PLANNING BLOCK %02d / 10" % active_playhead
-
-	# Update modal ruler tick highlights
-	for i in range(modal_ruler_tick_nodes.size()):
-		var pnl: PanelContainer = modal_ruler_tick_nodes[i]
-		var lbl: Label = modal_ruler_tick_labels[i]
-		var b_num: int = i + 1
-		var style := StyleBoxFlat.new()
-		style.set_corner_radius_all(3)
-		if b_num == active_playhead:
-			style.bg_color = Color(0.2, 0.45, 0.75, 1.0)
-			style.border_color = Color(0.5, 0.9, 1.0, 1.0)
-			style.set_border_width_all(2)
-			lbl.text = "▼ %02d" % b_num
-			lbl.add_theme_color_override("font_color", Color(1.0, 0.95, 0.4))
-		else:
-			style.bg_color = Color(0.10, 0.13, 0.18, 0.85)
-			style.border_color = Color(0.2, 0.3, 0.42, 0.8)
-			style.set_border_width_all(1)
-			lbl.text = "BLK %02d" % b_num
-			lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-		pnl.add_theme_stylebox_override("panel", style)
-
-	# Rebuild tracks list in modal
-	for child in modal_tracks_list.get_children():
-		child.queue_free()
 
 	# Query snapshot for active playhead in viewed round
 	var snap: BlockSnapshot = null
@@ -4421,22 +3911,7 @@ func _update_modal_tracks_display() -> void:
 		@warning_ignore("unsafe_cast")
 		snap = snaps[active_playhead] as BlockSnapshot
 
-	# Section 1: Hero Battlegroup Tracks (All 4 slots)
-	var ally_hdr := Label.new()
-	ally_hdr.text = "⚔ ALLIED HERO BATTLEGROUP (4 SLOTS)"
-	ally_hdr.add_theme_font_size_override("font_size", 9)
-	ally_hdr.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
-	modal_tracks_list.add_child(ally_hdr)
-
-	for i in range(4):
-		var ally: Combatant = sim_allies[i] if i < sim_allies.size() else null
-		var row := _create_modal_unit_track_row(ally, i + 1, true, active_playhead, snap)
-		modal_tracks_list.add_child(row)
-
-	var sep := HSeparator.new()
-	modal_tracks_list.add_child(sep)
-
-	# Section 2: Hostile Opposition Tracks (Requirement 5: Only show active enemies for the round)
+	# Filter active hostiles for viewed round
 	var active_enemies_for_view: Array[Combatant] = []
 	var is_r1: bool = (viewed_timeline_round == 1)
 	var reinforcements_active: bool = (snap.reinforcements_spawned if snap != null else reinforcements_spawned)
@@ -4449,174 +3924,35 @@ func _update_modal_tracks_display() -> void:
 			else:
 				active_enemies_for_view.append(enemy)
 		elif viewed_timeline_round == 2:
-			# Round 2: Brawler & Scout pruned, only surviving goblins shown
 			if not (enemy in [unit_brawler, unit_scout]):
 				active_enemies_for_view.append(enemy)
 		elif viewed_timeline_round == 3:
-			# Round 3: Berserker and Skirmisher defeated in Round 2, only Shaman and Archer survive
 			if enemy in [unit_shaman, unit_archer]:
 				active_enemies_for_view.append(enemy)
 
-	var enemy_hdr := Label.new()
-	enemy_hdr.text = "💀 HOSTILE OPPOSITION (%d Active Hostiles)" % active_enemies_for_view.size()
-	enemy_hdr.add_theme_font_size_override("font_size", 9)
-	enemy_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-	modal_tracks_list.add_child(enemy_hdr)
+	var can_go_prev: bool = (viewed_timeline_round > 1)
+	var can_go_next: bool = (viewed_timeline_round < max_unlocked_round)
 
-	for i in range(active_enemies_for_view.size()):
-		var enemy: Combatant = active_enemies_for_view[i]
-		var row := _create_modal_unit_track_row(enemy, i + 1, false, active_playhead, snap)
-		modal_tracks_list.add_child(row)
-
-
-func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, active_playhead: int, snap: BlockSnapshot = null) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", BLOCK_GAP)
-
-	# Left Header box (130px)
-	var hdr := PanelContainer.new()
-	hdr.custom_minimum_size = Vector2(130, 32)
-	var hdr_style := StyleBoxFlat.new()
-	hdr_style.set_corner_radius_all(3)
-	hdr_style.content_margin_left = 4
-	hdr_style.content_margin_right = 4
-	hdr_style.content_margin_top = 2
-	hdr_style.content_margin_bottom = 2
-	hdr_style.set_border_width_all(1)
-
-	if combatant != null:
-		var cur_hp: int = snap.hps.get(combatant, combatant.hp) if snap != null else combatant.hp
-		var max_hp: int = snap.max_hps.get(combatant, combatant.max_hp) if snap != null else combatant.max_hp
-		var is_withdrawn: bool = snap.is_withdrawn.get(combatant, combatant.is_withdrawn) if snap != null else combatant.is_withdrawn
-		var is_alive: bool = cur_hp > 0
-		var cur_stance: CombatTypes.StanceType = snap.stances.get(combatant, combatant.current_stance) if snap != null else combatant.current_stance
-
-		var team_col: Color = Color(0.2, 0.5, 0.9) if is_ally else Color(0.9, 0.35, 0.35)
-		hdr_style.bg_color = Color(0.10, 0.13, 0.19, 0.95)
-		hdr_style.border_color = team_col
-
-		var hbox := HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", 4)
-		hdr.add_child(hbox)
-
-		var icon := TextureRect.new()
-		icon.texture = _get_combatant_token_texture(combatant)
-		icon.custom_minimum_size = Vector2(18, 18)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		if not is_alive or is_withdrawn:
-			icon.modulate = Color(0.5, 0.5, 0.5, 0.6)
-		hbox.add_child(icon)
-
-		var vinfo := VBoxContainer.new()
-		vinfo.add_theme_constant_override("separation", 0)
-		hbox.add_child(vinfo)
-
-		var name_lbl := Label.new()
-		if not is_alive:
-			name_lbl.text = "%s 💀" % combatant.name
-			name_lbl.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35))
-			hdr.modulate = Color(0.6, 0.6, 0.6, 0.6)
-		elif is_withdrawn:
-			name_lbl.text = "%s 💨" % combatant.name
-			name_lbl.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
-			hdr.modulate = Color(0.65, 0.65, 0.65, 0.6)
-		else:
-			name_lbl.text = combatant.name
-			name_lbl.add_theme_color_override("font_color", Color.WHITE)
-			hdr.modulate = Color.WHITE
-		name_lbl.add_theme_font_size_override("font_size", 8)
-		vinfo.add_child(name_lbl)
-
-		var hp_lbl := Label.new()
-		if not is_alive:
-			hp_lbl.text = "0/%d HP [DEFEATED]" % max_hp
-		elif is_withdrawn:
-			hp_lbl.text = "%d/%d HP [ESCAPED]" % [cur_hp, max_hp]
-		else:
-			hp_lbl.text = "%d/%d HP | %s" % [cur_hp, max_hp, CombatTypes.stance_to_string(cur_stance)]
-		hp_lbl.add_theme_font_size_override("font_size", 7)
-		hp_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-		vinfo.add_child(hp_lbl)
-	else:
-		hdr_style.bg_color = Color(0.06, 0.08, 0.11, 0.6)
-		hdr_style.border_color = Color(0.2, 0.25, 0.35, 0.5)
-		var empty_lbl := Label.new()
-		empty_lbl.text = "— Slot %d (Empty) —" % slot_idx
-		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		empty_lbl.add_theme_font_size_override("font_size", 8)
-		empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.48, 0.58))
-		hdr.add_child(empty_lbl)
-
-	hdr.add_theme_stylebox_override("panel", hdr_style)
-	row.add_child(hdr)
-
-	# Right Action Clips (10 blocks)
-	var clips_hbox := HBoxContainer.new()
-	clips_hbox.add_theme_constant_override("separation", BLOCK_GAP)
-	row.add_child(clips_hbox)
-
-	if combatant == null:
-		# Empty placeholder row
-		for b in range(1, TOTAL_BLOCKS + 1):
-			var slot := PanelContainer.new()
-			slot.custom_minimum_size = Vector2(UNIT_MODAL_BLOCK_W, 32)
-			var s_style := StyleBoxFlat.new()
-			s_style.bg_color = Color(0.06, 0.08, 0.11, 0.4)
-			s_style.border_color = Color(0.15, 0.2, 0.28, 0.4)
-			s_style.set_border_width_all(1)
-			s_style.set_corner_radius_all(3)
-			slot.add_theme_stylebox_override("panel", s_style)
-			clips_hbox.add_child(slot)
-		return row
-
-	# If enemy during planning phase -> Secret intent banner across the 10 blocks
-	if not is_ally and combat_phase != CombatPhase.REPLAY:
-		var secret_panel := PanelContainer.new()
-		var total_w: int = TOTAL_BLOCKS * UNIT_MODAL_BLOCK_W + (TOTAL_BLOCKS - 1) * BLOCK_GAP
-		secret_panel.custom_minimum_size = Vector2(total_w, 32)
-		var sec_style := StyleBoxFlat.new()
-		sec_style.bg_color = Color(0.14, 0.08, 0.10, 0.8)
-		sec_style.border_color = Color(0.55, 0.2, 0.2, 0.8)
-		sec_style.set_border_width_all(1)
-		sec_style.set_corner_radius_all(3)
-		secret_panel.add_theme_stylebox_override("panel", sec_style)
-
-		var sec_lbl := Label.new()
-		sec_lbl.text = "🔒 SECRET ENEMY INTENT POOL — SIMULTANEOUS PLANNING (MASKED)"
-		sec_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		sec_lbl.add_theme_font_size_override("font_size", 8)
-		sec_lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
-		secret_panel.add_child(sec_lbl)
-		clips_hbox.add_child(secret_panel)
-		return row
-
-	# Otherwise render action clips from recorded_actions
-	var b: int = 1
-	while b <= TOTAL_BLOCKS:
-		var act: CombatResolver.ScheduledAction = _find_recorded_action_starting_at(combatant, b)
-		if act != null:
-			var cost: int = act.end_block - act.start_block + 1
-			var clip_w: int = cost * UNIT_MODAL_BLOCK_W + (cost - 1) * BLOCK_GAP
-			var clip := _create_action_clip_widget(act, clip_w, cost)
-			clips_hbox.add_child(clip)
-			b += cost
-		else:
-			var idle := _create_idle_clip_widget(b == active_playhead, UNIT_MODAL_BLOCK_W)
-			clips_hbox.add_child(idle)
-			b += 1
-
-	return row
+	timeline_modal.update_view(
+		viewed_timeline_round,
+		active_playhead,
+		combat_phase == CombatPhase.REPLAY,
+		sim_allies,
+		active_enemies_for_view,
+		snap,
+		can_go_prev,
+		can_go_next
+	)
 
 
 func _toggle_timeline_modal(open: bool) -> void:
-	if timeline_modal_overlay == null:
+	if timeline_modal == null:
 		return
-	timeline_modal_overlay.visible = open
 	if open:
-		timeline_modal_overlay.move_to_front()
+		timeline_modal.open_modal()
 		_update_modal_tracks_display()
 	else:
+		timeline_modal.close_modal()
 		_update_timeline_tracks_display()
 		_update_combined_block_display(combined_selected_block)
 
@@ -4625,22 +3961,22 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
 	if key_event != null and key_event.pressed and not key_event.echo:
 		if key_event.keycode == KEY_ESCAPE:
-			if log_modal_overlay != null and log_modal_overlay.visible:
+			if log_modal != null and log_modal.visible:
 				_toggle_log_modal(false)
 				get_viewport().set_input_as_handled()
 				return
-			elif timeline_modal_overlay != null and timeline_modal_overlay.visible:
+			elif timeline_modal != null and timeline_modal.visible:
 				_toggle_timeline_modal(false)
 				get_viewport().set_input_as_handled()
 				return
 		elif key_event.keycode == KEY_L:
-			if log_modal_overlay != null:
-				_toggle_log_modal(not log_modal_overlay.visible)
+			if log_modal != null:
+				_toggle_log_modal(not log_modal.visible)
 				get_viewport().set_input_as_handled()
 				return
 		elif key_event.keycode == KEY_F:
-			if timeline_modal_overlay != null:
-				_toggle_timeline_modal(not timeline_modal_overlay.visible)
+			if timeline_modal != null:
+				_toggle_timeline_modal(not timeline_modal.visible)
 				get_viewport().set_input_as_handled()
 				return
 		elif key_event.keycode == KEY_BRACKETLEFT:
