@@ -1,0 +1,12 @@
+{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "*.gd": "${capture}.gd.uid",
+    "*.svg": "${capture}.svg.import",
+    "*.png": "${capture}.png.import",
+    "*.wav": "${capture}.wav.import",
+    "*.ogg": "${capture}.ogg.import",
+    "*.mp3": "${capture}.mp3.import"
+  }
+}
