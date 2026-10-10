@@ -134,16 +134,47 @@ class BlockSnapshot:
 	var attack_boost_rds: Dictionary = {}  # Combatant -> int
 	var defense_mit: Dictionary = {}       # Combatant -> float
 
+class ActionLogEntry:
+	extends RefCounted
+	var round_num: int = 1
+	var block_num: int = 1
+	var ref_tag: String = "R1-B01"   # R<X>-B<Y>
+	var actor_name: String = ""
+	var actor_is_ally: bool = true
+	var target_name: String = ""
+	var target_is_ally: bool = false
+	var category: String = "ATTACK"  # ATTACK, DEFEND, BUFF, MOVE, TARGET, EVENT
+	var skill_name: String = ""
+	var skill_subtype: String = ""
+	var value_num: int = 0
+	var outcome_tag: String = "HIT"
+	var detail_text: String = ""
+	var status_text: String = ""
+	var coord_from: Vector2i = Vector2i(-1, -1)
+	var coord_to: Vector2i = Vector2i(-1, -1)
+
 # Interactive UI References
 var ui_canvas: CanvasLayer
 var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
 var unit_token_nodes: Dictionary = {} # Combatant -> Control
 var roster_cards: Dictionary = {}     # Combatant -> PanelContainer
-var party_cards_container: VBoxContainer
-var enemy_cards_container: VBoxContainer
+var party_cards_container: GridContainer
+var enemy_cards_container: GridContainer
 var party_title_lbl: Label
 var enemy_title_lbl: Label
 var log_rich_text: RichTextLabel
+var active_cell_dock: PanelContainer
+var log_step_badge: Label
+var btn_log_prev: Button
+var btn_log_next: Button
+var btn_expand_log: Button
+var log_modal_overlay: PanelContainer
+var modal_entries_vbox: VBoxContainer
+var modal_filter_btns: Dictionary = {} # String -> Button
+var current_log_filter: String = "ALL"
+var all_action_log_entries: Array[ActionLogEntry] = []
+var active_log_entry_index: int = -1
+var pending_block_actions: Array[CombatResolver.ScheduledAction] = []
 var status_label: Label
 var phase_badge_lbl: Label
 var btn_step: Button
@@ -296,17 +327,16 @@ func _setup_interactive_ui() -> void:
 	root_margin.add_child(main_vbox)
 
 	# --------------------------------------------------------------------------
-	# TOP ROW: PARTY STATUS (Left) | BATTLE LOG (Center) | ENEMY STATUS (Right)
+	# TOP ROW: PARTY STATUS (2x2) | ACTION LOG DOCK (Center) | ENEMY STATUS (5x2)
 	# --------------------------------------------------------------------------
 	var top_hbox := HBoxContainer.new()
-	top_hbox.custom_minimum_size = Vector2(0, 82)
-	top_hbox.add_theme_constant_override("separation", 10)
+	top_hbox.custom_minimum_size = Vector2(0, 84)
+	top_hbox.add_theme_constant_override("separation", 8)
 	main_vbox.add_child(top_hbox)
 
-	# Top-Left: Allied Party Status Panel (Scrollable for up to 4+ heroes)
+	# Top-Left: Allied Party Status Panel (Static 2x2 Grid for 4 Heroes)
 	var party_panel := PanelContainer.new()
-	party_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	party_panel.custom_minimum_size = Vector2(340, 82)
+	party_panel.custom_minimum_size = Vector2(310, 84)
 	var party_box_style := StyleBoxFlat.new()
 	party_box_style.bg_color = Color(0.08, 0.11, 0.16, 0.95)
 	party_box_style.border_color = Color(0.2, 0.38, 0.65, 0.8)
@@ -326,39 +356,37 @@ func _setup_interactive_ui() -> void:
 	var party_hdr_hbox := HBoxContainer.new()
 	party_vbox.add_child(party_hdr_hbox)
 	party_title_lbl = Label.new()
-	party_title_lbl.text = "⚔ PARTY MEMBERS (2)"
+	party_title_lbl.text = "⚔ PARTY MEMBERS (2/4)"
 	party_title_lbl.add_theme_font_size_override("font_size", 10)
 	party_title_lbl.add_theme_color_override("font_color", Color(0.38, 0.72, 1.0))
 	party_hdr_hbox.add_child(party_title_lbl)
 
 	var party_hint := Label.new()
-	party_hint.text = "(Click to inspect)"
+	party_hint.text = "(2x2 Formation)"
 	party_hint.add_theme_font_size_override("font_size", 8)
 	party_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	party_hdr_hbox.add_spacer(false)
 	party_hdr_hbox.add_child(party_hint)
 
-	var party_scroll := ScrollContainer.new()
-	party_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	party_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	party_vbox.add_child(party_scroll)
-
-	party_cards_container = VBoxContainer.new()
+	party_cards_container = GridContainer.new()
+	party_cards_container.columns = 2
 	party_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	party_cards_container.add_theme_constant_override("separation", 2)
-	party_scroll.add_child(party_cards_container)
+	party_cards_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	party_cards_container.add_theme_constant_override("h_separation", 4)
+	party_cards_container.add_theme_constant_override("v_separation", 3)
+	party_vbox.add_child(party_cards_container)
 
-	# Top-Center: Battle Log (Matches center grid width of 496px)
+	# Top-Center: Single-Action Resolution Log Dock with Navigation & Expand Button
 	var log_panel := PanelContainer.new()
-	log_panel.custom_minimum_size = Vector2(496, 82)
+	log_panel.custom_minimum_size = Vector2(450, 84)
 	log_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var log_style := StyleBoxFlat.new()
 	log_style.bg_color = Color(0.06, 0.08, 0.12, 0.95)
 	log_style.border_color = Color(0.25, 0.32, 0.44, 0.8)
 	log_style.set_border_width_all(1)
 	log_style.set_corner_radius_all(6)
-	log_style.content_margin_left = 8
-	log_style.content_margin_right = 8
+	log_style.content_margin_left = 6
+	log_style.content_margin_right = 6
 	log_style.content_margin_top = 4
 	log_style.content_margin_bottom = 4
 	log_panel.add_theme_stylebox_override("panel", log_style)
@@ -369,32 +397,79 @@ func _setup_interactive_ui() -> void:
 	log_panel.add_child(log_vbox)
 
 	var log_hdr_hbox := HBoxContainer.new()
+	log_hdr_hbox.add_theme_constant_override("separation", 6)
 	log_vbox.add_child(log_hdr_hbox)
+
 	var log_title := Label.new()
 	log_title.text = "📜 RESOLUTION LOG"
 	log_title.add_theme_font_size_override("font_size", 10)
 	log_title.add_theme_color_override("font_color", Color(0.96, 0.82, 0.35))
 	log_hdr_hbox.add_child(log_title)
 
-	var log_sub := Label.new()
-	log_sub.text = "Chronological Action Log"
-	log_sub.add_theme_font_size_override("font_size", 8)
-	log_sub.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
+	log_step_badge = Label.new()
+	log_step_badge.text = "[Awaiting Action]"
+	log_step_badge.add_theme_font_size_override("font_size", 8)
+	log_step_badge.add_theme_color_override("font_color", Color(0.55, 0.75, 0.95))
+	log_hdr_hbox.add_child(log_step_badge)
+
+	btn_log_prev = Button.new()
+	btn_log_prev.text = "◀"
+	btn_log_prev.custom_minimum_size = Vector2(20, 16)
+	btn_log_prev.add_theme_font_size_override("font_size", 8)
+	btn_log_prev.tooltip_text = "Previous Action Cell"
+	btn_log_prev.pressed.connect(_on_log_prev_pressed)
+	log_hdr_hbox.add_child(btn_log_prev)
+
+	btn_log_next = Button.new()
+	btn_log_next.text = "▶"
+	btn_log_next.custom_minimum_size = Vector2(20, 16)
+	btn_log_next.add_theme_font_size_override("font_size", 8)
+	btn_log_next.tooltip_text = "Next Action Cell"
+	btn_log_next.pressed.connect(_on_log_next_pressed)
+	log_hdr_hbox.add_child(btn_log_next)
+
 	log_hdr_hbox.add_spacer(false)
-	log_hdr_hbox.add_child(log_sub)
 
+	btn_expand_log = Button.new()
+	btn_expand_log.text = "⛶ EXPAND"
+	btn_expand_log.custom_minimum_size = Vector2(66, 18)
+	btn_expand_log.add_theme_font_size_override("font_size", 8)
+	var exp_btn_style := StyleBoxFlat.new()
+	exp_btn_style.bg_color = Color(0.16, 0.22, 0.32, 0.9)
+	exp_btn_style.border_color = Color(0.38, 0.6, 0.9, 0.8)
+	exp_btn_style.set_border_width_all(1)
+	exp_btn_style.set_corner_radius_all(3)
+	exp_btn_style.content_margin_left = 4
+	exp_btn_style.content_margin_right = 4
+	btn_expand_log.add_theme_stylebox_override("normal", exp_btn_style)
+	btn_expand_log.tooltip_text = "Expand Full Chronological Action Log Modal (Shortcut: L)"
+	btn_expand_log.pressed.connect(func() -> void: _toggle_log_modal(true))
+	log_hdr_hbox.add_child(btn_expand_log)
+
+	# Active single action cell dock
+	active_cell_dock = PanelContainer.new()
+	active_cell_dock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	active_cell_dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var dock_style := StyleBoxFlat.new()
+	dock_style.bg_color = Color(0.04, 0.06, 0.09, 0.7)
+	dock_style.border_color = Color(0.18, 0.24, 0.34, 0.5)
+	dock_style.set_border_width_all(1)
+	dock_style.set_corner_radius_all(4)
+	dock_style.content_margin_left = 4
+	dock_style.content_margin_right = 4
+	dock_style.content_margin_top = 2
+	dock_style.content_margin_bottom = 2
+	active_cell_dock.add_theme_stylebox_override("panel", dock_style)
+	log_vbox.add_child(active_cell_dock)
+
+	# Maintain hidden RichTextLabel for headless test / logging compatibility
 	log_rich_text = RichTextLabel.new()
-	log_rich_text.bbcode_enabled = true
-	log_rich_text.scroll_following = true
-	log_rich_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	log_rich_text.scroll_active = true
-	log_rich_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	log_vbox.add_child(log_rich_text)
+	log_rich_text.visible = false
+	log_panel.add_child(log_rich_text)
 
-	# Top-Right: Enemy Hostiles Status Panel (Scrollable for up to 10+ enemies)
+	# Top-Right: Enemy Hostiles Status Panel (Static 5x2 Compact Grid for 10 Enemies)
 	var enemy_panel := PanelContainer.new()
-	enemy_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enemy_panel.custom_minimum_size = Vector2(340, 82)
+	enemy_panel.custom_minimum_size = Vector2(476, 84)
 	var enemy_box_style := StyleBoxFlat.new()
 	enemy_box_style.bg_color = Color(0.12, 0.08, 0.10, 0.95)
 	enemy_box_style.border_color = Color(0.65, 0.25, 0.25, 0.8)
@@ -414,27 +489,25 @@ func _setup_interactive_ui() -> void:
 	var enemy_hdr_hbox := HBoxContainer.new()
 	enemy_vbox.add_child(enemy_hdr_hbox)
 	enemy_title_lbl = Label.new()
-	enemy_title_lbl.text = "💀 ENEMY HOSTILES (2)"
+	enemy_title_lbl.text = "💀 ENEMY HOSTILES (6/10)"
 	enemy_title_lbl.add_theme_font_size_override("font_size", 10)
 	enemy_title_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 	enemy_hdr_hbox.add_child(enemy_title_lbl)
 
 	var enemy_hint := Label.new()
-	enemy_hint.text = "(Scrollable • Click to inspect)"
+	enemy_hint.text = "(5x2 Grid • Click to inspect)"
 	enemy_hint.add_theme_font_size_override("font_size", 8)
 	enemy_hint.add_theme_color_override("font_color", Color(0.6, 0.5, 0.5))
 	enemy_hdr_hbox.add_spacer(false)
 	enemy_hdr_hbox.add_child(enemy_hint)
 
-	var enemy_scroll := ScrollContainer.new()
-	enemy_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	enemy_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	enemy_vbox.add_child(enemy_scroll)
-
-	enemy_cards_container = VBoxContainer.new()
+	enemy_cards_container = GridContainer.new()
+	enemy_cards_container.columns = 5
 	enemy_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enemy_cards_container.add_theme_constant_override("separation", 2)
-	enemy_scroll.add_child(enemy_cards_container)
+	enemy_cards_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	enemy_cards_container.add_theme_constant_override("h_separation", 3)
+	enemy_cards_container.add_theme_constant_override("v_separation", 3)
+	enemy_vbox.add_child(enemy_cards_container)
 
 	# --------------------------------------------------------------------------
 	# CENTER ROW: LEFT POPUP (Inspector) | COMBAT GRID (54px) | RIGHT POPUP (Forecast)
@@ -999,6 +1072,7 @@ func _setup_interactive_ui() -> void:
 	_build_timeline_tracks_ui(timeline_deck)
 	_build_combined_block_ui(timeline_deck)
 	_build_timeline_modal_ui()
+	_build_log_modal_ui()
 
 	# Auto-play timer
 	auto_play_timer = Timer.new()
@@ -1321,6 +1395,11 @@ func _init_interactive_simulation() -> void:
 			child.queue_free()
 	roster_cards.clear()
 
+	all_action_log_entries.clear()
+	active_log_entry_index = -1
+	pending_block_actions.clear()
+	_update_active_log_cell()
+
 	log_rich_text.clear()
 	_append_log("[color=cyan]>>> New 10-Block Tactical Battle Initialized (Round 1 Pre-planned Actions Loaded).[/color]")
 
@@ -1422,12 +1501,15 @@ func _init_interactive_simulation() -> void:
 	for ally in sim_allies:
 		_create_unit_token(ally, _get_combatant_token_texture(ally))
 		_create_roster_card(ally, Color(0.2, 0.5, 0.9))
+	_add_party_placeholders()
+
 	for enemy in sim_enemies:
 		_create_unit_token(enemy, _get_combatant_token_texture(enemy))
 		_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
+	_add_enemy_placeholders()
 
-	party_title_lbl.text = "⚔ PARTY MEMBERS (%d)" % sim_allies.size()
-	enemy_title_lbl.text = "💀 ENEMY HOSTILES (%d)" % sim_enemies.size()
+	party_title_lbl.text = "⚔ PARTY MEMBERS (%d/4)" % sim_allies.size()
+	enemy_title_lbl.text = "💀 ENEMY HOSTILES (%d/10)" % sim_enemies.size()
 
 	# 7. Capture Initial Snapshot (State 0 before block 1 executes)
 	snapshots.clear()
@@ -1497,64 +1579,142 @@ func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
 
 
 func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
-	var target_container: VBoxContainer = party_cards_container if sim_allies.has(combatant) else enemy_cards_container
+	var is_ally: bool = sim_allies.has(combatant)
+	var target_container: GridContainer = party_cards_container if is_ally else enemy_cards_container
 	if not target_container:
 		return
 
 	var card := PanelContainer.new()
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.custom_minimum_size = Vector2(0, 22)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.11, 0.14, 0.19, 0.9)
+	card_style.bg_color = Color(0.10, 0.13, 0.18, 0.92)
 	card_style.border_color = team_color
 	card_style.set_border_width_all(1)
 	card_style.set_corner_radius_all(3)
-	card_style.content_margin_left = 4
-	card_style.content_margin_right = 4
-	card_style.content_margin_top = 2
-	card_style.content_margin_bottom = 2
+	card_style.content_margin_left = 3
+	card_style.content_margin_right = 3
+	card_style.content_margin_top = 1
+	card_style.content_margin_bottom = 1
 	card.add_theme_stylebox_override("panel", card_style)
 
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 4)
-	card.add_child(hbox)
+	if is_ally:
+		card.custom_minimum_size = Vector2(146, 26)
+		var main_vbox := VBoxContainer.new()
+		main_vbox.add_theme_constant_override("separation", 1)
+		card.add_child(main_vbox)
 
-	var name_lbl := Label.new()
-	name_lbl.text = combatant.name
-	name_lbl.custom_minimum_size = Vector2(80, 0)
-	name_lbl.add_theme_font_size_override("font_size", 9)
-	name_lbl.add_theme_color_override("font_color", team_color.lightened(0.3))
-	hbox.add_child(name_lbl)
+		# Top row: Name & HP fraction
+		var top_row := HBoxContainer.new()
+		top_row.add_theme_constant_override("separation", 3)
+		main_vbox.add_child(top_row)
 
-	var hp_bar := ProgressBar.new()
-	hp_bar.custom_minimum_size = Vector2(55, 8)
-	hp_bar.max_value = combatant.max_hp
-	hp_bar.value = combatant.hp
-	hp_bar.show_percentage = false
-	hbox.add_child(hp_bar)
+		var name_lbl := Label.new()
+		name_lbl.text = combatant.name
+		name_lbl.add_theme_font_size_override("font_size", 9)
+		name_lbl.add_theme_color_override("font_color", team_color.lightened(0.35))
+		top_row.add_child(name_lbl)
 
-	var hp_lbl := Label.new()
-	hp_lbl.name = "HpLabel"
-	hp_lbl.text = "%d/%d" % [combatant.hp, combatant.max_hp]
-	hp_lbl.custom_minimum_size = Vector2(40, 0)
-	hp_lbl.add_theme_font_size_override("font_size", 8)
-	hbox.add_child(hp_lbl)
+		top_row.add_spacer(false)
 
-	var stance_lbl := Label.new()
-	stance_lbl.name = "StanceLabel"
-	stance_lbl.text = CombatTypes.stance_to_string(combatant.current_stance)
-	stance_lbl.custom_minimum_size = Vector2(50, 0)
-	stance_lbl.add_theme_font_size_override("font_size", 8)
-	stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	hbox.add_child(stance_lbl)
+		var hp_lbl := Label.new()
+		hp_lbl.name = "HpLabel"
+		hp_lbl.text = "%d/%d" % [combatant.hp, combatant.max_hp]
+		hp_lbl.add_theme_font_size_override("font_size", 8)
+		hp_lbl.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
+		top_row.add_child(hp_lbl)
 
-	var pos_lbl := Label.new()
-	pos_lbl.name = "PosLabel"
-	pos_lbl.text = "Pos: %s" % str(sim_grid.get_position(combatant))
-	pos_lbl.custom_minimum_size = Vector2(50, 0)
-	pos_lbl.add_theme_font_size_override("font_size", 8)
-	pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	hbox.add_child(pos_lbl)
+		# Bottom row: HP bar, Stance, Pos
+		var bot_row := HBoxContainer.new()
+		bot_row.add_theme_constant_override("separation", 4)
+		main_vbox.add_child(bot_row)
+
+		var hp_bar := ProgressBar.new()
+		hp_bar.custom_minimum_size = Vector2(46, 5)
+		hp_bar.max_value = combatant.max_hp
+		hp_bar.value = combatant.hp
+		hp_bar.show_percentage = false
+		bot_row.add_child(hp_bar)
+
+		var stance_lbl := Label.new()
+		stance_lbl.name = "StanceLabel"
+		stance_lbl.text = CombatTypes.stance_to_string(combatant.current_stance)
+		stance_lbl.add_theme_font_size_override("font_size", 7)
+		stance_lbl.add_theme_color_override("font_color", Color(0.65, 0.78, 0.9))
+		bot_row.add_child(stance_lbl)
+
+		bot_row.add_spacer(false)
+
+		var pos_lbl := Label.new()
+		pos_lbl.name = "PosLabel"
+		pos_lbl.text = "%s" % str(sim_grid.get_position(combatant))
+		pos_lbl.add_theme_font_size_override("font_size", 7)
+		pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
+		bot_row.add_child(pos_lbl)
+	else:
+		card.custom_minimum_size = Vector2(88, 26)
+		var main_vbox := VBoxContainer.new()
+		main_vbox.add_theme_constant_override("separation", 1)
+		card.add_child(main_vbox)
+
+		# Top row: Truncated name & HP
+		var top_row := HBoxContainer.new()
+		top_row.add_theme_constant_override("separation", 2)
+		main_vbox.add_child(top_row)
+
+		var short_name: String = combatant.name
+		if short_name.begins_with("Goblin "):
+			short_name = short_name.substr(7)
+		elif short_name.begins_with("Enemy "):
+			short_name = short_name.substr(6)
+		elif short_name.begins_with("Fleeing "):
+			short_name = short_name.substr(8)
+
+		var name_lbl := Label.new()
+		name_lbl.text = short_name
+		name_lbl.add_theme_font_size_override("font_size", 8)
+		name_lbl.add_theme_color_override("font_color", team_color.lightened(0.35))
+		top_row.add_child(name_lbl)
+
+		top_row.add_spacer(false)
+
+		var hp_lbl := Label.new()
+		hp_lbl.name = "HpLabel"
+		hp_lbl.text = "%d" % combatant.hp
+		hp_lbl.add_theme_font_size_override("font_size", 7)
+		hp_lbl.add_theme_color_override("font_color", Color(0.9, 0.75, 0.75))
+		top_row.add_child(hp_lbl)
+
+		# Bottom row: Mini HP bar, stance, pos
+		var bot_row := HBoxContainer.new()
+		bot_row.add_theme_constant_override("separation", 2)
+		main_vbox.add_child(bot_row)
+
+		var hp_bar := ProgressBar.new()
+		hp_bar.custom_minimum_size = Vector2(30, 4)
+		hp_bar.max_value = combatant.max_hp
+		hp_bar.value = combatant.hp
+		hp_bar.show_percentage = false
+		bot_row.add_child(hp_bar)
+
+		var stance_lbl := Label.new()
+		stance_lbl.name = "StanceLabel"
+		var st_str: String = CombatTypes.stance_to_string(combatant.current_stance)
+		stance_lbl.text = st_str.left(3)
+		stance_lbl.add_theme_font_size_override("font_size", 7)
+		stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.65, 0.65))
+		bot_row.add_child(stance_lbl)
+
+		bot_row.add_spacer(false)
+
+		var pos_lbl := Label.new()
+		pos_lbl.name = "PosLabel"
+		var coord: Vector2i = sim_grid.get_position(combatant)
+		pos_lbl.text = "%s" % (str(coord) if coord != Vector2i(-1, -1) else "Off")
+		pos_lbl.add_theme_font_size_override("font_size", 7)
+		pos_lbl.add_theme_color_override("font_color", Color(0.55, 0.5, 0.5))
+		bot_row.add_child(pos_lbl)
 
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
@@ -1564,6 +1724,54 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 
 	target_container.add_child(card)
 	roster_cards[combatant] = card
+
+
+func _add_party_placeholders() -> void:
+	if not party_cards_container:
+		return
+	while party_cards_container.get_child_count() < 4:
+		var slot_idx: int = party_cards_container.get_child_count() + 1
+		var ph := PanelContainer.new()
+		ph.custom_minimum_size = Vector2(146, 26)
+		var ph_style := StyleBoxFlat.new()
+		ph_style.bg_color = Color(0.06, 0.08, 0.12, 0.35)
+		ph_style.border_color = Color(0.2, 0.28, 0.4, 0.35)
+		ph_style.set_border_width_all(1)
+		ph_style.set_corner_radius_all(3)
+		ph.add_theme_stylebox_override("panel", ph_style)
+
+		var lbl := Label.new()
+		lbl.text = "[+ Hero Slot %d]" % slot_idx
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 8)
+		lbl.add_theme_color_override("font_color", Color(0.35, 0.45, 0.55))
+		ph.add_child(lbl)
+		party_cards_container.add_child(ph)
+
+
+func _add_enemy_placeholders() -> void:
+	if not enemy_cards_container:
+		return
+	while enemy_cards_container.get_child_count() < 10:
+		var slot_idx: int = enemy_cards_container.get_child_count() + 1
+		var ph := PanelContainer.new()
+		ph.custom_minimum_size = Vector2(88, 26)
+		var ph_style := StyleBoxFlat.new()
+		ph_style.bg_color = Color(0.08, 0.05, 0.06, 0.3)
+		ph_style.border_color = Color(0.3, 0.15, 0.18, 0.35)
+		ph_style.set_border_width_all(1)
+		ph_style.set_corner_radius_all(3)
+		ph.add_theme_stylebox_override("panel", ph_style)
+
+		var lbl := Label.new()
+		lbl.text = "[Reserve %d]" % slot_idx
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 7)
+		lbl.add_theme_color_override("font_color", Color(0.42, 0.32, 0.35))
+		ph.add_child(lbl)
+		enemy_cards_container.add_child(ph)
 
 
 # ==============================================================================
@@ -2575,54 +2783,102 @@ func _step_simulation() -> void:
 		combat_phase = CombatPhase.RESOLVING
 		phase_badge_lbl.text = "RESOLVING COMBAT"
 		phase_badge_lbl.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+		current_sim_block = 1
+		pending_block_actions.clear()
 
 	if combat_phase == CombatPhase.RESOLVING:
-		# Mid-round ambush trigger: When Block 4 is reached in Round 1, 4 new goblins appear!
-		if current_sim_block == 4 and not reinforcements_spawned and current_combat_round == 1:
-			_spawn_goblin_reinforcements()
+		# If no pending actions are queued for this block, prepare the block!
+		if pending_block_actions.is_empty():
+			# Mid-round ambush trigger: When Block 4 is reached in Round 1, 4 new goblins appear!
+			if current_sim_block == 4 and not reinforcements_spawned and current_combat_round == 1:
+				_spawn_goblin_reinforcements()
+				var ambush_entry := ActionLogEntry.new()
+				ambush_entry.round_num = current_combat_round
+				ambush_entry.block_num = current_sim_block
+				ambush_entry.ref_tag = "R%d-B%02d" % [current_combat_round, current_sim_block]
+				ambush_entry.actor_name = "Goblin Pack"
+				ambush_entry.actor_is_ally = false
+				ambush_entry.category = "EVENT"
+				ambush_entry.skill_name = "Ambush Reinforcements"
+				ambush_entry.skill_subtype = "Perimeter Breach"
+				ambush_entry.outcome_tag = "AMBUSH!"
+				ambush_entry.detail_text = "4 Goblin reinforcements arrive from eastern ridge!"
+				ambush_entry.status_text = "Hostiles: 6 total"
+				all_action_log_entries.append(ambush_entry)
+				active_log_entry_index = all_action_log_entries.size() - 1
+				_update_active_log_cell()
+				_trigger_action_impact_fx(ambush_entry)
+				return
 
-		_append_log("[color=#fde047][b]━━━ BLOCK %d RESOLUTION (ROUND %d) ━━━[/b][/color]" % [current_sim_block, current_combat_round])
-		sim_resolver.execute_block(current_sim_block)
-		_capture_snapshot(current_sim_block)
-		_sync_visuals_after_block()
+			_append_log("[color=#fde047][b]━━━ BLOCK %d RESOLUTION (ROUND %d) ━━━[/b][/color]" % [current_sim_block, current_combat_round])
+			pending_block_actions = sim_resolver.prepare_block(current_sim_block)
 
-		var is_over: bool = sim_resolver.is_combat_resolved(sim_allies, sim_enemies)
-		if is_over or current_sim_block >= TOTAL_BLOCKS:
-			sim_finished = true
-			combat_phase = CombatPhase.REPLAY
-			replay_block = current_sim_block
-			auto_play_timer.stop()
-			is_auto_playing = false
-			btn_play.text = "▶"
-			btn_play.tooltip_text = "Play Replay"
-			phase_badge_lbl.text = "ROUND %d CONCLUDED - REPLAY MODE" % current_combat_round
-			phase_badge_lbl.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
+		# Execute next single action if available
+		if not pending_block_actions.is_empty():
+			var act: CombatResolver.ScheduledAction = pending_block_actions.pop_front()
+			sim_resolver.execute_single_action(act)
+			var entry := _build_entry_from_action(act, current_combat_round, current_sim_block)
+			all_action_log_entries.append(entry)
+			active_log_entry_index = all_action_log_entries.size() - 1
+			_update_active_log_cell()
+			_trigger_action_impact_fx(entry)
+			_sync_visuals_after_block()
 
-			if btn_next_round:
-				btn_next_round.visible = (current_combat_round == 1 and not is_over)
+		# If all actions in this block have finished:
+		if pending_block_actions.is_empty():
+			sim_resolver.block_completed.emit(current_sim_block)
+			_capture_snapshot(current_sim_block)
+			_sync_visuals_after_block()
 
-			if current_combat_round == 1:
-				status_label.text = "Round 1 complete! Click Advance to Round 2."
-				_append_log("\n[color=#4ade80][b]🎉 ROUND 1 RESOLVED: Ranger fell in the ambush, Warrior holds at 73 HP against 4 goblins! Click ADVANCE TO ROUND 2 to begin the Last Stand.[/b][/color]")
-			else:
-				status_label.text = "Round 2 resolved! Warrior's last stand concluded. Review replay."
-				_append_log("\n[color=#4ade80][b]🎉 ROUND 2 RESOLVED: Combat concluded! Review replay or Reset.[/b][/color]")
+			var is_over: bool = sim_resolver.is_combat_resolved(sim_allies, sim_enemies)
+			if is_over or current_sim_block >= TOTAL_BLOCKS:
+				sim_finished = true
+				combat_phase = CombatPhase.REPLAY
+				replay_block = current_sim_block
+				auto_play_timer.stop()
+				is_auto_playing = false
+				btn_play.text = "▶"
+				btn_play.tooltip_text = "Play Replay"
+				phase_badge_lbl.text = "ROUND %d CONCLUDED - REPLAY MODE" % current_combat_round
+				phase_badge_lbl.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 
+				if btn_next_round:
+					btn_next_round.visible = (current_combat_round == 1 and not is_over)
+
+				if current_combat_round == 1:
+					status_label.text = "Round 1 complete! Click Advance to Round 2."
+					_append_log("\n[color=#4ade80][b]🎉 ROUND 1 RESOLVED: Ranger fell in the ambush, Warrior holds at 73 HP against 4 goblins! Click ADVANCE TO ROUND 2 to begin the Last Stand.[/b][/color]")
+				else:
+					status_label.text = "Round 2 resolved! Warrior's last stand concluded. Review replay."
+					_append_log("\n[color=#4ade80][b]🎉 ROUND 2 RESOLVED: Combat concluded! Review replay or Reset.[/b][/color]")
+
+				_update_timeline_tracks_display()
+				_update_combined_block_display(replay_block)
+				return
+
+			current_sim_block += 1
+			status_label.text = "Ready for Block %d." % current_sim_block
 			_update_timeline_tracks_display()
-			_update_combined_block_display(replay_block)
-			return
-
-		current_sim_block += 1
-		status_label.text = "Ready for Block %d." % current_sim_block
-		_update_timeline_tracks_display()
-		_update_combined_block_display(current_sim_block)
+			_update_combined_block_display(current_sim_block)
 
 	elif combat_phase == CombatPhase.REPLAY:
-		# Step Replay forward
-		replay_block = (replay_block % TOTAL_BLOCKS) + 1
-		status_label.text = "Replay Block %d of 10." % replay_block
-		_update_timeline_tracks_display()
-		_update_combined_block_display(replay_block)
+		# Step Replay through recorded action entries
+		if not all_action_log_entries.is_empty():
+			active_log_entry_index = (active_log_entry_index + 1) % all_action_log_entries.size()
+			var replay_entry := all_action_log_entries[active_log_entry_index]
+			_update_active_log_cell()
+			_trigger_action_impact_fx(replay_entry)
+			replay_block = replay_entry.block_num
+			if replay_block >= 0 and replay_block < snapshots.size():
+				_restore_snapshot(snapshots[replay_block])
+			status_label.text = "Replaying: %s [%s]" % [replay_entry.skill_name, replay_entry.ref_tag]
+			_update_timeline_tracks_display()
+			_update_combined_block_display(replay_block)
+		else:
+			replay_block = (replay_block % TOTAL_BLOCKS) + 1
+			status_label.text = "Replay Block %d of 10." % replay_block
+			_update_timeline_tracks_display()
+			_update_combined_block_display(replay_block)
 
 		if timeline_modal_overlay != null and timeline_modal_overlay.visible:
 			_update_modal_tracks_display()
@@ -2693,6 +2949,23 @@ func _start_round_2() -> void:
 	btn_play.tooltip_text = "Auto-Resolve Round 2"
 	if btn_next_round:
 		btn_next_round.visible = false
+
+	pending_block_actions.clear()
+	var r2_entry := ActionLogEntry.new()
+	r2_entry.round_num = 2
+	r2_entry.block_num = 1
+	r2_entry.ref_tag = "R2-B01"
+	r2_entry.actor_name = "Warrior"
+	r2_entry.actor_is_ally = true
+	r2_entry.category = "EVENT"
+	r2_entry.skill_name = "Round 2 Commenced"
+	r2_entry.skill_subtype = "Last Stand"
+	r2_entry.outcome_tag = "ROUND 2"
+	r2_entry.detail_text = "Warrior stands alone at (4, 4) against 4 goblins"
+	r2_entry.status_text = "Round 2 Active"
+	all_action_log_entries.append(r2_entry)
+	active_log_entry_index = all_action_log_entries.size() - 1
+	_update_active_log_cell()
 
 	phase_badge_lbl.text = "ROUND 2: PLANNING PHASE"
 	phase_badge_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
@@ -2783,6 +3056,622 @@ func _start_round_2() -> void:
 	_update_tactical_forecast_panel()
 	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
 		_update_modal_tracks_display()
+
+
+# ==============================================================================
+# RULE-DRIVEN ACTION LOG STREAM & DYNAMIC CELL TEMPLATES
+# ==============================================================================
+
+func _build_entry_from_action(act: CombatResolver.ScheduledAction, round_num: int, block_num: int) -> ActionLogEntry:
+	var entry := ActionLogEntry.new()
+	entry.round_num = round_num
+	entry.block_num = block_num
+	entry.ref_tag = "R%d-B%02d" % [round_num, block_num]
+	entry.actor_name = act.combatant.name
+	entry.actor_is_ally = sim_allies.has(act.combatant)
+
+	if act.command is AttackCommand:
+		var cmd := act.command as AttackCommand
+		entry.category = "ATTACK"
+		var target_c: Combatant = cmd.target as Combatant
+		if target_c:
+			entry.target_name = target_c.name
+			entry.target_is_ally = sim_allies.has(target_c)
+		else:
+			entry.target_name = str(cmd.target)
+
+		if cmd.range > 1:
+			entry.skill_subtype = "Ranged Projectile"
+			entry.skill_name = "Quick Snipe" if entry.actor_is_ally else "Longbow Volley"
+		else:
+			entry.skill_subtype = "Melee Physical"
+			entry.skill_name = "Heavy Slash" if entry.actor_is_ally else "Power Strike"
+
+		entry.value_num = cmd.power
+		if target_c:
+			if not target_c.is_alive():
+				entry.outcome_tag = "DEFEATED"
+			elif target_c.defense_mitigation_ratio > 0.0:
+				entry.outcome_tag = "MITIGATED"
+			else:
+				entry.outcome_tag = "HIT"
+			entry.status_text = "Target HP: %d/%d" % [target_c.hp, target_c.max_hp]
+		else:
+			entry.outcome_tag = "HIT"
+		entry.detail_text = "Power: %d | Range: %d" % [cmd.power, cmd.range]
+
+	elif act.command is MoveCommand:
+		var cmd := act.command as MoveCommand
+		entry.category = "MOVE"
+		entry.skill_name = "Sprint" if cmd.steps > 1 else "Tactical Move"
+		entry.skill_subtype = "Sprint Relocation" if cmd.steps > 1 else "Standard Step"
+		entry.value_num = cmd.steps
+		entry.coord_to = sim_grid.get_position(act.combatant)
+		if act.combatant.is_withdrawn:
+			entry.outcome_tag = "WITHDRAWN"
+			entry.status_text = "Safely exited battle grid"
+		else:
+			entry.outcome_tag = "MOVED"
+			entry.status_text = "Position: %s" % str(entry.coord_to)
+		entry.detail_text = "Stepped %d tiles (%s)" % [cmd.steps, str(cmd.direction)]
+
+	elif act.command is DefendCommand:
+		var cmd := act.command as DefendCommand
+		entry.category = "DEFEND"
+		entry.skill_name = "Defensive Stance"
+		entry.skill_subtype = "Shield Guard"
+		entry.value_num = int(cmd.mitigation_ratio * 100.0)
+		entry.outcome_tag = "%d%% MITIGATION" % entry.value_num
+		entry.detail_text = "Damage mitigation posture active"
+		entry.status_text = "Duration: %d Blocks" % cmd.duration_blocks
+
+	elif act.command is TargetCommand:
+		var cmd := act.command as TargetCommand
+		entry.category = "TARGET"
+		entry.skill_name = "Target Lock"
+		entry.skill_subtype = "Engagement Focus"
+		var target_c: Combatant = cmd.target as Combatant
+		if target_c:
+			entry.target_name = target_c.name
+			entry.target_is_ally = sim_allies.has(target_c)
+		else:
+			entry.target_name = str(cmd.target)
+		entry.outcome_tag = "LOCKED"
+		entry.detail_text = "Assigned tactical target focus"
+		entry.status_text = "Target Locked"
+
+	elif act.command is FocusCommand:
+		var cmd := act.command as FocusCommand
+		entry.category = "BUFF"
+		entry.skill_name = "Focus Skill"
+		entry.skill_subtype = "Attack Multiplier"
+		entry.value_num = int(cmd.attack_multiplier * 100.0)
+		entry.outcome_tag = "+%d%% ATK" % entry.value_num
+		entry.detail_text = "+%d%% Attack Power for 2 Rounds" % entry.value_num
+		entry.status_text = "Empowered"
+
+	elif act.command is HoldStanceCommand:
+		entry.category = "DEFEND"
+		entry.skill_name = "Hold Stance"
+		entry.skill_subtype = "Posture Maintenance"
+		entry.outcome_tag = "MAINTAINED"
+		entry.detail_text = "Current stance maintained"
+		entry.status_text = "Active"
+
+	else:
+		entry.category = "EVENT"
+		entry.skill_name = act.command.command_name
+		entry.skill_subtype = "Standard Action"
+		entry.outcome_tag = "EXECUTED"
+		entry.detail_text = act.command.command_name
+
+	return entry
+
+
+func _find_combatant_by_name(p_name: String) -> Combatant:
+	for c: Combatant in sim_allies:
+		if c.name == p_name:
+			return c
+	for c: Combatant in sim_enemies:
+		if c.name == p_name:
+			return c
+	return null
+
+
+func _format_action_cell(entry: ActionLogEntry, is_modal: bool = false) -> PanelContainer:
+	var cell := PanelContainer.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if is_modal else Control.CURSOR_ARROW
+
+	var style := StyleBoxFlat.new()
+	var cat_color: Color
+	match entry.category:
+		"ATTACK": cat_color = Color(0.92, 0.32, 0.32)
+		"DEFEND": cat_color = Color(0.35, 0.68, 1.0)
+		"BUFF": cat_color = Color(0.98, 0.78, 0.25)
+		"MOVE": cat_color = Color(0.3, 0.8, 0.95)
+		"TARGET": cat_color = Color(0.3, 0.85, 0.55)
+		"EVENT": cat_color = Color(0.75, 0.5, 0.98)
+		_: cat_color = Color(0.7, 0.75, 0.85)
+
+	style.bg_color = Color(cat_color.r * 0.12, cat_color.g * 0.12, cat_color.b * 0.15, 0.95)
+	style.border_color = cat_color.lerp(Color.WHITE, 0.15) if is_modal else cat_color
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 6
+	style.content_margin_right = 6
+	style.content_margin_top = 2
+	style.content_margin_bottom = 2
+	cell.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 1)
+	cell.add_child(vbox)
+
+	# Row 1: Badges & Tags
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 5)
+	vbox.add_child(row1)
+
+	# Reference Tag Badge [R1-B04]
+	var ref_lbl := Label.new()
+	ref_lbl.text = "[%s]" % entry.ref_tag
+	ref_lbl.add_theme_font_size_override("font_size", 9)
+	ref_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35))
+	row1.add_child(ref_lbl)
+
+	# Category + Subtype Badge
+	var type_lbl := Label.new()
+	type_lbl.text = "• %s" % entry.category
+	if not entry.skill_subtype.is_empty():
+		type_lbl.text += " (%s)" % entry.skill_subtype
+	type_lbl.add_theme_font_size_override("font_size", 8)
+	type_lbl.add_theme_color_override("font_color", cat_color)
+	row1.add_child(type_lbl)
+
+	row1.add_spacer(false)
+
+	# Outcome Badge
+	if not entry.outcome_tag.is_empty():
+		var out_lbl := Label.new()
+		out_lbl.text = "[%s]" % entry.outcome_tag
+		out_lbl.add_theme_font_size_override("font_size", 8)
+		if entry.outcome_tag == "DEFEATED":
+			out_lbl.add_theme_color_override("font_color", Color(1.0, 0.25, 0.25))
+		elif "MITIGAT" in entry.outcome_tag:
+			out_lbl.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0))
+		elif "BUFF" in entry.outcome_tag or "+" in entry.outcome_tag:
+			out_lbl.add_theme_color_override("font_color", Color(0.98, 0.82, 0.3))
+		elif entry.outcome_tag == "WITHDRAWN":
+			out_lbl.add_theme_color_override("font_color", Color(0.35, 0.95, 0.55))
+		else:
+			out_lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
+		row1.add_child(out_lbl)
+
+	# Row 2: Narrative & Target Details
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 4)
+	vbox.add_child(row2)
+
+	# Actor
+	var actor_lbl := Label.new()
+	actor_lbl.text = entry.actor_name
+	actor_lbl.add_theme_font_size_override("font_size", 9)
+	var actor_col := Color(0.4, 0.75, 1.0) if entry.actor_is_ally else Color(1.0, 0.45, 0.45)
+	actor_lbl.add_theme_color_override("font_color", actor_col)
+	row2.add_child(actor_lbl)
+
+	# Verb / Skill
+	var skill_lbl := Label.new()
+	var icon_sym := "⚔"
+	match entry.category:
+		"MOVE": icon_sym = "➜"
+		"DEFEND": icon_sym = "🛡"
+		"BUFF": icon_sym = "✦"
+		"TARGET": icon_sym = "🎯"
+		"EVENT": icon_sym = "⚡"
+	skill_lbl.text = "%s %s" % [icon_sym, entry.skill_name]
+	skill_lbl.add_theme_font_size_override("font_size", 8)
+	skill_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+	row2.add_child(skill_lbl)
+
+	# Target (if any)
+	if not entry.target_name.is_empty():
+		var arrow_lbl := Label.new()
+		arrow_lbl.text = "➔"
+		arrow_lbl.add_theme_font_size_override("font_size", 8)
+		arrow_lbl.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
+		row2.add_child(arrow_lbl)
+
+		var target_lbl := Label.new()
+		target_lbl.text = entry.target_name
+		target_lbl.add_theme_font_size_override("font_size", 9)
+		var target_col := Color(0.4, 0.75, 1.0) if entry.target_is_ally else Color(1.0, 0.45, 0.45)
+		target_lbl.add_theme_color_override("font_color", target_col)
+		row2.add_child(target_lbl)
+
+	row2.add_spacer(false)
+
+	# Status / Detail Text
+	var detail_msg: String = entry.status_text if not entry.status_text.is_empty() else entry.detail_text
+	if not detail_msg.is_empty():
+		var stat_lbl := Label.new()
+		stat_lbl.text = detail_msg
+		stat_lbl.add_theme_font_size_override("font_size", 8)
+		stat_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+		row2.add_child(stat_lbl)
+
+	if is_modal:
+		cell.gui_input.connect(func(ev: InputEvent) -> void:
+			var mb := ev as InputEventMouseButton
+			if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				_on_log_modal_cell_clicked(entry)
+		)
+
+	return cell
+
+
+func _update_active_log_cell() -> void:
+	if not active_cell_dock:
+		return
+	for child in active_cell_dock.get_children():
+		child.queue_free()
+
+	if all_action_log_entries.is_empty() or active_log_entry_index < 0:
+		var empty_lbl := Label.new()
+		empty_lbl.text = "Awaiting Action Resolution... Click Step [F6] or Play [Space] to begin."
+		empty_lbl.add_theme_font_size_override("font_size", 9)
+		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
+		active_cell_dock.add_child(empty_lbl)
+		if log_step_badge:
+			log_step_badge.text = "[Awaiting Action]"
+		if btn_log_prev:
+			btn_log_prev.disabled = true
+		if btn_log_next:
+			btn_log_next.disabled = true
+	else:
+		var entry := all_action_log_entries[active_log_entry_index]
+		active_cell_dock.add_child(_format_action_cell(entry, false))
+		if log_step_badge:
+			log_step_badge.text = "[%s] (%d/%d)" % [entry.ref_tag, active_log_entry_index + 1, all_action_log_entries.size()]
+		if btn_log_prev:
+			btn_log_prev.disabled = (active_log_entry_index <= 0)
+		if btn_log_next:
+			btn_log_next.disabled = (active_log_entry_index >= all_action_log_entries.size() - 1)
+
+
+func _on_log_prev_pressed() -> void:
+	if active_log_entry_index > 0:
+		active_log_entry_index -= 1
+		_update_active_log_cell()
+		var entry := all_action_log_entries[active_log_entry_index]
+		_trigger_action_impact_fx(entry)
+		if combat_phase == CombatPhase.REPLAY and entry.block_num < snapshots.size():
+			replay_block = entry.block_num
+			_restore_snapshot(snapshots[replay_block])
+			_update_timeline_tracks_display()
+			_update_combined_block_display(replay_block)
+
+
+func _on_log_next_pressed() -> void:
+	if active_log_entry_index < all_action_log_entries.size() - 1:
+		active_log_entry_index += 1
+		_update_active_log_cell()
+		var entry := all_action_log_entries[active_log_entry_index]
+		_trigger_action_impact_fx(entry)
+		if combat_phase == CombatPhase.REPLAY and entry.block_num < snapshots.size():
+			replay_block = entry.block_num
+			_restore_snapshot(snapshots[replay_block])
+			_update_timeline_tracks_display()
+			_update_combined_block_display(replay_block)
+
+
+func _build_log_modal_ui() -> void:
+	log_modal_overlay = PanelContainer.new()
+	log_modal_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	log_modal_overlay.visible = false
+	log_modal_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var backdrop_style := StyleBoxFlat.new()
+	backdrop_style.bg_color = Color(0.02, 0.04, 0.07, 0.9)
+	log_modal_overlay.add_theme_stylebox_override("panel", backdrop_style)
+	ui_canvas.add_child(log_modal_overlay)
+
+	var center_margin := MarginContainer.new()
+	center_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center_margin.add_theme_constant_override("margin_left", 180)
+	center_margin.add_theme_constant_override("margin_right", 180)
+	center_margin.add_theme_constant_override("margin_top", 70)
+	center_margin.add_theme_constant_override("margin_bottom", 70)
+	log_modal_overlay.add_child(center_margin)
+
+	var modal_box := PanelContainer.new()
+	var box_style := StyleBoxFlat.new()
+	box_style.bg_color = Color(0.07, 0.09, 0.14, 0.98)
+	box_style.border_color = Color(0.28, 0.46, 0.75, 0.9)
+	box_style.set_border_width_all(2)
+	box_style.set_corner_radius_all(6)
+	box_style.content_margin_left = 12
+	box_style.content_margin_right = 12
+	box_style.content_margin_top = 10
+	box_style.content_margin_bottom = 10
+	modal_box.add_theme_stylebox_override("panel", box_style)
+	center_margin.add_child(modal_box)
+
+	var modal_vbox := VBoxContainer.new()
+	modal_vbox.add_theme_constant_override("separation", 6)
+	modal_box.add_child(modal_vbox)
+
+	# Top header bar
+	var hdr := HBoxContainer.new()
+	modal_vbox.add_child(hdr)
+
+	var title := Label.new()
+	title.text = "📜 EXPANDED ACTION STREAM LOG"
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", Color(0.96, 0.85, 0.35))
+	hdr.add_child(title)
+
+	var sub := Label.new()
+	sub.text = "Chronological Action Cells (R<X>-B<Y> Reference Format)"
+	sub.add_theme_font_size_override("font_size", 8)
+	sub.add_theme_color_override("font_color", Color(0.55, 0.65, 0.78))
+	hdr.add_child(sub)
+
+	hdr.add_spacer(false)
+
+	var close_btn := Button.new()
+	close_btn.text = "✕ CLOSE (ESC / L)"
+	close_btn.custom_minimum_size = Vector2(95, 22)
+	close_btn.add_theme_font_size_override("font_size", 9)
+	var cls_style := StyleBoxFlat.new()
+	cls_style.bg_color = Color(0.35, 0.12, 0.15, 0.9)
+	cls_style.border_color = Color(0.85, 0.35, 0.35, 1.0)
+	cls_style.set_border_width_all(1)
+	cls_style.set_corner_radius_all(3)
+	close_btn.add_theme_stylebox_override("normal", cls_style)
+	close_btn.pressed.connect(func() -> void: _toggle_log_modal(false))
+	hdr.add_child(close_btn)
+
+	# Filter bar
+	var filter_bar := HBoxContainer.new()
+	filter_bar.add_theme_constant_override("separation", 4)
+	modal_vbox.add_child(filter_bar)
+
+	var filter_hdr := Label.new()
+	filter_hdr.text = "Filter Stream:"
+	filter_hdr.add_theme_font_size_override("font_size", 8)
+	filter_hdr.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	filter_bar.add_child(filter_hdr)
+
+	var categories: Array[String] = ["ALL", "ATTACK", "DEFEND", "BUFF", "MOVE", "TARGET", "EVENT"]
+	for cat in categories:
+		var btn := Button.new()
+		btn.text = cat
+		btn.custom_minimum_size = Vector2(50, 18)
+		btn.add_theme_font_size_override("font_size", 8)
+		btn.pressed.connect(func() -> void:
+			current_log_filter = cat
+			_refresh_log_modal_content()
+		)
+		filter_bar.add_child(btn)
+		modal_filter_btns[cat] = btn
+
+	var hsep := HSeparator.new()
+	modal_vbox.add_child(hsep)
+
+	# Scrollable entries stream
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	modal_vbox.add_child(scroll)
+
+	modal_entries_vbox = VBoxContainer.new()
+	modal_entries_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modal_entries_vbox.add_theme_constant_override("separation", 4)
+	scroll.add_child(modal_entries_vbox)
+
+
+func _toggle_log_modal(open: bool) -> void:
+	if not log_modal_overlay:
+		return
+	log_modal_overlay.visible = open
+	if open:
+		log_modal_overlay.move_to_front()
+		_refresh_log_modal_content()
+
+
+func _refresh_log_modal_content() -> void:
+	if not modal_entries_vbox:
+		return
+	for child in modal_entries_vbox.get_children():
+		child.queue_free()
+
+	# Highlight active filter button
+	for cat: String in modal_filter_btns:
+		var btn: Button = modal_filter_btns[cat]
+		if cat == current_log_filter:
+			btn.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35))
+		else:
+			btn.remove_theme_color_override("font_color")
+
+	if all_action_log_entries.is_empty():
+		var empty_lbl := Label.new()
+		empty_lbl.text = "No action cells resolved yet. Run combat blocks to populate stream."
+		empty_lbl.add_theme_font_size_override("font_size", 10)
+		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
+		modal_entries_vbox.add_child(empty_lbl)
+		return
+
+	var last_round: int = -1
+	var last_block: int = -1
+
+	for entry in all_action_log_entries:
+		if current_log_filter != "ALL" and entry.category != current_log_filter:
+			continue
+
+		# Round Divider
+		if entry.round_num != last_round:
+			last_round = entry.round_num
+			last_block = -1
+			var rd_panel := PanelContainer.new()
+			var rd_style := StyleBoxFlat.new()
+			rd_style.bg_color = Color(0.12, 0.16, 0.24, 0.95)
+			rd_style.border_color = Color(0.35, 0.55, 0.85, 0.9)
+			rd_style.set_border_width_all(1)
+			rd_style.set_corner_radius_all(3)
+			rd_style.content_margin_left = 8
+			rd_style.content_margin_right = 8
+			rd_style.content_margin_top = 2
+			rd_style.content_margin_bottom = 2
+			rd_panel.add_theme_stylebox_override("panel", rd_style)
+
+			var rd_lbl := Label.new()
+			rd_lbl.text = "━━━ ROUND %d RESOLUTION STREAM ━━━" % entry.round_num
+			rd_lbl.add_theme_font_size_override("font_size", 9)
+			rd_lbl.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+			rd_panel.add_child(rd_lbl)
+			modal_entries_vbox.add_child(rd_panel)
+
+		# Block Divider
+		if entry.block_num != last_block:
+			last_block = entry.block_num
+			var blk_lbl := Label.new()
+			blk_lbl.text = "── Block %02d Actions ──" % entry.block_num
+			blk_lbl.add_theme_font_size_override("font_size", 8)
+			blk_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+			modal_entries_vbox.add_child(blk_lbl)
+
+		var cell := _format_action_cell(entry, true)
+		modal_entries_vbox.add_child(cell)
+
+
+func _on_log_modal_cell_clicked(entry: ActionLogEntry) -> void:
+	var idx: int = all_action_log_entries.find(entry)
+	if idx != -1:
+		active_log_entry_index = idx
+		_update_active_log_cell()
+		_trigger_action_impact_fx(entry)
+		var actor := _find_combatant_by_name(entry.actor_name)
+		if actor != null:
+			_select_combatant(actor)
+		if combat_phase == CombatPhase.REPLAY and entry.block_num < snapshots.size():
+			replay_block = entry.block_num
+			_restore_snapshot(snapshots[replay_block])
+			_update_timeline_tracks_display()
+			_update_combined_block_display(replay_block)
+
+
+func _spawn_floating_combat_text(pos: Vector2, text: String, color: Color) -> void:
+	var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
+	if not overlay:
+		return
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 10)
+	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	lbl.add_theme_constant_override("shadow_offset_x", 1)
+	lbl.add_theme_constant_override("shadow_offset_y", 1)
+	lbl.position = pos + Vector2(8, -6)
+	lbl.scale = Vector2(1.2, 1.2)
+	overlay.add_child(lbl)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "position", pos + Vector2(8, -28), 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lbl, "scale", Vector2(1.0, 1.0), 0.25)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.55).set_delay(0.2)
+	tw.chain().tween_callback(lbl.queue_free)
+
+
+func _animate_attacker_lunge(actor_token: Control, target_pos: Vector2) -> void:
+	if not is_instance_valid(actor_token):
+		return
+	var orig_pos: Vector2 = actor_token.position
+	var diff := target_pos - orig_pos
+	if diff.length() < 0.1:
+		return
+	var dir := diff.normalized() * 10.0
+	var tw := create_tween()
+	tw.tween_property(actor_token, "position", orig_pos + dir, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(actor_token, "position", orig_pos, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+
+func _animate_token_impact(target_token: Control, is_damage: bool, is_mitigated: bool) -> void:
+	if not is_instance_valid(target_token):
+		return
+	var base_pos: Vector2 = target_token.position
+	var shake_tw := create_tween()
+	shake_tw.tween_property(target_token, "position", base_pos + Vector2(4, 0), 0.03)
+	shake_tw.tween_property(target_token, "position", base_pos + Vector2(-4, 0), 0.03)
+	shake_tw.tween_property(target_token, "position", base_pos + Vector2(2, 0), 0.03)
+	shake_tw.tween_property(target_token, "position", base_pos, 0.04)
+
+	var flash_col: Color
+	if is_mitigated:
+		flash_col = Color(0.4, 0.8, 1.8)
+	elif is_damage:
+		flash_col = Color(2.0, 0.35, 0.35)
+	else:
+		flash_col = Color(1.8, 1.6, 0.4)
+
+	var flash_tw := create_tween()
+	target_token.modulate = flash_col
+	flash_tw.tween_property(target_token, "modulate", Color.WHITE, 0.25)
+
+
+func _animate_token_pulse(token: Control, pulse_col: Color) -> void:
+	if not is_instance_valid(token):
+		return
+	var tw := create_tween()
+	token.modulate = pulse_col
+	tw.tween_property(token, "modulate", Color.WHITE, 0.3)
+
+
+func _trigger_action_impact_fx(entry: ActionLogEntry) -> void:
+	var actor := _find_combatant_by_name(entry.actor_name)
+	var target := _find_combatant_by_name(entry.target_name)
+	var actor_token: Control = unit_token_nodes.get(actor) as Control if actor != null else null
+	var target_token: Control = unit_token_nodes.get(target) as Control if target != null else null
+
+	match entry.category:
+		"ATTACK":
+			if actor_token != null and target_token != null:
+				_animate_attacker_lunge(actor_token, target_token.position)
+			if target_token != null:
+				var is_mitigated: bool = ("MITIGAT" in entry.outcome_tag)
+				_animate_token_impact(target_token, true, is_mitigated)
+				var txt := "-%d" % entry.value_num
+				if is_mitigated:
+					txt += " [MIT]"
+				_spawn_floating_combat_text(target_token.position, txt, Color(0.4, 0.85, 1.0) if is_mitigated else Color(1.0, 0.35, 0.35))
+				if entry.outcome_tag == "DEFEATED":
+					_spawn_floating_combat_text(target_token.position + Vector2(0, -14), "💀 DEFEATED!", Color(1.0, 0.25, 0.25))
+
+		"DEFEND":
+			if actor_token != null:
+				_animate_token_pulse(actor_token, Color(0.5, 0.8, 1.8))
+				_spawn_floating_combat_text(actor_token.position, "🛡 DEFEND [%d%%]" % entry.value_num, Color(0.4, 0.8, 1.0))
+
+		"BUFF":
+			if actor_token != null:
+				_animate_token_pulse(actor_token, Color(1.8, 1.5, 0.4))
+				_spawn_floating_combat_text(actor_token.position, "✦ +%d%% ATK" % entry.value_num, Color(1.0, 0.85, 0.25))
+
+		"MOVE":
+			if actor_token != null and entry.coord_to != Vector2i(-1, -1):
+				var target_px := Vector2(entry.coord_to.x * TILE_SIZE, entry.coord_to.y * TILE_SIZE)
+				var tw := create_tween()
+				tw.tween_property(actor_token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+		"EVENT":
+			if "WITHDRAWN" in entry.outcome_tag and actor_token != null:
+				_spawn_floating_combat_text(actor_token.position, "⚑ WITHDRAWN!", Color(0.35, 0.95, 0.55))
+			elif "AMBUSH" in entry.outcome_tag:
+				var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
+				if overlay:
+					_spawn_floating_combat_text(Vector2(200, 180), "⚠️ AMBUSH SPAWN!", Color(1.0, 0.4, 0.4))
 
 
 func _on_step_block_pressed() -> void:
@@ -3210,8 +4099,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
 	if key_event != null and key_event.pressed and not key_event.echo:
 		if key_event.keycode == KEY_ESCAPE:
-			if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+			if log_modal_overlay != null and log_modal_overlay.visible:
+				_toggle_log_modal(false)
+				get_viewport().set_input_as_handled()
+				return
+			elif timeline_modal_overlay != null and timeline_modal_overlay.visible:
 				_toggle_timeline_modal(false)
+				get_viewport().set_input_as_handled()
+				return
+		elif key_event.keycode == KEY_L:
+			if log_modal_overlay != null:
+				_toggle_log_modal(not log_modal_overlay.visible)
 				get_viewport().set_input_as_handled()
 				return
 		elif key_event.keycode == KEY_F:
@@ -3219,6 +4117,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				_toggle_timeline_modal(not timeline_modal_overlay.visible)
 				get_viewport().set_input_as_handled()
 				return
+		elif key_event.keycode == KEY_BRACKETLEFT:
+			_on_log_prev_pressed()
+			get_viewport().set_input_as_handled()
+			return
+		elif key_event.keycode == KEY_BRACKETRIGHT:
+			_on_log_next_pressed()
+			get_viewport().set_input_as_handled()
+			return
 		elif key_event.keycode == KEY_Q or key_event.keycode == KEY_LEFT:
 			_navigate_combined_block(-1)
 		elif key_event.keycode == KEY_E or key_event.keycode == KEY_RIGHT:

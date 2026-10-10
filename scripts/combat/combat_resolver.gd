@@ -129,7 +129,7 @@ func is_combat_resolved(allies: Array[Combatant], enemies: Array[Combatant]) -> 
 			active_enemies += 1
 	return active_allies == 0 or active_enemies == 0
 
-func _resolve_block(block: int) -> void:
+func prepare_block(block: int) -> Array[ScheduledAction]:
 	# 1. Reset transient block-level defense states
 	for c: Combatant in registered_combatants:
 		c.reset_block_transient_state()
@@ -158,7 +158,7 @@ func _resolve_block(block: int) -> void:
 			resolving.append(action)
 
 	if resolving.is_empty():
-		return
+		return []
 
 	print("\n[--- Block %d ---]" % block)
 
@@ -166,33 +166,38 @@ func _resolve_block(block: int) -> void:
 	resolving.sort_custom(func(a: ScheduledAction, b: ScheduledAction) -> bool:
 		return a.command.get_initiative() > b.command.get_initiative()
 	)
+	return resolving
 
-	# 5. Execute commands in order
+func execute_single_action(action: ScheduledAction) -> void:
+	if action.is_cancelled:
+		return
+	if not action.combatant.is_active():
+		action.is_cancelled = true
+		var cancel_msg: String = "[Cancelled] %s's %s cancelled (unit inactive)." % [
+			action.combatant.name, action.command.command_name
+		]
+		print(cancel_msg)
+		log_emitted.emit(cancel_msg)
+		return
+
+	# Execute the command
+	action.command.execute()
+	if not action.command.execution_log.is_empty():
+		log_emitted.emit(action.command.execution_log)
+
+	# Update stance upon resolution
+	if action.combatant.is_active() and action.command.resulting_stance != CombatTypes.StanceType.NEUTRAL:
+		action.combatant.set_stance(action.command.resulting_stance)
+
+	# Check for knockouts or withdrawals and cancel future actions
+	for c: Combatant in registered_combatants:
+		if not c.is_active():
+			_cancel_actions_for(c)
+
+func _resolve_block(block: int) -> void:
+	var resolving := prepare_block(block)
 	for action in resolving:
-		if action.is_cancelled:
-			continue
-		if not action.combatant.is_active():
-			action.is_cancelled = true
-			var cancel_msg: String = "[Cancelled] %s's %s cancelled (unit inactive)." % [
-				action.combatant.name, action.command.command_name
-			]
-			print(cancel_msg)
-			log_emitted.emit(cancel_msg)
-			continue
-
-		# Execute the command
-		action.command.execute()
-		if not action.command.execution_log.is_empty():
-			log_emitted.emit(action.command.execution_log)
-
-		# Update stance upon resolution
-		if action.combatant.is_active() and action.command.resulting_stance != CombatTypes.StanceType.NEUTRAL:
-			action.combatant.set_stance(action.command.resulting_stance)
-
-		# Check for knockouts or withdrawals and cancel future actions
-		for c: Combatant in registered_combatants:
-			if not c.is_active():
-				_cancel_actions_for(c)
+		execute_single_action(action)
 
 func _cancel_actions_for(combatant: Combatant) -> void:
 	for action in scheduled_actions:
