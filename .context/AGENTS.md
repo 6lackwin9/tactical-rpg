@@ -40,9 +40,15 @@
 
 ## 4. Testing & Agent Verification Workflow
 Whenever adding new mechanics, commands, or data fields:
-1. **Never break the test harness:** Update `res://scenes/test_arena.gd` to test any newly created command or system.
-2. **Execute Headless Verification:** Before declaring a task complete, run the test scene headlessly in the terminal:
+1. **Never break the test harness:** Update `res://scenes/test_arena.gd` and `res://scripts/tests/arena_test_suite.gd` to test any newly created command or system.
+2. **Execute Headless Verification:** Before declaring a task complete, run the automated verification suite:
    ```powershell
-   godot --headless res://scenes/test_arena.tscn | Out-Host
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\check_project.ps1
    ```
-3. **Handle Errors Autonomously:** Inspect standard error output. If an out-of-bounds, unhandled signal, or null-reference exception occurs, fix the root cause in the relevant .gd file before presenting the solution.
+3. **Resolve All Current Problems Autonomously:** Inspect standard output, LSP diagnostics (IDE Problems tab), and test assertions. If any errors, warnings, or assertion failures occur, fix the root cause in the relevant script and rerun verification until **all current problems are 100% resolved (0 errors, 0 warnings)**.
+
+---
+
+## 5. Documentation & Commit Protocol
+1. **Always Keep `README.md` Up to Date:** After every code change, refactoring step, or feature addition, the agent must review and update `README.md` to ensure the codebase breakdown, available features, test assertions, and roadmap are kept completely current.
+2. **Commit Only Once All Current Problems Are Resolved:** Do not commit partially broken code or out-of-date documentation. Only stage, commit, and push once all current problems/errors are 100% resolved and `README.md` has been synchronized.
