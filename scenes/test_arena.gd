@@ -127,11 +127,7 @@ enum CombatPhase {
 var ui_canvas: CanvasLayer
 var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
 var unit_token_nodes: Dictionary = {} # Combatant -> Control
-var roster_cards: Dictionary = {}     # Combatant -> PanelContainer
-var party_cards_container: GridContainer
-var enemy_cards_container: GridContainer
-var party_title_lbl: Label
-var enemy_title_lbl: Label
+var roster_panel: RosterPanelUI
 var log_rich_text: RichTextLabel
 var active_cell_dock: PanelContainer
 var log_step_badge: Label
@@ -159,40 +155,10 @@ var timeline_view_mode: TimelineViewMode = TimelineViewMode.TRACK_LAYERS
 var combat_phase: CombatPhase = CombatPhase.PLANNING
 var filter_active_only: bool = false
 
-# Left Popup (Unit Inspector & Action Setup Dock)
-var inspector_hdr: Label
-var inspector_avatar: TextureRect
-var inspector_name_lbl: Label
-var inspector_team_lbl: Label
-var inspector_hp_bar: ProgressBar
-var inspector_hp_lbl: Label
-var inspector_sp_bar: ProgressBar
-var inspector_sp_lbl: Label
-var inspector_stance_lbl: Label
-var inspector_speed_lbl: Label
-var inspector_range_lbl: Label
-var inspector_pos_lbl: Label
-var inspector_target_lbl: Label
-var inspector_buffs_lbl: Label
-var ally_actions_container: VBoxContainer
-var enemy_actions_container: VBoxContainer
-var left_hint: Label
-
-# Right Popup (Tactical Forecast & Arena Intel)
-var forecast_target_lbl: Label
-var forecast_dist_lbl: Label
-var forecast_range_badge: Label
-var forecast_stance_lbl: Label
-var forecast_dmg_lbl: Label
-var intel_center_lbl: Label
-var intel_exit_lbl: Label
-var intel_turn_lbl: Label
-
-# 2x2 Party Select Box UI Components
+# Side Docks & Selection UI Components
+var unit_inspector: UnitInspectorUI
+var tactical_forecast: TacticalForecastUI
 var selected_party_hero: Combatant = null
-var party_select_grid: GridContainer
-var party_slot_panels: Array[PanelContainer] = []
-var btn_party_all: Button
 
 # Timeline Deck & Modal UI Components (Extracted to scripts/ui/)
 
@@ -299,47 +265,9 @@ func _setup_interactive_ui() -> void:
 	top_hbox.add_theme_constant_override("separation", 8)
 	main_vbox.add_child(top_hbox)
 
-	# Top-Left: Allied Party Status Panel (Static 2x2 Grid for 4 Heroes)
-	var party_panel := PanelContainer.new()
-	party_panel.custom_minimum_size = Vector2(280, 84)
-	var party_box_style := StyleBoxFlat.new()
-	party_box_style.bg_color = Color(0.08, 0.11, 0.16, 0.95)
-	party_box_style.border_color = Color(0.2, 0.38, 0.65, 0.8)
-	party_box_style.set_border_width_all(1)
-	party_box_style.set_corner_radius_all(6)
-	party_box_style.content_margin_left = 6
-	party_box_style.content_margin_right = 6
-	party_box_style.content_margin_top = 4
-	party_box_style.content_margin_bottom = 4
-	party_panel.add_theme_stylebox_override("panel", party_box_style)
-	top_hbox.add_child(party_panel)
-
-	var party_vbox := VBoxContainer.new()
-	party_vbox.add_theme_constant_override("separation", 2)
-	party_panel.add_child(party_vbox)
-
-	var party_hdr_hbox := HBoxContainer.new()
-	party_vbox.add_child(party_hdr_hbox)
-	party_title_lbl = Label.new()
-	party_title_lbl.text = "⚔ PARTY MEMBERS (2/4)"
-	party_title_lbl.add_theme_font_size_override("font_size", 10)
-	party_title_lbl.add_theme_color_override("font_color", Color(0.38, 0.72, 1.0))
-	party_hdr_hbox.add_child(party_title_lbl)
-
-	var party_hint := Label.new()
-	party_hint.text = "(2x2 Formation)"
-	party_hint.add_theme_font_size_override("font_size", 8)
-	party_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	party_hdr_hbox.add_spacer(false)
-	party_hdr_hbox.add_child(party_hint)
-
-	party_cards_container = GridContainer.new()
-	party_cards_container.columns = 2
-	party_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	party_cards_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	party_cards_container.add_theme_constant_override("h_separation", 4)
-	party_cards_container.add_theme_constant_override("v_separation", 3)
-	party_vbox.add_child(party_cards_container)
+	# Top Roster Panels (Extracted Component: RosterPanelUI)
+	roster_panel = RosterPanelUI.new()
+	top_hbox.add_child(roster_panel.party_panel)
 
 	# Top-Center: Single-Action Resolution Log Dock with Navigation & Expand Button
 	var log_panel := PanelContainer.new()
@@ -433,47 +361,14 @@ func _setup_interactive_ui() -> void:
 	log_panel.add_child(log_rich_text)
 
 	# Top-Right: Enemy Hostiles Status Panel (Active Roster Grid)
-	var enemy_panel := PanelContainer.new()
-	enemy_panel.custom_minimum_size = Vector2(516, 84)
-	enemy_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var enemy_box_style := StyleBoxFlat.new()
-	enemy_box_style.bg_color = Color(0.12, 0.08, 0.10, 0.95)
-	enemy_box_style.border_color = Color(0.65, 0.25, 0.25, 0.8)
-	enemy_box_style.set_border_width_all(1)
-	enemy_box_style.set_corner_radius_all(6)
-	enemy_box_style.content_margin_left = 6
-	enemy_box_style.content_margin_right = 6
-	enemy_box_style.content_margin_top = 4
-	enemy_box_style.content_margin_bottom = 4
-	enemy_panel.add_theme_stylebox_override("panel", enemy_box_style)
-	top_hbox.add_child(enemy_panel)
+	top_hbox.add_child(roster_panel.enemy_panel)
 
-	var enemy_vbox := VBoxContainer.new()
-	enemy_vbox.add_theme_constant_override("separation", 2)
-	enemy_panel.add_child(enemy_vbox)
-
-	var enemy_hdr_hbox := HBoxContainer.new()
-	enemy_vbox.add_child(enemy_hdr_hbox)
-	enemy_title_lbl = Label.new()
-	enemy_title_lbl.text = "💀 ENEMY HOSTILES (2 Active)"
-	enemy_title_lbl.add_theme_font_size_override("font_size", 10)
-	enemy_title_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-	enemy_hdr_hbox.add_child(enemy_title_lbl)
-
-	var enemy_hint := Label.new()
-	enemy_hint.text = "(Active Roster • Click to inspect)"
-	enemy_hint.add_theme_font_size_override("font_size", 8)
-	enemy_hint.add_theme_color_override("font_color", Color(0.6, 0.5, 0.5))
-	enemy_hdr_hbox.add_spacer(false)
-	enemy_hdr_hbox.add_child(enemy_hint)
-
-	enemy_cards_container = GridContainer.new()
-	enemy_cards_container.columns = 5
-	enemy_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enemy_cards_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	enemy_cards_container.add_theme_constant_override("h_separation", 4)
-	enemy_cards_container.add_theme_constant_override("v_separation", 3)
-	enemy_vbox.add_child(enemy_cards_container)
+	roster_panel.combatant_selected.connect(_select_combatant)
+	roster_panel.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void:
+		if unit_token_nodes.has(c):
+			_show_unit_hover_card(c, unit_token_nodes[c])
+	)
+	roster_panel.combatant_unhovered.connect(_hide_unit_hover_card)
 
 	# --------------------------------------------------------------------------
 	# CENTER ROW: LEFT POPUP (Inspector) | COMBAT GRID (54px) | RIGHT POPUP (Forecast)
@@ -483,245 +378,9 @@ func _setup_interactive_ui() -> void:
 	center_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_vbox.add_child(center_hbox)
 
-	# 1. Left Popup Area: Unit Inspector & Dynamic Actions/Threat Dock
-	var left_popup_panel := PanelContainer.new()
-	left_popup_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_popup_panel.custom_minimum_size = Vector2(340, 468)
-	var left_style := StyleBoxFlat.new()
-	left_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
-	left_style.border_color = Color(0.2, 0.28, 0.42, 0.8)
-	left_style.set_border_width_all(1)
-	left_style.set_corner_radius_all(6)
-	left_style.content_margin_left = 8
-	left_style.content_margin_right = 8
-	left_style.content_margin_top = 6
-	left_style.content_margin_bottom = 6
-	left_popup_panel.add_theme_stylebox_override("panel", left_style)
-	center_hbox.add_child(left_popup_panel)
-
-	var left_vbox := VBoxContainer.new()
-	left_vbox.add_theme_constant_override("separation", 5)
-	left_popup_panel.add_child(left_vbox)
-
-	inspector_hdr = Label.new()
-	inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
-	inspector_hdr.add_theme_font_size_override("font_size", 11)
-	inspector_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
-	left_vbox.add_child(inspector_hdr)
-
-	# Selected Unit Profile Card (2-Block: Left=Sprite+Vitals, Right=Stats)
-	var profile_card := PanelContainer.new()
-	var prof_style := StyleBoxFlat.new()
-	prof_style.bg_color = Color(0.12, 0.15, 0.22, 0.8)
-	prof_style.border_color = Color(0.3, 0.4, 0.55, 0.6)
-	prof_style.set_border_width_all(1)
-	prof_style.set_corner_radius_all(6)
-	prof_style.content_margin_left = 8
-	prof_style.content_margin_right = 8
-	prof_style.content_margin_top = 5
-	prof_style.content_margin_bottom = 5
-	profile_card.add_theme_stylebox_override("panel", prof_style)
-	left_vbox.add_child(profile_card)
-
-	var prof_hbox := HBoxContainer.new()
-	prof_hbox.add_theme_constant_override("separation", 10)
-	profile_card.add_child(prof_hbox)
-
-	# Left Block: Avatar Sprite + Vitals
-	var left_block := VBoxContainer.new()
-	left_block.custom_minimum_size = Vector2(115, 0)
-	left_block.add_theme_constant_override("separation", 4)
-	prof_hbox.add_child(left_block)
-
-	var sprite_frame := PanelContainer.new()
-	var spr_style := StyleBoxFlat.new()
-	spr_style.bg_color = Color(0.07, 0.09, 0.13, 0.95)
-	spr_style.border_color = Color(0.22, 0.32, 0.46, 0.8)
-	spr_style.set_border_width_all(1)
-	spr_style.set_corner_radius_all(4)
-	spr_style.content_margin_left = 2
-	spr_style.content_margin_right = 2
-	spr_style.content_margin_top = 2
-	spr_style.content_margin_bottom = 2
-	sprite_frame.add_theme_stylebox_override("panel", spr_style)
-	left_block.add_child(sprite_frame)
-
-	inspector_avatar = TextureRect.new()
-	inspector_avatar.custom_minimum_size = Vector2(110, 110)
-	inspector_avatar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	inspector_avatar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	sprite_frame.add_child(inspector_avatar)
-
-	# HP Gauge
-	var hp_gauge_vbox := VBoxContainer.new()
-	hp_gauge_vbox.add_theme_constant_override("separation", 1)
-	left_block.add_child(hp_gauge_vbox)
-
-	var hp_hdr_row := HBoxContainer.new()
-	hp_gauge_vbox.add_child(hp_hdr_row)
-	var hp_tag := Label.new()
-	hp_tag.text = "HP"
-	hp_tag.add_theme_font_size_override("font_size", 9)
-	hp_tag.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
-	hp_hdr_row.add_child(hp_tag)
-	hp_hdr_row.add_spacer(false)
-	inspector_hp_lbl = Label.new()
-	inspector_hp_lbl.text = "100/100"
-	inspector_hp_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_hp_lbl.add_theme_color_override("font_color", Color.WHITE)
-	hp_hdr_row.add_child(inspector_hp_lbl)
-
-	inspector_hp_bar = ProgressBar.new()
-	inspector_hp_bar.custom_minimum_size = Vector2(110, 8)
-	inspector_hp_bar.show_percentage = false
-	var hp_bg := StyleBoxFlat.new()
-	hp_bg.bg_color = Color(0.18, 0.08, 0.08, 0.9)
-	hp_bg.set_corner_radius_all(3)
-	var hp_fill := StyleBoxFlat.new()
-	hp_fill.bg_color = Color(0.25, 0.75, 0.35, 1.0)
-	hp_fill.set_corner_radius_all(3)
-	inspector_hp_bar.add_theme_stylebox_override("background", hp_bg)
-	inspector_hp_bar.add_theme_stylebox_override("fill", hp_fill)
-	hp_gauge_vbox.add_child(inspector_hp_bar)
-
-	# SP/MP Gauge
-	var sp_gauge_vbox := VBoxContainer.new()
-	sp_gauge_vbox.add_theme_constant_override("separation", 1)
-	left_block.add_child(sp_gauge_vbox)
-
-	var sp_hdr_row := HBoxContainer.new()
-	sp_gauge_vbox.add_child(sp_hdr_row)
-	var sp_tag := Label.new()
-	sp_tag.text = "SP/MP"
-	sp_tag.add_theme_font_size_override("font_size", 9)
-	sp_tag.add_theme_color_override("font_color", Color(0.3, 0.75, 1.0))
-	sp_hdr_row.add_child(sp_tag)
-	sp_hdr_row.add_spacer(false)
-	inspector_sp_lbl = Label.new()
-	inspector_sp_lbl.text = "50/50"
-	inspector_sp_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_sp_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
-	sp_hdr_row.add_child(inspector_sp_lbl)
-
-	inspector_sp_bar = ProgressBar.new()
-	inspector_sp_bar.custom_minimum_size = Vector2(110, 8)
-	inspector_sp_bar.show_percentage = false
-	inspector_sp_bar.max_value = 50
-	inspector_sp_bar.value = 50
-	var sp_bg := StyleBoxFlat.new()
-	sp_bg.bg_color = Color(0.08, 0.12, 0.18, 0.9)
-	sp_bg.set_corner_radius_all(3)
-	var sp_fill := StyleBoxFlat.new()
-	sp_fill.bg_color = Color(0.2, 0.6, 0.95, 1.0)
-	sp_fill.set_corner_radius_all(3)
-	inspector_sp_bar.add_theme_stylebox_override("background", sp_bg)
-	inspector_sp_bar.add_theme_stylebox_override("fill", sp_fill)
-	hp_gauge_vbox.add_child(inspector_sp_bar)
-
-	# Right Block: Identity & Stats
-	var right_block := VBoxContainer.new()
-	right_block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_block.add_theme_constant_override("separation", 3)
-	prof_hbox.add_child(right_block)
-
-	inspector_name_lbl = Label.new()
-	inspector_name_lbl.text = "Warrior"
-	inspector_name_lbl.add_theme_font_size_override("font_size", 12)
-	inspector_name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	right_block.add_child(inspector_name_lbl)
-
-	inspector_team_lbl = Label.new()
-	inspector_team_lbl.text = "Allied Hero (Melee Frontline)"
-	inspector_team_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
-	right_block.add_child(inspector_team_lbl)
-
-	var info_sep := HSeparator.new()
-	right_block.add_child(info_sep)
-
-	inspector_stance_lbl = Label.new()
-	inspector_stance_lbl.text = "Stance: Neutral"
-	inspector_stance_lbl.add_theme_font_size_override("font_size", 10)
-	inspector_stance_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
-	right_block.add_child(inspector_stance_lbl)
-
-	var stats_row1 := HBoxContainer.new()
-	right_block.add_child(stats_row1)
-	inspector_speed_lbl = Label.new()
-	inspector_speed_lbl.text = "Speed: 15"
-	inspector_speed_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_speed_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	stats_row1.add_child(inspector_speed_lbl)
-
-	stats_row1.add_spacer(false)
-	inspector_range_lbl = Label.new()
-	inspector_range_lbl.text = "Range: 1 (Melee)"
-	inspector_range_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_range_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	stats_row1.add_child(inspector_range_lbl)
-
-	var stats_row2 := HBoxContainer.new()
-	right_block.add_child(stats_row2)
-	inspector_pos_lbl = Label.new()
-	inspector_pos_lbl.text = "Pos: (4, 4)"
-	inspector_pos_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.7, 0.9))
-	stats_row2.add_child(inspector_pos_lbl)
-
-	stats_row2.add_spacer(false)
-	inspector_target_lbl = Label.new()
-	inspector_target_lbl.text = "Target: Enemy Brawler"
-	inspector_target_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_target_lbl.add_theme_color_override("font_color", Color(0.9, 0.75, 0.4))
-	stats_row2.add_child(inspector_target_lbl)
-
-	inspector_buffs_lbl = Label.new()
-	inspector_buffs_lbl.text = "Buffs: None active"
-	inspector_buffs_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_buffs_lbl.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
-	right_block.add_child(inspector_buffs_lbl)
-
-	# Ally Action Setup Palette
-	ally_actions_container = VBoxContainer.new()
-	ally_actions_container.add_theme_constant_override("separation", 3)
-	left_vbox.add_child(ally_actions_container)
-
-	var ally_pal_hdr := Label.new()
-	ally_pal_hdr.text = "ACTION PALETTE (ALLIED HERO)"
-	ally_pal_hdr.add_theme_font_size_override("font_size", 10)
-	ally_pal_hdr.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-	ally_actions_container.add_child(ally_pal_hdr)
-
-	var ally_actions: Array[Dictionary] = [
-		{"name": "⚔ Attack", "desc": "Standard Strike | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.3, 0.3)},
-		{"name": "🛡 Defend", "desc": "Mitigation Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.3, 0.6, 0.95)},
-		{"name": "✦ Focus", "desc": "+50% ATK Buff (2 rds) | Cost: 2 Blocks", "cost": 2, "color": Color(0.7, 0.4, 0.95)},
-		{"name": "➜ Move", "desc": "1-Tile Cardinal Step | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-		{"name": "🎯 Target Lock", "desc": "Assign Combat Focus | Cost: 1 Block", "cost": 1, "color": Color(0.3, 0.85, 0.5)},
-		{"name": "🔄 Stance Shift", "desc": "Drop to Neutral | Cost: 1 Block", "cost": 1, "color": Color(0.7, 0.7, 0.8)}
-	]
-
-	for act in ally_actions:
-		var act_card := _create_mini_action_card(act)
-		ally_actions_container.add_child(act_card)
-
-	# Enemy Possible Actions Deck (Secret Intent Pool)
-	enemy_actions_container = VBoxContainer.new()
-	enemy_actions_container.add_theme_constant_override("separation", 3)
-	enemy_actions_container.visible = false
-	left_vbox.add_child(enemy_actions_container)
-
-	var enemy_deck_hdr := Label.new()
-	enemy_deck_hdr.text = "POSSIBLE ACTIONS POOL (THREAT INTEL)"
-	enemy_deck_hdr.add_theme_font_size_override("font_size", 10)
-	enemy_deck_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-	enemy_actions_container.add_child(enemy_deck_hdr)
-
-	left_hint = Label.new()
-	left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
-	left_hint.add_theme_font_size_override("font_size", 8)
-	left_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	left_vbox.add_child(left_hint)
+	# 1. Left Popup Area: Unit Inspector & Dynamic Actions/Threat Dock (Extracted: UnitInspectorUI)
+	unit_inspector = UnitInspectorUI.new()
+	center_hbox.add_child(unit_inspector)
 
 	# 2. Center Column: Prominent Combat Grid (54px Tiles)
 	var grid_vbox := VBoxContainer.new()
@@ -822,127 +481,9 @@ func _setup_interactive_ui() -> void:
 	hover_status_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.85))
 	hov_vbox.add_child(hover_status_lbl)
 
-	# 3. Right Popup Area: Tactical Forecast & Arena Intel
-	var right_popup_panel := PanelContainer.new()
-	right_popup_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_popup_panel.custom_minimum_size = Vector2(340, 468)
-	var right_style := StyleBoxFlat.new()
-	right_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
-	right_style.border_color = Color(0.2, 0.28, 0.42, 0.8)
-	right_style.set_border_width_all(1)
-	right_style.set_corner_radius_all(6)
-	right_style.content_margin_left = 8
-	right_style.content_margin_right = 8
-	right_style.content_margin_top = 6
-	right_style.content_margin_bottom = 6
-	right_popup_panel.add_theme_stylebox_override("panel", right_style)
-	center_hbox.add_child(right_popup_panel)
-
-	var right_vbox := VBoxContainer.new()
-	right_vbox.add_theme_constant_override("separation", 6)
-	right_popup_panel.add_child(right_vbox)
-
-	var forecast_hdr := Label.new()
-	forecast_hdr.text = "TACTICAL FORECAST & ARENA INTEL"
-	forecast_hdr.add_theme_font_size_override("font_size", 11)
-	forecast_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
-	right_vbox.add_child(forecast_hdr)
-
-	# Tactical Forecast Box
-	var forecast_box := PanelContainer.new()
-	var fc_style := StyleBoxFlat.new()
-	fc_style.bg_color = Color(0.12, 0.15, 0.22, 0.8)
-	fc_style.border_color = Color(0.3, 0.4, 0.55, 0.6)
-	fc_style.set_border_width_all(1)
-	fc_style.set_corner_radius_all(6)
-	fc_style.content_margin_left = 8
-	fc_style.content_margin_right = 8
-	fc_style.content_margin_top = 6
-	fc_style.content_margin_bottom = 6
-	forecast_box.add_theme_stylebox_override("panel", fc_style)
-	right_vbox.add_child(forecast_box)
-
-	var fc_vbox := VBoxContainer.new()
-	fc_vbox.add_theme_constant_override("separation", 4)
-	forecast_box.add_child(fc_vbox)
-
-	forecast_target_lbl = Label.new()
-	forecast_target_lbl.text = "Target: Enemy Brawler"
-	forecast_target_lbl.add_theme_font_size_override("font_size", 11)
-	forecast_target_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
-	fc_vbox.add_child(forecast_target_lbl)
-
-	forecast_dist_lbl = Label.new()
-	forecast_dist_lbl.text = "Distance: 1 Tile"
-	forecast_dist_lbl.add_theme_font_size_override("font_size", 10)
-	forecast_dist_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	fc_vbox.add_child(forecast_dist_lbl)
-
-	forecast_range_badge = Label.new()
-	forecast_range_badge.text = "✓ IN ATTACK RANGE"
-	forecast_range_badge.add_theme_font_size_override("font_size", 10)
-	forecast_range_badge.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
-	fc_vbox.add_child(forecast_range_badge)
-
-	forecast_stance_lbl = Label.new()
-	forecast_stance_lbl.text = "Stance Matchup: Neutral vs Defensive"
-	forecast_stance_lbl.add_theme_font_size_override("font_size", 10)
-	forecast_stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	fc_vbox.add_child(forecast_stance_lbl)
-
-	forecast_dmg_lbl = Label.new()
-	forecast_dmg_lbl.text = "Estimated Strike: ~12 dmg (Defending)"
-	forecast_dmg_lbl.add_theme_font_size_override("font_size", 10)
-	forecast_dmg_lbl.add_theme_color_override("font_color", Color(0.95, 0.5, 0.5))
-	fc_vbox.add_child(forecast_dmg_lbl)
-
-	# Arena Rules / Objectives
-	var arena_hdr := Label.new()
-	arena_hdr.text = "ARENA RULES & OBJECTIVES"
-	arena_hdr.add_theme_font_size_override("font_size", 10)
-	arena_hdr.add_theme_color_override("font_color", Color(0.85, 0.8, 0.55))
-	right_vbox.add_child(arena_hdr)
-
-	var arena_card := PanelContainer.new()
-	var ar_style := StyleBoxFlat.new()
-	ar_style.bg_color = Color(0.10, 0.13, 0.18, 0.8)
-	ar_style.border_color = Color(0.22, 0.3, 0.42, 0.6)
-	ar_style.set_border_width_all(1)
-	ar_style.set_corner_radius_all(6)
-	ar_style.content_margin_left = 8
-	ar_style.content_margin_right = 8
-	ar_style.content_margin_top = 6
-	ar_style.content_margin_bottom = 6
-	arena_card.add_theme_stylebox_override("panel", ar_style)
-	right_vbox.add_child(arena_card)
-
-	var ar_vbox := VBoxContainer.new()
-	ar_vbox.add_theme_constant_override("separation", 3)
-	arena_card.add_child(ar_vbox)
-
-	intel_center_lbl = Label.new()
-	intel_center_lbl.text = "🚩 Center Ring (4, 4): Core arena landmark"
-	intel_center_lbl.add_theme_font_size_override("font_size", 9)
-	intel_center_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	ar_vbox.add_child(intel_center_lbl)
-
-	intel_exit_lbl = Label.new()
-	intel_exit_lbl.text = "🚪 Exit Tile (8, 4): Allows safe withdrawal"
-	intel_exit_lbl.add_theme_font_size_override("font_size", 9)
-	intel_exit_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
-	ar_vbox.add_child(intel_exit_lbl)
-
-	intel_turn_lbl = Label.new()
-	intel_turn_lbl.text = "⏱ 10 Blocks / Round: Simultaneous Execution"
-	intel_turn_lbl.add_theme_font_size_override("font_size", 9)
-	intel_turn_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-	ar_vbox.add_child(intel_turn_lbl)
-
-	var right_hint := Label.new()
-	right_hint.text = "💡 Click any enemy unit to inspect their threat level."
-	right_hint.add_theme_font_size_override("font_size", 8)
-	right_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	right_vbox.add_child(right_hint)
+	# 3. Right Popup Area: Tactical Forecast & Arena Intel (Extracted: TacticalForecastUI)
+	tactical_forecast = TacticalForecastUI.new()
+	center_hbox.add_child(tactical_forecast)
 
 	# --------------------------------------------------------------------------
 	# BOTTOM ROW: PLAYBACK CONTROLS + ZERO-CLIPPING CONTINUOUS ACTIVE TRACK
@@ -1095,13 +636,8 @@ func _init_interactive_simulation() -> void:
 	unit_token_nodes.clear()
 
 	# Clear roster cards in both party and enemy containers
-	if party_cards_container:
-		for child in party_cards_container.get_children():
-			child.queue_free()
-	if enemy_cards_container:
-		for child in enemy_cards_container.get_children():
-			child.queue_free()
-	roster_cards.clear()
+	if roster_panel:
+		roster_panel.clear_roster()
 
 	all_action_log_entries.clear()
 	active_log_entry_index = -1
@@ -1224,9 +760,9 @@ func _init_interactive_simulation() -> void:
 		_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
 		# Goblin ambush reinforcements are invisible until they appear
 		if enemy in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
-			if roster_cards.has(enemy):
+			if roster_panel and roster_panel.roster_cards.has(enemy):
 				@warning_ignore("unsafe_cast")
-				var enemy_card := roster_cards[enemy] as Control
+				var enemy_card := roster_panel.roster_cards[enemy] as Control
 				if is_instance_valid(enemy_card):
 					enemy_card.visible = false
 	_add_enemy_placeholders()
@@ -1241,7 +777,6 @@ func _init_interactive_simulation() -> void:
 
 	# 8. Setup 2x2 Party Focus Box & Default Selection
 	selected_party_hero = unit_warrior
-	_update_party_select_box()
 
 	# Set default selected unit to Warrior
 	_select_combatant(unit_warrior)
@@ -1360,188 +895,19 @@ func _hide_unit_hover_card() -> void:
 
 
 func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
-	var is_ally: bool = sim_allies.has(combatant)
-	var target_container: GridContainer = party_cards_container if is_ally else enemy_cards_container
-	if not target_container:
+	if not roster_panel:
 		return
-
-	var card := PanelContainer.new()
-	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.10, 0.13, 0.18, 0.92)
-	card_style.border_color = team_color
-	card_style.set_border_width_all(1)
-	card_style.set_corner_radius_all(3)
-	card_style.content_margin_left = 3
-	card_style.content_margin_right = 3
-	card_style.content_margin_top = 1
-	card_style.content_margin_bottom = 1
-	card.add_theme_stylebox_override("panel", card_style)
-
-	if is_ally:
-		card.custom_minimum_size = Vector2(130, 26)
-		var main_vbox := VBoxContainer.new()
-		main_vbox.add_theme_constant_override("separation", 1)
-		card.add_child(main_vbox)
-
-		# Top row: Name & HP fraction
-		var top_row := HBoxContainer.new()
-		top_row.add_theme_constant_override("separation", 2)
-		main_vbox.add_child(top_row)
-
-		var name_lbl := Label.new()
-		name_lbl.text = combatant.name
-		name_lbl.clip_text = true
-		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_lbl.add_theme_font_size_override("font_size", 8)
-		name_lbl.add_theme_color_override("font_color", team_color.lightened(0.35))
-		top_row.add_child(name_lbl)
-
-		var hp_lbl := Label.new()
-		hp_lbl.name = "HpLabel"
-		hp_lbl.text = "%d/%d" % [combatant.hp, combatant.max_hp]
-		hp_lbl.add_theme_font_size_override("font_size", 7)
-		hp_lbl.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
-		top_row.add_child(hp_lbl)
-
-		# Bottom row: HP bar, Stance, Pos
-		var bot_row := HBoxContainer.new()
-		bot_row.add_theme_constant_override("separation", 2)
-		main_vbox.add_child(bot_row)
-
-		var hp_bar := ProgressBar.new()
-		hp_bar.custom_minimum_size = Vector2(34, 4)
-		hp_bar.max_value = combatant.max_hp
-		hp_bar.value = combatant.hp
-		hp_bar.show_percentage = false
-		bot_row.add_child(hp_bar)
-
-		var stance_lbl := Label.new()
-		stance_lbl.name = "StanceLabel"
-		stance_lbl.clip_text = true
-		stance_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		stance_lbl.text = CombatTypes.stance_to_string(combatant.current_stance)
-		stance_lbl.add_theme_font_size_override("font_size", 7)
-		stance_lbl.add_theme_color_override("font_color", Color(0.65, 0.78, 0.9))
-		bot_row.add_child(stance_lbl)
-
-		var pos_lbl := Label.new()
-		pos_lbl.name = "PosLabel"
-		pos_lbl.text = "%s" % str(sim_grid.get_position(combatant))
-		pos_lbl.add_theme_font_size_override("font_size", 7)
-		pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-		bot_row.add_child(pos_lbl)
-	else:
-		card.custom_minimum_size = Vector2(94, 26)
-		var main_vbox := VBoxContainer.new()
-		main_vbox.add_theme_constant_override("separation", 1)
-		card.add_child(main_vbox)
-
-		# Top row: Truncated name & HP
-		var top_row := HBoxContainer.new()
-		top_row.add_theme_constant_override("separation", 2)
-		main_vbox.add_child(top_row)
-
-		var short_name: String = combatant.name
-		if short_name.begins_with("Goblin "):
-			short_name = short_name.substr(7)
-		elif short_name.begins_with("Enemy "):
-			short_name = short_name.substr(6)
-		elif short_name.begins_with("Fleeing "):
-			short_name = short_name.substr(8)
-
-		var name_lbl := Label.new()
-		name_lbl.text = short_name
-		name_lbl.clip_text = true
-		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_lbl.add_theme_font_size_override("font_size", 8)
-		name_lbl.add_theme_color_override("font_color", team_color.lightened(0.35))
-		top_row.add_child(name_lbl)
-
-		var hp_lbl := Label.new()
-		hp_lbl.name = "HpLabel"
-		hp_lbl.text = "%d" % combatant.hp
-		hp_lbl.add_theme_font_size_override("font_size", 7)
-		hp_lbl.add_theme_color_override("font_color", Color(0.9, 0.75, 0.75))
-		top_row.add_child(hp_lbl)
-
-		# Bottom row: Mini HP bar, status
-		var bot_row := HBoxContainer.new()
-		bot_row.add_theme_constant_override("separation", 2)
-		main_vbox.add_child(bot_row)
-
-		var hp_bar := ProgressBar.new()
-		hp_bar.custom_minimum_size = Vector2(26, 4)
-		hp_bar.max_value = combatant.max_hp
-		hp_bar.value = combatant.hp
-		hp_bar.show_percentage = false
-		bot_row.add_child(hp_bar)
-
-		var stance_lbl := Label.new()
-		stance_lbl.name = "StanceLabel"
-		stance_lbl.clip_text = true
-		stance_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var st_str: String = CombatTypes.stance_to_string(combatant.current_stance)
-		stance_lbl.text = st_str.left(3)
-		stance_lbl.add_theme_font_size_override("font_size", 7)
-		stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.65, 0.65))
-		bot_row.add_child(stance_lbl)
-
-		var pos_lbl := Label.new()
-		pos_lbl.name = "PosLabel"
-		pos_lbl.visible = false
-		bot_row.add_child(pos_lbl)
-
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	for child in card.find_children("*", "Control", true, false):
-		(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	card.gui_input.connect(func(event: InputEvent) -> void:
-		var mouse_event := event as InputEventMouseButton
-		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			_select_combatant(combatant)
-	)
-
-	card.mouse_entered.connect(func() -> void:
-		if unit_token_nodes.has(combatant):
-			_show_unit_hover_card(combatant, unit_token_nodes[combatant])
-	)
-	card.mouse_exited.connect(func() -> void:
-		_hide_unit_hover_card()
-	)
-
-	target_container.add_child(card)
-	roster_cards[combatant] = card
+	var is_ally: bool = sim_allies.has(combatant)
+	var grid_pos: Vector2i = sim_grid.get_position(combatant) if sim_grid else Vector2i(-1, -1)
+	roster_panel.create_roster_card(combatant, team_color, is_ally, grid_pos)
 
 
 func _add_party_placeholders() -> void:
-	if not party_cards_container:
-		return
-	while party_cards_container.get_child_count() < 4:
-		var slot_idx: int = party_cards_container.get_child_count() + 1
-		var ph := PanelContainer.new()
-		ph.custom_minimum_size = Vector2(130, 26)
-		var ph_style := StyleBoxFlat.new()
-		ph_style.bg_color = Color(0.06, 0.08, 0.12, 0.35)
-		ph_style.border_color = Color(0.2, 0.28, 0.4, 0.35)
-		ph_style.set_border_width_all(1)
-		ph_style.set_corner_radius_all(3)
-		ph.add_theme_stylebox_override("panel", ph_style)
-
-		var lbl := Label.new()
-		lbl.text = "[+ Hero Slot %d]" % slot_idx
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 8)
-		lbl.add_theme_color_override("font_color", Color(0.35, 0.45, 0.55))
-		ph.add_child(lbl)
-		party_cards_container.add_child(ph)
+	if roster_panel:
+		roster_panel.add_party_placeholders()
 
 
 func _add_enemy_placeholders() -> void:
-	# Active roster only: reserve placeholders removed so only active enemies appear
 	pass
 
 
@@ -1598,77 +964,14 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 
 
 func _update_all_roster_cards(snap: BlockSnapshot = null) -> void:
-	var alive_enemies: int = 0
-	var is_r1: bool = (snap.round_num == 1 if snap != null else current_combat_round == 1)
-	var reinforcements_active: bool = (snap.reinforcements_spawned if snap != null else reinforcements_spawned)
-
-	for combatant: Combatant in roster_cards:
-		@warning_ignore("unsafe_cast")
-		var card := roster_cards[combatant] as PanelContainer
-		if not is_instance_valid(card):
-			continue
-
-		var is_ally: bool = sim_allies.has(combatant)
-		var cur_hp: int = snap.hps.get(combatant, combatant.hp) if snap != null else combatant.hp
-		var max_hp: int = snap.max_hps.get(combatant, combatant.max_hp) if snap != null else combatant.max_hp
-		var is_withdrawn: bool = snap.is_withdrawn.get(combatant, combatant.is_withdrawn) if snap != null else combatant.is_withdrawn
-		var is_alive: bool = (cur_hp > 0)
-		var is_act: bool = is_alive and not is_withdrawn
-		var cur_stance: CombatTypes.StanceType = snap.stances.get(combatant, combatant.current_stance) if snap != null else combatant.current_stance
-		var pos: Vector2i = snap.positions.get(combatant, sim_grid.get_position(combatant)) if snap != null else sim_grid.get_position(combatant)
-
-		# In Round 1, ambush goblins are only visible after they appear
-		if not is_ally and combatant in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
-			if is_r1:
-				card.visible = reinforcements_active
-			else:
-				card.visible = true
-
-		if not is_ally and card.visible and is_act:
-			alive_enemies += 1
-
-		var hp_bar := card.find_child("ProgressBar", true, false) as ProgressBar
-		var hp_lbl := card.find_child("HpLabel", true, false) as Label
-		var stance_lbl := card.find_child("StanceLabel", true, false) as Label
-		var pos_lbl := card.find_child("PosLabel", true, false) as Label
-
-		if hp_bar:
-			hp_bar.max_value = max_hp
-			hp_bar.value = cur_hp
-		if hp_lbl:
-			if is_ally:
-				hp_lbl.text = "%d/%d" % [cur_hp, max_hp]
-			else:
-				hp_lbl.text = "%d" % cur_hp
-		if stance_lbl:
-			if not is_alive:
-				stance_lbl.text = "DEFEATED"
-				stance_lbl.add_theme_color_override("font_color", Color(0.85, 0.35, 0.35))
-			elif is_withdrawn:
-				stance_lbl.text = "ESCAPED"
-				stance_lbl.add_theme_color_override("font_color", Color(0.95, 0.75, 0.25))
-			else:
-				stance_lbl.text = CombatTypes.stance_to_string(cur_stance) if is_ally else CombatTypes.stance_to_string(cur_stance).left(3)
-				stance_lbl.add_theme_color_override("font_color", Color(0.65, 0.78, 0.9) if is_ally else Color(0.7, 0.65, 0.65))
-
-		if pos_lbl:
-			if is_act:
-				pos_lbl.text = "%s" % str(pos)
-			else:
-				pos_lbl.text = "Off"
-
-		# Dimmer appearance for dead or escaped units (both party and enemy)
-		if not is_alive:
-			card.modulate = Color(0.55, 0.55, 0.55, 0.45)
-		elif is_withdrawn:
-			card.modulate = Color(0.65, 0.65, 0.65, 0.45)
-		else:
-			card.modulate = Color.WHITE
-
-	if enemy_title_lbl:
-		enemy_title_lbl.text = "💀 ENEMY HOSTILES (%d Active)" % alive_enemies
-	if party_title_lbl:
-		party_title_lbl.text = "⚔ PARTY MEMBERS (%d/4)" % sim_allies.size()
+	if roster_panel:
+		roster_panel.update_all_roster_cards(
+			sim_allies,
+			current_combat_round,
+			reinforcements_spawned,
+			sim_grid,
+			snap
+		)
 
 
 # ==============================================================================
@@ -1683,7 +986,6 @@ func _select_combatant(combatant: Combatant) -> void:
 	_update_unit_token_highlights()
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
-	_update_party_select_box()
 	_update_timeline_tracks_display()
 	_update_combined_block_display(combined_selected_block)
 
@@ -1695,37 +997,8 @@ func _select_combatant(combatant: Combatant) -> void:
 
 
 func _update_roster_card_highlights() -> void:
-	for c: Combatant in roster_cards:
-		@warning_ignore("unsafe_cast")
-		var card := roster_cards[c] as PanelContainer
-		if not is_instance_valid(card):
-			continue
-		var style := StyleBoxFlat.new()
-		style.set_corner_radius_all(3)
-		style.content_margin_left = 4
-		style.content_margin_right = 4
-		style.content_margin_top = 2
-		style.content_margin_bottom = 2
-		var is_ally: bool = sim_allies.has(c)
-		var base_color: Color = Color(0.2, 0.5, 0.9) if is_ally else Color(0.9, 0.3, 0.3)
-
-		if c == selected_combatant:
-			style.bg_color = Color(0.18, 0.22, 0.32, 0.95)
-			style.border_color = Color(1.0, 0.85, 0.25, 1.0)
-			style.set_border_width_all(2)
-		else:
-			style.bg_color = Color(0.11, 0.14, 0.19, 0.9)
-			style.border_color = base_color
-			style.set_border_width_all(1)
-		card.add_theme_stylebox_override("panel", style)
-
-		# Preserve dimming for dead / escaped units
-		if not c.is_alive():
-			card.modulate = Color(0.55, 0.55, 0.55, 0.45)
-		elif c.is_withdrawn:
-			card.modulate = Color(0.65, 0.65, 0.65, 0.45)
-		else:
-			card.modulate = Color.WHITE
+	if roster_panel:
+		roster_panel.update_highlights(selected_combatant, sim_allies)
 
 
 func _update_unit_token_highlights() -> void:
@@ -1738,139 +1011,28 @@ func _update_unit_token_highlights() -> void:
 
 
 func _update_selected_unit_panel() -> void:
-	if not selected_combatant:
+	if not selected_combatant or not unit_inspector:
 		return
 
-	inspector_name_lbl.text = selected_combatant.name
 	var is_ally: bool = sim_allies.has(selected_combatant)
-
-	if is_ally:
-		inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
-		inspector_team_lbl.text = "Allied Hero (Party Member)"
-		inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
-		inspector_avatar.texture = _get_combatant_sprite_texture(selected_combatant)
-		ally_actions_container.visible = selected_combatant.is_alive()
-		enemy_actions_container.visible = false
-		if not selected_combatant.is_alive():
-			left_hint.text = "💀 Unit is defeated. Future commands cancelled."
-		else:
-			left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
-	else:
-		inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
-		inspector_team_lbl.text = "Hostile Enemy Unit"
-		inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-		inspector_avatar.texture = _get_combatant_sprite_texture(selected_combatant)
-		ally_actions_container.visible = false
-		enemy_actions_container.visible = selected_combatant.is_alive()
-		_rebuild_enemy_threat_dock()
-		if not selected_combatant.is_alive():
-			left_hint.text = "💀 Enemy hostile defeated."
-		elif selected_combatant.is_withdrawn:
-			left_hint.text = "💨 Enemy safely withdrew through escape boundary."
-		else:
-			left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
-
-	inspector_hp_bar.max_value = selected_combatant.max_hp
-	inspector_hp_bar.value = selected_combatant.hp
-	inspector_hp_lbl.text = "%d/%d" % [selected_combatant.hp, selected_combatant.max_hp]
-
-	var hp_ratio: float = float(selected_combatant.hp) / float(maxi(1, selected_combatant.max_hp))
-	var hp_fill := StyleBoxFlat.new()
-	hp_fill.set_corner_radius_all(3)
-	if hp_ratio > 0.5:
-		hp_fill.bg_color = Color(0.25, 0.75, 0.35, 1.0)
-	elif hp_ratio > 0.25:
-		hp_fill.bg_color = Color(0.9, 0.75, 0.2, 1.0)
-	else:
-		hp_fill.bg_color = Color(0.9, 0.25, 0.25, 1.0)
-	inspector_hp_bar.add_theme_stylebox_override("fill", hp_fill)
-
-	if inspector_sp_bar and inspector_sp_lbl:
-		var cur_sp: int = 50 if selected_combatant.is_alive() else 0
-		inspector_sp_bar.max_value = 50
-		inspector_sp_bar.value = cur_sp
-		inspector_sp_lbl.text = "%d/50" % cur_sp
-
-	inspector_stance_lbl.text = "Stance: " + CombatTypes.stance_to_string(selected_combatant.current_stance)
-	inspector_speed_lbl.text = "Speed: %d" % selected_combatant.speed
-	inspector_range_lbl.text = "Range: %d tile%s" % [selected_combatant.attack_range, "s" if selected_combatant.attack_range > 1 else ""]
-
+	var pos_text: String = ""
 	if selected_combatant.is_active():
-		inspector_pos_lbl.text = "Pos: %s" % str(sim_grid.get_position(selected_combatant))
+		pos_text = "Pos: %s" % str(sim_grid.get_position(selected_combatant))
 	elif selected_combatant.is_withdrawn:
-		inspector_pos_lbl.text = "Pos: Withdrawn (Safe)"
+		pos_text = "Pos: Withdrawn (Safe)"
 	else:
-		inspector_pos_lbl.text = "Pos: Defeated"
+		pos_text = "Pos: Defeated"
 
-	if selected_combatant.active_target is Combatant:
-		@warning_ignore("unsafe_cast")
-		var tgt: Combatant = selected_combatant.active_target as Combatant
-		inspector_target_lbl.text = "Target: " + tgt.name
-	else:
-		inspector_target_lbl.text = "Target: None"
-
-	if selected_combatant.attack_boost_rounds_remaining > 0:
-		inspector_buffs_lbl.text = "Buffs: Focus (+50%% ATK, %d rds)" % selected_combatant.attack_boost_rounds_remaining
-	else:
-		inspector_buffs_lbl.text = "Buffs: None active"
-
-
-func _rebuild_enemy_threat_dock() -> void:
-	for child in enemy_actions_container.get_children():
-		if child is PanelContainer:
-			child.queue_free()
-
-	var enemy_actions: Array[Dictionary] = []
-	match selected_combatant.name:
-		"Enemy Brawler":
-			enemy_actions = [
-				{"name": "⚔ Heavy Strike", "desc": "20 Power Melee Crush | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)},
-				{"name": "🛡 Iron Guard", "desc": "50% Mitigation Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
-				{"name": "🎯 Target Lock", "desc": "Melee Focus Engagement | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
-				{"name": "➜ Tactical Stride", "desc": "1-Tile Repositioning | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
-			]
-		"Fleeing Scout", "Goblin Scout":
-			enemy_actions = [
-				{"name": "➜ Swift Retreat", "desc": "1-Tile Move toward Exit | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-				{"name": "⚡ Sprint / Dash", "desc": "2-Tile Burst toward Boundary | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.8, 0.3)},
-				{"name": "🗡 Quick Shank", "desc": "10 Power Puncture | Cost: 1 Block", "cost": 1, "color": Color(0.9, 0.35, 0.35)}
-			]
-		"Goblin Skirmisher":
-			enemy_actions = [
-				{"name": "🗡 Twin Dagger Rush", "desc": "15 Power Rapid Flank | Cost: 1 Block", "cost": 1, "color": Color(0.95, 0.6, 0.2)},
-				{"name": "➜ Shadow Step", "desc": "Agile 1-Tile Advance | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-				{"name": "⚔ Flank Strike", "desc": "20 Power Heavy Puncture | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
-			]
-		"Goblin Archer":
-			enemy_actions = [
-				{"name": "🏹 Piercing Volley", "desc": "25 Power Longshot (Rng 3) | Cost: 2 Blocks", "cost": 2, "color": Color(0.2, 0.85, 0.5)},
-				{"name": "🎯 Eagle Eye", "desc": "Target Lock & Ranged Focus | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
-				{"name": "➜ Reposition", "desc": "Kiting 1-Tile Step | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
-			]
-		"Goblin Berserker":
-			enemy_actions = [
-				{"name": "🪓 Brutal Cleave", "desc": "30 Power Devastating Blow | Cost: 2 Blocks", "cost": 2, "color": Color(0.95, 0.25, 0.25)},
-				{"name": "🔥 Blood Frenzy", "desc": "+25% Attack Boost Buff | Cost: 2 Blocks", "cost": 2, "color": Color(0.95, 0.5, 0.2)},
-				{"name": "⚔ Axe Slam", "desc": "20 Power Heavy Chop | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
-			]
-		"Goblin Shaman":
-			enemy_actions = [
-				{"name": "🔮 Shadow Hex", "desc": "25 Power Dark Curse (Rng 2) | Cost: 2 Blocks", "cost": 2, "color": Color(0.7, 0.4, 0.95)},
-				{"name": "💀 Tribal Ward", "desc": "50% Mystic Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
-				{"name": "✨ Mending Chant", "desc": "Restores 15 HP to Ally | Cost: 2 Blocks", "cost": 2, "color": Color(0.3, 0.9, 0.6)}
-			]
-		_:
-			enemy_actions = [
-				{"name": "⚔ Attack", "desc": "Basic Strike | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
-			]
-
-	for act in enemy_actions:
-		var card := _create_mini_action_card(act)
-		enemy_actions_container.add_child(card)
+	unit_inspector.update_inspector(
+		selected_combatant,
+		is_ally,
+		pos_text,
+		_get_combatant_sprite_texture(selected_combatant)
+	)
 
 
 func _update_tactical_forecast_panel() -> void:
-	if not selected_combatant:
+	if not selected_combatant or not tactical_forecast:
 		return
 
 	var target: Combatant = null
@@ -1882,217 +1044,12 @@ func _update_tactical_forecast_panel() -> void:
 	else:
 		target = sim_allies[0]
 
-	if target:
-		forecast_target_lbl.text = "Target: %s" % target.name
-		if selected_combatant.is_active() and target.is_active():
-			var p1: Vector2i = sim_grid.get_position(selected_combatant)
-			var p2: Vector2i = sim_grid.get_position(target)
-			var dist: int = sim_grid.get_distance(p1, p2)
-			forecast_dist_lbl.text = "Distance: %d tile%s (Manhattan)" % [dist, "s" if dist != 1 else ""]
-
-			var in_range: bool = dist <= selected_combatant.attack_range
-			if in_range:
-				forecast_range_badge.text = "✓ IN ATTACK RANGE (%d/%d)" % [dist, selected_combatant.attack_range]
-				forecast_range_badge.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
-			else:
-				var needed: int = dist - selected_combatant.attack_range
-				forecast_range_badge.text = "✗ OUT OF RANGE (Need +%d steps)" % needed
-				forecast_range_badge.add_theme_color_override("font_color", Color(0.95, 0.4, 0.4))
-
-			var mult: float = CombatTypes.get_matchup_multiplier(selected_combatant.current_stance, target.current_stance)
-			forecast_stance_lbl.text = "Stance: %s vs %s (%.2fx)" % [
-				CombatTypes.stance_to_string(selected_combatant.current_stance),
-				CombatTypes.stance_to_string(target.current_stance),
-				mult
-			]
-
-			var base_power: int = 25
-			var est_dmg: int = int(roundf(float(base_power) * mult * selected_combatant.attack_boost_multiplier * (1.0 - target.defense_mitigation_ratio)))
-			var mit_note: String = " (-%d%% def)" % int(target.defense_mitigation_ratio * 100) if target.defense_mitigation_ratio > 0 else ""
-			forecast_dmg_lbl.text = "Est. Strike Impact: ~%d dmg%s" % [est_dmg, mit_note]
-		else:
-			forecast_dist_lbl.text = "Distance: Inactive combatant"
-			forecast_range_badge.text = "Status: Off Active Grid"
-			forecast_range_badge.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-			forecast_stance_lbl.text = "Stance: N/A"
-			forecast_dmg_lbl.text = "Est. Strike: N/A"
-
-
-# ==============================================================================
-# SECTION 5: 2x2 PARTY SELECT BOX & CONTINUOUS ACTIVE TRACK RENDERING
-# ==============================================================================
-
-func _build_party_select_box() -> PanelContainer:
-	var pnl := PanelContainer.new()
-	pnl.custom_minimum_size = Vector2(124, 72)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.11, 0.16, 0.95)
-	style.border_color = Color(0.2, 0.35, 0.55, 0.8)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 4
-	style.content_margin_right = 4
-	style.content_margin_top = 3
-	style.content_margin_bottom = 3
-	pnl.add_theme_stylebox_override("panel", style)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
-	pnl.add_child(vbox)
-
-	var hdr_hbox := HBoxContainer.new()
-	vbox.add_child(hdr_hbox)
-
-	var hdr_lbl := Label.new()
-	hdr_lbl.text = "HERO FOCUS"
-	hdr_lbl.add_theme_font_size_override("font_size", 8)
-	hdr_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
-	hdr_hbox.add_child(hdr_lbl)
-
-	hdr_hbox.add_spacer(false)
-
-	btn_party_all = Button.new()
-	btn_party_all.text = "ALL"
-	btn_party_all.tooltip_text = "Show All Combatants in Combined View"
-	btn_party_all.custom_minimum_size = Vector2(28, 14)
-	btn_party_all.add_theme_font_size_override("font_size", 7)
-	btn_party_all.pressed.connect(_on_party_all_clicked)
-	hdr_hbox.add_child(btn_party_all)
-
-	party_select_grid = GridContainer.new()
-	party_select_grid.columns = 2
-	party_select_grid.add_theme_constant_override("h_separation", 3)
-	party_select_grid.add_theme_constant_override("v_separation", 3)
-	vbox.add_child(party_select_grid)
-
-	party_slot_panels.clear()
-	for i in range(4):
-		var slot_pnl := PanelContainer.new()
-		slot_pnl.custom_minimum_size = Vector2(56, 23)
-		slot_pnl.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var cur_i: int = i
-		slot_pnl.gui_input.connect(func(event: InputEvent) -> void:
-			var me := event as InputEventMouseButton
-			if me != null and me.pressed and me.button_index == MOUSE_BUTTON_LEFT:
-				_on_party_slot_clicked(cur_i)
-		)
-		party_select_grid.add_child(slot_pnl)
-		party_slot_panels.append(slot_pnl)
-
-	return pnl
-
-
-func _update_party_select_box() -> void:
-	if party_slot_panels.is_empty():
-		return
-
-	# Style for "ALL" button
-	if selected_party_hero == null:
-		btn_party_all.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25))
-	else:
-		btn_party_all.remove_theme_color_override("font_color")
-
-	for i in range(4):
-		var slot_pnl: PanelContainer = party_slot_panels[i]
-		for child in slot_pnl.get_children():
-			child.queue_free()
-
-		var slot_style := StyleBoxFlat.new()
-		slot_style.set_corner_radius_all(3)
-		slot_style.content_margin_left = 3
-		slot_style.content_margin_right = 3
-		slot_style.content_margin_top = 2
-		slot_style.content_margin_bottom = 2
-
-		var ally: Combatant = sim_allies[i] if i < sim_allies.size() else null
-
-		if ally != null:
-			var is_selected: bool = (ally == selected_party_hero)
-			var is_alive: bool = ally.is_alive()
-			if is_selected:
-				slot_style.bg_color = Color(0.18, 0.26, 0.38, 0.98)
-				slot_style.border_color = Color(1.0, 0.85, 0.25, 1.0)
-				slot_style.set_border_width_all(2)
-			elif not is_alive:
-				slot_style.bg_color = Color(0.14, 0.08, 0.08, 0.9)
-				slot_style.border_color = Color(0.7, 0.25, 0.25, 0.8)
-				slot_style.set_border_width_all(1)
-			else:
-				slot_style.bg_color = Color(0.09, 0.12, 0.17, 0.9)
-				slot_style.border_color = Color(0.2, 0.4, 0.65, 0.7)
-				slot_style.set_border_width_all(1)
-
-			slot_pnl.modulate = Color(0.6, 0.6, 0.6, 0.5) if not is_alive else Color.WHITE
-
-			var hbox := HBoxContainer.new()
-			hbox.add_theme_constant_override("separation", 3)
-			slot_pnl.add_child(hbox)
-
-			var icon := TextureRect.new()
-			icon.texture = _get_combatant_token_texture(ally)
-			icon.custom_minimum_size = Vector2(16, 16)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			if not is_alive:
-				icon.modulate = Color(0.5, 0.5, 0.5, 0.6)
-			hbox.add_child(icon)
-
-			var lbl := Label.new()
-			if not is_alive:
-				lbl.text = "%s 💀" % ally.name
-				lbl.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35))
-			else:
-				lbl.text = ally.name
-				lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if is_selected else Color(0.85, 0.92, 1.0))
-			lbl.add_theme_font_size_override("font_size", 7)
-			hbox.add_child(lbl)
-		else:
-			slot_pnl.modulate = Color.WHITE
-			slot_style.bg_color = Color(0.06, 0.08, 0.11, 0.6)
-			slot_style.border_color = Color(0.18, 0.24, 0.32, 0.5)
-			slot_style.set_border_width_all(1)
-
-			var lbl := Label.new()
-			lbl.text = "+ Slot %d" % (i + 1)
-			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			lbl.add_theme_font_size_override("font_size", 7)
-			lbl.add_theme_color_override("font_color", Color(0.4, 0.48, 0.58))
-			slot_pnl.add_child(lbl)
-
-		slot_pnl.add_theme_stylebox_override("panel", slot_style)
-
-
-func _on_party_slot_clicked(slot_idx: int) -> void:
-	if slot_idx >= sim_allies.size():
-		return
-
-	var ally: Combatant = sim_allies[slot_idx]
-	if selected_party_hero == ally:
-		selected_party_hero = null
-	else:
-		selected_party_hero = ally
-		selected_combatant = ally
-
-	_update_party_select_box()
-	_update_timeline_tracks_display()
-	_update_combined_block_display(combined_selected_block)
-	_update_selected_unit_panel()
-	_update_tactical_forecast_panel()
-	_update_roster_card_highlights()
-	_update_unit_token_highlights()
-
-
-func _on_party_all_clicked() -> void:
-	selected_party_hero = null
-	_update_party_select_box()
-	_update_combined_block_display(combined_selected_block)
+	tactical_forecast.update_forecast(selected_combatant, target, sim_grid)
 
 
 func _update_timeline_tracks_display() -> void:
 	if timeline_dock == null:
 		return
-
-	_update_party_select_box()
 
 	var active_playhead: int = replay_block if combat_phase == CombatPhase.REPLAY else current_sim_block
 	var is_enemy_selected: bool = selected_combatant != null and not sim_allies.has(selected_combatant)
@@ -2467,9 +1424,9 @@ func _spawn_goblin_reinforcements() -> void:
 			token.position = Vector2(coord.x * TILE_SIZE, coord.y * TILE_SIZE)
 			var tw := create_tween()
 			tw.tween_property(token, "modulate:a", 1.0, 0.35)
-		if roster_cards.has(c):
+		if roster_panel and roster_panel.roster_cards.has(c):
 			@warning_ignore("unsafe_cast")
-			var card := roster_cards[c] as Control
+			var card := roster_panel.roster_cards[c] as Control
 			if is_instance_valid(card):
 				card.visible = true
 
@@ -2527,19 +1484,15 @@ func _start_round_2() -> void:
 
 	# Prune any defeated or withdrawn enemies from roster cards for Round 2
 	for enemy in [unit_brawler, unit_scout]:
-		if roster_cards.has(enemy):
-			@warning_ignore("unsafe_cast")
-			var old_c := roster_cards[enemy] as Control
-			roster_cards.erase(enemy)
-			if is_instance_valid(old_c):
-				old_c.queue_free()
+		if roster_panel:
+			roster_panel.prune_enemy(enemy)
 
 	for enemy in [unit_skirmisher, unit_berserker, unit_archer, unit_shaman]:
-		if not roster_cards.has(enemy):
+		if roster_panel and not roster_panel.roster_cards.has(enemy):
 			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
-		else:
+		elif roster_panel and roster_panel.roster_cards.has(enemy):
 			@warning_ignore("unsafe_cast")
-			var card := roster_cards[enemy] as Control
+			var card := roster_panel.roster_cards[enemy] as Control
 			if is_instance_valid(card):
 				card.visible = true
 
@@ -2619,7 +1572,6 @@ func _start_round_2() -> void:
 	viewed_timeline_round = 2
 	_update_round_traversal_ui()
 
-	_update_party_select_box()
 	_select_combatant(unit_warrior)
 	_update_timeline_tracks_display()
 	_update_combined_block_display(1)
@@ -2670,20 +1622,16 @@ func _start_round_3() -> void:
 
 	# Prune defeated hostiles (Skirmisher, Berserker, Brawler, Scout) from roster cards
 	for enemy in [unit_skirmisher, unit_berserker, unit_brawler, unit_scout]:
-		if roster_cards.has(enemy):
-			@warning_ignore("unsafe_cast")
-			var old_card := roster_cards[enemy] as Control
-			roster_cards.erase(enemy)
-			if is_instance_valid(old_card):
-				old_card.queue_free()
+		if roster_panel:
+			roster_panel.prune_enemy(enemy)
 
 	# Ensure surviving hostiles have roster cards
 	for enemy in [unit_shaman, unit_archer]:
-		if not roster_cards.has(enemy):
+		if roster_panel and not roster_panel.roster_cards.has(enemy):
 			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
-		else:
+		elif roster_panel and roster_panel.roster_cards.has(enemy):
 			@warning_ignore("unsafe_cast")
-			var card := roster_cards[enemy] as Control
+			var card := roster_panel.roster_cards[enemy] as Control
 			if is_instance_valid(card):
 				card.visible = true
 
@@ -2751,7 +1699,6 @@ func _start_round_3() -> void:
 	viewed_timeline_round = 3
 	_update_round_traversal_ui()
 
-	_update_party_select_box()
 	_select_combatant(unit_warrior)
 	_update_timeline_tracks_display()
 	_update_combined_block_display(1)
