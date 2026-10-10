@@ -125,15 +125,13 @@ enum CombatPhase {
 
 # Interactive UI References
 var ui_canvas: CanvasLayer
-var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
-var unit_token_nodes: Dictionary = {} # Combatant -> Control
+var grid_view: CombatGridView
+var unit_token_nodes: Dictionary:
+	get:
+		return grid_view.unit_token_nodes if grid_view else {}
+var action_log_dock: ActionLogDockUI
 var roster_panel: RosterPanelUI
 var log_rich_text: RichTextLabel
-var active_cell_dock: PanelContainer
-var log_step_badge: Label
-var btn_log_prev: Button
-var btn_log_next: Button
-var btn_expand_log: Button
 var log_modal: CombatLogModal
 var all_action_log_entries: Array[ActionLogEntry] = []
 var active_log_entry_index: int = -1
@@ -201,11 +199,7 @@ var btn_prev_round: Button
 var btn_next_round_arrow: Button
 var ruler_round_badge: Label
 
-# Combat Grid Unit Hover Card (Replaces persistent overlapping labels)
-var grid_hover_tooltip: PanelContainer
-var hover_name_lbl: Label
-var hover_hp_lbl: Label
-var hover_status_lbl: Label
+# Combat Grid Unit Hover Card (Encapsulated in CombatGridView)
 
 func _ready() -> void:
 	print("\n=======================================================")
@@ -269,104 +263,26 @@ func _setup_interactive_ui() -> void:
 	roster_panel = RosterPanelUI.new()
 	top_hbox.add_child(roster_panel.party_panel)
 
-	# Top-Center: Single-Action Resolution Log Dock with Navigation & Expand Button
-	var log_panel := PanelContainer.new()
-	log_panel.custom_minimum_size = Vector2(430, 84)
-	log_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var log_style := StyleBoxFlat.new()
-	log_style.bg_color = Color(0.06, 0.08, 0.12, 0.95)
-	log_style.border_color = Color(0.25, 0.32, 0.44, 0.8)
-	log_style.set_border_width_all(1)
-	log_style.set_corner_radius_all(6)
-	log_style.content_margin_left = 6
-	log_style.content_margin_right = 6
-	log_style.content_margin_top = 4
-	log_style.content_margin_bottom = 4
-	log_panel.add_theme_stylebox_override("panel", log_style)
-	top_hbox.add_child(log_panel)
-
-	var log_vbox := VBoxContainer.new()
-	log_vbox.add_theme_constant_override("separation", 2)
-	log_panel.add_child(log_vbox)
-
-	var log_hdr_hbox := HBoxContainer.new()
-	log_hdr_hbox.add_theme_constant_override("separation", 6)
-	log_vbox.add_child(log_hdr_hbox)
-
-	var log_title := Label.new()
-	log_title.text = "📜 RESOLUTION LOG"
-	log_title.add_theme_font_size_override("font_size", 10)
-	log_title.add_theme_color_override("font_color", Color(0.96, 0.82, 0.35))
-	log_hdr_hbox.add_child(log_title)
-
-	log_step_badge = Label.new()
-	log_step_badge.text = "[Awaiting Action]"
-	log_step_badge.add_theme_font_size_override("font_size", 8)
-	log_step_badge.add_theme_color_override("font_color", Color(0.55, 0.75, 0.95))
-	log_hdr_hbox.add_child(log_step_badge)
-
-	btn_log_prev = Button.new()
-	btn_log_prev.text = "◀"
-	btn_log_prev.custom_minimum_size = Vector2(20, 16)
-	btn_log_prev.add_theme_font_size_override("font_size", 8)
-	btn_log_prev.tooltip_text = "Previous Action Cell"
-	btn_log_prev.pressed.connect(_on_log_prev_pressed)
-	log_hdr_hbox.add_child(btn_log_prev)
-
-	btn_log_next = Button.new()
-	btn_log_next.text = "▶"
-	btn_log_next.custom_minimum_size = Vector2(20, 16)
-	btn_log_next.add_theme_font_size_override("font_size", 8)
-	btn_log_next.tooltip_text = "Next Action Cell"
-	btn_log_next.pressed.connect(_on_log_next_pressed)
-	log_hdr_hbox.add_child(btn_log_next)
-
-	log_hdr_hbox.add_spacer(false)
-
-	btn_expand_log = Button.new()
-	btn_expand_log.text = "⛶ EXPAND"
-	btn_expand_log.custom_minimum_size = Vector2(66, 18)
-	btn_expand_log.add_theme_font_size_override("font_size", 8)
-	var exp_btn_style := StyleBoxFlat.new()
-	exp_btn_style.bg_color = Color(0.16, 0.22, 0.32, 0.9)
-	exp_btn_style.border_color = Color(0.38, 0.6, 0.9, 0.8)
-	exp_btn_style.set_border_width_all(1)
-	exp_btn_style.set_corner_radius_all(3)
-	exp_btn_style.content_margin_left = 4
-	exp_btn_style.content_margin_right = 4
-	btn_expand_log.add_theme_stylebox_override("normal", exp_btn_style)
-	btn_expand_log.tooltip_text = "Expand Full Chronological Action Log Modal (Shortcut: L)"
-	btn_expand_log.pressed.connect(func() -> void: _toggle_log_modal(true))
-	log_hdr_hbox.add_child(btn_expand_log)
-
-	# Active single action cell dock
-	active_cell_dock = PanelContainer.new()
-	active_cell_dock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	active_cell_dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var dock_style := StyleBoxFlat.new()
-	dock_style.bg_color = Color(0.04, 0.06, 0.09, 0.7)
-	dock_style.border_color = Color(0.18, 0.24, 0.34, 0.5)
-	dock_style.set_border_width_all(1)
-	dock_style.set_corner_radius_all(4)
-	dock_style.content_margin_left = 4
-	dock_style.content_margin_right = 4
-	dock_style.content_margin_top = 2
-	dock_style.content_margin_bottom = 2
-	active_cell_dock.add_theme_stylebox_override("panel", dock_style)
-	log_vbox.add_child(active_cell_dock)
+	# Top-Center: Single-Action Resolution Log Dock (Extracted Component: ActionLogDockUI)
+	action_log_dock = ActionLogDockUI.new()
+	top_hbox.add_child(action_log_dock)
+	action_log_dock.prev_pressed.connect(_on_log_prev_pressed)
+	action_log_dock.next_pressed.connect(_on_log_next_pressed)
+	action_log_dock.expand_requested.connect(func() -> void: _toggle_log_modal(true))
+	action_log_dock.entry_clicked.connect(_on_log_modal_cell_clicked)
 
 	# Maintain hidden RichTextLabel for headless test / logging compatibility
 	log_rich_text = RichTextLabel.new()
 	log_rich_text.visible = false
-	log_panel.add_child(log_rich_text)
+	action_log_dock.add_child(log_rich_text)
 
 	# Top-Right: Enemy Hostiles Status Panel (Active Roster Grid)
 	top_hbox.add_child(roster_panel.enemy_panel)
 
 	roster_panel.combatant_selected.connect(_select_combatant)
 	roster_panel.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void:
-		if unit_token_nodes.has(c):
-			_show_unit_hover_card(c, unit_token_nodes[c])
+		if grid_view and grid_view.unit_token_nodes.has(c):
+			_show_unit_hover_card(c, grid_view.unit_token_nodes[c])
 	)
 	roster_panel.combatant_unhovered.connect(_hide_unit_hover_card)
 
@@ -382,104 +298,15 @@ func _setup_interactive_ui() -> void:
 	unit_inspector = UnitInspectorUI.new()
 	center_hbox.add_child(unit_inspector)
 
-	# 2. Center Column: Prominent Combat Grid (54px Tiles)
-	var grid_vbox := VBoxContainer.new()
-	grid_vbox.custom_minimum_size = Vector2(496, 480)
-	grid_vbox.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	grid_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	grid_vbox.add_theme_constant_override("separation", 4)
-	center_hbox.add_child(grid_vbox)
-
-	var grid_header := Label.new()
-	grid_header.text = "9x9 COMBAT GRID"
-	grid_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	grid_header.add_theme_font_size_override("font_size", 11)
-	grid_header.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	grid_vbox.add_child(grid_header)
-
-	var grid_frame := PanelContainer.new()
-	grid_frame.custom_minimum_size = Vector2(490, 490)
-	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = Color(0.05, 0.07, 0.1, 1.0)
-	frame_style.border_color = Color(0.22, 0.32, 0.46, 1.0)
-	frame_style.set_border_width_all(1)
-	frame_style.set_corner_radius_all(6)
-	frame_style.content_margin_left = 2
-	frame_style.content_margin_right = 2
-	frame_style.content_margin_top = 2
-	frame_style.content_margin_bottom = 2
-	grid_frame.add_theme_stylebox_override("panel", frame_style)
-	grid_vbox.add_child(grid_frame)
-
-	var grid_anchor := Control.new()
-	grid_anchor.custom_minimum_size = Vector2(TILE_SIZE * GRID_SIZE, TILE_SIZE * GRID_SIZE)
-	grid_frame.add_child(grid_anchor)
-
-	var grid_container := GridContainer.new()
-	grid_container.columns = GRID_SIZE
-	grid_container.add_theme_constant_override("h_separation", 0)
-	grid_container.add_theme_constant_override("v_separation", 0)
-	grid_anchor.add_child(grid_container)
-
-	grid_tile_nodes.clear()
-	for y: int in range(GRID_SIZE):
-		for x: int in range(GRID_SIZE):
-			var coord := Vector2i(x, y)
-			var tile_rect := TextureRect.new()
-			tile_rect.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
-			tile_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			tile_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-
-			if coord == Vector2i(4, 4):
-				tile_rect.texture = tex_center
-			elif coord == Vector2i(8, 4):
-				tile_rect.texture = tex_exit
-			else:
-				tile_rect.texture = tex_floor
-
-			grid_container.add_child(tile_rect)
-			grid_tile_nodes[coord] = tile_rect
-
-	var unit_overlay := Control.new()
-	unit_overlay.name = "UnitOverlay"
-	unit_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	grid_anchor.add_child(unit_overlay)
-
-	# Floating Unit Inspector / Hover Tooltip (replacing overlapping persistent text labels)
-	grid_hover_tooltip = PanelContainer.new()
-	grid_hover_tooltip.name = "GridHoverTooltip"
-	grid_hover_tooltip.visible = false
-	grid_hover_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	grid_hover_tooltip.custom_minimum_size = Vector2(130, 46)
-	var hov_style := StyleBoxFlat.new()
-	hov_style.bg_color = Color(0.06, 0.08, 0.12, 0.96)
-	hov_style.border_color = Color(0.35, 0.55, 0.85, 0.9)
-	hov_style.set_border_width_all(1)
-	hov_style.set_corner_radius_all(4)
-	hov_style.content_margin_left = 6
-	hov_style.content_margin_right = 6
-	hov_style.content_margin_top = 4
-	hov_style.content_margin_bottom = 4
-	grid_hover_tooltip.add_theme_stylebox_override("panel", hov_style)
-	grid_anchor.add_child(grid_hover_tooltip)
-
-	var hov_vbox := VBoxContainer.new()
-	hov_vbox.add_theme_constant_override("separation", 2)
-	grid_hover_tooltip.add_child(hov_vbox)
-
-	hover_name_lbl = Label.new()
-	hover_name_lbl.add_theme_font_size_override("font_size", 9)
-	hov_vbox.add_child(hover_name_lbl)
-
-	hover_hp_lbl = Label.new()
-	hover_hp_lbl.add_theme_font_size_override("font_size", 8)
-	hover_hp_lbl.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
-	hov_vbox.add_child(hover_hp_lbl)
-
-	hover_status_lbl = Label.new()
-	hover_status_lbl.add_theme_font_size_override("font_size", 7)
-	hover_status_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.85))
-	hov_vbox.add_child(hover_status_lbl)
+	# 2. Center Column: Prominent Combat Grid (54px Tiles) (Extracted Component: CombatGridView)
+	grid_view = CombatGridView.new()
+	center_hbox.add_child(grid_view)
+	grid_view.setup_grid_tiles(tex_floor, tex_exit, tex_center)
+	grid_view.combatant_clicked.connect(_select_combatant)
+	grid_view.combatant_hovered.connect(func(c: Combatant, token: Control) -> void:
+		_show_unit_hover_card(c, token)
+	)
+	grid_view.combatant_unhovered.connect(_hide_unit_hover_card)
 
 	# 3. Right Popup Area: Tactical Forecast & Arena Intel (Extracted: TacticalForecastUI)
 	tactical_forecast = TacticalForecastUI.new()
@@ -569,38 +396,6 @@ func _setup_interactive_ui() -> void:
 	add_child(auto_play_timer)
 
 
-func _create_mini_action_card(act: Dictionary) -> PanelContainer:
-	var act_card := PanelContainer.new()
-	var act_style := StyleBoxFlat.new()
-	act_style.bg_color = Color(0.11, 0.14, 0.19, 0.7)
-	act_style.border_color = Color(0.22, 0.3, 0.42, 0.6)
-	act_style.set_border_width_all(1)
-	act_style.set_corner_radius_all(4)
-	act_style.content_margin_left = 6
-	act_style.content_margin_right = 6
-	act_style.content_margin_top = 2
-	act_style.content_margin_bottom = 2
-	act_card.add_theme_stylebox_override("panel", act_style)
-
-	var act_hbox := HBoxContainer.new()
-	act_card.add_child(act_hbox)
-
-	var act_name_lbl := Label.new()
-	act_name_lbl.text = str(act["name"])
-	var act_col: Color = act.get("color", Color.WHITE)
-	act_name_lbl.add_theme_color_override("font_color", act_col)
-	act_hbox.add_child(act_name_lbl)
-
-	act_hbox.add_spacer(false)
-
-	var act_desc_lbl := Label.new()
-	act_desc_lbl.text = str(act["desc"])
-	act_desc_lbl.add_theme_font_size_override("font_size", 8)
-	act_desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
-	act_hbox.add_child(act_desc_lbl)
-
-	return act_card
-
 # ==============================================================================
 # SECTION 2: SIMULATION SETUP WITH PRE-PLANNED COMMANDS & RECORDED ARCHIVE
 # ==============================================================================
@@ -629,11 +424,8 @@ func _init_interactive_simulation() -> void:
 	status_label.text = "Round 1: Set party actions, then Auto-Resolve."
 
 	# Clear previous tokens
-	var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
-	if overlay:
-		for child in overlay.get_children():
-			child.queue_free()
-	unit_token_nodes.clear()
+	if grid_view:
+		grid_view.clear_tokens()
 
 	# Clear roster cards in both party and enemy containers
 	if roster_panel:
@@ -785,68 +577,16 @@ func _init_interactive_simulation() -> void:
 
 
 func _create_unit_token(combatant: Combatant, texture: Texture2D) -> void:
-	var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
-	if not overlay:
+	if not grid_view or not sim_grid:
 		return
-
-	var token_ctrl := Control.new()
-	token_ctrl.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
-	token_ctrl.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-
-	var icon := TextureRect.new()
-	icon.texture = texture
-	icon.custom_minimum_size = Vector2(TILE_SIZE - 6, TILE_SIZE - 6)
-	icon.position = Vector2(3, 3)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	token_ctrl.add_child(icon)
-
-	var sel_border := ReferenceRect.new()
-	sel_border.name = "SelectionBorder"
-	sel_border.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
-	sel_border.border_color = Color(1.0, 0.85, 0.25, 0.95)
-	sel_border.border_width = 2.0
-	sel_border.editor_only = false
-	sel_border.visible = false
-	sel_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	token_ctrl.add_child(sel_border)
-
-	token_ctrl.gui_input.connect(func(event: InputEvent) -> void:
-		var mouse_event := event as InputEventMouseButton
-		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-			_select_combatant(combatant)
-	)
-
-	token_ctrl.mouse_entered.connect(func() -> void:
-		_show_unit_hover_card(combatant, token_ctrl)
-	)
-	token_ctrl.mouse_exited.connect(func() -> void:
-		_hide_unit_hover_card()
-	)
-
-	overlay.add_child(token_ctrl)
-	unit_token_nodes[combatant] = token_ctrl
-
 	var pos: Vector2i = sim_grid.get_position(combatant)
-	if pos == Vector2i(-1, -1) or not combatant.is_alive() or combatant.is_withdrawn:
-		token_ctrl.visible = false
-		token_ctrl.modulate.a = 0.0
-		token_ctrl.position = Vector2(0, 0)
-	else:
-		token_ctrl.visible = true
-		token_ctrl.modulate.a = 1.0
-		token_ctrl.position = Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
+	grid_view.create_unit_token(combatant, texture, pos)
 
 
 func _show_unit_hover_card(c: Combatant, token: Control) -> void:
-	if grid_hover_tooltip == null or not is_instance_valid(c):
+	if not grid_view or not is_instance_valid(c):
 		return
 	var is_ally: bool = sim_allies.has(c)
-	var col: Color = Color(0.4, 0.75, 1.0) if is_ally else Color(1.0, 0.45, 0.45)
-	hover_name_lbl.text = c.name
-	hover_name_lbl.add_theme_color_override("font_color", col)
-
 	var cur_snap: BlockSnapshot = null
 	var snaps: Array = round_snapshots.get(viewed_timeline_round, snapshots)
 	var cur_b: int = replay_block if combat_phase == CombatPhase.REPLAY else current_sim_block
@@ -854,44 +594,13 @@ func _show_unit_hover_card(c: Combatant, token: Control) -> void:
 		@warning_ignore("unsafe_cast")
 		cur_snap = snaps[cur_b] as BlockSnapshot
 
-	var cur_hp: int = cur_snap.hps.get(c, c.hp) if cur_snap != null else c.hp
-	var max_hp: int = cur_snap.max_hps.get(c, c.max_hp) if cur_snap != null else c.max_hp
-	var is_withdrawn: bool = cur_snap.is_withdrawn.get(c, c.is_withdrawn) if cur_snap != null else c.is_withdrawn
-	var is_alive: bool = cur_hp > 0
-	var cur_stance: CombatTypes.StanceType = cur_snap.stances.get(c, c.current_stance) if cur_snap != null else c.current_stance
-	var pos: Vector2i = cur_snap.positions.get(c, sim_grid.get_position(c)) if cur_snap != null else sim_grid.get_position(c)
-
-	if not is_alive:
-		hover_hp_lbl.text = "HP: 0/%d [DEFEATED]" % max_hp
-		hover_status_lbl.text = "Status: Fallen in battle"
-	elif is_withdrawn:
-		hover_hp_lbl.text = "HP: %d/%d [ESCAPED]" % [cur_hp, max_hp]
-		hover_status_lbl.text = "Status: Withdrawn via Exit Tile"
-	else:
-		hover_hp_lbl.text = "HP: %d/%d | Spd: %d | Rng: %d" % [cur_hp, max_hp, c.speed, c.attack_range]
-		hover_status_lbl.text = "Stance: %s | Pos: %s" % [CombatTypes.stance_to_string(cur_stance), str(pos)]
-
-	# Position adjacent to token within grid boundaries
-	var target_pos: Vector2
-	if token != null and token.visible and pos != Vector2i(-1, -1):
-		target_pos = token.position + Vector2(TILE_SIZE + 4, -4)
-	elif pos != Vector2i(-1, -1):
-		target_pos = Vector2(pos.x * TILE_SIZE + TILE_SIZE + 4, pos.y * TILE_SIZE - 4)
-	else:
-		target_pos = Vector2(8, 8)
-
-	if target_pos.x + 140 > GRID_SIZE * TILE_SIZE:
-		target_pos.x = maxf(0.0, target_pos.x - 146)
-	if target_pos.y + 55 > GRID_SIZE * TILE_SIZE:
-		target_pos.y = maxf(0.0, target_pos.y - 45)
-	grid_hover_tooltip.position = target_pos
-	grid_hover_tooltip.z_index = 50
-	grid_hover_tooltip.visible = true
+	var pos: Vector2i = sim_grid.get_position(c) if sim_grid else Vector2i(-1, -1)
+	grid_view.show_hover_card(c, token, cur_snap, is_ally, pos)
 
 
 func _hide_unit_hover_card() -> void:
-	if grid_hover_tooltip != null:
-		grid_hover_tooltip.visible = false
+	if grid_view != null:
+		grid_view.hide_hover_card()
 
 
 func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
@@ -937,26 +646,8 @@ func _capture_snapshot(block_idx: int) -> void:
 
 func _restore_snapshot(snap: BlockSnapshot) -> void:
 	reinforcements_spawned = snap.reinforcements_spawned
-	for c: Combatant in unit_token_nodes:
-		@warning_ignore("unsafe_cast")
-		var token := unit_token_nodes[c] as Control
-		if snap.positions.has(c):
-			var pos: Vector2i = snap.positions[c]
-			var active: bool = snap.is_active.get(c, false)
-			var withdrawn: bool = snap.is_withdrawn.get(c, false)
-			var hp_val: int = snap.hps.get(c, c.hp)
-			var is_alive: bool = hp_val > 0
-
-			# Requirement 7: Remove dead or withdrawn units from board completely to eliminate token overlap
-			if pos == Vector2i(-1, -1) or not is_alive or withdrawn or not active:
-				token.visible = false
-				token.modulate.a = 0.0
-			else:
-				token.visible = true
-				token.modulate = Color.WHITE
-				var target_px := Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
-				var tw := create_tween()
-				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if grid_view:
+		grid_view.restore_token_states(snap)
 
 	_update_all_roster_cards(snap)
 	_update_selected_unit_panel()
@@ -990,8 +681,8 @@ func _select_combatant(combatant: Combatant) -> void:
 	_update_combined_block_display(combined_selected_block)
 
 	# Ensure hover card displays for selected unit as well
-	if unit_token_nodes.has(combatant):
-		var tok := unit_token_nodes[combatant] as Control
+	if grid_view and grid_view.unit_token_nodes.has(combatant):
+		var tok := grid_view.unit_token_nodes[combatant] as Control
 		if is_instance_valid(tok) and tok.visible:
 			_show_unit_hover_card(combatant, tok)
 
@@ -1002,12 +693,8 @@ func _update_roster_card_highlights() -> void:
 
 
 func _update_unit_token_highlights() -> void:
-	for c: Combatant in unit_token_nodes:
-		@warning_ignore("unsafe_cast")
-		var token := unit_token_nodes[c] as Control
-		var border := token.find_child("SelectionBorder", true, false) as ReferenceRect
-		if border:
-			border.visible = (c == selected_combatant)
+	if grid_view:
+		grid_view.update_selection_highlight(selected_combatant)
 
 
 func _update_selected_unit_panel() -> void:
@@ -1837,40 +1524,9 @@ func _find_combatant_by_name(p_name: String) -> Combatant:
 	return null
 
 
-func _format_action_cell(entry: ActionLogEntry, is_modal: bool = false) -> PanelContainer:
-	return CombatLogModal.format_action_cell(entry, is_modal, func(e: ActionLogEntry) -> void:
-		_on_log_modal_cell_clicked(e)
-	)
-
-
-
 func _update_active_log_cell() -> void:
-	if not active_cell_dock:
-		return
-	for child in active_cell_dock.get_children():
-		child.queue_free()
-
-	if all_action_log_entries.is_empty() or active_log_entry_index < 0:
-		var empty_lbl := Label.new()
-		empty_lbl.text = "Awaiting Action Resolution... Click Step [F6] or Play [Space] to begin."
-		empty_lbl.add_theme_font_size_override("font_size", 9)
-		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-		active_cell_dock.add_child(empty_lbl)
-		if log_step_badge:
-			log_step_badge.text = "[Awaiting Action]"
-		if btn_log_prev:
-			btn_log_prev.disabled = true
-		if btn_log_next:
-			btn_log_next.disabled = true
-	else:
-		var entry := all_action_log_entries[active_log_entry_index]
-		active_cell_dock.add_child(_format_action_cell(entry, false))
-		if log_step_badge:
-			log_step_badge.text = "[%s] (%d/%d)" % [entry.ref_tag, active_log_entry_index + 1, all_action_log_entries.size()]
-		if btn_log_prev:
-			btn_log_prev.disabled = (active_log_entry_index <= 0)
-		if btn_log_next:
-			btn_log_next.disabled = (active_log_entry_index >= all_action_log_entries.size() - 1)
+	if action_log_dock:
+		action_log_dock.update_active_cell(all_action_log_entries, active_log_entry_index)
 
 
 func _on_log_prev_pressed() -> void:
@@ -1926,122 +1582,47 @@ func _on_log_modal_cell_clicked(entry: ActionLogEntry) -> void:
 			_update_combined_block_display(replay_block)
 
 
-func _spawn_floating_combat_text(pos: Vector2, text: String, color: Color) -> void:
-	var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
-	if not overlay:
-		return
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 10)
-	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	lbl.add_theme_constant_override("shadow_offset_x", 1)
-	lbl.add_theme_constant_override("shadow_offset_y", 1)
-	lbl.position = pos + Vector2(8, -6)
-	lbl.scale = Vector2(1.2, 1.2)
-	overlay.add_child(lbl)
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(lbl, "position", pos + Vector2(8, -28), 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(lbl, "scale", Vector2(1.0, 1.0), 0.25)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.55).set_delay(0.2)
-	tw.chain().tween_callback(lbl.queue_free)
-
-
-func _animate_attacker_lunge(actor_token: Control, target_pos: Vector2) -> void:
-	if not is_instance_valid(actor_token):
-		return
-	var orig_pos: Vector2 = actor_token.position
-	var diff := target_pos - orig_pos
-	if diff.length() < 0.1:
-		return
-	var dir := diff.normalized() * 10.0
-	var tw := create_tween()
-	tw.tween_property(actor_token, "position", orig_pos + dir, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(actor_token, "position", orig_pos, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-
-
-func _animate_token_impact(target_token: Control, is_damage: bool, is_mitigated: bool) -> void:
-	if not is_instance_valid(target_token):
-		return
-	var base_pos: Vector2 = target_token.position
-	var shake_tw := create_tween()
-	shake_tw.tween_property(target_token, "position", base_pos + Vector2(4, 0), 0.03)
-	shake_tw.tween_property(target_token, "position", base_pos + Vector2(-4, 0), 0.03)
-	shake_tw.tween_property(target_token, "position", base_pos + Vector2(2, 0), 0.03)
-	shake_tw.tween_property(target_token, "position", base_pos, 0.04)
-
-	var flash_col: Color
-	if is_mitigated:
-		flash_col = Color(0.4, 0.8, 1.8)
-	elif is_damage:
-		flash_col = Color(2.0, 0.35, 0.35)
-	else:
-		flash_col = Color(1.8, 1.6, 0.4)
-
-	var flash_tw := create_tween()
-	target_token.modulate = flash_col
-	flash_tw.tween_property(target_token, "modulate", Color.WHITE, 0.25)
-
-
-func _animate_token_pulse(token: Control, pulse_col: Color) -> void:
-	if not is_instance_valid(token):
-		return
-	var tw := create_tween()
-	token.modulate = pulse_col
-	tw.tween_property(token, "modulate", Color.WHITE, 0.3)
-
-
 func _trigger_action_impact_fx(entry: ActionLogEntry) -> void:
+	if not grid_view:
+		return
 	var actor := _find_combatant_by_name(entry.actor_name)
 	var target := _find_combatant_by_name(entry.target_name)
-	var actor_token: Control = null
-	if actor != null and unit_token_nodes.has(actor):
-		@warning_ignore("unsafe_cast")
-		actor_token = unit_token_nodes[actor] as Control
-	var target_token: Control = null
-	if target != null and unit_token_nodes.has(target):
-		@warning_ignore("unsafe_cast")
-		target_token = unit_token_nodes[target] as Control
+	var actor_token: Control = grid_view.unit_token_nodes.get(actor) as Control if actor else null
+	var target_token: Control = grid_view.unit_token_nodes.get(target) as Control if target else null
 
 	match entry.category:
 		"ATTACK":
-			if actor_token != null and target_token != null:
-				_animate_attacker_lunge(actor_token, target_token.position)
-			if target_token != null:
+			if actor != null and target_token != null:
+				grid_view.animate_attacker_lunge(actor, target_token.position)
+			if target != null and target_token != null:
 				var is_mitigated: bool = ("MITIGAT" in entry.outcome_tag)
-				_animate_token_impact(target_token, true, is_mitigated)
+				grid_view.animate_token_impact(target, true, is_mitigated)
 				var txt := "-%d" % entry.value_num
 				if is_mitigated:
 					txt += " [MIT]"
-				_spawn_floating_combat_text(target_token.position, txt, Color(0.4, 0.85, 1.0) if is_mitigated else Color(1.0, 0.35, 0.35))
+				grid_view.spawn_floating_combat_text(target_token.position, txt, Color(0.4, 0.85, 1.0) if is_mitigated else Color(1.0, 0.35, 0.35))
 				if entry.outcome_tag == "DEFEATED":
-					_spawn_floating_combat_text(target_token.position + Vector2(0, -14), "💀 DEFEATED!", Color(1.0, 0.25, 0.25))
+					grid_view.spawn_floating_combat_text(target_token.position + Vector2(0, -14), "💀 DEFEATED!", Color(1.0, 0.25, 0.25))
 
 		"DEFEND":
-			if actor_token != null:
-				_animate_token_pulse(actor_token, Color(0.5, 0.8, 1.8))
-				_spawn_floating_combat_text(actor_token.position, "🛡 DEFEND [%d%%]" % entry.value_num, Color(0.4, 0.8, 1.0))
+			if actor != null and actor_token != null:
+				grid_view.animate_token_pulse(actor, Color(0.5, 0.8, 1.8))
+				grid_view.spawn_floating_combat_text(actor_token.position, "🛡 DEFEND [%d%%]" % entry.value_num, Color(0.4, 0.8, 1.0))
 
 		"BUFF":
-			if actor_token != null:
-				_animate_token_pulse(actor_token, Color(1.8, 1.5, 0.4))
-				_spawn_floating_combat_text(actor_token.position, "✦ +%d%% ATK" % entry.value_num, Color(1.0, 0.85, 0.25))
+			if actor != null and actor_token != null:
+				grid_view.animate_token_pulse(actor, Color(1.8, 1.5, 0.4))
+				grid_view.spawn_floating_combat_text(actor_token.position, "✦ +%d%% ATK" % entry.value_num, Color(1.0, 0.85, 0.25))
 
 		"MOVE":
-			if actor_token != null and entry.coord_to != Vector2i(-1, -1):
-				var target_px := Vector2(entry.coord_to.x * TILE_SIZE, entry.coord_to.y * TILE_SIZE)
-				var tw := create_tween()
-				tw.tween_property(actor_token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			if actor != null and entry.coord_to != Vector2i(-1, -1):
+				grid_view.animate_token_move(actor, entry.coord_to)
 
 		"EVENT":
 			if "WITHDRAWN" in entry.outcome_tag and actor_token != null:
-				_spawn_floating_combat_text(actor_token.position, "⚑ WITHDRAWN!", Color(0.35, 0.95, 0.55))
+				grid_view.spawn_floating_combat_text(actor_token.position, "⚑ WITHDRAWN!", Color(0.35, 0.95, 0.55))
 			elif "AMBUSH" in entry.outcome_tag:
-				var overlay: Control = ui_canvas.find_child("UnitOverlay", true, false) as Control
-				if overlay:
-					_spawn_floating_combat_text(Vector2(200, 180), "⚠️ AMBUSH SPAWN!", Color(1.0, 0.4, 0.4))
+				grid_view.spawn_floating_combat_text(Vector2(200, 180), "⚠️ AMBUSH SPAWN!", Color(1.0, 0.4, 0.4))
 
 
 func _on_step_prev_pressed() -> void:
