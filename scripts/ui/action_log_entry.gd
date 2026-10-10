@@ -22,3 +22,27 @@ var detail_text: String = ""
 var status_text: String = ""
 var coord_from: Vector2i = Vector2i(-1, -1)
 var coord_to: Vector2i = Vector2i(-1, -1)
+
+func _init(
+	p_round: int = 1,
+	p_block: int = 1,
+	p_category: String = "ATTACK",
+	p_actor: String = "",
+	p_target: String = "",
+	p_detail: String = "",
+	p_value: int = 0,
+	p_outcome: String = "HIT",
+	p_from: Vector2i = Vector2i(-1, -1),
+	p_to: Vector2i = Vector2i(-1, -1)
+) -> void:
+	round_num = p_round
+	block_num = p_block
+	category = p_category
+	actor_name = p_actor
+	target_name = p_target
+	detail_text = p_detail
+	value_num = p_value
+	outcome_tag = p_outcome
+	coord_from = p_from
+	coord_to = p_to
+	ref_tag = "R%d-B%02d" % [round_num, block_num]
