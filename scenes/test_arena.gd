@@ -1167,12 +1167,29 @@ func _create_mini_action_card(act: Dictionary) -> PanelContainer:
 # ------------------------------------------------------------------------------
 
 func _build_timeline_tracks_ui(parent: Control) -> void:
-	tracks_container = VBoxContainer.new()
-	tracks_container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	tracks_container.add_theme_constant_override("separation", 2)
-	parent.add_child(tracks_container)
+	var timeline_flank_hbox := HBoxContainer.new()
+	timeline_flank_hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	timeline_flank_hbox.add_theme_constant_override("separation", 4)
+	parent.add_child(timeline_flank_hbox)
 
-	# Row 1: Time Ruler Ticks (Starts at X=0, exactly aligned with action clips in Row 2)
+	# 1. Left Round Traversal Arrow [ ⇦ ] (Spans vertical height of BLK Button tray and Action Timeline)
+	btn_prev_round = Button.new()
+	btn_prev_round.text = "◀"
+	btn_prev_round.tooltip_text = "Previous Round Timeline"
+	btn_prev_round.custom_minimum_size = Vector2(22, 54)
+	btn_prev_round.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn_prev_round.add_theme_font_size_override("font_size", 12)
+	btn_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
+	timeline_flank_hbox.add_child(btn_prev_round)
+
+	# 2. Center Timeline Container: BLK Button tray on top, Action Timeline on bottom
+	tracks_container = VBoxContainer.new()
+	tracks_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tracks_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tracks_container.add_theme_constant_override("separation", 2)
+	timeline_flank_hbox.add_child(tracks_container)
+
+	# Row 1: BLK Button Tray (Time Ruler Ticks BLK 01 .. BLK 10)
 	tracks_ruler_row = HBoxContainer.new()
 	tracks_ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
 	tracks_container.add_child(tracks_ruler_row)
@@ -1215,37 +1232,7 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 		ruler_tick_nodes.append(tick_panel)
 		ruler_tick_labels.append(tick_lbl)
 
-	# Dynamic Round Traversal Arrows at End of Timeline Ruler
-	var rd_nav_box := HBoxContainer.new()
-	rd_nav_box.add_theme_constant_override("separation", 2)
-	tracks_ruler_row.add_child(rd_nav_box)
-
-	btn_prev_round = Button.new()
-	btn_prev_round.text = "◀"
-	btn_prev_round.tooltip_text = "Previous Round Timeline"
-	btn_prev_round.custom_minimum_size = Vector2(20, 16)
-	btn_prev_round.add_theme_font_size_override("font_size", 8)
-	btn_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
-	rd_nav_box.add_child(btn_prev_round)
-
-	ruler_round_badge = Label.new()
-	ruler_round_badge.text = "R1"
-	ruler_round_badge.custom_minimum_size = Vector2(24, 16)
-	ruler_round_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ruler_round_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	ruler_round_badge.add_theme_font_size_override("font_size", 8)
-	ruler_round_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
-	rd_nav_box.add_child(ruler_round_badge)
-
-	btn_next_round_arrow = Button.new()
-	btn_next_round_arrow.text = "▶"
-	btn_next_round_arrow.tooltip_text = "Next Round Timeline"
-	btn_next_round_arrow.custom_minimum_size = Vector2(20, 16)
-	btn_next_round_arrow.add_theme_font_size_override("font_size", 8)
-	btn_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
-	rd_nav_box.add_child(btn_next_round_arrow)
-
-	# Row 2: Selected Hero's Continuous Action Track Row (Starts at X=0, exact 1:1 match)
+	# Row 2: Action Timeline (Selected Hero's Continuous Action Track Row)
 	single_track_row = HBoxContainer.new()
 	single_track_row.add_theme_constant_override("separation", BLOCK_GAP)
 	tracks_container.add_child(single_track_row)
@@ -1254,6 +1241,16 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 	track_clips_hbox.name = "ClipsHBox"
 	track_clips_hbox.add_theme_constant_override("separation", BLOCK_GAP)
 	single_track_row.add_child(track_clips_hbox)
+
+	# 3. Right Round Traversal Arrow [ ⇨ ] (Spans vertical height of BLK Button tray and Action Timeline)
+	btn_next_round_arrow = Button.new()
+	btn_next_round_arrow.text = "▶"
+	btn_next_round_arrow.tooltip_text = "Next Round Timeline"
+	btn_next_round_arrow.custom_minimum_size = Vector2(22, 54)
+	btn_next_round_arrow.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn_next_round_arrow.add_theme_font_size_override("font_size", 12)
+	btn_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
+	timeline_flank_hbox.add_child(btn_next_round_arrow)
 
 	# Enemy Classified Banner (Shown in Planning Phase when an enemy is selected)
 	enemy_classified_banner = PanelContainer.new()
@@ -1526,8 +1523,8 @@ func _init_interactive_simulation() -> void:
 	#   Block 9-10: Counter-Attack Goblin Skirmisher [2b]
 	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(0, -1), 1), 1)
 	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_brawler, 25, 2, 0, sim_grid), 2)
-	sim_resolver.schedule_action(unit_warrior, TargetCommand.new(unit_warrior, unit_skirmisher, 1), 4)
-	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_skirmisher, 25, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_warrior, TargetCommand.new(unit_warrior, unit_berserker, 1), 4)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_berserker, 25, 2, 0, sim_grid), 5)
 	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.5, 2, 1), 7)
 	sim_resolver.schedule_action(unit_warrior, HoldStanceCommand.new(unit_warrior, 0), 9)
 
@@ -1555,23 +1552,30 @@ func _init_interactive_simulation() -> void:
 	sim_resolver.schedule_action(unit_scout, MoveCommand.new(unit_scout, sim_grid, Vector2i(1, 0), 1), 1)
 	sim_resolver.schedule_action(unit_scout, MoveCommand.new(unit_scout, sim_grid, Vector2i(1, 0), 2, 2), 2)
 
-	# Ambush Reinforcements (Scheduled for Blocks 4-10):
-	# Berserker (spawns (5, 5)):
+	# Ambush Reinforcements (Continuous actions through Block 10 without empty gaps):
+	# Berserker (spawns (4, 5)):
 	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_ranger, 1), 4)
 	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_ranger, 30, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 7)
+	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 15, 3, 0, sim_grid), 8)
 
-	# Archer (spawns (7, 5)):
+	# Archer (spawns (6, 5)):
 	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_ranger, 1), 4)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_ranger, 25, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_ranger, 20, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 7)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 12, 3, 0, sim_grid), 8)
 
-	# Shaman (spawns (6, 5)):
+	# Shaman (spawns (6, 4)):
 	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_ranger, 1), 4)
-	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_ranger, 25, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_ranger, 20, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_warrior, 1), 7)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_warrior, 10, 3, 0, sim_grid), 8)
 
-	# Skirmisher (spawns (6, 4)):
-	sim_resolver.schedule_action(unit_skirmisher, MoveCommand.new(unit_skirmisher, sim_grid, Vector2i(-1, 0), 1), 4)
-	sim_resolver.schedule_action(unit_skirmisher, TargetCommand.new(unit_skirmisher, unit_warrior, 1), 5)
-	sim_resolver.schedule_action(unit_skirmisher, AttackCommand.new(unit_skirmisher, unit_warrior, 12, 2, 0, sim_grid), 7)
+	# Skirmisher (spawns (5, 4)):
+	sim_resolver.schedule_action(unit_skirmisher, TargetCommand.new(unit_skirmisher, unit_warrior, 1), 4)
+	sim_resolver.schedule_action(unit_skirmisher, AttackCommand.new(unit_skirmisher, unit_warrior, 12, 3, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_skirmisher, DefendCommand.new(unit_skirmisher, 0.4, 2, 1), 8)
+	sim_resolver.schedule_action(unit_skirmisher, HoldStanceCommand.new(unit_skirmisher, 0), 10)
 
 	# 5. Clone All Scheduled Actions into Permanent Archive
 	recorded_actions.clear()
@@ -3135,15 +3139,15 @@ func _sync_visuals_after_block() -> void:
 func _spawn_goblin_reinforcements() -> void:
 	reinforcements_spawned = true
 	_append_log("\n[color=#ef4444][b]⚠️ AMBUSH! Scout's escape alerted the pack! 4 Goblin Reinforcements enter the arena![/b][/color]")
-	_append_log("[color=#f87171]  • Goblin Berserker (55 HP) deployed at (5, 5)[/color]")
-	_append_log("[color=#f87171]  • Goblin Skirmisher (40 HP) deployed at (6, 4)[/color]")
-	_append_log("[color=#f87171]  • Goblin Archer (35 HP) deployed at (7, 5)[/color]")
-	_append_log("[color=#f87171]  • Goblin Shaman (35 HP) deployed at (6, 5)[/color]")
+	_append_log("[color=#f87171]  • Goblin Berserker (55 HP) deployed at (4, 5)[/color]")
+	_append_log("[color=#f87171]  • Goblin Skirmisher (40 HP) deployed at (5, 4)[/color]")
+	_append_log("[color=#f87171]  • Goblin Shaman (35 HP) deployed at (6, 4)[/color]")
+	_append_log("[color=#f87171]  • Goblin Archer (35 HP) deployed at (6, 5)[/color]")
 
-	sim_grid.place_combatant(unit_berserker, Vector2i(5, 5))
-	sim_grid.place_combatant(unit_skirmisher, Vector2i(6, 4))
-	sim_grid.place_combatant(unit_archer, Vector2i(7, 5))
-	sim_grid.place_combatant(unit_shaman, Vector2i(6, 5))
+	sim_grid.place_combatant(unit_berserker, Vector2i(4, 5))
+	sim_grid.place_combatant(unit_skirmisher, Vector2i(5, 4))
+	sim_grid.place_combatant(unit_shaman, Vector2i(6, 4))
+	sim_grid.place_combatant(unit_archer, Vector2i(6, 5))
 
 	var new_goblins: Array[Combatant] = [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]
 	for c: Combatant in new_goblins:
@@ -3187,26 +3191,26 @@ func _start_round_2() -> void:
 	if btn_next_round:
 		btn_next_round.visible = false
 
-	# Ensure proper combatant baseline for Round 2
+	# Ensure proper combatant baseline for Round 2 (Exact final coordinates of Round 1: zero movement between rounds)
 	unit_warrior.hp = 73
 	unit_warrior.set_stance(CombatTypes.StanceType.NEUTRAL)
 	sim_grid.combatant_positions[unit_warrior] = Vector2i(4, 4)
 
-	unit_skirmisher.hp = 15
+	unit_skirmisher.hp = 40
 	unit_skirmisher.set_stance(CombatTypes.StanceType.NEUTRAL)
-	sim_grid.combatant_positions[unit_skirmisher] = Vector2i(4, 3)
+	sim_grid.combatant_positions[unit_skirmisher] = Vector2i(5, 4)
 
-	unit_berserker.hp = 55
+	unit_berserker.hp = 30
 	unit_berserker.set_stance(CombatTypes.StanceType.NEUTRAL)
-	sim_grid.combatant_positions[unit_berserker] = Vector2i(5, 4)
-
-	unit_archer.hp = 35
-	unit_archer.set_stance(CombatTypes.StanceType.NEUTRAL)
-	sim_grid.combatant_positions[unit_archer] = Vector2i(7, 5)
+	sim_grid.combatant_positions[unit_berserker] = Vector2i(4, 5)
 
 	unit_shaman.hp = 35
 	unit_shaman.set_stance(CombatTypes.StanceType.NEUTRAL)
-	sim_grid.combatant_positions[unit_shaman] = Vector2i(6, 5)
+	sim_grid.combatant_positions[unit_shaman] = Vector2i(6, 4)
+
+	unit_archer.hp = 35
+	unit_archer.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_archer] = Vector2i(6, 5)
 
 	unit_brawler.hp = 0
 	unit_scout.is_withdrawn = true
@@ -3254,41 +3258,44 @@ func _start_round_2() -> void:
 	_append_log("\n[color=#38bdf8][b]⚔⚔⚔ COMMENCING ROUND 2: WARRIOR'S LAST STAND ⚔⚔⚔[/b][/color]")
 	_append_log("[color=#93c5fd]Surviving hero Warrior holds center at (4, 4). Pre-planned Round 2 actions loaded.[/color]")
 
-	# Schedule Pre-Planned Commands for Round 2
+	# Schedule Pre-Planned Commands for Round 2:
 	# Warrior:
-	#   Block 1-2: Cleaving Strike on Skirmisher at (4, 3) (power 25) [2b] -> Skirmisher DEFEATED!
+	#   Block 1-2: Cleaving Strike on Skirmisher at (5, 4) (power 40) [2b] -> Skirmisher DEFEATED!
 	#   Block 3-4: Defend (50% mitigation) [2b]
-	#   Block 5-6: Heavy Strike on Berserker at (5, 4) (power 30) [2b] -> Berserker damaged!
-	#   Block 7: Move East to (5, 4) [1b]
-	#   Block 8-9: Strike on Shaman at (6, 5) (power 35) [2b] -> Shaman DEFEATED!
-	#   Block 10: Hold Stance [1b]
-	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_skirmisher, 25, 2, 0, sim_grid), 1)
+	#   Block 5-6: Heavy Strike on Berserker at (4, 5) (power 35) [2b] -> Berserker DEFEATED!
+	#   Block 7: Move East to (5, 4) [1b] (steps into vacated tile)
+	#   Block 8-9: Strike on Shaman at (6, 4) (power 20) [2b] -> Shaman damaged (15 HP remaining)!
+	#   Block 10: Shield Defend [1b]
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_skirmisher, 40, 2, 0, sim_grid), 1)
 	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.5, 2, 1), 3)
-	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_berserker, 30, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_berserker, 35, 2, 0, sim_grid), 5)
 	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(1, 0), 1), 7)
-	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_shaman, 35, 2, 0, sim_grid), 8)
-	sim_resolver.schedule_action(unit_warrior, HoldStanceCommand.new(unit_warrior, 0), 10)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_shaman, 20, 2, 0, sim_grid), 8)
+	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.5, 1, 1), 10)
 
-	# Goblin Skirmisher (15 HP at (4, 3)):
+	# Goblin Skirmisher (40 HP at (5, 4)):
 	sim_resolver.schedule_action(unit_skirmisher, TargetCommand.new(unit_skirmisher, unit_warrior, 1), 1)
 	sim_resolver.schedule_action(unit_skirmisher, AttackCommand.new(unit_skirmisher, unit_warrior, 10, 1, 0, sim_grid), 2)
 
-	# Goblin Berserker (55 HP at (5, 4)):
+	# Goblin Berserker (30 HP at (4, 5)):
+	# Defeated at Block 6 by Warrior's Heavy Strike; NO action active at Block 7!
 	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 1)
-	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 20, 2, 0, sim_grid), 2)
-	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 4)
-	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 20, 2, 0, sim_grid), 5)
+	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 18, 3, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 5)
 
-	# Goblin Archer (35 HP at (7, 5)):
+	# Goblin Archer (35 HP at (6, 5) - continuous actions without empty gaps):
 	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 1)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 2, 0, sim_grid), 2)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 15, 2, 0, sim_grid), 4)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 15, 2, 0, sim_grid), 6)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 3, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 5)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 3, 0, sim_grid), 6)
+	sim_resolver.schedule_action(unit_archer, DefendCommand.new(unit_archer, 0.4, 2, 1), 9)
 
-	# Goblin Shaman (35 HP at (6, 5)):
+	# Goblin Shaman (35 HP at (6, 4) - continuous actions without empty gaps):
 	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_warrior, 1), 1)
-	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_warrior, 10, 2, 0, sim_grid), 2)
-	sim_resolver.schedule_action(unit_shaman, DefendCommand.new(unit_shaman, 0.5, 2, 1), 4)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_warrior, 12, 3, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_warrior, 1), 5)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_warrior, 12, 3, 0, sim_grid), 6)
+	sim_resolver.schedule_action(unit_shaman, DefendCommand.new(unit_shaman, 0.5, 2, 1), 9)
 
 	# Record Round 2 actions
 	recorded_actions.clear()
@@ -3333,27 +3340,27 @@ func _start_round_3() -> void:
 	if btn_next_round:
 		btn_next_round.visible = false
 
-	# Setup Round 3 combatant baseline
-	unit_warrior.hp = 32
+	# Setup Round 3 combatant baseline (Exact final coordinates of Round 2: zero movement between rounds)
+	unit_warrior.hp = 35
 	unit_warrior.set_stance(CombatTypes.StanceType.NEUTRAL)
 	sim_grid.combatant_positions[unit_warrior] = Vector2i(5, 4)
 
-	unit_berserker.hp = 25
-	unit_berserker.set_stance(CombatTypes.StanceType.NEUTRAL)
-	sim_grid.combatant_positions[unit_berserker] = Vector2i(5, 5)
+	unit_shaman.hp = 15
+	unit_shaman.set_stance(CombatTypes.StanceType.NEUTRAL)
+	sim_grid.combatant_positions[unit_shaman] = Vector2i(6, 4)
 
 	unit_archer.hp = 35
 	unit_archer.set_stance(CombatTypes.StanceType.NEUTRAL)
-	sim_grid.combatant_positions[unit_archer] = Vector2i(7, 5)
+	sim_grid.combatant_positions[unit_archer] = Vector2i(6, 5)
 
-	unit_skirmisher.hp = 0
-	unit_shaman.hp = 0
-	unit_brawler.hp = 0
+	unit_berserker.hp = 0  # Defeated in Round 2
+	unit_skirmisher.hp = 0 # Defeated in Round 2
+	unit_brawler.hp = 0    # Defeated in Round 1
 	unit_scout.is_withdrawn = true
 	unit_ranger.hp = 0
 
-	# Prune defeated hostiles (Skirmisher, Shaman, Brawler, Scout) from roster cards
-	for enemy in [unit_skirmisher, unit_shaman, unit_brawler, unit_scout]:
+	# Prune defeated hostiles (Skirmisher, Berserker, Brawler, Scout) from roster cards
+	for enemy in [unit_skirmisher, unit_berserker, unit_brawler, unit_scout]:
 		if roster_cards.has(enemy):
 			@warning_ignore("unsafe_cast")
 			var old_card := roster_cards[enemy] as Control
@@ -3362,7 +3369,7 @@ func _start_round_3() -> void:
 				old_card.queue_free()
 
 	# Ensure surviving hostiles have roster cards
-	for enemy in [unit_berserker, unit_archer]:
+	for enemy in [unit_shaman, unit_archer]:
 		if not roster_cards.has(enemy):
 			_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
 		else:
@@ -3382,7 +3389,7 @@ func _start_round_3() -> void:
 	r3_entry.skill_name = "Round 3 Commenced"
 	r3_entry.skill_subtype = "Final Showdown"
 	r3_entry.outcome_tag = "ROUND 3"
-	r3_entry.detail_text = "Warrior (32 HP) at (5, 4) against Berserker (25 HP) & Archer (35 HP)"
+	r3_entry.detail_text = "Warrior (35 HP) at (5, 4) against Shaman (15 HP) & Archer (35 HP)"
 	r3_entry.status_text = "Round 3 Active"
 	all_action_log_entries.append(r3_entry)
 	active_log_entry_index = all_action_log_entries.size() - 1
@@ -3390,36 +3397,37 @@ func _start_round_3() -> void:
 
 	phase_badge_lbl.text = "ROUND 3: PLANNING PHASE (FINAL SHOWDOWN)"
 	phase_badge_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
-	status_label.text = "Round 3: Final Showdown! Warrior confronts surviving Berserker & Archer. Auto-Resolve to conclude combat."
+	status_label.text = "Round 3: Final Showdown! Warrior confronts surviving Shaman & Archer. Auto-Resolve to conclude combat."
 
 	_append_log("\n[color=#38bdf8][b]⚔⚔⚔ COMMENCING ROUND 3: FINAL SHOWDOWN ⚔⚔⚔[/b][/color]")
 	_append_log("[color=#93c5fd]Warrior presses forward against the last two goblins. Victory is in sight![/color]")
 
 	# Schedule Pre-Planned Commands for Round 3:
 	# Warrior (Knight, at (5, 4)):
-	#   Block 1-2: Decisive Cleave on Berserker at (5, 5) (power 30) [2b] -> Berserker DEFEATED!
-	#   Block 3: Tactical Advance East to (6, 4) [1b]
-	#   Block 4: Tactical Advance East to (7, 4) [1b] (Adjacent to Archer at (7, 5)!)
-	#   Block 5-6: Defend (70% mitigation) [2b] (Deflects point-blank arrow!)
-	#   Block 7-8: Vanguard Finishing Strike on Archer at (7, 5) (priority 1, power 40) [2b] -> Archer DEFEATED!
+	#   Block 1-2: Decisive Slash on Shaman at (6, 4) (power 25) [2b] -> Shaman DEFEATED!
+	#   Block 3: Tactical Advance East to (6, 4) [1b] (steps adjacent to Archer at (6, 5))
+	#   Block 4-5: Defend (70% mitigation) [2b] (Deflects point-blank arrow!)
+	#   Block 6: Target Archer [1b]
+	#   Block 7-8: Vanguard Finishing Strike on Archer at (6, 5) (priority 1, power 40) [2b] -> Archer DEFEATED!
 	#   Block 9-10: Hold Victory Stance [2b]
-	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_berserker, 30, 2, 0, sim_grid), 1)
+	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_shaman, 25, 2, 0, sim_grid), 1)
 	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(1, 0), 1), 3)
-	sim_resolver.schedule_action(unit_warrior, MoveCommand.new(unit_warrior, sim_grid, Vector2i(1, 0), 1), 4)
-	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.7, 2, 1), 5)
+	sim_resolver.schedule_action(unit_warrior, DefendCommand.new(unit_warrior, 0.7, 2, 1), 4)
+	sim_resolver.schedule_action(unit_warrior, TargetCommand.new(unit_warrior, unit_archer, 1), 6)
 	sim_resolver.schedule_action(unit_warrior, AttackCommand.new(unit_warrior, unit_archer, 40, 2, 1, sim_grid), 7)
 	sim_resolver.schedule_action(unit_warrior, HoldStanceCommand.new(unit_warrior, 0), 9)
 
-	# Goblin Berserker (25 HP at (5, 5)):
-	sim_resolver.schedule_action(unit_berserker, TargetCommand.new(unit_berserker, unit_warrior, 1), 1)
-	sim_resolver.schedule_action(unit_berserker, AttackCommand.new(unit_berserker, unit_warrior, 15, 2, 0, sim_grid), 1)
+	# Goblin Shaman (15 HP at (6, 4)):
+	# Defeated at Block 2 by Warrior's Decisive Slash!
+	sim_resolver.schedule_action(unit_shaman, TargetCommand.new(unit_shaman, unit_warrior, 1), 1)
+	sim_resolver.schedule_action(unit_shaman, AttackCommand.new(unit_shaman, unit_warrior, 10, 2, 0, sim_grid), 1)
 
-	# Goblin Archer (35 HP at (7, 5)):
+	# Goblin Archer (35 HP at (6, 5) - continuous actions without empty gaps):
 	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 1)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 12, 2, 0, sim_grid), 2)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 12, 2, 0, sim_grid), 4)
-	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 6)
-	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 2, 0, sim_grid), 7)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 14, 3, 0, sim_grid), 2)
+	sim_resolver.schedule_action(unit_archer, TargetCommand.new(unit_archer, unit_warrior, 1), 5)
+	sim_resolver.schedule_action(unit_archer, AttackCommand.new(unit_archer, unit_warrior, 16, 3, 0, sim_grid), 6)
+	sim_resolver.schedule_action(unit_archer, DefendCommand.new(unit_archer, 0.5, 2, 1), 9)
 
 	# Record Round 3 actions
 	recorded_actions.clear()
@@ -4260,57 +4268,41 @@ func _build_timeline_modal_ui() -> void:
 	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	hdr_row.add_child(title_lbl)
 
-	hdr_row.add_spacer(false)
+	# Round Navigation Panel in Modal Suite (Replaces playback controls which don't belong in full screen timeline view)
+	var modal_round_nav_panel := HBoxContainer.new()
+	modal_round_nav_panel.add_theme_constant_override("separation", 6)
+	hdr_row.add_child(modal_round_nav_panel)
 
-	var modal_ctrls := HBoxContainer.new()
-	modal_ctrls.add_theme_constant_override("separation", 4)
-	hdr_row.add_child(modal_ctrls)
+	btn_modal_prev_round = Button.new()
+	btn_modal_prev_round.text = "◀ PREV ROUND"
+	btn_modal_prev_round.tooltip_text = "Navigate to Previous Round Timeline"
+	btn_modal_prev_round.custom_minimum_size = Vector2(95, 24)
+	btn_modal_prev_round.add_theme_font_size_override("font_size", 9)
+	btn_modal_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
+	modal_round_nav_panel.add_child(btn_modal_prev_round)
 
-	btn_modal_step_prev = Button.new()
-	btn_modal_step_prev.text = "⏮"
-	btn_modal_step_prev.tooltip_text = "Step Previous Block (Replay)"
-	btn_modal_step_prev.custom_minimum_size = Vector2(28, 22)
-	btn_modal_step_prev.add_theme_font_size_override("font_size", 10)
-	btn_modal_step_prev.pressed.connect(_on_step_prev_pressed)
-	modal_ctrls.add_child(btn_modal_step_prev)
+	modal_ruler_round_badge = Label.new()
+	modal_ruler_round_badge.text = "ROUND 1 TIMELINE"
+	modal_ruler_round_badge.custom_minimum_size = Vector2(130, 24)
+	modal_ruler_round_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	modal_ruler_round_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	modal_ruler_round_badge.add_theme_font_size_override("font_size", 10)
+	modal_ruler_round_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	modal_round_nav_panel.add_child(modal_ruler_round_badge)
 
-	btn_modal_play = Button.new()
-	btn_modal_play.text = "▶"
-	btn_modal_play.tooltip_text = "Autoplay Round from BLK 1 / Pause [Space]"
-	btn_modal_play.custom_minimum_size = Vector2(30, 22)
-	btn_modal_play.add_theme_font_size_override("font_size", 10)
-	btn_modal_play.pressed.connect(_on_play_round_pressed)
-	modal_ctrls.add_child(btn_modal_play)
-
-	btn_modal_step_next = Button.new()
-	btn_modal_step_next.text = "⏭"
-	btn_modal_step_next.tooltip_text = "Step Next Block"
-	btn_modal_step_next.custom_minimum_size = Vector2(28, 22)
-	btn_modal_step_next.add_theme_font_size_override("font_size", 10)
-	btn_modal_step_next.pressed.connect(_on_step_next_pressed)
-	modal_ctrls.add_child(btn_modal_step_next)
-
-	btn_modal_reset_round = Button.new()
-	btn_modal_reset_round.text = "↺"
-	btn_modal_reset_round.tooltip_text = "Reset Active Round (Restart Planning for Current Round)"
-	btn_modal_reset_round.custom_minimum_size = Vector2(28, 22)
-	btn_modal_reset_round.add_theme_font_size_override("font_size", 10)
-	btn_modal_reset_round.pressed.connect(_on_reset_active_round_pressed)
-	modal_ctrls.add_child(btn_modal_reset_round)
-
-	btn_modal_reset_game = Button.new()
-	btn_modal_reset_game.text = "⟲"
-	btn_modal_reset_game.tooltip_text = "Full Reset: Restart Entire Tactical Battle from Round 1"
-	btn_modal_reset_game.custom_minimum_size = Vector2(28, 22)
-	btn_modal_reset_game.add_theme_font_size_override("font_size", 10)
-	btn_modal_reset_game.pressed.connect(_on_reset_game_pressed)
-	modal_ctrls.add_child(btn_modal_reset_game)
+	btn_modal_next_round_arrow = Button.new()
+	btn_modal_next_round_arrow.text = "NEXT ROUND ▶"
+	btn_modal_next_round_arrow.tooltip_text = "Navigate to Next Round Timeline"
+	btn_modal_next_round_arrow.custom_minimum_size = Vector2(95, 24)
+	btn_modal_next_round_arrow.add_theme_font_size_override("font_size", 9)
+	btn_modal_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
+	modal_round_nav_panel.add_child(btn_modal_next_round_arrow)
 
 	modal_phase_lbl = Label.new()
 	modal_phase_lbl.text = "PLANNING PHASE"
 	modal_phase_lbl.add_theme_font_size_override("font_size", 9)
 	modal_phase_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
-	modal_ctrls.add_child(modal_phase_lbl)
+	modal_round_nav_panel.add_child(modal_phase_lbl)
 
 	hdr_row.add_spacer(false)
 
@@ -4331,7 +4323,7 @@ func _build_timeline_modal_ui() -> void:
 	var hsep1 := HSeparator.new()
 	modal_vbox.add_child(hsep1)
 
-	# 2. Synchronous Time Ruler Row
+	# 2. Synchronous Time Ruler Row (Aligned exactly with Tracks below)
 	var ruler_row := HBoxContainer.new()
 	ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
 	modal_vbox.add_child(ruler_row)
@@ -4377,36 +4369,6 @@ func _build_timeline_modal_ui() -> void:
 		modal_ruler_tick_nodes.append(tick_panel)
 		modal_ruler_tick_labels.append(tick_lbl)
 
-	# Dynamic Round Traversal Arrows at End of Modal Ruler
-	var modal_rd_nav_box := HBoxContainer.new()
-	modal_rd_nav_box.add_theme_constant_override("separation", 2)
-	ruler_row.add_child(modal_rd_nav_box)
-
-	btn_modal_prev_round = Button.new()
-	btn_modal_prev_round.text = "◀"
-	btn_modal_prev_round.tooltip_text = "Previous Round Timeline"
-	btn_modal_prev_round.custom_minimum_size = Vector2(24, 18)
-	btn_modal_prev_round.add_theme_font_size_override("font_size", 8)
-	btn_modal_prev_round.pressed.connect(func() -> void: _navigate_timeline_round(-1))
-	modal_rd_nav_box.add_child(btn_modal_prev_round)
-
-	modal_ruler_round_badge = Label.new()
-	modal_ruler_round_badge.text = "R1"
-	modal_ruler_round_badge.custom_minimum_size = Vector2(28, 18)
-	modal_ruler_round_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	modal_ruler_round_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	modal_ruler_round_badge.add_theme_font_size_override("font_size", 8)
-	modal_ruler_round_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
-	modal_rd_nav_box.add_child(modal_ruler_round_badge)
-
-	btn_modal_next_round_arrow = Button.new()
-	btn_modal_next_round_arrow.text = "▶"
-	btn_modal_next_round_arrow.tooltip_text = "Next Round Timeline"
-	btn_modal_next_round_arrow.custom_minimum_size = Vector2(24, 18)
-	btn_modal_next_round_arrow.add_theme_font_size_override("font_size", 8)
-	btn_modal_next_round_arrow.pressed.connect(func() -> void: _navigate_timeline_round(1))
-	modal_rd_nav_box.add_child(btn_modal_next_round_arrow)
-
 	# 3. Scrollable Tracks Matrix
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -4424,8 +4386,8 @@ func _update_modal_tracks_display() -> void:
 		return
 
 	var active_playhead: int = replay_block if combat_phase == CombatPhase.REPLAY else current_sim_block
-	modal_phase_lbl.text = "REPLAY BLOCK %02d / 10" % active_playhead if combat_phase == CombatPhase.REPLAY else "PLANNING BLOCK %02d / 10" % active_playhead
-	btn_modal_play.text = "⏸" if is_auto_playing else "▶"
+	if modal_phase_lbl != null:
+		modal_phase_lbl.text = "REPLAY BLOCK %02d / 10" % active_playhead if combat_phase == CombatPhase.REPLAY else "PLANNING BLOCK %02d / 10" % active_playhead
 
 	# Update modal ruler tick highlights
 	for i in range(modal_ruler_tick_nodes.size()):
@@ -4491,8 +4453,8 @@ func _update_modal_tracks_display() -> void:
 			if not (enemy in [unit_brawler, unit_scout]):
 				active_enemies_for_view.append(enemy)
 		elif viewed_timeline_round == 3:
-			# Round 3: Only Berserker and Archer survive into Round 3
-			if enemy in [unit_berserker, unit_archer]:
+			# Round 3: Berserker and Skirmisher defeated in Round 2, only Shaman and Archer survive
+			if enemy in [unit_shaman, unit_archer]:
 				active_enemies_for_view.append(enemy)
 
 	var enemy_hdr := Label.new()
