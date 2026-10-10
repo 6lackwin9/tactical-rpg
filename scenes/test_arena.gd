@@ -1026,8 +1026,8 @@ func _create_mini_action_card(act: Dictionary) -> PanelContainer:
 
 	var act_name_lbl := Label.new()
 	act_name_lbl.text = str(act["name"])
-	act_name_lbl.add_theme_font_size_override("font_size", 9)
-	act_name_lbl.add_theme_color_override("font_color", act["color"] as Color)
+	var act_col: Color = Color(act.get("color", Color.WHITE))
+	act_name_lbl.add_theme_color_override("font_color", act_col)
 	act_hbox.add_child(act_name_lbl)
 
 	act_hbox.add_spacer(false)
@@ -1339,7 +1339,11 @@ func _init_interactive_simulation() -> void:
 	sim_allies = [unit_warrior, unit_ranger]
 	sim_enemies = [unit_brawler, unit_scout, unit_skirmisher, unit_archer, unit_berserker, unit_shaman]
 
-	for c in [unit_warrior, unit_ranger, unit_brawler, unit_scout, unit_skirmisher, unit_archer, unit_berserker, unit_shaman]:
+	var initial_combatants: Array[Combatant] = [
+		unit_warrior, unit_ranger, unit_brawler, unit_scout,
+		unit_skirmisher, unit_archer, unit_berserker, unit_shaman
+	]
+	for c: Combatant in initial_combatants:
 		sim_resolver.register_combatant(c)
 
 	# 3. Center-ring deployment for initial combatants only
@@ -1577,11 +1581,11 @@ func _capture_snapshot(block_idx: int) -> void:
 
 
 func _restore_snapshot(snap: BlockSnapshot) -> void:
-	for c_variant in unit_token_nodes.keys():
-		var c := c_variant as Combatant
+	for c: Combatant in unit_token_nodes:
+		@warning_ignore("unsafe_cast")
 		var token := unit_token_nodes[c] as Control
 		if snap.positions.has(c):
-			var pos := snap.positions[c] as Vector2i
+			var pos: Vector2i = snap.positions[c]
 			if pos == Vector2i(-1, -1):
 				token.modulate.a = 0.0
 			else:
@@ -1589,15 +1593,15 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 				var tw := create_tween()
 				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
-				var active: bool = snap.is_active[c] as bool
-				var withdrawn: bool = snap.is_withdrawn[c] as bool
+				var active: bool = bool(snap.is_active.get(c, false))
+				var withdrawn: bool = bool(snap.is_withdrawn.get(c, false))
 				if not active:
 					token.modulate = Color(0.4, 0.4, 0.4, 0.0 if withdrawn else 0.6)
 				else:
 					token.modulate = Color.WHITE
 
-	for c_variant in roster_cards.keys():
-		var c := c_variant as Combatant
+	for c: Combatant in roster_cards:
+		@warning_ignore("unsafe_cast")
 		var card := roster_cards[c] as PanelContainer
 		if snap.hps.has(c):
 			var hp_bar := card.find_child("ProgressBar", true, false) as ProgressBar
@@ -1605,11 +1609,11 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 			var stance_lbl := card.find_child("StanceLabel", true, false) as Label
 			var pos_lbl := card.find_child("PosLabel", true, false) as Label
 
-			var cur_hp := snap.hps[c] as int
-			var max_hp := snap.max_hps[c] as int
-			var cur_stance := snap.stances[c] as CombatTypes.StanceType
-			var is_active := snap.is_active[c] as bool
-			var is_withdrawn := snap.is_withdrawn[c] as bool
+			var cur_hp: int = int(snap.hps[c])
+			var max_hp: int = int(snap.max_hps[c])
+			var cur_stance: CombatTypes.StanceType = snap.stances[c]
+			var is_active: bool = bool(snap.is_active[c])
+			var is_withdrawn: bool = bool(snap.is_withdrawn[c])
 
 			if hp_bar:
 				hp_bar.value = cur_hp
@@ -1623,7 +1627,7 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 				else:
 					stance_lbl.text = CombatTypes.stance_to_string(cur_stance)
 			if pos_lbl:
-				var pos := snap.positions[c] as Vector2i
+				var pos: Vector2i = snap.positions[c]
 				pos_lbl.text = "Pos: %s" % (str(pos) if is_active else "Off Grid")
 
 	_update_selected_unit_panel()
@@ -1648,8 +1652,8 @@ func _select_combatant(combatant: Combatant) -> void:
 
 
 func _update_roster_card_highlights() -> void:
-	for c_variant in roster_cards.keys():
-		var c := c_variant as Combatant
+	for c: Combatant in roster_cards:
+		@warning_ignore("unsafe_cast")
 		var card := roster_cards[c] as PanelContainer
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(3)
@@ -1672,8 +1676,8 @@ func _update_roster_card_highlights() -> void:
 
 
 func _update_unit_token_highlights() -> void:
-	for c_variant in unit_token_nodes.keys():
-		var c := c_variant as Combatant
+	for c: Combatant in unit_token_nodes:
+		@warning_ignore("unsafe_cast")
 		var token := unit_token_nodes[c] as Control
 		var border := token.find_child("SelectionBorder", true, false) as ReferenceRect
 		if border:
@@ -1746,7 +1750,9 @@ func _update_selected_unit_panel() -> void:
 		inspector_pos_lbl.text = "Pos: Defeated"
 
 	if selected_combatant.active_target is Combatant:
-		inspector_target_lbl.text = "Target: " + (selected_combatant.active_target as Combatant).name
+		@warning_ignore("unsafe_cast")
+		var tgt: Combatant = selected_combatant.active_target as Combatant
+		inspector_target_lbl.text = "Target: " + tgt.name
 	else:
 		inspector_target_lbl.text = "Target: None"
 
@@ -1816,6 +1822,7 @@ func _update_tactical_forecast_panel() -> void:
 
 	var target: Combatant = null
 	if selected_combatant.active_target is Combatant:
+		@warning_ignore("unsafe_cast")
 		target = selected_combatant.active_target as Combatant
 	elif sim_allies.has(selected_combatant):
 		target = sim_enemies[0]
@@ -2303,7 +2310,6 @@ func _update_combined_block_display(block: int) -> void:
 			if not engaged_enemies.has(e):
 				engaged_enemies.append(e)
 
-		var shown_count: int = 0
 		for enemy in engaged_enemies:
 			var enemy_act: CombatResolver.ScheduledAction = null
 			for a in actions_at_b:
@@ -2317,7 +2323,6 @@ func _update_combined_block_display(block: int) -> void:
 			var tag_str: String = "🎯 TARGET" if targeted_by_hero.has(enemy) else "⚡ THREAT"
 			var enemy_card := _create_combined_unit_card(enemy, enemy_act, block, false, tag_str)
 			combined_enemy_vbox.add_child(enemy_card)
-			shown_count += 1
 
 		if engaged_enemies.is_empty():
 			var empty_panel := PanelContainer.new()
@@ -2598,8 +2603,8 @@ func _step_simulation() -> void:
 
 
 func _sync_visuals_after_block() -> void:
-	for c_variant in unit_token_nodes.keys():
-		var combatant := c_variant as Combatant
+	for combatant: Combatant in unit_token_nodes:
+		@warning_ignore("unsafe_cast")
 		var token := unit_token_nodes[combatant] as Control
 		var target_coord: Vector2i = sim_grid.get_position(combatant)
 		if target_coord == Vector2i(-1, -1):
@@ -2632,9 +2637,11 @@ func _spawn_goblin_reinforcements() -> void:
 	sim_grid.place_combatant(unit_archer, Vector2i(7, 5))
 	sim_grid.place_combatant(unit_shaman, Vector2i(6, 5))
 
-	for c in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
+	var new_goblins: Array[Combatant] = [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]
+	for c: Combatant in new_goblins:
 		if unit_token_nodes.has(c):
-			var token: Control = unit_token_nodes[c]
+			@warning_ignore("unsafe_cast")
+			var token := unit_token_nodes[c] as Control
 			var coord: Vector2i = sim_grid.get_position(c)
 			token.position = Vector2(coord.x * TILE_SIZE, coord.y * TILE_SIZE)
 			var tw := create_tween()
@@ -2719,8 +2726,8 @@ func _start_round_2() -> void:
 	_update_combined_block_display(1)
 	_sync_visuals_after_block()
 
-	for c_variant in roster_cards.keys():
-		var combatant := c_variant as Combatant
+	for combatant: Combatant in roster_cards:
+		@warning_ignore("unsafe_cast")
 		var card := roster_cards[combatant] as PanelContainer
 		var hp_bar := card.find_child("ProgressBar", true, false) as ProgressBar
 		var hp_lbl := card.find_child("HpLabel", true, false) as Label
