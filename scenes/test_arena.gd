@@ -105,7 +105,7 @@ func _get_combatant_sprite_texture(c: Combatant) -> Texture2D:
 
 const TILE_SIZE: int = 54
 const GRID_SIZE: int = 9
-const UNIT_BLOCK_W: int = 70
+const UNIT_BLOCK_W: int = 80
 const BLOCK_GAP: int = 4
 const TOTAL_BLOCKS: int = 10
 
@@ -287,26 +287,26 @@ func _setup_interactive_ui() -> void:
 	root_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root_margin.add_theme_constant_override("margin_left", 14)
 	root_margin.add_theme_constant_override("margin_right", 14)
-	root_margin.add_theme_constant_override("margin_top", 6)
-	root_margin.add_theme_constant_override("margin_bottom", 6)
+	root_margin.add_theme_constant_override("margin_top", 4)
+	root_margin.add_theme_constant_override("margin_bottom", 4)
 	ui_canvas.add_child(root_margin)
 
 	var main_vbox := VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 6)
+	main_vbox.add_theme_constant_override("separation", 4)
 	root_margin.add_child(main_vbox)
 
 	# --------------------------------------------------------------------------
 	# TOP ROW: PARTY STATUS (Left) | BATTLE LOG (Center) | ENEMY STATUS (Right)
 	# --------------------------------------------------------------------------
 	var top_hbox := HBoxContainer.new()
-	top_hbox.custom_minimum_size = Vector2(0, 88)
+	top_hbox.custom_minimum_size = Vector2(0, 82)
 	top_hbox.add_theme_constant_override("separation", 10)
 	main_vbox.add_child(top_hbox)
 
 	# Top-Left: Allied Party Status Panel (Scrollable for up to 4+ heroes)
 	var party_panel := PanelContainer.new()
 	party_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	party_panel.custom_minimum_size = Vector2(340, 88)
+	party_panel.custom_minimum_size = Vector2(340, 82)
 	var party_box_style := StyleBoxFlat.new()
 	party_box_style.bg_color = Color(0.08, 0.11, 0.16, 0.95)
 	party_box_style.border_color = Color(0.2, 0.38, 0.65, 0.8)
@@ -350,7 +350,7 @@ func _setup_interactive_ui() -> void:
 
 	# Top-Center: Battle Log (Matches center grid width of 496px)
 	var log_panel := PanelContainer.new()
-	log_panel.custom_minimum_size = Vector2(496, 88)
+	log_panel.custom_minimum_size = Vector2(496, 82)
 	log_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var log_style := StyleBoxFlat.new()
 	log_style.bg_color = Color(0.06, 0.08, 0.12, 0.95)
@@ -394,7 +394,7 @@ func _setup_interactive_ui() -> void:
 	# Top-Right: Enemy Hostiles Status Panel (Scrollable for up to 10+ enemies)
 	var enemy_panel := PanelContainer.new()
 	enemy_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enemy_panel.custom_minimum_size = Vector2(340, 88)
+	enemy_panel.custom_minimum_size = Vector2(340, 82)
 	var enemy_box_style := StyleBoxFlat.new()
 	enemy_box_style.bg_color = Color(0.12, 0.08, 0.10, 0.95)
 	enemy_box_style.border_color = Color(0.65, 0.25, 0.25, 0.8)
@@ -447,7 +447,7 @@ func _setup_interactive_ui() -> void:
 	# 1. Left Popup Area: Unit Inspector & Dynamic Actions/Threat Dock
 	var left_popup_panel := PanelContainer.new()
 	left_popup_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_popup_panel.custom_minimum_size = Vector2(340, 480)
+	left_popup_panel.custom_minimum_size = Vector2(340, 468)
 	var left_style := StyleBoxFlat.new()
 	left_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
 	left_style.border_color = Color(0.2, 0.28, 0.42, 0.8)
@@ -700,16 +700,16 @@ func _setup_interactive_ui() -> void:
 	grid_vbox.add_child(grid_header)
 
 	var grid_frame := PanelContainer.new()
-	grid_frame.custom_minimum_size = Vector2(494, 494)
+	grid_frame.custom_minimum_size = Vector2(490, 490)
 	var frame_style := StyleBoxFlat.new()
 	frame_style.bg_color = Color(0.05, 0.07, 0.1, 1.0)
 	frame_style.border_color = Color(0.22, 0.32, 0.46, 1.0)
-	frame_style.set_border_width_all(2)
+	frame_style.set_border_width_all(1)
 	frame_style.set_corner_radius_all(6)
-	frame_style.content_margin_left = 4
-	frame_style.content_margin_right = 4
-	frame_style.content_margin_top = 4
-	frame_style.content_margin_bottom = 4
+	frame_style.content_margin_left = 2
+	frame_style.content_margin_right = 2
+	frame_style.content_margin_top = 2
+	frame_style.content_margin_bottom = 2
 	grid_frame.add_theme_stylebox_override("panel", frame_style)
 	grid_vbox.add_child(grid_frame)
 
@@ -750,7 +750,7 @@ func _setup_interactive_ui() -> void:
 	# 3. Right Popup Area: Tactical Forecast & Arena Intel
 	var right_popup_panel := PanelContainer.new()
 	right_popup_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_popup_panel.custom_minimum_size = Vector2(340, 480)
+	right_popup_panel.custom_minimum_size = Vector2(340, 468)
 	var right_style := StyleBoxFlat.new()
 	right_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
 	right_style.border_color = Color(0.2, 0.28, 0.42, 0.8)
@@ -873,7 +873,7 @@ func _setup_interactive_ui() -> void:
 	# BOTTOM ROW: PLAYBACK CONTROLS + ZERO-CLIPPING CONTINUOUS ACTIVE TRACK
 	# --------------------------------------------------------------------------
 	var bottom_panel := PanelContainer.new()
-	bottom_panel.custom_minimum_size = Vector2(0, 80)
+	bottom_panel.custom_minimum_size = Vector2(0, 96)
 	var bottom_style := StyleBoxFlat.new()
 	bottom_style.bg_color = Color(0.07, 0.09, 0.14, 0.98)
 	bottom_style.border_color = Color(0.22, 0.32, 0.46, 0.9)
@@ -881,8 +881,8 @@ func _setup_interactive_ui() -> void:
 	bottom_style.set_corner_radius_all(6)
 	bottom_style.content_margin_left = 8
 	bottom_style.content_margin_right = 8
-	bottom_style.content_margin_top = 4
-	bottom_style.content_margin_bottom = 4
+	bottom_style.content_margin_top = 3
+	bottom_style.content_margin_bottom = 3
 	bottom_panel.add_theme_stylebox_override("panel", bottom_style)
 	main_vbox.add_child(bottom_panel)
 
@@ -892,7 +892,7 @@ func _setup_interactive_ui() -> void:
 
 	# Controls Column
 	var controls_vbox := VBoxContainer.new()
-	controls_vbox.custom_minimum_size = Vector2(150, 0)
+	controls_vbox.custom_minimum_size = Vector2(165, 0)
 	controls_vbox.add_theme_constant_override("separation", 2)
 	bottom_hbox.add_child(controls_vbox)
 
@@ -964,7 +964,7 @@ func _setup_interactive_ui() -> void:
 	btn_next_round = Button.new()
 	btn_next_round.text = "⚔ ADVANCE TO ROUND 2"
 	btn_next_round.tooltip_text = "Conclude Round 1 and advance to Round 2 (Warrior Last Stand)"
-	btn_next_round.custom_minimum_size = Vector2(0, 24)
+	btn_next_round.custom_minimum_size = Vector2(0, 22)
 	btn_next_round.add_theme_font_size_override("font_size", 9)
 	var next_btn_style := StyleBoxFlat.new()
 	next_btn_style.bg_color = Color(0.7, 0.45, 0.1, 0.95)
@@ -973,8 +973,8 @@ func _setup_interactive_ui() -> void:
 	next_btn_style.set_corner_radius_all(4)
 	next_btn_style.content_margin_left = 6
 	next_btn_style.content_margin_right = 6
-	next_btn_style.content_margin_top = 2
-	next_btn_style.content_margin_bottom = 2
+	next_btn_style.content_margin_top = 1
+	next_btn_style.content_margin_bottom = 1
 	btn_next_round.add_theme_stylebox_override("normal", next_btn_style)
 	btn_next_round.visible = false
 	btn_next_round.pressed.connect(_on_next_round_pressed)
@@ -1062,11 +1062,16 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 	for b: int in range(1, TOTAL_BLOCKS + 1):
 		var tick_panel := PanelContainer.new()
 		tick_panel.custom_minimum_size = Vector2(UNIT_BLOCK_W, 16)
+		tick_panel.clip_contents = true
 		var tick_style := StyleBoxFlat.new()
 		tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.8)
 		tick_style.border_color = Color(0.2, 0.28, 0.38, 0.8)
 		tick_style.set_border_width_all(1)
 		tick_style.set_corner_radius_all(3)
+		tick_style.content_margin_left = 2
+		tick_style.content_margin_right = 2
+		tick_style.content_margin_top = 1
+		tick_style.content_margin_bottom = 1
 		tick_panel.add_theme_stylebox_override("panel", tick_style)
 
 		var tick_lbl := Label.new()
@@ -1074,6 +1079,8 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 		tick_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tick_lbl.add_theme_font_size_override("font_size", 8)
 		tick_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+		tick_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		tick_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tick_panel.add_child(tick_lbl)
 
 		var cur_b: int = b
@@ -2041,6 +2048,10 @@ func _update_timeline_tracks_display() -> void:
 		var b_num: int = i + 1
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(3)
+		style.content_margin_left = 2
+		style.content_margin_right = 2
+		style.content_margin_top = 1
+		style.content_margin_bottom = 1
 		if b_num == active_playhead:
 			style.bg_color = Color(0.2, 0.45, 0.75, 1.0)
 			style.border_color = Color(0.5, 0.9, 1.0, 1.0)
@@ -2118,6 +2129,7 @@ func _get_recorded_actions_at_block(block: int) -> Array[CombatResolver.Schedule
 func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int, cost: int) -> PanelContainer:
 	var clip := PanelContainer.new()
 	clip.custom_minimum_size = Vector2(width, 36)
+	clip.clip_contents = true
 	clip.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
 	var clip_style := StyleBoxFlat.new()
@@ -2130,6 +2142,7 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 
 	var icon_str: String = "⚔"
 	var subtitle: String = ""
+	var cmd_display_name: String = act.command.command_name
 
 	if act.command is AttackCommand:
 		clip_style.bg_color = Color(0.45, 0.12, 0.14, 0.95)
@@ -2156,6 +2169,12 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
 		icon_str = "🎯"
 		subtitle = "Focus Lock"
+	elif act.command is HoldStanceCommand:
+		clip_style.bg_color = Color(0.2, 0.28, 0.38, 0.95)
+		clip_style.border_color = Color(0.4, 0.65, 0.85, 1.0)
+		icon_str = "⏱"
+		cmd_display_name = "Hold" if cost == 1 else "Hold Stance"
+		subtitle = "Maintain Stance"
 	else:
 		clip_style.bg_color = Color(0.22, 0.26, 0.34, 0.95)
 		clip_style.border_color = Color(0.5, 0.6, 0.7, 1.0)
@@ -2167,19 +2186,21 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 0)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clip.add_child(vbox)
 
 	var title_hbox := HBoxContainer.new()
-	title_hbox.add_theme_constant_override("separation", 3)
+	title_hbox.add_theme_constant_override("separation", 2)
+	title_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(title_hbox)
 
 	var name_lbl := Label.new()
-	name_lbl.text = "%s %s" % [icon_str, act.command.command_name]
+	name_lbl.text = "%s %s" % [icon_str, cmd_display_name]
 	name_lbl.add_theme_font_size_override("font_size", 9)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_hbox.add_child(name_lbl)
-
-	title_hbox.add_spacer(false)
 
 	var cost_lbl := Label.new()
 	cost_lbl.text = "[%db]" % cost
@@ -2191,6 +2212,8 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 	sub_lbl.text = subtitle
 	sub_lbl.add_theme_font_size_override("font_size", 7)
 	sub_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.9))
+	sub_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(sub_lbl)
 
 	var cur_c: Combatant = act.combatant
@@ -2206,6 +2229,7 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> PanelContainer:
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(width, 36)
+	slot.clip_contents = true
 
 	var slot_style := StyleBoxFlat.new()
 	slot_style.set_corner_radius_all(3)
@@ -2225,6 +2249,8 @@ func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> P
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 8)
 	lbl.add_theme_color_override("font_color", Color(0.4, 0.5, 0.6))
+	lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slot.add_child(lbl)
 
 	return slot
@@ -2576,7 +2602,7 @@ func _step_simulation() -> void:
 				btn_next_round.visible = (current_combat_round == 1 and not is_over)
 
 			if current_combat_round == 1:
-				status_label.text = "Round 1 resolved! Ranger fell in ambush, Warrior holds at 73 HP. Click Advance to Round 2."
+				status_label.text = "Round 1 complete! Click Advance to Round 2."
 				_append_log("\n[color=#4ade80][b]🎉 ROUND 1 RESOLVED: Ranger fell in the ambush, Warrior holds at 73 HP against 4 goblins! Click ADVANCE TO ROUND 2 to begin the Last Stand.[/b][/color]")
 			else:
 				status_label.text = "Round 2 resolved! Warrior's last stand concluded. Review replay."
