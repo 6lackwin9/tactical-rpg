@@ -130,10 +130,14 @@ var intel_center_lbl: Label
 var intel_exit_lbl: Label
 var intel_turn_lbl: Label
 
+# 2x2 Party Select Box UI Components
+var selected_party_hero: Combatant = null
+var party_select_grid: GridContainer
+var party_slot_panels: Array[PanelContainer] = []
+var btn_party_all: Button
+
 # Timeline Deck UI Components
 var tracks_container: VBoxContainer
-var party_tabs_hbox: HBoxContainer
-var party_tab_buttons: Dictionary = {} # Combatant -> Button
 var tracks_ruler_row: HBoxContainer
 var ruler_tick_nodes: Array[PanelContainer] = []
 var ruler_tick_labels: Array[Label] = []
@@ -143,6 +147,20 @@ var track_unit_name_lbl: Label
 var track_unit_stance_lbl: Label
 var track_clips_hbox: HBoxContainer
 var enemy_classified_banner: PanelContainer
+
+# Popout Modal Timeline Suite UI Components
+const UNIT_MODAL_BLOCK_W: int = 94
+var btn_popout: Button
+var timeline_modal_overlay: PanelContainer
+var modal_tracks_list: VBoxContainer
+var modal_ruler_tick_nodes: Array[PanelContainer] = []
+var modal_ruler_tick_labels: Array[Label] = []
+var modal_phase_lbl: Label
+var btn_modal_play: Button
+var btn_modal_step: Button
+var btn_modal_rewind: Button
+var btn_modal_reset: Button
+var btn_modal_close: Button
 
 # Combined Block Inspector UI Components
 var combined_container: VBoxContainer
@@ -815,53 +833,61 @@ func _setup_interactive_ui() -> void:
 
 	# Controls Column
 	var controls_vbox := VBoxContainer.new()
-	controls_vbox.custom_minimum_size = Vector2(170, 0)
+	controls_vbox.custom_minimum_size = Vector2(150, 0)
 	controls_vbox.add_theme_constant_override("separation", 2)
 	bottom_hbox.add_child(controls_vbox)
 
 	var btns_row := HBoxContainer.new()
-	btns_row.add_theme_constant_override("separation", 4)
+	btns_row.add_theme_constant_override("separation", 3)
 	controls_vbox.add_child(btns_row)
 
 	btn_rewind = Button.new()
 	btn_rewind.text = "⏮"
 	btn_rewind.tooltip_text = "Rewind to Block 1 (Replay)"
-	btn_rewind.custom_minimum_size = Vector2(28, 24)
-	btn_rewind.add_theme_font_size_override("font_size", 11)
+	btn_rewind.custom_minimum_size = Vector2(24, 22)
+	btn_rewind.add_theme_font_size_override("font_size", 10)
 	btn_rewind.pressed.connect(_on_rewind_pressed)
 	btns_row.add_child(btn_rewind)
 
 	btn_play = Button.new()
 	btn_play.text = "▶"
 	btn_play.tooltip_text = "Auto-Resolve Round / Play Replay"
-	btn_play.custom_minimum_size = Vector2(30, 24)
-	btn_play.add_theme_font_size_override("font_size", 11)
+	btn_play.custom_minimum_size = Vector2(26, 22)
+	btn_play.add_theme_font_size_override("font_size", 10)
 	btn_play.pressed.connect(_on_play_toggle_pressed)
 	btns_row.add_child(btn_play)
 
 	btn_step = Button.new()
 	btn_step.text = "⏭"
 	btn_step.tooltip_text = "Step 1 Block Forward"
-	btn_step.custom_minimum_size = Vector2(28, 24)
-	btn_step.add_theme_font_size_override("font_size", 11)
+	btn_step.custom_minimum_size = Vector2(24, 22)
+	btn_step.add_theme_font_size_override("font_size", 10)
 	btn_step.pressed.connect(_on_step_block_pressed)
 	btns_row.add_child(btn_step)
 
 	btn_reset = Button.new()
 	btn_reset.text = "↺"
 	btn_reset.tooltip_text = "Reset Round / Return to Planning Phase"
-	btn_reset.custom_minimum_size = Vector2(28, 24)
-	btn_reset.add_theme_font_size_override("font_size", 11)
+	btn_reset.custom_minimum_size = Vector2(24, 22)
+	btn_reset.add_theme_font_size_override("font_size", 10)
 	btn_reset.pressed.connect(_on_reset_pressed)
 	btns_row.add_child(btn_reset)
 
 	btn_toggle_view = Button.new()
 	btn_toggle_view.text = "👥"
 	btn_toggle_view.tooltip_text = "Toggle Combined Block View (Inspect All Units per Block)"
-	btn_toggle_view.custom_minimum_size = Vector2(32, 24)
-	btn_toggle_view.add_theme_font_size_override("font_size", 11)
+	btn_toggle_view.custom_minimum_size = Vector2(26, 22)
+	btn_toggle_view.add_theme_font_size_override("font_size", 10)
 	btn_toggle_view.pressed.connect(_on_toggle_view_mode_pressed)
 	btns_row.add_child(btn_toggle_view)
+
+	btn_popout = Button.new()
+	btn_popout.text = "⛶"
+	btn_popout.tooltip_text = "Popout Detailed Full-Screen Timeline Suite [F / ESC]"
+	btn_popout.custom_minimum_size = Vector2(26, 22)
+	btn_popout.add_theme_font_size_override("font_size", 10)
+	btn_popout.pressed.connect(func() -> void: _toggle_timeline_modal(true))
+	btns_row.add_child(btn_popout)
 
 	phase_badge_lbl = Label.new()
 	phase_badge_lbl.text = "PLANNING PHASE"
@@ -876,8 +902,15 @@ func _setup_interactive_ui() -> void:
 	status_label.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95))
 	controls_vbox.add_child(status_label)
 
-	var vsep := VSeparator.new()
-	bottom_hbox.add_child(vsep)
+	var vsep1 := VSeparator.new()
+	bottom_hbox.add_child(vsep1)
+
+	# 2x2 Party Select Box (Slot 1-4 with Gold Selection & ALL button)
+	var party_box := _build_party_select_box()
+	bottom_hbox.add_child(party_box)
+
+	var vsep2 := VSeparator.new()
+	bottom_hbox.add_child(vsep2)
 
 	# Timeline Display Deck: Holds Active Track Layers View and Combined Block Inspector
 	var timeline_deck := Control.new()
@@ -887,6 +920,7 @@ func _setup_interactive_ui() -> void:
 
 	_build_timeline_tracks_ui(timeline_deck)
 	_build_combined_block_ui(timeline_deck)
+	_build_timeline_modal_ui()
 
 	# Auto-play timer
 	auto_play_timer = Timer.new()
@@ -939,20 +973,10 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 	tracks_container.add_theme_constant_override("separation", 2)
 	parent.add_child(tracks_container)
 
-	# Row 1: Layer Selector Tabs (Left) + Time Ruler Ticks (Right)
-	var top_ruler_row := HBoxContainer.new()
-	top_ruler_row.add_theme_constant_override("separation", 8)
-	tracks_container.add_child(top_ruler_row)
-
-	party_tabs_hbox = HBoxContainer.new()
-	party_tabs_hbox.add_theme_constant_override("separation", 4)
-	top_ruler_row.add_child(party_tabs_hbox)
-
-	top_ruler_row.add_spacer(false)
-
+	# Row 1: Time Ruler Ticks (Starts at X=0, exactly aligned with action clips in Row 2)
 	tracks_ruler_row = HBoxContainer.new()
 	tracks_ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
-	top_ruler_row.add_child(tracks_ruler_row)
+	tracks_container.add_child(tracks_ruler_row)
 
 	ruler_tick_nodes.clear()
 	ruler_tick_labels.clear()
@@ -985,49 +1009,10 @@ func _build_timeline_tracks_ui(parent: Control) -> void:
 		ruler_tick_nodes.append(tick_panel)
 		ruler_tick_labels.append(tick_lbl)
 
-	# Row 2: Selected Hero's Continuous Action Track Row
+	# Row 2: Selected Hero's Continuous Action Track Row (Starts at X=0, exact 1:1 match)
 	single_track_row = HBoxContainer.new()
 	single_track_row.add_theme_constant_override("separation", BLOCK_GAP)
 	tracks_container.add_child(single_track_row)
-
-	var track_hdr := PanelContainer.new()
-	track_hdr.custom_minimum_size = Vector2(110, 36)
-	var hdr_style := StyleBoxFlat.new()
-	hdr_style.bg_color = Color(0.10, 0.14, 0.20, 0.95)
-	hdr_style.border_color = Color(0.25, 0.4, 0.6, 0.8)
-	hdr_style.set_border_width_all(1)
-	hdr_style.set_corner_radius_all(4)
-	hdr_style.content_margin_left = 6
-	hdr_style.content_margin_right = 6
-	track_hdr.add_theme_stylebox_override("panel", hdr_style)
-	single_track_row.add_child(track_hdr)
-
-	var hdr_hbox := HBoxContainer.new()
-	hdr_hbox.add_theme_constant_override("separation", 6)
-	track_hdr.add_child(hdr_hbox)
-
-	track_avatar_icon = TextureRect.new()
-	track_avatar_icon.custom_minimum_size = Vector2(22, 22)
-	track_avatar_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	track_avatar_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	hdr_hbox.add_child(track_avatar_icon)
-
-	var name_vbox := VBoxContainer.new()
-	name_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	name_vbox.add_theme_constant_override("separation", 0)
-	hdr_hbox.add_child(name_vbox)
-
-	track_unit_name_lbl = Label.new()
-	track_unit_name_lbl.text = "Warrior"
-	track_unit_name_lbl.add_theme_font_size_override("font_size", 9)
-	track_unit_name_lbl.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
-	name_vbox.add_child(track_unit_name_lbl)
-
-	track_unit_stance_lbl = Label.new()
-	track_unit_stance_lbl.text = "Neutral"
-	track_unit_stance_lbl.add_theme_font_size_override("font_size", 7)
-	track_unit_stance_lbl.add_theme_color_override("font_color", Color(0.55, 0.75, 0.95))
-	name_vbox.add_child(track_unit_stance_lbl)
 
 	track_clips_hbox = HBoxContainer.new()
 	track_clips_hbox.name = "ClipsHBox"
@@ -1323,8 +1308,9 @@ func _init_interactive_simulation() -> void:
 	snapshots.clear()
 	_capture_snapshot(0)
 
-	# 8. Rebuild Layer Selector Tabs
-	_rebuild_party_layer_tabs()
+	# 8. Setup 2x2 Party Focus Box & Default Selection
+	selected_party_hero = warrior
+	_update_party_select_box()
 
 	# Set default selected unit to Warrior
 	_select_combatant(warrior)
@@ -1528,11 +1514,15 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 
 func _select_combatant(combatant: Combatant) -> void:
 	selected_combatant = combatant
+	if sim_allies.has(combatant):
+		selected_party_hero = combatant
 	_update_roster_card_highlights()
 	_update_unit_token_highlights()
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
+	_update_party_select_box()
 	_update_timeline_tracks_display()
+	_update_combined_block_display(combined_selected_block)
 
 
 func _update_roster_card_highlights() -> void:
@@ -1716,28 +1706,159 @@ func _update_tactical_forecast_panel() -> void:
 
 
 # ==============================================================================
-# SECTION 5: LAYER TABS & CONTINUOUS ACTIVE TRACK RENDERING
+# SECTION 5: 2x2 PARTY SELECT BOX & CONTINUOUS ACTIVE TRACK RENDERING
 # ==============================================================================
 
-func _rebuild_party_layer_tabs() -> void:
-	for child in party_tabs_hbox.get_children():
-		child.queue_free()
-	party_tab_buttons.clear()
+func _build_party_select_box() -> PanelContainer:
+	var pnl := PanelContainer.new()
+	pnl.custom_minimum_size = Vector2(124, 72)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.11, 0.16, 0.95)
+	style.border_color = Color(0.2, 0.35, 0.55, 0.8)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 4
+	style.content_margin_right = 4
+	style.content_margin_top = 3
+	style.content_margin_bottom = 3
+	pnl.add_theme_stylebox_override("panel", style)
 
-	for ally in sim_allies:
-		var tab_btn := Button.new()
-		var icon_str: String = "⚔" if ally.name == "Warrior" else "🏹"
-		tab_btn.text = "%s %s" % [icon_str, ally.name]
-		tab_btn.custom_minimum_size = Vector2(85, 20)
-		tab_btn.add_theme_font_size_override("font_size", 9)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	pnl.add_child(vbox)
 
-		var cur_ally: Combatant = ally
-		tab_btn.pressed.connect(func() -> void:
-			_select_combatant(cur_ally)
+	var hdr_hbox := HBoxContainer.new()
+	vbox.add_child(hdr_hbox)
+
+	var hdr_lbl := Label.new()
+	hdr_lbl.text = "HERO FOCUS"
+	hdr_lbl.add_theme_font_size_override("font_size", 8)
+	hdr_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
+	hdr_hbox.add_child(hdr_lbl)
+
+	hdr_hbox.add_spacer(false)
+
+	btn_party_all = Button.new()
+	btn_party_all.text = "ALL"
+	btn_party_all.tooltip_text = "Show All Combatants in Combined View"
+	btn_party_all.custom_minimum_size = Vector2(28, 14)
+	btn_party_all.add_theme_font_size_override("font_size", 7)
+	btn_party_all.pressed.connect(_on_party_all_clicked)
+	hdr_hbox.add_child(btn_party_all)
+
+	party_select_grid = GridContainer.new()
+	party_select_grid.columns = 2
+	party_select_grid.add_theme_constant_override("h_separation", 3)
+	party_select_grid.add_theme_constant_override("v_separation", 3)
+	vbox.add_child(party_select_grid)
+
+	party_slot_panels.clear()
+	for i in range(4):
+		var slot_pnl := PanelContainer.new()
+		slot_pnl.custom_minimum_size = Vector2(56, 23)
+		slot_pnl.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var cur_i: int = i
+		slot_pnl.gui_input.connect(func(event: InputEvent) -> void:
+			var me := event as InputEventMouseButton
+			if me != null and me.pressed and me.button_index == MOUSE_BUTTON_LEFT:
+				_on_party_slot_clicked(cur_i)
 		)
+		party_select_grid.add_child(slot_pnl)
+		party_slot_panels.append(slot_pnl)
 
-		party_tabs_hbox.add_child(tab_btn)
-		party_tab_buttons[ally] = tab_btn
+	return pnl
+
+
+func _update_party_select_box() -> void:
+	if party_slot_panels.is_empty():
+		return
+
+	# Style for "ALL" button
+	if selected_party_hero == null:
+		btn_party_all.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25))
+	else:
+		btn_party_all.remove_theme_color_override("font_color")
+
+	for i in range(4):
+		var slot_pnl: PanelContainer = party_slot_panels[i]
+		for child in slot_pnl.get_children():
+			child.queue_free()
+
+		var slot_style := StyleBoxFlat.new()
+		slot_style.set_corner_radius_all(3)
+		slot_style.content_margin_left = 3
+		slot_style.content_margin_right = 3
+		slot_style.content_margin_top = 2
+		slot_style.content_margin_bottom = 2
+
+		var ally: Combatant = sim_allies[i] if i < sim_allies.size() else null
+
+		if ally != null:
+			var is_selected: bool = (ally == selected_party_hero)
+			if is_selected:
+				slot_style.bg_color = Color(0.18, 0.26, 0.38, 0.98)
+				slot_style.border_color = Color(1.0, 0.85, 0.25, 1.0)
+				slot_style.set_border_width_all(2)
+			else:
+				slot_style.bg_color = Color(0.09, 0.12, 0.17, 0.9)
+				slot_style.border_color = Color(0.2, 0.4, 0.65, 0.7)
+				slot_style.set_border_width_all(1)
+
+			var hbox := HBoxContainer.new()
+			hbox.add_theme_constant_override("separation", 3)
+			slot_pnl.add_child(hbox)
+
+			var icon := TextureRect.new()
+			icon.texture = tex_warrior if ally.name == "Warrior" else tex_ranger
+			icon.custom_minimum_size = Vector2(16, 16)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			hbox.add_child(icon)
+
+			var lbl := Label.new()
+			lbl.text = ally.name
+			lbl.add_theme_font_size_override("font_size", 7)
+			lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if is_selected else Color(0.85, 0.92, 1.0))
+			hbox.add_child(lbl)
+		else:
+			slot_style.bg_color = Color(0.06, 0.08, 0.11, 0.6)
+			slot_style.border_color = Color(0.18, 0.24, 0.32, 0.5)
+			slot_style.set_border_width_all(1)
+
+			var lbl := Label.new()
+			lbl.text = "+ Slot %d" % (i + 1)
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lbl.add_theme_font_size_override("font_size", 7)
+			lbl.add_theme_color_override("font_color", Color(0.4, 0.48, 0.58))
+			slot_pnl.add_child(lbl)
+
+		slot_pnl.add_theme_stylebox_override("panel", slot_style)
+
+
+func _on_party_slot_clicked(slot_idx: int) -> void:
+	if slot_idx >= sim_allies.size():
+		return
+
+	var ally: Combatant = sim_allies[slot_idx]
+	if selected_party_hero == ally:
+		selected_party_hero = null
+	else:
+		selected_party_hero = ally
+		selected_combatant = ally
+
+	_update_party_select_box()
+	_update_timeline_tracks_display()
+	_update_combined_block_display(combined_selected_block)
+	_update_selected_unit_panel()
+	_update_tactical_forecast_panel()
+	_update_roster_card_highlights()
+	_update_unit_token_highlights()
+
+
+func _on_party_all_clicked() -> void:
+	selected_party_hero = null
+	_update_party_select_box()
+	_update_combined_block_display(combined_selected_block)
 
 
 func _update_timeline_tracks_display() -> void:
@@ -1763,13 +1884,7 @@ func _update_timeline_tracks_display() -> void:
 			lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
 		panel.add_theme_stylebox_override("panel", style)
 
-	# Update Layer Tab Highlights
-	for ally in party_tab_buttons.keys():
-		var btn: Button = party_tab_buttons[ally] as Button
-		if ally == selected_combatant:
-			btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25))
-		else:
-			btn.remove_theme_color_override("font_color")
+	_update_party_select_box()
 
 	# Check if selected unit is enemy during planning phase
 	var is_enemy_selected: bool = selected_combatant != null and not sim_allies.has(selected_combatant)
@@ -1781,21 +1896,21 @@ func _update_timeline_tracks_display() -> void:
 		enemy_classified_banner.visible = false
 		single_track_row.visible = true
 
-	# Render active track for selected unit
-	var target_unit: Combatant = selected_combatant if selected_combatant != null else sim_allies[0]
-	if target_unit.name == "Warrior":
-		track_avatar_icon.texture = tex_warrior
-	elif target_unit.name == "Ranger":
-		track_avatar_icon.texture = tex_ranger
-	elif target_unit.name == "Enemy Brawler":
-		track_avatar_icon.texture = tex_brawler
-	else:
-		track_avatar_icon.texture = tex_scout
+	# Render active track for target unit
+	var target_unit: Combatant = null
+	if is_enemy_selected and combat_phase == CombatPhase.REPLAY:
+		target_unit = selected_combatant
+	elif selected_party_hero != null:
+		target_unit = selected_party_hero
+	elif selected_combatant != null and sim_allies.has(selected_combatant):
+		target_unit = selected_combatant
+	elif not sim_allies.is_empty():
+		target_unit = sim_allies[0]
 
-	track_unit_name_lbl.text = target_unit.name
-	track_unit_stance_lbl.text = CombatTypes.stance_to_string(target_unit.current_stance)
+	if target_unit == null:
+		return
 
-	# Rebuild continuous clips
+	# Rebuild continuous clips (Starts at X=0, exactly under Ruler BLK 01..10)
 	for child in track_clips_hbox.get_children():
 		child.queue_free()
 
@@ -1917,9 +2032,9 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 	return clip
 
 
-func _create_idle_clip_widget(is_playhead: bool) -> PanelContainer:
+func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> PanelContainer:
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(UNIT_BLOCK_W, 36)
+	slot.custom_minimum_size = Vector2(width, 36)
 
 	var slot_style := StyleBoxFlat.new()
 	slot_style.set_corner_radius_all(3)
@@ -1968,47 +2083,134 @@ func _update_combined_block_display(block: int) -> void:
 	# Query recorded actions archive (100% fidelity even after round finish)
 	var actions_at_b: Array[CombatResolver.ScheduledAction] = _get_recorded_actions_at_block(block)
 
-	var active_hero_count: int = 0
-	var active_enemy_count: int = 0
-
-	# 1. Populate Allied Party Column
-	for ally in sim_allies:
-		var act: CombatResolver.ScheduledAction = null
+	# ----------------------------------------------------------------------
+	# CASE 1: HERO FOCUSED MODE (Party Hero selected in 2x2 box)
+	# ----------------------------------------------------------------------
+	if selected_party_hero != null:
+		var hero: Combatant = selected_party_hero
+		var hero_act: CombatResolver.ScheduledAction = null
 		for a in actions_at_b:
-			if a.combatant == ally:
-				act = a
+			if a.combatant == hero:
+				hero_act = a
 				break
 
-		var is_active_act: bool = (act != null)
-		if is_active_act:
-			active_hero_count += 1
+		# 1. Left Column: Only the focused hero
+		var hero_card := _create_combined_unit_card(hero, hero_act, block, true)
+		combined_party_vbox.add_child(hero_card)
+		combined_party_hdr.text = "HERO FOCUS: %s" % hero.name
 
-		if filter_active_only and not is_active_act:
-			continue
+		# 2. Right Column: Enemies targeting or targeted by this hero
+		var targeted_by_hero: Array[Combatant] = []
+		var targeting_hero: Array[Combatant] = []
 
-		var card := _create_combined_unit_card(ally, act, block, true)
-		combined_party_vbox.add_child(card)
+		for enemy in sim_enemies:
+			var is_targeted_by_hero: bool = false
+			var is_targeting_hero: bool = false
 
-	# 2. Populate Enemy Hostiles Column
-	for enemy in sim_enemies:
-		var act: CombatResolver.ScheduledAction = null
-		for a in actions_at_b:
-			if a.combatant == enemy:
-				act = a
-				break
+			# Check if hero targets this enemy
+			if hero.active_target == enemy:
+				is_targeted_by_hero = true
+			for a in recorded_actions:
+				if a.combatant == hero:
+					if a.command is AttackCommand and (a.command as AttackCommand).target == enemy:
+						is_targeted_by_hero = true
+					elif a.command is TargetCommand and (a.command as TargetCommand).target_value == enemy:
+						is_targeted_by_hero = true
 
-		var is_active_act: bool = (act != null)
-		if is_active_act:
-			active_enemy_count += 1
+			# Check if enemy targets this hero
+			if enemy.active_target == hero:
+				is_targeting_hero = true
+			for a in recorded_actions:
+				if a.combatant == enemy:
+					if a.command is AttackCommand and (a.command as AttackCommand).target == hero:
+						is_targeting_hero = true
+					elif a.command is TargetCommand and (a.command as TargetCommand).target_value == hero:
+						is_targeting_hero = true
 
-		if filter_active_only and not is_active_act:
-			continue
+			if is_targeted_by_hero:
+				targeted_by_hero.append(enemy)
+			elif is_targeting_hero:
+				targeting_hero.append(enemy)
 
-		var card := _create_combined_unit_card(enemy, act, block, false)
-		combined_enemy_vbox.add_child(card)
+		# Targeted enemy appears FIRST on enemy side!
+		var engaged_enemies: Array[Combatant] = []
+		engaged_enemies.append_array(targeted_by_hero)
+		for e in targeting_hero:
+			if not engaged_enemies.has(e):
+				engaged_enemies.append(e)
 
-	combined_party_hdr.text = "HERO ACTIONS (%d Active / %d Total)" % [active_hero_count, sim_allies.size()]
-	combined_enemy_hdr.text = "HOSTILE ACTIONS (%d Active / %d Total)" % [active_enemy_count, sim_enemies.size()]
+		var shown_count: int = 0
+		for enemy in engaged_enemies:
+			var enemy_act: CombatResolver.ScheduledAction = null
+			for a in actions_at_b:
+				if a.combatant == enemy:
+					enemy_act = a
+					break
+
+			if filter_active_only and enemy_act == null:
+				continue
+
+			var tag_str: String = "🎯 TARGET" if targeted_by_hero.has(enemy) else "⚡ THREAT"
+			var enemy_card := _create_combined_unit_card(enemy, enemy_act, block, false, tag_str)
+			combined_enemy_vbox.add_child(enemy_card)
+			shown_count += 1
+
+		if engaged_enemies.is_empty():
+			var empty_panel := PanelContainer.new()
+			var empty_lbl := Label.new()
+			empty_lbl.text = "No hostiles engaged with %s." % hero.name
+			empty_lbl.add_theme_font_size_override("font_size", 8)
+			empty_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+			empty_panel.add_child(empty_lbl)
+			combined_enemy_vbox.add_child(empty_panel)
+
+		combined_enemy_hdr.text = "ENGAGED HOSTILES (%d Targeted / %d Total)" % [targeted_by_hero.size(), engaged_enemies.size()]
+
+	# ----------------------------------------------------------------------
+	# CASE 2: "ALL" MODE (No hero selected in 2x2 box — show all units)
+	# ----------------------------------------------------------------------
+	else:
+		var active_hero_count: int = 0
+		var active_enemy_count: int = 0
+
+		# 1. Populate Allied Party Column
+		for ally in sim_allies:
+			var act: CombatResolver.ScheduledAction = null
+			for a in actions_at_b:
+				if a.combatant == ally:
+					act = a
+					break
+
+			var is_active_act: bool = (act != null)
+			if is_active_act:
+				active_hero_count += 1
+
+			if filter_active_only and not is_active_act:
+				continue
+
+			var card := _create_combined_unit_card(ally, act, block, true)
+			combined_party_vbox.add_child(card)
+
+		# 2. Populate Enemy Hostiles Column
+		for enemy in sim_enemies:
+			var act: CombatResolver.ScheduledAction = null
+			for a in actions_at_b:
+				if a.combatant == enemy:
+					act = a
+					break
+
+			var is_active_act: bool = (act != null)
+			if is_active_act:
+				active_enemy_count += 1
+
+			if filter_active_only and not is_active_act:
+				continue
+
+			var card := _create_combined_unit_card(enemy, act, block, false)
+			combined_enemy_vbox.add_child(card)
+
+		combined_party_hdr.text = "HERO ACTIONS (%d Active / %d Total)" % [active_hero_count, sim_allies.size()]
+		combined_enemy_hdr.text = "HOSTILE ACTIONS (%d Active / %d Total)" % [active_enemy_count, sim_enemies.size()]
 
 	# In replay mode, scrub board state to match inspected block
 	if combat_phase == CombatPhase.REPLAY:
@@ -2016,7 +2218,7 @@ func _update_combined_block_display(block: int) -> void:
 			_restore_snapshot(snapshots[block])
 
 
-func _create_combined_unit_card(combatant: Combatant, act: CombatResolver.ScheduledAction, block: int, is_ally: bool) -> PanelContainer:
+func _create_combined_unit_card(combatant: Combatant, act: CombatResolver.ScheduledAction, block: int, is_ally: bool, engagement_tag: String = "") -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size = Vector2(0, 32)
@@ -2083,6 +2285,13 @@ func _create_combined_unit_card(combatant: Combatant, act: CombatResolver.Schedu
 	stance_lbl.add_theme_font_size_override("font_size", 7)
 	stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95) if is_ally else Color(1.0, 0.7, 0.7))
 	id_vbox.add_child(stance_lbl)
+
+	if engagement_tag != "":
+		var tag_lbl := Label.new()
+		tag_lbl.text = engagement_tag
+		tag_lbl.add_theme_font_size_override("font_size", 7)
+		tag_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if engagement_tag.begins_with("🎯") else Color(1.0, 0.55, 0.35))
+		id_vbox.add_child(tag_lbl)
 
 	# Action Block Box
 	var act_box := PanelContainer.new()
@@ -2208,6 +2417,10 @@ func _step_simulation() -> void:
 		_update_combined_block_display(replay_block)
 
 
+		if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+			_update_modal_tracks_display()
+
+
 func _sync_visuals_after_block() -> void:
 	for c_variant in unit_token_nodes.keys():
 		var combatant := c_variant as Combatant
@@ -2254,6 +2467,8 @@ func _sync_visuals_after_block() -> void:
 
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
+	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+		_update_modal_tracks_display()
 
 
 func _on_step_block_pressed() -> void:
@@ -2265,9 +2480,11 @@ func _on_play_toggle_pressed() -> void:
 		is_auto_playing = false
 		auto_play_timer.stop()
 		btn_play.text = "▶"
+		if btn_modal_play: btn_modal_play.text = "▶"
 	else:
 		is_auto_playing = true
 		btn_play.text = "⏸"
+		if btn_modal_play: btn_modal_play.text = "⏸"
 		auto_play_timer.start()
 
 
@@ -2284,6 +2501,8 @@ func _on_rewind_pressed() -> void:
 	status_label.text = "Rewound to Block 1."
 	_update_timeline_tracks_display()
 	_update_combined_block_display(1)
+	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+		_update_modal_tracks_display()
 
 
 func _on_toggle_view_mode_pressed() -> void:
@@ -2312,12 +2531,375 @@ func _on_ruler_block_clicked(b: int) -> void:
 	else:
 		combined_selected_block = b
 		_on_toggle_view_mode_pressed()
+	if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+		_update_modal_tracks_display()
+
+
+# ==============================================================================
+# SECTION 8: FULL-SCREEN POPOUT MODAL TIMELINE SUITE
+# ==============================================================================
+
+func _build_timeline_modal_ui() -> void:
+	timeline_modal_overlay = PanelContainer.new()
+	timeline_modal_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	timeline_modal_overlay.visible = false
+	timeline_modal_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var overlay_style := StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0.04, 0.06, 0.09, 0.97)
+	overlay_style.border_color = Color(0.25, 0.45, 0.75, 0.95)
+	overlay_style.set_border_width_all(2)
+	overlay_style.set_corner_radius_all(8)
+	overlay_style.content_margin_left = 16
+	overlay_style.content_margin_right = 16
+	overlay_style.content_margin_top = 12
+	overlay_style.content_margin_bottom = 12
+	timeline_modal_overlay.add_theme_stylebox_override("panel", overlay_style)
+	ui_canvas.add_child(timeline_modal_overlay)
+
+	var modal_vbox := VBoxContainer.new()
+	modal_vbox.add_theme_constant_override("separation", 8)
+	timeline_modal_overlay.add_child(modal_vbox)
+
+	# 1. Header Bar: Title | Playback Controls | Phase Badge | Close Button
+	var hdr_row := HBoxContainer.new()
+	hdr_row.add_theme_constant_override("separation", 10)
+	modal_vbox.add_child(hdr_row)
+
+	var title_lbl := Label.new()
+	title_lbl.text = "🗂 TACTICAL TIMELINE MASTER SUITE (DETAILED EXPANDED VIEW)"
+	title_lbl.add_theme_font_size_override("font_size", 12)
+	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	hdr_row.add_child(title_lbl)
+
+	hdr_row.add_spacer(false)
+
+	var modal_ctrls := HBoxContainer.new()
+	modal_ctrls.add_theme_constant_override("separation", 4)
+	hdr_row.add_child(modal_ctrls)
+
+	btn_modal_rewind = Button.new()
+	btn_modal_rewind.text = "⏮"
+	btn_modal_rewind.tooltip_text = "Rewind to Block 1"
+	btn_modal_rewind.custom_minimum_size = Vector2(28, 22)
+	btn_modal_rewind.add_theme_font_size_override("font_size", 10)
+	btn_modal_rewind.pressed.connect(_on_rewind_pressed)
+	modal_ctrls.add_child(btn_modal_rewind)
+
+	btn_modal_play = Button.new()
+	btn_modal_play.text = "▶"
+	btn_modal_play.tooltip_text = "Play Auto-Resolve / Play Replay"
+	btn_modal_play.custom_minimum_size = Vector2(30, 22)
+	btn_modal_play.add_theme_font_size_override("font_size", 10)
+	btn_modal_play.pressed.connect(_on_play_toggle_pressed)
+	modal_ctrls.add_child(btn_modal_play)
+
+	btn_modal_step = Button.new()
+	btn_modal_step.text = "⏭"
+	btn_modal_step.tooltip_text = "Step 1 Block Forward"
+	btn_modal_step.custom_minimum_size = Vector2(28, 22)
+	btn_modal_step.add_theme_font_size_override("font_size", 10)
+	btn_modal_step.pressed.connect(_on_step_block_pressed)
+	modal_ctrls.add_child(btn_modal_step)
+
+	btn_modal_reset = Button.new()
+	btn_modal_reset.text = "↺"
+	btn_modal_reset.tooltip_text = "Reset Round"
+	btn_modal_reset.custom_minimum_size = Vector2(28, 22)
+	btn_modal_reset.add_theme_font_size_override("font_size", 10)
+	btn_modal_reset.pressed.connect(_on_reset_pressed)
+	modal_ctrls.add_child(btn_modal_reset)
+
+	modal_phase_lbl = Label.new()
+	modal_phase_lbl.text = "PLANNING PHASE"
+	modal_phase_lbl.add_theme_font_size_override("font_size", 9)
+	modal_phase_lbl.add_theme_color_override("font_color", Color(0.95, 0.8, 0.35))
+	modal_ctrls.add_child(modal_phase_lbl)
+
+	hdr_row.add_spacer(false)
+
+	btn_modal_close = Button.new()
+	btn_modal_close.text = "✕ CLOSE [ESC]"
+	btn_modal_close.tooltip_text = "Close expanded timeline [ESC / F / Tab]"
+	btn_modal_close.custom_minimum_size = Vector2(90, 22)
+	btn_modal_close.add_theme_font_size_override("font_size", 9)
+	var close_style := StyleBoxFlat.new()
+	close_style.bg_color = Color(0.35, 0.12, 0.14, 0.9)
+	close_style.border_color = Color(0.85, 0.35, 0.35, 1.0)
+	close_style.set_border_width_all(1)
+	close_style.set_corner_radius_all(3)
+	btn_modal_close.add_theme_stylebox_override("normal", close_style)
+	btn_modal_close.pressed.connect(func() -> void: _toggle_timeline_modal(false))
+	hdr_row.add_child(btn_modal_close)
+
+	var hsep1 := HSeparator.new()
+	modal_vbox.add_child(hsep1)
+
+	# 2. Synchronous Time Ruler Row
+	var ruler_row := HBoxContainer.new()
+	ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
+	modal_vbox.add_child(ruler_row)
+
+	var track_col_lbl := Label.new()
+	track_col_lbl.text = "COMBATANT"
+	track_col_lbl.custom_minimum_size = Vector2(130, 18)
+	track_col_lbl.add_theme_font_size_override("font_size", 9)
+	track_col_lbl.add_theme_color_override("font_color", Color(0.6, 0.75, 0.9))
+	ruler_row.add_child(track_col_lbl)
+
+	modal_ruler_tick_nodes.clear()
+	modal_ruler_tick_labels.clear()
+
+	for b: int in range(1, TOTAL_BLOCKS + 1):
+		var tick_panel := PanelContainer.new()
+		tick_panel.custom_minimum_size = Vector2(UNIT_MODAL_BLOCK_W, 18)
+		tick_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var tick_style := StyleBoxFlat.new()
+		tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.85)
+		tick_style.border_color = Color(0.2, 0.3, 0.42, 0.8)
+		tick_style.set_border_width_all(1)
+		tick_style.set_corner_radius_all(3)
+		tick_panel.add_theme_stylebox_override("panel", tick_style)
+
+		var tick_lbl := Label.new()
+		tick_lbl.text = "BLK %02d" % b
+		tick_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tick_lbl.add_theme_font_size_override("font_size", 8)
+		tick_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		tick_panel.add_child(tick_lbl)
+
+		var cur_b: int = b
+		tick_panel.gui_input.connect(func(event: InputEvent) -> void:
+			var mouse_event := event as InputEventMouseButton
+			if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+				_on_ruler_block_clicked(cur_b)
+				if timeline_modal_overlay.visible:
+					_update_modal_tracks_display()
+		)
+
+		ruler_row.add_child(tick_panel)
+		modal_ruler_tick_nodes.append(tick_panel)
+		modal_ruler_tick_labels.append(tick_lbl)
+
+	# 3. Scrollable Tracks Matrix
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	modal_vbox.add_child(scroll)
+
+	modal_tracks_list = VBoxContainer.new()
+	modal_tracks_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modal_tracks_list.add_theme_constant_override("separation", 6)
+	scroll.add_child(modal_tracks_list)
+
+
+func _update_modal_tracks_display() -> void:
+	if not timeline_modal_overlay.visible:
+		return
+
+	var active_playhead: int = replay_block if combat_phase == CombatPhase.REPLAY else current_sim_block
+	modal_phase_lbl.text = "REPLAY BLOCK %02d / 10" % active_playhead if combat_phase == CombatPhase.REPLAY else "PLANNING BLOCK %02d / 10" % active_playhead
+	btn_modal_play.text = "⏸" if is_auto_playing else "▶"
+
+	# Update modal ruler tick highlights
+	for i in range(modal_ruler_tick_nodes.size()):
+		var pnl: PanelContainer = modal_ruler_tick_nodes[i]
+		var lbl: Label = modal_ruler_tick_labels[i]
+		var b_num: int = i + 1
+		var style := StyleBoxFlat.new()
+		style.set_corner_radius_all(3)
+		if b_num == active_playhead:
+			style.bg_color = Color(0.2, 0.45, 0.75, 1.0)
+			style.border_color = Color(0.5, 0.9, 1.0, 1.0)
+			style.set_border_width_all(2)
+			lbl.text = "▼ %02d" % b_num
+			lbl.add_theme_color_override("font_color", Color(1.0, 0.95, 0.4))
+		else:
+			style.bg_color = Color(0.10, 0.13, 0.18, 0.85)
+			style.border_color = Color(0.2, 0.3, 0.42, 0.8)
+			style.set_border_width_all(1)
+			lbl.text = "BLK %02d" % b_num
+			lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		pnl.add_theme_stylebox_override("panel", style)
+
+	# Rebuild tracks list in modal
+	for child in modal_tracks_list.get_children():
+		child.queue_free()
+
+	# Section 1: Hero Battlegroup Tracks (All 4 slots)
+	var ally_hdr := Label.new()
+	ally_hdr.text = "⚔ ALLIED HERO BATTLEGROUP (4 SLOTS)"
+	ally_hdr.add_theme_font_size_override("font_size", 9)
+	ally_hdr.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
+	modal_tracks_list.add_child(ally_hdr)
+
+	for i in range(4):
+		var ally: Combatant = sim_allies[i] if i < sim_allies.size() else null
+		var row := _create_modal_unit_track_row(ally, i + 1, true, active_playhead)
+		modal_tracks_list.add_child(row)
+
+	var sep := HSeparator.new()
+	modal_tracks_list.add_child(sep)
+
+	# Section 2: Hostile Opposition Tracks (Scalable up to 10 enemies)
+	var enemy_hdr := Label.new()
+	enemy_hdr.text = "💀 HOSTILE OPPOSITION (SCALABLE UP TO 10 ENEMIES)"
+	enemy_hdr.add_theme_font_size_override("font_size", 9)
+	enemy_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+	modal_tracks_list.add_child(enemy_hdr)
+
+	for i in range(sim_enemies.size()):
+		var enemy: Combatant = sim_enemies[i]
+		var row := _create_modal_unit_track_row(enemy, i + 1, false, active_playhead)
+		modal_tracks_list.add_child(row)
+
+
+func _create_modal_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, active_playhead: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", BLOCK_GAP)
+
+	# Left Header box (130px)
+	var hdr := PanelContainer.new()
+	hdr.custom_minimum_size = Vector2(130, 32)
+	var hdr_style := StyleBoxFlat.new()
+	hdr_style.set_corner_radius_all(3)
+	hdr_style.content_margin_left = 4
+	hdr_style.content_margin_right = 4
+	hdr_style.content_margin_top = 2
+	hdr_style.content_margin_bottom = 2
+	hdr_style.set_border_width_all(1)
+
+	if combatant != null:
+		var team_col: Color = Color(0.2, 0.5, 0.9) if is_ally else Color(0.9, 0.35, 0.35)
+		hdr_style.bg_color = Color(0.10, 0.13, 0.19, 0.95)
+		hdr_style.border_color = team_col
+
+		var hbox := HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 4)
+		hdr.add_child(hbox)
+
+		var icon := TextureRect.new()
+		if combatant.name == "Warrior": icon.texture = tex_warrior
+		elif combatant.name == "Ranger": icon.texture = tex_ranger
+		elif combatant.name == "Enemy Brawler": icon.texture = tex_brawler
+		else: icon.texture = tex_scout
+		icon.custom_minimum_size = Vector2(18, 18)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hbox.add_child(icon)
+
+		var vinfo := VBoxContainer.new()
+		vinfo.add_theme_constant_override("separation", 0)
+		hbox.add_child(vinfo)
+
+		var name_lbl := Label.new()
+		name_lbl.text = combatant.name
+		name_lbl.add_theme_font_size_override("font_size", 8)
+		name_lbl.add_theme_color_override("font_color", Color.WHITE)
+		vinfo.add_child(name_lbl)
+
+		var hp_lbl := Label.new()
+		hp_lbl.text = "%d HP | %s" % [combatant.hp, CombatTypes.stance_to_string(combatant.current_stance)]
+		hp_lbl.add_theme_font_size_override("font_size", 7)
+		hp_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		vinfo.add_child(hp_lbl)
+	else:
+		hdr_style.bg_color = Color(0.06, 0.08, 0.11, 0.6)
+		hdr_style.border_color = Color(0.2, 0.25, 0.35, 0.5)
+		var empty_lbl := Label.new()
+		empty_lbl.text = "— Slot %d (Empty) —" % slot_idx
+		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_lbl.add_theme_font_size_override("font_size", 8)
+		empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.48, 0.58))
+		hdr.add_child(empty_lbl)
+
+	hdr.add_theme_stylebox_override("panel", hdr_style)
+	row.add_child(hdr)
+
+	# Right Action Clips (10 blocks)
+	var clips_hbox := HBoxContainer.new()
+	clips_hbox.add_theme_constant_override("separation", BLOCK_GAP)
+	row.add_child(clips_hbox)
+
+	if combatant == null:
+		# Empty placeholder row
+		for b in range(1, TOTAL_BLOCKS + 1):
+			var slot := PanelContainer.new()
+			slot.custom_minimum_size = Vector2(UNIT_MODAL_BLOCK_W, 32)
+			var s_style := StyleBoxFlat.new()
+			s_style.bg_color = Color(0.06, 0.08, 0.11, 0.4)
+			s_style.border_color = Color(0.15, 0.2, 0.28, 0.4)
+			s_style.set_border_width_all(1)
+			s_style.set_corner_radius_all(3)
+			slot.add_theme_stylebox_override("panel", s_style)
+			clips_hbox.add_child(slot)
+		return row
+
+	# If enemy during planning phase -> Secret intent banner across the 10 blocks
+	if not is_ally and combat_phase != CombatPhase.REPLAY:
+		var secret_panel := PanelContainer.new()
+		var total_w: int = TOTAL_BLOCKS * UNIT_MODAL_BLOCK_W + (TOTAL_BLOCKS - 1) * BLOCK_GAP
+		secret_panel.custom_minimum_size = Vector2(total_w, 32)
+		var sec_style := StyleBoxFlat.new()
+		sec_style.bg_color = Color(0.14, 0.08, 0.10, 0.8)
+		sec_style.border_color = Color(0.55, 0.2, 0.2, 0.8)
+		sec_style.set_border_width_all(1)
+		sec_style.set_corner_radius_all(3)
+		secret_panel.add_theme_stylebox_override("panel", sec_style)
+
+		var sec_lbl := Label.new()
+		sec_lbl.text = "🔒 SECRET ENEMY INTENT POOL — SIMULTANEOUS PLANNING (MASKED)"
+		sec_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sec_lbl.add_theme_font_size_override("font_size", 8)
+		sec_lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+		secret_panel.add_child(sec_lbl)
+		clips_hbox.add_child(secret_panel)
+		return row
+
+	# Otherwise render action clips from recorded_actions
+	var b: int = 1
+	while b <= TOTAL_BLOCKS:
+		var act: CombatResolver.ScheduledAction = _find_recorded_action_starting_at(combatant, b)
+		if act != null:
+			var cost: int = act.end_block - act.start_block + 1
+			var clip_w: int = cost * UNIT_MODAL_BLOCK_W + (cost - 1) * BLOCK_GAP
+			var clip := _create_action_clip_widget(act, clip_w, cost)
+			clips_hbox.add_child(clip)
+			b += cost
+		else:
+			var idle := _create_idle_clip_widget(b == active_playhead, UNIT_MODAL_BLOCK_W)
+			clips_hbox.add_child(idle)
+			b += 1
+
+	return row
+
+
+func _toggle_timeline_modal(open: bool) -> void:
+	if timeline_modal_overlay == null:
+		return
+	timeline_modal_overlay.visible = open
+	if open:
+		timeline_modal_overlay.move_to_front()
+		_update_modal_tracks_display()
+	else:
+		_update_timeline_tracks_display()
+		_update_combined_block_display(combined_selected_block)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
 	if key_event != null and key_event.pressed and not key_event.echo:
-		if key_event.keycode == KEY_Q or key_event.keycode == KEY_LEFT:
+		if key_event.keycode == KEY_ESCAPE:
+			if timeline_modal_overlay != null and timeline_modal_overlay.visible:
+				_toggle_timeline_modal(false)
+				get_viewport().set_input_as_handled()
+				return
+		elif key_event.keycode == KEY_F:
+			if timeline_modal_overlay != null:
+				_toggle_timeline_modal(not timeline_modal_overlay.visible)
+				get_viewport().set_input_as_handled()
+				return
+		elif key_event.keycode == KEY_Q or key_event.keycode == KEY_LEFT:
 			_navigate_combined_block(-1)
 		elif key_event.keycode == KEY_E or key_event.keycode == KEY_RIGHT:
 			_navigate_combined_block(1)
