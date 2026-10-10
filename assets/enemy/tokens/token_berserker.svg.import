@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dipdkpjnm1a3s"
-path="res://.godot/imported/tile_floor.svg-0e56cb16ee5557b761733ed992b5ff3e.ctex"
+uid="uid://cunm2rlncnk7x"
+path="res://.godot/imported/token_berserker.svg-498f35a009d64e8d609c53941df3f589.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tile_floor.svg"
-dest_files=["res://.godot/imported/tile_floor.svg-0e56cb16ee5557b761733ed992b5ff3e.ctex"]
+source_file="res://assets/enemy/tokens/token_berserker.svg"
+dest_files=["res://.godot/imported/token_berserker.svg-498f35a009d64e8d609c53941df3f589.ctex"]
 
 [params]
 

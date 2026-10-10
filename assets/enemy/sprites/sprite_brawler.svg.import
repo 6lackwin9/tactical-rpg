@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ca6uox6pjin7"
-path="res://.godot/imported/sprite_skirmisher.svg-61573cf0150fa4542a58f095bdba9bec.ctex"
+uid="uid://6kcm4kgy2txp"
+path="res://.godot/imported/sprite_brawler.svg-79421b191ba6ccafb1247239061b2220.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite_skirmisher.svg"
-dest_files=["res://.godot/imported/sprite_skirmisher.svg-61573cf0150fa4542a58f095bdba9bec.ctex"]
+source_file="res://assets/enemy/sprites/sprite_brawler.svg"
+dest_files=["res://.godot/imported/sprite_brawler.svg-79421b191ba6ccafb1247239061b2220.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cc5456ch6xwy4"
-path="res://.godot/imported/sprite_warrior.svg-f45839268cfc322547d597563eac8b96.ctex"
+uid="uid://skm8yb2jsh1a"
+path="res://.godot/imported/sprite_berserker.svg-ab364a902ec2f9d985991333964550ca.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite_warrior.svg"
-dest_files=["res://.godot/imported/sprite_warrior.svg-f45839268cfc322547d597563eac8b96.ctex"]
+source_file="res://assets/enemy/sprites/sprite_berserker.svg"
+dest_files=["res://.godot/imported/sprite_berserker.svg-ab364a902ec2f9d985991333964550ca.ctex"]
 
 [params]
 

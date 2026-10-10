@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dq3mtglkbqbng"
-path="res://.godot/imported/token_warrior.svg-6fdb609992f4726c4cf5b60da96d0b48.ctex"
+uid="uid://cc5456ch6xwy4"
+path="res://.godot/imported/sprite_warrior.svg-8e81a4c84ba424d277e1d9e64561f6f6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/token_warrior.svg"
-dest_files=["res://.godot/imported/token_warrior.svg-6fdb609992f4726c4cf5b60da96d0b48.ctex"]
+source_file="res://assets/party/sprites/sprite_warrior.svg"
+dest_files=["res://.godot/imported/sprite_warrior.svg-8e81a4c84ba424d277e1d9e64561f6f6.ctex"]
 
 [params]
 

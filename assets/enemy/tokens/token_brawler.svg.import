@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://00huedcscjqx"
-path="res://.godot/imported/token_archer.svg-08996c5a70b6ed2f03a01cac9dc93af9.ctex"
+uid="uid://blvtinmtvocwl"
+path="res://.godot/imported/token_brawler.svg-7a1dfff938e4570e92110b441bd7e482.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/token_archer.svg"
-dest_files=["res://.godot/imported/token_archer.svg-08996c5a70b6ed2f03a01cac9dc93af9.ctex"]
+source_file="res://assets/enemy/tokens/token_brawler.svg"
+dest_files=["res://.godot/imported/token_brawler.svg-7a1dfff938e4570e92110b441bd7e482.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://blvtinmtvocwl"
-path="res://.godot/imported/token_brawler.svg-f4f9a4d78f31a759f3869df780ef740e.ctex"
+uid="uid://ofjt1yd4bam6"
+path="res://.godot/imported/token_skirmisher.svg-69f1f17bf5aa116b7b68794fb6d922e1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/token_brawler.svg"
-dest_files=["res://.godot/imported/token_brawler.svg-f4f9a4d78f31a759f3869df780ef740e.ctex"]
+source_file="res://assets/enemy/tokens/token_skirmisher.svg"
+dest_files=["res://.godot/imported/token_skirmisher.svg-69f1f17bf5aa116b7b68794fb6d922e1.ctex"]
 
 [params]
 

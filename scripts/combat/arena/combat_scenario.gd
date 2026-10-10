@@ -58,9 +58,9 @@ static func create_default_arena_scenario() -> CombatScenario:
 	scenario.exit_coords = [Vector2i(8, 4)]
 
 	# Tile textures
-	scenario.tile_textures["floor"] = load_svg_texture("res://assets/tile_floor.svg")
-	scenario.tile_textures["exit"] = load_svg_texture("res://assets/tile_exit.svg")
-	scenario.tile_textures["center"] = load_svg_texture("res://assets/tile_center.svg")
+	scenario.tile_textures["floor"] = load_svg_texture("res://assets/tiles/tile_floor.svg")
+	scenario.tile_textures["exit"] = load_svg_texture("res://assets/tiles/tile_exit.svg")
+	scenario.tile_textures["center"] = load_svg_texture("res://assets/tiles/tile_center.svg")
 
 	# Allied Party
 	var warrior := Combatant.new("Warrior", 100, 15, 1)
@@ -88,14 +88,14 @@ static func create_default_arena_scenario() -> CombatScenario:
 	scenario.initial_positions[archer] = Vector2i(6, 5)
 
 	# Token Textures
-	var tex_warrior := load_svg_texture("res://assets/token_warrior.svg")
-	var tex_ranger := load_svg_texture("res://assets/token_ranger.svg")
-	var tex_brawler := load_svg_texture("res://assets/token_brawler.svg")
-	var tex_scout := load_svg_texture("res://assets/token_scout.svg")
-	var tex_berserker := load_svg_texture("res://assets/token_berserker.svg")
-	var tex_skirmisher := load_svg_texture("res://assets/token_skirmisher.svg")
-	var tex_shaman := load_svg_texture("res://assets/token_shaman.svg")
-	var tex_archer := load_svg_texture("res://assets/token_archer.svg")
+	var tex_warrior := load_svg_texture("res://assets/party/tokens/token_warrior.svg")
+	var tex_ranger := load_svg_texture("res://assets/party/tokens/token_ranger.svg")
+	var tex_brawler := load_svg_texture("res://assets/enemy/tokens/token_brawler.svg")
+	var tex_scout := load_svg_texture("res://assets/enemy/tokens/token_scout.svg")
+	var tex_berserker := load_svg_texture("res://assets/enemy/tokens/token_berserker.svg")
+	var tex_skirmisher := load_svg_texture("res://assets/enemy/tokens/token_skirmisher.svg")
+	var tex_shaman := load_svg_texture("res://assets/enemy/tokens/token_shaman.svg")
+	var tex_archer := load_svg_texture("res://assets/enemy/tokens/token_archer.svg")
 
 	scenario.token_textures[warrior] = tex_warrior
 	scenario.token_textures[ranger] = tex_ranger
@@ -107,13 +107,13 @@ static func create_default_arena_scenario() -> CombatScenario:
 	scenario.token_textures[archer] = tex_archer
 
 	# Character Full Sprite Textures
-	scenario.sprite_textures[warrior] = load_svg_texture("res://assets/sprite_warrior.svg")
-	scenario.sprite_textures[ranger] = load_svg_texture("res://assets/sprite_ranger.svg")
-	scenario.sprite_textures[brawler] = load_svg_texture("res://assets/sprite_brawler.svg")
-	scenario.sprite_textures[scout] = load_svg_texture("res://assets/sprite_scout.svg")
-	scenario.sprite_textures[berserker] = load_svg_texture("res://assets/sprite_berserker.svg")
-	scenario.sprite_textures[skirmisher] = load_svg_texture("res://assets/sprite_skirmisher.svg")
-	scenario.sprite_textures[shaman] = load_svg_texture("res://assets/sprite_shaman.svg")
-	scenario.sprite_textures[archer] = load_svg_texture("res://assets/sprite_archer.svg")
+	scenario.sprite_textures[warrior] = load_svg_texture("res://assets/party/sprites/sprite_warrior.svg")
+	scenario.sprite_textures[ranger] = load_svg_texture("res://assets/party/sprites/sprite_ranger.svg")
+	scenario.sprite_textures[brawler] = load_svg_texture("res://assets/enemy/sprites/sprite_brawler.svg")
+	scenario.sprite_textures[scout] = load_svg_texture("res://assets/enemy/sprites/sprite_scout.svg")
+	scenario.sprite_textures[berserker] = load_svg_texture("res://assets/enemy/sprites/sprite_berserker.svg")
+	scenario.sprite_textures[skirmisher] = load_svg_texture("res://assets/enemy/sprites/sprite_skirmisher.svg")
+	scenario.sprite_textures[shaman] = load_svg_texture("res://assets/enemy/sprites/sprite_shaman.svg")
+	scenario.sprite_textures[archer] = load_svg_texture("res://assets/enemy/sprites/sprite_archer.svg")
 
 	return scenario

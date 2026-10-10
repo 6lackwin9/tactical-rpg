@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bhdjmt4x211j2"
-path="res://.godot/imported/sprite_shaman.svg-4a13cf8bf5e39bfc26922f9e01a24270.ctex"
+uid="uid://duwtfxx8veekr"
+path="res://.godot/imported/token_ranger.svg-05e5005af198bd219e10b72fcf9a0fde.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite_shaman.svg"
-dest_files=["res://.godot/imported/sprite_shaman.svg-4a13cf8bf5e39bfc26922f9e01a24270.ctex"]
+source_file="res://assets/party/tokens/token_ranger.svg"
+dest_files=["res://.godot/imported/token_ranger.svg-05e5005af198bd219e10b72fcf9a0fde.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cunm2rlncnk7x"
-path="res://.godot/imported/token_berserker.svg-5ec9ba59530ce3da6c402b14401ddb47.ctex"
+uid="uid://00huedcscjqx"
+path="res://.godot/imported/token_archer.svg-1415ee5b0799f57497aeebf2fda13936.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/token_berserker.svg"
-dest_files=["res://.godot/imported/token_berserker.svg-5ec9ba59530ce3da6c402b14401ddb47.ctex"]
+source_file="res://assets/enemy/tokens/token_archer.svg"
+dest_files=["res://.godot/imported/token_archer.svg-1415ee5b0799f57497aeebf2fda13936.ctex"]
 
 [params]
 

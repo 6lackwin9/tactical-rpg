@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://comohrplea5x5"
-path="res://.godot/imported/sprite_ranger.svg-333e7310fcec1ab19439d65b1e359a8d.ctex"
+uid="uid://bg0ejfamd1mde"
+path="res://.godot/imported/token_scout.svg-8bab58856eb350df0f55337676518b1e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite_ranger.svg"
-dest_files=["res://.godot/imported/sprite_ranger.svg-333e7310fcec1ab19439d65b1e359a8d.ctex"]
+source_file="res://assets/enemy/tokens/token_scout.svg"
+dest_files=["res://.godot/imported/token_scout.svg-8bab58856eb350df0f55337676518b1e.ctex"]
 
 [params]
 

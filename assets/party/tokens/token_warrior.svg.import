@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dlaokji06bf0a"
-path="res://.godot/imported/tile_center.svg-cc450cb73f03ad1f39df015db6ce561e.ctex"
+uid="uid://dq3mtglkbqbng"
+path="res://.godot/imported/token_warrior.svg-d8abcef606b56d030a86b74ed93fe174.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tile_center.svg"
-dest_files=["res://.godot/imported/tile_center.svg-cc450cb73f03ad1f39df015db6ce561e.ctex"]
+source_file="res://assets/party/tokens/token_warrior.svg"
+dest_files=["res://.godot/imported/token_warrior.svg-d8abcef606b56d030a86b74ed93fe174.ctex"]
 
 [params]
 

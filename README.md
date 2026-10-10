@@ -28,27 +28,36 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 
 ```text
 tactical-rpg/
-├── assets/                       # Custom vector SVG assets (sprites, unit tokens, grid tiles)
+├── assets/                       # Custom vector SVG assets
+│   ├── enemy/                    # Hostile unit assets
+│   │   ├── sprites/              # Full-character illustration SVG assets (archer, berserker, brawler, etc.)
+│   │   └── tokens/               # Overhead circular unit token SVG assets
+│   ├── party/                    # Player party unit assets
+│   │   ├── sprites/              # Full-character illustration SVG assets (warrior, ranger)
+│   │   └── tokens/               # Overhead circular unit token SVG assets
+│   └── tiles/                    # Arena grid tile SVG textures (tile_floor, tile_center, tile_exit)
 ├── data/                         # [Placeholder] Game data definitions & balance tables
 ├── scenes/
 │   ├── test_arena.tscn           # Visual interactive combat arena harness scene
 │   └── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
 ├── scripts/
 │   ├── combat/                   # Core simulation, rules engine & commands
-│   │   ├── battle_command.gd         # Abstract base command class (duration, cost, execution)
-│   │   ├── attack_command.gd         # Melee & ranged attacks with stance & range gating
-│   │   ├── defend_command.gd         # Defensive stance transition & incoming damage mitigation
-│   │   ├── focus_command.gd          # Tactical buff command (+50% ATK for 2 rounds)
-│   │   ├── move_command.gd           # Cardinal movement (1 tile) & sprinting (2 tiles)
-│   │   ├── target_command.gd         # Intent lock onto specific opponent
-│   │   ├── enter_neutral_command.gd  # Reset active combat stance to Neutral
-│   │   ├── hold_stance_command.gd    # Stance preservation across timeline blocks
-│   │   ├── combatant.gd              # Unit model (HP, speed, range, stance, buffs, target)
-│   │   ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles
-│   │   ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
-│   │   ├── combat_scenario.gd        # Encounter setup, ally/enemy rosters, reinforcements, asset binding
-│   │   ├── combat_types.gd           # Stances, enum helpers, matchup multipliers, formatting
-│   │   └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   │   ├── actions/              # Discrete battle command implementations
+│   │   │   ├── battle_command.gd         # Abstract base command class (duration, cost, execution)
+│   │   │   ├── attack_command.gd         # Melee & ranged attacks with stance & range gating
+│   │   │   ├── defend_command.gd         # Defensive stance transition & incoming damage mitigation
+│   │   │   ├── focus_command.gd          # Tactical buff command (+50% ATK for 2 rounds)
+│   │   │   ├── move_command.gd           # Cardinal movement (1 tile) & sprinting (2 tiles)
+│   │   │   ├── target_command.gd         # Intent lock onto specific opponent
+│   │   │   ├── enter_neutral_command.gd  # Reset active combat stance to Neutral
+│   │   │   └── hold_stance_command.gd    # Stance preservation across timeline blocks
+│   │   ├── arena/                # Arena spatial rules, scenario setups & resolution
+│   │   │   ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles
+│   │   │   ├── combat_scenario.gd        # Encounter setup, ally/enemy rosters, reinforcements, asset binding
+│   │   │   ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
+│   │   │   └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   │   ├── combatant.gd          # Unit model (HP, speed, range, stance, buffs, target)
+│   │   └── combat_types.gd       # Stances, enum helpers, matchup multipliers, formatting
 │   ├── core/                     # [Placeholder] Core engine utilities & math helpers
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   └── arena_test_suite.gd       # 5 automated test suites with 40 assertions
@@ -64,7 +73,7 @@ tactical-rpg/
 │       ├── action_log_entry.gd       # Standardized action event model
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       └── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
-├── check_project.ps1             # 3-step automated validation script (syntax, cache, integration)
+├── check_project.ps1             # 3-step automated validation script (cache, syntax, integration)
 ├── check_project.bat             # Batch launcher for check_project.ps1
 └── run_game.bat                  # Quick launcher for interactive test arena in Godot
 ```
@@ -135,8 +144,8 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 
 Runs in 3 phases:
 
-- `[1/3]` Validates GDScript syntax & static typing across all 27 project scripts (`--headless --check-only`).
-- `[2/3]` Verifies global class cache and asset imports (`--headless --editor --quit`).
+- `[1/3]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
+- `[2/3]` Validates GDScript syntax & static typing across all 27 project scripts (`--headless --check-only`).
 - `[3/3]` Executes the full headless test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
 
 ---

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://skm8yb2jsh1a"
-path="res://.godot/imported/sprite_berserker.svg-6d25254394e66ec345104acbb2cb6a66.ctex"
+uid="uid://cna4hdyoek6kw"
+path="res://.godot/imported/sprite_archer.svg-577b50c96c17a04c6f62d3ea57aed35b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprite_berserker.svg"
-dest_files=["res://.godot/imported/sprite_berserker.svg-6d25254394e66ec345104acbb2cb6a66.ctex"]
+source_file="res://assets/enemy/sprites/sprite_archer.svg"
+dest_files=["res://.godot/imported/sprite_archer.svg-577b50c96c17a04c6f62d3ea57aed35b.ctex"]
 
 [params]
 

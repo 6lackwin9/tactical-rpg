@@ -49,9 +49,21 @@ function Invoke-GodotProcess {
 }
 
 # ------------------------------------------------------------------------------
-# STEP 1: Syntax & Static Typing Check Across All GDScript Files
+# STEP 1: Refresh Global Class Cache & Symbols
 # ------------------------------------------------------------------------------
-Write-Host "`n[1/3] Validating all GDScript files with Godot parser..." -ForegroundColor Yellow
+Write-Host "`n[1/3] Verifying global class cache and asset imports..." -ForegroundColor Yellow
+$editorResult = Invoke-GodotProcess -Arguments @("--headless", "--editor", "--quit-after", "50")
+if ($editorResult.ExitCode -ne 0) {
+    Write-Host "[ERROR] Godot editor scan failed with exit code: $($editorResult.ExitCode)" -ForegroundColor Red
+    Write-Host $editorResult.Output -ForegroundColor DarkRed
+    exit 1
+}
+Write-Host "  -> Global class cache and imports up to date." -ForegroundColor Green
+
+# ------------------------------------------------------------------------------
+# STEP 2: Syntax & Static Typing Check Across All GDScript Files
+# ------------------------------------------------------------------------------
+Write-Host "`n[2/3] Validating all GDScript files with Godot parser..." -ForegroundColor Yellow
 $gdFiles = Get-ChildItem -Path $projectRoot -Recurse -Filter "*.gd" | Where-Object { $_.FullName -notmatch "\\\.godot\\" }
 $scriptErrors = 0
 $scriptsChecked = 0
@@ -83,18 +95,6 @@ if ($scriptErrors -gt 0) {
 else {
     Write-Host "  -> All $scriptsChecked GDScript files passed syntax validation." -ForegroundColor Green
 }
-
-# ------------------------------------------------------------------------------
-# STEP 2: Refresh Global Class Cache & Symbols
-# ------------------------------------------------------------------------------
-Write-Host "`n[2/3] Verifying global class cache and asset imports..." -ForegroundColor Yellow
-$editorResult = Invoke-GodotProcess -Arguments @("--headless", "--editor", "--quit")
-if ($editorResult.ExitCode -ne 0) {
-    Write-Host "[ERROR] Godot editor scan failed with exit code: $($editorResult.ExitCode)" -ForegroundColor Red
-    Write-Host $editorResult.Output -ForegroundColor DarkRed
-    exit 1
-}
-Write-Host "  -> Global class cache and imports up to date." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # STEP 3: Run Full Automated Headless Integration Test Suite

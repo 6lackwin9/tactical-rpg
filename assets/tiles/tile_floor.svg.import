@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bg0ejfamd1mde"
-path="res://.godot/imported/token_scout.svg-92d8fa7d6915748acb1f7fb1f0af26f4.ctex"
+uid="uid://dipdkpjnm1a3s"
+path="res://.godot/imported/tile_floor.svg-8105555c47b0f95a5f6eae9d2c1350e2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/token_scout.svg"
-dest_files=["res://.godot/imported/token_scout.svg-92d8fa7d6915748acb1f7fb1f0af26f4.ctex"]
+source_file="res://assets/tiles/tile_floor.svg"
+dest_files=["res://.godot/imported/tile_floor.svg-8105555c47b0f95a5f6eae9d2c1350e2.ctex"]
 
 [params]
 
