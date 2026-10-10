@@ -123,6 +123,8 @@ enum CombatPhase {
 class BlockSnapshot:
 	extends RefCounted
 	var block_index: int = 0
+	var round_num: int = 1
+	var reinforcements_spawned: bool = false
 	var positions: Dictionary = {}         # Combatant -> Vector2i
 	var hps: Dictionary = {}               # Combatant -> int
 	var max_hps: Dictionary = {}           # Combatant -> int
@@ -336,7 +338,7 @@ func _setup_interactive_ui() -> void:
 
 	# Top-Left: Allied Party Status Panel (Static 2x2 Grid for 4 Heroes)
 	var party_panel := PanelContainer.new()
-	party_panel.custom_minimum_size = Vector2(310, 84)
+	party_panel.custom_minimum_size = Vector2(280, 84)
 	var party_box_style := StyleBoxFlat.new()
 	party_box_style.bg_color = Color(0.08, 0.11, 0.16, 0.95)
 	party_box_style.border_color = Color(0.2, 0.38, 0.65, 0.8)
@@ -378,7 +380,7 @@ func _setup_interactive_ui() -> void:
 
 	# Top-Center: Single-Action Resolution Log Dock with Navigation & Expand Button
 	var log_panel := PanelContainer.new()
-	log_panel.custom_minimum_size = Vector2(450, 84)
+	log_panel.custom_minimum_size = Vector2(430, 84)
 	log_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var log_style := StyleBoxFlat.new()
 	log_style.bg_color = Color(0.06, 0.08, 0.12, 0.95)
@@ -467,9 +469,10 @@ func _setup_interactive_ui() -> void:
 	log_rich_text.visible = false
 	log_panel.add_child(log_rich_text)
 
-	# Top-Right: Enemy Hostiles Status Panel (Static 5x2 Compact Grid for 10 Enemies)
+	# Top-Right: Enemy Hostiles Status Panel (Active Roster Grid)
 	var enemy_panel := PanelContainer.new()
-	enemy_panel.custom_minimum_size = Vector2(476, 84)
+	enemy_panel.custom_minimum_size = Vector2(516, 84)
+	enemy_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var enemy_box_style := StyleBoxFlat.new()
 	enemy_box_style.bg_color = Color(0.12, 0.08, 0.10, 0.95)
 	enemy_box_style.border_color = Color(0.65, 0.25, 0.25, 0.8)
@@ -489,13 +492,13 @@ func _setup_interactive_ui() -> void:
 	var enemy_hdr_hbox := HBoxContainer.new()
 	enemy_vbox.add_child(enemy_hdr_hbox)
 	enemy_title_lbl = Label.new()
-	enemy_title_lbl.text = "💀 ENEMY HOSTILES (6/10)"
+	enemy_title_lbl.text = "💀 ENEMY HOSTILES (2 Active)"
 	enemy_title_lbl.add_theme_font_size_override("font_size", 10)
 	enemy_title_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 	enemy_hdr_hbox.add_child(enemy_title_lbl)
 
 	var enemy_hint := Label.new()
-	enemy_hint.text = "(5x2 Grid • Click to inspect)"
+	enemy_hint.text = "(Active Roster • Click to inspect)"
 	enemy_hint.add_theme_font_size_override("font_size", 8)
 	enemy_hint.add_theme_color_override("font_color", Color(0.6, 0.5, 0.5))
 	enemy_hdr_hbox.add_spacer(false)
@@ -505,7 +508,7 @@ func _setup_interactive_ui() -> void:
 	enemy_cards_container.columns = 5
 	enemy_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	enemy_cards_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	enemy_cards_container.add_theme_constant_override("h_separation", 3)
+	enemy_cards_container.add_theme_constant_override("h_separation", 4)
 	enemy_cards_container.add_theme_constant_override("v_separation", 3)
 	enemy_vbox.add_child(enemy_cards_container)
 
@@ -1506,10 +1509,16 @@ func _init_interactive_simulation() -> void:
 	for enemy in sim_enemies:
 		_create_unit_token(enemy, _get_combatant_token_texture(enemy))
 		_create_roster_card(enemy, Color(0.9, 0.3, 0.3))
+		# Goblin ambush reinforcements are invisible until they appear
+		if enemy in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
+			if roster_cards.has(enemy):
+				@warning_ignore("unsafe_cast")
+				var enemy_card := roster_cards[enemy] as Control
+				if is_instance_valid(enemy_card):
+					enemy_card.visible = false
 	_add_enemy_placeholders()
 
-	party_title_lbl.text = "⚔ PARTY MEMBERS (%d/4)" % sim_allies.size()
-	enemy_title_lbl.text = "💀 ENEMY HOSTILES (%d/10)" % sim_enemies.size()
+	_update_all_roster_cards()
 
 	# 7. Capture Initial Snapshot (State 0 before block 1 executes)
 	snapshots.clear()
@@ -1600,38 +1609,38 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 	card.add_theme_stylebox_override("panel", card_style)
 
 	if is_ally:
-		card.custom_minimum_size = Vector2(146, 26)
+		card.custom_minimum_size = Vector2(130, 26)
 		var main_vbox := VBoxContainer.new()
 		main_vbox.add_theme_constant_override("separation", 1)
 		card.add_child(main_vbox)
 
 		# Top row: Name & HP fraction
 		var top_row := HBoxContainer.new()
-		top_row.add_theme_constant_override("separation", 3)
+		top_row.add_theme_constant_override("separation", 2)
 		main_vbox.add_child(top_row)
 
 		var name_lbl := Label.new()
 		name_lbl.text = combatant.name
-		name_lbl.add_theme_font_size_override("font_size", 9)
+		name_lbl.clip_text = true
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 8)
 		name_lbl.add_theme_color_override("font_color", team_color.lightened(0.35))
 		top_row.add_child(name_lbl)
-
-		top_row.add_spacer(false)
 
 		var hp_lbl := Label.new()
 		hp_lbl.name = "HpLabel"
 		hp_lbl.text = "%d/%d" % [combatant.hp, combatant.max_hp]
-		hp_lbl.add_theme_font_size_override("font_size", 8)
+		hp_lbl.add_theme_font_size_override("font_size", 7)
 		hp_lbl.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
 		top_row.add_child(hp_lbl)
 
 		# Bottom row: HP bar, Stance, Pos
 		var bot_row := HBoxContainer.new()
-		bot_row.add_theme_constant_override("separation", 4)
+		bot_row.add_theme_constant_override("separation", 2)
 		main_vbox.add_child(bot_row)
 
 		var hp_bar := ProgressBar.new()
-		hp_bar.custom_minimum_size = Vector2(46, 5)
+		hp_bar.custom_minimum_size = Vector2(34, 4)
 		hp_bar.max_value = combatant.max_hp
 		hp_bar.value = combatant.hp
 		hp_bar.show_percentage = false
@@ -1639,12 +1648,12 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 
 		var stance_lbl := Label.new()
 		stance_lbl.name = "StanceLabel"
+		stance_lbl.clip_text = true
+		stance_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stance_lbl.text = CombatTypes.stance_to_string(combatant.current_stance)
 		stance_lbl.add_theme_font_size_override("font_size", 7)
 		stance_lbl.add_theme_color_override("font_color", Color(0.65, 0.78, 0.9))
 		bot_row.add_child(stance_lbl)
-
-		bot_row.add_spacer(false)
 
 		var pos_lbl := Label.new()
 		pos_lbl.name = "PosLabel"
@@ -1653,7 +1662,7 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 		pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 		bot_row.add_child(pos_lbl)
 	else:
-		card.custom_minimum_size = Vector2(88, 26)
+		card.custom_minimum_size = Vector2(94, 26)
 		var main_vbox := VBoxContainer.new()
 		main_vbox.add_theme_constant_override("separation", 1)
 		card.add_child(main_vbox)
@@ -1673,11 +1682,11 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 
 		var name_lbl := Label.new()
 		name_lbl.text = short_name
+		name_lbl.clip_text = true
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.add_theme_font_size_override("font_size", 8)
 		name_lbl.add_theme_color_override("font_color", team_color.lightened(0.35))
 		top_row.add_child(name_lbl)
-
-		top_row.add_spacer(false)
 
 		var hp_lbl := Label.new()
 		hp_lbl.name = "HpLabel"
@@ -1686,13 +1695,13 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 		hp_lbl.add_theme_color_override("font_color", Color(0.9, 0.75, 0.75))
 		top_row.add_child(hp_lbl)
 
-		# Bottom row: Mini HP bar, stance, pos
+		# Bottom row: Mini HP bar, status
 		var bot_row := HBoxContainer.new()
 		bot_row.add_theme_constant_override("separation", 2)
 		main_vbox.add_child(bot_row)
 
 		var hp_bar := ProgressBar.new()
-		hp_bar.custom_minimum_size = Vector2(30, 4)
+		hp_bar.custom_minimum_size = Vector2(26, 4)
 		hp_bar.max_value = combatant.max_hp
 		hp_bar.value = combatant.hp
 		hp_bar.show_percentage = false
@@ -1700,20 +1709,17 @@ func _create_roster_card(combatant: Combatant, team_color: Color) -> void:
 
 		var stance_lbl := Label.new()
 		stance_lbl.name = "StanceLabel"
+		stance_lbl.clip_text = true
+		stance_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var st_str: String = CombatTypes.stance_to_string(combatant.current_stance)
 		stance_lbl.text = st_str.left(3)
 		stance_lbl.add_theme_font_size_override("font_size", 7)
 		stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.65, 0.65))
 		bot_row.add_child(stance_lbl)
 
-		bot_row.add_spacer(false)
-
 		var pos_lbl := Label.new()
 		pos_lbl.name = "PosLabel"
-		var coord: Vector2i = sim_grid.get_position(combatant)
-		pos_lbl.text = "%s" % (str(coord) if coord != Vector2i(-1, -1) else "Off")
-		pos_lbl.add_theme_font_size_override("font_size", 7)
-		pos_lbl.add_theme_color_override("font_color", Color(0.55, 0.5, 0.5))
+		pos_lbl.visible = false
 		bot_row.add_child(pos_lbl)
 
 	card.gui_input.connect(func(event: InputEvent) -> void:
@@ -1732,7 +1738,7 @@ func _add_party_placeholders() -> void:
 	while party_cards_container.get_child_count() < 4:
 		var slot_idx: int = party_cards_container.get_child_count() + 1
 		var ph := PanelContainer.new()
-		ph.custom_minimum_size = Vector2(146, 26)
+		ph.custom_minimum_size = Vector2(130, 26)
 		var ph_style := StyleBoxFlat.new()
 		ph_style.bg_color = Color(0.06, 0.08, 0.12, 0.35)
 		ph_style.border_color = Color(0.2, 0.28, 0.4, 0.35)
@@ -1751,36 +1757,19 @@ func _add_party_placeholders() -> void:
 
 
 func _add_enemy_placeholders() -> void:
-	if not enemy_cards_container:
-		return
-	while enemy_cards_container.get_child_count() < 10:
-		var slot_idx: int = enemy_cards_container.get_child_count() + 1
-		var ph := PanelContainer.new()
-		ph.custom_minimum_size = Vector2(88, 26)
-		var ph_style := StyleBoxFlat.new()
-		ph_style.bg_color = Color(0.08, 0.05, 0.06, 0.3)
-		ph_style.border_color = Color(0.3, 0.15, 0.18, 0.35)
-		ph_style.set_border_width_all(1)
-		ph_style.set_corner_radius_all(3)
-		ph.add_theme_stylebox_override("panel", ph_style)
-
-		var lbl := Label.new()
-		lbl.text = "[Reserve %d]" % slot_idx
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 7)
-		lbl.add_theme_color_override("font_color", Color(0.42, 0.32, 0.35))
-		ph.add_child(lbl)
-		enemy_cards_container.add_child(ph)
+	# Active roster only: reserve placeholders removed so only active enemies appear
+	pass
 
 
 # ==============================================================================
-# SECTION 3: SNAPSHOTS & REPLAY RESTORATION
+# SECTION 3: SNAPSHOTS, REPLAY RESTORATION & UNIFIED ROSTER UPDATES
 # ==============================================================================
 
 func _capture_snapshot(block_idx: int) -> void:
 	var snap := BlockSnapshot.new()
 	snap.block_index = block_idx
+	snap.round_num = current_combat_round
+	snap.reinforcements_spawned = reinforcements_spawned
 	for c: Combatant in sim_resolver.registered_combatants:
 		snap.positions[c] = sim_grid.get_position(c)
 		snap.hps[c] = c.hp
@@ -1796,6 +1785,7 @@ func _capture_snapshot(block_idx: int) -> void:
 
 
 func _restore_snapshot(snap: BlockSnapshot) -> void:
+	reinforcements_spawned = snap.reinforcements_spawned
 	for c: Combatant in unit_token_nodes:
 		@warning_ignore("unsafe_cast")
 		var token := unit_token_nodes[c] as Control
@@ -1815,38 +1805,83 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 				else:
 					token.modulate = Color.WHITE
 
-	for c: Combatant in roster_cards:
-		@warning_ignore("unsafe_cast")
-		var card := roster_cards[c] as PanelContainer
-		if snap.hps.has(c):
-			var hp_bar := card.find_child("ProgressBar", true, false) as ProgressBar
-			var hp_lbl := card.find_child("HpLabel", true, false) as Label
-			var stance_lbl := card.find_child("StanceLabel", true, false) as Label
-			var pos_lbl := card.find_child("PosLabel", true, false) as Label
-
-			var cur_hp: int = snap.hps[c]
-			var max_hp: int = snap.max_hps[c]
-			var cur_stance: CombatTypes.StanceType = snap.stances[c]
-			var is_active: bool = snap.is_active[c]
-			var is_withdrawn: bool = snap.is_withdrawn[c]
-
-			if hp_bar:
-				hp_bar.value = cur_hp
-			if hp_lbl:
-				hp_lbl.text = "%d/%d" % [cur_hp, max_hp]
-			if stance_lbl:
-				if is_withdrawn:
-					stance_lbl.text = "WITHDRAWN"
-				elif not is_active:
-					stance_lbl.text = "DEFEATED"
-				else:
-					stance_lbl.text = CombatTypes.stance_to_string(cur_stance)
-			if pos_lbl:
-				var pos: Vector2i = snap.positions[c]
-				pos_lbl.text = "Pos: %s" % (str(pos) if is_active else "Off Grid")
-
+	_update_all_roster_cards(snap)
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
+
+
+func _update_all_roster_cards(snap: BlockSnapshot = null) -> void:
+	var alive_enemies: int = 0
+	var is_r1: bool = (snap.round_num == 1 if snap != null else current_combat_round == 1)
+	var reinforcements_active: bool = (snap.reinforcements_spawned if snap != null else reinforcements_spawned)
+
+	for combatant: Combatant in roster_cards:
+		@warning_ignore("unsafe_cast")
+		var card := roster_cards[combatant] as PanelContainer
+		if not is_instance_valid(card):
+			continue
+
+		var is_ally: bool = sim_allies.has(combatant)
+		var cur_hp: int = snap.hps.get(combatant, combatant.hp) if snap != null else combatant.hp
+		var max_hp: int = snap.max_hps.get(combatant, combatant.max_hp) if snap != null else combatant.max_hp
+		var is_withdrawn: bool = snap.is_withdrawn.get(combatant, combatant.is_withdrawn) if snap != null else combatant.is_withdrawn
+		var is_alive: bool = (cur_hp > 0)
+		var is_act: bool = is_alive and not is_withdrawn
+		var cur_stance: CombatTypes.StanceType = snap.stances.get(combatant, combatant.current_stance) if snap != null else combatant.current_stance
+		var pos: Vector2i = snap.positions.get(combatant, sim_grid.get_position(combatant)) if snap != null else sim_grid.get_position(combatant)
+
+		# In Round 1, ambush goblins are only visible after they appear
+		if not is_ally and combatant in [unit_berserker, unit_skirmisher, unit_archer, unit_shaman]:
+			if is_r1:
+				card.visible = reinforcements_active
+			else:
+				card.visible = true
+
+		if not is_ally and card.visible and is_act:
+			alive_enemies += 1
+
+		var hp_bar := card.find_child("ProgressBar", true, false) as ProgressBar
+		var hp_lbl := card.find_child("HpLabel", true, false) as Label
+		var stance_lbl := card.find_child("StanceLabel", true, false) as Label
+		var pos_lbl := card.find_child("PosLabel", true, false) as Label
+
+		if hp_bar:
+			hp_bar.max_value = max_hp
+			hp_bar.value = cur_hp
+		if hp_lbl:
+			if is_ally:
+				hp_lbl.text = "%d/%d" % [cur_hp, max_hp]
+			else:
+				hp_lbl.text = "%d" % cur_hp
+		if stance_lbl:
+			if not is_alive:
+				stance_lbl.text = "DEFEATED"
+				stance_lbl.add_theme_color_override("font_color", Color(0.85, 0.35, 0.35))
+			elif is_withdrawn:
+				stance_lbl.text = "ESCAPED"
+				stance_lbl.add_theme_color_override("font_color", Color(0.95, 0.75, 0.25))
+			else:
+				stance_lbl.text = CombatTypes.stance_to_string(cur_stance) if is_ally else CombatTypes.stance_to_string(cur_stance).left(3)
+				stance_lbl.add_theme_color_override("font_color", Color(0.65, 0.78, 0.9) if is_ally else Color(0.7, 0.65, 0.65))
+
+		if pos_lbl:
+			if is_act:
+				pos_lbl.text = "%s" % str(pos)
+			else:
+				pos_lbl.text = "Off"
+
+		# Dimmer appearance for dead or escaped units (both party and enemy)
+		if not is_alive:
+			card.modulate = Color(0.55, 0.55, 0.55, 0.45)
+		elif is_withdrawn:
+			card.modulate = Color(0.65, 0.65, 0.65, 0.45)
+		else:
+			card.modulate = Color.WHITE
+
+	if enemy_title_lbl:
+		enemy_title_lbl.text = "💀 ENEMY HOSTILES (%d Active)" % alive_enemies
+	if party_title_lbl:
+		party_title_lbl.text = "⚔ PARTY MEMBERS (%d/4)" % sim_allies.size()
 
 
 # ==============================================================================
@@ -1870,6 +1905,8 @@ func _update_roster_card_highlights() -> void:
 	for c: Combatant in roster_cards:
 		@warning_ignore("unsafe_cast")
 		var card := roster_cards[c] as PanelContainer
+		if not is_instance_valid(card):
+			continue
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(3)
 		style.content_margin_left = 4
@@ -1888,6 +1925,14 @@ func _update_roster_card_highlights() -> void:
 			style.border_color = base_color
 			style.set_border_width_all(1)
 		card.add_theme_stylebox_override("panel", style)
+
+		# Preserve dimming for dead / escaped units
+		if not c.is_alive():
+			card.modulate = Color(0.55, 0.55, 0.55, 0.45)
+		elif c.is_withdrawn:
+			card.modulate = Color(0.65, 0.65, 0.65, 0.45)
+		else:
+			card.modulate = Color.WHITE
 
 
 func _update_unit_token_highlights() -> void:
@@ -2184,6 +2229,8 @@ func _update_party_select_box() -> void:
 				slot_style.border_color = Color(0.2, 0.4, 0.65, 0.7)
 				slot_style.set_border_width_all(1)
 
+			slot_pnl.modulate = Color(0.6, 0.6, 0.6, 0.5) if not is_alive else Color.WHITE
+
 			var hbox := HBoxContainer.new()
 			hbox.add_theme_constant_override("separation", 3)
 			slot_pnl.add_child(hbox)
@@ -2207,6 +2254,7 @@ func _update_party_select_box() -> void:
 			lbl.add_theme_font_size_override("font_size", 7)
 			hbox.add_child(lbl)
 		else:
+			slot_pnl.modulate = Color.WHITE
 			slot_style.bg_color = Color(0.06, 0.08, 0.11, 0.6)
 			slot_style.border_color = Color(0.18, 0.24, 0.32, 0.5)
 			slot_style.set_border_width_all(1)
@@ -2905,6 +2953,8 @@ func _sync_visuals_after_block() -> void:
 					var tw := create_tween()
 					tw.tween_property(token, "position", target_px, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
+	_update_all_roster_cards()
+
 
 func _spawn_goblin_reinforcements() -> void:
 	reinforcements_spawned = true
@@ -2928,6 +2978,13 @@ func _spawn_goblin_reinforcements() -> void:
 			token.position = Vector2(coord.x * TILE_SIZE, coord.y * TILE_SIZE)
 			var tw := create_tween()
 			tw.tween_property(token, "modulate:a", 1.0, 0.35)
+		if roster_cards.has(c):
+			@warning_ignore("unsafe_cast")
+			var card := roster_cards[c] as Control
+			if is_instance_valid(card):
+				card.visible = true
+
+	_update_all_roster_cards()
 
 
 func _on_next_round_pressed() -> void:
@@ -2949,6 +3006,28 @@ func _start_round_2() -> void:
 	btn_play.tooltip_text = "Auto-Resolve Round 2"
 	if btn_next_round:
 		btn_next_round.visible = false
+
+	# Prune any defeated or withdrawn enemies from roster cards for the new round
+	var enemies_to_remove: Array[Combatant] = []
+	for c: Combatant in roster_cards:
+		if not sim_allies.has(c):
+			if not c.is_alive() or c.is_withdrawn:
+				enemies_to_remove.append(c)
+
+	for c: Combatant in enemies_to_remove:
+		@warning_ignore("unsafe_cast")
+		var old_card := roster_cards[c] as Control
+		roster_cards.erase(c)
+		if is_instance_valid(old_card):
+			old_card.queue_free()
+
+	# Ensure all active surviving enemy cards are visible
+	for c: Combatant in roster_cards:
+		if not sim_allies.has(c):
+			@warning_ignore("unsafe_cast")
+			var rem_card := roster_cards[c] as Control
+			if is_instance_valid(rem_card):
+				rem_card.visible = true
 
 	pending_block_actions.clear()
 	var r2_entry := ActionLogEntry.new()
@@ -3024,33 +3103,7 @@ func _start_round_2() -> void:
 	_update_timeline_tracks_display()
 	_update_combined_block_display(1)
 	_sync_visuals_after_block()
-
-	for combatant: Combatant in roster_cards:
-		@warning_ignore("unsafe_cast")
-		var card := roster_cards[combatant] as PanelContainer
-		var hp_bar := card.find_child("ProgressBar", true, false) as ProgressBar
-		var hp_lbl := card.find_child("HpLabel", true, false) as Label
-		var stance_lbl := card.find_child("StanceLabel", true, false) as Label
-		var pos_lbl := card.find_child("PosLabel", true, false) as Label
-
-		if hp_bar:
-			hp_bar.value = combatant.hp
-		if hp_lbl:
-			hp_lbl.text = "%d/%d" % [combatant.hp, combatant.max_hp]
-		if stance_lbl:
-			if combatant.is_withdrawn:
-				stance_lbl.text = "WITHDRAWN"
-				stance_lbl.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
-			elif not combatant.is_alive():
-				stance_lbl.text = "DEFEATED"
-				stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.3, 0.3))
-			else:
-				stance_lbl.text = CombatTypes.stance_to_string(combatant.current_stance)
-		if pos_lbl:
-			if combatant.is_active():
-				pos_lbl.text = "Pos: %s" % str(sim_grid.get_position(combatant))
-			else:
-				pos_lbl.text = "Off Grid"
+	_update_all_roster_cards()
 
 	_update_selected_unit_panel()
 	_update_tactical_forecast_panel()
