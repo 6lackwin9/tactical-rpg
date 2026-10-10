@@ -10,6 +10,7 @@ var resulting_stance: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
 var is_self_targeted: bool = false
 var is_disruptive: bool = false
 var command_name: String = "Command"
+var execution_log: String = ""
 
 func _init(p_source: Combatant, p_priority: int = 0, p_block_cost: int = 1) -> void:
 	source = p_source

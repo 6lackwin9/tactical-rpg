@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="150" viewBox="0 0 140 150">
+  <defs>
+    <linearGradient id="b_bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3b1111"/>
+      <stop offset="100%" stop-color="#1c0707"/>
+    </linearGradient>
+    <linearGradient id="b_armor" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="50%" stop-color="#991b1b"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </linearGradient>
+    <linearGradient id="b_iron" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#71717a"/>
+      <stop offset="100%" stop-color="#3f3f46"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Card -->
+  <rect width="140" height="150" rx="8" fill="url(#b_bg)" stroke="#dc2626" stroke-width="2"/>
+
+  <!-- Back Spikes -->
+  <polygon points="26,45 14,28 32,38" fill="url(#b_iron)"/>
+  <polygon points="114,45 126,28 108,38" fill="url(#b_iron)"/>
+
+  <!-- Massive Shoulders -->
+  <path d="M 14 65 Q 35 44 56 56 L 46 94 Q 22 88 14 65 Z" fill="url(#b_armor)" stroke="#f87171" stroke-width="1.5"/>
+  <polygon points="24,52 16,36 32,48" fill="#fca5a5"/>
+  <path d="M 126 65 Q 105 44 84 56 L 94 94 Q 118 88 126 65 Z" fill="url(#b_armor)" stroke="#f87171" stroke-width="1.5"/>
+  <polygon points="116,52 124,36 108,48" fill="#fca5a5"/>
+
+  <!-- Heavy Torso -->
+  <path d="M 42 62 Q 70 54 98 62 L 96 122 Q 70 132 44 122 Z" fill="#450a0a" stroke="url(#b_iron)" stroke-width="2"/>
+  <!-- Chest Ribbed Plates -->
+  <path d="M 48 70 Q 70 64 92 70 L 90 84 Q 70 80 50 84 Z" fill="url(#b_armor)"/>
+  <path d="M 50 88 Q 70 82 90 88 L 88 102 Q 70 98 52 102 Z" fill="url(#b_armor)"/>
+  <!-- Iron Studs -->
+  <circle cx="56" cy="76" r="2" fill="#e4e4e7"/>
+  <circle cx="70" cy="74" r="2" fill="#e4e4e7"/>
+  <circle cx="84" cy="76" r="2" fill="#e4e4e7"/>
+  <circle cx="58" cy="94" r="2" fill="#e4e4e7"/>
+  <circle cx="70" cy="92" r="2" fill="#e4e4e7"/>
+  <circle cx="82" cy="94" r="2" fill="#e4e4e7"/>
+
+  <!-- Neck Collar / Spikes -->
+  <rect x="52" y="52" width="36" height="12" rx="2" fill="url(#b_iron)"/>
+  <polygon points="56,52 58,46 62,52" fill="#f87171"/>
+  <polygon points="68,52 70,44 72,52" fill="#f87171"/>
+  <polygon points="78,52 82,46 84,52" fill="#f87171"/>
+
+  <!-- Savage Head / Jaw -->
+  <ellipse cx="70" cy="38" rx="20" ry="22" fill="#7f1d1d" stroke="#f87171" stroke-width="1.5"/>
+  <!-- Horns -->
+  <path d="M 54 28 Q 42 12 36 14 Q 46 24 52 32 Z" fill="url(#b_iron)" stroke="#fca5a5" stroke-width="1"/>
+  <path d="M 86 28 Q 98 12 104 14 Q 94 24 88 32 Z" fill="url(#b_iron)" stroke="#fca5a5" stroke-width="1"/>
+
+  <!-- War Paint Markings -->
+  <path d="M 54 36 L 62 42 L 56 46" stroke="#ef4444" stroke-width="2" fill="none"/>
+  <path d="M 86 36 L 78 42 L 84 46" stroke="#ef4444" stroke-width="2" fill="none"/>
+
+  <!-- Glowing Fiery Red Eyes -->
+  <polygon points="58,34 66,36 60,39" fill="#fef08a"/>
+  <circle cx="62" cy="36" r="1.5" fill="#dc2626"/>
+  <polygon points="82,34 74,36 80,39" fill="#fef08a"/>
+  <circle cx="78" cy="36" r="1.5" fill="#dc2626"/>
+
+  <!-- Lower Tusks / Jaw -->
+  <polygon points="60,50 63,42 66,50" fill="#fef08a"/>
+  <polygon points="74,50 77,42 80,50" fill="#fef08a"/>
+
+  <!-- Studded Belt -->
+  <rect x="40" y="118" width="60" height="10" rx="3" fill="url(#b_iron)" stroke="#ef4444" stroke-width="1.5"/>
+  <circle cx="50" cy="123" r="3" fill="#ef4444"/>
+  <circle cx="70" cy="123" r="4" fill="#f87171"/>
+  <circle cx="90" cy="123" r="3" fill="#ef4444"/>
+
+  <!-- Class Label Badge -->
+  <rect x="20" y="134" width="100" height="12" rx="4" fill="#b91c1c" opacity="0.9"/>
+  <text x="70" y="143" font-family="'Segoe UI', sans-serif" font-size="8" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1">ENEMY BRAWLER</text>
+</svg>

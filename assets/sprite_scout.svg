@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="150" viewBox="0 0 140 150">
+  <defs>
+    <linearGradient id="s_bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a1b3d"/>
+      <stop offset="100%" stop-color="#120c1a"/>
+    </linearGradient>
+    <linearGradient id="s_cloak" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="50%" stop-color="#7e22ce"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </linearGradient>
+    <linearGradient id="s_gold" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="s_blade" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Card -->
+  <rect width="140" height="150" rx="8" fill="url(#s_bg)" stroke="#a855f7" stroke-width="2"/>
+
+  <!-- Dual Daggers (Drawn in background) -->
+  <path d="M 22 20 L 32 50 L 26 52 Z" fill="url(#s_blade)"/>
+  <rect x="23" y="50" width="8" height="14" rx="2" fill="#78350f"/>
+  <circle cx="27" cy="66" r="3" fill="url(#s_gold)"/>
+
+  <path d="M 118 20 L 108 50 L 114 52 Z" fill="url(#s_blade)"/>
+  <rect x="109" y="50" width="8" height="14" rx="2" fill="#78350f"/>
+  <circle cx="113" cy="66" r="3" fill="url(#s_gold)"/>
+
+  <!-- Cloak Shoulders -->
+  <path d="M 32 64 Q 18 105 24 148 L 116 148 Q 122 105 108 64 Z" fill="url(#s_cloak)" opacity="0.9"/>
+
+  <!-- Leather Vest -->
+  <path d="M 48 64 Q 70 60 92 64 L 88 120 Q 70 128 52 120 Z" fill="#2e1065" stroke="#a855f7" stroke-width="1.5"/>
+
+  <!-- Large Goblin Ears -->
+  <path d="M 50 36 Q 26 22 24 38 Q 36 46 52 44 Z" fill="#6b21a8" stroke="#d8b4fe" stroke-width="1.5"/>
+  <path d="M 90 36 Q 114 22 116 38 Q 104 46 88 44 Z" fill="#6b21a8" stroke="#d8b4fe" stroke-width="1.5"/>
+
+  <!-- Cowled Head -->
+  <ellipse cx="70" cy="40" rx="18" ry="20" fill="url(#s_cloak)" stroke="#c084fc" stroke-width="1.5"/>
+
+  <!-- Sly Shaded Face -->
+  <ellipse cx="70" cy="42" rx="14" ry="12" fill="#1e1035"/>
+
+  <!-- Piercing Amber Eyes -->
+  <ellipse cx="64" cy="41" rx="4" ry="2.5" fill="url(#s_gold)"/>
+  <circle cx="64" cy="41" r="1.5" fill="#451a03"/>
+  <ellipse cx="76" cy="41" rx="4" ry="2.5" fill="url(#s_gold)"/>
+  <circle cx="76" cy="41" r="1.5" fill="#451a03"/>
+
+  <!-- Scarf / Lower Mask -->
+  <path d="M 54 48 Q 70 56 86 48 L 82 66 Q 70 72 58 66 Z" fill="#3b0764" stroke="#c084fc" stroke-width="1"/>
+
+  <!-- Speed Dash Streaks (Subtle) -->
+  <line x1="26" y1="90" x2="16" y2="92" stroke="#e9d5ff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="28" y1="102" x2="14" y2="105" stroke="#e9d5ff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="114" y1="90" x2="124" y2="92" stroke="#e9d5ff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="112" y1="102" x2="126" y2="105" stroke="#e9d5ff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- Belt with Pouch & Throwing Knives -->
+  <rect x="42" y="118" width="56" height="8" rx="2" fill="#1e1b4b"/>
+  <circle cx="56" cy="122" r="2.5" fill="url(#s_gold)"/>
+  <circle cx="84" cy="122" r="2.5" fill="url(#s_gold)"/>
+
+  <!-- Class Label Badge -->
+  <rect x="22" y="134" width="96" height="12" rx="4" fill="#7e22ce" opacity="0.9"/>
+  <text x="70" y="143" font-family="'Segoe UI', sans-serif" font-size="8" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1">FLEEING SCOUT</text>
+</svg>

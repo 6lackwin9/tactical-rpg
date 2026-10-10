@@ -13,3 +13,4 @@ func execute() -> void:
 		return
 	source.set_stance(CombatTypes.StanceType.NEUTRAL)
 	print("[%s] transitions into Neutral Stance (unlocking all action pools starting next block)." % source.name)
+	execution_log = "[Enter Neutral] %s transitioned to Neutral Stance" % source.name

@@ -141,6 +141,16 @@ func _resolve_block(block: int) -> void:
 				if action.command is DefendCommand:
 					action.combatant.defense_mitigation_ratio = (action.command as DefendCommand).mitigation_ratio
 
+	# 2b. Notify when multi-block actions begin executing on this block
+	for action in scheduled_actions:
+		if not action.is_cancelled and action.combatant.is_active():
+			if action.start_block == block and action.end_block > action.start_block:
+				var channel_msg: String = "[Action Started] %s begins %s (resolves on Block %d)" % [
+					action.combatant.name, action.command.command_name, action.end_block
+				]
+				print(channel_msg)
+				log_emitted.emit(channel_msg)
+
 	# 3. Find actions that finish/resolve on this block
 	var resolving: Array[ScheduledAction] = []
 	for action in scheduled_actions:
@@ -163,10 +173,17 @@ func _resolve_block(block: int) -> void:
 			continue
 		if not action.combatant.is_active():
 			action.is_cancelled = true
+			var cancel_msg: String = "[Cancelled] %s's %s cancelled (unit inactive)." % [
+				action.combatant.name, action.command.command_name
+			]
+			print(cancel_msg)
+			log_emitted.emit(cancel_msg)
 			continue
 
 		# Execute the command
 		action.command.execute()
+		if not action.command.execution_log.is_empty():
+			log_emitted.emit(action.command.execution_log)
 
 		# Update stance upon resolution
 		if action.combatant.is_active() and action.command.resulting_stance != CombatTypes.StanceType.NEUTRAL:

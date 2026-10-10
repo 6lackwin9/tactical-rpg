@@ -15,7 +15,11 @@ func execute() -> void:
 	if not source.is_alive():
 		return
 	source.defense_mitigation_ratio = mitigation_ratio
+	var mit_pct: int = int(mitigation_ratio * 100.0)
 	print("[%s] assumes a Defensive Stance and raises guard (mitigates %d%% incoming damage)!" % [
 		source.name,
-		int(mitigation_ratio * 100.0)
+		mit_pct
 	])
+	execution_log = "[Defend] %s raised guard (mitigates %d%% damage, Defensive Stance)" % [
+		source.name, mit_pct
+	]
