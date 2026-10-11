@@ -42,9 +42,12 @@ tactical-rpg/
 │   └── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
 ├── scripts/
 │   ├── core/                     # Foundational rules engine primitives & base models
-│   │   ├── battle_command.gd         # Abstract base command class (duration, cost, initiative)
-│   │   ├── combatant.gd              # Core unit model (HP, SP, speed, range, stance, buffs, target)
-│   │   └── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
+│   │   ├── combat/               # Core unit, stance & command models
+│   │   │   ├── battle_command.gd         # Abstract base command class (duration, cost, initiative)
+│   │   │   ├── combatant.gd              # Core unit model (HP, SP, speed, range, stance, buffs, target)
+│   │   │   └── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
+│   │   └── events/               # Headless simulation event data transfer objects
+│   │       └── action_log_entry.gd       # Standardized action event model (ticks, actors, outcomes)
 │   ├── combat/                   # Combat simulation, spatial arena rules & battle actions
 │   │   ├── actions/              # Discrete battle command implementations
 │   │   │   ├── attack_command.gd         # Melee & ranged attacks with stance & range gating
@@ -70,7 +73,6 @@ tactical-rpg/
 │       ├── playback_controls_ui.gd   # Step prev/next, Auto-Play, Reset, Round navigation
 │       ├── timeline_dock_ui.gd       # Bottom dock (10-block ruler, unit track, enemy intent mask)
 │       ├── action_log_dock_ui.gd     # Top action dock displaying active block resolution
-│       ├── action_log_entry.gd       # Standardized action event model
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       └── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
 ├── check_project.ps1             # 3-step automated validation script (cache, syntax, integration)

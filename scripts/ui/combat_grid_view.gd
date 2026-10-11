@@ -186,13 +186,21 @@ func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vecto
 
 	return token_ctrl
 
+func get_token_for(combatant: Combatant) -> Control:
+	if combatant == null or not unit_token_nodes.has(combatant):
+		return null
+	var node: Variant = unit_token_nodes[combatant]
+	if node is Control:
+		return node
+	return null
+
 func update_selection_highlight(selected_combatant: Combatant) -> void:
 	for c: Combatant in unit_token_nodes:
-		@warning_ignore("unsafe_cast")
-		var token := unit_token_nodes[c] as Control
-		var border := token.find_child("SelectionBorder", true, false) as ReferenceRect
-		if border:
-			border.visible = (c == selected_combatant)
+		var token := get_token_for(c)
+		if token:
+			var border := token.find_child("SelectionBorder", true, false) as ReferenceRect
+			if border:
+				border.visible = (c == selected_combatant)
 
 func show_hover_card(
 	c: Combatant,
@@ -247,8 +255,9 @@ func hide_hover_card() -> void:
 
 func restore_token_states(snap: BlockSnapshot) -> void:
 	for c: Combatant in unit_token_nodes:
-		@warning_ignore("unsafe_cast")
-		var token := unit_token_nodes[c] as Control
+		var token := get_token_for(c)
+		if token == null:
+			continue
 		if snap.positions.has(c):
 			var pos: Vector2i = snap.positions[c]
 			var active: bool = snap.is_active.get(c, false)
@@ -267,9 +276,7 @@ func restore_token_states(snap: BlockSnapshot) -> void:
 				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func animate_attacker_lunge(actor: Combatant, target_pos: Vector2) -> void:
-	if not unit_token_nodes.has(actor):
-		return
-	var actor_token := unit_token_nodes[actor] as Control
+	var actor_token := get_token_for(actor)
 	if not is_instance_valid(actor_token):
 		return
 	var orig_pos: Vector2 = actor_token.position
@@ -282,9 +289,7 @@ func animate_attacker_lunge(actor: Combatant, target_pos: Vector2) -> void:
 	tw.tween_property(actor_token, "position", orig_pos, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 func animate_token_impact(target: Combatant, is_damage: bool, is_mitigated: bool) -> void:
-	if not unit_token_nodes.has(target):
-		return
-	var target_token := unit_token_nodes[target] as Control
+	var target_token := get_token_for(target)
 	if not is_instance_valid(target_token):
 		return
 	var base_pos: Vector2 = target_token.position
@@ -307,9 +312,7 @@ func animate_token_impact(target: Combatant, is_damage: bool, is_mitigated: bool
 	flash_tw.tween_property(target_token, "modulate", Color.WHITE, 0.25)
 
 func animate_token_pulse(token_actor: Combatant, pulse_col: Color) -> void:
-	if not unit_token_nodes.has(token_actor):
-		return
-	var token := unit_token_nodes[token_actor] as Control
+	var token := get_token_for(token_actor)
 	if not is_instance_valid(token):
 		return
 	var tw := create_tween()
@@ -317,9 +320,7 @@ func animate_token_pulse(token_actor: Combatant, pulse_col: Color) -> void:
 	tw.tween_property(token, "modulate", Color.WHITE, 0.3)
 
 func animate_token_move(token_actor: Combatant, target_coord: Vector2i, duration: float = 0.25) -> void:
-	if not unit_token_nodes.has(token_actor):
-		return
-	var token := unit_token_nodes[token_actor] as Control
+	var token := get_token_for(token_actor)
 	if not is_instance_valid(token):
 		return
 	var target_px := Vector2(target_coord.x * TILE_SIZE, target_coord.y * TILE_SIZE)

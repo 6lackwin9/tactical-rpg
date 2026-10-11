@@ -96,8 +96,7 @@ func _build_ui_layout() -> void:
 
 	roster_panel.combatant_selected.connect(func(c: Combatant) -> void: combatant_selected.emit(c))
 	roster_panel.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void:
-		@warning_ignore("unsafe_cast")
-		var token: Control = grid_view.unit_token_nodes.get(c, null) as Control if grid_view else null
+		var token: Control = grid_view.get_token_for(c) if grid_view else null
 		combatant_hovered.emit(c, token)
 	)
 	roster_panel.combatant_unhovered.connect(func() -> void: combatant_unhovered.emit())
@@ -243,8 +242,8 @@ func trigger_action_fx(entry: ActionLogEntry, actor: Combatant, target: Combatan
 	if not grid_view or entry == null:
 		return
 
-	var actor_token: Control = grid_view.unit_token_nodes.get(actor) as Control if actor else null
-	var target_token: Control = grid_view.unit_token_nodes.get(target) as Control if target else null
+	var actor_token: Control = grid_view.get_token_for(actor)
+	var target_token: Control = grid_view.get_token_for(target)
 
 	match entry.category:
 		"ATTACK":
