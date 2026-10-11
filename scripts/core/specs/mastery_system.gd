@@ -57,29 +57,15 @@ func get_weapon_requirement_discount(weapon_type: String) -> int:
 	var rank: int = get_weapon_mastery(weapon_type)
 	return rank * 2
 
-# Conditional stat bonuses applied when specific conditions/contexts are met
+# Weapon mastery grants direct Weapon Power bonus in combat (+2 Wep Power per rank) (Requirement 2)
+func get_weapon_power_bonus(weapon_type: String) -> int:
+	var rank: int = get_weapon_mastery(weapon_type)
+	return rank * 2
+
+# Conditional stat bonuses applied when specific exploration/lore contexts are met
 func get_conditional_stat_bonus(stat_name: String, context: Dictionary) -> int:
 	var bonus: int = 0
 	var clean_stat: String = stat_name.to_upper()
-
-	# 1. Weapon-specific mastery stat bonuses
-	if context.has("weapon"):
-		var w_type: String = str(context["weapon"]).to_lower()
-		var rank: int = get_weapon_mastery(w_type)
-		if rank > 0:
-			match w_type:
-				"sword", "axe", "mace", "hammer":
-					if clean_stat == "STR":
-						bonus += rank * 2
-				"bow", "dagger", "crossbow":
-					if clean_stat == "DEX":
-						bonus += rank * 2
-				"staff", "wand", "orb":
-					if clean_stat == "INT":
-						bonus += rank * 2
-				"shield":
-					if clean_stat == "CONS":
-						bonus += rank * 2
 
 	# 2. Lore / Background knowledge bonuses
 	if context.has("biome") and clean_stat == "KNOW":

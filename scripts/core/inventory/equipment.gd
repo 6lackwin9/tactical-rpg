@@ -22,6 +22,9 @@ var base_range: int = 1
 var block_cost: int = 1
 var burden: int = 0           # Speed/initiative penalty applied to user
 var mitigation: int = 0       # Flat defensive mitigation
+var is_two_handed: bool = false # Two-handed weapon occupies both hands (Claymore, Warhammer, Bow)
+var off_hand_category: String = "" # shield, shortsword, knuckles, dagger, knife, orb, tome
+var scaling_stat: String = "STR"   # STR, DEX, or INT scaling
 var stat_bonuses: Dictionary = {}        # Stat Name (String) -> Bonus (int)
 var unlocked_commands: Array[String] = [] # e.g. ["DefendCommand", "FocusCommand"]
 
@@ -51,6 +54,22 @@ func _init(
 	base_power = p_power
 	required_stats = p_reqs
 	threshold_tiers = p_tiers
+
+static func slot_display_name(p_slot: EquipSlot) -> String:
+	match p_slot:
+		EquipSlot.MAIN_HAND: return "Main Hand"
+		EquipSlot.OFF_HAND: return "Off Hand"
+		EquipSlot.HEAD: return "Headgear"
+		EquipSlot.BODY: return "Body Armor"
+		EquipSlot.ACCESSORY_1: return "Accessory 1"
+		EquipSlot.ACCESSORY_2: return "Accessory 2"
+	return "Gear Slot"
+
+func is_weapon() -> bool:
+	return item_type == ItemType.WEAPON
+
+func is_shield() -> bool:
+	return item_type == ItemType.SHIELD or off_hand_category == "shield"
 
 func is_ranged_weapon() -> bool:
 	if item_type != ItemType.WEAPON:
@@ -136,10 +155,10 @@ func get_requirement_status_summary(stats: CharacterStats, mastery: MasterySyste
 		status_tag = "★ Tier 1 Active (+%d Power)" % tier_boost
 		tag_color = Color(1.0, 0.85, 0.3)
 	elif meets and not required_stats.is_empty():
-		status_tag = "✓ Reqs Met"
+		status_tag = ""
 		tag_color = Color(0.4, 0.9, 0.5)
 	else:
-		status_tag = "✓"
+		status_tag = ""
 		tag_color = Color(0.8, 0.9, 0.8)
 
 	return {
@@ -247,20 +266,26 @@ func get_unlocked_threshold_power_boost(stats: CharacterStats, mastery: MasteryS
 			total_boost += raw_bonus
 	return total_boost
 
-# Effective power including tier boosts and deficit penalties
+# Effective power including tier boosts, mastery boosts and deficit penalties (Requirements 1 & 2)
 func get_effective_equipment_power(stats: CharacterStats, mastery: MasterySystem) -> int:
 	var total_power: int = base_power
 
 	# Add threshold tier bonuses
 	var active_tiers: Array[Dictionary] = get_active_threshold_tiers(stats, mastery)
 	for tier: Dictionary in active_tiers:
-		var bonus: int = tier.get("bonus_power", 0)
+		var bonus_raw: Variant = tier.get("bonus_power", 0)
+		var bonus: int = bonus_raw if bonus_raw is int else 0
 		total_power += bonus
 
-	# Deduct deficit penalties
+	# Add weapon mastery bonus power (Requirement 2)
+	if mastery != null and not weapon_type.is_empty():
+		total_power += mastery.get_weapon_power_bonus(weapon_type)
+
+	# Deduct deficit penalties: Wep Power * (1 - Deficit)
 	var penalty: Dictionary = get_wield_penalty(stats, mastery)
-	if penalty["is_penalized"]:
-		var ratio: float = penalty["power_penalty_ratio"]
+	if penalty.get("is_penalized", false):
+		var ratio_raw: Variant = penalty.get("power_penalty_ratio", 0.0)
+		var ratio: float = ratio_raw if ratio_raw is float else 0.0
 		total_power = maxi(1, int(roundf(float(total_power) * (1.0 - ratio))))
 
 	return total_power

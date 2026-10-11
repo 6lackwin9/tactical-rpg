@@ -146,20 +146,37 @@ tactical-rpg/
 ### 6. Character Specs, 6-Stat Framework & Mastery Engine (System 5)
 
 - **6-Stat Architecture**:
-  - **3 Active Stats (Combat-Primary)**: `STR` (Physical Power, Armor Burden mitigation), `DEX` (Initiative Speed, Ranged Power), `INT` (Tactical & Skill Power, Buff potency).
+  - **3 Active Stats (Combat-Primary)**: `STR` (Physical Power, Armor Burden mitigation), `DEX` (Initiative Speed, Ranged Power, Crit Hit Rate), `INT` (Tactical & Skill Power, Buff potency, Debuff Resistance).
   - **3 Passive Stats (Non-Combat-Primary)**: `CONS` (Travel endurance, Max HP scaling), `PERC` (Secret/trap spotting, Timeline intent unmasking), `KNOW` (Lore/dialogue, route danger reduction, tactical forecast intel).
+- **Derived Combat Metrics**:
+  - **Max HP**: $60 + (\text{CONS} \times 8) + (\text{STR} \times 2) + \text{Accessory HP}$.
+  - **Initiative Speed**: $\max(1, 8 + \text{DEX} - \text{Total Armor Burden} + \text{Accessory Speed})$.
+  - **Crit Hit Rate** (DEX-based): $5.0\% + (\text{DEX} \times 1.5\%)$ with $2.5\times$ base critical damage factor.
+  - **Debuff Resistance** (INT-based): $\text{INT} \times 2.5\%$, mitigating status ailment chance and penalty severity.
+  - **Effective Melee / Ranged Power**:
+    $$\text{Attack Power} = \left(\text{Weapon Power} \times (1 - \text{Deficit}) + \text{Stat} \times \text{Scaling}\right) \times (1 + \sum \text{Buffs} - \sum \text{Debuffs})$$
+    where $\text{Weapon Power} = \text{Base Power} + \text{Tier Bonus} + \text{Mastery Bonus}$.
 - **10-Level Cap & Progression**:
   - Guaranteed stat growths per level based on Class Archetype (`Warrior`, `Ranger`, `Shaman`, `Brawler`, `Scout`, `Berserker`).
   - 1 free attribute point per level for customization and flavor.
   - Bulk of free points awarded via outside exploration events (ancient shrines, quest rewards, tomes).
 - **Horizontal Progression (Mastery System)**:
-  - Weapon Masteries (Sword, Bow, Staff, etc.): Provide stat threshold discounts and contextual stat bonuses when wielding archetypal weapons.
+  - Weapon Masteries (Sword, Bow, Staff, etc.): Provide stat threshold discounts and direct Weapon Power bonuses ($+2\text{ Weapon Power}$ per rank) affecting combat damage calculations.
   - Lore & Faction Masteries: Contextual knowledge bonuses in specific biomes or dialogue interactions.
 
 ### 7. Equipment, Requirements & Inventory Engine (System 7)
 
-- **Item Taxonomy**: Weapons, Shields, Armor, Accessories, Consumables, Materials, Quest items.
-- **Stat-Gated Gear & Threshold Convention**: Equipment requirements use the convention `[Req <STAT level0>, <STAT level1>]`, where `level0` enables wielding without penalty and `level1` unlocks bonus effects (`+Wep power`, `+<STAT>`, or special combat effects like `1.5x against goblins`).
+- **Item Taxonomy & Wield Rules**:
+  - **Main-Hand Weapons**: Swords, Greatswords, Bows, Staves, Daggers.
+  - **Off-Hand Weapons & Auxiliaries**:
+    - *Shield*: Pure damage mitigation (`mitigation_value`), non-offensive.
+    - *Shortsword / Knuckles*: STR-based off-hand offensive strike.
+    - *Knife / Dagger*: DEX-based off-hand offensive strike.
+    - *Orb / Tome*: INT-based off-hand offensive strike / casting.
+  - **1-Handed vs. 2-Handed Weapons**:
+    - *1H Weapons*: Allow freely selecting attack hand (`Main Strike` vs. `Off-Hand Strike`).
+    - *2H Weapons*: Occupy both hands (preventing off-hand attacks) and require a deliberate switch action (`Switch Weapon`) to swap active weapon setup.
+- **Stat-Gated Gear & Threshold Convention**: Equipment requirements follow `[Req <STAT level0>, <STAT level1>]`, where `level0` enables wielding without penalty and `level1` unlocks bonus effects (`+Wep power`, `+<STAT>`, or special combat effects).
 - **Dynamic Deficit Scaling**: Wielding weapons with a stat deficit applies a dynamic penalty ratio (`minf(0.60, deficit * 0.15)`) to effective weapon power and delays timeline action blocks.
 - **Class Archetype Gear Restrictions**: Class archetypes enforce allowable gear proficiencies (`can_equip_gear`); accessories have no restrictions and can be equipped by any class.
 - **Accessory Stat Propagation**: Equipped accessories (rings, amulets) propagate stat bonuses directly into character stats, dynamically updating effective attributes, max HP, and attack power.
@@ -171,17 +188,19 @@ tactical-rpg/
 ### 8. Dedicated Gear & Skill Dojo (`gear_dojo.tscn`)
 
 - **Separated Scene Architecture**: Distinct from `test_arena.tscn` (which focuses on 10-block visual combat and ambush scenarios), `scenes/gear_dojo.tscn` is a dedicated workbench for gear equipping, stat inspection, and damage formula validation.
-- **Card-Based Active Loadout & Quick Pouches**: Base screen dock displays dedicated slot cards for Main Hand, Off Hand, Body Armor, Accessory 1, and Accessory 2, alongside a 3-slot Battle Pouch quick-belt with compact micro-card tooltips.
-- **Character Equipment Modal (`CharacterEquipmentModal`)**:
-  - **Column 1**: Party hero tabs, 6 primary stats with $+/-$ allocation, derived metrics (HP, Melee/Ranged Power, Speed, Shield Mitigation, Armor Burden bar), and horizontal weapon mastery ranks.
-  - **Column 2**: Equipment loadout slots (Main Hand, Off Hand, Body Armor, Accessory 1 & 2) and 3 combat battle pouch slots with unequip actions.
-  - **Column 3**: Party stash inventory with category filters (`ALL`, `WEAPON`, `ARMOR`, `ACCESSORY`, `CONSUMABLE`), class restriction badges, tier thresholds, and equip buttons.
-- **Interactive Training Dummy & Damage Formula Benchmark**:
-  - 500 HP Training Dummy with tunable defense mitigation ratio ($0\%$, $25\%$, $50\%$, $75\%$).
-  - Live Action Console: Trigger Melee Strike, Ranged Volley, Focus Buff, Defend Stance, Throwing Fire Bomb, and Stance shifts.
-  - Real-time mathematical damage calculation feed explaining:
-    $$\text{Actual Damage} = \max\left(1, \left\lfloor \left(\text{Effective Power} \times \text{Stance Multiplier}\right) \times (1 - \text{Mitigation Ratio}) \right\rceil\right)$$
-  - Live visual feedback: Floating combat damage numbers, hit sparks, hero attack lunges, and dummy health bars.
+- **Header Controls & State Reset**: Includes a `[↺ Reset Dojo]` button restoring heroes, loadouts, shared stash, dummy vitals, and action logs back to baseline.
+- **Interactive Stat Allocation Mode**: Unspent attribute points button toggles `+`/`-` buttons on each attribute. The `-` button only undoes newly allocated points in the pending session (never drops below baseline or grants extra points). Includes `Reset`, `Confirm`, and `Cancel` controls.
+- **Base UI Direct Equip & Slot Cards**: Base screen dock displays dedicated slot cards for Main Hand, Off Hand, Body Armor, Accessory 1, Accessory 2, and 3-slot Battle Pouches. Each card includes `[Equip/Swap]` and `[Unequip]` triggers opening a modal picker filtered strictly to class-eligible items from stash.
+- **Console Battle Pouch Selector**: Interactive `OptionButton` dropdown to select and consume any item stored in the 3 battle pouch quick-slots during testing.
+- **Comprehensive Combat Damage Formula Engine**:
+  $$\text{Final Damage} = \max\left(1, \left\lfloor \text{Attack Power} \times \text{Skill Mult} \times (1 - \text{Mitigation}) \times (1 + \text{Stance Mult}) \times \text{Crit Factor} \times (1 + \text{Effect Bonus} - \text{Effect Penalty}) \right\rceil\right)$$
+  - **Attack Power**: Base melee or ranged power derived from weapon power, stat scaling, and status multipliers.
+  - **Skill Multiplier**: Move-specific damage multiplier (e.g., $1.0\times$ for strike, $1.5\times$ for heavy strike).
+  - **Mitigation**: Opponent shield/armor mitigation ratio ($0\%$, $25\%$, $50\%$, $75\%$).
+  - **Stance Multiplier**: $+/-$ matchup multiplier based on stance interaction.
+  - **Crit Factor**: If critical hit ($P(\text{Crit Rate})$ or forced via console), applies $2.5\times + \text{bonus crit dmg}$; otherwise $1.0\times$.
+  - **Effect Modifiers**: Monster-specific or elemental bonus/penalty multipliers.
+- **Live Action Console**: Triggers `⚔ Main Strike`, `🗡 Off-Hand Strike`, `🏹 Ranged Volley`, `🔄 Switch Weapon`, `Focus Buff`, `Defend Stance`, and item usage with full step-by-step mathematical breakdown in the combat log feed.
 
 ---
 
@@ -196,10 +215,10 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 3. **9x9 Combat Grid & Withdrawal Test** (7 assertions): Center-ring deployment, spatial range gating, coordinate stepping to `(4, 4)`, exit tile escape, and casualty cleanup.
 4. **Resolution Feed Logging Test** (7 assertions): Movement, skill, defend, attack, withdrawal, and defeat log tags.
 5. **Goblin Ambush & Casualty Test** (9 assertions): Reinforcements arrival at Block 4, casualty action cancellation, multi-round rollover, and victory state.
-6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery contextual bonuses, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
+6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 7. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
 
-Additionally, `scenes/gear_dojo.tscn` contains **12 dedicated headless assertions** verifying dummy vitals, focus buff scaling, threshold tiers, weapon power melee/ranged gating, accessory stat propagation, and class archetype equip restrictions.
+Additionally, `scenes/gear_dojo.tscn` contains **18 dedicated headless assertions** verifying dummy vitals, focus buff scaling, threshold tiers, weapon power melee/ranged gating, accessory stat propagation, class archetype equip restrictions, 1H/2H off-hand strikes, critical damage factors, and stat allocation bounds.
 
 ### Automated Check Script (`check_project.ps1`)
 

@@ -23,6 +23,7 @@ var is_withdrawn: bool = false
 var attack_boost_multiplier: float = 1.0
 var attack_boost_rounds_remaining: int = 0
 var defense_mitigation_ratio: float = 0.0
+var active_buffs: Array[StatModifier] = []
 
 var stats: CharacterStats
 var inventory: Inventory
@@ -41,15 +42,12 @@ func sync_from_stats_and_gear() -> void:
 		# Sync equipped gear stat bonuses into character stats modifiers (Requirement 1)
 		stats.remove_modifier("gear")
 		if inventory != null:
-			for slot_k: Variant in inventory.equipped_gear:
-				var raw_eq: Variant = inventory.equipped_gear[slot_k]
-				if raw_eq is Equipment:
-					var eq: Equipment = raw_eq
-					for st_k: String in eq.stat_bonuses:
-						var val_v: Variant = eq.stat_bonuses[st_k]
-						var bonus_val: int = val_v if val_v is int else 0
-						if bonus_val != 0:
-							stats.add_modifier(StatModifier.new(st_k.to_upper(), bonus_val, 0.0, "gear", "always", -1))
+			for eq: Equipment in inventory._iter_equipped_gear():
+				for st_k: String in eq.stat_bonuses:
+					var val_v: Variant = eq.stat_bonuses[st_k]
+					var bonus_val: int = val_v if val_v is int else 0
+					if bonus_val != 0:
+						stats.add_modifier(StatModifier.new(st_k.to_upper(), bonus_val, 0.0, "gear", "always", -1))
 
 		var burden: int = inventory.get_total_armor_burden() if inventory != null else 0
 		var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
@@ -60,10 +58,15 @@ func sync_from_stats_and_gear() -> void:
 		speed = stats.get_initiative_speed(burden, ctx)
 		attack_range = stats.get_effective_range(base_rng, ctx)
 
-func get_effective_power(is_ranged: bool = false) -> int:
+func get_effective_power(is_ranged: bool = false, use_offhand: bool = false) -> int:
 	if stats == null:
 		return 20
-	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+	var weapon: Equipment = null
+	if use_offhand and inventory != null:
+		weapon = inventory.get_offhand_weapon()
+	if weapon == null and inventory != null:
+		weapon = inventory.get_main_weapon()
+
 	var ctx: Dictionary = {"weapon": weapon.weapon_type} if weapon != null else {}
 	var w_power: int = 0
 	if weapon != null:
@@ -73,13 +76,36 @@ func get_effective_power(is_ranged: bool = false) -> int:
 		else:
 			if weapon.is_melee_weapon():
 				w_power = weapon.get_effective_equipment_power(stats, stats.mastery)
-	if is_ranged:
-		return stats.get_ranged_power(w_power, ctx)
-	return stats.get_melee_power(w_power, ctx)
 
-func take_damage(amount: int) -> int:
+	var stat_to_scale: String = "STR"
+	if weapon != null:
+		if is_ranged:
+			if weapon.is_ranged_weapon():
+				stat_to_scale = weapon.scaling_stat
+			else:
+				stat_to_scale = "DEX"
+		else:
+			if weapon.is_melee_weapon():
+				stat_to_scale = weapon.scaling_stat
+			else:
+				stat_to_scale = "STR"
+	elif is_ranged:
+		stat_to_scale = "DEX"
+
+	match stat_to_scale:
+		"DEX":
+			return stats.get_ranged_power(w_power, ctx)
+		"INT":
+			return stats.get_tactical_power(w_power, ctx)
+		_:
+			return stats.get_melee_power(w_power, ctx)
+
+func get_offhand_power() -> int:
+	return get_effective_power(false, true)
+
+func take_damage(amount: int, is_mitigated: bool = false) -> int:
 	var actual_dmg: int = amount
-	if defense_mitigation_ratio > 0.0:
+	if not is_mitigated and defense_mitigation_ratio > 0.0:
 		actual_dmg = maxi(1, int(roundf(float(amount) * (1.0 - defense_mitigation_ratio))))
 	var was_alive: bool = is_alive()
 	hp = maxi(0, hp - actual_dmg)
@@ -122,9 +148,17 @@ func set_stance(p_stance: CombatTypes.StanceType) -> void:
 		stance_hold_duration = 0
 		stance_changed.emit(current_stance)
 
+func add_buff(mod: StatModifier) -> void:
+	active_buffs.append(mod)
+
+func remove_buff(source_id: String) -> void:
+	active_buffs = active_buffs.filter(func(m: StatModifier) -> bool: return m.source_id != source_id)
+
 func apply_attack_boost(multiplier: float, duration_rounds: int) -> void:
 	attack_boost_multiplier = multiplier
 	attack_boost_rounds_remaining = duration_rounds
+	remove_buff("focus_attack_boost")
+	add_buff(StatModifier.new("ATTACK", 0, multiplier - 1.0, "focus_attack_boost", "always", duration_rounds))
 	print("[%s] gains Attack Boost (%.1fx) for %d rounds!" % [name, attack_boost_multiplier, attack_boost_rounds_remaining])
 
 func tick_round_buffs() -> void:
@@ -133,6 +167,13 @@ func tick_round_buffs() -> void:
 		if attack_boost_rounds_remaining <= 0:
 			attack_boost_multiplier = 1.0
 			print("[%s]'s Attack Boost expired." % name)
+
+	var expired: Array[StatModifier] = []
+	for mod: StatModifier in active_buffs:
+		if mod.tick_round():
+			expired.append(mod)
+	for exp_mod: StatModifier in expired:
+		active_buffs.erase(exp_mod)
 
 func reset_block_transient_state() -> void:
 	defense_mitigation_ratio = 0.0

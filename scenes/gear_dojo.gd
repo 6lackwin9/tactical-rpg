@@ -30,28 +30,44 @@ var gear_modal: CharacterEquipmentModal
 var hero_tabs_hbox: HBoxContainer
 var hero_title_lbl: Label
 var hero_lvl_lbl: Label
-var hero_points_lbl: Label
+var hero_points_btn: Button
 var stat_display_labels: Dictionary = {} # String -> Label
 var stat_box_containers: Dictionary = {} # String -> PanelContainer
+var stat_plus_buttons: Dictionary = {}   # String -> Button
+var stat_minus_buttons: Dictionary = {}  # String -> Button
+var stat_allocation_controls_vbox: VBoxContainer
+var alloc_rem_lbl: Label
+var is_allocating_stats: bool = false
+var pending_allocated_stats: Dictionary = {"STR": 0, "CONS": 0, "DEX": 0, "PERC": 0, "INT": 0, "KNOW": 0}
+var pending_free_points: int = 0
+
 var derived_melee_lbl: Label
 var derived_ranged_lbl: Label
 var derived_speed_lbl: Label
 var derived_hp_lbl: Label
 var derived_mit_lbl: Label
 var derived_burden_lbl: Label
+var derived_crit_lbl: Label
+var derived_resist_lbl: Label
 var derived_rows: Dictionary = {} # String -> HBoxContainer
-var equipped_weapon_lbl: Label
-var equipped_shield_lbl: Label
-var equipped_armor_lbl: Label
-var equipped_acc1_lbl: Label
-var equipped_acc2_lbl: Label
-var equipped_status_lbl: Label
+
 var loadout_cards_vbox: VBoxContainer
 var battle_pouch_vbox: VBoxContainer
 
+# Base UI Gear Picker Modal
+var gear_picker_dialog: PanelContainer
+var picker_items_vbox: VBoxContainer
+var picker_title_lbl: Label
+var picker_slot: Equipment.EquipSlot = Equipment.EquipSlot.MAIN_HAND
+
 # Action Buttons
 var btn_melee_strike: Button
+var btn_offhand_strike: Button
 var btn_ranged_volley: Button
+var btn_switch_active_weapon: Button
+var force_crit_check: CheckBox
+var pouch_select_option: OptionButton
+var btn_use_pouch_item: Button
 
 # Dojo Stage Dimensions
 const STAGE_WIDTH: int = 420
@@ -192,6 +208,15 @@ func _build_dojo_ui() -> void:
 	btn_heal_dummy.pressed.connect(_on_heal_dummy_pressed)
 	hdr_row.add_child(btn_heal_dummy)
 
+	var btn_reset_dojo := Button.new()
+	btn_reset_dojo.text = "↺ Reset Dojo"
+	btn_reset_dojo.tooltip_text = "Reset heroes, loadouts, training dummy vitals, and formula logs back to initial state"
+	btn_reset_dojo.add_theme_font_size_override("font_size", 10)
+	btn_reset_dojo.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
+	btn_reset_dojo.focus_mode = Control.FOCUS_NONE
+	btn_reset_dojo.pressed.connect(_reset_dojo_to_baseline)
+	hdr_row.add_child(btn_reset_dojo)
+
 	var sep := HSeparator.new()
 	main_vbox.add_child(sep)
 
@@ -218,6 +243,9 @@ func _build_dojo_ui() -> void:
 		_refresh_all_views()
 	)
 	canvas_layer.add_child(gear_modal)
+
+	# Setup Base UI Gear Picker Dialog
+	_build_gear_picker_dialog()
 
 # ------------------------------------------------------------------------------
 # Left Dock: Hero 6-Stat Specs & Equipped Loadout
@@ -273,11 +301,12 @@ func _build_left_specs_dock(parent: Control) -> void:
 
 	lvl_row.add_spacer(false)
 
-	hero_points_lbl = Label.new()
-	hero_points_lbl.text = "Unspent Points: 1"
-	hero_points_lbl.add_theme_font_size_override("font_size", 9)
-	hero_points_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
-	lvl_row.add_child(hero_points_lbl)
+	hero_points_btn = Button.new()
+	hero_points_btn.text = "Unspent Points: 1"
+	hero_points_btn.add_theme_font_size_override("font_size", 9)
+	hero_points_btn.focus_mode = Control.FOCUS_NONE
+	hero_points_btn.pressed.connect(_on_points_btn_pressed)
+	lvl_row.add_child(hero_points_btn)
 
 	# 6 Core Stats Matrix
 	var stats_hdr := Label.new()
@@ -328,6 +357,18 @@ func _build_left_specs_dock(parent: Control) -> void:
 
 		s_hbox.add_spacer(false)
 
+		var key_str: String = str(sd["k"])
+
+		var btn_minus := Button.new()
+		btn_minus.text = "-"
+		btn_minus.custom_minimum_size = Vector2(16, 16)
+		btn_minus.add_theme_font_size_override("font_size", 8)
+		btn_minus.focus_mode = Control.FOCUS_NONE
+		btn_minus.visible = false
+		btn_minus.pressed.connect(func() -> void: _on_stat_minus_pressed(key_str))
+		s_hbox.add_child(btn_minus)
+		stat_minus_buttons[key_str] = btn_minus
+
 		var s_val := Label.new()
 		s_val.text = "14"
 		s_val.add_theme_font_size_override("font_size", 10)
@@ -335,9 +376,58 @@ func _build_left_specs_dock(parent: Control) -> void:
 		s_val.mouse_filter = Control.MOUSE_FILTER_PASS
 		s_hbox.add_child(s_val)
 
-		var key_str: String = str(sd["k"])
+		var btn_plus := Button.new()
+		btn_plus.text = "+"
+		btn_plus.custom_minimum_size = Vector2(16, 16)
+		btn_plus.add_theme_font_size_override("font_size", 8)
+		btn_plus.focus_mode = Control.FOCUS_NONE
+		btn_plus.visible = false
+		btn_plus.pressed.connect(func() -> void: _on_stat_plus_pressed(key_str))
+		s_hbox.add_child(btn_plus)
+		stat_plus_buttons[key_str] = btn_plus
+
 		stat_display_labels[key_str] = s_val
 		stat_box_containers[key_str] = stat_box
+
+	# Stat Allocation Action Controls (Requirement 8)
+	stat_allocation_controls_vbox = VBoxContainer.new()
+	stat_allocation_controls_vbox.add_theme_constant_override("separation", 3)
+	stat_allocation_controls_vbox.visible = false
+	vbox.add_child(stat_allocation_controls_vbox)
+
+	alloc_rem_lbl = Label.new()
+	alloc_rem_lbl.text = "Allocating Points: 0 remaining"
+	alloc_rem_lbl.add_theme_font_size_override("font_size", 8)
+	alloc_rem_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.6))
+	stat_allocation_controls_vbox.add_child(alloc_rem_lbl)
+
+	var alloc_btns_row := HBoxContainer.new()
+	alloc_btns_row.add_theme_constant_override("separation", 4)
+	stat_allocation_controls_vbox.add_child(alloc_btns_row)
+
+	var btn_reset_alloc := Button.new()
+	btn_reset_alloc.text = "↺ Reset"
+	btn_reset_alloc.tooltip_text = "Reset newly allocated points back to pool"
+	btn_reset_alloc.add_theme_font_size_override("font_size", 8)
+	btn_reset_alloc.focus_mode = Control.FOCUS_NONE
+	btn_reset_alloc.pressed.connect(_on_reset_allocation_pressed)
+	alloc_btns_row.add_child(btn_reset_alloc)
+
+	var btn_confirm_alloc := Button.new()
+	btn_confirm_alloc.text = "✔ Confirm"
+	btn_confirm_alloc.tooltip_text = "Commit newly allocated points to hero attributes"
+	btn_confirm_alloc.add_theme_font_size_override("font_size", 8)
+	btn_confirm_alloc.focus_mode = Control.FOCUS_NONE
+	btn_confirm_alloc.pressed.connect(_on_confirm_allocation_pressed)
+	alloc_btns_row.add_child(btn_confirm_alloc)
+
+	var btn_cancel_alloc := Button.new()
+	btn_cancel_alloc.text = "✖ Cancel"
+	btn_cancel_alloc.tooltip_text = "Cancel allocation session without saving"
+	btn_cancel_alloc.add_theme_font_size_override("font_size", 8)
+	btn_cancel_alloc.focus_mode = Control.FOCUS_NONE
+	btn_cancel_alloc.pressed.connect(_on_cancel_allocation_pressed)
+	alloc_btns_row.add_child(btn_cancel_alloc)
 
 	# Derived Combat Specs
 	var derived_hdr := Label.new()
@@ -352,6 +442,8 @@ func _build_left_specs_dock(parent: Control) -> void:
 	derived_hp_lbl = _create_key_val_row(vbox, "Maximum Health", "100 HP", Color(0.95, 0.4, 0.4), "hp")
 	derived_mit_lbl = _create_key_val_row(vbox, "Flat Mitigation", "+0 Mit", Color(0.7, 0.85, 1.0), "mit")
 	derived_burden_lbl = _create_key_val_row(vbox, "Armor Burden", "0 / 14", Color(0.9, 0.8, 0.35), "burden")
+	derived_crit_lbl = _create_key_val_row(vbox, "Crit Hit Rate", "5.0%", Color(0.95, 0.75, 0.3), "crit")
+	derived_resist_lbl = _create_key_val_row(vbox, "Debuff Resist", "0.0%", Color(0.7, 0.5, 0.95), "resist")
 
 	var sep_loadout := HSeparator.new()
 	vbox.add_child(sep_loadout)
@@ -556,12 +648,55 @@ func _build_center_stage_dock(parent: Control) -> void:
 	acts_grid.add_theme_constant_override("v_separation", 4)
 	vbox.add_child(acts_grid)
 
-	btn_melee_strike = _add_action_btn(acts_grid, "⚔ Melee Strike", "Execute weapon melee strike against Dummy", _on_test_melee_strike)
+	btn_melee_strike = _add_action_btn(acts_grid, "⚔ Main Strike", "Execute main hand strike against Dummy", _on_test_melee_strike)
+	btn_offhand_strike = _add_action_btn(acts_grid, "🗡 Off-Hand Strike", "Execute off-hand weapon strike against Dummy", _on_test_offhand_strike)
 	btn_ranged_volley = _add_action_btn(acts_grid, "🏹 Ranged Volley", "Execute ranged attack against Dummy", _on_test_ranged_volley)
+	btn_switch_active_weapon = _add_action_btn(acts_grid, "🔄 Switch Weapon", "Switch active weapon / toggle 1H off-hand or alternate weapon", _on_test_switch_active_weapon)
 	_add_action_btn(acts_grid, "✦ Focus Buff", "Gain +50% ATK Power boost for 2 rounds", _on_test_focus_buff)
 	_add_action_btn(acts_grid, "🛡 Shield Defend", "Enter Defensive Stance (50% Mitigation)", _on_test_defend)
-	_add_action_btn(acts_grid, "🧪 Pouch Item", "Consume battle pouch item (Heal or Bomb)", _on_test_pouch_item)
 	_add_action_btn(acts_grid, "🔄 Stance Shift", "Shift hero stance between Offensive/Neutral", _on_test_stance_shift)
+
+	force_crit_check = CheckBox.new()
+	force_crit_check.text = "Force Crit"
+	force_crit_check.tooltip_text = "Force critical hit (2.5x damage) for formula verification"
+	force_crit_check.add_theme_font_size_override("font_size", 8)
+	force_crit_check.focus_mode = Control.FOCUS_NONE
+	acts_grid.add_child(force_crit_check)
+
+	# Battle Pouch Quick Selector (Requirement 5)
+	var pouch_act_card := PanelContainer.new()
+	var pa_st := StyleBoxFlat.new()
+	pa_st.bg_color = Color(0.10, 0.13, 0.18, 0.8)
+	pa_st.set_corner_radius_all(4)
+	pa_st.content_margin_left = 6
+	pa_st.content_margin_right = 6
+	pa_st.content_margin_top = 4
+	pa_st.content_margin_bottom = 4
+	pouch_act_card.add_theme_stylebox_override("panel", pa_st)
+	vbox.add_child(pouch_act_card)
+
+	var pa_hbox := HBoxContainer.new()
+	pa_hbox.add_theme_constant_override("separation", 6)
+	pouch_act_card.add_child(pa_hbox)
+
+	var pa_lbl := Label.new()
+	pa_lbl.text = "🧪 Battle Pouch Action:"
+	pa_lbl.add_theme_font_size_override("font_size", 9)
+	pa_lbl.add_theme_color_override("font_color", Color(0.4, 0.9, 0.6))
+	pa_hbox.add_child(pa_lbl)
+
+	pouch_select_option = OptionButton.new()
+	pouch_select_option.add_theme_font_size_override("font_size", 9)
+	pouch_select_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pouch_select_option.focus_mode = Control.FOCUS_NONE
+	pa_hbox.add_child(pouch_select_option)
+
+	btn_use_pouch_item = Button.new()
+	btn_use_pouch_item.text = "Use Item"
+	btn_use_pouch_item.add_theme_font_size_override("font_size", 9)
+	btn_use_pouch_item.focus_mode = Control.FOCUS_NONE
+	btn_use_pouch_item.pressed.connect(_on_test_pouch_item)
+	pa_hbox.add_child(btn_use_pouch_item)
 
 func _add_action_btn(parent: Control, label_text: String, tooltip: String, callback: Callable) -> Button:
 	var btn := Button.new()
@@ -634,18 +769,25 @@ func _refresh_all_views() -> void:
 
 	active_hero.sync_from_stats_and_gear()
 
+	if hero_title_lbl == null:
+		return
+
 	# 1. Update Tabs
 	_rebuild_hero_tabs()
 
-	# 2. Update Header
+	# 2. Update Header & Points Button (Requirement 8)
 	var arch_name: String = active_hero.stats.archetype.display_name if active_hero.stats and active_hero.stats.archetype else "Hero"
 	hero_title_lbl.text = "%s (Archetype: %s)" % [active_hero.name, arch_name]
 	hero_lvl_lbl.text = "Level: %d / 10" % (active_hero.stats.level if active_hero.stats else 1)
 	var free_pts: int = active_hero.stats.unspent_attribute_points if active_hero.stats else 0
-	hero_points_lbl.text = "Unspent Points: %d" % free_pts
-	hero_points_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5) if free_pts > 0 else Color(0.6, 0.7, 0.8))
+	if is_allocating_stats:
+		hero_points_btn.text = "Allocating Stats (%d unspent)" % pending_free_points
+		hero_points_btn.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+	else:
+		hero_points_btn.text = "Unspent Points: %d (Click to Allocate)" % free_pts
+		hero_points_btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5) if free_pts > 0 else Color(0.6, 0.7, 0.8))
 
-	# 3. Update 6 Stats Matrix & Tooltips (Items 1 & 2)
+	# 3. Update 6 Stats Matrix & Tooltips (Items 1, 2 & 8)
 	if active_hero.stats != null:
 		var st := active_hero.stats
 		var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory else null
@@ -658,16 +800,38 @@ func _refresh_all_views() -> void:
 			var txt := "%d" % eff
 			if diff > 0:
 				txt += " (+%d)" % diff
+			if is_allocating_stats:
+				var pend: int = pending_allocated_stats.get(k, 0)
+				if pend > 0:
+					txt += " (+%d)" % pend
+
 			if stat_display_labels.has(k):
 				var lbl: Variant = stat_display_labels[k]
 				if lbl is Label:
 					lbl.text = txt
+
+			if stat_plus_buttons.has(k):
+				var btn_p: Variant = stat_plus_buttons[k]
+				if btn_p is Button:
+					btn_p.visible = is_allocating_stats
+					btn_p.disabled = (pending_free_points <= 0)
+
+			if stat_minus_buttons.has(k):
+				var btn_m: Variant = stat_minus_buttons[k]
+				if btn_m is Button:
+					btn_m.visible = is_allocating_stats
+					btn_m.disabled = (pending_allocated_stats.get(k, 0) <= 0)
+
 			if stat_box_containers.has(k):
 				var box: Variant = stat_box_containers[k]
 				if box is PanelContainer:
 					box.tooltip_text = _build_stat_breakdown_tooltip(k)
 
-		# 4. Update Derived Combat Metrics (Items 3, 5 & 11)
+		stat_allocation_controls_vbox.visible = is_allocating_stats
+		if is_allocating_stats:
+			alloc_rem_lbl.text = "Allocating Points: %d unspent remaining" % pending_free_points
+
+		# 4. Update Derived Combat Metrics (Items 3, 5, 9, 10 & 11)
 		var burden: int = active_hero.inventory.get_total_armor_burden() if active_hero.inventory else 0
 		var carry_max: int = st.get_carry_weight_capacity(ctx)
 		var pwr_melee: int = active_hero.get_effective_power(false)
@@ -677,6 +841,10 @@ func _refresh_all_views() -> void:
 		var total_gear_mit: int = active_hero.inventory.get_total_flat_mitigation() if active_hero.inventory else 0
 		var str_mit: int = int(roundf(float(st.get_effective_stat("STR", ctx)) * 0.25))
 		var total_mit_rating: int = total_gear_mit + str_mit
+
+		var crit_rate: float = st.get_crit_rate(ctx)
+		var crit_mult: float = st.get_crit_damage_multiplier(ctx)
+		var debuff_resist: float = st.get_debuff_resistance(ctx)
 
 		if main_w != null and main_w.is_ranged_weapon():
 			derived_melee_lbl.text = "%d ATK Power (Ranged Eqpd)" % pwr_melee
@@ -693,14 +861,19 @@ func _refresh_all_views() -> void:
 		if derived_mit_lbl != null:
 			derived_mit_lbl.text = "+%d Flat (Gear: %d, STR: +%d)" % [total_mit_rating, total_gear_mit, str_mit]
 		derived_burden_lbl.text = "%d / %d Burden" % [burden, carry_max]
+		derived_crit_lbl.text = "%.1f%% (%.1fx DMG)" % [crit_rate, crit_mult]
+		derived_resist_lbl.text = "%.1f%% Resist" % debuff_resist
 
 		_update_derived_tooltips(st, ctx, main_w, burden, carry_max, arm_mit, shd_mit, total_gear_mit, str_mit, total_mit_rating)
 
 		# 5. Active Loadout & Quick Pouches (Items 3, 4, 6, 7, 8, 9, 10)
 		_render_dojo_loadout_cards(st)
 
-		# 6. Action Button Availabilities based on weapon type (Item 3)
+		# 6. Action Button Availabilities based on weapon type (Item 3 & 7)
 		_update_action_button_states(main_w)
+
+		# 7. Update Battle Pouch Selector Dropdown (Item 5)
+		_refresh_pouch_dropdown()
 
 	# 7. Update Dummy Vitals
 	if test_dummy != null:
@@ -844,6 +1017,21 @@ func _update_derived_tooltips(
 		var row_b: Variant = derived_rows["burden"]
 		if row_b is Control: row_b.tooltip_text = bur_tip
 
+	if derived_rows.has("crit"):
+		var eff_dex_c: int = st.get_effective_stat("DEX", ctx)
+		var c_rate: float = st.get_crit_rate(ctx)
+		var c_mult: float = st.get_crit_damage_multiplier(ctx)
+		var c_tip: String = "[CRITICAL HIT RATE & MULTIPLIER]\nFormula: 5.0% (Base) + (DEX * 1.5%)\nCalc: 5.0% + (%d DEX * 1.5% = +%.1f%%) = %.1f%% Crit Rate\nCritical Damage Multiplier: %.1fx" % [eff_dex_c, float(eff_dex_c) * 1.5, c_rate, c_mult]
+		var row_c: Variant = derived_rows["crit"]
+		if row_c is Control: row_c.tooltip_text = c_tip
+
+	if derived_rows.has("resist"):
+		var eff_int_r: int = st.get_effective_stat("INT", ctx)
+		var r_rate: float = st.get_debuff_resistance(ctx)
+		var r_tip: String = "[DEBUFF & STATUS RESISTANCE]\nFormula: INT * 2.5%\nCalc: %d INT * 2.5% = %.1f%% Debuff Resistance\nEffect: Reduces incoming debuff duration, status infliction rate, and penalty severity." % [eff_int_r, r_rate]
+		var row_res: Variant = derived_rows["resist"]
+		if row_res is Control: row_res.tooltip_text = r_tip
+
 # Card-based equipped loadout & consumable pouches (Requirements 3 & 4)
 func _render_dojo_loadout_cards(st: CharacterStats) -> void:
 	if loadout_cards_vbox == null or active_hero == null or active_hero.inventory == null:
@@ -872,7 +1060,7 @@ func _render_dojo_loadout_cards(st: CharacterStats) -> void:
 
 	_render_dojo_battle_pouches()
 
-func _create_dojo_slot_card(slot_name: String, icon: String, eq: Equipment, _slot_val: Equipment.EquipSlot, st: CharacterStats) -> PanelContainer:
+func _create_dojo_slot_card(slot_name: String, icon: String, eq: Equipment, slot_val: Equipment.EquipSlot, st: CharacterStats) -> PanelContainer:
 	var card := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.10, 0.13, 0.19, 0.85)
@@ -960,6 +1148,26 @@ func _create_dojo_slot_card(slot_name: String, icon: String, eq: Equipment, _slo
 		badge_lbl.add_theme_color_override("font_color", tag_col)
 		r2.add_child(badge_lbl)
 
+	# Row 3: Slot Action Buttons (Equip / Swap & Unequip) (Requirement 4)
+	var r3 := HBoxContainer.new()
+	r3.add_theme_constant_override("separation", 4)
+	c_vbox.add_child(r3)
+
+	var btn_eq := Button.new()
+	btn_eq.text = "Swap" if eq != null else "Equip"
+	btn_eq.add_theme_font_size_override("font_size", 8)
+	btn_eq.focus_mode = Control.FOCUS_NONE
+	btn_eq.pressed.connect(func() -> void: _open_base_equip_picker(slot_val))
+	r3.add_child(btn_eq)
+
+	if eq != null:
+		var btn_uneq := Button.new()
+		btn_uneq.text = "Unequip"
+		btn_uneq.add_theme_font_size_override("font_size", 8)
+		btn_uneq.focus_mode = Control.FOCUS_NONE
+		btn_uneq.pressed.connect(func() -> void: _unequip_slot_to_stash(slot_val))
+		r3.add_child(btn_uneq)
+
 	return card
 
 func _render_dojo_battle_pouches() -> void:
@@ -1040,23 +1248,54 @@ func _get_rarity_color(rarity: Item.ItemRarity) -> Color:
 			return Color.WHITE
 
 func _update_action_button_states(main_w: Equipment) -> void:
-	if btn_melee_strike == null or btn_ranged_volley == null:
+	if btn_melee_strike == null or btn_ranged_volley == null or btn_offhand_strike == null:
 		return
+
+	var off_w: Equipment = active_hero.inventory.get_offhand_weapon() if (active_hero and active_hero.inventory) else null
+	var shield: Equipment = active_hero.inventory.get_shield() if (active_hero and active_hero.inventory) else null
+
+	# Main Strike & Ranged Volley (Requirements 3 & 7)
 	if main_w == null:
 		btn_melee_strike.disabled = false
 		btn_melee_strike.tooltip_text = "Execute unarmed melee strike against Dummy"
 		btn_ranged_volley.disabled = true
-		btn_ranged_volley.tooltip_text = "Disabled: Ranged Volley requires a ranged weapon (e.g. Bow, Crossbow)"
+		btn_ranged_volley.tooltip_text = "Disabled: Ranged Volley requires a ranged weapon (e.g. Bow)"
 	elif main_w.is_ranged_weapon():
 		btn_melee_strike.disabled = true
 		btn_melee_strike.tooltip_text = "Disabled: Cannot perform Melee Strike with ranged weapon (%s)" % main_w.name
 		btn_ranged_volley.disabled = false
-		btn_ranged_volley.tooltip_text = "Execute ranged attack with %s against Dummy" % main_w.name
+		btn_ranged_volley.tooltip_text = "Execute ranged volley with %s against Dummy" % main_w.name
 	else:
 		btn_melee_strike.disabled = false
-		btn_melee_strike.tooltip_text = "Execute melee strike with %s against Dummy" % main_w.name
+		btn_melee_strike.tooltip_text = "Execute main strike with %s against Dummy" % main_w.name
 		btn_ranged_volley.disabled = true
 		btn_ranged_volley.tooltip_text = "Disabled: Cannot perform Ranged Volley with melee weapon (%s)" % main_w.name
+
+	# Off-Hand Strike (Requirement 7)
+	if main_w != null and main_w.is_two_handed:
+		btn_offhand_strike.disabled = true
+		btn_offhand_strike.tooltip_text = "Disabled: Cannot use Off-Hand while wielding 2-Handed weapon (%s)" % main_w.name
+	elif off_w != null:
+		btn_offhand_strike.disabled = false
+		btn_offhand_strike.tooltip_text = "Execute off-hand strike with %s (scales with %s * 1.5)" % [off_w.name, off_w.scaling_stat]
+	elif shield != null:
+		btn_offhand_strike.disabled = true
+		btn_offhand_strike.tooltip_text = "Disabled: %s is a Shield (Mitigation only, not offensive)" % shield.name
+	else:
+		btn_offhand_strike.disabled = true
+		btn_offhand_strike.tooltip_text = "Disabled: No off-hand weapon equipped"
+
+	# Switch Weapon Action (Requirement 7)
+	if btn_switch_active_weapon != null:
+		if main_w != null and main_w.is_two_handed:
+			btn_switch_active_weapon.disabled = false
+			btn_switch_active_weapon.tooltip_text = "Use an action to switch from 2-Handed weapon to 1-Handed loadout"
+		elif off_w != null:
+			btn_switch_active_weapon.disabled = false
+			btn_switch_active_weapon.tooltip_text = "Use an action to swap active Main Hand and Off Hand weapons"
+		else:
+			btn_switch_active_weapon.disabled = false
+			btn_switch_active_weapon.tooltip_text = "Use an action to switch active weapon from stash"
 
 func _rebuild_hero_tabs() -> void:
 	for c in hero_tabs_hbox.get_children():
@@ -1084,6 +1323,71 @@ func _append_formula_log(bbcode: String) -> void:
 # 4. Interactive Skill Action Handlers & Formula Verification
 # ------------------------------------------------------------------------------
 
+# Thin wrapper – all math now lives in DamageCalculator (scripts/core/combat/damage_calculator.gd)
+func _calculate_combat_damage(
+	attacker: Combatant,
+	target: Combatant,
+	is_ranged: bool,
+	use_offhand: bool,
+	skill_mult: float = 1.0,
+	force_crit: bool = false,
+	allow_random_crit: bool = false
+) -> Dictionary:
+	return DamageCalculator.compute(attacker, target, is_ranged, use_offhand, skill_mult, force_crit, allow_random_crit)
+
+func _log_combat_damage_breakdown(action_title: String, res: Dictionary, actual_dmg: int) -> void:
+	var w: Equipment = res["weapon"]
+	var w_name: String = w.name if w != null else "Unarmed"
+	_append_formula_log("[color=#fde047][b]%s: %s strikes %s with %s![/b][/color]" % [action_title, active_hero.name, test_dummy.name, w_name])
+
+	# Step 1: Weapon Power
+	var pwr_parts: Array[String] = ["Base: %d" % res["base_w_power"]]
+	if res["tier_boost"] > 0:
+		pwr_parts.append("[color=#fbbf24]+Tier: %d[/color]" % res["tier_boost"])
+	if res["mastery_pwr"] > 0:
+		pwr_parts.append("[color=#a855f7]+Mastery: %d[/color]" % res["mastery_pwr"])
+	_append_formula_log("  1. Wep Power: [color=#e2e8f0]%d[/color] (%s)" % [res["total_w_power"], ", ".join(pwr_parts)])
+
+	if res["pen_ratio"] > 0.0:
+		var pen_raw: Variant = res.get("pen_ratio", 0.0)
+		var pen_val: float = pen_raw if pen_raw is float else 0.0
+		var pen_pct: int = int(roundf(pen_val * 100.0))
+		_append_formula_log("     [color=#f87171]⚠️ Deficit Penalty (-%d Deficit): %d * (1 - %d%%) = %.1f Wep Power[/color]" % [res["def_amount"], res["total_w_power"], pen_pct, res["penalized_w_power"]])
+
+	# Step 2: Stat Scaling
+	_append_formula_log("  2. Stat Scaling: [color=#e2e8f0]%d %s[/color] * 1.5 = [color=#38bdf8]+%.1f Power[/color]" % [res["stat_val"], res["stat_name"], res["stat_scaling_contrib"]])
+
+	# Step 3: Base Attack Power & Buffs
+	_append_formula_log("  3. Base Attack Power: (%.1f Wep + %.1f Stat) = [color=#38bdf8]%.1f[/color]" % [res["penalized_w_power"], res["stat_scaling_contrib"], res["unbuffed_attack_power"]])
+	if res["buff_mult"] != 1.0:
+		_append_formula_log("     [color=#c084fc]✦ Buff Multiplier: (1 + %.2f) -> Gross ATK Power: %d[/color]" % [res["buff_mult"] - 1.0, res["final_attack_power"]])
+	else:
+		_append_formula_log("     Final Attack Power: [color=#38bdf8]%d[/color]" % res["final_attack_power"])
+
+	# Step 4: Combat Multipliers
+	var mult_parts: Array[String] = []
+	if res["skill_mult"] != 1.0:
+		mult_parts.append("Skill: x%.2f" % res["skill_mult"])
+	var mit_raw: Variant = res.get("mit_ratio", 0.0)
+	var mit_val: float = mit_raw if mit_raw is float else 0.0
+	mult_parts.append("Mitigation: x%.2f (%d%%)" % [res["mit_mult"], int(roundf(mit_val * 100.0))])
+	if res["stance_mult"] != 0.0:
+		var sign_str := "+" if res["stance_mult"] > 0 else ""
+		mult_parts.append("[color=#fbbf24]Stance: (1 %s%.2f = x%.2f)[/color]" % [sign_str, res["stance_mult"], res["stance_factor"]])
+	else:
+		mult_parts.append("Stance: Neutral (x1.0)")
+
+	if res["is_crit"]:
+		mult_parts.append("[color=#f43f5e]CRIT! x%.1f (Rate: %.1f%%)[/color]" % [res["crit_dmg_mult"], res["crit_rate"]])
+	else:
+		mult_parts.append("Crit: No (Rate: %.1f%%)" % res["crit_rate"])
+
+	if res["effect_factor"] != 1.0:
+		mult_parts.append("Effect: x%.2f" % res["effect_factor"])
+
+	_append_formula_log("  4. Combat Multipliers: %s" % " | ".join(mult_parts))
+	_append_formula_log("  • [color=#4ade80][b]RESULT: %d Final Damage Inflicted! (Dummy HP: %d / %d)[/b][/color]\n" % [actual_dmg, test_dummy.hp, test_dummy.max_hp])
+
 func _on_test_melee_strike() -> void:
 	if active_hero == null or test_dummy == null:
 		return
@@ -1093,46 +1397,45 @@ func _on_test_melee_strike() -> void:
 		_append_formula_log("[color=#f87171]❌ Action Failed: Cannot execute Melee Strike while wielding ranged weapon (%s)![/color]\n" % main_w.name)
 		return
 
-	var w_name: String = main_w.name if main_w != null else "Unarmed Strike"
-	var base_w_power: int = main_w.base_power if main_w != null else 10
-	var eff_power: int = active_hero.get_effective_power(false)
+	var force_crit: bool = force_crit_check != null and force_crit_check.button_pressed
+	var res: Dictionary = _calculate_combat_damage(active_hero, test_dummy, false, false, 1.0, force_crit, true)
+	var final_dmg_raw: Variant = res.get("final_dmg", 0)
+	var final_dmg: int = final_dmg_raw if final_dmg_raw is int else 0
+	var actual_dmg: int = test_dummy.take_damage(final_dmg, true)
 
-	# Focus buff bonus
-	var focus_mult: float = active_hero.attack_boost_multiplier
-	var gross_power: int = int(roundf(float(eff_power) * focus_mult))
+	var mit_raw_fx: Variant = res.get("mit_ratio", 0.0)
+	var mit_ratio_fx: float = mit_raw_fx if mit_raw_fx is float else 0.0
+	_trigger_stage_fx(hero_token_ctrl, dummy_token_ctrl, actual_dmg, mit_ratio_fx > 0.0)
+	_log_combat_damage_breakdown("⚔ MAIN STRIKE", res, actual_dmg)
+	_refresh_all_views()
 
-	# Mitigation calculation
-	var mit_ratio: float = test_dummy.defense_mitigation_ratio
-	var actual_dmg: int = test_dummy.take_damage(gross_power)
+func _on_test_offhand_strike() -> void:
+	if active_hero == null or test_dummy == null:
+		return
 
-	_trigger_stage_fx(hero_token_ctrl, dummy_token_ctrl, actual_dmg, mit_ratio > 0.0)
+	var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory else null
+	if main_w != null and main_w.is_two_handed:
+		_append_formula_log("[color=#f87171]❌ Action Failed: Cannot use Off-Hand while wielding 2-Handed weapon (%s)![/color]\n" % main_w.name)
+		return
 
-	# Live formula logging
-	var ctx: Dictionary = {"weapon": main_w.weapon_type} if main_w != null else {}
-	_append_formula_log("[color=#fde047][b]⚔ MELEE STRIKE: %s strikes %s with %s![/b][/color]" % [active_hero.name, test_dummy.name, w_name])
-	_append_formula_log("  • Weapon Base Power: [color=#e2e8f0]%d[/color]" % base_w_power)
-	var str_val: int = active_hero.stats.get_effective_stat("STR", ctx) if active_hero.stats else 10
-	var str_scaling_bonus: int = int(roundf(float(str_val) * 1.5))
-	_append_formula_log("  • Effective STR: [color=#e2e8f0]%d[/color] (x1.5 scaling -> +%d Power)" % [str_val, str_scaling_bonus])
+	var off_w: Equipment = active_hero.inventory.get_offhand_weapon() if active_hero.inventory else null
+	if off_w == null:
+		_append_formula_log("[color=#f87171]❌ Action Failed: No off-hand weapon equipped![/color]\n")
+		return
+	if off_w.is_shield() or off_w.base_power == 0:
+		_append_formula_log("[color=#f87171]❌ Action Failed: %s is a Shield (Mitigation only, not offensive)![/color]\n" % off_w.name)
+		return
 
-	if main_w != null:
-		var bonus_tier: int = main_w.get_unlocked_threshold_power_boost(active_hero.stats, active_hero.stats.mastery)
-		if bonus_tier > 0:
-			_append_formula_log("  • [color=#fbbf24]★ Threshold Tier Bonus: +%d Power[/color]" % bonus_tier)
-		var pen := main_w.get_wield_penalty(active_hero.stats, active_hero.stats.mastery)
-		var is_pen: bool = pen.get("is_penalized", false)
-		if is_pen:
-			var pen_ratio_raw: Variant = pen.get("power_penalty_ratio", 0.0)
-			var pen_ratio: float = pen_ratio_raw if pen_ratio_raw is float else 0.0
-			var pen_pct: int = int(roundf(pen_ratio * 100.0))
-			_append_formula_log("  • [color=#f87171]⚠️ Deficit Penalty: -%d%% Power[/color]" % pen_pct)
+	var force_crit: bool = force_crit_check != null and force_crit_check.button_pressed
+	var res: Dictionary = _calculate_combat_damage(active_hero, test_dummy, false, true, 1.0, force_crit, true)
+	var final_dmg_raw: Variant = res.get("final_dmg", 0)
+	var final_dmg: int = final_dmg_raw if final_dmg_raw is int else 0
+	var actual_dmg: int = test_dummy.take_damage(final_dmg, true)
 
-	if focus_mult > 1.0:
-		_append_formula_log("  • [color=#c084fc]✦ Focus Buff Multiplier: x%.1f[/color]" % focus_mult)
-
-	_append_formula_log("  • Gross Power: [color=#38bdf8]%d[/color] | Dummy Mitigation: [color=#94a3b8]%d%%[/color]" % [gross_power, int(roundf(mit_ratio * 100.0))])
-	_append_formula_log("  • [color=#4ade80][b]RESULT: %d Damage Inflicted! (Dummy HP: %d / %d)[/b][/color]\n" % [actual_dmg, test_dummy.hp, test_dummy.max_hp])
-
+	var mit_raw_fx: Variant = res.get("mit_ratio", 0.0)
+	var mit_ratio_fx: float = mit_raw_fx if mit_raw_fx is float else 0.0
+	_trigger_stage_fx(hero_token_ctrl, dummy_token_ctrl, actual_dmg, mit_ratio_fx > 0.0)
+	_log_combat_damage_breakdown("🗡 OFF-HAND STRIKE", res, actual_dmg)
 	_refresh_all_views()
 
 func _on_test_ranged_volley() -> void:
@@ -1145,35 +1448,80 @@ func _on_test_ranged_volley() -> void:
 		_append_formula_log("[color=#f87171]❌ Action Failed: Cannot execute Ranged Volley without a ranged weapon! Currently wielding: %s.[/color]\n" % w_name)
 		return
 
-	var eff_power: int = active_hero.get_effective_power(true)
-	var focus_mult: float = active_hero.attack_boost_multiplier
-	var gross_power: int = int(roundf(float(eff_power) * focus_mult))
-	var mit_ratio: float = test_dummy.defense_mitigation_ratio
-	var actual_dmg: int = test_dummy.take_damage(gross_power)
+	var force_crit: bool = force_crit_check != null and force_crit_check.button_pressed
+	var res: Dictionary = _calculate_combat_damage(active_hero, test_dummy, true, false, 1.0, force_crit, true)
+	var final_dmg_raw: Variant = res.get("final_dmg", 0)
+	var final_dmg: int = final_dmg_raw if final_dmg_raw is int else 0
+	var actual_dmg: int = test_dummy.take_damage(final_dmg, true)
 
-	_trigger_stage_fx(hero_token_ctrl, dummy_token_ctrl, actual_dmg, mit_ratio > 0.0)
+	var mit_raw_fx: Variant = res.get("mit_ratio", 0.0)
+	var mit_ratio_fx: float = mit_raw_fx if mit_raw_fx is float else 0.0
+	_trigger_stage_fx(hero_token_ctrl, dummy_token_ctrl, actual_dmg, mit_ratio_fx > 0.0)
+	_log_combat_damage_breakdown("🏹 RANGED VOLLEY", res, actual_dmg)
+	_refresh_all_views()
 
-	var ctx: Dictionary = {"weapon": main_w.weapon_type} if main_w != null else {}
-	_append_formula_log("[color=#38bdf8][b]🏹 RANGED VOLLEY: %s fires %s at %s![/b][/color]" % [active_hero.name, w_name, test_dummy.name])
-	var dex_val: int = active_hero.stats.get_effective_stat("DEX", ctx) if active_hero.stats else 10
-	var dex_scaling_bonus: int = int(roundf(float(dex_val) * 1.5))
-	_append_formula_log("  • Effective DEX: [color=#e2e8f0]%d[/color] (x1.5 scaling -> +%d Power)" % [dex_val, dex_scaling_bonus])
-	_append_formula_log("  • Weapon Type: %s (Range: %d tiles)" % [main_w.weapon_type.capitalize(), main_w.base_range])
+func _on_test_switch_active_weapon() -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
 
-	if main_w != null:
-		var bonus_tier: int = main_w.get_unlocked_threshold_power_boost(active_hero.stats, active_hero.stats.mastery)
-		if bonus_tier > 0:
-			_append_formula_log("  • [color=#fbbf24]★ Threshold Tier Bonus: +%d Power[/color]" % bonus_tier)
-		var pen := main_w.get_wield_penalty(active_hero.stats, active_hero.stats.mastery)
-		var is_pen: bool = pen.get("is_penalized", false)
-		if is_pen:
-			var pen_ratio_raw_r: Variant = pen.get("power_penalty_ratio", 0.0)
-			var pen_ratio_r: float = pen_ratio_raw_r if pen_ratio_raw_r is float else 0.0
-			var pen_pct: int = int(roundf(pen_ratio_r * 100.0))
-			_append_formula_log("  • [color=#f87171]⚠️ Deficit Penalty: -%d%% Power[/color]" % pen_pct)
+	var inv: Inventory = active_hero.inventory
+	var main_w: Equipment = inv.get_main_weapon()
+	var off_w: Equipment = inv.get_offhand_weapon()
 
-	_append_formula_log("  • [color=#4ade80][b]RESULT: %d Ranged Damage! (Dummy HP: %d / %d)[/b][/color]\n" % [actual_dmg, test_dummy.hp, test_dummy.max_hp])
+	if main_w != null and off_w != null:
+		# 1H dual wield: Swap main hand and off hand
+		inv.equipped_gear.erase(Equipment.EquipSlot.MAIN_HAND)
+		inv.equipped_gear.erase(Equipment.EquipSlot.OFF_HAND)
+		inv.equipped_gear[Equipment.EquipSlot.MAIN_HAND] = off_w
+		inv.equipped_gear[Equipment.EquipSlot.OFF_HAND] = main_w
+		_spawn_floating_text(hero_token_ctrl.position, "🔄 Swapped Hands", Color(0.4, 0.9, 1.0))
+		_append_formula_log("[color=#38bdf8][b]🔄 WEAPON SWITCH: %s swapped hands! Active Main Hand is now %s (Off-Hand: %s).[/b][/color]\n" % [active_hero.name, off_w.name, main_w.name])
+	elif main_w != null and main_w.is_two_handed:
+		# 2-Handed weapon equipped: switch to first eligible 1H weapon in stash
+		var alt_1h: Equipment = null
+		if shared_stash != null:
+			for item_raw: Item in shared_stash.items:
+				if item_raw is Equipment:
+					var item: Equipment = item_raw as Equipment
+					if item.is_weapon() and not item.is_two_handed:
+						if active_hero.stats == null or active_hero.stats.archetype == null or active_hero.stats.archetype.can_equip_gear(item):
+							alt_1h = item
+							break
+		if alt_1h != null:
+			inv.unequip(Equipment.EquipSlot.MAIN_HAND)
+			shared_stash.remove_item(alt_1h)
+			shared_stash.add_item(main_w)
+			inv.equip(alt_1h, Equipment.EquipSlot.MAIN_HAND)
+			_spawn_floating_text(hero_token_ctrl.position, "🔄 1H Weapon", Color(0.4, 0.9, 1.0))
+			_append_formula_log("[color=#38bdf8][b]🔄 WEAPON SWITCH: %s stowed 2H %s and drew 1H %s![/b][/color]\n" % [active_hero.name, main_w.name, alt_1h.name])
+		else:
+			_append_formula_log("[color=#94a3b8]🔄 WEAPON SWITCH: %s adjusted grip on 2H %s (No alternative 1H weapon in stash).[/color]\n" % [active_hero.name, main_w.name])
+	else:
+		# Check for eligible 2H weapon in stash to switch into
+		var alt_2h: Equipment = null
+		if shared_stash != null:
+			for item_raw: Item in shared_stash.items:
+				if item_raw is Equipment:
+					var item: Equipment = item_raw as Equipment
+					if item.is_weapon() and item.is_two_handed:
+						if active_hero.stats == null or active_hero.stats.archetype == null or active_hero.stats.archetype.can_equip_gear(item):
+							alt_2h = item
+							break
+		if alt_2h != null:
+			if main_w != null:
+				inv.unequip(Equipment.EquipSlot.MAIN_HAND)
+				shared_stash.add_item(main_w)
+			var cur_off: Equipment = inv.unequip(Equipment.EquipSlot.OFF_HAND)
+			if cur_off != null and shared_stash != null:
+				shared_stash.add_item(cur_off)
+			shared_stash.remove_item(alt_2h)
+			inv.equip(alt_2h, Equipment.EquipSlot.MAIN_HAND)
+			_spawn_floating_text(hero_token_ctrl.position, "🔄 2H Weapon", Color(0.4, 0.9, 1.0))
+			_append_formula_log("[color=#38bdf8][b]🔄 WEAPON SWITCH: %s drew 2H %s![/b][/color]\n" % [active_hero.name, alt_2h.name])
+		else:
+			_append_formula_log("[color=#94a3b8]🔄 WEAPON SWITCH: %s shifted combat ready stance.[/color]\n" % active_hero.name)
 
+	active_hero.sync_from_stats_and_gear()
 	_refresh_all_views()
 
 func _on_test_focus_buff() -> void:
@@ -1195,14 +1543,19 @@ func _on_test_defend() -> void:
 	_refresh_all_views()
 
 func _on_test_pouch_item() -> void:
-	if active_hero == null or active_hero.inventory == null:
+	if active_hero == null or active_hero.inventory == null or pouch_select_option == null:
 		return
 
-	if active_hero.inventory.battle_pouch.is_empty():
+	var pouch := active_hero.inventory.battle_pouch
+	if pouch.is_empty():
 		_append_formula_log("[color=#f87171]⚠️ Battle pouch is empty. Open 'Manage Gear & Stash' to load consumables.[/color]\n")
 		return
 
-	var con: Consumable = active_hero.inventory.battle_pouch[0]
+	var idx: int = pouch_select_option.get_selected_id()
+	if idx < 0 or idx >= pouch.size():
+		idx = 0
+
+	var con: Consumable = pouch[idx]
 	active_hero.inventory.remove_from_battle_pouch(con)
 
 	match con.consumable_type:
@@ -1220,6 +1573,28 @@ func _on_test_pouch_item() -> void:
 			_append_formula_log("[color=#c084fc][b]🧪 ELIXIR: %s drank %s (+50%% ATK for %d rounds)![/b][/color]\n" % [active_hero.name, con.name, con.buff_duration_rounds])
 
 	_refresh_all_views()
+
+func _refresh_pouch_dropdown() -> void:
+	if pouch_select_option == null or active_hero == null or active_hero.inventory == null:
+		return
+	pouch_select_option.clear()
+	var pouch := active_hero.inventory.battle_pouch
+	if pouch.is_empty():
+		pouch_select_option.add_item("— Battle Pouch Empty —", 0)
+		pouch_select_option.set_item_disabled(0, true)
+		if btn_use_pouch_item != null:
+			btn_use_pouch_item.disabled = true
+	else:
+		for i in range(pouch.size()):
+			var con: Consumable = pouch[i]
+			var icon_str := "🧪 " if con.consumable_type == Consumable.ConsumableType.HEALTH_POTION else ("💣 " if con.consumable_type == Consumable.ConsumableType.THROWABLE_BOMB else "✦ ")
+			var detail := ""
+			if con.heal_amount > 0: detail = "(+%d HP)" % con.heal_amount
+			elif con.damage_amount > 0: detail = "(%d DMG)" % con.damage_amount
+			else: detail = "(+50% ATK)"
+			pouch_select_option.add_item("%sSlot %d: %s %s" % [icon_str, i + 1, con.name, detail], i)
+		if btn_use_pouch_item != null:
+			btn_use_pouch_item.disabled = false
 
 func _on_test_stance_shift() -> void:
 	if active_hero == null:
@@ -1256,7 +1631,301 @@ func _on_heal_dummy_pressed() -> void:
 	_refresh_all_views()
 
 # ------------------------------------------------------------------------------
-# 5. Visual Animation & Floating Combat Text FX
+# 5. Interactive Stat Allocation Mode (Requirement 8)
+# ------------------------------------------------------------------------------
+
+func _on_points_btn_pressed() -> void:
+	if active_hero == null or active_hero.stats == null:
+		return
+	if is_allocating_stats:
+		_on_cancel_allocation_pressed()
+	else:
+		if active_hero.stats.unspent_attribute_points <= 0:
+			_append_formula_log("[color=#94a3b8]ℹ No unspent attribute points available to allocate.[/color]")
+			return
+		is_allocating_stats = true
+		pending_free_points = active_hero.stats.unspent_attribute_points
+		for k: String in pending_allocated_stats:
+			pending_allocated_stats[k] = 0
+		_refresh_all_views()
+		_append_formula_log("[color=#38bdf8]⚡ Stat Allocation Mode Active: Use [+] and [-] to allocate points, then Confirm.[/color]")
+
+func _on_stat_plus_pressed(k: String) -> void:
+	if not is_allocating_stats or pending_free_points <= 0:
+		return
+	pending_free_points -= 1
+	var current_p: int = pending_allocated_stats[k] if pending_allocated_stats.has(k) else 0
+	pending_allocated_stats[k] = current_p + 1
+	_refresh_all_views()
+
+func _on_stat_minus_pressed(k: String) -> void:
+	if not is_allocating_stats:
+		return
+	var current_p: int = pending_allocated_stats[k] if pending_allocated_stats.has(k) else 0
+	if current_p <= 0:
+		# Requirement 8: - should only remove newly allocated points and not give extra points back
+		return
+	pending_allocated_stats[k] = current_p - 1
+	pending_free_points += 1
+	_refresh_all_views()
+
+func _on_reset_allocation_pressed() -> void:
+	if not is_allocating_stats or active_hero == null or active_hero.stats == null:
+		return
+	pending_free_points = active_hero.stats.unspent_attribute_points
+	for k: String in pending_allocated_stats:
+		pending_allocated_stats[k] = 0
+	_refresh_all_views()
+	_append_formula_log("[color=#94a3b8]↺ Pending stat allocations reset to baseline.[/color]")
+
+func _on_confirm_allocation_pressed() -> void:
+	if not is_allocating_stats or active_hero == null or active_hero.stats == null:
+		return
+	var allocated_summary: Array[String] = []
+	for k: String in pending_allocated_stats:
+		var pts: int = pending_allocated_stats[k]
+		if pts > 0:
+			match k:
+				"STR": active_hero.stats.str_stat += pts
+				"DEX": active_hero.stats.dex_stat += pts
+				"INT": active_hero.stats.int_stat += pts
+				"CONS": active_hero.stats.cons_stat += pts
+				"PERC": active_hero.stats.perc_stat += pts
+				"KNOW": active_hero.stats.know_stat += pts
+			allocated_summary.append("+%d %s" % [pts, k])
+	active_hero.stats.unallocated_attribute_points = pending_free_points
+	is_allocating_stats = false
+	for k: String in pending_allocated_stats:
+		pending_allocated_stats[k] = 0
+
+	active_hero.sync_from_stats_and_gear()
+	_refresh_all_views()
+	var alloc_str := ", ".join(allocated_summary) if not allocated_summary.is_empty() else "No points spent"
+	_append_formula_log("[color=#4ade80]✔ Stat Allocation Confirmed for %s: %s (Remaining: %d).[/color]" % [active_hero.name, alloc_str, active_hero.stats.unspent_attribute_points])
+
+func _on_cancel_allocation_pressed() -> void:
+	is_allocating_stats = false
+	for k: String in pending_allocated_stats:
+		pending_allocated_stats[k] = 0
+	pending_free_points = 0
+	_refresh_all_views()
+	_append_formula_log("[color=#94a3b8]✖ Stat Allocation Cancelled without saving.[/color]")
+
+# ------------------------------------------------------------------------------
+# 6. Base UI Gear Equip & Stash Picker (Requirement 4)
+# ------------------------------------------------------------------------------
+
+func _build_gear_picker_dialog() -> void:
+	gear_picker_dialog = PanelContainer.new()
+	gear_picker_dialog.custom_minimum_size = Vector2(420, 340)
+	gear_picker_dialog.set_anchors_preset(Control.PRESET_CENTER)
+	gear_picker_dialog.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	gear_picker_dialog.grow_vertical = Control.GROW_DIRECTION_BOTH
+	gear_picker_dialog.position = Vector2(430, 160)
+	var d_style := StyleBoxFlat.new()
+	d_style.bg_color = Color(0.09, 0.12, 0.18, 0.98)
+	d_style.border_color = Color(0.35, 0.50, 0.75, 0.95)
+	d_style.set_border_width_all(2)
+	d_style.set_corner_radius_all(6)
+	d_style.content_margin_left = 12
+	d_style.content_margin_right = 12
+	d_style.content_margin_top = 8
+	d_style.content_margin_bottom = 8
+	gear_picker_dialog.add_theme_stylebox_override("panel", d_style)
+	gear_picker_dialog.visible = false
+	canvas_layer.add_child(gear_picker_dialog)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	gear_picker_dialog.add_child(v)
+
+	picker_title_lbl = Label.new()
+	picker_title_lbl.text = "Select Equipment from Stash"
+	picker_title_lbl.add_theme_font_size_override("font_size", 11)
+	picker_title_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+	v.add_child(picker_title_lbl)
+
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(396, 250)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+
+	picker_items_vbox = VBoxContainer.new()
+	picker_items_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker_items_vbox.add_theme_constant_override("separation", 4)
+	sc.add_child(picker_items_vbox)
+
+	var btn_close := Button.new()
+	btn_close.text = "Close"
+	btn_close.add_theme_font_size_override("font_size", 9)
+	btn_close.focus_mode = Control.FOCUS_NONE
+	btn_close.pressed.connect(func() -> void: gear_picker_dialog.visible = false)
+	v.add_child(btn_close)
+
+func _open_base_equip_picker(slot_val: Equipment.EquipSlot) -> void:
+	if active_hero == null or shared_stash == null or picker_items_vbox == null:
+		return
+
+	picker_slot = slot_val
+	var slot_name: String = _get_slot_name(slot_val)
+	var arch_name: String = active_hero.stats.archetype.display_name if (active_hero.stats and active_hero.stats.archetype) else "Hero"
+	picker_title_lbl.text = "Equip %s (%s Eligible Only)" % [slot_name, arch_name]
+
+	for c in picker_items_vbox.get_children():
+		c.queue_free()
+
+	var eligible_count: int = 0
+	for item_raw: Item in shared_stash.items:
+		if not (item_raw is Equipment):
+			continue
+		var item: Equipment = item_raw as Equipment
+
+		# Slot filter
+		var matches_slot: bool = false
+		match slot_val:
+			Equipment.EquipSlot.MAIN_HAND:
+				matches_slot = item.is_weapon()
+			Equipment.EquipSlot.OFF_HAND:
+				matches_slot = item.is_shield() or (item.is_weapon() and not item.is_two_handed)
+			Equipment.EquipSlot.BODY:
+				matches_slot = (item.slot == Equipment.EquipSlot.BODY)
+			Equipment.EquipSlot.ACCESSORY_1, Equipment.EquipSlot.ACCESSORY_2:
+				matches_slot = (item.slot == Equipment.EquipSlot.ACCESSORY_1 or item.slot == Equipment.EquipSlot.ACCESSORY_2)
+
+		if not matches_slot:
+			continue
+
+		# Archetype eligibility filter (Requirement 4: "show only elegible gear for the character")
+		if active_hero.stats != null and active_hero.stats.archetype != null:
+			if not active_hero.stats.archetype.can_equip_gear(item):
+				continue
+
+		eligible_count += 1
+		var item_card := _create_picker_item_card(item, slot_val)
+		picker_items_vbox.add_child(item_card)
+
+	if eligible_count == 0:
+		var empty_lbl := Label.new()
+		empty_lbl.text = "No eligible %s items found in stash for %s." % [slot_name, arch_name]
+		empty_lbl.add_theme_font_size_override("font_size", 9)
+		empty_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		picker_items_vbox.add_child(empty_lbl)
+
+	gear_picker_dialog.visible = true
+
+func _create_picker_item_card(item: Equipment, slot_val: Equipment.EquipSlot) -> PanelContainer:
+	var card := PanelContainer.new()
+	var st_box := StyleBoxFlat.new()
+	st_box.bg_color = Color(0.12, 0.16, 0.22, 0.9)
+	st_box.border_color = Color(0.24, 0.35, 0.50, 0.8)
+	st_box.set_border_width_all(1)
+	st_box.set_corner_radius_all(4)
+	st_box.content_margin_left = 6
+	st_box.content_margin_right = 6
+	st_box.content_margin_top = 4
+	st_box.content_margin_bottom = 4
+	card.add_theme_stylebox_override("panel", st_box)
+
+	var hbox := HBoxContainer.new()
+	card.add_child(hbox)
+
+	var info_v := VBoxContainer.new()
+	info_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_v.add_theme_constant_override("separation", 1)
+	hbox.add_child(info_v)
+
+	var name_lbl := Label.new()
+	name_lbl.text = item.name
+	name_lbl.add_theme_font_size_override("font_size", 9)
+	name_lbl.add_theme_color_override("font_color", _get_rarity_color(item.rarity))
+	info_v.add_child(name_lbl)
+
+	var stat_parts: Array[String] = []
+	if item.base_power > 0: stat_parts.append("Pwr: %d" % item.base_power)
+	if item.mitigation > 0: stat_parts.append("Mit: %d" % item.mitigation)
+	if item.burden > 0: stat_parts.append("Brd: %d" % item.burden)
+	var b_str := item.get_stat_bonuses_display()
+	if not b_str.is_empty(): stat_parts.append(b_str)
+
+	var stats_lbl := Label.new()
+	stats_lbl.text = " • ".join(stat_parts)
+	stats_lbl.add_theme_font_size_override("font_size", 8)
+	stats_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 0.9))
+	info_v.add_child(stats_lbl)
+
+	var btn_pick := Button.new()
+	btn_pick.text = "Equip"
+	btn_pick.add_theme_font_size_override("font_size", 9)
+	btn_pick.focus_mode = Control.FOCUS_NONE
+	btn_pick.pressed.connect(func() -> void: _equip_item_from_picker(item, slot_val))
+	hbox.add_child(btn_pick)
+
+	return card
+
+func _equip_item_from_picker(item: Equipment, slot_val: Equipment.EquipSlot) -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+
+	# If equipping 2-handed weapon in main hand, unequip off-hand to stash
+	if slot_val == Equipment.EquipSlot.MAIN_HAND and item.is_two_handed:
+		var off_eq: Equipment = active_hero.inventory.unequip(Equipment.EquipSlot.OFF_HAND)
+		if off_eq != null and shared_stash != null:
+			shared_stash.add_item(off_eq)
+			_append_formula_log("[color=#94a3b8]ℹ Unequipped off-hand (%s) to stash because %s is 2-Handed.[/color]" % [off_eq.name, item.name])
+
+	# Unequip existing item in slot if any
+	var old_eq: Equipment = active_hero.inventory.unequip(slot_val)
+	if old_eq != null and shared_stash != null:
+		shared_stash.add_item(old_eq)
+
+	# Remove new item from stash and equip
+	if shared_stash != null:
+		shared_stash.remove_item(item)
+	active_hero.inventory.equip(item, slot_val)
+	_append_formula_log("[color=#4ade80]🎒 Equipped [b]%s[/b] to %s.[/color]" % [item.name, active_hero.name])
+
+	gear_picker_dialog.visible = false
+	active_hero.sync_from_stats_and_gear()
+	_refresh_all_views()
+
+func _unequip_slot_to_stash(slot_val: Equipment.EquipSlot) -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	var old_eq: Equipment = active_hero.inventory.unequip(slot_val)
+	if old_eq != null and shared_stash != null:
+		shared_stash.add_item(old_eq)
+		_append_formula_log("[color=#94a3b8]🎒 Unequipped [b]%s[/b] to shared stash.[/color]" % old_eq.name)
+	active_hero.sync_from_stats_and_gear()
+	_refresh_all_views()
+
+func _get_slot_name(slot_val: Equipment.EquipSlot) -> String:
+	return Equipment.slot_display_name(slot_val)
+
+# ------------------------------------------------------------------------------
+# 7. Reset Dojo (Requirement 6)
+# ------------------------------------------------------------------------------
+
+func _reset_dojo_to_baseline() -> void:
+	_init_dojo_data()
+	is_allocating_stats = false
+	for k: String in pending_allocated_stats:
+		pending_allocated_stats[k] = 0
+	pending_free_points = 0
+	if formula_log_rich != null:
+		formula_log_rich.clear()
+		_append_formula_log("[color=#38bdf8][b]>>> Dojo Reset to Initial Baseline State.[/b][/color]")
+		_append_formula_log("[color=#94a3b8]• Melee/Ranged Power = (Wep Power * (1-Deficit) + Stat*Scaling) * (1 + Buffs - Debuffs)[/color]")
+		_append_formula_log("[color=#94a3b8]• Final Damage = ATK * Skill * (1-Mitigation) * (1+Stance) * Crit * (1+Effect)[/color]\n")
+	if gear_picker_dialog != null:
+		gear_picker_dialog.visible = false
+	if gear_modal != null:
+		gear_modal.setup_heroes(party_allies, shared_stash)
+	_refresh_all_views()
+	_spawn_floating_text(HERO_POS, "↺ Dojo Reset", Color(0.4, 0.9, 1.0))
+	print("Dojo reset to initial baseline state.")
+
+# ------------------------------------------------------------------------------
+# 8. Visual Animation & Floating Combat Text FX
 # ------------------------------------------------------------------------------
 
 func _trigger_stage_fx(actor_ctrl: Control, target_ctrl: Control, dmg: int, is_mit: bool) -> void:
@@ -1304,153 +1973,16 @@ func _get_combatant_sprite_texture(c: Combatant) -> Texture2D:
 	if c == null:
 		return null
 	if c.name == "Warrior":
-		return CombatScenario.load_svg_texture("res://assets/party/sprites/sprite_warrior.svg")
+		return AssetUtils.load_svg_texture("res://assets/party/sprites/sprite_warrior.svg")
 	elif c.name == "Ranger":
-		return CombatScenario.load_svg_texture("res://assets/party/sprites/sprite_ranger.svg")
+		return AssetUtils.load_svg_texture("res://assets/party/sprites/sprite_ranger.svg")
 	elif c.name == "Training Dummy":
-		return CombatScenario.load_svg_texture("res://assets/enemy/sprites/sprite_dummy.svg")
+		return AssetUtils.load_svg_texture("res://assets/enemy/sprites/sprite_dummy.svg")
 	return null
 
 # ------------------------------------------------------------------------------
-# 6. Headless Verification Test Suite
+# 9. Headless Verification Test Suite
 # ------------------------------------------------------------------------------
 
 func _run_headless_dojo_assertions() -> bool:
-	var passed: bool = true
-
-	# Assert 1: Default Hero & Dummy setup
-	var w: Combatant = active_hero
-	var d: Combatant = test_dummy
-	if w == null or d == null or w.name != "Warrior" or d.hp != 500:
-		print("  [Dojo-1] Baseline hero and dummy initialization: FAIL")
-		passed = false
-	else:
-		print("  [Dojo-1] Baseline hero and dummy initialization: PASS")
-
-	# Assert 2: Base Attack Calculation
-	var initial_power: int = w.get_effective_power(false)
-	var dmg: int = d.take_damage(initial_power)
-	if dmg <= 0 or d.hp != (500 - dmg):
-		print("  [Dojo-2] Base melee attack calculation: FAIL")
-		passed = false
-	else:
-		print("  [Dojo-2] Base melee attack calculation: PASS (%d DMG)" % dmg)
-
-	# Assert 3: Dummy Mitigation Toggle
-	d.defense_mitigation_ratio = 0.5
-	var half_dmg: int = d.take_damage(initial_power)
-	var expected_half: int = maxi(1, int(roundf(float(initial_power) * 0.5)))
-	if half_dmg != expected_half:
-		print("  [Dojo-3] 50%% mitigation defense barrier calculation: FAIL (%d != %d)" % [half_dmg, expected_half])
-		passed = false
-	else:
-		print("  [Dojo-3] 50%% mitigation defense barrier calculation: PASS (%d DMG)" % half_dmg)
-
-	# Assert 4: Focus Buff Multiplier (x1.5)
-	w.apply_attack_boost(1.5, 2)
-	var boosted_power: int = int(roundf(float(w.get_effective_power(false)) * 1.5))
-	d.defense_mitigation_ratio = 0.0
-	var boosted_dmg: int = d.take_damage(boosted_power)
-	if boosted_dmg != boosted_power:
-		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: FAIL")
-		passed = false
-	else:
-		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: PASS (%d DMG)" % boosted_dmg)
-
-	# Assert 5: Claymore Threshold Tier Boost (18 STR -> +4 Power)
-	var claymore := ItemCatalog.create_iron_claymore()
-	w.inventory.equip(claymore)
-	w.sync_from_stats_and_gear()
-	var tier_boost: int = claymore.get_unlocked_threshold_power_boost(w.stats, w.stats.mastery)
-	if tier_boost != 4:
-		print("  [Dojo-5] Claymore threshold tier bonus at 18 STR: FAIL (got %d)" % tier_boost)
-		passed = false
-	else:
-		print("  [Dojo-5] Claymore threshold tier bonus at 18 STR: PASS (+4 Power unlocked)")
-
-	# Assert 6: Titan Warhammer Deficit Penalty
-	var titan := ItemCatalog.create_titan_warhammer()
-	w.inventory.equip(titan)
-	w.sync_from_stats_and_gear()
-	var pen := titan.get_wield_penalty(w.stats, w.stats.mastery)
-	var is_pen: bool = pen.get("is_penalized", false)
-	if not is_pen:
-		print("  [Dojo-6] Titan Warhammer deficit penalty check: FAIL")
-		passed = false
-	else:
-		print("  [Dojo-6] Titan Warhammer deficit penalty check: PASS (Deficit penalty applied)")
-
-	# Assert 7: Consumable Pouch Usage
-	var pouch_con := ItemCatalog.create_healing_draught()
-	w.hp = 50
-	pouch_con.apply_to_combatant(w)
-	if w.hp != 75:
-		print("  [Dojo-7] Consumable healing draught effect: FAIL (HP: %d)" % w.hp)
-		passed = false
-	else:
-		print("  [Dojo-7] Consumable healing draught effect: PASS (HP: 50 -> 75)")
-
-	# Assert 8: Reset Dummy Vitals
-	d.hp = d.max_hp
-	d.defense_mitigation_ratio = 0.0
-	if d.hp != 500 or d.defense_mitigation_ratio != 0.0:
-		print("  [Dojo-8] Dummy vitals full reset: FAIL")
-		passed = false
-	else:
-		print("  [Dojo-8] Dummy vitals full reset: PASS (500 / 500 HP)")
-
-	# Assert 9: Weapon Power Melee vs Ranged Gating (Requirement 3)
-	var claymore_melee: int = w.get_effective_power(false)
-	var claymore_ranged: int = w.get_effective_power(true)
-	if claymore_ranged >= claymore_melee:
-		print("  [Dojo-9] Melee weapon power gating on ranged attack: FAIL (ranged: %d >= melee: %d)" % [claymore_ranged, claymore_melee])
-		passed = false
-	else:
-		print("  [Dojo-9] Melee weapon power gating on ranged attack: PASS (Melee: %d, Ranged: %d)" % [claymore_melee, claymore_ranged])
-
-	# Assert 10: Ranged Bow Power Gating on Melee Attack (Requirement 3)
-	var bow := ItemCatalog.create_oak_shortbow()
-	w.inventory.equip(bow)
-	w.sync_from_stats_and_gear()
-	var bow_melee: int = w.get_effective_power(false)
-	var expected_unarmed_melee: int = w.stats.get_melee_power(0, {"weapon": "bow"})
-	if bow_melee != expected_unarmed_melee:
-		print("  [Dojo-10] Ranged weapon power excluded from melee attack: FAIL (%d != %d)" % [bow_melee, expected_unarmed_melee])
-		passed = false
-	else:
-		print("  [Dojo-10] Ranged weapon power excluded from melee attack: PASS (Bow grants 0 Melee Weapon Power)")
-
-	# Assert 11: Accessory Stat Bonus to Character Stats & Attack Power (Requirement 1)
-	w.inventory.unequip(Equipment.EquipSlot.ACCESSORY_1)
-	w.sync_from_stats_and_gear()
-	var pre_ring_str: int = w.stats.get_effective_stat("STR")
-	var pre_ring_hp: int = w.stats.get_max_hp()
-
-	var bear_ring := ItemCatalog.create_ring_of_the_bear() # +2 STR, +2 CONS
-	w.inventory.equip(bear_ring, Equipment.EquipSlot.ACCESSORY_1)
-	w.sync_from_stats_and_gear()
-	var post_ring_str: int = w.stats.get_effective_stat("STR")
-	var post_ring_hp: int = w.stats.get_max_hp()
-	if post_ring_str != (pre_ring_str + 2) or post_ring_hp <= pre_ring_hp:
-		print("  [Dojo-11] Accessory stat bonuses propagated to effective stats: FAIL (STR: %d -> %d, HP: %d -> %d)" % [pre_ring_str, post_ring_str, pre_ring_hp, post_ring_hp])
-		passed = false
-	else:
-		print("  [Dojo-11] Accessory stat bonuses propagated to effective stats: PASS (+2 STR, +2 CONS -> +%d Max HP)" % (post_ring_hp - pre_ring_hp))
-
-	# Assert 12: Class Archetype Gear Proficiency Restrictions (Requirement 5)
-	var sword := ItemCatalog.create_steel_broadsword()
-	var war_arch: ClassArchetype = w.stats.archetype
-	var ranger_arch: ClassArchetype = party_allies[1].stats.archetype if party_allies.size() > 1 else ClassArchetype.create_ranger()
-	var war_can_bow: bool = war_arch.can_equip_gear(bow)
-	var war_can_sword: bool = war_arch.can_equip_gear(sword)
-	var ranger_can_bow: bool = ranger_arch.can_equip_gear(bow)
-	var ranger_can_plate: bool = ranger_arch.can_equip_gear(ItemCatalog.create_steel_plate_cuirass())
-	var war_can_ring: bool = war_arch.can_equip_gear(bear_ring)
-	var ranger_can_ring: bool = ranger_arch.can_equip_gear(bear_ring)
-	if war_can_bow != false or war_can_sword != true or ranger_can_bow != true or ranger_can_plate != false or war_can_ring != true or ranger_can_ring != true:
-		print("  [Dojo-12] Class archetype gear equip restrictions: FAIL")
-		passed = false
-	else:
-		print("  [Dojo-12] Class archetype gear equip restrictions: PASS (Archetype weapon/armor proficiencies enforced; Accessories unrestricted)")
-
-	return passed
+	return DojoAssertions.run(self)

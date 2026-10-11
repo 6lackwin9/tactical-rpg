@@ -36,6 +36,8 @@ var derived_ranged_lbl: Label
 var derived_burden_lbl: Label
 var derived_range_lbl: Label
 var derived_shield_lbl: Label
+var derived_crit_lbl: Label
+var derived_resist_lbl: Label
 var masteries_container: VBoxContainer
 
 # Equipped Slots Container
@@ -269,6 +271,8 @@ func _build_ui() -> void:
 	derived_range_lbl = _create_derived_spec_row(derived_vbox, "Attack Range", "1 Tile", Color(0.8, 0.8, 0.8))
 	derived_shield_lbl = _create_derived_spec_row(derived_vbox, "Shield Mitigation", "+0 Flat", Color(0.4, 0.7, 1.0))
 	derived_burden_lbl = _create_derived_spec_row(derived_vbox, "Armor Burden", "0 / 14", Color(0.9, 0.75, 0.3))
+	derived_crit_lbl = _create_derived_spec_row(derived_vbox, "Crit Hit Rate", "5.0%", Color(0.95, 0.75, 0.3))
+	derived_resist_lbl = _create_derived_spec_row(derived_vbox, "Debuff Resist", "0.0%", Color(0.7, 0.5, 0.95))
 
 	# Horizontal Masteries
 	var masteries_hdr := Label.new()
@@ -615,6 +619,8 @@ func refresh_display() -> void:
 		derived_range_lbl.text = "%d Tile%s" % [active_hero.attack_range, "s" if active_hero.attack_range > 1 else ""]
 		derived_shield_lbl.text = "+%d Flat Mit" % shield_mit
 		derived_burden_lbl.text = "%d / %d Burden" % [burden, max_carry]
+		derived_crit_lbl.text = "%.1f%% (2.5x DMG)" % st.get_crit_rate(ctx)
+		derived_resist_lbl.text = "%.1f%% Resist" % st.get_debuff_resistance(ctx)
 
 		# Armor Burden Meter Update
 		burden_progress.max_value = maxi(1, max_carry)

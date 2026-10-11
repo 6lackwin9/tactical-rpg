@@ -65,6 +65,12 @@ func get_rarity_color() -> Color:
 			return Color(1.0, 0.75, 0.2)
 	return Color.WHITE
 
+func is_weapon() -> bool:
+	return item_type == ItemType.WEAPON
+
+func is_shield() -> bool:
+	return item_type == ItemType.SHIELD
+
 static func type_to_string(p_type: ItemType) -> String:
 	match p_type:
 		ItemType.WEAPON:

@@ -68,47 +68,55 @@ func get_equipped(slot: Equipment.EquipSlot) -> Equipment:
 func get_main_weapon() -> Equipment:
 	return get_equipped(Equipment.EquipSlot.MAIN_HAND)
 
-func get_total_armor_burden() -> int:
-	var total_burden: int = 0
+func get_offhand_weapon() -> Equipment:
+	var off_eq: Equipment = get_equipped(Equipment.EquipSlot.OFF_HAND)
+	if off_eq != null and off_eq.item_type == Item.ItemType.WEAPON:
+		return off_eq
+	return null
+
+func get_shield() -> Equipment:
+	var off_eq: Equipment = get_equipped(Equipment.EquipSlot.OFF_HAND)
+	if off_eq != null and (off_eq.item_type == Item.ItemType.SHIELD or off_eq.off_hand_category == "shield"):
+		return off_eq
+	return null
+
+# Returns every equipped piece as a typed array — single safe cast point.
+func _iter_equipped_gear() -> Array[Equipment]:
+	var result: Array[Equipment] = []
 	for slot_key: Variant in equipped_gear:
 		var raw_eq: Variant = equipped_gear[slot_key]
 		if raw_eq is Equipment:
-			total_burden += raw_eq.burden
-	return total_burden
+			result.append(raw_eq as Equipment)
+	return result
+
+func get_total_armor_burden() -> int:
+	var total: int = 0
+	for eq: Equipment in _iter_equipped_gear():
+		total += eq.burden
+	return total
 
 func get_total_shield_mitigation() -> int:
-	if equipped_gear.has(Equipment.EquipSlot.OFF_HAND):
-		var raw_eq: Variant = equipped_gear[Equipment.EquipSlot.OFF_HAND]
-		if raw_eq is Equipment:
-			return raw_eq.mitigation
-	return 0
+	var off: Equipment = get_equipped(Equipment.EquipSlot.OFF_HAND)
+	return off.mitigation if off != null else 0
 
 func get_total_armor_mitigation() -> int:
-	if equipped_gear.has(Equipment.EquipSlot.BODY):
-		var raw_eq: Variant = equipped_gear[Equipment.EquipSlot.BODY]
-		if raw_eq is Equipment:
-			return raw_eq.mitigation
-	return 0
+	var body: Equipment = get_equipped(Equipment.EquipSlot.BODY)
+	return body.mitigation if body != null else 0
 
 func get_total_flat_mitigation() -> int:
-	var total_mit: int = 0
-	for slot_key: Variant in equipped_gear:
-		var raw_eq: Variant = equipped_gear[slot_key]
-		if raw_eq is Equipment:
-			total_mit += raw_eq.mitigation
-	return total_mit
+	var total: int = 0
+	for eq: Equipment in _iter_equipped_gear():
+		total += eq.mitigation
+	return total
 
 func get_total_gear_stat_bonus(stat_name: String) -> int:
 	var total: int = 0
 	var clean: String = stat_name.to_upper()
-	for slot_key: Variant in equipped_gear:
-		var raw_eq: Variant = equipped_gear[slot_key]
-		if raw_eq is Equipment:
-			var eq: Equipment = raw_eq
-			if eq.stat_bonuses.has(clean):
-				var b: Variant = eq.stat_bonuses[clean]
-				if b is int:
-					total += b
+	for eq: Equipment in _iter_equipped_gear():
+		if eq.stat_bonuses.has(clean):
+			var b: Variant = eq.stat_bonuses[clean]
+			if b is int:
+				total += b
 	return total
 
 # ------------------------------------------------------------------------------

@@ -22,13 +22,34 @@ var unspent_attribute_points: int:
 	get:
 		return unallocated_attribute_points
 
-# Core Attributes (Base + Allocated)
-var str_stat: int = 10
-var dex_stat: int = 10
-var int_stat: int = 10
-var cons_stat: int = 10
-var perc_stat: int = 10
-var know_stat: int = 10
+# Core Attributes (Base + Allocated) backed by dictionary
+var _core_stats: Dictionary = {
+	"STR": 10,
+	"DEX": 10,
+	"INT": 10,
+	"CONS": 10,
+	"PERC": 10,
+	"KNOW": 10
+}
+
+var str_stat: int:
+	get: return _core_stats.get("STR", 10)
+	set(v): _core_stats["STR"] = v
+var dex_stat: int:
+	get: return _core_stats.get("DEX", 10)
+	set(v): _core_stats["DEX"] = v
+var int_stat: int:
+	get: return _core_stats.get("INT", 10)
+	set(v): _core_stats["INT"] = v
+var cons_stat: int:
+	get: return _core_stats.get("CONS", 10)
+	set(v): _core_stats["CONS"] = v
+var perc_stat: int:
+	get: return _core_stats.get("PERC", 10)
+	set(v): _core_stats["PERC"] = v
+var know_stat: int:
+	get: return _core_stats.get("KNOW", 10)
+	set(v): _core_stats["KNOW"] = v
 
 var mastery: MasterySystem
 var modifiers: Array[StatModifier] = []
@@ -37,12 +58,8 @@ func _init(p_archetype: ClassArchetype = null, p_level: int = 1) -> void:
 	mastery = MasterySystem.new()
 	if p_archetype != null:
 		class_archetype = p_archetype
-		str_stat = class_archetype.get_base_stat("STR")
-		dex_stat = class_archetype.get_base_stat("DEX")
-		int_stat = class_archetype.get_base_stat("INT")
-		cons_stat = class_archetype.get_base_stat("CONS")
-		perc_stat = class_archetype.get_base_stat("PERC")
-		know_stat = class_archetype.get_base_stat("KNOW")
+		for s: String in _core_stats:
+			_core_stats[s] = class_archetype.get_base_stat(s)
 
 		for w_type: String in class_archetype.innate_masteries:
 			var raw_lvl: Variant = class_archetype.innate_masteries[w_type]
@@ -65,12 +82,8 @@ func level_up() -> bool:
 
 	# 1. Guaranteed stat gains from Class Archetype
 	if class_archetype != null:
-		str_stat += class_archetype.get_growth_for_stat("STR")
-		dex_stat += class_archetype.get_growth_for_stat("DEX")
-		int_stat += class_archetype.get_growth_for_stat("INT")
-		cons_stat += class_archetype.get_growth_for_stat("CONS")
-		perc_stat += class_archetype.get_growth_for_stat("PERC")
-		know_stat += class_archetype.get_growth_for_stat("KNOW")
+		for s: String in _core_stats:
+			_core_stats[s] += class_archetype.get_growth_for_stat(s)
 
 	# 2. Grant free attribute point for customization/flavor
 	unallocated_attribute_points += 1
@@ -86,22 +99,10 @@ func allocate_attribute_point(stat_name: String) -> bool:
 		return false
 
 	var clean: String = stat_name.to_upper()
-	match clean:
-		"STR":
-			str_stat += 1
-		"DEX":
-			dex_stat += 1
-		"INT":
-			int_stat += 1
-		"CONS":
-			cons_stat += 1
-		"PERC":
-			perc_stat += 1
-		"KNOW":
-			know_stat += 1
-		_:
-			return false
+	if not _core_stats.has(clean):
+		return false
 
+	_core_stats[clean] += 1
 	unallocated_attribute_points -= 1
 	attribute_point_allocated.emit(clean, get_effective_stat(clean))
 	return true
@@ -111,41 +112,13 @@ func allocate_attribute_point(stat_name: String) -> bool:
 # ------------------------------------------------------------------------------
 
 func get_base_stat(stat_name: String) -> int:
-	var clean: String = stat_name.to_upper()
-	match clean:
-		"STR":
-			return str_stat
-		"DEX":
-			return dex_stat
-		"INT":
-			return int_stat
-		"CONS":
-			return cons_stat
-		"PERC":
-			return perc_stat
-		"KNOW":
-			return know_stat
-	return 10
+	return _core_stats.get(stat_name.to_upper(), 10)
 
 func get_effective_stat(stat_name: String, context: Dictionary = {}) -> int:
 	var clean: String = stat_name.to_upper()
-	var base_val: int = 10
+	var base_val: int = get_base_stat(clean)
 
-	match clean:
-		"STR":
-			base_val = str_stat
-		"DEX":
-			base_val = dex_stat
-		"INT":
-			base_val = int_stat
-		"CONS":
-			base_val = cons_stat
-		"PERC":
-			base_val = perc_stat
-		"KNOW":
-			base_val = know_stat
-
-	# Add contextual mastery bonus (e.g. Sword Mastery -> +STR when using sword)
+	# Add contextual mastery bonus (e.g. background knowledge -> +KNOW in specific regions)
 	if mastery != null:
 		base_val += mastery.get_conditional_stat_bonus(clean, context)
 
@@ -207,6 +180,19 @@ func get_carry_weight_capacity(context: Dictionary = {}) -> int:
 	var effective_str: int = get_effective_stat("STR", context)
 	var effective_cons: int = get_effective_stat("CONS", context)
 	return 30 + (effective_str * 3) + (effective_cons * 1)
+
+# Critical Hit Rate (DEX based) & Critical Damage Multiplier (Requirements 9 & 10)
+func get_crit_rate(context: Dictionary = {}) -> float:
+	var effective_dex: int = get_effective_stat("DEX", context)
+	return 5.0 + (float(effective_dex) * 1.5)
+
+func get_crit_damage_multiplier(_context: Dictionary = {}) -> float:
+	return 2.5
+
+# Status & Debuff Resistance (INT based) (Requirement 10)
+func get_debuff_resistance(context: Dictionary = {}) -> float:
+	var effective_int: int = get_effective_stat("INT", context)
+	return float(effective_int) * 2.5
 
 # ------------------------------------------------------------------------------
 # Modifier Management

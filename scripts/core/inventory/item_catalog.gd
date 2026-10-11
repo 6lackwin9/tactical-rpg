@@ -30,6 +30,8 @@ static func create_iron_claymore() -> Equipment:
 	)
 	eq.base_range = 1
 	eq.burden = 1
+	eq.is_two_handed = true
+	eq.scaling_stat = "STR"
 	eq.description = "A heavy double-edged greatsword. Gains +4 Power when wielded with 18+ STR."
 	return eq
 
@@ -52,6 +54,8 @@ static func create_titan_warhammer() -> Equipment:
 	)
 	eq.base_range = 1
 	eq.burden = 3
+	eq.is_two_handed = true
+	eq.scaling_stat = "STR"
 	eq.description = "Colossal warhammer requiring 22 STR. Inflicts severe deficit penalty if under-statted."
 	return eq
 
@@ -74,6 +78,8 @@ static func create_oak_shortbow() -> Equipment:
 	)
 	eq.base_range = 3
 	eq.burden = 0
+	eq.is_two_handed = true
+	eq.scaling_stat = "DEX"
 	eq.description = "Supple curved bow capable of ranged volleys up to 3 tiles."
 	return eq
 
@@ -93,7 +99,53 @@ static func create_steel_broadsword() -> Equipment:
 	)
 	eq.base_range = 1
 	eq.burden = 0
+	eq.is_two_handed = false
+	eq.scaling_stat = "STR"
 	eq.description = "Reliable military broadsword with modest strength requirements."
+	return eq
+
+static func create_iron_shortsword() -> Equipment:
+	var eq := Equipment.new(
+		"wpn_shortsword",
+		"Iron Shortsword",
+		Equipment.EquipSlot.MAIN_HAND,
+		"sword",
+		Item.ItemType.WEAPON,
+		14,
+		{"STR": 10},
+		[],
+		1.8,
+		25,
+		Item.ItemRarity.COMMON
+	)
+	eq.base_range = 1
+	eq.burden = 0
+	eq.is_two_handed = false
+	eq.off_hand_category = "shortsword"
+	eq.scaling_stat = "STR"
+	eq.description = "Agile 1-handed short blade wieldable in main or off-hand (STR scaling)."
+	return eq
+
+static func create_spiked_knuckles() -> Equipment:
+	var eq := Equipment.new(
+		"wpn_knuckles",
+		"Spiked Knuckles",
+		Equipment.EquipSlot.MAIN_HAND,
+		"fist",
+		Item.ItemType.WEAPON,
+		12,
+		{"STR": 10},
+		[],
+		1.2,
+		20,
+		Item.ItemRarity.COMMON
+	)
+	eq.base_range = 1
+	eq.burden = 0
+	eq.is_two_handed = false
+	eq.off_hand_category = "knuckles"
+	eq.scaling_stat = "STR"
+	eq.description = "Iron knuckle dusters for ruthless close-quarters off-hand strikes (STR scaling)."
 	return eq
 
 static func create_shadow_dagger() -> Equipment:
@@ -115,7 +167,32 @@ static func create_shadow_dagger() -> Equipment:
 	)
 	eq.base_range = 1
 	eq.burden = 0
-	eq.description = "Featherweight stiletto primed for rapid flanking strikes."
+	eq.is_two_handed = false
+	eq.off_hand_category = "dagger"
+	eq.scaling_stat = "DEX"
+	eq.description = "Featherweight stiletto primed for rapid off-hand or main-hand strikes (DEX scaling)."
+	return eq
+
+static func create_mystic_tome() -> Equipment:
+	var eq := Equipment.new(
+		"wpn_tome",
+		"Mystic Spellbook",
+		Equipment.EquipSlot.MAIN_HAND,
+		"orb",
+		Item.ItemType.WEAPON,
+		14,
+		{"INT": 12},
+		[],
+		1.5,
+		45,
+		Item.ItemRarity.UNCOMMON
+	)
+	eq.base_range = 2
+	eq.burden = 0
+	eq.is_two_handed = false
+	eq.off_hand_category = "tome"
+	eq.scaling_stat = "INT"
+	eq.description = "Bound grimoire wieldable in off-hand to channel tactical spells (INT scaling)."
 	return eq
 
 static func create_runed_staff() -> Equipment:
@@ -137,6 +214,8 @@ static func create_runed_staff() -> Equipment:
 	)
 	eq.base_range = 2
 	eq.burden = 0
+	eq.is_two_handed = true
+	eq.scaling_stat = "INT"
 	eq.description = "Carved ash stave engraved with mystic glyphs. Scales with intelligence."
 	return eq
 
@@ -328,7 +407,10 @@ static func populate_party_starter_stash(inv: Inventory) -> void:
 	inv.add_item(create_iron_claymore())
 	inv.add_item(create_titan_warhammer())
 	inv.add_item(create_oak_shortbow())
+	inv.add_item(create_iron_shortsword())
+	inv.add_item(create_spiked_knuckles())
 	inv.add_item(create_shadow_dagger())
+	inv.add_item(create_mystic_tome())
 	inv.add_item(create_runed_staff())
 	inv.add_item(create_iron_kite_shield())
 	inv.add_item(create_buckler())

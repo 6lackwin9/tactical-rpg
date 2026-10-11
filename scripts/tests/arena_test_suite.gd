@@ -607,15 +607,15 @@ static func run_character_specs_and_inventory_test() -> bool:
 	stats.mastery.set_weapon_mastery("sword", 2)
 	stats.mastery.set_lore_mastery("ancient_ruins", 1)
 
-	var sword_context: Dictionary = {"weapon": "sword"}
 	var ruins_context: Dictionary = {"biome": "ancient_ruins"}
-	# STR base 18 + (Rank 2 * 2 = 4) = 22
-	var mastery_str: int = stats.get_effective_stat("STR", sword_context)
+	# Weapon mastery moved from STR to Weapon Power bonus (+2 Wep Power/rank = +4) (Requirement 2)
+	var sword_power_bonus: int = stats.mastery.get_weapon_power_bonus("sword")
 	# KNOW base 9 + (Rank 1 * 2 = 2) = 11
 	var mastery_know: int = stats.get_effective_stat("KNOW", ruins_context)
-	var mastery_ok: bool = (mastery_str == 22 and mastery_know == 11)
+	var mastery_ok: bool = (sword_power_bonus == 4 and mastery_know == 11)
 
 	# 7. Equipment Stat Requirements & Mastery Threshold Discount
+	# Character STR is 18; Sword Mastery Rank 2 grants a 4-point requirement discount (eff STR 18 + 4 = 22)
 	var greatsword := Equipment.new(
 		"iron_greatsword",
 		"Iron Greatsword",
@@ -623,7 +623,7 @@ static func run_character_specs_and_inventory_test() -> bool:
 		"sword",
 		Item.ItemType.WEAPON,
 		18,
-		{"STR": 24},
+		{"STR": 22},
 		[
 			{"stat": "STR", "threshold": 22, "bonus_power": 4, "desc": "Tier 2: Crushing Strike"},
 			{"stat": "STR", "threshold": 28, "bonus_power": 8, "desc": "Tier 3: Sunder Guard"}
@@ -632,9 +632,10 @@ static func run_character_specs_and_inventory_test() -> bool:
 
 	var meets_req_ok: bool = greatsword.meets_requirements(stats, stats.mastery)
 
-	# 8. Threshold Tiers Unlocked (STR 22 meets Tier 2 threshold of 22!)
+	# 8. Threshold Tiers Unlocked (STR 18 + discount 4 = 22 meets Tier 2 threshold of 22!)
+	# Base 18 + Tier 4 + Sword Mastery (Rank 2 * 2) 4 = 26
 	var active_tiers: Array[Dictionary] = greatsword.get_active_threshold_tiers(stats, stats.mastery)
-	var tiers_ok: bool = (active_tiers.size() == 1 and greatsword.get_effective_equipment_power(stats, stats.mastery) == 22)
+	var tiers_ok: bool = (active_tiers.size() == 1 and greatsword.get_effective_equipment_power(stats, stats.mastery) == 26)
 
 	# 9. Deficit Wield Penalty Check (Character with 11 DEX tries to wield Longbow requiring 24 DEX)
 	var longbow := Equipment.new(

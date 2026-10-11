@@ -71,7 +71,7 @@ static func create_warrior() -> ClassArchetype:
 		{"STR": 16, "DEX": 10, "INT": 8, "CONS": 14, "PERC": 10, "KNOW": 8},
 		{"STR": 2, "CONS": 2, "PERC": 1},
 		{"sword": 1, "shield": 1},
-		["sword", "axe", "mace", "hammer", "shield", "plate", "leather"]
+		["sword", "axe", "mace", "hammer", "shield", "plate", "leather", "fist"]
 	)
 
 static func create_ranger() -> ClassArchetype:
@@ -81,7 +81,7 @@ static func create_ranger() -> ClassArchetype:
 		{"STR": 10, "DEX": 16, "INT": 10, "CONS": 10, "PERC": 14, "KNOW": 10},
 		{"DEX": 2, "PERC": 2, "STR": 1},
 		{"bow": 1, "dagger": 1, "wilderness": 1},
-		["bow", "crossbow", "dagger", "leather", "cloth"]
+		["bow", "crossbow", "dagger", "sword", "leather", "cloth"]
 	)
 
 static func create_shaman() -> ClassArchetype:
@@ -91,7 +91,7 @@ static func create_shaman() -> ClassArchetype:
 		{"STR": 8, "DEX": 10, "INT": 16, "CONS": 10, "PERC": 12, "KNOW": 14},
 		{"INT": 2, "KNOW": 2, "CONS": 1},
 		{"staff": 1, "ancient_ruins": 1},
-		["staff", "wand", "orb", "cloth", "leather"]
+		["staff", "wand", "orb", "tome", "cloth", "leather"]
 	)
 
 static func create_brawler() -> ClassArchetype:
