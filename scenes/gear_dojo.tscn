@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/gear_dojo.gd" id="1_dojo"]
+
+[node name="GearDojo" type="Node2D"]
+script = ExtResource("1_dojo")

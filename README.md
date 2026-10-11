@@ -30,8 +30,8 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 tactical-rpg/
 ├── assets/                       # Custom vector SVG assets
 │   ├── enemy/                    # Hostile unit assets
-│   │   ├── sprites/              # Full-character illustration SVG assets (archer, berserker, brawler, etc.)
-│   │   └── tokens/               # Overhead circular unit token SVG assets
+│   │   ├── sprites/              # Full-character illustration SVG assets (archer, berserker, brawler, dummy)
+│   │   └── tokens/               # Overhead circular unit token SVG assets (dummy token included)
 │   ├── party/                    # Player party unit assets
 │   │   ├── sprites/              # Full-character illustration SVG assets (warrior, ranger)
 │   │   └── tokens/               # Overhead circular unit token SVG assets
@@ -39,7 +39,9 @@ tactical-rpg/
 ├── data/                         # [Placeholder] Game data definitions & balance tables
 ├── scenes/
 │   ├── test_arena.tscn           # Visual interactive combat arena harness scene
-│   └── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
+│   ├── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
+│   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
+│   └── gear_dojo.gd              # Dojo orchestration, training dummy benchmark & damage formula feed
 ├── scripts/
 │   ├── core/                     # Foundational rules engine primitives & base models
 │   │   ├── combat/               # Core unit, stance & command models
@@ -55,7 +57,8 @@ tactical-rpg/
 │   │   │   ├── item.gd                   # Base item model (type, rarity, weight, value)
 │   │   │   ├── equipment.gd              # Gear model with stat requirements, threshold tiers & timeline penalties
 │   │   │   ├── consumable.gd             # Consumable items used in combat (ItemCommand) or exploration
-│   │   │   └── inventory.gd              # Party stash, equipped gear loadout & 3-slot combat battle pouches
+│   │   │   ├── inventory.gd              # Party stash, equipped gear loadout & 3-slot combat battle pouches
+│   │   │   └── item_catalog.gd           # Presets catalog: Claymore, Warhammer, Bow, Shields, Armor, Draughts, Bombs
 │   │   └── events/               # Headless simulation event data transfer objects
 │   │       └── action_log_entry.gd       # Standardized action event model (ticks, actors, outcomes)
 │   ├── combat/                   # Combat simulation, spatial arena rules & battle actions
@@ -73,7 +76,7 @@ tactical-rpg/
 │   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   └── arena_test_suite.gd       # 6 automated test suites with 50 assertions
+│   │   └── arena_test_suite.gd       # 7 automated test suites with 60 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── combat_arena_controller.gd# CanvasLayer coordinator & pure view composer
 │       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tweens & floating text
@@ -84,9 +87,11 @@ tactical-rpg/
 │       ├── timeline_dock_ui.gd       # Bottom dock (10-block ruler, unit track, enemy intent mask)
 │       ├── action_log_dock_ui.gd     # Top action dock displaying active block resolution
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
-│       └── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
+│       ├── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
+│       └── character_equipment_modal.gd # 3-column modal: party tabs, 6 stats, equipped slots & stash
 ├── check_project.ps1             # 3-step automated validation script (cache, syntax, integration)
 ├── check_project.bat             # Batch launcher for check_project.ps1
+├── run_gear_dojo.bat             # Dedicated launcher for Gear, Skill & Dummy Benchmark Dojo
 └── run_game.bat                  # Quick launcher for interactive test arena in Godot
 ```
 
@@ -154,12 +159,29 @@ tactical-rpg/
 ### 7. Equipment, Requirements & Inventory Engine (System 7)
 
 - **Item Taxonomy**: Weapons, Shields, Armor, Accessories, Consumables, Materials, Quest items.
-- **Stat-Gated Gear (No Artificial Item Levels)**: Equipment power scales by stat requirements rather than player level.
-- **Threshold Tiers**: Exceeding requirements unlocks tiered milestone boosts (e.g. $+4$ Power, Sunder Guard).
-- **Wield Deficit Penalties**: Equipping gear below required stats inflicts power reduction and $+1$ timeline block delay instead of hard locking.
+- **Stat-Gated Gear & Threshold Convention**: Equipment requirements use the convention `[Req <STAT level0>, <STAT level1>]`, where `level0` enables wielding without penalty and `level1` unlocks bonus effects (`+Wep power`, `+<STAT>`, or special combat effects like `1.5x against goblins`).
+- **Dynamic Deficit Scaling**: Wielding weapons with a stat deficit applies a dynamic penalty ratio (`minf(0.60, deficit * 0.15)`) to effective weapon power and delays timeline action blocks.
+- **Class Archetype Gear Restrictions**: Class archetypes enforce allowable gear proficiencies (`can_equip_gear`); accessories have no restrictions and can be equipped by any class.
+- **Accessory Stat Propagation**: Equipped accessories (rings, amulets) propagate stat bonuses directly into character stats, dynamically updating effective attributes, max HP, and attack power.
+- **Armor Burden & Speed**: Equipped heavy armor and shields inflict armor burden, directly reducing initiative speed (`8 + DEX - burden`).
 - **Party Stash & Battle Pouches**:
-  - Shared party stash capacity scales dynamically with party STR and CONS.
+  - Shared party stash capacity scales dynamically with party STR and CONS (`30 + (STR * 3) + (CONS * 1)`).
   - 3 combat battle pouch quick-slots per combatant for consumables used in combat (`ItemCommand` in Utility Stance).
+
+### 8. Dedicated Gear & Skill Dojo (`gear_dojo.tscn`)
+
+- **Separated Scene Architecture**: Distinct from `test_arena.tscn` (which focuses on 10-block visual combat and ambush scenarios), `scenes/gear_dojo.tscn` is a dedicated workbench for gear equipping, stat inspection, and damage formula validation.
+- **Card-Based Active Loadout & Quick Pouches**: Base screen dock displays dedicated slot cards for Main Hand, Off Hand, Body Armor, Accessory 1, and Accessory 2, alongside a 3-slot Battle Pouch quick-belt with compact micro-card tooltips.
+- **Character Equipment Modal (`CharacterEquipmentModal`)**:
+  - **Column 1**: Party hero tabs, 6 primary stats with $+/-$ allocation, derived metrics (HP, Melee/Ranged Power, Speed, Shield Mitigation, Armor Burden bar), and horizontal weapon mastery ranks.
+  - **Column 2**: Equipment loadout slots (Main Hand, Off Hand, Body Armor, Accessory 1 & 2) and 3 combat battle pouch slots with unequip actions.
+  - **Column 3**: Party stash inventory with category filters (`ALL`, `WEAPON`, `ARMOR`, `ACCESSORY`, `CONSUMABLE`), class restriction badges, tier thresholds, and equip buttons.
+- **Interactive Training Dummy & Damage Formula Benchmark**:
+  - 500 HP Training Dummy with tunable defense mitigation ratio ($0\%$, $25\%$, $50\%$, $75\%$).
+  - Live Action Console: Trigger Melee Strike, Ranged Volley, Focus Buff, Defend Stance, Throwing Fire Bomb, and Stance shifts.
+  - Real-time mathematical damage calculation feed explaining:
+    $$\text{Actual Damage} = \max\left(1, \left\lfloor \left(\text{Effective Power} \times \text{Stance Multiplier}\right) \times (1 - \text{Mitigation Ratio}) \right\rceil\right)$$
+  - Live visual feedback: Floating combat damage numbers, hit sparks, hero attack lunges, and dummy health bars.
 
 ---
 
@@ -167,7 +189,7 @@ tactical-rpg/
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **6 test suites** covering **50 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **7 test suites** covering **60 individual assertions**:
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): UI dock creation, scenario mounting, token generation, inspector synchronization, tactical forecast, modal lifecycle, signal relay, and action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
@@ -175,13 +197,16 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 4. **Resolution Feed Logging Test** (7 assertions): Movement, skill, defend, attack, withdrawal, and defeat log tags.
 5. **Goblin Ambush & Casualty Test** (9 assertions): Reinforcements arrival at Block 4, casualty action cancellation, multi-round rollover, and victory state.
 6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery contextual bonuses, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
+7. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
+
+Additionally, `scenes/gear_dojo.tscn` contains **12 dedicated headless assertions** verifying dummy vitals, focus buff scaling, threshold tiers, weapon power melee/ranged gating, accessory stat propagation, and class archetype equip restrictions.
 
 ### Automated Check Script (`check_project.ps1`)
 
 Runs in 3 phases:
 
 - `[1/3]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
-- `[2/3]` Validates GDScript syntax & static typing across all 35 project scripts (`--headless --check-only`).
+- `[2/3]` Validates GDScript syntax & static typing across all 38 project scripts (`--headless --check-only`).
 - `[3/3]` Executes the full headless test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
 
 ---
@@ -202,15 +227,23 @@ Or via Windows Batch:
 check_project.bat
 ```
 
-### Run Interactive Visual Arena
+### Run Dedicated Gear & Skill Dojo
 
-Launch the game in windowed mode:
+Launch the Gear, Skill & Dummy Benchmark Dojo in windowed mode:
+
+```cmd
+run_gear_dojo.bat
+```
+
+### Run Interactive Combat Arena
+
+Launch the combat arena in windowed mode:
 
 ```cmd
 run_game.bat
 ```
 
-Or open the project in **Godot 4.7+** and press **F5** (Main Scene: `res://scenes/test_arena.tscn`).
+Or open the project in **Godot 4.7+** and run `res://scenes/test_arena.tscn` or `res://scenes/gear_dojo.tscn`.
 
 ---
 
@@ -258,23 +291,24 @@ The following modular systems and capabilities are planned according to the mast
 
 ### 5. Items & Consumable Inventory Engine (`System 7`)
 
-*Status: Core baseline models implemented (`Item`, `Equipment`, `Consumable`, `Inventory`).*
+*Status: Core models & interactive equipment UI implemented.*
 
 - [x] Shared party bag container model and 3-slot combat battle pouches.
 - [x] Stat-gated equipment with tiered thresholds, deficit penalties, and weapon mastery discounts.
 - [x] Combat consumable usage and HP/buff application.
-- [ ] UI Equipment & Bag Inspection screens.
+- [x] UI Equipment & Bag Inspection screens (`CharacterEquipmentModal`).
+- [x] Preset catalog (`ItemCatalog`) with weapons, armor, shields, and accessories.
 - [ ] Equipment durability, weapon crafting, and socketed gems.
 
 ### 6. Character Progression & Stats Engine (`System 5`)
 
-*Status: Core baseline models implemented (`CharacterStats`, `ClassArchetype`, `MasterySystem`, `StatModifier`).*
+*Status: Core models & interactive equipment modal inspection implemented.*
 
 - [x] 6-stat architecture (STR, DEX, INT | CONS, PERC, KNOW) and derived formulas.
 - [x] 10-level cap with guaranteed class growths and free attribute point allocation.
 - [x] Horizontal mastery system (Weapon Masteries, Lore/Biome Masteries, Faction scores).
 - [x] Integration with `Combatant` model.
-- [ ] UI Character Sheet, stat allocation modal, and mastery leveling screen.
+- [x] UI Character Sheet & gear equip modal (`CharacterEquipmentModal` & `gear_dojo.tscn`).
 - [ ] Passive trait slot selection and talent trees.
 
 ### 7. Region Map & Exploration Engine (`System 2`)

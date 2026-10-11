@@ -7,7 +7,11 @@ extends PanelContainer
 # player action palette, and hostile threat intent decks.
 # ==============================================================================
 
+signal gear_modal_requested(combatant: Combatant)
+signal test_skill_requested(actor: Combatant, skill_type: String, target: Combatant)
+
 var inspector_hdr: Label
+var btn_gear_modal: Button
 var inspector_avatar: TextureRect
 var inspector_name_lbl: Label
 var inspector_team_lbl: Label
@@ -21,9 +25,15 @@ var inspector_range_lbl: Label
 var inspector_pos_lbl: Label
 var inspector_target_lbl: Label
 var inspector_buffs_lbl: Label
+var inspector_gear_lbl: Label
 var ally_actions_container: VBoxContainer
 var enemy_actions_container: VBoxContainer
+var dojo_test_container: VBoxContainer
+var dummy_defend_btn: Button
 var left_hint: Label
+
+var current_inspected_combatant: Combatant = null
+var dummy_target_ref: Combatant = null
 
 func _init() -> void:
 	name = "UnitInspectorUI"
@@ -48,11 +58,27 @@ func _build_ui() -> void:
 	left_vbox.add_theme_constant_override("separation", 5)
 	add_child(left_vbox)
 
+	var top_hdr_row := HBoxContainer.new()
+	left_vbox.add_child(top_hdr_row)
+
 	inspector_hdr = Label.new()
 	inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
-	inspector_hdr.add_theme_font_size_override("font_size", 11)
+	inspector_hdr.add_theme_font_size_override("font_size", 10)
 	inspector_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
-	left_vbox.add_child(inspector_hdr)
+	top_hdr_row.add_child(inspector_hdr)
+
+	top_hdr_row.add_spacer(false)
+
+	btn_gear_modal = Button.new()
+	btn_gear_modal.text = "🎒 GEAR"
+	btn_gear_modal.add_theme_font_size_override("font_size", 9)
+	btn_gear_modal.tooltip_text = "Open Character Gear & Attribute Screen"
+	btn_gear_modal.focus_mode = Control.FOCUS_NONE
+	btn_gear_modal.pressed.connect(func() -> void:
+		if current_inspected_combatant != null:
+			gear_modal_requested.emit(current_inspected_combatant)
+	)
+	top_hdr_row.add_child(btn_gear_modal)
 
 	# Selected Unit Profile Card (2-Block: Left=Sprite+Vitals, Right=Stats)
 	var profile_card := PanelContainer.new()
@@ -226,6 +252,12 @@ func _build_ui() -> void:
 	inspector_buffs_lbl.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
 	right_block.add_child(inspector_buffs_lbl)
 
+	inspector_gear_lbl = Label.new()
+	inspector_gear_lbl.text = "Gear: Default Loadout"
+	inspector_gear_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_gear_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	right_block.add_child(inspector_gear_lbl)
+
 	# Ally Action Setup Palette
 	ally_actions_container = VBoxContainer.new()
 	ally_actions_container.add_theme_constant_override("separation", 3)
@@ -249,6 +281,83 @@ func _build_ui() -> void:
 	for act in ally_actions:
 		var act_card := _create_mini_action_card(act)
 		ally_actions_container.add_child(act_card)
+
+	# Skill Dojo Test Panel
+	dojo_test_container = VBoxContainer.new()
+	dojo_test_container.add_theme_constant_override("separation", 3)
+	left_vbox.add_child(dojo_test_container)
+
+	var dojo_hdr := Label.new()
+	dojo_hdr.text = "🎯 SKILL EFFECT TEST BENCH (TRAINING DUMMY)"
+	dojo_hdr.add_theme_font_size_override("font_size", 9)
+	dojo_hdr.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+	dojo_test_container.add_child(dojo_hdr)
+
+	var dojo_grid := GridContainer.new()
+	dojo_grid.columns = 3
+	dojo_grid.add_theme_constant_override("h_separation", 4)
+	dojo_grid.add_theme_constant_override("v_separation", 3)
+	dojo_test_container.add_child(dojo_grid)
+
+	var btn_test_atk := Button.new()
+	btn_test_atk.text = "⚔ Strike"
+	btn_test_atk.tooltip_text = "Test Melee Weapon Strike on Dummy"
+	btn_test_atk.add_theme_font_size_override("font_size", 8)
+	btn_test_atk.focus_mode = Control.FOCUS_NONE
+	btn_test_atk.pressed.connect(func() -> void:
+		test_skill_requested.emit(current_inspected_combatant, "ATTACK", dummy_target_ref)
+	)
+	dojo_grid.add_child(btn_test_atk)
+
+	var btn_test_rng := Button.new()
+	btn_test_rng.text = "🏹 Volley"
+	btn_test_rng.tooltip_text = "Test Ranged Attack on Dummy (Scales with DEX)"
+	btn_test_rng.add_theme_font_size_override("font_size", 8)
+	btn_test_rng.focus_mode = Control.FOCUS_NONE
+	btn_test_rng.pressed.connect(func() -> void:
+		test_skill_requested.emit(current_inspected_combatant, "RANGED", dummy_target_ref)
+	)
+	dojo_grid.add_child(btn_test_rng)
+
+	var btn_test_foc := Button.new()
+	btn_test_foc.text = "✦ Focus"
+	btn_test_foc.tooltip_text = "Test Focus Buff (+50% ATK Power)"
+	btn_test_foc.add_theme_font_size_override("font_size", 8)
+	btn_test_foc.focus_mode = Control.FOCUS_NONE
+	btn_test_foc.pressed.connect(func() -> void:
+		test_skill_requested.emit(current_inspected_combatant, "FOCUS", dummy_target_ref)
+	)
+	dojo_grid.add_child(btn_test_foc)
+
+	var btn_test_def := Button.new()
+	btn_test_def.text = "🛡 Defend"
+	btn_test_def.tooltip_text = "Test Defensive Stance Barrier"
+	btn_test_def.add_theme_font_size_override("font_size", 8)
+	btn_test_def.focus_mode = Control.FOCUS_NONE
+	btn_test_def.pressed.connect(func() -> void:
+		test_skill_requested.emit(current_inspected_combatant, "DEFEND", dummy_target_ref)
+	)
+	dojo_grid.add_child(btn_test_def)
+
+	var btn_test_item := Button.new()
+	btn_test_item.text = "🧪 Pouch Item"
+	btn_test_item.tooltip_text = "Use Quick Consumable from Battle Pouch"
+	btn_test_item.add_theme_font_size_override("font_size", 8)
+	btn_test_item.focus_mode = Control.FOCUS_NONE
+	btn_test_item.pressed.connect(func() -> void:
+		test_skill_requested.emit(current_inspected_combatant, "POUCH_ITEM", dummy_target_ref)
+	)
+	dojo_grid.add_child(btn_test_item)
+
+	dummy_defend_btn = Button.new()
+	dummy_defend_btn.text = "🛡 Dummy Mit"
+	dummy_defend_btn.tooltip_text = "Toggle Dummy Defense (0% Neutral vs 50% Defending)"
+	dummy_defend_btn.add_theme_font_size_override("font_size", 8)
+	dummy_defend_btn.focus_mode = Control.FOCUS_NONE
+	dummy_defend_btn.pressed.connect(func() -> void:
+		test_skill_requested.emit(current_inspected_combatant, "TOGGLE_DUMMY_DEFENSE", dummy_target_ref)
+	)
+	dojo_grid.add_child(dummy_defend_btn)
 
 	# Enemy Possible Actions Deck (Secret Intent Pool)
 	enemy_actions_container = VBoxContainer.new()
@@ -309,6 +418,15 @@ func update_inspector(
 	if not selected_combatant:
 		return
 
+	current_inspected_combatant = selected_combatant
+	if btn_gear_modal:
+		btn_gear_modal.visible = is_ally
+	if dojo_test_container:
+		dojo_test_container.visible = is_ally and selected_combatant.is_alive()
+	if dummy_defend_btn:
+		var has_mit: bool = (dummy_target_ref != null and dummy_target_ref.defense_mitigation_ratio > 0.0)
+		dummy_defend_btn.text = "🛡 Dummy Mit: 50%" if has_mit else "🛡 Dummy Mit: 0%"
+
 	inspector_name_lbl.text = selected_combatant.name
 
 	if is_ally:
@@ -323,19 +441,29 @@ func update_inspector(
 		else:
 			left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
 	else:
-		inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
-		inspector_team_lbl.text = "Hostile Enemy Unit"
-		inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-		inspector_avatar.texture = sprite_texture
-		ally_actions_container.visible = false
-		enemy_actions_container.visible = selected_combatant.is_alive()
-		_rebuild_enemy_threat_dock(selected_combatant)
-		if not selected_combatant.is_alive():
-			left_hint.text = "💀 Enemy hostile defeated."
-		elif selected_combatant.is_withdrawn:
-			left_hint.text = "💨 Enemy safely withdrew through escape boundary."
+		if selected_combatant.name == "Training Dummy":
+			inspector_hdr.text = "TRAINING DOJO BENCHMARK"
+			inspector_team_lbl.text = "Target Dummy (Test Entity)"
+			inspector_team_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+			inspector_avatar.texture = sprite_texture
+			ally_actions_container.visible = false
+			enemy_actions_container.visible = true
+			_rebuild_enemy_threat_dock(selected_combatant)
+			left_hint.text = "🎯 Use Skill Dojo buttons on heroes to test attacks, buffs & gear damage."
 		else:
-			left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
+			inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
+			inspector_team_lbl.text = "Hostile Enemy Unit"
+			inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+			inspector_avatar.texture = sprite_texture
+			ally_actions_container.visible = false
+			enemy_actions_container.visible = selected_combatant.is_alive()
+			_rebuild_enemy_threat_dock(selected_combatant)
+			if not selected_combatant.is_alive():
+				left_hint.text = "💀 Enemy hostile defeated."
+			elif selected_combatant.is_withdrawn:
+				left_hint.text = "💨 Enemy safely withdrew through escape boundary."
+			else:
+				left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
 
 	inspector_hp_bar.max_value = selected_combatant.max_hp
 	inspector_hp_bar.value = selected_combatant.hp
@@ -375,6 +503,16 @@ func update_inspector(
 	else:
 		inspector_buffs_lbl.text = "Buffs: None active"
 
+	if inspector_gear_lbl:
+		if selected_combatant.inventory != null:
+			var wpn: Equipment = selected_combatant.inventory.get_main_weapon()
+			if wpn != null:
+				inspector_gear_lbl.text = "Gear: " + wpn.name
+			else:
+				inspector_gear_lbl.text = "Gear: Unarmed"
+		else:
+			inspector_gear_lbl.text = "Gear: None"
+
 func _rebuild_enemy_threat_dock(selected_combatant: Combatant) -> void:
 	for child in enemy_actions_container.get_children():
 		if child is PanelContainer:
@@ -382,6 +520,11 @@ func _rebuild_enemy_threat_dock(selected_combatant: Combatant) -> void:
 
 	var enemy_actions: Array[Dictionary] = []
 	match selected_combatant.name:
+		"Training Dummy":
+			enemy_actions = [
+				{"name": "🎯 Target Dummy", "desc": "Takes strikes for damage & skill testing", "cost": 0, "color": Color(0.9, 0.8, 0.3)},
+				{"name": "🛡 Defense Barrier", "desc": "Toggle 50% mitigation barrier", "cost": 0, "color": Color(0.4, 0.7, 1.0)}
+			]
 		"Enemy Brawler":
 			enemy_actions = [
 				{"name": "⚔ Heavy Strike", "desc": "20 Power Melee Crush | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)},

@@ -38,22 +38,44 @@ func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_s
 
 func sync_from_stats_and_gear() -> void:
 	if stats != null:
+		# Sync equipped gear stat bonuses into character stats modifiers (Requirement 1)
+		stats.remove_modifier("gear")
+		if inventory != null:
+			for slot_k: Variant in inventory.equipped_gear:
+				var raw_eq: Variant = inventory.equipped_gear[slot_k]
+				if raw_eq is Equipment:
+					var eq: Equipment = raw_eq
+					for st_k: String in eq.stat_bonuses:
+						var val_v: Variant = eq.stat_bonuses[st_k]
+						if val_v is int and (val_v as int) != 0:
+							var bonus_val: int = val_v as int
+							stats.add_modifier(StatModifier.new(st_k.to_upper(), bonus_val, 0.0, "gear", "always", -1))
+
 		var burden: int = inventory.get_total_armor_burden() if inventory != null else 0
 		var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
 		var base_rng: int = weapon.base_range if weapon != null else 1
-		max_hp = stats.get_max_hp()
+		var ctx: Dictionary = {"weapon": weapon.weapon_type} if weapon != null else {}
+		max_hp = stats.get_max_hp(ctx)
 		hp = mini(hp, max_hp)
-		speed = stats.get_initiative_speed(burden)
-		attack_range = stats.get_effective_range(base_rng)
+		speed = stats.get_initiative_speed(burden, ctx)
+		attack_range = stats.get_effective_range(base_rng, ctx)
 
 func get_effective_power(is_ranged: bool = false) -> int:
 	if stats == null:
 		return 20
 	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
-	var w_power: int = weapon.get_effective_equipment_power(stats, stats.mastery) if weapon != null else 0
+	var ctx: Dictionary = {"weapon": weapon.weapon_type} if weapon != null else {}
+	var w_power: int = 0
+	if weapon != null:
+		if is_ranged:
+			if weapon.is_ranged_weapon():
+				w_power = weapon.get_effective_equipment_power(stats, stats.mastery)
+		else:
+			if weapon.is_melee_weapon():
+				w_power = weapon.get_effective_equipment_power(stats, stats.mastery)
 	if is_ranged:
-		return stats.get_ranged_power(w_power)
-	return stats.get_melee_power(w_power)
+		return stats.get_ranged_power(w_power, ctx)
+	return stats.get_melee_power(w_power, ctx)
 
 func take_damage(amount: int) -> int:
 	var actual_dmg: int = amount

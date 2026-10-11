@@ -19,6 +19,9 @@ signal round_nav_requested(target_round: int)
 signal log_entry_clicked(entry: ActionLogEntry)
 signal combatant_hovered(combatant: Combatant, token: Control)
 signal combatant_unhovered()
+signal gear_modal_requested(combatant: Combatant)
+signal test_skill_requested(actor: Combatant, skill_type: String, target: Combatant)
+signal equipment_updated(combatant: Combatant)
 
 # Core UI Component References
 var roster_panel: RosterPanelUI
@@ -30,6 +33,7 @@ var playback_controls: PlaybackControlsUI
 var timeline_dock: TimelineDockUI
 var log_modal: CombatLogModal
 var timeline_modal: TimelineModal
+var gear_modal: CharacterEquipmentModal
 var log_rich_text: RichTextLabel
 
 # Convenience property accessor for unit tokens
@@ -110,6 +114,10 @@ func _build_ui_layout() -> void:
 	main_vbox.add_child(center_hbox)
 
 	unit_inspector = UnitInspectorUI.new()
+	unit_inspector.gear_modal_requested.connect(func(c: Combatant) -> void: toggle_gear_modal(true, c))
+	unit_inspector.test_skill_requested.connect(func(act: Combatant, sk: String, tgt: Combatant) -> void:
+		test_skill_requested.emit(act, sk, tgt)
+	)
 	center_hbox.add_child(unit_inspector)
 
 	grid_view = CombatGridView.new()
@@ -152,6 +160,7 @@ func _build_ui_layout() -> void:
 	playback_controls.reset_game_pressed.connect(func() -> void: reset_game_pressed.emit())
 	playback_controls.popout_pressed.connect(func() -> void: toggle_timeline_modal(true))
 	playback_controls.next_round_pressed.connect(func() -> void: next_round_pressed.emit())
+	playback_controls.gear_pressed.connect(func() -> void: toggle_gear_modal(true))
 	bottom_hbox.add_child(playback_controls)
 
 	timeline_dock = TimelineDockUI.new()
@@ -170,6 +179,10 @@ func _build_ui_layout() -> void:
 	timeline_modal.block_selected.connect(func(b: int) -> void: block_selected.emit(b))
 	timeline_modal.combatant_selected.connect(func(c: Combatant) -> void: combatant_selected.emit(c))
 	add_child(timeline_modal)
+
+	gear_modal = CharacterEquipmentModal.new()
+	gear_modal.equipment_updated.connect(func(c: Combatant) -> void: equipment_updated.emit(c))
+	add_child(gear_modal)
 
 func mount_scenario(scenario: CombatScenario, grid: CombatGrid) -> void:
 	if scenario == null or grid_view == null:
@@ -296,6 +309,15 @@ func toggle_timeline_modal(open: bool) -> void:
 		timeline_modal.open_modal()
 	else:
 		timeline_modal.close_modal()
+
+func toggle_gear_modal(open: bool, hero: Combatant = null) -> void:
+	if gear_modal == null:
+		return
+	if open:
+		gear_modal_requested.emit(hero)
+		gear_modal.open_modal(hero)
+	else:
+		gear_modal.close_modal()
 
 func append_log(text: String) -> void:
 	if log_rich_text:

@@ -64,3 +64,22 @@ func get_rarity_color() -> Color:
 		ItemRarity.LEGENDARY:
 			return Color(1.0, 0.75, 0.2)
 	return Color.WHITE
+
+static func type_to_string(p_type: ItemType) -> String:
+	match p_type:
+		ItemType.WEAPON:
+			return "Weapon"
+		ItemType.SHIELD:
+			return "Shield"
+		ItemType.ARMOR:
+			return "Armor"
+		ItemType.ACCESSORY:
+			return "Accessory"
+		ItemType.CONSUMABLE:
+			return "Consumable"
+		ItemType.MATERIAL:
+			return "Material"
+		ItemType.QUEST:
+			return "Quest Item"
+		_:
+			return "Item"

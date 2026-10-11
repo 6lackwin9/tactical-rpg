@@ -52,6 +52,118 @@ func _init(
 	required_stats = p_reqs
 	threshold_tiers = p_tiers
 
+func is_ranged_weapon() -> bool:
+	if item_type != ItemType.WEAPON:
+		return false
+	return weapon_type.to_lower() in ["bow", "crossbow", "sling"] or base_range > 1
+
+func is_melee_weapon() -> bool:
+	if item_type != ItemType.WEAPON:
+		return false
+	return not is_ranged_weapon()
+
+func get_requirements_display() -> String:
+	return get_tier_requirements_display()
+
+# Convention: [Req <STAT level0>, <STAT level1>] (Requirement 4)
+# level0 = wield without penalty; level1 = threshold tier boost (+Power, +STAT, effect)
+func get_tier_requirements_display() -> String:
+	if required_stats.is_empty() and threshold_tiers.is_empty():
+		return "[No Req]"
+
+	var parts: Array[String] = []
+	var processed_stats: Array[String] = []
+
+	for st_k: String in required_stats:
+		processed_stats.append(st_k.to_upper())
+		var lvl0: int = required_stats[st_k] if required_stats[st_k] is int else 0
+		var stat_parts: Array[String] = ["%s %d" % [st_k, lvl0]]
+
+		for tier: Dictionary in threshold_tiers:
+			var t_stat: String = str(tier.get("stat", ""))
+			if t_stat.to_upper() == st_k.to_upper():
+				var lvl1: int = tier.get("threshold", 0)
+				var bonus_pwr: int = tier.get("bonus_power", 0)
+				var desc: String = str(tier.get("desc", ""))
+				var bonus_label: String = ""
+				if bonus_pwr > 0:
+					bonus_label = "+%d Power" % bonus_pwr
+				elif not desc.is_empty():
+					bonus_label = desc
+				if not bonus_label.is_empty():
+					stat_parts.append("%d (%s)" % [lvl1, bonus_label])
+				else:
+					stat_parts.append("%d" % lvl1)
+
+		parts.append(", ".join(stat_parts))
+
+	for tier: Dictionary in threshold_tiers:
+		var t_stat: String = str(tier.get("stat", "")).to_upper()
+		if not processed_stats.has(t_stat):
+			processed_stats.append(t_stat)
+			var lvl1: int = tier.get("threshold", 0)
+			var bonus_pwr: int = tier.get("bonus_power", 0)
+			var desc: String = str(tier.get("desc", ""))
+			var bonus_label: String = ""
+			if bonus_pwr > 0:
+				bonus_label = "+%d Power" % bonus_pwr
+			elif not desc.is_empty():
+				bonus_label = desc
+			if not bonus_label.is_empty():
+				parts.append("%s %d (%s)" % [t_stat, lvl1, bonus_label])
+			else:
+				parts.append("%s %d" % [t_stat, lvl1])
+
+	return "[Req %s]" % "; ".join(parts)
+
+func get_requirement_status_summary(stats: CharacterStats, mastery: MasterySystem) -> Dictionary:
+	var meets: bool = meets_requirements(stats, mastery)
+	var pen: Dictionary = get_wield_penalty(stats, mastery)
+	var is_pen: bool = pen.get("is_penalized", false)
+	var raw_def: Variant = pen.get("deficit", 0)
+	var def_num: int = raw_def as int if raw_def is int else 0
+	var raw_ratio: Variant = pen.get("power_penalty_ratio", 0.0)
+	var pen_ratio: float = raw_ratio as float if raw_ratio is float else 0.0
+	var pen_pct: int = int(roundf(pen_ratio * 100.0))
+	var tier_boost: int = get_unlocked_threshold_power_boost(stats, mastery)
+
+	var status_tag := ""
+	var tag_color := Color.WHITE
+	if is_pen:
+		status_tag = "⚠️ -%d Deficit (-%d%% Power)" % [def_num, pen_pct]
+		tag_color = Color(1.0, 0.4, 0.4)
+	elif tier_boost > 0:
+		status_tag = "★ Tier 1 Active (+%d Power)" % tier_boost
+		tag_color = Color(1.0, 0.85, 0.3)
+	elif meets and not required_stats.is_empty():
+		status_tag = "✓ Reqs Met"
+		tag_color = Color(0.4, 0.9, 0.5)
+	else:
+		status_tag = "✓"
+		tag_color = Color(0.8, 0.9, 0.8)
+
+	return {
+		"meets": meets,
+		"is_penalized": is_pen,
+		"deficit": def_num,
+		"penalty_percent": pen_pct,
+		"tier_boost": tier_boost,
+		"status_tag": status_tag,
+		"tag_color": tag_color,
+		"req_display": get_tier_requirements_display()
+	}
+
+func get_stat_bonuses_display() -> String:
+	if stat_bonuses.is_empty():
+		return ""
+	var parts: Array[String] = []
+	for st_k: String in stat_bonuses:
+		var v: Variant = stat_bonuses[st_k]
+		var n: int = v if v is int else 0
+		var sign_str: String = "+%d" % n if n > 0 else "%d" % n
+		parts.append("%s %s" % [sign_str, st_k])
+	return ", ".join(parts)
+
 # ------------------------------------------------------------------------------
 # Stat Requirements & Class Mastery Threshold Discount
 # ------------------------------------------------------------------------------
@@ -124,6 +236,16 @@ func get_active_threshold_tiers(stats: CharacterStats, mastery: MasterySystem) -
 			active_tiers.append(tier)
 
 	return active_tiers
+
+# Helper: sum of unlocked bonus power across all active threshold tiers
+func get_unlocked_threshold_power_boost(stats: CharacterStats, mastery: MasterySystem) -> int:
+	var total_boost: int = 0
+	var active_tiers: Array[Dictionary] = get_active_threshold_tiers(stats, mastery)
+	for tier: Dictionary in active_tiers:
+		var raw_bonus: Variant = tier.get("bonus_power", 0)
+		if raw_bonus is int:
+			total_boost += raw_bonus
+	return total_boost
 
 # Effective power including tier boosts and deficit penalties
 func get_effective_equipment_power(stats: CharacterStats, mastery: MasterySystem) -> int:

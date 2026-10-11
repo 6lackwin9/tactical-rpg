@@ -13,6 +13,7 @@ signal reset_round_pressed()
 signal reset_game_pressed()
 signal popout_pressed()
 signal next_round_pressed()
+signal gear_pressed()
 
 var btn_step_prev: Button
 var btn_play: Button
@@ -20,6 +21,7 @@ var btn_step_next: Button
 var btn_reset_round: Button
 var btn_reset_game: Button
 var btn_popout: Button
+var btn_gear: Button
 
 var phase_badge_lbl: Label
 var status_label: Label
@@ -85,6 +87,14 @@ func _build_ui() -> void:
 	btn_popout.pressed.connect(func() -> void: popout_pressed.emit())
 	btns_row.add_child(btn_popout)
 
+	btn_gear = Button.new()
+	btn_gear.text = "🎒"
+	btn_gear.tooltip_text = "Character Gear & 6-Stat Attribute Benchmark [G]"
+	btn_gear.custom_minimum_size = Vector2(24, 22)
+	btn_gear.add_theme_font_size_override("font_size", 10)
+	btn_gear.pressed.connect(func() -> void: gear_pressed.emit())
+	btns_row.add_child(btn_gear)
+
 	# Row 2: Phase Badge
 	phase_badge_lbl = Label.new()
 	phase_badge_lbl.text = "PLANNING PHASE"
@@ -136,9 +146,9 @@ func set_play_state(is_playing: bool, tooltip_txt: String = "") -> void:
 		if not tooltip_txt.is_empty():
 			btn_play.tooltip_text = tooltip_txt
 
-func set_next_round_state(is_visible: bool, btn_text: String = "", tooltip_txt: String = "") -> void:
+func set_next_round_state(p_visible: bool, btn_text: String = "", tooltip_txt: String = "") -> void:
 	if btn_next_round != null:
-		btn_next_round.visible = is_visible
+		btn_next_round.visible = p_visible
 		if not btn_text.is_empty():
 			btn_next_round.text = btn_text
 		if not tooltip_txt.is_empty():

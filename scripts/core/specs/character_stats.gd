@@ -12,9 +12,15 @@ signal attribute_point_allocated(stat_name: String, new_val: int)
 const MAX_LEVEL: int = 10
 
 var class_archetype: ClassArchetype
+var archetype: ClassArchetype:
+	get:
+		return class_archetype
 var level: int = 1
 var experience: int = 0
 var unallocated_attribute_points: int = 0
+var unspent_attribute_points: int:
+	get:
+		return unallocated_attribute_points
 
 # Core Attributes (Base + Allocated)
 var str_stat: int = 10
@@ -41,7 +47,7 @@ func _init(p_archetype: ClassArchetype = null, p_level: int = 1) -> void:
 		for w_type: String in class_archetype.innate_masteries:
 			var raw_lvl: Variant = class_archetype.innate_masteries[w_type]
 			if raw_lvl is int:
-				mastery.set_weapon_mastery(w_type, raw_lvl)
+				mastery.set_weapon_mastery(w_type, raw_lvl as int)
 	else:
 		class_archetype = ClassArchetype.create_warrior()
 
@@ -100,8 +106,25 @@ func allocate_attribute_point(stat_name: String) -> bool:
 	return true
 
 # ------------------------------------------------------------------------------
-# Effective Stat Calculations (Base + Masteries + Equipment/Buff Modifiers)
+# Base and Effective Stat Calculations
 # ------------------------------------------------------------------------------
+
+func get_base_stat(stat_name: String) -> int:
+	var clean: String = stat_name.to_upper()
+	match clean:
+		"STR":
+			return str_stat
+		"DEX":
+			return dex_stat
+		"INT":
+			return int_stat
+		"CONS":
+			return cons_stat
+		"PERC":
+			return perc_stat
+		"KNOW":
+			return know_stat
+	return 10
 
 func get_effective_stat(stat_name: String, context: Dictionary = {}) -> int:
 	var clean: String = stat_name.to_upper()
@@ -193,6 +216,9 @@ func add_modifier(mod: StatModifier) -> void:
 
 func remove_modifier(source_id: String) -> void:
 	modifiers = modifiers.filter(func(m: StatModifier) -> bool: return m.source_id != source_id)
+
+func remove_modifiers_from_source(source_id: String) -> void:
+	remove_modifier(source_id)
 
 func tick_modifiers() -> void:
 	var expired: Array[StatModifier] = []

@@ -77,12 +77,39 @@ func get_total_armor_burden() -> int:
 	return total_burden
 
 func get_total_shield_mitigation() -> int:
+	if equipped_gear.has(Equipment.EquipSlot.OFF_HAND):
+		var raw_eq: Variant = equipped_gear[Equipment.EquipSlot.OFF_HAND]
+		if raw_eq is Equipment:
+			return raw_eq.mitigation
+	return 0
+
+func get_total_armor_mitigation() -> int:
+	if equipped_gear.has(Equipment.EquipSlot.BODY):
+		var raw_eq: Variant = equipped_gear[Equipment.EquipSlot.BODY]
+		if raw_eq is Equipment:
+			return raw_eq.mitigation
+	return 0
+
+func get_total_flat_mitigation() -> int:
 	var total_mit: int = 0
 	for slot_key: Variant in equipped_gear:
 		var raw_eq: Variant = equipped_gear[slot_key]
 		if raw_eq is Equipment:
 			total_mit += raw_eq.mitigation
 	return total_mit
+
+func get_total_gear_stat_bonus(stat_name: String) -> int:
+	var total: int = 0
+	var clean: String = stat_name.to_upper()
+	for slot_key: Variant in equipped_gear:
+		var raw_eq: Variant = equipped_gear[slot_key]
+		if raw_eq is Equipment:
+			var eq: Equipment = raw_eq
+			if eq.stat_bonuses.has(clean):
+				var b: Variant = eq.stat_bonuses[clean]
+				if b is int:
+					total += b
+	return total
 
 # ------------------------------------------------------------------------------
 # Item Stash Management
@@ -141,3 +168,17 @@ func use_pouch_item(index: int, target: Combatant) -> Dictionary:
 	var outcome: Dictionary = item.apply_to_combatant(target)
 	battle_pouch.remove_at(index)
 	return outcome
+
+func add_to_battle_pouch(consumable: Consumable) -> bool:
+	if consumable == null or battle_pouch.size() >= max_pouch_slots:
+		return false
+	battle_pouch.append(consumable)
+	if items.has(consumable):
+		items.erase(consumable)
+	return true
+
+func remove_from_battle_pouch(consumable: Consumable) -> bool:
+	if battle_pouch.has(consumable):
+		battle_pouch.erase(consumable)
+		return true
+	return false
