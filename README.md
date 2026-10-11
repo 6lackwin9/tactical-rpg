@@ -46,6 +46,16 @@ tactical-rpg/
 │   │   │   ├── battle_command.gd         # Abstract base command class (duration, cost, initiative)
 │   │   │   ├── combatant.gd              # Core unit model (HP, SP, speed, range, stance, buffs, target)
 │   │   │   └── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
+│   │   ├── specs/                # Character specs, 6-stat framework & progression models
+│   │   │   ├── character_stats.gd        # 6 stats (STR, DEX, INT | CONS, PERC, KNOW), leveling (1-10), derived stats
+│   │   │   ├── class_archetype.gd        # Base stats, guaranteed growths & innate weapon proficiencies
+│   │   │   ├── mastery_system.gd         # Horizontal progression (weapon proficiencies, lore, faction scores)
+│   │   │   └── stat_modifier.gd          # Composable flat/percent modifiers with contextual gating
+│   │   ├── inventory/            # Gear, equipment requirements & inventory containers
+│   │   │   ├── item.gd                   # Base item model (type, rarity, weight, value)
+│   │   │   ├── equipment.gd              # Gear model with stat requirements, threshold tiers & timeline penalties
+│   │   │   ├── consumable.gd             # Consumable items used in combat (ItemCommand) or exploration
+│   │   │   └── inventory.gd              # Party stash, equipped gear loadout & 3-slot combat battle pouches
 │   │   └── events/               # Headless simulation event data transfer objects
 │   │       └── action_log_entry.gd       # Standardized action event model (ticks, actors, outcomes)
 │   ├── combat/                   # Combat simulation, spatial arena rules & battle actions
@@ -63,7 +73,7 @@ tactical-rpg/
 │   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   └── arena_test_suite.gd       # 5 automated test suites with 40 assertions
+│   │   └── arena_test_suite.gd       # 6 automated test suites with 50 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── combat_arena_controller.gd# CanvasLayer coordinator & pure view composer
 │       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tweens & floating text
@@ -128,26 +138,50 @@ tactical-rpg/
   - Synchronized multi-unit timeline modal.
 - **Visual Combat FX**: Tweened attacker lunges, directional impacts, damage flash, stance pulse glows, and floating combat text (`-25 [MIT]`, `⚑ WITHDRAWN!`, `💀 DEFEATED!`).
 
+### 6. Character Specs, 6-Stat Framework & Mastery Engine (System 5)
+
+- **6-Stat Architecture**:
+  - **3 Active Stats (Combat-Primary)**: `STR` (Physical Power, Armor Burden mitigation), `DEX` (Initiative Speed, Ranged Power), `INT` (Tactical & Skill Power, Buff potency).
+  - **3 Passive Stats (Non-Combat-Primary)**: `CONS` (Travel endurance, Max HP scaling), `PERC` (Secret/trap spotting, Timeline intent unmasking), `KNOW` (Lore/dialogue, route danger reduction, tactical forecast intel).
+- **10-Level Cap & Progression**:
+  - Guaranteed stat growths per level based on Class Archetype (`Warrior`, `Ranger`, `Shaman`, `Brawler`, `Scout`, `Berserker`).
+  - 1 free attribute point per level for customization and flavor.
+  - Bulk of free points awarded via outside exploration events (ancient shrines, quest rewards, tomes).
+- **Horizontal Progression (Mastery System)**:
+  - Weapon Masteries (Sword, Bow, Staff, etc.): Provide stat threshold discounts and contextual stat bonuses when wielding archetypal weapons.
+  - Lore & Faction Masteries: Contextual knowledge bonuses in specific biomes or dialogue interactions.
+
+### 7. Equipment, Requirements & Inventory Engine (System 7)
+
+- **Item Taxonomy**: Weapons, Shields, Armor, Accessories, Consumables, Materials, Quest items.
+- **Stat-Gated Gear (No Artificial Item Levels)**: Equipment power scales by stat requirements rather than player level.
+- **Threshold Tiers**: Exceeding requirements unlocks tiered milestone boosts (e.g. $+4$ Power, Sunder Guard).
+- **Wield Deficit Penalties**: Equipping gear below required stats inflicts power reduction and $+1$ timeline block delay instead of hard locking.
+- **Party Stash & Battle Pouches**:
+  - Shared party stash capacity scales dynamically with party STR and CONS.
+  - 3 combat battle pouch quick-slots per combatant for consumables used in combat (`ItemCommand` in Utility Stance).
+
 ---
 
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **5 test suites** covering **40 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **6 test suites** covering **50 individual assertions**:
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): UI dock creation, scenario mounting, token generation, inspector synchronization, tactical forecast, modal lifecycle, signal relay, and action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
 3. **9x9 Combat Grid & Withdrawal Test** (7 assertions): Center-ring deployment, spatial range gating, coordinate stepping to `(4, 4)`, exit tile escape, and casualty cleanup.
 4. **Resolution Feed Logging Test** (7 assertions): Movement, skill, defend, attack, withdrawal, and defeat log tags.
 5. **Goblin Ambush & Casualty Test** (9 assertions): Reinforcements arrival at Block 4, casualty action cancellation, multi-round rollover, and victory state.
+6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery contextual bonuses, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 
 ### Automated Check Script (`check_project.ps1`)
 
 Runs in 3 phases:
 
 - `[1/3]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
-- `[2/3]` Validates GDScript syntax & static typing across all 27 project scripts (`--headless --check-only`).
+- `[2/3]` Validates GDScript syntax & static typing across all 35 project scripts (`--headless --check-only`).
 - `[3/3]` Executes the full headless test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
 
 ---
@@ -224,20 +258,24 @@ The following modular systems and capabilities are planned according to the mast
 
 ### 5. Items & Consumable Inventory Engine (`System 7`)
 
-*Status: Planned.*
+*Status: Core baseline models implemented (`Item`, `Equipment`, `Consumable`, `Inventory`).*
 
-- [ ] Shared party bag with consumable items and equippable gear.
-- [ ] `ItemCommand`: Consumable usage on the timeline (1–2 blocks, Utility Stance).
-- [ ] Potions, bandages, throwable bombs, and anti-toxins.
+- [x] Shared party bag container model and 3-slot combat battle pouches.
+- [x] Stat-gated equipment with tiered thresholds, deficit penalties, and weapon mastery discounts.
+- [x] Combat consumable usage and HP/buff application.
+- [ ] UI Equipment & Bag Inspection screens.
+- [ ] Equipment durability, weapon crafting, and socketed gems.
 
 ### 6. Character Progression & Stats Engine (`System 5`)
 
-*Status: Planned.*
+*Status: Core baseline models implemented (`CharacterStats`, `ClassArchetype`, `MasterySystem`, `StatModifier`).*
 
-- [ ] Class archetypes (Warrior, Ranger, Rogue, Mage, Cleric).
-- [ ] Level progression, stat scaling, and attribute points.
-- [ ] Passive trait slots (e.g. counter-attack chance, bonus movement speed).
-- [ ] Equipment slots influencing timeline action speed and unlocked commands.
+- [x] 6-stat architecture (STR, DEX, INT | CONS, PERC, KNOW) and derived formulas.
+- [x] 10-level cap with guaranteed class growths and free attribute point allocation.
+- [x] Horizontal mastery system (Weapon Masteries, Lore/Biome Masteries, Faction scores).
+- [x] Integration with `Combatant` model.
+- [ ] UI Character Sheet, stat allocation modal, and mastery leveling screen.
+- [ ] Passive trait slot selection and talent trees.
 
 ### 7. Region Map & Exploration Engine (`System 2`)
 

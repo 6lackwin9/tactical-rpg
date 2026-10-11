@@ -24,12 +24,36 @@ var attack_boost_multiplier: float = 1.0
 var attack_boost_rounds_remaining: int = 0
 var defense_mitigation_ratio: float = 0.0
 
-func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1) -> void:
+var stats: CharacterStats
+var inventory: Inventory
+
+func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_stats: CharacterStats = null) -> void:
 	name = p_name
 	max_hp = p_hp
 	hp = p_hp
 	speed = p_speed
 	attack_range = p_attack_range
+	stats = p_stats if p_stats != null else CharacterStats.new()
+	inventory = Inventory.new()
+
+func sync_from_stats_and_gear() -> void:
+	if stats != null:
+		var burden: int = inventory.get_total_armor_burden() if inventory != null else 0
+		var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+		var base_rng: int = weapon.base_range if weapon != null else 1
+		max_hp = stats.get_max_hp()
+		hp = mini(hp, max_hp)
+		speed = stats.get_initiative_speed(burden)
+		attack_range = stats.get_effective_range(base_rng)
+
+func get_effective_power(is_ranged: bool = false) -> int:
+	if stats == null:
+		return 20
+	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+	var w_power: int = weapon.get_effective_equipment_power(stats, stats.mastery) if weapon != null else 0
+	if is_ranged:
+		return stats.get_ranged_power(w_power)
+	return stats.get_melee_power(w_power)
 
 func take_damage(amount: int) -> int:
 	var actual_dmg: int = amount
