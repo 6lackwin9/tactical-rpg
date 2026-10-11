@@ -121,9 +121,9 @@ func get_requirement_status_summary(stats: CharacterStats, mastery: MasterySyste
 	var pen: Dictionary = get_wield_penalty(stats, mastery)
 	var is_pen: bool = pen.get("is_penalized", false)
 	var raw_def: Variant = pen.get("deficit", 0)
-	var def_num: int = raw_def as int if raw_def is int else 0
+	var def_num: int = raw_def if raw_def is int else 0
 	var raw_ratio: Variant = pen.get("power_penalty_ratio", 0.0)
-	var pen_ratio: float = raw_ratio as float if raw_ratio is float else 0.0
+	var pen_ratio: float = raw_ratio if raw_ratio is float else 0.0
 	var pen_pct: int = int(roundf(pen_ratio * 100.0))
 	var tier_boost: int = get_unlocked_threshold_power_boost(stats, mastery)
 

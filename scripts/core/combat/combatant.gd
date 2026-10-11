@@ -47,8 +47,8 @@ func sync_from_stats_and_gear() -> void:
 					var eq: Equipment = raw_eq
 					for st_k: String in eq.stat_bonuses:
 						var val_v: Variant = eq.stat_bonuses[st_k]
-						if val_v is int and (val_v as int) != 0:
-							var bonus_val: int = val_v as int
+						var bonus_val: int = val_v if val_v is int else 0
+						if bonus_val != 0:
 							stats.add_modifier(StatModifier.new(st_k.to_upper(), bonus_val, 0.0, "gear", "always", -1))
 
 		var burden: int = inventory.get_total_armor_burden() if inventory != null else 0

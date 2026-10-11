@@ -46,8 +46,9 @@ func _init(p_archetype: ClassArchetype = null, p_level: int = 1) -> void:
 
 		for w_type: String in class_archetype.innate_masteries:
 			var raw_lvl: Variant = class_archetype.innate_masteries[w_type]
-			if raw_lvl is int:
-				mastery.set_weapon_mastery(w_type, raw_lvl as int)
+			var lvl: int = raw_lvl if raw_lvl is int else 0
+			if lvl > 0:
+				mastery.set_weapon_mastery(w_type, lvl)
 	else:
 		class_archetype = ClassArchetype.create_warrior()
 

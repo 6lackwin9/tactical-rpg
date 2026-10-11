@@ -148,17 +148,19 @@ To prevent IDE warnings from ever appearing, adhere strictly to these patterns:
 - **Root Cause**: Declaring a `signal` definition in a class without any call to `.emit(...)` within that class.
 - **Rule**: Every signal declared in a script must be explicitly emitted within the class when the corresponding event or state transition occurs (e.g. `gear_modal_requested.emit(hero)`). If a signal is deprecated or unused, remove it.
 
-### L. Safe Float & Integer Extraction from `Variant`
+### L. Safe Float & Integer Extraction from `Variant` (Preventing `UNSAFE_CAST` & `UNSAFE_CALL_ARGUMENT`)
 
-- **Root Cause**: Invoking the constructor `float(val)` or `int(val)` on expressions that return `Variant` (such as `dict.get(...)` or `dict[k]`). The `float()` constructor requires the subtype `float`, `bool`, or `int`, triggering `UNSAFE_CALL_ARGUMENT` if passed `Variant`.
-- **Rule**: Always extract and guard using the `as` pattern with an `is` type check:
+- **Root Cause**:
+  1. Invoking the constructor `float(val)` or `int(val)` on expressions that return `Variant` triggers `UNSAFE_CALL_ARGUMENT`.
+  2. Writing `val as float` or `val as int` from a `Variant` triggers `UNSAFE_CAST` (`Casting "Variant" to "float"/"int" is unsafe`).
+- **Rule**: ALWAYS use direct ternary extraction WITHOUT the `as` keyword:
 
   ```gdscript
   var raw_val: Variant = dict.get("power_penalty_ratio", 0.0)
-  var ratio: float = raw_val as float if raw_val is float else 0.0
+  var ratio: float = raw_val if raw_val is float else 0.0
 
   var raw_int: Variant = dict.get("bonus", 0)
-  var bonus: int = raw_int as int if raw_int is int else 0
+  var bonus: int = raw_int if raw_int is int else 0
   ```
 
 ## 6. Markdown (.md) Formatting Standards (markdownlint Compliance)

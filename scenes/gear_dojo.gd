@@ -911,7 +911,7 @@ func _create_dojo_slot_card(slot_name: String, icon: String, eq: Equipment, _slo
 				var pen := eq.get_wield_penalty(st, st.mastery) if st else {}
 				if pen.get("is_penalized", false):
 					var ratio_raw: Variant = pen.get("power_penalty_ratio", 0.0)
-					var ratio: float = ratio_raw as float if ratio_raw is float else 0.0
+					var ratio: float = ratio_raw if ratio_raw is float else 0.0
 					var pen_pwr: int = maxi(1, int(roundf(float(eq.base_power) * (1.0 - ratio))))
 					stat_desc_parts.append("Pwr: %d (-%d%% Pen)" % [pen_pwr, int(roundf(ratio * 100.0))])
 				else:
@@ -1123,7 +1123,7 @@ func _on_test_melee_strike() -> void:
 		var is_pen: bool = pen.get("is_penalized", false)
 		if is_pen:
 			var pen_ratio_raw: Variant = pen.get("power_penalty_ratio", 0.0)
-			var pen_ratio: float = pen_ratio_raw as float if pen_ratio_raw is float else 0.0
+			var pen_ratio: float = pen_ratio_raw if pen_ratio_raw is float else 0.0
 			var pen_pct: int = int(roundf(pen_ratio * 100.0))
 			_append_formula_log("  • [color=#f87171]⚠️ Deficit Penalty: -%d%% Power[/color]" % pen_pct)
 
@@ -1168,7 +1168,7 @@ func _on_test_ranged_volley() -> void:
 		var is_pen: bool = pen.get("is_penalized", false)
 		if is_pen:
 			var pen_ratio_raw_r: Variant = pen.get("power_penalty_ratio", 0.0)
-			var pen_ratio_r: float = pen_ratio_raw_r as float if pen_ratio_raw_r is float else 0.0
+			var pen_ratio_r: float = pen_ratio_raw_r if pen_ratio_raw_r is float else 0.0
 			var pen_pct: int = int(roundf(pen_ratio_r * 100.0))
 			_append_formula_log("  • [color=#f87171]⚠️ Deficit Penalty: -%d%% Power[/color]" % pen_pct)
 
