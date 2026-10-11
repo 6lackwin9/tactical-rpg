@@ -41,9 +41,12 @@ tactical-rpg/
 │   ├── test_arena.tscn           # Visual interactive combat arena harness scene
 │   └── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
 ├── scripts/
-│   ├── combat/                   # Core simulation, rules engine & commands
+│   ├── core/                     # Foundational rules engine primitives & base models
+│   │   ├── battle_command.gd         # Abstract base command class (duration, cost, initiative)
+│   │   ├── combatant.gd              # Core unit model (HP, SP, speed, range, stance, buffs, target)
+│   │   └── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
+│   ├── combat/                   # Combat simulation, spatial arena rules & battle actions
 │   │   ├── actions/              # Discrete battle command implementations
-│   │   │   ├── battle_command.gd         # Abstract base command class (duration, cost, execution)
 │   │   │   ├── attack_command.gd         # Melee & ranged attacks with stance & range gating
 │   │   │   ├── defend_command.gd         # Defensive stance transition & incoming damage mitigation
 │   │   │   ├── focus_command.gd          # Tactical buff command (+50% ATK for 2 rounds)
@@ -51,14 +54,11 @@ tactical-rpg/
 │   │   │   ├── target_command.gd         # Intent lock onto specific opponent
 │   │   │   ├── enter_neutral_command.gd  # Reset active combat stance to Neutral
 │   │   │   └── hold_stance_command.gd    # Stance preservation across timeline blocks
-│   │   ├── arena/                # Arena spatial rules, scenario setups & resolution
-│   │   │   ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles
-│   │   │   ├── combat_scenario.gd        # Encounter setup, ally/enemy rosters, reinforcements, asset binding
-│   │   │   ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
-│   │   │   └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
-│   │   ├── combatant.gd          # Unit model (HP, speed, range, stance, buffs, target)
-│   │   └── combat_types.gd       # Stances, enum helpers, matchup multipliers, formatting
-│   ├── core/                     # [Placeholder] Core engine utilities & math helpers
+│   │   └── arena/                # Arena spatial rules, scenario setups & resolution
+│   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles
+│   │       ├── combat_scenario.gd        # Encounter setup, ally/enemy rosters, reinforcements, asset binding
+│   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
+│   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   └── arena_test_suite.gd       # 5 automated test suites with 40 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
