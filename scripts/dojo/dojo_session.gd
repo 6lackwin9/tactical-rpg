@@ -11,17 +11,21 @@ extends RefCounted
 signal changed()
 signal entry_logged(entry: DojoLogEntry)
 signal log_cleared()
+signal stash_filter_changed()
 signal stage_fx(kind: String, on_hero: bool, text: String, color: Color)
 
 const DUMMY_MAX_HP: int = 500
 const MAX_LOG_ENTRIES: int = 300
 const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]
 const DEFEND_MITIGATION: float = 0.5
+const MAX_PARTY_SIZE: int = 4
 
 var party_allies: Array[Combatant] = []
 var active_hero: Combatant = null
 var test_dummy: Combatant = null
 var shared_stash: Inventory = null
+var stash_filter: StashFilter = StashFilter.new()
+var carry_report: Dictionary = {}
 
 # Console modifiers
 var force_crit: bool = false
@@ -48,6 +52,7 @@ static func wrap_party(allies: Array[Combatant], stash: Inventory) -> DojoSessio
 	wrapped.party_allies = allies.duplicate()
 	wrapped.active_hero = allies[0] if not allies.is_empty() else null
 	wrapped.shared_stash = stash if stash != null else Inventory.new()
+	wrapped.carry_report = PartyCarry.apply(wrapped.party_allies, wrapped.shared_stash)
 	return wrapped
 
 static func equip_slots() -> Array[Equipment.EquipSlot]:
@@ -60,12 +65,24 @@ static func equip_slots() -> Array[Equipment.EquipSlot]:
 	]
 
 static func weapon_context(hero: Combatant) -> Dictionary:
-	if hero == null or hero.inventory == null:
-		return {}
-	var weapon: Equipment = hero.inventory.get_main_weapon()
-	if weapon == null:
-		return {}
-	return {"weapon": weapon.weapon_type}
+	return hero.get_weapon_context() if hero != null else {}
+
+# Emits `changed` after refreshing the party-wide carry load (overload penalties
+# depend on stash + equipped + pouch weight, which every mutation can affect).
+func _notify() -> void:
+	carry_report = PartyCarry.apply(party_allies, shared_stash)
+	changed.emit()
+
+func notify_filter_changed() -> void:
+	stash_filter_changed.emit()
+
+func set_slot_filter(slot_key: String) -> void:
+	stash_filter.slot_filter = slot_key
+	stash_filter_changed.emit()
+
+func reset_custom_filter() -> void:
+	stash_filter.reset_custom()
+	stash_filter_changed.emit()
 
 # ------------------------------------------------------------------------------
 # 1. State Initialization & Reset
@@ -93,6 +110,9 @@ func init_data() -> void:
 	test_dummy = Combatant.new("Training Dummy", DUMMY_MAX_HP, 10, 1, CharacterStats.new())
 	test_dummy.defense_mitigation_ratio = 0.0
 
+	stash_filter = StashFilter.new()
+	carry_report = PartyCarry.apply(party_allies, shared_stash)
+
 	force_crit = false
 	skill_mult = 1.0
 	_clear_allocation_state()
@@ -103,14 +123,14 @@ func reset() -> void:
 	_action_counter = 0
 	log_cleared.emit()
 	log_action("EVENT", "Dojo Reset", "Heroes, stash, loadouts and dummy restored to baseline", 0, "RESET")
-	stage_fx.emit("text", true, "↺ Dojo Reset", DojoTheme.COL_INFO)
-	changed.emit()
+	stage_fx.emit("text", true, "↺ Dojo Reset", UiTheme.COL_INFO)
+	_notify()
 
 # Called by external editors (e.g. the full stash modal) that mutate heroes directly.
 func notify_external_change() -> void:
 	if active_hero != null:
 		active_hero.sync_from_stats_and_gear()
-	changed.emit()
+	_notify()
 
 func set_active_hero(hero: Combatant) -> void:
 	if hero == null or hero == active_hero:
@@ -118,7 +138,7 @@ func set_active_hero(hero: Combatant) -> void:
 	if is_allocating_stats:
 		_clear_allocation_state()
 	active_hero = hero
-	changed.emit()
+	_notify()
 
 func set_force_crit(enabled: bool) -> void:
 	force_crit = enabled
@@ -268,10 +288,10 @@ func perform_strike(kind: String) -> void:
 			return
 
 	var hit: Dictionary = _apply_hit(title, is_ranged, use_offhand)
-	var actual_dmg: int = DojoTheme.dict_int(hit, "dmg")
+	var actual_dmg: int = UiTheme.dict_int(hit, "dmg")
 	log_action("ATTACK", title, str(hit.get("detail", "")), actual_dmg, str(hit.get("outcome", "HIT")), str(hit.get("breakdown", "")), test_dummy.name)
 	_emit_hit_fx(hit)
-	changed.emit()
+	_notify()
 
 # Combo skill: one action that hits with both the main-hand and off-hand weapon.
 func _perform_dual_strike() -> void:
@@ -288,30 +308,30 @@ func _perform_dual_strike() -> void:
 
 	var first: Dictionary = _apply_hit("Dual Strike ▸ Main Hand", false, false)
 	var second: Dictionary = _apply_hit("Dual Strike ▸ Off-Hand", false, true)
-	var total: int = DojoTheme.dict_int(first, "dmg") + DojoTheme.dict_int(second, "dmg")
-	var any_crit: bool = DojoTheme.dict_bool(first, "crit") or DojoTheme.dict_bool(second, "crit")
+	var total: int = UiTheme.dict_int(first, "dmg") + UiTheme.dict_int(second, "dmg")
+	var any_crit: bool = UiTheme.dict_bool(first, "crit") or UiTheme.dict_bool(second, "crit")
 
 	var outcome: String = "HIT"
 	if not test_dummy.is_alive():
 		outcome = "DEFEATED"
 	elif any_crit:
 		outcome = "CRIT"
-	elif DojoTheme.dict_bool(first, "mit"):
+	elif UiTheme.dict_bool(first, "mit"):
 		outcome = "MITIGATED"
-	var detail: String = "%s %d + %s %d" % [main_w.name, DojoTheme.dict_int(first, "dmg"), off_w.name, DojoTheme.dict_int(second, "dmg")]
+	var detail: String = "%s %d + %s %d" % [main_w.name, UiTheme.dict_int(first, "dmg"), off_w.name, UiTheme.dict_int(second, "dmg")]
 	var breakdown: String = "%s\n\n%s\n\n[color=#4ade80][b]COMBO TOTAL: %d damage[/b][/color]" % [str(first.get("breakdown", "")), str(second.get("breakdown", "")), total]
 	log_action("ATTACK", title, detail, total, outcome, breakdown, test_dummy.name)
 	_emit_hit_fx(first)
 	_emit_hit_fx(second)
-	changed.emit()
+	_notify()
 
 # Computes and applies one weapon hit to the dummy; breakdown text is captured
 # immediately so multi-hit skills report the dummy's HP after each hit.
 func _apply_hit(title: String, is_ranged: bool, use_offhand: bool) -> Dictionary:
 	var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, use_offhand, skill_mult, force_crit, true)
-	var actual_dmg: int = test_dummy.take_damage(DojoTheme.dict_int(res, "final_dmg"), true)
-	var is_crit: bool = DojoTheme.dict_bool(res, "is_crit")
-	var mitigated: bool = DojoTheme.dict_float(res, "mit_ratio") > 0.0
+	var actual_dmg: int = test_dummy.take_damage(UiTheme.dict_int(res, "final_dmg"), true)
+	var is_crit: bool = UiTheme.dict_bool(res, "is_crit")
+	var mitigated: bool = UiTheme.dict_float(res, "mit_ratio") > 0.0
 
 	var outcome: String = "HIT"
 	if not test_dummy.is_alive():
@@ -331,20 +351,20 @@ func _apply_hit(title: String, is_ranged: bool, use_offhand: bool) -> Dictionary
 		"crit": is_crit,
 		"mit": mitigated,
 		"outcome": outcome,
-		"detail": "%s • %d ATK" % [weapon_name, DojoTheme.dict_int(res, "final_attack_power")],
+		"detail": "%s • %d ATK" % [weapon_name, UiTheme.dict_int(res, "final_attack_power")],
 		"breakdown": DojoBreakdown.build_strike(title, active_hero.name, test_dummy, res, actual_dmg),
 	}
 
 func _emit_hit_fx(hit: Dictionary) -> void:
-	var dmg: int = DojoTheme.dict_int(hit, "dmg")
-	var is_crit: bool = DojoTheme.dict_bool(hit, "crit")
-	var mitigated: bool = DojoTheme.dict_bool(hit, "mit")
+	var dmg: int = UiTheme.dict_int(hit, "dmg")
+	var is_crit: bool = UiTheme.dict_bool(hit, "crit")
+	var mitigated: bool = UiTheme.dict_bool(hit, "mit")
 	var fx_text: String = "-%d" % dmg
 	if is_crit:
 		fx_text = "CRIT -%d" % dmg
 	elif mitigated:
 		fx_text += " [MIT]"
-	var fx_color: Color = DojoTheme.COL_INFO if (mitigated and not is_crit) else (DojoTheme.COL_WARN if is_crit else DojoTheme.COL_BAD)
+	var fx_color: Color = UiTheme.COL_INFO if (mitigated and not is_crit) else (UiTheme.COL_WARN if is_crit else UiTheme.COL_BAD)
 	stage_fx.emit("strike", true, fx_text, fx_color)
 
 func use_focus() -> void:
@@ -353,7 +373,7 @@ func use_focus() -> void:
 	active_hero.apply_attack_boost(1.5, 2)
 	log_action("BUFF", "Focus", "+50% ATK for 2 rounds", 50, "BUFF +50%", "[color=#c084fc]Focus: attack boost ×1.5 for 2 rounds.[/color]")
 	stage_fx.emit("glow", true, "✦ +50% ATK (2 rds)", Color(1.0, 0.85, 0.2))
-	changed.emit()
+	_notify()
 
 func toggle_defend() -> void:
 	if active_hero == null:
@@ -361,12 +381,12 @@ func toggle_defend() -> void:
 	if active_hero.defense_mitigation_ratio > 0.0:
 		active_hero.defense_mitigation_ratio = 0.0
 		log_action("DEFEND", "Guard Down", "Defensive guard dropped", 0, "NEUTRAL")
-		stage_fx.emit("text", true, "Guard down", DojoTheme.COL_MUTED)
+		stage_fx.emit("text", true, "Guard down", UiTheme.COL_MUTED)
 	else:
 		active_hero.defense_mitigation_ratio = DEFEND_MITIGATION
 		log_action("DEFEND", "Shield Defend", "50% damage mitigation active", 50, "MITIGATED 50%")
-		stage_fx.emit("glow", true, "🛡 DEFEND [50% MIT]", DojoTheme.COL_INFO)
-	changed.emit()
+		stage_fx.emit("glow", true, "🛡 DEFEND [50% MIT]", UiTheme.COL_INFO)
+	_notify()
 
 func shift_stance() -> void:
 	if active_hero == null:
@@ -374,12 +394,12 @@ func shift_stance() -> void:
 	if active_hero.current_stance == CombatTypes.StanceType.NEUTRAL:
 		active_hero.set_stance(CombatTypes.StanceType.OFFENSIVE)
 		log_action("EVENT", "Stance Shift", "Offensive Stance (+20% ATK)", 20, "OFFENSIVE")
-		stage_fx.emit("glow", true, "⚔ OFFENSIVE", DojoTheme.COL_BAD)
+		stage_fx.emit("glow", true, "⚔ OFFENSIVE", UiTheme.COL_BAD)
 	else:
 		active_hero.set_stance(CombatTypes.StanceType.NEUTRAL)
 		log_action("EVENT", "Stance Shift", "Back to Neutral Stance", 0, "NEUTRAL")
-		stage_fx.emit("text", true, "NEUTRAL", DojoTheme.COL_MUTED)
-	changed.emit()
+		stage_fx.emit("text", true, "NEUTRAL", UiTheme.COL_MUTED)
+	_notify()
 
 func use_pouch_item(index: int) -> void:
 	if active_hero == null or active_hero.inventory == null:
@@ -398,7 +418,7 @@ func use_pouch_item(index: int) -> void:
 			active_hero.heal(con.heal_amount)
 			var healed: int = active_hero.hp - before
 			log_action("BUFF", con.name, "Restored %d HP" % healed, healed, "+%d HP" % healed)
-			stage_fx.emit("glow", true, "+%d HP" % healed, DojoTheme.COL_GOOD)
+			stage_fx.emit("glow", true, "+%d HP" % healed, UiTheme.COL_GOOD)
 		Consumable.ConsumableType.THROWABLE_BOMB:
 			var dealt: int = test_dummy.take_damage(con.damage_amount)
 			log_action("ATTACK", con.name, "Explosive damage", dealt, "DEFEATED" if not test_dummy.is_alive() else "HIT", "", test_dummy.name)
@@ -407,7 +427,7 @@ func use_pouch_item(index: int) -> void:
 			active_hero.apply_attack_boost(1.0 + con.buff_percent, con.buff_duration_rounds)
 			log_action("BUFF", con.name, "+%d%% ATK for %d rounds" % [int(roundf(con.buff_percent * 100.0)), con.buff_duration_rounds], int(roundf(con.buff_percent * 100.0)), "BUFF +%d%%" % int(roundf(con.buff_percent * 100.0)))
 			stage_fx.emit("glow", true, "✦ ELIXIR BOOST", Color(1.0, 0.8, 0.2))
-	changed.emit()
+	_notify()
 
 func toggle_dummy_defense() -> void:
 	if test_dummy == null:
@@ -415,20 +435,20 @@ func toggle_dummy_defense() -> void:
 	if test_dummy.defense_mitigation_ratio > 0.0:
 		test_dummy.defense_mitigation_ratio = 0.0
 		log_action("EVENT", "Dummy Stance", "Dummy neutral - hits deal full damage", 0, "NEUTRAL", "", test_dummy.name)
-		stage_fx.emit("text", false, "0% Mit", DojoTheme.COL_GOOD)
+		stage_fx.emit("text", false, "0% Mit", UiTheme.COL_GOOD)
 	else:
 		test_dummy.defense_mitigation_ratio = 0.5
 		log_action("DEFEND", "Dummy Stance", "Dummy defending - hits halved", 50, "MITIGATED 50%", "", test_dummy.name)
-		stage_fx.emit("text", false, "🛡 50% Mit", DojoTheme.COL_INFO)
-	changed.emit()
+		stage_fx.emit("text", false, "🛡 50% Mit", UiTheme.COL_INFO)
+	_notify()
 
 func heal_dummy() -> void:
 	if test_dummy == null:
 		return
 	test_dummy.hp = test_dummy.max_hp
 	log_action("EVENT", "Dummy Heal", "Training Dummy restored to %d / %d HP" % [test_dummy.hp, test_dummy.max_hp], test_dummy.max_hp, "+HEAL", "", test_dummy.name)
-	stage_fx.emit("text", false, "💖 %d HP" % test_dummy.max_hp, DojoTheme.COL_GOOD)
-	changed.emit()
+	stage_fx.emit("text", false, "💖 %d HP" % test_dummy.max_hp, UiTheme.COL_GOOD)
+	_notify()
 
 # Simulates repeated swings without touching dummy HP; reports damage statistics.
 func run_benchmark(count: int) -> void:
@@ -439,8 +459,8 @@ func run_benchmark(count: int) -> void:
 	var title: String = "Benchmark ×%d (%s)" % [count, "Ranged" if is_ranged else "Melee"]
 
 	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, false)
-	var base_hit: int = DojoTheme.dict_int(base_res, "final_dmg")
-	var crit_rate: float = clampf(DojoTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
+	var base_hit: int = UiTheme.dict_int(base_res, "final_dmg")
+	var crit_rate: float = clampf(UiTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
 
 	var total: int = 0
 	var min_hit: int = 0
@@ -448,11 +468,11 @@ func run_benchmark(count: int) -> void:
 	var crits: int = 0
 	for i: int in range(count):
 		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, true)
-		var dmg: int = DojoTheme.dict_int(res, "final_dmg")
+		var dmg: int = UiTheme.dict_int(res, "final_dmg")
 		total += dmg
 		min_hit = dmg if i == 0 else mini(min_hit, dmg)
 		max_hit = maxi(max_hit, dmg)
-		if DojoTheme.dict_bool(res, "is_crit"):
+		if UiTheme.dict_bool(res, "is_crit"):
 			crits += 1
 
 	var avg: float = float(total) / float(maxi(1, count))
@@ -466,7 +486,7 @@ func run_benchmark(count: int) -> void:
 	}
 	var detail: String = "avg %.1f • min %d • max %d • %d crits" % [avg, min_hit, max_hit, crits]
 	log_action("ATTACK", title, detail, int(roundf(expected)), "SIM", DojoBreakdown.build_benchmark(title, count, stats), test_dummy.name)
-	changed.emit()
+	_notify()
 
 # ------------------------------------------------------------------------------
 # 4. Gear Management (Stash, Equip, Quick Setup)
@@ -481,26 +501,17 @@ func get_eligible_stash_items(slot: Equipment.EquipSlot) -> Array[Equipment]:
 	var result: Array[Equipment] = []
 	if shared_stash == null:
 		return result
+	var main_held: Equipment = active_hero.inventory.get_main_weapon() if (active_hero != null and active_hero.inventory != null) else null
 	for item: Item in shared_stash.items:
 		if not (item is Equipment):
 			continue
 		var eq: Equipment = item
-		var matches_slot: bool = false
-		match slot:
-			Equipment.EquipSlot.MAIN_HAND:
-				matches_slot = eq.is_weapon()
-			Equipment.EquipSlot.OFF_HAND:
-				var main_held: Equipment = active_hero.inventory.get_main_weapon() if (active_hero != null and active_hero.inventory != null) else null
-				var shield_ok: bool = eq.is_shield() and not (main_held != null and main_held.is_two_handed)
-				matches_slot = shield_ok or (eq.is_weapon() and not eq.is_two_handed)
-			Equipment.EquipSlot.BODY:
-				matches_slot = eq.slot == Equipment.EquipSlot.BODY
-			Equipment.EquipSlot.ACCESSORY_1, Equipment.EquipSlot.ACCESSORY_2:
-				matches_slot = eq.slot == Equipment.EquipSlot.ACCESSORY_1 or eq.slot == Equipment.EquipSlot.ACCESSORY_2
-			_:
-				matches_slot = eq.slot == slot
-		if matches_slot and can_hero_equip(eq):
-			result.append(eq)
+		if not eq.can_equip_in_slot(slot) or not can_hero_equip(eq):
+			continue
+		# A 2H main weapon cannot be paired with a shield (only an off-hand weapon).
+		if slot == Equipment.EquipSlot.OFF_HAND and main_held != null and main_held.is_two_handed and not eq.is_weapon():
+			continue
+		result.append(eq)
 	return result
 
 func get_stash_consumables() -> Array[Consumable]:
@@ -519,7 +530,7 @@ func equip_item(item: Equipment, slot: Equipment.EquipSlot) -> bool:
 	if not _equip_internal(item, slot, true):
 		return false
 	active_hero.sync_from_stats_and_gear()
-	changed.emit()
+	_notify()
 	return true
 
 func unequip_slot(slot: Equipment.EquipSlot) -> void:
@@ -529,7 +540,7 @@ func unequip_slot(slot: Equipment.EquipSlot) -> void:
 	if old_eq != null:
 		log_action("EVENT", "Unequip", "%s returned to stash" % old_eq.name, 0, "STASHED")
 	active_hero.sync_from_stats_and_gear()
-	changed.emit()
+	_notify()
 
 func clear_all_gear() -> void:
 	if active_hero == null or active_hero.inventory == null:
@@ -537,7 +548,7 @@ func clear_all_gear() -> void:
 	_stow_all_gear()
 	active_hero.sync_from_stats_and_gear()
 	log_action("EVENT", "Clear Gear", "All gear and pouch items returned to stash", 0, "STASHED")
-	changed.emit()
+	_notify()
 
 func apply_loadout(preset_id: String) -> void:
 	if active_hero == null or active_hero.inventory == null:
@@ -590,8 +601,8 @@ func apply_loadout(preset_id: String) -> void:
 		detail += " • skipped %s" % ", ".join(skipped)
 		breakdown += "\n[color=#f87171]Skipped (not eligible for %s): %s[/color]" % [active_hero.name, ", ".join(skipped)]
 	log_action("EVENT", "Quick Setup", detail, equipped_count, "LOADOUT", breakdown)
-	stage_fx.emit("glow", true, "🎒 %s" % str(preset.get("name", "Loadout")), DojoTheme.COL_GOOD)
-	changed.emit()
+	stage_fx.emit("glow", true, "🎒 %s" % str(preset.get("name", "Loadout")), UiTheme.COL_GOOD)
+	_notify()
 
 func add_to_pouch(con: Consumable) -> bool:
 	if active_hero == null or active_hero.inventory == null or con == null:
@@ -601,7 +612,7 @@ func add_to_pouch(con: Consumable) -> bool:
 		return false
 	shared_stash.remove_item(con)
 	log_action("EVENT", "Load Pouch", "%s loaded into battle pouch" % con.name, 0, "LOADED")
-	changed.emit()
+	_notify()
 	return true
 
 func remove_from_pouch(index: int) -> void:
@@ -614,7 +625,7 @@ func remove_from_pouch(index: int) -> void:
 	active_hero.inventory.remove_from_battle_pouch(con)
 	shared_stash.add_item(con)
 	log_action("EVENT", "Unload Pouch", "%s returned to stash" % con.name, 0, "STASHED")
-	changed.emit()
+	_notify()
 
 # Switch Weapon (1 block): readies the other weapon when a 2H main weapon is paired
 # with an off-hand weapon. 1H pairs never need it - both hands attack freely.
@@ -629,8 +640,8 @@ func switch_weapon() -> void:
 	var ready_w: Equipment = inv.get_active_weapon()
 	var breakdown: String = "[color=#38bdf8][b]Switch Weapon[/b][/color]  costs 1 block.\nActive weapon is now [b]%s[/b]; the other weapon is sheathed until you switch back." % ready_w.name
 	log_action("EVENT", "Switch Weapon", "1 block • %s now active" % ready_w.name, 1, "SWITCHED", breakdown)
-	stage_fx.emit("text", true, "🔄 %s" % ready_w.name, DojoTheme.COL_INFO)
-	changed.emit()
+	stage_fx.emit("text", true, "🔄 %s" % ready_w.name, UiTheme.COL_INFO)
+	_notify()
 
 func _spawn_from_factory(factory_raw: Variant) -> Variant:
 	if factory_raw is Callable:
@@ -682,11 +693,11 @@ func _equip_internal(item: Equipment, slot: Equipment.EquipSlot, announce: bool)
 		if announce:
 			_log_failure("Equip", "%s cannot equip %s (class proficiency)" % [active_hero.name, item.name])
 		return false
+	if not item.can_equip_in_slot(slot):
+		if announce:
+			_log_failure("Equip", "%s cannot be equipped in the %s slot" % [item.name, Equipment.slot_display_name(slot)])
+		return false
 	if slot == Equipment.EquipSlot.OFF_HAND:
-		if item.is_two_handed:
-			if announce:
-				_log_failure("Equip", "%s is two-handed and cannot go in the off-hand" % item.name)
-			return false
 		# A 2H main weapon cannot carry a shield, but an off-hand weapon is fine (needs Switch Weapon to use).
 		var main_w: Equipment = inv.get_main_weapon()
 		if main_w != null and main_w.is_two_handed and not item.is_weapon():
@@ -732,14 +743,14 @@ func begin_allocation() -> void:
 	_clear_allocation_state()
 	is_allocating_stats = true
 	pending_free_points = active_hero.stats.unspent_attribute_points
-	changed.emit()
+	_notify()
 
 func allocate_point(stat_key: String) -> void:
 	if not is_allocating_stats or pending_free_points <= 0 or not pending_allocated_stats.has(stat_key):
 		return
 	pending_free_points -= 1
 	pending_allocated_stats[stat_key] = get_pending(stat_key) + 1
-	changed.emit()
+	_notify()
 
 # Only undoes points allocated in the current session - never below baseline.
 func deallocate_point(stat_key: String) -> void:
@@ -750,7 +761,7 @@ func deallocate_point(stat_key: String) -> void:
 		return
 	pending_allocated_stats[stat_key] = current - 1
 	pending_free_points += 1
-	changed.emit()
+	_notify()
 
 func reset_allocation() -> void:
 	if not is_allocating_stats or active_hero == null or active_hero.stats == null:
@@ -759,7 +770,7 @@ func reset_allocation() -> void:
 	_clear_allocation_state()
 	is_allocating_stats = keep
 	pending_free_points = active_hero.stats.unspent_attribute_points
-	changed.emit()
+	_notify()
 
 func confirm_allocation() -> void:
 	if not is_allocating_stats or active_hero == null or active_hero.stats == null:
@@ -783,10 +794,10 @@ func confirm_allocation() -> void:
 	active_hero.sync_from_stats_and_gear()
 	var detail: String = ", ".join(summary) if not summary.is_empty() else "No points spent"
 	log_action("EVENT", "Allocate Stats", "%s (remaining %d)" % [detail, st.unspent_attribute_points], 0, "CONFIRMED")
-	changed.emit()
+	_notify()
 
 func cancel_allocation() -> void:
 	if not is_allocating_stats:
 		return
 	_clear_allocation_state()
-	changed.emit()
+	_notify()

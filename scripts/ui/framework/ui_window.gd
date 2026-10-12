@@ -1,25 +1,26 @@
-class_name DojoWindow
+class_name UiWindow
 extends Control
 
 # ==============================================================================
 # Tactical RPG - Dojo Floating Window
-# Draggable, resizable, collapsible window that hosts one DojoPanel. Position
+# Draggable, resizable, collapsible window that hosts one UiPanel. Position
 # and size are tracked as fractions of the desk (frac_rect) by the workspace so
 # layouts survive window resizes.
 # ==============================================================================
 
-signal close_requested(window: DojoWindow)
-signal raise_requested(window: DojoWindow)
-signal geometry_committed(window: DojoWindow)
+signal close_requested(window: UiWindow)
+signal raise_requested(window: UiWindow)
+signal geometry_committed(window: UiWindow)
 
 const TITLE_HEIGHT: float = 26.0
 const FRAME_BORDER: float = 1.0
 const GRIP_SIZE: float = 16.0
 
-var panel: DojoPanel = null
+var panel: UiPanel = null
 var window_id: String = ""
 var frac_rect: Rect2 = Rect2(0, 0, 0.3, 0.5)
 var is_collapsed: bool = false
+var show_collapse_button: bool = true  # overlays are fixed-size: no collapse
 
 var _frame: PanelContainer
 var _title_bar: PanelContainer
@@ -34,7 +35,7 @@ var _min_expanded: Vector2 = Vector2(220, 120)
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-func setup(p_panel: DojoPanel) -> void:
+func setup(p_panel: UiPanel) -> void:
 	panel = p_panel
 	window_id = p_panel.panel_id
 	_min_expanded = p_panel.default_min_size.max(Vector2(200, 100))
@@ -44,7 +45,7 @@ func setup(p_panel: DojoPanel) -> void:
 func _build() -> void:
 	_frame = PanelContainer.new()
 	_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_frame.add_theme_stylebox_override("panel", DojoTheme.box(DojoTheme.COL_PANEL_BG, Color(0.28, 0.42, 0.62, 0.95), 6, int(FRAME_BORDER), int(FRAME_BORDER), 1))
+	_frame.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, Color(0.28, 0.42, 0.62, 0.95), 6, int(FRAME_BORDER), int(FRAME_BORDER), 1))
 	_frame.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_frame)
 
@@ -55,7 +56,7 @@ func _build() -> void:
 	_title_bar = PanelContainer.new()
 	_title_bar.custom_minimum_size = Vector2(0, TITLE_HEIGHT)
 	_title_bar.mouse_default_cursor_shape = Control.CURSOR_MOVE
-	var title_style := DojoTheme.box(Color(0.13, 0.19, 0.28, 1.0), Color(0, 0, 0, 0), 5, 8, 2, 0)
+	var title_style := UiTheme.box(Color(0.13, 0.19, 0.28, 1.0), Color(0, 0, 0, 0), 5, 8, 2, 0)
 	title_style.corner_radius_bottom_left = 0
 	title_style.corner_radius_bottom_right = 0
 	_title_bar.add_theme_stylebox_override("panel", title_style)
@@ -67,12 +68,13 @@ func _build() -> void:
 	title_row.mouse_filter = Control.MOUSE_FILTER_PASS
 	_title_bar.add_child(title_row)
 
-	_title_lbl = DojoTheme.label("%s  %s" % [panel.panel_icon, panel.panel_title], DojoTheme.FONT_MD, DojoTheme.COL_TITLE)
+	_title_lbl = UiTheme.label("%s  %s" % [panel.panel_icon, panel.panel_title], UiTheme.FONT_MD, UiTheme.COL_TITLE)
 	_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	title_row.add_child(_title_lbl)
 
 	_collapse_btn = _make_title_button("–", "Collapse / expand (or double-click the title)", _toggle_collapse)
+	_collapse_btn.visible = show_collapse_button
 	title_row.add_child(_collapse_btn)
 	title_row.add_child(_make_title_button("✕", "Close window (reopen from the toolbar)", func() -> void: close_requested.emit(self)))
 
@@ -98,7 +100,7 @@ func _build() -> void:
 	add_child(_grip)
 
 func _make_title_button(text: String, tip: String, callback: Callable) -> Button:
-	var btn: Button = DojoTheme.button(text, tip, callback, DojoTheme.FONT_SM)
+	var btn: Button = UiTheme.button(text, tip, callback, UiTheme.FONT_SM)
 	btn.custom_minimum_size = Vector2(20, 18)
 	btn.flat = true
 	return btn
@@ -151,6 +153,8 @@ func _clamp_to_parent() -> void:
 	)
 
 func _toggle_collapse() -> void:
+	if not show_collapse_button:
+		return
 	if not is_collapsed:
 		frac_rect.size.y = size.y / maxf(1.0, get_parent_area_size().y)
 	set_collapsed(not is_collapsed)

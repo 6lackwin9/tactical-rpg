@@ -31,6 +31,7 @@ var rarity: ItemRarity = ItemRarity.COMMON
 var weight: float = 1.0
 var value_gold: int = 10
 var max_stack: int = 1
+var damage_type: String = ""  # slash, pierce, blunt, magic, fire (empty = non-damaging)
 
 func _init(
 	p_id: String = "",

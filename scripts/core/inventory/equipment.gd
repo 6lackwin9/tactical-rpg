@@ -71,6 +71,25 @@ func is_weapon() -> bool:
 func is_shield() -> bool:
 	return item_type == ItemType.SHIELD or off_hand_category == "shield"
 
+# Off-hand weapons (shortsword, knuckles, dagger, tome...) can only be held in the off-hand.
+func is_off_hand_weapon() -> bool:
+	return is_weapon() and not off_hand_category.is_empty() and off_hand_category != "shield" and not is_two_handed
+
+# Slot compatibility: 2H weapons -> main hand only; off-hand weapons and shields -> off-hand
+# only; plain 1H weapons -> main hand or off-hand (dual wield); armor/accessories -> own slot.
+func can_equip_in_slot(target: EquipSlot) -> bool:
+	if is_shield():
+		return target == EquipSlot.OFF_HAND
+	if is_weapon():
+		if is_two_handed:
+			return target == EquipSlot.MAIN_HAND
+		if is_off_hand_weapon():
+			return target == EquipSlot.OFF_HAND
+		return target == EquipSlot.MAIN_HAND or target == EquipSlot.OFF_HAND
+	if slot == EquipSlot.ACCESSORY_1 or slot == EquipSlot.ACCESSORY_2:
+		return target == EquipSlot.ACCESSORY_1 or target == EquipSlot.ACCESSORY_2
+	return target == slot
+
 func is_ranged_weapon() -> bool:
 	if item_type != ItemType.WEAPON:
 		return false

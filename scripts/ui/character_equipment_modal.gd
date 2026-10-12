@@ -30,14 +30,15 @@ var _party_panel: DojoPartyPanel
 var _gear_panel: DojoGearPanel
 var _stash_panel: DojoStashPanel
 var _gear_title: Label
+var _overlay_layer: UiOverlayLayer
 
 func _init() -> void:
 	name = "CharacterEquipmentModal"
 	visible = false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	theme = DojoTheme.tooltip_theme()
-	add_theme_stylebox_override("panel", DojoTheme.box(Color(0.02, 0.04, 0.07, 0.92), Color(0, 0, 0, 0), 0, 0, 0, 0))
+	theme = UiTheme.tooltip_theme()
+	add_theme_stylebox_override("panel", UiTheme.box(Color(0.02, 0.04, 0.07, 0.92), Color(0, 0, 0, 0), 0, 0, 0, 0))
 
 	var margin := MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]:
@@ -45,7 +46,7 @@ func _init() -> void:
 	add_child(margin)
 
 	var frame := PanelContainer.new()
-	frame.add_theme_stylebox_override("panel", DojoTheme.box(Color(0.07, 0.09, 0.14, 0.99), Color(0.28, 0.46, 0.75, 0.9), 8, 12, 10, 2))
+	frame.add_theme_stylebox_override("panel", UiTheme.box(Color(0.07, 0.09, 0.14, 0.99), Color(0.28, 0.46, 0.75, 0.9), 8, 12, 10, 2))
 	margin.add_child(frame)
 
 	var root := VBoxContainer.new()
@@ -65,32 +66,39 @@ func _init() -> void:
 	_stash_panel = DojoStashPanel.new()
 
 	columns.add_child(_build_column("👥  PARTY", _party_panel))
-	_gear_title = DojoTheme.header("🎒  GEAR LOADOUT", DojoTheme.COL_TITLE)
+	_gear_title = UiTheme.header("🎒  GEAR LOADOUT", UiTheme.COL_TITLE)
 	columns.add_child(_build_column_with_label(_gear_title, _gear_panel))
 	columns.add_child(_build_column("📦  PARTY STASH", _stash_panel))
+
+	# Overlay windows (equip picker, stat allocation, custom stash filter) open above all columns.
+	_overlay_layer = UiOverlayLayer.new()
+	add_child(_overlay_layer)
+	_overlay_layer.host_panel(_party_panel)
+	_overlay_layer.host_panel(_gear_panel)
+	_overlay_layer.host_panel(_stash_panel)
 
 func _build_header() -> Control:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 10)
-	header.add_child(DojoTheme.label("PARTY & STASH", DojoTheme.FONT_LG + 2, DojoTheme.COL_TITLE))
-	header.add_child(DojoTheme.label("Select a unit, review their stats, then move gear between the loadout and the stash.", DojoTheme.FONT_SM, DojoTheme.COL_MUTED))
+	header.add_child(UiTheme.label("PARTY & STASH", UiTheme.FONT_LG + 2, UiTheme.COL_TITLE))
+	header.add_child(UiTheme.label("Select a unit, review their stats, then move gear between the loadout and the stash.", UiTheme.FONT_SM, UiTheme.COL_MUTED))
 	header.add_spacer(false)
-	var close_btn: Button = DojoTheme.button("✕ CLOSE (Esc)", "Close the Party & Stash screen", close_modal, DojoTheme.FONT_SM)
+	var close_btn: Button = UiTheme.button("✕ CLOSE (Esc)", "Close the Party & Stash screen", close_modal, UiTheme.FONT_SM)
 	header.add_child(close_btn)
 	return header
 
 func _build_column(title: String, panel: DojoPanel) -> Control:
-	return _build_column_with_label(DojoTheme.header(title, DojoTheme.COL_TITLE), panel)
+	return _build_column_with_label(UiTheme.header(title, UiTheme.COL_TITLE), panel)
 
 func _build_column_with_label(title_lbl: Label, panel: DojoPanel) -> Control:
 	var frame := PanelContainer.new()
 	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	frame.size_flags_stretch_ratio = 1.0
-	frame.add_theme_stylebox_override("panel", DojoTheme.box(DojoTheme.COL_PANEL_BG, DojoTheme.COL_BORDER, 6, 6, 6))
+	frame.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, UiTheme.COL_BORDER, 6, 6, 6))
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 2)
 	frame.add_child(vbox)
-	title_lbl.add_theme_font_size_override("font_size", DojoTheme.FONT_MD)
+	title_lbl.add_theme_font_size_override("font_size", UiTheme.FONT_MD)
 	vbox.add_child(title_lbl)
 	vbox.add_child(HSeparator.new())
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -107,6 +115,7 @@ func attach_session(p_session: DojoSession) -> void:
 		session.changed.disconnect(_on_session_changed)
 	session = p_session
 	session.changed.connect(_on_session_changed)
+	_overlay_layer.set_session(session)
 	_party_panel.bind(session)
 	_gear_panel.bind(session)
 	_stash_panel.bind(session)
@@ -135,6 +144,7 @@ func open_modal(hero: Combatant = null) -> void:
 	move_to_front()
 
 func close_modal() -> void:
+	_overlay_layer.close_all()
 	visible = false
 	modal_closed.emit()
 

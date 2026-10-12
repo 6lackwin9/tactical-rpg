@@ -33,6 +33,7 @@ static func create_iron_claymore() -> Equipment:
 	eq.is_two_handed = true
 	eq.scaling_stat = "STR"
 	eq.description = "A heavy double-edged greatsword. Gains +4 Power when wielded with 18+ STR."
+	eq.damage_type = "slash"
 	return eq
 
 static func create_titan_warhammer() -> Equipment:
@@ -57,6 +58,7 @@ static func create_titan_warhammer() -> Equipment:
 	eq.is_two_handed = true
 	eq.scaling_stat = "STR"
 	eq.description = "Colossal warhammer requiring 22 STR. Inflicts severe deficit penalty if under-statted."
+	eq.damage_type = "blunt"
 	return eq
 
 static func create_oak_shortbow() -> Equipment:
@@ -81,6 +83,7 @@ static func create_oak_shortbow() -> Equipment:
 	eq.is_two_handed = true
 	eq.scaling_stat = "DEX"
 	eq.description = "Supple curved bow capable of ranged volleys up to 3 tiles."
+	eq.damage_type = "pierce"
 	return eq
 
 static func create_steel_broadsword() -> Equipment:
@@ -102,6 +105,7 @@ static func create_steel_broadsword() -> Equipment:
 	eq.is_two_handed = false
 	eq.scaling_stat = "STR"
 	eq.description = "Reliable military broadsword with modest strength requirements."
+	eq.damage_type = "slash"
 	return eq
 
 static func create_iron_shortsword() -> Equipment:
@@ -124,6 +128,7 @@ static func create_iron_shortsword() -> Equipment:
 	eq.off_hand_category = "shortsword"
 	eq.scaling_stat = "STR"
 	eq.description = "Agile 1-handed short blade wieldable in main or off-hand (STR scaling)."
+	eq.damage_type = "slash"
 	return eq
 
 static func create_spiked_knuckles() -> Equipment:
@@ -146,6 +151,7 @@ static func create_spiked_knuckles() -> Equipment:
 	eq.off_hand_category = "knuckles"
 	eq.scaling_stat = "STR"
 	eq.description = "Iron knuckle dusters for ruthless close-quarters off-hand strikes (STR scaling)."
+	eq.damage_type = "blunt"
 	return eq
 
 static func create_shadow_dagger() -> Equipment:
@@ -170,7 +176,8 @@ static func create_shadow_dagger() -> Equipment:
 	eq.is_two_handed = false
 	eq.off_hand_category = "dagger"
 	eq.scaling_stat = "DEX"
-	eq.description = "Featherweight stiletto primed for rapid off-hand or main-hand strikes (DEX scaling)."
+	eq.description = "Featherweight stiletto primed for rapid off-hand strikes (DEX scaling)."
+	eq.damage_type = "pierce"
 	return eq
 
 static func create_mystic_tome() -> Equipment:
@@ -193,6 +200,7 @@ static func create_mystic_tome() -> Equipment:
 	eq.off_hand_category = "tome"
 	eq.scaling_stat = "INT"
 	eq.description = "Bound grimoire wieldable in off-hand to channel tactical spells (INT scaling)."
+	eq.damage_type = "magic"
 	return eq
 
 static func create_runed_staff() -> Equipment:
@@ -217,6 +225,7 @@ static func create_runed_staff() -> Equipment:
 	eq.is_two_handed = true
 	eq.scaling_stat = "INT"
 	eq.description = "Carved ash stave engraved with mystic glyphs. Scales with intelligence."
+	eq.damage_type = "magic"
 	return eq
 
 # ------------------------------------------------------------------------------
@@ -395,6 +404,7 @@ static func create_throwing_fire_bomb() -> Consumable:
 		Item.ItemRarity.UNCOMMON
 	)
 	con.description = "Clay vessel of volatile pitch exploding on impact for 20 damage."
+	con.damage_type = "fire"
 	return con
 
 # ------------------------------------------------------------------------------

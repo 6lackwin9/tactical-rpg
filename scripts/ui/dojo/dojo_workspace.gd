@@ -3,7 +3,7 @@ extends Control
 
 # ==============================================================================
 # Tactical RPG - Dojo Workspace
-# Toolbar + free-form desk hosting one DojoWindow per DojoPanel. Handles active
+# Toolbar + free-form desk hosting one UiWindow per DojoPanel. Handles active
 # unit switching, window toggles, layout presets and layout persistence.
 # ==============================================================================
 
@@ -47,17 +47,18 @@ var _hero_row: HBoxContainer
 var _toggle_row: HBoxContainer
 var _layout_option: OptionButton
 var _desk: Control
-var _windows: Dictionary = {}      # String -> DojoWindow
+var _overlay_layer: UiOverlayLayer
+var _windows: Dictionary = {}      # String -> UiWindow
 var _toggle_btns: Dictionary = {}  # String -> Button
 var _layout_ready: bool = false
 var _current_layout: String = DEFAULT_LAYOUT
 
 func _init() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	theme = DojoTheme.tooltip_theme()
+	theme = UiTheme.tooltip_theme()
 
 	var bg := ColorRect.new()
-	bg.color = DojoTheme.COL_APP_BG
+	bg.color = UiTheme.COL_APP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -81,9 +82,12 @@ func _init() -> void:
 	_desk.resized.connect(_on_desk_resized)
 	root.add_child(_desk)
 
+	_overlay_layer = UiOverlayLayer.new()
+	add_child(_overlay_layer)
+
 func _build_toolbar() -> Control:
 	var bar := PanelContainer.new()
-	bar.add_theme_stylebox_override("panel", DojoTheme.box(Color(0.08, 0.11, 0.16, 0.98), DojoTheme.COL_BORDER, 6, 10, 6))
+	bar.add_theme_stylebox_override("panel", UiTheme.box(Color(0.08, 0.11, 0.16, 0.98), UiTheme.COL_BORDER, 6, 10, 6))
 
 	# Groups are plain HBoxes inside one wrapping flow, so the bar stays a single
 	# row when wide and wraps whole groups (never individual buttons) when narrow.
@@ -92,7 +96,7 @@ func _build_toolbar() -> Control:
 	flow.add_theme_constant_override("v_separation", 4)
 	bar.add_child(flow)
 
-	var title := DojoTheme.label("🥋 GEAR & SKILL DOJO", DojoTheme.FONT_LG, DojoTheme.COL_TITLE)
+	var title := UiTheme.label("🥋 GEAR & SKILL DOJO", UiTheme.FONT_LG, UiTheme.COL_TITLE)
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	flow.add_child(title)
 
@@ -111,16 +115,16 @@ func _build_toolbar() -> Control:
 	_layout_option.focus_mode = Control.FOCUS_NONE
 	_layout_option.fit_to_longest_item = false
 	_layout_option.custom_minimum_size = Vector2(120, 0)
-	_layout_option.add_theme_font_size_override("font_size", DojoTheme.FONT_SM)
+	_layout_option.add_theme_font_size_override("font_size", UiTheme.FONT_SM)
 	for layout_name: String in LAYOUTS:
 		_layout_option.add_item(layout_name)
 	_layout_option.item_selected.connect(_on_layout_selected)
 	layout_group.add_child(_layout_option)
-	layout_group.add_child(DojoTheme.button("⟲ Re-tile", "Re-apply the selected layout and reopen all of its windows", func() -> void: apply_layout(_current_layout)))
+	layout_group.add_child(UiTheme.button("⟲ Re-tile", "Re-apply the selected layout and reopen all of its windows", func() -> void: apply_layout(_current_layout)))
 
 	var action_group := _toolbar_group(flow, "")
-	action_group.add_child(DojoTheme.button("📦 Stash", "Open the full stash & character equipment screen", func() -> void: stash_requested.emit()))
-	action_group.add_child(DojoTheme.button("↺ Reset Dojo", "Restore heroes, loadouts, stash, dummy and log to baseline", func() -> void: reset_requested.emit()))
+	action_group.add_child(UiTheme.button("📦 Stash", "Open the full stash & character equipment screen", func() -> void: stash_requested.emit()))
+	action_group.add_child(UiTheme.button("↺ Reset Dojo", "Restore heroes, loadouts, stash, dummy and log to baseline", func() -> void: reset_requested.emit()))
 	return bar
 
 func _toolbar_group(parent: Control, caption: String) -> HBoxContainer:
@@ -129,7 +133,7 @@ func _toolbar_group(parent: Control, caption: String) -> HBoxContainer:
 	group.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	parent.add_child(group)
 	if not caption.is_empty():
-		group.add_child(DojoTheme.label(caption, DojoTheme.FONT_SM, DojoTheme.COL_MUTED))
+		group.add_child(UiTheme.label(caption, UiTheme.FONT_SM, UiTheme.COL_MUTED))
 	return group
 
 # ------------------------------------------------------------------------------
@@ -139,21 +143,26 @@ func _toolbar_group(parent: Control, caption: String) -> HBoxContainer:
 func setup(p_session: DojoSession, panels: Array[DojoPanel]) -> void:
 	session = p_session
 	session.changed.connect(_refresh_hero_buttons)
+	_overlay_layer.set_session(session)
 	for panel: DojoPanel in panels:
 		_add_panel(panel)
 	_refresh_hero_buttons()
 
-func get_panel(panel_id: String) -> DojoPanel:
+func get_overlay_layer() -> UiOverlayLayer:
+	return _overlay_layer
+
+func get_panel(panel_id: String) -> UiPanel:
 	var win_raw: Variant = _windows.get(panel_id, null)
-	if win_raw is DojoWindow:
-		var win: DojoWindow = win_raw
+	if win_raw is UiWindow:
+		var win: UiWindow = win_raw
 		return win.panel
 	return null
 
 func _add_panel(panel: DojoPanel) -> void:
 	panel.bind(session)
+	_overlay_layer.host_panel(panel)
 
-	var win := DojoWindow.new()
+	var win := UiWindow.new()
 	win.setup(panel)
 	win.visible = false
 	win.close_requested.connect(_on_window_close)
@@ -163,7 +172,7 @@ func _add_panel(panel: DojoPanel) -> void:
 	_windows[panel.panel_id] = win
 
 	var short_title: String = panel.panel_short_title if not panel.panel_short_title.is_empty() else panel.panel_title
-	var toggle: Button = DojoTheme.button("%s %s" % [panel.panel_icon, short_title], "Show / hide the %s window" % panel.panel_title, func() -> void: _on_toggle_pressed(panel.panel_id))
+	var toggle: Button = UiTheme.button("%s %s" % [panel.panel_icon, short_title], "Show / hide the %s window" % panel.panel_title, func() -> void: _on_toggle_pressed(panel.panel_id))
 	toggle.toggle_mode = true
 	_toggle_row.add_child(toggle)
 	_toggle_btns[panel.panel_id] = toggle
@@ -171,13 +180,13 @@ func _add_panel(panel: DojoPanel) -> void:
 func _refresh_hero_buttons() -> void:
 	if session == null:
 		return
-	DojoTheme.clear_children(_hero_row)
+	UiTheme.clear_children(_hero_row)
 	for hero: Combatant in session.party_allies:
-		var btn: Button = DojoTheme.button("%s (Lv %d)" % [hero.name, hero.stats.level if hero.stats != null else 1], "Inspect and test with %s" % hero.name, func() -> void: session.set_active_hero(hero))
+		var btn: Button = UiTheme.button("%s (Lv %d)" % [hero.name, hero.stats.level if hero.stats != null else 1], "Inspect and test with %s" % hero.name, func() -> void: session.set_active_hero(hero))
 		btn.toggle_mode = true
 		btn.button_pressed = hero == session.active_hero
 		if hero == session.active_hero:
-			btn.add_theme_color_override("font_color", DojoTheme.COL_GOOD)
+			btn.add_theme_color_override("font_color", UiTheme.COL_GOOD)
 		_hero_row.add_child(btn)
 
 # ------------------------------------------------------------------------------
@@ -186,32 +195,32 @@ func _refresh_hero_buttons() -> void:
 
 func _on_toggle_pressed(panel_id: String) -> void:
 	var win_raw: Variant = _windows.get(panel_id, null)
-	if not (win_raw is DojoWindow):
+	if not (win_raw is UiWindow):
 		return
-	var win: DojoWindow = win_raw
+	var win: UiWindow = win_raw
 	win.visible = not win.visible
 	if win.visible:
 		win.move_to_front()
 	_sync_toggle(panel_id)
 	save_layout()
 
-func _on_window_close(win: DojoWindow) -> void:
+func _on_window_close(win: UiWindow) -> void:
 	win.visible = false
 	_sync_toggle(win.window_id)
 	save_layout()
 
-func _on_window_raise(win: DojoWindow) -> void:
+func _on_window_raise(win: UiWindow) -> void:
 	win.move_to_front()
 
-func _on_geometry_committed(_win: DojoWindow) -> void:
+func _on_geometry_committed(_win: UiWindow) -> void:
 	save_layout()
 
 func _sync_toggle(panel_id: String) -> void:
 	var btn_raw: Variant = _toggle_btns.get(panel_id, null)
 	var win_raw: Variant = _windows.get(panel_id, null)
-	if btn_raw is Button and win_raw is DojoWindow:
+	if btn_raw is Button and win_raw is UiWindow:
 		var btn: Button = btn_raw
-		var win: DojoWindow = win_raw
+		var win: UiWindow = win_raw
 		btn.set_pressed_no_signal(win.visible)
 
 func _input(event: InputEvent) -> void:
@@ -222,8 +231,8 @@ func _input(event: InputEvent) -> void:
 	var children: Array[Node] = _desk.get_children()
 	for i: int in range(children.size() - 1, -1, -1):
 		var node: Node = children[i]
-		if node is DojoWindow:
-			var win: DojoWindow = node
+		if node is UiWindow:
+			var win: UiWindow = node
 			if win.visible and Rect2(win.position, win.size).has_point(local):
 				if i != children.size() - 1:
 					win.move_to_front()
@@ -242,8 +251,8 @@ func _on_desk_resized() -> void:
 			apply_layout(DEFAULT_LAYOUT)
 		return
 	for win_raw: Variant in _windows.values():
-		if win_raw is DojoWindow:
-			var win: DojoWindow = win_raw
+		if win_raw is UiWindow:
+			var win: UiWindow = win_raw
 			win.apply_fraction(_desk.size)
 
 func _on_layout_selected(index: int) -> void:
@@ -260,9 +269,9 @@ func apply_layout(layout_name: String) -> void:
 	var layout: Dictionary = LAYOUTS[layout_name]
 	for panel_id: String in _windows:
 		var win_raw: Variant = _windows[panel_id]
-		if not (win_raw is DojoWindow):
+		if not (win_raw is UiWindow):
 			continue
-		var win: DojoWindow = win_raw
+		var win: UiWindow = win_raw
 		win.set_collapsed(false)
 		var rect_raw: Variant = layout.get(panel_id, null)
 		if rect_raw is Rect2:
@@ -290,8 +299,8 @@ func save_layout() -> void:
 	cfg.set_value("layout", "name", _current_layout)
 	for panel_id: String in _windows:
 		var win_raw: Variant = _windows[panel_id]
-		if win_raw is DojoWindow:
-			var win: DojoWindow = win_raw
+		if win_raw is UiWindow:
+			var win: UiWindow = win_raw
 			cfg.set_value(panel_id, "rect", win.frac_rect)
 			cfg.set_value(panel_id, "visible", win.visible)
 			cfg.set_value(panel_id, "collapsed", win.is_collapsed)
@@ -312,9 +321,9 @@ func _load_layout() -> bool:
 
 	for panel_id: String in _windows:
 		var win_raw: Variant = _windows[panel_id]
-		if not (win_raw is DojoWindow):
+		if not (win_raw is UiWindow):
 			continue
-		var win: DojoWindow = win_raw
+		var win: UiWindow = win_raw
 		var rect_raw: Variant = cfg.get_value(panel_id, "rect", Rect2(0, 0, 0.3, 0.5))
 		var vis_raw: Variant = cfg.get_value(panel_id, "visible", true)
 		var col_raw: Variant = cfg.get_value(panel_id, "collapsed", false)

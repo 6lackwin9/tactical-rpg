@@ -23,6 +23,7 @@ var is_withdrawn: bool = false
 var attack_boost_multiplier: float = 1.0
 var attack_boost_rounds_remaining: int = 0
 var defense_mitigation_ratio: float = 0.0
+var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
 var active_buffs: Array[StatModifier] = []
 
 var stats: CharacterStats
@@ -36,6 +37,11 @@ func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_s
 	attack_range = p_attack_range
 	stats = p_stats if p_stats != null else CharacterStats.new()
 	inventory = Inventory.new()
+
+# Stat-context dictionary used for weapon-conditional bonuses (masteries etc.).
+func get_weapon_context() -> Dictionary:
+	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+	return {"weapon": weapon.weapon_type} if weapon != null else {}
 
 func sync_from_stats_and_gear() -> void:
 	if stats != null:
@@ -55,7 +61,7 @@ func sync_from_stats_and_gear() -> void:
 		var ctx: Dictionary = {"weapon": weapon.weapon_type} if weapon != null else {}
 		max_hp = stats.get_max_hp(ctx)
 		hp = mini(hp, max_hp)
-		speed = stats.get_initiative_speed(burden, ctx)
+		speed = maxi(1, stats.get_initiative_speed(burden, ctx) - carry_speed_penalty)
 		attack_range = stats.get_effective_range(base_rng, ctx)
 
 func get_effective_power(is_ranged: bool = false, use_offhand: bool = false) -> int:

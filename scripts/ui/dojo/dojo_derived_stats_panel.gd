@@ -14,15 +14,16 @@ const ROW_DEFS: Array[Dictionary] = [
 	{"id": "speed", "label": "Initiative Speed", "color": Color(0.35, 0.85, 0.95)},
 	{"id": "hp", "label": "Maximum Health", "color": Color(0.95, 0.4, 0.4)},
 	{"id": "mit", "label": "Flat Mitigation", "color": Color(0.7, 0.85, 1.0)},
-	{"id": "burden", "label": "Armor Burden", "color": Color(0.9, 0.8, 0.35)},
+	{"id": "burden", "label": "Unit Burden", "color": Color(0.9, 0.8, 0.35)},
+	{"id": "carry", "label": "Party Carry", "color": Color(0.5, 0.85, 0.65)},
 	{"id": "range", "label": "Attack Range", "color": Color(0.6, 0.9, 0.8)},
 	{"id": "crit", "label": "Crit Hit Rate", "color": Color(0.95, 0.75, 0.3)},
 	{"id": "resist", "label": "Debuff Resist", "color": Color(0.7, 0.5, 0.95)},
 ]
 
-var _rows: Dictionary = {}    # String -> DojoTipPanel
+var _rows: Dictionary = {}    # String -> UiTipPanel
 var _values: Dictionary = {}  # String -> Label
-var _burden_bar: ProgressBar
+var _carry_bar: ProgressBar
 
 func _init() -> void:
 	super._init()
@@ -33,7 +34,7 @@ func _init() -> void:
 	default_min_size = Vector2(230, 130)
 
 	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	add_child(scroll)
 
 	var vbox := VBoxContainer.new()
@@ -41,16 +42,16 @@ func _init() -> void:
 	vbox.add_theme_constant_override("separation", 3)
 	scroll.add_child(vbox)
 
-	vbox.add_child(DojoTheme.header("HOVER A ROW FOR ITS FORMULA", DojoTheme.COL_MUTED))
+	vbox.add_child(UiTheme.header("HOVER A ROW FOR ITS FORMULA", UiTheme.COL_MUTED))
 
 	for def: Dictionary in ROW_DEFS:
 		var id: String = str(def.get("id", ""))
 		var col: Color = def.get("color", Color.WHITE)
 
-		var row := DojoTipPanel.new()
+		var row := UiTipPanel.new()
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_theme_stylebox_override("panel", DojoTheme.box(Color(0.11, 0.14, 0.20, 0.85), Color(0.18, 0.26, 0.38, 0.7), 3, 6, 3))
+		row.add_theme_stylebox_override("panel", UiTheme.box(Color(0.11, 0.14, 0.20, 0.85), Color(0.18, 0.26, 0.38, 0.7), 3, 6, 3))
 		vbox.add_child(row)
 
 		var inner := VBoxContainer.new()
@@ -62,23 +63,23 @@ func _init() -> void:
 		line.mouse_filter = Control.MOUSE_FILTER_PASS
 		inner.add_child(line)
 
-		var tag := DojoTheme.label(str(def.get("label", "")), DojoTheme.FONT_SM, col)
+		var tag := UiTheme.label(str(def.get("label", "")), UiTheme.FONT_SM, col)
 		tag.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_child(tag)
 		line.add_spacer(false)
 
-		var value := DojoTheme.label("-", DojoTheme.FONT_SM, Color.WHITE)
+		var value := UiTheme.label("-", UiTheme.FONT_SM, Color.WHITE)
 		value.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_child(value)
 
-		if id == "burden":
-			_burden_bar = ProgressBar.new()
-			_burden_bar.custom_minimum_size = Vector2(0, 5)
-			_burden_bar.show_percentage = false
-			_burden_bar.mouse_filter = Control.MOUSE_FILTER_PASS
-			_burden_bar.add_theme_stylebox_override("background", DojoTheme.box(Color(0.15, 0.12, 0.08), Color(0, 0, 0, 0), 2, 0, 0, 0))
-			_burden_bar.add_theme_stylebox_override("fill", DojoTheme.box(Color(0.9, 0.75, 0.3), Color(0, 0, 0, 0), 2, 0, 0, 0))
-			inner.add_child(_burden_bar)
+		if id == "carry":
+			_carry_bar = ProgressBar.new()
+			_carry_bar.custom_minimum_size = Vector2(0, 5)
+			_carry_bar.show_percentage = false
+			_carry_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+			_carry_bar.add_theme_stylebox_override("background", UiTheme.box(Color(0.15, 0.12, 0.08), Color(0, 0, 0, 0), 2, 0, 0, 0))
+			_carry_bar.add_theme_stylebox_override("fill", UiTheme.box(Color(0.9, 0.75, 0.3), Color(0, 0, 0, 0), 2, 0, 0, 0))
+			inner.add_child(_carry_bar)
 
 		_rows[id] = row
 		_values[id] = value
@@ -89,8 +90,8 @@ func _set_row(id: String, text: String, tip: String) -> void:
 		var value_lbl: Label = value_raw
 		value_lbl.text = text
 	var row_raw: Variant = _rows.get(id, null)
-	if row_raw is DojoTipPanel:
-		var row: DojoTipPanel = row_raw
+	if row_raw is UiTipPanel:
+		var row: UiTipPanel = row_raw
 		row.tooltip_text = tip
 
 func refresh() -> void:
@@ -108,7 +109,7 @@ func refresh() -> void:
 	var eff_int: int = st.get_effective_stat("INT", ctx)
 	var eff_cons: int = st.get_effective_stat("CONS", ctx)
 	var burden: int = inv.get_total_armor_burden() if inv != null else 0
-	var carry_max: int = st.get_carry_weight_capacity(ctx)
+	var report: Dictionary = session.carry_report
 
 	# --- Offensive power ---
 	var melee: int = hero.get_effective_power(false)
@@ -139,8 +140,8 @@ func refresh() -> void:
 		_set_row("offhand", "-", _tip("OFF-HAND POWER", "Off-hand Weapon Power + Scaling Stat × 1.5", "No offensive off-hand weapon equipped."))
 
 	# --- Defensive & utility ---
-	_set_row("speed", "%d (burden -%d)" % [hero.speed, burden],
-		_tip("INITIATIVE SPEED", "8 + DEX - Burden", "8 + %d DEX - %d burden = [b]%d[/b]" % [eff_dex, burden, st.get_initiative_speed(burden, ctx)]))
+	_set_row("speed", "%d (burden -%d, carry -%d)" % [hero.speed, burden, hero.carry_speed_penalty],
+		_tip("INITIATIVE SPEED", "8 + DEX - Burden - Party overload penalty", "8 + %d DEX - %d burden - %d party overload = [b]%d[/b]" % [eff_dex, burden, hero.carry_speed_penalty, hero.speed]))
 	_set_row("hp", "%d" % st.get_max_hp(ctx),
 		_tip("MAXIMUM HEALTH", "60 + CONS × 8 + STR × 2", "60 + %d (CONS × 8) + %d (STR × 2) = [b]%d[/b]" % [eff_cons * 8, eff_str * 2, st.get_max_hp(ctx)]))
 
@@ -151,11 +152,23 @@ func refresh() -> void:
 	_set_row("mit", "+%d (gear %d, STR %d)" % [gear_mit + str_mit, gear_mit, str_mit],
 		_tip("FLAT MITIGATION", "Gear Mitigation + STR × 0.25", "%d (armor %d + off-hand %d) + %d (STR × 0.25) = [b]+%d[/b]" % [gear_mit, arm_mit, shd_mit, str_mit, gear_mit + str_mit]))
 
-	var status: String = "[color=#4ade80]Within limit (spare %d)[/color]" % (carry_max - burden) if burden <= carry_max else "[color=#f87171]OVERENCUMBERED[/color]"
-	_set_row("burden", "%d / %d" % [burden, carry_max],
-		_tip("BURDEN & CARRY CAPACITY", "Capacity = 30 + STR × 3 + CONS", "30 + %d + %d = [b]%d[/b]\nEquipped burden %d / %d - %s" % [eff_str * 3, eff_cons, carry_max, burden, carry_max, status]))
-	_burden_bar.max_value = maxi(1, carry_max)
-	_burden_bar.value = burden
+	# Unit burden: per unit, slows only the wearer. Party carry: one shared load for everyone.
+	var heavy_pieces: Array[String] = []
+	if inv != null:
+		for eq: Equipment in inv._iter_equipped_gear():
+			if eq.burden > 0:
+				heavy_pieces.append("%s %d" % [eq.name, eq.burden])
+	var pieces_text: String = "\n" + "  •  ".join(heavy_pieces) if not heavy_pieces.is_empty() else ""
+	_set_row("burden", "%d  →  -%d speed" % [burden, burden],
+		_tip("UNIT BURDEN", "Σ burden of THIS unit's equipped gear", "[b]%d[/b] burden → initiative speed -%d (only %s is slowed)%s" % [burden, burden, hero.name, pieces_text]))
+
+	var tier: String = str(report.get("tier", "LIGHT"))
+	var load_weight: float = UiTheme.dict_float(report, "load")
+	var capacity: int = UiTheme.dict_int(report, "capacity", 1)
+	_set_row("carry", "%.1f / %d  %s" % [load_weight, capacity, tier.capitalize()],
+		_tip("PARTY CARRY", "30 + Σ (STR × 3 + CONS) of all members", "Load [b]%.1f[/b] / capacity [b]%d[/b] (%s). Shared by the whole party: stash + equipped gear + pouches. Overloaded = every unit slows (now -%d)." % [load_weight, capacity, tier.capitalize(), hero.carry_speed_penalty]))
+	_carry_bar.max_value = maxi(1, capacity)
+	_carry_bar.value = minf(load_weight, float(capacity))
 
 	_set_row("range", "%d tile(s)" % hero.attack_range,
 		_tip("ATTACK RANGE", "Weapon Range + 1 if PERC ≥ 18", "Weapon range %d, PERC %d → [b]%d[/b]" % [main_w.base_range if main_w != null else 1, st.get_effective_stat("PERC", ctx), hero.attack_range]))

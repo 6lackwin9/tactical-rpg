@@ -70,9 +70,10 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "archer",
 			"name": "Archer",
-			"desc": "Oak Shortbow, Brigandine, Swiftness Amulet",
+			"desc": "2H Oak Shortbow with a Shadow Dagger backup (Switch Weapon to go melee), Brigandine, Swiftness Amulet",
 			"gear": [
 				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_oak_shortbow},
+				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_shadow_dagger},
 				{"slot": Equipment.EquipSlot.BODY, "make": ItemCatalog.create_leather_brigandine},
 				{"slot": Equipment.EquipSlot.ACCESSORY_2, "make": ItemCatalog.create_swiftness_amulet},
 			],
@@ -80,10 +81,11 @@ static func get_presets() -> Array[Dictionary]:
 		},
 		{
 			"id": "duelist",
-			"name": "Dagger Duelist",
-			"desc": "Shadow Dagger main hand, Brigandine, Swiftness Amulet (DEX scaling)",
+			"name": "Blade & Dagger",
+			"desc": "1H Broadsword + Shadow Dagger off-hand (Dual Strike), Brigandine, Swiftness Amulet",
 			"gear": [
-				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_shadow_dagger},
+				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_steel_broadsword},
+				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_shadow_dagger},
 				{"slot": Equipment.EquipSlot.BODY, "make": ItemCatalog.create_leather_brigandine},
 				{"slot": Equipment.EquipSlot.ACCESSORY_2, "make": ItemCatalog.create_swiftness_amulet},
 			],
@@ -92,7 +94,7 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "arcanist",
 			"name": "Arcanist",
-			"desc": "Runed Staff with Mystic Tome off-hand (INT scaling)",
+			"desc": "2H Runed Staff with a Mystic Tome off-hand (INT scaling, Switch Weapon to cast)",
 			"gear": [
 				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_runed_staff},
 				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_mystic_tome},

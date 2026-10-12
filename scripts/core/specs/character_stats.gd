@@ -176,10 +176,12 @@ func get_intent_unmask_blocks(context: Dictionary = {}) -> int:
 		return 2
 	return 1
 
-func get_carry_weight_capacity(context: Dictionary = {}) -> int:
+# What this unit adds to the PARTY-WIDE carry capacity (see PartyCarry). Burden, by contrast,
+# is per-unit: it only affects the wearer.
+func get_carry_contribution(context: Dictionary = {}) -> int:
 	var effective_str: int = get_effective_stat("STR", context)
 	var effective_cons: int = get_effective_stat("CONS", context)
-	return 30 + (effective_str * 3) + (effective_cons * 1)
+	return (effective_str * 3) + effective_cons
 
 # Critical Hit Rate (DEX based) & Critical Damage Multiplier (Requirements 9 & 10)
 func get_crit_rate(context: Dictionary = {}) -> float:

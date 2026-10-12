@@ -76,7 +76,7 @@ foreach ($file in $gdFiles) {
     $result = Invoke-GodotProcess -Arguments @("--headless", "--check-only", "-s", $resPath)
     if ($result.ExitCode -ne 0) {
         $scriptErrors++
-        Write-Host "  [FAIL] $relPath" -ForegroundColor Red
+        Write-Host "  [FAIL] $relPath (exit code: $($result.ExitCode))" -ForegroundColor Red
         if ($result.Output) {
             Write-Host "         $($result.Output)" -ForegroundColor DarkRed
         }

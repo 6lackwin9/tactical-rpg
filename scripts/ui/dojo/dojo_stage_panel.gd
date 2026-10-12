@@ -53,14 +53,14 @@ func _init() -> void:
 	var controls := HBoxContainer.new()
 	controls.add_theme_constant_override("separation", 4)
 	vbox.add_child(controls)
-	controls.add_child(DojoTheme.button("🛡 Toggle Dummy Defend", "Switch the dummy between 0% and 50% damage mitigation", func() -> void: session.toggle_dummy_defense()))
-	controls.add_child(DojoTheme.button("💖 Full Heal Dummy", "Restore the dummy to full HP", func() -> void: session.heal_dummy()))
+	controls.add_child(UiTheme.button("🛡 Toggle Dummy Defend", "Switch the dummy between 0% and 50% damage mitigation", func() -> void: session.toggle_dummy_defense()))
+	controls.add_child(UiTheme.button("💖 Full Heal Dummy", "Restore the dummy to full HP", func() -> void: session.heal_dummy()))
 
 func _build_mat(parent: Control) -> void:
 	var mat_panel := PanelContainer.new()
 	mat_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mat_panel.custom_minimum_size = Vector2(0, 150)
-	mat_panel.add_theme_stylebox_override("panel", DojoTheme.box(Color(0.12, 0.16, 0.22, 0.95), Color(0.25, 0.38, 0.55, 0.85), 6, 0, 0, 2))
+	mat_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.12, 0.16, 0.22, 0.95), Color(0.25, 0.38, 0.55, 0.85), 6, 0, 0, 2))
 	parent.add_child(mat_panel)
 
 	_mat = Control.new()
@@ -85,7 +85,7 @@ func _make_token(label_text: String, label_color: Color) -> TokenView:
 	view.icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	view.root.add_child(view.icon)
 
-	view.name_lbl = DojoTheme.label(label_text, DojoTheme.FONT_SM, label_color)
+	view.name_lbl = UiTheme.label(label_text, UiTheme.FONT_SM, label_color)
 	view.name_lbl.position = Vector2(-45, TOKEN_SIZE / 2.0 + 1)
 	view.name_lbl.custom_minimum_size = Vector2(90, 14)
 	view.name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -101,24 +101,24 @@ func _make_hp_bar(height: float) -> ProgressBar:
 	var bar := ProgressBar.new()
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(0, height)
-	bar.add_theme_stylebox_override("background", DojoTheme.box(Color(0.18, 0.08, 0.08, 0.9), Color(0, 0, 0, 0), 3, 0, 0, 0))
-	bar.add_theme_stylebox_override("fill", DojoTheme.box(Color(0.25, 0.75, 0.35), Color(0, 0, 0, 0), 3, 0, 0, 0))
+	bar.add_theme_stylebox_override("background", UiTheme.box(Color(0.18, 0.08, 0.08, 0.9), Color(0, 0, 0, 0), 3, 0, 0, 0))
+	bar.add_theme_stylebox_override("fill", UiTheme.box(Color(0.25, 0.75, 0.35), Color(0, 0, 0, 0), 3, 0, 0, 0))
 	return bar
 
 func _build_vitals_card(parent: Control, title: String, title_color: Color) -> VitalsView:
 	var view := VitalsView.new()
-	var card := DojoTheme.card(parent)
+	var card := UiTheme.card(parent)
 	var top := HBoxContainer.new()
 	card.add_child(top)
-	top.add_child(DojoTheme.label(title, DojoTheme.FONT_SM, title_color))
+	top.add_child(UiTheme.label(title, UiTheme.FONT_SM, title_color))
 	top.add_spacer(false)
-	view.hp_lbl = DojoTheme.label("0 / 0", DojoTheme.FONT_SM, Color.WHITE)
+	view.hp_lbl = UiTheme.label("0 / 0", UiTheme.FONT_SM, Color.WHITE)
 	top.add_child(view.hp_lbl)
 
 	view.bar = _make_hp_bar(7)
 	card.add_child(view.bar)
 
-	view.status = DojoTheme.label("", 9, DojoTheme.COL_GOOD)
+	view.status = UiTheme.label("", 9, UiTheme.COL_GOOD)
 	view.status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	card.add_child(view.status)
 	return view
@@ -171,13 +171,13 @@ func refresh() -> void:
 	var mit_pct: int = int(roundf(dummy.defense_mitigation_ratio * 100.0))
 	if not dummy.is_alive():
 		_dummy_vitals.status.text = "💀 Defeated - use Full Heal"
-		_dummy_vitals.status.add_theme_color_override("font_color", DojoTheme.COL_BAD)
+		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_BAD)
 	elif mit_pct > 0:
 		_dummy_vitals.status.text = "🛡 Defending (%d%% mitigation)" % mit_pct
-		_dummy_vitals.status.add_theme_color_override("font_color", DojoTheme.COL_INFO)
+		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_INFO)
 	else:
 		_dummy_vitals.status.text = "Neutral (0% mitigation)"
-		_dummy_vitals.status.add_theme_color_override("font_color", DojoTheme.COL_GOOD)
+		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_GOOD)
 	_layout_tokens()
 
 func _set_vitals(vitals: VitalsView, mini_bar: ProgressBar, unit: Combatant) -> void:
@@ -225,7 +225,7 @@ func _glow(target: Control, glow_col: Color) -> void:
 	tw.tween_property(target, "modulate", Color.WHITE, 0.25)
 
 func _spawn_text(anchor: Control, text: String, color: Color) -> void:
-	var lbl := DojoTheme.label(text, DojoTheme.FONT_LG, color)
+	var lbl := UiTheme.label(text, UiTheme.FONT_LG, color)
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	lbl.add_theme_constant_override("outline_size", 3)
 	lbl.position = anchor.position + Vector2(-34, -62)

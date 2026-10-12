@@ -23,7 +23,7 @@ func _init() -> void:
 	panel_title = "Test Log"
 	panel_short_title = "Log"
 	panel_icon = "📜"
-	default_min_size = Vector2(280, 180)
+	default_min_size = Vector2(340, 180)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
@@ -34,11 +34,11 @@ func _init() -> void:
 	bar.add_theme_constant_override("v_separation", 3)
 	vbox.add_child(bar)
 	for cat: String in FILTERS:
-		var btn: Button = DojoTheme.button(cat, "Show %s entries" % cat, func() -> void: _set_filter(cat), 9)
+		var btn: Button = UiTheme.button(cat, "Show %s entries" % cat, func() -> void: _set_filter(cat), 9)
 		btn.toggle_mode = true
 		bar.add_child(btn)
 		_filter_btns[cat] = btn
-	var clear_btn: Button = DojoTheme.button("🗑 Clear", "Clear the test log", func() -> void: session.clear_log(), 9)
+	var clear_btn: Button = UiTheme.button("🗑 Clear", "Clear the test log", func() -> void: session.clear_log(), 9)
 	bar.add_child(clear_btn)
 
 	var split := VSplitContainer.new()
@@ -47,7 +47,7 @@ func _init() -> void:
 
 	_scroll = ScrollContainer.new()
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.custom_minimum_size = Vector2(0, 90)
 	split.add_child(_scroll)
 	_scroll.get_v_scroll_bar().changed.connect(_on_scroll_range_changed)
@@ -61,14 +61,14 @@ func _init() -> void:
 	detail_frame.custom_minimum_size = Vector2(0, 90)
 	detail_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_frame.size_flags_stretch_ratio = 0.7
-	detail_frame.add_theme_stylebox_override("panel", DojoTheme.box(Color(0.05, 0.07, 0.10, 0.95), Color(0.18, 0.25, 0.35, 0.8), 4, 8, 6))
+	detail_frame.add_theme_stylebox_override("panel", UiTheme.box(Color(0.05, 0.07, 0.10, 0.95), Color(0.18, 0.25, 0.35, 0.8), 4, 8, 6))
 	split.add_child(detail_frame)
 
 	_detail = RichTextLabel.new()
 	_detail.bbcode_enabled = true
 	_detail.scroll_following = false
-	_detail.add_theme_font_size_override("normal_font_size", DojoTheme.FONT_SM)
-	_detail.add_theme_font_size_override("bold_font_size", DojoTheme.FONT_SM)
+	_detail.add_theme_font_size_override("normal_font_size", UiTheme.FONT_SM)
+	_detail.add_theme_font_size_override("bold_font_size", UiTheme.FONT_SM)
 	detail_frame.add_child(_detail)
 
 	_update_filter_buttons()
@@ -102,9 +102,9 @@ func _passes_filter(entry: ActionLogEntry) -> bool:
 	return _filter == "ALL" or entry.category == _filter
 
 func _rebuild() -> void:
-	DojoTheme.clear_children(_entries_vbox)
+	UiTheme.clear_children(_entries_vbox)
 	if session.log_entries.is_empty():
-		_entries_vbox.add_child(DojoTheme.label("No test actions yet. Use the Test Console or change gear.", DojoTheme.FONT_SM, DojoTheme.COL_MUTED))
+		_entries_vbox.add_child(UiTheme.label("No test actions yet. Use the Test Console or change gear.", UiTheme.FONT_SM, UiTheme.COL_MUTED))
 		_show_detail(null)
 		return
 	var last: DojoLogEntry = null
@@ -117,7 +117,7 @@ func _rebuild() -> void:
 
 func _on_entry_logged(entry: DojoLogEntry) -> void:
 	if session.log_entries.size() == 1:
-		DojoTheme.clear_children(_entries_vbox)
+		UiTheme.clear_children(_entries_vbox)
 	if not _passes_filter(entry):
 		return
 	_add_cell(entry)

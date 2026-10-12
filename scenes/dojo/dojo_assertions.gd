@@ -25,7 +25,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	# Power = 20 + (20 * 1.5) = 50.
 	var initial_power: int = w.get_effective_power(false)
 	var calc_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
-	var dmg: int = d.take_damage(DojoTheme.dict_int(calc_res, "final_dmg"))
+	var dmg: int = d.take_damage(UiTheme.dict_int(calc_res, "final_dmg"))
 	if dmg != 50 or initial_power != 50:
 		print("  [Dojo-2] Base melee attack calculation: FAIL (dmg: %d, pwr: %d != 50)" % [dmg, initial_power])
 		passed = false
@@ -35,7 +35,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	# Assert 3: Dummy Mitigation Toggle
 	d.defense_mitigation_ratio = 0.5
 	var mit_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
-	var half_dmg: int = d.take_damage(DojoTheme.dict_int(mit_res, "final_dmg"), true)
+	var half_dmg: int = d.take_damage(UiTheme.dict_int(mit_res, "final_dmg"), true)
 	if half_dmg != 25:
 		print("  [Dojo-3] 50%% mitigation defense barrier calculation: FAIL (%d != 25)" % half_dmg)
 		passed = false
@@ -46,7 +46,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	w.apply_attack_boost(1.5, 2)
 	d.defense_mitigation_ratio = 0.0
 	var focus_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
-	var boosted_dmg: int = d.take_damage(DojoTheme.dict_int(focus_res, "final_dmg"), true)
+	var boosted_dmg: int = d.take_damage(UiTheme.dict_int(focus_res, "final_dmg"), true)
 	if boosted_dmg != 75:
 		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: FAIL (%d != 75)" % boosted_dmg)
 		passed = false
@@ -70,7 +70,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	w.inventory.equip(titan)
 	w.sync_from_stats_and_gear()
 	var pen := titan.get_wield_penalty(w.stats, w.stats.mastery)
-	if not DojoTheme.dict_bool(pen, "is_penalized"):
+	if not UiTheme.dict_bool(pen, "is_penalized"):
 		print("  [Dojo-6] Titan Warhammer deficit penalty check: FAIL")
 		passed = false
 	else:
@@ -204,8 +204,8 @@ static func run(session: DojoSession, host: Node) -> bool:
 	# Assert 16: Critical Damage Multiplier in Combat Formula
 	w.inventory.equip(sword, Equipment.EquipSlot.MAIN_HAND)
 	w.sync_from_stats_and_gear()
-	var norm_dmg: int = DojoTheme.dict_int(DamageCalculator.compute(w, d, false, false, 1.0, false), "final_dmg")
-	var crit_dmg: int = DojoTheme.dict_int(DamageCalculator.compute(w, d, false, false, 1.0, true), "final_dmg")
+	var norm_dmg: int = UiTheme.dict_int(DamageCalculator.compute(w, d, false, false, 1.0, false), "final_dmg")
+	var crit_dmg: int = UiTheme.dict_int(DamageCalculator.compute(w, d, false, false, 1.0, true), "final_dmg")
 	if crit_dmg != int(roundf(float(norm_dmg) * 2.5)):
 		print("  [Dojo-16] Critical damage 2.5x multiplier in combat formula: FAIL (%d != %d)" % [crit_dmg, int(roundf(float(norm_dmg) * 2.5))])
 		passed = false
@@ -245,6 +245,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 
 	passed = _run_session_assertions(session) and passed
 	passed = _run_ui_smoke_assertions(session, host) and passed
+	passed = _run_slot_filter_and_carry_assertions(session, host) and passed
 	return passed
 
 # ------------------------------------------------------------------------------
@@ -328,8 +329,8 @@ static func _run_session_assertions(session: DojoSession) -> bool:
 	var dual_ok: bool = (
 		not inv.needs_weapon_switch() and session.log_entries.size() == entries_before + 1
 		and dual_entry.skill_name == "Dual Strike" and dual_entry.value_num == dual_hp_before - dummy.hp and dual_entry.value_num > 0
-		and DojoTheme.dict_bool(main_info, "enabled") and DojoTheme.dict_bool(off_info, "enabled")
-		and not DojoTheme.dict_bool(switch_info, "enabled", true)
+		and UiTheme.dict_bool(main_info, "enabled") and UiTheme.dict_bool(off_info, "enabled")
+		and not UiTheme.dict_bool(switch_info, "enabled", true)
 	)
 	if not dual_ok:
 		print("  [Dojo-21c] 1H pair uses both hands freely and Dual Strike combo: FAIL")
@@ -416,14 +417,14 @@ static func _run_ui_smoke_assertions(session: DojoSession, host: Node) -> bool:
 
 	session.perform_strike("main")
 	session.apply_loadout("dual_wield")
-	var log_panel_raw: DojoPanel = workspace.get_panel("log")
+	var log_panel_raw: UiPanel = workspace.get_panel("log")
 	var shown: int = 0
 	if log_panel_raw is DojoLogPanel:
 		var log_panel: DojoLogPanel = log_panel_raw
 		shown = log_panel.displayed_entry_count()
 	var ok: bool = all_mounted and shown == session.log_entries.size() and shown >= 2
 
-	workspace.queue_free()
+	_dispose(workspace)
 	if not ok:
 		print("  [Dojo-26] Modular panels mount in workspace and mirror session log: FAIL (mounted: %s, cells: %d / %d)" % [all_mounted, shown, session.log_entries.size()])
 	else:
@@ -451,10 +452,224 @@ static func _run_party_stash_assertions(session: DojoSession, host: Node) -> boo
 	modal._equip_item(claymore)
 	var equip_ok: bool = session.active_hero.inventory.get_main_weapon() == claymore and not session.shared_stash.items.has(claymore)
 
-	modal.queue_free()
+	_dispose(modal)
 	var ok: bool = party_ok and select_ok and equip_ok
 	if not ok:
 		print("  [Dojo-27] Party & Stash screen shares session (party list, selection, stash equip): FAIL (%s %s %s)" % [party_ok, select_ok, equip_ok])
 	else:
 		print("  [Dojo-27] Party & Stash screen shares session (party list, selection, stash equip): PASS")
 	return ok
+
+# ------------------------------------------------------------------------------
+# Slot rules, stash filters, 4-slot party viewer, party carry and overlays
+# ------------------------------------------------------------------------------
+
+static func _names(items: Array[Item]) -> Array[String]:
+	var result: Array[String] = []
+	for item: Item in items:
+		result.append(item.name)
+	return result
+
+static func _has_all(names: Array[String], expected: Array[String]) -> bool:
+	for n: String in expected:
+		if not names.has(n):
+			return false
+	return true
+
+static func _has_none(names: Array[String], banned: Array[String]) -> bool:
+	for n: String in banned:
+		if names.has(n):
+			return false
+	return true
+
+static func _run_slot_filter_and_carry_assertions(session: DojoSession, host: Node) -> bool:
+	var passed: bool = true
+	session.reset()
+	var hero: Combatant = session.active_hero
+	var stash: Array[Item] = session.shared_stash.items
+
+	# Assert 28: Equipment slot rules (off-hand weapons ONLY in off-hand; shields off-hand; 1H main may dual wield)
+	var claymore: Equipment = ItemCatalog.create_iron_claymore()
+	var broadsword: Equipment = ItemCatalog.create_steel_broadsword()
+	var shortsword: Equipment = ItemCatalog.create_iron_shortsword()
+	var buckler: Equipment = ItemCatalog.create_buckler()
+	var main: Equipment.EquipSlot = Equipment.EquipSlot.MAIN_HAND
+	var off: Equipment.EquipSlot = Equipment.EquipSlot.OFF_HAND
+	var rules_ok: bool = (
+		claymore.can_equip_in_slot(main) and not claymore.can_equip_in_slot(off)
+		and broadsword.can_equip_in_slot(main) and broadsword.can_equip_in_slot(off)
+		and shortsword.can_equip_in_slot(off) and not shortsword.can_equip_in_slot(main)
+		and buckler.can_equip_in_slot(off) and not buckler.can_equip_in_slot(main)
+	)
+	var stash_shortsword: Equipment = null
+	for item: Item in stash:
+		if item.id == shortsword.id and item is Equipment:
+			stash_shortsword = item
+	var refused_main: bool = stash_shortsword != null and not session.equip_item(stash_shortsword, main)
+	if not rules_ok or not refused_main:
+		print("  [Dojo-28] Slot rules: off-hand weapons/shields off-hand only, 1H may dual wield: FAIL (%s %s)" % [rules_ok, refused_main])
+		passed = false
+	else:
+		print("  [Dojo-28] Slot rules: off-hand weapons/shields off-hand only, 1H may dual wield: PASS")
+
+	# Assert 29: Stash filters - per-slot standard filter + custom dimensions
+	var f := StashFilter.new()
+	f.slot_filter = "MAIN_HAND"
+	var main_names: Array[String] = _names(f.apply(stash, hero))
+	f.slot_filter = "OFF_HAND"
+	var off_names: Array[String] = _names(f.apply(stash, hero))
+	f.slot_filter = "BODY"
+	var body_names: Array[String] = _names(f.apply(stash, hero))
+	f.slot_filter = "CONSUMABLE"
+	var con_names: Array[String] = _names(f.apply(stash, hero))
+	var slots_ok: bool = (
+		_has_all(main_names, ["Iron Claymore", "Titan Warhammer", "Oak Shortbow", "Runed Staff"])
+		and _has_none(main_names, ["Iron Shortsword", "Spiked Knuckles", "Shadow Dagger", "Mystic Spellbook", "Iron Kite Shield", "Duelist Buckler"])
+		and _has_all(off_names, ["Iron Shortsword", "Spiked Knuckles", "Shadow Dagger", "Mystic Spellbook", "Iron Kite Shield", "Duelist Buckler"])
+		and _has_none(off_names, ["Iron Claymore", "Oak Shortbow", "Titan Warhammer", "Runed Staff"])
+		and _has_all(body_names, ["Steel Plate Cuirass", "Leather Brigandine"]) and _has_none(body_names, ["Iron Kite Shield", "Duelist Buckler"])
+		and con_names.size() == 3
+	)
+
+	f = StashFilter.new()
+	f.stats = ["INT"]
+	var int_names: Array[String] = _names(f.apply(stash, hero))
+	f = StashFilter.new()
+	f.rarities = [int(Item.ItemRarity.RARE)]
+	var rare_names: Array[String] = _names(f.apply(stash, hero))
+	f = StashFilter.new()
+	f.damage_types = ["magic"]
+	var magic_names: Array[String] = _names(f.apply(stash, hero))
+	f = StashFilter.new()
+	f.slot_filter = "MAIN_HAND"
+	f.hand = "2H"
+	f.usable_only = true
+	var usable_2h: Array[String] = _names(f.apply(stash, hero)) # Warrior cannot use bow or staff
+	f = StashFilter.new()
+	f.slot_filter = "MAIN_HAND"
+	f.sort_mode = "POWER"
+	var sorted_main: Array[Item] = f.apply(stash, hero)
+	f = StashFilter.new()
+	f.search = "iron"
+	var iron_names: Array[String] = _names(f.apply(stash, hero))
+	var custom_ok: bool = (
+		_has_all(int_names, ["Mystic Spellbook", "Runed Staff"]) and _has_none(int_names, ["Iron Claymore", "Titan Warhammer"])
+		and _has_all(rare_names, ["Titan Warhammer", "Runed Staff"]) and _has_none(rare_names, ["Iron Claymore"])
+		and magic_names.size() == 2
+		and _has_all(usable_2h, ["Iron Claymore", "Titan Warhammer"]) and _has_none(usable_2h, ["Oak Shortbow", "Runed Staff"])
+		and not sorted_main.is_empty() and sorted_main[0].name == "Titan Warhammer"
+		and _has_all(iron_names, ["Iron Claymore", "Iron Shortsword", "Iron Kite Shield"]) and _has_none(iron_names, ["Titan Warhammer"])
+		and f.custom_count() == 1
+	)
+	if not slots_ok or not custom_ok:
+		print("  [Dojo-29] Stash filters: per-slot (shield in off-hand) + stat/rarity/damage/hand/usable/search/sort: FAIL (%s %s)" % [slots_ok, custom_ok])
+		passed = false
+	else:
+		print("  [Dojo-29] Stash filters: per-slot (shield in off-hand) + stat/rarity/damage/hand/usable/search/sort: PASS")
+
+	# Assert 30: Party viewer always renders 4 stable slots
+	session.reset()
+	var party_panel := DojoPartyPanel.new()
+	host.add_child(party_panel)
+	party_panel.bind(session)
+	var two_member_slots: int = party_panel.slot_card_count()
+	var lone: Array[Combatant] = [session.party_allies[0]]
+	var lone_session: DojoSession = DojoSession.wrap_party(lone, null)
+	party_panel.bind(lone_session)
+	var one_member_slots: int = party_panel.slot_card_count()
+	_dispose(party_panel)
+	if two_member_slots != DojoSession.MAX_PARTY_SIZE or one_member_slots != DojoSession.MAX_PARTY_SIZE or DojoSession.MAX_PARTY_SIZE != 4:
+		print("  [Dojo-30] Party viewer keeps 4 slots regardless of party size: FAIL (%d / %d)" % [two_member_slots, one_member_slots])
+		passed = false
+	else:
+		print("  [Dojo-30] Party viewer keeps 4 slots regardless of party size: PASS")
+
+	# Assert 31: Party-wide carry vs per-unit burden
+	session.reset()
+	var warrior: Combatant = session.party_allies[0]
+	var ranger: Combatant = session.party_allies[1]
+	var expected_capacity: int = PartyCarry.BASE_CAPACITY
+	for member: Combatant in session.party_allies:
+		var ctx: Dictionary = member.get_weapon_context()
+		expected_capacity += member.stats.get_effective_stat("STR", ctx) * 3 + member.stats.get_effective_stat("CONS", ctx)
+	var report: Dictionary = session.carry_report
+	var expected_load: float = 0.0
+	for it: Item in session.shared_stash.items:
+		expected_load += it.weight
+	for member: Combatant in session.party_allies:
+		for eq: Equipment in member.inventory._iter_equipped_gear():
+			expected_load += eq.weight
+		for con: Consumable in member.inventory.battle_pouch:
+			expected_load += con.weight
+	var base_ok: bool = (
+		UiTheme.dict_int(report, "capacity") == expected_capacity
+		and absf(UiTheme.dict_float(report, "load") - expected_load) < 0.01
+		and str(report.get("tier", "")) == "LIGHT" and UiTheme.dict_int(report, "speed_penalty") == 0
+	)
+
+	# Per-unit burden: stripping only the warrior's armor must not change the ranger's speed.
+	var ranger_speed_before: int = ranger.speed
+	var warrior_speed_before: int = warrior.speed
+	session.unequip_slot(Equipment.EquipSlot.BODY)
+	var burden_local: bool = warrior.speed > warrior_speed_before and ranger.speed == ranger_speed_before
+
+	# Party overload: loading the stash beyond capacity slows EVERY unit equally.
+	var baseline_w: int = warrior.speed
+	var baseline_r: int = ranger.speed
+	var ballast: Array[Equipment] = []
+	for i: int in range(20):
+		var plate: Equipment = ItemCatalog.create_steel_plate_cuirass()
+		ballast.append(plate)
+		session.shared_stash.add_item(plate)
+	session.notify_external_change()
+	var over: Dictionary = session.carry_report
+	var penalty: int = UiTheme.dict_int(over, "speed_penalty")
+	var overload_ok: bool = (
+		str(over.get("tier", "")) == "OVERLOADED" and penalty >= 1
+		and warrior.speed == baseline_w - penalty and ranger.speed == baseline_r - penalty
+		and warrior.carry_speed_penalty == penalty and ranger.carry_speed_penalty == penalty
+	)
+	for plate: Equipment in ballast:
+		session.shared_stash.remove_item(plate)
+	session.notify_external_change()
+	var recovered: bool = warrior.speed == baseline_w and ranger.speed == baseline_r and str(session.carry_report.get("tier", "")) != "OVERLOADED"
+	if not (base_ok and burden_local and overload_ok and recovered):
+		print("  [Dojo-31] Unit burden is per-unit; party carry is shared (overload slows everyone): FAIL (%s %s %s %s)" % [base_ok, burden_local, overload_ok, recovered])
+		passed = false
+	else:
+		print("  [Dojo-31] Unit burden is per-unit; party carry is shared (overload slows everyone): PASS (capacity %d, overload -%d speed)" % [expected_capacity, penalty])
+
+	# Assert 32: Overlay windows (picker, allocation, custom filter) open above the workspace without changing it
+	session.reset()
+	var workspace := DojoWorkspace.new()
+	host.add_child(workspace)
+	var inspector := DojoUnitInspectorPanel.new()
+	var gear := DojoGearPanel.new()
+	var stash_panel := DojoStashPanel.new()
+	var panels: Array[DojoPanel] = [inspector, gear, stash_panel]
+	workspace.setup(session, panels)
+	var layer: UiOverlayLayer = workspace.get_overlay_layer()
+	inspector._on_points_pressed()
+	var allocation_open: bool = layer.has_overlay("allocate") and session.is_allocating_stats
+	gear.overlay_requested.emit(DojoPickerPanel.for_slot(Equipment.EquipSlot.MAIN_HAND))
+	var picker_open: bool = layer.has_overlay("picker")
+	stash_panel.overlay_requested.emit(DojoStashFilterPanel.new())
+	var filter_open: bool = layer.has_overlay("stash_filter") and layer.overlay_count() == 3
+	session.cancel_allocation()
+	var allocation_closed: bool = not layer.has_overlay("allocate")
+	layer.close_all()
+	var all_closed: bool = layer.overlay_count() == 0
+	_dispose(workspace)
+	var overlays_ok: bool = allocation_open and picker_open and filter_open and allocation_closed and all_closed
+	if not overlays_ok:
+		print("  [Dojo-32] Overlay windows open on request and close on completion: FAIL (%s %s %s %s %s)" % [allocation_open, picker_open, filter_open, allocation_closed, all_closed])
+		passed = false
+	else:
+		print("  [Dojo-32] Overlay windows open on request and close on completion: PASS")
+	return passed
+
+# Frees a test-built node immediately (tests exit right after, so deferred frees would leak).
+static func _dispose(node: Node) -> void:
+	if node.get_parent() != null:
+		node.get_parent().remove_child(node)
+	node.free()
