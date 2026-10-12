@@ -51,7 +51,7 @@ function Invoke-GodotProcess {
 # ------------------------------------------------------------------------------
 # STEP 1: Refresh Global Class Cache & Symbols
 # ------------------------------------------------------------------------------
-Write-Host "`n[1/3] Verifying global class cache and asset imports..." -ForegroundColor Yellow
+Write-Host "`n[1/4] Verifying global class cache and asset imports..." -ForegroundColor Yellow
 $editorResult = Invoke-GodotProcess -Arguments @("--headless", "--editor", "--quit-after", "50")
 if ($editorResult.ExitCode -ne 0) {
     Write-Host "[ERROR] Godot editor scan failed with exit code: $($editorResult.ExitCode)" -ForegroundColor Red
@@ -63,7 +63,7 @@ Write-Host "  -> Global class cache and imports up to date." -ForegroundColor Gr
 # ------------------------------------------------------------------------------
 # STEP 2: Syntax & Static Typing Check Across All GDScript Files
 # ------------------------------------------------------------------------------
-Write-Host "`n[2/3] Validating all GDScript files with Godot parser..." -ForegroundColor Yellow
+Write-Host "`n[2/4] Validating all GDScript files with Godot parser..." -ForegroundColor Yellow
 $gdFiles = Get-ChildItem -Path $projectRoot -Recurse -Filter "*.gd" | Where-Object { $_.FullName -notmatch "\\\.godot\\" }
 $scriptErrors = 0
 $scriptsChecked = 0
@@ -97,32 +97,39 @@ else {
 }
 
 # ------------------------------------------------------------------------------
-# STEP 3: Run Full Automated Headless Integration Test Suite
+# STEP 3: Run Full Automated Headless Integration Test Suites
 # ------------------------------------------------------------------------------
-Write-Host "`n[3/3] Running Headless Integration Test Suite (test_arena.tscn)..." -ForegroundColor Yellow
-$testResult = Invoke-GodotProcess -Arguments @("--headless", "res://scenes/test_arena.tscn")
-
-$testLines = $testResult.Output -split "`r?`n"
 $passCount = 0
-$failCount = 0
+$testSuites = @(
+    @{ Label = "[3/4] Combat Arena Suite (test_arena.tscn)"; Scene = "res://scenes/test_arena.tscn" },
+    @{ Label = "[4/4] Gear & Skill Dojo Suite (gear_dojo.tscn)"; Scene = "res://scenes/gear_dojo.tscn" }
+)
 
-foreach ($line in $testLines) {
-    if ($line -match "PASS") {
-        $passCount++
-        Write-Host "  $line" -ForegroundColor Green
-    }
-    elseif ($line -match "FAIL") {
-        $failCount++
-        Write-Host "  $line" -ForegroundColor Red
-    }
-    elseif ($line -match "=== STARTING" -or $line -match "=== FINAL" -or $line -match "=== COMBAT" -or $line -match "=== RESOLUTION") {
-        Write-Host "  $line" -ForegroundColor Cyan
-    }
-}
+foreach ($suite in $testSuites) {
+    Write-Host "`n$($suite.Label)..." -ForegroundColor Yellow
+    $testResult = Invoke-GodotProcess -Arguments @("--headless", $suite.Scene)
 
-if ($testResult.ExitCode -ne 0 -or $failCount -gt 0) {
-    Write-Host "`n[ERROR] Integration tests failed! ($failCount failed assertions, exit code: $($testResult.ExitCode))" -ForegroundColor Red
-    exit 1
+    $testLines = $testResult.Output -split "`r?`n"
+    $failCount = 0
+
+    foreach ($line in $testLines) {
+        if ($line -match "PASS") {
+            $passCount++
+            Write-Host "  $line" -ForegroundColor Green
+        }
+        elseif ($line -match "FAIL") {
+            $failCount++
+            Write-Host "  $line" -ForegroundColor Red
+        }
+        elseif ($line -match "=== STARTING" -or $line -match "=== FINAL" -or $line -match "=== COMBAT" -or $line -match "=== RESOLUTION") {
+            Write-Host "  $line" -ForegroundColor Cyan
+        }
+    }
+
+    if ($testResult.ExitCode -ne 0 -or $failCount -gt 0) {
+        Write-Host "`n[ERROR] $($suite.Scene) failed! ($failCount failed assertions, exit code: $($testResult.ExitCode))" -ForegroundColor Red
+        exit 1
+    }
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan

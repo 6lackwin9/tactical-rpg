@@ -41,13 +41,18 @@ tactical-rpg/
 │   ├── test_arena.tscn           # Visual interactive combat arena harness scene
 │   ├── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
-│   └── gear_dojo.gd              # Dojo orchestration, training dummy benchmark & damage formula feed
+│   ├── gear_dojo.gd              # Thin bootstrap: builds DojoSession, mounts the window workspace or runs assertions
+│   └── dojo/
+│       └── dojo_assertions.gd        # 31 headless dojo assertions (rules, session actions, UI smoke test)
 ├── scripts/
 │   ├── core/                     # Foundational rules engine primitives & base models
 │   │   ├── combat/               # Core unit, stance & command models
 │   │   │   ├── battle_command.gd         # Abstract base command class (duration, cost, initiative)
 │   │   │   ├── combatant.gd              # Core unit model (HP, SP, speed, range, stance, buffs, target)
-│   │   │   └── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
+│   │   │   ├── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
+│   │   │   └── damage_calculator.gd      # Authoritative damage formula (shared by arena, dojo & future AI)
+│   │   ├── utils/                # Shared helpers
+│   │   │   └── asset_utils.gd            # Runtime SVG texture loading
 │   │   ├── specs/                # Character specs, 6-stat framework & progression models
 │   │   │   ├── character_stats.gd        # 6 stats (STR, DEX, INT | CONS, PERC, KNOW), leveling (1-10), derived stats
 │   │   │   ├── class_archetype.gd        # Base stats, guaranteed growths & innate weapon proficiencies
@@ -75,9 +80,28 @@ tactical-rpg/
 │   │       ├── combat_scenario.gd        # Encounter setup, ally/enemy rosters, reinforcements, asset binding
 │   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   ├── dojo/                     # Gear Dojo headless logic (no UI dependencies)
+│   │   ├── dojo_session.gd           # State + actions: heroes, dummy, stash, quick setup, strikes, benchmarks, stat allocation, test log
+│   │   ├── dojo_loadouts.gd          # Declarative quick-setup gear presets (class-proficiency aware)
+│   │   ├── dojo_breakdown.gd         # DamageCalculator result -> step-by-step BBCode explanation
+│   │   └── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   └── arena_test_suite.gd       # 7 automated test suites with 60 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
+│       ├── dojo/                     # Modular Gear Dojo UI: workspace, floating windows & six panels
+│       │   ├── dojo_workspace.gd         # Toolbar, desk, window toggles, layout presets & persistence
+│       │   ├── dojo_window.gd            # Draggable / resizable / collapsible floating window
+│       │   ├── dojo_panel.gd             # Panel base class (bind to session, refresh)
+│       │   ├── dojo_theme.gd             # Shared palette, font sizes & widget helpers
+│       │   ├── dojo_tip_panel.gd         # Container with BBCode formula tooltips
+│       │   ├── dojo_unit_inspector_panel.gd  # Component 1: identity, 6 stats, allocation, masteries
+│       │   ├── dojo_gear_panel.gd        # Component 2: equipped gear, pouch, inline pickers & Quick Setup
+│       │   ├── dojo_stage_panel.gd       # Component 3: combat region (hero vs dummy, vitals, FX)
+│       │   ├── dojo_console_panel.gd     # Component 4: test console (attacks, skills, modifiers, benchmarks)
+│       │   ├── dojo_derived_stats_panel.gd # Component 5: derived stats with hover formulas
+│       │   ├── dojo_log_panel.gd         # Component 6: test log using the battle-log cell UI
+│       │   ├── dojo_party_panel.gd       # Party & Stash column A: party list + inspector/derived tabs
+│       │   └── dojo_stash_panel.gd       # Party & Stash column C: filterable stash with one-click equip
 │       ├── combat_arena_controller.gd# CanvasLayer coordinator & pure view composer
 │       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tweens & floating text
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -88,8 +112,8 @@ tactical-rpg/
 │       ├── action_log_dock_ui.gd     # Top action dock displaying active block resolution
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       ├── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
-│       └── character_equipment_modal.gd # 3-column modal: party tabs, 6 stats, equipped slots & stash
-├── check_project.ps1             # 3-step automated validation script (cache, syntax, integration)
+│       └── character_equipment_modal.gd # Party & Stash screen: 3 columns (party viewer, gear loadout, party stash) sharing one DojoSession
+├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
 ├── run_gear_dojo.bat             # Dedicated launcher for Gear, Skill & Dummy Benchmark Dojo
 └── run_game.bat                  # Quick launcher for interactive test arena in Godot
@@ -174,8 +198,8 @@ tactical-rpg/
     - *Knife / Dagger*: DEX-based off-hand offensive strike.
     - *Orb / Tome*: INT-based off-hand offensive strike / casting.
   - **1-Handed vs. 2-Handed Weapons**:
-    - *1H Weapons*: Allow freely selecting attack hand (`Main Strike` vs. `Off-Hand Strike`).
-    - *2H Weapons*: Occupy both hands (preventing off-hand attacks) and require a deliberate switch action (`Switch Weapon`) to swap active weapon setup.
+    - *1H Weapons*: Main and off-hand weapons are both ready at all times: `Main Strike`, `Off-Hand Strike`, or the `Dual Strike` combo that hits with both weapons in one action. No switching needed.
+    - *2H Weapons*: Cannot be paired with a shield, but can carry an off-hand weapon as a backup. Only one of the two is active at a time; `Switch Weapon` (1 block) readies the other (`Inventory.active_weapon_slot`).
 - **Stat-Gated Gear & Threshold Convention**: Equipment requirements follow `[Req <STAT level0>, <STAT level1>]`, where `level0` enables wielding without penalty and `level1` unlocks bonus effects (`+Wep power`, `+<STAT>`, or special combat effects).
 - **Dynamic Deficit Scaling**: Wielding weapons with a stat deficit applies a dynamic penalty ratio (`minf(0.60, deficit * 0.15)`) to effective weapon power and delays timeline action blocks.
 - **Class Archetype Gear Restrictions**: Class archetypes enforce allowable gear proficiencies (`can_equip_gear`); accessories have no restrictions and can be equipped by any class.
@@ -184,14 +208,20 @@ tactical-rpg/
 - **Party Stash & Battle Pouches**:
   - Shared party stash capacity scales dynamically with party STR and CONS (`30 + (STR * 3) + (CONS * 1)`).
   - 3 combat battle pouch quick-slots per combatant for consumables used in combat (`ItemCommand` in Utility Stance).
+- **Party & Stash Screen**: Three reusable columns bound to one `DojoSession`: (A) party member list (click to select the active unit) with Unit Inspector / Derived Stats tabs, (B) gear loadout for that unit with inline equip pickers and battle pouch, (C) the shared party stash with category filters, class-restriction warnings, tier/deficit badges, and one-click `Main Hand` / `Off Hand` / `Equip` / `+ Pouch` actions. Opened from the arena unit inspector or the dojo `Stash` button; `Esc` closes it.
 
 ### 8. Dedicated Gear & Skill Dojo (`gear_dojo.tscn`)
 
 - **Separated Scene Architecture**: Distinct from `test_arena.tscn` (which focuses on 10-block visual combat and ambush scenarios), `scenes/gear_dojo.tscn` is a dedicated workbench for gear equipping, stat inspection, and damage formula validation.
-- **Header Controls & State Reset**: Includes a `[↺ Reset Dojo]` button restoring heroes, loadouts, shared stash, dummy vitals, and action logs back to baseline.
-- **Interactive Stat Allocation Mode**: Unspent attribute points button toggles `+`/`-` buttons on each attribute. The `-` button only undoes newly allocated points in the pending session (never drops below baseline or grants extra points). Includes `Reset`, `Confirm`, and `Cancel` controls.
-- **Base UI Direct Equip & Slot Cards**: Base screen dock displays dedicated slot cards for Main Hand, Off Hand, Body Armor, Accessory 1, Accessory 2, and 3-slot Battle Pouches. Each card includes `[Equip/Swap]` and `[Unequip]` triggers opening a modal picker filtered strictly to class-eligible items from stash.
-- **Console Battle Pouch Selector**: Interactive `OptionButton` dropdown to select and consume any item stored in the 3 battle pouch quick-slots during testing.
+- **Headless Session + Modular Windows**: All dojo state and rules live in `DojoSession` (`RefCounted`, no UI). Six independent panel components render from it, each hosted in a floating `DojoWindow` inside `DojoWorkspace`. Panels never talk to each other, only to the session, so any of them can be closed, moved, or reused elsewhere.
+- **Window System**: Drag by the title bar, resize from the bottom-right grip, collapse with `–` (or double-click the title), close with `✕`, and reopen from the toolbar `Windows:` toggles. Clicking a window raises it. Three layout presets (`Workbench`, `Combat Focus`, `Gear Focus`) plus `⟲ Re-tile`; window geometry is stored as fractions of the desk and persisted to `user://gear_dojo_layout.cfg`, so layouts survive restarts and window resizes.
+- **The Six Components**:
+  1. **Unit Inspector**: portrait, level/HP, the 6 base attributes with BBCode hover breakdowns (base, mastery, gear, buffs), weapon masteries, and the interactive stat allocation mode (the `-` button only undoes newly allocated points; `Reset`/`Confirm`/`Cancel` supported).
+  2. **Unit Gear**: Main Hand, Off Hand, Body Armor, Accessories and the 3-slot Battle Pouch as cards. `Equip`/`Swap` expands an inline picker (no floating dialog) filtered to class-eligible stash items; `Unequip` returns gear to the stash. **Quick Setup** applies a one-click loadout preset (Sword & Board, Claymore Bruiser, Titan Hammer deficit test, Dual Wield, Archer, Dagger Duelist, Arcanist, Claymore + Backup Blade), spawning missing pieces and reporting items the class cannot wield. `Stash Manager` opens the Party & Stash screen. Cards for a 2H main + off-hand weapon show which weapon is `ACTIVE` or `sheathed`.
+  3. **Combat Region**: hero and dummy tokens on a target mat with live HP bars, stance/guard/buff status, lunge, shake and glow animations, floating combat text, plus dummy `Toggle Defend` and `Full Heal` controls.
+  4. **Test Console**: attack actions (Main/Off-Hand/Dual Strike/Ranged, auto-gated by the equipped weapons and active-weapon state), `Focus Buff`, `Shield Defend` toggle, `Stance Shift`, `Switch Weapon (1b)`, `Force Crit`, a skill-multiplier selector (×0.5 to ×2.0), the battle pouch selector, and **Benchmark ×10 / ×100** simulations (min/avg/max, crit count, expected damage per swing, swings to defeat the dummy) that never change dummy HP.
+  5. **Derived Stats**: melee/ranged/off-hand power, initiative speed, max health, flat mitigation, armor burden (with capacity bar), attack range, crit rate, and debuff resistance. Hover any row for the formula with the live numbers substituted.
+  6. **Test Log**: renders every dojo event with the same action-cell UI as the combat log (`CombatLogModal.format_action_cell`), with category filters and a `Clear` button. Click an entry to see its step-by-step damage breakdown in the detail pane.
 - **Comprehensive Combat Damage Formula Engine**:
   $$\text{Final Damage} = \max\left(1, \left\lfloor \text{Attack Power} \times \text{Skill Mult} \times (1 - \text{Mitigation}) \times (1 + \text{Stance Mult}) \times \text{Crit Factor} \times (1 + \text{Effect Bonus} - \text{Effect Penalty}) \right\rceil\right)$$
   - **Attack Power**: Base melee or ranged power derived from weapon power, stat scaling, and status multipliers.
@@ -200,7 +230,7 @@ tactical-rpg/
   - **Stance Multiplier**: $+/-$ matchup multiplier based on stance interaction.
   - **Crit Factor**: If critical hit ($P(\text{Crit Rate})$ or forced via console), applies $2.5\times + \text{bonus crit dmg}$; otherwise $1.0\times$.
   - **Effect Modifiers**: Monster-specific or elemental bonus/penalty multipliers.
-- **Live Action Console**: Triggers `⚔ Main Strike`, `🗡 Off-Hand Strike`, `🏹 Ranged Volley`, `🔄 Switch Weapon`, `Focus Buff`, `Defend Stance`, and item usage with full step-by-step mathematical breakdown in the combat log feed.
+- **Shared Combat Math**: Every strike goes through `DamageCalculator.compute`, the same authoritative formula the arena uses, and the breakdown shown in the Test Log is generated from that result.
 
 ---
 
@@ -218,15 +248,20 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 7. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
 
-Additionally, `scenes/gear_dojo.tscn` contains **18 dedicated headless assertions** verifying dummy vitals, focus buff scaling, threshold tiers, weapon power melee/ranged gating, accessory stat propagation, class archetype equip restrictions, 1H/2H off-hand strikes, critical damage factors, and stat allocation bounds.
+Additionally, `scenes/gear_dojo.tscn` runs **31 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
+
+- **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword mastery, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
+- **Session behavior (Dojo-19 to 25)**: Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
+- **UI smoke tests (Dojo-26, 27)**: all six panels mount in the workspace and the Test Log mirrors the session log; the Party & Stash screen shares the session (party list, selection, stash equip).
 
 ### Automated Check Script (`check_project.ps1`)
 
-Runs in 3 phases:
+Runs in 4 phases:
 
-- `[1/3]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
-- `[2/3]` Validates GDScript syntax & static typing across all 38 project scripts (`--headless --check-only`).
-- `[3/3]` Executes the full headless test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
+- `[1/4]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
+- `[2/4]` Validates GDScript syntax & static typing across all 58 project scripts (`--headless --check-only`).
+- `[3/4]` Executes the headless combat arena harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
+- `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
 
 ---
 
@@ -303,6 +338,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Planned.*
 
 - [ ] **Chained Flow Moves**: Skills that automatically transition into compatible follow-up stances.
+- [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the 10-block timeline.
 - [ ] **Stance Disruption & Stagger**: Critical attacks or guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
 - [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 9x9 grid.
 - [ ] **Environmental Hazards**: Fire, ice, and poison terrain tiles that apply effects on entry/end of round.
@@ -315,7 +351,7 @@ The following modular systems and capabilities are planned according to the mast
 - [x] Shared party bag container model and 3-slot combat battle pouches.
 - [x] Stat-gated equipment with tiered thresholds, deficit penalties, and weapon mastery discounts.
 - [x] Combat consumable usage and HP/buff application.
-- [x] UI Equipment & Bag Inspection screens (`CharacterEquipmentModal`).
+- [x] Party & Stash screen (`CharacterEquipmentModal`): party viewer, gear loadout and filterable stash in three columns.
 - [x] Preset catalog (`ItemCatalog`) with weapons, armor, shields, and accessories.
 - [ ] Equipment durability, weapon crafting, and socketed gems.
 
@@ -327,7 +363,7 @@ The following modular systems and capabilities are planned according to the mast
 - [x] 10-level cap with guaranteed class growths and free attribute point allocation.
 - [x] Horizontal mastery system (Weapon Masteries, Lore/Biome Masteries, Faction scores).
 - [x] Integration with `Combatant` model.
-- [x] UI Character Sheet & gear equip modal (`CharacterEquipmentModal` & `gear_dojo.tscn`).
+- [x] UI Character Sheet & gear equip modal (`CharacterEquipmentModal`) and the modular Gear Dojo workspace (`gear_dojo.tscn`).
 - [ ] Passive trait slot selection and talent trees.
 
 ### 7. Region Map & Exploration Engine (`System 2`)
@@ -354,3 +390,14 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] Branching dialogue trees with choices and skill checks.
 - [ ] Global quest flag registry and world state persistence.
 - [ ] Faction reputation meters and trading/merchant shops.
+
+### 10. Gear Dojo Follow-ups
+
+*Status: Modular window workspace implemented; extensions planned.*
+
+- [x] Headless `DojoSession`, six panel components, floating window system, layout presets and persistence.
+- [x] Quick Setup loadout presets and damage benchmarks.
+- [ ] Custom loadout save/load (name and store your own presets).
+- [ ] Side-by-side gear comparison (hover a stash item to preview its delta on derived stats).
+- [ ] Target dummy profiles (armor, resistances, per-stance behavior) and a multi-round combat sequence recorder.
+- [ ] Optional native OS pop-out windows (`gui_embed_subwindows = false`) for multi-monitor setups.

@@ -1,0 +1,792 @@
+class_name DojoSession
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - Gear Dojo Session (headless state + rules glue)
+# Owns heroes, training dummy, shared stash, stat allocation and the test log.
+# UI panels only read this object and call its actions; every mutation ends in
+# `changed`, so panels stay independent and can be opened/closed freely.
+# ==============================================================================
+
+signal changed()
+signal entry_logged(entry: DojoLogEntry)
+signal log_cleared()
+signal stage_fx(kind: String, on_hero: bool, text: String, color: Color)
+
+const DUMMY_MAX_HP: int = 500
+const MAX_LOG_ENTRIES: int = 300
+const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]
+const DEFEND_MITIGATION: float = 0.5
+
+var party_allies: Array[Combatant] = []
+var active_hero: Combatant = null
+var test_dummy: Combatant = null
+var shared_stash: Inventory = null
+
+# Console modifiers
+var force_crit: bool = false
+var skill_mult: float = 1.0
+
+# Stat allocation session
+var is_allocating_stats: bool = false
+var pending_allocated_stats: Dictionary = {}
+var pending_free_points: int = 0
+
+var log_entries: Array[DojoLogEntry] = []
+var _action_counter: int = 0
+
+func _init(populate: bool = true) -> void:
+	if populate:
+		init_data()
+	else:
+		_clear_allocation_state()
+
+# Wraps an existing party and stash (e.g. for the Party & Stash screen) without
+# creating dojo test content. Strike/benchmark actions are unavailable (no dummy).
+static func wrap_party(allies: Array[Combatant], stash: Inventory) -> DojoSession:
+	var wrapped := DojoSession.new(false)
+	wrapped.party_allies = allies.duplicate()
+	wrapped.active_hero = allies[0] if not allies.is_empty() else null
+	wrapped.shared_stash = stash if stash != null else Inventory.new()
+	return wrapped
+
+static func equip_slots() -> Array[Equipment.EquipSlot]:
+	return [
+		Equipment.EquipSlot.MAIN_HAND,
+		Equipment.EquipSlot.OFF_HAND,
+		Equipment.EquipSlot.BODY,
+		Equipment.EquipSlot.ACCESSORY_1,
+		Equipment.EquipSlot.ACCESSORY_2,
+	]
+
+static func weapon_context(hero: Combatant) -> Dictionary:
+	if hero == null or hero.inventory == null:
+		return {}
+	var weapon: Equipment = hero.inventory.get_main_weapon()
+	if weapon == null:
+		return {}
+	return {"weapon": weapon.weapon_type}
+
+# ------------------------------------------------------------------------------
+# 1. State Initialization & Reset
+# ------------------------------------------------------------------------------
+
+func init_data() -> void:
+	shared_stash = Inventory.new()
+	ItemCatalog.populate_party_starter_stash(shared_stash)
+
+	var warrior_stats := CharacterStats.new(ClassArchetype.create_warrior(), 2)
+	var warrior := Combatant.new("Warrior", 100, 15, 1, warrior_stats)
+	ItemCatalog.setup_default_hero_loadout(warrior, "Warrior")
+
+	var ranger_stats := CharacterStats.new(ClassArchetype.create_ranger(), 1)
+	var ranger := Combatant.new("Ranger", 80, 14, 2, ranger_stats)
+	ItemCatalog.setup_default_hero_loadout(ranger, "Ranger")
+
+	# Gear/stat sync raises max HP above the constructor value; start heroes at full health.
+	warrior.hp = warrior.max_hp
+	ranger.hp = ranger.max_hp
+
+	party_allies = [warrior, ranger]
+	active_hero = warrior
+
+	test_dummy = Combatant.new("Training Dummy", DUMMY_MAX_HP, 10, 1, CharacterStats.new())
+	test_dummy.defense_mitigation_ratio = 0.0
+
+	force_crit = false
+	skill_mult = 1.0
+	_clear_allocation_state()
+
+func reset() -> void:
+	init_data()
+	log_entries.clear()
+	_action_counter = 0
+	log_cleared.emit()
+	log_action("EVENT", "Dojo Reset", "Heroes, stash, loadouts and dummy restored to baseline", 0, "RESET")
+	stage_fx.emit("text", true, "↺ Dojo Reset", DojoTheme.COL_INFO)
+	changed.emit()
+
+# Called by external editors (e.g. the full stash modal) that mutate heroes directly.
+func notify_external_change() -> void:
+	if active_hero != null:
+		active_hero.sync_from_stats_and_gear()
+	changed.emit()
+
+func set_active_hero(hero: Combatant) -> void:
+	if hero == null or hero == active_hero:
+		return
+	if is_allocating_stats:
+		_clear_allocation_state()
+	active_hero = hero
+	changed.emit()
+
+func set_force_crit(enabled: bool) -> void:
+	force_crit = enabled
+
+func set_skill_mult(value: float) -> void:
+	skill_mult = value
+
+# ------------------------------------------------------------------------------
+# 2. Test Log
+# ------------------------------------------------------------------------------
+
+func log_action(
+	category: String,
+	skill_name: String,
+	detail: String = "",
+	value: int = 0,
+	outcome: String = "",
+	breakdown: String = "",
+	target_name: String = "",
+	target_is_ally: bool = false
+) -> DojoLogEntry:
+	_action_counter += 1
+	var entry := DojoLogEntry.new()
+	entry.category = category
+	entry.skill_name = skill_name
+	entry.actor_name = active_hero.name if active_hero != null else "Dojo"
+	entry.actor_is_ally = true
+	entry.target_name = target_name
+	entry.target_is_ally = target_is_ally
+	entry.detail_text = detail
+	entry.value_num = value
+	entry.outcome_tag = outcome
+	entry.ref_tag = "#%03d" % _action_counter
+	entry.breakdown_bbcode = breakdown
+	log_entries.append(entry)
+	if log_entries.size() > MAX_LOG_ENTRIES:
+		log_entries.remove_at(0)
+	entry_logged.emit(entry)
+	return entry
+
+func _log_failure(skill_name: String, reason: String) -> void:
+	log_action("EVENT", skill_name, reason, 0, "FAILED", "[color=#f87171]%s[/color]" % reason)
+
+func clear_log() -> void:
+	log_entries.clear()
+	log_cleared.emit()
+
+# ------------------------------------------------------------------------------
+# 3. Combat Actions (Console)
+# ------------------------------------------------------------------------------
+
+# Returns {"enabled": bool, "tip": String} per action key for the console panel.
+func get_action_availability() -> Dictionary:
+	var result: Dictionary = {}
+	if active_hero == null or active_hero.inventory == null:
+		return result
+	var inv: Inventory = active_hero.inventory
+	var main_w: Equipment = inv.get_main_weapon()
+	var off_w: Equipment = inv.get_offhand_weapon()
+	var shield: Equipment = inv.get_shield()
+	var switch_needed: bool = inv.needs_weapon_switch()
+	var off_active: bool = inv.is_offhand_active()
+	var off_offensive: bool = off_w != null and off_w.base_power > 0
+
+	# Main hand (melee strike / ranged volley): blocked while the off-hand weapon is active.
+	var main_ready_tip: String = ""
+	if off_active:
+		main_ready_tip = "%s is active - Switch Weapon (1 block) to draw %s" % [off_w.name, main_w.name]
+	if main_w == null:
+		result["main"] = {"enabled": true, "tip": "Unarmed melee strike against the Dummy"}
+		result["ranged"] = {"enabled": false, "tip": "Requires a ranged weapon (e.g. Shortbow)"}
+	elif main_w.is_ranged_weapon():
+		result["main"] = {"enabled": false, "tip": "Cannot melee with ranged weapon (%s)" % main_w.name}
+		result["ranged"] = {"enabled": not off_active, "tip": main_ready_tip if off_active else "Ranged volley with %s" % main_w.name}
+	else:
+		result["main"] = {"enabled": not off_active, "tip": main_ready_tip if off_active else "Main-hand strike with %s" % main_w.name}
+		result["ranged"] = {"enabled": false, "tip": "Cannot fire a volley with melee weapon (%s)" % main_w.name}
+
+	# Off-hand strike: free with 1H main weapons; a 2H main weapon needs the switch first.
+	if off_offensive:
+		if switch_needed and not off_active:
+			result["offhand"] = {"enabled": false, "tip": "2H %s is active - Switch Weapon (1 block) to ready %s" % [main_w.name, off_w.name]}
+		else:
+			result["offhand"] = {"enabled": true, "tip": "Off-hand strike with %s (scales with %s)" % [off_w.name, off_w.scaling_stat]}
+	elif shield != null:
+		result["offhand"] = {"enabled": false, "tip": "%s is a shield (mitigation only)" % shield.name}
+	else:
+		result["offhand"] = {"enabled": false, "tip": "No off-hand weapon equipped"}
+
+	# Dual Strike combo: both hands hit, only with a 1H melee main weapon + offensive off-hand weapon.
+	var can_dual: bool = main_w != null and main_w.is_melee_weapon() and not main_w.is_two_handed and off_offensive
+	if can_dual:
+		result["dual"] = {"enabled": true, "tip": "Combo: strike with %s and %s in one action" % [main_w.name, off_w.name]}
+	else:
+		result["dual"] = {"enabled": false, "tip": "Needs a 1H melee main weapon and an offensive off-hand weapon"}
+
+	if switch_needed:
+		var next_w: Equipment = main_w if off_active else off_w
+		result["switch"] = {"enabled": true, "tip": "1 block: ready %s (2H main + off-hand weapons share one active slot)" % next_w.name}
+	else:
+		result["switch"] = {"enabled": false, "tip": "No switch needed: 1H weapons attack with both hands freely. Pair a 2H weapon with an off-hand weapon to use this."}
+	return result
+
+func perform_strike(kind: String) -> void:
+	if active_hero == null or test_dummy == null or active_hero.inventory == null:
+		return
+	var inv: Inventory = active_hero.inventory
+	var main_w: Equipment = inv.get_main_weapon()
+	var off_w: Equipment = inv.get_offhand_weapon()
+	var title: String = "Main Strike"
+	var is_ranged: bool = false
+	var use_offhand: bool = false
+
+	match kind:
+		"main":
+			if main_w != null and main_w.is_ranged_weapon():
+				_log_failure(title, "Cannot melee while wielding ranged weapon (%s)" % main_w.name)
+				return
+			if inv.is_offhand_active():
+				_log_failure(title, "%s is active - Switch Weapon (1 block) to draw %s" % [off_w.name, main_w.name])
+				return
+		"offhand":
+			title = "Off-Hand Strike"
+			use_offhand = true
+			if off_w == null:
+				_log_failure(title, "No off-hand weapon equipped")
+				return
+			if off_w.is_shield() or off_w.base_power == 0:
+				_log_failure(title, "%s is a shield (mitigation only, not offensive)" % off_w.name)
+				return
+			if inv.needs_weapon_switch() and not inv.is_offhand_active():
+				_log_failure(title, "2H %s is active - Switch Weapon (1 block) to ready %s" % [main_w.name, off_w.name])
+				return
+		"ranged":
+			title = "Ranged Volley"
+			is_ranged = true
+			if main_w == null or not main_w.is_ranged_weapon():
+				_log_failure(title, "Requires a ranged weapon (wielding: %s)" % (main_w.name if main_w != null else "Unarmed"))
+				return
+			if inv.is_offhand_active():
+				_log_failure(title, "%s is active - Switch Weapon (1 block) to draw %s" % [off_w.name, main_w.name])
+				return
+		"dual":
+			_perform_dual_strike()
+			return
+		_:
+			return
+
+	var hit: Dictionary = _apply_hit(title, is_ranged, use_offhand)
+	var actual_dmg: int = DojoTheme.dict_int(hit, "dmg")
+	log_action("ATTACK", title, str(hit.get("detail", "")), actual_dmg, str(hit.get("outcome", "HIT")), str(hit.get("breakdown", "")), test_dummy.name)
+	_emit_hit_fx(hit)
+	changed.emit()
+
+# Combo skill: one action that hits with both the main-hand and off-hand weapon.
+func _perform_dual_strike() -> void:
+	var title: String = "Dual Strike"
+	var inv: Inventory = active_hero.inventory
+	var main_w: Equipment = inv.get_main_weapon()
+	var off_w: Equipment = inv.get_offhand_weapon()
+	if main_w == null or not main_w.is_melee_weapon() or main_w.is_two_handed:
+		_log_failure(title, "Dual Strike needs a 1H melee main-hand weapon")
+		return
+	if off_w == null or off_w.base_power == 0:
+		_log_failure(title, "Dual Strike needs an offensive off-hand weapon")
+		return
+
+	var first: Dictionary = _apply_hit("Dual Strike ▸ Main Hand", false, false)
+	var second: Dictionary = _apply_hit("Dual Strike ▸ Off-Hand", false, true)
+	var total: int = DojoTheme.dict_int(first, "dmg") + DojoTheme.dict_int(second, "dmg")
+	var any_crit: bool = DojoTheme.dict_bool(first, "crit") or DojoTheme.dict_bool(second, "crit")
+
+	var outcome: String = "HIT"
+	if not test_dummy.is_alive():
+		outcome = "DEFEATED"
+	elif any_crit:
+		outcome = "CRIT"
+	elif DojoTheme.dict_bool(first, "mit"):
+		outcome = "MITIGATED"
+	var detail: String = "%s %d + %s %d" % [main_w.name, DojoTheme.dict_int(first, "dmg"), off_w.name, DojoTheme.dict_int(second, "dmg")]
+	var breakdown: String = "%s\n\n%s\n\n[color=#4ade80][b]COMBO TOTAL: %d damage[/b][/color]" % [str(first.get("breakdown", "")), str(second.get("breakdown", "")), total]
+	log_action("ATTACK", title, detail, total, outcome, breakdown, test_dummy.name)
+	_emit_hit_fx(first)
+	_emit_hit_fx(second)
+	changed.emit()
+
+# Computes and applies one weapon hit to the dummy; breakdown text is captured
+# immediately so multi-hit skills report the dummy's HP after each hit.
+func _apply_hit(title: String, is_ranged: bool, use_offhand: bool) -> Dictionary:
+	var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, use_offhand, skill_mult, force_crit, true)
+	var actual_dmg: int = test_dummy.take_damage(DojoTheme.dict_int(res, "final_dmg"), true)
+	var is_crit: bool = DojoTheme.dict_bool(res, "is_crit")
+	var mitigated: bool = DojoTheme.dict_float(res, "mit_ratio") > 0.0
+
+	var outcome: String = "HIT"
+	if not test_dummy.is_alive():
+		outcome = "DEFEATED"
+	elif is_crit:
+		outcome = "CRIT"
+	elif mitigated:
+		outcome = "MITIGATED"
+
+	var weapon_name: String = "Unarmed"
+	var raw_w: Variant = res.get("weapon", null)
+	if raw_w is Equipment:
+		var used_weapon: Equipment = raw_w
+		weapon_name = used_weapon.name
+	return {
+		"dmg": actual_dmg,
+		"crit": is_crit,
+		"mit": mitigated,
+		"outcome": outcome,
+		"detail": "%s • %d ATK" % [weapon_name, DojoTheme.dict_int(res, "final_attack_power")],
+		"breakdown": DojoBreakdown.build_strike(title, active_hero.name, test_dummy, res, actual_dmg),
+	}
+
+func _emit_hit_fx(hit: Dictionary) -> void:
+	var dmg: int = DojoTheme.dict_int(hit, "dmg")
+	var is_crit: bool = DojoTheme.dict_bool(hit, "crit")
+	var mitigated: bool = DojoTheme.dict_bool(hit, "mit")
+	var fx_text: String = "-%d" % dmg
+	if is_crit:
+		fx_text = "CRIT -%d" % dmg
+	elif mitigated:
+		fx_text += " [MIT]"
+	var fx_color: Color = DojoTheme.COL_INFO if (mitigated and not is_crit) else (DojoTheme.COL_WARN if is_crit else DojoTheme.COL_BAD)
+	stage_fx.emit("strike", true, fx_text, fx_color)
+
+func use_focus() -> void:
+	if active_hero == null:
+		return
+	active_hero.apply_attack_boost(1.5, 2)
+	log_action("BUFF", "Focus", "+50% ATK for 2 rounds", 50, "BUFF +50%", "[color=#c084fc]Focus: attack boost ×1.5 for 2 rounds.[/color]")
+	stage_fx.emit("glow", true, "✦ +50% ATK (2 rds)", Color(1.0, 0.85, 0.2))
+	changed.emit()
+
+func toggle_defend() -> void:
+	if active_hero == null:
+		return
+	if active_hero.defense_mitigation_ratio > 0.0:
+		active_hero.defense_mitigation_ratio = 0.0
+		log_action("DEFEND", "Guard Down", "Defensive guard dropped", 0, "NEUTRAL")
+		stage_fx.emit("text", true, "Guard down", DojoTheme.COL_MUTED)
+	else:
+		active_hero.defense_mitigation_ratio = DEFEND_MITIGATION
+		log_action("DEFEND", "Shield Defend", "50% damage mitigation active", 50, "MITIGATED 50%")
+		stage_fx.emit("glow", true, "🛡 DEFEND [50% MIT]", DojoTheme.COL_INFO)
+	changed.emit()
+
+func shift_stance() -> void:
+	if active_hero == null:
+		return
+	if active_hero.current_stance == CombatTypes.StanceType.NEUTRAL:
+		active_hero.set_stance(CombatTypes.StanceType.OFFENSIVE)
+		log_action("EVENT", "Stance Shift", "Offensive Stance (+20% ATK)", 20, "OFFENSIVE")
+		stage_fx.emit("glow", true, "⚔ OFFENSIVE", DojoTheme.COL_BAD)
+	else:
+		active_hero.set_stance(CombatTypes.StanceType.NEUTRAL)
+		log_action("EVENT", "Stance Shift", "Back to Neutral Stance", 0, "NEUTRAL")
+		stage_fx.emit("text", true, "NEUTRAL", DojoTheme.COL_MUTED)
+	changed.emit()
+
+func use_pouch_item(index: int) -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	var pouch: Array[Consumable] = active_hero.inventory.battle_pouch
+	if pouch.is_empty():
+		_log_failure("Battle Pouch", "Battle pouch is empty - load consumables in the Gear window")
+		return
+	var slot_idx: int = clampi(index, 0, pouch.size() - 1)
+	var con: Consumable = pouch[slot_idx]
+	active_hero.inventory.remove_from_battle_pouch(con)
+
+	match con.consumable_type:
+		Consumable.ConsumableType.HEALTH_POTION:
+			var before: int = active_hero.hp
+			active_hero.heal(con.heal_amount)
+			var healed: int = active_hero.hp - before
+			log_action("BUFF", con.name, "Restored %d HP" % healed, healed, "+%d HP" % healed)
+			stage_fx.emit("glow", true, "+%d HP" % healed, DojoTheme.COL_GOOD)
+		Consumable.ConsumableType.THROWABLE_BOMB:
+			var dealt: int = test_dummy.take_damage(con.damage_amount)
+			log_action("ATTACK", con.name, "Explosive damage", dealt, "DEFEATED" if not test_dummy.is_alive() else "HIT", "", test_dummy.name)
+			stage_fx.emit("strike", true, "-%d 💥" % dealt, Color(1.0, 0.6, 0.25))
+		_:
+			active_hero.apply_attack_boost(1.0 + con.buff_percent, con.buff_duration_rounds)
+			log_action("BUFF", con.name, "+%d%% ATK for %d rounds" % [int(roundf(con.buff_percent * 100.0)), con.buff_duration_rounds], int(roundf(con.buff_percent * 100.0)), "BUFF +%d%%" % int(roundf(con.buff_percent * 100.0)))
+			stage_fx.emit("glow", true, "✦ ELIXIR BOOST", Color(1.0, 0.8, 0.2))
+	changed.emit()
+
+func toggle_dummy_defense() -> void:
+	if test_dummy == null:
+		return
+	if test_dummy.defense_mitigation_ratio > 0.0:
+		test_dummy.defense_mitigation_ratio = 0.0
+		log_action("EVENT", "Dummy Stance", "Dummy neutral - hits deal full damage", 0, "NEUTRAL", "", test_dummy.name)
+		stage_fx.emit("text", false, "0% Mit", DojoTheme.COL_GOOD)
+	else:
+		test_dummy.defense_mitigation_ratio = 0.5
+		log_action("DEFEND", "Dummy Stance", "Dummy defending - hits halved", 50, "MITIGATED 50%", "", test_dummy.name)
+		stage_fx.emit("text", false, "🛡 50% Mit", DojoTheme.COL_INFO)
+	changed.emit()
+
+func heal_dummy() -> void:
+	if test_dummy == null:
+		return
+	test_dummy.hp = test_dummy.max_hp
+	log_action("EVENT", "Dummy Heal", "Training Dummy restored to %d / %d HP" % [test_dummy.hp, test_dummy.max_hp], test_dummy.max_hp, "+HEAL", "", test_dummy.name)
+	stage_fx.emit("text", false, "💖 %d HP" % test_dummy.max_hp, DojoTheme.COL_GOOD)
+	changed.emit()
+
+# Simulates repeated swings without touching dummy HP; reports damage statistics.
+func run_benchmark(count: int) -> void:
+	if active_hero == null or test_dummy == null or active_hero.inventory == null:
+		return
+	var main_w: Equipment = active_hero.inventory.get_main_weapon()
+	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon()
+	var title: String = "Benchmark ×%d (%s)" % [count, "Ranged" if is_ranged else "Melee"]
+
+	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, false)
+	var base_hit: int = DojoTheme.dict_int(base_res, "final_dmg")
+	var crit_rate: float = clampf(DojoTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
+
+	var total: int = 0
+	var min_hit: int = 0
+	var max_hit: int = 0
+	var crits: int = 0
+	for i: int in range(count):
+		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, true)
+		var dmg: int = DojoTheme.dict_int(res, "final_dmg")
+		total += dmg
+		min_hit = dmg if i == 0 else mini(min_hit, dmg)
+		max_hit = maxi(max_hit, dmg)
+		if DojoTheme.dict_bool(res, "is_crit"):
+			crits += 1
+
+	var avg: float = float(total) / float(maxi(1, count))
+	var crit_mult: float = active_hero.stats.get_crit_damage_multiplier(weapon_context(active_hero)) if active_hero.stats != null else 2.5
+	var expected: float = float(base_hit) * (1.0 + (crit_rate / 100.0) * (crit_mult - 1.0))
+	var swings_to_kill: int = ceili(float(test_dummy.hp) / maxf(1.0, expected))
+
+	var stats: Dictionary = {
+		"base_hit": base_hit, "min": min_hit, "max": max_hit, "avg": avg, "crits": crits,
+		"crit_rate": crit_rate, "expected": expected, "dummy_hp": test_dummy.hp, "swings_to_kill": swings_to_kill,
+	}
+	var detail: String = "avg %.1f • min %d • max %d • %d crits" % [avg, min_hit, max_hit, crits]
+	log_action("ATTACK", title, detail, int(roundf(expected)), "SIM", DojoBreakdown.build_benchmark(title, count, stats), test_dummy.name)
+	changed.emit()
+
+# ------------------------------------------------------------------------------
+# 4. Gear Management (Stash, Equip, Quick Setup)
+# ------------------------------------------------------------------------------
+
+func can_hero_equip(item: Equipment) -> bool:
+	if active_hero == null or active_hero.stats == null or active_hero.stats.archetype == null:
+		return true
+	return active_hero.stats.archetype.can_equip_gear(item)
+
+func get_eligible_stash_items(slot: Equipment.EquipSlot) -> Array[Equipment]:
+	var result: Array[Equipment] = []
+	if shared_stash == null:
+		return result
+	for item: Item in shared_stash.items:
+		if not (item is Equipment):
+			continue
+		var eq: Equipment = item
+		var matches_slot: bool = false
+		match slot:
+			Equipment.EquipSlot.MAIN_HAND:
+				matches_slot = eq.is_weapon()
+			Equipment.EquipSlot.OFF_HAND:
+				var main_held: Equipment = active_hero.inventory.get_main_weapon() if (active_hero != null and active_hero.inventory != null) else null
+				var shield_ok: bool = eq.is_shield() and not (main_held != null and main_held.is_two_handed)
+				matches_slot = shield_ok or (eq.is_weapon() and not eq.is_two_handed)
+			Equipment.EquipSlot.BODY:
+				matches_slot = eq.slot == Equipment.EquipSlot.BODY
+			Equipment.EquipSlot.ACCESSORY_1, Equipment.EquipSlot.ACCESSORY_2:
+				matches_slot = eq.slot == Equipment.EquipSlot.ACCESSORY_1 or eq.slot == Equipment.EquipSlot.ACCESSORY_2
+			_:
+				matches_slot = eq.slot == slot
+		if matches_slot and can_hero_equip(eq):
+			result.append(eq)
+	return result
+
+func get_stash_consumables() -> Array[Consumable]:
+	var result: Array[Consumable] = []
+	if shared_stash == null:
+		return result
+	for item: Item in shared_stash.items:
+		if item is Consumable:
+			var con: Consumable = item
+			result.append(con)
+	return result
+
+func equip_item(item: Equipment, slot: Equipment.EquipSlot) -> bool:
+	if active_hero == null or active_hero.inventory == null or item == null:
+		return false
+	if not _equip_internal(item, slot, true):
+		return false
+	active_hero.sync_from_stats_and_gear()
+	changed.emit()
+	return true
+
+func unequip_slot(slot: Equipment.EquipSlot) -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	var old_eq: Equipment = _unequip_to_stash(slot)
+	if old_eq != null:
+		log_action("EVENT", "Unequip", "%s returned to stash" % old_eq.name, 0, "STASHED")
+	active_hero.sync_from_stats_and_gear()
+	changed.emit()
+
+func clear_all_gear() -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	_stow_all_gear()
+	active_hero.sync_from_stats_and_gear()
+	log_action("EVENT", "Clear Gear", "All gear and pouch items returned to stash", 0, "STASHED")
+	changed.emit()
+
+func apply_loadout(preset_id: String) -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	var preset: Dictionary = DojoLoadouts.find_preset(preset_id)
+	if preset.is_empty():
+		return
+
+	_stow_all_gear()
+	var skipped: Array[String] = []
+	var equipped_count: int = 0
+
+	var gear_raw: Variant = preset.get("gear", [])
+	var gear: Array = gear_raw if gear_raw is Array else []
+	for entry: Variant in gear:
+		if not (entry is Dictionary):
+			continue
+		var gear_entry: Dictionary = entry
+		var slot_raw: Variant = gear_entry.get("slot", Equipment.EquipSlot.MAIN_HAND)
+		var slot_val: Equipment.EquipSlot = slot_raw if slot_raw is Equipment.EquipSlot else Equipment.EquipSlot.MAIN_HAND
+		var made: Variant = _spawn_from_factory(gear_entry.get("make", null))
+		if not (made is Equipment):
+			continue
+		var proto: Equipment = made
+		var piece: Equipment = _find_stash_equipment(proto.id)
+		if piece == null:
+			piece = proto
+		if _equip_internal(piece, slot_val, false):
+			equipped_count += 1
+		else:
+			skipped.append(proto.name)
+
+	var pouch_raw: Variant = preset.get("pouch", [])
+	var pouch_makers: Array = pouch_raw if pouch_raw is Array else []
+	for maker: Variant in pouch_makers:
+		var made_con: Variant = _spawn_from_factory(maker)
+		if not (made_con is Consumable):
+			continue
+		var proto_con: Consumable = made_con
+		var con: Consumable = _find_stash_consumable(proto_con.id)
+		if con == null:
+			con = proto_con
+		shared_stash.remove_item(con)
+		active_hero.inventory.add_to_battle_pouch(con)
+
+	active_hero.sync_from_stats_and_gear()
+	var detail: String = "%s: %d pieces equipped" % [str(preset.get("name", preset_id)), equipped_count]
+	var breakdown: String = "[color=#4ade80]Applied loadout [b]%s[/b][/color]\n%s" % [str(preset.get("name", preset_id)), str(preset.get("desc", ""))]
+	if not skipped.is_empty():
+		detail += " • skipped %s" % ", ".join(skipped)
+		breakdown += "\n[color=#f87171]Skipped (not eligible for %s): %s[/color]" % [active_hero.name, ", ".join(skipped)]
+	log_action("EVENT", "Quick Setup", detail, equipped_count, "LOADOUT", breakdown)
+	stage_fx.emit("glow", true, "🎒 %s" % str(preset.get("name", "Loadout")), DojoTheme.COL_GOOD)
+	changed.emit()
+
+func add_to_pouch(con: Consumable) -> bool:
+	if active_hero == null or active_hero.inventory == null or con == null:
+		return false
+	if not active_hero.inventory.add_to_battle_pouch(con):
+		_log_failure("Battle Pouch", "Battle pouch is full (3 slots)")
+		return false
+	shared_stash.remove_item(con)
+	log_action("EVENT", "Load Pouch", "%s loaded into battle pouch" % con.name, 0, "LOADED")
+	changed.emit()
+	return true
+
+func remove_from_pouch(index: int) -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	var pouch: Array[Consumable] = active_hero.inventory.battle_pouch
+	if index < 0 or index >= pouch.size():
+		return
+	var con: Consumable = pouch[index]
+	active_hero.inventory.remove_from_battle_pouch(con)
+	shared_stash.add_item(con)
+	log_action("EVENT", "Unload Pouch", "%s returned to stash" % con.name, 0, "STASHED")
+	changed.emit()
+
+# Switch Weapon (1 block): readies the other weapon when a 2H main weapon is paired
+# with an off-hand weapon. 1H pairs never need it - both hands attack freely.
+func switch_weapon() -> void:
+	if active_hero == null or active_hero.inventory == null:
+		return
+	var inv: Inventory = active_hero.inventory
+	if not inv.needs_weapon_switch():
+		_log_failure("Switch Weapon", "Nothing to switch: pair a 2H weapon with an off-hand weapon (1H weapons attack with both hands freely)")
+		return
+	inv.toggle_active_weapon()
+	var ready_w: Equipment = inv.get_active_weapon()
+	var breakdown: String = "[color=#38bdf8][b]Switch Weapon[/b][/color]  costs 1 block.\nActive weapon is now [b]%s[/b]; the other weapon is sheathed until you switch back." % ready_w.name
+	log_action("EVENT", "Switch Weapon", "1 block • %s now active" % ready_w.name, 1, "SWITCHED", breakdown)
+	stage_fx.emit("text", true, "🔄 %s" % ready_w.name, DojoTheme.COL_INFO)
+	changed.emit()
+
+func _spawn_from_factory(factory_raw: Variant) -> Variant:
+	if factory_raw is Callable:
+		var factory: Callable = factory_raw
+		return factory.call()
+	return null
+
+func _find_stash_equipment(item_id: String) -> Equipment:
+	if shared_stash == null:
+		return null
+	for item: Item in shared_stash.items:
+		if item is Equipment and item.id == item_id:
+			var eq: Equipment = item
+			return eq
+	return null
+
+func _find_stash_consumable(item_id: String) -> Consumable:
+	if shared_stash == null:
+		return null
+	for item: Item in shared_stash.items:
+		if item is Consumable and item.id == item_id:
+			var con: Consumable = item
+			return con
+	return null
+
+# Moves an equipped piece to the shared stash. Inventory.unequip also appends to
+# the hero's private item list, so strip it there to avoid duplicates.
+func _unequip_to_stash(slot: Equipment.EquipSlot) -> Equipment:
+	var inv: Inventory = active_hero.inventory
+	var eq: Equipment = inv.unequip(slot)
+	if eq == null:
+		return null
+	inv.items.erase(eq)
+	if not shared_stash.items.has(eq):
+		shared_stash.add_item(eq)
+	return eq
+
+func _stow_all_gear() -> void:
+	for slot: Equipment.EquipSlot in equip_slots():
+		_unequip_to_stash(slot)
+	var inv: Inventory = active_hero.inventory
+	for con: Consumable in inv.battle_pouch.duplicate():
+		inv.remove_from_battle_pouch(con)
+		shared_stash.add_item(con)
+
+func _equip_internal(item: Equipment, slot: Equipment.EquipSlot, announce: bool) -> bool:
+	var inv: Inventory = active_hero.inventory
+	if not can_hero_equip(item):
+		if announce:
+			_log_failure("Equip", "%s cannot equip %s (class proficiency)" % [active_hero.name, item.name])
+		return false
+	if slot == Equipment.EquipSlot.OFF_HAND:
+		if item.is_two_handed:
+			if announce:
+				_log_failure("Equip", "%s is two-handed and cannot go in the off-hand" % item.name)
+			return false
+		# A 2H main weapon cannot carry a shield, but an off-hand weapon is fine (needs Switch Weapon to use).
+		var main_w: Equipment = inv.get_main_weapon()
+		if main_w != null and main_w.is_two_handed and not item.is_weapon():
+			if announce:
+				_log_failure("Equip", "2H %s cannot be paired with %s - only an off-hand weapon (swap with Switch Weapon)" % [main_w.name, item.name])
+			return false
+	if slot == Equipment.EquipSlot.MAIN_HAND and item.is_two_handed:
+		# Shields cannot be held with a 2H weapon; an off-hand weapon stays as the switch-to weapon.
+		var held_off: Equipment = inv.get_equipped(Equipment.EquipSlot.OFF_HAND)
+		if held_off != null and not held_off.is_weapon():
+			_unequip_to_stash(Equipment.EquipSlot.OFF_HAND)
+			if announce:
+				log_action("EVENT", "Unequip", "%s stowed: %s is 2-Handed" % [held_off.name, item.name], 0, "STASHED")
+	_unequip_to_stash(slot)
+	shared_stash.remove_item(item)
+	active_hero.inventory.equip(item, slot)
+	if announce:
+		log_action("EVENT", "Equip", "%s ➜ %s" % [item.name, Equipment.slot_display_name(slot)], 0, "EQUIPPED")
+	return true
+
+# ------------------------------------------------------------------------------
+# 5. Interactive Stat Allocation
+# ------------------------------------------------------------------------------
+
+func _clear_allocation_state() -> void:
+	is_allocating_stats = false
+	pending_free_points = 0
+	pending_allocated_stats = {"STR": 0, "DEX": 0, "INT": 0, "CONS": 0, "PERC": 0, "KNOW": 0}
+
+func get_pending(stat_key: String) -> int:
+	var raw: Variant = pending_allocated_stats.get(stat_key, 0)
+	return raw if raw is int else 0
+
+func begin_allocation() -> void:
+	if active_hero == null or active_hero.stats == null:
+		return
+	if is_allocating_stats:
+		cancel_allocation()
+		return
+	if active_hero.stats.unspent_attribute_points <= 0:
+		log_action("EVENT", "Allocate Stats", "No unspent attribute points available", 0, "NONE")
+		return
+	_clear_allocation_state()
+	is_allocating_stats = true
+	pending_free_points = active_hero.stats.unspent_attribute_points
+	changed.emit()
+
+func allocate_point(stat_key: String) -> void:
+	if not is_allocating_stats or pending_free_points <= 0 or not pending_allocated_stats.has(stat_key):
+		return
+	pending_free_points -= 1
+	pending_allocated_stats[stat_key] = get_pending(stat_key) + 1
+	changed.emit()
+
+# Only undoes points allocated in the current session - never below baseline.
+func deallocate_point(stat_key: String) -> void:
+	if not is_allocating_stats:
+		return
+	var current: int = get_pending(stat_key)
+	if current <= 0:
+		return
+	pending_allocated_stats[stat_key] = current - 1
+	pending_free_points += 1
+	changed.emit()
+
+func reset_allocation() -> void:
+	if not is_allocating_stats or active_hero == null or active_hero.stats == null:
+		return
+	var keep: bool = is_allocating_stats
+	_clear_allocation_state()
+	is_allocating_stats = keep
+	pending_free_points = active_hero.stats.unspent_attribute_points
+	changed.emit()
+
+func confirm_allocation() -> void:
+	if not is_allocating_stats or active_hero == null or active_hero.stats == null:
+		return
+	var summary: Array[String] = []
+	var st: CharacterStats = active_hero.stats
+	for key: String in STAT_KEYS:
+		var pts: int = get_pending(key)
+		if pts <= 0:
+			continue
+		match key:
+			"STR": st.str_stat += pts
+			"DEX": st.dex_stat += pts
+			"INT": st.int_stat += pts
+			"CONS": st.cons_stat += pts
+			"PERC": st.perc_stat += pts
+			"KNOW": st.know_stat += pts
+		summary.append("+%d %s" % [pts, key])
+	st.unallocated_attribute_points = pending_free_points
+	_clear_allocation_state()
+	active_hero.sync_from_stats_and_gear()
+	var detail: String = ", ".join(summary) if not summary.is_empty() else "No points spent"
+	log_action("EVENT", "Allocate Stats", "%s (remaining %d)" % [detail, st.unspent_attribute_points], 0, "CONFIRMED")
+	changed.emit()
+
+func cancel_allocation() -> void:
+	if not is_allocating_stats:
+		return
+	_clear_allocation_state()
+	changed.emit()

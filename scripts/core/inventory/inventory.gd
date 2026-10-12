@@ -15,6 +15,10 @@ var equipped_gear: Dictionary = {}  # Equipment.EquipSlot (int) -> Equipment
 var battle_pouch: Array[Consumable] = []
 var max_pouch_slots: int = 3
 
+# Two-handed main weapons can be paired with an off-hand weapon, but only one of
+# the two is "active" at a time; swapping costs a Switch Weapon action (1 block).
+var active_weapon_slot: Equipment.EquipSlot = Equipment.EquipSlot.MAIN_HAND
+
 func _init() -> void:
 	equipped_gear.clear()
 	battle_pouch.clear()
@@ -42,6 +46,7 @@ func equip(equipment: Equipment, slot_override: int = -1) -> Equipment:
 	if items.has(equipment):
 		items.erase(equipment)
 
+	_normalize_active_weapon()
 	equipment_changed.emit(target_slot, equipment)
 	return previous
 
@@ -54,6 +59,7 @@ func unequip(slot: Equipment.EquipSlot) -> Equipment:
 		var eq: Equipment = raw_eq
 		equipped_gear.erase(slot)
 		items.append(eq)
+		_normalize_active_weapon()
 		equipment_changed.emit(slot, null)
 		return eq
 	return null
@@ -74,6 +80,32 @@ func get_offhand_weapon() -> Equipment:
 		return off_eq
 	return null
 
+# True when a 2H main weapon is paired with an off-hand weapon: only one is ready
+# at a time and the other needs a Switch Weapon action. 1H pairs never need it.
+func needs_weapon_switch() -> bool:
+	var main_w: Equipment = get_main_weapon()
+	return main_w != null and main_w.is_two_handed and get_offhand_weapon() != null
+
+func get_active_weapon() -> Equipment:
+	if needs_weapon_switch() and active_weapon_slot == Equipment.EquipSlot.OFF_HAND:
+		return get_offhand_weapon()
+	return get_main_weapon()
+
+func is_offhand_active() -> bool:
+	return needs_weapon_switch() and active_weapon_slot == Equipment.EquipSlot.OFF_HAND
+
+# Swaps the ready weapon. Returns false when there is nothing to switch to.
+func toggle_active_weapon() -> bool:
+	if not needs_weapon_switch():
+		active_weapon_slot = Equipment.EquipSlot.MAIN_HAND
+		return false
+	active_weapon_slot = Equipment.EquipSlot.MAIN_HAND if is_offhand_active() else Equipment.EquipSlot.OFF_HAND
+	return true
+
+func _normalize_active_weapon() -> void:
+	if not needs_weapon_switch():
+		active_weapon_slot = Equipment.EquipSlot.MAIN_HAND
+
 func get_shield() -> Equipment:
 	var off_eq: Equipment = get_equipped(Equipment.EquipSlot.OFF_HAND)
 	if off_eq != null and (off_eq.item_type == Item.ItemType.SHIELD or off_eq.off_hand_category == "shield"):
@@ -86,7 +118,8 @@ func _iter_equipped_gear() -> Array[Equipment]:
 	for slot_key: Variant in equipped_gear:
 		var raw_eq: Variant = equipped_gear[slot_key]
 		if raw_eq is Equipment:
-			result.append(raw_eq as Equipment)
+			var eq: Equipment = raw_eq
+			result.append(eq)
 	return result
 
 func get_total_armor_burden() -> int:

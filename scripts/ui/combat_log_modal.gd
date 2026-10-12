@@ -323,16 +323,22 @@ static func format_action_cell(entry: ActionLogEntry, is_modal: bool = false, on
 		target_lbl.add_theme_color_override("font_color", target_col)
 		row2.add_child(target_lbl)
 
-	row2.add_spacer(false)
-
-	# Status / Detail Text
+	# Status / Detail Text (right-aligned; trims with an ellipsis in narrow containers)
 	var detail_msg: String = entry.status_text if not entry.status_text.is_empty() else entry.detail_text
 	if not detail_msg.is_empty():
 		var stat_lbl := Label.new()
 		stat_lbl.text = detail_msg
+		stat_lbl.tooltip_text = detail_msg
+		stat_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		stat_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stat_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		stat_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		stat_lbl.custom_minimum_size = Vector2(40, 0)
 		stat_lbl.add_theme_font_size_override("font_size", 8)
 		stat_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
 		row2.add_child(stat_lbl)
+	else:
+		row2.add_spacer(false)
 
 	if is_modal and on_cell_clicked.is_valid():
 		cell.gui_input.connect(func(ev: InputEvent) -> void:
