@@ -21,9 +21,11 @@ var shaman: Combatant
 func _init() -> void:
 	encounter_name = "Goblin Ambush"
 	max_rounds = 3
+	zone_id = "forest_clearing"
 
 func build() -> void:
 	grid = CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	grid.apply_zone(zone_id)
 	reinforcements_spawned = false
 
 	warrior = Combatant.new("Warrior", 100, 15, 1)
@@ -44,24 +46,10 @@ func build() -> void:
 
 	party_stash = Inventory.new()
 	ItemCatalog.populate_party_starter_stash(party_stash)
-	_load_textures()
-
-func _load_textures() -> void:
-	tile_textures["floor"] = AssetUtils.load_svg_texture("res://assets/tiles/tile_floor.svg")
-	tile_textures["exit"] = AssetUtils.load_svg_texture("res://assets/tiles/tile_exit.svg")
-	tile_textures["center"] = AssetUtils.load_svg_texture("res://assets/tiles/tile_center.svg")
-	var art: Dictionary = {
-		warrior: ["party", "warrior"], ranger: ["party", "ranger"],
-		brawler: ["enemy", "brawler"], scout: ["enemy", "scout"],
-		skirmisher: ["enemy", "skirmisher"], archer: ["enemy", "archer"],
-		berserker: ["enemy", "berserker"], shaman: ["enemy", "shaman"],
+	unit_classes = {
+		warrior: "warrior", ranger: "ranger", brawler: "brawler", scout: "scout",
+		skirmisher: "skirmisher", archer: "archer", berserker: "berserker", shaman: "shaman",
 	}
-	for c: Combatant in art:
-		var parts: Array = art[c]
-		var team: String = str(parts[0])
-		var key: String = str(parts[1])
-		token_textures[c] = AssetUtils.load_svg_texture("res://assets/%s/tokens/token_%s.svg" % [team, key])
-		sprite_textures[c] = AssetUtils.load_svg_texture("res://assets/%s/sprites/sprite_%s.svg" % [team, key])
 
 # ------------------------------------------------------------------------------
 # Round setup & narration

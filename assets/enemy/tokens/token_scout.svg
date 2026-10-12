@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
-  <circle cx="28" cy="28" r="26" fill="#4a2211" stroke="#f97316" stroke-width="3"/>
-  <circle cx="28" cy="28" r="22" fill="#2e1409"/>
-  <!-- Crossed Daggers -->
-  <line x1="18" y1="18" x2="38" y2="38" stroke="#fdba74" stroke-width="3" stroke-linecap="round"/>
-  <line x1="18" y1="38" x2="38" y2="18" stroke="#fdba74" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="28" cy="28" r="4" fill="#fb923c"/>
-</svg>

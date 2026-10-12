@@ -72,21 +72,22 @@ func _refresh_slot() -> void:
 	for item: Equipment in items:
 		var card := UiTheme.card(_list_vbox)
 		var head := HBoxContainer.new()
-		card.add_child(head)
+		var info: VBoxContainer = UiTheme.item_row(card, item)
+		info.add_child(head)
 		head.add_child(UiTheme.label(item.name, UiTheme.FONT_MD, UiTheme.rarity_color(item.rarity)))
 		head.add_spacer(false)
 		head.add_child(UiTheme.button("Equip", "Equip %s" % item.name, func() -> void: _pick(item), 10))
 
 		var summary: Label = UiTheme.label(UiTheme.equipment_summary(item, st), 9, Color(0.8, 0.9, 0.9))
 		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		card.add_child(summary)
+		info.add_child(summary)
 		var status: Dictionary = item.get_requirement_status_summary(st, st.mastery)
 		var badge_text: String = ("%s  %s" % [str(status.get("req_display", "")), str(status.get("status_tag", ""))]).strip_edges()
 		if not badge_text.is_empty():
 			var badge_col: Color = status.get("tag_color", Color.WHITE)
 			var badge: Label = UiTheme.label(badge_text, 9, badge_col)
 			badge.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			card.add_child(badge)
+			info.add_child(badge)
 
 func _refresh_pouch() -> void:
 	var inv: Inventory = session.active_hero.inventory
@@ -98,13 +99,14 @@ func _refresh_pouch() -> void:
 	for con: Consumable in options:
 		var card := UiTheme.card(_list_vbox)
 		var head := HBoxContainer.new()
-		card.add_child(head)
+		var con_info: VBoxContainer = UiTheme.item_row(card, con, 28)
+		con_info.add_child(head)
 		head.add_child(UiTheme.label("%s %s" % [UiTheme.consumable_icon(con), con.name], UiTheme.FONT_MD, UiTheme.COL_GOOD))
 		head.add_spacer(false)
 		var load_btn: Button = UiTheme.button("Load", "Load into the battle pouch", func() -> void: _pick_pouch(con), 10)
 		load_btn.disabled = inv.battle_pouch.size() >= inv.max_pouch_slots
 		head.add_child(load_btn)
-		card.add_child(UiTheme.label(UiTheme.consumable_effect_text(con), 9, UiTheme.COL_WARN))
+		con_info.add_child(UiTheme.label(UiTheme.consumable_effect_text(con), 9, UiTheme.COL_WARN))
 
 func _pick(item: Equipment) -> void:
 	if session.equip_item(item, _slot):

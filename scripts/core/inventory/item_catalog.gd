@@ -59,6 +59,7 @@ static func create_titan_warhammer() -> Equipment:
 	eq.scaling_stat = "STR"
 	eq.description = "Colossal warhammer requiring 22 STR. Inflicts severe deficit penalty if under-statted."
 	eq.damage_type = "blunt"
+	eq.icon_id = "titan_warhammer"
 	return eq
 
 static func create_oak_shortbow() -> Equipment:
@@ -226,6 +227,7 @@ static func create_runed_staff() -> Equipment:
 	eq.scaling_stat = "INT"
 	eq.description = "Carved ash stave engraved with mystic glyphs. Scales with intelligence."
 	eq.damage_type = "magic"
+	eq.icon_id = "runed_staff"
 	return eq
 
 # ------------------------------------------------------------------------------

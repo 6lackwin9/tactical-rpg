@@ -70,7 +70,7 @@ func _build_mat(parent: Control) -> void:
 
 	_hero = _make_token("Hero", Color(0.4, 0.8, 1.0))
 	_dummy = _make_token("Test Dummy", Color(0.95, 0.85, 0.4))
-	_dummy.icon.texture = AssetUtils.load_svg_texture("res://assets/enemy/tokens/token_dummy.svg")
+	_dummy.icon.texture = UnitArt.token("dummy", UnitArt.Team.NEUTRAL)
 
 func _make_token(label_text: String, label_color: Color) -> TokenView:
 	var view := TokenView.new()
@@ -141,7 +141,7 @@ func _layout_tokens() -> void:
 func _hero_texture(hero: Combatant) -> Texture2D:
 	var key: String = hero.name.to_lower()
 	if not _texture_cache.has(key):
-		_texture_cache[key] = AssetUtils.load_svg_texture("res://assets/party/tokens/token_%s.svg" % key)
+		_texture_cache[key] = UnitArt.token(key, UnitArt.Team.FRIENDLY)
 	var raw: Variant = _texture_cache[key]
 	if raw is Texture2D:
 		var tex: Texture2D = raw

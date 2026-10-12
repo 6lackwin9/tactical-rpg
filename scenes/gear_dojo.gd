@@ -26,6 +26,7 @@ func _ready() -> void:
 		var ok: bool = DojoAssertions.run(session, self)
 		var code: int = 0 if ok else 1
 		print("Dojo headless test complete. Exiting with code: %d\n" % code)
+		SvgRaster.clear_cache()
 		get_tree().quit(code)
 	else:
 		print("Initializing interactive Gear & Skill Dojo UI...\n")

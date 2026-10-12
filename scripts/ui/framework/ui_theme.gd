@@ -72,6 +72,30 @@ static func card(parent: Control, bg: Color = COL_CARD_BG) -> VBoxContainer:
 	panel.add_child(vbox)
 	return vbox
 
+static func icon_rect(tex: Texture2D, px: int = 32) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.texture = tex
+	rect.custom_minimum_size = Vector2(px, px)
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	return rect
+
+# Adds [item icon | details column] to `parent` and returns the details column.
+static func item_row(parent: Control, item: Item, px: int = 34) -> VBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	parent.add_child(row)
+	var icon := icon_rect(ItemArt.icon(item), px)
+	icon.tooltip_text = item.description if not item.description.is_empty() else item.name
+	icon.mouse_filter = Control.MOUSE_FILTER_PASS
+	row.add_child(icon)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 1)
+	row.add_child(info)
+	return info
+
 static func clear_children(node: Node) -> void:
 	for child: Node in node.get_children():
 		node.remove_child(child)

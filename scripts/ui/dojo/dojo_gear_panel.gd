@@ -142,17 +142,18 @@ func _build_slot_card(slot_val: Equipment.EquipSlot, icon: String, eq: Equipment
 	if eq == null:
 		card.add_child(UiTheme.label("— Empty Slot —", UiTheme.FONT_SM, UiTheme.COL_MUTED))
 		return
-	card.add_child(UiTheme.label(eq.name, UiTheme.FONT_MD, UiTheme.rarity_color(eq.rarity)))
+	var info: VBoxContainer = UiTheme.item_row(card, eq)
+	info.add_child(UiTheme.label(eq.name, UiTheme.FONT_MD, UiTheme.rarity_color(eq.rarity)))
 	var summary: Label = UiTheme.label(UiTheme.equipment_summary(eq, st), 9, Color(0.8, 0.9, 0.9))
 	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	card.add_child(summary)
+	info.add_child(summary)
 	var status: Dictionary = eq.get_requirement_status_summary(st, st.mastery)
 	var badge_text: String = ("%s  %s" % [str(status.get("req_display", "")), str(status.get("status_tag", ""))]).strip_edges()
 	if not badge_text.is_empty():
 		var badge_col: Color = status.get("tag_color", Color.WHITE)
 		var badge: Label = UiTheme.label(badge_text, 9, badge_col)
 		badge.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		card.add_child(badge)
+		info.add_child(badge)
 
 func _render_pouch(inv: Inventory) -> void:
 	UiTheme.clear_children(_pouch_vbox)
@@ -169,7 +170,8 @@ func _render_pouch(inv: Inventory) -> void:
 			row.add_spacer(false)
 			row.add_child(UiTheme.button("Load", "Load a consumable from the stash", func() -> void: overlay_requested.emit(DojoPickerPanel.for_pouch()), 9))
 		else:
-			row.add_child(UiTheme.label("%s %s" % [UiTheme.consumable_icon(con), con.name], UiTheme.FONT_SM, UiTheme.COL_GOOD))
+			row.add_child(UiTheme.icon_rect(ItemArt.icon(con), 20))
+			row.add_child(UiTheme.label(con.name, UiTheme.FONT_SM, UiTheme.COL_GOOD))
 			row.add_spacer(false)
 			row.add_child(UiTheme.label(UiTheme.consumable_effect_text(con), 9, UiTheme.COL_WARN))
 			row.add_child(UiTheme.button("✕", "Return to stash", func() -> void: session.remove_from_pouch(i), 9))

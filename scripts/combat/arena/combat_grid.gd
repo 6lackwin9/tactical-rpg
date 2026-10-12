@@ -30,6 +30,26 @@ func is_exit_tile(coord: Vector2i) -> bool:
 		return coord.x == 0 or coord.x == GRID_SIZE - 1 or coord.y == 0 or coord.y == GRID_SIZE - 1
 	return designated_exits.has(coord)
 
+# ------------------------------------------------------------------------------
+# Terrain (default: plain arena floor everywhere)
+# ------------------------------------------------------------------------------
+
+var terrain: Dictionary = {}  # Vector2i -> Terrain.Type (missing = FLOOR)
+
+func set_terrain(coord: Vector2i, terrain_type: Terrain.Type) -> void:
+	if is_valid_coord(coord):
+		terrain[coord] = terrain_type
+
+func get_terrain(coord: Vector2i) -> Terrain.Type:
+	var raw: Variant = terrain.get(coord, Terrain.Type.FLOOR)
+	return raw if raw is Terrain.Type else Terrain.Type.FLOOR
+
+func is_walkable(coord: Vector2i) -> bool:
+	return is_valid_coord(coord) and Terrain.is_walkable(get_terrain(coord))
+
+func apply_zone(zone_id: String) -> void:
+	terrain = CombatZones.terrain_map(zone_id)
+
 func is_occupied(coord: Vector2i) -> bool:
 	for c: Combatant in combatant_positions.keys():
 		if c.is_active() and combatant_positions[c] == coord:
@@ -57,6 +77,9 @@ func get_distance(a: Vector2i, b: Vector2i) -> int:
 func place_combatant(combatant: Combatant, coord: Vector2i) -> bool:
 	if not is_valid_coord(coord):
 		push_error("Cannot place [%s] at invalid coordinate %s" % [combatant.name, str(coord)])
+		return false
+	if not is_walkable(coord):
+		push_error("Cannot place [%s] on blocked terrain %s (%s)" % [combatant.name, str(coord), Terrain.display_name(get_terrain(coord))])
 		return false
 	if is_occupied(coord):
 		push_error("Tile %s is already occupied" % str(coord))
@@ -95,6 +118,10 @@ func move_combatant(combatant: Combatant, offset: Vector2i) -> bool:
 
 	if not is_valid_coord(target_pos):
 		print("[%s] move to %s blocked by arena boundary." % [combatant.name, str(target_pos)])
+		return false
+
+	if not is_walkable(target_pos):
+		print("[%s] move to %s blocked by %s." % [combatant.name, str(target_pos), Terrain.display_name(get_terrain(target_pos))])
 		return false
 
 	if is_occupied(target_pos):
@@ -146,7 +173,7 @@ func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> v
 		var placed: bool = false
 		var preferred_slots: Array[Vector2i] = ally_slots_d2 if ally.attack_range > 1 else ally_slots_d1
 		for slot: Vector2i in preferred_slots:
-			if not is_occupied(slot) and get_distance(slot, CENTER) <= ally.attack_range:
+			if not is_occupied(slot) and is_walkable(slot) and get_distance(slot, CENTER) <= ally.attack_range:
 				place_combatant(ally, slot)
 				placed = true
 				break
@@ -155,7 +182,7 @@ func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> v
 			for dx: int in range(-ally.attack_range, ally.attack_range + 1):
 				for dy: int in range(-ally.attack_range, ally.attack_range + 1):
 					var cand: Vector2i = CENTER + Vector2i(dx, dy)
-					if is_valid_coord(cand) and not is_occupied(cand) and get_distance(cand, CENTER) <= ally.attack_range:
+					if is_walkable(cand) and not is_occupied(cand) and get_distance(cand, CENTER) <= ally.attack_range:
 						place_combatant(ally, cand)
 						placed = true
 						break
@@ -167,7 +194,7 @@ func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> v
 		var placed: bool = false
 		var preferred_slots: Array[Vector2i] = enemy_slots_d2 if enemy.attack_range > 1 else enemy_slots_d1
 		for slot: Vector2i in preferred_slots:
-			if not is_occupied(slot) and get_distance(slot, CENTER) <= enemy.attack_range:
+			if not is_occupied(slot) and is_walkable(slot) and get_distance(slot, CENTER) <= enemy.attack_range:
 				place_combatant(enemy, slot)
 				placed = true
 				break
@@ -176,7 +203,7 @@ func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> v
 			for dx: int in range(-enemy.attack_range, enemy.attack_range + 1):
 				for dy: int in range(-enemy.attack_range, enemy.attack_range + 1):
 					var cand: Vector2i = CENTER + Vector2i(dx, dy)
-					if is_valid_coord(cand) and not is_occupied(cand) and get_distance(cand, CENTER) <= enemy.attack_range:
+					if is_walkable(cand) and not is_occupied(cand) and get_distance(cand, CENTER) <= enemy.attack_range:
 						place_combatant(enemy, cand)
 						placed = true
 						break

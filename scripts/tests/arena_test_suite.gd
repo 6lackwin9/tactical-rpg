@@ -12,6 +12,7 @@ extends RefCounted
 # 6. Character Specs & Inventory Test (6-stat framework, progression, masteries)
 # 7. Gear Equip UI, Test Dummy & Damage Formula Test (Equipment modal, dummy, formulas)
 # 8. Combat Session Flow Test (scripted 3-round Goblin Ambush through CombatSession)
+# 9. Art, Terrain & Combat Zone Test (generated tokens/portraits/tiles/icons, terrain rules, zones)
 # ==============================================================================
 
 static func run_all_tests(tree_parent: Node = null) -> bool:
@@ -23,9 +24,10 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 	var test5_passed: bool = run_character_specs_and_inventory_test()
 	var test6_passed: bool = run_gear_equip_and_test_dummy_suite(tree_parent)
 	var test7_passed: bool = run_combat_session_flow_test()
+	var test8_passed: bool = run_art_and_terrain_test()
 
 	return (test0_passed and test1_passed and test2_passed and test3_passed and
-		test4_passed and test5_passed and test6_passed and test7_passed)
+		test4_passed and test5_passed and test6_passed and test7_passed and test8_passed)
 
 
 # ==============================================================================
@@ -131,6 +133,7 @@ static func run_combat_ui_framework_test(tree_parent: Node = null) -> bool:
 	if tree_parent != null:
 		tree_parent.remove_child(host)
 	host.free()
+	session.dispose()
 
 	return (docks_ok and tokens_ok and inspector_ok and forecast_ok and
 		log_modal_ok and timeline_modal_ok and signals_ok and layout_ok)
@@ -225,6 +228,7 @@ static func run_combat_session_flow_test() -> bool:
 	print("  [Session] Auto-play ticks resolve a full round headlessly: %s" % ("PASS" if autoplay_ok else "FAIL"))
 	print("  [Session] Round reset restores planning with an empty log: %s" % ("PASS" if reset_ok else "FAIL"))
 
+	session.dispose()
 	return pre_view_ok and ambush_ok and round1_ok and replay_ok and traversal_ok and victory_ok and autoplay_ok and reset_ok
 
 # ==============================================================================
@@ -897,3 +901,137 @@ static func run_gear_equip_and_test_dummy_suite(tree_parent: Node = null) -> boo
 	return (modal_init_ok and hero_switch_ok and equip_ok and threshold_boost_ok and
 		deficit_ok and burden_ok and unequip_ok and dummy_init_ok and damage_formula_ok and consumable_test_ok)
 
+# ==============================================================================
+# TEST 9: GENERATED ART, TERRAIN & COMBAT ZONES
+# ==============================================================================
+
+static func run_art_and_terrain_test() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING ART, TERRAIN & COMBAT ZONE TEST        ===")
+	print("=======================================================")
+
+	# 1. Tokens: every class x team rasterizes; team decides color, hostiles get a spiked rim
+	var tokens_ok: bool = true
+	for class_key: String in UnitArt.CLASS_KEYS:
+		for team: int in [UnitArt.Team.FRIENDLY, UnitArt.Team.HOSTILE, UnitArt.Team.NEUTRAL]:
+			var tex: Texture2D = UnitArt.token(class_key, team as UnitArt.Team)
+			if tex == null or tex.get_width() != 128:
+				tokens_ok = false
+	var friendly_svg: String = UnitArt.token_svg("warrior", UnitArt.Team.FRIENDLY)
+	var hostile_svg: String = UnitArt.token_svg("warrior", UnitArt.Team.HOSTILE)
+	var neutral_svg: String = UnitArt.token_svg("dummy", UnitArt.Team.NEUTRAL)
+	tokens_ok = tokens_ok and "#60a5fa" in friendly_svg and "#f87171" in hostile_svg and "#facc15" in neutral_svg
+	tokens_ok = tokens_ok and hostile_svg.count("<path d=\"M") > friendly_svg.count("<path d=\"M") and "stroke-dasharray" in neutral_svg
+
+	# 2. Portraits: every class x team rasterizes; goblin classes get goblin skin
+	var portraits_ok: bool = true
+	for class_key: String in UnitArt.CLASS_KEYS:
+		for team: int in [UnitArt.Team.FRIENDLY, UnitArt.Team.HOSTILE]:
+			if UnitArt.portrait(class_key, team as UnitArt.Team) == null:
+				portraits_ok = false
+	portraits_ok = portraits_ok and "#7cb342" in UnitArt.portrait_svg("shaman", UnitArt.Team.HOSTILE) and not ("#7cb342" in UnitArt.portrait_svg("warrior", UnitArt.Team.FRIENDLY))
+
+	# 3. Encounter art follows sides: allies friendly (blue), enemies hostile (red)
+	var enc := GoblinAmbushEncounter.new()
+	enc.build()
+	var sides_ok: bool = true
+	for c: Combatant in enc.allies:
+		sides_ok = sides_ok and enc.team_of(c) == UnitArt.Team.FRIENDLY and enc.get_token_texture(c) != null and enc.get_sprite_texture(c) != null
+	for c: Combatant in enc.enemies:
+		sides_ok = sides_ok and enc.team_of(c) == UnitArt.Team.HOSTILE and enc.get_token_texture(c) != null
+	sides_ok = sides_ok and enc.class_of(enc.shaman) == "shaman"
+
+	# 4. Terrain glyph round-trip and walkability rules
+	var terrain_ok: bool = true
+	for t: int in Terrain.INFO:
+		var tt: Terrain.Type = t as Terrain.Type
+		if Terrain.from_glyph(Terrain.glyph(tt)) != tt:
+			terrain_ok = false
+	terrain_ok = terrain_ok and not Terrain.is_walkable(Terrain.Type.WALL) and not Terrain.is_walkable(Terrain.Type.DEEP_WATER) and Terrain.is_walkable(Terrain.Type.BRIDGE) and Terrain.is_walkable(Terrain.Type.MUD)
+
+	# 5. Every zone is a valid 9x9 map with a walkable core and exit lane
+	var zones_ok: bool = CombatZones.zone_ids().size() >= 8
+	for zone_id: String in CombatZones.zone_ids():
+		var map: Dictionary = CombatZones.terrain_map(zone_id)
+		if map.size() != 81:
+			zones_ok = false
+		for x: int in range(2, 7):
+			for y: int in range(2, 7):
+				var core_raw: Variant = map.get(Vector2i(x, y), Terrain.Type.FLOOR)
+				if core_raw is Terrain.Type and not Terrain.is_walkable(core_raw):
+					zones_ok = false
+		for x: int in range(4, 9):
+			var lane_raw: Variant = map.get(Vector2i(x, 4), Terrain.Type.FLOOR)
+			if lane_raw is Terrain.Type and not Terrain.is_walkable(lane_raw):
+				zones_ok = false
+
+	# 6. Grid enforces terrain: no placing/moving onto blocked tiles; deployment skips them
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	grid.set_terrain(Vector2i(4, 5), Terrain.Type.WALL)
+	grid.set_terrain(Vector2i(2, 3), Terrain.Type.LAVA)
+	var hero := Combatant.new("Tester", 50, 10, 1)
+	var allies_g: Array[Combatant] = [hero]
+	var none: Array[Combatant] = []
+	grid.deploy_combatants(allies_g, none)
+	var deployed_off_wall: bool = grid.get_position(hero) != Vector2i(4, 5) and grid.is_walkable(grid.get_position(hero))
+	var walker := Combatant.new("Walker", 50, 10, 1)
+	var placed_lava: bool = grid.place_combatant(walker, Vector2i(2, 3))
+	grid.place_combatant(walker, Vector2i(2, 4))
+	var moved_into_lava: bool = grid.move_combatant(walker, Vector2i(0, -1))
+	var grid_ok: bool = deployed_off_wall and not placed_lava and not moved_into_lava and grid.get_position(walker) == Vector2i(2, 4)
+
+	# 7. The scripted Goblin Ambush still reaches total victory on every zone
+	var all_zones_play: bool = true
+	for zone_id: String in CombatZones.zone_ids():
+		var zone_enc := GoblinAmbushEncounter.new()
+		zone_enc.zone_id = zone_id
+		var session := CombatSession.new(zone_enc)
+		session.start()
+		for round_num: int in range(3):
+			_resolve_until_replay(session)
+			if round_num < 2:
+				session.advance_round()
+		var concluded: bool = session.combat_over
+		session.dispose()
+		if not concluded:
+			all_zones_play = false
+			print("    zone failed to conclude: %s" % zone_id)
+
+	# 8. Tiles & overlays rasterize for every terrain variant
+	var tiles_ok: bool = TileArt.overlay("exit") != null and TileArt.overlay("center") != null
+	for t: int in Terrain.INFO:
+		for v: int in range(TileArt.VARIANTS):
+			if TileArt.tile(t as Terrain.Type, v) == null:
+				tiles_ok = false
+
+	# 9. Item icons: every catalog item gets one; types map correctly; rare weapons use bespoke art
+	var stash := Inventory.new()
+	ItemCatalog.populate_party_starter_stash(stash)
+	var icons_ok: bool = true
+	for item: Item in stash.items:
+		if ItemArt.icon(item) == null:
+			icons_ok = false
+	icons_ok = icons_ok and (
+		ItemArt.icon_key(ItemCatalog.create_iron_claymore()) == "greatsword"
+		and ItemArt.icon_key(ItemCatalog.create_iron_shortsword()) == "shortsword"
+		and ItemArt.icon_key(ItemCatalog.create_buckler()) == "shield"
+		and ItemArt.icon_key(ItemCatalog.create_steel_plate_cuirass()) == "plate"
+		and ItemArt.icon_key(ItemCatalog.create_healing_draught()) == "potion"
+		and ItemArt.icon_key(ItemCatalog.create_titan_warhammer()) == "titan_warhammer"
+		and ItemArt.icon_key(ItemCatalog.create_runed_staff()) == "runed_staff"
+	)
+
+	print("\n=======================================================")
+	print("=== ART, TERRAIN & ZONE ASSERTIONS                  ===")
+	print("=======================================================")
+	print("  [Art] Team-colored class tokens (blue/red/yellow + rim shapes): %s" % ("PASS" if tokens_ok else "FAIL"))
+	print("  [Art] Class portraits for every class and team: %s" % ("PASS" if portraits_ok else "FAIL"))
+	print("  [Art] Encounter art follows sides (allies friendly, enemies hostile): %s" % ("PASS" if sides_ok else "FAIL"))
+	print("  [Terrain] Glyph round-trip & walkability rules: %s" % ("PASS" if terrain_ok else "FAIL"))
+	print("  [Terrain] All zones valid 9x9 with walkable core & exit lane: %s" % ("PASS" if zones_ok else "FAIL"))
+	print("  [Terrain] Grid blocks placement/movement on blocked tiles; deploy skips them: %s" % ("PASS" if grid_ok else "FAIL"))
+	print("  [Terrain] Scripted Goblin Ambush reaches victory on every zone: %s" % ("PASS" if all_zones_play else "FAIL"))
+	print("  [Art] Terrain tiles (all variants) & overlays rasterize: %s" % ("PASS" if tiles_ok else "FAIL"))
+	print("  [Art] Item icons by gear type + bespoke rare weapon icons: %s" % ("PASS" if icons_ok else "FAIL"))
+
+	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok

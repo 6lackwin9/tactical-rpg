@@ -132,7 +132,8 @@ func _build_item_card(item: Item) -> void:
 	var card := UiTheme.card(_items_vbox)
 
 	var head := HBoxContainer.new()
-	card.add_child(head)
+	var info: VBoxContainer = UiTheme.item_row(card, item)
+	info.add_child(head)
 	head.add_child(UiTheme.label(item.name, UiTheme.FONT_MD, UiTheme.rarity_color(item.rarity)))
 	head.add_spacer(false)
 	var type_text: String = Item.type_to_string(item.item_type)
@@ -149,14 +150,14 @@ func _build_item_card(item: Item) -> void:
 		var st: CharacterStats = session.active_hero.stats if session.active_hero != null else null
 		var summary: Label = UiTheme.label("%s  •  wt %.1f" % [UiTheme.equipment_summary(eq, st), eq.weight], 9, Color(0.8, 0.9, 0.9))
 		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		card.add_child(summary)
+		info.add_child(summary)
 
 		var allowed: bool = session.can_hero_equip(eq)
 		if not allowed:
 			var arch: String = st.archetype.display_name if (st != null and st.archetype != null) else "Hero"
 			var warn: Label = UiTheme.label("⚠ Class restricted: %s cannot use %s" % [arch, eq.weapon_type.capitalize()], 9, UiTheme.COL_BAD)
 			warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			card.add_child(warn)
+			info.add_child(warn)
 		elif st != null:
 			var status: Dictionary = eq.get_requirement_status_summary(st, st.mastery)
 			var badge_text: String = ("%s  %s" % [str(status.get("req_display", "")), str(status.get("status_tag", ""))]).strip_edges()
@@ -164,7 +165,7 @@ func _build_item_card(item: Item) -> void:
 				var badge_col: Color = status.get("tag_color", Color.WHITE)
 				var badge: Label = UiTheme.label(badge_text, 9, badge_col)
 				badge.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				card.add_child(badge)
+				info.add_child(badge)
 
 		card.add_child(buttons)
 		# Buttons follow the item's real slot rules (Equipment.can_equip_in_slot).
@@ -178,7 +179,7 @@ func _build_item_card(item: Item) -> void:
 			_add_equip_button(buttons, "Equip", eq, _free_accessory_slot(), allowed)
 	elif item is Consumable:
 		var con: Consumable = item
-		card.add_child(UiTheme.label("%s  •  wt %.1f" % [UiTheme.consumable_effect_text(con), con.weight], 9, UiTheme.COL_WARN))
+		info.add_child(UiTheme.label("%s  •  wt %.1f" % [UiTheme.consumable_effect_text(con), con.weight], 9, UiTheme.COL_WARN))
 		card.add_child(buttons)
 		var full: bool = session.active_hero != null and session.active_hero.inventory.battle_pouch.size() >= session.active_hero.inventory.max_pouch_slots
 		var pouch_btn: Button = UiTheme.button("+ Pouch", "Load into the battle pouch" if not full else "Battle pouch is full", func() -> void: session.add_to_pouch(con), 9)

@@ -42,6 +42,7 @@ var _float_layer: Control
 var _overlay_layer: UiOverlayLayer
 var _edit_bar: PanelContainer
 var _layout_option: OptionButton
+var _zone_option: OptionButton
 var _edit_mode: bool = false
 var _auto_timer: Timer
 
@@ -159,6 +160,7 @@ func setup(p_session: CombatSession) -> void:
 	timeline_modal.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
 	session.changed.connect(_on_session_changed)
 	apply_layout(DEFAULT_LAYOUT)
+	_sync_zone_option()
 
 func get_panel(panel_id: String) -> CombatPanel:
 	var raw: Variant = _panels.get(panel_id, null)
@@ -371,8 +373,39 @@ func _build_edit_controls() -> void:
 		_layout_option.add_item(layout_name)
 	_layout_option.item_selected.connect(func(index: int) -> void: apply_layout(_layout_option.get_item_text(index)))
 	row.add_child(_layout_option)
+	row.add_child(UiTheme.label("Zone", UiTheme.FONT_SM, UiTheme.COL_WARN))
+	_zone_option = OptionButton.new()
+	_zone_option.focus_mode = Control.FOCUS_NONE
+	_zone_option.tooltip_text = "Rebuild the battle on another terrain preset (restarts the encounter)"
+	_zone_option.add_theme_font_size_override("font_size", UiTheme.FONT_SM)
+	for zone_id: String in CombatZones.zone_ids():
+		_zone_option.add_item(CombatZones.zone_name(zone_id))
+		_zone_option.set_item_metadata(_zone_option.item_count - 1, zone_id)
+	_zone_option.item_selected.connect(_on_zone_selected)
+	row.add_child(_zone_option)
 	row.add_child(UiTheme.button("Dock All", "Return every floating panel to its dock", dock_all, UiTheme.FONT_SM))
 	row.add_child(UiTheme.button("✔ Done", "Leave layout edit mode", func() -> void: set_edit_mode(false), UiTheme.FONT_SM))
+
+func _on_zone_selected(index: int) -> void:
+	var meta: Variant = _zone_option.get_item_metadata(index)
+	if meta is String:
+		var zone_id: String = meta
+		select_zone(zone_id)
+
+# Switches the encounter's terrain preset and restarts the battle on it.
+func select_zone(zone_id: String) -> void:
+	if session == null or not CombatZones.ZONES.has(zone_id):
+		return
+	session.encounter.zone_id = zone_id
+	session.reset_battle()
+	_sync_zone_option()
+
+func _sync_zone_option() -> void:
+	if _zone_option == null or session == null:
+		return
+	for i: int in range(_zone_option.item_count):
+		if _zone_option.get_item_metadata(i) == session.encounter.zone_id:
+			_zone_option.select(i)
 
 func set_edit_mode(enabled: bool) -> void:
 	_edit_mode = enabled

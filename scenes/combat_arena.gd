@@ -24,3 +24,7 @@ func _ready() -> void:
 	canvas.add_child(host)
 	host.setup(session)
 	session.start()
+
+func _exit_tree() -> void:
+	if session != null:
+		session.dispose()

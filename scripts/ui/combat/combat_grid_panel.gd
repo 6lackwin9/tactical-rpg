@@ -36,7 +36,24 @@ func _mount() -> void:
 	if session == null or session.grid == null:
 		return
 	var enc: CombatEncounter = session.encounter
-	grid_view.setup_grid_tiles(enc.get_tile_texture("floor"), enc.get_tile_texture("exit"), enc.get_tile_texture("center"))
+	var grid: CombatGrid = session.grid
+	var textures: Dictionary = {}
+	var overlays: Dictionary = {}
+	var tooltips: Dictionary = {}
+	for y: int in range(CombatGrid.GRID_SIZE):
+		for x: int in range(CombatGrid.GRID_SIZE):
+			var coord := Vector2i(x, y)
+			var terrain_type: Terrain.Type = grid.get_terrain(coord)
+			textures[coord] = TileArt.tile_at(terrain_type, coord)
+			var tip: String = "%s  %s" % [str(coord), Terrain.describe(terrain_type)]
+			if grid.is_exit_tile(coord):
+				overlays[coord] = TileArt.overlay("exit")
+				tip += " • EXIT (withdraw here)"
+			elif coord == CombatGrid.CENTER:
+				overlays[coord] = TileArt.overlay("center")
+				tip += " • Center ring"
+			tooltips[coord] = tip
+	grid_view.setup_tile_textures(textures, overlays, tooltips)
 	for c: Combatant in session.allies:
 		grid_view.create_unit_token(c, enc.get_token_texture(c), session.grid.get_position(c))
 	for c: Combatant in session.enemies:

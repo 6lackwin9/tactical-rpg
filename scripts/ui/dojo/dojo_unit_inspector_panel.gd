@@ -118,7 +118,7 @@ func _on_points_pressed() -> void:
 func _token_texture(hero: Combatant) -> Texture2D:
 	var key: String = hero.name.to_lower()
 	if not _texture_cache.has(key):
-		_texture_cache[key] = AssetUtils.load_svg_texture("res://assets/party/tokens/token_%s.svg" % key)
+		_texture_cache[key] = UnitArt.token(key, UnitArt.Team.FRIENDLY)
 	var raw: Variant = _texture_cache[key]
 	if raw is Texture2D:
 		var tex: Texture2D = raw

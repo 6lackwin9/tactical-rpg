@@ -21,6 +21,7 @@ func _ready() -> void:
 		print("Execution finished headlessly. Exiting with code: %d\n" % exit_code)
 		# Let nodes freed by the tests (queue_free) actually release before exiting.
 		await get_tree().process_frame
+		SvgRaster.clear_cache()
 		get_tree().quit(exit_code)
 	else:
 		print("Running in windowed mode. Launching combat arena UI...\n")

@@ -28,14 +28,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 
 ```text
 tactical-rpg/
-├── assets/                       # Custom vector SVG assets
-│   ├── enemy/                    # Hostile unit assets
-│   │   ├── sprites/              # Full-character illustration SVG assets (archer, berserker, brawler, dummy)
-│   │   └── tokens/               # Overhead circular unit token SVG assets (dummy token included)
-│   ├── party/                    # Player party unit assets
-│   │   ├── sprites/              # Full-character illustration SVG assets (warrior, ranger)
-│   │   └── tokens/               # Overhead circular unit token SVG assets
-│   └── tiles/                    # Arena grid tile SVG textures (tile_floor, tile_center, tile_exit)
+├── assets/                       # Static assets (icon.svg only; all art is generated in code, see scripts/art/)
 ├── data/                         # [Placeholder] Game data definitions & balance tables
 ├── scenes/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
@@ -85,9 +78,16 @@ tactical-rpg/
 │   │   │   ├── goblin_ambush_encounter.gd # Scripted 3-round demo encounter (reference battle)
 │   │   │   └── combat_log_builder.gd     # Resolved actions -> log cells; resolver messages -> BBCode
 │   │   └── arena/                # Arena spatial rules & resolution
-│   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles
+│   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability
+│       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
+│       ├── combat_zones.gd           # 8 preset 9x9 combat zones (forest, river, lava cavern, ...)
 │   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
+│   │   ├── svg_raster.gd             # SVG string -> cached ImageTexture
+│   │   ├── unit_art.gd               # Class-glyph tokens (blue friendly / red hostile / yellow neutral) & portraits
+│   │   ├── tile_art.gd               # Terrain tiles (seeded variants) plus exit/center overlays
+│   │   └── item_art.gd               # Gear icons by type with rarity frame; unique icons via Item.icon_id
 │   ├── dojo/                     # Gear Dojo headless logic (no UI dependencies)
 │   │   ├── dojo_session.gd           # State + actions: heroes, dummy, stash, quick setup, strikes, benchmarks, stat allocation, test log
 │   │   ├── dojo_loadouts.gd          # Declarative quick-setup gear presets (class-proficiency aware)
@@ -95,7 +95,7 @@ tactical-rpg/
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   └── arena_test_suite.gd       # 8 automated test suites with 68 assertions
+│   │   └── arena_test_suite.gd       # 9 automated test suites with 77 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── framework/                # Neutral UI framework shared by the dojo and the combat UI
 │       │   ├── ui_panel.gd               # Panel base: metadata, bind(session), refresh(), overlay requests
@@ -272,7 +272,7 @@ tactical-rpg/
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **8 test suites** covering **68 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **9 test suites** covering **77 individual assertions**:
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
@@ -282,6 +282,7 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 7. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
 8. **Combat Session Flow Test** (8 assertions): Through `CombatSession` headlessly, only deployed enemies in view before the ambush, ambush event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay playhead reading per-block snapshots, round advance baselines with past rounds reviewable, Rounds 2-3 resolving to total victory, timer-free auto-play ticks, and round reset.
+9. **Art, Terrain & Zones Test** (9 assertions): team-colored class tokens and portraits, encounter art follows sides, terrain glyph round-trip and walkability, all 8 zones valid, grid blocks blocked tiles, Goblin Ambush wins on every zone, tile and item icon rasterization.
 
 Additionally, `scenes/gear_dojo.tscn` runs **36 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
@@ -348,6 +349,8 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] Interactive timeline command placement (drag/click to assign player commands onto Blocks 1–10).
 - [ ] Action Point / Stamina cost budget verification during planning.
 - [ ] Dynamic command replacement and block shifting.
+- [ ] Terrain gameplay rules: cover bonuses, movement cost and hazard damage (metadata already in `Terrain`).
+- [ ] More bespoke icons for unique/rare gear (`Item.icon_id`).
 - [x] `CombatSession` extracted from `test_arena.gd`; combat UI rebuilt as session-bound panels in a static dock host (`combat_arena.tscn`).
 
 ### 2. Enemy AI Decision Engine (`System 8`)

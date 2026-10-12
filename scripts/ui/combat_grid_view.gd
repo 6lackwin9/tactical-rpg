@@ -107,8 +107,11 @@ func _build_ui() -> void:
 	hover_status_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.85))
 	hov_vbox.add_child(hover_status_lbl)
 
-func setup_grid_tiles(tex_floor: Texture2D, tex_exit: Texture2D, tex_center: Texture2D) -> void:
-	for child in grid_container.get_children():
+# Builds the 9x9 board from per-tile textures (Vector2i -> Texture2D), optional
+# overlays drawn on top (exits, landmarks) and hover tooltips (terrain info).
+func setup_tile_textures(textures: Dictionary, overlays: Dictionary = {}, tooltips: Dictionary = {}) -> void:
+	for child: Node in grid_container.get_children():
+		grid_container.remove_child(child)
 		child.queue_free()
 	grid_tile_nodes.clear()
 
@@ -119,13 +122,23 @@ func setup_grid_tiles(tex_floor: Texture2D, tex_exit: Texture2D, tex_center: Tex
 			tile_rect.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
 			tile_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			tile_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tile_rect.mouse_filter = Control.MOUSE_FILTER_PASS
+			var tex_raw: Variant = textures.get(coord, null)
+			if tex_raw is Texture2D:
+				var tex: Texture2D = tex_raw
+				tile_rect.texture = tex
+			tile_rect.tooltip_text = str(tooltips.get(coord, ""))
 
-			if coord == Vector2i(4, 4):
-				tile_rect.texture = tex_center
-			elif coord == Vector2i(8, 4):
-				tile_rect.texture = tex_exit
-			else:
-				tile_rect.texture = tex_floor
+			var overlay_raw: Variant = overlays.get(coord, null)
+			if overlay_raw is Texture2D:
+				var overlay_tex: Texture2D = overlay_raw
+				var overlay := TextureRect.new()
+				overlay.texture = overlay_tex
+				overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+				overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				tile_rect.add_child(overlay)
 
 			grid_container.add_child(tile_rect)
 			grid_tile_nodes[coord] = tile_rect

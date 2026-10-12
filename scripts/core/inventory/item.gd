@@ -32,6 +32,7 @@ var weight: float = 1.0
 var value_gold: int = 10
 var max_stack: int = 1
 var damage_type: String = ""  # slash, pierce, blunt, magic, fire (empty = non-damaging)
+var icon_id: String = ""      # optional bespoke icon (ItemArt.UNIQUE_ICONS); empty = icon by gear type
 
 func _init(
 	p_id: String = "",

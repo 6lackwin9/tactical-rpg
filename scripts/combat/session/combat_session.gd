@@ -76,6 +76,7 @@ func _init(p_encounter: CombatEncounter) -> void:
 # ------------------------------------------------------------------------------
 
 func start() -> void:
+	dispose()
 	is_auto_playing = false
 	combat_over = false
 	max_unlocked_round = 1
@@ -141,6 +142,19 @@ func _begin_round(round_num: int) -> void:
 	focused_hero = first_active
 	selected_combatant = first_active
 	_notify()
+
+# Breaks reference cycles of the current battle (units locking onto each other via
+# active_target) so a finished or abandoned battle can be freed. Safe to repeat.
+func dispose() -> void:
+	for c: Combatant in allies:
+		c.active_target = null
+	for c: Combatant in enemies:
+		c.active_target = null
+	if resolver != null:
+		resolver.scheduled_actions.clear()
+	round_actions.clear()
+	round_snapshots.clear()
+	_pending_actions.clear()
 
 func reset_round() -> void:
 	if current_round == 1:
