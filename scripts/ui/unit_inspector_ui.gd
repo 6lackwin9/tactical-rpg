@@ -8,7 +8,6 @@ extends PanelContainer
 # ==============================================================================
 
 signal gear_modal_requested(combatant: Combatant)
-signal test_skill_requested(actor: Combatant, skill_type: String, target: Combatant)
 
 var inspector_hdr: Label
 var btn_gear_modal: Button
@@ -28,12 +27,9 @@ var inspector_buffs_lbl: Label
 var inspector_gear_lbl: Label
 var ally_actions_container: VBoxContainer
 var enemy_actions_container: VBoxContainer
-var dojo_test_container: VBoxContainer
-var dummy_defend_btn: Button
 var left_hint: Label
 
 var current_inspected_combatant: Combatant = null
-var dummy_target_ref: Combatant = null
 
 func _init() -> void:
 	name = "UnitInspectorUI"
@@ -282,83 +278,6 @@ func _build_ui() -> void:
 		var act_card := _create_mini_action_card(act)
 		ally_actions_container.add_child(act_card)
 
-	# Skill Dojo Test Panel
-	dojo_test_container = VBoxContainer.new()
-	dojo_test_container.add_theme_constant_override("separation", 3)
-	left_vbox.add_child(dojo_test_container)
-
-	var dojo_hdr := Label.new()
-	dojo_hdr.text = "🎯 SKILL EFFECT TEST BENCH (TRAINING DUMMY)"
-	dojo_hdr.add_theme_font_size_override("font_size", 9)
-	dojo_hdr.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
-	dojo_test_container.add_child(dojo_hdr)
-
-	var dojo_grid := GridContainer.new()
-	dojo_grid.columns = 3
-	dojo_grid.add_theme_constant_override("h_separation", 4)
-	dojo_grid.add_theme_constant_override("v_separation", 3)
-	dojo_test_container.add_child(dojo_grid)
-
-	var btn_test_atk := Button.new()
-	btn_test_atk.text = "⚔ Strike"
-	btn_test_atk.tooltip_text = "Test Melee Weapon Strike on Dummy"
-	btn_test_atk.add_theme_font_size_override("font_size", 8)
-	btn_test_atk.focus_mode = Control.FOCUS_NONE
-	btn_test_atk.pressed.connect(func() -> void:
-		test_skill_requested.emit(current_inspected_combatant, "ATTACK", dummy_target_ref)
-	)
-	dojo_grid.add_child(btn_test_atk)
-
-	var btn_test_rng := Button.new()
-	btn_test_rng.text = "🏹 Volley"
-	btn_test_rng.tooltip_text = "Test Ranged Attack on Dummy (Scales with DEX)"
-	btn_test_rng.add_theme_font_size_override("font_size", 8)
-	btn_test_rng.focus_mode = Control.FOCUS_NONE
-	btn_test_rng.pressed.connect(func() -> void:
-		test_skill_requested.emit(current_inspected_combatant, "RANGED", dummy_target_ref)
-	)
-	dojo_grid.add_child(btn_test_rng)
-
-	var btn_test_foc := Button.new()
-	btn_test_foc.text = "✦ Focus"
-	btn_test_foc.tooltip_text = "Test Focus Buff (+50% ATK Power)"
-	btn_test_foc.add_theme_font_size_override("font_size", 8)
-	btn_test_foc.focus_mode = Control.FOCUS_NONE
-	btn_test_foc.pressed.connect(func() -> void:
-		test_skill_requested.emit(current_inspected_combatant, "FOCUS", dummy_target_ref)
-	)
-	dojo_grid.add_child(btn_test_foc)
-
-	var btn_test_def := Button.new()
-	btn_test_def.text = "🛡 Defend"
-	btn_test_def.tooltip_text = "Test Defensive Stance Barrier"
-	btn_test_def.add_theme_font_size_override("font_size", 8)
-	btn_test_def.focus_mode = Control.FOCUS_NONE
-	btn_test_def.pressed.connect(func() -> void:
-		test_skill_requested.emit(current_inspected_combatant, "DEFEND", dummy_target_ref)
-	)
-	dojo_grid.add_child(btn_test_def)
-
-	var btn_test_item := Button.new()
-	btn_test_item.text = "🧪 Pouch Item"
-	btn_test_item.tooltip_text = "Use Quick Consumable from Battle Pouch"
-	btn_test_item.add_theme_font_size_override("font_size", 8)
-	btn_test_item.focus_mode = Control.FOCUS_NONE
-	btn_test_item.pressed.connect(func() -> void:
-		test_skill_requested.emit(current_inspected_combatant, "POUCH_ITEM", dummy_target_ref)
-	)
-	dojo_grid.add_child(btn_test_item)
-
-	dummy_defend_btn = Button.new()
-	dummy_defend_btn.text = "🛡 Dummy Mit"
-	dummy_defend_btn.tooltip_text = "Toggle Dummy Defense (0% Neutral vs 50% Defending)"
-	dummy_defend_btn.add_theme_font_size_override("font_size", 8)
-	dummy_defend_btn.focus_mode = Control.FOCUS_NONE
-	dummy_defend_btn.pressed.connect(func() -> void:
-		test_skill_requested.emit(current_inspected_combatant, "TOGGLE_DUMMY_DEFENSE", dummy_target_ref)
-	)
-	dojo_grid.add_child(dummy_defend_btn)
-
 	# Enemy Possible Actions Deck (Secret Intent Pool)
 	enemy_actions_container = VBoxContainer.new()
 	enemy_actions_container.add_theme_constant_override("separation", 3)
@@ -409,67 +328,75 @@ func _create_mini_action_card(act: Dictionary) -> PanelContainer:
 
 	return act_card
 
+# `snap` (optional) renders the unit as it was at a replayed block; null = live state.
 func update_inspector(
 	selected_combatant: Combatant,
 	is_ally: bool,
 	pos_text: String,
-	sprite_texture: Texture2D
+	sprite_texture: Texture2D,
+	snap: BlockSnapshot = null
 ) -> void:
 	if not selected_combatant:
 		return
 
-	current_inspected_combatant = selected_combatant
+	var c: Combatant = selected_combatant
+	var cur_hp: int = c.hp
+	var max_hp: int = c.max_hp
+	var stance: CombatTypes.StanceType = c.current_stance
+	var target_val: Variant = c.active_target
+	var boost_rds: int = c.attack_boost_rounds_remaining
+	var withdrawn: bool = c.is_withdrawn
+	if snap != null:
+		var raw_hp: Variant = snap.hps.get(c, cur_hp)
+		cur_hp = raw_hp if raw_hp is int else cur_hp
+		var raw_max: Variant = snap.max_hps.get(c, max_hp)
+		max_hp = raw_max if raw_max is int else max_hp
+		var raw_stance: Variant = snap.stances.get(c, stance)
+		stance = raw_stance if raw_stance is CombatTypes.StanceType else stance
+		target_val = snap.targets.get(c, target_val)
+		var raw_rds: Variant = snap.attack_boost_rds.get(c, boost_rds)
+		boost_rds = raw_rds if raw_rds is int else boost_rds
+		var raw_withdrawn: Variant = snap.is_withdrawn.get(c, withdrawn)
+		withdrawn = raw_withdrawn if raw_withdrawn is bool else withdrawn
+	var alive: bool = cur_hp > 0
+
+	current_inspected_combatant = c
 	if btn_gear_modal:
 		btn_gear_modal.visible = is_ally
-	if dojo_test_container:
-		dojo_test_container.visible = is_ally and selected_combatant.is_alive()
-	if dummy_defend_btn:
-		var has_mit: bool = (dummy_target_ref != null and dummy_target_ref.defense_mitigation_ratio > 0.0)
-		dummy_defend_btn.text = "🛡 Dummy Mit: 50%" if has_mit else "🛡 Dummy Mit: 0%"
 
-	inspector_name_lbl.text = selected_combatant.name
+	inspector_name_lbl.text = c.name
 
 	if is_ally:
 		inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
 		inspector_team_lbl.text = "Allied Hero (Party Member)"
 		inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
 		inspector_avatar.texture = sprite_texture
-		ally_actions_container.visible = selected_combatant.is_alive()
+		ally_actions_container.visible = alive
 		enemy_actions_container.visible = false
-		if not selected_combatant.is_alive():
+		if not alive:
 			left_hint.text = "💀 Unit is defeated. Future commands cancelled."
 		else:
 			left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
 	else:
-		if selected_combatant.name == "Training Dummy":
-			inspector_hdr.text = "TRAINING DOJO BENCHMARK"
-			inspector_team_lbl.text = "Target Dummy (Test Entity)"
-			inspector_team_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
-			inspector_avatar.texture = sprite_texture
-			ally_actions_container.visible = false
-			enemy_actions_container.visible = true
-			_rebuild_enemy_threat_dock(selected_combatant)
-			left_hint.text = "🎯 Use Skill Dojo buttons on heroes to test attacks, buffs & gear damage."
+		inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
+		inspector_team_lbl.text = "Hostile Enemy Unit"
+		inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+		inspector_avatar.texture = sprite_texture
+		ally_actions_container.visible = false
+		enemy_actions_container.visible = alive
+		_rebuild_enemy_threat_dock(c)
+		if not alive:
+			left_hint.text = "💀 Enemy hostile defeated."
+		elif withdrawn:
+			left_hint.text = "💨 Enemy safely withdrew through escape boundary."
 		else:
-			inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
-			inspector_team_lbl.text = "Hostile Enemy Unit"
-			inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
-			inspector_avatar.texture = sprite_texture
-			ally_actions_container.visible = false
-			enemy_actions_container.visible = selected_combatant.is_alive()
-			_rebuild_enemy_threat_dock(selected_combatant)
-			if not selected_combatant.is_alive():
-				left_hint.text = "💀 Enemy hostile defeated."
-			elif selected_combatant.is_withdrawn:
-				left_hint.text = "💨 Enemy safely withdrew through escape boundary."
-			else:
-				left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
+			left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
 
-	inspector_hp_bar.max_value = selected_combatant.max_hp
-	inspector_hp_bar.value = selected_combatant.hp
-	inspector_hp_lbl.text = "%d/%d" % [selected_combatant.hp, selected_combatant.max_hp]
+	inspector_hp_bar.max_value = max_hp
+	inspector_hp_bar.value = cur_hp
+	inspector_hp_lbl.text = "%d/%d" % [cur_hp, max_hp]
 
-	var hp_ratio: float = float(selected_combatant.hp) / float(maxi(1, selected_combatant.max_hp))
+	var hp_ratio: float = float(cur_hp) / float(maxi(1, max_hp))
 	var hp_fill := StyleBoxFlat.new()
 	hp_fill.set_corner_radius_all(3)
 	if hp_ratio > 0.5:
@@ -481,31 +408,30 @@ func update_inspector(
 	inspector_hp_bar.add_theme_stylebox_override("fill", hp_fill)
 
 	if inspector_sp_bar and inspector_sp_lbl:
-		var cur_sp: int = 50 if selected_combatant.is_alive() else 0
+		var cur_sp: int = 50 if alive else 0
 		inspector_sp_bar.max_value = 50
 		inspector_sp_bar.value = cur_sp
 		inspector_sp_lbl.text = "%d/50" % cur_sp
 
-	inspector_stance_lbl.text = "Stance: " + CombatTypes.stance_to_string(selected_combatant.current_stance)
-	inspector_speed_lbl.text = "Speed: %d" % selected_combatant.speed
-	inspector_range_lbl.text = "Range: %d tile%s" % [selected_combatant.attack_range, "s" if selected_combatant.attack_range > 1 else ""]
+	inspector_stance_lbl.text = "Stance: " + CombatTypes.stance_to_string(stance)
+	inspector_speed_lbl.text = "Speed: %d" % c.speed
+	inspector_range_lbl.text = "Range: %d tile%s" % [c.attack_range, "s" if c.attack_range > 1 else ""]
 	inspector_pos_lbl.text = pos_text
 
-	if selected_combatant.active_target is Combatant:
-		@warning_ignore("unsafe_cast")
-		var tgt: Combatant = selected_combatant.active_target as Combatant
+	if target_val is Combatant:
+		var tgt: Combatant = target_val
 		inspector_target_lbl.text = "Target: " + tgt.name
 	else:
 		inspector_target_lbl.text = "Target: None"
 
-	if selected_combatant.attack_boost_rounds_remaining > 0:
-		inspector_buffs_lbl.text = "Buffs: Focus (+50%% ATK, %d rds)" % selected_combatant.attack_boost_rounds_remaining
+	if boost_rds > 0:
+		inspector_buffs_lbl.text = "Buffs: Focus (+50%% ATK, %d rds)" % boost_rds
 	else:
 		inspector_buffs_lbl.text = "Buffs: None active"
 
 	if inspector_gear_lbl:
-		if selected_combatant.inventory != null:
-			var wpn: Equipment = selected_combatant.inventory.get_main_weapon()
+		if c.inventory != null:
+			var wpn: Equipment = c.inventory.get_main_weapon()
 			if wpn != null:
 				inspector_gear_lbl.text = "Gear: " + wpn.name
 			else:
@@ -520,11 +446,6 @@ func _rebuild_enemy_threat_dock(selected_combatant: Combatant) -> void:
 
 	var enemy_actions: Array[Dictionary] = []
 	match selected_combatant.name:
-		"Training Dummy":
-			enemy_actions = [
-				{"name": "🎯 Target Dummy", "desc": "Takes strikes for damage & skill testing", "cost": 0, "color": Color(0.9, 0.8, 0.3)},
-				{"name": "🛡 Defense Barrier", "desc": "Toggle 50% mitigation barrier", "cost": 0, "color": Color(0.4, 0.7, 1.0)}
-			]
 		"Enemy Brawler":
 			enemy_actions = [
 				{"name": "⚔ Heavy Strike", "desc": "20 Power Melee Crush | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)},

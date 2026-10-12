@@ -38,8 +38,10 @@ tactical-rpg/
 │   └── tiles/                    # Arena grid tile SVG textures (tile_floor, tile_center, tile_exit)
 ├── data/                         # [Placeholder] Game data definitions & balance tables
 ├── scenes/
-│   ├── test_arena.tscn           # Visual interactive combat arena harness scene
-│   ├── test_arena.gd             # Harness orchestration, replay scrubbing & UI wiring
+│   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
+│   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
+│   ├── test_arena.tscn           # Test harness scene: runs ArenaTestSuite, then launches combat_arena
+│   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
 │   ├── gear_dojo.gd              # Thin bootstrap: builds DojoSession, mounts the window workspace or runs assertions
 │   └── dojo/
@@ -77,9 +79,13 @@ tactical-rpg/
 │   │   │   ├── target_command.gd         # Intent lock onto specific opponent
 │   │   │   ├── enter_neutral_command.gd  # Reset active combat stance to Neutral
 │   │   │   └── hold_stance_command.gd    # Stance preservation across timeline blocks
-│   │   └── arena/                # Arena spatial rules, scenario setups & resolution
+│   │   ├── session/              # Headless combat session & encounter definitions
+│   │   │   ├── combat_session.gd         # Battle state: rounds, resolution, snapshots, replay, selection, log
+│   │   │   ├── combat_encounter.gd       # Encounter plug-in base (combatants, deployment, plans, triggers, art)
+│   │   │   ├── goblin_ambush_encounter.gd # Scripted 3-round demo encounter (reference battle)
+│   │   │   └── combat_log_builder.gd     # Resolved actions -> log cells; resolver messages -> BBCode
+│   │   └── arena/                # Arena spatial rules & resolution
 │   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles
-│   │       ├── combat_scenario.gd        # Encounter setup, ally/enemy rosters, reinforcements, asset binding
 │   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── dojo/                     # Gear Dojo headless logic (no UI dependencies)
@@ -89,7 +95,7 @@ tactical-rpg/
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   └── arena_test_suite.gd       # 7 automated test suites with 60 assertions
+│   │   └── arena_test_suite.gd       # 8 automated test suites with 68 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── framework/                # Neutral UI framework shared by the dojo and the combat UI
 │       │   ├── ui_panel.gd               # Panel base: metadata, bind(session), refresh(), overlay requests
@@ -112,7 +118,16 @@ tactical-rpg/
 │       │   ├── dojo_allocation_panel.gd  # Overlay: allocate attribute points
 │       │   ├── dojo_picker_panel.gd      # Overlay: equip picker for one slot / battle pouch
 │       │   └── dojo_stash_filter_panel.gd # Overlay: custom stash filter (stat, rarity, type, damage, hands, sort)
-│       ├── combat_arena_controller.gd# CanvasLayer coordinator & pure view composer
+│       ├── combat/                   # Combat panels (extend CombatPanel) & the dock host
+│       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
+│       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
+│       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
+│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards & action FX
+│       │   ├── combat_action_log_panel.gd # Compact resolution log dock
+│       │   ├── combat_inspector_panel.gd # Unit inspector (snapshot-aware)
+│       │   ├── combat_forecast_panel.gd  # Tactical forecast
+│       │   ├── combat_playback_panel.gd  # Step / play / reset / round advance
+│       │   └── combat_timeline_panel.gd  # 10-block ruler & focused unit track
 │       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tweens & floating text
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
 │       ├── unit_inspector_ui.gd      # Left dock (avatar, vitals, stats, action decks)
@@ -126,7 +141,7 @@ tactical-rpg/
 ├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
 ├── run_gear_dojo.bat             # Dedicated launcher for Gear, Skill & Dummy Benchmark Dojo
-└── run_game.bat                  # Quick launcher for interactive test arena in Godot
+└── run_game.bat                  # Quick launcher for the combat arena (main scene)
 ```
 
 ---
@@ -164,9 +179,12 @@ tactical-rpg/
 - **Two-Way Stepping**: Jump backward and forward through blocks (`Step Prev`, `Step Next`, ruler scrub) with restored visual states.
 - **Multi-Round Historical Traversal**: Review previous completed rounds (Round 1, Round 2) without losing active simulation state.
 
-### 5. Modular UI & Visual Feedback Framework
+### 5. Modular Combat UI (`combat_arena.tscn`)
 
-- **Pure View Coordinator (`CombatArenaController`)**: Zero layout coupling in simulation logic.
+- **Headless `CombatSession`**: Owns one battle: the encounter's combatants, grid and resolver, round flow, block-by-block resolution, per-block snapshots, multi-round traversal, selection/hover and the action log. Panels only read it and call its actions; every change ends in `changed`, visual one-shots use `fx_requested` / `hover_changed`. The whole battle flow is headless-testable.
+- **Pluggable `CombatEncounter`**: Defines *what* a battle is (combatants, deployment, per-round plans, mid-round triggers, narration, art). The scripted 3-round Goblin Ambush is `GoblinAmbushEncounter`; future AI-planned or region-generated encounters plug in the same way. Its combatants are the single source of truth for simulation and rendering.
+- **Panels (`CombatPanel`)**: Party roster, enemy roster, resolution log, unit inspector, combat grid, tactical forecast, playback controls and timeline are independent panels bound to the session, each wrapping an existing view component. The inspector, roster and grid all render the replayed snapshot when reviewing a past block.
+- **Static Dock Host (`CombatDockHost`)**: Fixed regions (top row, left/center/right, bottom bar) filled from data-driven layout presets (`Standard`, `Mirrored`). The game UI stays static; **layout edit mode** (`⚙` / `F9`) overlays an `⇱ Undock` tag on each panel without moving anything, floats panels into `UiWindow`s (their dock keeps a same-size placeholder) and docks them back when closed. The host also owns the full-screen modals and shortcuts (`Space` play, `Q`/`E` blocks, `[`/`]` log, `L` log modal, `F`/`Tab` timeline, `G` party & stash, `Esc` close).
 - **Custom SVG Visual Assets**: Custom vector graphics for characters, unit tokens, and grid tiles.
 - **Allied & Enemy Status Roster Docks**: Real-time HP bars, SP gauges, status badges, and position coordinates.
 - **Unit Inspector & Action Palette**: Unit profile portrait, speed, attack range, and action deck.
@@ -228,7 +246,7 @@ tactical-rpg/
 
 ### 8. Dedicated Gear & Skill Dojo (`gear_dojo.tscn`)
 
-- **Separated Scene Architecture**: Distinct from `test_arena.tscn` (which focuses on 10-block visual combat and ambush scenarios), `scenes/gear_dojo.tscn` is a dedicated workbench for gear equipping, stat inspection, and damage formula validation.
+- **Separated Scene Architecture**: Distinct from the combat arena (`combat_arena.tscn`, the production combat UI), `scenes/gear_dojo.tscn` is a dedicated workbench for gear equipping, stat inspection, and damage formula validation.
 - **Headless Session + Modular Windows**: All dojo state and rules live in `DojoSession` (`RefCounted`, no UI). Six independent panel components render from it, each hosted in a floating `UiWindow` inside `DojoWorkspace`. Panels never talk to each other, only to the session, so any of them can be closed, moved, or reused elsewhere.
 - **Window System**: Drag by the title bar, resize from the bottom-right grip, collapse with `–` (or double-click the title), close with `✕`, and reopen from the toolbar `Windows:` toggles. Clicking a window raises it. Three layout presets (`Workbench`, `Combat Focus`, `Gear Focus`) plus `⟲ Re-tile`; window geometry is stored as fractions of the desk and persisted to `user://gear_dojo_layout.cfg`, so layouts survive restarts and window resizes.
 - **The Six Components**:
@@ -254,15 +272,16 @@ tactical-rpg/
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **7 test suites** covering **60 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **8 test suites** covering **68 individual assertions**:
 
-1. **Combat UI Framework & Behaviour Test** (8 assertions): UI dock creation, scenario mounting, token generation, inspector synchronization, tactical forecast, modal lifecycle, signal relay, and action FX dispatch.
+1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
 3. **9x9 Combat Grid & Withdrawal Test** (7 assertions): Center-ring deployment, spatial range gating, coordinate stepping to `(4, 4)`, exit tile escape, and casualty cleanup.
 4. **Resolution Feed Logging Test** (7 assertions): Movement, skill, defend, attack, withdrawal, and defeat log tags.
 5. **Goblin Ambush & Casualty Test** (9 assertions): Reinforcements arrival at Block 4, casualty action cancellation, multi-round rollover, and victory state.
 6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 7. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
+8. **Combat Session Flow Test** (8 assertions): Through `CombatSession` headlessly, only deployed enemies in view before the ambush, ambush event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay playhead reading per-block snapshots, round advance baselines with past rounds reviewable, Rounds 2-3 resolving to total victory, timer-free auto-play ticks, and round reset.
 
 Additionally, `scenes/gear_dojo.tscn` runs **36 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
@@ -277,7 +296,7 @@ Runs in 4 phases:
 
 - `[1/4]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
 - `[2/4]` Validates GDScript syntax & static typing across all 67 project scripts (`--headless --check-only`).
-- `[3/4]` Executes the headless combat arena harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
+- `[3/4]` Executes the headless arena test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
 - `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
 
 ---
@@ -314,7 +333,7 @@ Launch the combat arena in windowed mode:
 run_game.bat
 ```
 
-Or open the project in **Godot 4.7+** and run `res://scenes/test_arena.tscn` or `res://scenes/gear_dojo.tscn`.
+Or open the project in **Godot 4.7+** and press Play (main scene `res://scenes/combat_arena.tscn`), or run `res://scenes/gear_dojo.tscn`. `res://scenes/test_arena.tscn` runs the test suite first, then opens the arena.
 
 ---
 
@@ -329,7 +348,7 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] Interactive timeline command placement (drag/click to assign player commands onto Blocks 1–10).
 - [ ] Action Point / Stamina cost budget verification during planning.
 - [ ] Dynamic command replacement and block shifting.
-- [ ] Extraction of `CombatSession` orchestration out of `test_arena.gd` to completely decouple playback from the harness.
+- [x] `CombatSession` extracted from `test_arena.gd`; combat UI rebuilt as session-bound panels in a static dock host (`combat_arena.tscn`).
 
 ### 2. Enemy AI Decision Engine (`System 8`)
 

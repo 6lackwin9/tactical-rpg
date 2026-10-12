@@ -311,14 +311,10 @@ func prune_enemy(enemy: Combatant) -> void:
 
 func update_all_roster_cards(
 	allies: Array[Combatant],
-	current_combat_round: int,
-	reinforcements_spawned: bool,
 	grid: CombatGrid,
 	snap: BlockSnapshot = null
 ) -> void:
 	var alive_enemies: int = 0
-	var is_r1: bool = (snap.round_num == 1 if snap != null else current_combat_round == 1)
-	var reinforcements_active: bool = (snap.reinforcements_spawned if snap != null else reinforcements_spawned)
 
 	for combatant: Combatant in roster_cards:
 		@warning_ignore("unsafe_cast")
@@ -335,13 +331,7 @@ func update_all_roster_cards(
 		var cur_stance: CombatTypes.StanceType = snap.stances.get(combatant, combatant.current_stance) if snap != null else combatant.current_stance
 		var pos: Vector2i = snap.positions.get(combatant, grid.get_position(combatant) if grid else Vector2i(-1, -1)) if snap != null else (grid.get_position(combatant) if grid else Vector2i(-1, -1))
 
-		# In Round 1, ambush goblins are only visible after they appear
-		if not is_ally and combatant.name in ["Goblin Berserker", "Goblin Skirmisher", "Goblin Archer", "Goblin Shaman"]:
-			if is_r1:
-				card.visible = reinforcements_active
-			else:
-				card.visible = true
-
+		# Card visibility (who is on the field) is decided by the owning panel/session.
 		if not is_ally and card.visible and is_act:
 			alive_enemies += 1
 

@@ -4,13 +4,14 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Headless Integration & UI Test Suite
 # Contains all automated headless tests:
-# 1. UI Setup and Behaviour Test (CombatArenaController view framework)
+# 1. Combat UI Framework Test (CombatSession + CombatDockHost panels)
 # 2. Warrior vs 3 Goblins Battle (Stance, Multi-round focus buff, Damage mitigation)
 # 3. Combat Grid & Withdrawal Test (9x9 grid, spatial range gate, exit withdrawal)
 # 4. Resolution Feed & Action Logging Test (Event capture, structured log feed)
 # 5. Goblin Ambush & Casualty Test (Reinforcements, casualty action cancellation)
 # 6. Character Specs & Inventory Test (6-stat framework, progression, masteries)
 # 7. Gear Equip UI, Test Dummy & Damage Formula Test (Equipment modal, dummy, formulas)
+# 8. Combat Session Flow Test (scripted 3-round Goblin Ambush through CombatSession)
 # ==============================================================================
 
 static func run_all_tests(tree_parent: Node = null) -> bool:
@@ -21,13 +22,14 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 	var test4_passed: bool = run_goblin_ambush_and_casualty_test()
 	var test5_passed: bool = run_character_specs_and_inventory_test()
 	var test6_passed: bool = run_gear_equip_and_test_dummy_suite(tree_parent)
+	var test7_passed: bool = run_combat_session_flow_test()
 
 	return (test0_passed and test1_passed and test2_passed and test3_passed and
-		test4_passed and test5_passed and test6_passed)
+		test4_passed and test5_passed and test6_passed and test7_passed)
 
 
 # ==============================================================================
-# TEST 1: COMBAT UI FRAMEWORK & BEHAVIOUR TEST
+# TEST 1: COMBAT UI FRAMEWORK & BEHAVIOUR TEST (CombatSession + CombatDockHost)
 # ==============================================================================
 
 static func run_combat_ui_framework_test(tree_parent: Node = null) -> bool:
@@ -35,105 +37,195 @@ static func run_combat_ui_framework_test(tree_parent: Node = null) -> bool:
 	print("=== STARTING COMBAT UI FRAMEWORK & BEHAVIOUR TEST   ===")
 	print("=======================================================")
 
-	var arena := CombatArenaController.new()
+	var session := CombatSession.new(GoblinAmbushEncounter.new())
+	var host := CombatDockHost.new()
 	if tree_parent != null:
-		tree_parent.add_child(arena)
+		tree_parent.add_child(host)
+	host.setup(session)
+	session.start()
 
-	# 1. Verify core docks and child nodes are instantiated
-	var ui_nodes_ok: bool = (
-		arena.roster_panel != null and
-		arena.action_log_dock != null and
-		arena.unit_inspector != null and
-		arena.grid_view != null and
-		arena.tactical_forecast != null and
-		arena.playback_controls != null and
-		arena.timeline_dock != null and
-		arena.log_modal != null and
-		arena.timeline_modal != null
+	# 1. Every panel is mounted in its dock region of the default layout
+	var expected_regions: Dictionary = {
+		"party": "top_left", "action_log": "top_center", "enemies": "top_right",
+		"inspector": "left", "grid": "center", "forecast": "right",
+		"playback": "bottom_left", "timeline": "bottom_center",
+	}
+	var docks_ok: bool = host.log_modal != null and host.timeline_modal != null
+	for id: String in expected_regions:
+		if host.get_panel(id) == null or host.region_of(id) != str(expected_regions[id]):
+			docks_ok = false
+
+	# 2. Tokens and roster cards are bound to the SAME combatants the session simulates
+	var grid_panel: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+	var enemy_panel: CombatRosterPanel = host.get_panel("enemies") as CombatRosterPanel
+	var warrior: Combatant = session.allies[0]
+	var tokens_ok: bool = (
+		grid_panel.token_count() == session.allies.size() + session.enemies.size()
+		and grid_panel.grid_view.get_token_for(warrior) != null
+		and grid_panel.visible_token_count() == 4  # 2 heroes + Brawler + Scout; the ambush is not on the field yet
+		and enemy_panel.visible_card_count() == 2
 	)
 
-	# 2. Scenario mounting & visual token generation
-	var scenario := CombatScenario.create_default_arena_scenario()
-	var exit_coord := Vector2i(8, 4)
-	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [exit_coord])
-	grid.deploy_combatants(scenario.allies, scenario.enemies)
-	arena.mount_scenario(scenario, grid)
+	# 3. Selecting a unit updates the Unit Inspector
+	var inspector_panel: CombatInspectorPanel = host.get_panel("inspector") as CombatInspectorPanel
+	session.select_combatant(session.find_combatant("Enemy Brawler"))
+	var enemy_shown: bool = inspector_panel.inspector.inspector_name_lbl.text == "Enemy Brawler"
+	session.select_combatant(warrior)
+	var inspector_ok: bool = enemy_shown and inspector_panel.inspector.inspector_name_lbl.text == "Warrior"
 
-	var ally0: Combatant = scenario.allies[0]
-	var enemy0: Combatant = scenario.enemies[0]
-	var tokens_created_ok: bool = (
-		arena.grid_view.unit_token_nodes.has(ally0) and
-		arena.grid_view.unit_token_nodes.has(enemy0) and
-		arena.roster_panel.roster_cards.has(ally0) and
-		arena.roster_panel.roster_cards.has(enemy0)
-	)
+	# 4. Tactical forecast targets the selected unit's opponent
+	var forecast_panel: CombatForecastPanel = host.get_panel("forecast") as CombatForecastPanel
+	var target: Combatant = session.forecast_target(warrior)
+	var forecast_ok: bool = target != null and target.name in forecast_panel.forecast.forecast_target_lbl.text
 
-	# 3. Combatant selection & Unit Inspector update
-	arena.select_combatant(ally0, scenario.allies)
-	arena.update_selected_unit_panel(ally0, true, "(4, 5)", scenario.get_sprite_texture(ally0))
-	var inspector_sync_ok: bool = (
-		arena.unit_inspector.inspector_name_lbl != null and
-		arena.unit_inspector.inspector_name_lbl.text == ally0.name
-	)
+	# 5. Log modal opens with the session's entries and closes
+	for i: int in range(30):
+		session.step_next()
+		if session.current_block >= 3:
+			break
+	host.open_modal("log")
+	var log_open: bool = host.log_modal.visible and host.log_modal.all_entries.size() == session.log_entries.size() and not session.log_entries.is_empty()
+	host.close_modals()
+	var log_modal_ok: bool = log_open and not host.log_modal.visible
 
-	# 4. Tactical Forecast update
-	arena.update_tactical_forecast_panel(ally0, enemy0, grid)
-	var forecast_ok: bool = (
-		arena.tactical_forecast.forecast_target_lbl != null and
-		enemy0.name in arena.tactical_forecast.forecast_target_lbl.text
-	)
+	# 6. Timeline modal opens and closes
+	host.open_modal("timeline")
+	var timeline_open: bool = host.timeline_modal.visible
+	host.close_modals()
+	var timeline_modal_ok: bool = timeline_open and not host.timeline_modal.visible
 
-	# 5. Action Log Dock & Log Modal toggle lifecycle
-	var test_entry := ActionLogEntry.new(1, 2, "ATTACK", ally0.name, enemy0.name, "-25 HP", 25, "HIT")
-	arena.update_active_log_cell([test_entry], 0)
-	arena.toggle_log_modal(true, [test_entry])
-	var modal_open_ok: bool = arena.log_modal.visible and arena.log_modal.all_entries.size() == 1
-	arena.toggle_log_modal(false)
-	var modal_close_ok: bool = not arena.log_modal.visible
-	var log_modal_ok: bool = modal_open_ok and modal_close_ok
+	# 7. Timeline dock block click inspects a resolved block of the live round
+	var timeline_panel: CombatTimelinePanel = host.get_panel("timeline") as CombatTimelinePanel
+	timeline_panel.dock.block_selected.emit(1)
+	var inspected: bool = session.inspect_block == 1 and session.playhead() == 1 and session.display_snapshot() != null
+	session.step_next()
+	var signals_ok: bool = inspected and session.inspect_block == -1
 
-	# 6. Timeline Modal toggle lifecycle
-	arena.toggle_timeline_modal(true)
-	var timeline_open_ok: bool = arena.timeline_modal.visible
-	arena.toggle_timeline_modal(false)
-	var timeline_close_ok: bool = not arena.timeline_modal.visible
-	var timeline_modal_ok: bool = timeline_open_ok and timeline_close_ok
-
-	# 7. UI Signal propagation
-	var received_block: Array[int] = [0]
-	arena.block_selected.connect(func(b: int) -> void: received_block[0] = b)
-	arena.timeline_dock.block_selected.emit(4)
-	var signals_ok: bool = (received_block[0] == 4)
-
-	# 8. Visual Action FX & Floating Combat Text dispatch
-	var fx_ok: bool = true
+	# 8. Undock floats a panel (its region keeps a placeholder), dock returns it; FX dispatch is safe
+	host.undock("forecast")
+	var floating: bool = host.is_undocked("forecast") and host.region_of("forecast") == "right"
+	host.dock("forecast")
+	host.apply_layout("Mirrored")
+	var mirrored: bool = host.region_of("inspector") == "right" and host.region_of("forecast") == "left"
+	host.apply_layout("Standard")
 	if tree_parent != null:
-		arena.trigger_action_fx(test_entry, ally0, enemy0)
-		arena.trigger_action_fx(ActionLogEntry.new(1, 1, "DEFEND", ally0.name, "", "50%", 50, "DEFEND"), ally0, null)
-		arena.trigger_action_fx(ActionLogEntry.new(1, 1, "BUFF", ally0.name, "", "+50%", 50, "FOCUS"), ally0, null)
-		arena.trigger_action_fx(ActionLogEntry.new(1, 1, "MOVE", ally0.name, "", "-> (4, 4)", 0, "MOVED", Vector2i(4, 5), Vector2i(4, 4)), ally0, null)
-		arena.trigger_action_fx(ActionLogEntry.new(1, 3, "EVENT", enemy0.name, "", "WITHDREW", 0, "WITHDRAWN"), enemy0, null)
+		var brawler: Combatant = session.find_combatant("Enemy Brawler")
+		session.fx_requested.emit(ActionLogEntry.new(1, 2, "ATTACK", warrior.name, brawler.name, "-25 HP", 25, "HIT"))
+		session.fx_requested.emit(ActionLogEntry.new(1, 1, "DEFEND", warrior.name, "", "50%", 50, "DEFEND"))
+		session.fx_requested.emit(ActionLogEntry.new(1, 1, "BUFF", warrior.name, "", "+50%", 50, "FOCUS"))
+		session.fx_requested.emit(ActionLogEntry.new(1, 1, "MOVE", warrior.name, "", "-> (4, 4)", 0, "MOVED", Vector2i(4, 5), Vector2i(4, 4)))
+	var layout_ok: bool = floating and not host.is_undocked("forecast") and host.region_of("forecast") == "right" and mirrored
 
 	print("\n=======================================================")
 	print("=== COMBAT UI FRAMEWORK TEST ASSERTIONS             ===")
 	print("=======================================================")
-	print("  [UI] Core dock & controller widgets created: %s" % ("PASS" if ui_nodes_ok else "FAIL"))
-	print("  [UI] Scenario mounted unit tokens & roster cards: %s" % ("PASS" if tokens_created_ok else "FAIL"))
-	print("  [UI] Combatant selection & Unit Inspector synced: %s" % ("PASS" if inspector_sync_ok else "FAIL"))
+	print("  [UI] All 8 combat panels mounted in their dock regions: %s" % ("PASS" if docks_ok else "FAIL"))
+	print("  [UI] Tokens & roster bound to the simulated combatants: %s" % ("PASS" if tokens_ok else "FAIL"))
+	print("  [UI] Combatant selection & Unit Inspector synced: %s" % ("PASS" if inspector_ok else "FAIL"))
 	print("  [UI] Tactical forecast computed & rendered: %s" % ("PASS" if forecast_ok else "FAIL"))
 	print("  [UI] Action Log Modal toggle & entry view lifecycle: %s" % ("PASS" if log_modal_ok else "FAIL"))
 	print("  [UI] Timeline Modal toggle lifecycle: %s" % ("PASS" if timeline_modal_ok else "FAIL"))
-	print("  [UI] Timeline dock block selection signal dispatched: %s" % ("PASS" if signals_ok else "FAIL"))
-	print("  [UI] Action FX and floating text triggered safely: %s" % ("PASS" if fx_ok else "FAIL"))
+	print("  [UI] Timeline dock block selection inspects resolved block: %s" % ("PASS" if signals_ok else "FAIL"))
+	print("  [UI] Undock/dock, layout presets & action FX dispatch: %s" % ("PASS" if layout_ok else "FAIL"))
 
-	# Cleanup
 	if tree_parent != null:
-		tree_parent.remove_child(arena)
-	arena.queue_free()
+		tree_parent.remove_child(host)
+	host.free()
 
-	return (ui_nodes_ok and tokens_created_ok and inspector_sync_ok and forecast_ok and
-		log_modal_ok and timeline_modal_ok and signals_ok and fx_ok)
+	return (docks_ok and tokens_ok and inspector_ok and forecast_ok and
+		log_modal_ok and timeline_modal_ok and signals_ok and layout_ok)
 
+
+# ==============================================================================
+# TEST 8: COMBAT SESSION FLOW (scripted Goblin Ambush, headless)
+# ==============================================================================
+
+static func _resolve_until_replay(session: CombatSession, max_steps: int = 600) -> void:
+	for i: int in range(max_steps):
+		if session.phase == CombatSession.Phase.REPLAY:
+			return
+		session.step_next()
+
+static func run_combat_session_flow_test() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING COMBAT SESSION FLOW TEST (3 ROUNDS)    ===")
+	print("=======================================================")
+
+	var encounter := GoblinAmbushEncounter.new()
+	var session := CombatSession.new(encounter)
+	session.start()
+
+	# 1. Before the ambush only the initial enemies are in view
+	var pre_view_ok: bool = session.enemies_in_view().size() == 2 and session.phase == CombatSession.Phase.PLANNING
+
+	# 2. The ambush triggers exactly at Round 1, Block 4 and brings 4 goblins into view
+	var ambush: ActionLogEntry = null
+	for i: int in range(300):
+		session.step_next()
+		var last: ActionLogEntry = session.log_entries[session.log_entries.size() - 1]
+		if last.outcome_tag == "AMBUSH!":
+			ambush = last
+			break
+	var ambush_ok: bool = ambush != null and ambush.ref_tag == "R1-B04" and session.enemies_in_view().size() == 6
+
+	# 3. Round 1 resolves into replay mode with the round advance offered
+	_resolve_until_replay(session)
+	var round1_ok: bool = (
+		session.phase == CombatSession.Phase.REPLAY and not session.combat_over
+		and session.can_advance_round() and not session.next_round_label.is_empty()
+		and encounter.warrior.is_alive()
+	)
+
+	# 4. Replay reads snapshots: block 1 state differs from the round's final state
+	session.select_block(1)
+	var snap1: BlockSnapshot = session.snapshot_at(1, 1)
+	var start_hp: int = session.snapshot_at(1, 0).hps.get(encounter.warrior, -1)
+	var replay_ok: bool = (
+		snap1 != null and session.display_snapshot() == snap1
+		and session.position_of(encounter.warrior) == snap1.positions.get(encounter.warrior, Vector2i(-1, -1))
+		and start_hp == 100
+	)
+
+	# 5. Advancing applies the Round 2 baseline; Round 1 stays reviewable
+	session.advance_round()
+	var r2_live: bool = session.current_round == 2 and session.phase == CombatSession.Phase.PLANNING and encounter.warrior.hp == 73
+	session.select_round(1)
+	var viewing_r1: bool = session.viewed_round == 1 and not session.is_live_view()
+	session.select_round(2)
+	var traversal_ok: bool = r2_live and viewing_r1 and session.is_live_view() and session.max_unlocked_round == 2
+
+	# 6. Rounds 2 and 3 resolve to total victory
+	_resolve_until_replay(session)
+	session.advance_round()
+	_resolve_until_replay(session)
+	var victory_ok: bool = session.combat_over and session.current_round == 3 and not session.can_advance_round() and "VICTORY" in session.phase_text
+
+	# 7. Auto-play ticks resolve a round without a timer (headless)
+	session.reset_battle()
+	session.toggle_auto_play()
+	for i: int in range(600):
+		if not session.is_auto_playing:
+			break
+		session.auto_play_tick()
+	var autoplay_ok: bool = session.phase == CombatSession.Phase.REPLAY and not session.is_auto_playing
+
+	# 8. Resetting the round restores Round 1 planning with an empty log
+	session.reset_round()
+	var reset_ok: bool = session.current_round == 1 and session.log_entries.is_empty() and encounter.warrior.hp == 100 and session.phase == CombatSession.Phase.PLANNING
+
+	print("\n=======================================================")
+	print("=== COMBAT SESSION FLOW ASSERTIONS                  ===")
+	print("=======================================================")
+	print("  [Session] Only deployed enemies in view before ambush: %s" % ("PASS" if pre_view_ok else "FAIL"))
+	print("  [Session] Ambush event at R1-B04 brings reinforcements into view: %s" % ("PASS" if ambush_ok else "FAIL"))
+	print("  [Session] Round 1 resolves into replay with round advance offered: %s" % ("PASS" if round1_ok else "FAIL"))
+	print("  [Session] Replay playhead reads per-block snapshots: %s" % ("PASS" if replay_ok else "FAIL"))
+	print("  [Session] Round advance applies baseline; past rounds reviewable: %s" % ("PASS" if traversal_ok else "FAIL"))
+	print("  [Session] Rounds 2-3 resolve to total victory: %s" % ("PASS" if victory_ok else "FAIL"))
+	print("  [Session] Auto-play ticks resolve a full round headlessly: %s" % ("PASS" if autoplay_ok else "FAIL"))
+	print("  [Session] Round reset restores planning with an empty log: %s" % ("PASS" if reset_ok else "FAIL"))
+
+	return pre_view_ok and ambush_ok and round1_ok and replay_ok and traversal_ok and victory_ok and autoplay_ok and reset_ok
 
 # ==============================================================================
 # TEST 2: WARRIOR VS 3 GOBLINS BATTLE
