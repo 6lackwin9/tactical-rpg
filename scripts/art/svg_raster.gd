@@ -26,9 +26,6 @@ static func texture(key: String, svg: String, scale: float = 1.0) -> Texture2D:
 static func clear_cache() -> void:
 	_cache.clear()
 
-static func hex(c: Color) -> String:
-	return "#" + c.to_html(false)
-
 # Deterministic 0..1 noise from integer coordinates + salt (for tile variation).
 static func hash01(x: int, y: int, salt: int = 0) -> float:
 	var h: int = (x * 73856093) ^ (y * 19349663) ^ (salt * 83492791)

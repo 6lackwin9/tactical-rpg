@@ -302,13 +302,6 @@ func create_roster_card(
 	roster_cards[combatant] = card
 	return card
 
-func prune_enemy(enemy: Combatant) -> void:
-	if roster_cards.has(enemy):
-		var old_card := roster_cards[enemy] as Control
-		if is_instance_valid(old_card):
-			old_card.queue_free()
-		roster_cards.erase(enemy)
-
 func update_all_roster_cards(
 	allies: Array[Combatant],
 	grid: CombatGrid,

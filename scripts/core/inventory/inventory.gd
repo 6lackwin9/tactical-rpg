@@ -170,18 +170,6 @@ func remove_item(item: Item) -> bool:
 		return true
 	return false
 
-func get_total_weight() -> float:
-	var total: float = 0.0
-	for itm: Item in items:
-		total += itm.weight
-	for slot_key: Variant in equipped_gear:
-		var raw_eq: Variant = equipped_gear[slot_key]
-		if raw_eq is Equipment:
-			total += raw_eq.weight
-	for c_itm: Consumable in battle_pouch:
-		total += c_itm.weight
-	return total
-
 # ------------------------------------------------------------------------------
 # Combat Battle Pouch (Quick slots for ItemCommand in combat)
 # ------------------------------------------------------------------------------

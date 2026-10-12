@@ -49,19 +49,6 @@ func schedule_action(combatant: Combatant, command: BattleCommand, start_block: 
 	scheduled_actions.append(ScheduledAction.new(combatant, command, start_block, end_block))
 	return true
 
-# Backward-compatible queuing helper: schedules action to next available block
-func queue_action(command: BattleCommand) -> void:
-	var combatant: Combatant = command.source
-	register_combatant(combatant)
-	var next_start: int = 1
-	for existing in scheduled_actions:
-		if existing.combatant == combatant and not existing.is_cancelled:
-			next_start = maxi(next_start, existing.end_block + 1)
-	if next_start + command.block_cost - 1 <= TOTAL_BLOCKS:
-		schedule_action(combatant, command, next_start)
-	else:
-		push_error("Timeline full for [%s]: cannot queue '%s'" % [combatant.name, command.command_name])
-
 static func _get_target_display_name(target_val: Variant) -> String:
 	if target_val is Combatant:
 		@warning_ignore("unsafe_cast")
@@ -69,13 +56,6 @@ static func _get_target_display_name(target_val: Variant) -> String:
 	elif target_val != null:
 		return str(target_val)
 	return "None"
-
-func get_actions_at_block(block: int) -> Array[ScheduledAction]:
-	var result: Array[ScheduledAction] = []
-	for a in scheduled_actions:
-		if not a.is_cancelled and a.start_block <= block and a.end_block >= block:
-			result.append(a)
-	return result
 
 func execute_block(block: int) -> void:
 	block_started.emit(block)
@@ -114,9 +94,6 @@ func resolve_round() -> void:
 		execute_block(block)
 
 	finish_round()
-
-func resolve_turn() -> void:
-	resolve_round()
 
 func is_combat_resolved(allies: Array[Combatant], enemies: Array[Combatant]) -> bool:
 	var active_allies: int = 0

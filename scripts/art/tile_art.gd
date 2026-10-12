@@ -8,7 +8,6 @@ extends RefCounted
 # top of any terrain. Variants are chosen deterministically from the coordinate.
 # ==============================================================================
 
-const SIZE: int = 54
 const VARIANTS: int = 4
 
 static func tile_at(terrain_type: Terrain.Type, coord: Vector2i) -> Texture2D:

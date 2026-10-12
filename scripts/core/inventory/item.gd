@@ -53,20 +53,6 @@ func _init(
 	description = p_desc
 	max_stack = p_max_stack
 
-func get_rarity_color() -> Color:
-	match rarity:
-		ItemRarity.COMMON:
-			return Color(0.85, 0.85, 0.85)
-		ItemRarity.UNCOMMON:
-			return Color(0.3, 0.9, 0.4)
-		ItemRarity.RARE:
-			return Color(0.3, 0.6, 1.0)
-		ItemRarity.EPIC:
-			return Color(0.7, 0.35, 1.0)
-		ItemRarity.LEGENDARY:
-			return Color(1.0, 0.75, 0.2)
-	return Color.WHITE
-
 func is_weapon() -> bool:
 	return item_type == ItemType.WEAPON
 

@@ -266,28 +266,6 @@ func hide_hover_card() -> void:
 	if grid_hover_tooltip != null:
 		grid_hover_tooltip.visible = false
 
-func restore_token_states(snap: BlockSnapshot) -> void:
-	for c: Combatant in unit_token_nodes:
-		var token := get_token_for(c)
-		if token == null:
-			continue
-		if snap.positions.has(c):
-			var pos: Vector2i = snap.positions[c]
-			var active: bool = snap.is_active.get(c, false)
-			var withdrawn: bool = snap.is_withdrawn.get(c, false)
-			var hp_val: int = snap.hps.get(c, c.hp)
-			var is_alive: bool = hp_val > 0
-
-			if pos == Vector2i(-1, -1) or not is_alive or withdrawn or not active:
-				token.visible = false
-				token.modulate.a = 0.0
-			else:
-				token.visible = true
-				token.modulate = Color.WHITE
-				var target_px := Vector2(pos.x * TILE_SIZE, pos.y * TILE_SIZE)
-				var tw := create_tween()
-				tw.tween_property(token, "position", target_px, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
 func animate_attacker_lunge(actor: Combatant, target_pos: Vector2) -> void:
 	var actor_token := get_token_for(actor)
 	if not is_instance_valid(actor_token):
