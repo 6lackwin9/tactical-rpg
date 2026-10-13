@@ -1,7 +1,7 @@
 class_name CombatResolver
 extends RefCounted
 
-const TOTAL_BLOCKS: int = 10
+const DEFAULT_BLOCKS: int = 10
 
 class ScheduledAction:
 	extends RefCounted
@@ -25,6 +25,7 @@ var scheduled_actions: Array[ScheduledAction] = []
 var registered_combatants: Array[Combatant] = []
 var current_round: int = 1
 var grid: CombatGrid = null
+var total_blocks: int = DEFAULT_BLOCKS   # blocks in a round (per encounter)
 
 func register_combatant(combatant: Combatant) -> void:
 	if not registered_combatants.has(combatant):
@@ -33,8 +34,8 @@ func register_combatant(combatant: Combatant) -> void:
 func schedule_action(combatant: Combatant, command: BattleCommand, start_block: int) -> bool:
 	register_combatant(combatant)
 	var end_block: int = start_block + command.block_cost - 1
-	if start_block < 1 or end_block > TOTAL_BLOCKS:
-		push_error("Action '%s' out of timeline bounds (Blocks %d-%d, max %d)" % [command.command_name, start_block, end_block, TOTAL_BLOCKS])
+	if start_block < 1 or end_block > total_blocks:
+		push_error("Action '%s' out of timeline bounds (Blocks %d-%d, max %d)" % [command.command_name, start_block, end_block, total_blocks])
 		return false
 
 	# Check for overlap on this combatant's timeline
@@ -90,7 +91,7 @@ func resolve_round() -> void:
 	print("=== RESOLVING 10-BLOCK ROUND %d ===" % current_round)
 	print("==========================================")
 
-	for block: int in range(1, TOTAL_BLOCKS + 1):
+	for block: int in range(1, total_blocks + 1):
 		execute_block(block)
 
 	finish_round()

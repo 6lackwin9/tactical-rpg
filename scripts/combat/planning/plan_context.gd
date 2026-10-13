@@ -11,9 +11,11 @@ var grid: CombatGrid = null
 var allies: Array[Combatant] = []
 var enemies: Array[Combatant] = []
 var profiles: Dictionary = {}   # Combatant -> AiProfile
+var total_blocks: int = 10      # blocks in a round
 
-static func create(p_grid: CombatGrid, p_allies: Array[Combatant], p_enemies: Array[Combatant], p_profiles: Dictionary = {}) -> PlanContext:
+static func create(p_grid: CombatGrid, p_allies: Array[Combatant], p_enemies: Array[Combatant], p_profiles: Dictionary = {}, p_total_blocks: int = 10) -> PlanContext:
 	var ctx := PlanContext.new()
+	ctx.total_blocks = p_total_blocks
 	ctx.grid = p_grid
 	ctx.allies = p_allies
 	ctx.enemies = p_enemies

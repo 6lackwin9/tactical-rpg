@@ -443,6 +443,7 @@ func close_modals() -> bool:
 	return false
 
 func _refresh_timeline_modal() -> void:
+	timeline_modal.set_total_blocks(session.total_blocks)
 	timeline_modal.update_view(
 		session.viewed_round,
 		session.playhead(),

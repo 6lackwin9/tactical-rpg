@@ -44,9 +44,10 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) 
 			if _try_skills(plan, actor, SkillDef.Kind.FOCUS, cap, profile, Callable()):
 				continue
 
-		var target: Combatant = _pick_target(plan, actor, st, foes, grid, profile)
-		if target == null:
+		var ranked: Array[Combatant] = _rank_targets(plan, actor, st, foes, grid, profile)
+		if ranked.is_empty():
 			break
+		var target: Combatant = ranked[0]
 		var dist: int = grid.get_distance(st.pos, grid.get_position(target))
 		var low_hp: bool = hp_ratio <= profile.defend_below
 
@@ -66,8 +67,14 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) 
 			if back != Vector2i.ZERO and plan.add_step(actor, PlanStep.move(SkillCatalog.lowest(SkillDef.Kind.MOVE), back, 1), false).is_empty():
 				continue
 
-		var engage: Callable = func(skill: SkillDef) -> PlanStep: return PlanStep.engage(skill, target)
-		if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage):
+		# Best target first; if it can't be reached this round (one move only), try the next.
+		var engaged: bool = false
+		for candidate: Combatant in ranked:
+			var engage: Callable = func(skill: SkillDef) -> PlanStep: return PlanStep.engage(skill, candidate)
+			if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage):
+				engaged = true
+				break
+		if engaged:
 			continue
 		# Can't afford anything useful: catch a breath to recover AP, then try again.
 		if rests < 2 and st.blocks_left() >= 2 and st.ap_left < SkillCatalog.lowest(SkillDef.Kind.ATTACK).ap_cost(actor) + 1:
@@ -102,9 +109,10 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 			return true
 	return false
 
-static func _pick_target(plan: CombatPlan, actor: Combatant, st: CombatPlan.SimState, foes: Array[Combatant], grid: CombatGrid, profile: AiProfile) -> Combatant:
-	var best: Combatant = null
-	var best_score: float = INF
+# Foes ordered best-first: aggressors prefer the nearest, everyone else the weakest;
+# targets that are far or hard to reach are penalised by the route they would need.
+static func _rank_targets(plan: CombatPlan, actor: Combatant, st: CombatPlan.SimState, foes: Array[Combatant], grid: CombatGrid, profile: AiProfile) -> Array[Combatant]:
+	var scored: Array[Dictionary] = []
 	for f: Combatant in foes:
 		if not f.is_active() or not grid.has_combatant(f) or DictUtil.int_of(st.est_hp, f) <= 0:
 			continue
@@ -114,10 +122,13 @@ static func _pick_target(plan: CombatPlan, actor: Combatant, st: CombatPlan.SimS
 		if d > actor.attack_range:
 			var route: Array[Vector2i] = plan.approach_path(actor, st.pos, f)
 			score += 400.0 if route.is_empty() else float(route.size()) * 8.0
-		if score < best_score:
-			best_score = score
-			best = f
-	return best
+		scored.append({"foe": f, "score": score})
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["score"]) < float(b["score"]))
+	var result: Array[Combatant] = []
+	for entry: Dictionary in scored:
+		var foe: Combatant = entry["foe"]
+		result.append(foe)
+	return result
 
 # One step that gains distance from the nearest foe but stays within weapon range
 # of the current target (so a ranged unit can keep shooting).

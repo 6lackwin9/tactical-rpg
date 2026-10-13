@@ -82,7 +82,7 @@ func _make_row(index: int, option: PlanOption) -> Button:
 	var text: String = "%d  %s" % [index + 1, _row_text(option)]
 	var btn: Button = UiTheme.button(text, option.cost_text(), func() -> void: _choose(step), 10)
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.custom_minimum_size = Vector2(190, 0)
+	btn.custom_minimum_size = Vector2(250, 0)
 	if not option.warning.is_empty():
 		btn.modulate = Color(1.0, 0.8, 0.4)
 	btn.mouse_entered.connect(func() -> void: option_hovered.emit(step))
@@ -95,9 +95,17 @@ static func _row_text(option: PlanOption) -> String:
 	if step.mode == PlanStep.Mode.GOTO:
 		name_text = "➜ Move here"
 	var cost: String = ("+%d AP" % -option.ap) if option.ap < 0 else ("%d AP" % option.ap)
-	return "%s   %s · %db" % [name_text, cost, option.blocks]
+	var text: String = "%s   %s · %db" % [name_text, cost, option.blocks]
+	if option.damage > 0:
+		text += " · ~%d dmg" % option.damage
+	if option.switches_target:
+		text += " · switch target"
+	return text
 
 func _choose(step: PlanStep) -> void:
+	if step == null:
+		close()
+		return
 	visible = false
 	option_hovered.emit(null)
 	option_chosen.emit(step)

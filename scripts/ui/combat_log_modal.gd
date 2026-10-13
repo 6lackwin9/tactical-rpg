@@ -267,7 +267,10 @@ static func format_action_cell(entry: ActionLogEntry, is_modal: bool = false, on
 	# Outcome Badge
 	if not entry.outcome_tag.is_empty():
 		var out_lbl := Label.new()
-		out_lbl.text = "[%s]" % entry.outcome_tag
+		out_lbl.text = "[%s]" % entry.outcome_tag if entry.damage <= 0 else "[%s  -%d]" % [entry.outcome_tag, entry.damage]
+		if ActionLogEntry.show_formulas and not entry.breakdown.is_empty():
+			out_lbl.tooltip_text = entry.breakdown
+			out_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 		out_lbl.add_theme_font_size_override("font_size", 8)
 		if entry.outcome_tag == "DEFEATED":
 			out_lbl.add_theme_color_override("font_color", Color(1.0, 0.25, 0.25))

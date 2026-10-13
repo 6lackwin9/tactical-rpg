@@ -77,6 +77,7 @@ func _build_ui() -> void:
 	unit_overlay = Control.new()
 	unit_overlay.name = "UnitOverlay"
 	unit_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	unit_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE   # tokens (children) take clicks; empty tiles underneath must too
 	grid_anchor.add_child(unit_overlay)
 
 	# Floating Unit Inspector / Hover Tooltip

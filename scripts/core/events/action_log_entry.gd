@@ -6,6 +6,9 @@ extends RefCounted
 # Standardized action event structure for timeline cells and expanded stream log
 # ==============================================================================
 
+# Test mode only: log cells explain damage on hover (set by the test harness, off in the real game).
+static var show_formulas: bool = false
+
 var round_num: int = 1
 var block_num: int = 1
 var ref_tag: String = "R1-B01"   # R<X>-B<Y>
@@ -20,6 +23,8 @@ var value_num: int = 0
 var outcome_tag: String = "HIT"
 var detail_text: String = ""
 var status_text: String = ""
+var damage: int = 0              # ATTACK: damage actually dealt
+var breakdown: String = ""       # ATTACK: how that number came about (formula hover in test mode)
 var coord_from: Vector2i = Vector2i(-1, -1)
 var coord_to: Vector2i = Vector2i(-1, -1)
 

@@ -41,5 +41,6 @@ func _on_bound() -> void:
 func refresh() -> void:
 	if session == null:
 		return
+	dock.set_total_blocks(session.total_blocks)
 	dock.set_planning(session.plan_info(), session.plan_step_index_at)
 	dock.update_view(session.timeline_unit(), session.playhead(), session.is_timeline_masked(), session.can_view_prev_round(), session.can_view_next_round())

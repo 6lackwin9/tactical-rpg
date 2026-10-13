@@ -15,6 +15,7 @@ func _ready() -> void:
 	print("=======================================================")
 
 	var all_tests_passed: bool = ArenaTestSuite.run_all_tests(self)
+	ActionLogEntry.show_formulas = true   # test harness: log cells explain their damage on hover
 	var exit_code: int = 0 if all_tests_passed else 1
 
 	if DisplayServer.get_name() == "headless":

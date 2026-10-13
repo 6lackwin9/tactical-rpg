@@ -11,8 +11,7 @@ signal block_selected(block: int)
 signal combatant_selected(c: Combatant)
 signal modal_closed()
 
-const UNIT_MODAL_BLOCK_W: int = 94
-const TOTAL_BLOCKS: int = 10
+const MODAL_TRACK_WIDTH: int = 930   # block widths scale so a round always fills this width
 const BLOCK_GAP: int = 4
 
 var btn_prev_round: Button
@@ -22,6 +21,9 @@ var phase_lbl: Label
 var ruler_tick_nodes: Array[PanelContainer] = []
 var ruler_tick_labels: Array[Label] = []
 var tracks_list: VBoxContainer
+var ruler_row: HBoxContainer
+var total_blocks: int = 10
+var block_w: int = 94
 
 var action_lookup_fn: Callable      # func(c: Combatant, b: int) -> CombatResolver.ScheduledAction
 var token_texture_fn: Callable     # func(c: Combatant) -> Texture2D
@@ -116,7 +118,7 @@ func _build_ui() -> void:
 	modal_vbox.add_child(hsep1)
 
 	# 2. Synchronous Time Ruler Row (Aligned exactly with Tracks below)
-	var ruler_row := HBoxContainer.new()
+	ruler_row = HBoxContainer.new()
 	ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
 	modal_vbox.add_child(ruler_row)
 
@@ -127,12 +129,29 @@ func _build_ui() -> void:
 	track_col_lbl.add_theme_color_override("font_color", Color(0.6, 0.75, 0.9))
 	ruler_row.add_child(track_col_lbl)
 
+	_build_ruler_ticks()
+
+	# 3. Scrollable Tracks Matrix
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	modal_vbox.add_child(scroll)
+
+	tracks_list = VBoxContainer.new()
+	tracks_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tracks_list.add_theme_constant_override("separation", 6)
+	scroll.add_child(tracks_list)
+
+# (Re)builds the BLK ticks for the current round length.
+func _build_ruler_ticks() -> void:
+	for i: int in range(ruler_tick_nodes.size()):
+		ruler_tick_nodes[i].queue_free()
 	ruler_tick_nodes.clear()
 	ruler_tick_labels.clear()
 
-	for b: int in range(1, TOTAL_BLOCKS + 1):
+	for b: int in range(1, total_blocks + 1):
 		var tick_panel := PanelContainer.new()
-		tick_panel.custom_minimum_size = Vector2(UNIT_MODAL_BLOCK_W, 18)
+		tick_panel.custom_minimum_size = Vector2(block_w, 18)
 		tick_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var tick_style := StyleBoxFlat.new()
 		tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.85)
@@ -159,16 +178,12 @@ func _build_ui() -> void:
 		ruler_tick_nodes.append(tick_panel)
 		ruler_tick_labels.append(tick_lbl)
 
-	# 3. Scrollable Tracks Matrix
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	modal_vbox.add_child(scroll)
-
-	tracks_list = VBoxContainer.new()
-	tracks_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tracks_list.add_theme_constant_override("separation", 6)
-	scroll.add_child(tracks_list)
+func set_total_blocks(n: int) -> void:
+	if n == total_blocks:
+		return
+	total_blocks = n
+	block_w = int(float(MODAL_TRACK_WIDTH - (n - 1) * BLOCK_GAP) / float(n))
+	_build_ruler_ticks()
 
 func open_modal() -> void:
 	visible = true
@@ -339,9 +354,9 @@ func _create_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, 
 
 	if combatant == null:
 		# Empty placeholder row
-		for b in range(1, TOTAL_BLOCKS + 1):
+		for b in range(1, total_blocks + 1):
 			var slot := PanelContainer.new()
-			slot.custom_minimum_size = Vector2(UNIT_MODAL_BLOCK_W, 32)
+			slot.custom_minimum_size = Vector2(block_w, 32)
 			var s_style := StyleBoxFlat.new()
 			s_style.bg_color = Color(0.06, 0.08, 0.11, 0.4)
 			s_style.border_color = Color(0.15, 0.2, 0.28, 0.4)
@@ -354,7 +369,7 @@ func _create_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, 
 	# If enemy during planning phase -> Secret intent banner across the 10 blocks
 	if not is_ally and not is_replay:
 		var secret_panel := PanelContainer.new()
-		var total_w: int = TOTAL_BLOCKS * UNIT_MODAL_BLOCK_W + (TOTAL_BLOCKS - 1) * BLOCK_GAP
+		var total_w: int = total_blocks * block_w + (total_blocks - 1) * BLOCK_GAP
 		secret_panel.custom_minimum_size = Vector2(total_w, 32)
 		var sec_style := StyleBoxFlat.new()
 		sec_style.bg_color = Color(0.14, 0.08, 0.10, 0.8)
@@ -374,18 +389,18 @@ func _create_unit_track_row(combatant: Combatant, slot_idx: int, is_ally: bool, 
 
 	# Otherwise render action clips from recorded actions
 	var b: int = 1
-	while b <= TOTAL_BLOCKS:
+	while b <= total_blocks:
 		var act: CombatResolver.ScheduledAction = null
 		if action_lookup_fn.is_valid():
 			act = action_lookup_fn.call(combatant, b)
 		if act != null:
 			var cost: int = act.end_block - act.start_block + 1
-			var clip_w: int = cost * UNIT_MODAL_BLOCK_W + (cost - 1) * BLOCK_GAP
+			var clip_w: int = cost * block_w + (cost - 1) * BLOCK_GAP
 			var clip := _create_action_clip(act, clip_w, cost)
 			clips_hbox.add_child(clip)
 			b += cost
 		else:
-			var idle := _create_idle_clip(b == active_playhead, UNIT_MODAL_BLOCK_W)
+			var idle := _create_idle_clip(b == active_playhead, block_w)
 			clips_hbox.add_child(idle)
 			b += 1
 
@@ -490,9 +505,10 @@ func _create_action_clip(act: CombatResolver.ScheduledAction, width: int, cost: 
 
 	return clip
 
-func _create_idle_clip(is_playhead: bool, width: int = UNIT_MODAL_BLOCK_W) -> PanelContainer:
+func _create_idle_clip(is_playhead: bool, width: int = -1) -> PanelContainer:
+	var idle_w: int = width if width > 0 else block_w
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(width, 32)
+	slot.custom_minimum_size = Vector2(idle_w, 32)
 	slot.clip_contents = true
 
 	var slot_style := StyleBoxFlat.new()

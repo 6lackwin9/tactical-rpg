@@ -5,8 +5,9 @@ extends RefCounted
 # Tactical RPG - Skill Definition (one tier of a command family)
 # Leveled skills (level 1-5) cost AP equal to their level: a level 2 Attack or
 # Defend always costs 2 AP unless an effect shifts it (Combatant.ap_cost_modifier).
-# Move is the exception: one block, 1 AP per tile covered. Rest is free and
-# recovers AP.
+# Move is the exception: 1 AP per tile covered (1-2 blocks, once per round). Rest
+# is free and recovers AP. Switch Target is a free 1-block step inserted
+# automatically when an attack changes the current target lock.
 #
 # Stances (rock-paper-scissors: Offensive > Tactical > Defensive > Offensive):
 #   Attack -> Offensive, Defend -> Defensive, Focus -> Tactical.
@@ -15,7 +16,7 @@ extends RefCounted
 # (no block cost). Rest switches to Neutral for free.
 # ==============================================================================
 
-enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST }
+enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET }
 
 const MIN_LEVEL: int = 1
 const MAX_LEVEL: int = 5
@@ -45,7 +46,7 @@ static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_b
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.
 func ap_cost(actor: Combatant = null) -> int:
-	if kind == Kind.REST:
+	if kind == Kind.REST or kind == Kind.TARGET:
 		return 0
 	var shift: int = actor.ap_cost_modifier if actor != null else 0
 	var base: int = 1 if kind == Kind.MOVE else level
@@ -63,11 +64,11 @@ func stance() -> CombatTypes.StanceType:
 	return CombatTypes.StanceType.NEUTRAL
 
 func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
-	return current if kind == Kind.MOVE else stance()
+	return current if (kind == Kind.MOVE or kind == Kind.TARGET) else stance()
 
 # Automatic stance-switch penalty (AP): changing stance costs 1; Move and Rest never do.
 func switch_cost(current: CombatTypes.StanceType) -> int:
-	if kind == Kind.MOVE or kind == Kind.REST:
+	if kind == Kind.MOVE or kind == Kind.REST or kind == Kind.TARGET:
 		return 0
 	return 0 if current == stance() else 1
 
@@ -81,6 +82,8 @@ func icon() -> String:
 			return "✦"
 		Kind.MOVE:
 			return "➜"
+		Kind.TARGET:
+			return "🎯"
 	return "💤"
 
 func label() -> String:

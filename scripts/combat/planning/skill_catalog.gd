@@ -29,7 +29,8 @@ static func _build() -> void:
 	_all.append(_focus("focus", "Focus", 2, 1.5, 2, "+50% attack for 2 rounds."))
 	_all.append(_focus("deep_focus", "Deep Focus", 3, 1.75, 3, "+75% attack for 3 rounds."))
 
-	_all.append(SkillDef.create("move", "Move", SkillDef.Kind.MOVE, 1, 1, "Move up to your speed in tiles in one block: 1 AP per tile. Keeps your stance."))
+	_all.append(SkillDef.create("move", "Move", SkillDef.Kind.MOVE, 1, 1, "Move up to 2 blocks (speed-based tiles per block), once per round: 1 AP per tile. Keeps your stance."))
+	_all.append(SkillDef.create("switch_target", "Switch Target", SkillDef.Kind.TARGET, 1, 1, "Lock onto a different enemy (no AP). Added automatically when an attack changes target."))
 	var rest: SkillDef = SkillDef.create("rest", "Rest", SkillDef.Kind.REST, 1, 1, "Catch your breath: recover 2 AP and return to Neutral stance, free.")
 	rest.recover_ap = 2
 	_all.append(rest)

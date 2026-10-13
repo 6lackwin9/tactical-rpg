@@ -17,14 +17,15 @@ signal confirm_requested()                                     # planning: lock 
 signal step_remove_requested(step_index: int)
 signal step_reorder_requested(from_step: int, to_step: int)
 
-const UNIT_BLOCK_W: int = 80
 const BLOCK_GAP: int = 4
-const TOTAL_BLOCKS: int = 10
+const TRACK_WIDTH: int = 830   # block widths scale so a round always fills this width
 
 var btn_prev_round: Button
 var btn_next_round_arrow: Button
 var tracks_container: VBoxContainer
 var tracks_ruler_row: HBoxContainer
+var total_blocks: int = 10
+var block_w: int = 80
 var ruler_tick_nodes: Array[PanelContainer] = []
 var ruler_tick_labels: Array[Label] = []
 var single_track_row: HBoxContainer
@@ -76,43 +77,7 @@ func _build_ui() -> void:
 	tracks_ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
 	tracks_container.add_child(tracks_ruler_row)
 
-	ruler_tick_nodes.clear()
-	ruler_tick_labels.clear()
-
-	for b: int in range(1, TOTAL_BLOCKS + 1):
-		var tick_panel := PanelContainer.new()
-		tick_panel.custom_minimum_size = Vector2(UNIT_BLOCK_W, 16)
-		tick_panel.clip_contents = true
-		var tick_style := StyleBoxFlat.new()
-		tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.8)
-		tick_style.border_color = Color(0.2, 0.28, 0.38, 0.8)
-		tick_style.set_border_width_all(1)
-		tick_style.set_corner_radius_all(3)
-		tick_style.content_margin_left = 2
-		tick_style.content_margin_right = 2
-		tick_style.content_margin_top = 1
-		tick_style.content_margin_bottom = 1
-		tick_panel.add_theme_stylebox_override("panel", tick_style)
-
-		var tick_lbl := Label.new()
-		tick_lbl.text = "BLK %02d" % b
-		tick_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		tick_lbl.add_theme_font_size_override("font_size", 8)
-		tick_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
-		tick_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		tick_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tick_panel.add_child(tick_lbl)
-
-		var cur_b: int = b
-		tick_panel.gui_input.connect(func(event: InputEvent) -> void:
-			var mouse_event := event as InputEventMouseButton
-			if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-				block_selected.emit(cur_b)
-		)
-
-		tracks_ruler_row.add_child(tick_panel)
-		ruler_tick_nodes.append(tick_panel)
-		ruler_tick_labels.append(tick_lbl)
+	_build_ruler()
 
 	# Row 2: Action Timeline (Selected Unit's Continuous Action Track Row)
 	single_track_row = HBoxContainer.new()
@@ -224,6 +189,55 @@ func _build_ui() -> void:
 	btn_view_party.pressed.connect(func() -> void: hero_view_requested.emit())
 	banner_hbox.add_child(btn_view_party)
 
+# (Re)builds the BLK ruler for the current round length.
+func _build_ruler() -> void:
+	for child: Node in tracks_ruler_row.get_children():
+		tracks_ruler_row.remove_child(child)
+		child.queue_free()
+	ruler_tick_nodes.clear()
+	ruler_tick_labels.clear()
+	for b: int in range(1, total_blocks + 1):
+		var tick_panel := PanelContainer.new()
+		tick_panel.custom_minimum_size = Vector2(block_w, 16)
+		tick_panel.clip_contents = true
+		var tick_style := StyleBoxFlat.new()
+		tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.8)
+		tick_style.border_color = Color(0.2, 0.28, 0.38, 0.8)
+		tick_style.set_border_width_all(1)
+		tick_style.set_corner_radius_all(3)
+		tick_style.content_margin_left = 2
+		tick_style.content_margin_right = 2
+		tick_style.content_margin_top = 1
+		tick_style.content_margin_bottom = 1
+		tick_panel.add_theme_stylebox_override("panel", tick_style)
+
+		var tick_lbl := Label.new()
+		tick_lbl.text = "BLK %02d" % b
+		tick_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tick_lbl.add_theme_font_size_override("font_size", 8)
+		tick_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+		tick_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		tick_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tick_panel.add_child(tick_lbl)
+
+		var cur_b: int = b
+		tick_panel.gui_input.connect(func(event: InputEvent) -> void:
+			var mouse_event := event as InputEventMouseButton
+			if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+				block_selected.emit(cur_b)
+		)
+
+		tracks_ruler_row.add_child(tick_panel)
+		ruler_tick_nodes.append(tick_panel)
+		ruler_tick_labels.append(tick_lbl)
+
+func set_total_blocks(n: int) -> void:
+	if n == total_blocks:
+		return
+	total_blocks = n
+	block_w = int(float(TRACK_WIDTH - (n - 1) * BLOCK_GAP) / float(n))
+	_build_ruler()
+
 # Planning bar state: info is CombatSession.plan_info(); step_fn maps a block to its step index.
 func set_planning(info: Dictionary, step_fn: Callable) -> void:
 	planning = bool(info.get("planning", false))
@@ -293,14 +307,14 @@ func update_view(
 
 	# Rebuild continuous clips (Starts at X=0, exactly under Ruler BLK 01..10)
 	var b: int = 1
-	while b <= TOTAL_BLOCKS:
+	while b <= total_blocks:
 		var act: CombatResolver.ScheduledAction = null
 		if action_lookup_fn.is_valid():
 			act = action_lookup_fn.call(target_unit, b) as CombatResolver.ScheduledAction
 
 		if act != null:
 			var cost: int = act.end_block - act.start_block + 1
-			var clip_w: int = cost * UNIT_BLOCK_W + (cost - 1) * BLOCK_GAP
+			var clip_w: int = cost * block_w + (cost - 1) * BLOCK_GAP
 			var clip := _create_action_clip_widget(act, clip_w, cost)
 			track_clips_hbox.add_child(clip)
 			b += cost
@@ -333,6 +347,8 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		icon_str = "⚔"
 		var atk: AttackCommand = act.command as AttackCommand
 		subtitle = "🎯 %s" % atk.target.name if atk != null and atk.target != null else "🎯 Strike"
+		if atk != null and act.command.est_damage > 0:
+			subtitle += " ~%d dmg" % act.command.est_damage
 	elif act.command is DefendCommand:
 		clip_style.bg_color = Color(0.12, 0.25, 0.48, 0.95)
 		clip_style.border_color = Color(0.3, 0.6, 0.95, 1.0)
@@ -426,7 +442,7 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 			combatant_selected.emit(cur_c)
 	)
 	if planning:
-		clip.tooltip_text = "%s\nDrag onto another command to reorder • right-click to remove" % cmd_display_name
+		clip.tooltip_text = "%s%s\nAP %d • drag onto another command to reorder • right-click to remove" % [cmd_display_name, ("\nExpected hit ~%d damage" % act.command.est_damage) if act.command.est_damage > 0 else "", act.command.ap_cost + act.command.stance_switch_cost]
 		clip.set_drag_forwarding(
 			func(_pos: Vector2) -> Variant:
 				var from_step: int = _step_at(start_b)
@@ -449,9 +465,10 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 
 	return clip
 
-func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> PanelContainer:
+func _create_idle_clip_widget(is_playhead: bool, width: int = -1) -> PanelContainer:
+	var slot_w: int = width if width > 0 else block_w
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(width, 36)
+	slot.custom_minimum_size = Vector2(slot_w, 36)
 	slot.clip_contents = true
 
 	var slot_style := StyleBoxFlat.new()

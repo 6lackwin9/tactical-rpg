@@ -23,8 +23,16 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		else:
 			entry.skill_subtype = "Melee Physical"
 			entry.skill_name = "Heavy Slash" if entry.actor_is_ally else "Power Strike"
-		entry.value_num = attack.power
+		if attack.planner_controlled:
+			entry.skill_name = attack.command_name
+		entry.value_num = attack.last_damage
+		entry.damage = attack.last_damage
+		entry.breakdown = attack.last_breakdown
 		entry.outcome_tag = "HIT"
+		if attack.last_damage == 0 and attack.execution_log.begins_with("[Attack Out of Range]"):
+			entry.outcome_tag = "OUT OF RANGE"
+		elif attack.last_damage == 0 and attack.execution_log.begins_with("[Attack Miss]"):
+			entry.outcome_tag = "MISS"
 		if target_c != null:
 			entry.target_name = target_c.name
 			entry.target_is_ally = allies.has(target_c)
@@ -35,7 +43,7 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 			entry.status_text = "Target HP: %d/%d" % [target_c.hp, target_c.max_hp]
 		else:
 			entry.target_name = "Target"
-		entry.detail_text = "Power: %d | Range: %d" % [attack.power, atk_range]
+		entry.detail_text = "Dealt %d | Power %d | Range %d" % [attack.last_damage, attack.power, atk_range]
 
 	elif act.command is MoveCommand:
 		var move: MoveCommand = act.command as MoveCommand

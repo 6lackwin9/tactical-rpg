@@ -14,6 +14,9 @@ extends RefCounted
 
 var encounter_name: String = "Encounter"
 var max_rounds: int = 1
+var total_blocks: int = 10     # blocks in a round (planner encounters use a tighter 6)
+var ap_regen: int = -1        # AP regained at each round start (-1 = refill to max)
+var unit_ap: int = 0          # >0: every unit starts with / is capped at this many AP
 var grid: CombatGrid = null
 var allies: Array[Combatant] = []
 var enemies: Array[Combatant] = []        # includes reinforcements not yet on the field
@@ -80,7 +83,7 @@ var player_planning: bool = false   # true: allies are planned by the player in 
 var ai_profiles: Dictionary = {}    # Combatant -> AiProfile
 
 func plan_context() -> PlanContext:
-	return PlanContext.create(grid, allies, enemies, ai_profiles)
+	return PlanContext.create(grid, allies, enemies, ai_profiles, total_blocks)
 
 func profile_of(c: Combatant) -> AiProfile:
 	return plan_context().profile_of(c)

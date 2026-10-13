@@ -24,7 +24,6 @@ signal plan_preview_changed()                 # hover preview of a planned step 
 
 enum Phase { PLANNING, RESOLVING, REPLAY }
 
-const TOTAL_BLOCKS: int = 10
 const MAX_TEXT_LOG: int = 400
 const NO_POSITION: Vector2i = Vector2i(-1, -1)
 
@@ -40,6 +39,7 @@ var allies: Array[Combatant] = []
 var enemies: Array[Combatant] = []
 
 # Round & block flow
+var total_blocks: int = 10          # blocks per round (from the encounter)
 var current_round: int = 1
 var current_block: int = 1          # next block to resolve during RESOLVING
 var replay_block: int = 1           # playhead while replaying / viewing a past round
@@ -100,8 +100,10 @@ func start() -> void:
 	grid = encounter.grid
 	allies = encounter.allies
 	enemies = encounter.enemies
+	total_blocks = encounter.total_blocks
 	resolver = CombatResolver.new()
 	resolver.grid = grid
+	resolver.total_blocks = total_blocks
 	resolver.log_emitted.connect(_on_resolver_log)
 	for c: Combatant in allies:
 		resolver.register_combatant(c)
@@ -117,8 +119,9 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 		resolver.finish_round()
 	elif not roll_over:
 		resolver.scheduled_actions.clear()
-	for c: Combatant in resolver.registered_combatants:
-		c.ap = c.max_ap
+	if roll_over:
+		for c: Combatant in resolver.registered_combatants:
+			c.ap = c.max_ap if encounter.ap_regen < 0 else mini(c.max_ap, c.ap + encounter.ap_regen)
 	current_round = round_num
 	max_unlocked_round = maxi(max_unlocked_round, round_num)
 	viewed_round = round_num
@@ -215,7 +218,7 @@ func step_prev() -> void:
 func _step_resolution() -> void:
 	inspect_block = -1
 	if phase == Phase.PLANNING:
-		if encounter.player_planning and not plan_confirmed and not confirm_plan():
+		if encounter.player_planning and not plan_confirmed and not confirm_plan(false):
 			return
 		phase = Phase.RESOLVING
 		_set_phase("RESOLVING COMBAT", COL_RESOLVING)
@@ -241,7 +244,7 @@ func _step_resolution() -> void:
 		resolver.block_completed.emit(current_block)
 		_capture_snapshot(current_block)
 		var over: bool = resolver.is_combat_resolved(allies, enemies)
-		if over or current_block >= TOTAL_BLOCKS:
+		if over or current_block >= total_blocks:
 			_conclude_round(over)
 			return
 		current_block += 1
@@ -275,7 +278,7 @@ func auto_play_tick() -> void:
 		return
 	if is_live_view():
 		_step_resolution()
-	elif replay_block < TOTAL_BLOCKS:
+	elif replay_block < total_blocks:
 		select_block(replay_block + 1)
 	else:
 		is_auto_playing = false
@@ -284,7 +287,7 @@ func auto_play_tick() -> void:
 # Inspect the state at block `b` of the viewed round (replay, past round, or an
 # already-resolved block of the live round).
 func select_block(b: int) -> void:
-	var block: int = clampi(b, 0, TOTAL_BLOCKS)
+	var block: int = clampi(b, 0, total_blocks)
 	if is_live_view():
 		if block < _snapshots_for(viewed_round).size():
 			inspect_block = block
@@ -303,7 +306,7 @@ func select_round(round_num: int) -> void:
 	viewed_round = target
 	inspect_block = -1
 	if not is_live_view():
-		replay_block = clampi(replay_block, 1, TOTAL_BLOCKS)
+		replay_block = clampi(replay_block, 1, total_blocks)
 	status_text = "Viewing Round %d Timeline." % target
 	_notify()
 
@@ -432,6 +435,8 @@ func inspected_combatant() -> Combatant:
 	return selected_combatant
 # Appends a step to the actor's sequence; returns "" or the reason it was rejected.
 func plan_add_step(actor: Combatant, step: PlanStep) -> String:
+	if step == null or actor == null:
+		return "No action chosen."
 	if not is_planning():
 		return "Planning is closed."
 	var problem: String = plan.add_step(actor, step)
@@ -482,8 +487,8 @@ func plan_is_valid() -> bool:
 			return false
 	return true
 
-# Locks the party's sequences and schedules them with the enemies'. Refused while any is invalid.
-func confirm_plan() -> bool:
+# Locks the party's sequences, schedules them with the enemies' and starts resolving\n# (auto-play; uto_play false lets the caller step manually). Refused while any is invalid.
+func confirm_plan(auto_play: bool = true) -> bool:
 	if not is_planning():
 		return false
 	if not plan_is_valid():
@@ -493,7 +498,8 @@ func confirm_plan() -> bool:
 	plan.commit(resolver)
 	plan_confirmed = true
 	_refresh_archive(false)
-	status_text = "Plan confirmed. Step or play to resolve the round."
+	status_text = "Plan confirmed: resolving the round (Step to go block by block)."
+	is_auto_playing = auto_play   # confirming starts the round; Play afterwards replays it
 	_notify()
 	return true
 
@@ -702,7 +708,7 @@ func select_log_entry(entry: ActionLogEntry, navigate: bool = true) -> void:
 	var in_live_round: bool = entry.round_num == current_round and phase != Phase.REPLAY
 	if navigate and not in_live_round:
 		viewed_round = entry.round_num
-		replay_block = clampi(entry.block_num, 1, TOTAL_BLOCKS)
+		replay_block = clampi(entry.block_num, 1, total_blocks)
 		inspect_block = -1
 	status_text = "%s [%s]" % [entry.skill_name, entry.ref_tag]
 	_notify()

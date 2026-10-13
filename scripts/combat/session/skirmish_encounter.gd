@@ -21,6 +21,9 @@ func _init() -> void:
 	max_rounds = 6
 	zone_id = "ruined_courtyard"
 	player_planning = true
+	total_blocks = 6      # tight rounds: roughly three actions each
+	ap_regen = 4          # AP carries across the battle; +4 each round, Rest recovers more
+	unit_ap = 12
 
 func build() -> void:
 	grid = CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
@@ -34,6 +37,10 @@ func build() -> void:
 	archer = Combatant.new("Goblin Archer", 35, 13, 3)
 	shaman = Combatant.new("Goblin Shaman", 35, 12, 2)
 	berserker = Combatant.new("Goblin Berserker", 50, 11, 1)
+
+	for c: Combatant in [warrior, ranger, brawler, skirmisher, archer, shaman, berserker]:
+		c.max_ap = unit_ap
+		c.ap = unit_ap
 
 	allies = [warrior, ranger]
 	enemies = [brawler, skirmisher, archer, shaman, berserker]

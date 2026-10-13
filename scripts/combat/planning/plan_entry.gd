@@ -21,6 +21,8 @@ var step_index: int = 0
 var pos_before: Vector2i = Vector2i(-1, -1)  # where the unit stands before / after this command (preview ghosts)
 var pos_after: Vector2i = Vector2i(-1, -1)
 var skill_ap: int = 0                     # AP for the skill itself
+var blocks_override: int = 0               # MOVE: 1-2 blocks depending on the path length (0 = the skill's own)
+var est_damage: int = 0                   # ATTACK: expected hit (power x skill x stance x boost)
 var switch_ap: int = 0                    # automatic stance-switch penalty
 var stance_before: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
 var stance_after: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
@@ -36,32 +38,37 @@ func total_ap() -> int:
 	return skill_ap + switch_ap
 
 func blocks() -> int:
-	return skill.blocks
+	return blocks_override if blocks_override > 0 else skill.blocks
 
 func end_block() -> int:
-	return start_block + skill.blocks - 1
+	return start_block + blocks() - 1
 
 func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	var command: BattleCommand
 	match skill.kind:
 		SkillDef.Kind.ATTACK:
-			command = AttackCommand.new(actor, target, maxi(1, roundi(float(power) * skill.power_mult)), skill.blocks, 0, grid)
+			var attack := AttackCommand.new(actor, target, maxi(1, roundi(float(power) * skill.power_mult)), skill.blocks, 0, grid)
+			attack.follow_tiles = 1   # follows a target that steps one tile out of reach
+			command = attack
 		SkillDef.Kind.DEFEND:
 			command = DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
 		SkillDef.Kind.FOCUS:
 			command = FocusCommand.new(actor, skill.boost, skill.boost_rounds, skill.blocks, 0)
 		SkillDef.Kind.MOVE:
 			if target != null:
-				command = ApproachCommand.new(actor, grid, target, tiles, 1)
+				command = ApproachCommand.new(actor, grid, target, tiles, blocks())
 			else:
-				command = WalkCommand.new(actor, grid, path, 1)
+				command = WalkCommand.new(actor, grid, path, blocks())
+		SkillDef.Kind.TARGET:
+			command = TargetCommand.new(actor, target, 2)
 		_:
 			command = RestCommand.new(actor, skill.recover_ap, skill.blocks)
 	command.command_name = skill.display_name
 	command.planner_controlled = true
 	command.ap_cost = skill_ap
 	command.stance_switch_cost = switch_ap
-	command.stance_on_start = -1 if skill.kind == SkillDef.Kind.MOVE else skill.stance()
+	command.stance_on_start = -1 if (skill.kind == SkillDef.Kind.MOVE or skill.kind == SkillDef.Kind.TARGET) else skill.stance()
+	command.est_damage = est_damage
 	return command
 
 static func dir_arrow(dir: Vector2i) -> String:

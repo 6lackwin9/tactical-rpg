@@ -15,6 +15,8 @@ var ap: int = 0            # AP the step adds (negative: Rest recovers), incl. a
 var blocks: int = 0        # total blocks the step adds
 var moves: int = 0         # move entries it adds
 var switch_ap: int = 0     # of p, the automatic stance-switch penalty
+var damage: int = 0         # expected hit for attack options
+var switches_target: bool = false
 
 func cost_text() -> String:
 	if not valid:
@@ -25,6 +27,10 @@ func cost_text() -> String:
 		text += " (incl. %d move%s)" % [moves, "" if moves == 1 else "s"]
 	if switch_ap > 0:
 		text += " (incl. +%d stance switch)" % switch_ap
+	if switches_target:
+		text += " (incl. Switch Target)"
+	if damage > 0:
+		text += " • ~%d dmg" % damage
 	if not warning.is_empty():
 		text += "\n⚠ " + warning
 	return text
