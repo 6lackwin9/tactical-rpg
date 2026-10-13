@@ -63,6 +63,22 @@ func refresh() -> void:
 				card.visible = in_view.has(enemy)
 	_roster.update_highlights(session.selected_combatant, session.allies)
 	_roster.update_all_roster_cards(session.allies, session.grid, session.display_snapshot())
+	if is_party and session.is_planning():
+		_tag_planning_state()
+
+# While planning, each party card shows whether the hero has a sequence yet.
+func _tag_planning_state() -> void:
+	for ally: Combatant in session.allies:
+		var card: Control = _card_for(ally)
+		if card == null or not ally.is_active():
+			continue
+		var lbl: Label = card.find_child("StanceLabel", true, false) as Label
+		if lbl == null:
+			continue
+		var steps: int = session.plan.steps_of(ally).size()
+		var st: CombatPlan.SimState = session.plan.compile(ally)
+		var mark: String = "○ no plan" if steps == 0 else ("⚠ %d" % steps if st.error_index >= 0 or st.runs_dry() else "✔ %d" % steps)
+		lbl.text = "%s • %s • AP %d" % [CombatTypes.stance_to_string(ally.current_stance), mark, st.ap_left]
 
 func _card_for(c: Combatant) -> Control:
 	var raw: Variant = _roster.roster_cards.get(c, null)

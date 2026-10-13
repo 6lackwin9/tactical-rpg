@@ -21,11 +21,12 @@ func _init() -> void:
 
 func _on_bound() -> void:
 	inspector.gear_modal_requested.connect(func(_c: Combatant) -> void: modal_requested.emit("gear"))
+	session.hover_changed.connect(func(_c: Combatant) -> void: refresh())   # while planning, hovering inspects
 
 func refresh() -> void:
 	if session == null:
 		return
-	var c: Combatant = session.selected_combatant
+	var c: Combatant = session.inspected_combatant()
 	if c == null or not is_instance_valid(c):
 		return
 	inspector.update_inspector(c, session.is_ally(c), session.position_text(c), session.encounter.get_sprite_texture(c), session.display_snapshot(), _threat_intel(c))

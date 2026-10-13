@@ -11,6 +11,11 @@ signal round_nav_requested(delta: int)
 signal block_selected(block: int)
 signal combatant_selected(c: Combatant)
 signal hero_view_requested()
+signal draft_requested(preset_id: String, whole_party: bool)  # planning: AI-drafted sequence
+signal clear_requested()                                       # planning: clear the hero's sequence
+signal confirm_requested()                                     # planning: lock the round
+signal step_remove_requested(step_index: int)
+signal step_reorder_requested(from_step: int, to_step: int)
 
 const UNIT_BLOCK_W: int = 80
 const BLOCK_GAP: int = 4
@@ -23,6 +28,14 @@ var tracks_ruler_row: HBoxContainer
 var ruler_tick_nodes: Array[PanelContainer] = []
 var ruler_tick_labels: Array[Label] = []
 var single_track_row: HBoxContainer
+var plan_row: HBoxContainer
+var plan_info_lbl: Label
+var draft_btn: MenuButton
+var clear_btn: Button
+var confirm_btn: Button
+
+var planning: bool = false
+var plan_step_fn: Callable   # func(block: int) -> int: index of the step behind the command at a block
 var track_clips_hbox: HBoxContainer
 var enemy_classified_banner: PanelContainer
 
@@ -111,6 +124,50 @@ func _build_ui() -> void:
 	track_clips_hbox.add_theme_constant_override("separation", BLOCK_GAP)
 	single_track_row.add_child(track_clips_hbox)
 
+	# Planning bar: status of the hero's sequence plus Draft / Clear / Confirm
+	plan_row = HBoxContainer.new()
+	plan_row.add_theme_constant_override("separation", 6)
+	plan_row.visible = false
+	tracks_container.add_child(plan_row)
+	plan_info_lbl = Label.new()
+	plan_info_lbl.add_theme_font_size_override("font_size", 9)
+	plan_info_lbl.add_theme_color_override("font_color", Color(0.98, 0.78, 0.3))
+	plan_info_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	plan_info_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	plan_row.add_child(plan_info_lbl)
+	draft_btn = MenuButton.new()
+	draft_btn.text = "🤖 Draft ▾"
+	draft_btn.tooltip_text = "Let the AI draft a sequence for this hero or the whole party (you can edit it)"
+	draft_btn.flat = false
+	draft_btn.add_theme_font_size_override("font_size", 9)
+	var draft_popup: PopupMenu = draft_btn.get_popup()
+	draft_popup.add_theme_font_size_override("font_size", 10)
+	draft_popup.add_separator("This hero")
+	for i: int in range(PlanPresets.IDS.size()):
+		draft_popup.add_item(PlanPresets.label(PlanPresets.IDS[i]), i)
+	draft_popup.add_separator("Whole party")
+	for i: int in range(PlanPresets.IDS.size()):
+		draft_popup.add_item(PlanPresets.label(PlanPresets.IDS[i]), 100 + i)
+	draft_popup.id_pressed.connect(func(id: int) -> void:
+		if id >= 100:
+			draft_requested.emit(PlanPresets.IDS[id - 100], true)
+		else:
+			draft_requested.emit(PlanPresets.IDS[id], false)
+	)
+	plan_row.add_child(draft_btn)
+	clear_btn = Button.new()
+	clear_btn.text = "🗑 Clear"
+	clear_btn.tooltip_text = "Remove this hero's whole sequence"
+	clear_btn.add_theme_font_size_override("font_size", 9)
+	clear_btn.pressed.connect(func() -> void: clear_requested.emit())
+	plan_row.add_child(clear_btn)
+	confirm_btn = Button.new()
+	confirm_btn.text = "✔ CONFIRM ROUND"
+	confirm_btn.tooltip_text = "Lock every hero's sequence and start the round [Enter]"
+	confirm_btn.add_theme_font_size_override("font_size", 10)
+	confirm_btn.pressed.connect(func() -> void: confirm_requested.emit())
+	plan_row.add_child(confirm_btn)
+
 	# 3. Right Round Traversal Arrow [ ▶ ] (Spans vertical height of ruler + action track)
 	btn_next_round_arrow = Button.new()
 	btn_next_round_arrow.text = "▶"
@@ -166,6 +223,17 @@ func _build_ui() -> void:
 	btn_view_party.add_theme_font_size_override("font_size", 8)
 	btn_view_party.pressed.connect(func() -> void: hero_view_requested.emit())
 	banner_hbox.add_child(btn_view_party)
+
+# Planning bar state: info is CombatSession.plan_info(); step_fn maps a block to its step index.
+func set_planning(info: Dictionary, step_fn: Callable) -> void:
+	planning = bool(info.get("planning", false))
+	plan_step_fn = step_fn
+	plan_row.visible = planning
+	if planning:
+		plan_info_lbl.text = str(info.get("text", ""))
+		var warn: bool = bool(info.get("warn", false))
+		plan_info_lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.4) if warn else Color(0.98, 0.78, 0.3))
+		confirm_btn.disabled = not bool(info.get("can_confirm", false))
 
 func update_round_arrows(can_go_prev: bool, can_go_next: bool) -> void:
 	if btn_prev_round != null:
@@ -330,6 +398,8 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 
 	var cost_lbl := Label.new()
 	cost_lbl.text = "[%db]" % cost
+	if act.command.planner_controlled:
+		cost_lbl.text = "[%db · %dAP]" % [cost, act.command.ap_cost + act.command.stance_switch_cost]
 	cost_lbl.add_theme_font_size_override("font_size", 8)
 	cost_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
 	title_hbox.add_child(cost_lbl)
@@ -343,11 +413,39 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 	vbox.add_child(sub_lbl)
 
 	var cur_c: Combatant = act.combatant
+	var start_b: int = act.start_block
 	clip.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+		if mouse_event == null or not mouse_event.pressed:
+			return
+		if planning and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			var step_idx: int = _step_at(start_b)
+			if step_idx >= 0:
+				step_remove_requested.emit(step_idx)
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			combatant_selected.emit(cur_c)
 	)
+	if planning:
+		clip.tooltip_text = "%s\nDrag onto another command to reorder • right-click to remove" % cmd_display_name
+		clip.set_drag_forwarding(
+			func(_pos: Vector2) -> Variant:
+				var from_step: int = _step_at(start_b)
+				if from_step < 0:
+					return null
+				var preview := Label.new()
+				preview.text = "  ↕ %s" % cmd_display_name
+				clip.set_drag_preview(preview)
+				return {"timeline_step": from_step},
+			func(_pos: Vector2, data: Variant) -> bool:
+				if not (data is Dictionary):
+					return false
+				var d: Dictionary = data
+				return DictUtil.int_of(d, "timeline_step", -1) >= 0 and DictUtil.int_of(d, "timeline_step", -1) != _step_at(start_b),
+			func(_pos: Vector2, data: Variant) -> void:
+				if data is Dictionary:
+					var d: Dictionary = data
+					step_reorder_requested.emit(DictUtil.int_of(d, "timeline_step", -1), _step_at(start_b))
+		)
 
 	return clip
 
@@ -379,3 +477,9 @@ func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> P
 	slot.add_child(lbl)
 
 	return slot
+
+func _step_at(block: int) -> int:
+	if not plan_step_fn.is_valid():
+		return -1
+	var raw: Variant = plan_step_fn.call(block)
+	return raw if raw is int else -1

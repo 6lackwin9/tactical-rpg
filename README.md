@@ -143,12 +143,14 @@ tactical-rpg/
 │       │   ├── combat_forecast_panel.gd  # Tactical forecast
 │       │   ├── combat_playback_panel.gd  # Step / play / reset / round advance
 │       │   └── combat_timeline_panel.gd  # 10-block ruler & focused unit track
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tweens & floating text
+│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, tweens & floating text
+│       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
+│       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
 │       ├── unit_inspector_ui.gd      # Left dock (avatar, vitals, stats, action decks)
 │       ├── tactical_forecast_ui.gd   # Right dock (range checks, damage forecast, arena intel)
 │       ├── playback_controls_ui.gd   # Step prev/next, Auto-Play, Reset, Round navigation
-│       ├── timeline_dock_ui.gd       # Bottom dock (10-block ruler, unit track, enemy intent mask)
+│       ├── timeline_dock_ui.gd       # Bottom dock (10-block ruler, unit track, planning bar: AP status, AI Draft, Clear, Confirm; drag/remove steps)
 │       ├── action_log_dock_ui.gd     # Top action dock displaying active block resolution
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       ├── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
@@ -199,7 +201,7 @@ tactical-rpg/
 - **Static Dock Host (`CombatDockHost`)**: Fixed regions (top row, left/center/right, bottom bar) filled from data-driven layout presets (`Standard`, `Mirrored`). The game UI stays static; **layout edit mode** (`⚙` / `F9`) overlays an `⇱ Undock` tag on each panel without moving anything, floats panels into `UiWindow`s (their dock keeps a same-size placeholder) and docks them back when closed. The host also owns the full-screen modals and shortcuts (`Space` play, `Q`/`E` blocks, `[`/`]` log, `L` log modal, `F`/`Tab` timeline, `G` party & stash, `Esc` close).
 - **Custom SVG Visual Assets**: Custom vector graphics for characters, unit tokens, and grid tiles.
 - **Allied & Enemy Status Roster Docks**: Real-time HP bars, SP gauges, status badges, and position coordinates.
-- **Planning Phase (Plan Round screen)**: In player-planned encounters (`SkirmishEncounter`, the arena default) each round starts in PLANNING. The round is a *command sequence* per hero built on one screen (`📝 PLAN ROUND` / `P`, opened automatically each round): a single input area lists only the valid next actions, every pick is appended at the lowest free block and the screen immediately offers the next input, and a preview timeline per hero shows the sequence (drag chips to reorder, ✕ to remove). **Engage** combines target + move: pick an enemy and an attack skill and the moves to get in range are inserted automatically (Move blocks of up to your speed in tiles, 1 AP per tile); at execution the approach re-paths from current positions, so it chases a target that moved. Manual Move, Withdraw and Rest cover positioning and recovery. Hard-invalid sequences (no path, bad target, too many blocks) are flagged in red and block **Confirm**; running out of AP only warns; once confirmed the timeline is only a read-only visualisation. **AI draft presets** (Balanced, All-out, Focus Weakest, Guard & Counter, Kite, Economy, Fall Back) fill one hero's or the whole party's sequence in one click and stay editable.
+- **Planning Phase (on the combat grid)**: In player-planned encounters (`SkirmishEncounter`, the arena default) each round starts in PLANNING and you plan right on the main screen. Select a hero (click the token or roster card; cards show `○ no plan` / `✔ n` / `⚠ n` and AP), then click a target: an **enemy** opens a small popup of attack skills, **your own token** lists Guard/Brace/Focus/Rest, an **empty tile** offers *Move here* (the exit offers *Withdraw*). Each row shows `AP · blocks`; hovering a row (or just hovering a target) previews the route, destination ghost, weapon reach and cost on the grid, and hovering inspects the unit in the side panels. Pick with the mouse, `1`-`9`, or `Enter` / clicking the same target again for the first option; the step lands on the lowest free block and the hero's ghost trail and the timeline update. The timeline bar shows the hero's AP, next block and warnings, with **🤖 Draft** (AI presets for the hero or party), **Clear** and **Confirm Round** (`Enter`); right-click a timeline command to remove its step and drag one onto another to reorder. **Engage** combines target + move: the moves to get in range are inserted automatically and, at execution, re-path from current positions so they chase a target that moved. Hard-invalid sequences (no path, bad target, too many blocks) block Confirm; running out of AP only warns. Once confirmed the timeline is a read-only visualisation.
 - **Skill levels & AP**: every leveled skill has a level 1-5 and its base AP cost *is* its level (a level 2 Attack or Defend always costs 2 AP unless an effect shifts it via `Combatant.ap_cost_modifier`). **Move** is always one block and costs 1 AP per tile, up to the unit's speed-based tiles per block, along any path. **Rest** is free, recovers 2 AP and returns the unit to Neutral. Round budget 10 AP. `AiProfile.skill_cap` stands in for skill progression.
 - **AP is a runtime resource**: the planner projects AP and warns where a hero "runs dry", but allows the sequence. At resolution each command pays its AP (plus any +1 stance switch) when it starts; a unit that can't pay stops its whole sequence. Rest mid-round to recover.
 - **Enemy AI (`TacticalAI`)**: Each goblin drafts its round at round start from an `AiProfile`: *Aggressor*, *Skirmisher*, *Sniper*, *Support* (opens with Focus). It grows a scratch plan one validated step at a time, picks targets by role and route cost, guards once when hurt, kites when it should, and withdraws at 25% HP. Plans commit blind; Engage chases, fixed moves do not. Enemy tracks stay masked on the timeline and the inspector's *Threat Intel* shows each hostile's role and thresholds.
@@ -363,13 +365,14 @@ The following modular systems and capabilities are planned according to the mast
 
 *Status: Sequence planning implemented (chained inputs, validation, AI presets, skill-level AP, stance flow, live-chasing Engage).*
 
-- [x] Sequence-based Plan Round screen with chained inputs, validation, reorder/remove, AI presets, AP = skill level and stance flow.
+- [x] Sequence-based on-grid planning with chained inputs, validation, reorder/remove, AI presets, AP = skill level and stance flow.
 - [x] CombatSession extracted from `test_arena.gd`; combat UI rebuilt as session-bound panels in a static dock host (`combat_arena.tscn`).
 - [ ] Reactive defensive skills (Parry, Counter, Shield Bash: Defensive-stance skills that deal damage).
 - [ ] Status effects (poison, intimidate, stagger) and Offensive debuff skills; Tactical buffs beyond Focus.
 - [ ] Sequence-altering skills (Interrupt, Stagger delay, AP drain) with replay explanations of why a sequence changed.
 - [ ] Per-step projected stance/AP annotations on the grid preview.
-- [ ] Ghost path / range preview of planned moves and attacks on the grid.
+- [x] Ghost trail, destination ghost and reach preview of planned moves and attacks on the grid.
+- [ ] Ally-targeted skills (the click-an-ally popup is ready; no ally skills exist yet).
 - [ ] Skill and item commands in the planner (`SwitchWeaponCommand`, Dual Strike, battle-pouch items, level 4-5 skills) and real skill progression feeding `skill_cap`.
 - [ ] Terrain gameplay rules: cover bonuses, movement cost and hazard damage (metadata already in `Terrain`).
 - [ ] More bespoke icons for unique/rare gear (`Item.icon_id`).

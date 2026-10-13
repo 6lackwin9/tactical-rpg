@@ -22,7 +22,6 @@ func _ready() -> void:
 	add_child(canvas)
 	host = CombatDockHost.new()
 	canvas.add_child(host)
-	host.auto_open_plan = true
 	host.setup(session)
 	session.start()
 

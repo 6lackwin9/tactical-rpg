@@ -20,6 +20,7 @@ signal log_reset()
 signal fx_requested(entry: ActionLogEntry)    # animate an action (attack lunge, move, buff...)
 signal hover_changed(combatant: Combatant)    # null = hover cleared
 signal text_logged(bbcode: String)
+signal plan_preview_changed()                 # hover preview of a planned step (grid ghosts)
 
 enum Phase { PLANNING, RESOLVING, REPLAY }
 
@@ -70,6 +71,7 @@ var next_round_label: String = ""    # empty = no round advance available
 # Planning (encounters with player_planning): the party's plan for the live round.
 var plan: CombatPlan = null               # per-unit command sequences (rebuilt each round)
 var plan_confirmed: bool = false         # sequences locked and scheduled
+var preview_step: PlanStep = null         # hovered option being previewed on the grid
 
 var _pending_actions: Array[CombatResolver.ScheduledAction] = []
 
@@ -373,7 +375,62 @@ func is_planning() -> bool:
 func plan_options(actor: Combatant) -> Array[PlanOption]:
 	return plan.options(actor) if is_planning() and actor != null else []
 
-# Appends a step to ctor's sequence; returns "" or the reason it was rejected.
+# Skills offered when the focused hero clicks a target (foe: attacks, self: self skills).
+func plan_target_options(target: Combatant) -> Array[PlanOption]:
+	if not is_planning() or focused_hero == null:
+		return []
+	return plan.target_options(focused_hero, target)
+
+# What the focused hero can do about an empty tile (move there, or withdraw at the exit).
+func plan_cell_options(cell: Vector2i) -> Array[PlanOption]:
+	if not is_planning() or focused_hero == null:
+		return []
+	return plan.cell_options(focused_hero, cell)
+
+func set_plan_preview(step: PlanStep) -> void:
+	if preview_step == step:
+		return
+	preview_step = step
+	plan_preview_changed.emit()
+
+# The hero's compiled state with the hovered step appended (null when not previewing).
+func plan_preview_state() -> CombatPlan.SimState:
+	if preview_step == null or focused_hero == null or not is_planning():
+		return null
+	return plan.preview(focused_hero, preview_step)
+
+# Index of the step that produced the focused hero's command at lock (-1 = none).
+func plan_step_index_at(block: int) -> int:
+	if focused_hero == null or plan == null:
+		return -1
+	for e: PlanEntry in plan.entries_for(focused_hero):
+		if block >= e.start_block and block <= e.end_block():
+			return e.step_index
+	return -1
+
+# One-line planning status for the timeline bar.
+func plan_info() -> Dictionary:
+	var info: Dictionary = {"planning": is_planning(), "text": "", "warn": false, "can_confirm": false}
+	if not is_planning() or focused_hero == null:
+		return info
+	var st: CombatPlan.SimState = plan.compile(focused_hero)
+	var text: String = "%s  •  AP %d/%d  •  next block %d  •  %s" % [focused_hero.name, st.ap_left, focused_hero.max_ap, mini(st.next_block, 10), CombatTypes.stance_to_string(st.stance)]
+	if st.error_index >= 0:
+		text += "  •  ⚠ step %d invalid: %s" % [st.error_index + 1, st.error_text]
+		info["warn"] = true
+	elif st.runs_dry():
+		text += "  •  ⚠ runs dry at step %d" % (st.dry_step + 1)
+		info["warn"] = true
+	info["text"] = text
+	info["can_confirm"] = plan_is_valid()
+	return info
+
+# Unit shown in the inspector/forecast: the hovered one while planning, else the selection.
+func inspected_combatant() -> Combatant:
+	if is_planning() and hovered_combatant != null:
+		return hovered_combatant
+	return selected_combatant
+# Appends a step to the actor's sequence; returns "" or the reason it was rejected.
 func plan_add_step(actor: Combatant, step: PlanStep) -> String:
 	if not is_planning():
 		return "Planning is closed."
@@ -441,6 +498,7 @@ func confirm_plan() -> bool:
 	return true
 
 func _after_plan_edit() -> void:
+	preview_step = null
 	_refresh_archive()
 	_notify()
 

@@ -176,6 +176,8 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 			return _add_entry(c, st, step.skill, index)
 		PlanStep.Mode.MOVE:
 			return _apply_move(c, st, step, index)
+		PlanStep.Mode.GOTO:
+			return _apply_goto(c, st, step, index)
 		PlanStep.Mode.WITHDRAW:
 			return _apply_withdraw(c, st, index)
 		PlanStep.Mode.ENGAGE:
@@ -203,6 +205,20 @@ func _apply_move(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 			return "Another unit blocks that move."
 		path.append(step.direction)
 	return _add_move(c, st, path, null, index)
+
+func _apply_goto(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	var grid: CombatGrid = context.grid
+	var blocked: Dictionary = blocked_cells(c)
+	if not grid.is_valid_coord(step.cell) or not grid.is_walkable(step.cell) or grid.is_exit_tile(step.cell):
+		return "That tile can't be moved to."
+	if blocked.has(step.cell):
+		return "Another unit is standing there."
+	if st.pos == step.cell:
+		return "%s is already there." % c.name
+	var path: Array[Vector2i] = find_path(grid, st.pos, {step.cell: true}, blocked, false)
+	if path.is_empty():
+		return "No path to that tile."
+	return _walk(c, st, path, index, null)
 
 func _apply_withdraw(c: Combatant, st: SimState, index: int) -> String:
 	var exits: Dictionary = {}
@@ -275,6 +291,7 @@ func _add_move(c: Combatant, st: SimState, dirs: Array[Vector2i], chase: Combata
 	if problem.is_empty() and not st.runs_dry():
 		for d: Vector2i in dirs:
 			st.pos += d
+		st.entries[st.entries.size() - 1].pos_after = st.pos
 	return problem
 
 # Places one skill at the lowest free block: checks blocks, then pays AP (skill +
@@ -292,6 +309,8 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 	entry.skill_ap = skill.ap_cost(c) * (maxi(1, dirs.size()) if skill.kind == SkillDef.Kind.MOVE else 1)
 	entry.switch_ap = skill.switch_cost(st.stance)
 	entry.stance_before = st.stance
+	entry.pos_before = st.pos
+	entry.pos_after = st.pos
 	entry.stance_after = skill.stance_after(st.stance)
 	st.entries.append(entry)
 	st.next_block += skill.blocks
@@ -341,6 +360,44 @@ func options(c: Combatant) -> Array[PlanOption]:
 	if not context.grid.designated_exits.is_empty():
 		out.append(_probe(c, PlanStep.withdraw(), base))
 	return out
+
+# Options when c clicks 	arget: attacks for a foe, self skills for itself, nothing for allies yet.
+func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
+	var out: Array[PlanOption] = []
+	var base: SimState = compile(c)
+	if base.error_index >= 0 or base.withdrawn or base.runs_dry() or not c.is_active():
+		return out
+	var cap: int = context.skill_cap_of(c)
+	if target == c:
+		for kind: SkillDef.Kind in [SkillDef.Kind.DEFEND, SkillDef.Kind.FOCUS, SkillDef.Kind.REST]:
+			for skill: SkillDef in SkillCatalog.available(kind, cap):
+				out.append(_probe(c, PlanStep.self_skill(skill), base))
+	elif context.foes_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
+		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.ATTACK, cap):
+			out.append(_probe(c, PlanStep.engage(skill, target), base))
+	return out
+
+# Options when c clicks an empty tile (or the exit).
+func cell_options(c: Combatant, cell: Vector2i) -> Array[PlanOption]:
+	var out: Array[PlanOption] = []
+	var base: SimState = compile(c)
+	if base.error_index >= 0 or base.withdrawn or base.runs_dry() or not c.is_active():
+		return out
+	if context.grid.is_exit_tile(cell):
+		out.append(_probe(c, PlanStep.withdraw(), base))
+	else:
+		out.append(_probe(c, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), cell), base))
+	return out
+
+# The compiled state as if step were appended (without changing the plan).
+func preview(c: Combatant, step: PlanStep) -> SimState:
+	var steps: Array[PlanStep] = steps_of(c)
+	steps.append(step)
+	sequences[c] = steps
+	var st: SimState = compile(c)
+	steps.pop_back()
+	sequences[c] = steps
+	return st
 
 func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 	var option := PlanOption.new()

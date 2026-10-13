@@ -27,13 +27,11 @@ func _on_bound() -> void:
 	controls.next_round_pressed.connect(func() -> void: session.advance_round())
 	controls.popout_pressed.connect(func() -> void: modal_requested.emit("timeline"))
 	controls.gear_pressed.connect(func() -> void: modal_requested.emit("gear"))
-	controls.plan_pressed.connect(func() -> void: modal_requested.emit("plan"))
 
 func refresh() -> void:
 	if session == null:
 		return
 	controls.set_phase_badge(session.phase_text, session.phase_color)
-	controls.set_plan_state(session.is_planning())
 	controls.set_status_text(session.status_text)
 	var play_tip: String = "Pause auto-play [Space]" if session.is_auto_playing else ("Auto-resolve Round %d [Space]" % session.current_round if session.is_live_view() else "Play replay from Block 1 [Space]")
 	controls.set_play_state(session.is_auto_playing, play_tip)

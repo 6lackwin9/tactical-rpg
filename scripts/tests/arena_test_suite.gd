@@ -1235,6 +1235,44 @@ static func run_planning_and_ai_test() -> bool:
 	var rest_ok: bool = dummy.hp < 100 and spent.ap == 0
 	var runtime_ok: bool = stops_ok and said_exhausted and rest_ok
 
+	# 5c. On-grid input model: options per clicked target / tile, hover previews, status line
+	var gsession := CombatSession.new(SkirmishEncounter.new())
+	gsession.start()
+	var gh: Combatant = gsession.allies[0]
+	var gfoe: Combatant = gsession.enemies[0]
+	var foe_opts: Array[PlanOption] = gsession.plan_target_options(gfoe)
+	var self_opts: Array[PlanOption] = gsession.plan_target_options(gh)
+	var ally_opts: Array[PlanOption] = gsession.plan_target_options(gsession.allies[1])
+	var tile_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(2, 6))
+	var exit_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(8, 4))
+	var occupied_opts: Array[PlanOption] = gsession.plan_cell_options(gsession.grid.get_position(gfoe))
+	var targets_ok: bool = foe_opts.size() == 3 and ally_opts.is_empty() and tile_opts.size() == 1 and exit_opts.size() == 1
+	for o: PlanOption in foe_opts:
+		targets_ok = targets_ok and o.step.mode == PlanStep.Mode.ENGAGE and o.step.target == gfoe and o.valid
+	var has_rest: bool = false
+	for o: PlanOption in self_opts:
+		targets_ok = targets_ok and o.step.mode == PlanStep.Mode.SELF
+		if o.step.skill.kind == SkillDef.Kind.REST:
+			has_rest = true
+	targets_ok = targets_ok and has_rest and tile_opts[0].step.mode == PlanStep.Mode.GOTO and tile_opts[0].valid and exit_opts[0].step.mode == PlanStep.Mode.WITHDRAW
+	targets_ok = targets_ok and (occupied_opts.is_empty() or not occupied_opts[0].valid)
+	var previews: Array[int] = [0]
+	gsession.plan_preview_changed.connect(func() -> void: previews[0] += 1)
+	gsession.set_plan_preview(tile_opts[0].step)
+	var pst: CombatPlan.SimState = gsession.plan_preview_state()
+	var grid_preview_ok: bool = previews[0] == 1 and pst != null and pst.pos == Vector2i(2, 6) and gsession.plan.steps_of(gh).is_empty()
+	gsession.set_plan_preview(null)
+	var added: String = gsession.plan_add_step(gh, tile_opts[0].step)
+	var moved_state: CombatPlan.SimState = gsession.plan.compile(gh)
+	var trail_ok: bool = added.is_empty() and moved_state.pos == Vector2i(2, 6) and not moved_state.entries.is_empty() and moved_state.entries[0].pos_before == Vector2i(4, 5) and moved_state.entries[moved_state.entries.size() - 1].pos_after == Vector2i(2, 6)
+	var info: Dictionary = gsession.plan_info()
+	var info_ok: bool = bool(info.get("planning", false)) and "Warrior" in str(info.get("text", "")) and bool(info.get("can_confirm", false)) and gsession.plan_step_index_at(1) == 0 and gsession.plan_step_index_at(10) == -1
+	gsession.set_hovered(gfoe)
+	var hover_ok: bool = gsession.inspected_combatant() == gfoe
+	gsession.set_hovered(null)
+	hover_ok = hover_ok and gsession.inspected_combatant() == gsession.selected_combatant
+	var input_ok: bool = targets_ok and grid_preview_ok and trail_ok and info_ok and hover_ok
+	gsession.dispose()
 	# 6. Presets: every preset drafts a valid, affordable sequence; each shows its focus
 	var psession := CombatSession.new(SkirmishEncounter.new())
 	psession.start()
@@ -1390,6 +1428,7 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [Plan] Over-committed AP is projected (runs dry) not refused; Rest offered: %s" % ("PASS" if (runtime_plan_ok and options_ok) else "FAIL"))
 	print("  [Plan] Reorder/remove edits are flagged when invalid and block Confirm: %s" % ("PASS" if edit_ok else "FAIL"))
 	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, AP spent at runtime: %s" % ("PASS" if flow_ok2 else "FAIL"))
+	print("  [Input] Per-target/tile options (foe attacks, self skills, move here, withdraw), previews, status & hover inspect: %s" % ("PASS" if input_ok else "FAIL"))
 	print("  [Runtime] Out-of-AP units stop their sequence; Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
 	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
 	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, Engage chases: %s" % ("PASS" if ai_ok else "FAIL"))
@@ -1397,4 +1436,4 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [AI] Both sides take damage in a preset-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
 	print("  [Plan] Reset round rewinds to the round start, refills AP and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
 
-	return ap_model_ok and stance_ok and seq_ok and auto_switch_ok and runtime_plan_ok and options_ok and edit_ok and flow_ok2 and runtime_ok and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok
+	return ap_model_ok and stance_ok and seq_ok and auto_switch_ok and runtime_plan_ok and options_ok and edit_ok and flow_ok2 and input_ok and runtime_ok and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok

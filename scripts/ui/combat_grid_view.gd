@@ -10,6 +10,9 @@ extends VBoxContainer
 signal combatant_clicked(combatant: Combatant)
 signal combatant_hovered(combatant: Combatant, token: Control)
 signal combatant_unhovered()
+signal tile_clicked(coord: Vector2i)
+signal tile_hovered(coord: Vector2i)
+signal tile_unhovered()
 
 const TILE_SIZE: int = 54
 const GRID_SIZE: int = 9
@@ -19,6 +22,7 @@ var grid_anchor: Control
 var grid_container: GridContainer
 var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
 var unit_overlay: Control
+var plan_overlay: PlanOverlay
 var unit_token_nodes: Dictionary = {} # Combatant -> Control
 
 var grid_hover_tooltip: PanelContainer
@@ -65,6 +69,10 @@ func _build_ui() -> void:
 	grid_container.add_theme_constant_override("h_separation", 0)
 	grid_container.add_theme_constant_override("v_separation", 0)
 	grid_anchor.add_child(grid_container)
+
+	# Planning ghosts / paths sit above the tiles and below the unit tokens
+	plan_overlay = PlanOverlay.new()
+	grid_anchor.add_child(plan_overlay)
 
 	unit_overlay = Control.new()
 	unit_overlay.name = "UnitOverlay"
@@ -128,6 +136,13 @@ func setup_tile_textures(textures: Dictionary, overlays: Dictionary = {}, toolti
 				var tex: Texture2D = tex_raw
 				tile_rect.texture = tex
 			tile_rect.tooltip_text = str(tooltips.get(coord, ""))
+			tile_rect.gui_input.connect(func(event: InputEvent) -> void:
+				var mouse_event := event as InputEventMouseButton
+				if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+					tile_clicked.emit(coord)
+			)
+			tile_rect.mouse_entered.connect(func() -> void: tile_hovered.emit(coord))
+			tile_rect.mouse_exited.connect(func() -> void: tile_unhovered.emit())
 
 			var overlay_raw: Variant = overlays.get(coord, null)
 			if overlay_raw is Texture2D:
