@@ -49,9 +49,9 @@ static func run_combat_ui_framework_test(tree_parent: Node = null) -> bool:
 
 	# 1. Every panel is mounted in its dock region of the default layout
 	var expected_regions: Dictionary = {
-		"party": "top_left", "action_log": "top_center", "enemies": "top_right",
+		"party": "top_left", "timeline": "top_center", "enemies": "top_right",
 		"inspector": "left", "grid": "center", "forecast": "right",
-		"playback": "bottom_left", "timeline": "bottom_center",
+		"playback": "bottom_left", "action_log": "bottom_center",
 	}
 	var docks_ok: bool = host.log_modal != null and host.timeline_modal != null
 	for id: String in expected_regions:
@@ -180,15 +180,21 @@ static func run_combat_session_flow_test() -> bool:
 		and encounter.warrior.is_alive()
 	)
 
-	# 4. Replay reads snapshots: block 1 state differs from the round's final state
-	session.select_block(1)
+	# 4. Replay works by log points: a block opens at its start (state after the blocks
+	# before it), a round opens at its start, and stepping walks the log forward and back
+	var snap0: BlockSnapshot = session.snapshot_at(1, 0)
 	var snap1: BlockSnapshot = session.snapshot_at(1, 1)
-	var start_hp: int = session.snapshot_at(1, 0).hps.get(encounter.warrior, -1)
-	var replay_ok: bool = (
-		snap1 != null and session.display_snapshot() == snap1
-		and session.position_of(encounter.warrior) == snap1.positions.get(encounter.warrior, Vector2i(-1, -1))
-		and start_hp == 100
-	)
+	var start_hp: int = snap0.hps.get(encounter.warrior, -1)
+	session.select_block(2)
+	var at_block2: bool = snap1 != null and session.position_of(encounter.warrior) == snap1.positions.get(encounter.warrior, Vector2i(-1, -1))
+	session.select_block(1)
+	var at_start: bool = session.replay_cursor == -1 and session.display_snapshot() == snap0 and session.position_of(encounter.warrior) == snap0.positions.get(encounter.warrior, Vector2i(-1, -1))
+	session.step_next()
+	var first_point: int = session.replay_cursor
+	var stepped: bool = first_point >= 0 and session.log_entries[first_point].round_num == 1 and session.display_snapshot() != snap0
+	session.step_prev()
+	var back_to_start: bool = session.replay_cursor == -1
+	var replay_ok: bool = at_block2 and at_start and stepped and back_to_start and start_hp == 100
 
 	# 5. Advancing applies the Round 2 baseline; Round 1 stays reviewable
 	session.advance_round()
@@ -223,7 +229,7 @@ static func run_combat_session_flow_test() -> bool:
 	print("  [Session] Only deployed enemies in view before ambush: %s" % ("PASS" if pre_view_ok else "FAIL"))
 	print("  [Session] Ambush event at R1-B04 brings reinforcements into view: %s" % ("PASS" if ambush_ok else "FAIL"))
 	print("  [Session] Round 1 resolves into replay with round advance offered: %s" % ("PASS" if round1_ok else "FAIL"))
-	print("  [Session] Replay playhead reads per-block snapshots: %s" % ("PASS" if replay_ok else "FAIL"))
+	print("  [Session] Replay steps by log points; blocks/rounds open at their start: %s" % ("PASS" if replay_ok else "FAIL"))
 	print("  [Session] Round advance applies baseline; past rounds reviewable: %s" % ("PASS" if traversal_ok else "FAIL"))
 	print("  [Session] Rounds 2-3 resolve to total victory: %s" % ("PASS" if victory_ok else "FAIL"))
 	print("  [Session] Auto-play ticks resolve a full round headlessly: %s" % ("PASS" if autoplay_ok else "FAIL"))
@@ -1508,6 +1514,24 @@ static func run_planning_and_ai_test() -> bool:
 	usession.dispose()
 	mechanics_ok = mechanics_ok and reach2_ok and undo_ok
 
+	# the AI pack drafts into one shared plan: no two goblins plan to end on the same tile
+	var pack := CombatSession.new(SkirmishEncounter.new())
+	pack.start()
+	var pack_dest: Dictionary = {}
+	var pack_ok: bool = true
+	for sa: CombatResolver.ScheduledAction in pack.resolver.scheduled_actions:
+		var walk_cmd: WalkCommand = sa.command as WalkCommand
+		if walk_cmd != null and walk_cmd.goal != Vector2i(-1, -1):
+			pack_dest[sa.combatant] = walk_cmd.goal
+	var seen_tiles: Dictionary = {}
+	for unit: Variant in pack_dest:
+		var tile: Vector2i = pack_dest[unit]
+		if seen_tiles.has(tile):
+			pack_ok = false
+		seen_tiles[tile] = true
+	pack.dispose()
+	mechanics_ok = mechanics_ok and pack_ok
+
 	# split moves: a 4-tile move at 2 tiles/block is two 1-block halves (first lands after block 1);
 	# a half blocked by a unit that stepped in stops short, refunds its tiles and logs CUT SHORT
 	var sgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
@@ -1722,7 +1746,7 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, AP spent at runtime: %s" % ("PASS" if flow_ok2 else "FAIL"))
 	print("  [Input] Per-target/tile options (foe attacks, self skills, move here, withdraw), previews, status & hover inspect: %s" % ("PASS" if input_ok else "FAIL"))
 	print("  [Rules] 6-block rounds, AP pool + regen, one move per round, centre tie-break, target switching, insurance attacks, follow, damage log, auto-play on confirm: %s" % ("PASS" if rules_ok else "FAIL"))
-	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles, split moves & cut-short refunds, ranged 2-3 reach, undo last step: %s" % ("PASS" if mechanics_ok else "FAIL"))
+	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles, split moves & cut-short refunds, ranged 2-3 reach, undo last step, AI pack avoids its own planned tiles: %s" % ("PASS" if mechanics_ok else "FAIL"))
 	print("  [Runtime] Overspending goes into AP debt (next round: less AP, 3+ Stagger, 5+ Stun); Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
 	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
 	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, attack closes a 1-tile gap at its start: %s" % ("PASS" if ai_ok else "FAIL"))

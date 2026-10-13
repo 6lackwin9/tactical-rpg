@@ -27,6 +27,7 @@ func _on_bound() -> void:
 	dock.block_selected.connect(func(b: int) -> void: session.select_block(b))
 	dock.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
 	dock.hero_view_requested.connect(func() -> void: session.focus_first_hero())
+	dock.fit_changed.connect(refresh)
 	dock.draft_requested.connect(func(preset_id: String, whole_party: bool) -> void:
 		if whole_party:
 			session.plan_apply_preset_all(preset_id)

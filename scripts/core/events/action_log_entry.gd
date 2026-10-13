@@ -6,8 +6,8 @@ extends RefCounted
 # Standardized action event structure for timeline cells and expanded stream log
 # ==============================================================================
 
-# Test mode only: log cells explain damage on hover (set by the test harness, off in the real game).
-static var show_formulas: bool = false
+# Test mode: log cells explain damage on hover. On in debug builds (editor / test runs), off in release builds.
+static var show_formulas: bool = OS.is_debug_build()
 
 var round_num: int = 1
 var block_num: int = 1

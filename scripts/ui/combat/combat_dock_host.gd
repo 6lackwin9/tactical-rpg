@@ -16,14 +16,14 @@ const REGIONS: Array[String] = ["top_left", "top_center", "top_right", "left", "
 const DEFAULT_LAYOUT: String = "Standard"
 const LAYOUTS: Dictionary = {
 	"Standard": {
-		"top_left": ["party"], "top_center": ["action_log"], "top_right": ["enemies"],
+		"top_left": ["party"], "top_center": ["timeline"], "top_right": ["enemies"],
 		"left": ["inspector"], "center": ["grid"], "right": ["forecast"],
-		"bottom_left": ["playback"], "bottom_center": ["timeline"],
+		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 	"Mirrored": {
-		"top_left": ["enemies"], "top_center": ["action_log"], "top_right": ["party"],
+		"top_left": ["enemies"], "top_center": ["timeline"], "top_right": ["party"],
 		"left": ["forecast"], "center": ["grid"], "right": ["inspector"],
-		"bottom_left": ["playback"], "bottom_center": ["timeline"],
+		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 }
 const AUTO_PLAY_INTERVAL: float = 0.55
@@ -70,7 +70,7 @@ func _init() -> void:
 	margin.add_child(root)
 
 	var top := _row(root, 8)
-	top.custom_minimum_size = Vector2(0, 84)
+	top.custom_minimum_size = Vector2(0, 96)
 	_add_region(top, "top_left", false)
 	_add_region(top, "top_center", true)
 	_add_region(top, "top_right", false)

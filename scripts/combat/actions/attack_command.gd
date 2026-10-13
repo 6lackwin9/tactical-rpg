@@ -77,7 +77,7 @@ func on_start() -> String:
 # Steps toward a target that moved out of range, paying 1 AP per tile.
 func _follow(effective_target: Combatant) -> void:
 	var left: int = follow_tiles
-	while left > 0 and source.ap >= 1 and not in_reach(effective_target):
+	while left > 0 and not in_reach(effective_target):   # may run into AP debt like any planned cost
 		var reach: int = reach_max()
 		var near: int = reach_min()
 		var target_pos: Vector2i = grid.get_position(effective_target)

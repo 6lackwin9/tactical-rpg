@@ -44,6 +44,8 @@ var current_round: int = 1
 var current_block: int = 1          # next block to resolve during RESOLVING
 var replay_block: int = 1           # playhead while replaying / viewing a past round
 var inspect_block: int = -1         # snapshot inspected during the live round (-1 = live)
+var replay_cursor: int = -1         # replay: index into log_entries whose resulting state is shown (-1 = start of the viewed round)
+var entry_snapshots: Dictionary = {} # ActionLogEntry -> BlockSnapshot (state right after that log point)
 var phase: Phase = Phase.PLANNING
 var combat_over: bool = false
 var is_auto_playing: bool = false
@@ -90,6 +92,8 @@ func start() -> void:
 	round_actions.clear()
 	round_snapshots.clear()
 	log_entries.clear()
+	entry_snapshots.clear()
+	replay_cursor = -1
 	active_log_index = -1
 	text_log.clear()
 	selected_combatant = null
@@ -106,6 +110,7 @@ func start() -> void:
 	resolver.total_blocks = total_blocks
 	resolver.rng.seed = encounter.rng_seed
 	resolver.log_emitted.connect(_on_resolver_log)
+	resolver.action_note.connect(_on_action_note)
 	for c: Combatant in allies:
 		resolver.register_combatant(c)
 	for c: Combatant in enemies:
@@ -217,13 +222,13 @@ func step_next() -> void:
 	if is_live_view():
 		_step_resolution()
 	else:
-		select_block(replay_block + 1)
+		_replay_step(1)
 
 func step_prev() -> void:
 	if is_live_view():
 		log_prev()
 	else:
-		select_block(replay_block - 1)
+		_replay_step(-1)
 
 func _step_resolution() -> void:
 	inspect_block = -1
@@ -265,11 +270,13 @@ func _conclude_round(over: bool) -> void:
 	combat_over = over
 	phase = Phase.REPLAY
 	replay_block = current_block
+	replay_cursor = _round_entry_indices(current_round).back() if not _round_entry_indices(current_round).is_empty() else -1
 	is_auto_playing = false
 	var summary: Dictionary = encounter.round_summary(current_round, over)
 	_set_phase(str(summary.get("phase", "ROUND %d CONCLUDED" % current_round)), COL_VICTORY if over else COL_REPLAY)
 	status_text = str(summary.get("status", "Round %d concluded. Review the replay." % current_round))
 	_log_text(str(summary.get("log", "")))
+	export_log()
 	next_round_label = encounter.advance_label(current_round) if can_advance_round() else ""
 	_notify()
 
@@ -278,7 +285,7 @@ func toggle_auto_play() -> void:
 		is_auto_playing = false
 	else:
 		if not is_live_view():
-			replay_block = 1
+			_set_replay_cursor(-1)   # replays start from the positions at the start of the round
 		is_auto_playing = true
 	_notify()
 
@@ -288,8 +295,8 @@ func auto_play_tick() -> void:
 		return
 	if is_live_view():
 		_step_resolution()
-	elif replay_block < total_blocks:
-		select_block(replay_block + 1)
+	elif _replay_has_next():
+		_replay_step(1)
 	else:
 		is_auto_playing = false
 		_notify()
@@ -305,8 +312,14 @@ func select_block(b: int) -> void:
 		else:
 			status_text = "Block %d has not resolved yet." % block
 	else:
+		# Replay: jump to the START of the block (state after everything before it).
+		var cursor: int = -1
+		for idx: int in _round_entry_indices(viewed_round):
+			if log_entries[idx].block_num < block:
+				cursor = idx
+		_set_replay_cursor(cursor)
 		replay_block = maxi(1, block)
-		status_text = "Round %d • Block %02d state inspected." % [viewed_round, replay_block]
+		status_text = "Round %d • start of Block %02d." % [viewed_round, replay_block]
 	_notify()
 
 func select_round(round_num: int) -> void:
@@ -316,8 +329,8 @@ func select_round(round_num: int) -> void:
 	viewed_round = target
 	inspect_block = -1
 	if not is_live_view():
-		replay_block = clampi(replay_block, 1, total_blocks)
-	status_text = "Viewing Round %d Timeline." % target
+		_set_replay_cursor(-1)   # a round opens at its start
+	status_text = "Viewing Round %d from its start." % target
 	_notify()
 
 func navigate_round(delta: int) -> void:
@@ -333,16 +346,19 @@ func can_view_next_round() -> bool:
 func playhead() -> int:
 	if is_live_view():
 		return inspect_block if inspect_block >= 0 else current_block
-	return replay_block
+	return log_entries[replay_cursor].block_num if replay_cursor >= 0 and replay_cursor < log_entries.size() else 0
 
 # Snapshot to render, or null for the live state.
 func display_snapshot() -> BlockSnapshot:
 	if is_live_view():
 		return snapshot_at(viewed_round, inspect_block) if inspect_block >= 0 else null
+	if replay_cursor >= 0 and replay_cursor < log_entries.size():
+		var raw: Variant = entry_snapshots.get(log_entries[replay_cursor], null)
+		if raw is BlockSnapshot:
+			var after_entry: BlockSnapshot = raw
+			return after_entry
 	var snaps: Array[BlockSnapshot] = _snapshots_for(viewed_round)
-	if snaps.is_empty():
-		return null
-	return snaps[clampi(replay_block, 0, snaps.size() - 1)]
+	return snaps[0] if not snaps.is_empty() else null
 
 func snapshot_at(round_num: int, block: int) -> BlockSnapshot:
 	var snaps: Array[BlockSnapshot] = _snapshots_for(round_num)
@@ -507,7 +523,7 @@ func plan_clear(actor: Combatant) -> void:
 func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
 	if not is_planning() or actor == null or not actor.is_active():
 		return
-	plan.set_steps(actor, encounter.draft_steps(actor, preset_id))
+	encounter.draft_steps(actor, preset_id, plan)
 	status_text = "%s: %s drafted %d step(s)." % [actor.name, PlanPresets.label(preset_id), plan.steps_of(actor).size()]
 	_after_plan_edit()
 
@@ -516,7 +532,7 @@ func plan_apply_preset_all(preset_id: String) -> void:
 		return
 	for a: Combatant in allies:
 		if a.is_active():
-			plan.set_steps(a, encounter.draft_steps(a, preset_id))
+			encounter.draft_steps(a, preset_id, plan)
 	status_text = "Party: %s drafted. Review the sequences, then confirm." % PlanPresets.label(preset_id)
 	_after_plan_edit()
 
@@ -581,6 +597,54 @@ func _refresh_archive(with_plan: bool = true) -> void:
 	round_actions[current_round] = archived
 
 func _capture_snapshot(block_idx: int) -> void:
+	var snaps: Array[BlockSnapshot] = _snapshots_for(current_round)
+	snaps.append(_make_snapshot(block_idx))
+	round_snapshots[current_round] = snaps
+
+# ------------------------------------------------------------------------------
+# Replay (reviewing resolved rounds; a testing / sharing aid, not part of play)
+# The cursor is a log point: the state right after that log entry. Stepping moves
+# between log points of the viewed round; a round opens at its start, a block at
+# its start (after everything before it).
+# ------------------------------------------------------------------------------
+
+func _round_entry_indices(round_num: int) -> Array[int]:
+	var result: Array[int] = []
+	for i: int in range(log_entries.size()):
+		if log_entries[i].round_num == round_num:
+			result.append(i)
+	return result
+
+func _set_replay_cursor(cursor: int) -> void:
+	replay_cursor = cursor
+	replay_block = log_entries[cursor].block_num if cursor >= 0 and cursor < log_entries.size() else 1
+	if cursor >= 0 and cursor < log_entries.size():
+		active_log_index = cursor
+
+func _replay_has_next() -> bool:
+	var indices: Array[int] = _round_entry_indices(viewed_round)
+	return not indices.is_empty() and replay_cursor < indices.back()
+
+# One log point forward (animated) or back.
+func _replay_step(direction: int) -> void:
+	var indices: Array[int] = _round_entry_indices(viewed_round)
+	if indices.is_empty():
+		return
+	var pos: int = indices.find(replay_cursor)   # -1 when at the start of the round
+	var next_pos: int = clampi(pos + direction, -1, indices.size() - 1)
+	if next_pos == pos:
+		return
+	_set_replay_cursor(indices[next_pos] if next_pos >= 0 else -1)
+	if next_pos >= 0:
+		var entry: ActionLogEntry = log_entries[indices[next_pos]]
+		status_text = "Round %d • %s [%s]" % [viewed_round, entry.skill_name, entry.ref_tag]
+		if direction > 0:
+			fx_requested.emit(entry)
+	else:
+		status_text = "Round %d • start of the round." % viewed_round
+	_notify()
+
+func _make_snapshot(block_idx: int) -> BlockSnapshot:
 	var snap := BlockSnapshot.new()
 	snap.block_index = block_idx
 	snap.round_num = current_round
@@ -597,9 +661,7 @@ func _capture_snapshot(block_idx: int) -> void:
 		snap.attack_boost_rds[c] = c.attack_boost_rounds_remaining
 		snap.defense_mit[c] = c.defense_mitigation_ratio
 		snap.aps[c] = c.ap
-	var snaps: Array[BlockSnapshot] = _snapshots_for(current_round)
-	snaps.append(snap)
-	round_snapshots[current_round] = snaps
+	return snap
 
 # ------------------------------------------------------------------------------
 # 3. Unit state queries (snapshot-aware)
@@ -719,6 +781,7 @@ func set_hovered(c: Combatant) -> void:
 
 func _append_entry(entry: ActionLogEntry, with_fx: bool) -> void:
 	log_entries.append(entry)
+	entry_snapshots[entry] = _make_snapshot(current_block)   # replay steps through log points
 	active_log_index = log_entries.size() - 1
 	log_appended.emit(entry)
 	if with_fx:
@@ -749,10 +812,31 @@ func select_log_entry(entry: ActionLogEntry, navigate: bool = true) -> void:
 	var in_live_round: bool = entry.round_num == current_round and phase != Phase.REPLAY
 	if navigate and not in_live_round:
 		viewed_round = entry.round_num
+		replay_cursor = idx
 		replay_block = clampi(entry.block_num, 1, total_blocks)
 		inspect_block = -1
 	status_text = "%s [%s]" % [entry.skill_name, entry.ref_tag]
 	_notify()
+
+# Writes the readable combat log (cells + text feed) to user://combat_last.log so a
+# finished round can be shared or inspected outside the game. Debug builds only.
+func export_log(path: String = "user://combat_last.log") -> void:
+	if not OS.is_debug_build():
+		return
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_line("%s - round %d (%s)" % [encounter.encounter_name, current_round, Time.get_datetime_string_from_system()])
+	file.store_line("== Action log ==")
+	for e: ActionLogEntry in log_entries:
+		var dmg: String = (" -%d" % e.damage) if e.damage > 0 else ""
+		file.store_line("[%s] %s %s %s -> %s [%s%s] %s | %s" % [e.ref_tag, e.category, e.actor_name, e.skill_name, e.target_name, e.outcome_tag, dmg, e.status_text, e.breakdown])
+	file.store_line("== Feed ==")
+	var bbcode := RegEx.new()
+	bbcode.compile("\\[/?(b|i|u|s|color|font_size|url|center)(=[^\\]]*)?\\]")
+	for line: String in text_log:
+		file.store_line(bbcode.sub(line, "", true))
+	file.close()
 
 func _truncate_log_from_round(round_num: int) -> void:
 	var kept: Array[ActionLogEntry] = []
@@ -760,8 +844,16 @@ func _truncate_log_from_round(round_num: int) -> void:
 		if e.round_num < round_num:
 			kept.append(e)
 	log_entries = kept
+	for e: Variant in entry_snapshots.keys():
+		if e is ActionLogEntry and not kept.has(e):
+			entry_snapshots.erase(e)
 	active_log_index = log_entries.size() - 1
 	log_reset.emit()
+
+# A command did something as it started (a chase): give it its own log cell and animation.
+func _on_action_note(action: CombatResolver.ScheduledAction, message: String) -> void:
+	if message.begins_with("[Chase]"):
+		_append_entry(CombatLogBuilder.chase_entry(action, current_round, current_block, allies, grid, message), true)
 
 func _on_resolver_log(msg: String) -> void:
 	_log_text(CombatLogBuilder.format_resolver_message(msg))

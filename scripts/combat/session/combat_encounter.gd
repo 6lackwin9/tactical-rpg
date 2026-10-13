@@ -90,9 +90,9 @@ func profile_of(c: Combatant) -> AiProfile:
 	return plan_context().profile_of(c)
 
 # AI-drafted sequence for c from the current state (preset_id: see PlanPresets).
-func draft_steps(c: Combatant, preset_id: String = "balanced") -> Array[PlanStep]:
-	var ctx: PlanContext = plan_context()
-	return TacticalAI.build_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)))
+func draft_steps(c: Combatant, preset_id: String = "balanced", shared: CombatPlan = null) -> Array[PlanStep]:
+	var ctx: PlanContext = shared.context if shared != null else plan_context()
+	return TacticalAI.build_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)), shared)
 
 # Plans every enemy on the field with the AI and schedules it on esolver.
 func schedule_enemy_ai(resolver: CombatResolver) -> void:
@@ -100,7 +100,7 @@ func schedule_enemy_ai(resolver: CombatResolver) -> void:
 	var enemy_plan := CombatPlan.new(ctx)
 	for e: Combatant in enemies:
 		if e.is_active() and grid.has_combatant(e):
-			enemy_plan.set_steps(e, TacticalAI.build_steps(e, ctx, ctx.profile_of(e)))
+			TacticalAI.build_steps(e, ctx, ctx.profile_of(e), enemy_plan)   # drafts into the shared plan: packmates avoid each other
 	enemy_plan.commit(resolver)
 # Convenience for subclasses: an EVENT log entry for narration / triggers.
 static func make_event_entry(round_num: int, block_num: int, actor: String, actor_is_ally: bool, skill: String, subtype: String, outcome: String, detail: String, status: String) -> ActionLogEntry:

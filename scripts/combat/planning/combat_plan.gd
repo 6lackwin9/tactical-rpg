@@ -338,7 +338,23 @@ func _apply_engage(c: Combatant, st: SimState, step: PlanStep, index: int) -> St
 			if dist < band.x:
 				return "%s is too close for %s (needs distance %d-%d)%s." % [foe.name, step.skill.display_name, band.x, band.y, "; use an off-hand jab" if c.attack_range > 1 else ""]
 			return "%s is out of reach: %s" % [foe.name, problem]
-		var path: Array[Vector2i] = approach_path(c, st.pos, foe, band.x, band.y)
+		# The approach destination is fixed when the step is planned (step.cell); later
+		# compiles re-check that same tile instead of re-routing around other plans.
+		var path: Array[Vector2i] = []
+		if step.cell != NO_CELL:
+			var stored_dist: int = context.grid.get_distance(step.cell, foe_pos)
+			if stored_dist < band.x or stored_dist > band.y:
+				return "The planned approach to %s no longer reaches it." % foe.name
+			if blocked_cells(c).has(step.cell):
+				return "The planned approach tile %s is taken; re-plan this attack." % str(step.cell)
+			path = GridPath.find_path(context.grid, st.pos, {step.cell: true}, blocked_cells(c), false)
+		else:
+			path = approach_path(c, st.pos, foe, band.x, band.y)
+			if not path.is_empty():
+				var dest: Vector2i = st.pos
+				for d: Vector2i in path:
+					dest += d
+				step.cell = dest
 		if path.is_empty():
 			return "No path to get %s within reach of %s." % [c.name, foe.name]
 		if path.size() > max_move_tiles(c):
@@ -528,25 +544,19 @@ func _blocked_for(c: Combatant, moves: Dictionary) -> Dictionary:
 			blocked[start] = true
 	return blocked
 
-# Each planning unit's move (from its first step): {to, end}. Two passes so a
-# unit can step into a tile a faster friend vacates in block 1.
+# Each planning unit's opening move: {to, end, leave}. Units are evaluated in the
+# order they were planned; each sees the tiles claimed by the units planned before
+# it (earlier plans have priority), so two units never claim the same tile. A unit
+# can step into a tile an earlier, faster friend vacates in block 1.
 func _ally_moves() -> Dictionary:
-	var first_pass: Dictionary = {}
+	var moves: Dictionary = {}
 	for key: Variant in sequences:
 		if key is Combatant:
 			var unit: Combatant = key
-			var move: Dictionary = _first_move(unit, _blocked_for(unit, {}))
+			var move: Dictionary = _first_move(unit, _blocked_for(unit, moves))
 			if not move.is_empty():
-				first_pass[unit] = move
-	var second_pass: Dictionary = {}
-	for key: Variant in sequences:
-		if key is Combatant:
-			var unit: Combatant = key
-			var move: Dictionary = _first_move(unit, _blocked_for(unit, first_pass))
-			if not move.is_empty():
-				second_pass[unit] = move
-	return second_pass
-
+				moves[unit] = move
+	return moves
 # Destination and end block of `c`'s opening move, evaluated against `blocked`.
 func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 	var steps: Array[PlanStep] = steps_of(c)

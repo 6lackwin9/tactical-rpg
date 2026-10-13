@@ -15,8 +15,11 @@ extends RefCounted
 
 const MAX_STEPS: int = 16
 
-static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) -> Array[PlanStep]:
-	var plan := CombatPlan.new(ctx)
+# With shared, the draft is written into that plan (replacing the actor's steps), so it
+# sees - and avoids - the moves its friends have already planned there.
+static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, shared: CombatPlan = null) -> Array[PlanStep]:
+	var plan: CombatPlan = shared if shared != null else CombatPlan.new(ctx)
+	plan.clear(actor)
 	var grid: CombatGrid = ctx.grid
 	var foes: Array[Combatant] = ctx.foes_of(actor)
 	if actor == null or not actor.is_active() or not grid.has_combatant(actor):
@@ -99,7 +102,15 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 		skills.sort_custom(func(a: SkillDef, b: SkillDef) -> bool:
 			return absi(a.level - profile.prefer_level) < absi(b.level - profile.prefer_level)
 		)
+	# The off-hand jab is a last resort for ranged units (only when nothing else reaches).
+	var ordered: Array[SkillDef] = []
 	for skill: SkillDef in skills:
+		if not skill.offhand:
+			ordered.append(skill)
+	for skill: SkillDef in skills:
+		if skill.offhand:
+			ordered.append(skill)
+	for skill: SkillDef in ordered:
 		var step: PlanStep
 		if make_step.is_valid():
 			var raw: Variant = make_step.call(skill)

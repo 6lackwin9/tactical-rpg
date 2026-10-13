@@ -16,6 +16,7 @@ signal clear_requested()                                       # planning: clear
 signal confirm_requested()                                     # planning: lock the round
 signal step_remove_requested(step_index: int)
 signal step_reorder_requested(from_step: int, to_step: int)
+signal fit_changed()            # block width changed to fit the dock: the owner should redraw
 
 const BLOCK_GAP: int = 4
 const TRACK_WIDTH: int = 830   # block widths scale so a round always fills this width
@@ -45,6 +46,10 @@ var action_lookup_fn: Callable
 
 func _init() -> void:
 	name = "TimelineDockUI"
+	resized.connect(func() -> void:
+		if _fit_blocks():
+			fit_changed.emit()
+	)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_build_ui()
@@ -235,8 +240,22 @@ func set_total_blocks(n: int) -> void:
 	if n == total_blocks:
 		return
 	total_blocks = n
-	block_w = int(float(TRACK_WIDTH - (n - 1) * BLOCK_GAP) / float(n))
+	if not _fit_blocks():
+		block_w = int(float(TRACK_WIDTH - (n - 1) * BLOCK_GAP) / float(n))
+		_build_ruler()
+
+# Sizes blocks to the width this dock actually has (it may sit in a narrow slot).
+# Returns true when the block width changed (ruler rebuilt; clips need a redraw).
+func _fit_blocks() -> bool:
+	var avail: float = size.x - 60.0   # round arrows + spacing
+	if avail <= 0.0:
+		return false
+	var w: int = clampi(int((avail - float((total_blocks - 1) * BLOCK_GAP)) / float(total_blocks)), 36, 140)
+	if w == block_w:
+		return false
+	block_w = w
 	_build_ruler()
+	return true
 
 # Planning bar state: info is CombatSession.plan_info(); step_fn maps a block to its step index.
 func set_planning(info: Dictionary, step_fn: Callable) -> void:

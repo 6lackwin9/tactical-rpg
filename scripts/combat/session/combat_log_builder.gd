@@ -151,6 +151,24 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.detail_text = act.command.command_name
 	return entry
 
+# A chase: the attacker closed a one-tile gap as its attack started.
+static func chase_entry(act: CombatResolver.ScheduledAction, round_num: int, block_num: int, allies: Array[Combatant], grid: CombatGrid, message: String) -> ActionLogEntry:
+	var entry := ActionLogEntry.new(round_num, block_num)
+	entry.actor_name = act.combatant.name
+	entry.actor_is_ally = allies.has(act.combatant)
+	entry.category = "MOVE"
+	entry.skill_name = "Chase"
+	entry.skill_subtype = "Closes the gap (1 AP)"
+	entry.outcome_tag = "CHASED"
+	entry.coord_to = grid.get_position(act.combatant) if grid != null else Vector2i(-1, -1)
+	var attack: AttackCommand = act.command as AttackCommand
+	if attack != null and attack.target != null:
+		entry.target_name = attack.target.name
+		entry.target_is_ally = allies.has(attack.target)
+	entry.status_text = "Position: %s" % str(entry.coord_to)
+	entry.detail_text = message.trim_prefix("[Chase] ")
+	return entry
+
 # Colors and iconifies raw CombatResolver log messages for the text feed.
 static func format_resolver_message(msg: String) -> String:
 	var formatted: String = "[color=#e2e8f0]" + msg + "[/color]"

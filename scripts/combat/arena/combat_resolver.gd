@@ -20,6 +20,7 @@ class ScheduledAction:
 signal block_started(block: int)
 signal block_completed(block: int)
 signal log_emitted(message: String)
+signal action_note(action: ScheduledAction, message: String)   # something happened as a command started (e.g. a chase)
 
 var scheduled_actions: Array[ScheduledAction] = []
 var registered_combatants: Array[Combatant] = []
@@ -177,6 +178,7 @@ func _begin_actions(block: int) -> void:
 		var start_msg: String = cmd.on_start()
 		if not start_msg.is_empty():
 			log_emitted.emit(start_msg)
+			action_note.emit(action, start_msg)
 func execute_single_action(action: ScheduledAction) -> void:
 	if action.is_cancelled:
 		return

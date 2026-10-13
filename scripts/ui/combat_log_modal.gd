@@ -12,6 +12,8 @@ signal modal_closed()
 var entries_vbox: VBoxContainer
 var filter_buttons: Dictionary = {} # String -> Button
 var current_filter: String = "ALL"
+var unit_filter: String = ""          # custom filter: only cells involving this unit (actor or target)
+var unit_option: OptionButton
 var all_entries: Array[ActionLogEntry] = []
 
 func _init() -> void:
@@ -107,6 +109,25 @@ func _build_ui() -> void:
 		filter_bar.add_child(btn)
 		filter_buttons[cat] = btn
 
+	# Custom filter row: narrow the stream to one unit (as actor or target)
+	var custom_bar := HBoxContainer.new()
+	custom_bar.add_theme_constant_override("separation", 6)
+	modal_vbox.add_child(custom_bar)
+	var custom_hdr := Label.new()
+	custom_hdr.text = "Custom filter:"
+	custom_hdr.add_theme_font_size_override("font_size", 8)
+	custom_hdr.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	custom_bar.add_child(custom_hdr)
+	unit_option = OptionButton.new()
+	unit_option.add_theme_font_size_override("font_size", 9)
+	unit_option.custom_minimum_size = Vector2(170, 18)
+	unit_option.tooltip_text = "Show only cells where this unit acts or is targeted"
+	unit_option.item_selected.connect(func(i: int) -> void:
+		unit_filter = "" if i == 0 else unit_option.get_item_text(i)
+		refresh_content()
+	)
+	custom_bar.add_child(unit_option)
+
 	var hsep := HSeparator.new()
 	modal_vbox.add_child(hsep)
 
@@ -158,6 +179,7 @@ func refresh_content() -> void:
 		else:
 			btn.remove_theme_color_override("font_color")
 
+	_sync_unit_options()
 	if all_entries.is_empty():
 		var empty_lbl := Label.new()
 		empty_lbl.text = "No action cells resolved yet. Run combat blocks to populate stream."
@@ -171,6 +193,8 @@ func refresh_content() -> void:
 
 	for entry in all_entries:
 		if current_filter != "ALL" and entry.category != current_filter:
+			continue
+		if not unit_filter.is_empty() and entry.actor_name != unit_filter and entry.target_name != unit_filter:
 			continue
 
 		# Round Divider
@@ -211,10 +235,31 @@ func refresh_content() -> void:
 		)
 		entries_vbox.add_child(cell)
 
+# Unit list for the custom filter: everyone who appears in the log (keeps the selection).
+func _sync_unit_options() -> void:
+	if unit_option == null:
+		return
+	var names: Array[String] = []
+	for e: ActionLogEntry in all_entries:
+		for n: String in [e.actor_name, e.target_name]:
+			if not n.is_empty() and not names.has(n) and not n.ends_with("tiles"):
+				names.append(n)
+	names.sort()
+	unit_option.clear()
+	unit_option.add_item("All units")
+	var selected: int = 0
+	for i: int in range(names.size()):
+		unit_option.add_item(names[i])
+		if names[i] == unit_filter:
+			selected = i + 1
+	unit_option.select(selected)
+
 static func format_action_cell(entry: ActionLogEntry, is_modal: bool = false, on_cell_clicked: Callable = Callable()) -> PanelContainer:
 	var cell := PanelContainer.new()
 	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cell.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if is_modal else Control.CURSOR_ARROW
+	if ActionLogEntry.show_formulas and not entry.breakdown.is_empty():
+		cell.tooltip_text = "%s\n%s" % [entry.detail_text, entry.breakdown]   # test mode: how the damage came about
 
 	var style := StyleBoxFlat.new()
 	var cat_color: Color
