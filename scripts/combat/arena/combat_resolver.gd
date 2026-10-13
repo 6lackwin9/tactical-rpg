@@ -27,7 +27,12 @@ var registered_combatants: Array[Combatant] = []
 var current_round: int = 1
 var grid: CombatGrid = null
 var total_blocks: int = DEFAULT_BLOCKS   # blocks in a round (per encounter)
-var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # seeded per battle: status rolls stay replayable
+var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # seeded per battle: crit & status rolls stay replayable
+
+const DEFAULT_SEED: int = 1337
+
+func _init() -> void:
+	rng.seed = DEFAULT_SEED   # a fresh RNG is randomly seeded; battles (CombatSession) set the encounter's seed
 
 func register_combatant(combatant: Combatant) -> void:
 	if not registered_combatants.has(combatant):

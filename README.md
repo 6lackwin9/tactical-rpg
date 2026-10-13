@@ -203,6 +203,23 @@ tactical-rpg/
 - **Stance pools**: Attack skills are Offensive, Defend skills Defensive, Focus/buff skills Tactical. Move keeps your current stance; Rest returns you to Neutral.
 - **Automatic switching**: using a skill from another stance switches stance for **+1 AP** and no block cost; the new stance applies as the skill starts.
 
+### 2b. Damage Formula (`DamageCalculator`, one formula everywhere)
+
+Every hit goes through `DamageCalculator.compute`: arena attacks (single-target and each victim of an area attack), the planner's `~N dmg` estimates, the tactical forecast and the Gear Dojo.
+
+- **Attack Power = Weapon Power + Unit Power**
+  - *Weapon Power* = (base + threshold-tier bonus + mastery bonus) × (1 - stat deficit). A weapon that doesn't suit the attack (a sword for a ranged shot) adds 0.
+  - *Unit Power* = the weapon's scaling stat × **1.5** (`DamageCalculator.unit_power_scaling`, the hook for future class / weapon-ease preferences). A weapon that doesn't suit the attack uses DEX (ranged) or STR (melee).
+  - *Unarmed*: Weapon Power 0, Unit Power **STR + DEX**. Off-hand jabs use the off-hand weapon, or bare hands.
+  - *Authored strike power* (a unit's `power` > 0 in the catalog, e.g. the goblins) replaces the whole sum.
+- **Hit = Attack Power × Focus × Skill × Stance Matchup × Crit × (1 - Guard) × (1 - Armor)**, rounded once, minimum 1.
+  - *Stance Matchup*: 1.25 / 0.75 / 1.0 (section 2).
+  - *Crit*: **5% + 1% per DEX above 10**, damage **×1.5**. Rolled with the battle's seeded RNG (the encounter's `rng_seed`; the Dojo's own seeded RNG), so replays repeat exactly.
+  - *Guard*: Defend skills (Guard -30%, Brace -50%, Fortress -70%).
+  - *Armor*: rating = equipped gear mitigation + STR / 4 (or the unit's authored `armor`, the training dummy has 0); damage × (1 - rating / (rating + 50)): 10 → -17%, 20 → -29%, 40 → -44%.
+- **Estimates** (`DamageCalculator.expected`): the same formula with no crit and no guard (unknown ahead), armor included. Log cells show the hit actually dealt and, in debug builds, the full breakdown on hover (`DamageCalculator.describe`).
+- **Future**: weapon-focused skills may scale only Weapon Power; class / weapon preferences may change the 1.5 scaling.
+
 ### 3. 9x9 Spatial Grid & Spatial Rules
 
 - **Arena Geometry**: Fixed 9x9 grid (`0..8` on both axes) with landmark center at `(4, 4)`.
@@ -231,11 +248,11 @@ tactical-rpg/
 - **AP debt instead of mid-round stops**: overspending is allowed; the unit finishes its sequence in AP debt and pays next round: the debt comes out of its +4 recovery, **3+ debt Staggers** it (blocks 1 and 4 lost) and **5+ Stuns** it (blocks 1-2 lost). The planner shows the projected debt and penalty. Engage approaches **walk the planned path** (no live re-chasing); when a **targeted attack** starts it adjusts by one tile if the target shifted out of its reach band (1 AP, may go into debt, shown as its own *Chase* log cell): melee steps in, a ranged unit whose target stepped point-blank **backs off** to shoot. Only damage-focused attacks adjust: after a hand-picked tile move (Move here / Withdraw) the unit holds its tile, and area attacks never move. Each approach destination is fixed when first planned, and units claim tiles in planning order, so allies (and the AI pack, which drafts into one shared plan) never plan onto the same tile. Confirming the round starts resolving it automatically; Play afterwards replays it.
 - **Statuses (`StatusEffects`)**: Stagger, Stun and Root (no moving) last one round and always apply to the **next** round, so they reshape the next plan instead of breaking the current one; lost blocks show as locked `✖` blocks on the timeline. Skills roll to inflict them with a **seeded roll** (replays stay identical): chance = potency - the target's Debuff Resistance (INT) - any passive resistance (`Combatant.status_resist`; 100 = immune). New skills: **Shield Bash** (Defensive-stance strike, may Stagger), **Hamstring** (may Root).
 - **Area attacks (tile-targeted)**: **Volley** (plus shape), **Firebomb** (3x3) at a tile in weapon reach, **Shockwave** (3-tile line from an adjacent tile). They hit everyone in the area, **allies included** (friendly fire is previewed in orange and warned). Click an empty tile or an enemy to aim; the preview shows the affected tiles.
-- **Damage visibility**: attack rows in the popup and attack commands on the timeline show the expected hit (`~25 dmg`: power × skill × stance matchup × buffs). Log cells show the damage actually dealt (`[HIT -28]`); in debug builds (`ActionLogEntry.show_formulas`) hovering the tag explains the formula.
+- **Damage visibility**: attack rows in the popup and attack commands on the timeline show the expected hit (`~25 dmg`, `DamageCalculator.expected`: see 2b). Log cells show the damage actually dealt (`[HIT -28]`); in debug builds (`ActionLogEntry.show_formulas`) hovering the tag explains the formula.
 - **Timing**: an action's effect lands at the **end of its last block**; its stance and AP apply when it **starts**; Defend protects from its first block. Within a block, higher priority (Switch Target, Defend) resolves first, then speed.
 - **Layout**: the action timeline sits in the top row between the party and enemy rosters (its blocks shrink to fit the slot); the resolution log sits in the bottom bar next to the playback controls.
 - **Unit Inspector**: portrait, HP and **AP** gauges (AP debt shown), speed, basic-attack reach band, stance, target, buffs and statuses, gear, and AI threat intel for hostiles.
-- **Tactical Forecast Dock**: distance, reach-band check (in reach / too close / out of reach), stance matchup, estimated strike from the unit's real strike power, and the encounter's rules (blocks per round, AP pool and regen, exits).
+- **Tactical Forecast Dock**: distance, reach-band check (in reach / too close / out of reach), stance matchup, the expected Strike hit and crit chance (section 2b), and the encounter's rules (blocks per round, AP pool and regen, exits).
 - **Action Feed & Modals**:
   - Compact active block log dock.
   - Filterable fullscreen action stream modal (`ATTACK`, `DEFEND`, `MOVE`, `BUFF`, `EVENT` quick filters, plus a **custom filter** row to show a single unit's actions and the actions aimed at it). In debug builds hovering an attack cell shows its damage formula.
@@ -250,10 +267,10 @@ tactical-rpg/
 - **Derived Combat Metrics**:
   - **Max HP**: $60 + (\text{CONS} \times 8) + (\text{STR} \times 2) + \text{Accessory HP}$.
   - **Initiative Speed**: $\max(1, 8 + \text{DEX} - \text{Total Armor Burden} + \text{Accessory Speed})$.
-  - **Crit Hit Rate** (DEX-based): $5.0\% + (\text{DEX} \times 1.5\%)$ with $2.5\times$ base critical damage factor.
+  - **Crit Hit Rate** (DEX-based): $5\% + 1\%$ per DEX above 10, $1.5\times$ critical damage (section 2b).
   - **Debuff Resistance** (INT-based): $\text{INT} \times 2.5\%$, mitigating status ailment chance and penalty severity.
   - **Effective Melee / Ranged Power**:
-    $$\text{Attack Power} = \left(\text{Weapon Power} \times (1 - \text{Deficit}) + \text{Stat} \times \text{Scaling}\right) \times (1 + \sum \text{Buffs} - \sum \text{Debuffs})$$
+    $$\text{Attack Power} = \text{Weapon Power} \times (1 - \text{Deficit}) + \text{Stat} \times 1.5 \quad (\text{unarmed: STR + DEX})$$
     where $\text{Weapon Power} = \text{Base Power} + \text{Tier Bonus} + \text{Mastery Bonus}$.
 - **10-Level Cap & Progression**:
   - Guaranteed stat growths per level based on Class Archetype (`Warrior`, `Ranger`, `Shaman`, `Brawler`, `Scout`, `Berserker`).
@@ -301,24 +318,16 @@ tactical-rpg/
   2. **Unit Gear**: Main Hand, Off Hand, Body Armor, Accessories and the 3-slot Battle Pouch as cards. `Equip`/`Swap`/`Load` open an overlay picker filtered to class-eligible stash items valid for that slot; `Unequip` returns gear to the stash. **Quick Setup** applies a one-click loadout preset (Sword & Board, Claymore Bruiser, Claymore + Backup Blade, Titan Hammer deficit test, Dual Wield, Archer with dagger backup, Blade & Dagger, Arcanist), spawning missing pieces and reporting items the class cannot wield. `Stash Manager` opens the Party & Stash screen. Cards for a 2H main + off-hand weapon show which weapon is `ACTIVE` or `sheathed`.
   3. **Combat Region**: hero and dummy tokens on a target mat with live HP bars, stance/guard/buff status, lunge, shake and glow animations, floating combat text, plus dummy `Toggle Defend` and `Full Heal` controls.
   4. **Test Console**: attack actions (Main/Off-Hand/Dual Strike/Ranged, auto-gated by the equipped weapons and active-weapon state), `Focus Buff`, `Shield Defend` toggle, `Stance Shift`, `Switch Weapon (1b)`, `Force Crit`, a skill-multiplier selector (×0.5 to ×2.0), the battle pouch selector, and **Benchmark ×10 / ×100** simulations (min/avg/max, crit count, expected damage per swing, swings to defeat the dummy) that never change dummy HP.
-  5. **Derived Stats**: melee/ranged/off-hand power, initiative speed (burden and party overload shown separately), max health, flat mitigation, unit burden, party carry (with load bar), attack range, crit rate, and debuff resistance. Hover any row for the formula with the live numbers substituted.
+  5. **Derived Stats**: melee/ranged/off-hand power (weapon + unit power), initiative speed (burden and party overload shown separately), max health, armor rating and its damage cut, unit burden, party carry (with load bar), attack range, crit rate, and debuff resistance. Hover any row for the formula with the live numbers substituted.
   6. **Test Log**: renders every dojo event with the same action-cell UI as the combat log (`CombatLogModal.format_action_cell`), with category filters and a `Clear` button. Click an entry to see its step-by-step damage breakdown in the detail pane.
-- **Comprehensive Combat Damage Formula Engine**:
-  $$\text{Final Damage} = \max\left(1, \left\lfloor \text{Attack Power} \times \text{Skill Mult} \times (1 - \text{Mitigation}) \times (1 + \text{Stance Mult}) \times \text{Crit Factor} \times (1 + \text{Effect Bonus} - \text{Effect Penalty}) \right\rceil\right)$$
-  - **Attack Power**: Base melee or ranged power derived from weapon power, stat scaling, and status multipliers.
-  - **Skill Multiplier**: Move-specific damage multiplier (e.g., $1.0\times$ for strike, $1.5\times$ for heavy strike).
-  - **Mitigation**: Opponent shield/armor mitigation ratio ($0\%$, $25\%$, $50\%$, $75\%$).
-  - **Stance Multiplier**: $+/-$ matchup multiplier based on stance interaction.
-  - **Crit Factor**: If critical hit ($P(\text{Crit Rate})$ or forced via console), applies $2.5\times + \text{bonus crit dmg}$; otherwise $1.0\times$.
-  - **Effect Modifiers**: Monster-specific or elemental bonus/penalty multipliers.
-- **Dojo Combat Math**: every dojo strike goes through `DamageCalculator.compute` (gear and stat power, deficits, mitigation, crits) and the Test Log breakdown comes from that result. Its stance factor is the arena's rock-paper-scissors matchup against the dummy's stance (the dummy guards in Defensive stance); **Stance Shift** cycles Neutral > Offensive > Tactical > Defensive. The arena itself still uses the simpler planner formula (strike power x skill x matchup x Focus, then guard); see the roadmap.
+- **Dojo Combat Math**: every dojo strike goes through the game's one damage formula (`DamageCalculator.compute`, section 2b) with the Dojo's own seeded RNG for crits; the Test Log shows its step-by-step breakdown (weapon power, unit power, Focus, skill, stance vs the dummy's stance, crit, guard, armor). **Stance Shift** cycles Neutral > Offensive > Tactical > Defensive; the dummy guards in Defensive stance and has no armor.
 
 ### 9. Content Catalog & Content Forge (`content_forge.tscn`)
 
 - **One catalog for all content** (`data/catalog/*.json`): skills, items, classes, units (party members and enemies) and encounters are data, not code. Every object that existed in code was seeded into it unchanged (19 skills, 18 items, 6 classes, 13 units incl. the Skirmish and Ambush goblins, the Gear Dojo heroes and the training dummy) plus 3 encounters (Goblin Skirmish, Goblin Ambush, Veterans' Drill), and the engine reads it: `SkillCatalog`, `ItemCatalog.create(id)` (the old `create_*` helpers are shorthands), `ClassArchetype.create(id)`, the party starter stash (`starter_stash` flag), every battle (`CatalogEncounter`) and the Gear Dojo heroes/dummy.
 - **Schema-driven** (`ContentSchema`): each kind is a field list (type, default, range, enum options, references, conditional fields such as attack-only or consumable-only fields, help text). It normalises JSON (types, defaults, key order), drives validation and builds the editor form. Enums are stored by name (`"ATTACK"`, `"MAIN_HAND"`), so the files read and diff well.
 - **Validation** (`ContentCatalog.validate_entry / validate_all`): snake_case unique ids, enum values, references that resolve and fit (a party roster only takes party units, an off-hand slot only off-hand gear), skill rules (engine-only kinds, reach bands, LINE areas, status potency), item slot rules, two-handed weapon + shield, derived units needing a class, encounter rosters and exit tiles. In-use and engine (`system`) entries can't be deleted; renaming an id rewrites every reference to it.
-- **Units**: `fixed` vitals (HP / speed / range, like the goblins) or `derived` from class + level + gear (like the dojo heroes); loadout per slot plus battle pouch; AP pool; strike power (0 = from gear & stats); skill cap and an optional **known-skills list** (only those leveled skills are offered to the planner and the AI; Move, Rest and other engine skills are always known); AI role, targeting, flee / guard thresholds; per-status resistances.
+- **Units**: `fixed` vitals (HP / speed / range, like the goblins) or `derived` from class + level + gear (like the dojo heroes); loadout per slot plus battle pouch; AP pool; strike power (0 = weapon + unit power) and armor rating (-1 = gear + STR / 4); skill cap and an optional **known-skills list** (only those leveled skills are offered to the planner and the AI; Move, Rest and other engine skills are always known); AI role, targeting, flee / guard thresholds; per-status resistances.
 - **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the centre-ring deployment can't fit go to the nearest free tile on their side. One **reinforcement wave** per encounter (`wave_units`, `wave_round`, `wave_block`, `wave_label`) enters mid-round. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
 - **Content Forge** (Scene Runner > Content Forge): kind tabs; searchable entry list (side filter for units, ⚠ marks invalid entries, 🔒 engine skills); a form generated from the schema with dropdowns for enums and references, add/remove/reorder lists, stat grids and JSON fields; an **engine preview** of what the entry becomes (skill cost / reach / damage, item stats and which classes can use it, class stats at levels 1/5/10, unit vitals / power / skills / gear, encounter deployment) with its icon or portrait and "used by" references; live problem list. **New**, **Duplicate** (use any existing entry as a template), **Delete** (click twice), **Apply** / **Revert**, **Save** (`Ctrl+S`, writes the JSON), **Reload**, **Validate All**. **▶ Playtest** runs the selected encounter (or a unit in a sandbox fight on its side) in the real combat arena, with *Back to Forge* to return.
 - **Reuse in tests**: tests build units and encounters straight from the catalog (`ContentFactory.unit(ContentCatalog.get_entry("units", id))`, `CatalogEncounter.new(id)`). Tests that write call `ContentCatalog.fork_to("user://...")`, so the shipped catalog is never modified.
@@ -336,10 +345,10 @@ tactical-rpg/
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **9 test suites** covering **81 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **9 test suites** covering **82 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
-2. **Core Combat Rules Test** (6 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: Brace mitigation with the Defensive-vs-Offensive matchup (exact damage), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
+2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
 3. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 4. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
 5. **Combat Session Flow Test** (8 assertions): the catalog Goblin Ambush through `CombatSession` headlessly: only deployed enemies in view before the wave, the wave event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay by log points, state carried into Round 2 with past rounds reviewable, later rounds (AI presets) playing on to a conclusion, timer-free auto-play (including Play pressed while planning), and round reset.
@@ -450,7 +459,7 @@ The following modular systems and capabilities are planned according to the mast
 
 - [ ] **Chained Flow Moves**: Skills that automatically transition into compatible follow-up stances.
 - [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the round timeline.
-- [ ] **Stance Disruption & Stagger**: Critical attacks or guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
+- [ ] **Stance Disruption & Stagger**: Guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
 - [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 9x9 grid.
 - [ ] **Environmental Hazards**: Fire, ice, and poison terrain tiles that apply effects on entry/end of round.
 - [ ] **Status Conditions**: Bleed, Poison, Blind, Stun, and Haste.
@@ -531,7 +540,8 @@ The following modular systems and capabilities are planned according to the mast
 
 *Status: open decisions found while retiring the legacy scripted layer.*
 
-- [ ] **One damage formula for arena and dojo**: the arena uses strike power x skill x matchup x Focus, then guard; the dojo's `DamageCalculator` adds gear/stat power, deficits, flat armor mitigation and (unseeded) crits. Decide whether battles should use gear mitigation and seeded crits, then route both through one calculator.
+- [x] **One damage formula for arena and dojo** (section 2b): weapon + unit power, seeded x1.5 crits, percent armor with diminishing returns, used by battles, the planner, the forecast and the Dojo.
 - [ ] **Dojo skills from the catalog**: the dojo console's attacks (strike, volley, Dual Strike) are its own buttons, not `SkillCatalog` skills, so new Forge skills can't be benchmarked there yet.
-- [ ] **Gear in battles**: catalog loadouts feed derived vitals and strike power, but armor mitigation and weapon block costs don't affect arena combat yet.
+- [ ] **Gear in battles**: loadouts now drive attack power and armor in battles; weapon block costs and active-weapon switching still don't affect the arena.
+- [ ] **Fixed units' stat block**: units without a class get the default stat sheet (the Warrior archetype at level 1), which sets their crit chance, armor (STR / 4) and status resistance; give them a neutral baseline or author classes for them.
 - [ ] **Reinforcements**: one wave per encounter; multiple waves, conditional triggers (e.g. "when the scout escapes") and explicit spawn tiles.

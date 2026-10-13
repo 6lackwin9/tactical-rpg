@@ -111,33 +111,18 @@ func refresh() -> void:
 	var burden: int = inv.get_total_armor_burden() if inv != null else 0
 	var report: Dictionary = session.carry_report
 
-	# --- Offensive power ---
-	var melee: int = hero.get_effective_power(false)
-	var melee_wep: String = "0 (no melee weapon)"
-	if main_w != null and main_w.is_melee_weapon():
-		melee_wep = "%d" % main_w.get_effective_equipment_power(st, st.mastery)
-	_set_row("melee", "%d ATK%s" % [melee, " (ranged eqpd)" if (main_w != null and main_w.is_ranged_weapon()) else ""],
-		_tip("MELEE POWER", "Weapon Power + STR × 1.5", "%s + (%d STR × 1.5 = %d) = [b]%d[/b]" % [melee_wep, eff_str, int(roundf(float(eff_str) * 1.5)), melee]))
-
-	var ranged: int = hero.get_effective_power(true)
-	var ranged_wep: String = "0 (no ranged weapon)"
-	if main_w != null and main_w.is_ranged_weapon():
-		ranged_wep = "%d" % main_w.get_effective_equipment_power(st, st.mastery)
-	_set_row("ranged", "%d ATK%s" % [ranged, " (melee eqpd)" if (main_w != null and main_w.is_melee_weapon()) else ""],
-		_tip("RANGED POWER", "Weapon Power + DEX × 1.5", "%s + (%d DEX × 1.5 = %d) = [b]%d[/b]" % [ranged_wep, eff_dex, int(roundf(float(eff_dex) * 1.5)), ranged]))
-
+	# --- Offensive power (DamageCalculator: weapon power + unit power) ---
+	var melee_res: Dictionary = DamageCalculator.attack_power(hero, false, false)
+	_set_row("melee", "%d ATK%s" % [DictUtil.to_int(melee_res["attack_power"]), " (ranged eqpd)" if (main_w != null and main_w.is_ranged_weapon()) else ""], _power_tip("MELEE POWER", melee_res))
+	var ranged_res: Dictionary = DamageCalculator.attack_power(hero, true, false)
+	_set_row("ranged", "%d ATK%s" % [DictUtil.to_int(ranged_res["attack_power"]), " (melee eqpd)" if (main_w != null and main_w.is_melee_weapon()) else ""], _power_tip("RANGED POWER", ranged_res))
 	if off_w != null:
-		var off_stat: String = off_w.scaling_stat
-		var off_val: int = st.get_effective_stat(off_stat, ctx)
-		var off_pwr: int = hero.get_offhand_power()
+		var off_res: Dictionary = DamageCalculator.attack_power(hero, false, true)
 		var needs_switch: bool = inv.needs_weapon_switch()
-		var switch_note: String = ""
-		if needs_switch:
-			switch_note = "\n[color=#fbbf24]2H main weapon equipped: Switch Weapon (1 block) to use the off-hand weapon.[/color]"
-		_set_row("offhand", "%d ATK%s" % [off_pwr, " (needs switch)" if needs_switch else ""],
-			_tip("OFF-HAND POWER", "Off-hand Weapon Power + %s × 1.5" % off_stat, "%d + (%d %s × 1.5 = %d) = [b]%d[/b]%s" % [off_w.get_effective_equipment_power(st, st.mastery), off_val, off_stat, int(roundf(float(off_val) * 1.5)), off_pwr, switch_note]))
+		var switch_note: String = "\n[color=#fbbf24]2H main weapon equipped: Switch Weapon (1 block) to use the off-hand weapon.[/color]" if needs_switch else ""
+		_set_row("offhand", "%d ATK%s" % [DictUtil.to_int(off_res["attack_power"]), " (needs switch)" if needs_switch else ""], _power_tip("OFF-HAND POWER", off_res) + switch_note)
 	else:
-		_set_row("offhand", "-", _tip("OFF-HAND POWER", "Off-hand Weapon Power + Scaling Stat × 1.5", "No offensive off-hand weapon equipped."))
+		_set_row("offhand", "-", _tip("OFF-HAND POWER", "Off-hand Weapon Power + Unit Power", "No offensive off-hand weapon equipped."))
 
 	# --- Defensive & utility ---
 	_set_row("speed", "%d (burden -%d, carry -%d)" % [hero.speed, burden, hero.carry_speed_penalty],
@@ -148,9 +133,10 @@ func refresh() -> void:
 	var arm_mit: int = inv.get_total_armor_mitigation() if inv != null else 0
 	var shd_mit: int = inv.get_total_shield_mitigation() if inv != null else 0
 	var gear_mit: int = inv.get_total_flat_mitigation() if inv != null else 0
-	var str_mit: int = int(roundf(float(eff_str) * 0.25))
-	_set_row("mit", "+%d (gear %d, STR %d)" % [gear_mit + str_mit, gear_mit, str_mit],
-		_tip("FLAT MITIGATION", "Gear Mitigation + STR × 0.25", "%d (armor %d + off-hand %d) + %d (STR × 0.25) = [b]+%d[/b]" % [gear_mit, arm_mit, shd_mit, str_mit, gear_mit + str_mit]))
+	var rating: int = DamageCalculator.armor_rating(hero)
+	var cut: int = roundi(DamageCalculator.armor_reduction(rating) * 100.0)
+	_set_row("mit", "%d rating  →  -%d%% damage" % [rating, cut],
+		_tip("ARMOR", "rating = Gear Mitigation + STR / 4;  damage taken × (1 - rating / (rating + 50))", "%d gear (armor %d + off-hand %d) + STR %d / 4 = [b]%d[/b] → [b]-%d%%[/b] damage" % [gear_mit, arm_mit, shd_mit, eff_str, rating, cut]))
 
 	# Unit burden: per unit, slows only the wearer. Party carry: one shared load for everyone.
 	var heavy_pieces: Array[String] = []
@@ -176,11 +162,24 @@ func refresh() -> void:
 	var crit_rate: float = st.get_crit_rate(ctx)
 	var crit_mult: float = st.get_crit_damage_multiplier(ctx)
 	_set_row("crit", "%.1f%% (%.1f×)" % [crit_rate, crit_mult],
-		_tip("CRIT RATE & DAMAGE", "5%% + DEX × 1.5%%  •  damage ×%.1f" % crit_mult, "5.0%% + (%d DEX × 1.5%% = %.1f%%) = [b]%.1f%%[/b]" % [eff_dex, float(eff_dex) * 1.5, crit_rate]))
+		_tip("CRIT RATE & DAMAGE", "5%% + 1%% per DEX above 10  •  damage ×%.1f (seeded roll)" % crit_mult, "5.0%% + %d (DEX %d above 10) = [b]%.1f%%[/b]" % [maxi(0, eff_dex - 10), eff_dex, crit_rate]))
 
 	var resist: float = st.get_debuff_resistance(ctx)
 	_set_row("resist", "%.1f%%" % resist,
 		_tip("DEBUFF RESISTANCE", "INT × 2.5%", "%d INT × 2.5%% = [b]%.1f%%[/b]\nReduces debuff duration, infliction chance and penalty severity." % [eff_int, resist]))
+
+func _power_tip(title: String, res: Dictionary) -> String:
+	if DictUtil.to_bool(res["authored"]):
+		return _tip(title, "Authored strike power", "[b]%d[/b]" % DictUtil.to_int(res["attack_power"]))
+	if str(res["stat_name"]) == "STR+DEX":
+		return _tip(title, "Unarmed: Weapon 0 + Unit Power (STR + DEX)", "STR + DEX = [b]%d[/b]" % DictUtil.to_int(res["attack_power"]))
+	var weapon_txt: String = "%.0f" % DictUtil.to_float(res["weapon_power"])
+	if not DictUtil.to_bool(res["weapon_fits"]):
+		weapon_txt = "0 (weapon doesn't suit this attack)"
+	elif DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["mastery_pwr"]) > 0 or DictUtil.to_float(res["pen_ratio"]) > 0.0:
+		weapon_txt += " (base %d + tier %d + mastery %d, -%d%% deficit)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["mastery_pwr"]), roundi(DictUtil.to_float(res["pen_ratio"]) * 100.0)]
+	return _tip(title, "Weapon Power (base + tier + mastery, deficit) + Unit Power (stat × %.1f)" % DictUtil.to_float(res["unit_scaling"]),
+		"%s + (%d %s × %.1f = %.0f) = [b]%d[/b]" % [weapon_txt, DictUtil.to_int(res["stat_val"]), str(res["stat_name"]), DictUtil.to_float(res["unit_scaling"]), DictUtil.to_float(res["unit_power"]), DictUtil.to_int(res["attack_power"])])
 
 func _tip(title: String, formula: String, calc: String) -> String:
 	return "[color=#a5d8ff][b]%s[/b][/color]\n[color=#94a3b8]Formula:[/color] %s\n[color=#94a3b8]Live:[/color] %s" % [title, formula, calc]

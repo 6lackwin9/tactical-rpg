@@ -54,7 +54,7 @@ static func _skill(e: Dictionary) -> String:
 			var mb: Vector2i = s.reach_for(melee)
 			var rb: Vector2i = s.reach_for(ranged)
 			t += _line("Reach", "melee unit %d-%d, ranged unit %d-%d" % [mb.x, mb.y, rb.x, rb.y])
-			t += _line("Damage", "power x %.2f  (~%d at power 20, ~%d at power 30)" % [s.power_mult, roundi(20.0 * s.power_mult), roundi(30.0 * s.power_mult)])
+			t += _line("Damage", "attack power x %.2f  (~%d at power 20, ~%d at power 40; then stance, crit, guard, armor)" % [s.power_mult, roundi(20.0 * s.power_mult), roundi(40.0 * s.power_mult)])
 			if s.is_area():
 				t += _line("Area", "%s: %d tiles, hits allies too" % [SkillDef.Area.keys()[s.area], s.area_cells(Vector2i(4, 6), Vector2i(4, 5)).size()])
 			if not s.status_effect.is_empty():
@@ -115,7 +115,11 @@ static func _unit(e: Dictionary) -> String:
 	var profile: AiProfile = ContentFactory.ai_profile(e, c)
 	var t: String = "[b]%s[/b]  (%s)\n" % [c.name, str(e["side"])]
 	t += _line("Vitals", "HP %d, speed %d (%d tiles / block), range %d, AP %d" % [c.max_hp, c.speed, c.move_per_block(), c.attack_range, c.max_ap])
-	t += _line("Strike power", "%d%s" % [profile.power, " (from gear & stats)" if DictUtil.to_int(e["power"]) == 0 else ""])
+	var power_res: Dictionary = DamageCalculator.attack_power(c, c.attack_range > 1)
+	var power_parts: String = "authored" if DictUtil.to_bool(power_res["authored"]) else "weapon %.0f + unit %.0f (%s)" % [DictUtil.to_float(power_res["weapon_power"]), DictUtil.to_float(power_res["unit_power"]), str(power_res["stat_name"])]
+	t += _line("Attack power", "%d (%s)" % [DictUtil.to_int(power_res["attack_power"]), power_parts])
+	var rating: int = DamageCalculator.armor_rating(c)
+	t += _line("Defence", "armor %d (-%d%% damage), crit %.0f%% x%.1f" % [rating, roundi(DamageCalculator.armor_reduction(rating) * 100.0), DamageCalculator.crit_chance(c), DamageCalculator.CRIT_MULT])
 	t += _line("AI", "%s, targets %s, flees at %d%% HP" % [AiProfile.role_name(profile.role), str(AiProfile.TargetPref.keys()[profile.target_pref]).to_lower(), roundi(profile.flee_ratio * 100.0)])
 	var known: Array[String] = []
 	for s: SkillDef in SkillCatalog.all():

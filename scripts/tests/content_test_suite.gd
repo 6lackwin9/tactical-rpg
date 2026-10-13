@@ -68,7 +68,7 @@ static func _test_engine_parity() -> bool:
 	var enc := CatalogEncounter.new("goblin_skirmish")
 	enc.build()
 	var units_ok: bool = (enc.unit("warrior").max_hp == 100 and enc.unit("goblin_archer").attack_range == 3 and enc.unit("warrior").max_ap == 12
-		and enc.profile_of(enc.unit("warrior")).power == 25 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
+		and enc.plan_context().power_of(enc.unit("warrior")) == 25 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
 		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.unit("goblin_shaman")) == "shaman" and enc.unit("warrior").catalog_id == "warrior")
 	return _report("Engine content comes from the catalog (skills, items, stash, classes, Goblin Skirmish)", skills_ok and items_ok and classes_ok and units_ok,
 		"skills %s, items %s, classes %s, units %s" % [skills_ok, items_ok, classes_ok, units_ok])

@@ -404,7 +404,7 @@ func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 		var entry: PlanEntry = st.entries[st.entries.size() - 1]
 		for foe: Combatant in context.foes_of(c):
 			if foe.is_active() and grid.has_combatant(foe) and cells.has(grid.get_position(foe)):
-				var hit: int = estimate_damage(c, entry.power, skill, entry.stance_after, foe)
+				var hit: int = estimate_damage(c, skill, entry.stance_after, foe)
 				entry.est_damage += hit
 				st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - hit
 		for friend: Combatant in context.friends_of(c):
@@ -477,7 +477,6 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 	var entry: PlanEntry = PlanEntry.create(skill, start, index)
 	entry.blocks_override = blocks_override
 	entry.target = foe
-	entry.power = context.power_of(c)
 	entry.path = dirs
 	entry.tiles = dirs.size()
 	entry.cells = cells
@@ -489,7 +488,7 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 	entry.pos_before = st.pos
 	entry.pos_after = st.pos
 	if skill.kind == SkillDef.Kind.ATTACK and foe != null and not skill.is_area():
-		entry.est_damage = estimate_damage(c, entry.power, skill, entry.stance_after, foe)
+		entry.est_damage = estimate_damage(c, skill, entry.stance_after, foe)
 	st.entries.append(entry)
 	st.next_block = start + nblocks
 	st.acted = true
@@ -502,11 +501,10 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 		st.ap_left = mini(st.max_ap, st.ap_left + skill.recover_ap)
 	return ""
 
-# Expected hit: strike power x skill x stance matchup (against the target's stance
-# now) x the attacker's attack boost. Ignores the target's guard.
-func estimate_damage(c: Combatant, power: int, skill: SkillDef, attacker_stance: CombatTypes.StanceType, foe: Combatant) -> int:
-	var mult: float = CombatTypes.get_matchup_multiplier(attacker_stance, foe.current_stance)
-	return maxi(1, roundi(float(power) * skill.power_mult * mult * c.attack_boost_multiplier))
+# Expected hit (DamageCalculator.expected): attack power x Focus x skill x stance
+# matchup (against the target's stance now) x armor. No crit; guard is unknown ahead.
+func estimate_damage(c: Combatant, skill: SkillDef, attacker_stance: CombatTypes.StanceType, foe: Combatant) -> int:
+	return DamageCalculator.expected(c, foe, skill, attacker_stance)
 
 # ------------------------------------------------------------------------------
 # Occupancy: enemies where they stand, allies where their plans take them

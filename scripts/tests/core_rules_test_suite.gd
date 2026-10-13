@@ -43,6 +43,7 @@ static func run() -> bool:
 	print("=== STARTING CORE COMBAT RULES TEST (PLANNER)       ===")
 	print("=======================================================")
 	var ok: bool = true
+	ok = _test_unified_formula() and ok
 	ok = _test_guard_and_matchup() and ok
 	ok = _test_stances_persist() and ok
 	ok = _test_focus_duration() and ok
@@ -50,6 +51,63 @@ static func run() -> bool:
 	ok = _test_withdrawal() and ok
 	ok = _test_feed_from_catalog_battle() and ok
 	return ok
+
+# One damage formula (DamageCalculator) for battles, the planner and the dojo.
+static func _test_unified_formula() -> bool:
+	var checks: Dictionary = {}
+	# Unarmed: weapon power 0, unit power STR + DEX.
+	var brawler := Combatant.new("Fists", 50, 10, 1, CharacterStats.new(ClassArchetype.create("brawler"), 1))
+	var fists: Dictionary = DamageCalculator.attack_power(brawler)
+	checks["unarmed STR+DEX"] = DictUtil.to_int(fists["attack_power"]) == brawler.stats.get_effective_stat("STR") + brawler.stats.get_effective_stat("DEX") and DictUtil.to_float(fists["weapon_power"]) == 0.0
+	# Weapon: (base + tier + mastery) + scaling stat x 1.5 (the dojo warrior's broadsword: 18 + 2 mastery + 20 STR x 1.5 = 50).
+	var warrior: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_warrior"))
+	var armed: Dictionary = DamageCalculator.attack_power(warrior)
+	checks["weapon + unit power"] = DictUtil.to_int(armed["attack_power"]) == 50 and DictUtil.to_int(armed["total_w_power"]) == 20 and is_equal_approx(DictUtil.to_float(armed["unit_power"]), 30.0)
+	# A melee weapon adds nothing to a ranged shot; authored strike power overrides everything.
+	var gated: Dictionary = DamageCalculator.attack_power(warrior, true)
+	checks["unsuited weapon adds 0"] = DictUtil.to_float(gated["weapon_power"]) == 0.0 and str(gated["stat_name"]) == "DEX"
+	var goblin: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "goblin_brawler"))
+	checks["authored power"] = DamageCalculator.power_of(goblin) == 10
+	# Armor: rating / (rating + 50), gear + STR / 4 unless authored.
+	var target := Combatant.new("Target", 500, 10, 1)
+	target.armor_override = 20
+	var base_hit: Dictionary = DamageCalculator.compute(goblin, target, false, false)
+	checks["armor curve"] = DictUtil.to_int(base_hit["final_dmg"]) == roundi(10.0 * (1.0 - 20.0 / 70.0)) and is_equal_approx(DamageCalculator.armor_reduction(10), 10.0 / 60.0)
+	var plated: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_warrior"))
+	plated.inventory.equip(ItemCatalog.create_steel_plate_cuirass(), Equipment.EquipSlot.BODY)
+	checks["gear armor rating"] = DamageCalculator.armor_rating(plated) == plated.stats.get_mitigation_rating(plated.inventory.get_total_flat_mitigation())
+	# Crits: 5% + 1% per DEX above 10, x1.5.
+	target.armor_override = 0
+	var normal: int = DictUtil.to_int(DamageCalculator.compute(warrior, target, false, false)["final_dmg"])
+	var crit: int = DictUtil.to_int(DamageCalculator.compute(warrior, target, false, false, 1.0, true)["final_dmg"])
+	var dex: int = warrior.stats.get_effective_stat("DEX")
+	checks["crit x1.5 and chance"] = crit == roundi(float(normal) * 1.5) and is_equal_approx(DamageCalculator.crit_chance(warrior), 5.0 + float(maxi(0, dex - 10)))
+	# Seeded: the same seed rolls the same crits (and crits do happen).
+	var rolls: Array[String] = []
+	for attempt: int in range(2):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 99
+		var line: String = ""
+		for i: int in range(60):
+			line += "C" if DictUtil.to_bool(DamageCalculator.compute(warrior, target, false, false, 1.0, false, rng)["is_crit"]) else "."
+		rolls.append(line)
+	checks["seeded crits repeat"] = rolls[0] == rolls[1] and rolls[0].contains("C")
+	# The planner's estimate is the same formula (no crit, no guard).
+	var grid := _grid()
+	var foe := Combatant.new("Foe", 300, 10, 1)
+	grid.place_combatant(warrior, Vector2i(3, 4))
+	grid.place_combatant(foe, Vector2i(4, 4))
+	var ctx: PlanContext = PlanContext.create(grid, _side([warrior]), _side([foe]))
+	var plan := CombatPlan.new(ctx)
+	plan.add_step(warrior, PlanStep.engage(SkillCatalog.find("strike"), foe))
+	var est: int = plan.compile(warrior).entries[0].est_damage
+	var direct: int = DamageCalculator.expected(warrior, foe, SkillCatalog.find("strike"), CombatTypes.StanceType.OFFENSIVE)
+	checks["planner estimate"] = est == direct and est > 0
+	var failed: Array[String] = []
+	for key: Variant in checks:
+		if not DictUtil.to_bool(checks[key]):
+			failed.append(str(key))
+	return _report("One damage formula: weapon + unit power, unarmed STR+DEX, armor curve, seeded x1.5 crits, planner estimate", failed.is_empty(), ", ".join(failed))
 
 # A Brace (-50%) taken in Defensive stance against an Offensive strike: matchup 0.75, then the guard.
 static func _test_guard_and_matchup() -> bool:
@@ -69,15 +127,24 @@ static func _test_guard_and_matchup() -> bool:
 		hitter: [PlanStep.engage(strike, guard)], guard: [PlanStep.self_skill(brace)],
 		hitter2: [PlanStep.engage(strike, dummy)],
 	})
-	resolver.resolve_round()
-	var power: int = ctx.power_of(hitter)   # strike power x1.0
-	var struck: int = maxi(1, int(roundf(float(power) * CombatTypes.STANCE_DISADVANTAGE)))
-	var expected_guarded: int = maxi(1, int(roundf(float(struck) * (1.0 - brace.mitigation))))
+	var crits: Dictionary = {}   # attacker -> rolled a (seeded) crit
+	for b: int in range(1, resolver.total_blocks + 1):
+		resolver.execute_block(b)
+	for sa: CombatResolver.ScheduledAction in resolver.scheduled_actions:
+		if sa.command is AttackCommand:
+			var atk: AttackCommand = sa.command
+			crits[sa.combatant] = atk.last_crit
+	var power: int = ctx.power_of(hitter)   # Strike: attack power x1.0 (test units: 15, no armor)
+	var crit_g: float = DamageCalculator.CRIT_MULT if DictUtil.to_bool(crits.get(hitter, false)) else 1.0
+	var crit_o: float = DamageCalculator.CRIT_MULT if DictUtil.to_bool(crits.get(hitter2, false)) else 1.0
+	# one formula, one rounding: power x matchup x crit x (1 - guard)
+	var expected_guarded: int = maxi(1, roundi(float(power) * CombatTypes.STANCE_DISADVANTAGE * crit_g * (1.0 - brace.mitigation)))
+	var expected_open: int = maxi(1, roundi(float(power) * crit_o))
 	var guarded_taken: int = 100 - guard.hp
 	var open_taken: int = 100 - dummy.hp
-	var ok: bool = guarded_taken == expected_guarded and open_taken == power and guarded_taken < open_taken
+	var ok: bool = guarded_taken == expected_guarded and open_taken == expected_open and guarded_taken < open_taken
 	return _report("Guard mitigation and stance matchup: Brace -50% in Defensive vs an Offensive strike (x0.75)", ok,
-		"guarded %d (expected %d), unguarded %d (power %d)" % [guarded_taken, expected_guarded, open_taken, power])
+		"guarded %d (expected %d), unguarded %d (expected %d), crits %s" % [guarded_taken, expected_guarded, open_taken, expected_open, str(crits.values())])
 
 # Stances set by a skill stay after it resolves and carry into the next round;
 # Shield Bash (a Defensive-stance attack) leaves its user Defensive.
@@ -203,8 +270,8 @@ static func _test_feed_from_catalog_battle() -> bool:
 	var concluded: bool = session.combat_over or session.current_round == enc.max_rounds
 	session.dispose()
 	var missing: Array[String] = []
-	for key: String in ["move", "attack", "buff/guard", "wave", "withdrawn", "defeated"]:
+	for key: String in ["move", "attack", "wave", "withdrawn", "defeated"]:   # buffs/guards depend on AI choices
 		if not seen.has(key):
 			missing.append(key)
-	return _report("Goblin Ambush feed: moves, attacks with HP, buffs/guards, wave at R1-B04, withdrawal, defeats", missing.is_empty() and concluded,
+	return _report("Goblin Ambush feed: moves, attacks with HP, wave at R1-B04, withdrawal, defeats", missing.is_empty() and concluded,
 		"missing %s, concluded %s" % [str(missing), concluded])

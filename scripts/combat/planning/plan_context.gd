@@ -4,7 +4,7 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Plan Context (who is on which side, and how each unit plans)
 # The read-only world a CombatPlan / TacticalAI works against: the grid, both
-# sides and each unit's AiProfile (strike power, unlocked skill level, roles).
+# sides and each unit's AiProfile (unlocked skill level, role, thresholds).
 # ==============================================================================
 
 var grid: CombatGrid = null
@@ -28,10 +28,11 @@ func profile_of(c: Combatant) -> AiProfile:
 		var stored: AiProfile = raw
 		return stored
 	var is_ranged: bool = c.attack_range > 1
-	return AiProfile.create(AiProfile.Role.SNIPER if is_ranged else AiProfile.Role.AGGRESSOR, c.get_effective_power(is_ranged))
+	return AiProfile.create(AiProfile.Role.SNIPER if is_ranged else AiProfile.Role.AGGRESSOR)
 
+# The unit's attack power for its basic attack (DamageCalculator).
 func power_of(c: Combatant) -> int:
-	return profile_of(c).power
+	return DamageCalculator.power_of(c, c.attack_range > 1)
 
 func skill_cap_of(c: Combatant) -> int:
 	return profile_of(c).skill_cap

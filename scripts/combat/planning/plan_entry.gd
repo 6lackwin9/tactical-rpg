@@ -16,14 +16,13 @@ var direction: Vector2i = Vector2i.ZERO   # display hint for a move (first step)
 var path: Array[Vector2i] = []            # MOVE: the unit steps taken
 var tiles: int = 0                        # MOVE: tiles covered
 var target: Combatant = null              # ATTACK target, or the chase target of an Engage move
-var power: int = 20                       # the unit's base strike power (the skill scales it)
 var step_index: int = 0
 var pos_before: Vector2i = Vector2i(-1, -1)  # where the unit stands before / after this command (preview ghosts)
 var pos_after: Vector2i = Vector2i(-1, -1)
 var goal: Vector2i = Vector2i(-1, -1)      # MOVE: the whole move's destination (a split move's halves share it)
 var skill_ap: int = 0                     # AP for the skill itself
 var blocks_override: int = 0               # MOVE: 1-2 blocks depending on the path length (0 = the skill's own)
-var est_damage: int = 0                   # ATTACK: expected hit (power x skill x stance x boost); area: total on foes
+var est_damage: int = 0                   # ATTACK: expected hit (DamageCalculator.expected); area: total on foes
 var cells: Array[Vector2i] = []           # ATTACK (area): tiles hit
 var hits_allies: int = 0                  # ATTACK (area): allies standing in the area (friendly fire)
 var status_name: String = ""               # STATUS: the status that took this block
@@ -52,12 +51,12 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	var command: BattleCommand
 	match skill.kind:
 		SkillDef.Kind.ATTACK:
-			var hit: int = maxi(1, roundi(float(power) * skill.power_mult))
 			if skill.is_area():
-				var area := AreaAttackCommand.new(actor, grid, cells, hit, skill.blocks)
+				var area := AreaAttackCommand.new(actor, grid, cells, skill.power_mult, skill.blocks)
 				command = area
 			else:
-				var attack := AttackCommand.new(actor, target, hit, skill.blocks, 0, grid)
+				var attack := AttackCommand.new(actor, target, skill.power_mult, skill.blocks, 0, grid)
+				attack.use_offhand = skill.offhand
 				attack.follow_tiles = 1 if chase else 0   # one-tile adjustment when the attack starts
 				var band: Vector2i = skill.reach_for(actor)
 				attack.min_range = band.x

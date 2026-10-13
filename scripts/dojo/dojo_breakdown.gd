@@ -15,42 +15,36 @@ static func build_strike(title: String, attacker_name: String, target: Combatant
 		w_name = weapon.name
 	lines.append("[color=#fde047][b]%s[/b][/color]  %s ➜ %s  (%s)" % [title, attacker_name, target.name, w_name])
 
-	var pwr_parts: Array[String] = ["Base %d" % UiTheme.dict_int(res, "base_w_power")]
-	var tier: int = UiTheme.dict_int(res, "tier_boost")
-	var mastery: int = UiTheme.dict_int(res, "mastery_pwr")
-	if tier > 0:
-		pwr_parts.append("[color=#fbbf24]Tier +%d[/color]" % tier)
-	if mastery > 0:
-		pwr_parts.append("[color=#a855f7]Mastery +%d[/color]" % mastery)
-	lines.append("1. Weapon Power: [color=#e2e8f0]%d[/color] (%s)" % [UiTheme.dict_int(res, "total_w_power"), ", ".join(pwr_parts)])
-
-	var pen_ratio: float = UiTheme.dict_float(res, "pen_ratio")
-	var penalized: float = UiTheme.dict_float(res, "penalized_w_power")
-	if pen_ratio > 0.0:
-		lines.append("   [color=#f87171]⚠ Deficit -%d: %d × (1 - %d%%) = %.1f[/color]" % [
-			UiTheme.dict_int(res, "def_amount"),
-			UiTheme.dict_int(res, "total_w_power"),
-			int(roundf(pen_ratio * 100.0)),
-			penalized
-		])
-
-	var scaling: float = UiTheme.dict_float(res, "stat_scaling_contrib")
-	lines.append("2. Stat Scaling: %d %s × 1.5 = [color=#38bdf8]+%.1f[/color]" % [
-		UiTheme.dict_int(res, "stat_val"), str(res.get("stat_name", "STR")), scaling
-	])
-
-	lines.append("3. Attack Power: (%.1f + %.1f) = %.1f" % [penalized, scaling, UiTheme.dict_float(res, "unbuffed_attack_power")])
+	if UiTheme.dict_bool(res, "authored"):
+		lines.append("1-3. Attack Power: [color=#38bdf8][b]%d[/b][/color] (authored strike power)" % UiTheme.dict_int(res, "attack_power"))
+	elif str(res.get("stat_name", "")) == "STR+DEX":
+		lines.append("1. Weapon Power: 0 (unarmed)")
+		lines.append("2. Unit Power: STR + DEX = [color=#38bdf8]%d[/color]" % UiTheme.dict_int(res, "stat_val"))
+		lines.append("3. Attack Power: [color=#e2e8f0]%d[/color]" % UiTheme.dict_int(res, "attack_power"))
+	else:
+		if UiTheme.dict_bool(res, "weapon_fits"):
+			var pwr_parts: Array[String] = ["Base %d" % UiTheme.dict_int(res, "base_w_power")]
+			if UiTheme.dict_int(res, "tier_boost") > 0:
+				pwr_parts.append("[color=#fbbf24]Tier +%d[/color]" % UiTheme.dict_int(res, "tier_boost"))
+			if UiTheme.dict_int(res, "mastery_pwr") > 0:
+				pwr_parts.append("[color=#a855f7]Mastery +%d[/color]" % UiTheme.dict_int(res, "mastery_pwr"))
+			lines.append("1. Weapon Power: [color=#e2e8f0]%d[/color] (%s)" % [UiTheme.dict_int(res, "total_w_power"), ", ".join(pwr_parts)])
+			var pen_ratio: float = UiTheme.dict_float(res, "pen_ratio")
+			if pen_ratio > 0.0:
+				lines.append("   [color=#f87171]⚠ Deficit -%d: %d × (1 - %d%%) = %.1f[/color]" % [UiTheme.dict_int(res, "def_amount"), UiTheme.dict_int(res, "total_w_power"), roundi(pen_ratio * 100.0), UiTheme.dict_float(res, "weapon_power")])
+		else:
+			lines.append("1. Weapon Power: 0 (this weapon doesn't suit the attack)")
+		lines.append("2. Unit Power: %d %s × %.1f = [color=#38bdf8]+%.1f[/color]" % [UiTheme.dict_int(res, "stat_val"), str(res.get("stat_name", "STR")), UiTheme.dict_float(res, "unit_scaling", 1.5), UiTheme.dict_float(res, "unit_power")])
+		lines.append("3. Attack Power: %.1f + %.1f = [color=#e2e8f0]%d[/color]" % [UiTheme.dict_float(res, "weapon_power"), UiTheme.dict_float(res, "unit_power"), UiTheme.dict_int(res, "attack_power")])
 	var buff_mult: float = UiTheme.dict_float(res, "buff_mult", 1.0)
 	if buff_mult != 1.0:
-		lines.append("   [color=#c084fc]✦ Buff ×%.2f → [b]%d ATK[/b][/color]" % [buff_mult, UiTheme.dict_int(res, "final_attack_power")])
-	else:
-		lines.append("   Final ATK: [color=#38bdf8][b]%d[/b][/color]" % UiTheme.dict_int(res, "final_attack_power"))
-
+		lines.append("   [color=#c084fc]✦ Focus ×%.2f → [b]%d ATK[/b][/color]" % [buff_mult, UiTheme.dict_int(res, "final_attack_power")])
 	var mult_parts: Array[String] = []
 	var skill_mult: float = UiTheme.dict_float(res, "skill_mult", 1.0)
 	if skill_mult != 1.0:
 		mult_parts.append("Skill ×%.2f" % skill_mult)
-	mult_parts.append("Mitigation ×%.2f (%d%%)" % [UiTheme.dict_float(res, "mit_mult", 1.0), int(roundf(UiTheme.dict_float(res, "mit_ratio") * 100.0))])
+	mult_parts.append("Guard ×%.2f (%d%%)" % [UiTheme.dict_float(res, "mit_mult", 1.0), roundi(UiTheme.dict_float(res, "mit_ratio") * 100.0)])
+	mult_parts.append("Armor %d ×%.2f" % [UiTheme.dict_int(res, "armor_rating"), 1.0 - UiTheme.dict_float(res, "armor_ratio")])
 	var stance_mult: float = UiTheme.dict_float(res, "stance_mult")
 	if stance_mult != 0.0:
 		mult_parts.append("[color=#fbbf24]Stance ×%.2f[/color]" % UiTheme.dict_float(res, "stance_factor", 1.0))

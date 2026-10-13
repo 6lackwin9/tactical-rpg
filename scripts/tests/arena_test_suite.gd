@@ -655,7 +655,11 @@ static func run_art_and_terrain_test() -> bool:
 static func _hand_ctx(grid: CombatGrid, allies: Array[Combatant], enemies: Array[Combatant], cap: int = 3) -> PlanContext:
 	var profiles: Dictionary = {}
 	for c: Combatant in allies + enemies:
-		var p: AiProfile = AiProfile.create(AiProfile.Role.SNIPER if c.attack_range > 1 else AiProfile.Role.AGGRESSOR, 15, 0.25, cap)
+		var p: AiProfile = AiProfile.create(AiProfile.Role.SNIPER if c.attack_range > 1 else AiProfile.Role.AGGRESSOR, 0.25, cap)
+		if c.power_override <= 0:
+			c.power_override = 15   # hand-built test units: fixed strike power
+		if c.armor_override < 0:
+			c.armor_override = 0    # and no armor, so expected numbers stay simple
 		profiles[c] = p
 	return PlanContext.create(grid, allies, enemies, profiles)
 
@@ -947,7 +951,7 @@ static func run_planning_and_ai_test() -> bool:
 	rules_ok = rules_ok and autoplayed
 	for e: ActionLogEntry in rsession.log_entries:
 		if e.category == "ATTACK" and e.damage > 0:
-			attack_logged = attack_logged or (e.value_num == e.damage and not e.breakdown.is_empty() and "Power" in e.breakdown)
+			attack_logged = attack_logged or (e.value_num == e.damage and not e.breakdown.is_empty() and "stance x" in e.breakdown)
 	rules_ok = rules_ok and attack_logged
 	rsession.dispose()
 	# hand grid: target switching costs a block; attacks follow a target that steps away

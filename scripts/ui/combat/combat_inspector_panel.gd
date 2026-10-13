@@ -48,7 +48,7 @@ func _threat_intel(c: Combatant) -> Array[Dictionary]:
 		AiProfile.Role.SUPPORT:
 			role_desc = "Opens with Focus, then fights from range"
 	intel.append({"name": "🧠 %s" % AiProfile.role_name(profile.role), "desc": role_desc, "color": Color(0.9, 0.6, 0.3)})
-	intel.append({"name": "⚔ Strike %d power" % profile.power, "desc": "Range %d tile(s)" % c.attack_range, "color": Color(0.9, 0.35, 0.35)})
+	intel.append({"name": "⚔ Strike %d power" % DamageCalculator.power_of(c, c.attack_range > 1), "desc": "Range %d tile(s)" % c.attack_range, "color": Color(0.9, 0.35, 0.35)})
 	if profile.defend_below > 0.0:
 		intel.append({"name": "🛡 Guards at ≤%d%% HP" % int(profile.defend_below * 100.0), "desc": "Raises a 50% guard once per round", "color": Color(0.35, 0.65, 0.95)})
 	if profile.flee_ratio > 0.0:

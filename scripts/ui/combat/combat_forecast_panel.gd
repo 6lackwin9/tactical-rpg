@@ -36,5 +36,4 @@ func refresh() -> void:
 	if target == null:
 		return
 	var basic: SkillDef = SkillCatalog.lowest(SkillDef.Kind.ATTACK)
-	var power: int = roundi(float(enc.profile_of(c).power) * basic.power_mult)
-	forecast.update_forecast(c, target, session.grid, power, basic.reach_for(c))
+	forecast.update_forecast(c, target, session.grid, DamageCalculator.expected(c, target, basic, basic.stance()), basic.reach_for(c))

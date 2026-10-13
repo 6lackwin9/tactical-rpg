@@ -2,7 +2,8 @@ class_name AttackCommand
 extends BattleCommand
 
 var target: Combatant
-var power: int
+var skill_mult: float = 1.0       # the skill's power multiplier (DamageCalculator does the rest)
+var use_offhand: bool = false     # off-hand jab: off-hand weapon or bare hands
 var grid: CombatGrid = null
 
 # Planner single-target attacks adjust by this many tiles when they start if the
@@ -17,11 +18,12 @@ var max_range: int = -1
 # Filled in by execute(): what was dealt and why (shown in the log; formula hover in test mode).
 var last_damage: int = 0
 var last_breakdown: String = ""
+var last_crit: bool = false
 
-func _init(p_source: Combatant, p_target: Combatant = null, p_power: int = 25, p_block_cost: int = 2, p_priority: int = 0, p_grid: CombatGrid = null) -> void:
+func _init(p_source: Combatant, p_target: Combatant = null, p_skill_mult: float = 1.0, p_block_cost: int = 2, p_priority: int = 0, p_grid: CombatGrid = null) -> void:
 	super(p_source, p_priority, p_block_cost)
 	target = p_target
-	power = p_power
+	skill_mult = p_skill_mult
 	grid = p_grid
 	command_name = "Attack"
 
@@ -98,6 +100,7 @@ func _follow(effective_target: Combatant) -> void:
 func execute() -> void:
 	last_damage = 0
 	last_breakdown = ""
+	last_crit = false
 	if not source.is_active():
 		print("[%s] cannot act (defeated or withdrawn)." % source.name)
 		execution_log = "[Action Failed] %s cannot act (unit is inactive)." % source.name
@@ -123,43 +126,28 @@ func execute() -> void:
 
 	source.active_target = effective_target   # the lock a later attack must switch away from
 
-	# Calculate stance matchup and buff modifiers
-	var stance_mult: float = CombatTypes.get_matchup_multiplier(source.current_stance, effective_target.current_stance)
-	var buff_mult: float = source.attack_boost_multiplier
-	var raw_dmg: float = float(power) * stance_mult * buff_mult
-	var final_power: int = maxi(1, int(roundf(raw_dmg)))
-	var defense_mit_pct: int = int(roundf(effective_target.defense_mitigation_ratio * 100.0))
-
-	print("[%s] (%s) strikes [%s] (%s) for %d raw damage (x%.2f stance, x%.1f buff)!" % [
-		source.name,
-		CombatTypes.stance_to_string(source.current_stance),
-		effective_target.name,
-		CombatTypes.stance_to_string(effective_target.current_stance),
-		final_power,
-		stance_mult,
-		buff_mult
-	])
-
-	var taken: int = effective_target.take_damage(final_power)
+	# The one damage formula: attack power x Focus x skill x stance x crit, then guard and armor.
+	var res: Dictionary = DamageCalculator.compute(source, effective_target, source.attack_range > 1 and not use_offhand, use_offhand, skill_mult, false, rng)
+	var taken: int = effective_target.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 	last_damage = taken
-	last_breakdown = "Power %d × stance %.2f (%s vs %s) × buff %.2f = %d" % [
-		power, stance_mult, CombatTypes.stance_to_string(source.current_stance), CombatTypes.stance_to_string(effective_target.current_stance), buff_mult, final_power
-	]
-	if defense_mit_pct > 0:
-		last_breakdown += " → guard -%d%% → %d dealt" % [defense_mit_pct, taken]
-	else:
-		last_breakdown += " → %d dealt" % taken
-	print("  -> [%s] took %d damage (HP: %d/%d)" % [effective_target.name, taken, effective_target.hp, effective_target.max_hp])
+	last_crit = DictUtil.to_bool(res["is_crit"])
+	last_breakdown = DamageCalculator.describe(res)
+	print("[%s] strikes [%s]: %s" % [source.name, effective_target.name, last_breakdown])
 
 	var details: Array[String] = []
+	var stance_mult: float = DictUtil.to_float(res["stance_factor"])
 	if stance_mult > 1.05:
 		details.append("x%.2f Stance Adv" % stance_mult)
 	elif stance_mult < 0.95:
 		details.append("x%.2f Stance Disadv" % stance_mult)
-	if buff_mult > 1.0:
-		details.append("x%.1f Buff" % buff_mult)
-	if defense_mit_pct > 0:
-		details.append("-%d%% Defended" % defense_mit_pct)
+	if DictUtil.to_float(res["buff_mult"]) > 1.0:
+		details.append("x%.1f Focus" % DictUtil.to_float(res["buff_mult"]))
+	if last_crit:
+		details.append("CRIT x%.1f" % DictUtil.to_float(res["crit_dmg_mult"]))
+	if DictUtil.to_float(res["mit_ratio"]) > 0.0:
+		details.append("-%d%% Guard" % roundi(DictUtil.to_float(res["mit_ratio"]) * 100.0))
+	if DictUtil.to_int(res["armor_rating"]) > 0:
+		details.append("-%d%% Armor" % roundi(DictUtil.to_float(res["armor_ratio"]) * 100.0))
 
 	if not status_effect.is_empty() and effective_target.is_alive():
 		var chance: int = StatusEffects.apply_chance(effective_target, status_effect, status_potency)

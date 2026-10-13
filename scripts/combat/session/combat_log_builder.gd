@@ -32,12 +32,14 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 			entry.target_is_ally = allies.has(target_c)
 			if not target_c.is_alive():
 				entry.outcome_tag = "DEFEATED"
+			elif attack.last_crit and attack.last_damage > 0:
+				entry.outcome_tag = "CRIT"
 			elif target_c.defense_mitigation_ratio > 0.0:
 				entry.outcome_tag = "MITIGATED"
 			entry.status_text = "Target HP: %d/%d" % [target_c.hp, target_c.max_hp]
 		else:
 			entry.target_name = "Target"
-		entry.detail_text = "Dealt %d | Power %d | Range %d" % [attack.last_damage, attack.power, atk_range]
+		entry.detail_text = "Dealt %d | Skill x%.2f | Range %d" % [attack.last_damage, attack.skill_mult, atk_range]
 
 	elif act.command is WalkCommand:
 		var move: WalkCommand = act.command as WalkCommand

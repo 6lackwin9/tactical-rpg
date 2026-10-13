@@ -200,6 +200,8 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 	if ap > 0:
 		c.max_ap = ap
 		c.ap = ap
+	c.power_override = DictUtil.to_int(e["power"])
+	c.armor_override = DictUtil.to_int(e["armor"])
 	c.known_skills = _strings(e["skills"])
 	var resist: Dictionary = _ints(e["status_resist"])
 	for status: Variant in resist:
@@ -208,11 +210,10 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 	return c
 
 # How unit `entry` (spawned as `c`) plans its rounds.
-static func ai_profile(entry: Dictionary, c: Combatant) -> AiProfile:
+static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	var e: Dictionary = ContentSchema.normalize("units", entry)
 	var role: AiProfile.Role = _enum(AiProfile.Role.keys(), str(e["ai_role"]), 0) as AiProfile.Role
-	var power: int = DictUtil.to_int(e["power"]) if DictUtil.to_int(e["power"]) > 0 else c.get_effective_power(c.attack_range > 1)
-	var profile: AiProfile = AiProfile.create(role, power, DictUtil.to_float(e["flee_ratio"]), DictUtil.to_int(e["skill_cap"]))
+	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), DictUtil.to_int(e["skill_cap"]))
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])
 	if str(e["target_pref"]) != "ROLE":

@@ -149,8 +149,9 @@ func set_arena_intel(total_blocks: int, unit_ap: int, ap_regen: int, exits: Arra
 		exit_names.append(str(e))
 	intel_exit_lbl.text = ("🚪 Exit %s: withdraw to leave the battle" % ", ".join(exit_names)) if not exit_names.is_empty() else "🚪 No exit: fight to the end"
 
-# `power`: the unit's strike power; `band`: its basic attack's reach (min, max).
-func update_forecast(selected_combatant: Combatant, target: Combatant, grid: CombatGrid, power: int = 25, band: Vector2i = Vector2i(1, 1)) -> void:
+# `expected_hit`: DamageCalculator.expected for the basic attack (stance, armor, no crit/guard);
+# `band`: its reach (min, max).
+func update_forecast(selected_combatant: Combatant, target: Combatant, grid: CombatGrid, expected_hit: int = 0, band: Vector2i = Vector2i(1, 1)) -> void:
 	if not selected_combatant:
 		return
 
@@ -187,9 +188,9 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 			mult
 		]
 
-		var est_dmg: int = int(roundf(float(power) * mult * selected_combatant.attack_boost_multiplier * (1.0 - target.defense_mitigation_ratio)))
-		var mit_note: String = " (-%d%% def)" % int(target.defense_mitigation_ratio * 100) if target.defense_mitigation_ratio > 0 else ""
-		forecast_dmg_lbl.text = "Est. Strike Impact: ~%d dmg%s" % [est_dmg, mit_note]
+		var est_dmg: int = maxi(1, roundi(float(expected_hit) * (1.0 - target.defense_mitigation_ratio)))
+		var mit_note: String = " (-%d%% guard)" % roundi(target.defense_mitigation_ratio * 100.0) if target.defense_mitigation_ratio > 0 else ""
+		forecast_dmg_lbl.text = "Est. Strike: ~%d dmg%s • crit %.0f%% x%.1f" % [est_dmg, mit_note, DamageCalculator.crit_chance(selected_combatant), DamageCalculator.CRIT_MULT]
 	else:
 		forecast_dist_lbl.text = "Distance: Inactive combatant"
 		forecast_range_badge.text = "Status: Off Active Grid"

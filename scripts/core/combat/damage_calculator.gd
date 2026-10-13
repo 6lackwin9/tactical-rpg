@@ -2,56 +2,139 @@ class_name DamageCalculator
 extends RefCounted
 
 # ==============================================================================
-# Tactical RPG – Authoritative Damage Calculator
+# Tactical RPG - Damage Calculator (the one damage formula)
+# Every hit in the game goes through compute(): arena attacks (single target and
+# area), the planner's damage estimates, the forecast, and the Gear Dojo.
 #
-# Single source of truth for all combat math. Call compute() from any system
-# (Gear Dojo, Arena, AI planner, etc.) to guarantee identical results.
+#   Attack Power = Weapon Power + Unit Power
+#     Weapon Power = (Base + Tier bonus + Mastery bonus) x (1 - Deficit)
+#     Unit Power   = Stat x Scaling       (the weapon's scaling stat; 1.5 for now,
+#                                          see unit_power_scaling)
+#     Unarmed      = Weapon 0, Unit Power = STR + DEX
+#     A weapon that doesn't suit the attack (a sword for a ranged shot) adds
+#     nothing: Unit Power = DEX (ranged) or STR (melee) x Scaling.
+#     Authored strike power (Combatant.power_override > 0) replaces all of it.
 #
-# Formula (per spec):
-#   Melee/Ranged Power =
-#       (Wep Power * (1 - Deficit) + Stat * 1.5) * (1 + ΣBuffs - ΣDebuffs)
-#   where Wep Power = Base Power + Σ Tier Bonus Power + Mastery Bonus Power
-#
-#   Final Damage =
-#       Attack Power * Skill Mult * (1 - Mitigation%) * Stance Matchup * Crit * (1 + Effect)
-#   Stance Matchup: CombatTypes.get_matchup_multiplier (Offensive > Tactical >
-#   Defensive > Offensive: 1.25 / 0.75; Neutral or same stance 1.0), as in the arena.
+#   Hit = Attack Power x Focus x Skill x Stance Matchup x Crit
+#         x (1 - Guard) x (1 - Armor)                        (minimum 1)
+#     Stance Matchup  CombatTypes.get_matchup_multiplier: 1.25 / 0.75 / 1.0
+#     Crit            seeded roll: 5% + 1% per DEX above 10, x1.5
+#     Guard           Defend skills (Guard -30%, Brace -50%, Fortress -70%)
+#     Armor           rating / (rating + 50); rating = gear mitigation + STR / 4
+#                     (or the unit's authored armor, Combatant.armor_override)
 # ==============================================================================
 
-const SCALING_FACTOR: float = 1.5
+const DEFAULT_UNIT_SCALING: float = 1.5
+const ARMOR_K: float = 50.0
+const CRIT_BASE: float = 5.0         # % chance with DEX <= 10
+const CRIT_PER_DEX: float = 1.0      # % per DEX point above 10
+const CRIT_DEX_FLOOR: int = 10
+const CRIT_MULT: float = 1.5
 
 # ------------------------------------------------------------------------------
-# Primary compute entry point
-#
-# Returns a rich breakdown Dictionary so callers can display every step
-# without recomputing anything themselves.
-# Keys:
-#   weapon              Equipment (or null for unarmed)
-#   base_w_power        int
-#   tier_boost          int
-#   mastery_pwr         int
-#   total_w_power       int
-#   pen_ratio           float  [0.0 – 0.60]
-#   def_amount          int    deficit point count
-#   penalized_w_power   float  after deficit deduction
-#   stat_name           String
-#   stat_val            int
-#   stat_scaling_contrib float
-#   unbuffed_attack_power float
-#   buff_mult           float
-#   final_attack_power  int
-#   skill_mult          float
-#   mit_ratio           float
-#   mit_mult            float
-#   stance_mult         float
-#   stance_factor       float
-#   crit_rate           float  [%]
-#   is_crit             bool
-#   crit_dmg_mult       float
-#   effect_factor       float
-#   final_dmg           int    pre-application result (call Combatant.take_damage separately)
+# Attack power
 # ------------------------------------------------------------------------------
 
+# Unit-power scaling for `attacker` wielding `weapon` (null = unarmed). A hook for
+# class / weapon preferences (how easy the weapon is to wield); 1.5 for everyone now.
+static func unit_power_scaling(_attacker: Combatant, _weapon: Equipment) -> float:
+	return DEFAULT_UNIT_SCALING
+
+# The weapon an attack swings: off-hand weapon (or bare hands) for off-hand
+# attacks, otherwise the main weapon.
+static func weapon_for(attacker: Combatant, use_offhand: bool) -> Equipment:
+	if attacker.inventory == null:
+		return null
+	return attacker.inventory.get_offhand_weapon() if use_offhand else attacker.inventory.get_main_weapon()
+
+static func _stat(attacker: Combatant, stat_name: String, ctx: Dictionary) -> int:
+	return attacker.stats.get_effective_stat(stat_name, ctx) if attacker.stats != null else 10
+
+# Attack power and its parts. Keys: authored, weapon, weapon_fits, base_w_power,
+# tier_boost, mastery_pwr, total_w_power, pen_ratio, def_amount, weapon_power,
+# stat_name, stat_val, unit_scaling, unit_power, attack_power.
+static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offhand: bool = false) -> Dictionary:
+	var w: Equipment = weapon_for(attacker, use_offhand)
+	var res: Dictionary = {
+		"authored": false, "weapon": w, "weapon_fits": false, "base_w_power": 0, "tier_boost": 0, "mastery_pwr": 0,
+		"total_w_power": 0, "pen_ratio": 0.0, "def_amount": 0, "weapon_power": 0.0,
+		"stat_name": "", "stat_val": 0, "unit_scaling": 1.0, "unit_power": 0.0, "attack_power": 0,
+	}
+	if attacker.power_override > 0:
+		res["authored"] = true
+		res["stat_name"] = "authored"
+		res["unit_power"] = float(attacker.power_override)
+		res["attack_power"] = attacker.power_override
+		return res
+	var ctx: Dictionary = {"weapon": w.weapon_type} if w != null else {}
+	if w == null:
+		# Bare hands: no weapon power, the unit's own STR + DEX.
+		var str_val: int = _stat(attacker, "STR", ctx)
+		var dex_val: int = _stat(attacker, "DEX", ctx)
+		res["stat_name"] = "STR+DEX"
+		res["stat_val"] = str_val + dex_val
+		res["unit_power"] = float(str_val + dex_val)
+	else:
+		var fits: bool = (is_ranged and w.is_ranged_weapon()) or (not is_ranged and w.is_melee_weapon())
+		res["weapon_fits"] = fits
+		var scaling: float = unit_power_scaling(attacker, w)
+		res["unit_scaling"] = scaling
+		var stat_name: String = w.scaling_stat if fits else ("DEX" if is_ranged else "STR")
+		if fits:
+			var tier: int = w.get_unlocked_threshold_power_boost(attacker.stats, attacker.stats.mastery) if attacker.stats != null else 0
+			var mastery: int = attacker.stats.mastery.get_weapon_power_bonus(w.weapon_type) if attacker.stats != null and attacker.stats.mastery != null else 0
+			var total: int = w.base_power + tier + mastery
+			res["base_w_power"] = w.base_power
+			res["tier_boost"] = tier
+			res["mastery_pwr"] = mastery
+			res["total_w_power"] = total
+			var pen_ratio: float = 0.0
+			if attacker.stats != null:
+				var pen: Dictionary = w.get_wield_penalty(attacker.stats, attacker.stats.mastery)
+				if DictUtil.to_bool(pen.get("is_penalized", false)):
+					pen_ratio = DictUtil.to_float(pen.get("power_penalty_ratio", 0.0))
+					res["def_amount"] = DictUtil.to_int(pen.get("deficit", 0))
+			res["pen_ratio"] = pen_ratio
+			res["weapon_power"] = float(total) * (1.0 - pen_ratio)
+		var stat_val: int = _stat(attacker, stat_name, ctx)
+		res["stat_name"] = stat_name
+		res["stat_val"] = stat_val
+		res["unit_power"] = float(stat_val) * scaling
+	res["attack_power"] = maxi(1, roundi(DictUtil.to_float(res["weapon_power"]) + DictUtil.to_float(res["unit_power"])))
+	return res
+
+static func power_of(attacker: Combatant, is_ranged: bool = false, use_offhand: bool = false) -> int:
+	return DictUtil.to_int(attack_power(attacker, is_ranged, use_offhand)["attack_power"])
+
+# ------------------------------------------------------------------------------
+# Defence & crits
+# ------------------------------------------------------------------------------
+
+# Armor rating: equipped gear mitigation + STR / 4, unless the unit has authored armor.
+static func armor_rating(target: Combatant) -> int:
+	if target.armor_override >= 0:
+		return target.armor_override
+	var gear: int = target.inventory.get_total_flat_mitigation() if target.inventory != null else 0
+	if target.stats == null:
+		return gear
+	return target.stats.get_mitigation_rating(gear, target.get_weapon_context())
+
+# Damage share removed by `rating` (diminishing: 10 -> 17%, 20 -> 29%, 40 -> 44%).
+static func armor_reduction(rating: int) -> float:
+	return float(maxi(0, rating)) / (float(maxi(0, rating)) + ARMOR_K)
+
+static func crit_chance(attacker: Combatant) -> float:
+	return attacker.stats.get_crit_rate(attacker.get_weapon_context()) if attacker.stats != null else CRIT_BASE
+
+# ------------------------------------------------------------------------------
+# A hit
+# ------------------------------------------------------------------------------
+
+# One hit of `attacker` on `target`. `rng` rolls the crit (null: no random crit;
+# battles pass the resolver's seeded RNG so replays match). `attacker_stance`
+# (-1 = current) lets the planner estimate with the stance a skill will use.
+# The result's final_dmg already includes guard and armor: apply it with
+# Combatant.take_damage(final_dmg, true).
 static func compute(
 	attacker: Combatant,
 	target: Combatant,
@@ -59,104 +142,72 @@ static func compute(
 	use_offhand: bool,
 	skill_mult: float = 1.0,
 	force_crit: bool = false,
-	allow_random_crit: bool = false
+	rng: RandomNumberGenerator = null,
+	attacker_stance: int = -1,
+	include_guard: bool = true
 ) -> Dictionary:
-	# --- Weapon selection ---
-	var w: Equipment = null
-	if attacker.inventory != null:
-		w = attacker.inventory.get_offhand_weapon() if use_offhand else attacker.inventory.get_main_weapon()
+	var res: Dictionary = attack_power(attacker, is_ranged, use_offhand)
+	var power: int = DictUtil.to_int(res["attack_power"])
 
-	var ctx: Dictionary = {"weapon": w.weapon_type} if w != null else {}
-
-	# --- Step 1: Weapon Power = Base + Tier Boost + Mastery ---
-	var base_w_power: int = w.base_power if w != null else 10
-	var tier_boost: int = 0
-	var mastery_pwr: int = 0
-	if w != null and attacker.stats != null:
-		tier_boost = w.get_unlocked_threshold_power_boost(attacker.stats, attacker.stats.mastery)
-		if attacker.stats.mastery != null:
-			mastery_pwr = attacker.stats.mastery.get_weapon_power_bonus(w.weapon_type)
-	var total_w_power: int = base_w_power + tier_boost + mastery_pwr
-
-	# --- Deficit penalty: Wep Power * (1 − Deficit) ---
-	var pen_ratio: float = 0.0
-	var def_amount: int = 0
-	if w != null and attacker.stats != null:
-		var pen: Dictionary = w.get_wield_penalty(attacker.stats, attacker.stats.mastery)
-		if pen.get("is_penalized", false):
-			var raw_ratio: Variant = pen.get("power_penalty_ratio", 0.0)
-			pen_ratio = raw_ratio if raw_ratio is float else 0.0
-			var raw_def: Variant = pen.get("deficit", 0)
-			def_amount = raw_def if raw_def is int else 0
-	var penalized_w_power: float = float(total_w_power) * (1.0 - pen_ratio)
-
-	# --- Step 2: Stat scaling (STR / DEX / INT) * 1.5 ---
-	var stat_name: String = "STR"
-	if w != null:
-		stat_name = w.scaling_stat
-	elif is_ranged:
-		stat_name = "DEX"
-	var stat_val: int = attacker.stats.get_effective_stat(stat_name, ctx) if attacker.stats != null else 10
-	var stat_scaling_contrib: float = float(stat_val) * SCALING_FACTOR
-
-	# --- Unbuffed attack power ---
-	var unbuffed_attack_power: float = penalized_w_power + stat_scaling_contrib
-
-	# --- Buff / Debuff multiplier: (1 + ΣBuff − ΣDebuff) ---
-	var buff_sum: float = (attacker.attack_boost_multiplier - 1.0) if attacker.attack_boost_multiplier > 1.0 else 0.0
-	var debuff_sum: float = 0.0
-	var buff_mult: float = 1.0 + buff_sum - debuff_sum
-	var final_attack_power: int = maxi(1, int(roundf(unbuffed_attack_power * buff_mult)))
-
-	# --- Step 3: Target mitigation (1 − Mitigation%) ---
-	var mit_ratio: float = target.defense_mitigation_ratio if target != null else 0.0
-	var mit_mult: float = 1.0 - mit_ratio
-
-	# --- Step 4: Stance matchup (the arena's rock-paper-scissors: +/-25%) ---
+	var buff_mult: float = maxf(1.0, attacker.attack_boost_multiplier)
+	var stance: CombatTypes.StanceType = attacker.current_stance if attacker_stance < 0 else attacker_stance as CombatTypes.StanceType
 	var defender_stance: CombatTypes.StanceType = target.current_stance if target != null else CombatTypes.StanceType.NEUTRAL
-	var stance_factor: float = CombatTypes.get_matchup_multiplier(attacker.current_stance, defender_stance)
-	var stance_mult: float = stance_factor - 1.0
+	var stance_factor: float = CombatTypes.get_matchup_multiplier(stance, defender_stance)
 
-	# --- Step 5: Critical hit ---
-	var crit_rate: float = attacker.stats.get_crit_rate(ctx) if attacker.stats != null else 5.0
-	var is_crit: bool = false
-	if force_crit:
-		is_crit = true
-	elif allow_random_crit:
-		is_crit = (randf() * 100.0) < crit_rate
+	var chance: float = crit_chance(attacker)
+	var is_crit: bool = force_crit or (rng != null and rng.randf() * 100.0 < chance)
+	var crit_mult: float = attacker.stats.get_crit_damage_multiplier() if (is_crit and attacker.stats != null) else (CRIT_MULT if is_crit else 1.0)
 
-	var crit_dmg_mult: float = attacker.stats.get_crit_damage_multiplier(ctx) if (is_crit and attacker.stats != null) else (2.5 if is_crit else 1.0)
+	var guard: float = target.defense_mitigation_ratio if (target != null and include_guard) else 0.0
+	var rating: int = armor_rating(target) if target != null else 0
+	var armor: float = armor_reduction(rating)
 
-	# --- Step 6: Effect bonus / penalty ---
-	var effect_factor: float = 1.0  # Reserved for future status-effect integration
-
-	# --- Final damage ---
-	var gross: float = float(final_attack_power) * skill_mult * mit_mult * stance_factor * crit_dmg_mult * effect_factor
-	var final_dmg: int = maxi(1, int(roundf(gross)))
-
-	return {
-		"weapon": w,
-		"base_w_power": base_w_power,
-		"tier_boost": tier_boost,
-		"mastery_pwr": mastery_pwr,
-		"total_w_power": total_w_power,
-		"pen_ratio": pen_ratio,
-		"def_amount": def_amount,
-		"penalized_w_power": penalized_w_power,
-		"stat_name": stat_name,
-		"stat_val": stat_val,
-		"stat_scaling_contrib": stat_scaling_contrib,
-		"unbuffed_attack_power": unbuffed_attack_power,
+	var gross: float = float(power) * buff_mult * skill_mult * stance_factor * crit_mult * (1.0 - guard) * (1.0 - armor)
+	res.merge({
 		"buff_mult": buff_mult,
-		"final_attack_power": final_attack_power,
+		"final_attack_power": maxi(1, roundi(float(power) * buff_mult)),
 		"skill_mult": skill_mult,
-		"mit_ratio": mit_ratio,
-		"mit_mult": mit_mult,
-		"stance_mult": stance_mult,
 		"stance_factor": stance_factor,
-		"crit_rate": crit_rate,
+		"stance_mult": stance_factor - 1.0,
+		"crit_rate": chance,
 		"is_crit": is_crit,
-		"crit_dmg_mult": crit_dmg_mult,
-		"effect_factor": effect_factor,
-		"final_dmg": final_dmg
-	}
+		"crit_dmg_mult": crit_mult,
+		"mit_ratio": guard,
+		"mit_mult": 1.0 - guard,
+		"armor_rating": rating,
+		"armor_ratio": armor,
+		"final_dmg": maxi(1, roundi(gross)),
+	}, true)
+	return res
+
+# The planner's expected hit for `skill`: no crit, no guard (unknown ahead), armor included.
+static func expected(attacker: Combatant, target: Combatant, skill: SkillDef, attacker_stance: int = -1) -> int:
+	var res: Dictionary = compute(attacker, target, attacker.attack_range > 1 and not skill.offhand, skill.offhand, skill.power_mult, false, null, attacker_stance, false)
+	return DictUtil.to_int(res["final_dmg"])
+
+# One-line explanation of a result (log hover, forecast tooltips).
+static func describe(res: Dictionary) -> String:
+	var parts: Array[String] = []
+	if DictUtil.to_bool(res.get("authored", false)):
+		parts.append("Strike power %d (authored)" % DictUtil.to_int(res["attack_power"]))
+	else:
+		var weapon_txt: String = "Weapon %.0f" % DictUtil.to_float(res["weapon_power"])
+		if DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["mastery_pwr"]) > 0:
+			weapon_txt += " (base %d +%d tier +%d mastery)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["mastery_pwr"])]
+		if DictUtil.to_float(res["pen_ratio"]) > 0.0:
+			weapon_txt += " -%d%% deficit" % roundi(DictUtil.to_float(res["pen_ratio"]) * 100.0)
+		var unit_txt: String = ("Unit %.0f (%s %d)" % [DictUtil.to_float(res["unit_power"]), str(res["stat_name"]), DictUtil.to_int(res["stat_val"])]) if str(res["stat_name"]) == "STR+DEX" else ("Unit %.0f (%s %d x %.1f)" % [DictUtil.to_float(res["unit_power"]), str(res["stat_name"]), DictUtil.to_int(res["stat_val"]), DictUtil.to_float(res["unit_scaling"])])
+		parts.append("%s + %s = %d" % [weapon_txt, unit_txt, DictUtil.to_int(res["attack_power"])])
+	var mults: Array[String] = []
+	if DictUtil.to_float(res.get("buff_mult", 1.0)) > 1.0:
+		mults.append("Focus x%.2f" % DictUtil.to_float(res["buff_mult"]))
+	if not is_equal_approx(DictUtil.to_float(res.get("skill_mult", 1.0)), 1.0):
+		mults.append("skill x%.2f" % DictUtil.to_float(res["skill_mult"]))
+	mults.append("stance x%.2f" % DictUtil.to_float(res.get("stance_factor", 1.0)))
+	if DictUtil.to_bool(res.get("is_crit", false)):
+		mults.append("CRIT x%.1f" % DictUtil.to_float(res["crit_dmg_mult"]))
+	if DictUtil.to_float(res.get("mit_ratio", 0.0)) > 0.0:
+		mults.append("guard -%d%%" % roundi(DictUtil.to_float(res["mit_ratio"]) * 100.0))
+	if DictUtil.to_int(res.get("armor_rating", 0)) > 0:
+		mults.append("armor %d -%d%%" % [DictUtil.to_int(res["armor_rating"]), roundi(DictUtil.to_float(res["armor_ratio"]) * 100.0)])
+	return "%s x %s = %d" % [parts[0], " x ".join(mults), DictUtil.to_int(res.get("final_dmg", 0))]

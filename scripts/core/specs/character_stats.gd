@@ -186,10 +186,10 @@ func get_carry_contribution(context: Dictionary = {}) -> int:
 # Critical Hit Rate (DEX based) & Critical Damage Multiplier (Requirements 9 & 10)
 func get_crit_rate(context: Dictionary = {}) -> float:
 	var effective_dex: int = get_effective_stat("DEX", context)
-	return 5.0 + (float(effective_dex) * 1.5)
+	return DamageCalculator.CRIT_BASE + float(maxi(0, effective_dex - DamageCalculator.CRIT_DEX_FLOOR)) * DamageCalculator.CRIT_PER_DEX
 
 func get_crit_damage_multiplier(_context: Dictionary = {}) -> float:
-	return 2.5
+	return DamageCalculator.CRIT_MULT
 
 # Status & Debuff Resistance (INT based) (Requirement 10)
 func get_debuff_resistance(context: Dictionary = {}) -> float:

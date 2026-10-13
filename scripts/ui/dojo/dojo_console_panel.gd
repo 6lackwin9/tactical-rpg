@@ -58,7 +58,7 @@ func _init() -> void:
 
 	_force_crit = CheckBox.new()
 	_force_crit.text = "Force Crit"
-	_force_crit.tooltip_text = "Force a critical hit (×2.5) for formula verification"
+	_force_crit.tooltip_text = "Force a critical hit (×%.1f) for formula verification" % DamageCalculator.CRIT_MULT
 	_force_crit.focus_mode = Control.FOCUS_NONE
 	_force_crit.add_theme_font_size_override("font_size", UiTheme.FONT_SM)
 	_force_crit.toggled.connect(func(pressed: bool) -> void: session.set_force_crit(pressed))

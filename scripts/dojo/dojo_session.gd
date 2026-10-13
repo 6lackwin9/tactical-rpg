@@ -29,6 +29,8 @@ var carry_report: Dictionary = {}
 
 # Console modifiers
 var force_crit: bool = false
+var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # crit rolls (seeded on reset, so benchmarks repeat)
+const RNG_SEED: int = 1337
 var skill_mult: float = 1.0
 
 # Stat allocation session
@@ -89,6 +91,7 @@ func reset_custom_filter() -> void:
 # ------------------------------------------------------------------------------
 
 func init_data() -> void:
+	rng.seed = RNG_SEED
 	shared_stash = Inventory.new()
 	ItemCatalog.populate_party_starter_stash(shared_stash)
 
@@ -323,7 +326,7 @@ func _perform_dual_strike() -> void:
 # Computes and applies one weapon hit to the dummy; breakdown text is captured
 # immediately so multi-hit skills report the dummy's HP after each hit.
 func _apply_hit(title: String, is_ranged: bool, use_offhand: bool) -> Dictionary:
-	var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, use_offhand, skill_mult, force_crit, true)
+	var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, use_offhand, skill_mult, force_crit, rng)
 	var actual_dmg: int = test_dummy.take_damage(UiTheme.dict_int(res, "final_dmg"), true)
 	var is_crit: bool = UiTheme.dict_bool(res, "is_crit")
 	var mitigated: bool = UiTheme.dict_float(res, "mit_ratio") > 0.0
@@ -456,7 +459,7 @@ func run_benchmark(count: int) -> void:
 	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon()
 	var title: String = "Benchmark ×%d (%s)" % [count, "Ranged" if is_ranged else "Melee"]
 
-	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, false)
+	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, null)
 	var base_hit: int = UiTheme.dict_int(base_res, "final_dmg")
 	var crit_rate: float = clampf(UiTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
 
@@ -465,7 +468,7 @@ func run_benchmark(count: int) -> void:
 	var max_hit: int = 0
 	var crits: int = 0
 	for i: int in range(count):
-		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, true)
+		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, rng)
 		var dmg: int = UiTheme.dict_int(res, "final_dmg")
 		total += dmg
 		min_hit = dmg if i == 0 else mini(min_hit, dmg)
@@ -474,7 +477,7 @@ func run_benchmark(count: int) -> void:
 			crits += 1
 
 	var avg: float = float(total) / float(maxi(1, count))
-	var crit_mult: float = active_hero.stats.get_crit_damage_multiplier(weapon_context(active_hero)) if active_hero.stats != null else 2.5
+	var crit_mult: float = DamageCalculator.CRIT_MULT
 	var expected: float = float(base_hit) * (1.0 + (crit_rate / 100.0) * (crit_mult - 1.0))
 	var swings_to_kill: int = ceili(float(test_dummy.hp) / maxf(1.0, expected))
 

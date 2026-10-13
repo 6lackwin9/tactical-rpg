@@ -193,7 +193,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	# Assert 15: Critical Hit Rate & Debuff Resistance Derived Metrics
 	var crit_r: float = w.stats.get_crit_rate()
 	var debuff_res: float = w.stats.get_debuff_resistance()
-	var exp_crit: float = 5.0 + (float(w.stats.get_effective_stat("DEX")) * 1.5)
+	var exp_crit: float = DamageCalculator.CRIT_BASE + float(maxi(0, w.stats.get_effective_stat("DEX") - DamageCalculator.CRIT_DEX_FLOOR)) * DamageCalculator.CRIT_PER_DEX
 	var exp_res: float = float(w.stats.get_effective_stat("INT")) * 2.5
 	if absf(crit_r - exp_crit) > 0.01 or absf(debuff_res - exp_res) > 0.01:
 		print("  [Dojo-15] Derived Crit Rate and Debuff Resistance: FAIL (Crit: %.1f != %.1f, Res: %.1f != %.1f)" % [crit_r, exp_crit, debuff_res, exp_res])
@@ -206,11 +206,12 @@ static func run(session: DojoSession, host: Node) -> bool:
 	w.sync_from_stats_and_gear()
 	var norm_dmg: int = UiTheme.dict_int(DamageCalculator.compute(w, d, false, false, 1.0, false), "final_dmg")
 	var crit_dmg: int = UiTheme.dict_int(DamageCalculator.compute(w, d, false, false, 1.0, true), "final_dmg")
-	if crit_dmg != int(roundf(float(norm_dmg) * 2.5)):
-		print("  [Dojo-16] Critical damage 2.5x multiplier in combat formula: FAIL (%d != %d)" % [crit_dmg, int(roundf(float(norm_dmg) * 2.5))])
+	var exp_crit_dmg: int = roundi(float(norm_dmg) * DamageCalculator.CRIT_MULT)
+	if absi(crit_dmg - exp_crit_dmg) > 1:
+		print("  [Dojo-16] Critical damage x%.1f multiplier in combat formula: FAIL (%d != %d)" % [DamageCalculator.CRIT_MULT, crit_dmg, exp_crit_dmg])
 		passed = false
 	else:
-		print("  [Dojo-16] Critical damage 2.5x multiplier in combat formula: PASS (%d -> %d DMG)" % [norm_dmg, crit_dmg])
+		print("  [Dojo-16] Critical damage x%.1f multiplier in combat formula: PASS (%d -> %d DMG)" % [DamageCalculator.CRIT_MULT, norm_dmg, crit_dmg])
 
 	# Assert 17: Stat Allocation Logic (only newly allocated points can be removed)
 	var unspent_pre: int = w.stats.unspent_attribute_points

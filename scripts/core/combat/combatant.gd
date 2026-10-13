@@ -31,6 +31,8 @@ var statuses: Dictionary = {}           # active this round: status name -> true
 var pending_statuses: Dictionary = {}   # inflicted this round, active next round
 var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
+var power_override: int = 0    # authored strike power (> 0 replaces weapon + unit power; see DamageCalculator)
+var armor_override: int = -1    # authored armor rating (>= 0 replaces gear mitigation + STR / 4)
 var known_skills: Array[String] = []   # leveled skills this unit may plan (empty = every skill up to its cap)
 var catalog_id: String = ""         # ContentCatalog unit id it was spawned from (empty = built in code)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
@@ -94,48 +96,9 @@ func sync_from_stats_and_gear() -> void:
 		speed = maxi(1, stats.get_initiative_speed(burden, ctx) - carry_speed_penalty)
 		attack_range = stats.get_effective_range(base_rng, ctx)
 
+# Attack power (weapon power + unit power, or the authored strike power): see DamageCalculator.
 func get_effective_power(is_ranged: bool = false, use_offhand: bool = false) -> int:
-	if stats == null:
-		return 20
-	var weapon: Equipment = null
-	if use_offhand and inventory != null:
-		weapon = inventory.get_offhand_weapon()
-	if weapon == null and inventory != null:
-		weapon = inventory.get_main_weapon()
-
-	var ctx: Dictionary = {"weapon": weapon.weapon_type} if weapon != null else {}
-	var w_power: int = 0
-	if weapon != null:
-		if is_ranged:
-			if weapon.is_ranged_weapon():
-				w_power = weapon.get_effective_equipment_power(stats, stats.mastery)
-		else:
-			if weapon.is_melee_weapon():
-				w_power = weapon.get_effective_equipment_power(stats, stats.mastery)
-
-	var stat_to_scale: String = "STR"
-	if weapon != null:
-		if is_ranged:
-			if weapon.is_ranged_weapon():
-				stat_to_scale = weapon.scaling_stat
-			else:
-				stat_to_scale = "DEX"
-		else:
-			if weapon.is_melee_weapon():
-				stat_to_scale = weapon.scaling_stat
-			else:
-				stat_to_scale = "STR"
-	elif is_ranged:
-		stat_to_scale = "DEX"
-
-	match stat_to_scale:
-		"DEX":
-			return stats.get_ranged_power(w_power, ctx)
-		"INT":
-			return stats.get_tactical_power(w_power, ctx)
-		_:
-			return stats.get_melee_power(w_power, ctx)
-
+	return DamageCalculator.power_of(self, is_ranged, use_offhand)
 func get_offhand_power() -> int:
 	return get_effective_power(false, true)
 
