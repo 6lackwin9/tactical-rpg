@@ -5,19 +5,22 @@ extends RefCounted
 # Tactical RPG - Combat Plan (a round's command sequence per unit)
 # Each unit's plan is an ordered list of PlanSteps. The plan is compiled by
 # simulating the unit through the round (position, stance, AP, blocks, target
-# lock, expected damage), placing every command at the lowest free block:
-#   - hard errors (block overrun, no path, out of range after moving, locked
-#     skill) make the sequence INVALID and block Confirm;
-#   - running out of AP is NOT an error: AP is a runtime resource. The compile
-#     projects it and flags where the unit "runs dry" (`dry_step`); at
-#     resolution the sequence simply stops there. Steps after it are not compiled.
+# lock, expected damage), placing every command at the lowest free block.
+# Hard errors (no free blocks, no path, out of reach, locked skill, moving after
+# acting, rooted) make the sequence INVALID and block Confirm. Overspending AP is
+# allowed: the unit goes into AP debt and pays next round (less recovery; 3+ debt
+# staggers, 5+ stuns) - the compile projects it as a warning.
 # Rules shaping a round:
-#   - Stance changes are automatic: +1 AP, no block (Move keeps stance; Rest
-#     returns to Neutral for free).
-#   - A unit may MOVE once per round (manual move, go-to, or the approach of an
-#     Engage): up to 2 blocks, up to its speed-based tiles per block, 1 AP per tile.
-#   - After that, attacks need the target in range; attacking a different target
-#     than the current lock costs a Switch Target block (no AP).
+#   - Statuses from last round take blocks away (Stagger: B1+B4, Stun: B1-B2) or
+#     forbid moving (Root). They show as locked blocks on the timeline.
+#   - Moving must come first (manual move, go-to, or an Engage approach), once,
+#     up to 2 blocks at the unit's tiles per block, 1 AP per tile.
+#   - Attacks need the target inside the skill's reach band: melee 1, ranged
+#     2..range (the off-hand jab covers distance 1). Area attacks aim at a tile.
+#   - Attacking a different target than the current lock inserts a free
+#     Switch Target block. Stance changes are automatic (+1 AP, no block).
+#   - Allies plan around each other's planned moves: a tile an ally leaves is
+#     free once that ally has left it (it moves in block 1 and acts first).
 # Headless: used by the player's planning UI, the AI presets and the enemy AI.
 # ==============================================================================
 
@@ -30,18 +33,21 @@ class SimState:
 	extends RefCounted
 	var pos: Vector2i = Vector2i(-1, -1)
 	var stance: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
-	var ap_left: int = 0                   # projected AP after the commands that can be paid
+	var ap_left: int = 0                   # projected AP (negative = AP debt)
 	var max_ap: int = 10
 	var total_blocks: int = 10
 	var next_block: int = 1
+	var blocked_blocks: Dictionary = {}    # block -> status name (Stagger / Stun)
+	var rooted: bool = false
 	var withdrawn: bool = false
-	var moved: bool = false                # the round's one move has been used
+	var acted: bool = false                # anything but a status block planned (moving is no longer allowed)
+	var moved: bool = false
 	var lock: Combatant = null             # current target lock (attacking another costs a Switch Target block)
 	var est_hp: Dictionary = {}            # foe -> expected HP after the planned strikes
 	var entries: Array[PlanEntry] = []
 	var error_index: int = -1              # first invalid step (-1 = valid)
 	var error_text: String = ""
-	var dry_entry: int = -1                # index into `entries` of the first command AP can't pay (-1 = none)
+	var dry_entry: int = -1                # first entry that pushes AP below zero (-1 = none)
 	var dry_step: int = -1                 # the step that produced it
 
 	func copy() -> SimState:
@@ -56,7 +62,10 @@ class SimState:
 		max_ap = o.max_ap
 		total_blocks = o.total_blocks
 		next_block = o.next_block
+		blocked_blocks = o.blocked_blocks.duplicate()
+		rooted = o.rooted
 		withdrawn = o.withdrawn
+		acted = o.acted
 		moved = o.moved
 		lock = o.lock
 		est_hp = o.est_hp.duplicate()
@@ -66,14 +75,24 @@ class SimState:
 		dry_entry = o.dry_entry
 		dry_step = o.dry_step
 
+	# Free (not status-locked) blocks from the next block on.
 	func blocks_left() -> int:
-		return total_blocks - next_block + 1
+		var free: int = 0
+		for b: int in range(next_block, total_blocks + 1):
+			if not blocked_blocks.has(b):
+				free += 1
+		return free
 
+	# True when the plan overspends AP (the unit ends the round in AP debt).
 	func runs_dry() -> bool:
-		return dry_entry >= 0
+		return ap_left < 0
+
+	func debt() -> int:
+		return maxi(0, -ap_left)
 
 var context: PlanContext = null
 var sequences: Dictionary = {}  # Combatant -> Array[PlanStep]
+var _blocked_override: Variant = null   # Dictionary while evaluating an ally's first move
 
 func _init(p_context: PlanContext) -> void:
 	context = p_context
@@ -84,6 +103,14 @@ func total_blocks() -> int:
 # Tiles a unit can cover with its one move this round.
 func max_move_tiles(c: Combatant) -> int:
 	return c.move_per_block() * MAX_MOVE_BLOCKS
+
+# Distance band (min, max) at which `c` can use attack `skill`.
+static func reach(c: Combatant, skill: SkillDef) -> Vector2i:
+	if skill.offhand:
+		return Vector2i(1, 1)
+	if skill.is_area() and skill.area == SkillDef.Area.LINE:
+		return Vector2i(1, 1)
+	return Vector2i(c.min_attack_range(), c.attack_range)
 
 # ------------------------------------------------------------------------------
 # Sequence editing
@@ -98,8 +125,8 @@ func steps_of(c: Combatant) -> Array[PlanStep]:
 	return result
 
 # Appends `step` if it compiles; returns "" or the reason it doesn't. With
-# `allow_dry` false a step that would run the unit out of AP is refused too (the
-# AI plans within its means; the player may over-commit and is warned).
+# `allow_dry` false a step that would put the unit into AP debt is refused too
+# (the AI plans within its means; the player may over-commit and is warned).
 func add_step(c: Combatant, step: PlanStep, allow_dry: bool = true) -> String:
 	var steps: Array[PlanStep] = steps_of(c)
 	steps.append(step)
@@ -149,7 +176,7 @@ func is_empty() -> bool:
 # Compilation: simulate the unit through its sequence
 # ------------------------------------------------------------------------------
 
-func compile(c: Combatant) -> SimState:
+func _start_state(c: Combatant) -> SimState:
 	var st := SimState.new()
 	var grid: CombatGrid = context.grid
 	st.pos = grid.get_position(c) if grid.has_combatant(c) else NO_CELL
@@ -157,23 +184,43 @@ func compile(c: Combatant) -> SimState:
 	st.ap_left = c.ap
 	st.max_ap = c.max_ap
 	st.total_blocks = context.total_blocks
+	st.rooted = c.has_status(StatusEffects.ROOT)
 	if c.active_target is Combatant:
 		var locked: Combatant = c.active_target
 		st.lock = locked if locked.is_active() else null
 	for foe: Combatant in context.foes_of(c):
 		st.est_hp[foe] = foe.hp
+	# Blocks lost to last round's statuses come first on the timeline.
+	for status: Variant in c.statuses:
+		for b: int in StatusEffects.blocked_blocks(str(status)):
+			if b <= st.total_blocks and not st.blocked_blocks.has(b):
+				st.blocked_blocks[b] = str(status)
+	for b: int in range(1, st.total_blocks + 1):
+		if st.blocked_blocks.has(b):
+			var status_name: String = str(st.blocked_blocks[b])
+			var lost: PlanEntry = PlanEntry.create(SkillCatalog.find("stunned" if status_name == StatusEffects.STUN else "staggered"), b, -1)
+			lost.status_name = status_name
+			lost.pos_before = st.pos
+			lost.pos_after = st.pos
+			lost.stance_before = st.stance
+			lost.stance_after = st.stance
+			st.entries.append(lost)
+	return st
+
+func compile(c: Combatant) -> SimState:
+	var st: SimState = _start_state(c)
 	var steps: Array[PlanStep] = steps_of(c)
 	for i: int in range(steps.size()):
 		var backup: SimState = st.copy()
+		var ap_before: int = st.ap_left
 		var problem: String = _apply(c, st, steps[i], i)
 		if not problem.is_empty():
 			st.assign_from(backup)
 			st.error_index = i
 			st.error_text = problem
 			break
-		if st.runs_dry():
+		if st.ap_left < 0 and ap_before >= 0 and st.dry_step < 0:
 			st.dry_step = i
-			break  # the unit stops here; later steps never run
 	return st
 
 func entries_for(c: Combatant) -> Array[PlanEntry]:
@@ -204,11 +251,22 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 			return _apply_withdraw(c, st, index)
 		PlanStep.Mode.ENGAGE:
 			return _apply_engage(c, st, step, index)
+		PlanStep.Mode.AREA:
+			return _apply_area(c, st, step, index)
 	return "Unknown step."
 
+# "" when `c` may move now, otherwise why not.
+func _move_problem(c: Combatant, st: SimState) -> String:
+	if st.rooted:
+		return "%s is rooted this round and can't move." % c.name
+	if st.acted:
+		return "Moving must come first: %s has already acted this round." % c.name
+	return ""
+
 func _apply_move(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
-	if st.moved:
-		return "%s has already moved this round." % c.name
+	var problem: String = _move_problem(c, st)
+	if not problem.is_empty():
+		return problem
 	if absi(step.direction.x) + absi(step.direction.y) != 1:
 		return "Pick a direction to move."
 	if step.tiles < 1 or step.tiles > max_move_tiles(c):
@@ -231,17 +289,18 @@ func _apply_move(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 	return _add_move(c, st, path, null, index)
 
 func _apply_goto(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
-	if st.moved:
-		return "%s has already moved this round." % c.name
+	var problem: String = _move_problem(c, st)
+	if not problem.is_empty():
+		return problem
 	var grid: CombatGrid = context.grid
 	var blocked: Dictionary = blocked_cells(c)
 	if not grid.is_valid_coord(step.cell) or not grid.is_walkable(step.cell) or grid.is_exit_tile(step.cell):
 		return "That tile can't be moved to."
 	if blocked.has(step.cell):
-		return "Another unit is standing there."
+		return "Another unit is (or will be) standing there."
 	if st.pos == step.cell:
 		return "%s is already there." % c.name
-	var path: Array[Vector2i] = find_path(grid, st.pos, {step.cell: true}, blocked, false)
+	var path: Array[Vector2i] = GridPath.find_path(grid, st.pos, {step.cell: true}, blocked, false)
 	if path.is_empty():
 		return "No path to that tile."
 	if path.size() > max_move_tiles(c):
@@ -249,72 +308,106 @@ func _apply_goto(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 	return _add_move(c, st, path, null, index)
 
 func _apply_withdraw(c: Combatant, st: SimState, index: int) -> String:
-	if st.moved:
-		return "%s has already moved this round." % c.name
+	var problem: String = _move_problem(c, st)
+	if not problem.is_empty():
+		return problem
 	var exits: Dictionary = {}
 	for exit_tile: Vector2i in context.grid.designated_exits:
 		exits[exit_tile] = true
 	if exits.is_empty():
 		return "This arena has no exit."
-	var path: Array[Vector2i] = find_path(context.grid, st.pos, exits, blocked_cells(c), true)
+	var path: Array[Vector2i] = GridPath.find_path(context.grid, st.pos, exits, blocked_cells(c), true)
 	if path.is_empty():
 		return "No route to an exit."
 	var reaches_exit: bool = path.size() <= max_move_tiles(c)
 	if not reaches_exit:
 		path = path.slice(0, max_move_tiles(c))   # run as far as you can; finish next round
-	var problem: String = _add_move(c, st, path, null, index)
-	if problem.is_empty() and not st.runs_dry() and reaches_exit:
+	var move_problem: String = _add_move(c, st, path, null, index)
+	if move_problem.is_empty() and reaches_exit:
 		st.withdrawn = true
-	return problem
+	return move_problem
 
 func _apply_engage(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 	var foe: Combatant = step.target
 	if foe == null or not foe.is_active() or not context.grid.has_combatant(foe):
 		return "Choose an enemy to attack."
+	if step.skill.is_area():
+		return _apply_area(c, st, PlanStep.area_at(step.skill, context.grid.get_position(foe)), index)
+	var band: Vector2i = reach(c, step.skill)
 	var foe_pos: Vector2i = context.grid.get_position(foe)
-	var in_range: bool = context.grid.get_distance(st.pos, foe_pos) <= c.attack_range
-	var path: Array[Vector2i] = []
-	if not in_range:
-		if st.moved:
-			return "%s is out of range and %s has already moved this round." % [foe.name, c.name]
-		path = approach_path(c, st.pos, foe)
+	var dist: int = context.grid.get_distance(st.pos, foe_pos)
+	if dist < band.x or dist > band.y:
+		var problem: String = _move_problem(c, st)
+		if not problem.is_empty():
+			if dist < band.x:
+				return "%s is too close for %s (needs distance %d-%d)%s." % [foe.name, step.skill.display_name, band.x, band.y, "; use an off-hand jab" if c.attack_range > 1 else ""]
+			return "%s is out of reach: %s" % [foe.name, problem]
+		var path: Array[Vector2i] = approach_path(c, st.pos, foe, band.x, band.y)
 		if path.is_empty():
-			return "No path to get %s within range of %s." % [c.name, foe.name]
+			return "No path to get %s within reach of %s." % [c.name, foe.name]
 		if path.size() > max_move_tiles(c):
-			return "Too far: %d tiles to get in range, %s can move %d in a round." % [path.size(), c.name, max_move_tiles(c)]
+			return "Too far: %d tiles to get in reach, %s can move %d in a round." % [path.size(), c.name, max_move_tiles(c)]
+		var move_problem: String = _add_move(c, st, path, foe, index)
+		if not move_problem.is_empty():
+			return move_problem
 	# Attacking someone other than the current lock costs a block to switch target.
 	if st.lock != null and st.lock != foe:
 		var switch_problem: String = _add_entry(c, st, SkillCatalog.find("switch_target"), index, foe)
 		if not switch_problem.is_empty():
 			return switch_problem
-		if st.runs_dry():
-			return ""
 	st.lock = foe
-	if not path.is_empty():
-		var move_problem: String = _add_move(c, st, path, foe, index)
-		if not move_problem.is_empty():
-			return move_problem
-		if st.runs_dry():
-			return ""
-	var problem: String = _add_entry(c, st, step.skill, index, foe)
-	if problem.is_empty() and not st.runs_dry():
+	var attack_problem: String = _add_entry(c, st, step.skill, index, foe)
+	if attack_problem.is_empty():
 		st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - st.entries[st.entries.size() - 1].est_damage
+	return attack_problem
+
+# Area attack aimed at a tile: no auto-move, the tile must already be in reach.
+func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	var skill: SkillDef = step.skill
+	if skill == null or not skill.is_area():
+		return "That isn't an area attack."
+	var grid: CombatGrid = context.grid
+	if not grid.is_valid_coord(step.cell):
+		return "Aim inside the arena."
+	var band: Vector2i = reach(c, skill)
+	var dist: int = grid.get_distance(st.pos, step.cell)
+	if skill.area == SkillDef.Area.LINE and (dist != 1):
+		return "%s needs a tile right next to %s." % [skill.display_name, c.name]
+	if skill.area != SkillDef.Area.LINE and (dist < band.x or dist > band.y):
+		return "That tile is out of reach for %s (distance %d, needs %d-%d)." % [skill.display_name, dist, band.x, band.y]
+	var cells: Array[Vector2i] = []
+	for cell: Vector2i in skill.area_cells(st.pos, step.cell):
+		if grid.is_valid_coord(cell) and cell != st.pos:
+			cells.append(cell)
+	var problem: String = _add_entry(c, st, skill, index, null, [], 0, cells)
+	if problem.is_empty():
+		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		for foe: Combatant in context.foes_of(c):
+			if foe.is_active() and grid.has_combatant(foe) and cells.has(grid.get_position(foe)):
+				var hit: int = estimate_damage(c, entry.power, skill, entry.stance_after, foe)
+				entry.est_damage += hit
+				st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - hit
+		for friend: Combatant in context.friends_of(c):
+			if friend != c and friend.is_active() and cells.has(planned_position(friend)):
+				entry.hits_allies += 1
 	return problem
 
-# Unit steps from `from` to the nearest tile within weapon range of `foe`. Empty
-# when already in range or when no route exists.
-func approach_path(c: Combatant, from: Vector2i, foe: Combatant) -> Array[Vector2i]:
+# Unit steps from `from` to the nearest tile at distance min..max of `foe`
+# (defaults: the unit's own reach band). Empty when already there or unreachable.
+func approach_path(c: Combatant, from: Vector2i, foe: Combatant, near: int = -1, far: int = -1) -> Array[Vector2i]:
 	var grid: CombatGrid = context.grid
 	var foe_pos: Vector2i = grid.get_position(foe)
-	var reach: int = c.attack_range
+	var lo: int = near if near > 0 else c.min_attack_range()
+	var hi: int = far if far > 0 else c.attack_range
 	var blocked: Dictionary = blocked_cells(c)
 	var goals: Dictionary = {}
-	for dx: int in range(-reach, reach + 1):
-		for dy: int in range(-reach, reach + 1):
+	for dx: int in range(-hi, hi + 1):
+		for dy: int in range(-hi, hi + 1):
+			var d: int = absi(dx) + absi(dy)
 			var cell: Vector2i = foe_pos + Vector2i(dx, dy)
-			if absi(dx) + absi(dy) <= reach and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
+			if d >= lo and d <= hi and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
 				goals[cell] = true
-	return find_path(grid, from, goals, blocked, false)
+	return GridPath.find_path(grid, from, goals, blocked, false)
 
 # One Move entry for the whole path: 1-2 blocks (the unit's tiles per block), 1 AP
 # per tile. `chase` makes it a live approach toward that foe.
@@ -322,26 +415,39 @@ func _add_move(c: Combatant, st: SimState, dirs: Array[Vector2i], chase: Combata
 	var skill: SkillDef = SkillCatalog.lowest(SkillDef.Kind.MOVE)
 	var blocks: int = ceili(float(dirs.size()) / float(c.move_per_block()))
 	var problem: String = _add_entry(c, st, skill, index, chase, dirs, maxi(1, blocks))
-	if problem.is_empty() and not st.runs_dry():
+	if problem.is_empty():
 		for d: Vector2i in dirs:
 			st.pos += d
 		st.entries[st.entries.size() - 1].pos_after = st.pos
 		st.moved = true
 	return problem
 
-# Places one skill at the lowest free block: checks blocks, then pays AP (skill +
-# automatic stance switch). If AP can't cover it the entry is still recorded but
-# flagged as where the unit runs dry (no further state changes are applied).
-func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Combatant = null, dirs: Array[Vector2i] = [], blocks_override: int = 0) -> String:
+# Lowest block where `n` consecutive blocks are free (not status-locked), or -1.
+func _free_start(st: SimState, n: int) -> int:
+	for s: int in range(st.next_block, st.total_blocks - n + 2):
+		var ok: bool = true
+		for b: int in range(s, s + n):
+			if st.blocked_blocks.has(b):
+				ok = false
+				break
+		if ok:
+			return s
+	return -1
+
+# Places one skill at the lowest free block and pays its AP (skill + automatic
+# stance switch). Overspending is allowed (AP debt), and flagged.
+func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Combatant = null, dirs: Array[Vector2i] = [], blocks_override: int = 0, cells: Array[Vector2i] = []) -> String:
 	var nblocks: int = blocks_override if blocks_override > 0 else skill.blocks
-	if nblocks > st.blocks_left():
-		return "Not enough blocks: %s needs %d, %d left." % [skill.display_name, nblocks, st.blocks_left()]
-	var entry: PlanEntry = PlanEntry.create(skill, st.next_block, index)
+	var start: int = _free_start(st, nblocks)
+	if start < 0:
+		return "Not enough free blocks: %s needs %d in a row, %d left." % [skill.display_name, nblocks, st.blocks_left()]
+	var entry: PlanEntry = PlanEntry.create(skill, start, index)
 	entry.blocks_override = blocks_override
 	entry.target = foe
 	entry.power = context.power_of(c)
 	entry.path = dirs
 	entry.tiles = dirs.size()
+	entry.cells = cells
 	entry.direction = dirs[0] if not dirs.is_empty() else Vector2i.ZERO
 	entry.skill_ap = skill.ap_cost(c) * (maxi(1, dirs.size()) if skill.kind == SkillDef.Kind.MOVE else 1)
 	entry.switch_ap = skill.switch_cost(st.stance)
@@ -349,16 +455,15 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 	entry.stance_after = skill.stance_after(st.stance)
 	entry.pos_before = st.pos
 	entry.pos_after = st.pos
-	if skill.kind == SkillDef.Kind.ATTACK and foe != null:
+	if skill.kind == SkillDef.Kind.ATTACK and foe != null and not skill.is_area():
 		entry.est_damage = estimate_damage(c, entry.power, skill, entry.stance_after, foe)
 	st.entries.append(entry)
-	st.next_block += nblocks
-	if st.runs_dry():
-		return ""
-	if entry.total_ap() > st.ap_left:
-		st.dry_entry = st.entries.size() - 1
-		return ""
+	st.next_block = start + nblocks
+	st.acted = true
+	var was_solvent: bool = st.ap_left >= 0
 	st.ap_left -= entry.total_ap()
+	if st.ap_left < 0 and was_solvent and st.dry_entry < 0:
+		st.dry_entry = st.entries.size() - 1
 	st.stance = entry.stance_after
 	if skill.kind == SkillDef.Kind.REST:
 		st.ap_left = mini(st.max_ap, st.ap_left + skill.recover_ap)
@@ -370,24 +475,99 @@ func estimate_damage(c: Combatant, power: int, skill: SkillDef, attacker_stance:
 	var mult: float = CombatTypes.get_matchup_multiplier(attacker_stance, foe.current_stance)
 	return maxi(1, roundi(float(power) * skill.power_mult * mult * c.attack_boost_multiplier))
 
-# Tiles occupied by other units (their round-start positions).
+# ------------------------------------------------------------------------------
+# Occupancy: enemies where they stand, allies where their plans take them
+# ------------------------------------------------------------------------------
+
+# Where `c` ends up after its planned move (its current tile if it isn't moving).
+func planned_position(c: Combatant) -> Vector2i:
+	var moves: Dictionary = _ally_moves()
+	var raw: Variant = moves.get(c, null)
+	if raw is Dictionary:
+		var move: Dictionary = raw
+		var to_raw: Variant = move.get("to", NO_CELL)
+		return to_raw if to_raw is Vector2i else NO_CELL
+	return context.grid.get_position(c) if context.grid.has_combatant(c) else NO_CELL
+
+# Tiles `c` can't enter or path through.
 func blocked_cells(c: Combatant) -> Dictionary:
+	if _blocked_override is Dictionary:
+		var override: Dictionary = _blocked_override
+		return override
+	return _blocked_for(c, _ally_moves())
+
+# Blocked tiles for `c` given its friends' planned moves (friend -> {to, end, speed}).
+# A friend's start tile is free only if it leaves in block 1 and acts before `c`.
+func _blocked_for(c: Combatant, moves: Dictionary) -> Dictionary:
 	var blocked: Dictionary = {}
+	var grid: CombatGrid = context.grid
+	var friends: Array[Combatant] = context.friends_of(c)
 	for other: Combatant in context.allies + context.enemies:
-		if other != c and context.grid.has_combatant(other):
-			blocked[context.grid.get_position(other)] = true
+		if other == c or not grid.has_combatant(other):
+			continue
+		var start: Vector2i = grid.get_position(other)
+		var raw: Variant = moves.get(other, null) if friends.has(other) else null
+		if raw is Dictionary:
+			var move: Dictionary = raw
+			var to_raw: Variant = move.get("to", NO_CELL)
+			var to: Vector2i = to_raw if to_raw is Vector2i else NO_CELL
+			if to != NO_CELL:
+				blocked[to] = true
+			var leaves_first: bool = DictUtil.int_of(move, "end", 99) == 1 and other.speed > c.speed
+			if not leaves_first:
+				blocked[start] = true
+		else:
+			blocked[start] = true
 	return blocked
+
+# Each planning unit's move (from its first step): {to, end}. Two passes so a
+# unit can step into a tile a faster friend vacates in block 1.
+func _ally_moves() -> Dictionary:
+	var first_pass: Dictionary = {}
+	for key: Variant in sequences:
+		if key is Combatant:
+			var unit: Combatant = key
+			var move: Dictionary = _first_move(unit, _blocked_for(unit, {}))
+			if not move.is_empty():
+				first_pass[unit] = move
+	var second_pass: Dictionary = {}
+	for key: Variant in sequences:
+		if key is Combatant:
+			var unit: Combatant = key
+			var move: Dictionary = _first_move(unit, _blocked_for(unit, first_pass))
+			if not move.is_empty():
+				second_pass[unit] = move
+	return second_pass
+
+# Destination and end block of `c`'s opening move, evaluated against `blocked`.
+func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
+	var steps: Array[PlanStep] = steps_of(c)
+	if steps.is_empty() or not c.is_active():
+		return {}
+	var mode: PlanStep.Mode = steps[0].mode
+	if mode != PlanStep.Mode.MOVE and mode != PlanStep.Mode.GOTO and mode != PlanStep.Mode.WITHDRAW and mode != PlanStep.Mode.ENGAGE:
+		return {}
+	var previous: Variant = _blocked_override
+	_blocked_override = blocked
+	var st: SimState = _start_state(c)
+	var problem: String = _apply(c, st, steps[0], 0)
+	_blocked_override = previous
+	if not problem.is_empty():
+		return {}
+	for e: PlanEntry in st.entries:
+		if e.skill.kind == SkillDef.Kind.MOVE:
+			return {"to": NO_CELL if st.withdrawn else e.pos_after, "end": e.end_block()}
+	return {}
 
 # ------------------------------------------------------------------------------
 # Valid next inputs
 # ------------------------------------------------------------------------------
 
-# Every candidate next step for `c`, probed against the current sequence. Options
-# that would run the unit out of AP are listed as valid but carry a warning.
+# Every candidate next step for `c`, probed against the current sequence.
 func options(c: Combatant) -> Array[PlanOption]:
 	var out: Array[PlanOption] = []
 	var base: SimState = compile(c)
-	if base.error_index >= 0 or base.withdrawn or base.runs_dry() or not c.is_active():
+	if base.error_index >= 0 or base.withdrawn or not c.is_active():
 		return out
 	for foe: Combatant in context.foes_of(c):
 		out.append_array(target_options(c, foe))
@@ -396,11 +576,12 @@ func options(c: Combatant) -> Array[PlanOption]:
 		out.append(_probe(c, PlanStep.withdraw(), base))
 	return out
 
-# Options when `c` clicks `target`: attacks for a foe, self skills for itself, nothing for allies yet.
+# Options when `c` clicks `target`: attacks (single and area) for a foe, self
+# skills for itself, nothing for allies yet.
 func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 	var out: Array[PlanOption] = []
 	var base: SimState = compile(c)
-	if base.error_index >= 0 or base.withdrawn or base.runs_dry() or not c.is_active():
+	if base.error_index >= 0 or base.withdrawn or not c.is_active():
 		return out
 	var cap: int = context.skill_cap_of(c)
 	if target == c:
@@ -408,20 +589,25 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 			for skill: SkillDef in SkillCatalog.available(kind, cap):
 				out.append(_probe(c, PlanStep.self_skill(skill), base))
 	elif context.foes_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
-		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.ATTACK, cap):
+		for skill: SkillDef in SkillCatalog.single_attacks(c, cap):
 			out.append(_probe(c, PlanStep.engage(skill, target), base))
+		var foe_cell: Vector2i = context.grid.get_position(target)
+		for skill: SkillDef in SkillCatalog.area_attacks(cap):
+			out.append(_probe(c, PlanStep.area_at(skill, foe_cell), base))
 	return out
 
-# Options when `c` clicks an empty tile (or the exit).
+# Options when `c` clicks an empty tile (or the exit): move there, or aim an area attack.
 func cell_options(c: Combatant, cell: Vector2i) -> Array[PlanOption]:
 	var out: Array[PlanOption] = []
 	var base: SimState = compile(c)
-	if base.error_index >= 0 or base.withdrawn or base.runs_dry() or not c.is_active():
+	if base.error_index >= 0 or base.withdrawn or not c.is_active():
 		return out
 	if context.grid.is_exit_tile(cell):
 		out.append(_probe(c, PlanStep.withdraw(), base))
-	else:
-		out.append(_probe(c, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), cell), base))
+		return out
+	out.append(_probe(c, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), cell), base))
+	for skill: SkillDef in SkillCatalog.area_attacks(context.skill_cap_of(c)):
+		out.append(_probe(c, PlanStep.area_at(skill, cell), base))
 	return out
 
 # The compiled state as if `step` were appended (without changing the plan).
@@ -440,25 +626,32 @@ func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 	var st: SimState = preview(c, step)
 	option.valid = st.error_index < 0
 	option.reason = st.error_text
-	if option.valid:
-		for i: int in range(base.entries.size(), st.entries.size()):
-			var e: PlanEntry = st.entries[i]
-			option.ap += e.total_ap()
-			option.blocks += e.blocks()
-			if e.skill.kind == SkillDef.Kind.MOVE:
-				option.moves += 1
-			if e.switch_ap > 0:
-				option.switch_ap += e.switch_ap
-			if e.skill.kind == SkillDef.Kind.TARGET:
-				option.switches_target = true
-			if e.skill.kind == SkillDef.Kind.ATTACK:
-				option.damage = e.est_damage
-		if st.runs_dry():
-			option.warning = "Not enough AP (%d left): the sequence would stop here." % base.ap_left
-		elif step.mode == PlanStep.Mode.ENGAGE and DictUtil.int_of(base.est_hp, step.target) <= 0:
-			option.warning = "%s is already expected to fall; this is an insurance attack." % step.target.name
-		elif step.mode == PlanStep.Mode.SELF and step.skill.kind == SkillDef.Kind.REST:
-			option.ap = -step.skill.recover_ap
+	if not option.valid:
+		return option
+	var hits_allies: int = 0
+	for i: int in range(base.entries.size(), st.entries.size()):
+		var e: PlanEntry = st.entries[i]
+		option.ap += e.total_ap()
+		option.blocks += e.blocks()
+		if e.skill.kind == SkillDef.Kind.MOVE:
+			option.moves += 1
+		if e.switch_ap > 0:
+			option.switch_ap += e.switch_ap
+		if e.skill.kind == SkillDef.Kind.TARGET:
+			option.switches_target = true
+		if e.skill.kind == SkillDef.Kind.ATTACK:
+			option.damage = e.est_damage
+			hits_allies += e.hits_allies
+	var debt: int = st.debt()
+	if debt > 0:
+		var penalty: String = StatusEffects.debt_status(debt)
+		option.warning = "AP debt %d: %s next round." % [debt, ("%s and less AP" % StatusEffects.display_name(penalty)) if not penalty.is_empty() else "less AP"]
+	elif hits_allies > 0:
+		option.warning = "Friendly fire: hits %d all%s." % [hits_allies, "y" if hits_allies == 1 else "ies"]
+	elif step.mode == PlanStep.Mode.ENGAGE and DictUtil.int_of(base.est_hp, step.target) <= 0:
+		option.warning = "%s is already expected to fall; this is an insurance attack." % step.target.name
+	if step.mode == PlanStep.Mode.SELF and step.skill.kind == SkillDef.Kind.REST:
+		option.ap = -step.skill.recover_ap
 	return option
 
 # ------------------------------------------------------------------------------

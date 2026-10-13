@@ -92,9 +92,9 @@ func _on_token_clicked(c: Combatant) -> void:
 	_open_popup(c, _title_for(c), session.plan_target_options(c), _token_rect(c))
 
 func _on_tile_clicked(coord: Vector2i) -> void:
-	if not _planning_ready() or session.grid.is_occupied(coord) or session.grid.get_position(session.focused_hero) == coord:
+	if not _planning_ready() or session.planned_occupant(coord) != null:
 		return
-	var title: String = "Exit tile" if session.grid.is_exit_tile(coord) else "Move to %s" % str(coord)
+	var title: String = "Exit tile" if session.grid.is_exit_tile(coord) else "Tile %s" % str(coord)
 	_open_popup(coord, title, session.plan_cell_options(coord), _tile_rect(coord))
 
 func _title_for(c: Combatant) -> String:
@@ -129,7 +129,7 @@ func _on_token_unhovered() -> void:
 		session.set_plan_preview(null)
 
 func _on_tile_hovered(coord: Vector2i) -> void:
-	if _planning_ready() and not popup.visible and not session.grid.is_occupied(coord):
+	if _planning_ready() and not popup.visible and session.planned_occupant(coord) == null:
 		_preview_default(session.plan_cell_options(coord))
 
 func _on_tile_unhovered() -> void:
@@ -169,17 +169,25 @@ func _refresh_overlay() -> void:
 	overlay.ghost_texture = session.encounter.get_token_texture(hero)
 	overlay.committed_marks = []
 	overlay.committed_trail = _trail(start, st.entries, 0, overlay.committed_marks)
-	overlay.committed_ghost = st.pos if st.pos != start else PlanOverlay.NONE
+	overlay.committed_ghost = start if st.pos != start else PlanOverlay.NONE   # the token itself shows the planned spot
 	var pst: CombatPlan.SimState = session.plan_preview_state()
 	if pst != null and pst.error_index < 0:
 		overlay.preview_marks = []
 		overlay.preview_trail = _trail(st.pos, pst.entries, st.entries.size(), overlay.preview_marks)
 		overlay.preview_ghost = pst.pos if pst.pos != st.pos else PlanOverlay.NONE
 		var step: PlanStep = session.preview_step
-		if step != null and step.mode == PlanStep.Mode.ENGAGE and step.target != null:
+		if step != null and (step.mode == PlanStep.Mode.AREA or (step.mode == PlanStep.Mode.ENGAGE and step.skill != null and step.skill.is_area())):
+			for i: int in range(st.entries.size(), pst.entries.size()):
+				if pst.entries[i].skill.is_area():
+					overlay.reach_tiles = pst.entries[i].cells
+			for friend: Combatant in session.allies:
+				if overlay.reach_tiles.has(session.planned_position(friend)) and friend != hero:
+					overlay.ally_hit_tiles.append(session.planned_position(friend))
+		elif step != null and step.mode == PlanStep.Mode.ENGAGE and step.target != null:
 			var tpos: Vector2i = session.grid.get_position(step.target)
 			overlay.preview_target = tpos
-			overlay.reach_tiles = _reach_around(pst.pos, hero.attack_range)
+			var band: Vector2i = CombatPlan.reach(hero, step.skill)
+			overlay.reach_tiles = _reach_around(pst.pos, band.x, band.y)
 		if _hint_option != null and _hint_option.step == step:
 			overlay.hint_text = _hint_option.cost_text().get_slice("\n", 0)
 			overlay.hint_cell = tpos_for_hint(step, pst.pos)
@@ -190,7 +198,7 @@ func tpos_for_hint(step: PlanStep, end_pos: Vector2i) -> Vector2i:
 		return session.grid.get_position(step.target)
 	return end_pos
 
-# Every tile the unit walks through: rom, then each step of each move entry from skip on.
+# Every tile the unit walks through: `from`, then each step of each move entry from `skip` on.
 # marks receives the tile each move block ends on (numbered on the grid).
 func _trail(from: Vector2i, entries: Array[PlanEntry], skip: int, marks: Array[Vector2i]) -> Array[Vector2i]:
 	var trail: Array[Vector2i] = [from]
@@ -204,12 +212,13 @@ func _trail(from: Vector2i, entries: Array[PlanEntry], skip: int, marks: Array[V
 			trail.append(pos)
 		marks.append(pos)
 	return trail
-func _reach_around(center: Vector2i, reach: int) -> Array[Vector2i]:
+func _reach_around(center: Vector2i, near: int, far: int) -> Array[Vector2i]:
 	var tiles: Array[Vector2i] = []
-	for dx: int in range(-reach, reach + 1):
-		for dy: int in range(-reach, reach + 1):
+	for dx: int in range(-far, far + 1):
+		for dy: int in range(-far, far + 1):
 			var cell: Vector2i = center + Vector2i(dx, dy)
-			if absi(dx) + absi(dy) <= reach and absi(dx) + absi(dy) > 0 and session.grid.is_valid_coord(cell):
+			var d: int = absi(dx) + absi(dy)
+			if d <= far and d >= maxi(1, near) and session.grid.is_valid_coord(cell):
 				tiles.append(cell)
 	return tiles
 
@@ -235,7 +244,9 @@ func refresh() -> void:
 			token.visible = false
 			token.modulate.a = 0.0
 			continue
-		var target_px := Vector2(session.position_of(c) * TILE_SIZE)
+		# While planning, allies stand where their plan takes them (the start tile shows a ghost).
+		var shown: Vector2i = session.planned_position(c) if session.is_planning() and session.is_ally(c) else session.position_of(c)
+		var target_px := Vector2(shown * TILE_SIZE)
 		if not token.visible:
 			token.position = target_px
 		token.visible = true

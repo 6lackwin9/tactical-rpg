@@ -17,6 +17,7 @@ var max_rounds: int = 1
 var total_blocks: int = 10     # blocks in a round (planner encounters use a tighter 6)
 var ap_regen: int = -1        # AP regained at each round start (-1 = refill to max)
 var unit_ap: int = 0          # >0: every unit starts with / is capped at this many AP
+var rng_seed: int = 1337      # seeds status rolls so a battle replays identically
 var grid: CombatGrid = null
 var allies: Array[Combatant] = []
 var enemies: Array[Combatant] = []        # includes reinforcements not yet on the field

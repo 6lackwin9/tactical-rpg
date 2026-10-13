@@ -98,6 +98,26 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.detail_text = "+%d%% Attack Power for %d Round(s)" % [entry.value_num, focus.duration_rounds]
 		entry.status_text = "Empowered"
 
+	elif act.command is AreaAttackCommand:
+		var area: AreaAttackCommand = act.command as AreaAttackCommand
+		entry.category = "ATTACK"
+		entry.skill_name = area.command_name
+		entry.skill_subtype = "Area Attack"
+		entry.value_num = area.last_damage
+		entry.damage = area.last_damage
+		entry.breakdown = area.last_breakdown
+		entry.outcome_tag = "%d HIT%s" % [area.last_hits, "" if area.last_hits == 1 else "S"] if area.last_hits > 0 else "MISS"
+		entry.target_name = "%d tiles" % area.cells.size()
+		entry.detail_text = area.execution_log.trim_prefix("[Attack] ")
+
+	elif act.command is StatusBlockCommand:
+		var lost: StatusBlockCommand = act.command as StatusBlockCommand
+		entry.category = "EVENT"
+		entry.skill_name = StatusEffects.display_name(lost.status)
+		entry.skill_subtype = "Block lost"
+		entry.outcome_tag = "LOST"
+		entry.detail_text = "%s can't act this block" % act.combatant.name
+
 	elif act.command is RestCommand:
 		var rest: RestCommand = act.command as RestCommand
 		entry.category = "BUFF"

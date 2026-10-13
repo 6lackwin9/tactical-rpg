@@ -27,6 +27,9 @@ const BASE_AP: int = 10
 
 var max_ap: int = BASE_AP            # AP available each round (restored at round start)
 var ap: int = BASE_AP                # runtime AP: spent as planned commands start, regained by Rest
+var statuses: Dictionary = {}           # active this round: status name -> true (see StatusEffects)
+var pending_statuses: Dictionary = {}   # inflicted this round, active next round
+var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
 var active_buffs: Array[StatModifier] = []
@@ -42,6 +45,18 @@ func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_s
 	attack_range = p_attack_range
 	stats = p_stats if p_stats != null else CharacterStats.new()
 	inventory = Inventory.new()
+
+# Ranged units can't use their ranged attack point-blank: they need distance 2+
+# (adjacent foes get an off-hand melee attack instead).
+func min_attack_range() -> int:
+	return 2 if attack_range > 1 else 1
+
+func has_status(status: String) -> bool:
+	return statuses.has(status)
+
+# Debuff resistance (%): from INT via the stat sheet.
+func debuff_resistance() -> float:
+	return stats.get_debuff_resistance(get_weapon_context()) if stats != null else 0.0
 
 # Tiles one Move command can cover (one block): faster units cover more ground.
 func move_per_block() -> int:

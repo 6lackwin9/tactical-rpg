@@ -271,7 +271,7 @@ func _build_ui() -> void:
 	enemy_actions_container.add_child(enemy_deck_hdr)
 
 	left_hint = Label.new()
-	left_hint.text = "💡 Plan the round with the PLAN ROUND button (P)."
+	left_hint.text = "💡 Planning: click an enemy, yourself or a tile on the grid."
 	left_hint.add_theme_font_size_override("font_size", 8)
 	left_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	left_vbox.add_child(left_hint)

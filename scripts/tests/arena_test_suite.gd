@@ -1095,7 +1095,7 @@ static func run_planning_and_ai_test() -> bool:
 	# 1. Skill AP: level = AP, Move = 1 AP per tile, Rest free; effects shift costs
 	var skills_ok: bool = SkillCatalog.all().size() >= 10
 	for s: SkillDef in SkillCatalog.all():
-		if s.kind != SkillDef.Kind.MOVE and s.kind != SkillDef.Kind.REST and s.kind != SkillDef.Kind.TARGET:
+		if s.kind == SkillDef.Kind.ATTACK or s.kind == SkillDef.Kind.DEFEND or s.kind == SkillDef.Kind.FOCUS:
 			skills_ok = skills_ok and s.ap_cost() == s.level
 	var l2_ok: bool = SkillCatalog.find("power_strike").ap_cost() == 2 and SkillCatalog.find("brace").ap_cost() == 2 and SkillCatalog.find("focus").ap_cost() == 2
 	var modded := Combatant.new("Modded", 10, 10, 1)
@@ -1151,12 +1151,12 @@ static func run_planning_and_ai_test() -> bool:
 
 	# Switching stance mid-sequence is allowed and automatic: +1 AP, no block
 	session.plan_clear(warrior)
-	session.plan_add_step(warrior, PlanStep.self_skill(SkillCatalog.find("guard")))
+	session.plan_add_step(warrior, PlanStep.engage(strike, foe))
 	var before_strike: CombatPlan.SimState = session.plan.compile(warrior)
-	var switched: String = session.plan_add_step(warrior, PlanStep.engage(strike, foe))
+	var switched: String = session.plan_add_step(warrior, PlanStep.self_skill(SkillCatalog.find("guard")))
 	var after_strike: CombatPlan.SimState = session.plan.compile(warrior)
 	var switch_entry: PlanEntry = after_strike.entries[after_strike.entries.size() - 1]
-	var auto_switch_ok: bool = switched.is_empty() and switch_entry.switch_ap == 1 and switch_entry.stance_before == D and switch_entry.stance_after == O
+	var auto_switch_ok: bool = switched.is_empty() and switch_entry.switch_ap == 1 and switch_entry.stance_before == O and switch_entry.stance_after == D
 	auto_switch_ok = auto_switch_ok and before_strike.ap_left - after_strike.ap_left >= 2
 
 	# AP is a runtime resource: over-committing is allowed, the plan projects where it runs dry
@@ -1165,7 +1165,7 @@ static func run_planning_and_ai_test() -> bool:
 	var last_problem: String = session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("heavy_blow"), session.enemies[1]))
 	last_problem += session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("strike"), session.enemies[1]))
 	var dry_state: CombatPlan.SimState = session.plan.compile(warrior)
-	var dry_ok: bool = dry_state.runs_dry() and dry_state.dry_step >= 0 and dry_state.ap_left >= 0 and session.plan_is_valid()
+	var dry_ok: bool = dry_state.runs_dry() and dry_state.dry_step >= 0 and dry_state.ap_left < 0 and dry_state.debt() > 0 and session.plan_is_valid()
 	var option_warns: bool = false
 	var rest_option: bool = false
 	for o: PlanOption in session.plan_options(warrior):
@@ -1211,7 +1211,7 @@ static func run_planning_and_ai_test() -> bool:
 	var flow_ok2: bool = preview_ok and locked_ok and party_scheduled and enemy_scheduled and session.phase == CombatSession.Phase.REPLAY and spent_ok
 	session.dispose()
 
-	# 5b. Runtime AP: a unit that can't pay stops its sequence; Rest recovers AP mid-round
+	# 5b. Runtime AP: overspending runs into AP debt (paid next round: less AP, 3+ Stagger, 5+ Stun); Rest recovers mid-round
 	var rgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	var spent := Combatant.new("Spent", 60, 10, 1)
 	var dummy := Combatant.new("Dummy", 100, 10, 1)
@@ -1223,11 +1223,25 @@ static func run_planning_and_ai_test() -> bool:
 	spent.ap = 1
 	var exhausted_steps: Array[PlanStep] = [PlanStep.engage(strike, dummy), PlanStep.engage(strike, dummy)]
 	var exhaust_log: Array[String] = _run_steps(spent, rctx, exhausted_steps)
-	var stops_ok: bool = dummy.hp == 100 and spent.ap == 1
+	var stops_ok: bool = dummy.hp < 100 and spent.ap == -2   # both strikes land: 1 + 1 (stance) + 1 AP
 	var said_exhausted: bool = false
 	for msg: String in exhaust_log:
-		if msg.begins_with("[Exhausted]"):
+		if msg.begins_with("[AP Debt]"):
 			said_exhausted = true
+	StatusEffects.roll_over(spent, 4)
+	stops_ok = stops_ok and spent.ap == 2 and spent.statuses.is_empty()
+	spent.ap = -3
+	StatusEffects.roll_over(spent, 4)
+	var staggered_plan := CombatPlan.new(rctx)
+	var stagger_entries: Array[PlanEntry] = staggered_plan.entries_for(spent)
+	stops_ok = stops_ok and spent.has_status(StatusEffects.STAGGER) and spent.ap == 1 and stagger_entries.size() == 2 and stagger_entries[0].start_block == 1 and stagger_entries[1].start_block == 4
+	staggered_plan.add_step(spent, PlanStep.engage(strike, dummy))
+	var after_stagger: Array[PlanEntry] = staggered_plan.entries_for(spent)
+	stops_ok = stops_ok and after_stagger[after_stagger.size() - 1].start_block == 2   # skips the lost block 1
+	spent.ap = -5
+	StatusEffects.roll_over(spent, 4)
+	stops_ok = stops_ok and spent.has_status(StatusEffects.STUN) and not spent.has_status(StatusEffects.STAGGER)
+	spent.statuses.clear()
 	spent.ap = 0
 	var rest_steps: Array[PlanStep] = [PlanStep.self_skill(rest_skill), PlanStep.engage(strike, dummy)]
 	_run_steps(spent, rctx, rest_steps)
@@ -1245,9 +1259,17 @@ static func run_planning_and_ai_test() -> bool:
 	var tile_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(2, 6))
 	var exit_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(8, 4))
 	var occupied_opts: Array[PlanOption] = gsession.plan_cell_options(gsession.grid.get_position(gfoe))
-	var targets_ok: bool = foe_opts.size() == 3 and ally_opts.is_empty() and tile_opts.size() == 1 and exit_opts.size() == 1
+	var engage_count: int = 0
+	var area_count: int = 0
 	for o: PlanOption in foe_opts:
-		targets_ok = targets_ok and o.step.mode == PlanStep.Mode.ENGAGE and o.step.target == gfoe and o.valid
+		if o.step.mode == PlanStep.Mode.ENGAGE:
+			engage_count += 1
+		elif o.step.mode == PlanStep.Mode.AREA:
+			area_count += 1
+	var targets_ok: bool = engage_count == SkillCatalog.single_attacks(gh, 3).size() and area_count == SkillCatalog.area_attacks(3).size() and ally_opts.is_empty() and tile_opts.size() == 1 + area_count and exit_opts.size() == 1
+	for o: PlanOption in foe_opts:
+		if o.step.mode == PlanStep.Mode.ENGAGE:
+			targets_ok = targets_ok and o.step.target == gfoe and o.valid
 	var has_rest: bool = false
 	for o: PlanOption in self_opts:
 		targets_ok = targets_ok and o.step.mode == PlanStep.Mode.SELF
@@ -1285,7 +1307,7 @@ static func run_planning_and_ai_test() -> bool:
 	# the move is spent: a second move or a far second engage is refused, an in-range attack is fine
 	var second_move: String = rsession.plan_add_step(rhero, PlanStep.go_to(mover, Vector2i(2, 6)))
 	var far_engage: String = rsession.plan_add_step(rhero, PlanStep.engage(strike, rsession.enemies[2]))
-	rules_ok = rules_ok and "already moved" in second_move and not far_engage.is_empty()
+	rules_ok = rules_ok and "Moving must come first" in second_move and not far_engage.is_empty()
 	# insurance: a target already expected to fall can still be attacked (it may dodge or guard)
 	rsession.enemies[1].hp = 5
 	var insurance_warned: bool = false
@@ -1357,6 +1379,118 @@ static func run_planning_and_ai_test() -> bool:
 	fresolver.resolve_round()
 	var follow_ok: bool = runner2.hp < 100
 	rules_ok = rules_ok and target_switch_ok and follow_ok
+	# 5e. Reach bands, move-first, statuses with resist rolls, area attacks, allies moving around each other
+	var mgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var archer_u := Combatant.new("ArcherU", 50, 12, 3)
+	var brute_u := Combatant.new("BruteU", 80, 10, 1)
+	var far_u := Combatant.new("FarU", 80, 10, 1)
+	mgrid.place_combatant(archer_u, Vector2i(2, 4))
+	mgrid.place_combatant(brute_u, Vector2i(3, 4))
+	mgrid.place_combatant(far_u, Vector2i(2, 1))
+	var archer_side: Array[Combatant] = [archer_u]
+	var brute_side: Array[Combatant] = [brute_u, far_u]
+	var mctx: PlanContext = _hand_ctx(mgrid, archer_side, brute_side)
+	var mplan := CombatPlan.new(mctx)
+	var jab: SkillDef = SkillCatalog.find("offhand_jab")
+	# ranged units: no ranged attack at distance 1 (once they can't step back), but the off-hand jab works there; 2-3 is fine
+	var stepped_back: String = mplan.add_step(archer_u, PlanStep.engage(strike, brute_u))   # unacted: backs off to reach
+	var backed_off: bool = stepped_back.is_empty() and mgrid.get_distance(mplan.compile(archer_u).pos, mgrid.get_position(brute_u)) >= 2
+	mplan.clear(archer_u)
+	mplan.add_step(archer_u, PlanStep.self_skill(SkillCatalog.find("rest")))
+	var too_close: String = mplan.add_step(archer_u, PlanStep.engage(strike, brute_u))
+	var jab_ok: String = mplan.add_step(archer_u, PlanStep.engage(jab, brute_u))
+	mplan.clear(archer_u)
+	var at_range: String = mplan.add_step(archer_u, PlanStep.engage(strike, far_u))
+	var reach_ok: bool = backed_off and archer_u.min_attack_range() == 2 and brute_u.min_attack_range() == 1 and not too_close.is_empty() and jab_ok.is_empty() and at_range.is_empty()
+	reach_ok = reach_ok and SkillCatalog.single_attacks(archer_u, 3).has(jab) and not SkillCatalog.single_attacks(brute_u, 3).has(jab)
+	# moving must come first
+	mplan.clear(archer_u)
+	mplan.add_step(archer_u, PlanStep.self_skill(SkillCatalog.find("guard")))
+	var late_move: String = mplan.add_step(archer_u, PlanStep.go_to(mover, Vector2i(1, 6)))
+	var move_first_ok: bool = "must come first" in late_move
+	# rooted units can't move
+	mplan.clear(archer_u)
+	archer_u.statuses[StatusEffects.ROOT] = true
+	var rooted_move: String = mplan.add_step(archer_u, PlanStep.go_to(mover, Vector2i(1, 6)))
+	move_first_ok = move_first_ok and "rooted" in rooted_move
+	archer_u.statuses.clear()
+	# status rolls: potency vs resistance, seeded; immunity blocks it
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = 7
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = 7
+	var victim_a := Combatant.new("VictimA", 50, 10, 1)
+	var victim_b := Combatant.new("VictimB", 50, 10, 1)
+	var rolls_a: Array[bool] = []
+	var rolls_b: Array[bool] = []
+	for i: int in range(20):
+		victim_a.pending_statuses.clear()
+		victim_b.pending_statuses.clear()
+		rolls_a.append(StatusEffects.try_inflict(victim_a, StatusEffects.STAGGER, 60, rng_a))
+		rolls_b.append(StatusEffects.try_inflict(victim_b, StatusEffects.STAGGER, 60, rng_b))
+	var landed: int = rolls_a.count(true)
+	var immune := Combatant.new("Immune", 50, 10, 1)
+	immune.status_resist[StatusEffects.ROOT] = 100
+	var status_ok: bool = rolls_a == rolls_b and landed > 0 and landed < 20 and StatusEffects.apply_chance(immune, StatusEffects.ROOT, 90) == 0
+	status_ok = status_ok and not StatusEffects.try_inflict(immune, StatusEffects.ROOT, 90, rng_a)
+	victim_a.pending_statuses.clear()
+	victim_a.pending_statuses[StatusEffects.ROOT] = true
+	StatusEffects.roll_over(victim_a, 4)
+	status_ok = status_ok and victim_a.has_status(StatusEffects.ROOT) and victim_a.pending_statuses.is_empty()
+	StatusEffects.roll_over(victim_a, 4)
+	status_ok = status_ok and not victim_a.has_status(StatusEffects.ROOT)   # lasts one round
+	# area attack: Volley on a tile hits everyone in the plus, friends included (friendly fire)
+	var agrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var thrower := Combatant.new("Thrower", 60, 12, 3)
+	var buddy := Combatant.new("Buddy", 60, 10, 1)
+	var foe_x := Combatant.new("FoeX", 60, 10, 1)
+	var foe_y := Combatant.new("FoeY", 60, 10, 1)
+	agrid.place_combatant(thrower, Vector2i(1, 4))
+	agrid.place_combatant(foe_x, Vector2i(4, 4))
+	agrid.place_combatant(foe_y, Vector2i(4, 5))
+	agrid.place_combatant(buddy, Vector2i(4, 3))
+	var throw_side: Array[Combatant] = [thrower, buddy]
+	var target_side: Array[Combatant] = [foe_x, foe_y]
+	var actx: PlanContext = _hand_ctx(agrid, throw_side, target_side)
+	var aplan := CombatPlan.new(actx)
+	var volley_opt: PlanOption = null
+	for o: PlanOption in aplan.cell_options(thrower, Vector2i(4, 4)):
+		if o.step.mode == PlanStep.Mode.AREA and o.step.skill.id == "volley":
+			volley_opt = o
+	var area_ok: bool = volley_opt != null and volley_opt.valid and volley_opt.damage > 0 and "Friendly fire" in volley_opt.warning
+	aplan.add_step(thrower, volley_opt.step if volley_opt != null else PlanStep.withdraw())
+	var aresolver := CombatResolver.new()
+	aresolver.grid = agrid
+	aplan.commit(aresolver)
+	aresolver.resolve_round()
+	area_ok = area_ok and foe_x.hp < 60 and foe_y.hp < 60 and buddy.hp < 60 and thrower.hp == 60
+	var far_aim: Array[PlanOption] = aplan.cell_options(thrower, Vector2i(7, 7))
+	var out_of_reach: bool = false
+	for o: PlanOption in far_aim:
+		if o.step.mode == PlanStep.Mode.AREA and o.step.skill.id == "volley" and not o.valid:
+			out_of_reach = true
+	area_ok = area_ok and out_of_reach
+	# allies: the Ranger can take the Warrior's tile once the (faster) Warrior moves off it in block 1
+	var csession := CombatSession.new(SkirmishEncounter.new())
+	csession.start()
+	var cw: Combatant = csession.allies[0]
+	var cr: Combatant = csession.allies[1]
+	var w_start: Vector2i = csession.grid.get_position(cw)
+	var blocked_before: String = ""
+	for o: PlanOption in csession.plan_cell_options(w_start):
+		pass
+	csession.select_combatant(cr)
+	var before_opts: Array[PlanOption] = csession.plan_cell_options(w_start)
+	blocked_before = before_opts[0].reason if not before_opts.is_empty() and not before_opts[0].valid else ""
+	csession.plan_add_step(cw, PlanStep.engage(strike, csession.enemies[1]))   # Warrior steps to (4,4)
+	var cw_dest: Vector2i = csession.planned_position(cw)
+	var into_vacated: String = csession.plan_add_step(cr, PlanStep.go_to(mover, w_start))
+	var into_dest: String = csession.plan_add_step(cr, PlanStep.go_to(mover, cw_dest))
+	var coord_ok: bool = not blocked_before.is_empty() and cw_dest != w_start and into_vacated.is_empty() and not into_dest.is_empty()
+	coord_ok = coord_ok and csession.planned_position(cr) == w_start and csession.planned_occupant(w_start) == cr and csession.planned_occupant(cw_dest) == cw
+	csession.dispose()
+	var mechanics_ok: bool = reach_ok and move_first_ok and status_ok and area_ok and coord_ok
+
 	# 6. Presets: every preset drafts a valid, affordable sequence; each shows its focus
 	var psession := CombatSession.new(SkirmishEncounter.new())
 	psession.start()
@@ -1518,11 +1652,12 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, AP spent at runtime: %s" % ("PASS" if flow_ok2 else "FAIL"))
 	print("  [Input] Per-target/tile options (foe attacks, self skills, move here, withdraw), previews, status & hover inspect: %s" % ("PASS" if input_ok else "FAIL"))
 	print("  [Rules] 6-block rounds, AP pool + regen, one move per round, centre tie-break, target switching, insurance attacks, follow, damage log, auto-play on confirm: %s" % ("PASS" if rules_ok else "FAIL"))
-	print("  [Runtime] Out-of-AP units stop their sequence; Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
+	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles: %s" % ("PASS" if mechanics_ok else "FAIL"))
+	print("  [Runtime] Overspending goes into AP debt (next round: less AP, 3+ Stagger, 5+ Stun); Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
 	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
 	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, Engage chases: %s" % ("PASS" if ai_ok else "FAIL"))
 	print("  [AI] Preset skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [AI] Both sides take damage in a preset-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
 	print("  [Plan] Reset round rewinds units and AP to the round start and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
 
-	return ap_model_ok and stance_ok and seq_ok and auto_switch_ok and runtime_plan_ok and options_ok and edit_ok and flow_ok2 and input_ok and rules_ok and runtime_ok and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok
+	return ap_model_ok and stance_ok and seq_ok and auto_switch_ok and runtime_plan_ok and options_ok and edit_ok and flow_ok2 and input_ok and rules_ok and mechanics_ok and runtime_ok and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok

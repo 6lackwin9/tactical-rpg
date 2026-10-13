@@ -9,11 +9,12 @@ extends RefCounted
 #             inserted automatically (and chase the target when they run)
 #   MOVE      manual reposition: a straight move of `tiles` in a direction
 #   GOTO      move to a chosen tile (path-found, split into blocks by speed)
+#   AREA      area attack aimed at a tile (no auto-move: the tile must be in reach)
 #   WITHDRAW  auto-path to the exit tile and leave the battle
 #   SELF      Defend / Focus / Rest
 # ==============================================================================
 
-enum Mode { ENGAGE, MOVE, GOTO, WITHDRAW, SELF }
+enum Mode { ENGAGE, MOVE, GOTO, AREA, WITHDRAW, SELF }
 
 var mode: Mode = Mode.SELF
 var skill: SkillDef = null
@@ -44,6 +45,13 @@ static func go_to(p_skill: SkillDef, p_cell: Vector2i) -> PlanStep:
 	step.cell = p_cell
 	return step
 
+static func area_at(p_skill: SkillDef, p_cell: Vector2i) -> PlanStep:
+	var step := PlanStep.new()
+	step.mode = Mode.AREA
+	step.skill = p_skill
+	step.cell = p_cell
+	return step
+
 static func withdraw() -> PlanStep:
 	var step := PlanStep.new()
 	step.mode = Mode.WITHDRAW
@@ -64,6 +72,8 @@ func title() -> String:
 			return "%s %s%d" % [skill.label(), PlanEntry.dir_arrow(direction), tiles]
 		Mode.GOTO:
 			return "%s to %s" % [skill.label(), str(cell)]
+		Mode.AREA:
+			return "%s at %s" % [skill.label(), str(cell)]
 		Mode.WITHDRAW:
 			return "🏃 Withdraw"
 	return skill.label()

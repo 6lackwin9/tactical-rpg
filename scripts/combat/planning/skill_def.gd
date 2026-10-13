@@ -16,7 +16,11 @@ extends RefCounted
 # (no block cost). Rest switches to Neutral for free.
 # ==============================================================================
 
-enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET }
+enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS }
+
+# Area attacks target a tile: PLUS = tile + 4 neighbours, BURST = 3x3, LINE = 3 tiles
+# straight out from the caster (aim at an adjacent tile).
+enum Area { NONE, PLUS, BURST, LINE }
 
 const MIN_LEVEL: int = 1
 const MAX_LEVEL: int = 5
@@ -31,6 +35,11 @@ var mitigation: float = 0.5    # DEFEND: damage reduction
 var boost: float = 1.5         # FOCUS: attack multiplier
 var boost_rounds: int = 2      # FOCUS: duration
 var recover_ap: int = 2        # REST: AP regained
+var area: Area = Area.NONE     # ATTACK: area shape (tile-targeted)
+var offhand: bool = false      # ATTACK: melee off-hand jab (range 1) for ranged units
+var stance_override: int = -1  # ATTACK in another stance pool (e.g. Shield Bash is Defensive)
+var status_effect: String = "" # status rolled on hit (StatusEffects), active next round
+var status_potency: int = 0
 var description: String = ""
 
 static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_blocks: int, p_description: String) -> SkillDef:
@@ -46,7 +55,7 @@ static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_b
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.
 func ap_cost(actor: Combatant = null) -> int:
-	if kind == Kind.REST or kind == Kind.TARGET:
+	if kind == Kind.REST or kind == Kind.TARGET or kind == Kind.STATUS:
 		return 0
 	var shift: int = actor.ap_cost_modifier if actor != null else 0
 	var base: int = 1 if kind == Kind.MOVE else level
@@ -54,6 +63,8 @@ func ap_cost(actor: Combatant = null) -> int:
 
 # The stance this skill puts the unit in (Move keeps the current one; see stance_after).
 func stance() -> CombatTypes.StanceType:
+	if stance_override >= 0:
+		return stance_override as CombatTypes.StanceType
 	match kind:
 		Kind.ATTACK:
 			return CombatTypes.StanceType.OFFENSIVE
@@ -64,11 +75,11 @@ func stance() -> CombatTypes.StanceType:
 	return CombatTypes.StanceType.NEUTRAL
 
 func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
-	return current if (kind == Kind.MOVE or kind == Kind.TARGET) else stance()
+	return current if (kind == Kind.MOVE or kind == Kind.TARGET or kind == Kind.STATUS) else stance()
 
 # Automatic stance-switch penalty (AP): changing stance costs 1; Move and Rest never do.
 func switch_cost(current: CombatTypes.StanceType) -> int:
-	if kind == Kind.MOVE or kind == Kind.REST or kind == Kind.TARGET:
+	if kind == Kind.MOVE or kind == Kind.REST or kind == Kind.TARGET or kind == Kind.STATUS:
 		return 0
 	return 0 if current == stance() else 1
 
@@ -84,7 +95,30 @@ func icon() -> String:
 			return "➜"
 		Kind.TARGET:
 			return "🎯"
+		Kind.STATUS:
+			return "✖"
 	return "💤"
+
+func is_area() -> bool:
+	return area != Area.NONE
+
+# Tiles an area attack aimed at `cell` hits, cast from `from`.
+func area_cells(from: Vector2i, cell: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	match area:
+		Area.PLUS:
+			cells = [cell, cell + Vector2i(1, 0), cell + Vector2i(-1, 0), cell + Vector2i(0, 1), cell + Vector2i(0, -1)]
+		Area.BURST:
+			for dx: int in range(-1, 2):
+				for dy: int in range(-1, 2):
+					cells.append(cell + Vector2i(dx, dy))
+		Area.LINE:
+			var dir: Vector2i = cell - from
+			for i: int in range(1, 4):
+				cells.append(from + dir * i)
+		_:
+			cells = [cell]
+	return cells
 
 func label() -> String:
 	return "%s %s" % [icon(), display_name]

@@ -23,7 +23,8 @@ var committed_ghost: Vector2i = NONE         # where the committed sequence leav
 var preview_trail: Array[Vector2i] = []
 var preview_ghost: Vector2i = NONE
 var preview_target: Vector2i = NONE
-var reach_tiles: Array[Vector2i] = []
+var reach_tiles: Array[Vector2i] = []       # weapon reach, or the tiles an area attack hits
+var ally_hit_tiles: Array[Vector2i] = []    # area tiles where an ally stands (friendly fire)
 var hint_text: String = ""
 var hint_cell: Vector2i = NONE
 
@@ -52,6 +53,7 @@ func clear() -> void:
 	preview_ghost = NONE
 	preview_target = NONE
 	reach_tiles = []
+	ally_hit_tiles = []
 	hint_text = ""
 	hint_cell = NONE
 	_hint_label.visible = false
@@ -73,8 +75,11 @@ static func _center(cell: Vector2i) -> Vector2:
 func _draw() -> void:
 	for cell: Vector2i in reach_tiles:
 		draw_rect(Rect2(Vector2(cell) * TILE + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), COL_REACH)
+	for cell: Vector2i in ally_hit_tiles:
+		draw_rect(Rect2(Vector2(cell) * TILE + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(1.0, 0.6, 0.1, 0.45))
+		draw_rect(Rect2(Vector2(cell) * TILE + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(1.0, 0.6, 0.1, 0.95), false, 2.0)
 	_draw_trail(committed_trail, committed_marks, COL_COMMITTED, true)
-	_draw_ghost(committed_ghost, 0.45)
+	_draw_ghost(committed_ghost, 0.3)   # where the hero starts (its token shows the planned spot)
 	_draw_trail(preview_trail, preview_marks, COL_PREVIEW, false)
 	_draw_ghost(preview_ghost, 0.7)
 	if preview_target != NONE:

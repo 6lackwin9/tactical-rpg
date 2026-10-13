@@ -22,7 +22,10 @@ var pos_before: Vector2i = Vector2i(-1, -1)  # where the unit stands before / af
 var pos_after: Vector2i = Vector2i(-1, -1)
 var skill_ap: int = 0                     # AP for the skill itself
 var blocks_override: int = 0               # MOVE: 1-2 blocks depending on the path length (0 = the skill's own)
-var est_damage: int = 0                   # ATTACK: expected hit (power x skill x stance x boost)
+var est_damage: int = 0                   # ATTACK: expected hit (power x skill x stance x boost); area: total on foes
+var cells: Array[Vector2i] = []           # ATTACK (area): tiles hit
+var hits_allies: int = 0                  # ATTACK (area): allies standing in the area (friendly fire)
+var status_name: String = ""               # STATUS: the status that took this block
 var switch_ap: int = 0                    # automatic stance-switch penalty
 var stance_before: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
 var stance_after: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
@@ -47,9 +50,21 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	var command: BattleCommand
 	match skill.kind:
 		SkillDef.Kind.ATTACK:
-			var attack := AttackCommand.new(actor, target, maxi(1, roundi(float(power) * skill.power_mult)), skill.blocks, 0, grid)
-			attack.follow_tiles = 1   # follows a target that steps one tile out of reach
-			command = attack
+			var hit: int = maxi(1, roundi(float(power) * skill.power_mult))
+			if skill.is_area():
+				var area := AreaAttackCommand.new(actor, grid, cells, hit, skill.blocks)
+				command = area
+			else:
+				var attack := AttackCommand.new(actor, target, hit, skill.blocks, 0, grid)
+				attack.follow_tiles = 1   # follows a target that steps one tile out of reach
+				if skill.offhand:
+					attack.min_range = 1
+					attack.max_range = 1
+				command = attack
+			command.status_effect = skill.status_effect
+			command.status_potency = skill.status_potency
+		SkillDef.Kind.STATUS:
+			command = StatusBlockCommand.new(actor, status_name)
 		SkillDef.Kind.DEFEND:
 			command = DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
 		SkillDef.Kind.FOCUS:
@@ -67,7 +82,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	command.planner_controlled = true
 	command.ap_cost = skill_ap
 	command.stance_switch_cost = switch_ap
-	command.stance_on_start = -1 if (skill.kind == SkillDef.Kind.MOVE or skill.kind == SkillDef.Kind.TARGET) else skill.stance()
+	command.stance_on_start = -1 if (skill.kind == SkillDef.Kind.MOVE or skill.kind == SkillDef.Kind.TARGET or skill.kind == SkillDef.Kind.STATUS) else skill.stance()
 	command.est_damage = est_damage
 	return command
 

@@ -28,7 +28,7 @@ enum StanceType {
 const STANCE_ADVANTAGE: float = 1.25
 const STANCE_DISADVANTAGE: float = 0.75
 
-# True when ttacker stance beats defender stance in the loop.
+# True when `attacker` stance beats `defender` stance in the loop.
 static func stance_beats(attacker: StanceType, defender: StanceType) -> bool:
 	return (attacker == StanceType.OFFENSIVE and defender == StanceType.TACTICAL) \
 		or (attacker == StanceType.TACTICAL and defender == StanceType.DEFENSIVE) \

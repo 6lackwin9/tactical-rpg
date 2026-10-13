@@ -104,6 +104,7 @@ func start() -> void:
 	resolver = CombatResolver.new()
 	resolver.grid = grid
 	resolver.total_blocks = total_blocks
+	resolver.rng.seed = encounter.rng_seed
 	resolver.log_emitted.connect(_on_resolver_log)
 	for c: Combatant in allies:
 		resolver.register_combatant(c)
@@ -120,8 +121,15 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	elif not roll_over:
 		resolver.scheduled_actions.clear()
 	if roll_over:
+		# Last round's statuses expire; queued ones and AP-debt penalties take effect; AP recovers.
 		for c: Combatant in resolver.registered_combatants:
-			c.ap = c.max_ap if encounter.ap_regen < 0 else mini(c.max_ap, c.ap + encounter.ap_regen)
+			var debt: int = maxi(0, -c.ap)
+			var active: Array[String] = StatusEffects.roll_over(c, encounter.ap_regen)
+			if c.is_active() and (not active.is_empty() or debt > 0):
+				var names: Array[String] = []
+				for st_name: String in active:
+					names.append(StatusEffects.display_name(st_name))
+				_log_text("[color=#f59e0b]⚡ %s: %s%s[/color]" % [c.name, ("AP debt %d paid back; " % debt) if debt > 0 else "", (", ".join(names) + " this round") if not names.is_empty() else "no status"])
 	current_round = round_num
 	max_unlocked_round = maxi(max_unlocked_round, round_num)
 	viewed_round = round_num
@@ -182,6 +190,8 @@ func reset_round() -> void:
 		var start_snap: BlockSnapshot = snapshot_at(current_round, 0)
 		if start_snap != null:
 			_restore_snapshot(start_snap)
+		for c: Combatant in resolver.registered_combatants:
+			c.pending_statuses.clear()   # statuses inflicted in the undone round never happened
 		_begin_round(current_round, false)
 	else:
 		_begin_round(current_round)
@@ -374,7 +384,7 @@ func find_recorded_action(combatant: Combatant, block: int) -> CombatResolver.Sc
 func is_planning() -> bool:
 	return encounter.player_planning and phase == Phase.PLANNING and is_live_view() and not combat_over and not plan_confirmed
 
-# Next inputs for ctor, each probed against the sequence so far (valid or why not).
+# Next inputs for `actor`, each probed against the sequence so far (valid or why not).
 func plan_options(actor: Combatant) -> Array[PlanOption]:
 	return plan.options(actor) if is_planning() and actor != null else []
 
@@ -402,7 +412,7 @@ func plan_preview_state() -> CombatPlan.SimState:
 		return null
 	return plan.preview(focused_hero, preview_step)
 
-# Index of the step that produced the focused hero's command at lock (-1 = none).
+# Index of the step that produced the focused hero's command at `block` (-1 = none).
 func plan_step_index_at(block: int) -> int:
 	if focused_hero == null or plan == null:
 		return -1
@@ -417,16 +427,32 @@ func plan_info() -> Dictionary:
 	if not is_planning() or focused_hero == null:
 		return info
 	var st: CombatPlan.SimState = plan.compile(focused_hero)
-	var text: String = "%s  •  AP %d/%d  •  next block %d  •  %s" % [focused_hero.name, st.ap_left, focused_hero.max_ap, mini(st.next_block, 10), CombatTypes.stance_to_string(st.stance)]
+	var text: String = "%s  •  AP %d/%d  •  next block %d  •  %s" % [focused_hero.name, st.ap_left, focused_hero.max_ap, mini(st.next_block, total_blocks), CombatTypes.stance_to_string(st.stance)]
+	for status: Variant in focused_hero.statuses:
+		text += "  •  %s" % StatusEffects.display_name(str(status))
 	if st.error_index >= 0:
 		text += "  •  ⚠ step %d invalid: %s" % [st.error_index + 1, st.error_text]
 		info["warn"] = true
 	elif st.runs_dry():
-		text += "  •  ⚠ runs dry at step %d" % (st.dry_step + 1)
+		var penalty: String = StatusEffects.debt_status(st.debt())
+		text += "  •  ⚠ AP debt %d -> %s next round" % [st.debt(), (StatusEffects.display_name(penalty) + " + less AP") if not penalty.is_empty() else "less AP"]
 		info["warn"] = true
 	info["text"] = text
 	info["can_confirm"] = plan_is_valid()
 	return info
+
+# Where a unit stands for planning purposes: allies at their planned destination.
+func planned_position(c: Combatant) -> Vector2i:
+	if is_planning() and is_ally(c) and plan != null:
+		return plan.planned_position(c)
+	return grid.get_position(c)
+
+# The unit that will stand on cell once planned moves happen (null = free).
+func planned_occupant(cell: Vector2i) -> Combatant:
+	for c: Combatant in allies + enemies:
+		if c.is_active() and grid.has_combatant(c) and planned_position(c) == cell:
+			return c
+	return null
 
 # Unit shown in the inspector/forecast: the hovered one while planning, else the selection.
 func inspected_combatant() -> Combatant:
@@ -463,7 +489,7 @@ func plan_clear(actor: Combatant) -> void:
 		status_text = "%s: sequence cleared." % actor.name
 		_after_plan_edit()
 
-# Replaces ctor's sequence with an AI draft (see PlanPresets); still editable.
+# Replaces `actor`'s sequence with an AI draft (see PlanPresets); still editable.
 func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
 	if not is_planning() or actor == null or not actor.is_active():
 		return
@@ -487,7 +513,8 @@ func plan_is_valid() -> bool:
 			return false
 	return true
 
-# Locks the party's sequences, schedules them with the enemies' and starts resolving\n# (auto-play; uto_play false lets the caller step manually). Refused while any is invalid.
+# Locks the party's sequences, schedules them with the enemies' and starts resolving
+# (auto-play; `auto_play` false lets the caller step manually). Refused while any is invalid.
 func confirm_plan(auto_play: bool = true) -> bool:
 	if not is_planning():
 		return false

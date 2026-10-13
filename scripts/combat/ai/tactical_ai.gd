@@ -92,7 +92,8 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) 
 # Tries skills of `kind` in preference order; returns true when one was added.
 # `make_step` builds the step from a skill (default: a self step).
 static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable) -> bool:
-	var skills: Array[SkillDef] = SkillCatalog.available(kind, cap)
+	# Attacks: single-target ones (the AI doesn't aim area attacks yet; ranged units add the off-hand jab).
+	var skills: Array[SkillDef] = SkillCatalog.single_attacks(actor, cap) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap)
 	skills.reverse()  # highest level first
 	if profile.prefer_level > 0:
 		skills.sort_custom(func(a: SkillDef, b: SkillDef) -> bool:

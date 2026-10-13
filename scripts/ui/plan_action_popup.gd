@@ -94,6 +94,8 @@ static func _row_text(option: PlanOption) -> String:
 	var name_text: String = step.skill.label() if step.skill != null else "🏃 Withdraw"
 	if step.mode == PlanStep.Mode.GOTO:
 		name_text = "➜ Move here"
+	elif step.mode == PlanStep.Mode.AREA:
+		name_text = "%s ✸ area" % step.skill.label()
 	var cost: String = ("+%d AP" % -option.ap) if option.ap < 0 else ("%d AP" % option.ap)
 	var text: String = "%s   %s · %db" % [name_text, cost, option.blocks]
 	if option.damage > 0:

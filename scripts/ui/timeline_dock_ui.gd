@@ -369,6 +369,16 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 			subtitle = "→ %s (%d)" % [chase.target.name, mv.steps]
 		else:
 			subtitle = "%s %s" % [PlanEntry.dir_arrow(mv.direction), "2 tiles" if mv.steps > 1 else "1 tile"] if mv != null else "Grid Step"
+	elif act.command is StatusBlockCommand:
+		clip_style.bg_color = Color(0.25, 0.08, 0.08, 0.95)
+		clip_style.border_color = Color(0.7, 0.25, 0.25, 1.0)
+		icon_str = "✖"
+		subtitle = "block lost"
+	elif act.command is AreaAttackCommand:
+		clip_style.bg_color = Color(0.45, 0.2, 0.08, 0.95)
+		clip_style.border_color = Color(1.0, 0.55, 0.2, 1.0)
+		icon_str = "✸"
+		subtitle = "%d tiles" % (act.command as AreaAttackCommand).cells.size()
 	elif act.command is RestCommand:
 		clip_style.bg_color = Color(0.1, 0.3, 0.2, 0.95)
 		clip_style.border_color = Color(0.3, 0.85, 0.5, 1.0)

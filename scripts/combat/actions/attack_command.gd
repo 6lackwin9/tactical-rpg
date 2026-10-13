@@ -9,6 +9,10 @@ var grid: CombatGrid = null
 # (1 AP per tile, only if the unit still has AP). Scripted attacks never follow.
 var follow_tiles: int = 0
 
+# Reach band: -1 = the unit's own (ranged units: 2..range; melee: 1). Off-hand jabs use 1..1.
+var min_range: int = -1
+var max_range: int = -1
+
 # Filled in by execute(): what was dealt and why (shown in the log; formula hover in test mode).
 var last_damage: int = 0
 var last_breakdown: String = ""
@@ -30,6 +34,23 @@ func _get_effective_target() -> Combatant:
 		return source.active_target as Combatant
 	return null
 
+# Scripted (legacy) attacks keep the old 1..range band so the reference battle is unchanged.
+func reach_min() -> int:
+	if min_range > 0:
+		return min_range
+	return source.min_attack_range() if planner_controlled else 1
+
+func reach_max() -> int:
+	return max_range if max_range > 0 else source.attack_range
+
+func in_reach(target_unit: Combatant) -> bool:
+	if grid == null:
+		return true
+	if not grid.has_combatant(source) or not grid.has_combatant(target_unit):
+		return false
+	var dist: int = grid.get_distance(grid.get_position(source), grid.get_position(target_unit))
+	return dist >= reach_min() and dist <= reach_max()
+
 func can_execute() -> bool:
 	if not super.can_execute():
 		return false
@@ -38,15 +59,14 @@ func can_execute() -> bool:
 	var effective_target: Combatant = _get_effective_target()
 	if effective_target == null or not effective_target.is_active():
 		return false
-	if grid != null and not grid.can_target(source, effective_target, source.attack_range):
-		return false
-	return true
+	return in_reach(effective_target)
 
 # Steps toward a target that moved out of range, paying 1 AP per tile.
 func _follow(effective_target: Combatant) -> void:
 	var left: int = follow_tiles
-	while left > 0 and source.ap >= 1 and not grid.can_target(source, effective_target, source.attack_range):
-		var reach: int = source.attack_range
+	while left > 0 and source.ap >= 1 and not in_reach(effective_target):
+		var reach: int = reach_max()
+		var near: int = reach_min()
 		var target_pos: Vector2i = grid.get_position(effective_target)
 		var blocked: Dictionary = {}
 		for other: Variant in grid.combatant_positions:
@@ -56,7 +76,7 @@ func _follow(effective_target: Combatant) -> void:
 		for dx: int in range(-reach, reach + 1):
 			for dy: int in range(-reach, reach + 1):
 				var cell: Vector2i = target_pos + Vector2i(dx, dy)
-				if absi(dx) + absi(dy) <= reach and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
+				if absi(dx) + absi(dy) <= reach and absi(dx) + absi(dy) >= near and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
 					goals[cell] = true
 		var path: Array[Vector2i] = GridPath.find_path(grid, grid.get_position(source), goals, blocked, false)
 		if path.is_empty() or not grid.move_combatant(source, path[0]):
@@ -82,12 +102,15 @@ func execute() -> void:
 	if grid != null and follow_tiles > 0:
 		_follow(effective_target)
 
-	if grid != null and not grid.can_target(source, effective_target, source.attack_range):
+	if grid != null and not in_reach(effective_target):
 		var dist: int = grid.get_distance(grid.get_position(source), grid.get_position(effective_target))
-		print("[%s] cannot reach [%s] (range %d vs dist %d)!" % [source.name, effective_target.name, source.attack_range, dist])
-		execution_log = "[Attack Out of Range] %s cannot reach %s (distance %d exceeds range %d)!" % [
-			source.name, effective_target.name, dist, source.attack_range
-		]
+		print("[%s] cannot reach [%s] (range %d-%d vs dist %d)!" % [source.name, effective_target.name, reach_min(), reach_max(), dist])
+		if dist < reach_min():
+			execution_log = "[Attack Out of Range] %s is too close to %s for this attack (distance %d, needs %d-%d)!" % [source.name, effective_target.name, dist, reach_min(), reach_max()]
+		else:
+			execution_log = "[Attack Out of Range] %s cannot reach %s (distance %d exceeds range %d)!" % [
+				source.name, effective_target.name, dist, reach_max()
+			]
 		return
 
 	if planner_controlled:
@@ -130,6 +153,13 @@ func execute() -> void:
 		details.append("x%.1f Buff" % buff_mult)
 	if defense_mit_pct > 0:
 		details.append("-%d%% Defended" % defense_mit_pct)
+
+	if not status_effect.is_empty() and effective_target.is_alive():
+		var chance: int = StatusEffects.apply_chance(effective_target, status_effect, status_potency)
+		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng):
+			details.append("%s next round (%d%%)" % [StatusEffects.display_name(status_effect), chance])
+		else:
+			details.append("resisted %s (%d%%)" % [StatusEffects.display_name(status_effect).to_lower(), chance])
 
 	var detail_suffix: String = (" (" + ", ".join(details) + ")") if not details.is_empty() else ""
 

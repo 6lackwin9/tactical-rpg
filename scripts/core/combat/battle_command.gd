@@ -19,6 +19,9 @@ var ap_cost: int = 0                 # skill AP (excludes the stance switch)
 var stance_switch_cost: int = 0     # extra AP for changing stance on start
 var stance_on_start: int = -1       # CombatTypes.StanceType to enter at start, -1 = keep
 var est_damage: int = 0              # planner's expected hit (attacks), for previews
+var status_effect: String = ""        # status this command tries to inflict (StatusEffects)
+var status_potency: int = 0
+var rng: RandomNumberGenerator = null   # battle RNG, set by the resolver before execute()
 
 func _init(p_source: Combatant, p_priority: int = 0, p_block_cost: int = 1) -> void:
 	source = p_source
