@@ -5,6 +5,11 @@ var grid: CombatGrid
 var direction: Vector2i
 var steps: int
 
+# Outcome of the last execute() (read by the log): tiles walked, and why it stopped early.
+var moved_tiles: int = 0
+var cut_short: bool = false
+var blocked_by: String = ""
+
 func _init(p_source: Combatant, p_grid: CombatGrid, p_direction: Vector2i, p_steps: int = 1, p_block_cost: int = 1, p_priority: int = 0) -> void:
 	super(p_source, p_priority, p_block_cost)
 	grid = p_grid

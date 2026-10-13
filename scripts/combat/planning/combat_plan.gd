@@ -409,18 +409,29 @@ func approach_path(c: Combatant, from: Vector2i, foe: Combatant, near: int = -1,
 				goals[cell] = true
 	return GridPath.find_path(grid, from, goals, blocked, false)
 
-# One Move entry for the whole path: 1-2 blocks (the unit's tiles per block), 1 AP
-# per tile. `chase` makes it a live approach toward that foe.
+# The move as one Move entry per block (up to the unit's tiles per block, 1 AP
+# per tile): a 2-block move covers its first stretch at the end of block 1 and the
+# rest at the end of block 2. `chase` makes both halves live approaches.
 func _add_move(c: Combatant, st: SimState, dirs: Array[Vector2i], chase: Combatant, index: int) -> String:
 	var skill: SkillDef = SkillCatalog.lowest(SkillDef.Kind.MOVE)
-	var blocks: int = ceili(float(dirs.size()) / float(c.move_per_block()))
-	var problem: String = _add_entry(c, st, skill, index, chase, dirs, maxi(1, blocks))
-	if problem.is_empty():
-		for d: Vector2i in dirs:
+	var goal: Vector2i = st.pos
+	for d: Vector2i in dirs:
+		goal += d
+	var per_block: int = c.move_per_block()
+	var i: int = 0
+	while i < dirs.size():
+		var chunk: Array[Vector2i] = dirs.slice(i, mini(dirs.size(), i + per_block))
+		var problem: String = _add_entry(c, st, skill, index, chase, chunk, 1)
+		if not problem.is_empty():
+			return problem
+		for d: Vector2i in chunk:
 			st.pos += d
-		st.entries[st.entries.size() - 1].pos_after = st.pos
-		st.moved = true
-	return problem
+		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		entry.pos_after = st.pos
+		entry.goal = goal
+		i += chunk.size()
+	st.moved = true
+	return ""
 
 # Lowest block where `n` consecutive blocks are free (not status-locked), or -1.
 func _free_start(st: SimState, n: int) -> int:
@@ -513,7 +524,7 @@ func _blocked_for(c: Combatant, moves: Dictionary) -> Dictionary:
 			var to: Vector2i = to_raw if to_raw is Vector2i else NO_CELL
 			if to != NO_CELL:
 				blocked[to] = true
-			var leaves_first: bool = DictUtil.int_of(move, "end", 99) == 1 and other.speed > c.speed
+			var leaves_first: bool = DictUtil.int_of(move, "leave", 99) == 1 and other.speed > c.speed
 			if not leaves_first:
 				blocked[start] = true
 		else:
@@ -554,10 +565,16 @@ func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 	_blocked_override = previous
 	if not problem.is_empty():
 		return {}
+	var leave: int = -1
+	var last: PlanEntry = null
 	for e: PlanEntry in st.entries:
 		if e.skill.kind == SkillDef.Kind.MOVE:
-			return {"to": NO_CELL if st.withdrawn else e.pos_after, "end": e.end_block()}
-	return {}
+			if leave < 0:
+				leave = e.end_block()
+			last = e
+	if last == null:
+		return {}
+	return {"to": NO_CELL if st.withdrawn else last.pos_after, "end": last.end_block(), "leave": leave}
 
 # ------------------------------------------------------------------------------
 # Valid next inputs

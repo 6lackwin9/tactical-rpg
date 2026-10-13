@@ -2,13 +2,20 @@ class_name WalkCommand
 extends MoveCommand
 
 # ==============================================================================
-# Tactical RPG - Walk Command (a planned multi-tile move along any path)
-# One block. The path is a list of unit steps (each cardinal), so a single Move
-# can turn corners. It stops early when a step is blocked. AP is paid when it
-# starts (1 AP per planned tile).
+# Tactical RPG - Walk Command (a planned move along any path, one block)
+# Planned moves longer than a unit's tiles-per-block are split into one Walk
+# per block, each landing at the end of its own block. A walk follows its
+# planned steps; if the unit isn't where the plan expected (an earlier half was
+# cut short), it re-paths toward the final destination around whoever stands
+# there now. A blocked step stops it short: the unit stays on the last free
+# tile, unused tiles are refunded as AP, and the log says what blocked it.
 # ==============================================================================
 
+const NONE: Vector2i = Vector2i(-1, -1)
+
 var path: Array[Vector2i] = []
+var expected_start: Vector2i = NONE   # where the plan has the unit when this walk starts
+var goal: Vector2i = NONE             # the move's final destination (for re-pathing)
 
 func _init(p_source: Combatant, p_grid: CombatGrid, p_path: Array[Vector2i], p_block_cost: int = 1) -> void:
 	super(p_source, p_grid, p_path[0] if not p_path.is_empty() else Vector2i.ZERO, p_path.size(), p_block_cost)
@@ -16,18 +23,55 @@ func _init(p_source: Combatant, p_grid: CombatGrid, p_path: Array[Vector2i], p_b
 	command_name = "Move"
 
 func execute() -> void:
+	moved_tiles = 0
+	cut_short = false
+	blocked_by = ""
 	if not can_execute():
 		execution_log = "[Move Failed] %s could not execute movement (inactive or off grid)." % source.name
 		return
 	var start_pos: Vector2i = grid.get_position(source)
-	var moved: int = 0
-	for dir: Vector2i in path:
+	var walk: Array[Vector2i] = path
+	if expected_start != NONE and goal != NONE and start_pos != expected_start:
+		walk = _repath(start_pos)
+	for dir: Vector2i in walk:
+		var next_cell: Vector2i = grid.get_position(source) + dir
 		if not source.is_active() or not grid.move_combatant(source, dir):
+			cut_short = true
+			blocked_by = _describe_blocker(next_cell)
 			break
-		moved += 1
+		moved_tiles += 1
 	if source.is_withdrawn:
 		execution_log = "[Withdrawal] %s moved from %s and safely WITHDREW through Exit!" % [source.name, str(start_pos)]
-	elif moved == 0:
-		execution_log = "[Move Blocked] %s could not move from %s (path blocked)." % [source.name, str(start_pos)]
+		return
+	# Tiles the unit couldn't walk cost nothing.
+	if planner_controlled and moved_tiles < path.size():
+		source.ap = mini(source.max_ap, source.ap + (path.size() - moved_tiles))
+		cut_short = true
+		if blocked_by.is_empty():
+			blocked_by = "no route"
+	var end_pos: Vector2i = grid.get_position(source)
+	if moved_tiles == 0:
+		execution_log = "[Move Cut Short] %s couldn't move from %s (blocked by %s)." % [source.name, str(start_pos), blocked_by]
+	elif cut_short:
+		execution_log = "[Move Cut Short] %s stopped at %s after %d of %d tiles (blocked by %s)." % [source.name, str(end_pos), moved_tiles, path.size(), blocked_by]
 	else:
-		execution_log = "[Move] %s moved %d tile%s from %s to %s" % [source.name, moved, "" if moved == 1 else "s", str(start_pos), str(grid.get_position(source))]
+		execution_log = "[Move] %s moved %d tile%s from %s to %s" % [source.name, moved_tiles, "" if moved_tiles == 1 else "s", str(start_pos), str(end_pos)]
+
+# Up to this walk's tile count toward `goal`, around current occupants.
+func _repath(from: Vector2i) -> Array[Vector2i]:
+	var blocked: Dictionary = {}
+	for other: Variant in grid.combatant_positions:
+		if other != source and other is Combatant:
+			blocked[grid.combatant_positions[other]] = true
+	var route: Array[Vector2i] = GridPath.find_path(grid, from, {goal: true}, blocked, grid.is_exit_tile(goal))
+	return route.slice(0, path.size())
+
+func _describe_blocker(cell: Vector2i) -> String:
+	var occupant: Combatant = grid.get_combatant_at(cell)
+	if occupant != null:
+		return occupant.name
+	if not grid.is_valid_coord(cell):
+		return "the arena edge"
+	if not grid.is_walkable(cell):
+		return Terrain.display_name(grid.get_terrain(cell))
+	return "an obstacle"

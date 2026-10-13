@@ -20,6 +20,7 @@ var power: int = 20                       # the unit's base strike power (the sk
 var step_index: int = 0
 var pos_before: Vector2i = Vector2i(-1, -1)  # where the unit stands before / after this command (preview ghosts)
 var pos_after: Vector2i = Vector2i(-1, -1)
+var goal: Vector2i = Vector2i(-1, -1)      # MOVE: the whole move's destination (a split move's halves share it)
 var skill_ap: int = 0                     # AP for the skill itself
 var blocks_override: int = 0               # MOVE: 1-2 blocks depending on the path length (0 = the skill's own)
 var est_damage: int = 0                   # ATTACK: expected hit (power x skill x stance x boost); area: total on foes
@@ -73,7 +74,10 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			if target != null:
 				command = ApproachCommand.new(actor, grid, target, tiles, blocks())
 			else:
-				command = WalkCommand.new(actor, grid, path, blocks())
+				var walk := WalkCommand.new(actor, grid, path, blocks())
+				walk.expected_start = pos_before
+				walk.goal = goal
+				command = walk
 		SkillDef.Kind.TARGET:
 			command = TargetCommand.new(actor, target, 2)
 		_:

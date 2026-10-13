@@ -26,14 +26,21 @@ func execute() -> void:
 
 	var start_pos: Vector2i = grid.get_position(source)
 	var moved: int = 0
+	cut_short = false
+	blocked_by = ""
 	for s: int in range(steps):
 		if not source.is_active() or grid.get_distance(grid.get_position(source), grid.get_position(target)) <= source.attack_range:
 			break
 		var dir: Vector2i = _next_step()
 		if dir == Vector2i.ZERO or not grid.move_combatant(source, dir):
+			cut_short = true
+			var next_cell: Vector2i = grid.get_position(source) + dir
+			var occupant: Combatant = grid.get_combatant_at(next_cell) if dir != Vector2i.ZERO else null
+			blocked_by = occupant.name if occupant != null else "no route"
 			break
 		moved += 1
 
+	moved_tiles = moved
 	# Tiles not needed (target already in range, or no route) cost no AP.
 	if planner_controlled and moved < steps:
 		source.ap = mini(source.max_ap, source.ap + (steps - moved))
@@ -41,6 +48,8 @@ func execute() -> void:
 	if moved == 0:
 		var in_range: bool = grid.get_distance(start_pos, grid.get_position(target)) <= source.attack_range
 		execution_log = "[Approach] %s holds at %s (%s)." % [source.name, str(start_pos), "already in range of %s" % target.name if in_range else "no route to %s" % target.name]
+	elif cut_short and grid.get_distance(end_pos, grid.get_position(target)) > source.attack_range:
+		execution_log = "[Move Cut Short] %s closed in on %s but stopped at %s (blocked by %s)." % [source.name, target.name, str(end_pos), blocked_by]
 	else:
 		execution_log = "[Approach] %s closed in on %s: %s to %s" % [source.name, target.name, str(start_pos), str(end_pos)]
 

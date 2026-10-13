@@ -1490,6 +1490,34 @@ static func run_planning_and_ai_test() -> bool:
 	coord_ok = coord_ok and csession.planned_position(cr) == w_start and csession.planned_occupant(w_start) == cr and csession.planned_occupant(cw_dest) == cw
 	csession.dispose()
 	var mechanics_ok: bool = reach_ok and move_first_ok and status_ok and area_ok and coord_ok
+	# split moves: a 4-tile move at 2 tiles/block is two 1-block halves (first lands after block 1);
+	# a half blocked by a unit that stepped in stops short, refunds its tiles and logs CUT SHORT
+	var sgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var walker2 := Combatant.new("Walker2", 60, 8, 1)
+	var cutter := Combatant.new("Cutter", 60, 30, 1)
+	sgrid.place_combatant(walker2, Vector2i(1, 4))
+	sgrid.place_combatant(cutter, Vector2i(6, 7))
+	var walk_side: Array[Combatant] = [walker2]
+	var cut_side: Array[Combatant] = [cutter]
+	var sctx: PlanContext = _hand_ctx(sgrid, walk_side, cut_side)
+	var splan := CombatPlan.new(sctx)
+	var split_added: String = splan.add_step(walker2, PlanStep.go_to(mover, Vector2i(5, 4)))
+	var halves: Array[PlanEntry] = splan.entries_for(walker2)
+	var split_ok: bool = split_added.is_empty() and walker2.move_per_block() == 2 and halves.size() == 2
+	if split_ok:
+		split_ok = halves[0].start_block == 1 and halves[1].start_block == 2 and halves[0].blocks() == 1 and halves[0].pos_after == Vector2i(3, 4) and halves[1].pos_after == Vector2i(5, 4) and halves[0].skill_ap == 2 and halves[1].goal == Vector2i(5, 4)
+	var sresolver := CombatResolver.new()
+	sresolver.grid = sgrid
+	splan.commit(sresolver)
+	sresolver.execute_block(1)
+	split_ok = split_ok and sgrid.get_position(walker2) == Vector2i(3, 4)
+	sgrid.combatant_positions[cutter] = Vector2i(4, 4)   # an enemy steps into the path
+	var ap_before_half: int = walker2.ap
+	sresolver.execute_block(2)
+	var cut_entry: ActionLogEntry = CombatLogBuilder.from_action(sresolver.scheduled_actions[1], 1, 2, walk_side, sgrid)
+	split_ok = split_ok and sgrid.get_position(walker2) == Vector2i(3, 4) and walker2.ap == ap_before_half - 2 + 2 and cut_entry.outcome_tag == "CUT SHORT" and "Cutter" in cut_entry.status_text
+	mechanics_ok = mechanics_ok and split_ok
+
 
 	# 6. Presets: every preset drafts a valid, affordable sequence; each shows its focus
 	var psession := CombatSession.new(SkirmishEncounter.new())
@@ -1652,7 +1680,7 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, AP spent at runtime: %s" % ("PASS" if flow_ok2 else "FAIL"))
 	print("  [Input] Per-target/tile options (foe attacks, self skills, move here, withdraw), previews, status & hover inspect: %s" % ("PASS" if input_ok else "FAIL"))
 	print("  [Rules] 6-block rounds, AP pool + regen, one move per round, centre tie-break, target switching, insurance attacks, follow, damage log, auto-play on confirm: %s" % ("PASS" if rules_ok else "FAIL"))
-	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles: %s" % ("PASS" if mechanics_ok else "FAIL"))
+	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles, split moves & cut-short refunds: %s" % ("PASS" if mechanics_ok else "FAIL"))
 	print("  [Runtime] Overspending goes into AP debt (next round: less AP, 3+ Stagger, 5+ Stun); Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
 	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
 	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, Engage chases: %s" % ("PASS" if ai_ok else "FAIL"))
