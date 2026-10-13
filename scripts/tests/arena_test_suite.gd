@@ -1037,33 +1037,34 @@ static func run_art_and_terrain_test() -> bool:
 
 	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok
 
-
 # ==============================================================================
-# TEST 10: PLANNING & ENEMY AI
+# TEST 10: PLANNING SEQUENCES, SKILL LEVELS, STANCE FLOW & ENEMY AI
 # ==============================================================================
 
-static func _plan_is_valid(actor: Combatant, entries: Array[PlanEntry]) -> bool:
-	var check := CombatPlan.new()
-	for e: PlanEntry in entries:
-		if not check.add(actor, e).is_empty():
-			return false
-	return true
+static func _hand_ctx(grid: CombatGrid, allies: Array[Combatant], enemies: Array[Combatant], cap: int = 3) -> PlanContext:
+	var profiles: Dictionary = {}
+	for c: Combatant in allies + enemies:
+		var p: AiProfile = AiProfile.create(AiProfile.Role.SNIPER if c.attack_range > 1 else AiProfile.Role.AGGRESSOR, 15, 0.25, cap)
+		profiles[c] = p
+	return PlanContext.create(grid, allies, enemies, profiles)
 
-static func _execute_plan(actor: Combatant, entries: Array[PlanEntry], grid: CombatGrid) -> void:
+static func _run_steps(actor: Combatant, ctx: PlanContext, steps: Array[PlanStep]) -> void:
 	var resolver := CombatResolver.new()
-	resolver.grid = grid
-	var cp := CombatPlan.new()
-	cp.set_entries(actor, entries)
-	cp.commit(resolver, grid)
+	resolver.grid = ctx.grid
+	var cp := CombatPlan.new(ctx)
+	cp.set_steps(actor, steps)
+	cp.commit(resolver)
 	resolver.resolve_round()
 
-static func _play_with_auto_plan(zone_id: String) -> Dictionary:
+static func _play_with_preset(zone_id: String, preset_id: String) -> Dictionary:
 	var enc := SkirmishEncounter.new()
 	enc.zone_id = zone_id
 	var session := CombatSession.new(enc)
 	session.start()
 	for round_num: int in range(enc.max_rounds):
-		session.plan_auto_all()
+		session.plan_apply_preset_all(preset_id)
+		if not session.confirm_plan():
+			break
 		_resolve_until_replay(session)
 		if session.combat_over or not session.can_advance_round():
 			break
@@ -1084,63 +1085,166 @@ static func _play_with_auto_plan(zone_id: String) -> Dictionary:
 
 static func run_planning_and_ai_test() -> bool:
 	print("\n=======================================================")
-	print("=== STARTING PLANNING & ENEMY AI TEST               ===")
+	print("=== STARTING PLANNING, STANCE FLOW & ENEMY AI TEST  ===")
 	print("=======================================================")
 
-	# 1. Plan validation: bounds, overlap/replace, AP budget, targets
+	# 1. Skill levels: AP cost = level, shifted only by effects
+	var skills_ok: bool = SkillCatalog.all().size() >= 12
+	for s: SkillDef in SkillCatalog.all():
+		skills_ok = skills_ok and s.ap_cost() == s.level
+	var l2_ok: bool = SkillCatalog.find("power_strike").ap_cost() == 2 and SkillCatalog.find("brace").ap_cost() == 2 and SkillCatalog.find("dash").ap_cost() == 2
+	var modded := Combatant.new("Modded", 10, 10, 1)
+	modded.ap_cost_modifier = 1
+	var mod_ok: bool = SkillCatalog.find("strike").ap_cost(modded) == 2 and SkillCatalog.find("sprint").ap_cost(modded) == 4
+	modded.ap_cost_modifier = -5
+	mod_ok = mod_ok and SkillCatalog.find("heavy_blow").ap_cost(modded) == 1
+	var ap_model_ok: bool = skills_ok and l2_ok and mod_ok
+
+	# 2. Stance flow table
+	var N: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
+	var O: CombatTypes.StanceType = CombatTypes.StanceType.OFFENSIVE
+	var D: CombatTypes.StanceType = CombatTypes.StanceType.DEFENSIVE
+	var T: CombatTypes.StanceType = CombatTypes.StanceType.TACTICAL
+	var M: CombatTypes.StanceType = CombatTypes.StanceType.MOBILE
+	var flow_ok: bool = CombatTypes.can_flow(N, D) and CombatTypes.can_flow(O, M) and CombatTypes.can_flow(M, O) and CombatTypes.can_flow(D, N)
+	flow_ok = flow_ok and not CombatTypes.can_flow(D, O) and not CombatTypes.can_flow(T, M) and not CombatTypes.can_flow(O, D) and not CombatTypes.can_flow(D, T)
+
+	# 3. Sequence compile: lowest free blocks, engage auto-moves, stance and AP validation
 	var session := CombatSession.new(SkirmishEncounter.new())
 	session.start()
 	var warrior: Combatant = session.allies[0]
 	var foe: Combatant = session.enemies[0]
-	var entry_ok: bool = session.is_planning() and session.plan.is_empty()
-	entry_ok = entry_ok and session.plan_add(warrior, PlanEntry.Kind.ATTACK, 1, Vector2i.ZERO, foe).is_empty()
-	entry_ok = entry_ok and not session.plan_add(warrior, PlanEntry.Kind.ATTACK, 10, Vector2i.ZERO, foe).is_empty()  # needs 2 blocks
-	var clash: PlanEntry = PlanEntry.create(PlanEntry.Kind.DEFEND, 2)
-	entry_ok = entry_ok and not session.plan.add(warrior, clash).is_empty()  # overlap without replace
-	entry_ok = entry_ok and session.plan_add(warrior, PlanEntry.Kind.DEFEND, 2).is_empty()  # replace overlap
-	var at_block_1: PlanEntry = session.plan.entry_at(warrior, 1)
-	entry_ok = entry_ok and at_block_1 == null and session.plan.entry_at(warrior, 2) != null
-	session.plan_clear(warrior)
-	var ap_ok: bool = true
-	for b: int in range(1, 5):
-		ap_ok = ap_ok and session.plan_add(warrior, PlanEntry.Kind.SPRINT, b, Vector2i(1, 0)).is_empty()
-	var over_budget: String = session.plan_add(warrior, PlanEntry.Kind.SPRINT, 5, Vector2i(1, 0))
-	ap_ok = ap_ok and session.plan.ap_left(warrior) == 0 and "AP" in over_budget
-	var untargeted: PlanEntry = PlanEntry.create(PlanEntry.Kind.ATTACK, 6)
-	var target_ok: bool = not session.plan.check(warrior, untargeted).is_empty()
-	var plan_valid_ok: bool = entry_ok and ap_ok and target_ok
+	var strike: SkillDef = SkillCatalog.find("strike")
+	var power_strike: SkillDef = SkillCatalog.find("power_strike")
+	var guard: SkillDef = SkillCatalog.find("guard")
+	var reset: SkillDef = SkillCatalog.find("reset_stance")
+	var first: String = session.plan_add_step(warrior, PlanStep.engage(power_strike, foe))
+	var compiled: CombatPlan.SimState = session.plan.compile(warrior)
+	var attack_entry: PlanEntry = compiled.entries[compiled.entries.size() - 1] if not compiled.entries.is_empty() else null
+	var chain_ok: bool = first.is_empty() and attack_entry != null and attack_entry.skill == power_strike and attack_entry.target == foe
+	var blocks_ok: bool = true
+	var expected_block: int = 1
+	var ap_sum: int = 0
+	for e: PlanEntry in compiled.entries:
+		blocks_ok = blocks_ok and e.start_block == expected_block
+		expected_block += e.blocks()
+		ap_sum += e.ap
+	blocks_ok = blocks_ok and compiled.ap_left == CombatPlan.ROUND_AP - ap_sum and compiled.next_block == expected_block
+	var in_range_ok: bool = session.grid.get_distance(compiled.pos, session.grid.get_position(foe)) <= warrior.attack_range
+	var stance_after: bool = compiled.stance == O
+	var over_budget: String = ""
+	for i: int in range(6):
+		over_budget = session.plan_add_step(warrior, PlanStep.engage(power_strike, session.enemies[1 + (i % 3)]))
+		if not over_budget.is_empty():
+			break
+	var budget_ok: bool = "AP" in over_budget or "blocks" in over_budget or "path" in over_budget
+	var seq_ok: bool = chain_ok and blocks_ok and in_range_ok and stance_after and budget_ok
 
-	# 2. The party's plan shows on the timeline and is committed (locked) on resolve
+	# Stance enforcement on the same unit: Guard then Strike is refused; Reset in between is fine
 	session.plan_clear(warrior)
-	session.plan_add(warrior, PlanEntry.Kind.MOVE, 1, Vector2i(0, -1))
+	var guard_ok: bool = session.plan_add_step(warrior, PlanStep.self_skill(guard)).is_empty()
+	var refused: String = session.plan_add_step(warrior, PlanStep.engage(strike, foe))
+	var stance_block_ok: bool = guard_ok and "Reset Stance" in refused
+	var options: Array[PlanOption] = session.plan_options(warrior)
+	var strike_valid: bool = false
+	var reset_valid: bool = false
+	for o: PlanOption in options:
+		if o.step.mode == PlanStep.Mode.ENGAGE and o.valid:
+			strike_valid = true
+		if o.step.mode == PlanStep.Mode.SELF and o.step.skill == reset and o.valid:
+			reset_valid = true
+	stance_block_ok = stance_block_ok and not strike_valid and reset_valid
+	var chain_after_reset: bool = session.plan_add_step(warrior, PlanStep.self_skill(reset)).is_empty() and session.plan_add_step(warrior, PlanStep.engage(strike, foe)).is_empty()
+	stance_block_ok = stance_block_ok and chain_after_reset
+
+	# 4. Editing: reorder into an invalid order is flagged and blocks Confirm; fixing it allows Confirm
+	session.plan_move_step(warrior, 2, 1)  # [Guard, Strike, Reset]: Strike straight after Guard
+	var flagged: CombatPlan.SimState = session.plan.compile(warrior)
+	var edit_ok: bool = flagged.error_index == 1 and not session.plan_is_valid() and not session.confirm_plan()
+	session.plan_move_step(warrior, 1, 2)
+	edit_ok = edit_ok and session.plan_is_valid()
+	session.plan_remove_step(warrior, 0)  # drops Guard: [Reset, Strike] stays valid
+	edit_ok = edit_ok and session.plan_is_valid() and session.plan.steps_of(warrior).size() == 2
+
+	# 5. Confirm locks the plan, schedules party + AI enemies, and resolution runs
+	session.plan_apply_preset(session.allies[1], "balanced")
 	var preview: CombatResolver.ScheduledAction = session.find_recorded_action(warrior, 1)
-	var preview_ok: bool = preview != null and preview.command.command_name == "Move"
-	session.step_next()
-	var locked_ok: bool = session.phase == CombatSession.Phase.RESOLVING and not session.is_planning()
-	locked_ok = locked_ok and not session.plan_add(warrior, PlanEntry.Kind.DEFEND, 5).is_empty()
+	var preview_ok: bool = preview != null
+	var confirmed: bool = session.confirm_plan()
+	var locked_ok: bool = confirmed and not session.is_planning() and not session.plan_add_step(warrior, PlanStep.self_skill(guard)).is_empty()
 	var party_scheduled: bool = false
 	var enemy_scheduled: bool = false
 	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
-		if a.combatant == warrior and a.command.command_name == "Move":
+		if a.combatant == warrior:
 			party_scheduled = true
 		if not session.is_ally(a.combatant):
 			enemy_scheduled = true
-	var flow_ok: bool = preview_ok and locked_ok and party_scheduled and enemy_scheduled
+	_resolve_until_replay(session)
+	var flow_ok2: bool = preview_ok and locked_ok and party_scheduled and enemy_scheduled and session.phase == CombatSession.Phase.REPLAY
 	session.dispose()
 
-	# 3. AI patterns on hand-built grids
-	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
-	var hero := Combatant.new("Hero", 100, 10, 1)
-	var brute := Combatant.new("Brute", 60, 10, 1)
-	grid.place_combatant(hero, Vector2i(1, 2))
-	grid.place_combatant(brute, Vector2i(5, 4))
-	var hero_list: Array[Combatant] = [hero]
-	var brute_list: Array[Combatant] = [brute]
-	var brute_plan: Array[PlanEntry] = TacticalAI.plan(brute, hero_list, brute_list, grid, AiProfile.create(AiProfile.Role.AGGRESSOR, 15))
-	var closes_in: bool = not brute_plan.is_empty() and PlanEntry.needs_direction(brute_plan[0].kind)
-	closes_in = closes_in and brute_plan[brute_plan.size() - 1].kind == PlanEntry.Kind.ATTACK and _plan_is_valid(brute, brute_plan)
+	# 6. Presets: every preset drafts a valid sequence; each shows its focus
+	var psession := CombatSession.new(SkirmishEncounter.new())
+	psession.start()
+	var hero: Combatant = psession.allies[0]
+	var weakest: Combatant = psession.enemies[4]
+	weakest.hp = 5
+	var presets_ok: bool = true
+	for preset_id: String in PlanPresets.IDS:
+		psession.plan_apply_preset(hero, preset_id)
+		presets_ok = presets_ok and psession.plan.is_valid(hero)
+	psession.plan_apply_preset(hero, "aggressive")
+	var aggressive_ok: bool = not psession.plan.steps_of(hero).is_empty()
+	for s: PlanStep in psession.plan.steps_of(hero):
+		aggressive_ok = aggressive_ok and s.mode == PlanStep.Mode.ENGAGE
+	psession.plan_apply_preset(hero, "focus_weakest")
+	var focus_steps: Array[PlanStep] = psession.plan.steps_of(hero)
+	var weakest_ok: bool = not focus_steps.is_empty() and focus_steps[0].mode == PlanStep.Mode.ENGAGE and focus_steps[0].target == weakest
+	psession.plan_apply_preset(hero, "economy")
+	var economy_ok: bool = not psession.plan.steps_of(hero).is_empty()
+	for s: PlanStep in psession.plan.steps_of(hero):
+		economy_ok = economy_ok and (s.skill == null or s.skill.level == 1)
+	psession.plan_apply_preset(hero, "defensive")
+	var defensive_ok: bool = not psession.plan.steps_of(hero).is_empty() and psession.plan.steps_of(hero)[0].mode == PlanStep.Mode.SELF and psession.plan.steps_of(hero)[0].skill.kind == SkillDef.Kind.DEFEND
+	psession.plan_apply_preset(hero, "withdraw")
+	var withdraw_steps: Array[PlanStep] = psession.plan.steps_of(hero)
+	var withdraw_ok: bool = not withdraw_steps.is_empty() and withdraw_steps[0].mode == PlanStep.Mode.WITHDRAW
+	var preset_ok: bool = presets_ok and aggressive_ok and weakest_ok and economy_ok and defensive_ok and withdraw_ok
+	psession.dispose()
 
-	# Walls: the plan still reaches the target (path-finding), verified by executing it
+	# 7. AI patterns on hand-built grids, verified by executing the drafted sequences
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var hunter := Combatant.new("Hunter", 60, 10, 1)
+	var quarry := Combatant.new("Quarry", 100, 10, 1)
+	grid.place_combatant(hunter, Vector2i(5, 4))
+	grid.place_combatant(quarry, Vector2i(1, 2))
+	var hunter_side: Array[Combatant] = [hunter]
+	var quarry_side: Array[Combatant] = [quarry]
+	var hunt_ctx: PlanContext = _hand_ctx(grid, quarry_side, hunter_side)
+	var hunt_steps: Array[PlanStep] = TacticalAI.build_steps(hunter, hunt_ctx, hunt_ctx.profile_of(hunter))
+	var hunt_plan := CombatPlan.new(hunt_ctx)
+	hunt_plan.set_steps(hunter, hunt_steps)
+	var closes_in: bool = not hunt_steps.is_empty() and hunt_steps[0].mode == PlanStep.Mode.ENGAGE and hunt_plan.is_valid(hunter)
+	_run_steps(hunter, hunt_ctx, hunt_steps)
+	closes_in = closes_in and quarry.hp < 100
+
+	# Engage chases: the approach re-paths at execution when the target has moved
+	var chase_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var chaser2 := Combatant.new("Chaser2", 60, 10, 1)
+	var dodger := Combatant.new("Dodger", 100, 10, 1)
+	chase_grid.place_combatant(chaser2, Vector2i(1, 4))
+	chase_grid.place_combatant(dodger, Vector2i(5, 4))
+	var chaser_side2: Array[Combatant] = [chaser2]
+	var dodger_side: Array[Combatant] = [dodger]
+	var chase_ctx: PlanContext = _hand_ctx(chase_grid, dodger_side, chaser_side2)
+	var chase_plan := CombatPlan.new(chase_ctx)
+	var chase_added: String = chase_plan.add_step(chaser2, PlanStep.engage(SkillCatalog.find("strike"), dodger))
+	chase_grid.combatant_positions[dodger] = Vector2i(3, 2)  # the target moves after planning
+	var chase_resolver := CombatResolver.new()
+	chase_resolver.grid = chase_grid
+	chase_plan.commit(chase_resolver)
+	chase_resolver.resolve_round()
+	var chase_ok: bool = chase_added.is_empty() and dodger.hp < 100
 	var wall_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	for y: int in range(0, 6):
 		wall_grid.set_terrain(Vector2i(4, y), Terrain.Type.WALL)
@@ -1148,24 +1252,27 @@ static func run_planning_and_ai_test() -> bool:
 	var prey := Combatant.new("Prey", 60, 10, 1)
 	wall_grid.place_combatant(runner, Vector2i(2, 4))
 	wall_grid.place_combatant(prey, Vector2i(6, 4))
-	var prey_list: Array[Combatant] = [prey]
-	var runner_list: Array[Combatant] = [runner]
-	var wall_plan: Array[PlanEntry] = TacticalAI.plan(runner, prey_list, runner_list, wall_grid, AiProfile.create(AiProfile.Role.AGGRESSOR, 15))
-	_execute_plan(runner, wall_plan, wall_grid)
-	var walls_ok: bool = prey.hp < 60 and _plan_is_valid(runner, wall_plan)
+	var runner_side: Array[Combatant] = [runner]
+	var prey_side: Array[Combatant] = [prey]
+	var wall_ctx: PlanContext = _hand_ctx(wall_grid, prey_side, runner_side)
+	var wall_steps: Array[PlanStep] = TacticalAI.build_steps(runner, wall_ctx, wall_ctx.profile_of(runner))
+	_run_steps(runner, wall_ctx, wall_steps)
+	var walls_ok: bool = prey.hp < 60
 
-	# Sniper keeps its distance; Support opens with Focus; a wounded unit flees and withdraws
 	var snipe_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	var sniper := Combatant.new("Sniper", 40, 10, 3)
 	var bruiser := Combatant.new("Bruiser", 60, 10, 1)
 	snipe_grid.place_combatant(sniper, Vector2i(4, 4))
 	snipe_grid.place_combatant(bruiser, Vector2i(3, 4))
-	var bruiser_list: Array[Combatant] = [bruiser]
-	var sniper_list: Array[Combatant] = [sniper]
-	var snipe_plan: Array[PlanEntry] = TacticalAI.plan(sniper, bruiser_list, sniper_list, snipe_grid, AiProfile.create(AiProfile.Role.SNIPER, 14))
-	var sniper_ok: bool = not snipe_plan.is_empty() and snipe_plan[0].kind == PlanEntry.Kind.MOVE and snipe_plan[0].direction == Vector2i(1, 0)
-	var support_plan: Array[PlanEntry] = TacticalAI.plan(sniper, bruiser_list, sniper_list, snipe_grid, AiProfile.create(AiProfile.Role.SUPPORT, 10))
-	var support_ok: bool = not support_plan.is_empty() and support_plan[0].kind == PlanEntry.Kind.FOCUS
+	var sniper_side: Array[Combatant] = [sniper]
+	var bruiser_side: Array[Combatant] = [bruiser]
+	var snipe_ctx: PlanContext = _hand_ctx(snipe_grid, bruiser_side, sniper_side)
+	var snipe_steps: Array[PlanStep] = TacticalAI.build_steps(sniper, snipe_ctx, snipe_ctx.profile_of(sniper))
+	var sniper_ok: bool = not snipe_steps.is_empty() and snipe_steps[0].mode == PlanStep.Mode.MOVE and snipe_steps[0].direction == Vector2i(1, 0)
+	var support_profile: AiProfile = snipe_ctx.profile_of(sniper).duplicate_profile()
+	support_profile.role = AiProfile.Role.SUPPORT
+	var support_steps: Array[PlanStep] = TacticalAI.build_steps(sniper, snipe_ctx, support_profile)
+	var support_ok: bool = not support_steps.is_empty() and support_steps[0].skill.kind == SkillDef.Kind.FOCUS
 
 	var weakling := Combatant.new("Weakling", 100, 10, 1)
 	weakling.hp = 10
@@ -1173,36 +1280,32 @@ static func run_planning_and_ai_test() -> bool:
 	var flee_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	flee_grid.place_combatant(weakling, Vector2i(5, 4))
 	flee_grid.place_combatant(chaser, Vector2i(2, 4))
-	var chaser_list: Array[Combatant] = [chaser]
-	var weak_list: Array[Combatant] = [weakling]
-	var flee_plan: Array[PlanEntry] = TacticalAI.plan(weakling, chaser_list, weak_list, flee_grid, AiProfile.create(AiProfile.Role.AGGRESSOR, 15))
-	_execute_plan(weakling, flee_plan, flee_grid)
-	var flee_ok: bool = not flee_plan.is_empty() and weakling.is_withdrawn
-	var ai_ok: bool = closes_in and walls_ok and sniper_ok and support_ok and flee_ok
+	var weak_side: Array[Combatant] = [weakling]
+	var chaser_side: Array[Combatant] = [chaser]
+	var flee_ctx: PlanContext = _hand_ctx(flee_grid, chaser_side, weak_side)
+	var flee_steps: Array[PlanStep] = TacticalAI.build_steps(weakling, flee_ctx, flee_ctx.profile_of(weakling))
+	_run_steps(weakling, flee_ctx, flee_steps)
+	var flee_ok: bool = not flee_steps.is_empty() and flee_steps[0].mode == PlanStep.Mode.WITHDRAW and weakling.is_withdrawn
+	var ai_ok: bool = closes_in and walls_ok and sniper_ok and support_ok and flee_ok and chase_ok
 
-	# 4. AI vs AI: full skirmish on every zone is deterministic and hurts both sides
+	# 8. AI vs AI preset skirmishes: every zone is deterministic and hurts both sides
 	var zones_ok: bool = true
 	var both_hurt: bool = true
 	for zone_id: String in CombatZones.zone_ids():
-		var first: Dictionary = _play_with_auto_plan(zone_id)
-		var second: Dictionary = _play_with_auto_plan(zone_id)
-		if first.get("hp", []) != second.get("hp", []) or first.get("log", 0) != second.get("log", -1):
+		var run_a: Dictionary = _play_with_preset(zone_id, "balanced")
+		var run_b: Dictionary = _play_with_preset(zone_id, "balanced")
+		if run_a.get("hp", []) != run_b.get("hp", []) or run_a.get("log", 0) != run_b.get("log", -1):
 			zones_ok = false
 			print("    non-deterministic result on zone: %s" % zone_id)
-		var hp_list: Array = []
-		var hp_raw: Variant = first.get("hp", [])
-		if hp_raw is Array:
-			hp_list = hp_raw
-		var party_hurt: bool = bool(first.get("party_hurt", false))
-		var foes_hurt: bool = bool(first.get("foes_hurt", false))
-		if not (party_hurt and foes_hurt):
+		if not (bool(run_a.get("party_hurt", false)) and bool(run_a.get("foes_hurt", false))):
 			both_hurt = false
-			print("    one side untouched on zone: %s %s" % [zone_id, str(hp_list)])
+			print("    one side untouched on zone: %s %s" % [zone_id, str(run_a.get("hp", []))])
 
-	# 5. Resetting a planned round rewinds units to the start of that round
+	# 9. Resetting a planned round rewinds units to the start of that round
 	var rs := CombatSession.new(SkirmishEncounter.new())
 	rs.start()
-	rs.plan_auto_all()
+	rs.plan_apply_preset_all("balanced")
+	rs.confirm_plan()
 	_resolve_until_replay(rs)
 	var reset_ok: bool = false
 	if rs.can_advance_round():
@@ -1212,7 +1315,8 @@ static func run_planning_and_ai_test() -> bool:
 		for c: Combatant in rs.allies + rs.enemies:
 			start_hp.append(c.hp)
 			start_pos.append(rs.grid.get_position(c))
-		rs.plan_auto_all()
+		rs.plan_apply_preset_all("balanced")
+		rs.confirm_plan()
 		_resolve_until_replay(rs)
 		rs.reset_round()
 		var end_hp: Array[int] = []
@@ -1224,14 +1328,18 @@ static func run_planning_and_ai_test() -> bool:
 	rs.dispose()
 
 	print("\n=======================================================")
-	print("=== PLANNING & ENEMY AI ASSERTIONS                  ===")
+	print("=== PLANNING, STANCE FLOW & ENEMY AI ASSERTIONS     ===")
 	print("=======================================================")
-	print("  [Plan] Bounds, overlap/replace, AP budget & target validation: %s" % ("PASS" if plan_valid_ok else "FAIL"))
-	print("  [Plan] Party plan previews on the timeline, locks and schedules with the AI plans on resolve: %s" % ("PASS" if flow_ok else "FAIL"))
-	print("  [AI] Aggressor closes in then attacks; path-finds around walls: %s" % ("PASS" if (closes_in and walls_ok) else "FAIL"))
-	print("  [AI] Sniper backs away, Support opens with Focus, wounded unit flees and withdraws: %s" % ("PASS" if (sniper_ok and support_ok and flee_ok) else "FAIL"))
-	print("  [AI] Skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
-	print("  [AI] Both sides take damage in an auto-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
+	print("  [Skills] AP cost = skill level (L2 attack/defend/move = 2 AP), effects shift it: %s" % ("PASS" if ap_model_ok else "FAIL"))
+	print("  [Stance] Flow table: Neutral opens all, Offensive<->Mobile chain, others need Reset: %s" % ("PASS" if flow_ok else "FAIL"))
+	print("  [Plan] Sequence compiles to lowest free blocks; Engage auto-inserts moves; AP/blocks validated: %s" % ("PASS" if seq_ok else "FAIL"))
+	print("  [Plan] Invalid stance steps are refused with a reason; valid options exclude them: %s" % ("PASS" if stance_block_ok else "FAIL"))
+	print("  [Plan] Reorder/remove edits are flagged when invalid and block Confirm: %s" % ("PASS" if edit_ok else "FAIL"))
+	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, round resolves: %s" % ("PASS" if flow_ok2 else "FAIL"))
+	print("  [AI] Presets draft valid sequences with their focus (aggressive, weakest, economy, guard, withdraw): %s" % ("PASS" if preset_ok else "FAIL"))
+	print("  [AI] Aggressor engages, path-finds around walls, Sniper backs away, Support focuses, wounded flee, Engage chases a moved target: %s" % ("PASS" if ai_ok else "FAIL"))
+	print("  [AI] Preset skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
+	print("  [AI] Both sides take damage in a preset-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
 	print("  [Plan] Reset round rewinds to the round start and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
 
-	return plan_valid_ok and flow_ok and ai_ok and zones_ok and both_hurt and reset_ok
+	return ap_model_ok and flow_ok and seq_ok and stance_block_ok and edit_ok and flow_ok2 and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok

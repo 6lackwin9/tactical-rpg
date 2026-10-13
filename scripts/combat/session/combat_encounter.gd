@@ -79,42 +79,25 @@ func get_sprite_texture(c: Combatant) -> Texture2D:
 var player_planning: bool = false   # true: allies are planned by the player in the PLANNING phase
 var ai_profiles: Dictionary = {}    # Combatant -> AiProfile
 
+func plan_context() -> PlanContext:
+	return PlanContext.create(grid, allies, enemies, ai_profiles)
+
 func profile_of(c: Combatant) -> AiProfile:
-	var raw: Variant = ai_profiles.get(c, null)
-	if raw is AiProfile:
-		var stored: AiProfile = raw
-		return stored
-	var is_ranged: bool = c.attack_range > 1
-	return AiProfile.create(AiProfile.Role.SNIPER if is_ranged else AiProfile.Role.AGGRESSOR, c.get_effective_power(is_ranged))
+	return plan_context().profile_of(c)
 
-func foes_of(c: Combatant) -> Array[Combatant]:
-	if allies.has(c):
-		return enemies
-	if enemies.has(c):
-		return allies
-	var none: Array[Combatant] = []
-	return none
+# AI-drafted sequence for c from the current state (preset_id: see PlanPresets).
+func draft_steps(c: Combatant, preset_id: String = "balanced") -> Array[PlanStep]:
+	var ctx: PlanContext = plan_context()
+	return TacticalAI.build_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)))
 
-func friends_of(c: Combatant) -> Array[Combatant]:
-	if allies.has(c):
-		return allies
-	if enemies.has(c):
-		return enemies
-	var none: Array[Combatant] = []
-	return none
-
-# AI-chosen plan for `c` from the current state (enemies each round; allies on Auto-plan).
-func plan_for(c: Combatant) -> Array[PlanEntry]:
-	return TacticalAI.plan(c, foes_of(c), friends_of(c), grid, profile_of(c))
-
-# Plans every enemy on the field with the AI and schedules it on `resolver`.
+# Plans every enemy on the field with the AI and schedules it on esolver.
 func schedule_enemy_ai(resolver: CombatResolver) -> void:
-	var ai_plan := CombatPlan.new()
+	var ctx: PlanContext = plan_context()
+	var enemy_plan := CombatPlan.new(ctx)
 	for e: Combatant in enemies:
 		if e.is_active() and grid.has_combatant(e):
-			ai_plan.set_entries(e, plan_for(e))
-	ai_plan.commit(resolver, grid)
-
+			enemy_plan.set_steps(e, TacticalAI.build_steps(e, ctx, ctx.profile_of(e)))
+	enemy_plan.commit(resolver)
 # Convenience for subclasses: an EVENT log entry for narration / triggers.
 static func make_event_entry(round_num: int, block_num: int, actor: String, actor_is_ally: bool, skill: String, subtype: String, outcome: String, detail: String, status: String) -> ActionLogEntry:
 	var entry := ActionLogEntry.new(round_num, block_num, "EVENT", actor, "", detail, 0, outcome)

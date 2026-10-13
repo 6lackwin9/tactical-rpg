@@ -78,3 +78,13 @@ static func stance_to_string(stance: StanceType) -> String:
 		StanceType.MOBILE: return "Mobile"
 		StanceType.STAGGERED: return "Staggered"
 		_: return "Unknown"
+
+# Stance flow for planned sequences: from Neutral anything is open; otherwise a
+# unit stays in its stance pool, except that Offensive and Mobile flow freely
+# into each other (advance and strike, strike and reposition). Anything else
+# needs a Reset Stance (back to Neutral) first.
+static func can_flow(from_stance: StanceType, to_stance: StanceType) -> bool:
+	if from_stance == StanceType.NEUTRAL or to_stance == StanceType.NEUTRAL or from_stance == to_stance:
+		return true
+	var striking: Array[StanceType] = [StanceType.OFFENSIVE, StanceType.MOBILE]
+	return striking.has(from_stance) and striking.has(to_stance)

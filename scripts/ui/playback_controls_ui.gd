@@ -14,6 +14,7 @@ signal reset_game_pressed()
 signal popout_pressed()
 signal next_round_pressed()
 signal gear_pressed()
+signal plan_pressed()
 
 var btn_step_prev: Button
 var btn_play: Button
@@ -26,6 +27,7 @@ var btn_gear: Button
 var phase_badge_lbl: Label
 var status_label: Label
 var btn_next_round: Button
+var btn_plan: Button
 
 func _init() -> void:
 	name = "PlaybackControlsUI"
@@ -110,6 +112,16 @@ func _build_ui() -> void:
 	status_label.add_theme_color_override("font_color", Color(0.7, 0.85, 0.95))
 	add_child(status_label)
 
+	# Plan Round button (planning phase only)
+	btn_plan = Button.new()
+	btn_plan.text = "📝 PLAN ROUND [P]"
+	btn_plan.tooltip_text = "Open the Plan Round screen: build each hero's command sequence, then confirm"
+	btn_plan.custom_minimum_size = Vector2(0, 24)
+	btn_plan.add_theme_font_size_override("font_size", 10)
+	btn_plan.visible = false
+	btn_plan.pressed.connect(func() -> void: plan_pressed.emit())
+	add_child(btn_plan)
+
 	# Row 4: Round Advance Action Button
 	btn_next_round = Button.new()
 	btn_next_round.text = "⚔ ADVANCE TO ROUND 2"
@@ -153,3 +165,7 @@ func set_next_round_state(p_visible: bool, btn_text: String = "", tooltip_txt: S
 			btn_next_round.text = btn_text
 		if not tooltip_txt.is_empty():
 			btn_next_round.tooltip_text = tooltip_txt
+
+func set_plan_state(is_planning: bool) -> void:
+	if btn_plan != null:
+		btn_plan.visible = is_planning

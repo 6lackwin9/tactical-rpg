@@ -1,0 +1,51 @@
+class_name PlanContext
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - Plan Context (who is on which side, and how each unit plans)
+# The read-only world a CombatPlan / TacticalAI works against: the grid, both
+# sides and each unit's AiProfile (strike power, unlocked skill level, roles).
+# ==============================================================================
+
+var grid: CombatGrid = null
+var allies: Array[Combatant] = []
+var enemies: Array[Combatant] = []
+var profiles: Dictionary = {}   # Combatant -> AiProfile
+
+static func create(p_grid: CombatGrid, p_allies: Array[Combatant], p_enemies: Array[Combatant], p_profiles: Dictionary = {}) -> PlanContext:
+	var ctx := PlanContext.new()
+	ctx.grid = p_grid
+	ctx.allies = p_allies
+	ctx.enemies = p_enemies
+	ctx.profiles = p_profiles
+	return ctx
+
+func profile_of(c: Combatant) -> AiProfile:
+	var raw: Variant = profiles.get(c, null)
+	if raw is AiProfile:
+		var stored: AiProfile = raw
+		return stored
+	var is_ranged: bool = c.attack_range > 1
+	return AiProfile.create(AiProfile.Role.SNIPER if is_ranged else AiProfile.Role.AGGRESSOR, c.get_effective_power(is_ranged))
+
+func power_of(c: Combatant) -> int:
+	return profile_of(c).power
+
+func skill_cap_of(c: Combatant) -> int:
+	return profile_of(c).skill_cap
+
+func foes_of(c: Combatant) -> Array[Combatant]:
+	if allies.has(c):
+		return enemies
+	if enemies.has(c):
+		return allies
+	var none: Array[Combatant] = []
+	return none
+
+func friends_of(c: Combatant) -> Array[Combatant]:
+	if allies.has(c):
+		return allies
+	if enemies.has(c):
+		return enemies
+	var none: Array[Combatant] = []
+	return none

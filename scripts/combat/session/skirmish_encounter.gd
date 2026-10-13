@@ -46,8 +46,8 @@ func build() -> void:
 		skirmisher: "skirmisher", archer: "archer", shaman: "shaman", berserker: "berserker",
 	}
 	ai_profiles = {
-		warrior: AiProfile.create(AiProfile.Role.AGGRESSOR, 25, 0.0),
-		ranger: AiProfile.create(AiProfile.Role.SNIPER, 22, 0.0),
+		warrior: AiProfile.create(AiProfile.Role.AGGRESSOR, 25, 0.0, 3),
+		ranger: AiProfile.create(AiProfile.Role.SNIPER, 22, 0.0, 3),
 		brawler: AiProfile.create(AiProfile.Role.AGGRESSOR, 18),
 		skirmisher: AiProfile.create(AiProfile.Role.SKIRMISHER, 16),
 		archer: AiProfile.create(AiProfile.Role.SNIPER, 16),

@@ -11,11 +11,6 @@ signal round_nav_requested(delta: int)
 signal block_selected(block: int)
 signal combatant_selected(c: Combatant)
 signal hero_view_requested()
-signal slot_clicked(block: int)             # planning: place the armed command at this block
-signal clip_remove_requested(block: int)    # planning: remove the command starting at this block
-
-var planning: bool = false
-var armed_text: String = ""   # label of the armed palette command, "" = none
 
 const UNIT_BLOCK_W: int = 80
 const BLOCK_GAP: int = 4
@@ -183,12 +178,8 @@ func update_view(
 	active_playhead: int,
 	is_enemy_masked: bool,
 	can_go_prev: bool,
-	can_go_next: bool,
-	p_planning: bool = false,
-	p_armed_text: String = ""
+	can_go_next: bool
 ) -> void:
-	planning = p_planning
-	armed_text = p_armed_text
 	update_round_arrows(can_go_prev, can_go_next)
 
 	# Update Ruler highlights
@@ -246,7 +237,7 @@ func update_view(
 			track_clips_hbox.add_child(clip)
 			b += cost
 		else:
-			var idle_slot := _create_idle_clip_widget(b == active_playhead, UNIT_BLOCK_W, b)
+			var idle_slot := _create_idle_clip_widget(b == active_playhead)
 			track_clips_hbox.add_child(idle_slot)
 			b += 1
 
@@ -289,7 +280,11 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		clip_style.border_color = Color(0.2, 0.8, 0.95, 1.0)
 		icon_str = "➜"
 		var mv: MoveCommand = act.command as MoveCommand
-		subtitle = "%s %s" % [PlanEntry.dir_arrow(mv.direction), "2 tiles" if mv.steps > 1 else "1 tile"] if mv != null else "Grid Step"
+		var chase: ApproachCommand = act.command as ApproachCommand
+		if chase != null and chase.target != null:
+			subtitle = "→ %s (%d)" % [chase.target.name, mv.steps]
+		else:
+			subtitle = "%s %s" % [PlanEntry.dir_arrow(mv.direction), "2 tiles" if mv.steps > 1 else "1 tile"] if mv != null else "Grid Step"
 	elif act.command is TargetCommand:
 		clip_style.bg_color = Color(0.08, 0.38, 0.24, 0.95)
 		clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
@@ -343,36 +338,18 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 	vbox.add_child(sub_lbl)
 
 	var cur_c: Combatant = act.combatant
-	var start_b: int = act.start_block
-	if planning:
-		clip.tooltip_text = "Left-click: replace with the armed command • Right-click: remove"
 	clip.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event == null or not mouse_event.pressed:
-			return
-		if planning and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
-			clip_remove_requested.emit(start_b)
-		elif planning and mouse_event.button_index == MOUSE_BUTTON_LEFT and not armed_text.is_empty():
-			slot_clicked.emit(start_b)
-		elif mouse_event.button_index == MOUSE_BUTTON_LEFT:
+		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			combatant_selected.emit(cur_c)
 	)
 
 	return clip
 
-func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W, block: int = 0) -> PanelContainer:
+func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W) -> PanelContainer:
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(width, 36)
 	slot.clip_contents = true
-	var armed: bool = planning and not armed_text.is_empty()
-	if planning:
-		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if armed else Control.CURSOR_ARROW
-		slot.tooltip_text = "Place %s here" % armed_text if armed else "Pick a command from the palette, then click a block"
-		slot.gui_input.connect(func(event: InputEvent) -> void:
-			var mouse_event := event as InputEventMouseButton
-			if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
-				slot_clicked.emit(block)
-		)
 
 	var slot_style := StyleBoxFlat.new()
 	slot_style.set_corner_radius_all(3)
@@ -387,7 +364,7 @@ func _create_idle_clip_widget(is_playhead: bool, width: int = UNIT_BLOCK_W, bloc
 	slot.add_theme_stylebox_override("panel", slot_style)
 
 	var lbl := Label.new()
-	lbl.text = "＋ %s" % armed_text if armed else ("· Open" if planning else "· Idle")
+	lbl.text = "· Idle"
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 8)

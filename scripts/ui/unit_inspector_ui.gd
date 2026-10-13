@@ -4,13 +4,10 @@ extends PanelContainer
 # ==============================================================================
 # Tactical RPG - Unit Inspector & Action Setup Dock
 # Left-side tactical inspector displaying unit portrait, vitals, stats,
-# player action palette, and hostile threat intent decks.
+# and hostile AI threat intel.
 # ==============================================================================
 
 signal gear_modal_requested(combatant: Combatant)
-signal command_armed(kind: int, dir: Vector2i)   # palette pick (PlanEntry.Kind, direction or ZERO)
-signal auto_plan_requested()
-signal clear_plan_requested()
 
 var inspector_hdr: Label
 var btn_gear_modal: Button
@@ -31,12 +28,6 @@ var inspector_gear_lbl: Label
 var ally_actions_container: VBoxContainer
 var enemy_actions_container: VBoxContainer
 var left_hint: Label
-var palette_title_lbl: Label
-var palette_ap_lbl: Label
-var palette_enabled: bool = false
-var palette_cards: Dictionary = {}          # PlanEntry.Kind -> PanelContainer
-var direction_buttons: Array[Dictionary] = []  # {kind, dir, button}
-var palette_buttons: Array[Button] = []
 
 var current_inspected_combatant: Combatant = null
 
@@ -263,54 +254,9 @@ func _build_ui() -> void:
 	inspector_gear_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
 	right_block.add_child(inspector_gear_lbl)
 
-	# Ally command palette (planning): pick a command, then click a timeline block
+	# Allies: planning happens in the Plan Round screen; this container stays for layout symmetry
 	ally_actions_container = VBoxContainer.new()
-	ally_actions_container.add_theme_constant_override("separation", 3)
 	left_vbox.add_child(ally_actions_container)
-
-	var pal_hdr_row := HBoxContainer.new()
-	ally_actions_container.add_child(pal_hdr_row)
-	palette_title_lbl = Label.new()
-	palette_title_lbl.text = "COMMAND PALETTE"
-	palette_title_lbl.add_theme_font_size_override("font_size", 10)
-	palette_title_lbl.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-	pal_hdr_row.add_child(palette_title_lbl)
-	pal_hdr_row.add_spacer(false)
-	palette_ap_lbl = Label.new()
-	palette_ap_lbl.add_theme_font_size_override("font_size", 10)
-	palette_ap_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
-	palette_ap_lbl.tooltip_text = "Action points left this round. Each command costs AP; Hold and Neutral are free."
-	pal_hdr_row.add_child(palette_ap_lbl)
-
-	var palette_grid := GridContainer.new()
-	palette_grid.columns = 2
-	palette_grid.add_theme_constant_override("h_separation", 3)
-	palette_grid.add_theme_constant_override("v_separation", 3)
-	ally_actions_container.add_child(palette_grid)
-	for kind: PlanEntry.Kind in [PlanEntry.Kind.ATTACK, PlanEntry.Kind.DEFEND, PlanEntry.Kind.FOCUS, PlanEntry.Kind.HOLD, PlanEntry.Kind.NEUTRAL]:
-		palette_grid.add_child(_create_palette_card(kind, Vector2i.ZERO))
-
-	for kind: PlanEntry.Kind in [PlanEntry.Kind.MOVE, PlanEntry.Kind.SPRINT]:
-		ally_actions_container.add_child(_create_direction_card(kind))
-
-	var plan_row := HBoxContainer.new()
-	plan_row.add_theme_constant_override("separation", 4)
-	ally_actions_container.add_child(plan_row)
-	var auto_btn := Button.new()
-	auto_btn.text = "🤖 Auto-plan"
-	auto_btn.tooltip_text = "Let the AI draft this hero's round (you can edit it afterwards)"
-	auto_btn.add_theme_font_size_override("font_size", 9)
-	auto_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	auto_btn.pressed.connect(func() -> void: auto_plan_requested.emit())
-	plan_row.add_child(auto_btn)
-	var clear_btn := Button.new()
-	clear_btn.text = "✖ Clear"
-	clear_btn.tooltip_text = "Remove every planned command for this hero"
-	clear_btn.add_theme_font_size_override("font_size", 9)
-	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clear_btn.pressed.connect(func() -> void: clear_plan_requested.emit())
-	plan_row.add_child(clear_btn)
-	palette_buttons = [auto_btn, clear_btn]
 
 	# Enemy Possible Actions Deck (Secret Intent Pool)
 	enemy_actions_container = VBoxContainer.new()
@@ -325,142 +271,11 @@ func _build_ui() -> void:
 	enemy_actions_container.add_child(enemy_deck_hdr)
 
 	left_hint = Label.new()
-	left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
+	left_hint.text = "💡 Plan the round with the PLAN ROUND button (P)."
 	left_hint.add_theme_font_size_override("font_size", 8)
 	left_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	left_vbox.add_child(left_hint)
 
-const PALETTE: Dictionary = {
-	PlanEntry.Kind.ATTACK: {"icon": "⚔", "desc": "Strike the selected enemy", "color": Color(0.9, 0.3, 0.3)},
-	PlanEntry.Kind.DEFEND: {"icon": "🛡", "desc": "Guard: -50% damage taken", "color": Color(0.3, 0.6, 0.95)},
-	PlanEntry.Kind.FOCUS: {"icon": "✦", "desc": "+50% ATK for 2 rounds", "color": Color(0.7, 0.4, 0.95)},
-	PlanEntry.Kind.MOVE: {"icon": "➜", "desc": "Step 1 tile", "color": Color(0.2, 0.8, 0.9)},
-	PlanEntry.Kind.SPRINT: {"icon": "⇒", "desc": "Dash 2 tiles in a line", "color": Color(0.3, 0.85, 0.5)},
-	PlanEntry.Kind.HOLD: {"icon": "⏱", "desc": "Keep the current stance", "color": Color(0.5, 0.7, 0.9)},
-	PlanEntry.Kind.NEUTRAL: {"icon": "🔄", "desc": "Drop to Neutral stance", "color": Color(0.7, 0.7, 0.8)},
-}
-const DIR_BUTTONS: Array[Dictionary] = [
-	{"text": "←", "dir": Vector2i(-1, 0)}, {"text": "↑", "dir": Vector2i(0, -1)},
-	{"text": "↓", "dir": Vector2i(0, 1)}, {"text": "→", "dir": Vector2i(1, 0)},
-]
-
-func _palette_style(border: Color, fill: Color, width: int = 1) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = border
-	style.set_border_width_all(width)
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 6
-	style.content_margin_right = 6
-	style.content_margin_top = 2
-	style.content_margin_bottom = 2
-	return style
-
-func _kind_text(kind: PlanEntry.Kind) -> String:
-	var info: Dictionary = PALETTE[kind]
-	return "%s %s" % [str(info["icon"]), PlanEntry.kind_name(kind)]
-
-func _kind_tooltip(kind: PlanEntry.Kind) -> String:
-	var info: Dictionary = PALETTE[kind]
-	return "%s\n%d block(s) • %d AP" % [str(info["desc"]), PlanEntry.blocks_of(kind), PlanEntry.ap_of(kind)]
-
-# One clickable palette card; arms the command for placement on the timeline.
-func _create_palette_card(kind: PlanEntry.Kind, dir: Vector2i) -> PanelContainer:
-	var info: Dictionary = PALETTE[kind]
-	var col: Color = info["color"]
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.tooltip_text = _kind_tooltip(kind)
-	card.add_theme_stylebox_override("panel", _palette_style(Color(0.22, 0.3, 0.42, 0.6), Color(0.11, 0.14, 0.19, 0.7)))
-	var row := HBoxContainer.new()
-	card.add_child(row)
-	var name_lbl := Label.new()
-	name_lbl.text = _kind_text(kind)
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", col)
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(name_lbl)
-	var cost_lbl := Label.new()
-	cost_lbl.text = "%db·%dAP" % [PlanEntry.blocks_of(kind), PlanEntry.ap_of(kind)]
-	cost_lbl.add_theme_font_size_override("font_size", 8)
-	cost_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
-	cost_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(cost_lbl)
-	card.gui_input.connect(func(event: InputEvent) -> void:
-		var mouse_event := event as InputEventMouseButton
-		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and palette_enabled:
-			command_armed.emit(kind as int, dir)
-	)
-	palette_cards[kind] = card
-	return card
-
-# Move / Sprint card: the command name plus four direction buttons.
-func _create_direction_card(kind: PlanEntry.Kind) -> PanelContainer:
-	var info: Dictionary = PALETTE[kind]
-	var col: Color = info["color"]
-	var card := PanelContainer.new()
-	card.tooltip_text = _kind_tooltip(kind)
-	card.add_theme_stylebox_override("panel", _palette_style(Color(0.22, 0.3, 0.42, 0.6), Color(0.11, 0.14, 0.19, 0.7)))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 3)
-	card.add_child(row)
-	var name_lbl := Label.new()
-	name_lbl.text = _kind_text(kind)
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", col)
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_lbl)
-	var cost_lbl := Label.new()
-	cost_lbl.text = "%db·%dAP" % [PlanEntry.blocks_of(kind), PlanEntry.ap_of(kind)]
-	cost_lbl.add_theme_font_size_override("font_size", 8)
-	cost_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
-	row.add_child(cost_lbl)
-	for spec: Dictionary in DIR_BUTTONS:
-		var dir: Vector2i = spec["dir"]
-		var btn := Button.new()
-		btn.text = str(spec["text"])
-		btn.custom_minimum_size = Vector2(24, 0)
-		btn.add_theme_font_size_override("font_size", 11)
-		btn.tooltip_text = "%s %s" % [PlanEntry.kind_name(kind), str(spec["text"])]
-		btn.pressed.connect(func() -> void:
-			if palette_enabled:
-				command_armed.emit(kind as int, dir)
-		)
-		row.add_child(btn)
-		direction_buttons.append({"kind": kind, "dir": dir, "button": btn})
-	palette_cards[kind] = card
-	return card
-
-# Reflects the planning state: enabled while planning, armed card highlighted, AP left.
-func update_planning(is_planning: bool, armed_kind: int, armed_dir: Vector2i, ap_left: int, ap_total: int) -> void:
-	palette_enabled = is_planning
-	palette_title_lbl.text = "COMMAND PALETTE" if is_planning else "COMMAND PALETTE (planning closed)"
-	palette_ap_lbl.text = "AP %d/%d" % [ap_left, ap_total] if is_planning else ""
-	for kind_key: Variant in palette_cards:
-		var card: PanelContainer = palette_cards[kind_key]
-		var kind: int = kind_key
-		var armed: bool = is_planning and armed_kind == kind
-		var info: Dictionary = PALETTE[kind]
-		var col: Color = info["color"]
-		card.modulate = Color.WHITE if is_planning else Color(1, 1, 1, 0.45)
-		if armed:
-			card.add_theme_stylebox_override("panel", _palette_style(Color(1.0, 0.9, 0.4), col.darkened(0.6), 2))
-		else:
-			card.add_theme_stylebox_override("panel", _palette_style(Color(0.22, 0.3, 0.42, 0.6), Color(0.11, 0.14, 0.19, 0.7)))
-	for spec: Dictionary in direction_buttons:
-		var btn: Button = spec["button"]
-		var spec_kind: int = spec["kind"]
-		var spec_dir: Vector2i = spec["dir"]
-		var is_armed_dir: bool = is_planning and armed_kind == spec_kind and armed_dir == spec_dir
-		btn.modulate = Color(1.0, 0.9, 0.4) if is_armed_dir else Color.WHITE
-		btn.disabled = not is_planning
-	for btn: Button in palette_buttons:
-		btn.disabled = not is_planning
-	left_hint.text = "💡 Pick a command (and a direction), then click a block on the timeline. Right-click a placed command to remove it." if is_planning else "💡 Planning is closed. Step through the round or review the replay."
-
-# `snap` (optional) renders the unit as it was at a replayed block; null = live state.
 func update_inspector(
 	selected_combatant: Combatant,
 	is_ally: bool,

@@ -27,13 +27,8 @@ func _on_bound() -> void:
 	dock.block_selected.connect(func(b: int) -> void: session.select_block(b))
 	dock.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
 	dock.hero_view_requested.connect(func() -> void: session.focus_first_hero())
-	dock.slot_clicked.connect(func(b: int) -> void: session.place_armed(b))
-	dock.clip_remove_requested.connect(func(b: int) -> void:
-		if session.focused_hero != null:
-			session.plan_remove_at(session.focused_hero, b)
-	)
 
 func refresh() -> void:
 	if session == null:
 		return
-	dock.update_view(session.timeline_unit(), session.playhead(), session.is_timeline_masked(), session.can_view_prev_round(), session.can_view_next_round(), session.is_planning(), session.armed_label())
+	dock.update_view(session.timeline_unit(), session.playhead(), session.is_timeline_masked(), session.can_view_prev_round(), session.can_view_next_round())

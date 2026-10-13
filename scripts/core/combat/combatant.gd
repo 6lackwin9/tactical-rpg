@@ -23,6 +23,7 @@ var is_withdrawn: bool = false
 var attack_boost_multiplier: float = 1.0
 var attack_boost_rounds_remaining: int = 0
 var defense_mitigation_ratio: float = 0.0
+var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
 var active_buffs: Array[StatModifier] = []
 

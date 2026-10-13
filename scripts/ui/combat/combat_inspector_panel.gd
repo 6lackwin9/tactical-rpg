@@ -3,10 +3,9 @@ extends CombatPanel
 
 # ==============================================================================
 # Tactical RPG - Combat Unit Inspector Panel
-# Portrait, vitals, stance, target, buffs and the command palette (allies) or
-# threat intel (enemies) for the selected unit. The palette arms commands in the
-# session so they can be placed on the timeline during planning. The 🎒 GEAR
-# button asks the host for the Party & Stash screen.
+# Portrait, vitals, stance, target and buffs for the selected unit, plus AI threat
+# intel for hostiles. Planning lives in the Plan Round screen. The 🎒 GEAR button
+# asks the host for the Party & Stash screen.
 # ==============================================================================
 
 var inspector: UnitInspectorUI
@@ -22,16 +21,10 @@ func _init() -> void:
 
 func _on_bound() -> void:
 	inspector.gear_modal_requested.connect(func(_c: Combatant) -> void: modal_requested.emit("gear"))
-	inspector.command_armed.connect(func(kind: int, dir: Vector2i) -> void: session.arm(kind, dir))
-	inspector.auto_plan_requested.connect(func() -> void: session.plan_auto(session.focused_hero))
-	inspector.clear_plan_requested.connect(func() -> void: session.plan_clear(session.focused_hero))
 
 func refresh() -> void:
 	if session == null:
 		return
-	var hero: Combatant = session.focused_hero
-	var ap_left: int = session.plan.ap_left(hero) if hero != null else 0
-	inspector.update_planning(session.is_planning(), session.armed_kind, session.armed_dir, ap_left, CombatPlan.ROUND_AP)
 	var c: Combatant = session.selected_combatant
 	if c == null or not is_instance_valid(c):
 		return

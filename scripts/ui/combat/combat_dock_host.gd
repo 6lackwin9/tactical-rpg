@@ -32,6 +32,8 @@ var session: CombatSession = null
 var current_layout: String = DEFAULT_LAYOUT
 var log_modal: CombatLogModal
 var timeline_modal: TimelineModal
+var plan_modal: CombatPlanModal
+var auto_open_plan: bool = false   # open the Plan Round screen when a planning phase starts
 var gear_modal: CharacterEquipmentModal = null
 
 var _panels: Dictionary = {}    # String -> CombatPanel
@@ -45,6 +47,7 @@ var _layout_option: OptionButton
 var _zone_option: OptionButton
 var _edit_mode: bool = false
 var _auto_timer: Timer
+var _plan_prompted_round: int = 0
 
 func _init() -> void:
 	name = "CombatDockHost"
@@ -105,6 +108,8 @@ func _init() -> void:
 	add_child(log_modal)
 	timeline_modal = TimelineModal.new()
 	add_child(timeline_modal)
+	plan_modal = CombatPlanModal.new()
+	add_child(plan_modal)
 
 	_auto_timer = Timer.new()
 	_auto_timer.wait_time = AUTO_PLAY_INTERVAL
@@ -158,6 +163,8 @@ func setup(p_session: CombatSession) -> void:
 	timeline_modal.round_nav_requested.connect(func(delta: int) -> void: session.navigate_round(delta))
 	timeline_modal.block_selected.connect(func(b: int) -> void: session.select_block(b))
 	timeline_modal.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
+	plan_modal.setup(session)
+	plan_modal.token_texture_fn = session.encounter.get_token_texture
 	session.changed.connect(_on_session_changed)
 	apply_layout(DEFAULT_LAYOUT)
 	_sync_zone_option()
@@ -184,6 +191,9 @@ func _on_session_changed() -> void:
 		log_modal.set_entries(session.log_entries)
 	if timeline_modal.visible:
 		_refresh_timeline_modal()
+	if auto_open_plan and session.is_planning() and _plan_prompted_round != session.current_round and not plan_modal.visible:
+		_plan_prompted_round = session.current_round
+		open_modal("plan")
 
 # ------------------------------------------------------------------------------
 # Dock slots, layouts and undocking
@@ -432,8 +442,14 @@ func open_modal(kind: String) -> void:
 			_refresh_timeline_modal()
 		"gear":
 			_open_gear_modal()
+		"plan":
+			if session.encounter.player_planning:
+				plan_modal.open_modal()
 
 func close_modals() -> bool:
+	if plan_modal.visible:
+		plan_modal.close_modal()
+		return true
 	if log_modal.visible:
 		log_modal.close_modal()
 		return true
@@ -488,6 +504,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				open_modal("timeline")
 		KEY_G:
 			open_modal("gear")
+		KEY_P:
+			if plan_modal.visible:
+				plan_modal.close_modal()
+			else:
+				open_modal("plan")
 		KEY_F9:
 			set_edit_mode(not _edit_mode)
 		KEY_BRACKETLEFT:

@@ -68,9 +68,8 @@ var status_text: String = ""
 var next_round_label: String = ""    # empty = no round advance available
 
 # Planning (encounters with player_planning): the party's plan for the live round.
-var plan: CombatPlan = CombatPlan.new()
-var armed_kind: int = -1                  # PlanEntry.Kind chosen in the palette, -1 = none
-var armed_dir: Vector2i = Vector2i(1, 0)  # direction for armed Move / Sprint
+var plan: CombatPlan = null               # per-unit command sequences (rebuilt each round)
+var plan_confirmed: bool = false         # sequences locked and scheduled
 
 var _pending_actions: Array[CombatResolver.ScheduledAction] = []
 
@@ -136,8 +135,8 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	status_text = str(intro.get("status", "Round %d: plan actions, then resolve." % round_num))
 	_log_text(str(intro.get("log", "")))
 
-	plan.clear_all()
-	armed_kind = -1
+	plan = CombatPlan.new(encounter.plan_context())
+	plan_confirmed = false
 	encounter.schedule_round(resolver, round_num)
 	_refresh_archive()
 
@@ -162,7 +161,8 @@ func dispose() -> void:
 	round_actions.clear()
 	round_snapshots.clear()
 	_pending_actions.clear()
-	plan.clear_all()
+	if plan != null:
+		plan.clear_all()
 
 func reset_round() -> void:
 	if current_round == 1:
@@ -211,7 +211,8 @@ func step_prev() -> void:
 func _step_resolution() -> void:
 	inspect_block = -1
 	if phase == Phase.PLANNING:
-		_commit_plan()
+		if encounter.player_planning and not plan_confirmed and not confirm_plan():
+			return
 		phase = Phase.RESOLVING
 		_set_phase("RESOLVING COMBAT", COL_RESOLVING)
 		current_block = 1
@@ -364,129 +365,87 @@ func find_recorded_action(combatant: Combatant, block: int) -> CombatResolver.Sc
 # ------------------------------------------------------------------------------
 
 func is_planning() -> bool:
-	return encounter.player_planning and phase == Phase.PLANNING and is_live_view() and not combat_over
+	return encounter.player_planning and phase == Phase.PLANNING and is_live_view() and not combat_over and not plan_confirmed
 
-func plan_power(actor: Combatant) -> int:
-	return encounter.profile_of(actor).power
+# Next inputs for ctor, each probed against the sequence so far (valid or why not).
+func plan_options(actor: Combatant) -> Array[PlanOption]:
+	return plan.options(actor) if is_planning() and actor != null else []
 
-# The enemy an Attack is aimed at: the selected hostile, else the closest one.
-func plan_target_for(actor: Combatant) -> Combatant:
-	if selected_combatant != null and not is_ally(selected_combatant) and selected_combatant.is_active() and grid.has_combatant(selected_combatant):
-		return selected_combatant
-	var best: Combatant = null
-	var best_dist: int = 999
-	for e: Combatant in enemies:
-		if e.is_active() and grid.has_combatant(e) and grid.has_combatant(actor):
-			var d: int = grid.get_distance(grid.get_position(actor), grid.get_position(e))
-			if d < best_dist:
-				best_dist = d
-				best = e
-	return best
-
-func arm(kind: int, dir: Vector2i = Vector2i.ZERO) -> void:
-	if armed_kind == kind and (dir == Vector2i.ZERO or dir == armed_dir):
-		armed_kind = -1
-	else:
-		armed_kind = kind
-		if dir != Vector2i.ZERO:
-			armed_dir = dir
-	_notify()
-
-# Short name of the armed palette command ("Attack", "Move →"), "" when none.
-func armed_label() -> String:
-	if armed_kind < 0:
-		return ""
-	var kind: PlanEntry.Kind = armed_kind as PlanEntry.Kind
-	var text: String = PlanEntry.kind_name(kind)
-	if PlanEntry.needs_direction(kind):
-		text += " " + PlanEntry.dir_arrow(armed_dir)
-	return text
-
-func disarm() -> void:
-	armed_kind = -1
-	_notify()
-
-# Places the armed command for the focused hero at `block` (replacing overlaps).
-func place_armed(block: int) -> void:
-	if not is_planning() or focused_hero == null:
-		return
-	if armed_kind < 0:
-		status_text = "Pick a command from the palette first."
-		_notify()
-		return
-	plan_add(focused_hero, armed_kind as PlanEntry.Kind, block, armed_dir)
-
-# Returns "" on success, otherwise the reason it was rejected (also shown as status).
-func plan_add(actor: Combatant, kind: PlanEntry.Kind, block: int, dir: Vector2i = Vector2i.ZERO, target: Combatant = null) -> String:
+# Appends a step to ctor's sequence; returns "" or the reason it was rejected.
+func plan_add_step(actor: Combatant, step: PlanStep) -> String:
 	if not is_planning():
 		return "Planning is closed."
-	var aim: Combatant = target
-	if PlanEntry.needs_target(kind) and aim == null:
-		aim = plan_target_for(actor)
-	var entry: PlanEntry = PlanEntry.create(kind, block, dir if PlanEntry.needs_direction(kind) else Vector2i.ZERO, aim, plan_power(actor))
-	var problem: String = plan.add(actor, entry, true)
-	if problem.is_empty():
-		var aim_text: String = " → %s" % aim.name if aim != null and PlanEntry.needs_target(kind) else ""
-		status_text = "%s: %s%s at block %d (AP left %d)." % [actor.name, PlanEntry.kind_name(kind), aim_text, block, plan.ap_left(actor)]
-		_refresh_archive()
-	else:
-		status_text = problem
-	_notify()
+	var problem: String = plan.add_step(actor, step)
+	status_text = "%s: %s (AP left %d)." % [actor.name, step.title(), plan.ap_left(actor)] if problem.is_empty() else problem
+	_after_plan_edit()
 	return problem
 
-func plan_remove_at(actor: Combatant, block: int) -> void:
-	if is_planning() and plan.remove_at(actor, block):
-		status_text = "%s: cleared block %d." % [actor.name, block]
-		_refresh_archive()
-		_notify()
+func plan_remove_step(actor: Combatant, index: int) -> void:
+	if is_planning():
+		plan.remove_step(actor, index)
+		status_text = "%s: step removed." % actor.name
+		_after_plan_edit()
+
+func plan_move_step(actor: Combatant, from_index: int, to_index: int) -> void:
+	if is_planning():
+		plan.move_step(actor, from_index, to_index)
+		var st: CombatPlan.SimState = plan.compile(actor)
+		status_text = "%s: sequence reordered." % actor.name if st.error_index < 0 else "%s: that order is invalid - %s" % [actor.name, st.error_text]
+		_after_plan_edit()
 
 func plan_clear(actor: Combatant) -> void:
-	if not is_planning():
-		return
-	plan.clear(actor)
-	status_text = "%s: plan cleared." % actor.name
-	_refresh_archive()
-	_notify()
+	if is_planning():
+		plan.clear(actor)
+		status_text = "%s: sequence cleared." % actor.name
+		_after_plan_edit()
 
-# Lets the AI plan `actor`'s round (the player can then tweak it).
-func plan_auto(actor: Combatant) -> void:
+# Replaces ctor's sequence with an AI draft (see PlanPresets); still editable.
+func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
 	if not is_planning() or actor == null or not actor.is_active():
 		return
-	plan.set_entries(actor, encounter.plan_for(actor))
-	status_text = "%s: auto-planned %d command(s)." % [actor.name, plan.entries_for(actor).size()]
-	_refresh_archive()
-	_notify()
+	plan.set_steps(actor, encounter.draft_steps(actor, preset_id))
+	status_text = "%s: %s drafted %d step(s)." % [actor.name, PlanPresets.label(preset_id), plan.steps_of(actor).size()]
+	_after_plan_edit()
 
-func plan_auto_all() -> void:
+func plan_apply_preset_all(preset_id: String) -> void:
 	if not is_planning():
 		return
 	for a: Combatant in allies:
 		if a.is_active():
-			plan.set_entries(a, encounter.plan_for(a))
-	status_text = "Party auto-planned. Adjust the timeline or resolve."
+			plan.set_steps(a, encounter.draft_steps(a, preset_id))
+	status_text = "Party: %s drafted. Review the sequences, then confirm." % PlanPresets.label(preset_id)
+	_after_plan_edit()
+
+# True when every active ally's sequence is valid (an empty sequence is valid: the unit idles).
+func plan_is_valid() -> bool:
+	for a: Combatant in allies:
+		if a.is_active() and not plan.is_valid(a):
+			return false
+	return true
+
+# Locks the party's sequences and schedules them with the enemies'. Refused while any is invalid.
+func confirm_plan() -> bool:
+	if not is_planning():
+		return false
+	if not plan_is_valid():
+		status_text = "Fix the highlighted steps before confirming."
+		_notify()
+		return false
+	plan.commit(resolver)
+	plan_confirmed = true
+	_refresh_archive(false)
+	status_text = "Plan confirmed. Step or play to resolve the round."
+	_notify()
+	return true
+
+func _after_plan_edit() -> void:
 	_refresh_archive()
 	_notify()
-
-func _commit_plan() -> void:
-	if encounter.player_planning:
-		plan.commit(resolver, grid)
-	armed_kind = -1
-	_refresh_archive(false)
-
-# Timeline copy of the live round's commands. While planning it also includes
-# the party's unsent plan so the timeline shows it.
-func _refresh_archive(with_plan: bool = true) -> void:
-	var archived: Array[CombatResolver.ScheduledAction] = []
-	for a: CombatResolver.ScheduledAction in resolver.scheduled_actions:
-		archived.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
-	if with_plan and encounter.player_planning and phase == Phase.PLANNING:
-		archived.append_array(plan.preview_actions(grid))
-	round_actions[current_round] = archived
 
 # Rewinds unit state to a snapshot (used to redo a planned round).
 func _restore_snapshot(snap: BlockSnapshot) -> void:
 	for c: Combatant in resolver.registered_combatants:
-		c.hp = int(snap.hps.get(c, c.hp))
+		c.hp = DictUtil.int_of(snap.hps, c, c.hp)
 		var withdrawn_raw: Variant = snap.is_withdrawn.get(c, false)
 		c.is_withdrawn = withdrawn_raw is bool and withdrawn_raw
 		if not c.is_withdrawn:
@@ -495,14 +454,23 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		if stance_raw is int:
 			c.current_stance = stance_raw as CombatTypes.StanceType
 		c.active_target = snap.targets.get(c, null)
-		c.attack_boost_multiplier = float(snap.attack_boost_mult.get(c, 1.0))
-		c.attack_boost_rounds_remaining = int(snap.attack_boost_rds.get(c, 0))
-		c.defense_mitigation_ratio = float(snap.defense_mit.get(c, 0.0))
+		c.attack_boost_multiplier = DictUtil.float_of(snap.attack_boost_mult, c, 1.0)
+		c.attack_boost_rounds_remaining = DictUtil.int_of(snap.attack_boost_rds, c)
+		c.defense_mitigation_ratio = DictUtil.float_of(snap.defense_mit, c)
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
 			grid.combatant_positions[c] = pos_raw
 		else:
 			grid.combatant_positions.erase(c)
+# Timeline copy of the live round's commands. While planning it also includes
+# the party's unsent plan so the timeline shows it.
+func _refresh_archive(with_plan: bool = true) -> void:
+	var archived: Array[CombatResolver.ScheduledAction] = []
+	for a: CombatResolver.ScheduledAction in resolver.scheduled_actions:
+		archived.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
+	if with_plan and encounter.player_planning and phase == Phase.PLANNING and not plan_confirmed:
+		archived.append_array(plan.preview_actions())
+	round_actions[current_round] = archived
 
 func _capture_snapshot(block_idx: int) -> void:
 	var snap := BlockSnapshot.new()
