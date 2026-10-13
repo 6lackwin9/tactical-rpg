@@ -25,9 +25,10 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 	var test6_passed: bool = run_gear_equip_and_test_dummy_suite(tree_parent)
 	var test7_passed: bool = run_combat_session_flow_test()
 	var test8_passed: bool = run_art_and_terrain_test()
+	var test9_passed: bool = run_planning_and_ai_test()
 
 	return (test0_passed and test1_passed and test2_passed and test3_passed and
-		test4_passed and test5_passed and test6_passed and test7_passed and test8_passed)
+		test4_passed and test5_passed and test6_passed and test7_passed and test8_passed and test9_passed)
 
 
 # ==============================================================================
@@ -1035,3 +1036,202 @@ static func run_art_and_terrain_test() -> bool:
 	print("  [Art] Item icons by gear type + bespoke rare weapon icons: %s" % ("PASS" if icons_ok else "FAIL"))
 
 	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok
+
+
+# ==============================================================================
+# TEST 10: PLANNING & ENEMY AI
+# ==============================================================================
+
+static func _plan_is_valid(actor: Combatant, entries: Array[PlanEntry]) -> bool:
+	var check := CombatPlan.new()
+	for e: PlanEntry in entries:
+		if not check.add(actor, e).is_empty():
+			return false
+	return true
+
+static func _execute_plan(actor: Combatant, entries: Array[PlanEntry], grid: CombatGrid) -> void:
+	var resolver := CombatResolver.new()
+	resolver.grid = grid
+	var cp := CombatPlan.new()
+	cp.set_entries(actor, entries)
+	cp.commit(resolver, grid)
+	resolver.resolve_round()
+
+static func _play_with_auto_plan(zone_id: String) -> Dictionary:
+	var enc := SkirmishEncounter.new()
+	enc.zone_id = zone_id
+	var session := CombatSession.new(enc)
+	session.start()
+	for round_num: int in range(enc.max_rounds):
+		session.plan_auto_all()
+		_resolve_until_replay(session)
+		if session.combat_over or not session.can_advance_round():
+			break
+		session.advance_round()
+	var hp_sig: Array[int] = []
+	var party_hurt: bool = false
+	var foes_hurt: bool = false
+	for c: Combatant in session.allies + session.enemies:
+		hp_sig.append(c.hp)
+		if c.hp < c.max_hp:
+			if session.is_ally(c):
+				party_hurt = true
+			else:
+				foes_hurt = true
+	var result: Dictionary = {"hp": hp_sig, "log": session.log_entries.size(), "party_hurt": party_hurt, "foes_hurt": foes_hurt}
+	session.dispose()
+	return result
+
+static func run_planning_and_ai_test() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING PLANNING & ENEMY AI TEST               ===")
+	print("=======================================================")
+
+	# 1. Plan validation: bounds, overlap/replace, AP budget, targets
+	var session := CombatSession.new(SkirmishEncounter.new())
+	session.start()
+	var warrior: Combatant = session.allies[0]
+	var foe: Combatant = session.enemies[0]
+	var entry_ok: bool = session.is_planning() and session.plan.is_empty()
+	entry_ok = entry_ok and session.plan_add(warrior, PlanEntry.Kind.ATTACK, 1, Vector2i.ZERO, foe).is_empty()
+	entry_ok = entry_ok and not session.plan_add(warrior, PlanEntry.Kind.ATTACK, 10, Vector2i.ZERO, foe).is_empty()  # needs 2 blocks
+	var clash: PlanEntry = PlanEntry.create(PlanEntry.Kind.DEFEND, 2)
+	entry_ok = entry_ok and not session.plan.add(warrior, clash).is_empty()  # overlap without replace
+	entry_ok = entry_ok and session.plan_add(warrior, PlanEntry.Kind.DEFEND, 2).is_empty()  # replace overlap
+	var at_block_1: PlanEntry = session.plan.entry_at(warrior, 1)
+	entry_ok = entry_ok and at_block_1 == null and session.plan.entry_at(warrior, 2) != null
+	session.plan_clear(warrior)
+	var ap_ok: bool = true
+	for b: int in range(1, 5):
+		ap_ok = ap_ok and session.plan_add(warrior, PlanEntry.Kind.SPRINT, b, Vector2i(1, 0)).is_empty()
+	var over_budget: String = session.plan_add(warrior, PlanEntry.Kind.SPRINT, 5, Vector2i(1, 0))
+	ap_ok = ap_ok and session.plan.ap_left(warrior) == 0 and "AP" in over_budget
+	var untargeted: PlanEntry = PlanEntry.create(PlanEntry.Kind.ATTACK, 6)
+	var target_ok: bool = not session.plan.check(warrior, untargeted).is_empty()
+	var plan_valid_ok: bool = entry_ok and ap_ok and target_ok
+
+	# 2. The party's plan shows on the timeline and is committed (locked) on resolve
+	session.plan_clear(warrior)
+	session.plan_add(warrior, PlanEntry.Kind.MOVE, 1, Vector2i(0, -1))
+	var preview: CombatResolver.ScheduledAction = session.find_recorded_action(warrior, 1)
+	var preview_ok: bool = preview != null and preview.command.command_name == "Move"
+	session.step_next()
+	var locked_ok: bool = session.phase == CombatSession.Phase.RESOLVING and not session.is_planning()
+	locked_ok = locked_ok and not session.plan_add(warrior, PlanEntry.Kind.DEFEND, 5).is_empty()
+	var party_scheduled: bool = false
+	var enemy_scheduled: bool = false
+	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
+		if a.combatant == warrior and a.command.command_name == "Move":
+			party_scheduled = true
+		if not session.is_ally(a.combatant):
+			enemy_scheduled = true
+	var flow_ok: bool = preview_ok and locked_ok and party_scheduled and enemy_scheduled
+	session.dispose()
+
+	# 3. AI patterns on hand-built grids
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var hero := Combatant.new("Hero", 100, 10, 1)
+	var brute := Combatant.new("Brute", 60, 10, 1)
+	grid.place_combatant(hero, Vector2i(1, 2))
+	grid.place_combatant(brute, Vector2i(5, 4))
+	var hero_list: Array[Combatant] = [hero]
+	var brute_list: Array[Combatant] = [brute]
+	var brute_plan: Array[PlanEntry] = TacticalAI.plan(brute, hero_list, brute_list, grid, AiProfile.create(AiProfile.Role.AGGRESSOR, 15))
+	var closes_in: bool = not brute_plan.is_empty() and PlanEntry.needs_direction(brute_plan[0].kind)
+	closes_in = closes_in and brute_plan[brute_plan.size() - 1].kind == PlanEntry.Kind.ATTACK and _plan_is_valid(brute, brute_plan)
+
+	# Walls: the plan still reaches the target (path-finding), verified by executing it
+	var wall_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	for y: int in range(0, 6):
+		wall_grid.set_terrain(Vector2i(4, y), Terrain.Type.WALL)
+	var runner := Combatant.new("Runner", 60, 10, 1)
+	var prey := Combatant.new("Prey", 60, 10, 1)
+	wall_grid.place_combatant(runner, Vector2i(2, 4))
+	wall_grid.place_combatant(prey, Vector2i(6, 4))
+	var prey_list: Array[Combatant] = [prey]
+	var runner_list: Array[Combatant] = [runner]
+	var wall_plan: Array[PlanEntry] = TacticalAI.plan(runner, prey_list, runner_list, wall_grid, AiProfile.create(AiProfile.Role.AGGRESSOR, 15))
+	_execute_plan(runner, wall_plan, wall_grid)
+	var walls_ok: bool = prey.hp < 60 and _plan_is_valid(runner, wall_plan)
+
+	# Sniper keeps its distance; Support opens with Focus; a wounded unit flees and withdraws
+	var snipe_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var sniper := Combatant.new("Sniper", 40, 10, 3)
+	var bruiser := Combatant.new("Bruiser", 60, 10, 1)
+	snipe_grid.place_combatant(sniper, Vector2i(4, 4))
+	snipe_grid.place_combatant(bruiser, Vector2i(3, 4))
+	var bruiser_list: Array[Combatant] = [bruiser]
+	var sniper_list: Array[Combatant] = [sniper]
+	var snipe_plan: Array[PlanEntry] = TacticalAI.plan(sniper, bruiser_list, sniper_list, snipe_grid, AiProfile.create(AiProfile.Role.SNIPER, 14))
+	var sniper_ok: bool = not snipe_plan.is_empty() and snipe_plan[0].kind == PlanEntry.Kind.MOVE and snipe_plan[0].direction == Vector2i(1, 0)
+	var support_plan: Array[PlanEntry] = TacticalAI.plan(sniper, bruiser_list, sniper_list, snipe_grid, AiProfile.create(AiProfile.Role.SUPPORT, 10))
+	var support_ok: bool = not support_plan.is_empty() and support_plan[0].kind == PlanEntry.Kind.FOCUS
+
+	var weakling := Combatant.new("Weakling", 100, 10, 1)
+	weakling.hp = 10
+	var chaser := Combatant.new("Chaser", 100, 10, 1)
+	var flee_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	flee_grid.place_combatant(weakling, Vector2i(5, 4))
+	flee_grid.place_combatant(chaser, Vector2i(2, 4))
+	var chaser_list: Array[Combatant] = [chaser]
+	var weak_list: Array[Combatant] = [weakling]
+	var flee_plan: Array[PlanEntry] = TacticalAI.plan(weakling, chaser_list, weak_list, flee_grid, AiProfile.create(AiProfile.Role.AGGRESSOR, 15))
+	_execute_plan(weakling, flee_plan, flee_grid)
+	var flee_ok: bool = not flee_plan.is_empty() and weakling.is_withdrawn
+	var ai_ok: bool = closes_in and walls_ok and sniper_ok and support_ok and flee_ok
+
+	# 4. AI vs AI: full skirmish on every zone is deterministic and hurts both sides
+	var zones_ok: bool = true
+	var both_hurt: bool = true
+	for zone_id: String in CombatZones.zone_ids():
+		var first: Dictionary = _play_with_auto_plan(zone_id)
+		var second: Dictionary = _play_with_auto_plan(zone_id)
+		if first.get("hp", []) != second.get("hp", []) or first.get("log", 0) != second.get("log", -1):
+			zones_ok = false
+			print("    non-deterministic result on zone: %s" % zone_id)
+		var hp_list: Array = []
+		var hp_raw: Variant = first.get("hp", [])
+		if hp_raw is Array:
+			hp_list = hp_raw
+		var party_hurt: bool = bool(first.get("party_hurt", false))
+		var foes_hurt: bool = bool(first.get("foes_hurt", false))
+		if not (party_hurt and foes_hurt):
+			both_hurt = false
+			print("    one side untouched on zone: %s %s" % [zone_id, str(hp_list)])
+
+	# 5. Resetting a planned round rewinds units to the start of that round
+	var rs := CombatSession.new(SkirmishEncounter.new())
+	rs.start()
+	rs.plan_auto_all()
+	_resolve_until_replay(rs)
+	var reset_ok: bool = false
+	if rs.can_advance_round():
+		rs.advance_round()
+		var start_hp: Array[int] = []
+		var start_pos: Array[Vector2i] = []
+		for c: Combatant in rs.allies + rs.enemies:
+			start_hp.append(c.hp)
+			start_pos.append(rs.grid.get_position(c))
+		rs.plan_auto_all()
+		_resolve_until_replay(rs)
+		rs.reset_round()
+		var end_hp: Array[int] = []
+		var end_pos: Array[Vector2i] = []
+		for c: Combatant in rs.allies + rs.enemies:
+			end_hp.append(c.hp)
+			end_pos.append(rs.grid.get_position(c))
+		reset_ok = start_hp == end_hp and start_pos == end_pos and rs.is_planning() and rs.current_round == 2
+	rs.dispose()
+
+	print("\n=======================================================")
+	print("=== PLANNING & ENEMY AI ASSERTIONS                  ===")
+	print("=======================================================")
+	print("  [Plan] Bounds, overlap/replace, AP budget & target validation: %s" % ("PASS" if plan_valid_ok else "FAIL"))
+	print("  [Plan] Party plan previews on the timeline, locks and schedules with the AI plans on resolve: %s" % ("PASS" if flow_ok else "FAIL"))
+	print("  [AI] Aggressor closes in then attacks; path-finds around walls: %s" % ("PASS" if (closes_in and walls_ok) else "FAIL"))
+	print("  [AI] Sniper backs away, Support opens with Focus, wounded unit flees and withdraws: %s" % ("PASS" if (sniper_ok and support_ok and flee_ok) else "FAIL"))
+	print("  [AI] Skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
+	print("  [AI] Both sides take damage in an auto-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
+	print("  [Plan] Reset round rewinds to the round start and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
+
+	return plan_valid_ok and flow_ok and ai_ok and zones_ok and both_hurt and reset_ok

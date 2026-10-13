@@ -25,6 +25,7 @@ enum Phase { PLANNING, RESOLVING, REPLAY }
 
 const TOTAL_BLOCKS: int = 10
 const MAX_TEXT_LOG: int = 400
+const NO_POSITION: Vector2i = Vector2i(-1, -1)
 
 const COL_PLANNING: Color = Color(0.95, 0.8, 0.35)
 const COL_RESOLVING: Color = Color(0.4, 0.8, 1.0)
@@ -66,6 +67,11 @@ var phase_color: Color = COL_PLANNING
 var status_text: String = ""
 var next_round_label: String = ""    # empty = no round advance available
 
+# Planning (encounters with player_planning): the party's plan for the live round.
+var plan: CombatPlan = CombatPlan.new()
+var armed_kind: int = -1                  # PlanEntry.Kind chosen in the palette, -1 = none
+var armed_dir: Vector2i = Vector2i(1, 0)  # direction for armed Move / Sprint
+
 var _pending_actions: Array[CombatResolver.ScheduledAction] = []
 
 func _init(p_encounter: CombatEncounter) -> void:
@@ -105,9 +111,11 @@ func start() -> void:
 	mounted.emit()
 	_begin_round(1)
 
-func _begin_round(round_num: int) -> void:
-	if round_num > 1:
+func _begin_round(round_num: int, roll_over: bool = true) -> void:
+	if round_num > 1 and roll_over:
 		resolver.finish_round()
+	elif not roll_over:
+		resolver.scheduled_actions.clear()
 	current_round = round_num
 	max_unlocked_round = maxi(max_unlocked_round, round_num)
 	viewed_round = round_num
@@ -128,11 +136,10 @@ func _begin_round(round_num: int) -> void:
 	status_text = str(intro.get("status", "Round %d: plan actions, then resolve." % round_num))
 	_log_text(str(intro.get("log", "")))
 
+	plan.clear_all()
+	armed_kind = -1
 	encounter.schedule_round(resolver, round_num)
-	var archived: Array[CombatResolver.ScheduledAction] = []
-	for a: CombatResolver.ScheduledAction in resolver.scheduled_actions:
-		archived.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
-	round_actions[round_num] = archived
+	_refresh_archive()
 
 	var snaps: Array[BlockSnapshot] = []
 	round_snapshots[round_num] = snaps
@@ -155,6 +162,7 @@ func dispose() -> void:
 	round_actions.clear()
 	round_snapshots.clear()
 	_pending_actions.clear()
+	plan.clear_all()
 
 func reset_round() -> void:
 	if current_round == 1:
@@ -162,7 +170,14 @@ func reset_round() -> void:
 		return
 	_truncate_log_from_round(current_round)
 	combat_over = false
-	_begin_round(current_round)
+	if encounter.player_planning:
+		# Rounds carry state over, so rewind to how this round started.
+		var start_snap: BlockSnapshot = snapshot_at(current_round, 0)
+		if start_snap != null:
+			_restore_snapshot(start_snap)
+		_begin_round(current_round, false)
+	else:
+		_begin_round(current_round)
 
 func reset_battle() -> void:
 	start()
@@ -196,6 +211,7 @@ func step_prev() -> void:
 func _step_resolution() -> void:
 	inspect_block = -1
 	if phase == Phase.PLANNING:
+		_commit_plan()
 		phase = Phase.RESOLVING
 		_set_phase("RESOLVING COMBAT", COL_RESOLVING)
 		current_block = 1
@@ -340,6 +356,153 @@ func find_recorded_action(combatant: Combatant, block: int) -> CombatResolver.Sc
 		if a.combatant == combatant and a.start_block == block:
 			return a
 	return null
+
+# ------------------------------------------------------------------------------
+# 2b. Planning (player-planned encounters)
+# The party's commands are placed on the timeline during the PLANNING phase and
+# scheduled together with the enemies' (AI-planned) commands when resolution starts.
+# ------------------------------------------------------------------------------
+
+func is_planning() -> bool:
+	return encounter.player_planning and phase == Phase.PLANNING and is_live_view() and not combat_over
+
+func plan_power(actor: Combatant) -> int:
+	return encounter.profile_of(actor).power
+
+# The enemy an Attack is aimed at: the selected hostile, else the closest one.
+func plan_target_for(actor: Combatant) -> Combatant:
+	if selected_combatant != null and not is_ally(selected_combatant) and selected_combatant.is_active() and grid.has_combatant(selected_combatant):
+		return selected_combatant
+	var best: Combatant = null
+	var best_dist: int = 999
+	for e: Combatant in enemies:
+		if e.is_active() and grid.has_combatant(e) and grid.has_combatant(actor):
+			var d: int = grid.get_distance(grid.get_position(actor), grid.get_position(e))
+			if d < best_dist:
+				best_dist = d
+				best = e
+	return best
+
+func arm(kind: int, dir: Vector2i = Vector2i.ZERO) -> void:
+	if armed_kind == kind and (dir == Vector2i.ZERO or dir == armed_dir):
+		armed_kind = -1
+	else:
+		armed_kind = kind
+		if dir != Vector2i.ZERO:
+			armed_dir = dir
+	_notify()
+
+# Short name of the armed palette command ("Attack", "Move →"), "" when none.
+func armed_label() -> String:
+	if armed_kind < 0:
+		return ""
+	var kind: PlanEntry.Kind = armed_kind as PlanEntry.Kind
+	var text: String = PlanEntry.kind_name(kind)
+	if PlanEntry.needs_direction(kind):
+		text += " " + PlanEntry.dir_arrow(armed_dir)
+	return text
+
+func disarm() -> void:
+	armed_kind = -1
+	_notify()
+
+# Places the armed command for the focused hero at `block` (replacing overlaps).
+func place_armed(block: int) -> void:
+	if not is_planning() or focused_hero == null:
+		return
+	if armed_kind < 0:
+		status_text = "Pick a command from the palette first."
+		_notify()
+		return
+	plan_add(focused_hero, armed_kind as PlanEntry.Kind, block, armed_dir)
+
+# Returns "" on success, otherwise the reason it was rejected (also shown as status).
+func plan_add(actor: Combatant, kind: PlanEntry.Kind, block: int, dir: Vector2i = Vector2i.ZERO, target: Combatant = null) -> String:
+	if not is_planning():
+		return "Planning is closed."
+	var aim: Combatant = target
+	if PlanEntry.needs_target(kind) and aim == null:
+		aim = plan_target_for(actor)
+	var entry: PlanEntry = PlanEntry.create(kind, block, dir if PlanEntry.needs_direction(kind) else Vector2i.ZERO, aim, plan_power(actor))
+	var problem: String = plan.add(actor, entry, true)
+	if problem.is_empty():
+		var aim_text: String = " → %s" % aim.name if aim != null and PlanEntry.needs_target(kind) else ""
+		status_text = "%s: %s%s at block %d (AP left %d)." % [actor.name, PlanEntry.kind_name(kind), aim_text, block, plan.ap_left(actor)]
+		_refresh_archive()
+	else:
+		status_text = problem
+	_notify()
+	return problem
+
+func plan_remove_at(actor: Combatant, block: int) -> void:
+	if is_planning() and plan.remove_at(actor, block):
+		status_text = "%s: cleared block %d." % [actor.name, block]
+		_refresh_archive()
+		_notify()
+
+func plan_clear(actor: Combatant) -> void:
+	if not is_planning():
+		return
+	plan.clear(actor)
+	status_text = "%s: plan cleared." % actor.name
+	_refresh_archive()
+	_notify()
+
+# Lets the AI plan `actor`'s round (the player can then tweak it).
+func plan_auto(actor: Combatant) -> void:
+	if not is_planning() or actor == null or not actor.is_active():
+		return
+	plan.set_entries(actor, encounter.plan_for(actor))
+	status_text = "%s: auto-planned %d command(s)." % [actor.name, plan.entries_for(actor).size()]
+	_refresh_archive()
+	_notify()
+
+func plan_auto_all() -> void:
+	if not is_planning():
+		return
+	for a: Combatant in allies:
+		if a.is_active():
+			plan.set_entries(a, encounter.plan_for(a))
+	status_text = "Party auto-planned. Adjust the timeline or resolve."
+	_refresh_archive()
+	_notify()
+
+func _commit_plan() -> void:
+	if encounter.player_planning:
+		plan.commit(resolver, grid)
+	armed_kind = -1
+	_refresh_archive(false)
+
+# Timeline copy of the live round's commands. While planning it also includes
+# the party's unsent plan so the timeline shows it.
+func _refresh_archive(with_plan: bool = true) -> void:
+	var archived: Array[CombatResolver.ScheduledAction] = []
+	for a: CombatResolver.ScheduledAction in resolver.scheduled_actions:
+		archived.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
+	if with_plan and encounter.player_planning and phase == Phase.PLANNING:
+		archived.append_array(plan.preview_actions(grid))
+	round_actions[current_round] = archived
+
+# Rewinds unit state to a snapshot (used to redo a planned round).
+func _restore_snapshot(snap: BlockSnapshot) -> void:
+	for c: Combatant in resolver.registered_combatants:
+		c.hp = int(snap.hps.get(c, c.hp))
+		var withdrawn_raw: Variant = snap.is_withdrawn.get(c, false)
+		c.is_withdrawn = withdrawn_raw is bool and withdrawn_raw
+		if not c.is_withdrawn:
+			grid.withdrawn_combatants.erase(c)
+		var stance_raw: Variant = snap.stances.get(c, c.current_stance)
+		if stance_raw is int:
+			c.current_stance = stance_raw as CombatTypes.StanceType
+		c.active_target = snap.targets.get(c, null)
+		c.attack_boost_multiplier = float(snap.attack_boost_mult.get(c, 1.0))
+		c.attack_boost_rounds_remaining = int(snap.attack_boost_rds.get(c, 0))
+		c.defense_mitigation_ratio = float(snap.defense_mit.get(c, 0.0))
+		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
+		if pos_raw is Vector2i and pos_raw != NO_POSITION:
+			grid.combatant_positions[c] = pos_raw
+		else:
+			grid.combatant_positions.erase(c)
 
 func _capture_snapshot(block_idx: int) -> void:
 	var snap := BlockSnapshot.new()

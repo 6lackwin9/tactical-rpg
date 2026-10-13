@@ -8,6 +8,9 @@ extends PanelContainer
 # ==============================================================================
 
 signal gear_modal_requested(combatant: Combatant)
+signal command_armed(kind: int, dir: Vector2i)   # palette pick (PlanEntry.Kind, direction or ZERO)
+signal auto_plan_requested()
+signal clear_plan_requested()
 
 var inspector_hdr: Label
 var btn_gear_modal: Button
@@ -28,6 +31,12 @@ var inspector_gear_lbl: Label
 var ally_actions_container: VBoxContainer
 var enemy_actions_container: VBoxContainer
 var left_hint: Label
+var palette_title_lbl: Label
+var palette_ap_lbl: Label
+var palette_enabled: bool = false
+var palette_cards: Dictionary = {}          # PlanEntry.Kind -> PanelContainer
+var direction_buttons: Array[Dictionary] = []  # {kind, dir, button}
+var palette_buttons: Array[Button] = []
 
 var current_inspected_combatant: Combatant = null
 
@@ -254,29 +263,54 @@ func _build_ui() -> void:
 	inspector_gear_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
 	right_block.add_child(inspector_gear_lbl)
 
-	# Ally Action Setup Palette
+	# Ally command palette (planning): pick a command, then click a timeline block
 	ally_actions_container = VBoxContainer.new()
 	ally_actions_container.add_theme_constant_override("separation", 3)
 	left_vbox.add_child(ally_actions_container)
 
-	var ally_pal_hdr := Label.new()
-	ally_pal_hdr.text = "ACTION PALETTE (ALLIED HERO)"
-	ally_pal_hdr.add_theme_font_size_override("font_size", 10)
-	ally_pal_hdr.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-	ally_actions_container.add_child(ally_pal_hdr)
+	var pal_hdr_row := HBoxContainer.new()
+	ally_actions_container.add_child(pal_hdr_row)
+	palette_title_lbl = Label.new()
+	palette_title_lbl.text = "COMMAND PALETTE"
+	palette_title_lbl.add_theme_font_size_override("font_size", 10)
+	palette_title_lbl.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+	pal_hdr_row.add_child(palette_title_lbl)
+	pal_hdr_row.add_spacer(false)
+	palette_ap_lbl = Label.new()
+	palette_ap_lbl.add_theme_font_size_override("font_size", 10)
+	palette_ap_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
+	palette_ap_lbl.tooltip_text = "Action points left this round. Each command costs AP; Hold and Neutral are free."
+	pal_hdr_row.add_child(palette_ap_lbl)
 
-	var ally_actions: Array[Dictionary] = [
-		{"name": "⚔ Attack", "desc": "Standard Strike | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.3, 0.3)},
-		{"name": "🛡 Defend", "desc": "Mitigation Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.3, 0.6, 0.95)},
-		{"name": "✦ Focus", "desc": "+50% ATK Buff (2 rds) | Cost: 2 Blocks", "cost": 2, "color": Color(0.7, 0.4, 0.95)},
-		{"name": "➜ Move", "desc": "1-Tile Cardinal Step | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-		{"name": "🎯 Target Lock", "desc": "Assign Combat Focus | Cost: 1 Block", "cost": 1, "color": Color(0.3, 0.85, 0.5)},
-		{"name": "🔄 Stance Shift", "desc": "Drop to Neutral | Cost: 1 Block", "cost": 1, "color": Color(0.7, 0.7, 0.8)}
-	]
+	var palette_grid := GridContainer.new()
+	palette_grid.columns = 2
+	palette_grid.add_theme_constant_override("h_separation", 3)
+	palette_grid.add_theme_constant_override("v_separation", 3)
+	ally_actions_container.add_child(palette_grid)
+	for kind: PlanEntry.Kind in [PlanEntry.Kind.ATTACK, PlanEntry.Kind.DEFEND, PlanEntry.Kind.FOCUS, PlanEntry.Kind.HOLD, PlanEntry.Kind.NEUTRAL]:
+		palette_grid.add_child(_create_palette_card(kind, Vector2i.ZERO))
 
-	for act in ally_actions:
-		var act_card := _create_mini_action_card(act)
-		ally_actions_container.add_child(act_card)
+	for kind: PlanEntry.Kind in [PlanEntry.Kind.MOVE, PlanEntry.Kind.SPRINT]:
+		ally_actions_container.add_child(_create_direction_card(kind))
+
+	var plan_row := HBoxContainer.new()
+	plan_row.add_theme_constant_override("separation", 4)
+	ally_actions_container.add_child(plan_row)
+	var auto_btn := Button.new()
+	auto_btn.text = "🤖 Auto-plan"
+	auto_btn.tooltip_text = "Let the AI draft this hero's round (you can edit it afterwards)"
+	auto_btn.add_theme_font_size_override("font_size", 9)
+	auto_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	auto_btn.pressed.connect(func() -> void: auto_plan_requested.emit())
+	plan_row.add_child(auto_btn)
+	var clear_btn := Button.new()
+	clear_btn.text = "✖ Clear"
+	clear_btn.tooltip_text = "Remove every planned command for this hero"
+	clear_btn.add_theme_font_size_override("font_size", 9)
+	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clear_btn.pressed.connect(func() -> void: clear_plan_requested.emit())
+	plan_row.add_child(clear_btn)
+	palette_buttons = [auto_btn, clear_btn]
 
 	# Enemy Possible Actions Deck (Secret Intent Pool)
 	enemy_actions_container = VBoxContainer.new()
@@ -285,7 +319,7 @@ func _build_ui() -> void:
 	left_vbox.add_child(enemy_actions_container)
 
 	var enemy_deck_hdr := Label.new()
-	enemy_deck_hdr.text = "POSSIBLE ACTIONS POOL (THREAT INTEL)"
+	enemy_deck_hdr.text = "THREAT INTEL (AI BEHAVIOUR)"
 	enemy_deck_hdr.add_theme_font_size_override("font_size", 10)
 	enemy_deck_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 	enemy_actions_container.add_child(enemy_deck_hdr)
@@ -296,37 +330,135 @@ func _build_ui() -> void:
 	left_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	left_vbox.add_child(left_hint)
 
-func _create_mini_action_card(act: Dictionary) -> PanelContainer:
-	var act_card := PanelContainer.new()
-	var act_style := StyleBoxFlat.new()
-	act_style.bg_color = Color(0.11, 0.14, 0.19, 0.7)
-	act_style.border_color = Color(0.22, 0.3, 0.42, 0.6)
-	act_style.set_border_width_all(1)
-	act_style.set_corner_radius_all(4)
-	act_style.content_margin_left = 6
-	act_style.content_margin_right = 6
-	act_style.content_margin_top = 2
-	act_style.content_margin_bottom = 2
-	act_card.add_theme_stylebox_override("panel", act_style)
+const PALETTE: Dictionary = {
+	PlanEntry.Kind.ATTACK: {"icon": "⚔", "desc": "Strike the selected enemy", "color": Color(0.9, 0.3, 0.3)},
+	PlanEntry.Kind.DEFEND: {"icon": "🛡", "desc": "Guard: -50% damage taken", "color": Color(0.3, 0.6, 0.95)},
+	PlanEntry.Kind.FOCUS: {"icon": "✦", "desc": "+50% ATK for 2 rounds", "color": Color(0.7, 0.4, 0.95)},
+	PlanEntry.Kind.MOVE: {"icon": "➜", "desc": "Step 1 tile", "color": Color(0.2, 0.8, 0.9)},
+	PlanEntry.Kind.SPRINT: {"icon": "⇒", "desc": "Dash 2 tiles in a line", "color": Color(0.3, 0.85, 0.5)},
+	PlanEntry.Kind.HOLD: {"icon": "⏱", "desc": "Keep the current stance", "color": Color(0.5, 0.7, 0.9)},
+	PlanEntry.Kind.NEUTRAL: {"icon": "🔄", "desc": "Drop to Neutral stance", "color": Color(0.7, 0.7, 0.8)},
+}
+const DIR_BUTTONS: Array[Dictionary] = [
+	{"text": "←", "dir": Vector2i(-1, 0)}, {"text": "↑", "dir": Vector2i(0, -1)},
+	{"text": "↓", "dir": Vector2i(0, 1)}, {"text": "→", "dir": Vector2i(1, 0)},
+]
 
-	var act_hbox := HBoxContainer.new()
-	act_card.add_child(act_hbox)
+func _palette_style(border: Color, fill: Color, width: int = 1) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(width)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 6
+	style.content_margin_right = 6
+	style.content_margin_top = 2
+	style.content_margin_bottom = 2
+	return style
 
-	var act_name_lbl := Label.new()
-	act_name_lbl.text = str(act["name"])
-	var act_col: Color = act.get("color", Color.WHITE)
-	act_name_lbl.add_theme_color_override("font_color", act_col)
-	act_hbox.add_child(act_name_lbl)
+func _kind_text(kind: PlanEntry.Kind) -> String:
+	var info: Dictionary = PALETTE[kind]
+	return "%s %s" % [str(info["icon"]), PlanEntry.kind_name(kind)]
 
-	act_hbox.add_spacer(false)
+func _kind_tooltip(kind: PlanEntry.Kind) -> String:
+	var info: Dictionary = PALETTE[kind]
+	return "%s\n%d block(s) • %d AP" % [str(info["desc"]), PlanEntry.blocks_of(kind), PlanEntry.ap_of(kind)]
 
-	var act_desc_lbl := Label.new()
-	act_desc_lbl.text = str(act["desc"])
-	act_desc_lbl.add_theme_font_size_override("font_size", 8)
-	act_desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
-	act_hbox.add_child(act_desc_lbl)
+# One clickable palette card; arms the command for placement on the timeline.
+func _create_palette_card(kind: PlanEntry.Kind, dir: Vector2i) -> PanelContainer:
+	var info: Dictionary = PALETTE[kind]
+	var col: Color = info["color"]
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.tooltip_text = _kind_tooltip(kind)
+	card.add_theme_stylebox_override("panel", _palette_style(Color(0.22, 0.3, 0.42, 0.6), Color(0.11, 0.14, 0.19, 0.7)))
+	var row := HBoxContainer.new()
+	card.add_child(row)
+	var name_lbl := Label.new()
+	name_lbl.text = _kind_text(kind)
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	name_lbl.add_theme_color_override("font_color", col)
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(name_lbl)
+	var cost_lbl := Label.new()
+	cost_lbl.text = "%db·%dAP" % [PlanEntry.blocks_of(kind), PlanEntry.ap_of(kind)]
+	cost_lbl.add_theme_font_size_override("font_size", 8)
+	cost_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	cost_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(cost_lbl)
+	card.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and palette_enabled:
+			command_armed.emit(kind as int, dir)
+	)
+	palette_cards[kind] = card
+	return card
 
-	return act_card
+# Move / Sprint card: the command name plus four direction buttons.
+func _create_direction_card(kind: PlanEntry.Kind) -> PanelContainer:
+	var info: Dictionary = PALETTE[kind]
+	var col: Color = info["color"]
+	var card := PanelContainer.new()
+	card.tooltip_text = _kind_tooltip(kind)
+	card.add_theme_stylebox_override("panel", _palette_style(Color(0.22, 0.3, 0.42, 0.6), Color(0.11, 0.14, 0.19, 0.7)))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	card.add_child(row)
+	var name_lbl := Label.new()
+	name_lbl.text = _kind_text(kind)
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	name_lbl.add_theme_color_override("font_color", col)
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(name_lbl)
+	var cost_lbl := Label.new()
+	cost_lbl.text = "%db·%dAP" % [PlanEntry.blocks_of(kind), PlanEntry.ap_of(kind)]
+	cost_lbl.add_theme_font_size_override("font_size", 8)
+	cost_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	row.add_child(cost_lbl)
+	for spec: Dictionary in DIR_BUTTONS:
+		var dir: Vector2i = spec["dir"]
+		var btn := Button.new()
+		btn.text = str(spec["text"])
+		btn.custom_minimum_size = Vector2(24, 0)
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.tooltip_text = "%s %s" % [PlanEntry.kind_name(kind), str(spec["text"])]
+		btn.pressed.connect(func() -> void:
+			if palette_enabled:
+				command_armed.emit(kind as int, dir)
+		)
+		row.add_child(btn)
+		direction_buttons.append({"kind": kind, "dir": dir, "button": btn})
+	palette_cards[kind] = card
+	return card
+
+# Reflects the planning state: enabled while planning, armed card highlighted, AP left.
+func update_planning(is_planning: bool, armed_kind: int, armed_dir: Vector2i, ap_left: int, ap_total: int) -> void:
+	palette_enabled = is_planning
+	palette_title_lbl.text = "COMMAND PALETTE" if is_planning else "COMMAND PALETTE (planning closed)"
+	palette_ap_lbl.text = "AP %d/%d" % [ap_left, ap_total] if is_planning else ""
+	for kind_key: Variant in palette_cards:
+		var card: PanelContainer = palette_cards[kind_key]
+		var kind: int = kind_key
+		var armed: bool = is_planning and armed_kind == kind
+		var info: Dictionary = PALETTE[kind]
+		var col: Color = info["color"]
+		card.modulate = Color.WHITE if is_planning else Color(1, 1, 1, 0.45)
+		if armed:
+			card.add_theme_stylebox_override("panel", _palette_style(Color(1.0, 0.9, 0.4), col.darkened(0.6), 2))
+		else:
+			card.add_theme_stylebox_override("panel", _palette_style(Color(0.22, 0.3, 0.42, 0.6), Color(0.11, 0.14, 0.19, 0.7)))
+	for spec: Dictionary in direction_buttons:
+		var btn: Button = spec["button"]
+		var spec_kind: int = spec["kind"]
+		var spec_dir: Vector2i = spec["dir"]
+		var is_armed_dir: bool = is_planning and armed_kind == spec_kind and armed_dir == spec_dir
+		btn.modulate = Color(1.0, 0.9, 0.4) if is_armed_dir else Color.WHITE
+		btn.disabled = not is_planning
+	for btn: Button in palette_buttons:
+		btn.disabled = not is_planning
+	left_hint.text = "💡 Pick a command (and a direction), then click a block on the timeline. Right-click a placed command to remove it." if is_planning else "💡 Planning is closed. Step through the round or review the replay."
 
 # `snap` (optional) renders the unit as it was at a replayed block; null = live state.
 func update_inspector(
@@ -334,7 +466,8 @@ func update_inspector(
 	is_ally: bool,
 	pos_text: String,
 	sprite_texture: Texture2D,
-	snap: BlockSnapshot = null
+	snap: BlockSnapshot = null,
+	intel: Array[Dictionary] = []
 ) -> void:
 	if not selected_combatant:
 		return
@@ -375,22 +508,20 @@ func update_inspector(
 		enemy_actions_container.visible = false
 		if not alive:
 			left_hint.text = "💀 Unit is defeated. Future commands cancelled."
-		else:
-			left_hint.text = "💡 Actions for selected hero line up on continuous timeline below."
 	else:
-		inspector_hdr.text = "ENEMY INTEL & POSSIBLE ACTIONS"
+		inspector_hdr.text = "ENEMY INTEL & BEHAVIOUR"
 		inspector_team_lbl.text = "Hostile Enemy Unit"
 		inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 		inspector_avatar.texture = sprite_texture
 		ally_actions_container.visible = false
 		enemy_actions_container.visible = alive
-		_rebuild_enemy_threat_dock(c)
+		_rebuild_enemy_threat_dock(intel)
 		if not alive:
 			left_hint.text = "💀 Enemy hostile defeated."
 		elif withdrawn:
 			left_hint.text = "💨 Enemy safely withdrew through escape boundary."
 		else:
-			left_hint.text = "💡 In actual combat, enemy turns resolve simultaneously in secret."
+			left_hint.text = "💡 Hostiles plan in secret; their commands are revealed as blocks resolve."
 
 	inspector_hp_bar.max_value = max_hp
 	inspector_hp_bar.value = cur_hp
@@ -439,55 +570,47 @@ func update_inspector(
 		else:
 			inspector_gear_lbl.text = "Gear: None"
 
-func _rebuild_enemy_threat_dock(selected_combatant: Combatant) -> void:
+func _rebuild_enemy_threat_dock(intel: Array[Dictionary]) -> void:
 	for child in enemy_actions_container.get_children():
 		if child is PanelContainer:
 			child.queue_free()
 
-	var enemy_actions: Array[Dictionary] = []
-	match selected_combatant.name:
-		"Enemy Brawler":
-			enemy_actions = [
-				{"name": "⚔ Heavy Strike", "desc": "20 Power Melee Crush | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)},
-				{"name": "🛡 Iron Guard", "desc": "50% Mitigation Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
-				{"name": "🎯 Target Lock", "desc": "Melee Focus Engagement | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
-				{"name": "➜ Tactical Stride", "desc": "1-Tile Repositioning | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
-			]
-		"Fleeing Scout", "Goblin Scout":
-			enemy_actions = [
-				{"name": "➜ Swift Retreat", "desc": "1-Tile Move toward Exit | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-				{"name": "⚡ Sprint / Dash", "desc": "2-Tile Burst toward Boundary | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.8, 0.3)},
-				{"name": "🗡 Quick Shank", "desc": "10 Power Puncture | Cost: 1 Block", "cost": 1, "color": Color(0.9, 0.35, 0.35)}
-			]
-		"Goblin Skirmisher":
-			enemy_actions = [
-				{"name": "🗡 Twin Dagger Rush", "desc": "15 Power Rapid Flank | Cost: 1 Block", "cost": 1, "color": Color(0.95, 0.6, 0.2)},
-				{"name": "➜ Shadow Step", "desc": "Agile 1-Tile Advance | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)},
-				{"name": "⚔ Flank Strike", "desc": "20 Power Heavy Puncture | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
-			]
-		"Goblin Archer":
-			enemy_actions = [
-				{"name": "🏹 Piercing Volley", "desc": "25 Power Longshot (Rng 3) | Cost: 2 Blocks", "cost": 2, "color": Color(0.2, 0.85, 0.5)},
-				{"name": "🎯 Eagle Eye", "desc": "Target Lock & Ranged Focus | Cost: 1 Block", "cost": 1, "color": Color(0.35, 0.85, 0.5)},
-				{"name": "➜ Reposition", "desc": "Kiting 1-Tile Step | Cost: 1 Block", "cost": 1, "color": Color(0.2, 0.8, 0.9)}
-			]
-		"Goblin Berserker":
-			enemy_actions = [
-				{"name": "🪓 Brutal Cleave", "desc": "30 Power Devastating Blow | Cost: 2 Blocks", "cost": 2, "color": Color(0.95, 0.25, 0.25)},
-				{"name": "🔥 Blood Frenzy", "desc": "+25% Attack Boost Buff | Cost: 2 Blocks", "cost": 2, "color": Color(0.95, 0.5, 0.2)},
-				{"name": "⚔ Axe Slam", "desc": "20 Power Heavy Chop | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
-			]
-		"Goblin Shaman":
-			enemy_actions = [
-				{"name": "🔮 Shadow Hex", "desc": "25 Power Dark Curse (Rng 2) | Cost: 2 Blocks", "cost": 2, "color": Color(0.7, 0.4, 0.95)},
-				{"name": "💀 Tribal Ward", "desc": "50% Mystic Barrier | Cost: 2 Blocks", "cost": 2, "color": Color(0.35, 0.65, 0.95)},
-				{"name": "✨ Mending Chant", "desc": "Restores 15 HP to Ally | Cost: 2 Blocks", "cost": 2, "color": Color(0.3, 0.9, 0.6)}
-			]
-		_:
-			enemy_actions = [
-				{"name": "⚔ Attack", "desc": "Basic Strike | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}
-			]
+	var enemy_actions: Array[Dictionary] = intel.duplicate()
+	if enemy_actions.is_empty():
+		enemy_actions = [{"name": "⚔ Attack", "desc": "Basic Strike | Cost: 2 Blocks", "cost": 2, "color": Color(0.9, 0.35, 0.35)}]
 
 	for act in enemy_actions:
 		var card := _create_mini_action_card(act)
 		enemy_actions_container.add_child(card)
+
+func _create_mini_action_card(act: Dictionary) -> PanelContainer:
+	var act_card := PanelContainer.new()
+	var act_style := StyleBoxFlat.new()
+	act_style.bg_color = Color(0.11, 0.14, 0.19, 0.7)
+	act_style.border_color = Color(0.22, 0.3, 0.42, 0.6)
+	act_style.set_border_width_all(1)
+	act_style.set_corner_radius_all(4)
+	act_style.content_margin_left = 6
+	act_style.content_margin_right = 6
+	act_style.content_margin_top = 2
+	act_style.content_margin_bottom = 2
+	act_card.add_theme_stylebox_override("panel", act_style)
+
+	var act_hbox := HBoxContainer.new()
+	act_card.add_child(act_hbox)
+
+	var act_name_lbl := Label.new()
+	act_name_lbl.text = str(act["name"])
+	var act_col: Color = act.get("color", Color.WHITE)
+	act_name_lbl.add_theme_color_override("font_color", act_col)
+	act_hbox.add_child(act_name_lbl)
+
+	act_hbox.add_spacer(false)
+
+	var act_desc_lbl := Label.new()
+	act_desc_lbl.text = str(act["desc"])
+	act_desc_lbl.add_theme_font_size_override("font_size", 8)
+	act_desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	act_hbox.add_child(act_desc_lbl)
+
+	return act_card

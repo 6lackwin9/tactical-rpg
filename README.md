@@ -76,7 +76,14 @@ tactical-rpg/
 │   │   │   ├── combat_session.gd         # Battle state: rounds, resolution, snapshots, replay, selection, log
 │   │   │   ├── combat_encounter.gd       # Encounter plug-in base (combatants, deployment, plans, triggers, art)
 │   │   │   ├── goblin_ambush_encounter.gd # Scripted 3-round demo encounter (reference battle)
+│   │   │   ├── skirmish_encounter.gd     # Player-planned encounter vs AI-planned goblins (arena default)
 │   │   │   └── combat_log_builder.gd     # Resolved actions -> log cells; resolver messages -> BBCode
+│   │   ├── planning/             # Per-round command plans (headless)
+│   │   │   ├── plan_entry.gd             # One planned command: kind, block, direction, target; builds the BattleCommand
+│   │   │   └── combat_plan.gd            # Per-unit timeline plan: validation, replace, AP budget, commit to resolver
+│   │   ├── ai/                   # Computer-controlled planning
+│   │   │   ├── ai_profile.gd             # Role (Aggressor/Skirmisher/Sniper/Support), strike power, flee & guard thresholds
+│   │   │   └── tactical_ai.gd            # Plans a unit's 10-block round: BFS path-finding, targeting, role patterns, flee
 │   │   └── arena/                # Arena spatial rules & resolution
 │   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability
 │       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
@@ -95,7 +102,7 @@ tactical-rpg/
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   └── arena_test_suite.gd       # 9 automated test suites with 77 assertions
+│   │   └── arena_test_suite.gd       # 10 automated test suites with 84 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── framework/                # Neutral UI framework shared by the dojo and the combat UI
 │       │   ├── ui_panel.gd               # Panel base: metadata, bind(session), refresh(), overlay requests
@@ -187,7 +194,9 @@ tactical-rpg/
 - **Static Dock Host (`CombatDockHost`)**: Fixed regions (top row, left/center/right, bottom bar) filled from data-driven layout presets (`Standard`, `Mirrored`). The game UI stays static; **layout edit mode** (`⚙` / `F9`) overlays an `⇱ Undock` tag on each panel without moving anything, floats panels into `UiWindow`s (their dock keeps a same-size placeholder) and docks them back when closed. The host also owns the full-screen modals and shortcuts (`Space` play, `Q`/`E` blocks, `[`/`]` log, `L` log modal, `F`/`Tab` timeline, `G` party & stash, `Esc` close).
 - **Custom SVG Visual Assets**: Custom vector graphics for characters, unit tokens, and grid tiles.
 - **Allied & Enemy Status Roster Docks**: Real-time HP bars, SP gauges, status badges, and position coordinates.
-- **Unit Inspector & Action Palette**: Unit profile portrait, speed, attack range, and action deck.
+- **Planning Phase (CombatPlan)**: In player-planned encounters (`SkirmishEncounter`, the arena default) each round starts in PLANNING: pick a command in the inspector's palette (Attack, Defend, Focus, Move/Sprint with a direction, Hold, Neutral), then click a free timeline block to place it; click a placed command to replace it, right-click to remove it. Attacks aim at the selected enemy (else the nearest). Every command costs AP (12 per round; Hold/Neutral are free) and blocks, and invalid placements are rejected with a reason. **Auto-plan** drafts a hero's round with the AI. Stepping/resolving locks the plan and schedules it together with the enemies' plans. **Reset round** rewinds units to how the round started.
+- **Enemy AI (`TacticalAI`)**: Each goblin plans its whole round at round start from an `AiProfile`: *Aggressor* (nearest foe, closes in), *Skirmisher* (weakest foe, backs off when hurt), *Sniper* (holds max range, retreats from melee), *Support* (opens with Focus, then ranged). Units path-find around walls/water/lava with BFS, sprint when AP allows, guard once when hurt and flee to the exit at 25% HP. Plans commit blind, so moving targets can make them fizzle. Enemy tracks stay masked on the timeline; the inspector's *Threat Intel* shows each hostile's role, power and thresholds.
+- **Unit Inspector & Command Palette**: Unit profile portrait, speed, range, AP left and the interactive palette (allies) or AI threat intel (hostiles).
 - **Tactical Forecast Dock**: Real-time Manhattan distance, in-range validation, matchup multiplier, and estimated strike damage.
 - **Action Feed & Modals**:
   - Compact active block log dock.
@@ -272,7 +281,7 @@ tactical-rpg/
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **9 test suites** covering **77 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **10 test suites** covering **84 individual assertions**:
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
@@ -284,6 +293,7 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 8. **Combat Session Flow Test** (8 assertions): Through `CombatSession` headlessly, only deployed enemies in view before the ambush, ambush event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay playhead reading per-block snapshots, round advance baselines with past rounds reviewable, Rounds 2-3 resolving to total victory, timer-free auto-play ticks, and round reset.
 9. **Art, Terrain & Zones Test** (9 assertions): team-colored class tokens and portraits, encounter art follows sides, terrain glyph round-trip and walkability, all 8 zones valid, grid blocks blocked tiles, Goblin Ambush wins on every zone, tile and item icon rasterization.
 
+10. **Planning & Enemy AI Test** (7 assertions): plan validation (timeline bounds, overlap/replace, AP budget, targets), party plan previewed on the timeline then locked and scheduled alongside the AI plans, Aggressor closing in and path-finding around walls, Sniper backing away, Support opening with Focus, wounded units fleeing and withdrawing, deterministic AI-vs-AI skirmishes on all 8 zones, and round reset rewinding state.
 Additionally, `scenes/gear_dojo.tscn` runs **36 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
 - **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword mastery, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
@@ -342,29 +352,29 @@ Or open the project in **Godot 4.7+** and press Play (main scene `res://scenes/c
 
 The following modular systems and capabilities are planned according to the master game design specification:
 
-### 1. Interactive Command Input & Planning Phase (Next Priority)
+### 1. Planning Phase Follow-ups
 
-*Status: Architecture ready, planning UI in progress.*
+*Status: Core planning implemented (palette, timeline placement, AP budget, replace/remove, auto-plan, round reset).*
 
-- [ ] Interactive timeline command placement (drag/click to assign player commands onto Blocks 1–10).
-- [ ] Action Point / Stamina cost budget verification during planning.
-- [ ] Dynamic command replacement and block shifting.
+- [x] Interactive timeline command placement and AP budget validation.
+- [x] Dynamic command replacement and removal.
+- [x] CombatSession extracted from `test_arena.gd`; combat UI rebuilt as session-bound panels in a static dock host (`combat_arena.tscn`).
+- [ ] Drag-and-drop on the timeline and block shifting (push later commands).
+- [ ] Ghost path / range preview of planned moves and attacks on the grid.
+- [ ] Skill and item commands in the palette (`SwitchWeaponCommand`, Dual Strike, battle-pouch items).
 - [ ] Terrain gameplay rules: cover bonuses, movement cost and hazard damage (metadata already in `Terrain`).
 - [ ] More bespoke icons for unique/rare gear (`Item.icon_id`).
-- [x] `CombatSession` extracted from `test_arena.gd`; combat UI rebuilt as session-bound panels in a static dock host (`combat_arena.tscn`).
 
-### 2. Enemy AI Decision Engine (`System 8`)
+### 2. Enemy AI Follow-ups (System 8)
 
-*Status: Currently runs pre-scripted tactical scenarios; dynamic AI engine planned.*
+*Status: Role-based AI planner implemented (Aggressor, Skirmisher, Sniper, Support, flee heuristic).*
 
-- [ ] AI Intent Evaluation: Evaluate party vulnerabilities, calculate distances, and choose targets.
-- [ ] Role Archetypes:
-  - *Aggressor*: Closes distance and executes high-power offensive combos.
-  - *Skirmisher / Flanker*: Maneuvers along perimeter, attacks, and retreats.
-  - *Sniper / Ranged*: Maintains max range and retreats if enemies close within melee distance.
-  - *Support / Shaman*: Buffs allies and debuffs player frontline.
-- [ ] Dynamic Flee Heuristic: Automatically triggers `MoveCommand` toward exit tiles when HP falls below 25%.
-
+- [x] AI intent evaluation: distances, weakest/nearest targeting, expected-damage tracking, BFS path-finding.
+- [x] Role archetypes and the 25% HP flee-to-exit heuristic.
+- [ ] Support abilities that buff or heal allies (needs ally-target commands).
+- [ ] Coordinated behaviour: focus fire, flanking and formation keeping.
+- [ ] Reactive intent: enemies reading the party's telegraphed plans (perception stat).
+- [ ] Difficulty profiles and AI-driven reinforcement waves.
 ### 3. Asset Loading & Animation Test Suite (`Test Suite 2`)
 
 *Status: Planned.*
