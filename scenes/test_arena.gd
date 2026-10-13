@@ -3,11 +3,9 @@ extends Node2D
 # ==============================================================================
 # Tactical RPG - Arena Test Harness
 # Runs the headless integration suite (ArenaTestSuite). Headless: exits with the
-# result code (used by check_project.ps1). Windowed: after the tests, launches
-# the real combat UI foundation scene (combat_arena.tscn) for manual testing.
+# result code (used by check_project.ps1 and the Scene Runner's suite buttons).
+# Windowed: after the tests, opens the Scene Runner.
 # ==============================================================================
-
-const COMBAT_ARENA_SCENE: PackedScene = preload("res://scenes/combat_arena.tscn")
 
 func _ready() -> void:
 	print("\n=======================================================")
@@ -27,5 +25,5 @@ func _ready() -> void:
 		ContentCatalog.clear_cache()
 		get_tree().quit(exit_code)
 	else:
-		print("Running in windowed mode. Launching combat arena UI...\n")
-		add_child(COMBAT_ARENA_SCENE.instantiate())
+		print("Running in windowed mode. Opening the Scene Runner...\n")
+		get_tree().change_scene_to_file.call_deferred("res://scenes/scene_runner.tscn")

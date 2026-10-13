@@ -383,17 +383,18 @@ func toggle_defend() -> void:
 		stage_fx.emit("glow", true, "🛡 DEFEND [50% MIT]", UiTheme.COL_INFO)
 	_notify()
 
+# Cycles the hero's stance: Neutral -> Offensive -> Tactical -> Defensive -> Neutral.
+# Damage uses the arena's matchup against the dummy's stance (see toggle_dummy_defense).
 func shift_stance() -> void:
 	if active_hero == null:
 		return
-	if active_hero.current_stance == CombatTypes.StanceType.NEUTRAL:
-		active_hero.set_stance(CombatTypes.StanceType.OFFENSIVE)
-		log_action("EVENT", "Stance Shift", "Offensive Stance (+20% ATK)", 20, "OFFENSIVE")
-		stage_fx.emit("glow", true, "⚔ OFFENSIVE", UiTheme.COL_BAD)
-	else:
-		active_hero.set_stance(CombatTypes.StanceType.NEUTRAL)
-		log_action("EVENT", "Stance Shift", "Back to Neutral Stance", 0, "NEUTRAL")
-		stage_fx.emit("text", true, "NEUTRAL", UiTheme.COL_MUTED)
+	var order: Array[CombatTypes.StanceType] = [CombatTypes.StanceType.NEUTRAL, CombatTypes.StanceType.OFFENSIVE, CombatTypes.StanceType.TACTICAL, CombatTypes.StanceType.DEFENSIVE]
+	var next: CombatTypes.StanceType = order[(order.find(active_hero.current_stance) + 1) % order.size()]
+	active_hero.set_stance(next)
+	var vs: float = CombatTypes.get_matchup_multiplier(next, test_dummy.current_stance) if test_dummy != null else 1.0
+	var label: String = CombatTypes.stance_to_string(next)
+	log_action("EVENT", "Stance Shift", "%s stance (x%.2f vs the dummy's %s)" % [label, vs, CombatTypes.stance_to_string(test_dummy.current_stance) if test_dummy != null else "-"], roundi((vs - 1.0) * 100.0), label.to_upper())
+	stage_fx.emit("glow" if next != CombatTypes.StanceType.NEUTRAL else "text", true, label.to_upper(), UiTheme.COL_BAD if next == CombatTypes.StanceType.OFFENSIVE else UiTheme.COL_MUTED)
 	_notify()
 
 func use_pouch_item(index: int) -> void:
@@ -429,11 +430,13 @@ func toggle_dummy_defense() -> void:
 		return
 	if test_dummy.defense_mitigation_ratio > 0.0:
 		test_dummy.defense_mitigation_ratio = 0.0
+		test_dummy.set_stance(CombatTypes.StanceType.NEUTRAL)
 		log_action("EVENT", "Dummy Stance", "Dummy neutral - hits deal full damage", 0, "NEUTRAL", "", test_dummy.name)
 		stage_fx.emit("text", false, "0% Mit", UiTheme.COL_GOOD)
 	else:
 		test_dummy.defense_mitigation_ratio = 0.5
-		log_action("DEFEND", "Dummy Stance", "Dummy defending - hits halved", 50, "MITIGATED 50%", "", test_dummy.name)
+		test_dummy.set_stance(CombatTypes.StanceType.DEFENSIVE)   # guarding = Defensive stance, as in the arena
+		log_action("DEFEND", "Dummy Stance", "Dummy guarding (Defensive stance) - hits halved", 50, "MITIGATED 50%", "", test_dummy.name)
 		stage_fx.emit("text", false, "🛡 50% Mit", UiTheme.COL_INFO)
 	_notify()
 

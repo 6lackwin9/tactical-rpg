@@ -187,6 +187,10 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("rng_seed", "RNG seed", "int", 1337, {"min": 0, "max": 2147483647}),
 		_f("party", "Party", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}}),
 		_f("enemies", "Enemies", "refs", [], {"ref": "units", "ref_filter": {"side": "enemy"}, "dupes": true, "help": "The same unit may appear more than once."}),
+		_f("wave_units", "Reinforcements", "refs", [], {"ref": "units", "ref_filter": {"side": "enemy"}, "dupes": true, "help": "Enemies that join mid-battle (one wave). They are planned by the AI from the next round."}),
+		_f("wave_round", "Wave round", "int", 1, {"min": 1, "max": 30}),
+		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10, "help": "The wave enters before this block resolves."}),
+		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
 	]
 
 # ------------------------------------------------------------------------------

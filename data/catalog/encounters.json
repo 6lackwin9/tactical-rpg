@@ -29,7 +29,11 @@
 				"goblin_archer",
 				"goblin_shaman",
 				"goblin_berserker"
-			]
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Reinforcements arrive!"
 		},
 		{
 			"id": "veterans_drill",
@@ -56,7 +60,46 @@
 				"goblin_brawler",
 				"goblin_archer",
 				"goblin_archer"
-			]
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Reinforcements arrive!"
+		},
+		{
+			"id": "goblin_ambush",
+			"name": "Goblin Ambush",
+			"description": "A brawler covers a fleeing scout; at Round 1 Block 4 the goblin pack ambushes the party from the east.",
+			"zone": "forest_clearing",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					8,
+					4
+				]
+			],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"warrior",
+				"ranger"
+			],
+			"enemies": [
+				"enemy_brawler",
+				"fleeing_scout"
+			],
+			"wave_units": [
+				"ambush_berserker",
+				"goblin_skirmisher",
+				"goblin_archer",
+				"goblin_shaman"
+			],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Ambush! The goblin pack"
 		}
 	]
 }

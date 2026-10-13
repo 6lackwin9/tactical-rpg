@@ -70,7 +70,7 @@ var phase_color: Color = COL_PLANNING
 var status_text: String = ""
 var next_round_label: String = ""    # empty = no round advance available
 
-# Planning (encounters with player_planning): the party's plan for the live round.
+# Planning: the party's plan for the live round.
 var plan: CombatPlan = null               # per-unit command sequences (rebuilt each round)
 var plan_confirmed: bool = false         # sequences locked and scheduled
 var preview_step: PlanStep = null         # hovered option being previewed on the grid
@@ -190,16 +190,13 @@ func reset_round() -> void:
 		return
 	_truncate_log_from_round(current_round)
 	combat_over = false
-	if encounter.player_planning:
-		# Rounds carry state over, so rewind to how this round started.
-		var start_snap: BlockSnapshot = snapshot_at(current_round, 0)
-		if start_snap != null:
-			_restore_snapshot(start_snap)
-		for c: Combatant in resolver.registered_combatants:
-			c.pending_statuses.clear()   # statuses inflicted in the undone round never happened
-		_begin_round(current_round, false)
-	else:
-		_begin_round(current_round)
+	# Rounds carry state over, so rewind to how this round started.
+	var start_snap: BlockSnapshot = snapshot_at(current_round, 0)
+	if start_snap != null:
+		_restore_snapshot(start_snap)
+	for c: Combatant in resolver.registered_combatants:
+		c.pending_statuses.clear()   # statuses inflicted in the undone round never happened
+	_begin_round(current_round, false)
 
 func reset_battle() -> void:
 	start()
@@ -233,7 +230,7 @@ func step_prev() -> void:
 func _step_resolution() -> void:
 	inspect_block = -1
 	if phase == Phase.PLANNING:
-		if encounter.player_planning and not plan_confirmed and not confirm_plan(false):
+		if not plan_confirmed and not confirm_plan(false):
 			return
 		phase = Phase.RESOLVING
 		_set_phase("RESOLVING COMBAT", COL_RESOLVING)
@@ -398,7 +395,7 @@ func find_recorded_action(combatant: Combatant, block: int) -> CombatResolver.Sc
 # ------------------------------------------------------------------------------
 
 func is_planning() -> bool:
-	return encounter.player_planning and phase == Phase.PLANNING and is_live_view() and not combat_over and not plan_confirmed
+	return phase == Phase.PLANNING and is_live_view() and not combat_over and not plan_confirmed
 
 # Next inputs for `actor`, each probed against the sequence so far (valid or why not).
 func plan_options(actor: Combatant) -> Array[PlanOption]:
@@ -556,7 +553,8 @@ func confirm_plan(auto_play: bool = true) -> bool:
 	plan_confirmed = true
 	_refresh_archive(false)
 	status_text = "Plan confirmed: resolving the round (Step to go block by block)."
-	is_auto_playing = auto_play   # confirming starts the round; Play afterwards replays it
+	if auto_play:
+		is_auto_playing = true   # confirming starts the round (Play while planning keeps playing); Play afterwards replays it
 	_notify()
 	return true
 
@@ -593,7 +591,7 @@ func _refresh_archive(with_plan: bool = true) -> void:
 	var archived: Array[CombatResolver.ScheduledAction] = []
 	for a: CombatResolver.ScheduledAction in resolver.scheduled_actions:
 		archived.append(CombatResolver.ScheduledAction.new(a.combatant, a.command, a.start_block, a.end_block))
-	if with_plan and encounter.player_planning and phase == Phase.PLANNING and not plan_confirmed:
+	if with_plan and phase == Phase.PLANNING and not plan_confirmed:
 		archived.append_array(plan.preview_actions())
 	round_actions[current_round] = archived
 

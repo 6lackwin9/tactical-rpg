@@ -6,8 +6,8 @@ extends Node2D
 #   Rules & battle flow -> scripts/combat/session/ (CombatSession, CombatEncounter)
 #   Panels & layout     -> scripts/ui/combat/      (CombatPanel subclasses, CombatDockHost)
 # Callers (game flow, test harness) may assign `encounter` before the scene
-# enters the tree, or pass `-- --encounter=<catalog id>`; it defaults to the
-# player-planned Goblin Skirmish (GoblinAmbushEncounter is the scripted reference).
+# enters the tree (the Scene Runner does), or pass `-- --encounter=<catalog id>`;
+# it defaults to the Goblin Skirmish.
 # ==============================================================================
 
 var encounter: CombatEncounter = null
@@ -18,7 +18,7 @@ func _ready() -> void:
 	if encounter == null:
 		encounter = encounter_from_args(OS.get_cmdline_user_args())
 	if encounter == null:
-		encounter = SkirmishEncounter.new()
+		encounter = CatalogEncounter.new("goblin_skirmish")
 	session = CombatSession.new(encounter)
 
 	var canvas := CanvasLayer.new()

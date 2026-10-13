@@ -51,9 +51,14 @@ func close_playtest() -> void:
 	if forge_layer != null:
 		forge_layer.visible = true
 
+# SceneRunner asks before leaving: unsaved catalog edits would be lost.
+func has_unsaved_changes() -> bool:
+	return ContentCatalog.is_dirty() or (forge != null and forge.draft_dirty)
+
 func is_playtesting() -> bool:
 	return arena != null
 
+# Leaving with unsaved catalog edits discards them (the menu already asked).
 func _exit_tree() -> void:
-	SkillCatalog.clear_cache()
-	ContentCatalog.clear_cache()
+	if ContentCatalog.is_dirty():
+		ContentCatalog.reload_from_disk()

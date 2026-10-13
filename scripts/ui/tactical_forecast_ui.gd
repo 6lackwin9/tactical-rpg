@@ -130,7 +130,7 @@ func _build_ui() -> void:
 	ar_vbox.add_child(intel_exit_lbl)
 
 	intel_turn_lbl = Label.new()
-	intel_turn_lbl.text = "⏱ 10 Blocks / Round: Simultaneous Execution"
+	intel_turn_lbl.text = "⏱ Blocks / Round"
 	intel_turn_lbl.add_theme_font_size_override("font_size", 9)
 	intel_turn_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
 	ar_vbox.add_child(intel_turn_lbl)
@@ -141,7 +141,16 @@ func _build_ui() -> void:
 	right_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	right_vbox.add_child(right_hint)
 
-func update_forecast(selected_combatant: Combatant, target: Combatant, grid: CombatGrid) -> void:
+# Arena rules line: blocks per round, AP pool and recovery, exits.
+func set_arena_intel(total_blocks: int, unit_ap: int, ap_regen: int, exits: Array[Vector2i]) -> void:
+	intel_turn_lbl.text = "⏱ %d Blocks / Round • %d AP pool, %s each round" % [total_blocks, unit_ap, ("+%d" % ap_regen) if ap_regen >= 0 else "refilled"]
+	var exit_names: Array[String] = []
+	for e: Vector2i in exits:
+		exit_names.append(str(e))
+	intel_exit_lbl.text = ("🚪 Exit %s: withdraw to leave the battle" % ", ".join(exit_names)) if not exit_names.is_empty() else "🚪 No exit: fight to the end"
+
+# `power`: the unit's strike power; `band`: its basic attack's reach (min, max).
+func update_forecast(selected_combatant: Combatant, target: Combatant, grid: CombatGrid, power: int = 25, band: Vector2i = Vector2i(1, 1)) -> void:
 	if not selected_combatant:
 		return
 
@@ -161,13 +170,14 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 		var dist: int = grid.get_distance(p1, p2)
 		forecast_dist_lbl.text = "Distance: %d tile%s (Manhattan)" % [dist, "s" if dist != 1 else ""]
 
-		var in_range: bool = dist <= selected_combatant.attack_range
-		if in_range:
-			forecast_range_badge.text = "✓ IN ATTACK RANGE (%d/%d)" % [dist, selected_combatant.attack_range]
+		if dist >= band.x and dist <= band.y:
+			forecast_range_badge.text = "✓ IN REACH (distance %d, reach %d-%d)" % [dist, band.x, band.y]
 			forecast_range_badge.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+		elif dist < band.x:
+			forecast_range_badge.text = "✗ TOO CLOSE (reach %d-%d): back off or off-hand jab" % [band.x, band.y]
+			forecast_range_badge.add_theme_color_override("font_color", Color(0.98, 0.7, 0.3))
 		else:
-			var needed: int = dist - selected_combatant.attack_range
-			forecast_range_badge.text = "✗ OUT OF RANGE (Need +%d steps)" % needed
+			forecast_range_badge.text = "✗ OUT OF REACH (+%d tiles): Engage moves in" % (dist - band.y)
 			forecast_range_badge.add_theme_color_override("font_color", Color(0.95, 0.4, 0.4))
 
 		var mult: float = CombatTypes.get_matchup_multiplier(selected_combatant.current_stance, target.current_stance)
@@ -177,8 +187,7 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 			mult
 		]
 
-		var base_power: int = 25
-		var est_dmg: int = int(roundf(float(base_power) * mult * selected_combatant.attack_boost_multiplier * (1.0 - target.defense_mitigation_ratio)))
+		var est_dmg: int = int(roundf(float(power) * mult * selected_combatant.attack_boost_multiplier * (1.0 - target.defense_mitigation_ratio)))
 		var mit_note: String = " (-%d%% def)" % int(target.defense_mitigation_ratio * 100) if target.defense_mitigation_ratio > 0 else ""
 		forecast_dmg_lbl.text = "Est. Strike Impact: ~%d dmg%s" % [est_dmg, mit_note]
 	else:

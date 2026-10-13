@@ -360,7 +360,7 @@ func save_all() -> bool:
 	return true
 
 func reload_all() -> void:
-	ContentCatalog.reload()
+	ContentCatalog.reload_from_disk()
 	draft_dirty = false
 	selected_id = ""
 	show_kind(kind)

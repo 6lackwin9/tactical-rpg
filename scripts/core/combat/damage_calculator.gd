@@ -13,12 +13,11 @@ extends RefCounted
 #   where Wep Power = Base Power + Σ Tier Bonus Power + Mastery Bonus Power
 #
 #   Final Damage =
-#       Attack Power * Skill Mult * (1 - Mitigation%) * (1 + Stance) * Crit * (1 + Effect)
+#       Attack Power * Skill Mult * (1 - Mitigation%) * Stance Matchup * Crit * (1 + Effect)
+#   Stance Matchup: CombatTypes.get_matchup_multiplier (Offensive > Tactical >
+#   Defensive > Offensive: 1.25 / 0.75; Neutral or same stance 1.0), as in the arena.
 # ==============================================================================
 
-# Stance bonus constants (centralised so arena & dojo stay in sync)
-const OFFENSIVE_STANCE_BONUS: float = 0.20
-const DEFENSIVE_STANCE_PENALTY: float = -0.15
 const SCALING_FACTOR: float = 1.5
 
 # ------------------------------------------------------------------------------
@@ -113,13 +112,10 @@ static func compute(
 	var mit_ratio: float = target.defense_mitigation_ratio if target != null else 0.0
 	var mit_mult: float = 1.0 - mit_ratio
 
-	# --- Step 4: Stance multiplier ---
-	var stance_mult: float = 0.0
-	if attacker.current_stance == CombatTypes.StanceType.OFFENSIVE:
-		stance_mult = OFFENSIVE_STANCE_BONUS
-	elif attacker.current_stance == CombatTypes.StanceType.DEFENSIVE:
-		stance_mult = DEFENSIVE_STANCE_PENALTY
-	var stance_factor: float = 1.0 + stance_mult
+	# --- Step 4: Stance matchup (the arena's rock-paper-scissors: +/-25%) ---
+	var defender_stance: CombatTypes.StanceType = target.current_stance if target != null else CombatTypes.StanceType.NEUTRAL
+	var stance_factor: float = CombatTypes.get_matchup_multiplier(attacker.current_stance, defender_stance)
+	var stance_mult: float = stance_factor - 1.0
 
 	# --- Step 5: Critical hit ---
 	var crit_rate: float = attacker.stats.get_crit_rate(ctx) if attacker.stats != null else 5.0

@@ -84,7 +84,6 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 		_:
 			command = RestCommand.new(actor, skill.recover_ap, skill.blocks)
 	command.command_name = skill.display_name
-	command.planner_controlled = true
 	command.ap_cost = skill_ap
 	command.stance_switch_cost = switch_ap
 	command.stance_on_start = -1 if (skill.kind == SkillDef.Kind.MOVE or skill.kind == SkillDef.Kind.TARGET or skill.kind == SkillDef.Kind.STATUS) else skill.stance()

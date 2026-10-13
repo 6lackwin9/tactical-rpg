@@ -374,22 +374,22 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		clip_style.bg_color = Color(0.12, 0.25, 0.48, 0.95)
 		clip_style.border_color = Color(0.3, 0.6, 0.95, 1.0)
 		icon_str = "🛡"
-		subtitle = "Mitigate 50%"
+		subtitle = "Guard -%d%%" % roundi((act.command as DefendCommand).mitigation_ratio * 100.0)
 	elif act.command is FocusCommand:
 		clip_style.bg_color = Color(0.32, 0.14, 0.48, 0.95)
 		clip_style.border_color = Color(0.75, 0.4, 0.95, 1.0)
 		icon_str = "✦"
-		subtitle = "+50% ATK (2 rds)"
-	elif act.command is MoveCommand:
+		subtitle = "x%.2f ATK (%d rds)" % [(act.command as FocusCommand).boost_multiplier, (act.command as FocusCommand).duration_rounds]
+	elif act.command is WalkCommand:
 		clip_style.bg_color = Color(0.08, 0.32, 0.44, 0.95)
 		clip_style.border_color = Color(0.2, 0.8, 0.95, 1.0)
 		icon_str = "➜"
-		var mv: MoveCommand = act.command as MoveCommand
 		var walk_cmd: WalkCommand = act.command as WalkCommand
-		if walk_cmd != null and walk_cmd.approach_target != null:
-			subtitle = "→ %s (%d)" % [walk_cmd.approach_target.name, mv.steps]
+		var tiles: int = walk_cmd.path.size()
+		if walk_cmd.approach_target != null:
+			subtitle = "→ %s (%d)" % [walk_cmd.approach_target.name, tiles]
 		else:
-			subtitle = "%s %s" % [PlanEntry.dir_arrow(mv.direction), "2 tiles" if mv.steps > 1 else "1 tile"] if mv != null else "Grid Step"
+			subtitle = "%s %d tile%s" % [PlanEntry.dir_arrow(walk_cmd.direction()), tiles, "" if tiles == 1 else "s"]
 	elif act.command is StatusBlockCommand:
 		clip_style.bg_color = Color(0.25, 0.08, 0.08, 0.95)
 		clip_style.border_color = Color(0.7, 0.25, 0.25, 1.0)
@@ -410,12 +410,6 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
 		icon_str = "🎯"
 		subtitle = "Focus Lock"
-	elif act.command is HoldStanceCommand:
-		clip_style.bg_color = Color(0.2, 0.28, 0.38, 0.95)
-		clip_style.border_color = Color(0.4, 0.65, 0.85, 1.0)
-		icon_str = "⏱"
-		cmd_display_name = "Hold" if cost == 1 else "Hold Stance"
-		subtitle = "Maintain Stance"
 	else:
 		clip_style.bg_color = Color(0.22, 0.26, 0.34, 0.95)
 		clip_style.border_color = Color(0.5, 0.6, 0.7, 1.0)
@@ -444,9 +438,7 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 	title_hbox.add_child(name_lbl)
 
 	var cost_lbl := Label.new()
-	cost_lbl.text = "[%db]" % cost
-	if act.command.planner_controlled:
-		cost_lbl.text = "[%db · %dAP]" % [cost, act.command.ap_cost + act.command.stance_switch_cost]
+	cost_lbl.text = "[%db · %dAP]" % [cost, act.command.ap_cost + act.command.stance_switch_cost]
 	cost_lbl.add_theme_font_size_override("font_size", 8)
 	cost_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
 	title_hbox.add_child(cost_lbl)

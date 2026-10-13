@@ -3,33 +3,31 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Headless Integration & UI Test Suite
-# Contains all automated headless tests:
-# 1. Combat UI Framework Test (CombatSession + CombatDockHost panels)
-# 2. Warrior vs 3 Goblins Battle (Stance, Multi-round focus buff, Damage mitigation)
-# 3. Combat Grid & Withdrawal Test (9x9 grid, spatial range gate, exit withdrawal)
-# 4. Resolution Feed & Action Logging Test (Event capture, structured log feed)
-# 5. Goblin Ambush & Casualty Test (Reinforcements, casualty action cancellation)
-# 6. Character Specs & Inventory Test (6-stat framework, progression, masteries)
-# 7. Gear Equip UI, Test Dummy & Damage Formula Test (Equipment modal, dummy, formulas)
-# 8. Combat Session Flow Test (scripted 3-round Goblin Ambush through CombatSession)
-# 9. Art, Terrain & Combat Zone Test (generated tokens/portraits/tiles/icons, terrain rules, zones)
+# Runs every headless suite (exit code for check_project.ps1):
+#  1. Combat UI Framework (CombatSession + CombatDockHost panels, Goblin Ambush)
+#  2. Core Combat Rules (CoreRulesTestSuite: guard, stances, Focus, casualties, withdrawal, feed)
+#  3. Character Specs & Inventory (6-stat framework, progression, masteries, gear)
+#  4. Gear Equip UI & Test Dummy (equipment modal, dummy, damage formula)
+#  5. Combat Session Flow (catalog Goblin Ambush: wave, replay, rounds, auto-play, reset)
+#  6. Art, Terrain & Combat Zones (tokens, portraits, tiles, icons, zones)
+#  7. Planning, Stances, AP & Enemy AI
+#  8. Content Catalog & Forge (ContentTestSuite)
+#  9. Scene Runner (RunnerTestSuite)
 # ==============================================================================
 
 static func run_all_tests(tree_parent: Node = null) -> bool:
-	var test0_passed: bool = run_combat_ui_framework_test(tree_parent)
-	var test1_passed: bool = run_warrior_vs_3_goblins_battle()
-	var test2_passed: bool = run_combat_grid_and_withdrawal_test()
-	var test3_passed: bool = run_resolution_feed_logging_test()
-	var test4_passed: bool = run_goblin_ambush_and_casualty_test()
-	var test5_passed: bool = run_character_specs_and_inventory_test()
-	var test6_passed: bool = run_gear_equip_and_test_dummy_suite(tree_parent)
-	var test7_passed: bool = run_combat_session_flow_test()
-	var test8_passed: bool = run_art_and_terrain_test()
-	var test9_passed: bool = run_planning_and_ai_test()
-	var test10_passed: bool = ContentTestSuite.run(tree_parent)
-
-	return (test0_passed and test1_passed and test2_passed and test3_passed and
-		test4_passed and test5_passed and test6_passed and test7_passed and test8_passed and test9_passed and test10_passed)
+	var results: Array[bool] = [
+		run_combat_ui_framework_test(tree_parent),
+		CoreRulesTestSuite.run(),
+		run_character_specs_and_inventory_test(),
+		run_gear_equip_and_test_dummy_suite(tree_parent),
+		run_combat_session_flow_test(),
+		run_art_and_terrain_test(),
+		run_planning_and_ai_test(),
+		ContentTestSuite.run(tree_parent),
+		RunnerTestSuite.run(tree_parent),
+	]
+	return not results.has(false)
 
 
 # ==============================================================================
@@ -41,7 +39,7 @@ static func run_combat_ui_framework_test(tree_parent: Node = null) -> bool:
 	print("=== STARTING COMBAT UI FRAMEWORK & BEHAVIOUR TEST   ===")
 	print("=======================================================")
 
-	var session := CombatSession.new(GoblinAmbushEncounter.new())
+	var session := CombatSession.new(CatalogEncounter.new("goblin_ambush"))
 	var host := CombatDockHost.new()
 	if tree_parent != null:
 		tree_parent.add_child(host)
@@ -142,7 +140,7 @@ static func run_combat_ui_framework_test(tree_parent: Node = null) -> bool:
 
 
 # ==============================================================================
-# TEST 8: COMBAT SESSION FLOW (scripted Goblin Ambush, headless)
+# TEST 5: COMBAT SESSION FLOW (catalog Goblin Ambush, headless)
 # ==============================================================================
 
 static func _resolve_until_replay(session: CombatSession, max_steps: int = 600) -> void:
@@ -153,22 +151,26 @@ static func _resolve_until_replay(session: CombatSession, max_steps: int = 600) 
 
 static func run_combat_session_flow_test() -> bool:
 	print("\n=======================================================")
-	print("=== STARTING COMBAT SESSION FLOW TEST (3 ROUNDS)    ===")
+	print("=== STARTING COMBAT SESSION FLOW TEST (GOBLIN AMBUSH) ===")
 	print("=======================================================")
 
-	var encounter := GoblinAmbushEncounter.new()
+	var encounter := CatalogEncounter.new("goblin_ambush")
 	var session := CombatSession.new(encounter)
 	session.start()
+	var warrior: Combatant = encounter.unit("warrior")
 
-	# 1. Before the ambush only the initial enemies are in view
+	# 1. Before the wave only the initial enemies are in view
 	var pre_view_ok: bool = session.enemies_in_view().size() == 2 and session.phase == CombatSession.Phase.PLANNING
 
-	# 2. The ambush triggers exactly at Round 1, Block 4 and brings 4 goblins into view
+	# 2. The wave enters exactly at Round 1, Block 4 and brings 4 goblins into view
+	session.plan_apply_preset_all("balanced")
 	var ambush: ActionLogEntry = null
 	for i: int in range(300):
 		session.step_next()
+		if session.log_entries.is_empty():
+			continue
 		var last: ActionLogEntry = session.log_entries[session.log_entries.size() - 1]
-		if last.outcome_tag == "AMBUSH!":
+		if last.outcome_tag == "ARRIVED":
 			ambush = last
 			break
 	var ambush_ok: bool = ambush != null and ambush.ref_tag == "R1-B04" and session.enemies_in_view().size() == 6
@@ -178,38 +180,43 @@ static func run_combat_session_flow_test() -> bool:
 	var round1_ok: bool = (
 		session.phase == CombatSession.Phase.REPLAY and not session.combat_over
 		and session.can_advance_round() and not session.next_round_label.is_empty()
-		and encounter.warrior.is_alive()
+		and warrior.is_alive()
 	)
 
 	# 4. Replay works by log points: a block opens at its start (state after the blocks
 	# before it), a round opens at its start, and stepping walks the log forward and back
 	var snap0: BlockSnapshot = session.snapshot_at(1, 0)
 	var snap1: BlockSnapshot = session.snapshot_at(1, 1)
-	var start_hp: int = snap0.hps.get(encounter.warrior, -1)
+	var start_hp: int = snap0.hps.get(warrior, -1)
 	session.select_block(2)
-	var at_block2: bool = snap1 != null and session.position_of(encounter.warrior) == snap1.positions.get(encounter.warrior, Vector2i(-1, -1))
+	var at_block2: bool = snap1 != null and session.position_of(warrior) == snap1.positions.get(warrior, Vector2i(-1, -1))
 	session.select_block(1)
-	var at_start: bool = session.replay_cursor == -1 and session.display_snapshot() == snap0 and session.position_of(encounter.warrior) == snap0.positions.get(encounter.warrior, Vector2i(-1, -1))
+	var at_start: bool = session.replay_cursor == -1 and session.display_snapshot() == snap0 and session.position_of(warrior) == snap0.positions.get(warrior, Vector2i(-1, -1))
 	session.step_next()
 	var first_point: int = session.replay_cursor
 	var stepped: bool = first_point >= 0 and session.log_entries[first_point].round_num == 1 and session.display_snapshot() != snap0
 	session.step_prev()
 	var back_to_start: bool = session.replay_cursor == -1
-	var replay_ok: bool = at_block2 and at_start and stepped and back_to_start and start_hp == 100
+	var replay_ok: bool = at_block2 and at_start and stepped and back_to_start and start_hp == warrior.max_hp
 
-	# 5. Advancing applies the Round 2 baseline; Round 1 stays reviewable
+	# 5. Advancing carries the state into Round 2; Round 1 stays reviewable
+	var hp_end_r1: int = warrior.hp
 	session.advance_round()
-	var r2_live: bool = session.current_round == 2 and session.phase == CombatSession.Phase.PLANNING and encounter.warrior.hp == 73
+	var r2_live: bool = session.current_round == 2 and session.phase == CombatSession.Phase.PLANNING and warrior.hp == hp_end_r1
 	session.select_round(1)
 	var viewing_r1: bool = session.viewed_round == 1 and not session.is_live_view()
 	session.select_round(2)
 	var traversal_ok: bool = r2_live and viewing_r1 and session.is_live_view() and session.max_unlocked_round == 2
 
-	# 6. Rounds 2 and 3 resolve to total victory
-	_resolve_until_replay(session)
-	session.advance_round()
-	_resolve_until_replay(session)
-	var victory_ok: bool = session.combat_over and session.current_round == 3 and not session.can_advance_round() and "VICTORY" in session.phase_text
+	# 6. Later rounds (AI presets on both sides) play on to a conclusion
+	for round_num: int in range(encounter.max_rounds):
+		session.plan_apply_preset_all("balanced")
+		session.confirm_plan()
+		_resolve_until_replay(session)
+		if session.combat_over or not session.can_advance_round():
+			break
+		session.advance_round()
+	var victory_ok: bool = (session.combat_over or session.current_round == encounter.max_rounds) and not session.can_advance_round()
 
 	# 7. Auto-play ticks resolve a round without a timer (headless)
 	session.reset_battle()
@@ -222,17 +229,18 @@ static func run_combat_session_flow_test() -> bool:
 
 	# 8. Resetting the round restores Round 1 planning with an empty log
 	session.reset_round()
-	var reset_ok: bool = session.current_round == 1 and session.log_entries.is_empty() and encounter.warrior.hp == 100 and session.phase == CombatSession.Phase.PLANNING
+	warrior = encounter.unit("warrior")   # a round-1 reset rebuilds the battle
+	var reset_ok: bool = session.current_round == 1 and session.log_entries.is_empty() and warrior.hp == warrior.max_hp and session.phase == CombatSession.Phase.PLANNING
 
 	print("\n=======================================================")
 	print("=== COMBAT SESSION FLOW ASSERTIONS                  ===")
 	print("=======================================================")
-	print("  [Session] Only deployed enemies in view before ambush: %s" % ("PASS" if pre_view_ok else "FAIL"))
-	print("  [Session] Ambush event at R1-B04 brings reinforcements into view: %s" % ("PASS" if ambush_ok else "FAIL"))
+	print("  [Session] Only deployed enemies in view before the wave: %s" % ("PASS" if pre_view_ok else "FAIL"))
+	print("  [Session] Wave event at R1-B04 brings reinforcements into view: %s" % ("PASS" if ambush_ok else "FAIL"))
 	print("  [Session] Round 1 resolves into replay with round advance offered: %s" % ("PASS" if round1_ok else "FAIL"))
 	print("  [Session] Replay steps by log points; blocks/rounds open at their start: %s" % ("PASS" if replay_ok else "FAIL"))
-	print("  [Session] Round advance applies baseline; past rounds reviewable: %s" % ("PASS" if traversal_ok else "FAIL"))
-	print("  [Session] Rounds 2-3 resolve to total victory: %s" % ("PASS" if victory_ok else "FAIL"))
+	print("  [Session] Round advance carries state over; past rounds reviewable: %s" % ("PASS" if traversal_ok else "FAIL"))
+	print("  [Session] Later rounds (AI presets) play on to a conclusion: %s" % ("PASS" if victory_ok else "FAIL"))
 	print("  [Session] Auto-play ticks resolve a full round headlessly: %s" % ("PASS" if autoplay_ok else "FAIL"))
 	print("  [Session] Round reset restores planning with an empty log: %s" % ("PASS" if reset_ok else "FAIL"))
 
@@ -240,417 +248,7 @@ static func run_combat_session_flow_test() -> bool:
 	return pre_view_ok and ambush_ok and round1_ok and replay_ok and traversal_ok and victory_ok and autoplay_ok and reset_ok
 
 # ==============================================================================
-# TEST 2: WARRIOR VS 3 GOBLINS BATTLE
-# ==============================================================================
-
-static func run_warrior_vs_3_goblins_battle() -> bool:
-	var resolver := CombatResolver.new()
-
-	var warrior := Combatant.new("Warrior", 120, 15)
-	var scout := Combatant.new("Goblin Scout", 35, 18)
-	var brawler := Combatant.new("Goblin Brawler", 45, 12)
-	var skirmisher := Combatant.new("Goblin Skirmisher", 40, 16)
-
-	resolver.register_combatant(warrior)
-	resolver.register_combatant(scout)
-	resolver.register_combatant(brawler)
-	resolver.register_combatant(skirmisher)
-
-	# Round 1 Scheduling
-	resolver.schedule_action(warrior, TargetCommand.new(warrior, scout), 1)
-	resolver.schedule_action(warrior, FocusCommand.new(warrior, 1.5, 2), 2)
-	resolver.schedule_action(warrior, EnterNeutralCommand.new(warrior), 4)
-	resolver.schedule_action(warrior, AttackCommand.new(warrior, scout, 30), 5)
-	resolver.schedule_action(warrior, EnterNeutralCommand.new(warrior), 7)
-	resolver.schedule_action(warrior, DefendCommand.new(warrior, 0.5), 8)
-	resolver.schedule_action(warrior, HoldStanceCommand.new(warrior), 10)
-
-	resolver.schedule_action(scout, DefendCommand.new(scout, 0.5), 1)
-	resolver.schedule_action(scout, AttackCommand.new(scout, warrior, 12), 3)
-	resolver.schedule_action(scout, AttackCommand.new(scout, warrior, 12), 5)
-
-	resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5), 1)
-	resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5), 3)
-	resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5), 5)
-	resolver.schedule_action(brawler, EnterNeutralCommand.new(brawler), 7)
-	resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 14), 8)
-	resolver.schedule_action(brawler, HoldStanceCommand.new(brawler), 10)
-
-	resolver.schedule_action(skirmisher, TargetCommand.new(skirmisher, warrior), 1)
-	resolver.schedule_action(skirmisher, AttackCommand.new(skirmisher, warrior, 10), 2)
-	resolver.schedule_action(skirmisher, EnterNeutralCommand.new(skirmisher), 4)
-	resolver.schedule_action(skirmisher, DefendCommand.new(skirmisher, 0.5), 5)
-	resolver.schedule_action(skirmisher, EnterNeutralCommand.new(skirmisher), 7)
-	resolver.schedule_action(skirmisher, AttackCommand.new(skirmisher, warrior, 12), 8)
-	resolver.schedule_action(skirmisher, HoldStanceCommand.new(skirmisher), 10)
-
-	resolver.resolve_round()
-
-	var warrior_hp_r1: int = warrior.hp
-	var scout_defeated_r1: bool = scout.hp == 0
-	var warrior_hp_r1_ok: bool = warrior_hp_r1 == 73
-	var focus_buff_persisted: bool = warrior.attack_boost_multiplier == 1.5 and warrior.attack_boost_rounds_remaining == 1
-	var stance_persisted: bool = warrior.current_stance == CombatTypes.StanceType.DEFENSIVE
-
-	# Round 2 Scheduling
-	resolver.schedule_action(warrior, EnterNeutralCommand.new(warrior), 1)
-	resolver.schedule_action(warrior, TargetCommand.new(warrior, brawler), 2)
-	resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 30), 3)
-	resolver.schedule_action(warrior, EnterNeutralCommand.new(warrior), 5)
-	resolver.schedule_action(warrior, TargetCommand.new(warrior, skirmisher), 6)
-	resolver.schedule_action(warrior, AttackCommand.new(warrior, skirmisher, 30), 7)
-	resolver.schedule_action(warrior, DefendCommand.new(warrior, 0.5), 9)
-
-	resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 10), 1)
-	resolver.schedule_action(skirmisher, DefendCommand.new(skirmisher, 0.5), 1)
-
-	resolver.resolve_round()
-
-	var warrior_hp_r2: int = warrior.hp
-	var brawler_defeated: bool = brawler.hp == 0
-	var skirmisher_defeated: bool = skirmisher.hp == 0
-	var warrior_survived: bool = warrior.is_alive() and warrior_hp_r2 == 63
-	var all_goblins_down: bool = scout_defeated_r1 and brawler_defeated and skirmisher_defeated
-	var buff_expired_after_r2: bool = warrior.attack_boost_multiplier == 1.0 and warrior.attack_boost_rounds_remaining == 0
-
-	print("\n==========================================")
-	print("=== FINAL INTEGRATION TEST ASSERTIONS ===")
-	print("==========================================")
-	print("  [R1] Goblin Scout defeated (0 HP): %s" % ("PASS" if scout_defeated_r1 else "FAIL"))
-	print("  [R1] Warrior mitigated damage (HP == 73): %s (HP: %d)" % [("PASS" if warrior_hp_r1_ok else "FAIL"), warrior_hp_r1])
-	print("  [R1] Defensive Stance carried to R2: %s" % ("PASS" if stance_persisted else "FAIL"))
-	print("  [R1] Focus 2-round buff active into R2: %s" % ("PASS" if focus_buff_persisted else "FAIL"))
-	print("  [R2] Goblin Brawler defeated (0 HP): %s" % ("PASS" if brawler_defeated else "FAIL"))
-	print("  [R2] Goblin Skirmisher defeated (0 HP): %s" % ("PASS" if skirmisher_defeated else "FAIL"))
-	print("  [R2] Warrior survived battle (HP == 63): %s (HP: %d/120)" % [("PASS" if warrior_survived else "FAIL"), warrior_hp_r2])
-	print("  [R2] All 3 Goblins eliminated: %s" % ("PASS" if all_goblins_down else "FAIL"))
-	print("  [R2] Focus 2-round buff expired cleanly: %s" % ("PASS" if buff_expired_after_r2 else "FAIL"))
-
-	warrior.clear_target()
-	scout.clear_target()
-	brawler.clear_target()
-	skirmisher.clear_target()
-	resolver.registered_combatants.clear()
-
-	return (scout_defeated_r1 and warrior_hp_r1_ok and stance_persisted and
-		focus_buff_persisted and brawler_defeated and skirmisher_defeated and
-		warrior_survived and all_goblins_down and buff_expired_after_r2)
-
-
-# ==============================================================================
-# TEST 3: COMBAT GRID & WITHDRAWAL TEST (9x9)
-# ==============================================================================
-
-static func run_combat_grid_and_withdrawal_test() -> bool:
-	print("\n=======================================================")
-	print("=== STARTING COMBAT GRID & WITHDRAWAL TEST (9x9)    ===")
-	print("=======================================================")
-
-	var exit_coord := Vector2i(8, 4)
-	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [exit_coord])
-	var resolver := CombatResolver.new()
-	resolver.grid = grid
-
-	var warrior := Combatant.new("Warrior", 100, 15, 1)
-	var ranger := Combatant.new("Ranger", 80, 14, 2)
-	var brawler := Combatant.new("Enemy Brawler", 45, 12, 1)
-	var scout := Combatant.new("Fleeing Scout", 30, 16, 1)
-
-	var allies: Array[Combatant] = [warrior, ranger]
-	var enemies: Array[Combatant] = [brawler, scout]
-
-	resolver.register_combatant(warrior)
-	resolver.register_combatant(ranger)
-	resolver.register_combatant(brawler)
-	resolver.register_combatant(scout)
-
-	grid.deploy_combatants(allies, enemies)
-
-	var warrior_pos: Vector2i = grid.get_position(warrior)
-	var ranger_pos: Vector2i = grid.get_position(ranger)
-	var brawler_pos: Vector2i = grid.get_position(brawler)
-	var scout_pos: Vector2i = grid.get_position(scout)
-
-	var warrior_center_ok: bool = grid.get_distance(warrior_pos, CombatGrid.CENTER) <= warrior.attack_range
-	var ranger_center_ok: bool = grid.get_distance(ranger_pos, CombatGrid.CENTER) <= ranger.attack_range
-	var brawler_center_ok: bool = grid.get_distance(brawler_pos, CombatGrid.CENTER) <= brawler.attack_range
-	var scout_center_ok: bool = grid.get_distance(scout_pos, CombatGrid.CENTER) <= scout.attack_range
-
-	var deployment_ok: bool = warrior_center_ok and ranger_center_ok and brawler_center_ok and scout_center_ok
-	var initial_out_of_range: bool = not grid.can_target(warrior, brawler, warrior.attack_range)
-
-	resolver.schedule_action(warrior, MoveCommand.new(warrior, grid, Vector2i(0, -1), 1), 1)
-	resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 25, 2, 0, grid), 2)
-
-	resolver.schedule_action(ranger, MoveCommand.new(ranger, grid, Vector2i(0, -1), 1), 4)
-	resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 25, 2, 0, grid), 5)
-
-	resolver.schedule_action(scout, MoveCommand.new(scout, grid, Vector2i(1, 0), 1), 1)
-	resolver.schedule_action(scout, MoveCommand.new(scout, grid, Vector2i(1, 0), 2, 2), 2)
-	resolver.schedule_action(scout, AttackCommand.new(scout, warrior, 10, 2, 0, grid), 4)
-
-	resolver.resolve_round()
-
-	var scout_withdrawn_ok: bool = scout.is_withdrawn and not scout.is_active() and grid.withdrawn_combatants.has(scout)
-	var scout_removed_from_grid: bool = not grid.has_combatant(scout)
-	var brawler_defeated_ok: bool = brawler.hp == 0 and not brawler.is_active()
-	var combat_ended_ok: bool = resolver.is_combat_resolved(allies, enemies)
-	var warrior_pos_after: Vector2i = grid.get_position(warrior)
-	var warrior_moved_ok: bool = warrior_pos_after == Vector2i(4, 4)
-
-	print("\n================================================")
-	print("=== COMBAT GRID & WITHDRAWAL TEST ASSERTIONS ===")
-	print("================================================")
-	print("  [Grid] Center-ring deployment valid: %s" % ("PASS" if deployment_ok else "FAIL"))
-	print("  [Grid] Spatial range gate verified: %s" % ("PASS" if initial_out_of_range else "FAIL"))
-	print("  [Grid] Warrior stepped to (4, 4): %s (%s)" % [("PASS" if warrior_moved_ok else "FAIL"), str(warrior_pos_after)])
-	print("  [Grid] Fleeing Scout partially withdrawn at (8, 4): %s" % ("PASS" if scout_withdrawn_ok else "FAIL"))
-	print("  [Grid] Scout removed from active grid: %s" % ("PASS" if scout_removed_from_grid else "FAIL"))
-	print("  [Grid] Brawler eliminated by ranged team: %s" % ("PASS" if brawler_defeated_ok else "FAIL"))
-	print("  [Grid] Combat terminated (all hostiles resolved): %s" % ("PASS" if combat_ended_ok else "FAIL"))
-
-	warrior.clear_target()
-	ranger.clear_target()
-	brawler.clear_target()
-	scout.clear_target()
-	resolver.registered_combatants.clear()
-
-	return (deployment_ok and initial_out_of_range and warrior_moved_ok and 
-		scout_withdrawn_ok and scout_removed_from_grid and brawler_defeated_ok and combat_ended_ok)
-
-
-# ==============================================================================
-# TEST 4: RESOLUTION FEED & ACTION LOGGING TEST
-# ==============================================================================
-
-static func run_resolution_feed_logging_test() -> bool:
-	print("\n=======================================================")
-	print("=== STARTING RESOLUTION FEED & ACTION LOGGING TEST  ===")
-	print("=======================================================")
-	var captured_logs: Array[String] = []
-
-	var exit_coord := Vector2i(8, 4)
-	var test_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [exit_coord])
-	var test_resolver := CombatResolver.new()
-	test_resolver.grid = test_grid
-	test_resolver.log_emitted.connect(func(msg: String) -> void:
-		captured_logs.append(msg)
-	)
-
-	var warrior := Combatant.new("Warrior", 100, 15, 1)
-	var ranger := Combatant.new("Ranger", 80, 14, 2)
-	var brawler := Combatant.new("Enemy Brawler", 45, 12, 1)
-	var scout := Combatant.new("Fleeing Scout", 30, 16, 1)
-
-	var allies: Array[Combatant] = [warrior, ranger]
-	var enemies: Array[Combatant] = [brawler, scout]
-
-	test_resolver.register_combatant(warrior)
-	test_resolver.register_combatant(ranger)
-	test_resolver.register_combatant(brawler)
-	test_resolver.register_combatant(scout)
-
-	test_grid.deploy_combatants(allies, enemies)
-
-	test_resolver.schedule_action(warrior, MoveCommand.new(warrior, test_grid, Vector2i(0, -1), 1), 1)
-	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 30, 2, 0, test_grid), 2)
-	test_resolver.schedule_action(ranger, FocusCommand.new(ranger, 1.5, 2, 2, 0), 1)
-	test_resolver.schedule_action(ranger, MoveCommand.new(ranger, test_grid, Vector2i(0, -1), 1), 4)
-	test_resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 30, 2, 0, test_grid), 5)
-	test_resolver.schedule_action(brawler, TargetCommand.new(brawler, warrior, 2), 1)
-	test_resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5, 2, 1), 2)
-	test_resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 20, 2, 0, test_grid), 4)
-	test_resolver.schedule_action(scout, MoveCommand.new(scout, test_grid, Vector2i(1, 0), 1), 1)
-	test_resolver.schedule_action(scout, MoveCommand.new(scout, test_grid, Vector2i(1, 0), 2, 2), 2)
-
-	for b: int in range(1, 7):
-		test_resolver.execute_block(b)
-
-	var has_move_log: bool = false
-	var has_skill_log: bool = false
-	var has_defend_log: bool = false
-	var has_damage_log: bool = false
-	var has_withdrawal_log: bool = false
-	var has_defeat_log: bool = false
-
-	for log_msg in captured_logs:
-		if "[Move]" in log_msg and "moved from" in log_msg:
-			has_move_log = true
-		if "[Skill: Focus]" in log_msg:
-			has_skill_log = true
-		if "[Defend]" in log_msg and "Defensive Stance" in log_msg:
-			has_defend_log = true
-		if "[Attack]" in log_msg and "damage" in log_msg:
-			has_damage_log = true
-		if "[Withdrawal]" in log_msg and "WITHDREW" in log_msg:
-			has_withdrawal_log = true
-		if "DEFEATED" in log_msg:
-			has_defeat_log = true
-
-	var battle_resolved: bool = test_resolver.is_combat_resolved(allies, enemies)
-
-	print("\n=======================================================")
-	print("=== RESOLUTION FEED LOGGING TEST ASSERTIONS        ===")
-	print("=======================================================")
-	print("  [Feed] Movement coordinates logged: %s" % ("PASS" if has_move_log else "FAIL"))
-	print("  [Feed] Focus skill usage logged: %s" % ("PASS" if has_skill_log else "FAIL"))
-	print("  [Feed] Defense stance mitigation logged: %s" % ("PASS" if has_defend_log else "FAIL"))
-	print("  [Feed] Attack damage and target HP logged: %s" % ("PASS" if has_damage_log else "FAIL"))
-	print("  [Feed] Exit tile withdrawal logged: %s" % ("PASS" if has_withdrawal_log else "FAIL"))
-	print("  [Feed] Enemy defeat logged: %s" % ("PASS" if has_defeat_log else "FAIL"))
-	print("  [Feed] Combat resolution state reached: %s" % ("PASS" if battle_resolved else "FAIL"))
-
-	warrior.clear_target()
-	ranger.clear_target()
-	brawler.clear_target()
-	scout.clear_target()
-	test_resolver.registered_combatants.clear()
-
-	return (has_move_log and has_skill_log and has_defend_log and 
-		has_damage_log and has_withdrawal_log and has_defeat_log and battle_resolved)
-
-
-# ==============================================================================
-# TEST 5: GOBLIN AMBUSH & CASUALTY TEST (MULTI-ROUND)
-# ==============================================================================
-
-static func run_goblin_ambush_and_casualty_test() -> bool:
-	print("\n=======================================================")
-	print("=== STARTING GOBLIN AMBUSH & CASUALTY TEST (MULTI-RD) ===")
-	print("=======================================================")
-
-	var test_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
-	var test_resolver := CombatResolver.new()
-	test_resolver.grid = test_grid
-
-	var warrior := Combatant.new("Warrior", 100, 15, 1)
-	var ranger := Combatant.new("Ranger", 80, 14, 2)
-	var brawler := Combatant.new("Enemy Brawler", 45, 12, 1)
-	var scout := Combatant.new("Fleeing Scout", 30, 16, 1)
-
-	var skirmisher := Combatant.new("Goblin Skirmisher", 40, 15, 1)
-	var archer := Combatant.new("Goblin Archer", 35, 13, 3)
-	var berserker := Combatant.new("Goblin Berserker", 55, 11, 1)
-	var shaman := Combatant.new("Goblin Shaman", 35, 12, 2)
-
-	var allies: Array[Combatant] = [warrior, ranger]
-	var initial_enemies: Array[Combatant] = [brawler, scout]
-	var all_enemies: Array[Combatant] = [brawler, scout, skirmisher, archer, berserker, shaman]
-
-	for c: Combatant in [warrior, ranger, brawler, scout, skirmisher, archer, berserker, shaman]:
-		test_resolver.register_combatant(c)
-
-	test_grid.deploy_combatants(allies, initial_enemies)
-
-	var init_placement_ok: bool = (test_grid.has_combatant(warrior) and test_grid.has_combatant(ranger) and
-		test_grid.has_combatant(brawler) and test_grid.has_combatant(scout) and
-		not test_grid.has_combatant(skirmisher) and not test_grid.has_combatant(archer))
-
-	# Schedule Round 1 actions:
-	test_resolver.schedule_action(warrior, MoveCommand.new(warrior, test_grid, Vector2i(0, -1), 1), 1)
-	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 25, 2, 0, test_grid), 2)
-	test_resolver.schedule_action(warrior, TargetCommand.new(warrior, skirmisher, 1), 4)
-	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, skirmisher, 25, 2, 0, test_grid), 5)
-	test_resolver.schedule_action(warrior, DefendCommand.new(warrior, 0.5, 2, 1), 7)
-	test_resolver.schedule_action(warrior, HoldStanceCommand.new(warrior, 0), 9)
-
-	test_resolver.schedule_action(ranger, FocusCommand.new(ranger, 1.5, 2, 2, 0), 1)
-	test_resolver.schedule_action(ranger, MoveCommand.new(ranger, test_grid, Vector2i(0, -1), 1), 4)
-	test_resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 30, 2, 0, test_grid), 5)
-	var ranger_future_act := AttackCommand.new(ranger, archer, 25, 2, 0, test_grid)
-	test_resolver.schedule_action(ranger, ranger_future_act, 7)
-
-	test_resolver.schedule_action(brawler, TargetCommand.new(brawler, warrior, 2), 1)
-	test_resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5, 2, 1), 2)
-	test_resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 15, 2, 0, test_grid), 4)
-
-	test_resolver.schedule_action(scout, MoveCommand.new(scout, test_grid, Vector2i(1, 0), 1), 1)
-	test_resolver.schedule_action(scout, MoveCommand.new(scout, test_grid, Vector2i(1, 0), 2, 2), 2)
-
-	# Execute Block 1..3
-	for b: int in range(1, 4):
-		test_resolver.execute_block(b)
-
-	var scout_escaped_ok: bool = scout.is_withdrawn and not scout.is_active() and not test_grid.has_combatant(scout)
-
-	# Block 4 Ambush: Reinforcements arrive on grid
-	test_grid.place_combatant(berserker, Vector2i(5, 5))
-	test_grid.place_combatant(skirmisher, Vector2i(6, 4))
-	test_grid.place_combatant(archer, Vector2i(7, 5))
-	test_grid.place_combatant(shaman, Vector2i(6, 5))
-
-	test_resolver.schedule_action(berserker, TargetCommand.new(berserker, ranger, 1), 4)
-	test_resolver.schedule_action(berserker, AttackCommand.new(berserker, ranger, 30, 2, 0, test_grid), 5)
-	test_resolver.schedule_action(archer, TargetCommand.new(archer, ranger, 1), 4)
-	test_resolver.schedule_action(archer, AttackCommand.new(archer, ranger, 25, 2, 0, test_grid), 5)
-	test_resolver.schedule_action(shaman, TargetCommand.new(shaman, ranger, 1), 4)
-	test_resolver.schedule_action(shaman, AttackCommand.new(shaman, ranger, 25, 2, 0, test_grid), 5)
-
-	test_resolver.schedule_action(skirmisher, MoveCommand.new(skirmisher, test_grid, Vector2i(-1, 0), 1), 4)
-	test_resolver.schedule_action(skirmisher, TargetCommand.new(skirmisher, warrior, 1), 5)
-	test_resolver.schedule_action(skirmisher, AttackCommand.new(skirmisher, warrior, 12, 2, 0, test_grid), 7)
-
-	# Execute Block 4..6
-	for b: int in range(4, 7):
-		test_resolver.execute_block(b)
-
-	var ranger_defeated_ok: bool = not ranger.is_alive() and ranger.hp == 0
-	var brawler_defeated_ok: bool = not brawler.is_alive() and brawler.hp == 0
-
-	var ranger_future_cancelled_ok: bool = false
-	for sa: CombatResolver.ScheduledAction in test_resolver.scheduled_actions:
-		if sa.combatant == ranger and sa.start_block == 7:
-			ranger_future_cancelled_ok = sa.is_cancelled
-			break
-
-	# Execute remaining Blocks 7..10 of Round 1
-	for b: int in range(7, 11):
-		test_resolver.execute_block(b)
-
-	var warrior_survived_r1_ok: bool = warrior.is_alive() and warrior.hp == 75
-	var r1_not_prematurely_ended: bool = not test_resolver.is_combat_resolved(allies, all_enemies)
-
-	# Rollover to Round 2
-	test_resolver.finish_round()
-	var round_2_started_ok: bool = test_resolver.current_round == 2
-
-	# Schedule Round 2 action for Warrior: Finish Skirmisher at (5, 4)
-	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, skirmisher, 25, 2, 0, test_grid), 1)
-	test_resolver.execute_block(1)
-	test_resolver.execute_block(2)
-
-	var skirmisher_defeated_r2_ok: bool = not skirmisher.is_alive() and skirmisher.hp == 0
-
-	print("\n=======================================================")
-	print("=== GOBLIN AMBUSH & CASUALTY TEST ASSERTIONS        ===")
-	print("=======================================================")
-	print("  [Ambush] Initial grid deployment (4 units): %s" % ("PASS" if init_placement_ok else "FAIL"))
-	print("  [Ambush] Scout withdrawal at Block 3: %s" % ("PASS" if scout_escaped_ok else "FAIL"))
-	print("  [Casualty] Ranger defeated at Block 6: %s" % ("PASS" if ranger_defeated_ok else "FAIL"))
-	print("  [Casualty] Ranger future actions cancelled: %s" % ("PASS" if ranger_future_cancelled_ok else "FAIL"))
-	print("  [Casualty] Brawler defeated at Block 6: %s" % ("PASS" if brawler_defeated_ok else "FAIL"))
-	print("  [Multi-Round] Warrior survived Round 1 (75 HP): %s" % ("PASS" if warrior_survived_r1_ok else "FAIL"))
-	print("  [Multi-Round] Combat active with 1 ally & 4 goblins: %s" % ("PASS" if r1_not_prematurely_ended else "FAIL"))
-	print("  [Multi-Round] Rollover to Round 2 succeeded: %s" % ("PASS" if round_2_started_ok else "FAIL"))
-	print("  [Multi-Round] Round 2 combat resolved Skirmisher: %s" % ("PASS" if skirmisher_defeated_r2_ok else "FAIL"))
-
-	warrior.clear_target()
-	ranger.clear_target()
-	brawler.clear_target()
-	scout.clear_target()
-	skirmisher.clear_target()
-	archer.clear_target()
-	berserker.clear_target()
-	shaman.clear_target()
-	test_resolver.registered_combatants.clear()
-
-	return (init_placement_ok and scout_escaped_ok and ranger_defeated_ok and
-		ranger_future_cancelled_ok and brawler_defeated_ok and warrior_survived_r1_ok and
-		r1_not_prematurely_ended and round_2_started_ok and skirmisher_defeated_r2_ok)
-
-
-# ==============================================================================
-# TEST 6: CHARACTER SPECS, STATS, GEAR & INVENTORY TEST
+# TEST 3: CHARACTER SPECS, STATS, GEAR & INVENTORY TEST
 # ==============================================================================
 
 static func run_character_specs_and_inventory_test() -> bool:
@@ -795,7 +393,7 @@ static func run_character_specs_and_inventory_test() -> bool:
 
 
 # ==============================================================================
-# TEST 7: GEAR EQUIP UI, TEST DUMMY & DAMAGE FORMULA SUITE
+# TEST 4: GEAR EQUIP UI, TEST DUMMY & DAMAGE FORMULA SUITE
 # ==============================================================================
 
 static func run_gear_equip_and_test_dummy_suite(tree_parent: Node = null) -> bool:
@@ -910,7 +508,7 @@ static func run_gear_equip_and_test_dummy_suite(tree_parent: Node = null) -> boo
 		deficit_ok and burden_ok and unequip_ok and dummy_init_ok and damage_formula_ok and consumable_test_ok)
 
 # ==============================================================================
-# TEST 9: GENERATED ART, TERRAIN & COMBAT ZONES
+# TEST 6: GENERATED ART, TERRAIN & COMBAT ZONES
 # ==============================================================================
 
 static func run_art_and_terrain_test() -> bool:
@@ -940,14 +538,14 @@ static func run_art_and_terrain_test() -> bool:
 	portraits_ok = portraits_ok and "#7cb342" in UnitArt.portrait_svg("shaman", UnitArt.Team.HOSTILE) and not ("#7cb342" in UnitArt.portrait_svg("warrior", UnitArt.Team.FRIENDLY))
 
 	# 3. Encounter art follows sides: allies friendly (blue), enemies hostile (red)
-	var enc := GoblinAmbushEncounter.new()
+	var enc := CatalogEncounter.new("goblin_ambush")
 	enc.build()
 	var sides_ok: bool = true
 	for c: Combatant in enc.allies:
 		sides_ok = sides_ok and enc.team_of(c) == UnitArt.Team.FRIENDLY and enc.get_token_texture(c) != null and enc.get_sprite_texture(c) != null
 	for c: Combatant in enc.enemies:
 		sides_ok = sides_ok and enc.team_of(c) == UnitArt.Team.HOSTILE and enc.get_token_texture(c) != null
-	sides_ok = sides_ok and enc.class_of(enc.shaman) == "shaman"
+	sides_ok = sides_ok and enc.class_of(enc.unit("goblin_shaman")) == "shaman"
 
 	# 4. Terrain glyph round-trip and walkability rules
 	var terrain_ok: bool = true
@@ -988,18 +586,24 @@ static func run_art_and_terrain_test() -> bool:
 	var moved_into_lava: bool = grid.move_combatant(walker, Vector2i(0, -1))
 	var grid_ok: bool = deployed_off_wall and not placed_lava and not moved_into_lava and grid.get_position(walker) == Vector2i(2, 4)
 
-	# 7. The scripted Goblin Ambush still reaches total victory on every zone
+	# 7. The Goblin Ambush (wave included) deploys and plays to a conclusion on every zone
 	var all_zones_play: bool = true
 	for zone_id: String in CombatZones.zone_ids():
-		var zone_enc := GoblinAmbushEncounter.new()
+		var zone_enc := CatalogEncounter.new("goblin_ambush")
 		zone_enc.zone_id = zone_id
 		var session := CombatSession.new(zone_enc)
 		session.start()
-		for round_num: int in range(3):
+		for round_num: int in range(zone_enc.max_rounds):
+			session.plan_apply_preset_all("balanced")
+			session.confirm_plan()
 			_resolve_until_replay(session)
-			if round_num < 2:
-				session.advance_round()
-		var concluded: bool = session.combat_over
+			if session.combat_over or not session.can_advance_round():
+				break
+			session.advance_round()
+		var concluded: bool = session.combat_over or session.current_round == zone_enc.max_rounds
+		for c: Combatant in zone_enc.allies + zone_enc.enemies:
+			if c.is_active() and not session.grid.has_combatant(c):
+				concluded = false   # every unit (wave included) must have found a tile
 		session.dispose()
 		if not concluded:
 			all_zones_play = false
@@ -1038,14 +642,14 @@ static func run_art_and_terrain_test() -> bool:
 	print("  [Terrain] Glyph round-trip & walkability rules: %s" % ("PASS" if terrain_ok else "FAIL"))
 	print("  [Terrain] All zones valid 9x9 with walkable core & exit lane: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [Terrain] Grid blocks placement/movement on blocked tiles; deploy skips them: %s" % ("PASS" if grid_ok else "FAIL"))
-	print("  [Terrain] Scripted Goblin Ambush reaches victory on every zone: %s" % ("PASS" if all_zones_play else "FAIL"))
+	print("  [Terrain] Goblin Ambush (with its wave) deploys and concludes on every zone: %s" % ("PASS" if all_zones_play else "FAIL"))
 	print("  [Art] Terrain tiles (all variants) & overlays rasterize: %s" % ("PASS" if tiles_ok else "FAIL"))
 	print("  [Art] Item icons by gear type + bespoke rare weapon icons: %s" % ("PASS" if icons_ok else "FAIL"))
 
 	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok
 
 # ==============================================================================
-# TEST 10: PLANNING SEQUENCES, SKILL AP, STANCES, RUNTIME AP & ENEMY AI
+# TEST 7: PLANNING SEQUENCES, SKILL AP, STANCES, RUNTIME AP & ENEMY AI
 # ==============================================================================
 
 static func _hand_ctx(grid: CombatGrid, allies: Array[Combatant], enemies: Array[Combatant], cap: int = 3) -> PlanContext:
@@ -1068,7 +672,7 @@ static func _run_steps(actor: Combatant, ctx: PlanContext, steps: Array[PlanStep
 	return messages
 
 static func _play_with_preset(zone_id: String, preset_id: String) -> Dictionary:
-	var enc := SkirmishEncounter.new()
+	var enc := CatalogEncounter.new("goblin_skirmish")
 	enc.zone_id = zone_id
 	var session := CombatSession.new(enc)
 	session.start()
@@ -1132,7 +736,7 @@ static func run_planning_and_ai_test() -> bool:
 	var stance_ok: bool = rps_ok and switch_ok
 
 	# 3. Sequence compile: lowest free blocks, Engage auto-moves, AP incl. stance switch
-	var session := CombatSession.new(SkirmishEncounter.new())
+	var session := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	session.start()
 	var warrior: Combatant = session.allies[0]
 	var foe: Combatant = session.enemies[0]
@@ -1256,7 +860,7 @@ static func run_planning_and_ai_test() -> bool:
 	var runtime_ok: bool = stops_ok and said_exhausted and rest_ok
 
 	# 5c. On-grid input model: options per clicked target / tile, hover previews, status line
-	var gsession := CombatSession.new(SkirmishEncounter.new())
+	var gsession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	gsession.start()
 	var gh: Combatant = gsession.allies[0]
 	var gfoe: Combatant = gsession.enemies[0]
@@ -1302,7 +906,7 @@ static func run_planning_and_ai_test() -> bool:
 	var input_ok: bool = targets_ok and grid_preview_ok and trail_ok and info_ok and hover_ok
 	gsession.dispose()
 	# 5d. Round rules: 6 blocks, AP pool + regen, one move per round, target switching, insurance attacks, live follow
-	var rsession := CombatSession.new(SkirmishEncounter.new())
+	var rsession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	rsession.start()
 	var rhero: Combatant = rsession.allies[0]
 	var rules_ok: bool = rsession.total_blocks == 6 and rsession.resolver.total_blocks == 6 and rsession.encounter.plan_context().total_blocks == 6 and rhero.max_ap == 12 and rhero.ap == 12
@@ -1358,8 +962,7 @@ static func run_planning_and_ai_test() -> bool:
 	var foes_side: Array[Combatant] = [foe_a, foe_b]
 	var hctx: PlanContext = _hand_ctx(hgrid, duel_side, foes_side)
 	var hplan := CombatPlan.new(hctx)
-	hplan.add_step(duelist, PlanStep.engage(strike, foe_a))
-	hplan.add_step(duelist, PlanStep.engage(strike, foe_a))
+	hplan.add_step(duelist, PlanStep.engage(strike, foe_a))   # strike (2) + switch (1) + strike (2) fits a 6-block round
 	var no_switch: bool = true
 	for e: PlanEntry in hplan.entries_for(duelist):
 		no_switch = no_switch and e.skill.kind != SkillDef.Kind.TARGET
@@ -1478,7 +1081,7 @@ static func run_planning_and_ai_test() -> bool:
 			out_of_reach = true
 	area_ok = area_ok and out_of_reach
 	# allies: the Ranger can take the Warrior's tile once the (faster) Warrior moves off it in block 1
-	var csession := CombatSession.new(SkirmishEncounter.new())
+	var csession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	csession.start()
 	var cw: Combatant = csession.allies[0]
 	var cr: Combatant = csession.allies[1]
@@ -1502,7 +1105,7 @@ static func run_planning_and_ai_test() -> bool:
 	var reach2_ok: bool = strike.reach_for(range2) == Vector2i(2, 3) and strike.reach_for(brute_u) == Vector2i(1, 1)
 	reach2_ok = reach2_ok and SkillCatalog.find("volley").reach_for(range2) == Vector2i(2, 3) and SkillCatalog.find("firebomb").reach_for(range2) == Vector2i(2, 2) and SkillCatalog.find("offhand_jab").reach_for(range2) == Vector2i(1, 1)
 	# undo: removes the focused hero's last step; harmless when there is nothing to undo
-	var usession := CombatSession.new(SkirmishEncounter.new())
+	var usession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	usession.start()
 	var uhero: Combatant = usession.focused_hero
 	usession.plan_add_step(uhero, PlanStep.engage(strike, usession.enemies[1]))
@@ -1516,7 +1119,7 @@ static func run_planning_and_ai_test() -> bool:
 	mechanics_ok = mechanics_ok and reach2_ok and undo_ok
 
 	# the AI pack drafts into one shared plan: no two goblins plan to end on the same tile
-	var pack := CombatSession.new(SkirmishEncounter.new())
+	var pack := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	pack.start()
 	var pack_dest: Dictionary = {}
 	var pack_ok: bool = true
@@ -1563,7 +1166,7 @@ static func run_planning_and_ai_test() -> bool:
 
 
 	# 6. Presets: every preset drafts a valid, affordable sequence; each shows its focus
-	var psession := CombatSession.new(SkirmishEncounter.new())
+	var psession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	psession.start()
 	var hero: Combatant = psession.allies[0]
 	var weakest: Combatant = psession.enemies[4]
@@ -1752,7 +1355,7 @@ static func run_planning_and_ai_test() -> bool:
 			print("    one side untouched on zone: %s %s" % [zone_id, str(run_a.get("hp", []))])
 
 	# 9. Resetting a planned round rewinds units to the start of that round
-	var rs := CombatSession.new(SkirmishEncounter.new())
+	var rs := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	rs.start()
 	rs.plan_apply_preset_all("balanced")
 	rs.confirm_plan()

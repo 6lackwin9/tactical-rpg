@@ -52,7 +52,7 @@ func _build_party_panel() -> void:
 	party_hdr_hbox.add_child(party_title_lbl)
 
 	var party_hint := Label.new()
-	party_hint.text = "(2x2 Formation)"
+	party_hint.text = "(click a hero to plan)"
 	party_hint.add_theme_font_size_override("font_size", 8)
 	party_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	party_hdr_hbox.add_spacer(false)

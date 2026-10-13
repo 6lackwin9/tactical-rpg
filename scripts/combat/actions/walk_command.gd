@@ -1,5 +1,5 @@
 class_name WalkCommand
-extends MoveCommand
+extends BattleCommand
 
 # ==============================================================================
 # Tactical RPG - Walk Command (a planned move along any path, one block)
@@ -13,15 +13,29 @@ extends MoveCommand
 
 const NONE: Vector2i = Vector2i(-1, -1)
 
-var path: Array[Vector2i] = []
+var grid: CombatGrid = null
+var path: Array[Vector2i] = []        # unit steps, in order
 var expected_start: Vector2i = NONE   # where the plan has the unit when this walk starts
 var goal: Vector2i = NONE             # the move's final destination (for re-pathing)
 var approach_target: Combatant = null  # set when this walk is an Engage's approach (display only)
 
+# Outcome of the last execute() (read by the log): tiles walked, and why it stopped early.
+var moved_tiles: int = 0
+var cut_short: bool = false
+var blocked_by: String = ""
+
 func _init(p_source: Combatant, p_grid: CombatGrid, p_path: Array[Vector2i], p_block_cost: int = 1) -> void:
-	super(p_source, p_grid, p_path[0] if not p_path.is_empty() else Vector2i.ZERO, p_path.size(), p_block_cost)
+	super(p_source, 0, p_block_cost)
+	grid = p_grid
 	path = p_path
 	command_name = "Move"
+
+# First step of the walk (display: the timeline's arrow).
+func direction() -> Vector2i:
+	return path[0] if not path.is_empty() else Vector2i.ZERO
+
+func can_execute() -> bool:
+	return super.can_execute() and source.is_active() and grid != null and grid.has_combatant(source)
 
 func execute() -> void:
 	moved_tiles = 0
@@ -45,7 +59,7 @@ func execute() -> void:
 		execution_log = "[Withdrawal] %s moved from %s and safely WITHDREW through Exit!" % [source.name, str(start_pos)]
 		return
 	# Tiles the unit couldn't walk cost nothing.
-	if planner_controlled and moved_tiles < path.size():
+	if moved_tiles < path.size():
 		source.ap = mini(source.max_ap, source.ap + (path.size() - moved_tiles))
 		cut_short = true
 		if blocked_by.is_empty():

@@ -17,14 +17,8 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.category = "ATTACK"
 		var target_c: Combatant = attack.target
 		var atk_range: int = attack.source.attack_range
-		if atk_range > 1:
-			entry.skill_subtype = "Ranged Projectile"
-			entry.skill_name = "Quick Snipe" if entry.actor_is_ally else "Longbow Volley"
-		else:
-			entry.skill_subtype = "Melee Physical"
-			entry.skill_name = "Heavy Slash" if entry.actor_is_ally else "Power Strike"
-		if attack.planner_controlled:
-			entry.skill_name = attack.command_name
+		entry.skill_name = attack.command_name
+		entry.skill_subtype = "Reach %d-%d" % [attack.reach_min(), attack.reach_max()]
 		entry.value_num = attack.last_damage
 		entry.damage = attack.last_damage
 		entry.breakdown = attack.last_breakdown
@@ -45,33 +39,29 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 			entry.target_name = "Target"
 		entry.detail_text = "Dealt %d | Power %d | Range %d" % [attack.last_damage, attack.power, atk_range]
 
-	elif act.command is MoveCommand:
-		var move: MoveCommand = act.command as MoveCommand
+	elif act.command is WalkCommand:
+		var move: WalkCommand = act.command as WalkCommand
 		entry.category = "MOVE"
-		entry.skill_name = "Sprint" if move.steps > 1 else "Tactical Move"
-		entry.skill_subtype = "Sprint Relocation" if move.steps > 1 else "Standard Step"
-		if move.planner_controlled:
-			var walk_cmd: WalkCommand = move as WalkCommand
-			entry.skill_name = "Approach" if walk_cmd != null and walk_cmd.approach_target != null else "Move"
-			entry.skill_subtype = "%d tile%s" % [move.moved_tiles, "" if move.moved_tiles == 1 else "s"]
-		entry.value_num = move.steps
+		entry.skill_name = "Approach" if move.approach_target != null else "Move"
+		entry.skill_subtype = "%d tile%s" % [move.moved_tiles, "" if move.moved_tiles == 1 else "s"]
+		entry.value_num = move.moved_tiles
 		entry.coord_to = grid.get_position(act.combatant) if grid != null else Vector2i(-1, -1)
 		if act.combatant.is_withdrawn:
 			entry.outcome_tag = "WITHDRAWN"
 			entry.status_text = "Safely exited battle grid"
-		elif move.planner_controlled and move.cut_short:
+		elif move.cut_short:
 			entry.outcome_tag = "CUT SHORT"
 			entry.status_text = "Stopped at %s (blocked by %s)" % [str(entry.coord_to), move.blocked_by]
 		else:
 			entry.outcome_tag = "MOVED"
 			entry.status_text = "Position: %s" % str(entry.coord_to)
-		entry.detail_text = "Stepped %d tiles (%s)" % [move.steps, str(move.direction)]
+		entry.detail_text = "Walked %d of %d planned tiles" % [move.moved_tiles, move.path.size()]
 
 	elif act.command is DefendCommand:
 		var defend: DefendCommand = act.command as DefendCommand
 		entry.category = "DEFEND"
-		entry.skill_name = "Defensive Stance"
-		entry.skill_subtype = "Shield Guard"
+		entry.skill_name = defend.command_name
+		entry.skill_subtype = "Guard -%d%%" % roundi(defend.mitigation_ratio * 100.0)
 		entry.value_num = int(defend.mitigation_ratio * 100.0)
 		entry.outcome_tag = "%d%% MITIGATION" % entry.value_num
 		entry.detail_text = "Damage mitigation posture active"
@@ -80,8 +70,8 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 	elif act.command is TargetCommand:
 		var target_cmd: TargetCommand = act.command as TargetCommand
 		entry.category = "TARGET"
-		entry.skill_name = "Target Lock"
-		entry.skill_subtype = "Engagement Focus"
+		entry.skill_name = "Switch Target"
+		entry.skill_subtype = "Target Lock"
 		var target_value: Variant = target_cmd.target_value
 		if target_value is Combatant:
 			var locked: Combatant = target_value
@@ -98,7 +88,7 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 	elif act.command is FocusCommand:
 		var focus: FocusCommand = act.command as FocusCommand
 		entry.category = "BUFF"
-		entry.skill_name = "Focus Skill"
+		entry.skill_name = focus.command_name
 		entry.skill_subtype = "Attack Multiplier"
 		entry.value_num = int((focus.boost_multiplier - 1.0) * 100.0)
 		entry.outcome_tag = "+%d%% ATK" % entry.value_num
@@ -135,13 +125,6 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.detail_text = "Catches their breath and returns to Neutral"
 		entry.status_text = "Recovering"
 
-	elif act.command is HoldStanceCommand:
-		entry.category = "DEFEND"
-		entry.skill_name = "Hold Stance"
-		entry.skill_subtype = "Posture Maintenance"
-		entry.outcome_tag = "MAINTAINED"
-		entry.detail_text = "Current stance maintained"
-		entry.status_text = "Active"
 
 	else:
 		entry.category = "EVENT"

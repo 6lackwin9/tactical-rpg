@@ -433,28 +433,23 @@ func _create_action_clip(act: CombatResolver.ScheduledAction, width: int, cost: 
 		clip_style.bg_color = Color(0.12, 0.25, 0.48, 0.95)
 		clip_style.border_color = Color(0.3, 0.6, 0.95, 1.0)
 		icon_str = "🛡"
-		subtitle = "Mitigate 50%"
+		subtitle = "Guard -%d%%" % roundi((act.command as DefendCommand).mitigation_ratio * 100.0)
 	elif act.command is FocusCommand:
 		clip_style.bg_color = Color(0.32, 0.14, 0.48, 0.95)
 		clip_style.border_color = Color(0.75, 0.4, 0.95, 1.0)
 		icon_str = "✦"
-		subtitle = "+50% ATK (2 rds)"
-	elif act.command is MoveCommand:
+		subtitle = "x%.2f ATK (%d rds)" % [(act.command as FocusCommand).boost_multiplier, (act.command as FocusCommand).duration_rounds]
+	elif act.command is WalkCommand:
 		clip_style.bg_color = Color(0.08, 0.32, 0.44, 0.95)
 		clip_style.border_color = Color(0.2, 0.8, 0.95, 1.0)
 		icon_str = "➜"
-		subtitle = "Grid Step"
+		var walk_cmd: WalkCommand = act.command as WalkCommand
+		subtitle = "%d tile%s" % [walk_cmd.path.size(), "" if walk_cmd.path.size() == 1 else "s"]
 	elif act.command is TargetCommand:
 		clip_style.bg_color = Color(0.08, 0.38, 0.24, 0.95)
 		clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
 		icon_str = "🎯"
 		subtitle = "Focus Lock"
-	elif act.command is HoldStanceCommand:
-		clip_style.bg_color = Color(0.2, 0.28, 0.38, 0.95)
-		clip_style.border_color = Color(0.4, 0.65, 0.85, 1.0)
-		icon_str = "⏱"
-		cmd_display_name = "Hold" if cost == 1 else "Hold Stance"
-		subtitle = "Maintain Stance"
 	else:
 		clip_style.bg_color = Color(0.22, 0.26, 0.34, 0.95)
 		clip_style.border_color = Color(0.5, 0.6, 0.7, 1.0)

@@ -15,10 +15,10 @@ extends CombatEncounter
 var encounter_id: String = ""
 var definition: Dictionary = {}
 var units_by_id: Dictionary = {}   # unit id -> Array of Combatants spawned from it (encounter order)
+var wave: Array[Combatant] = []     # reinforcements: off the field until wave_round / wave_block
 
 func _init(p_encounter_id: String = "") -> void:
 	encounter_id = p_encounter_id
-	player_planning = true
 	load_definition()
 
 # An encounter from an entry that isn't (or isn't yet) stored, e.g. a Forge sandbox.
@@ -64,9 +64,11 @@ func build() -> void:
 	units_by_id.clear()
 	unit_classes.clear()
 	ai_profiles.clear()
+	wave.clear()
 	var party_ids: Array[String] = _ids("party")
 	var enemy_ids: Array[String] = _ids("enemies")
-	var names: Dictionary = _display_names(party_ids + enemy_ids)
+	var wave_ids: Array[String] = _ids("wave_units")
+	var names: Dictionary = _display_names(party_ids + enemy_ids + wave_ids)
 	var slot: int = 0
 	for id: String in party_ids:
 		party.append(_spawn(id, str(names[slot])))
@@ -74,11 +76,17 @@ func build() -> void:
 	for id: String in enemy_ids:
 		foes.append(_spawn(id, str(names[slot])))
 		slot += 1
+	var deployed: Array[Combatant] = foes.duplicate()
+	for id: String in wave_ids:
+		var arriving: Combatant = _spawn(id, str(names[slot]))
+		wave.append(arriving)
+		foes.append(arriving)   # on the enemy side from the start, off the field until the wave
+		slot += 1
 	allies = party
 	enemies = foes
-	grid.deploy_combatants(allies, enemies)
+	grid.deploy_combatants(allies, deployed)
 	_place_leftovers(allies, true)
-	_place_leftovers(enemies, false)
+	_place_leftovers(deployed, false)
 
 	party_stash = Inventory.new()
 	ItemCatalog.populate_party_starter_stash(party_stash)
@@ -146,6 +154,26 @@ func _place_leftovers(units: Array[Combatant], party_side: bool) -> void:
 			grid.place_combatant(c, best)
 
 # ------------------------------------------------------------------------------
+# Reinforcement wave
+# ------------------------------------------------------------------------------
+
+# The wave enters before its block resolves (announced as an EVENT log cell). It
+# has no plan for the rest of that round; the AI plans it from the next round.
+func on_block_start(round_num: int, block_num: int) -> ActionLogEntry:
+	if wave.is_empty() or reinforcements_spawned:
+		return null
+	if round_num != DictUtil.to_int(definition["wave_round"]) or block_num != DictUtil.to_int(definition["wave_block"]):
+		return null
+	reinforcements_spawned = true
+	_place_leftovers(wave, false)
+	var arrived: Array[String] = []
+	for c: Combatant in wave:
+		if grid.has_combatant(c):
+			arrived.append(c.name)
+	return CombatEncounter.make_event_entry(round_num, block_num, "Reinforcements", false, str(definition["wave_label"]), "Wave",
+		"ARRIVED", "%s join the battle." % ", ".join(arrived), "%d more hostiles" % arrived.size())
+
+# ------------------------------------------------------------------------------
 # Round flow & narration
 # ------------------------------------------------------------------------------
 
@@ -162,8 +190,6 @@ func prepare_round(round_num: int) -> Dictionary:
 		"log": "\n[color=#38bdf8][b]⚔ ROUND %d: PLANNING ⚔[/b][/color]" % round_num,
 	}
 
-func schedule_round(resolver: CombatResolver, _round_num: int) -> void:
-	schedule_enemy_ai(resolver)
 
 func party_alive() -> bool:
 	for a: Combatant in allies:

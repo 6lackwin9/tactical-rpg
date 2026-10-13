@@ -10,7 +10,7 @@ extends RefCounted
 # CatalogEncounter loads an encounter entry into the real combat engine.
 #
 # Everything that reads content goes through here: SkillCatalog, ItemCatalog,
-# ClassArchetype presets, SkirmishEncounter, the tests and the Content Forge.
+# ClassArchetype presets, CatalogEncounter, the tests and the Content Forge.
 # Tests that write use use_root("user://...") so the shipped catalog is untouched.
 # ==============================================================================
 
@@ -24,9 +24,10 @@ const VERSION: int = 1
 
 # ------------------------------------------------------------------------------
 # State
-# Kept on the Engine singleton rather than in static vars: Godot may reload this
-# class's script mid-run (re-running static initialisers), which would silently
-# point the catalog back at res:// and drop unsaved edits.
+# Kept on the Engine singleton rather than in static vars, so a hot reload of
+# this script (SceneRunner) can't silently point the catalog back at res:// or
+# drop unsaved edits. (Never name a static func `reload`: ContentCatalog.reload()
+# would call the class's Script.reload() and recompile this file instead.)
 # ------------------------------------------------------------------------------
 
 const STATE_KEY: StringName = &"content_catalog_state"
@@ -60,7 +61,7 @@ static func path_for(kind: String, p_root: String = "") -> String:
 # Points the catalog at another folder (e.g. a test sandbox) and loads it.
 static func use_root(p_root: String) -> void:
 	_state()["root"] = p_root
-	reload()
+	reload_from_disk()
 
 # Copies the loaded catalog into `p_root` (replacing its catalog files) and
 # switches to it: tests and experiments edit the copy, never the shipped data.
@@ -71,10 +72,10 @@ static func fork_to(p_root: String) -> Error:
 		_dirty_map()[kind] = true
 	var err: Error = save_all()
 	if err == OK:
-		reload()
+		reload_from_disk()
 	return err
 
-static func reload() -> void:
+static func reload_from_disk() -> void:
 	_data_map().clear()
 	_dirty_map().clear()
 	_error_list().clear()
@@ -84,7 +85,7 @@ static func reload() -> void:
 
 static func _ensure_loaded() -> void:
 	if _data_map().is_empty():
-		reload()
+		reload_from_disk()
 
 static func load_errors() -> Array[String]:
 	_ensure_loaded()
@@ -434,6 +435,12 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 		errors.append("Add at least one enemy.")
 	if party.size() > 4:
 		errors.append("The party holds at most 4 members.")
+	var wave: Array = e["wave_units"]
+	if not wave.is_empty():
+		if DictUtil.to_int(e["wave_block"]) > DictUtil.to_int(e["total_blocks"]):
+			errors.append("The wave block is past the end of the round (%d blocks)." % DictUtil.to_int(e["total_blocks"]))
+		if DictUtil.to_int(e["wave_round"]) > DictUtil.to_int(e["max_rounds"]):
+			errors.append("The wave round is after the last round.")
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		var exit_list: Array = exits

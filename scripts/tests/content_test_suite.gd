@@ -65,11 +65,11 @@ static func _test_engine_parity() -> bool:
 		and DictUtil.int_of(claymore.required_stats, "STR") == 14 and ItemCatalog.create_healing_draught().max_stack == 5
 		and stash.items.size() == 17)
 	var classes_ok: bool = ClassArchetype.create_warrior().get_base_stat("STR") == 16 and ClassArchetype.create_berserker().allowed_gear_types.has("axe")
-	var enc := SkirmishEncounter.new()
+	var enc := CatalogEncounter.new("goblin_skirmish")
 	enc.build()
-	var units_ok: bool = (enc.warrior.max_hp == 100 and enc.archer.attack_range == 3 and enc.warrior.max_ap == 12
-		and enc.profile_of(enc.warrior).power == 25 and enc.profile_of(enc.brawler).flee_ratio == 0.25 and enc.total_blocks == 6
-		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.shaman) == "shaman" and enc.warrior.catalog_id == "warrior")
+	var units_ok: bool = (enc.unit("warrior").max_hp == 100 and enc.unit("goblin_archer").attack_range == 3 and enc.unit("warrior").max_ap == 12
+		and enc.profile_of(enc.unit("warrior")).power == 25 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
+		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.unit("goblin_shaman")) == "shaman" and enc.unit("warrior").catalog_id == "warrior")
 	return _report("Engine content comes from the catalog (skills, items, stash, classes, Goblin Skirmish)", skills_ok and items_ok and classes_ok and units_ok,
 		"skills %s, items %s, classes %s, units %s" % [skills_ok, items_ok, classes_ok, units_ok])
 
@@ -135,7 +135,7 @@ static func _test_authoring() -> bool:
 	errors.append_array(ContentCatalog.upsert("encounters", {"id": "test_trial", "name": "Test Trial", "zone": "stone_arena",
 		"party": ["test_knight"], "enemies": ["test_raider", "test_raider"], "max_rounds": 8, "total_blocks": 6, "unit_ap": 12, "ap_regen": 4}))
 	var saved: bool = ContentCatalog.save_all() == OK and FileAccess.file_exists(ContentCatalog.path_for("units"))
-	ContentCatalog.reload()
+	ContentCatalog.reload_from_disk()
 	var reloaded: bool = (ContentCatalog.has("skills", "test_cleave") and ContentCatalog.has("encounters", "test_trial")
 		and SkillCatalog.find("test_cleave") != null and is_equal_approx(SkillCatalog.find("test_cleave").power_mult, 1.3)
 		and ContentCatalog.validate_all().is_empty())

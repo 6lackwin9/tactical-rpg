@@ -16,8 +16,8 @@ var inspector_name_lbl: Label
 var inspector_team_lbl: Label
 var inspector_hp_bar: ProgressBar
 var inspector_hp_lbl: Label
-var inspector_sp_bar: ProgressBar
-var inspector_sp_lbl: Label
+var inspector_ap_bar: ProgressBar
+var inspector_ap_lbl: Label
 var inspector_stance_lbl: Label
 var inspector_speed_lbl: Label
 var inspector_range_lbl: Label
@@ -151,39 +151,39 @@ func _build_ui() -> void:
 	inspector_hp_bar.add_theme_stylebox_override("fill", hp_fill)
 	hp_gauge_vbox.add_child(inspector_hp_bar)
 
-	# SP/MP Gauge
-	var sp_gauge_vbox := VBoxContainer.new()
-	sp_gauge_vbox.add_theme_constant_override("separation", 1)
-	left_block.add_child(sp_gauge_vbox)
+	# AP Gauge (the round's action points; debt shows as a negative value)
+	var ap_gauge_vbox := VBoxContainer.new()
+	ap_gauge_vbox.add_theme_constant_override("separation", 1)
+	left_block.add_child(ap_gauge_vbox)
 
-	var sp_hdr_row := HBoxContainer.new()
-	sp_gauge_vbox.add_child(sp_hdr_row)
-	var sp_tag := Label.new()
-	sp_tag.text = "SP/MP"
-	sp_tag.add_theme_font_size_override("font_size", 9)
-	sp_tag.add_theme_color_override("font_color", Color(0.3, 0.75, 1.0))
-	sp_hdr_row.add_child(sp_tag)
-	sp_hdr_row.add_spacer(false)
-	inspector_sp_lbl = Label.new()
-	inspector_sp_lbl.text = "50/50"
-	inspector_sp_lbl.add_theme_font_size_override("font_size", 9)
-	inspector_sp_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
-	sp_hdr_row.add_child(inspector_sp_lbl)
+	var ap_hdr_row := HBoxContainer.new()
+	ap_gauge_vbox.add_child(ap_hdr_row)
+	var ap_tag := Label.new()
+	ap_tag.text = "AP"
+	ap_tag.add_theme_font_size_override("font_size", 9)
+	ap_tag.add_theme_color_override("font_color", Color(0.3, 0.75, 1.0))
+	ap_hdr_row.add_child(ap_tag)
+	ap_hdr_row.add_spacer(false)
+	inspector_ap_lbl = Label.new()
+	inspector_ap_lbl.text = "12/12"
+	inspector_ap_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_ap_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	ap_hdr_row.add_child(inspector_ap_lbl)
 
-	inspector_sp_bar = ProgressBar.new()
-	inspector_sp_bar.custom_minimum_size = Vector2(110, 8)
-	inspector_sp_bar.show_percentage = false
-	inspector_sp_bar.max_value = 50
-	inspector_sp_bar.value = 50
-	var sp_bg := StyleBoxFlat.new()
-	sp_bg.bg_color = Color(0.08, 0.12, 0.18, 0.9)
-	sp_bg.set_corner_radius_all(3)
-	var sp_fill := StyleBoxFlat.new()
-	sp_fill.bg_color = Color(0.2, 0.6, 0.95, 1.0)
-	sp_fill.set_corner_radius_all(3)
-	inspector_sp_bar.add_theme_stylebox_override("background", sp_bg)
-	inspector_sp_bar.add_theme_stylebox_override("fill", sp_fill)
-	hp_gauge_vbox.add_child(inspector_sp_bar)
+	inspector_ap_bar = ProgressBar.new()
+	inspector_ap_bar.custom_minimum_size = Vector2(110, 8)
+	inspector_ap_bar.show_percentage = false
+	inspector_ap_bar.max_value = 12
+	inspector_ap_bar.value = 12
+	var ap_bg := StyleBoxFlat.new()
+	ap_bg.bg_color = Color(0.08, 0.12, 0.18, 0.9)
+	ap_bg.set_corner_radius_all(3)
+	var ap_fill := StyleBoxFlat.new()
+	ap_fill.bg_color = Color(0.2, 0.6, 0.95, 1.0)
+	ap_fill.set_corner_radius_all(3)
+	inspector_ap_bar.add_theme_stylebox_override("background", ap_bg)
+	inspector_ap_bar.add_theme_stylebox_override("fill", ap_fill)
+	hp_gauge_vbox.add_child(inspector_ap_bar)
 
 	# Right Block: Identity & Stats
 	var right_block := VBoxContainer.new()
@@ -222,7 +222,7 @@ func _build_ui() -> void:
 
 	stats_row1.add_spacer(false)
 	inspector_range_lbl = Label.new()
-	inspector_range_lbl.text = "Range: 1 (Melee)"
+	inspector_range_lbl.text = "Reach: 1 tile"
 	inspector_range_lbl.add_theme_font_size_override("font_size", 9)
 	inspector_range_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	stats_row1.add_child(inspector_range_lbl)
@@ -243,7 +243,7 @@ func _build_ui() -> void:
 	stats_row2.add_child(inspector_target_lbl)
 
 	inspector_buffs_lbl = Label.new()
-	inspector_buffs_lbl.text = "Buffs: None active"
+	inspector_buffs_lbl.text = "Effects: None active"
 	inspector_buffs_lbl.add_theme_font_size_override("font_size", 9)
 	inspector_buffs_lbl.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
 	right_block.add_child(inspector_buffs_lbl)
@@ -294,7 +294,11 @@ func update_inspector(
 	var target_val: Variant = c.active_target
 	var boost_rds: int = c.attack_boost_rounds_remaining
 	var withdrawn: bool = c.is_withdrawn
+	var boost_mult: float = c.attack_boost_multiplier
+	var cur_ap: int = c.ap
 	if snap != null:
+		cur_ap = DictUtil.int_of(snap.aps, c, cur_ap)
+		boost_mult = DictUtil.float_of(snap.attack_boost_mult, c, boost_mult)
 		var raw_hp: Variant = snap.hps.get(c, cur_hp)
 		cur_hp = raw_hp if raw_hp is int else cur_hp
 		var raw_max: Variant = snap.max_hps.get(c, max_hp)
@@ -353,15 +357,15 @@ func update_inspector(
 		hp_fill.bg_color = Color(0.9, 0.25, 0.25, 1.0)
 	inspector_hp_bar.add_theme_stylebox_override("fill", hp_fill)
 
-	if inspector_sp_bar and inspector_sp_lbl:
-		var cur_sp: int = 50 if alive else 0
-		inspector_sp_bar.max_value = 50
-		inspector_sp_bar.value = cur_sp
-		inspector_sp_lbl.text = "%d/50" % cur_sp
+	if inspector_ap_bar and inspector_ap_lbl:
+		inspector_ap_bar.max_value = maxi(1, c.max_ap)
+		inspector_ap_bar.value = maxi(0, cur_ap)
+		inspector_ap_lbl.text = ("%d/%d" % [cur_ap, c.max_ap]) + (" (debt)" if cur_ap < 0 else "")
 
 	inspector_stance_lbl.text = "Stance: " + CombatTypes.stance_to_string(stance)
 	inspector_speed_lbl.text = "Speed: %d" % c.speed
-	inspector_range_lbl.text = "Range: %d tile%s" % [c.attack_range, "s" if c.attack_range > 1 else ""]
+	var band: Vector2i = SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(c)
+	inspector_range_lbl.text = ("Reach: %d tile" % band.y) if band.x == band.y else ("Reach: %d-%d tiles" % [band.x, band.y])
 	inspector_pos_lbl.text = pos_text
 
 	if target_val is Combatant:
@@ -370,10 +374,12 @@ func update_inspector(
 	else:
 		inspector_target_lbl.text = "Target: None"
 
+	var effects: Array[String] = []
 	if boost_rds > 0:
-		inspector_buffs_lbl.text = "Buffs: Focus (+50%% ATK, %d rds)" % boost_rds
-	else:
-		inspector_buffs_lbl.text = "Buffs: None active"
+		effects.append("Focus x%.2f ATK (%d rds)" % [boost_mult, boost_rds])
+	for status: Variant in c.statuses:
+		effects.append(StatusEffects.display_name(str(status)))
+	inspector_buffs_lbl.text = "Effects: " + (", ".join(effects) if not effects.is_empty() else "None active")
 
 	if inspector_gear_lbl:
 		if c.inventory != null:

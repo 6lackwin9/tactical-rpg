@@ -1,6 +1,6 @@
 # Tactical RPG (Godot 4)
 
-A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Combat resolves across a synchronous **10-block round timeline** on a **9x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
+A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Every unit plans a **6-block round** (AP-costed skills, one move, AI-planned enemies) that resolves simultaneously on a **9x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
 
 ---
 
@@ -18,9 +18,10 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 ## Core Design Philosophy
 
 - **Decoupled Rules Engines**: All core game mechanics inherit from `RefCounted` rather than scenes or rendering nodes, allowing 100% headless simulation and rapid automated testing.
-- **Simultaneous 10-Block Rounds**: Combat does not use traditional turn-based initiative. Instead, all units plan actions along a 10-block timeline that resolves synchronously with multi-block durations, interruptions, and stance interactions.
+- **Simultaneous 6-Block Rounds**: Combat does not use traditional turn-based initiative. Every unit plans its round as a sequence of skills on a 6-block timeline (AP pool of 12, +4 per round); all plans then resolve together, block by block, with multi-block durations and stance interactions.
 - **Dynamic Stance Matchups**: three stances in a rock-paper-scissors loop (`Offensive` > `Tactical` > `Defensive` > `Offensive`) plus `Neutral` govern damage dealt and received through asymmetric multipliers.
-- **Spatial Positioning & Withdrawal**: 9x9 grid maneuvering with center-ring deployment, range checks, and safe boundary withdrawal.
+- **Spatial Positioning & Withdrawal**: 9x9 grid maneuvering with center-ring deployment, reach bands, and safe boundary withdrawal.
+- **Content as data**: skills, items, classes, units and encounters live in a JSON catalog edited with the Content Forge; the engine, the scenes and the tests all load from it.
 
 ---
 
@@ -39,8 +40,9 @@ tactical-rpg/
 ├── scenes/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
-│   ├── test_arena.tscn           # Test harness scene: runs ArenaTestSuite, then launches combat_arena
-│   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1
+│   ├── scene_runner.tscn         # Main scene: Scene Runner menu (launch scenes, hot-reload scripts, run suites)
+│   ├── test_arena.tscn           # Test harness scene: runs ArenaTestSuite (headless exit code); windowed opens the runner
+│   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1 and the runner's suite buttons
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
 │   ├── gear_dojo.gd              # Thin bootstrap: builds DojoSession, mounts the window workspace or runs assertions
 │   ├── content_forge.tscn        # Content Forge: author skills, items, classes, units & encounters; playtest in the arena
@@ -54,8 +56,8 @@ tactical-rpg/
 │   │   └── content_factory.gd        # Entries <-> engine objects (SkillDef, Item, ClassArchetype, Combatant + AiProfile)
 │   ├── core/                     # Foundational rules engine primitives & base models
 │   │   ├── combat/               # Core unit, stance & command models
-│   │   │   ├── battle_command.gd         # Abstract base command class (duration, cost, initiative)
-│   │   │   ├── combatant.gd              # Core unit model (HP, SP, speed, range, stance, buffs, target)
+│   │   │   ├── battle_command.gd         # Base command: blocks, AP + stance switch at start, initiative, effect at end
+│   │   │   ├── combatant.gd              # Core unit model (HP, AP, speed, range, stance, statuses, buffs, target, known skills)
 │   │   │   ├── combat_types.gd           # Stances, enum helpers, matchup multipliers & formatting
 │   │   │   └── damage_calculator.gd      # Authoritative damage formula (shared by arena, dojo & future AI)
 │   │   ├── utils/                # Shared helpers
@@ -80,20 +82,15 @@ tactical-rpg/
 │   │   │   ├── attack_command.gd         # Melee & ranged attacks: reach band, one-tile adjust at start (step in / ranged back off)
 │   │   │   ├── defend_command.gd         # Defensive stance transition & incoming damage mitigation
 │   │   │   ├── focus_command.gd          # Tactical buff command (+50% ATK for 2 rounds)
-│   │   │   ├── move_command.gd           # Straight-line movement of 1-3 tiles per command
 │   │   │   ├── walk_command.gd           # One block of a planned move: any path, re-paths after a cut-short half, refunds unwalked tiles
 │   │   │   ├── rest_command.gd           # Idle block: recovers AP, returns to Neutral
 │   │   │   ├── area_attack_command.gd    # Tile-targeted attack hitting every unit in an area (friendly fire)
 │   │   │   ├── status_block_command.gd   # A block lost to Stagger / Stun
-│   │   │   ├── target_command.gd         # Intent lock onto specific opponent
-│   │   │   ├── enter_neutral_command.gd  # Reset active combat stance to Neutral
-│   │   │   └── hold_stance_command.gd    # Stance preservation across timeline blocks
+│   │   │   └── target_command.gd         # Switch Target: lock onto a different opponent
 │   │   ├── session/              # Headless combat session & encounter definitions
 │   │   │   ├── combat_session.gd         # Battle state: rounds, resolution, snapshots, replay, selection, log
 │   │   │   ├── combat_encounter.gd       # Encounter plug-in base (combatants, deployment, plans, triggers, art)
-│   │   │   ├── goblin_ambush_encounter.gd # Scripted 3-round demo encounter (reference battle)
-│   │   │   ├── catalog_encounter.gd      # Any catalog encounter in the real engine: spawns units, profiles, deployment overflow
-│   │   │   ├── skirmish_encounter.gd     # The "goblin_skirmish" catalog encounter + its narration (arena default)
+│   │   │   ├── catalog_encounter.gd      # Any catalog encounter in the real engine: spawns units, AI profiles, deployment, reinforcement wave
 │   │   │   └── combat_log_builder.gd     # Resolved actions -> log cells; resolver messages -> BBCode
 │   │   ├── planning/             # Round command sequences (headless)
 │   │   │   ├── skill_def.gd              # One skill tier: level 1-5, AP cost = level (Move per tile, Rest free), stance pool, auto switch cost
@@ -114,7 +111,7 @@ tactical-rpg/
 │   │       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
 │   │       ├── combat_zones.gd           # 8 preset 9x9 combat zones (forest, river, lava cavern, ...)
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
-│   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
+│   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
 │   │   ├── svg_raster.gd             # SVG string -> cached ImageTexture
@@ -129,7 +126,9 @@ tactical-rpg/
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   ├── arena_test_suite.gd       # Combat, planning, AI, art & session suites (runs the content suite last)
-│   │   └── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
+│   │   ├── core_rules_test_suite.gd  # Core combat rules via the planner: guard & matchup, stances, Focus, casualties, withdrawal, feed
+│   │   ├── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
+│   │   └── runner_test_suite.gd      # Scene Runner: scene list, launch/restart/menu, unsaved-work guard, hot reload
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── framework/                # Neutral UI framework shared by the dojo and the combat UI
 │       │   ├── ui_panel.gd               # Panel base: metadata, bind(session), refresh(), overlay requests
@@ -161,7 +160,10 @@ tactical-rpg/
 │       │   ├── combat_inspector_panel.gd # Unit inspector (snapshot-aware)
 │       │   ├── combat_forecast_panel.gd  # Tactical forecast
 │       │   ├── combat_playback_panel.gd  # Step / play / reset / round advance
-│       │   └── combat_timeline_panel.gd  # 10-block ruler & focused unit track
+│       │   └── combat_timeline_panel.gd  # Block ruler & focused unit track (planning bar)
+│       ├── runner/                   # Scene Runner (main menu)
+│       │   ├── scene_runner.gd           # Scene list, launch / restart / back to menu, unsaved-work guard, suite runs, F5/F6/F10
+│       │   └── script_reloader.gd        # Hot reload: recompiles scripts edited on disk (GDScript.reload)
 │       ├── forge/                    # Content Forge authoring UI
 │       │   ├── content_forge.gd          # Kind tabs, entry list (search/side filter), form, preview, problems, save, playtest
 │       │   ├── forge_form.gd             # Schema-driven editor: one widget per field, conditional fields, ref pickers
@@ -180,18 +182,16 @@ tactical-rpg/
 │       └── character_equipment_modal.gd # Party & Stash screen: 3 columns (party viewer, gear loadout, party stash) sharing one DojoSession
 ├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
-├── run_gear_dojo.bat             # Dedicated launcher for Gear, Skill & Dummy Benchmark Dojo
-├── run_content_forge.bat         # Launcher for the Content Forge authoring tool
-└── run_game.bat                  # Quick launcher for the combat arena (main scene)
+└── run.bat                       # Opens the Scene Runner (every scene, hot reload, test suites)
 ```
 
 ---
 
 ## Currently Implemented Features & Functionality
 
-### 1. 10-Block Simultaneous Resolution Engine
+### 1. Simultaneous Block Resolution Engine
 
-- **Synchronous Execution**: Block-by-block progression from Block 1 to 10. Actions specify start blocks and duration costs.
+- **Synchronous Execution**: Block-by-block progression through the round (6 blocks; per encounter). Every action is a planned command with a start block and a length; it pays AP and enters its stance when it starts, and its effect lands at the end of its last block.
 - **Initiative Sorting**: Multiple actions completing on the same block resolve deterministically via speed ordering `(priority * 1000) + speed`.
 - **Casualty Action Cancellation**: If an active combatant is eliminated mid-round, all future scheduled commands for that unit are cancelled immediately.
 - **Round Rollover**: Buff durations decrement cleanly, lingering stances carry over deterministically, and fallen/withdrawn units are purged from subsequent rounds.
@@ -207,13 +207,13 @@ tactical-rpg/
 
 - **Arena Geometry**: Fixed 9x9 grid (`0..8` on both axes) with landmark center at `(4, 4)`.
 - **Center-Ring Deployment**: Initial spawn radius around `(4, 4)` offset by attack range so units can engage center on Block 1.
-- **Spatial Range Gating**: Attack commands validate target distance against attacker range; out-of-range attacks fail cleanly.
+- **Reach Bands**: attacks check the target's distance against the skill's reach band (melee 1, ranged 2-3, off-hand jab 1, area skills their own); a targeted attack adjusts one tile when it starts, otherwise an out-of-reach attack fails cleanly.
 - **Perimeter Escape & Partial Withdrawal**: Stepping onto designated exit tiles (e.g. `(8, 4)`) triggers safe partial withdrawal, removing the unit from active combat without penalty.
-- **Reinforcement Ingress**: Mid-round triggers (e.g. Block 4 ambush) dynamically deploy reinforcements onto grid coordinates.
+- **Reinforcement Ingress**: an encounter's reinforcement wave enters before a given block of a given round (e.g. the Goblin Ambush at Round 1 Block 4), deploying on free tiles of the enemy side; the AI plans it from the next round.
 
 ### 4. Deterministic Scrubbing & Replay System
 
-- **State Snapshots (`BlockSnapshot`)**: Full state (HP, SP, stances, targets, active flags, coordinates) captured per block.
+- **State Snapshots (`BlockSnapshot`)**: Full state (HP, AP, stances, targets, buffs, guard, active flags, coordinates) captured per block and per log entry.
 - **Two-Way Stepping by log point**: After a round resolves, `Step Prev` / `Step Next` walk the round's log entries one at a time (each entry keeps the board state right after it), so a 2-block move replays from where it started. Selecting a round jumps to its start; selecting a block jumps to the state just before that block. Playback is a review/testing aid only and never changes the battle.
 - **Log export**: in debug builds every resolved round is written to `user://combat_last.log` (board cells plus the plain-text feed) for sharing and bug reports.
 - **Multi-Round Historical Traversal**: Review previous completed rounds (Round 1, Round 2) without losing active simulation state.
@@ -221,21 +221,21 @@ tactical-rpg/
 ### 5. Modular Combat UI (`combat_arena.tscn`)
 
 - **Headless `CombatSession`**: Owns one battle: the encounter's combatants, grid and resolver, round flow, block-by-block resolution, per-block snapshots, multi-round traversal, selection/hover and the action log. Panels only read it and call its actions; every change ends in `changed`, visual one-shots use `fx_requested` / `hover_changed`. The whole battle flow is headless-testable.
-- **Pluggable `CombatEncounter`**: Defines *what* a battle is (combatants, deployment, per-round plans, mid-round triggers, narration, art). The scripted 3-round Goblin Ambush is `GoblinAmbushEncounter`; future AI-planned or region-generated encounters plug in the same way. Its combatants are the single source of truth for simulation and rendering.
+- **Pluggable `CombatEncounter`**: Defines *what* a battle is (combatants, deployment, per-round plans, mid-round triggers, narration, art). Every battle is a `CatalogEncounter` built from the content catalog (Goblin Skirmish is the arena default; Goblin Ambush adds a mid-round wave); region-generated encounters will plug in the same way. Its combatants are the single source of truth for simulation and rendering.
 - **Panels (`CombatPanel`)**: Party roster, enemy roster, resolution log, unit inspector, combat grid, tactical forecast, playback controls and timeline are independent panels bound to the session, each wrapping an existing view component. The inspector, roster and grid all render the replayed snapshot when reviewing a past block.
 - **Static Dock Host (`CombatDockHost`)**: Fixed regions (top row, left/center/right, bottom bar) filled from data-driven layout presets (`Standard`, `Mirrored`). The game UI stays static; **layout edit mode** (`⚙` / `F9`) overlays an `⇱ Undock` tag on each panel without moving anything, floats panels into `UiWindow`s (their dock keeps a same-size placeholder) and docks them back when closed. The host also owns the full-screen modals and shortcuts (`Space` play, `Q`/`E` blocks, `[`/`]` log, `L` log modal, `F`/`Tab` timeline, `G` party & stash, `Esc` close).
 - **Custom SVG Visual Assets**: Custom vector graphics for characters, unit tokens, and grid tiles.
-- **Allied & Enemy Status Roster Docks**: Real-time HP bars, SP gauges, status badges, and position coordinates.
-- **Planning Phase (on the combat grid)**: In player-planned encounters (`SkirmishEncounter`, the arena default) each round starts in PLANNING and you plan right on the main screen. Select a hero (click the token or roster card; cards show `○ no plan` / `✔ n` / `⚠ n` and AP), then click a target: an **enemy** opens a small popup of attack skills, **your own token** lists Guard/Brace/Focus/Rest, an **empty tile** offers *Move here* (the exit offers *Withdraw*). Each row shows `AP · blocks`; hovering a row (or just hovering a target) previews the route, destination ghost, weapon reach and cost on the grid, and hovering inspects the unit in the side panels. Pick with the mouse, `1`-`9`, or `Enter` / clicking the same target again for the first option; **right-click the grid or press Backspace to undo the hero's last step**; the step lands on the lowest free block and the hero's ghost trail and the timeline update. The timeline bar shows the hero's AP, next block and warnings, with **🤖 Draft** (AI presets for the hero or party), **Clear** and **Confirm Round** (`Enter`); right-click a timeline command to remove its step and drag one onto another to reorder. **Engage** combines target + move: the moves to get in range are inserted automatically and, at execution, re-path from current positions so they chase a target that moved. Hard-invalid sequences (no path, bad target, too many blocks) block Confirm; running out of AP only warns. Once confirmed the timeline is a read-only visualisation.
-- **Round rules (planner encounters)**: rounds are **6 blocks** (roughly three actions). Each unit has an **AP pool of 12** that carries across the battle and regains **+4 each round**; **Rest** (1 free block) recovers 2 AP and returns to Neutral. Leveled skills cost AP equal to their level (a level 2 Attack or Defend always costs 2 AP unless an effect shifts it via `Combatant.ap_cost_modifier`). **Moving must come first** and happens once: a manual move, a move-to-tile or the approach of an Engage, up to **2 blocks** at the unit's speed-based tiles per block, 1 AP per tile. A 2-block move is split per block: its first stretch lands at the end of block 1, the rest at the end of block 2. A move blocked at resolution (e.g. an enemy stepped into the path) stops on the last free tile, refunds the tiles it didn't walk and logs **CUT SHORT** with what blocked it; a second half re-paths toward the destination if the first half was cut short. Allies plan around each other's planned moves: tokens stay on their real tiles and each planned move shows as a **clickable shadow** at its destination (click your own shadow for self skills; a shadow on a tile that is still occupied shrinks into the corner). A unit may take a tile an ally leaves in block 1 if that ally acts first: click that ally's token to get *Move here* or *Plan for <ally>*. Attacks need the target in the skill's reach: melee 1, **ranged single-target attacks 2-3** (or the unit's longer range; an **Off-hand Jab** covers distance 1, with the off-hand weapon or bare hands); area attacks have their own reach (Volley 2-3, Firebomb 2, Shockwave adjacent). Attacking a different target than the current lock inserts a free **Switch Target** block. A target already expected to fall can still be attacked (insurance, flagged in amber). `AiProfile.skill_cap` stands in for skill progression. Scripted encounters keep 10-block rounds, refilled AP and the old reach rules (`CombatEncounter.total_blocks` / `ap_regen`).
+- **Allied & Enemy Status Roster Docks**: Real-time HP bars, plan status (`○ no plan` / `✔ n` / `⚠ n`), AP, stance and position.
+- **Planning Phase (on the combat grid)**: Each round starts in PLANNING and you plan right on the main screen. Select a hero (click the token or roster card; cards show `○ no plan` / `✔ n` / `⚠ n` and AP), then click a target: an **enemy** opens a small popup of attack skills, **your own token** lists Guard/Brace/Focus/Rest, an **empty tile** offers *Move here* (the exit offers *Withdraw*). Each row shows `AP · blocks`; hovering a row (or just hovering a target) previews the route, destination ghost, weapon reach and cost on the grid, and hovering inspects the unit in the side panels. Pick with the mouse, `1`-`9`, or `Enter` / clicking the same target again for the first option; **right-click the grid or press Backspace to undo the hero's last step**; the step lands on the lowest free block and the hero's ghost trail and the timeline update. The timeline bar shows the hero's AP, next block and warnings, with **🤖 Draft** (AI presets for the hero or party), **Clear** and **Confirm Round** (`Enter`); right-click a timeline command to remove its step and drag one onto another to reorder. **Engage** combines target + move: the moves to get in range are inserted automatically and walk the planned path (see the one-tile adjustment below). Hard-invalid sequences (no path, bad target, too many blocks) block Confirm; running out of AP only warns. Once confirmed the timeline is a read-only visualisation.
+- **Round rules**: rounds are **6 blocks** (roughly three actions). Each unit has an **AP pool of 12** that carries across the battle and regains **+4 each round**; **Rest** (1 free block) recovers 2 AP and returns to Neutral. Leveled skills cost AP equal to their level (a level 2 Attack or Defend always costs 2 AP unless an effect shifts it via `Combatant.ap_cost_modifier`). **Moving must come first** and happens once: a manual move, a move-to-tile or the approach of an Engage, up to **2 blocks** at the unit's speed-based tiles per block, 1 AP per tile. A 2-block move is split per block: its first stretch lands at the end of block 1, the rest at the end of block 2. A move blocked at resolution (e.g. an enemy stepped into the path) stops on the last free tile, refunds the tiles it didn't walk and logs **CUT SHORT** with what blocked it; a second half re-paths toward the destination if the first half was cut short. Allies plan around each other's planned moves: tokens stay on their real tiles and each planned move shows as a **clickable shadow** at its destination (click your own shadow for self skills; a shadow on a tile that is still occupied shrinks into the corner). A unit may take a tile an ally leaves in block 1 if that ally acts first: click that ally's token to get *Move here* or *Plan for <ally>*. Attacks need the target in the skill's reach: melee 1, **ranged single-target attacks 2-3** (or the unit's longer range; an **Off-hand Jab** covers distance 1, with the off-hand weapon or bare hands); area attacks have their own reach (Volley 2-3, Firebomb 2, Shockwave adjacent). Attacking a different target than the current lock inserts a free **Switch Target** block. A target already expected to fall can still be attacked (insurance, flagged in amber). `AiProfile.skill_cap` (and an optional known-skills list per unit) stands in for skill progression. Rounds, AP pool and regen are per encounter (`total_blocks`, `unit_ap`, `ap_regen`).
 - **AP debt instead of mid-round stops**: overspending is allowed; the unit finishes its sequence in AP debt and pays next round: the debt comes out of its +4 recovery, **3+ debt Staggers** it (blocks 1 and 4 lost) and **5+ Stuns** it (blocks 1-2 lost). The planner shows the projected debt and penalty. Engage approaches **walk the planned path** (no live re-chasing); when a **targeted attack** starts it adjusts by one tile if the target shifted out of its reach band (1 AP, may go into debt, shown as its own *Chase* log cell): melee steps in, a ranged unit whose target stepped point-blank **backs off** to shoot. Only damage-focused attacks adjust: after a hand-picked tile move (Move here / Withdraw) the unit holds its tile, and area attacks never move. Each approach destination is fixed when first planned, and units claim tiles in planning order, so allies (and the AI pack, which drafts into one shared plan) never plan onto the same tile. Confirming the round starts resolving it automatically; Play afterwards replays it.
 - **Statuses (`StatusEffects`)**: Stagger, Stun and Root (no moving) last one round and always apply to the **next** round, so they reshape the next plan instead of breaking the current one; lost blocks show as locked `✖` blocks on the timeline. Skills roll to inflict them with a **seeded roll** (replays stay identical): chance = potency - the target's Debuff Resistance (INT) - any passive resistance (`Combatant.status_resist`; 100 = immune). New skills: **Shield Bash** (Defensive-stance strike, may Stagger), **Hamstring** (may Root).
 - **Area attacks (tile-targeted)**: **Volley** (plus shape), **Firebomb** (3x3) at a tile in weapon reach, **Shockwave** (3-tile line from an adjacent tile). They hit everyone in the area, **allies included** (friendly fire is previewed in orange and warned). Click an empty tile or an enemy to aim; the preview shows the affected tiles.
-- **Damage visibility**: attack rows in the popup and attack commands on the timeline show the expected hit (`~25 dmg`: power × skill × stance matchup × buffs). Log cells show the damage actually dealt (`[HIT -28]`); in the test harness (`test_arena.tscn`, `ActionLogEntry.show_formulas`) hovering the tag explains the formula.
+- **Damage visibility**: attack rows in the popup and attack commands on the timeline show the expected hit (`~25 dmg`: power × skill × stance matchup × buffs). Log cells show the damage actually dealt (`[HIT -28]`); in debug builds (`ActionLogEntry.show_formulas`) hovering the tag explains the formula.
 - **Timing**: an action's effect lands at the **end of its last block**; its stance and AP apply when it **starts**; Defend protects from its first block. Within a block, higher priority (Switch Target, Defend) resolves first, then speed.
 - **Layout**: the action timeline sits in the top row between the party and enemy rosters (its blocks shrink to fit the slot); the resolution log sits in the bottom bar next to the playback controls.
-- **Unit Inspector**: Unit profile portrait, speed, range, stance, target, buffs, and AI threat intel for hostiles.
-- **Tactical Forecast Dock**: Real-time Manhattan distance, in-range validation, matchup multiplier, and estimated strike damage.
+- **Unit Inspector**: portrait, HP and **AP** gauges (AP debt shown), speed, basic-attack reach band, stance, target, buffs and statuses, gear, and AI threat intel for hostiles.
+- **Tactical Forecast Dock**: distance, reach-band check (in reach / too close / out of reach), stance matchup, estimated strike from the unit's real strike power, and the encounter's rules (blocks per round, AP pool and regen, exits).
 - **Action Feed & Modals**:
   - Compact active block log dock.
   - Filterable fullscreen action stream modal (`ATTACK`, `DEFEND`, `MOVE`, `BUFF`, `EVENT` quick filters, plus a **custom filter** row to show a single unit's actions and the actions aimed at it). In debug builds hovering an attack cell shows its damage formula.
@@ -311,37 +311,42 @@ tactical-rpg/
   - **Stance Multiplier**: $+/-$ matchup multiplier based on stance interaction.
   - **Crit Factor**: If critical hit ($P(\text{Crit Rate})$ or forced via console), applies $2.5\times + \text{bonus crit dmg}$; otherwise $1.0\times$.
   - **Effect Modifiers**: Monster-specific or elemental bonus/penalty multipliers.
-- **Shared Combat Math**: Every strike goes through `DamageCalculator.compute`, the same authoritative formula the arena uses, and the breakdown shown in the Test Log is generated from that result.
+- **Dojo Combat Math**: every dojo strike goes through `DamageCalculator.compute` (gear and stat power, deficits, mitigation, crits) and the Test Log breakdown comes from that result. Its stance factor is the arena's rock-paper-scissors matchup against the dummy's stance (the dummy guards in Defensive stance); **Stance Shift** cycles Neutral > Offensive > Tactical > Defensive. The arena itself still uses the simpler planner formula (strike power x skill x matchup x Focus, then guard); see the roadmap.
 
 ### 9. Content Catalog & Content Forge (`content_forge.tscn`)
 
-- **One catalog for all content** (`data/catalog/*.json`): skills, items, classes, units (party members and enemies) and encounters are data, not code. Every object that existed in code was seeded into it unchanged (19 skills, 18 items, 6 classes, 13 units incl. the Skirmish and Ambush goblins, the Gear Dojo heroes and the training dummy, 2 encounters), and the engine now reads it: `SkillCatalog`, `ItemCatalog.create(id)` (the old `create_*` helpers are shorthands), `ClassArchetype.create(id)`, the party starter stash (`starter_stash` flag), `SkirmishEncounter` and the Gear Dojo heroes/dummy.
+- **One catalog for all content** (`data/catalog/*.json`): skills, items, classes, units (party members and enemies) and encounters are data, not code. Every object that existed in code was seeded into it unchanged (19 skills, 18 items, 6 classes, 13 units incl. the Skirmish and Ambush goblins, the Gear Dojo heroes and the training dummy) plus 3 encounters (Goblin Skirmish, Goblin Ambush, Veterans' Drill), and the engine reads it: `SkillCatalog`, `ItemCatalog.create(id)` (the old `create_*` helpers are shorthands), `ClassArchetype.create(id)`, the party starter stash (`starter_stash` flag), every battle (`CatalogEncounter`) and the Gear Dojo heroes/dummy.
 - **Schema-driven** (`ContentSchema`): each kind is a field list (type, default, range, enum options, references, conditional fields such as attack-only or consumable-only fields, help text). It normalises JSON (types, defaults, key order), drives validation and builds the editor form. Enums are stored by name (`"ATTACK"`, `"MAIN_HAND"`), so the files read and diff well.
 - **Validation** (`ContentCatalog.validate_entry / validate_all`): snake_case unique ids, enum values, references that resolve and fit (a party roster only takes party units, an off-hand slot only off-hand gear), skill rules (engine-only kinds, reach bands, LINE areas, status potency), item slot rules, two-handed weapon + shield, derived units needing a class, encounter rosters and exit tiles. In-use and engine (`system`) entries can't be deleted; renaming an id rewrites every reference to it.
 - **Units**: `fixed` vitals (HP / speed / range, like the goblins) or `derived` from class + level + gear (like the dojo heroes); loadout per slot plus battle pouch; AP pool; strike power (0 = from gear & stats); skill cap and an optional **known-skills list** (only those leveled skills are offered to the planner and the AI; Move, Rest and other engine skills are always known); AI role, targeting, flee / guard thresholds; per-status resistances.
-- **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the centre-ring deployment can't fit go to the nearest free tile on their side. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
-- **Content Forge** (`run_content_forge.bat`): kind tabs; searchable entry list (side filter for units, ⚠ marks invalid entries, 🔒 engine skills); a form generated from the schema with dropdowns for enums and references, add/remove/reorder lists, stat grids and JSON fields; an **engine preview** of what the entry becomes (skill cost / reach / damage, item stats and which classes can use it, class stats at levels 1/5/10, unit vitals / power / skills / gear, encounter deployment) with its icon or portrait and "used by" references; live problem list. **New**, **Duplicate** (use any existing entry as a template), **Delete** (click twice), **Apply** / **Revert**, **Save** (`Ctrl+S`, writes the JSON), **Reload**, **Validate All**. **▶ Playtest** runs the selected encounter (or a unit in a sandbox fight on its side) in the real combat arena, with *Back to Forge* to return.
+- **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the centre-ring deployment can't fit go to the nearest free tile on their side. One **reinforcement wave** per encounter (`wave_units`, `wave_round`, `wave_block`, `wave_label`) enters mid-round. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
+- **Content Forge** (Scene Runner > Content Forge): kind tabs; searchable entry list (side filter for units, ⚠ marks invalid entries, 🔒 engine skills); a form generated from the schema with dropdowns for enums and references, add/remove/reorder lists, stat grids and JSON fields; an **engine preview** of what the entry becomes (skill cost / reach / damage, item stats and which classes can use it, class stats at levels 1/5/10, unit vitals / power / skills / gear, encounter deployment) with its icon or portrait and "used by" references; live problem list. **New**, **Duplicate** (use any existing entry as a template), **Delete** (click twice), **Apply** / **Revert**, **Save** (`Ctrl+S`, writes the JSON), **Reload**, **Validate All**. **▶ Playtest** runs the selected encounter (or a unit in a sandbox fight on its side) in the real combat arena, with *Back to Forge* to return.
 - **Reuse in tests**: tests build units and encounters straight from the catalog (`ContentFactory.unit(ContentCatalog.get_entry("units", id))`, `CatalogEncounter.new(id)`). Tests that write call `ContentCatalog.fork_to("user://...")`, so the shipped catalog is never modified.
 
+
+### 10. Scene Runner (`scene_runner.tscn`, main scene)
+
+- **One launcher** (`run.bat`, or Play in the editor): a menu listing every runnable scene: Combat Arena (with an encounter picker over the content catalog, remembered between runs), Content Forge, Gear & Skill Dojo, and any other `.tscn` dropped into `scenes/` (shown under its file name). Scenes run inside the runner, so returning to the menu is instant.
+- **In-scene controls**: a small **☰ Menu / ↻ / ⟳** pill (bottom-right) and keys **F10** (menu), **F6** (restart the scene), **F5** (reload edited scripts, then restart). Leaving the Content Forge with unsaved catalog edits asks for a second press and then discards them.
+- **Hot reload** (`ScriptReloader`): remembers each script's modification time and recompiles the edited ones in place (`GDScript.reload`), clearing static caches built by the old code and re-reading the catalog JSON. New files or new `class_name`s can't join a running game's class registry: the menu lists them and **⏻ Restart runner** starts a fresh process.
+- **Test suites**: **▶ Arena suite / ▶ Dojo suite** run `test_arena.tscn` / `gear_dojo.tscn` headless in a separate process (the menu stays usable) and show the PASS / FAIL lines with a summary.
 ---
 
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **11 test suites** covering **102 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **9 test suites** covering **81 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
-2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
-3. **9x9 Combat Grid & Withdrawal Test** (7 assertions): Center-ring deployment, spatial range gating, coordinate stepping to `(4, 4)`, exit tile escape, and casualty cleanup.
-4. **Resolution Feed Logging Test** (7 assertions): Movement, skill, defend, attack, withdrawal, and defeat log tags.
-5. **Goblin Ambush & Casualty Test** (9 assertions): Reinforcements arrival at Block 4, casualty action cancellation, multi-round rollover, and victory state.
-6. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
-7. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
-8. **Combat Session Flow Test** (8 assertions): Through `CombatSession` headlessly, only deployed enemies in view before the ambush, ambush event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay playhead reading per-block snapshots, round advance baselines with past rounds reviewable, Rounds 2-3 resolving to total victory, timer-free auto-play ticks, and round reset.
-9. **Art, Terrain & Zones Test** (9 assertions): team-colored class tokens and portraits, encounter art follows sides, terrain glyph round-trip and walkability, all 8 zones valid, grid blocks blocked tiles, Goblin Ambush wins on every zone, tile and item icon rasterization.
-10. **Planning, Stances, AP & Enemy AI Test** (16 assertions): reach bands and the off-hand jab, move-first, Root, seeded status rolls and immunity, area friendly fire, allies moving into vacated tiles, AP debt penalties (Stagger/Stun blocks), on-grid input options (per target / tile), round rules (6 blocks, AP pool + regen, one move per round, centre tie-break for equal routes, target switching, insurance attacks, attack follow, damage in the log, auto-play on confirm), skill AP = level (Move per tile, Rest free) with effect modifiers and speed-based tiles per block, the rock-paper-scissors stance matrix and automatic +1 AP switch costs, sequences compiling to the lowest free blocks with Engage inserting 1-block moves, mid-sequence stance switching, projected "runs dry" instead of refusal, flagged invalid edits blocking Confirm, Confirm scheduling party and AI plans with AP spent at runtime, units stopping when they can't pay, Rest recovering AP, AI presets, role patterns (walls, sniper retreat, support Focus, flee, Engage chasing a moved target), deterministic AI-vs-AI skirmishes on all 8 zones, and round reset refilling AP.
-11. **Content Catalog & Forge Test** (9 assertions, [content_test_suite.gd](scripts/tests/content_test_suite.gd)): the shipped catalog loads and validates; the engine's skills, items, stash, classes and Goblin Skirmish come from it; skills, items and classes round-trip through engine objects unchanged; validation catches bad ids, kinds, reach, slots, references and rosters and refuses unsafe deletes; on a sandbox copy: authoring a skill, item, class, units and an encounter, saving, reloading, renaming an id (references follow) and duplicating as a template; authored units bring class-derived vitals, gear, numbered duplicates, whitelisted skills and resistances into planning; the authored encounter (and the shipped Veterans' Drill) plays out in the full engine using the new skill; and the Forge UI (template, conditional fields, refused invalid draft, delete, new unit, playtest in the arena and back, save).
+2. **Core Combat Rules Test** (6 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: Brace mitigation with the Defensive-vs-Offensive matchup (exact damage), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
+3. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
+4. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
+5. **Combat Session Flow Test** (8 assertions): the catalog Goblin Ambush through `CombatSession` headlessly: only deployed enemies in view before the wave, the wave event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay by log points, state carried into Round 2 with past rounds reviewable, later rounds (AI presets) playing on to a conclusion, timer-free auto-play (including Play pressed while planning), and round reset.
+6. **Art, Terrain & Zones Test** (9 assertions): team-colored class tokens and portraits, encounter art follows sides, terrain glyph round-trip and walkability, all 8 zones valid, grid blocks blocked tiles, the Goblin Ambush (wave included) deploying and concluding on every zone, tile and item icon rasterization.
+7. **Planning, Stances, AP & Enemy AI Test** (16 assertions): reach bands and the off-hand jab, move-first, Root, seeded status rolls and immunity, area friendly fire, allies moving into vacated tiles, AP debt penalties (Stagger/Stun blocks), on-grid input options (per target / tile), round rules (6 blocks, AP pool + regen, one move per round, centre tie-break for equal routes, target switching, insurance attacks, attack follow, damage in the log, auto-play on confirm), skill AP = level (Move per tile, Rest free) with effect modifiers and speed-based tiles per block, the rock-paper-scissors stance matrix and automatic +1 AP switch costs, sequences compiling to the lowest free blocks with Engage inserting 1-block moves, mid-sequence stance switching, projected "runs dry" instead of refusal, flagged invalid edits blocking Confirm, Confirm scheduling party and AI plans with AP spent at runtime, units stopping when they can't pay, Rest recovering AP, AI presets, role patterns (walls, sniper retreat, support Focus, flee, Engage chasing a moved target), deterministic AI-vs-AI skirmishes on all 8 zones, the one-tile chase only for targeted attacks (not after a tile move; ranged units back off), and round reset refilling AP.
+8. **Content Catalog & Forge Test** (9 assertions, [content_test_suite.gd](scripts/tests/content_test_suite.gd)): the shipped catalog loads and validates; the engine's skills, items, stash, classes and Goblin Skirmish come from it; skills, items and classes round-trip through engine objects unchanged; validation catches bad ids, kinds, reach, slots, references and rosters and refuses unsafe deletes; on a sandbox copy: authoring a skill, item, class, units and an encounter, saving, reloading, renaming an id (references follow) and duplicating as a template; authored units bring class-derived vitals, gear, numbered duplicates, whitelisted skills and resistances into planning; the authored encounter (and the shipped Veterans' Drill) plays out in the full engine using the new skill; and the Forge UI (template, conditional fields, refused invalid draft, delete, new unit, playtest in the arena and back, save).
+9. **Scene Runner Test** (5 assertions, [runner_test_suite.gd](scripts/tests/runner_test_suite.gd)): every runnable scene listed (runner and test harness hidden), suite output parsing, launching the arena with a chosen catalog encounter plus restart and back to the menu, the unsaved-Forge-work guard (second press discards), and hot-reloading a script in place.
 
 Additionally, `scenes/gear_dojo.tscn` runs **36 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
@@ -356,7 +361,7 @@ Runs in 4 phases:
 
 - `[1/4]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
 - `[2/4]` Validates GDScript syntax & static typing across every project script (`--headless --check-only`); a crash only while Godot shuts down after a clean parse is reported as a warning.
-- `[3/4]` Executes the headless arena test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0.
+- `[3/4]` Executes the headless arena test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0. (The Scene Runner's suite buttons run the same scenes.)
 - `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
 
 ---
@@ -377,37 +382,26 @@ Or via Windows Batch:
 check_project.bat
 ```
 
-### Run Dedicated Gear & Skill Dojo
+### Run the Game (Scene Runner)
 
-Launch the Gear, Skill & Dummy Benchmark Dojo in windowed mode:
-
-```cmd
-run_gear_dojo.bat
-```
-
-### Run the Content Forge
-
-Create and edit skills, items, classes, units and encounters, then playtest them in the arena:
+One launcher for everything:
 
 ```cmd
-run_content_forge.bat
+run.bat
 ```
 
-Saving writes `data/catalog/*.json` (run from the project, not an exported build). To run any catalog encounter in the arena directly:
+Or open the project in **Godot 4.7+** and press Play: the main scene is the Scene Runner. From its menu:
+
+- **Combat Arena** (pick any catalog encounter), **Content Forge**, **Gear & Skill Dojo**, plus any other scene added under `scenes/` (listed automatically).
+- In a running scene, the **☰ Menu** pill (bottom-right) or **F10** returns to the menu, **F6** restarts the scene, **F5** reloads edited scripts and restarts it.
+- **⟳ Reload scripts** recompiles scripts edited on disk (the menu shows how many are pending); brand-new files or new `class_name`s need **⏻ Restart runner**, which starts a fresh process.
+- **▶ Arena suite / ▶ Dojo suite** run the headless test scenes in a separate process and show their PASS / FAIL lines.
+
+The Content Forge saves to `data/catalog/*.json` (run from the project, not an exported build). To run a catalog encounter directly:
 
 ```cmd
 "C:\Program Files\Godot\godot.exe" --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill
 ```
-
-### Run Interactive Combat Arena
-
-Launch the combat arena in windowed mode:
-
-```cmd
-run_game.bat
-```
-
-Or open the project in **Godot 4.7+** and press Play (main scene `res://scenes/combat_arena.tscn`), or run `res://scenes/gear_dojo.tscn`. `res://scenes/test_arena.tscn` runs the test suite first, then opens the arena.
 
 ---
 
@@ -455,7 +449,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Planned.*
 
 - [ ] **Chained Flow Moves**: Skills that automatically transition into compatible follow-up stances.
-- [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the 10-block timeline.
+- [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the round timeline.
 - [ ] **Stance Disruption & Stagger**: Critical attacks or guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
 - [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 9x9 grid.
 - [ ] **Environmental Hazards**: Fire, ice, and poison terrain tiles that apply effects on entry/end of round.
@@ -528,7 +522,16 @@ The following modular systems and capabilities are planned according to the mast
 - [x] Schema-driven Content Forge: browse, template, edit, validate, save, engine preview and arena playtest.
 - [x] Per-unit known-skill lists; class-derived or fixed vitals; catalog encounters loadable from the command line.
 - [ ] Clean up and flesh out entry attributes (descriptions, missing stats, item/skill effects not yet modelled).
-- [ ] Scripted encounters as data (Goblin Ambush triggers and reinforcement waves are still code).
+- [x] The scripted Goblin Ambush is now a catalog encounter with a data-driven reinforcement wave (the hand-scripted encounter and its legacy commands were retired).
 - [ ] Explicit deployment positions per encounter, and a zone (terrain map) editor.
 - [ ] Skill effects beyond the current kinds (heals, ally buffs, multi-hit, sequence-altering skills) once the engine supports them.
 - [ ] Balance tools: batch-simulate an encounter N times and report win rates and damage.
+
+### 12. Engine Consistency Follow-ups (from the cleanup audit)
+
+*Status: open decisions found while retiring the legacy scripted layer.*
+
+- [ ] **One damage formula for arena and dojo**: the arena uses strike power x skill x matchup x Focus, then guard; the dojo's `DamageCalculator` adds gear/stat power, deficits, flat armor mitigation and (unseeded) crits. Decide whether battles should use gear mitigation and seeded crits, then route both through one calculator.
+- [ ] **Dojo skills from the catalog**: the dojo console's attacks (strike, volley, Dual Strike) are its own buttons, not `SkillCatalog` skills, so new Forge skills can't be benchmarked there yet.
+- [ ] **Gear in battles**: catalog loadouts feed derived vitals and strike power, but armor mitigation and weapon block costs don't affect arena combat yet.
+- [ ] **Reinforcements**: one wave per encounter; multiple waves, conditional triggers (e.g. "when the scout escapes") and explicit spawn tiles.

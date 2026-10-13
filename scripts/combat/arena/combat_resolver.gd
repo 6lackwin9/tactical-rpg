@@ -1,7 +1,7 @@
 class_name CombatResolver
 extends RefCounted
 
-const DEFAULT_BLOCKS: int = 10
+const DEFAULT_BLOCKS: int = 6
 
 class ScheduledAction:
 	extends RefCounted
@@ -90,7 +90,7 @@ func finish_round() -> void:
 
 func resolve_round() -> void:
 	print("\n==========================================")
-	print("=== RESOLVING 10-BLOCK ROUND %d ===" % current_round)
+	print("=== RESOLVING %d-BLOCK ROUND %d ===" % [total_blocks, current_round])
 	print("==========================================")
 
 	for block: int in range(1, total_blocks + 1):
@@ -151,12 +151,12 @@ func prepare_block(block: int) -> Array[ScheduledAction]:
 	)
 	return resolving
 
-# Planner-controlled commands pay AP (skill + automatic stance switch) and enter
-# their stance when they START. Overspending is allowed: the unit goes into AP
+# Commands pay AP (skill + automatic stance switch) and enter their stance when
+# they START (the stance stays until another command changes it). Overspending is allowed: the unit goes into AP
 # debt and pays for it next round (reduced recovery; 3+ debt staggers, 5+ stuns).
 func _begin_actions(block: int) -> void:
 	for action: ScheduledAction in scheduled_actions:
-		if action.is_cancelled or action.start_block != block or not action.command.planner_controlled:
+		if action.is_cancelled or action.start_block != block:
 			continue
 		var c: Combatant = action.combatant
 		if not c.is_active():
@@ -197,9 +197,6 @@ func execute_single_action(action: ScheduledAction) -> void:
 	if not action.command.execution_log.is_empty():
 		log_emitted.emit(action.command.execution_log)
 
-	# Update stance upon resolution
-	if action.combatant.is_active() and action.command.resulting_stance != CombatTypes.StanceType.NEUTRAL:
-		action.combatant.set_stance(action.command.resulting_stance)
 
 	# Check for knockouts or withdrawals and cancel future actions
 	for c: Combatant in registered_combatants:

@@ -24,6 +24,8 @@ func _on_bound() -> void:
 func refresh() -> void:
 	if session == null or session.grid == null:
 		return
+	var enc: CombatEncounter = session.encounter
+	forecast.set_arena_intel(enc.total_blocks, enc.unit_ap, enc.ap_regen, session.grid.designated_exits)
 	var c: Combatant = session.selected_combatant
 	var hovered_foe: Combatant = session.hovered_combatant if session.is_planning() and session.hovered_combatant != null and not session.is_ally(session.hovered_combatant) else null
 	if hovered_foe != null and session.focused_hero != null:
@@ -33,4 +35,6 @@ func refresh() -> void:
 	var target: Combatant = hovered_foe if hovered_foe != null else session.forecast_target(c)
 	if target == null:
 		return
-	forecast.update_forecast(c, target, session.grid)
+	var basic: SkillDef = SkillCatalog.lowest(SkillDef.Kind.ATTACK)
+	var power: int = roundi(float(enc.profile_of(c).power) * basic.power_mult)
+	forecast.update_forecast(c, target, session.grid, power, basic.reach_for(c))

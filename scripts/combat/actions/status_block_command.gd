@@ -11,8 +11,6 @@ var status: String = ""
 func _init(p_source: Combatant, p_status: String) -> void:
 	super(p_source, 0, 1)
 	status = p_status
-	action_type = CombatTypes.ActionType.HOLD_STANCE
-	is_self_targeted = true
 	command_name = StatusEffects.display_name(p_status)
 
 func execute() -> void:

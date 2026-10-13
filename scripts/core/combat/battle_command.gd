@@ -1,20 +1,19 @@
 class_name BattleCommand
 extends RefCounted
 
+# ==============================================================================
+# Tactical RPG - Battle Command (one scheduled action on a unit's timeline)
+# Built from a PlanEntry. When it STARTS the resolver charges its AP (skill +
+# automatic stance switch; debt allowed), enters stance_on_start and calls
+# on_start(); its effect (execute) lands at the end of its last block.
+# ==============================================================================
+
 var source: Combatant
-var priority: int = 0  # High-priority actions (e.g., Defend) resolve first
-var block_cost: int = 1  # Timeline duration in blocks (1 to 3)
-var action_type: CombatTypes.ActionType = CombatTypes.ActionType.ATTACK
-var required_stance: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
-var resulting_stance: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
-var is_self_targeted: bool = false
-var is_disruptive: bool = false
+var priority: int = 0  # High-priority actions (Switch Target, Defend) resolve first within a block
+var block_cost: int = 1  # Timeline duration in blocks
 var command_name: String = "Command"
 var execution_log: String = ""
 
-# Planner-controlled commands pay AP when they START and may switch stance then.
-# (Scripted commands leave these at their defaults and keep the legacy rules.)
-var planner_controlled: bool = false
 var ap_cost: int = 0                 # skill AP (excludes the stance switch)
 var stance_switch_cost: int = 0     # extra AP for changing stance on start
 var stance_on_start: int = -1       # CombatTypes.StanceType to enter at start, -1 = keep

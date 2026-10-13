@@ -6,9 +6,6 @@ var target_value: Variant
 func _init(p_source: Combatant, p_target: Variant = null, p_priority: int = 2) -> void:
 	super(p_source, p_priority, 1)
 	target_value = p_target
-	action_type = CombatTypes.ActionType.TARGET
-	required_stance = CombatTypes.StanceType.NEUTRAL
-	is_self_targeted = true
 	command_name = "Target"
 
 func execute() -> void:

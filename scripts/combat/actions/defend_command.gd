@@ -6,9 +6,6 @@ var mitigation_ratio: float
 func _init(p_source: Combatant, p_mitigation_ratio: float = 0.5, p_block_cost: int = 2, p_priority: int = 1) -> void:
 	super(p_source, p_priority, p_block_cost)
 	mitigation_ratio = p_mitigation_ratio
-	action_type = CombatTypes.ActionType.DEFEND
-	resulting_stance = CombatTypes.StanceType.DEFENSIVE
-	is_self_targeted = true
 	command_name = "Defend"
 
 func execute() -> void:

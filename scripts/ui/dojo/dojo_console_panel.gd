@@ -48,7 +48,7 @@ func _init() -> void:
 	var skills := _flow(vbox)
 	_action("focus", "✦ Focus Buff", skills, func() -> void: session.use_focus(), "Gain +50% ATK for 2 rounds")
 	_action("defend", "🛡 Shield Defend", skills, func() -> void: session.toggle_defend(), "Toggle 50% damage mitigation guard")
-	_action("stance", "⚡ Stance Shift", skills, func() -> void: session.shift_stance(), "Toggle Neutral / Offensive stance (+20% ATK)")
+	_action("stance", "⚡ Stance Shift", skills, func() -> void: session.shift_stance(), "Cycle stance: Neutral > Offensive > Tactical > Defensive (matchup vs the dummy: x1.25 / x0.75)")
 	_action("switch", "🔄 Switch Weapon (1b)", skills, func() -> void: session.switch_weapon())
 
 	vbox.add_child(UiTheme.header("MODIFIERS"))

@@ -7,7 +7,7 @@ var grid: CombatGrid = null
 
 # Planner single-target attacks adjust by this many tiles when they start if the
 # target is out of the reach band: step closer, or (ranged, target too close) step
-# back. 1 AP per tile, may go into debt. Scripted, area and post-tile-move attacks use 0.
+# back. 1 AP per tile, may go into debt. Area and post-tile-move attacks use 0.
 var follow_tiles: int = 0
 
 # Reach band: -1 = the unit's own (ranged units: 2..range; melee: 1). Off-hand jabs use 1..1.
@@ -23,8 +23,6 @@ func _init(p_source: Combatant, p_target: Combatant = null, p_power: int = 25, p
 	target = p_target
 	power = p_power
 	grid = p_grid
-	action_type = CombatTypes.ActionType.ATTACK
-	resulting_stance = CombatTypes.StanceType.OFFENSIVE
 	command_name = "Attack"
 
 func _get_effective_target() -> Combatant:
@@ -35,11 +33,8 @@ func _get_effective_target() -> Combatant:
 		return source.active_target as Combatant
 	return null
 
-# Scripted (legacy) attacks keep the old 1..range band so the reference battle is unchanged.
 func reach_min() -> int:
-	if min_range > 0:
-		return min_range
-	return source.min_attack_range() if planner_controlled else 1
+	return min_range if min_range > 0 else source.min_attack_range()
 
 func reach_max() -> int:
 	return max_range if max_range > 0 else source.attack_range
@@ -126,8 +121,7 @@ func execute() -> void:
 			]
 		return
 
-	if planner_controlled:
-		source.active_target = effective_target   # the lock a later attack must switch away from
+	source.active_target = effective_target   # the lock a later attack must switch away from
 
 	# Calculate stance matchup and buff modifiers
 	var stance_mult: float = CombatTypes.get_matchup_multiplier(source.current_stance, effective_target.current_stance)

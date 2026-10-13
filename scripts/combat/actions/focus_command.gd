@@ -8,9 +8,6 @@ func _init(p_source: Combatant, p_boost_multiplier: float = 1.5, p_duration_roun
 	super(p_source, p_priority, p_block_cost)
 	boost_multiplier = p_boost_multiplier
 	duration_rounds = p_duration_rounds
-	action_type = CombatTypes.ActionType.SKILL
-	resulting_stance = CombatTypes.StanceType.TACTICAL
-	is_self_targeted = true
 	command_name = "Focus"
 
 func execute() -> void:

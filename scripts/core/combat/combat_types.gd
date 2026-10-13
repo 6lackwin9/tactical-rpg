@@ -1,18 +1,6 @@
 class_name CombatTypes
 extends RefCounted
 
-enum ActionType {
-	ATTACK,
-	DEFEND,
-	SKILL,
-	ITEM,
-	MOVE,
-	ENTER_NEUTRAL,
-	HOLD_STANCE,
-	TARGET,
-	REST
-}
-
 # Three stances in a rock-paper-scissors loop, plus Neutral (no advantage and no
 # exposure; the home stance for moving, retargeting and resting).
 #   Offensive beats Tactical (punishes preparation)

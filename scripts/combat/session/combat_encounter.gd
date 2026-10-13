@@ -14,9 +14,9 @@ extends RefCounted
 
 var encounter_name: String = "Encounter"
 var max_rounds: int = 1
-var total_blocks: int = 10     # blocks in a round (planner encounters use a tighter 6)
-var ap_regen: int = -1        # AP regained at each round start (-1 = refill to max)
-var unit_ap: int = 0          # >0: every unit starts with / is capped at this many AP
+var total_blocks: int = 6      # blocks in a round (roughly three actions)
+var ap_regen: int = 4          # AP regained at each round start (-1 = refill to max)
+var unit_ap: int = 12          # AP pool of units without their own (carries across rounds)
 var rng_seed: int = 1337      # seeds status rolls so a battle replays identically
 var grid: CombatGrid = null
 var allies: Array[Combatant] = []
@@ -37,9 +37,10 @@ func build() -> void:
 func prepare_round(_round_num: int) -> Dictionary:
 	return {}
 
-# Schedules every combatant's commands for `round_num` (player plans + enemy AI).
-func schedule_round(_resolver: CombatResolver, _round_num: int) -> void:
-	pass
+# Schedules the enemy side for `round_num` (the party is planned by the player and
+# committed on Confirm). Default: every enemy on the field plans with TacticalAI.
+func schedule_round(resolver: CombatResolver, _round_num: int) -> void:
+	schedule_enemy_ai(resolver)
 
 # Mid-round trigger evaluated before a block resolves. Return an EVENT entry to
 # announce something (the block then resolves on the next step), or null.
@@ -80,7 +81,6 @@ func get_sprite_texture(c: Combatant) -> Texture2D:
 # Planning & AI: units plan their rounds as PlanEntry lists (see CombatPlan)
 # ------------------------------------------------------------------------------
 
-var player_planning: bool = false   # true: allies are planned by the player in the PLANNING phase
 var ai_profiles: Dictionary = {}    # Combatant -> AiProfile
 
 func plan_context() -> PlanContext:
@@ -94,7 +94,7 @@ func draft_steps(c: Combatant, preset_id: String = "balanced", shared: CombatPla
 	var ctx: PlanContext = shared.context if shared != null else plan_context()
 	return TacticalAI.build_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)), shared)
 
-# Plans every enemy on the field with the AI and schedules it on esolver.
+# Plans every enemy on the field with the AI and schedules it on the resolver.
 func schedule_enemy_ai(resolver: CombatResolver) -> void:
 	var ctx: PlanContext = plan_context()
 	var enemy_plan := CombatPlan.new(ctx)
@@ -102,6 +102,7 @@ func schedule_enemy_ai(resolver: CombatResolver) -> void:
 		if e.is_active() and grid.has_combatant(e):
 			TacticalAI.build_steps(e, ctx, ctx.profile_of(e), enemy_plan)   # drafts into the shared plan: packmates avoid each other
 	enemy_plan.commit(resolver)
+
 # Convenience for subclasses: an EVENT log entry for narration / triggers.
 static func make_event_entry(round_num: int, block_num: int, actor: String, actor_is_ally: bool, skill: String, subtype: String, outcome: String, detail: String, status: String) -> ActionLogEntry:
 	var entry := ActionLogEntry.new(round_num, block_num, "EVENT", actor, "", detail, 0, outcome)

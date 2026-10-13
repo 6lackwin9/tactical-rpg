@@ -4,7 +4,7 @@ extends BattleCommand
 # ==============================================================================
 # Tactical RPG - Rest Command (an idle block that recovers AP)
 # Costs no AP, returns the unit to Neutral stance for free (set on start by the
-# planner) and restores ecover_ap when the block resolves.
+# planner) and restores recover_ap when the block resolves.
 # ==============================================================================
 
 var recover_ap: int = 2
@@ -12,8 +12,6 @@ var recover_ap: int = 2
 func _init(p_source: Combatant, p_recover_ap: int = 2, p_block_cost: int = 1) -> void:
 	super(p_source, 0, p_block_cost)
 	recover_ap = p_recover_ap
-	action_type = CombatTypes.ActionType.REST
-	is_self_targeted = true
 	command_name = "Rest"
 
 func execute() -> void:

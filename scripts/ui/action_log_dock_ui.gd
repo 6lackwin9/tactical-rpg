@@ -114,7 +114,7 @@ func update_active_cell(entries: Array[ActionLogEntry], active_idx: int) -> void
 
 	if entries.is_empty() or active_idx < 0:
 		var empty_lbl := Label.new()
-		empty_lbl.text = "Awaiting Action Resolution... Click Step [F6] or Play [Space] to begin."
+		empty_lbl.text = "Awaiting resolution... Plan the party, then Confirm Round [Enter]: the round plays out here."
 		empty_lbl.add_theme_font_size_override("font_size", 9)
 		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 		active_cell_dock.add_child(empty_lbl)

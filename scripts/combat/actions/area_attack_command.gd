@@ -21,8 +21,6 @@ func _init(p_source: Combatant, p_grid: CombatGrid, p_cells: Array[Vector2i], p_
 	grid = p_grid
 	cells = p_cells
 	power = p_power
-	action_type = CombatTypes.ActionType.ATTACK
-	resulting_stance = CombatTypes.StanceType.OFFENSIVE
 	command_name = "Area Attack"
 
 func execute() -> void:
