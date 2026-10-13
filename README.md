@@ -92,11 +92,12 @@ tactical-rpg/
 │   │   ├── ai/                   # Computer-controlled planning
 │   │   │   ├── ai_profile.gd             # Role, power, skill cap, flee/guard thresholds, target & skill preferences
 │   │   │   ├── plan_presets.gd           # One-click AI draft presets (balanced, all-out, focus weakest, guard, kite, economy, fall back)
-│   │   │   └── tactical_ai.gd            # Drafts a validated step sequence for a unit│   │   └── arena/                # Arena spatial rules & resolution
+│   │   │   └── tactical_ai.gd            # Drafts a validated step sequence for a unit
+│   │   └── arena/                # Arena spatial rules & resolution
 │   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability
-│   │       ├── terrain.gd            # Terrain types (14) with walkability, cover, move cost & hazard metadata
-│   │       ├── combat_zones.gd       # 8 preset 9x9 combat zones (forest, river, lava cavern, ...)
-│   │       ├── grid_path.gd          # Breadth-first routes (centre tie-break); shared by planner, AI and commands
+│   │       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
+│   │       ├── combat_zones.gd           # 8 preset 9x9 combat zones (forest, river, lava cavern, ...)
+│   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # 10-block timeline resolution, action scheduling, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
