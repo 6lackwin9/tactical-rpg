@@ -37,6 +37,10 @@ func can_execute() -> bool:
 		return false
 	return true
 
+# Virtual: runs when a planner command STARTS (after AP and stance). Returns a log line or "".
+func on_start() -> String:
+	return ""
+
 # Virtual method: calculate and apply state modifications
 func execute() -> void:
 	pass

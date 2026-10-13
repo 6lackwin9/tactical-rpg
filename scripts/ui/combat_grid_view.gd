@@ -13,6 +13,8 @@ signal combatant_unhovered()
 signal tile_clicked(coord: Vector2i)
 signal tile_hovered(coord: Vector2i)
 signal tile_unhovered()
+signal grid_right_clicked()      # anywhere on the board (planning: undo the last step)
+signal ghost_clicked(combatant: Combatant)   # a planned-move shadow
 
 const TILE_SIZE: int = 54
 const GRID_SIZE: int = 9
@@ -23,6 +25,8 @@ var grid_container: GridContainer
 var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
 var unit_overlay: Control
 var plan_overlay: PlanOverlay
+var ghost_layer: Control
+var ghost_nodes: Dictionary = {}  # Combatant -> Control (planned-move shadows)
 var unit_token_nodes: Dictionary = {} # Combatant -> Control
 
 var grid_hover_tooltip: PanelContainer
@@ -79,6 +83,13 @@ func _build_ui() -> void:
 	unit_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	unit_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE   # tokens (children) take clicks; empty tiles underneath must too
 	grid_anchor.add_child(unit_overlay)
+
+	# Planned-move shadows sit above the tokens so a shadow on an occupied tile stays clickable
+	ghost_layer = Control.new()
+	ghost_layer.name = "GhostLayer"
+	ghost_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ghost_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grid_anchor.add_child(ghost_layer)
 
 	# Floating Unit Inspector / Hover Tooltip
 	grid_hover_tooltip = PanelContainer.new()
@@ -141,6 +152,8 @@ func setup_tile_textures(textures: Dictionary, overlays: Dictionary = {}, toolti
 				var mouse_event := event as InputEventMouseButton
 				if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
 					tile_clicked.emit(coord)
+				elif mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+					grid_right_clicked.emit()
 			)
 			tile_rect.mouse_entered.connect(func() -> void: tile_hovered.emit(coord))
 			tile_rect.mouse_exited.connect(func() -> void: tile_unhovered.emit())
@@ -163,6 +176,9 @@ func clear_tokens() -> void:
 	for child in unit_overlay.get_children():
 		child.queue_free()
 	unit_token_nodes.clear()
+	for ghost: Node in ghost_layer.get_children():
+		ghost.queue_free()
+	ghost_nodes.clear()
 
 func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vector2i) -> Control:
 	var token_ctrl := Control.new()
@@ -192,6 +208,8 @@ func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vecto
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			combatant_clicked.emit(combatant)
+		elif mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			grid_right_clicked.emit()
 	)
 
 	token_ctrl.mouse_entered.connect(func() -> void:
@@ -214,6 +232,65 @@ func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vecto
 		token_ctrl.position = Vector2(grid_pos.x * TILE_SIZE, grid_pos.y * TILE_SIZE)
 
 	return token_ctrl
+
+# Shows a shadow per planned move: `ghosts` holds {"unit": Combatant, "cell": Vector2i,
+# "texture": Texture2D, "small": bool}. Small shadows (their tile is still occupied)
+# sit in the tile's top-right corner so the unit standing there stays visible.
+func update_ghosts(ghosts: Array[Dictionary]) -> void:
+	var keep: Dictionary = {}
+	for g: Dictionary in ghosts:
+		var unit: Combatant = g["unit"]
+		var cell: Vector2i = g["cell"]
+		var small: bool = bool(g.get("small", false))
+		keep[unit] = true
+		var node: Control = _ghost_for(unit, g.get("texture", null))
+		var size_px: float = 28.0 if small else float(TILE_SIZE - 8)
+		node.size = Vector2(size_px, size_px)
+		node.position = Vector2(cell * TILE_SIZE) + (Vector2(TILE_SIZE - size_px - 2, 2) if small else Vector2(4, 4))
+		node.visible = true
+	for unit_key: Variant in ghost_nodes:
+		if not keep.has(unit_key):
+			var stale: Control = ghost_nodes[unit_key]
+			stale.visible = false
+
+func get_ghost_for(combatant: Combatant) -> Control:
+	var raw: Variant = ghost_nodes.get(combatant, null)
+	return raw if raw is Control else null
+
+func _ghost_for(unit: Combatant, tex_raw: Variant) -> Control:
+	var existing: Control = get_ghost_for(unit)
+	if existing != null:
+		return existing
+	var node := Control.new()
+	node.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	node.tooltip_text = "%s's planned spot (click for self actions)" % unit.name
+	var icon := TextureRect.new()
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.modulate = Color(1, 1, 1, 0.6)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if tex_raw is Texture2D:
+		var tex: Texture2D = tex_raw
+		icon.texture = tex
+	node.add_child(icon)
+	var frame := ReferenceRect.new()
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.border_color = Color(0.4, 0.9, 1.0, 0.95)
+	frame.border_width = 1.5
+	frame.editor_only = false
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	node.add_child(frame)
+	node.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			ghost_clicked.emit(unit)
+		elif mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			grid_right_clicked.emit()
+	)
+	ghost_layer.add_child(node)
+	ghost_nodes[unit] = node
+	return node
 
 func get_token_for(combatant: Combatant) -> Control:
 	if combatant == null or not unit_token_nodes.has(combatant):

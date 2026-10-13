@@ -61,6 +61,19 @@ func can_execute() -> bool:
 		return false
 	return in_reach(effective_target)
 
+# When the attack starts: if the target stepped out of reach, close the gap (up to
+# follow_tiles, 1 AP per tile) before winding up the strike.
+func on_start() -> String:
+	var effective_target: Combatant = _get_effective_target()
+	if grid == null or follow_tiles <= 0 or effective_target == null or not effective_target.is_active() or not source.is_active() or in_reach(effective_target):
+		return ""
+	var from: Vector2i = grid.get_position(source)
+	_follow(effective_target)
+	var to: Vector2i = grid.get_position(source)
+	if to == from:
+		return ""
+	return "[Chase] %s closes in on %s: %s to %s (1 AP)" % [source.name, effective_target.name, str(from), str(to)]
+
 # Steps toward a target that moved out of range, paying 1 AP per tile.
 func _follow(effective_target: Combatant) -> void:
 	var left: int = follow_tiles
@@ -98,9 +111,6 @@ func execute() -> void:
 		print("[%s] targeted [%s], but they are no longer in active combat." % [source.name, target_name])
 		execution_log = "[Attack Miss] %s targeted %s, but target is no longer in active combat." % [source.name, target_name]
 		return
-
-	if grid != null and follow_tiles > 0:
-		_follow(effective_target)
 
 	if grid != null and not in_reach(effective_target):
 		var dist: int = grid.get_distance(grid.get_position(source), grid.get_position(effective_target))

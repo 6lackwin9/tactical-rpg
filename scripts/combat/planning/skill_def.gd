@@ -40,6 +40,8 @@ var offhand: bool = false      # ATTACK: melee off-hand jab (range 1) for ranged
 var stance_override: int = -1  # ATTACK in another stance pool (e.g. Shield Bash is Defensive)
 var status_effect: String = "" # status rolled on hit (StatusEffects), active next round
 var status_potency: int = 0
+var reach_min: int = 0          # skill-specific reach band (0 = the unit's default band)
+var reach_max: int = 0
 var description: String = ""
 
 static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_blocks: int, p_description: String) -> SkillDef:
@@ -98,6 +100,17 @@ func icon() -> String:
 		Kind.STATUS:
 			return "✖"
 	return "💤"
+
+# Distance band (min, max) at which `c` can use this attack: skill-specific if set;
+# off-hand jabs and line areas 1; ranged units 2..3 (or their longer range); melee 1..range.
+func reach_for(c: Combatant) -> Vector2i:
+	if reach_max > 0:
+		return Vector2i(reach_min, reach_max)
+	if offhand or area == Area.LINE:
+		return Vector2i(1, 1)
+	if c.attack_range > 1:
+		return Vector2i(2, maxi(3, c.attack_range))
+	return Vector2i(1, c.attack_range)
 
 func is_area() -> bool:
 	return area != Area.NONE

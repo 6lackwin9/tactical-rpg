@@ -128,7 +128,7 @@ func _build_ui() -> void:
 	plan_row.add_child(clear_btn)
 	confirm_btn = Button.new()
 	confirm_btn.text = "✔ CONFIRM ROUND"
-	confirm_btn.tooltip_text = "Lock every hero's sequence and start the round [Enter]"
+	confirm_btn.tooltip_text = "Lock every hero's sequence and start the round [Enter]. Right-click the grid or press Backspace to undo the last step."
 	confirm_btn.add_theme_font_size_override("font_size", 10)
 	confirm_btn.pressed.connect(func() -> void: confirm_requested.emit())
 	plan_row.add_child(confirm_btn)
@@ -364,9 +364,9 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		clip_style.border_color = Color(0.2, 0.8, 0.95, 1.0)
 		icon_str = "➜"
 		var mv: MoveCommand = act.command as MoveCommand
-		var chase: ApproachCommand = act.command as ApproachCommand
-		if chase != null and chase.target != null:
-			subtitle = "→ %s (%d)" % [chase.target.name, mv.steps]
+		var walk_cmd: WalkCommand = act.command as WalkCommand
+		if walk_cmd != null and walk_cmd.approach_target != null:
+			subtitle = "→ %s (%d)" % [walk_cmd.approach_target.name, mv.steps]
 		else:
 			subtitle = "%s %s" % [PlanEntry.dir_arrow(mv.direction), "2 tiles" if mv.steps > 1 else "1 tile"] if mv != null else "Grid Step"
 	elif act.command is StatusBlockCommand:

@@ -36,7 +36,7 @@ func _init() -> void:
 	root.add_child(_list)
 
 # `options` come from CombatPlan (valid or not); only the valid ones become rows.
-func open_for(title: String, options: Array[PlanOption], anchor: Vector2, target_rect: Rect2 = Rect2()) -> void:
+func open_for(title: String, options: Array[PlanOption], anchor: Vector2, target_rect: Rect2 = Rect2(), extras: Array[Dictionary] = []) -> void:
 	_target_rect = target_rect
 	_options = []
 	UiTheme.clear_children(_list)
@@ -55,6 +55,16 @@ func open_for(title: String, options: Array[PlanOption], anchor: Vector2, target
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lbl.custom_minimum_size = Vector2(170, 0)
 		_list.add_child(lbl)
+	# Extra non-plan actions (e.g. switch to an ally): {text, callback}
+	for extra: Dictionary in extras:
+		var cb: Callable = extra.get("callback", Callable())
+		var extra_btn: Button = UiTheme.button(str(extra.get("text", "")), "", func() -> void:
+			close()
+			if cb.is_valid():
+				cb.call()
+		, 10)
+		extra_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_list.add_child(extra_btn)
 	visible = true
 	reset_size()
 	_place.call_deferred(anchor)

@@ -37,11 +37,15 @@ static func _build() -> void:
 	var shockwave: SkillDef = _attack("shockwave", "Shockwave", 2, 2, 0.9, "Hits the 3 tiles in a line from you (aim at an adjacent tile). Friendly fire!")
 	shockwave.area = SkillDef.Area.LINE
 	_all.append(shockwave)
-	var volley: SkillDef = _attack("volley", "Volley", 2, 2, 0.7, "Hits a tile in weapon range and its 4 neighbours. Friendly fire!")
+	var volley: SkillDef = _attack("volley", "Volley", 2, 2, 0.7, "Hits a tile 2-3 away and its 4 neighbours. Friendly fire!")
 	volley.area = SkillDef.Area.PLUS
+	volley.reach_min = 2
+	volley.reach_max = 3
 	_all.append(volley)
-	var firebomb: SkillDef = _attack("firebomb", "Firebomb", 3, 3, 0.6, "Hits a 3x3 area around a tile in weapon range. Friendly fire!")
+	var firebomb: SkillDef = _attack("firebomb", "Firebomb", 3, 3, 0.6, "Hits a 3x3 area around a tile 2 away. Friendly fire!")
 	firebomb.area = SkillDef.Area.BURST
+	firebomb.reach_min = 2
+	firebomb.reach_max = 2
 	_all.append(firebomb)
 
 	_all.append(_defend("guard", "Guard", 1, 2, 0.3, "Raise a light guard: -30% damage."))

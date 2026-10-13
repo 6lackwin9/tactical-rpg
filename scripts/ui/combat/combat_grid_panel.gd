@@ -38,6 +38,13 @@ func _on_bound() -> void:
 	grid_view.tile_clicked.connect(_on_tile_clicked)
 	grid_view.tile_hovered.connect(_on_tile_hovered)
 	grid_view.tile_unhovered.connect(_on_tile_unhovered)
+	grid_view.ghost_clicked.connect(_on_ghost_clicked)
+	grid_view.grid_right_clicked.connect(func() -> void:
+		if popup.visible:
+			popup.close()
+		elif _planning_ready():
+			session.plan_undo_last()
+	)
 	session.plan_preview_changed.connect(_refresh_overlay)
 	popup.option_hovered.connect(func(step: PlanStep) -> void: session.set_plan_preview(step))
 	popup.option_chosen.connect(_on_option_chosen)
@@ -87,6 +94,12 @@ func _on_token_clicked(c: Combatant) -> void:
 		session.select_combatant(c)
 		return
 	if session.is_ally(c) and c != session.focused_hero:
+		var cell: Vector2i = session.grid.get_position(c)
+		if session.planned_position(c) != cell:
+			# This ally is leaving its tile: offer moving the planned hero in, or switching to the ally.
+			var extras: Array[Dictionary] = [{"text": "👤 Plan for %s" % c.name, "callback": func() -> void: session.select_combatant(c)}]
+			_open_popup(c, "%s leaves %s" % [c.name, str(cell)], session.plan_cell_options(cell), _token_rect(c), extras)
+			return
 		session.select_combatant(c)   # switch the hero being planned
 		return
 	_open_popup(c, _title_for(c), session.plan_target_options(c), _token_rect(c))
@@ -102,7 +115,16 @@ func _title_for(c: Combatant) -> String:
 		return "%s - yourself" % c.name
 	return "%s  HP %d/%d" % [c.name, c.hp, c.max_hp]
 
-func _open_popup(key: Variant, title: String, options: Array[PlanOption], target_rect: Rect2) -> void:
+func _on_ghost_clicked(c: Combatant) -> void:
+	if not _planning_ready():
+		return
+	if c != session.focused_hero:
+		session.select_combatant(c)
+		return
+	var ghost: Control = grid_view.get_ghost_for(c)
+	_open_popup("ghost", _title_for(c), session.plan_target_options(c), ghost.get_global_rect() if ghost != null else _token_rect(c))
+
+func _open_popup(key: Variant, title: String, options: Array[PlanOption], target_rect: Rect2, extras: Array[Dictionary] = []) -> void:
 	if popup.visible and _popup_key == key:
 		var step: PlanStep = popup.default_step()   # clicking the same target again takes the first action
 		popup.close()
@@ -112,7 +134,7 @@ func _open_popup(key: Variant, title: String, options: Array[PlanOption], target
 	popup.close()
 	_popup_key = key
 	session.set_plan_preview(null)
-	popup.open_for(title, options, target_rect.end + Vector2(6, -target_rect.size.y), target_rect)
+	popup.open_for(title, options, target_rect.end + Vector2(6, -target_rect.size.y), target_rect, extras)
 
 func _on_option_chosen(step: PlanStep) -> void:
 	if session.focused_hero != null:
@@ -161,6 +183,7 @@ func _tile_rect(coord: Vector2i) -> Rect2:
 func _refresh_overlay() -> void:
 	var overlay: PlanOverlay = grid_view.plan_overlay
 	overlay.clear()
+	_refresh_ghosts()
 	if session == null or not _planning_ready():
 		return
 	var hero: Combatant = session.focused_hero
@@ -169,7 +192,7 @@ func _refresh_overlay() -> void:
 	overlay.ghost_texture = session.encounter.get_token_texture(hero)
 	overlay.committed_marks = []
 	overlay.committed_trail = _trail(start, st.entries, 0, overlay.committed_marks)
-	overlay.committed_ghost = start if st.pos != start else PlanOverlay.NONE   # the token itself shows the planned spot
+	overlay.committed_ghost = PlanOverlay.NONE   # planned spots are clickable shadows (grid_view ghosts)
 	var pst: CombatPlan.SimState = session.plan_preview_state()
 	if pst != null and pst.error_index < 0:
 		overlay.preview_marks = []
@@ -192,6 +215,19 @@ func _refresh_overlay() -> void:
 			overlay.hint_text = _hint_option.cost_text().get_slice("\n", 0)
 			overlay.hint_cell = tpos_for_hint(step, pst.pos)
 	overlay.refresh_hint()
+
+# A shadow on each ally's planned destination; small when someone still stands there.
+func _refresh_ghosts() -> void:
+	var ghosts: Array[Dictionary] = []
+	if session != null and session.is_planning():
+		for ally: Combatant in session.allies:
+			if not ally.is_active() or not session.grid.has_combatant(ally):
+				continue
+			var dest: Vector2i = session.planned_position(ally)
+			if dest == CombatPlan.NO_CELL or dest == session.grid.get_position(ally):
+				continue
+			ghosts.append({"unit": ally, "cell": dest, "texture": session.encounter.get_token_texture(ally), "small": session.grid.is_occupied(dest)})
+	grid_view.update_ghosts(ghosts)
 
 func tpos_for_hint(step: PlanStep, end_pos: Vector2i) -> Vector2i:
 	if step.mode == PlanStep.Mode.ENGAGE and step.target != null:
@@ -244,9 +280,7 @@ func refresh() -> void:
 			token.visible = false
 			token.modulate.a = 0.0
 			continue
-		# While planning, allies stand where their plan takes them (the start tile shows a ghost).
-		var shown: Vector2i = session.planned_position(c) if session.is_planning() and session.is_ally(c) else session.position_of(c)
-		var target_px := Vector2(shown * TILE_SIZE)
+		var target_px := Vector2(session.position_of(c) * TILE_SIZE)
 		if not token.visible:
 			token.position = target_px
 		token.visible = true

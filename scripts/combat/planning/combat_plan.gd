@@ -106,11 +106,7 @@ func max_move_tiles(c: Combatant) -> int:
 
 # Distance band (min, max) at which `c` can use attack `skill`.
 static func reach(c: Combatant, skill: SkillDef) -> Vector2i:
-	if skill.offhand:
-		return Vector2i(1, 1)
-	if skill.is_area() and skill.area == SkillDef.Area.LINE:
-		return Vector2i(1, 1)
-	return Vector2i(c.min_attack_range(), c.attack_range)
+	return skill.reach_for(c)
 
 # ------------------------------------------------------------------------------
 # Sequence editing
@@ -397,8 +393,9 @@ func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 func approach_path(c: Combatant, from: Vector2i, foe: Combatant, near: int = -1, far: int = -1) -> Array[Vector2i]:
 	var grid: CombatGrid = context.grid
 	var foe_pos: Vector2i = grid.get_position(foe)
-	var lo: int = near if near > 0 else c.min_attack_range()
-	var hi: int = far if far > 0 else c.attack_range
+	var basic: Vector2i = SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(c)
+	var lo: int = near if near > 0 else basic.x
+	var hi: int = far if far > 0 else basic.y
 	var blocked: Dictionary = blocked_cells(c)
 	var goals: Dictionary = {}
 	for dx: int in range(-hi, hi + 1):

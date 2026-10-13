@@ -51,14 +51,15 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.skill_name = "Sprint" if move.steps > 1 else "Tactical Move"
 		entry.skill_subtype = "Sprint Relocation" if move.steps > 1 else "Standard Step"
 		if move.planner_controlled:
-			entry.skill_name = "Approach" if move is ApproachCommand else "Move"
+			var walk_cmd: WalkCommand = move as WalkCommand
+			entry.skill_name = "Approach" if walk_cmd != null and walk_cmd.approach_target != null else "Move"
 			entry.skill_subtype = "%d tile%s" % [move.moved_tiles, "" if move.moved_tiles == 1 else "s"]
 		entry.value_num = move.steps
 		entry.coord_to = grid.get_position(act.combatant) if grid != null else Vector2i(-1, -1)
 		if act.combatant.is_withdrawn:
 			entry.outcome_tag = "WITHDRAWN"
 			entry.status_text = "Safely exited battle grid"
-		elif move.planner_controlled and move.cut_short and not (move is ApproachCommand and move.moved_tiles > 0 and move.blocked_by == ""):
+		elif move.planner_controlled and move.cut_short:
 			entry.outcome_tag = "CUT SHORT"
 			entry.status_text = "Stopped at %s (blocked by %s)" % [str(entry.coord_to), move.blocked_by]
 		else:
@@ -176,6 +177,8 @@ static func format_resolver_message(msg: String) -> String:
 		formatted = "[color=#34d399]🎯 " + msg.substr(9) + "[/color]"
 	elif msg.begins_with("[Action Started]"):
 		formatted = "[color=#94a3b8]⏳ " + msg.substr(17) + "[/color]"
+	elif msg.begins_with("[Chase]"):
+		formatted = "[color=#38bdf8]➜ [b]Chase:[/b] " + msg.substr(8) + "[/color]"
 	elif msg.begins_with("[Move Cut Short]"):
 		formatted = "[color=#f59e0b]⚠ [b]Cut short:[/b] " + msg.substr(17) + "[/color]"
 	elif msg.begins_with("[Exhausted]"):

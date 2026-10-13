@@ -57,10 +57,10 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 				command = area
 			else:
 				var attack := AttackCommand.new(actor, target, hit, skill.blocks, 0, grid)
-				attack.follow_tiles = 1   # follows a target that steps one tile out of reach
-				if skill.offhand:
-					attack.min_range = 1
-					attack.max_range = 1
+				attack.follow_tiles = 1   # closes a one-tile gap when the attack starts
+				var band: Vector2i = skill.reach_for(actor)
+				attack.min_range = band.x
+				attack.max_range = band.y
 				command = attack
 			command.status_effect = skill.status_effect
 			command.status_potency = skill.status_potency
@@ -71,13 +71,13 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 		SkillDef.Kind.FOCUS:
 			command = FocusCommand.new(actor, skill.boost, skill.boost_rounds, skill.blocks, 0)
 		SkillDef.Kind.MOVE:
-			if target != null:
-				command = ApproachCommand.new(actor, grid, target, tiles, blocks())
-			else:
-				var walk := WalkCommand.new(actor, grid, path, blocks())
-				walk.expected_start = pos_before
-				walk.goal = goal
-				command = walk
+			# Engage approaches walk the planned path too (no live re-chasing); the attack
+			# itself closes a one-tile gap when it starts.
+			var walk := WalkCommand.new(actor, grid, path, blocks())
+			walk.expected_start = pos_before
+			walk.goal = goal
+			walk.approach_target = target
+			command = walk
 		SkillDef.Kind.TARGET:
 			command = TargetCommand.new(actor, target, 2)
 		_:

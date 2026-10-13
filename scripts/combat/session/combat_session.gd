@@ -483,6 +483,20 @@ func plan_move_step(actor: Combatant, from_index: int, to_index: int) -> void:
 		status_text = "%s: sequence reordered." % actor.name if st.error_index < 0 else "%s: that order is invalid - %s" % [actor.name, st.error_text]
 		_after_plan_edit()
 
+# Removes the focused hero's last planned step (right-click on the grid / Backspace).
+func plan_undo_last() -> void:
+	if not is_planning() or focused_hero == null:
+		return
+	var steps: Array[PlanStep] = plan.steps_of(focused_hero)
+	if steps.is_empty():
+		status_text = "%s has nothing planned to undo." % focused_hero.name
+		_notify()
+		return
+	var removed: PlanStep = steps[steps.size() - 1]
+	plan.remove_step(focused_hero, steps.size() - 1)
+	status_text = "%s: removed %s." % [focused_hero.name, removed.title()]
+	_after_plan_edit()
+
 func plan_clear(actor: Combatant) -> void:
 	if is_planning():
 		plan.clear(actor)

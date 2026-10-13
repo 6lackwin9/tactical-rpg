@@ -174,6 +174,9 @@ func _begin_actions(block: int) -> void:
 				c.set_stance(new_stance)
 				if cmd.stance_switch_cost > 0:
 					log_emitted.emit("[Stance] %s shifts to %s stance (+%d AP)" % [c.name, CombatTypes.stance_to_string(new_stance), cmd.stance_switch_cost])
+		var start_msg: String = cmd.on_start()
+		if not start_msg.is_empty():
+			log_emitted.emit(start_msg)
 func execute_single_action(action: ScheduledAction) -> void:
 	if action.is_cancelled:
 		return

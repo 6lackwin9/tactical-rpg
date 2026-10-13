@@ -489,6 +489,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				open_modal("timeline")
 		KEY_G:
 			open_modal("gear")
+		KEY_BACKSPACE:
+			if session.is_planning():
+				session.plan_undo_last()
+			else:
+				handled = false
 		KEY_ENTER, KEY_KP_ENTER:
 			if session.is_planning():
 				session.confirm_plan()

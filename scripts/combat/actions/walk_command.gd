@@ -16,6 +16,7 @@ const NONE: Vector2i = Vector2i(-1, -1)
 var path: Array[Vector2i] = []
 var expected_start: Vector2i = NONE   # where the plan has the unit when this walk starts
 var goal: Vector2i = NONE             # the move's final destination (for re-pathing)
+var approach_target: Combatant = null  # set when this walk is an Engage's approach (display only)
 
 func _init(p_source: Combatant, p_grid: CombatGrid, p_path: Array[Vector2i], p_block_cost: int = 1) -> void:
 	super(p_source, p_grid, p_path[0] if not p_path.is_empty() else Vector2i.ZERO, p_path.size(), p_block_cost)

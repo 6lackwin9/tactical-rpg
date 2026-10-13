@@ -26,7 +26,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) 
 	var focused: bool = false
 	var fled: bool = false
 	var rests: int = 0
-	var reach: int = actor.attack_range
+	var reach: int = SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(actor).y
 
 	for iteration: int in range(MAX_STEPS):
 		var st: CombatPlan.SimState = plan.compile(actor)
@@ -120,7 +120,7 @@ static func _rank_targets(plan: CombatPlan, actor: Combatant, st: CombatPlan.Sim
 		var d: int = grid.get_distance(st.pos, grid.get_position(f))
 		var hp_left: float = float(DictUtil.int_of(st.est_hp, f))
 		var score: float = float(d) * 100.0 + hp_left if profile.target_pref == AiProfile.TargetPref.NEAREST else hp_left + float(d) * 4.0
-		if d > actor.attack_range:
+		if d > SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(actor).y:
 			var route: Array[Vector2i] = plan.approach_path(actor, st.pos, f)
 			score += 400.0 if route.is_empty() else float(route.size()) * 8.0
 		scored.append({"foe": f, "score": score})

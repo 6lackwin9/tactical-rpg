@@ -1490,6 +1490,24 @@ static func run_planning_and_ai_test() -> bool:
 	coord_ok = coord_ok and csession.planned_position(cr) == w_start and csession.planned_occupant(w_start) == cr and csession.planned_occupant(cw_dest) == cw
 	csession.dispose()
 	var mechanics_ok: bool = reach_ok and move_first_ok and status_ok and area_ok and coord_ok
+	# ranged single-target reach is 2-3 even for range-2 units; area reach is skill-specific
+	var range2 := Combatant.new("Range2", 50, 10, 2)
+	var reach2_ok: bool = strike.reach_for(range2) == Vector2i(2, 3) and strike.reach_for(brute_u) == Vector2i(1, 1)
+	reach2_ok = reach2_ok and SkillCatalog.find("volley").reach_for(range2) == Vector2i(2, 3) and SkillCatalog.find("firebomb").reach_for(range2) == Vector2i(2, 2) and SkillCatalog.find("offhand_jab").reach_for(range2) == Vector2i(1, 1)
+	# undo: removes the focused hero's last step; harmless when there is nothing to undo
+	var usession := CombatSession.new(SkirmishEncounter.new())
+	usession.start()
+	var uhero: Combatant = usession.focused_hero
+	usession.plan_add_step(uhero, PlanStep.engage(strike, usession.enemies[1]))
+	usession.plan_add_step(uhero, PlanStep.self_skill(SkillCatalog.find("guard")))
+	usession.plan_undo_last()
+	var undo_ok: bool = usession.plan.steps_of(uhero).size() == 1 and usession.plan.steps_of(uhero)[0].mode == PlanStep.Mode.ENGAGE
+	usession.plan_undo_last()
+	usession.plan_undo_last()
+	undo_ok = undo_ok and usession.plan.steps_of(uhero).is_empty()
+	usession.dispose()
+	mechanics_ok = mechanics_ok and reach2_ok and undo_ok
+
 	# split moves: a 4-tile move at 2 tiles/block is two 1-block halves (first lands after block 1);
 	# a half blocked by a unit that stepped in stops short, refunds its tiles and logs CUT SHORT
 	var sgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
@@ -1564,7 +1582,8 @@ static func run_planning_and_ai_test() -> bool:
 	_run_steps(hunter, hunt_ctx, hunt_steps)
 	closes_in = closes_in and quarry.hp < 100
 
-	# Engage chases: the approach re-paths at execution when the target has moved
+	# Engage: the approach walks the planned path; if the target stepped one tile away,
+	# the attack closes the gap when it starts (a target that ran farther is out of reach)
 	var chase_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	var chaser2 := Combatant.new("Chaser2", 60, 10, 1)
 	var dodger := Combatant.new("Dodger", 100, 10, 1)
@@ -1575,12 +1594,35 @@ static func run_planning_and_ai_test() -> bool:
 	var chase_ctx: PlanContext = _hand_ctx(chase_grid, dodger_side, chaser_side2)
 	var chase_plan := CombatPlan.new(chase_ctx)
 	var chase_added: String = chase_plan.add_step(chaser2, PlanStep.engage(strike, dodger))
-	chase_grid.combatant_positions[dodger] = Vector2i(3, 2)  # the target moves after planning
 	var chase_resolver := CombatResolver.new()
 	chase_resolver.grid = chase_grid
+	var chase_log: Array[String] = []
+	chase_resolver.log_emitted.connect(func(msg: String) -> void: chase_log.append(msg))
 	chase_plan.commit(chase_resolver)
+	chase_grid.combatant_positions[dodger] = Vector2i(5, 3)  # after confirming, the target steps 1 tile
 	chase_resolver.resolve_round()
-	var chase_ok: bool = chase_added.is_empty() and dodger.hp < 100
+	var chased: bool = false
+	for msg: String in chase_log:
+		if msg.begins_with("[Chase]"):
+			chased = true
+	var chase_ok: bool = chase_added.is_empty() and dodger.hp < 100 and chased
+	# a target that runs 3 tiles away is not chased down
+	var runner_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var chaser3 := Combatant.new("Chaser3", 60, 10, 1)
+	var sprinter := Combatant.new("Sprinter", 100, 10, 1)
+	runner_grid.place_combatant(chaser3, Vector2i(1, 4))
+	runner_grid.place_combatant(sprinter, Vector2i(5, 4))
+	var sprinter_side: Array[Combatant] = [sprinter]
+	var chaser3_side: Array[Combatant] = [chaser3]
+	var runner_ctx: PlanContext = _hand_ctx(runner_grid, sprinter_side, chaser3_side)
+	var runner_plan := CombatPlan.new(runner_ctx)
+	runner_plan.add_step(chaser3, PlanStep.engage(strike, sprinter))
+	var runner_resolver := CombatResolver.new()
+	runner_resolver.grid = runner_grid
+	runner_plan.commit(runner_resolver)
+	runner_grid.combatant_positions[sprinter] = Vector2i(7, 7)
+	runner_resolver.resolve_round()
+	chase_ok = chase_ok and sprinter.hp == 100 and runner_grid.get_position(chaser3) != Vector2i(7, 6)
 
 	var wall_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	for y: int in range(0, 5):
@@ -1680,10 +1722,10 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, AP spent at runtime: %s" % ("PASS" if flow_ok2 else "FAIL"))
 	print("  [Input] Per-target/tile options (foe attacks, self skills, move here, withdraw), previews, status & hover inspect: %s" % ("PASS" if input_ok else "FAIL"))
 	print("  [Rules] 6-block rounds, AP pool + regen, one move per round, centre tie-break, target switching, insurance attacks, follow, damage log, auto-play on confirm: %s" % ("PASS" if rules_ok else "FAIL"))
-	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles, split moves & cut-short refunds: %s" % ("PASS" if mechanics_ok else "FAIL"))
+	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles, split moves & cut-short refunds, ranged 2-3 reach, undo last step: %s" % ("PASS" if mechanics_ok else "FAIL"))
 	print("  [Runtime] Overspending goes into AP debt (next round: less AP, 3+ Stagger, 5+ Stun); Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
 	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
-	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, Engage chases: %s" % ("PASS" if ai_ok else "FAIL"))
+	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, attack closes a 1-tile gap at its start: %s" % ("PASS" if ai_ok else "FAIL"))
 	print("  [AI] Preset skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [AI] Both sides take damage in a preset-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
 	print("  [Plan] Reset round rewinds units and AP to the round start and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
