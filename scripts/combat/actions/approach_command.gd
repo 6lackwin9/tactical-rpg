@@ -58,5 +58,5 @@ func _next_step() -> Vector2i:
 			var cell: Vector2i = target_pos + Vector2i(dx, dy)
 			if absi(dx) + absi(dy) <= reach and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
 				goals[cell] = true
-	var path: Array[Vector2i] = CombatPlan.find_path(grid, grid.get_position(source), goals, blocked, false)
+	var path: Array[Vector2i] = GridPath.find_path(grid, grid.get_position(source), goals, blocked, false)
 	return path[0] if not path.is_empty() else Vector2i.ZERO

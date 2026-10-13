@@ -58,7 +58,7 @@ func _follow(effective_target: Combatant) -> void:
 				var cell: Vector2i = target_pos + Vector2i(dx, dy)
 				if absi(dx) + absi(dy) <= reach and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
 					goals[cell] = true
-		var path: Array[Vector2i] = CombatPlan.find_path(grid, grid.get_position(source), goals, blocked, false)
+		var path: Array[Vector2i] = GridPath.find_path(grid, grid.get_position(source), goals, blocked, false)
 		if path.is_empty() or not grid.move_combatant(source, path[0]):
 			return
 		source.ap -= 1

@@ -51,6 +51,11 @@ static func _focus(id: String, p_name: String, level: int, boost: float, rounds:
 	skill.boost_rounds = rounds
 	return skill
 
+# Drops the static cache. Call on shutdown: a static Array holding instances of a
+# script keeps that script (and everything it references) alive past exit.
+static func clear_cache() -> void:
+	_all.clear()
+
 static func find(skill_id: String) -> SkillDef:
 	for s: SkillDef in all():
 		if s.id == skill_id:
