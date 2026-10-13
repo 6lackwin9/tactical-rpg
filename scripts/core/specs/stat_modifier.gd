@@ -46,7 +46,7 @@ func matches_context(context: Dictionary) -> bool:
 			return false
 
 	# Single tag check
-	return context.has(context_tag) and bool(context[context_tag])
+	return context.has(context_tag) and DictUtil.to_bool(context[context_tag])
 
 func tick_round() -> bool:
 	if duration_rounds > 0:

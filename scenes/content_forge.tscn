@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/content_forge.gd" id="1_forge"]
+
+[node name="ContentForge" type="Node"]
+script = ExtResource("1_forge")

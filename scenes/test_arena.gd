@@ -24,6 +24,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 		SvgRaster.clear_cache()
 		SkillCatalog.clear_cache()
+		ContentCatalog.clear_cache()
 		get_tree().quit(exit_code)
 	else:
 		print("Running in windowed mode. Launching combat arena UI...\n")

@@ -241,7 +241,7 @@ func update_ghosts(ghosts: Array[Dictionary]) -> void:
 	for g: Dictionary in ghosts:
 		var unit: Combatant = g["unit"]
 		var cell: Vector2i = g["cell"]
-		var small: bool = bool(g.get("small", false))
+		var small: bool = DictUtil.to_bool(g.get("small", false))
 		keep[unit] = true
 		var node: Control = _ghost_for(unit, g.get("texture", null))
 		var size_px: float = 28.0 if small else float(TILE_SIZE - 8)

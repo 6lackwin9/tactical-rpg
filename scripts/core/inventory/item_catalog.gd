@@ -2,437 +2,103 @@ class_name ItemCatalog
 extends RefCounted
 
 # ==============================================================================
-# Tactical RPG - Preset Item & Equipment Catalog
-# Provides pre-configured weapons, armor, accessories, and consumables
-# for party stash management, testing, and initial hero loadouts.
+# Tactical RPG - Item & Equipment Catalog
+# Items are authored in the content catalog (res://data/catalog/items.json, edited
+# in the Content Forge); create(id) builds a fresh instance. The create_* helpers
+# below are shorthands for the items the code, dojo and tests use by name.
 # ==============================================================================
 
+# A new instance of catalog item `id` (null if unknown).
+static func create(id: String) -> Item:
+	if not ContentCatalog.has("items", id):
+		push_error("ItemCatalog: unknown item '%s'" % id)
+		return null
+	return ContentFactory.item(ContentCatalog.get_entry("items", id))
+
+static func create_equipment(id: String) -> Equipment:
+	var it: Item = create(id)
+	return it as Equipment
+
+static func create_consumable(id: String) -> Consumable:
+	var it: Item = create(id)
+	return it as Consumable
+
+# Every catalog item, in catalog order.
+static func all_items() -> Array[Item]:
+	var out: Array[Item] = []
+	for entry: Dictionary in ContentCatalog.entries("items"):
+		out.append(ContentFactory.item(entry))
+	return out
+
 # ------------------------------------------------------------------------------
-# Weapons
+# Named shorthands
 # ------------------------------------------------------------------------------
 
 static func create_iron_claymore() -> Equipment:
-	var tiers: Array[Dictionary] = [
-		{"stat": "STR", "threshold": 18, "bonus_power": 4, "desc": "Sunder Guard: +4 Power"}
-	]
-	var eq := Equipment.new(
-		"wpn_claymore",
-		"Iron Claymore",
-		Equipment.EquipSlot.MAIN_HAND,
-		"sword",
-		Item.ItemType.WEAPON,
-		24,
-		{"STR": 14},
-		tiers,
-		4.5,
-		65,
-		Item.ItemRarity.UNCOMMON
-	)
-	eq.base_range = 1
-	eq.burden = 1
-	eq.is_two_handed = true
-	eq.scaling_stat = "STR"
-	eq.description = "A heavy double-edged greatsword. Gains +4 Power when wielded with 18+ STR."
-	eq.damage_type = "slash"
-	return eq
+	return create_equipment("wpn_claymore")
 
 static func create_titan_warhammer() -> Equipment:
-	var tiers: Array[Dictionary] = [
-		{"stat": "STR", "threshold": 26, "bonus_power": 6, "desc": "Crushing Impact: +6 Power"}
-	]
-	var eq := Equipment.new(
-		"wpn_warhammer",
-		"Titan Warhammer",
-		Equipment.EquipSlot.MAIN_HAND,
-		"hammer",
-		Item.ItemType.WEAPON,
-		34,
-		{"STR": 22},
-		tiers,
-		7.0,
-		120,
-		Item.ItemRarity.RARE
-	)
-	eq.base_range = 1
-	eq.burden = 3
-	eq.is_two_handed = true
-	eq.scaling_stat = "STR"
-	eq.description = "Colossal warhammer requiring 22 STR. Inflicts severe deficit penalty if under-statted."
-	eq.damage_type = "blunt"
-	eq.icon_id = "titan_warhammer"
-	return eq
+	return create_equipment("wpn_warhammer")
 
 static func create_oak_shortbow() -> Equipment:
-	var tiers: Array[Dictionary] = [
-		{"stat": "DEX", "threshold": 16, "bonus_power": 3, "desc": "True Flight: +3 Power"}
-	]
-	var eq := Equipment.new(
-		"wpn_shortbow",
-		"Oak Shortbow",
-		Equipment.EquipSlot.MAIN_HAND,
-		"bow",
-		Item.ItemType.WEAPON,
-		20,
-		{"DEX": 13},
-		tiers,
-		2.0,
-		55,
-		Item.ItemRarity.UNCOMMON
-	)
-	eq.base_range = 3
-	eq.burden = 0
-	eq.is_two_handed = true
-	eq.scaling_stat = "DEX"
-	eq.description = "Supple curved bow capable of ranged volleys up to 3 tiles."
-	eq.damage_type = "pierce"
-	return eq
+	return create_equipment("wpn_shortbow")
 
 static func create_steel_broadsword() -> Equipment:
-	var eq := Equipment.new(
-		"wpn_broadsword",
-		"Steel Broadsword",
-		Equipment.EquipSlot.MAIN_HAND,
-		"sword",
-		Item.ItemType.WEAPON,
-		18,
-		{"STR": 10},
-		[],
-		2.8,
-		35,
-		Item.ItemRarity.COMMON
-	)
-	eq.base_range = 1
-	eq.burden = 0
-	eq.is_two_handed = false
-	eq.scaling_stat = "STR"
-	eq.description = "Reliable military broadsword with modest strength requirements."
-	eq.damage_type = "slash"
-	return eq
+	return create_equipment("wpn_broadsword")
 
 static func create_iron_shortsword() -> Equipment:
-	var eq := Equipment.new(
-		"wpn_shortsword",
-		"Iron Shortsword",
-		Equipment.EquipSlot.MAIN_HAND,
-		"sword",
-		Item.ItemType.WEAPON,
-		14,
-		{"STR": 10},
-		[],
-		1.8,
-		25,
-		Item.ItemRarity.COMMON
-	)
-	eq.base_range = 1
-	eq.burden = 0
-	eq.is_two_handed = false
-	eq.off_hand_category = "shortsword"
-	eq.scaling_stat = "STR"
-	eq.description = "Agile 1-handed short blade wieldable in main or off-hand (STR scaling)."
-	eq.damage_type = "slash"
-	return eq
+	return create_equipment("wpn_shortsword")
 
 static func create_spiked_knuckles() -> Equipment:
-	var eq := Equipment.new(
-		"wpn_knuckles",
-		"Spiked Knuckles",
-		Equipment.EquipSlot.MAIN_HAND,
-		"fist",
-		Item.ItemType.WEAPON,
-		12,
-		{"STR": 10},
-		[],
-		1.2,
-		20,
-		Item.ItemRarity.COMMON
-	)
-	eq.base_range = 1
-	eq.burden = 0
-	eq.is_two_handed = false
-	eq.off_hand_category = "knuckles"
-	eq.scaling_stat = "STR"
-	eq.description = "Iron knuckle dusters for ruthless close-quarters off-hand strikes (STR scaling)."
-	eq.damage_type = "blunt"
-	return eq
+	return create_equipment("wpn_knuckles")
 
 static func create_shadow_dagger() -> Equipment:
-	var tiers: Array[Dictionary] = [
-		{"stat": "DEX", "threshold": 15, "bonus_power": 4, "desc": "Puncture: +4 Power"}
-	]
-	var eq := Equipment.new(
-		"wpn_dagger",
-		"Shadow Dagger",
-		Equipment.EquipSlot.MAIN_HAND,
-		"dagger",
-		Item.ItemType.WEAPON,
-		16,
-		{"DEX": 12},
-		tiers,
-		1.0,
-		50,
-		Item.ItemRarity.UNCOMMON
-	)
-	eq.base_range = 1
-	eq.burden = 0
-	eq.is_two_handed = false
-	eq.off_hand_category = "dagger"
-	eq.scaling_stat = "DEX"
-	eq.description = "Featherweight stiletto primed for rapid off-hand strikes (DEX scaling)."
-	eq.damage_type = "pierce"
-	return eq
+	return create_equipment("wpn_dagger")
 
 static func create_mystic_tome() -> Equipment:
-	var eq := Equipment.new(
-		"wpn_tome",
-		"Mystic Spellbook",
-		Equipment.EquipSlot.MAIN_HAND,
-		"orb",
-		Item.ItemType.WEAPON,
-		14,
-		{"INT": 12},
-		[],
-		1.5,
-		45,
-		Item.ItemRarity.UNCOMMON
-	)
-	eq.base_range = 2
-	eq.burden = 0
-	eq.is_two_handed = false
-	eq.off_hand_category = "tome"
-	eq.scaling_stat = "INT"
-	eq.description = "Bound grimoire wieldable in off-hand to channel tactical spells (INT scaling)."
-	eq.damage_type = "magic"
-	return eq
+	return create_equipment("wpn_tome")
 
 static func create_runed_staff() -> Equipment:
-	var tiers: Array[Dictionary] = [
-		{"stat": "INT", "threshold": 18, "bonus_power": 5, "desc": "Arcane Surge: +5 Power"}
-	]
-	var eq := Equipment.new(
-		"wpn_staff",
-		"Runed Staff",
-		Equipment.EquipSlot.MAIN_HAND,
-		"staff",
-		Item.ItemType.WEAPON,
-		22,
-		{"INT": 14},
-		tiers,
-		2.2,
-		75,
-		Item.ItemRarity.RARE
-	)
-	eq.base_range = 2
-	eq.burden = 0
-	eq.is_two_handed = true
-	eq.scaling_stat = "INT"
-	eq.description = "Carved ash stave engraved with mystic glyphs. Scales with intelligence."
-	eq.damage_type = "magic"
-	eq.icon_id = "runed_staff"
-	return eq
-
-# ------------------------------------------------------------------------------
-# Shields & Armor
-# ------------------------------------------------------------------------------
+	return create_equipment("wpn_staff")
 
 static func create_iron_kite_shield() -> Equipment:
-	var eq := Equipment.new(
-		"shd_kite",
-		"Iron Kite Shield",
-		Equipment.EquipSlot.OFF_HAND,
-		"shield",
-		Item.ItemType.SHIELD,
-		0,
-		{"STR": 12},
-		[],
-		4.0,
-		45,
-		Item.ItemRarity.COMMON
-	)
-	eq.mitigation = 8
-	eq.burden = 2
-	eq.description = "Sturdy teardrop shield granting +8 flat damage mitigation."
-	return eq
+	return create_equipment("shd_kite")
 
 static func create_buckler() -> Equipment:
-	var eq := Equipment.new(
-		"shd_buckler",
-		"Duelist Buckler",
-		Equipment.EquipSlot.OFF_HAND,
-		"shield",
-		Item.ItemType.SHIELD,
-		0,
-		{"DEX": 10},
-		[],
-		1.5,
-		30,
-		Item.ItemRarity.COMMON
-	)
-	eq.mitigation = 4
-	eq.burden = 0
-	eq.description = "Light metal fist-shield providing 4 mitigation without slowing down."
-	return eq
+	return create_equipment("shd_buckler")
 
 static func create_steel_plate_cuirass() -> Equipment:
-	var eq := Equipment.new(
-		"arm_plate",
-		"Steel Plate Cuirass",
-		Equipment.EquipSlot.BODY,
-		"plate",
-		Item.ItemType.ARMOR,
-		0,
-		{"CONS": 12},
-		[],
-		8.5,
-		80,
-		Item.ItemRarity.UNCOMMON
-	)
-	eq.mitigation = 10
-	eq.burden = 3
-	eq.description = "Interlocking steel plates providing 10 mitigation with 3 burden."
-	return eq
+	return create_equipment("arm_plate")
 
 static func create_leather_brigandine() -> Equipment:
-	var eq := Equipment.new(
-		"arm_leather",
-		"Leather Brigandine",
-		Equipment.EquipSlot.BODY,
-		"leather",
-		Item.ItemType.ARMOR,
-		0,
-		{"DEX": 10},
-		[],
-		3.0,
-		40,
-		Item.ItemRarity.COMMON
-	)
-	eq.mitigation = 4
-	eq.burden = 1
-	eq.description = "Riveted hardened leather protecting vital organs while keeping mobility."
-	return eq
-
-# ------------------------------------------------------------------------------
-# Accessories
-# ------------------------------------------------------------------------------
+	return create_equipment("arm_leather")
 
 static func create_ring_of_the_bear() -> Equipment:
-	var eq := Equipment.new(
-		"acc_bear_ring",
-		"Ring of the Bear",
-		Equipment.EquipSlot.ACCESSORY_1,
-		"",
-		Item.ItemType.ACCESSORY,
-		0,
-		{},
-		[],
-		0.2,
-		70,
-		Item.ItemRarity.RARE
-	)
-	eq.stat_bonuses = {"STR": 2, "CONS": 2}
-	eq.description = "Chiseled bone band infusing the wearer with ursine fortitude (+2 STR, +2 CONS)."
-	return eq
+	return create_equipment("acc_bear_ring")
 
 static func create_swiftness_amulet() -> Equipment:
-	var eq := Equipment.new(
-		"acc_swift_amulet",
-		"Amulet of Swiftness",
-		Equipment.EquipSlot.ACCESSORY_2,
-		"",
-		Item.ItemType.ACCESSORY,
-		0,
-		{},
-		[],
-		0.2,
-		65,
-		Item.ItemRarity.RARE
-	)
-	eq.stat_bonuses = {"DEX": 3}
-	eq.description = "Windstone pendant enhancing timeline reflexes (+3 DEX)."
-	return eq
-
-# ------------------------------------------------------------------------------
-# Consumables
-# ------------------------------------------------------------------------------
+	return create_equipment("acc_swift_amulet")
 
 static func create_healing_draught() -> Consumable:
-	var con := Consumable.new(
-		"con_heal_potion",
-		"Healing Draught",
-		Consumable.ConsumableType.HEALTH_POTION,
-		25, # p_heal
-		0,  # p_damage
-		"", # p_buff_stat
-		0.0,# p_buff_pct
-		0,  # p_duration
-		1,  # p_block_cost
-		0.5,# p_weight
-		15, # p_value
-		Item.ItemRarity.COMMON
-	)
-	con.description = "Herbal restorative that instantly patches wounds for +25 HP."
-	return con
+	return create_consumable("con_heal_potion")
 
 static func create_focus_elixir() -> Consumable:
-	var con := Consumable.new(
-		"con_focus_elixir",
-		"Elixir of Focus",
-		Consumable.ConsumableType.FOCUS_INCENSE,
-		0,  # p_heal
-		0,  # p_damage
-		"STR", # p_buff_stat
-		0.5,# p_buff_pct
-		2,  # p_duration
-		1,  # p_block_cost
-		0.4,# p_weight
-		25, # p_value
-		Item.ItemRarity.UNCOMMON
-	)
-	con.description = "Distilled ginseng elixir imparting +50% attack power for 2 rounds."
-	return con
+	return create_consumable("con_focus_elixir")
 
 static func create_throwing_fire_bomb() -> Consumable:
-	var con := Consumable.new(
-		"con_fire_bomb",
-		"Throwing Fire Bomb",
-		Consumable.ConsumableType.THROWABLE_BOMB,
-		0,  # p_heal
-		20, # p_damage
-		"", # p_buff_stat
-		0.0,# p_buff_pct
-		0,  # p_duration
-		1,  # p_block_cost
-		1.0,# p_weight
-		30, # p_value
-		Item.ItemRarity.UNCOMMON
-	)
-	con.description = "Clay vessel of volatile pitch exploding on impact for 20 damage."
-	con.damage_type = "fire"
-	return con
+	return create_consumable("con_fire_bomb")
 
 # ------------------------------------------------------------------------------
 # Inventory & Party Loadout Population Helpers
 # ------------------------------------------------------------------------------
 
+# Adds every catalog item flagged "starter_stash", in catalog order.
 static func populate_party_starter_stash(inv: Inventory) -> void:
 	if inv == null:
 		return
-	inv.add_item(create_iron_claymore())
-	inv.add_item(create_titan_warhammer())
-	inv.add_item(create_oak_shortbow())
-	inv.add_item(create_iron_shortsword())
-	inv.add_item(create_spiked_knuckles())
-	inv.add_item(create_shadow_dagger())
-	inv.add_item(create_mystic_tome())
-	inv.add_item(create_runed_staff())
-	inv.add_item(create_iron_kite_shield())
-	inv.add_item(create_buckler())
-	inv.add_item(create_steel_plate_cuirass())
-	inv.add_item(create_leather_brigandine())
-	inv.add_item(create_ring_of_the_bear())
-	inv.add_item(create_swiftness_amulet())
-	inv.add_item(create_healing_draught())
-	inv.add_item(create_focus_elixir())
-	inv.add_item(create_throwing_fire_bomb())
+	for entry: Dictionary in ContentCatalog.entries("items"):
+		if DictUtil.to_bool(entry.get("starter_stash", false)):
+			inv.add_item(ContentFactory.item(entry))
 
 static func setup_default_hero_loadout(hero: Combatant, archetype_name: String) -> void:
 	if hero == null or hero.inventory == null:

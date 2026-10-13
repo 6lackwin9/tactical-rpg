@@ -1,11 +1,12 @@
 class_name SkirmishEncounter
-extends CombatEncounter
+extends CatalogEncounter
 
 # ==============================================================================
 # Tactical RPG - Skirmish Encounter (player-planned, AI-opposed)
-# Warrior & Ranger vs five goblins. The player plans the party's 10-block round;
-# every goblin plans its own round with TacticalAI (roles below). State carries
-# from round to round until one side is gone or the round limit is reached.
+# The catalog encounter "goblin_skirmish" (Warrior & Ranger vs five goblins,
+# 6-block rounds, 12 AP +4 per round) with its own narration. Rules and roster
+# live in res://data/catalog (edit them in the Content Forge); the named fields
+# below give tests direct access to each unit.
 # ==============================================================================
 
 var warrior: Combatant
@@ -17,50 +18,17 @@ var shaman: Combatant
 var berserker: Combatant
 
 func _init() -> void:
-	encounter_name = "Goblin Skirmish"
-	max_rounds = 6
-	zone_id = "ruined_courtyard"
-	player_planning = true
-	total_blocks = 6      # tight rounds: roughly three actions each
-	ap_regen = 4          # AP carries across the battle; +4 each round, Rest recovers more
-	unit_ap = 12
+	super("goblin_skirmish")
 
 func build() -> void:
-	grid = CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
-	grid.apply_zone(zone_id)
-	reinforcements_spawned = false
-
-	warrior = Combatant.new("Warrior", 100, 15, 1)
-	ranger = Combatant.new("Ranger", 80, 14, 2)
-	brawler = Combatant.new("Goblin Brawler", 50, 12, 1)
-	skirmisher = Combatant.new("Goblin Skirmisher", 40, 15, 1)
-	archer = Combatant.new("Goblin Archer", 35, 13, 3)
-	shaman = Combatant.new("Goblin Shaman", 35, 12, 2)
-	berserker = Combatant.new("Goblin Berserker", 50, 11, 1)
-
-	for c: Combatant in [warrior, ranger, brawler, skirmisher, archer, shaman, berserker]:
-		c.max_ap = unit_ap
-		c.ap = unit_ap
-
-	allies = [warrior, ranger]
-	enemies = [brawler, skirmisher, archer, shaman, berserker]
-	grid.deploy_combatants(allies, enemies)
-
-	party_stash = Inventory.new()
-	ItemCatalog.populate_party_starter_stash(party_stash)
-	unit_classes = {
-		warrior: "warrior", ranger: "ranger", brawler: "brawler",
-		skirmisher: "skirmisher", archer: "archer", shaman: "shaman", berserker: "berserker",
-	}
-	ai_profiles = {
-		warrior: AiProfile.create(AiProfile.Role.AGGRESSOR, 25, 0.0, 3),
-		ranger: AiProfile.create(AiProfile.Role.SNIPER, 22, 0.0, 3),
-		brawler: AiProfile.create(AiProfile.Role.AGGRESSOR, 10),
-		skirmisher: AiProfile.create(AiProfile.Role.SKIRMISHER, 8),
-		archer: AiProfile.create(AiProfile.Role.SNIPER, 9),
-		shaman: AiProfile.create(AiProfile.Role.SUPPORT, 7),
-		berserker: AiProfile.create(AiProfile.Role.AGGRESSOR, 11, 0.0),
-	}
+	super.build()
+	warrior = unit("warrior")
+	ranger = unit("ranger")
+	brawler = unit("goblin_brawler")
+	skirmisher = unit("goblin_skirmisher")
+	archer = unit("goblin_archer")
+	shaman = unit("goblin_shaman")
+	berserker = unit("goblin_berserker")
 
 func prepare_round(round_num: int) -> Dictionary:
 	if round_num == 1:
@@ -75,15 +43,8 @@ func prepare_round(round_num: int) -> Dictionary:
 		"log": "\n[color=#38bdf8][b]⚔ ROUND %d: PLANNING ⚔[/b][/color]" % round_num,
 	}
 
-func schedule_round(resolver: CombatResolver, _round_num: int) -> void:
-	schedule_enemy_ai(resolver)
-
 func round_summary(round_num: int, combat_over: bool) -> Dictionary:
-	var party_alive: bool = false
-	for a: Combatant in allies:
-		if a.is_active():
-			party_alive = true
-	if combat_over and party_alive:
+	if combat_over and party_alive():
 		return {
 			"phase": "🏆 VICTORY - ALL GOBLINS ROUTED",
 			"status": "🏆 The goblins are down or have fled. Review the replay.",

@@ -1,0 +1,181 @@
+{
+	"kind": "classes",
+	"version": 1,
+	"entries": [
+		{
+			"id": "warrior",
+			"name": "Warrior",
+			"description": "Front-line fighter: strength and constitution, swords and shields.",
+			"base_stats": {
+				"STR": 16,
+				"DEX": 10,
+				"INT": 8,
+				"CONS": 14,
+				"PERC": 10,
+				"KNOW": 8
+			},
+			"growth": {
+				"STR": 2,
+				"CONS": 2,
+				"PERC": 1
+			},
+			"masteries": {
+				"sword": 1,
+				"shield": 1
+			},
+			"allowed_gear": [
+				"sword",
+				"axe",
+				"mace",
+				"hammer",
+				"shield",
+				"plate",
+				"leather",
+				"fist"
+			]
+		},
+		{
+			"id": "ranger",
+			"name": "Ranger",
+			"description": "Ranged skirmisher: dexterity and perception, bows and daggers.",
+			"base_stats": {
+				"STR": 10,
+				"DEX": 16,
+				"INT": 10,
+				"CONS": 10,
+				"PERC": 14,
+				"KNOW": 10
+			},
+			"growth": {
+				"DEX": 2,
+				"PERC": 2,
+				"STR": 1
+			},
+			"masteries": {
+				"bow": 1,
+				"dagger": 1,
+				"wilderness": 1
+			},
+			"allowed_gear": [
+				"bow",
+				"crossbow",
+				"dagger",
+				"sword",
+				"leather",
+				"cloth"
+			]
+		},
+		{
+			"id": "shaman",
+			"name": "Shaman",
+			"description": "Spellcaster: intelligence and knowledge, staves and tomes.",
+			"base_stats": {
+				"STR": 8,
+				"DEX": 10,
+				"INT": 16,
+				"CONS": 10,
+				"PERC": 12,
+				"KNOW": 14
+			},
+			"growth": {
+				"INT": 2,
+				"KNOW": 2,
+				"CONS": 1
+			},
+			"masteries": {
+				"staff": 1,
+				"ancient_ruins": 1
+			},
+			"allowed_gear": [
+				"staff",
+				"wand",
+				"orb",
+				"tome",
+				"cloth",
+				"leather"
+			]
+		},
+		{
+			"id": "brawler",
+			"name": "Brawler",
+			"description": "Close-quarters bruiser: fists and axes.",
+			"base_stats": {
+				"STR": 14,
+				"DEX": 12,
+				"INT": 6,
+				"CONS": 14,
+				"PERC": 8,
+				"KNOW": 6
+			},
+			"growth": {
+				"STR": 2,
+				"CONS": 2,
+				"DEX": 1
+			},
+			"masteries": {
+				"fist": 1,
+				"axe": 1
+			},
+			"allowed_gear": [
+				"fist",
+				"axe",
+				"leather"
+			]
+		},
+		{
+			"id": "scout",
+			"name": "Scout",
+			"description": "Fast, perceptive lookout: daggers and bows.",
+			"base_stats": {
+				"STR": 8,
+				"DEX": 16,
+				"INT": 10,
+				"CONS": 8,
+				"PERC": 16,
+				"KNOW": 10
+			},
+			"growth": {
+				"DEX": 2,
+				"PERC": 2,
+				"CONS": 1
+			},
+			"masteries": {
+				"dagger": 1,
+				"bow": 1,
+				"wilderness": 1
+			},
+			"allowed_gear": [
+				"dagger",
+				"bow",
+				"leather",
+				"cloth"
+			]
+		},
+		{
+			"id": "berserker",
+			"name": "Berserker",
+			"description": "Reckless heavy hitter: axes and maces.",
+			"base_stats": {
+				"STR": 18,
+				"DEX": 12,
+				"INT": 6,
+				"CONS": 14,
+				"PERC": 8,
+				"KNOW": 6
+			},
+			"growth": {
+				"STR": 3,
+				"CONS": 2
+			},
+			"masteries": {
+				"axe": 2
+			},
+			"allowed_gear": [
+				"axe",
+				"mace",
+				"leather",
+				"plate"
+			]
+		}
+	]
+}

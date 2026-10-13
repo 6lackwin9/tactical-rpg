@@ -43,6 +43,7 @@ var status_potency: int = 0
 var reach_min: int = 0          # skill-specific reach band (0 = the unit's default band)
 var reach_max: int = 0
 var description: String = ""
+var system: bool = false       # engine skill (Move, Rest, Switch Target, status blocks): always known, not deletable
 
 static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_blocks: int, p_description: String) -> SkillDef:
 	var skill := SkillDef.new()

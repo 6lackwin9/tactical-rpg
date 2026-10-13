@@ -61,65 +61,30 @@ func can_equip_gear(eq: Equipment) -> bool:
 	return eq.weapon_type.to_lower() in allowed_gear_types
 
 # ------------------------------------------------------------------------------
-# Built-in Standard Class Archetypes
+# Catalog archetypes (res://data/catalog/classes.json, edited in the Content Forge)
 # ------------------------------------------------------------------------------
 
+# Class `class_id` from the content catalog (a plain 10-stat class if it is missing).
+static func create(class_id: String) -> ClassArchetype:
+	if ContentCatalog.has("classes", class_id):
+		return ContentFactory.class_archetype(ContentCatalog.get_entry("classes", class_id))
+	push_warning("ClassArchetype: unknown class '%s'" % class_id)
+	return ClassArchetype.new(class_id, class_id.capitalize())
+
 static func create_warrior() -> ClassArchetype:
-	return ClassArchetype.new(
-		"warrior",
-		"Warrior",
-		{"STR": 16, "DEX": 10, "INT": 8, "CONS": 14, "PERC": 10, "KNOW": 8},
-		{"STR": 2, "CONS": 2, "PERC": 1},
-		{"sword": 1, "shield": 1},
-		["sword", "axe", "mace", "hammer", "shield", "plate", "leather", "fist"]
-	)
+	return create("warrior")
 
 static func create_ranger() -> ClassArchetype:
-	return ClassArchetype.new(
-		"ranger",
-		"Ranger",
-		{"STR": 10, "DEX": 16, "INT": 10, "CONS": 10, "PERC": 14, "KNOW": 10},
-		{"DEX": 2, "PERC": 2, "STR": 1},
-		{"bow": 1, "dagger": 1, "wilderness": 1},
-		["bow", "crossbow", "dagger", "sword", "leather", "cloth"]
-	)
+	return create("ranger")
 
 static func create_shaman() -> ClassArchetype:
-	return ClassArchetype.new(
-		"shaman",
-		"Shaman",
-		{"STR": 8, "DEX": 10, "INT": 16, "CONS": 10, "PERC": 12, "KNOW": 14},
-		{"INT": 2, "KNOW": 2, "CONS": 1},
-		{"staff": 1, "ancient_ruins": 1},
-		["staff", "wand", "orb", "tome", "cloth", "leather"]
-	)
+	return create("shaman")
 
 static func create_brawler() -> ClassArchetype:
-	return ClassArchetype.new(
-		"brawler",
-		"Brawler",
-		{"STR": 14, "DEX": 12, "INT": 6, "CONS": 14, "PERC": 8, "KNOW": 6},
-		{"STR": 2, "CONS": 2, "DEX": 1},
-		{"fist": 1, "axe": 1},
-		["fist", "axe", "leather"]
-	)
+	return create("brawler")
 
 static func create_scout() -> ClassArchetype:
-	return ClassArchetype.new(
-		"scout",
-		"Scout",
-		{"STR": 8, "DEX": 16, "INT": 10, "CONS": 8, "PERC": 16, "KNOW": 10},
-		{"DEX": 2, "PERC": 2, "CONS": 1},
-		{"dagger": 1, "bow": 1, "wilderness": 1},
-		["dagger", "bow", "leather", "cloth"]
-	)
+	return create("scout")
 
 static func create_berserker() -> ClassArchetype:
-	return ClassArchetype.new(
-		"berserker",
-		"Berserker",
-		{"STR": 18, "DEX": 12, "INT": 6, "CONS": 14, "PERC": 8, "KNOW": 6},
-		{"STR": 3, "CONS": 2},
-		{"axe": 2},
-		["axe", "mace", "leather", "plate"]
-	)
+	return create("berserker")

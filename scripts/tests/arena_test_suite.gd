@@ -26,9 +26,10 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 	var test7_passed: bool = run_combat_session_flow_test()
 	var test8_passed: bool = run_art_and_terrain_test()
 	var test9_passed: bool = run_planning_and_ai_test()
+	var test10_passed: bool = ContentTestSuite.run(tree_parent)
 
 	return (test0_passed and test1_passed and test2_passed and test3_passed and
-		test4_passed and test5_passed and test6_passed and test7_passed and test8_passed and test9_passed)
+		test4_passed and test5_passed and test6_passed and test7_passed and test8_passed and test9_passed and test10_passed)
 
 
 # ==============================================================================
@@ -965,11 +966,11 @@ static func run_art_and_terrain_test() -> bool:
 		for x: int in range(2, 7):
 			for y: int in range(2, 7):
 				var core_raw: Variant = map.get(Vector2i(x, y), Terrain.Type.FLOOR)
-				if core_raw is Terrain.Type and not Terrain.is_walkable(core_raw):
+				if core_raw is Terrain.Type and not Terrain.is_walkable(DictUtil.to_int(core_raw) as Terrain.Type):
 					zones_ok = false
 		for x: int in range(4, 9):
 			var lane_raw: Variant = map.get(Vector2i(x, 4), Terrain.Type.FLOOR)
-			if lane_raw is Terrain.Type and not Terrain.is_walkable(lane_raw):
+			if lane_raw is Terrain.Type and not Terrain.is_walkable(DictUtil.to_int(lane_raw) as Terrain.Type):
 				zones_ok = false
 
 	# 6. Grid enforces terrain: no placing/moving onto blocked tiles; deployment skips them
@@ -1168,15 +1169,15 @@ static func run_planning_and_ai_test() -> bool:
 	# AP is a runtime resource: over-committing is allowed, the plan projects where it runs dry
 	session.plan_clear(warrior)
 	warrior.ap = 3   # a Heavy Blow (3 AP + 1 stance switch) is more than the unit can pay
-	var last_problem: String = session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("heavy_blow"), session.enemies[1]))
-	last_problem += session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("strike"), session.enemies[1]))
+	var _last_problem: String = session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("heavy_blow"), session.enemies[1]))
+	_last_problem += session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("strike"), session.enemies[1]))
 	var dry_state: CombatPlan.SimState = session.plan.compile(warrior)
 	var dry_ok: bool = dry_state.runs_dry() and dry_state.dry_step >= 0 and dry_state.ap_left < 0 and dry_state.debt() > 0 and session.plan_is_valid()
-	var option_warns: bool = false
+	var _option_warns: bool = false
 	var rest_option: bool = false
 	for o: PlanOption in session.plan_options(warrior):
 		if o.step.mode == PlanStep.Mode.ENGAGE and not o.warning.is_empty():
-			option_warns = true
+			_option_warns = true
 	session.plan_clear(warrior)
 	warrior.ap = warrior.max_ap
 	for o: PlanOption in session.plan_options(warrior):
@@ -1293,7 +1294,7 @@ static func run_planning_and_ai_test() -> bool:
 	var moved_state: CombatPlan.SimState = gsession.plan.compile(gh)
 	var trail_ok: bool = added.is_empty() and moved_state.pos == Vector2i(2, 6) and not moved_state.entries.is_empty() and moved_state.entries[0].pos_before == Vector2i(4, 5) and moved_state.entries[moved_state.entries.size() - 1].pos_after == Vector2i(2, 6)
 	var info: Dictionary = gsession.plan_info()
-	var info_ok: bool = bool(info.get("planning", false)) and "Warrior" in str(info.get("text", "")) and bool(info.get("can_confirm", false)) and gsession.plan_step_index_at(1) == 0 and gsession.plan_step_index_at(10) == -1
+	var info_ok: bool = DictUtil.to_bool(info.get("planning", false)) and "Warrior" in str(info.get("text", "")) and DictUtil.to_bool(info.get("can_confirm", false)) and gsession.plan_step_index_at(1) == 0 and gsession.plan_step_index_at(10) == -1
 	gsession.set_hovered(gfoe)
 	var hover_ok: bool = gsession.inspected_combatant() == gfoe
 	gsession.set_hovered(null)
@@ -1647,6 +1648,52 @@ static func run_planning_and_ai_test() -> bool:
 	runner_grid.combatant_positions[sprinter] = Vector2i(7, 7)
 	runner_resolver.resolve_round()
 	chase_ok = chase_ok and sprinter.hp == 100 and runner_grid.get_position(chaser3) != Vector2i(7, 6)
+	# Only damage-focused attacks adjust: after a hand-picked tile move the unit holds its tile
+	var hold_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var holder := Combatant.new("Holder", 60, 10, 1)
+	var post := Combatant.new("Post", 100, 10, 1)
+	hold_grid.place_combatant(holder, Vector2i(1, 4))
+	hold_grid.place_combatant(post, Vector2i(4, 4))
+	var holder_side: Array[Combatant] = [holder]
+	var post_side: Array[Combatant] = [post]
+	var hold_plan := CombatPlan.new(_hand_ctx(hold_grid, post_side, holder_side))
+	hold_plan.add_step(holder, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), Vector2i(3, 4)))
+	hold_plan.add_step(holder, PlanStep.engage(strike, post))
+	var hold_entries: Array[PlanEntry] = hold_plan.entries_for(holder)
+	var hold_attack: PlanEntry = hold_entries[hold_entries.size() - 1]
+	var hold_resolver := CombatResolver.new()
+	hold_resolver.grid = hold_grid
+	hold_plan.commit(hold_resolver)
+	hold_grid.combatant_positions[post] = Vector2i(5, 4)   # steps away after the plan is locked
+	hold_resolver.resolve_round()
+	var held: bool = not hold_attack.chase and post.hp == 100 and hold_grid.get_position(holder) == Vector2i(3, 4)
+	# ...while an engage (no tile move) keeps its one-tile adjustment
+	var adjacent_plan := CombatPlan.new(_hand_ctx(hold_grid, post_side, holder_side))
+	adjacent_plan.add_step(holder, PlanStep.engage(strike, post))
+	var adjacent_entries: Array[PlanEntry] = adjacent_plan.entries_for(holder)
+	held = held and adjacent_entries[adjacent_entries.size() - 1].chase
+	# A ranged attacker whose target stepped point-blank backs off one tile to shoot
+	var back_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var bowman := Combatant.new("Bowman", 60, 10, 3)
+	var rusher := Combatant.new("Rusher", 100, 10, 1)
+	back_grid.place_combatant(bowman, Vector2i(2, 4))
+	back_grid.place_combatant(rusher, Vector2i(5, 4))
+	var bowman_side: Array[Combatant] = [bowman]
+	var rusher_side: Array[Combatant] = [rusher]
+	var back_plan := CombatPlan.new(_hand_ctx(back_grid, rusher_side, bowman_side))
+	var back_added: String = back_plan.add_step(bowman, PlanStep.engage(strike, rusher))
+	var back_resolver := CombatResolver.new()
+	back_resolver.grid = back_grid
+	var back_log: Array[String] = []
+	back_resolver.log_emitted.connect(func(msg: String) -> void: back_log.append(msg))
+	back_plan.commit(back_resolver)
+	back_grid.combatant_positions[rusher] = Vector2i(3, 4)   # rushes into point-blank range
+	back_resolver.resolve_round()
+	var backed: bool = false
+	for msg: String in back_log:
+		if msg.begins_with("[Chase]") and msg.contains("backs off"):
+			backed = true
+	chase_ok = chase_ok and held and back_added.is_empty() and backed and rusher.hp < 100
 
 	var wall_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	for y: int in range(0, 5):
@@ -1700,7 +1747,7 @@ static func run_planning_and_ai_test() -> bool:
 		if run_a.get("hp", []) != run_b.get("hp", []) or run_a.get("log", 0) != run_b.get("log", -1):
 			zones_ok = false
 			print("    non-deterministic result on zone: %s" % zone_id)
-		if not (bool(run_a.get("party_hurt", false)) and bool(run_a.get("foes_hurt", false))):
+		if not (DictUtil.to_bool(run_a.get("party_hurt", false)) and DictUtil.to_bool(run_a.get("foes_hurt", false))):
 			both_hurt = false
 			print("    one side untouched on zone: %s %s" % [zone_id, str(run_a.get("hp", []))])
 
@@ -1749,7 +1796,7 @@ static func run_planning_and_ai_test() -> bool:
 	print("  [Mechanics] Ranged 2+ reach & off-hand jab, move-first, root, seeded status rolls & immunity, area friendly fire, allies moving into vacated tiles, split moves & cut-short refunds, ranged 2-3 reach, undo last step, AI pack avoids its own planned tiles: %s" % ("PASS" if mechanics_ok else "FAIL"))
 	print("  [Runtime] Overspending goes into AP debt (next round: less AP, 3+ Stagger, 5+ Stun); Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
 	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
-	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, attack closes a 1-tile gap at its start: %s" % ("PASS" if ai_ok else "FAIL"))
+	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, attack closes a 1-tile gap at its start (not after a tile move; ranged backs off): %s" % ("PASS" if ai_ok else "FAIL"))
 	print("  [AI] Preset skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [AI] Both sides take damage in a preset-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
 	print("  [Plan] Reset round rewinds units and AP to the round start and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))

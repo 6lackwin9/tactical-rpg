@@ -5,8 +5,9 @@ var target: Combatant
 var power: int
 var grid: CombatGrid = null
 
-# Planner attacks follow a target that stepped out of range by this many tiles
-# (1 AP per tile, only if the unit still has AP). Scripted attacks never follow.
+# Planner single-target attacks adjust by this many tiles when they start if the
+# target is out of the reach band: step closer, or (ranged, target too close) step
+# back. 1 AP per tile, may go into debt. Scripted, area and post-tile-move attacks use 0.
 var follow_tiles: int = 0
 
 # Reach band: -1 = the unit's own (ranged units: 2..range; melee: 1). Off-hand jabs use 1..1.
@@ -68,11 +69,13 @@ func on_start() -> String:
 	if grid == null or follow_tiles <= 0 or effective_target == null or not effective_target.is_active() or not source.is_active() or in_reach(effective_target):
 		return ""
 	var from: Vector2i = grid.get_position(source)
+	var too_close: bool = grid.get_distance(from, grid.get_position(effective_target)) < reach_min()
 	_follow(effective_target)
 	var to: Vector2i = grid.get_position(source)
 	if to == from:
 		return ""
-	return "[Chase] %s closes in on %s: %s to %s (1 AP)" % [source.name, effective_target.name, str(from), str(to)]
+	var verb: String = "backs off from" if too_close else "closes in on"
+	return "[Chase] %s %s %s: %s to %s (1 AP)" % [source.name, verb, effective_target.name, str(from), str(to)]
 
 # Steps toward a target that moved out of range, paying 1 AP per tile.
 func _follow(effective_target: Combatant) -> void:

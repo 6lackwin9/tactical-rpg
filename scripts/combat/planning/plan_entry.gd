@@ -27,6 +27,7 @@ var est_damage: int = 0                   # ATTACK: expected hit (power x skill 
 var cells: Array[Vector2i] = []           # ATTACK (area): tiles hit
 var hits_allies: int = 0                  # ATTACK (area): allies standing in the area (friendly fire)
 var status_name: String = ""               # STATUS: the status that took this block
+var chase: bool = false                    # ATTACK (single target): adjust one tile at the start if out of reach
 var switch_ap: int = 0                    # automatic stance-switch penalty
 var stance_before: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
 var stance_after: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
@@ -57,7 +58,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 				command = area
 			else:
 				var attack := AttackCommand.new(actor, target, hit, skill.blocks, 0, grid)
-				attack.follow_tiles = 1   # closes a one-tile gap when the attack starts
+				attack.follow_tiles = 1 if chase else 0   # one-tile adjustment when the attack starts
 				var band: Vector2i = skill.reach_for(actor)
 				attack.min_range = band.x
 				attack.max_range = band.y

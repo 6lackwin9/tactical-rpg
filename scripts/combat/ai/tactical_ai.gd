@@ -96,7 +96,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 # `make_step` builds the step from a skill (default: a self step).
 static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable) -> bool:
 	# Attacks: single-target ones (the AI doesn't aim area attacks yet; ranged units add the off-hand jab).
-	var skills: Array[SkillDef] = SkillCatalog.single_attacks(actor, cap) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap)
+	var skills: Array[SkillDef] = SkillCatalog.single_attacks(actor, cap) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap, actor)
 	skills.reverse()  # highest level first
 	if profile.prefer_level > 0:
 		skills.sort_custom(func(a: SkillDef, b: SkillDef) -> bool:
@@ -135,7 +135,7 @@ static func _rank_targets(plan: CombatPlan, actor: Combatant, st: CombatPlan.Sim
 			var route: Array[Vector2i] = plan.approach_path(actor, st.pos, f)
 			score += 400.0 if route.is_empty() else float(route.size()) * 8.0
 		scored.append({"foe": f, "score": score})
-	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["score"]) < float(b["score"]))
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return DictUtil.to_float(a["score"]) < DictUtil.to_float(b["score"]))
 	var result: Array[Combatant] = []
 	for entry: Dictionary in scored:
 		var foe: Combatant = entry["foe"]

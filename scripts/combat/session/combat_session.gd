@@ -575,7 +575,8 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 			grid.withdrawn_combatants.erase(c)
 		var stance_raw: Variant = snap.stances.get(c, c.current_stance)
 		if stance_raw is int:
-			c.current_stance = stance_raw as CombatTypes.StanceType
+			var stance_value: int = stance_raw
+			c.current_stance = stance_value as CombatTypes.StanceType
 		c.active_target = snap.targets.get(c, null)
 		c.attack_boost_multiplier = DictUtil.float_of(snap.attack_boost_mult, c, 1.0)
 		c.attack_boost_rounds_remaining = DictUtil.int_of(snap.attack_boost_rds, c)

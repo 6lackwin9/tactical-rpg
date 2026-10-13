@@ -92,22 +92,17 @@ func init_data() -> void:
 	shared_stash = Inventory.new()
 	ItemCatalog.populate_party_starter_stash(shared_stash)
 
-	var warrior_stats := CharacterStats.new(ClassArchetype.create_warrior(), 2)
-	var warrior := Combatant.new("Warrior", 100, 15, 1, warrior_stats)
-	ItemCatalog.setup_default_hero_loadout(warrior, "Warrior")
-
-	var ranger_stats := CharacterStats.new(ClassArchetype.create_ranger(), 1)
-	var ranger := Combatant.new("Ranger", 80, 14, 2, ranger_stats)
-	ItemCatalog.setup_default_hero_loadout(ranger, "Ranger")
-
-	# Gear/stat sync raises max HP above the constructor value; start heroes at full health.
-	warrior.hp = warrior.max_hp
-	ranger.hp = ranger.max_hp
+	# Heroes and dummy are catalog units (class, level and loadout in data/catalog/units.json);
+	# derived units come out synced to their gear at full health.
+	var warrior: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_warrior"))
+	var ranger: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_ranger"))
 
 	party_allies = [warrior, ranger]
 	active_hero = warrior
 
-	test_dummy = Combatant.new("Training Dummy", DUMMY_MAX_HP, 10, 1, CharacterStats.new())
+	test_dummy = ContentFactory.unit(ContentCatalog.get_entry("units", "training_dummy"))
+	test_dummy.max_hp = DUMMY_MAX_HP
+	test_dummy.hp = DUMMY_MAX_HP
 	test_dummy.defense_mitigation_ratio = 0.0
 
 	stash_filter = StashFilter.new()

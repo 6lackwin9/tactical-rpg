@@ -259,14 +259,14 @@ func _fit_blocks() -> bool:
 
 # Planning bar state: info is CombatSession.plan_info(); step_fn maps a block to its step index.
 func set_planning(info: Dictionary, step_fn: Callable) -> void:
-	planning = bool(info.get("planning", false))
+	planning = DictUtil.to_bool(info.get("planning", false))
 	plan_step_fn = step_fn
 	plan_row.visible = planning
 	if planning:
 		plan_info_lbl.text = str(info.get("text", ""))
-		var warn: bool = bool(info.get("warn", false))
+		var warn: bool = DictUtil.to_bool(info.get("warn", false))
 		plan_info_lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.4) if warn else Color(0.98, 0.78, 0.3))
-		confirm_btn.disabled = not bool(info.get("can_confirm", false))
+		confirm_btn.disabled = not DictUtil.to_bool(info.get("can_confirm", false))
 
 func update_round_arrows(can_go_prev: bool, can_go_next: bool) -> void:
 	if btn_prev_round != null:
@@ -329,7 +329,9 @@ func update_view(
 	while b <= total_blocks:
 		var act: CombatResolver.ScheduledAction = null
 		if action_lookup_fn.is_valid():
-			act = action_lookup_fn.call(target_unit, b) as CombatResolver.ScheduledAction
+			var found: Variant = action_lookup_fn.call(target_unit, b)
+			if found is CombatResolver.ScheduledAction:
+				act = found
 
 		if act != null:
 			var cost: int = act.end_block - act.start_block + 1

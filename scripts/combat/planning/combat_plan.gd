@@ -42,7 +42,8 @@ class SimState:
 	var withdrawn: bool = false
 	var acted: bool = false                # anything but a status block planned (moving is no longer allowed)
 	var moved: bool = false
-	var lock: Combatant = null             # current target lock (attacking another costs a Switch Target block)
+	var positioned: bool = false           # moved by hand (tile move / withdraw): its attacks don't chase
+	var lock: Combatant = null            # current target lock (attacking another costs a Switch Target block)
 	var est_hp: Dictionary = {}            # foe -> expected HP after the planned strikes
 	var entries: Array[PlanEntry] = []
 	var error_index: int = -1              # first invalid step (-1 = valid)
@@ -67,6 +68,7 @@ class SimState:
 		withdrawn = o.withdrawn
 		acted = o.acted
 		moved = o.moved
+		positioned = o.positioned
 		lock = o.lock
 		est_hp = o.est_hp.duplicate()
 		entries = o.entries.duplicate()
@@ -236,6 +238,8 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 	var cap: int = context.skill_cap_of(c)
 	if step.skill != null and step.skill.level > cap:
 		return "%s isn't unlocked yet (needs skill level %d)." % [step.skill.display_name, step.skill.level]
+	if step.skill != null and not c.knows_skill(step.skill.id):
+		return "%s doesn't know %s." % [c.name, step.skill.display_name]
 	match step.mode:
 		PlanStep.Mode.SELF:
 			return _add_entry(c, st, step.skill, index)
@@ -370,7 +374,11 @@ func _apply_engage(c: Combatant, st: SimState, step: PlanStep, index: int) -> St
 	st.lock = foe
 	var attack_problem: String = _add_entry(c, st, step.skill, index, foe)
 	if attack_problem.is_empty():
-		st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - st.entries[st.entries.size() - 1].est_damage
+		var attack_entry: PlanEntry = st.entries[st.entries.size() - 1]
+		# A damage-focused attack adjusts by one tile if its target shifted; after a
+		# hand-picked tile move the unit holds its position.
+		attack_entry.chase = not st.positioned
+		st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - attack_entry.est_damage
 	return attack_problem
 
 # Area attack aimed at a tile: no auto-move, the tile must already be in reach.
@@ -444,6 +452,7 @@ func _add_move(c: Combatant, st: SimState, dirs: Array[Vector2i], chase: Combata
 		entry.goal = goal
 		i += chunk.size()
 	st.moved = true
+	st.positioned = chase == null
 	return ""
 
 # Lowest block where `n` consecutive blocks are free (not status-locked), or -1.
@@ -610,13 +619,13 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 	var cap: int = context.skill_cap_of(c)
 	if target == c:
 		for kind: SkillDef.Kind in [SkillDef.Kind.DEFEND, SkillDef.Kind.FOCUS, SkillDef.Kind.REST]:
-			for skill: SkillDef in SkillCatalog.available(kind, cap):
+			for skill: SkillDef in SkillCatalog.available(kind, cap, c):
 				out.append(_probe(c, PlanStep.self_skill(skill), base))
 	elif context.foes_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
 		for skill: SkillDef in SkillCatalog.single_attacks(c, cap):
 			out.append(_probe(c, PlanStep.engage(skill, target), base))
 		var foe_cell: Vector2i = context.grid.get_position(target)
-		for skill: SkillDef in SkillCatalog.area_attacks(cap):
+		for skill: SkillDef in SkillCatalog.area_attacks(cap, c):
 			out.append(_probe(c, PlanStep.area_at(skill, foe_cell), base))
 	return out
 
@@ -630,7 +639,7 @@ func cell_options(c: Combatant, cell: Vector2i) -> Array[PlanOption]:
 		out.append(_probe(c, PlanStep.withdraw(), base))
 		return out
 	out.append(_probe(c, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), cell), base))
-	for skill: SkillDef in SkillCatalog.area_attacks(context.skill_cap_of(c)):
+	for skill: SkillDef in SkillCatalog.area_attacks(context.skill_cap_of(c), c):
 		out.append(_probe(c, PlanStep.area_at(skill, cell), base))
 	return out
 

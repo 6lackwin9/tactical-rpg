@@ -31,6 +31,8 @@ var statuses: Dictionary = {}           # active this round: status name -> true
 var pending_statuses: Dictionary = {}   # inflicted this round, active next round
 var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
+var known_skills: Array[String] = []   # leveled skills this unit may plan (empty = every skill up to its cap)
+var catalog_id: String = ""         # ContentCatalog unit id it was spawned from (empty = built in code)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
 var active_buffs: Array[StatModifier] = []
 
@@ -50,6 +52,10 @@ func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_s
 # (adjacent foes get an off-hand melee attack instead).
 func min_attack_range() -> int:
 	return 2 if attack_range > 1 else 1
+
+# Move, Rest and other system skills are always known; a whitelist limits the rest.
+func knows_skill(skill_id: String) -> bool:
+	return known_skills.is_empty() or known_skills.has(skill_id) or SkillCatalog.is_system(skill_id)
 
 func has_status(status: String) -> bool:
 	return statuses.has(status)
