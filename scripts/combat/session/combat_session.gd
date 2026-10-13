@@ -115,6 +115,8 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 		resolver.finish_round()
 	elif not roll_over:
 		resolver.scheduled_actions.clear()
+	for c: Combatant in resolver.registered_combatants:
+		c.ap = c.max_ap
 	current_round = round_num
 	max_unlocked_round = maxi(max_unlocked_round, round_num)
 	viewed_round = round_num
@@ -457,6 +459,7 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		c.attack_boost_multiplier = DictUtil.float_of(snap.attack_boost_mult, c, 1.0)
 		c.attack_boost_rounds_remaining = DictUtil.int_of(snap.attack_boost_rds, c)
 		c.defense_mitigation_ratio = DictUtil.float_of(snap.defense_mit, c)
+		c.ap = DictUtil.int_of(snap.aps, c, c.max_ap)
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
 			grid.combatant_positions[c] = pos_raw
@@ -488,6 +491,7 @@ func _capture_snapshot(block_idx: int) -> void:
 		snap.attack_boost_mult[c] = c.attack_boost_multiplier
 		snap.attack_boost_rds[c] = c.attack_boost_rounds_remaining
 		snap.defense_mit[c] = c.defense_mitigation_ratio
+		snap.aps[c] = c.ap
 	var snaps: Array[BlockSnapshot] = _snapshots_for(current_round)
 	snaps.append(snap)
 	round_snapshots[current_round] = snaps

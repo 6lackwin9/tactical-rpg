@@ -285,6 +285,11 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 			subtitle = "→ %s (%d)" % [chase.target.name, mv.steps]
 		else:
 			subtitle = "%s %s" % [PlanEntry.dir_arrow(mv.direction), "2 tiles" if mv.steps > 1 else "1 tile"] if mv != null else "Grid Step"
+	elif act.command is RestCommand:
+		clip_style.bg_color = Color(0.1, 0.3, 0.2, 0.95)
+		clip_style.border_color = Color(0.3, 0.85, 0.5, 1.0)
+		icon_str = "💤"
+		subtitle = "+AP, Neutral"
 	elif act.command is TargetCommand:
 		clip_style.bg_color = Color(0.08, 0.38, 0.24, 0.95)
 		clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)

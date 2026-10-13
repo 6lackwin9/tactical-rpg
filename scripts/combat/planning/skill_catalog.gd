@@ -6,8 +6,8 @@ extends RefCounted
 # One family per command kind, tiered by level 1-3 today (4-5 reserved for
 # progression). A unit may use every skill up to its unlocked level
 # (AiProfile.skill_cap stands in for real skill progression for now).
-# Per-tile AP is flat across move tiers, so higher move levels buy time (fewer
-# blocks), not distance for free.
+# Move and Rest are single skills: Move is one block at 1 AP per tile (up to
+# Combatant.move_per_block() tiles), Rest is one free block that recovers AP.
 # ==============================================================================
 
 static var _all: Array[SkillDef] = []
@@ -29,11 +29,10 @@ static func _build() -> void:
 	_all.append(_focus("focus", "Focus", 2, 1.5, 2, "+50% attack for 2 rounds."))
 	_all.append(_focus("deep_focus", "Deep Focus", 3, 1.75, 3, "+75% attack for 3 rounds."))
 
-	_all.append(_move("step", "Step", 1, 1, "Move 1 tile."))
-	_all.append(_move("dash", "Dash", 2, 2, "Move 2 tiles in a line, in one block."))
-	_all.append(_move("sprint", "Sprint", 3, 3, "Move 3 tiles in a line, in one block."))
-
-	_all.append(SkillDef.create("reset_stance", "Reset Stance", SkillDef.Kind.NEUTRAL, 1, 1, "Return to Neutral so any action is open again."))
+	_all.append(SkillDef.create("move", "Move", SkillDef.Kind.MOVE, 1, 1, "Move up to your speed in tiles in one block: 1 AP per tile. Keeps your stance."))
+	var rest: SkillDef = SkillDef.create("rest", "Rest", SkillDef.Kind.REST, 1, 1, "Catch your breath: recover 2 AP and return to Neutral stance, free.")
+	rest.recover_ap = 2
+	_all.append(rest)
 
 static func _attack(id: String, p_name: String, level: int, blocks: int, mult: float, text: String) -> SkillDef:
 	var skill: SkillDef = SkillDef.create(id, p_name, SkillDef.Kind.ATTACK, level, blocks, text)
@@ -49,11 +48,6 @@ static func _focus(id: String, p_name: String, level: int, boost: float, rounds:
 	var skill: SkillDef = SkillDef.create(id, p_name, SkillDef.Kind.FOCUS, level, 2, text)
 	skill.boost = boost
 	skill.boost_rounds = rounds
-	return skill
-
-static func _move(id: String, p_name: String, level: int, steps: int, text: String) -> SkillDef:
-	var skill: SkillDef = SkillDef.create(id, p_name, SkillDef.Kind.MOVE, level, 1, text)
-	skill.steps = steps
 	return skill
 
 static func find(skill_id: String) -> SkillDef:

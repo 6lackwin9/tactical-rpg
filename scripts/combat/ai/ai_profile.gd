@@ -20,13 +20,13 @@ enum TargetPref { NEAREST, WEAKEST }
 
 var role: Role = Role.AGGRESSOR
 var power: int = 20
-var skill_cap: int = 2
+var skill_cap: int = 1
 var flee_ratio: float = 0.25    # withdraw at or below this HP fraction (0 = never)
 var defend_below: float = 0.4   # guard once when at or below this HP fraction
 var target_pref: TargetPref = TargetPref.NEAREST
 var prefer_level: int = 0       # skill level to favour (0 = highest affordable)
 
-static func create(p_role: Role, p_power: int, p_flee_ratio: float = 0.25, p_skill_cap: int = 2) -> AiProfile:
+static func create(p_role: Role, p_power: int, p_flee_ratio: float = 0.25, p_skill_cap: int = 1) -> AiProfile:
 	var profile := AiProfile.new()
 	profile.role = p_role
 	profile.power = p_power

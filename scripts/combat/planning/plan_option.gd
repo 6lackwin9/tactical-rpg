@@ -10,14 +10,21 @@ extends RefCounted
 var step: PlanStep = null
 var valid: bool = false
 var reason: String = ""
-var ap: int = 0        # total AP the step adds (including auto-inserted moves)
-var blocks: int = 0    # total blocks the step adds
-var moves: int = 0     # auto/manual move entries it adds
+var warning: String = ""   # valid but risky (e.g. the unit would run out of AP here)
+var ap: int = 0            # AP the step adds (negative: Rest recovers), incl. auto stance switches
+var blocks: int = 0        # total blocks the step adds
+var moves: int = 0         # move entries it adds
+var switch_ap: int = 0     # of p, the automatic stance-switch penalty
 
 func cost_text() -> String:
 	if not valid:
 		return reason
-	var text: String = "%d AP • %d block%s" % [ap, blocks, "" if blocks == 1 else "s"]
+	var text: String = ("+%d AP" % -ap) if ap < 0 else ("%d AP" % ap)
+	text += " • %d block%s" % [blocks, "" if blocks == 1 else "s"]
 	if step.mode == PlanStep.Mode.ENGAGE and moves > 0:
 		text += " (incl. %d move%s)" % [moves, "" if moves == 1 else "s"]
+	if switch_ap > 0:
+		text += " (incl. +%d stance switch)" % switch_ap
+	if not warning.is_empty():
+		text += "\n⚠ " + warning
 	return text

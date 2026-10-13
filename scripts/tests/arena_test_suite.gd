@@ -446,10 +446,10 @@ static func run_resolution_feed_logging_test() -> bool:
 	test_grid.deploy_combatants(allies, enemies)
 
 	test_resolver.schedule_action(warrior, MoveCommand.new(warrior, test_grid, Vector2i(0, -1), 1), 1)
-	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 25, 2, 0, test_grid), 2)
+	test_resolver.schedule_action(warrior, AttackCommand.new(warrior, brawler, 30, 2, 0, test_grid), 2)
 	test_resolver.schedule_action(ranger, FocusCommand.new(ranger, 1.5, 2, 2, 0), 1)
 	test_resolver.schedule_action(ranger, MoveCommand.new(ranger, test_grid, Vector2i(0, -1), 1), 4)
-	test_resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 25, 2, 0, test_grid), 5)
+	test_resolver.schedule_action(ranger, AttackCommand.new(ranger, brawler, 30, 2, 0, test_grid), 5)
 	test_resolver.schedule_action(brawler, TargetCommand.new(brawler, warrior, 2), 1)
 	test_resolver.schedule_action(brawler, DefendCommand.new(brawler, 0.5, 2, 1), 2)
 	test_resolver.schedule_action(brawler, AttackCommand.new(brawler, warrior, 20, 2, 0, test_grid), 4)
@@ -600,7 +600,7 @@ static func run_goblin_ambush_and_casualty_test() -> bool:
 	for b: int in range(7, 11):
 		test_resolver.execute_block(b)
 
-	var warrior_survived_r1_ok: bool = warrior.is_alive() and warrior.hp == 73
+	var warrior_survived_r1_ok: bool = warrior.is_alive() and warrior.hp == 75
 	var r1_not_prematurely_ended: bool = not test_resolver.is_combat_resolved(allies, all_enemies)
 
 	# Rollover to Round 2
@@ -622,7 +622,7 @@ static func run_goblin_ambush_and_casualty_test() -> bool:
 	print("  [Casualty] Ranger defeated at Block 6: %s" % ("PASS" if ranger_defeated_ok else "FAIL"))
 	print("  [Casualty] Ranger future actions cancelled: %s" % ("PASS" if ranger_future_cancelled_ok else "FAIL"))
 	print("  [Casualty] Brawler defeated at Block 6: %s" % ("PASS" if brawler_defeated_ok else "FAIL"))
-	print("  [Multi-Round] Warrior survived Round 1 (73 HP): %s" % ("PASS" if warrior_survived_r1_ok else "FAIL"))
+	print("  [Multi-Round] Warrior survived Round 1 (75 HP): %s" % ("PASS" if warrior_survived_r1_ok else "FAIL"))
 	print("  [Multi-Round] Combat active with 1 ally & 4 goblins: %s" % ("PASS" if r1_not_prematurely_ended else "FAIL"))
 	print("  [Multi-Round] Rollover to Round 2 succeeded: %s" % ("PASS" if round_2_started_ok else "FAIL"))
 	print("  [Multi-Round] Round 2 combat resolved Skirmisher: %s" % ("PASS" if skirmisher_defeated_r2_ok else "FAIL"))
@@ -1038,7 +1038,7 @@ static func run_art_and_terrain_test() -> bool:
 	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok
 
 # ==============================================================================
-# TEST 10: PLANNING SEQUENCES, SKILL LEVELS, STANCE FLOW & ENEMY AI
+# TEST 10: PLANNING SEQUENCES, SKILL AP, STANCES, RUNTIME AP & ENEMY AI
 # ==============================================================================
 
 static func _hand_ctx(grid: CombatGrid, allies: Array[Combatant], enemies: Array[Combatant], cap: int = 3) -> PlanContext:
@@ -1048,13 +1048,17 @@ static func _hand_ctx(grid: CombatGrid, allies: Array[Combatant], enemies: Array
 		profiles[c] = p
 	return PlanContext.create(grid, allies, enemies, profiles)
 
-static func _run_steps(actor: Combatant, ctx: PlanContext, steps: Array[PlanStep]) -> void:
+# Commits `steps` for `actor` and plays one full round on a bare resolver.
+static func _run_steps(actor: Combatant, ctx: PlanContext, steps: Array[PlanStep]) -> Array[String]:
 	var resolver := CombatResolver.new()
 	resolver.grid = ctx.grid
+	var messages: Array[String] = []
+	resolver.log_emitted.connect(func(msg: String) -> void: messages.append(msg))
 	var cp := CombatPlan.new(ctx)
 	cp.set_steps(actor, steps)
 	cp.commit(resolver)
 	resolver.resolve_round()
+	return messages
 
 static func _play_with_preset(zone_id: String, preset_id: String) -> Dictionary:
 	var enc := SkirmishEncounter.new()
@@ -1085,93 +1089,117 @@ static func _play_with_preset(zone_id: String, preset_id: String) -> Dictionary:
 
 static func run_planning_and_ai_test() -> bool:
 	print("\n=======================================================")
-	print("=== STARTING PLANNING, STANCE FLOW & ENEMY AI TEST  ===")
+	print("=== STARTING PLANNING, STANCES, AP & ENEMY AI TEST  ===")
 	print("=======================================================")
 
-	# 1. Skill levels: AP cost = level, shifted only by effects
-	var skills_ok: bool = SkillCatalog.all().size() >= 12
+	# 1. Skill AP: level = AP, Move = 1 AP per tile, Rest free; effects shift costs
+	var skills_ok: bool = SkillCatalog.all().size() >= 10
 	for s: SkillDef in SkillCatalog.all():
-		skills_ok = skills_ok and s.ap_cost() == s.level
-	var l2_ok: bool = SkillCatalog.find("power_strike").ap_cost() == 2 and SkillCatalog.find("brace").ap_cost() == 2 and SkillCatalog.find("dash").ap_cost() == 2
+		if s.kind != SkillDef.Kind.MOVE and s.kind != SkillDef.Kind.REST:
+			skills_ok = skills_ok and s.ap_cost() == s.level
+	var l2_ok: bool = SkillCatalog.find("power_strike").ap_cost() == 2 and SkillCatalog.find("brace").ap_cost() == 2 and SkillCatalog.find("focus").ap_cost() == 2
 	var modded := Combatant.new("Modded", 10, 10, 1)
 	modded.ap_cost_modifier = 1
-	var mod_ok: bool = SkillCatalog.find("strike").ap_cost(modded) == 2 and SkillCatalog.find("sprint").ap_cost(modded) == 4
+	var mod_ok: bool = SkillCatalog.find("strike").ap_cost(modded) == 2 and SkillCatalog.find("heavy_blow").ap_cost(modded) == 4 and SkillCatalog.find("move").ap_cost(modded) == 2 and SkillCatalog.find("rest").ap_cost(modded) == 0
 	modded.ap_cost_modifier = -5
 	mod_ok = mod_ok and SkillCatalog.find("heavy_blow").ap_cost(modded) == 1
-	var ap_model_ok: bool = skills_ok and l2_ok and mod_ok
+	var fast := Combatant.new("Fast", 10, 15, 1)
+	var slow := Combatant.new("Slow", 10, 8, 1)
+	var speed_ok: bool = fast.move_per_block() == 3 and slow.move_per_block() == 2 and Combatant.new("Tortoise", 10, 1, 1).move_per_block() == 1
+	var ap_model_ok: bool = skills_ok and l2_ok and mod_ok and speed_ok
 
-	# 2. Stance flow table
+	# 2. Stances: RPS loop with Neutral outside it; automatic switch costs
 	var N: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
 	var O: CombatTypes.StanceType = CombatTypes.StanceType.OFFENSIVE
 	var D: CombatTypes.StanceType = CombatTypes.StanceType.DEFENSIVE
 	var T: CombatTypes.StanceType = CombatTypes.StanceType.TACTICAL
-	var M: CombatTypes.StanceType = CombatTypes.StanceType.MOBILE
-	var flow_ok: bool = CombatTypes.can_flow(N, D) and CombatTypes.can_flow(O, M) and CombatTypes.can_flow(M, O) and CombatTypes.can_flow(D, N)
-	flow_ok = flow_ok and not CombatTypes.can_flow(D, O) and not CombatTypes.can_flow(T, M) and not CombatTypes.can_flow(O, D) and not CombatTypes.can_flow(D, T)
+	var rps_ok: bool = CombatTypes.get_matchup_multiplier(O, T) == 1.25 and CombatTypes.get_matchup_multiplier(T, D) == 1.25 and CombatTypes.get_matchup_multiplier(D, O) == 1.25
+	rps_ok = rps_ok and CombatTypes.get_matchup_multiplier(T, O) == 0.75 and CombatTypes.get_matchup_multiplier(D, T) == 0.75 and CombatTypes.get_matchup_multiplier(O, D) == 0.75
+	rps_ok = rps_ok and CombatTypes.get_matchup_multiplier(N, O) == 1.0 and CombatTypes.get_matchup_multiplier(T, N) == 1.0 and CombatTypes.get_matchup_multiplier(O, O) == 1.0
+	var strike: SkillDef = SkillCatalog.find("strike")
+	var brace: SkillDef = SkillCatalog.find("brace")
+	var mover: SkillDef = SkillCatalog.find("move")
+	var rest_skill: SkillDef = SkillCatalog.find("rest")
+	var switch_ok: bool = strike.switch_cost(N) == 1 and strike.switch_cost(O) == 0 and brace.switch_cost(O) == 1 and brace.switch_cost(D) == 0
+	switch_ok = switch_ok and mover.switch_cost(T) == 0 and mover.stance_after(T) == T and rest_skill.switch_cost(D) == 0 and rest_skill.stance_after(D) == N
+	var stance_ok: bool = rps_ok and switch_ok
 
-	# 3. Sequence compile: lowest free blocks, engage auto-moves, stance and AP validation
+	# 3. Sequence compile: lowest free blocks, Engage auto-moves, AP incl. stance switch
 	var session := CombatSession.new(SkirmishEncounter.new())
 	session.start()
 	var warrior: Combatant = session.allies[0]
 	var foe: Combatant = session.enemies[0]
-	var strike: SkillDef = SkillCatalog.find("strike")
 	var power_strike: SkillDef = SkillCatalog.find("power_strike")
-	var guard: SkillDef = SkillCatalog.find("guard")
-	var reset: SkillDef = SkillCatalog.find("reset_stance")
 	var first: String = session.plan_add_step(warrior, PlanStep.engage(power_strike, foe))
 	var compiled: CombatPlan.SimState = session.plan.compile(warrior)
 	var attack_entry: PlanEntry = compiled.entries[compiled.entries.size() - 1] if not compiled.entries.is_empty() else null
-	var chain_ok: bool = first.is_empty() and attack_entry != null and attack_entry.skill == power_strike and attack_entry.target == foe
+	var chain_ok: bool = first.is_empty() and attack_entry != null and attack_entry.skill == power_strike and attack_entry.target == foe and attack_entry.switch_ap == 1
 	var blocks_ok: bool = true
 	var expected_block: int = 1
 	var ap_sum: int = 0
+	var moves_ok: bool = true
 	for e: PlanEntry in compiled.entries:
 		blocks_ok = blocks_ok and e.start_block == expected_block
 		expected_block += e.blocks()
-		ap_sum += e.ap
-	blocks_ok = blocks_ok and compiled.ap_left == CombatPlan.ROUND_AP - ap_sum and compiled.next_block == expected_block
+		ap_sum += e.total_ap()
+		if e.skill.kind == SkillDef.Kind.MOVE:
+			moves_ok = moves_ok and e.blocks() == 1 and e.skill_ap == e.tiles and e.tiles <= warrior.move_per_block()
+	blocks_ok = blocks_ok and compiled.ap_left == warrior.ap - ap_sum and compiled.next_block == expected_block
 	var in_range_ok: bool = session.grid.get_distance(compiled.pos, session.grid.get_position(foe)) <= warrior.attack_range
-	var stance_after: bool = compiled.stance == O
-	var over_budget: String = ""
-	for i: int in range(6):
-		over_budget = session.plan_add_step(warrior, PlanStep.engage(power_strike, session.enemies[1 + (i % 3)]))
-		if not over_budget.is_empty():
-			break
-	var budget_ok: bool = "AP" in over_budget or "blocks" in over_budget or "path" in over_budget
-	var seq_ok: bool = chain_ok and blocks_ok and in_range_ok and stance_after and budget_ok
+	var stance_after_ok: bool = compiled.stance == O
+	var seq_ok: bool = chain_ok and blocks_ok and moves_ok and in_range_ok and stance_after_ok
 
-	# Stance enforcement on the same unit: Guard then Strike is refused; Reset in between is fine
+	# Switching stance mid-sequence is allowed and automatic: +1 AP, no block
 	session.plan_clear(warrior)
-	var guard_ok: bool = session.plan_add_step(warrior, PlanStep.self_skill(guard)).is_empty()
-	var refused: String = session.plan_add_step(warrior, PlanStep.engage(strike, foe))
-	var stance_block_ok: bool = guard_ok and "Reset Stance" in refused
-	var options: Array[PlanOption] = session.plan_options(warrior)
-	var strike_valid: bool = false
-	var reset_valid: bool = false
-	for o: PlanOption in options:
-		if o.step.mode == PlanStep.Mode.ENGAGE and o.valid:
-			strike_valid = true
-		if o.step.mode == PlanStep.Mode.SELF and o.step.skill == reset and o.valid:
-			reset_valid = true
-	stance_block_ok = stance_block_ok and not strike_valid and reset_valid
-	var chain_after_reset: bool = session.plan_add_step(warrior, PlanStep.self_skill(reset)).is_empty() and session.plan_add_step(warrior, PlanStep.engage(strike, foe)).is_empty()
-	stance_block_ok = stance_block_ok and chain_after_reset
+	session.plan_add_step(warrior, PlanStep.self_skill(SkillCatalog.find("guard")))
+	var before_strike: CombatPlan.SimState = session.plan.compile(warrior)
+	var switched: String = session.plan_add_step(warrior, PlanStep.engage(strike, foe))
+	var after_strike: CombatPlan.SimState = session.plan.compile(warrior)
+	var switch_entry: PlanEntry = after_strike.entries[after_strike.entries.size() - 1]
+	var auto_switch_ok: bool = switched.is_empty() and switch_entry.switch_ap == 1 and switch_entry.stance_before == D and switch_entry.stance_after == O
+	auto_switch_ok = auto_switch_ok and before_strike.ap_left - after_strike.ap_left >= 2
 
-	# 4. Editing: reorder into an invalid order is flagged and blocks Confirm; fixing it allows Confirm
-	session.plan_move_step(warrior, 2, 1)  # [Guard, Strike, Reset]: Strike straight after Guard
+	# AP is a runtime resource: over-committing is allowed, the plan projects where it runs dry
+	session.plan_clear(warrior)
+	var last_problem: String = ""
+	for i: int in range(8):
+		last_problem = session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("heavy_blow"), session.enemies[(i % 3) + 1]))
+		if not last_problem.is_empty():
+			break
+	var dry_state: CombatPlan.SimState = session.plan.compile(warrior)
+	var dry_ok: bool = dry_state.runs_dry() and dry_state.dry_step >= 0 and dry_state.ap_left >= 0 and session.plan_is_valid()
+	var option_warns: bool = false
+	var rest_option: bool = false
+	for o: PlanOption in session.plan_options(warrior):
+		if o.step.mode == PlanStep.Mode.ENGAGE and not o.warning.is_empty():
+			option_warns = true
+	session.plan_clear(warrior)
+	for o: PlanOption in session.plan_options(warrior):
+		if o.step.mode == PlanStep.Mode.SELF and o.step.skill.kind == SkillDef.Kind.REST and o.valid:
+			rest_option = true
+	var runtime_plan_ok: bool = dry_ok and rest_option
+	var options_ok: bool = rest_option and not session.plan_options(warrior).is_empty()
+
+	# 4. Editing: a sequence broken by an edit is flagged and blocks Confirm; fixing it allows Confirm
+	var fallen: Combatant = session.enemies[3]
+	var fallen_hp: int = fallen.hp
+	fallen.hp = 0  # an enemy that has since been defeated
+	var broken: Array[PlanStep] = [PlanStep.engage(strike, foe), PlanStep.engage(strike, fallen)]
+	session.plan.set_steps(warrior, broken)
 	var flagged: CombatPlan.SimState = session.plan.compile(warrior)
 	var edit_ok: bool = flagged.error_index == 1 and not session.plan_is_valid() and not session.confirm_plan()
-	session.plan_move_step(warrior, 1, 2)
+	fallen.hp = fallen_hp
+	session.plan_remove_step(warrior, 1)
 	edit_ok = edit_ok and session.plan_is_valid()
-	session.plan_remove_step(warrior, 0)  # drops Guard: [Reset, Strike] stays valid
-	edit_ok = edit_ok and session.plan_is_valid() and session.plan.steps_of(warrior).size() == 2
-
+	session.plan_add_step(warrior, PlanStep.engage(strike, session.enemies[1]))
+	session.plan_move_step(warrior, 1, 0)
+	edit_ok = edit_ok and session.plan.steps_of(warrior).size() == 2 and session.plan.steps_of(warrior)[0].target == session.enemies[1] and session.plan_is_valid()
 	# 5. Confirm locks the plan, schedules party + AI enemies, and resolution runs
 	session.plan_apply_preset(session.allies[1], "balanced")
 	var preview: CombatResolver.ScheduledAction = session.find_recorded_action(warrior, 1)
 	var preview_ok: bool = preview != null
 	var confirmed: bool = session.confirm_plan()
-	var locked_ok: bool = confirmed and not session.is_planning() and not session.plan_add_step(warrior, PlanStep.self_skill(guard)).is_empty()
+	var locked_ok: bool = confirmed and not session.is_planning() and not session.plan_add_step(warrior, PlanStep.self_skill(brace)).is_empty()
 	var party_scheduled: bool = false
 	var enemy_scheduled: bool = false
 	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
@@ -1180,10 +1208,34 @@ static func run_planning_and_ai_test() -> bool:
 		if not session.is_ally(a.combatant):
 			enemy_scheduled = true
 	_resolve_until_replay(session)
-	var flow_ok2: bool = preview_ok and locked_ok and party_scheduled and enemy_scheduled and session.phase == CombatSession.Phase.REPLAY
+	var spent_ok: bool = warrior.ap < warrior.max_ap
+	var flow_ok2: bool = preview_ok and locked_ok and party_scheduled and enemy_scheduled and session.phase == CombatSession.Phase.REPLAY and spent_ok
 	session.dispose()
 
-	# 6. Presets: every preset drafts a valid sequence; each shows its focus
+	# 5b. Runtime AP: a unit that can't pay stops its sequence; Rest recovers AP mid-round
+	var rgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
+	var spent := Combatant.new("Spent", 60, 10, 1)
+	var dummy := Combatant.new("Dummy", 100, 10, 1)
+	rgrid.place_combatant(spent, Vector2i(3, 4))
+	rgrid.place_combatant(dummy, Vector2i(4, 4))
+	var spent_side: Array[Combatant] = [spent]
+	var dummy_side: Array[Combatant] = [dummy]
+	var rctx: PlanContext = _hand_ctx(rgrid, dummy_side, spent_side)
+	spent.ap = 1
+	var exhausted_steps: Array[PlanStep] = [PlanStep.engage(strike, dummy), PlanStep.engage(strike, dummy)]
+	var exhaust_log: Array[String] = _run_steps(spent, rctx, exhausted_steps)
+	var stops_ok: bool = dummy.hp == 100 and spent.ap == 1
+	var said_exhausted: bool = false
+	for msg: String in exhaust_log:
+		if msg.begins_with("[Exhausted]"):
+			said_exhausted = true
+	spent.ap = 0
+	var rest_steps: Array[PlanStep] = [PlanStep.self_skill(rest_skill), PlanStep.engage(strike, dummy)]
+	_run_steps(spent, rctx, rest_steps)
+	var rest_ok: bool = dummy.hp < 100 and spent.ap == 0
+	var runtime_ok: bool = stops_ok and said_exhausted and rest_ok
+
+	# 6. Presets: every preset drafts a valid, affordable sequence; each shows its focus
 	var psession := CombatSession.new(SkirmishEncounter.new())
 	psession.start()
 	var hero: Combatant = psession.allies[0]
@@ -1192,7 +1244,7 @@ static func run_planning_and_ai_test() -> bool:
 	var presets_ok: bool = true
 	for preset_id: String in PlanPresets.IDS:
 		psession.plan_apply_preset(hero, preset_id)
-		presets_ok = presets_ok and psession.plan.is_valid(hero)
+		presets_ok = presets_ok and psession.plan.is_valid(hero) and not psession.plan.compile(hero).runs_dry()
 	psession.plan_apply_preset(hero, "aggressive")
 	var aggressive_ok: bool = not psession.plan.steps_of(hero).is_empty()
 	for s: PlanStep in psession.plan.steps_of(hero):
@@ -1224,7 +1276,7 @@ static func run_planning_and_ai_test() -> bool:
 	var hunt_steps: Array[PlanStep] = TacticalAI.build_steps(hunter, hunt_ctx, hunt_ctx.profile_of(hunter))
 	var hunt_plan := CombatPlan.new(hunt_ctx)
 	hunt_plan.set_steps(hunter, hunt_steps)
-	var closes_in: bool = not hunt_steps.is_empty() and hunt_steps[0].mode == PlanStep.Mode.ENGAGE and hunt_plan.is_valid(hunter)
+	var closes_in: bool = not hunt_steps.is_empty() and hunt_steps[0].mode == PlanStep.Mode.ENGAGE and hunt_plan.is_valid(hunter) and not hunt_plan.compile(hunter).runs_dry()
 	_run_steps(hunter, hunt_ctx, hunt_steps)
 	closes_in = closes_in and quarry.hp < 100
 
@@ -1238,13 +1290,14 @@ static func run_planning_and_ai_test() -> bool:
 	var dodger_side: Array[Combatant] = [dodger]
 	var chase_ctx: PlanContext = _hand_ctx(chase_grid, dodger_side, chaser_side2)
 	var chase_plan := CombatPlan.new(chase_ctx)
-	var chase_added: String = chase_plan.add_step(chaser2, PlanStep.engage(SkillCatalog.find("strike"), dodger))
+	var chase_added: String = chase_plan.add_step(chaser2, PlanStep.engage(strike, dodger))
 	chase_grid.combatant_positions[dodger] = Vector2i(3, 2)  # the target moves after planning
 	var chase_resolver := CombatResolver.new()
 	chase_resolver.grid = chase_grid
 	chase_plan.commit(chase_resolver)
 	chase_resolver.resolve_round()
 	var chase_ok: bool = chase_added.is_empty() and dodger.hp < 100
+
 	var wall_grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
 	for y: int in range(0, 6):
 		wall_grid.set_terrain(Vector2i(4, y), Terrain.Type.WALL)
@@ -1324,22 +1377,24 @@ static func run_planning_and_ai_test() -> bool:
 		for c: Combatant in rs.allies + rs.enemies:
 			end_hp.append(c.hp)
 			end_pos.append(rs.grid.get_position(c))
-		reset_ok = start_hp == end_hp and start_pos == end_pos and rs.is_planning() and rs.current_round == 2
+		reset_ok = start_hp == end_hp and start_pos == end_pos and rs.is_planning() and rs.current_round == 2 and rs.allies[0].ap == rs.allies[0].max_ap
 	rs.dispose()
 
 	print("\n=======================================================")
-	print("=== PLANNING, STANCE FLOW & ENEMY AI ASSERTIONS     ===")
+	print("=== PLANNING, STANCES, AP & ENEMY AI ASSERTIONS     ===")
 	print("=======================================================")
-	print("  [Skills] AP cost = skill level (L2 attack/defend/move = 2 AP), effects shift it: %s" % ("PASS" if ap_model_ok else "FAIL"))
-	print("  [Stance] Flow table: Neutral opens all, Offensive<->Mobile chain, others need Reset: %s" % ("PASS" if flow_ok else "FAIL"))
-	print("  [Plan] Sequence compiles to lowest free blocks; Engage auto-inserts moves; AP/blocks validated: %s" % ("PASS" if seq_ok else "FAIL"))
-	print("  [Plan] Invalid stance steps are refused with a reason; valid options exclude them: %s" % ("PASS" if stance_block_ok else "FAIL"))
+	print("  [Skills] AP = skill level, Move 1 AP/tile, Rest free, effects shift costs, speed sets tiles/block: %s" % ("PASS" if ap_model_ok else "FAIL"))
+	print("  [Stance] Offensive > Tactical > Defensive > Offensive; Neutral neutral; auto switch costs +1 AP: %s" % ("PASS" if stance_ok else "FAIL"))
+	print("  [Plan] Sequence compiles to lowest free blocks; Engage auto-inserts 1-block moves; AP incl. switch: %s" % ("PASS" if seq_ok else "FAIL"))
+	print("  [Plan] Mid-sequence stance switch is automatic (+1 AP, no block): %s" % ("PASS" if auto_switch_ok else "FAIL"))
+	print("  [Plan] Over-committed AP is projected (runs dry) not refused; Rest offered: %s" % ("PASS" if (runtime_plan_ok and options_ok) else "FAIL"))
 	print("  [Plan] Reorder/remove edits are flagged when invalid and block Confirm: %s" % ("PASS" if edit_ok else "FAIL"))
-	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, round resolves: %s" % ("PASS" if flow_ok2 else "FAIL"))
-	print("  [AI] Presets draft valid sequences with their focus (aggressive, weakest, economy, guard, withdraw): %s" % ("PASS" if preset_ok else "FAIL"))
-	print("  [AI] Aggressor engages, path-finds around walls, Sniper backs away, Support focuses, wounded flee, Engage chases a moved target: %s" % ("PASS" if ai_ok else "FAIL"))
+	print("  [Plan] Confirm locks the sequence, schedules party + AI enemies, AP spent at runtime: %s" % ("PASS" if flow_ok2 else "FAIL"))
+	print("  [Runtime] Out-of-AP units stop their sequence; Rest recovers AP mid-round: %s" % ("PASS" if runtime_ok else "FAIL"))
+	print("  [AI] Presets draft valid, affordable sequences with their focus: %s" % ("PASS" if preset_ok else "FAIL"))
+	print("  [AI] Aggressor engages, path-finds walls, Sniper backs away, Support focuses, wounded flee, Engage chases: %s" % ("PASS" if ai_ok else "FAIL"))
 	print("  [AI] Preset skirmish is deterministic on every zone: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [AI] Both sides take damage in a preset-planned skirmish: %s" % ("PASS" if both_hurt else "FAIL"))
-	print("  [Plan] Reset round rewinds to the round start and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
+	print("  [Plan] Reset round rewinds to the round start, refills AP and reopens planning: %s" % ("PASS" if reset_ok else "FAIL"))
 
-	return ap_model_ok and flow_ok and seq_ok and stance_block_ok and edit_ok and flow_ok2 and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok
+	return ap_model_ok and stance_ok and seq_ok and auto_switch_ok and runtime_plan_ok and options_ok and edit_ok and flow_ok2 and runtime_ok and preset_ok and ai_ok and zones_ok and both_hurt and reset_ok

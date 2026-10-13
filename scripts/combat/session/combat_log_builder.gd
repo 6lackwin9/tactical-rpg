@@ -90,6 +90,16 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.detail_text = "+%d%% Attack Power for %d Round(s)" % [entry.value_num, focus.duration_rounds]
 		entry.status_text = "Empowered"
 
+	elif act.command is RestCommand:
+		var rest: RestCommand = act.command as RestCommand
+		entry.category = "BUFF"
+		entry.skill_name = "Rest"
+		entry.skill_subtype = "Recover AP"
+		entry.value_num = rest.recover_ap
+		entry.outcome_tag = "+%d AP" % rest.recover_ap
+		entry.detail_text = "Catches their breath and returns to Neutral"
+		entry.status_text = "Recovering"
+
 	elif act.command is HoldStanceCommand:
 		entry.category = "DEFEND"
 		entry.skill_name = "Hold Stance"
@@ -132,6 +142,14 @@ static func format_resolver_message(msg: String) -> String:
 		formatted = "[color=#34d399]🎯 " + msg.substr(9) + "[/color]"
 	elif msg.begins_with("[Action Started]"):
 		formatted = "[color=#94a3b8]⏳ " + msg.substr(17) + "[/color]"
+	elif msg.begins_with("[Exhausted]"):
+		formatted = "[color=#f59e0b]⚡ [b]" + msg.substr(12) + "[/b][/color]"
+	elif msg.begins_with("[Rest]"):
+		formatted = "[color=#4ade80]💤 " + msg.substr(7) + "[/color]"
+	elif msg.begins_with("[Stance]"):
+		formatted = "[color=#c084fc]◈ " + msg.substr(9) + "[/color]"
+	elif msg.begins_with("[Approach]"):
+		formatted = "[color=#38bdf8]➜ " + msg.substr(11) + "[/color]"
 	elif msg.begins_with("[Cancelled]"):
 		formatted = "[color=#ef4444]⛔ " + msg.substr(12) + "[/color]"
 	elif msg.strip_edges().begins_with("[") and "Status:" in msg:

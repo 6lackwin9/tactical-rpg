@@ -23,6 +23,10 @@ var is_withdrawn: bool = false
 var attack_boost_multiplier: float = 1.0
 var attack_boost_rounds_remaining: int = 0
 var defense_mitigation_ratio: float = 0.0
+const BASE_AP: int = 10
+
+var max_ap: int = BASE_AP            # AP available each round (restored at round start)
+var ap: int = BASE_AP                # runtime AP: spent as planned commands start, regained by Rest
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
 var active_buffs: Array[StatModifier] = []
@@ -38,6 +42,10 @@ func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_s
 	attack_range = p_attack_range
 	stats = p_stats if p_stats != null else CharacterStats.new()
 	inventory = Inventory.new()
+
+# Tiles one Move command can cover (one block): faster units cover more ground.
+func move_per_block() -> int:
+	return clampi(floori(float(speed + 2) / 5.0), 1, 4)
 
 # Stat-context dictionary used for weapon-conditional bonuses (masteries etc.).
 func get_weapon_context() -> Dictionary:

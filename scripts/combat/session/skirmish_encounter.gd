@@ -48,11 +48,11 @@ func build() -> void:
 	ai_profiles = {
 		warrior: AiProfile.create(AiProfile.Role.AGGRESSOR, 25, 0.0, 3),
 		ranger: AiProfile.create(AiProfile.Role.SNIPER, 22, 0.0, 3),
-		brawler: AiProfile.create(AiProfile.Role.AGGRESSOR, 18),
-		skirmisher: AiProfile.create(AiProfile.Role.SKIRMISHER, 16),
-		archer: AiProfile.create(AiProfile.Role.SNIPER, 16),
-		shaman: AiProfile.create(AiProfile.Role.SUPPORT, 14),
-		berserker: AiProfile.create(AiProfile.Role.AGGRESSOR, 20, 0.0),
+		brawler: AiProfile.create(AiProfile.Role.AGGRESSOR, 10),
+		skirmisher: AiProfile.create(AiProfile.Role.SKIRMISHER, 8),
+		archer: AiProfile.create(AiProfile.Role.SNIPER, 9),
+		shaman: AiProfile.create(AiProfile.Role.SUPPORT, 7),
+		berserker: AiProfile.create(AiProfile.Role.AGGRESSOR, 11, 0.0),
 	}
 
 func prepare_round(round_num: int) -> Dictionary:

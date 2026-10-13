@@ -7,7 +7,7 @@ extends PanelContainer
 #   - ONE input area: the valid next actions for the selected hero (Engage a
 #     target with auto-moves, self skills, manual moves, withdraw). Each pick is
 #     appended at the lowest free block and the screen immediately offers the
-#     next input, chained against the sequence so far (stance flow, AP, blocks).
+#     next input, chained against the sequence so far (AP, stance, blocks).
 #   - AI presets draft a whole sequence in one click.
 #   - A preview timeline per hero shows the sequence; chips can be dragged to
 #     reorder or removed. A sequence that breaks a rule is flagged and blocks Confirm.
@@ -163,7 +163,17 @@ func _refresh() -> void:
 	_build_chooser(planning)
 	var valid: bool = session.plan_is_valid()
 	_confirm_btn.disabled = not planning or not valid
-	_confirm_hint.text = "" if valid or not planning else "⚠ Fix the red steps first"
+	var dry_heroes: Array[String] = []
+	for hero: Combatant in session.allies:
+		if hero.is_active() and session.plan.compile(hero).runs_dry():
+			dry_heroes.append(hero.name)
+	_confirm_hint.add_theme_color_override("font_color", UiTheme.COL_BAD if not valid else UiTheme.COL_WARN)
+	if planning and not valid:
+		_confirm_hint.text = "⚠ Fix the red steps first"
+	elif planning and not dry_heroes.is_empty():
+		_confirm_hint.text = "⚠ %s will run out of AP and stop (you can still confirm)" % ", ".join(dry_heroes)
+	else:
+		_confirm_hint.text = ""
 
 func _build_ruler() -> void:
 	UiTheme.clear_children(_ruler)
@@ -198,7 +208,9 @@ func _build_hero_row(hero: Combatant, planning: bool) -> void:
 			name_row.add_child(UiTheme.icon_rect(tex, 22))
 	name_row.add_child(UiTheme.label(hero.name, UiTheme.FONT_MD, UiTheme.COL_TEXT))
 	var st: CombatPlan.SimState = session.plan.compile(hero)
-	info.add_child(UiTheme.label("AP %d/%d  •  %s" % [st.ap_left, CombatPlan.ROUND_AP, CombatTypes.stance_to_string(st.stance)], 9, UiTheme.COL_WARN))
+	info.add_child(UiTheme.label("AP %d/%d  •  %s" % [st.ap_left, hero.max_ap, CombatTypes.stance_to_string(st.stance)], 9, UiTheme.COL_WARN))
+	if st.runs_dry():
+		info.add_child(UiTheme.label("⚠ runs dry at step %d" % (st.dry_step + 1), 9, UiTheme.COL_BAD))
 	info.add_child(UiTheme.label("HP %d/%d" % [hero.hp, hero.max_hp], 9, UiTheme.COL_MUTED))
 	if not hero.is_active():
 		info.add_child(UiTheme.label("out of action", 9, UiTheme.COL_BAD))
@@ -211,9 +223,12 @@ func _build_hero_row(hero: Combatant, planning: bool) -> void:
 	var steps: Array[PlanStep] = session.plan.steps_of(hero)
 	var blocks_per_step: Dictionary = {}
 	var ap_per_step: Dictionary = {}
+	var switch_steps: Dictionary = {}
 	for e: PlanEntry in st.entries:
 		blocks_per_step[e.step_index] = DictUtil.int_of(blocks_per_step, e.step_index) + e.blocks()
-		ap_per_step[e.step_index] = DictUtil.int_of(ap_per_step, e.step_index) + e.ap
+		ap_per_step[e.step_index] = DictUtil.int_of(ap_per_step, e.step_index) + e.total_ap()
+		if e.switch_ap > 0:
+			switch_steps[e.step_index] = true
 	var used: int = 0
 	for i: int in range(steps.size()):
 		var failed: bool = st.error_index >= 0 and i >= st.error_index
@@ -221,7 +236,15 @@ func _build_hero_row(hero: Combatant, planning: bool) -> void:
 		var reason: String = ""
 		if failed:
 			reason = st.error_text if i == st.error_index else "after an invalid step"
-		var chip: PlanChipUI = PlanChipUI.create(hero, i, steps[i], blocks, DictUtil.int_of(ap_per_step, i), reason, BLOCK_W)
+		var note: String = ""
+		var dropped: bool = st.dry_step >= 0 and i > st.dry_step
+		if dropped:
+			note = "never runs (out of AP)"
+		elif st.dry_step == i:
+			note = "runs out of AP here"
+		elif switch_steps.has(i):
+			note = "+1 AP stance switch"
+		var chip: PlanChipUI = PlanChipUI.create(hero, i, steps[i], blocks, DictUtil.int_of(ap_per_step, i), reason, BLOCK_W, note, dropped or st.dry_step == i)
 		chip.remove_requested.connect(func(a: Combatant, idx: int) -> void: session.plan_remove_step(a, idx))
 		chip.reorder_requested.connect(func(a: Combatant, from_i: int, to_i: int) -> void: session.plan_move_step(a, from_i, to_i))
 		track.add_child(chip)
@@ -246,9 +269,12 @@ func _build_chooser(planning: bool) -> void:
 		return
 	var st: CombatPlan.SimState = session.plan.compile(hero)
 	_chooser.add_child(UiTheme.label("ADD NEXT ACTION  —  %s" % hero.name, UiTheme.FONT_LG, UiTheme.COL_HEADER))
-	_chooser.add_child(UiTheme.label("Next block %d  •  AP left %d  •  Stance %s" % [st.next_block, st.ap_left, CombatTypes.stance_to_string(st.stance)], 10, UiTheme.COL_WARN))
+	_chooser.add_child(UiTheme.label("Next block %d  •  AP left %d  •  Stance %s (switching costs +1 AP)" % [st.next_block, st.ap_left, CombatTypes.stance_to_string(st.stance)], 10, UiTheme.COL_WARN))
 	if not planning:
 		_chooser.add_child(UiTheme.label("The plan is locked. Step or play to resolve the round.", 10, UiTheme.COL_MUTED))
+		return
+	if st.runs_dry():
+		_chooser.add_child(UiTheme.label("⚠ %s runs out of AP at step %d, so the sequence stops there. Add a Rest before it, or remove steps." % [hero.name, st.dry_step + 1], 10, UiTheme.COL_WARN))
 		return
 	if st.error_index >= 0:
 		_chooser.add_child(UiTheme.label("⚠ Step %d is invalid: %s\nRemove or reorder it to continue." % [st.error_index + 1, st.error_text], 10, UiTheme.COL_BAD))
@@ -299,41 +325,45 @@ func _add_engage_section(options: Array[PlanOption]) -> void:
 				var o: PlanOption = raw
 				btns.add_child(_option_button(o, "%s %dAP" % [o.step.skill.display_name, o.step.skill.level]))
 
+func _self_label(skill: SkillDef) -> String:
+	if skill.kind == SkillDef.Kind.REST:
+		return "%s +%d AP" % [skill.label(), skill.recover_ap]
+	return "%s %dAP" % [skill.label(), skill.level]
+
 func _add_self_section(options: Array[PlanOption]) -> void:
-	_chooser.add_child(UiTheme.header("🛡 SELF", Color(0.5, 0.75, 1.0)))
+	_chooser.add_child(UiTheme.header("🛡 SELF  (Rest: free, +AP, back to Neutral)", Color(0.5, 0.75, 1.0)))
 	var row := HFlowContainer.new()
 	row.add_theme_constant_override("h_separation", 3)
 	row.add_theme_constant_override("v_separation", 3)
 	_chooser.add_child(row)
 	for o: PlanOption in options:
 		if o.step.mode == PlanStep.Mode.SELF:
-			row.add_child(_option_button(o, "%s %dAP" % [o.step.skill.label(), o.step.skill.level]))
+			row.add_child(_option_button(o, _self_label(o.step.skill)))
 
 func _add_move_section(options: Array[PlanOption]) -> void:
-	_chooser.add_child(UiTheme.header("➜ REPOSITION  (manual move)", Color(0.4, 0.85, 0.95)))
-	var skills: Array[SkillDef] = []
-	var by_skill: Dictionary = {}
+	_chooser.add_child(UiTheme.header("➜ MOVE  (1 block, 1 AP per tile, keeps your stance)", Color(0.4, 0.85, 0.95)))
+	var rows: Dictionary = {}
+	var order: Array[Vector2i] = []
 	for o: PlanOption in options:
 		if o.step.mode != PlanStep.Mode.MOVE:
 			continue
-		if not by_skill.has(o.step.skill):
-			by_skill[o.step.skill] = []
-			skills.append(o.step.skill)
-		var list: Array = by_skill[o.step.skill]
+		if not rows.has(o.step.direction):
+			rows[o.step.direction] = []
+			order.append(o.step.direction)
+		var list: Array = rows[o.step.direction]
 		list.append(o)
-	for skill: SkillDef in skills:
+	for dir: Vector2i in order:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 3)
 		_chooser.add_child(row)
-		var name_lbl: Label = UiTheme.label("%s  %dAP • %d tile%s" % [skill.label(), skill.level, skill.steps, "" if skill.steps == 1 else "s"], 10, UiTheme.COL_TEXT)
-		name_lbl.custom_minimum_size = Vector2(190, 0)
+		var name_lbl: Label = UiTheme.label("%s  tiles:" % PlanEntry.dir_arrow(dir), 11, UiTheme.COL_TEXT)
+		name_lbl.custom_minimum_size = Vector2(70, 0)
 		row.add_child(name_lbl)
-		var list: Array = by_skill[skill]
+		var list: Array = rows[dir]
 		for raw: Variant in list:
 			if raw is PlanOption:
 				var o: PlanOption = raw
-				row.add_child(_option_button(o, PlanEntry.dir_arrow(o.step.direction)))
-
+				row.add_child(_option_button(o, "%d" % o.step.tiles))
 # A button for one option: enabled when valid, otherwise greyed with the reason as tooltip.
 func _option_button(option: PlanOption, text: String) -> Button:
 	var step: PlanStep = option.step
@@ -342,4 +372,6 @@ func _option_button(option: PlanOption, text: String) -> Button:
 	btn.disabled = not option.valid
 	if not option.valid:
 		btn.tooltip_text = "Unavailable: %s" % option.reason
+	elif not option.warning.is_empty():
+		btn.modulate = Color(1.0, 0.8, 0.4)
 	return btn

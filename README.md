@@ -19,7 +19,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 
 - **Decoupled Rules Engines**: All core game mechanics inherit from `RefCounted` rather than scenes or rendering nodes, allowing 100% headless simulation and rapid automated testing.
 - **Simultaneous 10-Block Rounds**: Combat does not use traditional turn-based initiative. Instead, all units plan actions along a 10-block timeline that resolves synchronously with multi-block durations, interruptions, and stance interactions.
-- **Dynamic Stance Matchups**: 6 core combat stances (`Neutral`, `Offensive`, `Defensive`, `Tactical`, `Utility`, `Mobile`) govern damage dealt and received through asymmetric multipliers.
+- **Dynamic Stance Matchups**: three stances in a rock-paper-scissors loop (`Offensive` > `Tactical` > `Defensive` > `Offensive`) plus `Neutral` govern damage dealt and received through asymmetric multipliers.
 - **Spatial Positioning & Withdrawal**: 9x9 grid maneuvering with center-ring deployment, range checks, and safe boundary withdrawal.
 
 ---
@@ -70,6 +70,8 @@ tactical-rpg/
 │   │   │   ├── focus_command.gd          # Tactical buff command (+50% ATK for 2 rounds)
 │   │   │   ├── move_command.gd           # Straight-line movement of 1-3 tiles per command
 │   │   │   ├── approach_command.gd       # Live move-toward-target (re-paths when it executes; Engage's moves)
+│   │   │   ├── walk_command.gd           # Planned multi-tile move along any path (one block)
+│   │   │   ├── rest_command.gd           # Idle block: recovers AP, returns to Neutral
 │   │   │   ├── target_command.gd         # Intent lock onto specific opponent
 │   │   │   ├── enter_neutral_command.gd  # Reset active combat stance to Neutral
 │   │   │   └── hold_stance_command.gd    # Stance preservation across timeline blocks
@@ -80,8 +82,8 @@ tactical-rpg/
 │   │   │   ├── skirmish_encounter.gd     # Player-planned encounter vs AI-planned goblins (arena default)
 │   │   │   └── combat_log_builder.gd     # Resolved actions -> log cells; resolver messages -> BBCode
 │   │   ├── planning/             # Round command sequences (headless)
-│   │   │   ├── skill_def.gd              # One skill tier: level 1-5, AP cost = level, blocks, effect, stance pool
-│   │   │   ├── skill_catalog.gd          # Strike/Power Strike/Heavy Blow, Guard/Brace/Fortress, Focus, Step/Dash/Sprint, Reset Stance
+│   │   │   ├── skill_def.gd              # One skill tier: level 1-5, AP cost = level (Move per tile, Rest free), stance pool, auto switch cost
+│   │   │   ├── skill_catalog.gd          # Strike/Power Strike/Heavy Blow, Guard/Brace/Fortress, Focus/Deep Focus, Move, Rest
 │   │   │   ├── plan_step.gd              # One input: Engage (target + attack, auto-moves), Move, Withdraw, Self
 │   │   │   ├── plan_entry.gd             # A compiled timeline command (lowest free block, AP charged)
 │   │   │   ├── plan_context.gd           # Grid, sides and AI profiles a plan works against
@@ -108,7 +110,7 @@ tactical-rpg/
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   └── arena_test_suite.gd       # 10 automated test suites with 88 assertions
+│   │   └── arena_test_suite.gd       # 10 automated test suites with 90 assertions
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── framework/                # Neutral UI framework shared by the dojo and the combat UI
 │       │   ├── ui_panel.gd               # Panel base: metadata, bind(session), refresh(), overlay requests
@@ -170,13 +172,10 @@ tactical-rpg/
 
 ### 2. Stance System & Matchup Multipliers
 
-- **6 Discrete Stances**: `NEUTRAL`, `OFFENSIVE`, `DEFENSIVE`, `TACTICAL`, `UTILITY`, `MOBILE`.
-- **Dynamic Combat Modifiers**:
-  - `OFFENSIVE` vs `MOBILE`: $+15\%$ damage.
-  - `OFFENSIVE` vs `TACTICAL`: $+25\%$ damage.
-  - `DEFENSIVE`: Flat damage mitigation ratio (e.g. $50\%$ reduction against attacks).
-  - `TACTICAL`: Channel focus buffs (+50% attack power for 2 rounds).
-  - `MOBILE`: Mobility bonuses and position repositioning.
+- **3 stances + Neutral**: `OFFENSIVE`, `DEFENSIVE`, `TACTICAL` form a rock-paper-scissors loop; `NEUTRAL` sits outside it (no advantage, no exposure).
+- **Matchups** (attacker stance vs defender stance): Offensive beats Tactical (+25%), Tactical beats Defensive (+25%), Defensive beats Offensive (+25%); the losing side of each pair takes -25%. Same stance or Neutral = 1.0x.
+- **Stance pools**: Attack skills are Offensive, Defend skills Defensive, Focus/buff skills Tactical. Move keeps your current stance; Rest returns you to Neutral.
+- **Automatic switching**: using a skill from another stance switches stance for **+1 AP** and no block cost; the new stance applies as the skill starts.
 
 ### 3. 9x9 Spatial Grid & Spatial Rules
 
@@ -200,9 +199,9 @@ tactical-rpg/
 - **Static Dock Host (`CombatDockHost`)**: Fixed regions (top row, left/center/right, bottom bar) filled from data-driven layout presets (`Standard`, `Mirrored`). The game UI stays static; **layout edit mode** (`⚙` / `F9`) overlays an `⇱ Undock` tag on each panel without moving anything, floats panels into `UiWindow`s (their dock keeps a same-size placeholder) and docks them back when closed. The host also owns the full-screen modals and shortcuts (`Space` play, `Q`/`E` blocks, `[`/`]` log, `L` log modal, `F`/`Tab` timeline, `G` party & stash, `Esc` close).
 - **Custom SVG Visual Assets**: Custom vector graphics for characters, unit tokens, and grid tiles.
 - **Allied & Enemy Status Roster Docks**: Real-time HP bars, SP gauges, status badges, and position coordinates.
-- **Planning Phase (Plan Round screen)**: In player-planned encounters (`SkirmishEncounter`, the arena default) each round starts in PLANNING. The round is a *command sequence* per hero built on one screen (`📝 PLAN ROUND` / `P`, opened automatically each round): a single input area lists only the valid next actions, every pick is appended at the lowest free block and the screen immediately offers the next input, and a preview timeline per hero shows the sequence (drag chips to reorder, ✕ to remove). **Engage** combines target + move: pick an enemy and an attack skill and the moves to get in range are inserted automatically (from your unlocked move tiers); at execution the approach re-paths from current positions, so it chases a target that moved. Manual Move and Withdraw cover pure positioning. Invalid sequences are flagged in red and block **Confirm**; once confirmed the timeline is only a read-only visualisation. **AI draft presets** (Balanced, All-out, Focus Weakest, Guard & Counter, Kite, Economy, Fall Back) fill one hero's or the whole party's sequence in one click and stay editable.
-- **Skill levels & AP**: every skill has a level 1-5 and its base AP cost *is* its level (a level 2 Attack, Defend or Move always costs 2 AP unless an effect shifts it via `Combatant.ap_cost_modifier`). Round budget 10 AP. Higher tiers are stronger (Strike, Power Strike, Heavy Blow) or faster (Step, Dash, Sprint: same AP per tile, fewer blocks). `AiProfile.skill_cap` stands in for skill progression.
-- **Stance flow**: skills belong to stance pools (Attack = Offensive, Defend = Defensive, Focus = Tactical, Move = Mobile). From Neutral anything is open; Offensive and Mobile flow into each other (advance and strike); every other switch needs a *Reset Stance* step first. The planner enforces this for the player and the AI alike.
+- **Planning Phase (Plan Round screen)**: In player-planned encounters (`SkirmishEncounter`, the arena default) each round starts in PLANNING. The round is a *command sequence* per hero built on one screen (`📝 PLAN ROUND` / `P`, opened automatically each round): a single input area lists only the valid next actions, every pick is appended at the lowest free block and the screen immediately offers the next input, and a preview timeline per hero shows the sequence (drag chips to reorder, ✕ to remove). **Engage** combines target + move: pick an enemy and an attack skill and the moves to get in range are inserted automatically (Move blocks of up to your speed in tiles, 1 AP per tile); at execution the approach re-paths from current positions, so it chases a target that moved. Manual Move, Withdraw and Rest cover positioning and recovery. Hard-invalid sequences (no path, bad target, too many blocks) are flagged in red and block **Confirm**; running out of AP only warns; once confirmed the timeline is only a read-only visualisation. **AI draft presets** (Balanced, All-out, Focus Weakest, Guard & Counter, Kite, Economy, Fall Back) fill one hero's or the whole party's sequence in one click and stay editable.
+- **Skill levels & AP**: every leveled skill has a level 1-5 and its base AP cost *is* its level (a level 2 Attack or Defend always costs 2 AP unless an effect shifts it via `Combatant.ap_cost_modifier`). **Move** is always one block and costs 1 AP per tile, up to the unit's speed-based tiles per block, along any path. **Rest** is free, recovers 2 AP and returns the unit to Neutral. Round budget 10 AP. `AiProfile.skill_cap` stands in for skill progression.
+- **AP is a runtime resource**: the planner projects AP and warns where a hero "runs dry", but allows the sequence. At resolution each command pays its AP (plus any +1 stance switch) when it starts; a unit that can't pay stops its whole sequence. Rest mid-round to recover.
 - **Enemy AI (`TacticalAI`)**: Each goblin drafts its round at round start from an `AiProfile`: *Aggressor*, *Skirmisher*, *Sniper*, *Support* (opens with Focus). It grows a scratch plan one validated step at a time, picks targets by role and route cost, guards once when hurt, kites when it should, and withdraws at 25% HP. Plans commit blind; Engage chases, fixed moves do not. Enemy tracks stay masked on the timeline and the inspector's *Threat Intel* shows each hostile's role and thresholds.
 - **Unit Inspector**: Unit profile portrait, speed, range, stance, target, buffs, and AI threat intel for hostiles.
 - **Tactical Forecast Dock**: Real-time Manhattan distance, in-range validation, matchup multiplier, and estimated strike damage.
@@ -289,7 +288,7 @@ tactical-rpg/
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **10 test suites** covering **88 individual assertions**:
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **10 test suites** covering **90 individual assertions**:
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Warrior vs 3 Goblins Battle** (9 assertions): Multi-round mitigation, stance carryover, Focus buff persist/expire, multi-enemy defeat.
@@ -301,7 +300,7 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 8. **Combat Session Flow Test** (8 assertions): Through `CombatSession` headlessly, only deployed enemies in view before the ambush, ambush event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay playhead reading per-block snapshots, round advance baselines with past rounds reviewable, Rounds 2-3 resolving to total victory, timer-free auto-play ticks, and round reset.
 9. **Art, Terrain & Zones Test** (9 assertions): team-colored class tokens and portraits, encounter art follows sides, terrain glyph round-trip and walkability, all 8 zones valid, grid blocks blocked tiles, Goblin Ambush wins on every zone, tile and item icon rasterization.
 
-10. **Planning, Stance Flow & Enemy AI Test** (11 assertions): AP = skill level with effect modifiers, the stance flow table, sequences compiling to the lowest free blocks with Engage auto-inserting moves, stance/AP/block validation and valid-option probing, flagged invalid edits blocking Confirm, Confirm locking and scheduling with the AI plans, AI presets with their focus, role patterns (path-finding around walls, sniper retreat, support Focus, flee, Engage chasing a moved target), deterministic AI-vs-AI skirmishes on all 8 zones, and round reset.
+10. **Planning, Stances, AP & Enemy AI Test** (13 assertions): skill AP = level (Move per tile, Rest free) with effect modifiers and speed-based tiles per block, the rock-paper-scissors stance matrix and automatic +1 AP switch costs, sequences compiling to the lowest free blocks with Engage inserting 1-block moves, mid-sequence stance switching, projected "runs dry" instead of refusal, flagged invalid edits blocking Confirm, Confirm scheduling party and AI plans with AP spent at runtime, units stopping when they can't pay, Rest recovering AP, AI presets, role patterns (walls, sniper retreat, support Focus, flee, Engage chasing a moved target), deterministic AI-vs-AI skirmishes on all 8 zones, and round reset refilling AP.
 Additionally, `scenes/gear_dojo.tscn` runs **36 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
 - **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword mastery, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
@@ -366,6 +365,10 @@ The following modular systems and capabilities are planned according to the mast
 
 - [x] Sequence-based Plan Round screen with chained inputs, validation, reorder/remove, AI presets, AP = skill level and stance flow.
 - [x] CombatSession extracted from `test_arena.gd`; combat UI rebuilt as session-bound panels in a static dock host (`combat_arena.tscn`).
+- [ ] Reactive defensive skills (Parry, Counter, Shield Bash: Defensive-stance skills that deal damage).
+- [ ] Status effects (poison, intimidate, stagger) and Offensive debuff skills; Tactical buffs beyond Focus.
+- [ ] Sequence-altering skills (Interrupt, Stagger delay, AP drain) with replay explanations of why a sequence changed.
+- [ ] Per-step projected stance/AP annotations on the grid preview.
 - [ ] Ghost path / range preview of planned moves and attacks on the grid.
 - [ ] Skill and item commands in the planner (`SwitchWeaponCommand`, Dual Strike, battle-pouch items, level 4-5 skills) and real skill progression feeding `skill_cap`.
 - [ ] Terrain gameplay rules: cover bonuses, movement cost and hazard damage (metadata already in `Terrain`).

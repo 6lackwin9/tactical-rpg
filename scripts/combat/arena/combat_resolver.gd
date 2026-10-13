@@ -111,6 +111,9 @@ func prepare_block(block: int) -> Array[ScheduledAction]:
 	for c: Combatant in registered_combatants:
 		c.reset_block_transient_state()
 
+	# 1b. Planner commands starting now pay AP and enter their stance
+	_begin_actions(block)
+
 	# 2. Check and activate continuous defensive postures active during this block
 	for action in scheduled_actions:
 		if not action.is_cancelled and action.combatant.is_active():
@@ -144,6 +147,37 @@ func prepare_block(block: int) -> Array[ScheduledAction]:
 		return a.command.get_initiative() > b.command.get_initiative()
 	)
 	return resolving
+
+# Planner-controlled commands pay AP (skill + automatic stance switch) and enter
+# their stance when they START. A unit that can't pay stops its whole sequence:
+# this command and every later one are cancelled.
+func _begin_actions(block: int) -> void:
+	for action: ScheduledAction in scheduled_actions:
+		if action.is_cancelled or action.start_block != block or not action.command.planner_controlled:
+			continue
+		var c: Combatant = action.combatant
+		if not c.is_active():
+			continue
+		var cmd: BattleCommand = action.command
+		var total: int = cmd.ap_cost + cmd.stance_switch_cost
+		if total > c.ap:
+			_halt_sequence(c, action, total)
+			continue
+		c.ap -= total
+		if cmd.stance_on_start >= 0:
+			var new_stance: CombatTypes.StanceType = cmd.stance_on_start as CombatTypes.StanceType
+			if new_stance != c.current_stance:
+				c.set_stance(new_stance)
+				if cmd.stance_switch_cost > 0:
+					log_emitted.emit("[Stance] %s shifts to %s stance (+%d AP)" % [c.name, CombatTypes.stance_to_string(new_stance), cmd.stance_switch_cost])
+
+func _halt_sequence(c: Combatant, from: ScheduledAction, needed: int) -> void:
+	var msg: String = "[Exhausted] %s needs %d AP for %s but has %d: the sequence stops." % [c.name, needed, from.command.command_name, c.ap]
+	print(msg)
+	log_emitted.emit(msg)
+	for a: ScheduledAction in scheduled_actions:
+		if a.combatant == c and a.start_block >= from.start_block:
+			a.is_cancelled = true
 
 func execute_single_action(action: ScheduledAction) -> void:
 	if action.is_cancelled:

@@ -25,11 +25,12 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) 
 	var guarded: bool = false
 	var focused: bool = false
 	var fled: bool = false
+	var rests: int = 0
 	var reach: int = actor.attack_range
 
 	for iteration: int in range(MAX_STEPS):
 		var st: CombatPlan.SimState = plan.compile(actor)
-		if st.ap_left < 1 or st.blocks_left() < 1 or st.withdrawn:
+		if st.blocks_left() < 1 or st.withdrawn:
 			break
 
 		var hp_ratio: float = float(actor.hp) / float(maxi(1, actor.max_hp))
@@ -62,16 +63,16 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile) 
 				retreat = hp_ratio <= profile.defend_below and dist <= 1
 		if retreat:
 			var back: Vector2i = _retreat_dir(plan, actor, st.pos, foes, reach, grid.get_position(target))
-			if back != Vector2i.ZERO and plan.add_step(actor, PlanStep.move(SkillCatalog.lowest(SkillDef.Kind.MOVE), back)).is_empty():
+			if back != Vector2i.ZERO and plan.add_step(actor, PlanStep.move(SkillCatalog.lowest(SkillDef.Kind.MOVE), back, 1), false).is_empty():
 				continue
 
 		var engage: Callable = func(skill: SkillDef) -> PlanStep: return PlanStep.engage(skill, target)
 		if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage):
 			continue
-		# Blocked by stance? Reset to Neutral and try again next iteration.
-		if not CombatTypes.can_flow(st.stance, CombatTypes.StanceType.OFFENSIVE) or not CombatTypes.can_flow(st.stance, CombatTypes.StanceType.MOBILE):
-			var reset: SkillDef = SkillCatalog.lowest(SkillDef.Kind.NEUTRAL)
-			if plan.add_step(actor, PlanStep.self_skill(reset)).is_empty():
+		# Can't afford anything useful: catch a breath to recover AP, then try again.
+		if rests < 2 and st.blocks_left() >= 2 and st.ap_left < SkillCatalog.lowest(SkillDef.Kind.ATTACK).ap_cost(actor) + 1:
+			rests += 1
+			if plan.add_step(actor, PlanStep.self_skill(SkillCatalog.find("rest"))).is_empty():
 				continue
 		break
 
@@ -97,7 +98,7 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 			step = raw if raw is PlanStep else null
 		else:
 			step = PlanStep.self_skill(skill)
-		if step != null and plan.add_step(actor, step).is_empty():
+		if step != null and plan.add_step(actor, step, false).is_empty():
 			return true
 	return false
 

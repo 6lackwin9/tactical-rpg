@@ -19,3 +19,4 @@ var is_withdrawn: Dictionary = {}      # Combatant -> bool
 var attack_boost_mult: Dictionary = {} # Combatant -> float
 var attack_boost_rds: Dictionary = {}  # Combatant -> int
 var defense_mit: Dictionary = {}       # Combatant -> float
+var aps: Dictionary = {}               # Combatant -> int (runtime AP)

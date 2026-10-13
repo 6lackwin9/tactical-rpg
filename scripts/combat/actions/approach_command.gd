@@ -34,12 +34,15 @@ func execute() -> void:
 			break
 		moved += 1
 
+	# Tiles not needed (target already in range, or no route) cost no AP.
+	if planner_controlled and moved < steps:
+		source.ap = mini(source.max_ap, source.ap + (steps - moved))
 	var end_pos: Vector2i = grid.get_position(source)
 	if moved == 0:
 		var in_range: bool = grid.get_distance(start_pos, grid.get_position(target)) <= source.attack_range
 		execution_log = "[Approach] %s holds at %s (%s)." % [source.name, str(start_pos), "already in range of %s" % target.name if in_range else "no route to %s" % target.name]
 	else:
-		execution_log = "[Approach] %s closed in on %s: %s to %s (Mobile Stance)" % [source.name, target.name, str(start_pos), str(end_pos)]
+		execution_log = "[Approach] %s closed in on %s: %s to %s" % [source.name, target.name, str(start_pos), str(end_pos)]
 
 # First step of the shortest route to a tile within range of the target's current position.
 func _next_step() -> Vector2i:

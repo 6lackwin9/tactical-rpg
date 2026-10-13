@@ -11,7 +11,7 @@ func _init(p_source: Combatant, p_grid: CombatGrid, p_direction: Vector2i, p_ste
 	direction = p_direction
 	steps = p_steps
 	action_type = CombatTypes.ActionType.MOVE
-	resulting_stance = CombatTypes.StanceType.MOBILE
+	resulting_stance = CombatTypes.StanceType.NEUTRAL  # moving never changes stance
 	is_self_targeted = true
 	command_name = "Move" if p_steps == 1 else "Sprint"
 
@@ -49,6 +49,6 @@ func execute() -> void:
 			]
 		else:
 			var verb: String = "sprinted" if steps > 1 else "moved"
-			execution_log = "[%s] %s %s from %s to %s (Mobile Stance)" % [
+			execution_log = "[%s] %s %s from %s to %s" % [
 				command_name, source.name, verb, str(start_pos), str(end_pos)
 			]

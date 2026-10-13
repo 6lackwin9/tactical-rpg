@@ -6,10 +6,10 @@ extends RefCounted
 # What the player (or AI) chooses; CombatPlan compiles each step into timeline
 # entries at the lowest free blocks.
 #   ENGAGE    attack skill + target; the moves needed to get in range are
-#             inserted automatically
-#   MOVE      manual reposition: move skill + direction
+#             inserted automatically (and chase the target when they run)
+#   MOVE      manual reposition: a straight move of `tiles` in a direction
 #   WITHDRAW  auto-path to the exit tile and leave the battle
-#   SELF      Defend / Focus / Reset Stance
+#   SELF      Defend / Focus / Rest
 # ==============================================================================
 
 enum Mode { ENGAGE, MOVE, WITHDRAW, SELF }
@@ -18,6 +18,7 @@ var mode: Mode = Mode.SELF
 var skill: SkillDef = null
 var target: Combatant = null
 var direction: Vector2i = Vector2i.ZERO
+var tiles: int = 1
 
 static func engage(p_skill: SkillDef, p_target: Combatant) -> PlanStep:
 	var step := PlanStep.new()
@@ -26,11 +27,12 @@ static func engage(p_skill: SkillDef, p_target: Combatant) -> PlanStep:
 	step.target = p_target
 	return step
 
-static func move(p_skill: SkillDef, p_direction: Vector2i) -> PlanStep:
+static func move(p_skill: SkillDef, p_direction: Vector2i, p_tiles: int = 1) -> PlanStep:
 	var step := PlanStep.new()
 	step.mode = Mode.MOVE
 	step.skill = p_skill
 	step.direction = p_direction
+	step.tiles = p_tiles
 	return step
 
 static func withdraw() -> PlanStep:
@@ -50,7 +52,7 @@ func title() -> String:
 		Mode.ENGAGE:
 			return "%s → %s" % [skill.label(), target.name if target != null else "?"]
 		Mode.MOVE:
-			return "%s %s" % [skill.label(), PlanEntry.dir_arrow(direction)]
+			return "%s %s%d" % [skill.label(), PlanEntry.dir_arrow(direction), tiles]
 		Mode.WITHDRAW:
 			return "🏃 Withdraw"
 	return skill.label()
@@ -61,4 +63,5 @@ func duplicate_step() -> PlanStep:
 	copy.skill = skill
 	copy.target = target
 	copy.direction = direction
+	copy.tiles = tiles
 	return copy

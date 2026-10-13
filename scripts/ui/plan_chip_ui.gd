@@ -13,16 +13,17 @@ signal reorder_requested(actor: Combatant, from_index: int, to_index: int)
 var actor: Combatant = null
 var step_index: int = 0
 
-static func create(p_actor: Combatant, p_index: int, step: PlanStep, blocks: int, ap: int, error_text: String, block_w: int) -> PlanChipUI:
+static func create(p_actor: Combatant, p_index: int, step: PlanStep, blocks: int, ap: int, error_text: String, block_w: int, note: String = "", warn: bool = false) -> PlanChipUI:
 	var chip := PlanChipUI.new()
 	chip.actor = p_actor
 	chip.step_index = p_index
 	var invalid: bool = not error_text.is_empty()
 	var col: Color = _step_color(step)
 	chip.custom_minimum_size = Vector2(maxi(1, blocks) * block_w + (blocks - 1) * 4 if not invalid else 120, 40)
-	chip.add_theme_stylebox_override("panel", UiTheme.box(Color(0.35, 0.1, 0.1, 0.95) if invalid else col.darkened(0.55), UiTheme.COL_BAD if invalid else col, 4, 5, 2))
+	var fill: Color = Color(0.35, 0.1, 0.1, 0.95) if invalid else (Color(0.25, 0.2, 0.08, 0.95) if warn else col.darkened(0.55))
+	chip.add_theme_stylebox_override("panel", UiTheme.box(fill, UiTheme.COL_BAD if invalid else (UiTheme.COL_WARN if warn else col), 4, 5, 2))
 	chip.mouse_default_cursor_shape = Control.CURSOR_DRAG
-	chip.tooltip_text = ("⚠ %s" % error_text) if invalid else "%s\n%d block(s) • %d AP\nDrag to reorder • ✕ to remove" % [step.title(), blocks, ap]
+	chip.tooltip_text = ("⚠ %s" % error_text) if invalid else "%s\n%d block(s) • %d AP%s\nDrag to reorder • ✕ to remove" % [step.title(), blocks, ap, ("\n⚠ " + note) if not note.is_empty() else ""]
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
 	chip.add_child(row)
@@ -35,7 +36,10 @@ static func create(p_actor: Combatant, p_index: int, step: PlanStep, blocks: int
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col_box.add_child(title)
-	var sub: Label = UiTheme.label(("⚠ " + error_text) if invalid else "%db • %d AP" % [blocks, ap], 8, UiTheme.COL_BAD if invalid else UiTheme.COL_MUTED)
+	var detail: String = "%db • %d AP" % [blocks, ap]
+	if not note.is_empty():
+		detail += " • ⚠ " + note if warn else " • " + note
+	var sub: Label = UiTheme.label(("⚠ " + error_text) if invalid else detail, 8, UiTheme.COL_BAD if invalid else (UiTheme.COL_WARN if warn else UiTheme.COL_MUTED))
 	sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col_box.add_child(sub)
