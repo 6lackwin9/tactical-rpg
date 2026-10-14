@@ -12,7 +12,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | --- | --- | --- | --- | --- |
 | S1 | Combat core: block resolver, planner, stances, AP, damage formula, statuses | balance-ready | - | `DamageCalculator` is the only formula |
 | S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | done (roster rework approved: warrior, ranger, priest, brawler, rogue, mage) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
-| S3 | Gear and inventory: requirements, tiers, burden, carry, stash | done | S1 | Gear budget per class is an open balance lever |
+| S3 | Gear and inventory: requirements, tiers, burden, carry, stash | done (gear budget guard added in M2d) | S1 | Gear budget per class is an open balance lever |
 | S4 | Enemy AI (roles, presets, targeting) | done (M1: kiting, no idle turns, support heals, reckless profile) | S1 | Shaman/ranger AI wastes turns: candidate fix |
 | S5 | Content catalog + Content Forge | done | - | Data pipeline for S2/S3/S6 |
 | S6 | World engine + World Forge (lore layer, inheritance) | done | S5 | Characters, factions, items, quests as data |
@@ -125,3 +125,9 @@ Until step 7, only S1/S2 stay balance-ready and no balance work is done.
 
 ### Open questions raised by this pass
 Q1 May S1 lose `balance-ready` if S12 needs a formula change? Q2 Gear budget: soft validation (A) or content-only (B)? Q3 Player-allocated level-up (S7-B) or automatic? Q4 May quest rewards exceed class budget, and by how much? Q5 Exploration encounters: placed only, step-counter only, or hybrid? Q6 Are travel supplies wanted? Q7 Should the shaman get a support/heal identity? Q8 Are lone-hero 1v3 and boss losses intended (party fights expected)? Q9 Passives permanent or temporary (existing question)? Q10 Playable loop scope: one campaign or a world sandbox?
+
+## Refactor backlog (separate from feature milestones; never part of a builder's feature task)
+
+| Id | Item | When | Rules |
+| --- | --- | --- | --- |
+| R1 | Split oversized test files: `arena_test_suite.gd` (~1400 lines, older groups: combat UI, character specs, gear/dummy, session flow, art/terrain, planning/AI) into one file per group with a small runner; later `combat_extensions_test_suite.gd` (~800) by feature and `dojo_assertions.gd` (~770) | after M2c merges | Pure refactor on its own branch and review; no behaviour or number changes; total assertion count before = after |

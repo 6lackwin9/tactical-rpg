@@ -378,6 +378,27 @@ static func validate_all() -> Dictionary:
 		problems["load"] = _error_list().duplicate()
 	return problems
 
+# Soft problems of one entry (never block saving): gear budget rules (GearBudget).
+static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
+	var e: Dictionary = ContentSchema.normalize(kind, entry)
+	match kind:
+		"items":
+			return GearBudget.check_item(e)
+		"classes":
+			return GearBudget.check_class(e)
+	var none: Array[String] = []
+	return none
+
+# Every warning in the catalog: {"kind:id": [warnings]}. Separate from validate_all().
+static func warnings_all() -> Dictionary:
+	var out: Dictionary = {}
+	for kind: String in ["items", "classes"]:
+		for e: Dictionary in entries(kind):
+			var found: Array[String] = warnings_for(kind, e)
+			if not found.is_empty():
+				out["%s:%s" % [kind, str(e.get("id", ""))]] = found
+	return out
+
 static func _skill_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	var kind: String = str(e["kind"])

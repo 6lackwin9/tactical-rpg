@@ -1,0 +1,170 @@
+class_name GearBudgetTestSuite
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - Gear Budget Test Suite (milestone M2d)
+# GearBudget weights, burden / block-cost penalties, loadout sums (pouch ignored), special
+# items reported separately, soft warnings (never errors) from ContentCatalog, the special
+# schema fields round-trip, and the Forge preview budget lines. Expectations are computed
+# from GearBudget's constants. Works on a sandbox copy of the catalog.
+# ==============================================================================
+
+const SANDBOX: String = "user://gear_budget_test"
+
+static func _report(label: String, checks: Dictionary) -> bool:
+	var failed: Array[String] = []
+	for key: Variant in checks:
+		if not DictUtil.to_bool(checks[key]):
+			failed.append(str(key))
+	var ok: bool = failed.is_empty()
+	print("    [GearBudget] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
+	return ok
+
+static func _near(a: float, b: float) -> bool:
+	return absf(a - b) < 0.001
+
+static func _gear(id: String, extra: Dictionary) -> Dictionary:
+	var e: Dictionary = {"id": id, "name": id, "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "base_power": 10}
+	e.merge(extra, true)
+	return ContentSchema.normalize("items", e)
+
+static func run() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING GEAR BUDGET TEST (M2d)                  ===")
+	print("=======================================================")
+	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	var ok: bool = true
+	ok = _test_item_weights() and ok
+	for kind: String in ContentSchema.KINDS:
+		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
+	if ContentCatalog.fork_to(SANDBOX) != OK or ContentCatalog.get_root() != SANDBOX:
+		ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+		return _report("sandbox fork", {"forked": false})
+	ok = _test_shipped() and ok
+	ok = _test_loadouts() and ok
+	ok = _test_warnings() and ok
+	ok = _test_schema_round_trip() and ok
+	ok = _test_forge_preview() and ok
+	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	return ok
+
+static func _test_item_weights() -> bool:
+	var c: Dictionary = {}
+	var full: Dictionary = _gear("t_full", {"base_power": 12, "mitigation": 6, "stat_bonuses": {"STR": 2, "DEX": 1}, "burden": 3, "block_cost": 3})
+	var expected: float = 12 * GearBudget.W_POWER + 6 * GearBudget.W_MITIGATION + 3 * GearBudget.W_STAT_POINT + 3 * GearBudget.W_BURDEN + 2 * GearBudget.W_EXTRA_BLOCK
+	c["weighted sum"] = _near(GearBudget.item_value(full), expected)
+	var plain: Dictionary = _gear("t_plain", {"base_power": 12})
+	c["plain = power only"] = _near(GearBudget.item_value(plain), 12 * GearBudget.W_POWER)
+	c["burden lowers value"] = _near(GearBudget.item_value(_gear("t_b", {"base_power": 12, "burden": 2})), GearBudget.item_value(plain) + 2 * GearBudget.W_BURDEN)
+	c["burden penalty is negative weight"] = GearBudget.W_BURDEN < 0.0
+	c["extra block cost lowers value"] = _near(GearBudget.item_value(_gear("t_c", {"base_power": 12, "block_cost": 2})), GearBudget.item_value(plain) + GearBudget.W_EXTRA_BLOCK)
+	c["base block cost 1 is free"] = _near(GearBudget.item_value(_gear("t_d", {"base_power": 12, "block_cost": 1})), GearBudget.item_value(plain))
+	c["mitigation weighted"] = _near(GearBudget.item_value(_gear("t_m", {"item_type": "ARMOR", "slot": "BODY", "base_power": 0, "mitigation": 8})), 8 * GearBudget.W_MITIGATION)
+	var potion: Dictionary = ContentSchema.normalize("items", {"id": "t_p", "item_type": "CONSUMABLE", "heal": 20})
+	c["consumables are worth 0"] = _near(GearBudget.item_value(potion), 0.0)
+	c["band brackets target"] = GearBudget.band_low() < GearBudget.TARGET_BUDGET and GearBudget.band_high() > GearBudget.TARGET_BUDGET
+	return _report("item weights and penalties", c)
+
+static func _test_shipped() -> bool:
+	var c: Dictionary = {}
+	c["validate_all stays empty (warnings are separate)"] = ContentCatalog.validate_all().is_empty()
+	var passing: int = 0
+	for e: Dictionary in ContentCatalog.entries("classes"):
+		if GearBudget.in_band(GearBudget.loadout_value(e)):
+			passing += 1
+		print("      class %s loadout %.1f / %.1f%s" % [str(e["id"]), GearBudget.loadout_value(e), GearBudget.TARGET_BUDGET, "" if GearBudget.in_band(GearBudget.loadout_value(e)) else " OUT OF BAND"])
+	c["most shipped classes in band"] = passing * 2 > ContentCatalog.entries("classes").size()
+	return _report("shipped catalog", c)
+
+static func _seed_items() -> void:
+	ContentCatalog.upsert("items", _gear("t_sword", {"base_power": 14}))
+	ContentCatalog.upsert("items", _gear("t_plate", {"item_type": "ARMOR", "slot": "BODY", "weapon_type": "plate", "base_power": 0, "mitigation": 6, "burden": 2}))
+	ContentCatalog.upsert("items", _gear("t_ring", {"item_type": "ACCESSORY", "slot": "ACCESSORY_1", "weapon_type": "", "base_power": 0, "stat_bonuses": {"STR": 2}}))
+	ContentCatalog.upsert("items", _gear("t_god", {"base_power": 80, "special": true, "special_note": "Huge power but two block cost.", "block_cost": 2}))
+	ContentCatalog.upsert("items", _gear("t_god_bare", {"base_power": 80, "special": true}))
+	ContentCatalog.upsert("items", ContentSchema.normalize("items", {"id": "t_potion", "item_type": "CONSUMABLE", "heal": 20}))
+
+static func _class_with(slots: Dictionary) -> Dictionary:
+	var e: Dictionary = ContentCatalog.get_entry("classes", "warrior").duplicate(true)
+	for slot: String in ContentSchema.LOADOUT_SLOTS:
+		e[slot] = ""
+	e["pouch"] = []
+	e.merge(slots, true)
+	return e
+
+static func _test_loadouts() -> bool:
+	_seed_items()
+	var c: Dictionary = {}
+	var cls: Dictionary = _class_with({"main_hand": "t_sword", "body": "t_plate", "accessory_1": "t_ring", "pouch": ["t_potion"]})
+	var expected: float = 14 * GearBudget.W_POWER + (6 * GearBudget.W_MITIGATION + 2 * GearBudget.W_BURDEN) + 2 * GearBudget.W_STAT_POINT
+	c["loadout = sum of slots, pouch ignored"] = _near(GearBudget.loadout_value(cls), expected)
+	c["breakdown lists 3 slots"] = GearBudget.loadout_breakdown(cls).size() == 3
+	c["no special reported"] = _near(GearBudget.special_value(cls), 0.0)
+	var with_special: Dictionary = _class_with({"main_hand": "t_god", "body": "t_plate"})
+	var god_value: float = 80 * GearBudget.W_POWER + GearBudget.W_EXTRA_BLOCK
+	c["special value reported separately"] = _near(GearBudget.special_value(with_special), god_value)
+	c["total includes special"] = _near(GearBudget.loadout_value(with_special), god_value + GearBudget.item_value(ContentCatalog.get_entry("items", "t_plate")))
+	var flagged: int = 0
+	for row: Dictionary in GearBudget.loadout_breakdown(with_special):
+		if DictUtil.to_bool(row["special"]):
+			flagged += 1
+	c["exactly one special row"] = flagged == 1
+	return _report("loadout sums and special reporting", c)
+
+static func _test_warnings() -> bool:
+	var c: Dictionary = {}
+	var cheap: Dictionary = _class_with({"main_hand": "t_ring"})
+	cheap["id"] = "t_cheap_class"
+	var mid: Dictionary = _class_with({"main_hand": "t_sword", "body": "t_plate", "accessory_1": "t_ring"})
+	# Make a clearly over-budget loadout by pairing the bare special (no documented note).
+	var over: Dictionary = _class_with({"main_hand": "t_god_bare", "body": "t_plate"})
+	var over_warn: Array[String] = ContentCatalog.warnings_for("classes", over)
+	c["over band warns"] = over_warn.size() == 1
+	c["warning names value and budget"] = over_warn.size() == 1 and over_warn[0].contains("%.1f" % GearBudget.loadout_value(over)) and over_warn[0].contains("%.1f" % GearBudget.TARGET_BUDGET)
+	c["warning names top item"] = over_warn.size() == 1 and over_warn[0].contains("t_god_bare")
+	c["over band is not an error"] = ContentCatalog.validate_entry("classes", over, "warrior").filter(func(m: String) -> bool: return m.contains("Gear budget")).is_empty()
+	var under_warn: Array[String] = ContentCatalog.warnings_for("classes", cheap)
+	c["under band warns"] = under_warn.size() == 1 and under_warn[0].contains("below")
+	var documented: Dictionary = _class_with({"main_hand": "t_god", "body": "t_plate"})
+	c["documented special may exceed band"] = ContentCatalog.warnings_for("classes", documented).is_empty()
+	c["special without note warns"] = ContentCatalog.warnings_for("items", ContentCatalog.get_entry("items", "t_god_bare")).size() == 1
+	c["special with note is clean"] = ContentCatalog.warnings_for("items", ContentCatalog.get_entry("items", "t_god")).is_empty()
+	c["normal item is clean"] = ContentCatalog.warnings_for("items", ContentCatalog.get_entry("items", "t_sword")).is_empty()
+	c["in-band class is clean"] = GearBudget.in_band(GearBudget.loadout_value(mid)) and ContentCatalog.warnings_for("classes", mid).is_empty()
+	var all_w: Dictionary = ContentCatalog.warnings_all()
+	c["warnings_all lists the bare special"] = all_w.has("items:t_god_bare")
+	c["validate_all still empty"] = ContentCatalog.validate_all().is_empty()
+	return _report("soft warnings", c)
+
+static func _test_schema_round_trip() -> bool:
+	var c: Dictionary = {}
+	var entry: Dictionary = ContentCatalog.get_entry("items", "t_god")
+	var rebuilt: Dictionary = ContentFactory.item_to_entry(ContentFactory.item(entry))
+	c["special survives"] = DictUtil.to_bool(rebuilt["special"])
+	c["note survives"] = str(rebuilt["special_note"]) == str(entry["special_note"])
+	var plain: Dictionary = ContentFactory.item_to_entry(ContentFactory.item(ContentCatalog.get_entry("items", "t_sword")))
+	c["defaults false / empty"] = not DictUtil.to_bool(plain["special"]) and str(plain["special_note"]).is_empty()
+	var shown_for_consumable: int = 0
+	var shown_for_weapon: int = 0
+	for f: Dictionary in ContentSchema.fields("items"):
+		if str(f["key"]) == "special" or str(f["key"]) == "special_note":
+			if ContentSchema.is_visible(f, {"item_type": "CONSUMABLE"}):
+				shown_for_consumable += 1
+			if ContentSchema.is_visible(f, {"item_type": "WEAPON"}):
+				shown_for_weapon += 1
+	c["special fields only for equipment"] = shown_for_consumable == 0 and shown_for_weapon == 2
+	return _report("schema round trip", c)
+
+static func _test_forge_preview() -> bool:
+	var c: Dictionary = {}
+	var cls: Dictionary = _class_with({"main_hand": "t_god", "body": "t_plate"})
+	var text: String = ForgePreview.describe("classes", cls)
+	c["class preview has budget line"] = text.contains("Gear budget")
+	c["class preview has target"] = text.contains("%.1f" % GearBudget.TARGET_BUDGET)
+	c["class preview shows special items"] = text.contains("Special items")
+	var over: Dictionary = _class_with({"main_hand": "t_god_bare", "body": "t_plate"})
+	c["out of band marked"] = ForgePreview.describe("classes", over).contains("out of band")
+	var item_text: String = ForgePreview.describe("items", ContentCatalog.get_entry("items", "t_god"))
+	c["item preview has value"] = item_text.contains("Gear value") and item_text.contains("%.1f" % GearBudget.item_value(ContentCatalog.get_entry("items", "t_god")))
+	c["item preview shows special"] = item_text.contains("SPECIAL")
+	return _report("forge preview", c)

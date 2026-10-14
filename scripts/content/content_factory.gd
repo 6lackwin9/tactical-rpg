@@ -123,6 +123,8 @@ static func item(entry: Dictionary) -> Item:
 	result.description = str(e["description"])
 	result.damage_type = str(e["damage_type"])
 	result.icon_id = str(e["icon_id"])
+	result.special = DictUtil.to_bool(e["special"])
+	result.special_note = str(e["special_note"])
 	return result
 
 static func item_to_entry(it: Item, starter_stash: bool = false) -> Dictionary:
@@ -131,6 +133,7 @@ static func item_to_entry(it: Item, starter_stash: bool = false) -> Dictionary:
 		"rarity": _name(Item.ItemRarity.keys(), it.rarity), "weight": it.weight, "value": it.value_gold,
 		"description": it.description, "damage_type": it.damage_type, "icon_id": it.icon_id,
 		"starter_stash": starter_stash, "max_stack": it.max_stack,
+		"special": it.special, "special_note": it.special_note,
 	}
 	if it is Equipment:
 		var eq: Equipment = it

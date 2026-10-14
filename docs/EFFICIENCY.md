@@ -41,3 +41,6 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 - `fc.sh suite <name>`: run a single test suite (arena takes 20 s, so low value now; revisit if it grows past ~60 s).
 - Cache catalog loads in sims (minor).
 - Cut `balance_sim` time by lowering tick/step overhead or fighting fewer seeds on obvious matchups (revisit when tuning).
+
+## Agent reuse (2026-10-15)
+Agent types are reused; instances are fresh per call. Fresh instance for reviews (independence), balance runs and new milestones; resume the same instance (SendMessage) for follow-ups to its own work; do tiny fixes in the main session. A long-lived builder's context grows and every follow-up re-reads it.

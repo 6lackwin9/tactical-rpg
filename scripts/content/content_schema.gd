@@ -125,6 +125,8 @@ static func _item_fields() -> Array[Dictionary]:
 		_f("damage_type", "Damage type", "enum", "", {"options": ["", "slash", "pierce", "blunt", "magic", "fire"]}),
 		_f("icon_id", "Icon id", "string", "", {"help": "Optional bespoke icon (ItemArt.UNIQUE_ICONS); empty = icon by gear type."}),
 		_f("starter_stash", "In starter stash", "bool", false, {"help": "Added to the party stash of every encounter and the Gear Dojo."}),
+		_f("special", "Special item", "bool", false, {"when": equip, "help": "May exceed the class gear budget; needs a special note."}),
+		_f("special_note", "Special note", "text", "", {"when": equip, "help": "The trade-off or playstyle that justifies a special item."}),
 		_f("slot", "Slot", "enum", "MAIN_HAND", {"options": ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"], "when": equip}),
 		_f("weapon_type", "Gear type", "enum", "", {"options": ["", "sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "orb", "tome", "shield", "plate", "leather", "cloth"], "when": equip, "help": "Checked against class proficiencies and weapon masteries."}),
 		_f("base_power", "Power", "int", 0, {"min": 0, "max": 200, "when": weapon}),

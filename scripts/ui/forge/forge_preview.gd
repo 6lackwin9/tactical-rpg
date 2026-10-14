@@ -104,6 +104,7 @@ static func _item(e: Dictionary) -> String:
 			if ContentFactory.class_archetype(c).can_equip_gear(eq):
 				users.append(str(c.get("name", "")))
 		t += _line("Classes", ", ".join(users) if not users.is_empty() else "none")
+		t += _line("Gear value", "%.1f%s" % [GearBudget.item_value(e), "  [color=#fbbf24]SPECIAL[/color]: " + (str(e.get("special_note", "")) if not str(e.get("special_note", "")).strip_edges().is_empty() else "[color=#f87171]no note[/color]") if GearBudget.is_special(e) else ""])
 	elif it is Consumable:
 		var con: Consumable = it
 		t += _line("Effect", "%s %s, %d block" % [UiTheme.consumable_icon(con), UiTheme.consumable_effect_text(con), con.block_cost])
@@ -137,6 +138,19 @@ static func _class(e: Dictionary) -> String:
 		if arch.loadout.has(slot):
 			kit.append(str(ContentCatalog.get_entry("items", str(arch.loadout[slot])).get("name", arch.loadout[slot])))
 	t += _line("Default gear", ", ".join(kit) if not kit.is_empty() else "none")
+	var slot_parts: Array[String] = []
+	var specials: Array[String] = []
+	for row: Dictionary in GearBudget.loadout_breakdown(e):
+		slot_parts.append("%s %.1f" % [str(row["slot"]), DictUtil.to_float(row["value"])])
+		if DictUtil.to_bool(row["special"]):
+			specials.append("%s %.1f" % [str(row["name"]), DictUtil.to_float(row["value"])])
+	if not slot_parts.is_empty():
+		var total: float = GearBudget.loadout_value(e)
+		var flag: String = "" if GearBudget.in_band(total) else " [color=#f87171](out of band)[/color]"
+		t += _line("Gear budget", "%.1f / %.1f (+-%d%%)%s" % [total, GearBudget.TARGET_BUDGET, roundi(GearBudget.TOLERANCE * 100.0), flag])
+		t += _line("Slot values", ", ".join(slot_parts))
+		if not specials.is_empty():
+			t += _line("Special items", ", ".join(specials))
 	t += "\n%s\n" % str(e.get("description", ""))
 	return t
 
