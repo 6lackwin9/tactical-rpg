@@ -41,6 +41,7 @@ static func run() -> bool:
 		ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 		return _report("sandbox fork", {"forked": false})
 	ok = _test_shipped() and ok
+	ok = _test_m2b_items() and ok
 	ok = _test_loadouts() and ok
 	ok = _test_warnings() and ok
 	ok = _test_schema_round_trip() and ok
@@ -75,6 +76,80 @@ static func _test_shipped() -> bool:
 		print("      class %s loadout %.1f / %.1f%s" % [str(e["id"]), GearBudget.loadout_value(e), GearBudget.TARGET_BUDGET, "" if GearBudget.in_band(GearBudget.loadout_value(e)) else " OUT OF BAND"])
 	c["most shipped classes in band"] = passing * 2 > ContentCatalog.entries("classes").size()
 	return _report("shipped catalog", c)
+
+# M2b items: id -> [min, max] plausible value for the item's slot (documented ranges,
+# compared with the shipped originals: body 4-9, shield 6-8, one-hand weapon 12-18, two-hand 20-28).
+const M2B_RANGES: Dictionary = {
+	"arm_robe": [1.0, 6.0], "arm_cleric_vestment": [3.0, 10.0], "arm_mage_robe": [3.0, 10.0],
+	"shd_tower": [14.0, 18.0],
+	"wpn_wand": [12.0, 18.0], "wpn_cleric_mace": [12.0, 18.0], "wpn_mage_staff": [18.0, 28.0],
+}
+const M2B_SPECIAL: Array[String] = ["wpn_glass_wand"]
+const M2B_CLOTH: Array[String] = ["arm_robe", "arm_cleric_vestment", "arm_mage_robe"]
+
+static func _test_m2b_items() -> bool:
+	var c: Dictionary = {}
+	var all_ids: Array[String] = M2B_SPECIAL.duplicate()
+	for id: Variant in M2B_RANGES:
+		all_ids.append(str(id))
+	var present: bool = true
+	var in_range: bool = true
+	var not_stash: bool = true
+	var no_warn: bool = true
+	for id: String in all_ids:
+		if not ContentCatalog.has("items", id):
+			present = false
+			continue
+		var e: Dictionary = ContentCatalog.get_entry("items", id)
+		not_stash = not_stash and not DictUtil.to_bool(e["starter_stash"])
+		no_warn = no_warn and ContentCatalog.warnings_for("items", e).is_empty()
+		if M2B_RANGES.has(id):
+			var r: Array = M2B_RANGES[id]
+			var v: float = GearBudget.item_value(e)
+			print("      m2b %s value %.1f (range %.0f-%.0f)" % [id, v, DictUtil.to_float(r[0]), DictUtil.to_float(r[1])])
+			in_range = in_range and v >= DictUtil.to_float(r[0]) and v <= DictUtil.to_float(r[1]) and not GearBudget.is_special(e)
+	c["all M2b items present"] = present
+	c["values inside slot ranges, non-special"] = in_range
+	c["not in the starter stash"] = not_stash
+	c["no item warnings"] = no_warn
+	c["validate_all stays empty"] = ContentCatalog.validate_all().is_empty()
+	var special_ok: bool = true
+	for id: String in M2B_SPECIAL:
+		var e: Dictionary = ContentCatalog.get_entry("items", id)
+		special_ok = special_ok and GearBudget.is_special(e) and not str(e["special_note"]).strip_edges().is_empty()
+		special_ok = special_ok and GearBudget.item_value(e) > 20.0
+	c["special items carry a note"] = special_ok
+	# Tower shield trades its mitigation for burden, block cost and a STR requirement versus the kite shield.
+	var tower: Dictionary = ContentCatalog.get_entry("items", "shd_tower")
+	var kite: Dictionary = ContentCatalog.get_entry("items", "shd_kite")
+	c["tower shield not strictly better than kite"] = DictUtil.to_int(tower["mitigation"]) > DictUtil.to_int(kite["mitigation"]) and (DictUtil.to_int(tower["burden"]) > DictUtil.to_int(kite["burden"]) or DictUtil.to_int(tower["block_cost"]) > DictUtil.to_int(kite["block_cost"]))
+	# Cloth armor is gated by the proficiency dict: the warrior cannot wear it, a cloth-trained class can.
+	var warrior: ClassArchetype = ClassArchetype.create("warrior")
+	var cloth_user: ClassArchetype = null
+	for ce: Dictionary in ContentCatalog.entries("classes"):
+		var arch: ClassArchetype = ContentFactory.class_archetype(ce)
+		var probe: Equipment = ContentFactory.item(ContentCatalog.get_entry("items", "arm_robe")) as Equipment
+		if probe != null and arch.can_equip_gear(probe) and cloth_user == null:
+			cloth_user = arch
+	var cloth_gate: bool = cloth_user != null
+	for id: String in M2B_CLOTH:
+		var eq: Equipment = ContentFactory.item(ContentCatalog.get_entry("items", id)) as Equipment
+		cloth_gate = cloth_gate and eq != null and eq.weapon_type == "cloth" and not warrior.can_equip_gear(eq) and cloth_user != null and cloth_user.can_equip_gear(eq)
+	c["cloth armor needs cloth proficiency"] = cloth_gate
+	# Weapons: wand ranged one-handed INT, mage staff two-handed INT, cleric mace melee one-handed.
+	var wand: Equipment = ContentFactory.item(ContentCatalog.get_entry("items", "wpn_wand")) as Equipment
+	var mstaff: Equipment = ContentFactory.item(ContentCatalog.get_entry("items", "wpn_mage_staff")) as Equipment
+	var cmace: Equipment = ContentFactory.item(ContentCatalog.get_entry("items", "wpn_cleric_mace")) as Equipment
+	c["weapon shapes"] = wand != null and mstaff != null and cmace != null and wand.weapon_type == "wand" and not wand.is_two_handed and wand.base_range >= 2 and mstaff.is_two_handed and cmace.base_range == 1 and not cmace.is_two_handed
+	c["icons resolve per gear type"] = wand != null and mstaff != null and ItemArt.icon_key(wand) == "wand" and ItemArt.icon_key(mstaff) == "staff" and ItemArt.icon_key(ContentFactory.item(ContentCatalog.get_entry("items", "arm_robe"))) == "robe" and ItemArt.icon_key(ContentFactory.item(tower)) == "shield" and ItemArt.icon(wand) != null
+	# Placeholder art keys render for every team.
+	var art_ok: bool = true
+	for key: String in ["priest", "mage", "rogue"]:
+		art_ok = art_ok and UnitArt.CLASS_KEYS.has(key) and UnitArt.normalize_class(key) == key
+		for team: int in [UnitArt.Team.FRIENDLY, UnitArt.Team.HOSTILE, UnitArt.Team.NEUTRAL]:
+			art_ok = art_ok and UnitArt.token(key, team as UnitArt.Team) != null and UnitArt.portrait(key, team as UnitArt.Team) != null
+	c["priest/mage/rogue art renders"] = art_ok
+	return _report("M2b items and art", c)
 
 static func _seed_items() -> void:
 	ContentCatalog.upsert("items", _gear("t_sword", {"base_power": 14}))

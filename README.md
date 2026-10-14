@@ -378,7 +378,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **14 test suites** covering **119 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **14 test suites** covering **120 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
@@ -410,6 +410,10 @@ A defensive self-buff skill (`riposte`, mitigation 0.15) grants the `riposte` st
 ### Gear budget (M2d)
 
 `GearBudget` gives every item one weighted value (power, mitigation, stat bonuses minus burden and extra block cost) and checks each class's default loadout against a target (23, band +-20%). Warnings only (never errors); `special` items with a `special_note` may exceed the budget. Shown in the Forge class and item previews; tested in `gear_budget_test_suite.gd`.
+
+### New gear and placeholder art (M2b)
+
+Eight new items for the reworked roster (cloth robes, cleric vestment, mage robe, tower shield, wand, mage staff, cleric mace, and the special `wpn_glass_wand`), none in the starter stash; placeholder `priest`, `mage` and `rogue` token/portrait keys and a wand icon. Not yet in any class loadout (M2c).
 
 ### Agent workflow tools
 

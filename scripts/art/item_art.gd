@@ -76,8 +76,10 @@ static func icon_key(item: Item) -> String:
 			return "bow"
 		"dagger", "knife":
 			return "dagger"
-		"staff", "wand":
+		"staff":
 			return "staff"
+		"wand":
+			return "wand"
 		"orb", "tome":
 			return "tome"
 		"fist":
@@ -122,6 +124,8 @@ static func _glyph(key: String) -> String:
 				_ln(12, 24, 34, 24, 1.8, STEEL) + _shape("M38 24 L32 21 L32 27 Z", STEEL))
 		"staff":
 			return _ln(16, 40, 30, 14, 3, WOOD) + '<circle cx="32" cy="12" r="5.5" fill="#a855f7" stroke="{i}" stroke-width="1.3"/><circle cx="30.5" cy="10.5" r="1.8" fill="#f5d0fe"/>'.format({"i": INK})
+		"wand":
+			return _ln(15, 38, 31, 18, 2.4, WOOD) + _shape("M33 9 L35 14 L40 14 L36 17.5 L37.5 23 L33 19.5 L28.5 23 L30 17.5 L26 14 L31 14 Z", "#67e8f9")
 		"tome":
 			return _shape("M13 12 H33 C35 12 36 13 36 15 V36 H15 C14 36 13 35 13 34 Z", "#6d28d9") + '<path d="M15 36 C14 36 13 35 13 33 C13 32 14 31 15 31 H36" fill="none" stroke="{s}" stroke-width="1.4"/><path d="M24 17 L28 23 L24 29 L20 23 Z" fill="{g}"/>'.format({"s": STEEL, "g": GOLD})
 		"knuckles":

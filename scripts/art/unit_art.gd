@@ -14,7 +14,7 @@ extends RefCounted
 
 enum Team { FRIENDLY, HOSTILE, NEUTRAL }
 
-const CLASS_KEYS: Array[String] = ["warrior", "ranger", "archer", "scout", "brawler", "berserker", "shaman", "skirmisher", "dummy"]
+const CLASS_KEYS: Array[String] = ["warrior", "ranger", "archer", "scout", "brawler", "berserker", "shaman", "skirmisher", "dummy", "priest", "mage", "rogue"]
 const GOBLIN_CLASSES: Array[String] = ["archer", "berserker", "shaman", "skirmisher"]
 
 const TEAM_PALETTES: Dictionary = {
@@ -119,6 +119,19 @@ static func _glyph(class_key: String, pal: Dictionary) -> String:
 			return (_ln(31, 24, 37, 51, 3) +
 				'<circle cx="29" cy="18" r="8" fill="{w}" stroke="{ink}" stroke-width="1.4"/><circle cx="32.5" cy="15.5" r="6.4" fill="{d}"/>'.format({"w": WHITE, "ink": INK, "d": dark}) +
 				_ln(44, 18, 44, 24, 1.4) + _ln(41, 21, 47, 21, 1.4) + _ln(17, 30, 17, 34, 1.2) + _ln(15, 32, 19, 32, 1.2))
+		"priest":  # staff with halo ring and cross (placeholder, shaman silhouette)
+			return (_ln(31, 24, 37, 51, 3) +
+				'<ellipse cx="30" cy="12" rx="9" ry="3.6" fill="none" stroke="{ink}" stroke-width="4.4"/><ellipse cx="30" cy="12" rx="9" ry="3.6" fill="none" stroke="{w}" stroke-width="2.4"/>'.format({"w": WHITE, "ink": INK}) +
+				_ln(30, 17, 30, 29, 2.6) + _ln(25, 21, 35, 21, 2.6) +
+				_ln(44, 18, 44, 24, 1.4) + _ln(41, 21, 47, 21, 1.4))
+		"mage":  # pointed hat with star (placeholder, shaman-like)
+			return (_shape("M32 8 L44 38 L20 38 Z") + _ln(14, 40, 50, 40, 3.2) +
+				'<path d="M24 34 H40" stroke="{d}" stroke-width="2.6" stroke-linecap="round"/>'.format({"d": dark}) +
+				_ln(32, 44, 32, 52, 1.6) + _ln(28, 48, 36, 48, 1.6) + _ln(46, 18, 46, 24, 1.4) + _ln(43, 21, 49, 21, 1.4))
+		"rogue":  # hooded dagger (placeholder, scout silhouette)
+			return (_shape("M32 11 L36.5 34 L27.5 34 Z") + _ln(23, 35.5, 41, 35.5, 2.6) +
+				_shape("M29.5 37 H34.5 V46 H29.5 Z") +
+				_shape("M14 24 C14 12 24 9 32 9 L32 16 C24 16 20 20 20 28 Z", WHITE) + _ln(48, 22, 54, 22, 1.6) + _ln(46, 28, 54, 28, 1.6))
 		"skirmisher":  # crossed short blades
 			return (_ln(18, 18, 44, 44, 2.8) + _ln(46, 18, 20, 44, 2.8) +
 				_ln(38, 44, 44, 38, 2.4) + _ln(20, 38, 26, 44, 2.4) +
@@ -142,6 +155,9 @@ const CLASS_LOOKS: Dictionary = {
 	"shaman": {"armor": "#3f3f46", "shade": "#27272a", "label": "GOBLIN SHAMAN"},
 	"skirmisher": {"armor": "#9a3412", "shade": "#7c2d12", "label": "GOBLIN SKIRMISHER"},
 	"dummy": {"armor": "#a16207", "shade": "#713f12", "label": "TRAINING DUMMY"},
+	"priest": {"armor": "#e7e5e4", "shade": "#a8a29e", "label": "PRIEST"},
+	"mage": {"armor": "#4c1d95", "shade": "#2e1065", "label": "MAGE"},
+	"rogue": {"armor": "#3f3f46", "shade": "#18181b", "label": "ROGUE"},
 	"unit": {"armor": "#64748b", "shade": "#334155", "label": "UNIT"},
 }
 
@@ -201,6 +217,12 @@ static func _portrait_behind(class_key: String) -> String:
 			return '<path d="M88 108 L102 30" stroke="#78350f" stroke-width="5" stroke-linecap="round"/><path d="M98 30 C112 26 116 40 110 50 C106 44 100 42 96 44 Z" fill="#a8a29e" stroke="#44403c" stroke-width="1.5"/>'
 		"shaman":
 			return '<path d="M96 112 L90 34" stroke="#57534e" stroke-width="5" stroke-linecap="round"/><circle cx="89" cy="28" r="9" fill="#c084fc" stroke="#f5d0fe" stroke-width="2"/><circle cx="89" cy="28" r="15" fill="#c084fc" opacity="0.25"/>'
+		"priest":
+			return '<path d="M96 112 L90 34" stroke="#a8a29e" stroke-width="5" stroke-linecap="round"/><path d="M82 28 H96 M89 21 V35" stroke="#fde68a" stroke-width="4" stroke-linecap="round"/>'
+		"mage":
+			return '<path d="M96 112 L90 34" stroke="#57534e" stroke-width="5" stroke-linecap="round"/><circle cx="89" cy="28" r="8" fill="#38bdf8" stroke="#e0f2fe" stroke-width="2"/><circle cx="89" cy="28" r="14" fill="#38bdf8" opacity="0.25"/>'
+		"rogue":
+			return '<path d="M22 108 L34 74" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/><path d="M98 108 L86 74" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round"/>'
 		"skirmisher":
 			return '<path d="M16 110 L98 20" stroke="#78350f" stroke-width="4" stroke-linecap="round"/><path d="M98 20 L92 30 L102 26 Z" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>'
 	return ""
@@ -239,6 +261,18 @@ static func _portrait_gear(class_key: String, pal: Dictionary) -> String:
 				'<path d="M42 44 H78" stroke="#e7e5e4" stroke-width="4"/>' +
 				'<path d="M38 88 Q60 104 82 88" fill="none" stroke="#f5f5f4" stroke-width="3" stroke-dasharray="3 3"/>' +
 				'<path d="M60 90 L60 118" stroke="#a855f7" stroke-width="4"/>')
+		"priest":  # halo ring over the head, white mantle
+			return ('<ellipse cx="60" cy="28" rx="16" ry="5" fill="none" stroke="#fde68a" stroke-width="3.5"/>' +
+				'<path d="M42 50 C42 34 78 34 78 50 L74 46 C66 42 54 42 46 46 Z" fill="#f5f5f4" stroke="#a8a29e" stroke-width="1.5"/>' +
+				'<path d="M60 90 V112 M52 98 H68" stroke="{a}" stroke-width="4" stroke-linecap="round"/>'.format({"a": accent}))
+		"mage":  # pointed wizard hat with star
+			return ('<path d="M34 46 Q60 38 86 46 Q60 52 34 46 Z" fill="#2e1065" stroke="#0f172a" stroke-width="1.5"/>' +
+				'<path d="M44 45 C48 30 56 14 70 6 C66 18 70 32 76 45 Z" fill="#4c1d95" stroke="#0f172a" stroke-width="1.5"/>' +
+				'<path d="M44 43 H76" stroke="{a}" stroke-width="3"/><path d="M60 30 L62 35 L67 35 L63 38 L65 43 L60 40 L55 43 L57 38 L53 35 L58 35 Z" fill="#fde68a"/>'.format({"a": accent}))
+		"rogue":  # hood and face scarf
+			return ('<path d="M38 64 C32 28 88 28 82 64 L76 56 C70 48 50 48 44 56 Z" fill="#27272a" stroke="#09090b" stroke-width="2"/>' +
+				'<path d="M44 62 L76 62 L72 74 C66 78 54 78 48 74 Z" fill="#3f3f46"/>' +
+				'<path d="M40 100 L60 86 L80 100" fill="none" stroke="{a}" stroke-width="3" stroke-linecap="round"/>'.format({"a": accent}))
 		"skirmisher":
 			return ('<path d="M42 50 C42 32 78 32 78 50 L74 52 L60 46 L46 52 Z" fill="#64748b" stroke="#1e293b" stroke-width="2"/><path d="M60 46 L60 62" stroke="#475569" stroke-width="3"/>' +
 				'<path d="M36 92 L84 92" stroke="#451a03" stroke-width="4"/><circle cx="60" cy="92" r="4" fill="{a}"/>'.format({"a": accent}))
