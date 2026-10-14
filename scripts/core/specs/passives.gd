@@ -12,7 +12,7 @@ extends RefCounted
 #   stat         {"stat": "KNOW", "value": 3, "context": {"biome": "ruins"}}
 #                flat stat bonus, optionally only in a context (empty = always)
 #   proficiency  {"gear": "sword", "levels": 1}   gear-training levels (Proficiency)
-#   resist       {"status": "stagger", "value": 25}   status resistance % (100 = immune)
+#   resist       {"status": "stagger", "value": 25}   status resistance % (100 = immune); status is any of StatusEffects.resistable() (stagger, stun, root, bleed)
 #   ap_regen     {"value": 1}   extra AP regained each round
 #   skill        {"skill": "quick_stab"}   a skill the unit may use beyond its class path
 # ==============================================================================
@@ -47,7 +47,7 @@ static func validate_effects(effects: Variant, skill_exists: Callable) -> Array[
 				if DictUtil.to_int(e.get("levels", 0)) < 1 or DictUtil.to_int(e.get("levels", 0)) > Proficiency.MAX_LEVEL:
 					errors.append("%s: levels must be 1-%d." % [at, Proficiency.MAX_LEVEL])
 			"resist":
-				if not [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT].has(str(e.get("status", ""))):
+				if not StatusEffects.resistable().has(str(e.get("status", ""))):
 					errors.append("%s: unknown status '%s'." % [at, str(e.get("status", ""))])
 				if DictUtil.to_int(e.get("value", 0)) < 1 or DictUtil.to_int(e.get("value", 0)) > 100:
 					errors.append("%s: resistance is 1-100." % at)

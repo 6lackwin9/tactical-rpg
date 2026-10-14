@@ -382,8 +382,36 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	var kind: String = str(e["kind"])
 	if not DictUtil.to_bool(e.get("system", false)) and kind in ["MOVE", "TARGET", "STATUS"]:
-		errors.append("%s skills are engine-only; author an ATTACK, DEFEND, FOCUS or REST skill." % kind)
+		errors.append("%s skills are engine-only; author an ATTACK, DEFEND, FOCUS, REST or SUPPORT skill." % kind)
+	if kind == "SUPPORT":
+		var heal_stat: String = str(e["heal_stat"])
+		var heal_mult: float = DictUtil.to_float(e["heal_mult"])
+		var heal_base: int = DictUtil.to_int(e["heal_base"])
+		var grant: String = str(e["grant_status"])
+		if heal_base <= 0 and heal_mult <= 0.0 and grant.is_empty():
+			errors.append("A support skill needs a heal (base or per-stat) or a granted status.")
+		if heal_mult > 0.0 and not SupportRules.HEAL_STATS.has(heal_stat):
+			errors.append("Heal per stat point needs a heal stat (INT or KNOW).")
+		if heal_mult <= 0.0 and not heal_stat.is_empty():
+			errors.append("Heal stat is set but heal per stat point is 0.")
+		if not grant.is_empty() and not StatusEffects.buffs().has(grant):
+			errors.append("Grants: '%s' is not a buff status (%s)." % [grant, ", ".join(StatusEffects.buffs())])
+		if DictUtil.to_int(e["reach_max"]) > 0 and DictUtil.to_int(e["reach_min"]) > DictUtil.to_int(e["reach_max"]):
+			errors.append("Reach min is above reach max.")
+		if grant == StatusEffects.TAUNT and str(e["target_mode"]) != "SELF":
+			errors.append("Taunt is cast on the taunter itself: set Targets to SELF.")
+	elif not str(e["grant_status"]).is_empty() or DictUtil.to_int(e["heal_base"]) > 0 or DictUtil.to_float(e["heal_mult"]) > 0.0:
+		errors.append("Heal and Grants belong to SUPPORT skills.")
+	if kind != "ATTACK" and DictUtil.to_int(e["dash_tiles"]) > 0:
+		errors.append("Gap-close tiles belong to ATTACK skills.")
 	if kind == "ATTACK":
+		if DictUtil.to_int(e["dash_tiles"]) > 0:
+			if str(e["area"]) != "NONE":
+				errors.append("An area attack can't be a gap-close.")
+			if DictUtil.to_bool(e["offhand"]):
+				errors.append("An off-hand jab can't be a gap-close.")
+		if not str(e["status_effect"]).is_empty() and not StatusEffects.debuffs().has(str(e["status_effect"])):
+			errors.append("Inflicts: '%s' is not a debuff status (%s)." % [str(e["status_effect"]), ", ".join(StatusEffects.debuffs())])
 		if DictUtil.to_int(e["reach_max"]) > 0 and DictUtil.to_int(e["reach_min"]) > DictUtil.to_int(e["reach_max"]):
 			errors.append("Reach min is above reach max.")
 		if DictUtil.to_int(e["reach_max"]) == 0 and DictUtil.to_int(e["reach_min"]) > 0:

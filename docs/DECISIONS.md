@@ -30,3 +30,6 @@
 | Warrior tank | Highest HP/armor, taunt to protect allies, mostly reactive damage (counter-style) rather than proactive | User 2026-10-15 |
 | Berserker behaviour | Goblin berserkers become Brawler minions with an aggressive AI profile (never flee, charge) | User 2026-10-15 |
 | Milestone order | M1 engine (S12-A + S4-A) -> M2 roster/items/gear budget -> M3 progression data + save schema | User 2026-10-15 |
+| Bleed | 6% of max HP at round end (min 1), ignores armor and guard, can defeat; statuses queued this round start next round and last `status_rounds` | M1 builder default 2026-10-15 (rate open for tuning at the balance pass) |
+| Gap-close | `dash_tiles` on attack skills: dash is the unit's move for the round, must come first, AP = skill level, refused if target already in reach | M1 2026-10-15 |
+| Support skills | Heal = `heal_base + round(KNOW or INT x heal_mult)` via `SupportRules`, never through `DamageCalculator`; `learned_only` skills reach a unit only via extra_skills / learn_skill / class path | M1 2026-10-15 |

@@ -196,6 +196,7 @@ func reset_round() -> void:
 		_restore_snapshot(start_snap)
 	for c: Combatant in resolver.registered_combatants:
 		c.pending_statuses.clear()   # statuses inflicted in the undone round never happened
+		c.pending_status_rounds.clear()
 	_begin_round(current_round, false)
 
 func reset_battle() -> void:
@@ -254,6 +255,8 @@ func _step_resolution() -> void:
 
 	if _pending_actions.is_empty():
 		resolver.block_completed.emit(current_block)
+		if current_block >= total_blocks:
+			resolver.apply_round_end_effects()   # bleeding lands before the round is judged
 		_capture_snapshot(current_block)
 		var over: bool = resolver.is_combat_resolved(allies, enemies)
 		if over or current_block >= total_blocks:
@@ -853,6 +856,8 @@ func _truncate_log_from_round(round_num: int) -> void:
 func _on_action_note(action: CombatResolver.ScheduledAction, message: String) -> void:
 	if message.begins_with("[Chase]"):
 		_append_entry(CombatLogBuilder.chase_entry(action, current_round, current_block, allies, grid, message), true)
+	elif message.begins_with("[Dash]"):
+		_append_entry(CombatLogBuilder.dash_entry(action, current_round, current_block, allies, grid, message), true)
 
 func _on_resolver_log(msg: String) -> void:
 	_log_text(CombatLogBuilder.format_resolver_message(msg))

@@ -11,10 +11,11 @@ extends RefCounted
 #   GOTO      move to a chosen tile (path-found, split into blocks by speed)
 #   AREA      area attack aimed at a tile (no auto-move: the tile must be in reach)
 #   WITHDRAW  auto-path to the exit tile and leave the battle
-#   SELF      Defend / Focus / Rest
+#   SELF      Defend / Focus / Rest, or a SUPPORT skill cast on the caster
+#   ALLY      SUPPORT skill on a friendly unit; walks into the skill's reach first if needed
 # ==============================================================================
 
-enum Mode { ENGAGE, MOVE, GOTO, AREA, WITHDRAW, SELF }
+enum Mode { ENGAGE, MOVE, GOTO, AREA, WITHDRAW, SELF, ALLY }
 
 var mode: Mode = Mode.SELF
 var skill: SkillDef = null
@@ -57,6 +58,13 @@ static func withdraw() -> PlanStep:
 	step.mode = Mode.WITHDRAW
 	return step
 
+static func ally(p_skill: SkillDef, p_target: Combatant) -> PlanStep:
+	var step := PlanStep.new()
+	step.mode = Mode.ALLY
+	step.skill = p_skill
+	step.target = p_target
+	return step
+
 static func self_skill(p_skill: SkillDef) -> PlanStep:
 	var step := PlanStep.new()
 	step.mode = Mode.SELF
@@ -74,6 +82,8 @@ func title() -> String:
 			return "%s to %s" % [skill.label(), str(cell)]
 		Mode.AREA:
 			return "%s at %s" % [skill.label(), str(cell)]
+		Mode.ALLY:
+			return "%s → %s" % [skill.label(), target.name if target != null else "?"]
 		Mode.WITHDRAW:
 			return "🏃 Withdraw"
 	return skill.label()

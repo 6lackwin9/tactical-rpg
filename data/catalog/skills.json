@@ -14,8 +14,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -31,8 +34,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -48,8 +54,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -65,8 +74,11 @@
 			"offhand": true,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -83,8 +95,11 @@
 			"stance": "DEFENSIVE",
 			"status_effect": "stagger",
 			"status_potency": 70,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -101,8 +116,11 @@
 			"stance": "AUTO",
 			"status_effect": "root",
 			"status_potency": 80,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -118,8 +136,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -135,8 +156,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 2,
 			"reach_max": 3,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -152,8 +176,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 2,
 			"reach_max": 2,
+			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
 		},
@@ -164,6 +191,7 @@
 			"level": 1,
 			"blocks": 2,
 			"description": "Raise a light guard: -30% damage.",
+			"learned_only": false,
 			"mitigation": 0.3
 		},
 		{
@@ -173,6 +201,7 @@
 			"level": 2,
 			"blocks": 2,
 			"description": "Brace for impact: -50% damage.",
+			"learned_only": false,
 			"mitigation": 0.5
 		},
 		{
@@ -182,6 +211,7 @@
 			"level": 3,
 			"blocks": 3,
 			"description": "Dig in: -70% damage.",
+			"learned_only": false,
 			"mitigation": 0.7
 		},
 		{
@@ -191,6 +221,7 @@
 			"level": 2,
 			"blocks": 2,
 			"description": "+50% attack for 2 rounds.",
+			"learned_only": false,
 			"boost": 1.5,
 			"boost_rounds": 2
 		},
@@ -201,6 +232,7 @@
 			"level": 3,
 			"blocks": 2,
 			"description": "+75% attack for 3 rounds.",
+			"learned_only": false,
 			"boost": 1.75,
 			"boost_rounds": 3
 		},
@@ -211,7 +243,8 @@
 			"level": 1,
 			"blocks": 1,
 			"description": "Move up to 2 blocks (speed-based tiles per block), once per round: 1 AP per tile. Keeps your stance.",
-			"system": true
+			"system": true,
+			"learned_only": false
 		},
 		{
 			"id": "switch_target",
@@ -220,7 +253,8 @@
 			"level": 1,
 			"blocks": 1,
 			"description": "Lock onto a different enemy (no AP). Added automatically when an attack changes target.",
-			"system": true
+			"system": true,
+			"learned_only": false
 		},
 		{
 			"id": "staggered",
@@ -229,7 +263,8 @@
 			"level": 1,
 			"blocks": 1,
 			"description": "Block lost to Stagger.",
-			"system": true
+			"system": true,
+			"learned_only": false
 		},
 		{
 			"id": "stunned",
@@ -238,7 +273,8 @@
 			"level": 1,
 			"blocks": 1,
 			"description": "Block lost to Stun.",
-			"system": true
+			"system": true,
+			"learned_only": false
 		},
 		{
 			"id": "rest",
@@ -248,6 +284,7 @@
 			"blocks": 1,
 			"description": "Catch your breath: recover 2 AP and return to Neutral stance, free.",
 			"system": true,
+			"learned_only": false,
 			"recover_ap": 2
 		},
 		{
@@ -263,8 +300,11 @@
 			"stance": "AUTO",
 			"status_effect": "stagger",
 			"status_potency": 50,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"axe",
 				"mace",
@@ -284,8 +324,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"axe",
 				"sword",
@@ -305,8 +348,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"bow",
 				"crossbow"
@@ -326,8 +372,11 @@
 			"stance": "AUTO",
 			"status_effect": "root",
 			"status_potency": 80,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"bow",
 				"crossbow"
@@ -346,8 +395,11 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"staff",
 				"orb",
@@ -369,8 +421,11 @@
 			"stance": "AUTO",
 			"status_effect": "stagger",
 			"status_potency": 90,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"staff",
 				"orb",
@@ -391,8 +446,11 @@
 			"stance": "AUTO",
 			"status_effect": "stun",
 			"status_potency": 50,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"fist",
 				"mace",
@@ -413,8 +471,11 @@
 			"stance": "AUTO",
 			"status_effect": "stagger",
 			"status_potency": 50,
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"fist",
 				"mace"
@@ -433,12 +494,107 @@
 			"offhand": false,
 			"stance": "AUTO",
 			"status_effect": "",
+			"dash_tiles": 0,
+			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"learned_only": false,
 			"weapon_types": [
 				"dagger"
 			],
 			"min_proficiency": 1
+		},
+		{
+			"id": "mend",
+			"name": "Mend",
+			"kind": "SUPPORT",
+			"level": 2,
+			"blocks": 2,
+			"description": "Restores HP to a friendly unit within 3 tiles (or yourself): 8 + 1.5 x KNOW.",
+			"status_rounds": 1,
+			"reach_min": 0,
+			"reach_max": 0,
+			"target_mode": "ALLY_OR_SELF",
+			"heal_stat": "KNOW",
+			"heal_base": 8,
+			"heal_mult": 1.5,
+			"grant_status": "",
+			"learned_only": true
+		},
+		{
+			"id": "rally",
+			"name": "Rally",
+			"kind": "SUPPORT",
+			"level": 1,
+			"blocks": 1,
+			"description": "Hastes another friendly unit within 3 tiles: +1 tile per move block for a round, starting next round.",
+			"status_rounds": 1,
+			"reach_min": 0,
+			"reach_max": 0,
+			"target_mode": "ALLY",
+			"heal_stat": "",
+			"heal_base": 0,
+			"heal_mult": 0.0,
+			"grant_status": "haste",
+			"learned_only": true
+		},
+		{
+			"id": "taunt_shout",
+			"name": "Taunt Shout",
+			"kind": "SUPPORT",
+			"level": 1,
+			"blocks": 1,
+			"description": "Draws the enemy AI: for 2 rounds starting next round, foes that can reach you must target you.",
+			"status_rounds": 2,
+			"reach_min": 0,
+			"reach_max": 0,
+			"target_mode": "SELF",
+			"heal_stat": "",
+			"heal_base": 0,
+			"heal_mult": 0.0,
+			"grant_status": "taunt",
+			"learned_only": true
+		},
+		{
+			"id": "lunge",
+			"name": "Lunge",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "Gap-close: dash up to 3 tiles to get adjacent to a target out of reach, then strike. The dash is your move for the round.",
+			"power_mult": 1.2,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "",
+			"dash_tiles": 3,
+			"status_rounds": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"learned_only": true,
+			"weapon_types": [],
+			"min_proficiency": 0
+		},
+		{
+			"id": "bleeding_cut",
+			"name": "Bleeding Cut",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "A slash that can open a wound: bleeding for 2 rounds (6% max HP per round, ignores guard and armor).",
+			"power_mult": 0.8,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "bleed",
+			"status_potency": 70,
+			"dash_tiles": 0,
+			"status_rounds": 2,
+			"reach_min": 0,
+			"reach_max": 0,
+			"learned_only": true,
+			"weapon_types": [],
+			"min_proficiency": 0
 		}
 	]
 }

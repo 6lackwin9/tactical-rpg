@@ -390,6 +390,16 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 			subtitle = "→ %s (%d)" % [walk_cmd.approach_target.name, tiles]
 		else:
 			subtitle = "%s %d tile%s" % [PlanEntry.dir_arrow(walk_cmd.direction()), tiles, "" if tiles == 1 else "s"]
+	elif act.command is SupportCommand:
+		clip_style.bg_color = Color(0.1, 0.34, 0.2, 0.95)
+		clip_style.border_color = Color(0.35, 0.9, 0.5, 1.0)
+		icon_str = "+"
+		var support_cmd: SupportCommand = act.command as SupportCommand
+		subtitle = "→ %s" % support_cmd.target.name if support_cmd.target != null else "Support"
+		if support_cmd.est_heal > 0:
+			subtitle += " ~+%d HP" % support_cmd.est_heal
+		elif support_cmd.skill != null and not support_cmd.skill.grant_status.is_empty():
+			subtitle += " %s" % StatusEffects.display_name(support_cmd.skill.grant_status)
 	elif act.command is StatusBlockCommand:
 		clip_style.bg_color = Color(0.25, 0.08, 0.08, 0.95)
 		clip_style.border_color = Color(0.7, 0.25, 0.25, 1.0)

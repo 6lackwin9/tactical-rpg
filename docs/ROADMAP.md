@@ -13,7 +13,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S1 | Combat core: block resolver, planner, stances, AP, damage formula, statuses | balance-ready | - | `DamageCalculator` is the only formula |
 | S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | done (roster rework approved: warrior, ranger, priest, brawler, rogue, mage) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
 | S3 | Gear and inventory: requirements, tiers, burden, carry, stash | done | S1 | Gear budget per class is an open balance lever |
-| S4 | Enemy AI (roles, presets, targeting) | done (M1 touches: turn-waste fixes, support AI) | S1 | Shaman/ranger AI wastes turns: candidate fix |
+| S4 | Enemy AI (roles, presets, targeting) | done (M1: kiting, no idle turns, support heals, reckless profile) | S1 | Shaman/ranger AI wastes turns: candidate fix |
 | S5 | Content catalog + Content Forge | done | - | Data pipeline for S2/S3/S6 |
 | S6 | World engine + World Forge (lore layer, inheritance) | done | S5 | Characters, factions, items, quests as data |
 | S7 | Party and progression: persistent unit state (spend, learned skills, passives), level-up UI, XP | proposed | S2 | First gameplay-facing gap |
@@ -21,7 +21,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | placeholder | S6, S8 | README System 2 |
 | S10 | World map and travel: routes, travel events, supplies | placeholder | S9 | README System 1 |
 | S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | placeholder | S8 | README System 9 |
-| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (M1: ally targeting, gap-close, statuses, taunt) | S1, S2 | README System 6 |
+| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; terrain and combos remain) | S1, S2 | README System 6 |
 | S13 | Save/load and game state, new-game flow, main menu | placeholder | S7 | Needed before any playable loop |
 | S14 | Audio, animation and asset pipeline, asset-load tests | placeholder | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |

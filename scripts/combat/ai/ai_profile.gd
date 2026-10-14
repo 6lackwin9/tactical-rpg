@@ -24,6 +24,8 @@ var flee_ratio: float = 0.25    # withdraw at or below this HP fraction (0 = nev
 var defend_below: float = 0.4   # guard once when at or below this HP fraction
 var target_pref: TargetPref = TargetPref.NEAREST
 var prefer_level: int = 0       # skill level to favour (0 = highest affordable)
+var reckless: bool = false      # never flees or guards, always charges the nearest foe (berserker behaviour)
+var heal_below: float = 0.7     # SUPPORT role: heal the most wounded ally at or below this HP fraction
 
 static func create(p_role: Role, p_flee_ratio: float = 0.25, p_skill_cap: int = 1) -> AiProfile:
 	var profile := AiProfile.new()
@@ -41,6 +43,8 @@ func duplicate_profile() -> AiProfile:
 	copy.defend_below = defend_below
 	copy.target_pref = target_pref
 	copy.prefer_level = prefer_level
+	copy.reckless = reckless
+	copy.heal_below = heal_below
 	return copy
 
 static func role_name(p_role: Role) -> String:

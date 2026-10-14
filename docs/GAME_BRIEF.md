@@ -41,3 +41,10 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Test expectations for a system: its suite in `scripts/tests/` (class rules: `class_rules_test_suite.gd`).
 
 See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things are the way they are.
+
+## Combat extensions (M1, S12-A)
+
+- Support skills (`SkillDef.Kind.SUPPORT`, target modes SELF/ALLY/ALLY_OR_SELF): heal = `heal_base + round(KNOW|INT x heal_mult)` (`SupportRules`), optional `grant_status`. Planner mode `PlanStep.Mode.ALLY`.
+- Gap-close: `dash_tiles` on attack skills; the dash is the move for the round, first in the sequence.
+- Statuses: haste (+1 tile per move block), bleed (6% max HP at round end, ignores armor/guard), taunt (forces TacticalAI target, not the player planner); all start next round for `status_rounds`. Resistable keys: stagger, stun, root, bleed.
+- AI: kites to max range, no idle turns, SUPPORT heals the most wounded ally (<=70%, max 2/round), `reckless` profile never flees. `learned_only` skills reach a unit only via extra_skills / learn_skill.

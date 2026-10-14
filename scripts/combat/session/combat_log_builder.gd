@@ -109,6 +109,29 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.target_name = "%d tiles" % area.cells.size()
 		entry.detail_text = area.execution_log.trim_prefix("[Attack] ")
 
+	elif act.command is SupportCommand:
+		var support: SupportCommand = act.command as SupportCommand
+		entry.category = "BUFF"
+		entry.skill_name = support.command_name
+		entry.skill_subtype = "Support"
+		entry.value_num = support.last_heal
+		if support.target != null:
+			entry.target_name = support.target.name
+			entry.target_is_ally = allies.has(support.target)
+			entry.status_text = "HP %d/%d" % [support.target.hp, support.target.max_hp]
+		if support.failed:
+			entry.outcome_tag = "FAILED"
+		elif support.skill != null and support.skill.heals():
+			entry.outcome_tag = "+%d HP" % support.last_heal
+		elif not support.last_status.is_empty():
+			entry.outcome_tag = StatusEffects.display_name(support.last_status).to_upper()
+		else:
+			entry.outcome_tag = "EXECUTED"
+		if not support.last_status.is_empty():
+			entry.detail_text = "%s next round" % StatusEffects.display_name(support.last_status)
+		else:
+			entry.detail_text = support.execution_log.trim_prefix("[Support] ")
+
 	elif act.command is StatusBlockCommand:
 		var lost: StatusBlockCommand = act.command as StatusBlockCommand
 		entry.category = "EVENT"
@@ -154,6 +177,15 @@ static func chase_entry(act: CombatResolver.ScheduledAction, round_num: int, blo
 	entry.detail_text = message.trim_prefix("[Chase] ")
 	return entry
 
+# A gap-close: the attacker dashed into reach as its lunge started (the skill's AP paid for it).
+static func dash_entry(act: CombatResolver.ScheduledAction, round_num: int, block_num: int, allies: Array[Combatant], grid: CombatGrid, message: String) -> ActionLogEntry:
+	var entry: ActionLogEntry = chase_entry(act, round_num, block_num, allies, grid, message)
+	entry.skill_name = "Dash"
+	entry.skill_subtype = "Gap-close (no extra AP)"
+	entry.outcome_tag = "DASHED"
+	entry.detail_text = message.trim_prefix("[Dash] ")
+	return entry
+
 # Colors and iconifies raw CombatResolver log messages for the text feed.
 static func format_resolver_message(msg: String) -> String:
 	var formatted: String = "[color=#e2e8f0]" + msg + "[/color]"
@@ -182,6 +214,12 @@ static func format_resolver_message(msg: String) -> String:
 		formatted = "[color=#94a3b8]⏳ " + msg.substr(17) + "[/color]"
 	elif msg.begins_with("[Chase]"):
 		formatted = "[color=#38bdf8]➜ [b]Chase:[/b] " + msg.substr(8) + "[/color]"
+	elif msg.begins_with("[Support]"):
+		formatted = "[color=#4ade80]✚ " + msg.substr(10) + "[/color]"
+	elif msg.begins_with("[Bleed]"):
+		formatted = "[color=#f87171]🩸 " + msg.substr(8) + "[/color]"
+	elif msg.begins_with("[Dash]") or msg.begins_with("[Dash Blocked]"):
+		formatted = "[color=#38bdf8]➜ " + msg + "[/color]"
 	elif msg.begins_with("[Move Cut Short]"):
 		formatted = "[color=#f59e0b]⚠ [b]Cut short:[/b] " + msg.substr(17) + "[/color]"
 	elif msg.begins_with("[Exhausted]"):

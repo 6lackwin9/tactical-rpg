@@ -12,6 +12,7 @@ extends RefCounted
 #  6. Art, Terrain & Combat Zones (tokens, portraits, tiles, icons, zones)
 #  7. Planning, Stances, AP & Enemy AI
 #  7b. Class & unit rules (ClassRulesTestSuite)
+#  7c. Combat extensions: ally targeting, gap-close, haste/bleed/taunt, AI fixes (CombatExtensionsTestSuite)
 #  8. Content Catalog & Forge (ContentTestSuite)
 #  9. Scene Runner (RunnerTestSuite)
 # 10. World Engine & World Forge (WorldTestSuite)
@@ -22,6 +23,7 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 		run_combat_ui_framework_test(tree_parent),
 		CoreRulesTestSuite.run(),
 		ClassRulesTestSuite.run(),
+		CombatExtensionsTestSuite.run(),
 		run_character_specs_and_inventory_test(),
 		run_gear_equip_and_test_dummy_suite(tree_parent),
 		run_combat_session_flow_test(),

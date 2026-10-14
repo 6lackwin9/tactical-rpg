@@ -242,7 +242,11 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 		return "%s doesn't know %s." % [c.name, step.skill.display_name]
 	match step.mode:
 		PlanStep.Mode.SELF:
+			if step.skill.kind == SkillDef.Kind.SUPPORT:
+				return _apply_support_self(c, st, step, index)
 			return _add_entry(c, st, step.skill, index)
+		PlanStep.Mode.ALLY:
+			return _apply_ally(c, st, step, index)
 		PlanStep.Mode.MOVE:
 			return _apply_move(c, st, step, index)
 		PlanStep.Mode.GOTO:
@@ -333,6 +337,8 @@ func _apply_engage(c: Combatant, st: SimState, step: PlanStep, index: int) -> St
 		return "Choose an enemy to attack."
 	if step.skill.is_area():
 		return _apply_area(c, st, PlanStep.area_at(step.skill, context.grid.get_position(foe)), index)
+	if step.skill.dash_tiles > 0:
+		return _apply_dash(c, st, step, index)
 	var band: Vector2i = reach(c, step.skill)
 	var foe_pos: Vector2i = context.grid.get_position(foe)
 	var dist: int = context.grid.get_distance(st.pos, foe_pos)
@@ -380,6 +386,96 @@ func _apply_engage(c: Combatant, st: SimState, step: PlanStep, index: int) -> St
 		attack_entry.chase = not st.positioned
 		st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - attack_entry.est_damage
 	return attack_problem
+
+# Gap-close attack (lunge): offered only when the foe is beyond the skill's reach but a
+# route of at most `dash_tiles` tiles gets the unit into it. The dash is the unit's move
+# for the round (it must come first, a rooted unit can't), paid by the skill's AP alone,
+# so there is at most one per round. The dash itself happens when the attack starts.
+func _apply_dash(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	var skill: SkillDef = step.skill
+	var foe: Combatant = step.target
+	var grid: CombatGrid = context.grid
+	var band: Vector2i = reach(c, skill)
+	var dist: int = grid.get_distance(st.pos, grid.get_position(foe))
+	if dist >= band.x and dist <= band.y:
+		return "%s is already in reach; %s is for closing a gap." % [foe.name, skill.display_name]
+	if dist < band.x:
+		return "%s is too close for %s." % [foe.name, skill.display_name]
+	var problem: String = _move_problem(c, st)
+	if not problem.is_empty():
+		return "%s can't dash: %s" % [c.name, problem]
+	var path: Array[Vector2i] = approach_path(c, st.pos, foe, band.x, band.y)
+	if path.is_empty():
+		return "No route for %s to get within reach of %s." % [c.name, foe.name]
+	if path.size() > skill.dash_tiles:
+		return "%s is too far for %s: %d tiles to cross, it covers %d." % [foe.name, skill.display_name, path.size(), skill.dash_tiles]
+	if st.lock != null and st.lock != foe:
+		var switch_problem: String = _add_entry(c, st, SkillCatalog.find("switch_target"), index, foe)
+		if not switch_problem.is_empty():
+			return switch_problem
+	var from: Vector2i = st.pos
+	var dest: Vector2i = from
+	for d: Vector2i in path:
+		dest += d
+	st.lock = foe
+	var attack_problem: String = _add_entry(c, st, skill, index, foe, path)
+	if attack_problem.is_empty():
+		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		entry.pos_before = from
+		entry.pos_after = dest
+		entry.goal = dest
+		st.pos = dest
+		st.moved = true
+		st.positioned = false
+		st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - entry.est_damage
+	return attack_problem
+
+# A SUPPORT skill cast on the caster itself (SELF or ALLY_OR_SELF skills).
+func _apply_support_self(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	if step.skill.target_mode == SkillDef.TargetMode.ALLY:
+		return "%s must be aimed at an ally." % step.skill.display_name
+	var problem: String = _add_entry(c, st, step.skill, index, c)
+	if problem.is_empty():
+		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		entry.est_heal = SupportRules.effective_heal(c, SupportRules.heal_amount(c, step.skill))
+	return problem
+
+# A SUPPORT skill on a friendly unit. Out of reach, the caster walks into the skill's
+# reach first (like an Engage approach); the target must be alive and on the field.
+func _apply_ally(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	var skill: SkillDef = step.skill
+	var ally: Combatant = step.target
+	if skill == null or skill.kind != SkillDef.Kind.SUPPORT:
+		return "That isn't a support skill."
+	if ally == c:
+		return _apply_support_self(c, st, PlanStep.self_skill(skill), index)
+	var problem: String = SupportRules.target_problem(c, skill, ally, context.friends_of(c))
+	if not problem.is_empty():
+		return problem
+	var grid: CombatGrid = context.grid
+	if not grid.has_combatant(ally):
+		return "%s is not on the field." % ally.name
+	var band: Vector2i = skill.support_reach(c)
+	var near: int = maxi(1, band.x)
+	var ally_pos: Vector2i = grid.get_position(ally)
+	var dist: int = grid.get_distance(st.pos, ally_pos)
+	if dist < near or dist > band.y:
+		var move_problem: String = _move_problem(c, st)
+		if not move_problem.is_empty():
+			return "%s is out of reach for %s: %s" % [ally.name, skill.display_name, move_problem]
+		var path: Array[Vector2i] = approach_path(c, st.pos, ally, near, band.y)
+		if path.is_empty():
+			return "No path to get %s within reach of %s." % [c.name, ally.name]
+		if path.size() > max_move_tiles(c):
+			return "Too far: %d tiles to get in reach, %s can move %d in a round." % [path.size(), c.name, max_move_tiles(c)]
+		var approach_problem: String = _add_move(c, st, path, null, index)
+		if not approach_problem.is_empty():
+			return approach_problem
+	var add_problem: String = _add_entry(c, st, skill, index, ally)
+	if add_problem.is_empty():
+		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		entry.est_heal = SupportRules.effective_heal(ally, SupportRules.heal_amount(c, skill))
+	return add_problem
 
 # Area attack aimed at a tile: no auto-move, the tile must already be in reach.
 func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
@@ -574,7 +670,7 @@ func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 	if steps.is_empty() or not c.is_active():
 		return {}
 	var mode: PlanStep.Mode = steps[0].mode
-	if mode != PlanStep.Mode.MOVE and mode != PlanStep.Mode.GOTO and mode != PlanStep.Mode.WITHDRAW and mode != PlanStep.Mode.ENGAGE:
+	if mode != PlanStep.Mode.MOVE and mode != PlanStep.Mode.GOTO and mode != PlanStep.Mode.WITHDRAW and mode != PlanStep.Mode.ENGAGE and mode != PlanStep.Mode.ALLY:
 		return {}
 	var previous: Variant = _blocked_override
 	_blocked_override = blocked
@@ -589,6 +685,10 @@ func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 		if e.skill.kind == SkillDef.Kind.MOVE:
 			if leave < 0:
 				leave = e.end_block()
+			last = e
+		elif e.skill.dash_tiles > 0 and e.pos_after != e.pos_before:
+			if leave < 0:
+				leave = e.start_block   # a dash happens as its command starts
 			last = e
 	if last == null:
 		return {}
@@ -606,13 +706,16 @@ func options(c: Combatant) -> Array[PlanOption]:
 		return out
 	for foe: Combatant in context.foes_of(c):
 		out.append_array(target_options(c, foe))
+	for friend: Combatant in context.friends_of(c):
+		if friend != c and friend.is_active() and context.grid.has_combatant(friend):
+			out.append_array(target_options(c, friend))
 	out.append_array(target_options(c, c))
 	if not context.grid.designated_exits.is_empty():
 		out.append(_probe(c, PlanStep.withdraw(), base))
 	return out
 
 # Options when `c` clicks `target`: attacks (single and area) for a foe, self
-# skills for itself, nothing for allies yet.
+# skills for itself, ally-target support skills (heal, buff) for a friend.
 func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 	var out: Array[PlanOption] = []
 	var base: SimState = compile(c)
@@ -623,6 +726,13 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 		for kind: SkillDef.Kind in [SkillDef.Kind.DEFEND, SkillDef.Kind.FOCUS, SkillDef.Kind.REST]:
 			for skill: SkillDef in SkillCatalog.available(kind, cap, c):
 				out.append(_probe(c, PlanStep.self_skill(skill), base))
+		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, c):
+			if skill.target_mode != SkillDef.TargetMode.ALLY:
+				out.append(_probe(c, PlanStep.self_skill(skill), base))
+	elif context.friends_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
+		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, c):
+			if skill.targets_ally():
+				out.append(_probe(c, PlanStep.ally(skill, target), base))
 	elif context.foes_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
 		for skill: SkillDef in SkillCatalog.single_attacks(c, cap):
 			out.append(_probe(c, PlanStep.engage(skill, target), base))
@@ -664,6 +774,7 @@ func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 	if not option.valid:
 		return option
 	var hits_allies: int = 0
+	var support_note: String = ""
 	for i: int in range(base.entries.size(), st.entries.size()):
 		var e: PlanEntry = st.entries[i]
 		option.ap += e.total_ap()
@@ -677,12 +788,19 @@ func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 		if e.skill.kind == SkillDef.Kind.ATTACK:
 			option.damage = e.est_damage
 			hits_allies += e.hits_allies
+		if e.skill.kind == SkillDef.Kind.SUPPORT:
+			option.heal = e.est_heal
+			option.grants = e.skill.grant_status
+			if e.skill.heals() and e.est_heal <= 0 and e.skill.grant_status.is_empty():
+				support_note = "Nothing to heal: %s is at full HP." % (e.target.name if e.target != null else "the target")
 	var debt: int = st.debt()
 	if debt > 0:
 		var penalty: String = StatusEffects.debt_status(debt)
 		option.warning = "AP debt %d: %s next round." % [debt, ("%s and less AP" % StatusEffects.display_name(penalty)) if not penalty.is_empty() else "less AP"]
 	elif hits_allies > 0:
 		option.warning = "Friendly fire: hits %d all%s." % [hits_allies, "y" if hits_allies == 1 else "ies"]
+	elif not support_note.is_empty():
+		option.warning = support_note
 	elif step.mode == PlanStep.Mode.ENGAGE and DictUtil.int_of(base.est_hp, step.target) <= 0:
 		option.warning = "%s is already expected to fall; this is an insurance attack." % step.target.name
 	if step.mode == PlanStep.Mode.SELF and step.skill.kind == SkillDef.Kind.REST:

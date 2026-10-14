@@ -70,6 +70,19 @@ func execute_block(block: int) -> void:
 	_resolve_block(block)
 	block_completed.emit(block)
 
+# End-of-round effects, applied once after the last block: bleeding units lose a share of
+# max HP (StatusEffects.bleed_damage), ignoring guard and armor. Returns the damage dealt per unit.
+func apply_round_end_effects() -> Dictionary:
+	var dealt: Dictionary = {}
+	for c: Combatant in registered_combatants:
+		if c.is_active() and c.has_status(StatusEffects.BLEED):
+			var amount: int = c.take_damage(StatusEffects.bleed_damage(c), true)
+			dealt[c] = amount
+			var msg: String = "[Bleed] %s bleeds for %d damage (HP %d/%d)%s" % [c.name, amount, c.hp, c.max_hp, "" if c.is_alive() else " -> %s DEFEATED!" % c.name]
+			print(msg)
+			log_emitted.emit(msg)
+	return dealt
+
 func finish_round() -> void:
 	print("\n--- ROUND %d CONCLUDED (ROUND ROLLOVER) ---" % current_round)
 	for c: Combatant in registered_combatants:
@@ -101,6 +114,7 @@ func resolve_round() -> void:
 	for block: int in range(1, total_blocks + 1):
 		execute_block(block)
 
+	apply_round_end_effects()
 	finish_round()
 
 func is_combat_resolved(allies: Array[Combatant], enemies: Array[Combatant]) -> bool:

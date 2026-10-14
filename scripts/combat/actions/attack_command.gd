@@ -11,6 +11,13 @@ var grid: CombatGrid = null
 # back. 1 AP per tile, may go into debt. Area and post-tile-move attacks use 0.
 var follow_tiles: int = 0
 
+# Gap-close (lunge): when the attack starts, move up to this many tiles to get into
+# reach of the target. The skill's AP already pays for it (no per-tile cost). A rooted
+# unit, or a route blocked by terrain / units, can't dash and the strike then falls short.
+var dash_tiles: int = 0
+var status_rounds: int = 1   # how long an inflicted status lasts once active
+var dash_note: String = ""   # filled by on_start(): what the dash did (for tests / the log)
+
 # Reach band: -1 = the unit's own (ranged units: 2..range; melee: 1). Off-hand jabs use 1..1.
 var min_range: int = -1
 var max_range: int = -1
@@ -62,6 +69,10 @@ func can_execute() -> bool:
 # When the attack starts: if the target stepped out of reach, close the gap (up to
 # follow_tiles, 1 AP per tile) before winding up the strike.
 func on_start() -> String:
+	dash_note = ""
+	if dash_tiles > 0:
+		dash_note = _dash()
+		return dash_note
 	var effective_target: Combatant = _get_effective_target()
 	if grid == null or follow_tiles <= 0 or effective_target == null or not effective_target.is_active() or not source.is_active() or in_reach(effective_target):
 		return ""
@@ -73,6 +84,41 @@ func on_start() -> String:
 		return ""
 	var verb: String = "backs off from" if too_close else "closes in on"
 	return "[Chase] %s %s %s: %s to %s (1 AP)" % [source.name, verb, effective_target.name, str(from), str(to)]
+
+# Gap-close: path (around units and terrain) to the nearest tile in reach of the target,
+# at most dash_tiles long. Returns the log line ("" when no dash was needed).
+func _dash() -> String:
+	var effective_target: Combatant = _get_effective_target()
+	if grid == null or effective_target == null or not effective_target.is_active() or not source.is_active() or in_reach(effective_target):
+		return ""
+	if source.has_status(StatusEffects.ROOT):
+		return "[Dash Blocked] %s is rooted and can't dash at %s." % [source.name, effective_target.name]
+	var from: Vector2i = grid.get_position(source)
+	var target_pos: Vector2i = grid.get_position(effective_target)
+	var blocked: Dictionary = {}
+	for other: Variant in grid.combatant_positions:
+		if other != source and other is Combatant:
+			var occupant: Combatant = other
+			if occupant.is_active():
+				blocked[grid.combatant_positions[other]] = true
+	var goals: Dictionary = {}
+	var hi: int = reach_max()
+	for dx: int in range(-hi, hi + 1):
+		for dy: int in range(-hi, hi + 1):
+			var cell: Vector2i = target_pos + Vector2i(dx, dy)
+			var d: int = absi(dx) + absi(dy)
+			if d >= reach_min() and d <= hi and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
+				goals[cell] = true
+	var path: Array[Vector2i] = GridPath.find_path(grid, from, goals, blocked, false)
+	if path.is_empty() or path.size() > dash_tiles:
+		return "[Dash Blocked] %s can't reach %s (%s)." % [source.name, effective_target.name, "no route" if path.is_empty() else ("%d tiles, dash covers %d" % [path.size(), dash_tiles])]
+	for dir: Vector2i in path:
+		if not grid.move_combatant(source, dir):
+			break
+	var to: Vector2i = grid.get_position(source)
+	if to == from:
+		return "[Dash Blocked] %s couldn't move toward %s." % [source.name, effective_target.name]
+	return "[Dash] %s dashes at %s: %s to %s" % [source.name, effective_target.name, str(from), str(to)]
 
 # Steps toward a target that moved out of range, paying 1 AP per tile.
 func _follow(effective_target: Combatant) -> void:
@@ -151,7 +197,7 @@ func execute() -> void:
 
 	if not status_effect.is_empty() and effective_target.is_alive():
 		var chance: int = StatusEffects.apply_chance(effective_target, status_effect, status_potency)
-		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng):
+		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng, status_rounds):
 			details.append("%s next round (%d%%)" % [StatusEffects.display_name(status_effect), chance])
 		else:
 			details.append("resisted %s (%d%%)" % [StatusEffects.display_name(status_effect).to_lower(), chance])

@@ -75,10 +75,12 @@ static func _f(key: String, label: String, type: String, default: Variant, extra
 
 static func _skill_fields() -> Array[Dictionary]:
 	var attack: Dictionary = {"key": "kind", "in": ["ATTACK"]}
+	var support: Dictionary = {"key": "kind", "in": ["SUPPORT"]}
+	var reaching: Dictionary = {"key": "kind", "in": ["ATTACK", "SUPPORT"]}
 	return [
 		_f("id", "ID", "id", "", {"help": "Unique snake_case id used by units and tests."}),
 		_f("name", "Name", "string", "New Skill"),
-		_f("kind", "Kind", "enum", "ATTACK", {"options": ["ATTACK", "DEFEND", "FOCUS", "REST", "MOVE", "TARGET", "STATUS"], "help": "MOVE / TARGET / STATUS are engine skills; author ATTACK, DEFEND, FOCUS or REST."}),
+		_f("kind", "Kind", "enum", "ATTACK", {"options": ["ATTACK", "DEFEND", "FOCUS", "REST", "MOVE", "TARGET", "STATUS", "SUPPORT"], "help": "MOVE / TARGET / STATUS are engine skills; author ATTACK, DEFEND, FOCUS, REST or SUPPORT (heal / buff a friendly unit or yourself)."}),
 		_f("level", "Level (= AP cost)", "int", 1, {"min": 1, "max": 5}),
 		_f("blocks", "Blocks", "int", 1, {"min": 1, "max": 6, "help": "Timeline length; the effect lands at the end of the last block."}),
 		_f("description", "Description", "text", ""),
@@ -89,8 +91,16 @@ static func _skill_fields() -> Array[Dictionary]:
 		_f("stance", "Stance", "enum", "AUTO", {"options": ["AUTO", "OFFENSIVE", "TACTICAL", "DEFENSIVE", "NEUTRAL"], "when": attack, "help": "AUTO: attacks use Offensive."}),
 		_f("status_effect", "Inflicts", "enum", "", {"options_from": "status", "when": attack}),
 		_f("status_potency", "Status potency %", "int", 0, {"min": 0, "max": 200, "when": {"key": "status_effect", "not_in": [""]}, "help": "Chance = potency - target debuff resistance - passive resistance."}),
-		_f("reach_min", "Reach min", "int", 0, {"min": 0, "max": 8, "when": attack, "help": "0 = the unit's default band (melee 1, ranged 2-3)."}),
-		_f("reach_max", "Reach max", "int", 0, {"min": 0, "max": 8, "when": attack}),
+		_f("dash_tiles", "Gap-close tiles", "int", 0, {"min": 0, "max": 6, "when": attack, "help": "Lunge: move up to this many tiles to get into reach, then strike. Only offered while the target is out of reach; it is the unit's move for the round (one per round, blocked by root, terrain and units). AP is the skill's level alone."}),
+		_f("status_rounds", "Status rounds", "int", 1, {"min": 1, "max": 5, "when": reaching, "help": "How many rounds an inflicted / granted status lasts once active (it starts next round)."}),
+		_f("reach_min", "Reach min", "int", 0, {"min": 0, "max": 8, "when": reaching, "help": "0 = the unit's default band (attacks: melee 1, ranged 2-3; support: 0-3)."}),
+		_f("reach_max", "Reach max", "int", 0, {"min": 0, "max": 8, "when": reaching}),
+		_f("target_mode", "Targets", "enum", "ALLY_OR_SELF", {"options": ["SELF", "ALLY", "ALLY_OR_SELF"], "when": support, "help": "SELF: the caster only. ALLY: a friendly unit other than the caster. ALLY_OR_SELF: either."}),
+		_f("heal_stat", "Heal scales with", "enum", "", {"options": ["", "INT", "KNOW"], "when": support, "help": "Heal = heal base + stat x heal per point (SupportRules.heal_amount), never DamageCalculator."}),
+		_f("heal_base", "Heal base", "int", 0, {"min": 0, "max": 500, "when": support}),
+		_f("heal_mult", "Heal per stat point", "float", 0.0, {"min": 0.0, "max": 10.0, "step": 0.05, "when": support}),
+		_f("grant_status", "Grants", "enum", "", {"options_from": "status_buff", "when": support, "help": "Buff queued on the target for next round: haste (+1 tile per move block) or taunt (enemy AI must target it while reachable)."}),
+		_f("learned_only", "Learn only", "bool", false, {"help": "Unrestricted hand-built units (tests, sandbox) don't know it unless they learn it; class-derived units get it from skill paths / extra skills as usual."}),
 		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types (class-derived units only)."}),
 		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "when": attack, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),
 		_f("mitigation", "Mitigation", "float", 0.5, {"min": 0.0, "max": 0.95, "step": 0.05, "when": {"key": "kind", "in": ["DEFEND"]}}),
@@ -194,7 +204,8 @@ static func _unit_fields() -> Array[Dictionary]:
 		_f("flee_ratio", "Flee at HP", "float", 0.25, {"min": 0.0, "max": 1.0, "step": 0.05, "help": "Withdraw at or below this HP fraction (0 = never)."}),
 		_f("defend_below", "Guard at HP", "float", 0.4, {"min": 0.0, "max": 1.0, "step": 0.05}),
 		_f("prefer_level", "Preferred skill level", "int", 0, {"min": 0, "max": 5, "help": "0 = highest affordable."}),
-		_f("status_resist", "Status resist %", "stats", {}, {"keys": [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT], "help": "100 = immune."}),
+		_f("status_resist", "Status resist %", "stats", {}, {"keys": StatusEffects.resistable(), "help": "100 = immune."}),
+		_f("reckless", "Reckless", "bool", false, {"help": "AI: never flees or guards, always charges the nearest foe (berserker behaviour)."}),
 	]
 	list.append_array(_loadout_fields(true))
 	return list
@@ -237,7 +248,12 @@ static func options_of(f: Dictionary) -> Array[String]:
 			out.append_array(UnitArt.CLASS_KEYS)
 			return out
 		"status":
-			out.assign(["", StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT])
+			out.append("")
+			out.append_array(StatusEffects.debuffs())
+			return out
+		"status_buff":
+			out.append("")
+			out.append_array(StatusEffects.buffs())
 			return out
 	var raw: Variant = f.get("options", [])
 	if raw is Array:

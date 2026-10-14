@@ -49,3 +49,5 @@ Rule: when something fails, look it up in **Known issues** first. Only debug fro
 | Test calls removed API (`stats.mastery`, `allowed_gear_types`, `masteries`, `class_to_entry(..., desc)`) | Mastery replaced by `Proficiency` + `Passives` | Use `stats.proficiency`, `ContentFactory.apply_passives`, `class.make_proficiency()` |
 | Passive adds nothing at max level | Proficiency level clamps to 3 | Test passives on gear below level 3 or on stat/resist effects |
 | IDE shows UNSAFE warnings referencing removed classes (`MasterySystem`) | Stale language-server state | Ignore until the editor scan; trust `--check-only` |
+| `reset_round` test uses stale Combatant objects | At round 1 `reset_round()` calls `start()`, which rebuilds every Combatant | Test round-reset behaviour from round 2 (advance first) and re-fetch units after reset |
+| New level-2+ catalog skill changes existing AI/test numbers | Hand-built units with empty `known_skills` know every skill | Mark new example skills `learned_only: true` or add them via `extra_skills` |

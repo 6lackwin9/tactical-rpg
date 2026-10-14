@@ -53,6 +53,14 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.boost = DictUtil.to_float(e["boost"])
 	s.boost_rounds = DictUtil.to_int(e["boost_rounds"])
 	s.recover_ap = DictUtil.to_int(e["recover_ap"])
+	s.dash_tiles = DictUtil.to_int(e["dash_tiles"])
+	s.status_rounds = DictUtil.to_int(e["status_rounds"], 1)
+	s.target_mode = _enum(SkillDef.TargetMode.keys(), str(e["target_mode"]), SkillDef.TargetMode.ALLY_OR_SELF) as SkillDef.TargetMode
+	s.heal_stat = str(e["heal_stat"])
+	s.heal_base = DictUtil.to_int(e["heal_base"])
+	s.heal_mult = DictUtil.to_float(e["heal_mult"])
+	s.grant_status = str(e["grant_status"])
+	s.learned_only = DictUtil.to_bool(e["learned_only"])
 	s.system = DictUtil.to_bool(e["system"])
 	return s
 
@@ -65,6 +73,8 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"status_effect": s.status_effect, "status_potency": s.status_potency,
 		"reach_min": s.reach_min, "reach_max": s.reach_max, "weapon_types": s.weapon_types, "min_proficiency": s.min_proficiency, "mitigation": s.mitigation,
 		"boost": s.boost, "boost_rounds": s.boost_rounds, "recover_ap": s.recover_ap,
+		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
+		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
 	})
 
 # ------------------------------------------------------------------------------
@@ -291,6 +301,7 @@ static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), cap)
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])
+	profile.reckless = DictUtil.to_bool(e["reckless"])
 	if str(e["target_pref"]) != "ROLE":
 		profile.target_pref = _enum(AiProfile.TargetPref.keys(), str(e["target_pref"]), 0) as AiProfile.TargetPref
 	return profile

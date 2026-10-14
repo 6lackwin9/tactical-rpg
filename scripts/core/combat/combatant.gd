@@ -29,6 +29,8 @@ var max_ap: int = BASE_AP            # AP available each round (restored at roun
 var ap: int = BASE_AP                # runtime AP: spent as planned commands start, regained by Rest
 var statuses: Dictionary = {}           # active this round: status name -> true (see StatusEffects)
 var pending_statuses: Dictionary = {}   # inflicted this round, active next round
+var status_rounds_left: Dictionary = {} # active status -> rounds left, this one included (multi-round buffs / bleed)
+var pending_status_rounds: Dictionary = {}   # queued status -> rounds it will last once active
 var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
 var power_override: int = 0    # authored strike power (> 0 replaces weapon + unit power; see DamageCalculator)
@@ -65,7 +67,10 @@ func min_attack_range() -> int:
 # Move, Rest and other system skills are always known; class-derived units know their
 # class path (up to their level), learned extras and granted skills.
 func knows_skill(skill_id: String) -> bool:
-	return known_skills.is_empty() or known_skills.has(skill_id) or granted_skills.has(skill_id) or SkillCatalog.is_system(skill_id)
+	if known_skills.has(skill_id) or granted_skills.has(skill_id) or SkillCatalog.is_system(skill_id):
+		return true
+	# Unrestricted (hand-built) units know every skill except those that must be learned explicitly.
+	return known_skills.is_empty() and not SkillCatalog.is_learned_only(skill_id)
 
 # Known AND trained for: skills with min_proficiency need the right gear type at that
 # proficiency level (class-derived units only; hand-built units are unrestricted).
@@ -103,8 +108,10 @@ func debuff_resistance() -> float:
 	return stats.get_debuff_resistance(get_weapon_context()) if stats != null else 0.0
 
 # Tiles one Move command can cover (one block): faster units cover more ground.
+# Haste adds StatusEffects.HASTE_TILES on top of the 1-4 base.
 func move_per_block() -> int:
-	return clampi(floori(float(speed + 2) / 5.0), 1, 4)
+	var base: int = clampi(floori(float(speed + 2) / 5.0), 1, 4)
+	return base + (StatusEffects.HASTE_TILES if has_status(StatusEffects.HASTE) else 0)
 
 # Stat-context dictionary used for weapon-conditional bonuses (passives etc.).
 func get_weapon_context() -> Dictionary:

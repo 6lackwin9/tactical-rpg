@@ -33,6 +33,10 @@ static func is_system(skill_id: String) -> bool:
 	var s: SkillDef = find(skill_id)
 	return s != null and s.system
 
+static func is_learned_only(skill_id: String) -> bool:
+	var s: SkillDef = find(skill_id)
+	return s != null and s.learned_only
+
 static func find(skill_id: String) -> SkillDef:
 	for s: SkillDef in all():
 		if s.id == skill_id:

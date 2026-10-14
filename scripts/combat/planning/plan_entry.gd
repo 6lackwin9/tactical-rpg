@@ -23,6 +23,7 @@ var goal: Vector2i = Vector2i(-1, -1)      # MOVE: the whole move's destination 
 var skill_ap: int = 0                     # AP for the skill itself
 var blocks_override: int = 0               # MOVE: 1-2 blocks depending on the path length (0 = the skill's own)
 var est_damage: int = 0                   # ATTACK: expected hit (DamageCalculator.expected); area: total on foes
+var est_heal: int = 0                     # SUPPORT: expected HP restored (clamped to the target's missing HP)
 var cells: Array[Vector2i] = []           # ATTACK (area): tiles hit
 var hits_allies: int = 0                  # ATTACK (area): allies standing in the area (friendly fire)
 var status_name: String = ""               # STATUS: the status that took this block
@@ -57,7 +58,9 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			else:
 				var attack := AttackCommand.new(actor, target, skill.power_mult, skill.blocks, 0, grid)
 				attack.use_offhand = skill.offhand
-				attack.follow_tiles = 1 if chase else 0   # one-tile adjustment when the attack starts
+				attack.follow_tiles = 1 if (chase and skill.dash_tiles <= 0) else 0   # one-tile adjustment when the attack starts
+				attack.dash_tiles = skill.dash_tiles
+				attack.status_rounds = skill.status_rounds
 				var band: Vector2i = skill.reach_for(actor)
 				attack.min_range = band.x
 				attack.max_range = band.y
@@ -66,6 +69,10 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			command.status_potency = skill.status_potency
 		SkillDef.Kind.STATUS:
 			command = StatusBlockCommand.new(actor, status_name)
+		SkillDef.Kind.SUPPORT:
+			var support := SupportCommand.new(actor, target, skill, grid, skill.blocks)
+			support.est_heal = est_heal
+			command = support
 		SkillDef.Kind.DEFEND:
 			command = DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
 		SkillDef.Kind.FOCUS:
@@ -85,7 +92,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	command.command_name = skill.display_name
 	command.ap_cost = skill_ap
 	command.stance_switch_cost = switch_ap
-	command.stance_on_start = -1 if (skill.kind == SkillDef.Kind.MOVE or skill.kind == SkillDef.Kind.TARGET or skill.kind == SkillDef.Kind.STATUS) else skill.stance()
+	command.stance_on_start = -1 if skill.keeps_stance() else skill.stance()
 	command.est_damage = est_damage
 	return command
 

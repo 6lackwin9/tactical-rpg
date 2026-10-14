@@ -16,12 +16,18 @@ extends RefCounted
 # (no block cost). Rest switches to Neutral for free.
 # ==============================================================================
 
-enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS }
+# SUPPORT: heals and/or grants a buff status to itself or a friendly unit (SupportRules,
+# SupportCommand). It keeps the unit's stance like Move does (no switch cost).
+enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS, SUPPORT }
+
+# SUPPORT targeting: the caster only, a friendly unit other than the caster, or either.
+enum TargetMode { SELF, ALLY, ALLY_OR_SELF }
 
 # Area attacks target a tile: PLUS = tile + 4 neighbours, BURST = 3x3, LINE = 3 tiles
 # straight out from the caster (aim at an adjacent tile).
 enum Area { NONE, PLUS, BURST, LINE }
 
+const SUPPORT_REACH: int = 3   # default reach of a SUPPORT skill (or the caster's attack range if longer)
 const MIN_LEVEL: int = 1
 const MAX_LEVEL: int = 5
 
@@ -44,6 +50,14 @@ var reach_min: int = 0          # skill-specific reach band (0 = the unit's defa
 var reach_max: int = 0
 var weapon_types: Array[String] = []   # gear types that may use it (empty = any); class-derived units only
 var min_proficiency: int = 0           # training level in the wielded weapon type needed (0 = none)
+var status_rounds: int = 1      # rounds an inflicted / granted status lasts once active
+var dash_tiles: int = 0         # ATTACK gap-close: move up to this many tiles to get adjacent, then strike (counts as the round's move)
+var target_mode: TargetMode = TargetMode.ALLY_OR_SELF   # SUPPORT: who it may target
+var heal_stat: String = ""      # SUPPORT: stat the heal scales with ("INT" / "KNOW"; "" = fixed heal only)
+var heal_base: int = 0          # SUPPORT: flat heal
+var heal_mult: float = 0.0      # SUPPORT: heal per point of heal_stat (see SupportRules.heal_amount)
+var grant_status: String = ""   # SUPPORT: buff status given to the target (StatusEffects.buffs())
+var learned_only: bool = false  # unrestricted (hand-built) units don't know it unless they learn it
 var description: String = ""
 var system: bool = false       # engine skill (Move, Rest, Switch Target, status blocks): always known, not deletable
 
@@ -79,16 +93,35 @@ func stance() -> CombatTypes.StanceType:
 			return CombatTypes.StanceType.TACTICAL
 	return CombatTypes.StanceType.NEUTRAL
 
+func keeps_stance() -> bool:
+	return kind == Kind.MOVE or kind == Kind.TARGET or kind == Kind.STATUS or (kind == Kind.SUPPORT and stance_override < 0)
+
 func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
-	return current if (kind == Kind.MOVE or kind == Kind.TARGET or kind == Kind.STATUS) else stance()
+	return current if keeps_stance() else stance()
 
 # Automatic stance-switch penalty (AP): changing stance costs 1; Move and Rest never do.
 func switch_cost(current: CombatTypes.StanceType) -> int:
-	if kind == Kind.MOVE or kind == Kind.REST or kind == Kind.TARGET or kind == Kind.STATUS:
+	if kind == Kind.REST or keeps_stance():
 		return 0
 	return 0 if current == stance() else 1
 
+# True when a SUPPORT skill heals.
+func heals() -> bool:
+	return kind == Kind.SUPPORT and (heal_base > 0 or heal_mult > 0.0)
+
+# True when the skill must be aimed at a friendly unit other than the caster (or may be).
+func targets_ally() -> bool:
+	return kind == Kind.SUPPORT and target_mode != TargetMode.SELF
+
+# Distance band at which a SUPPORT skill reaches its target (0 = the caster itself).
+func support_reach(c: Combatant) -> Vector2i:
+	if reach_max > 0:
+		return Vector2i(reach_min, reach_max)
+	return Vector2i(0, maxi(SUPPORT_REACH, c.attack_range))
+
 func icon() -> String:
+	if kind == Kind.SUPPORT:
+		return "+"
 	match kind:
 		Kind.ATTACK:
 			return "⚔"

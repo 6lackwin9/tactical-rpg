@@ -17,6 +17,8 @@ var moves: int = 0         # move entries it adds
 var switch_ap: int = 0     # of `ap`, the automatic stance-switch penalty
 var damage: int = 0         # expected hit for attack options
 var switches_target: bool = false
+var heal: int = 0           # expected HP restored (support options)
+var grants: String = ""     # buff status the option grants (support options)
 
 func cost_text() -> String:
 	if not valid:
@@ -31,6 +33,10 @@ func cost_text() -> String:
 		text += " (incl. Switch Target)"
 	if damage > 0:
 		text += " • ~%d dmg" % damage
+	if heal > 0:
+		text += " • ~+%d HP" % heal
+	if not grants.is_empty():
+		text += " • %s" % StatusEffects.display_name(grants)
 	if not warning.is_empty():
 		text += "\n⚠ " + warning
 	return text
