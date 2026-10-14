@@ -3,7 +3,7 @@
 Never delete or rewrite entries. When something is replaced, add a row with the date, what changed and WHY. Agents must read this before proposing ideas and must not re-propose a deprecated concept unless the original reason no longer holds (say so explicitly).
 
 | Date | Concept | Status | Replaced by | Why |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | before 2026-10 | Hand-scripted combat layer (10-block rounds, scripted commands) | deprecated | Planner + resolver, 6 blocks, player-planned sequences | Scripted battles could not express planning, AP and AI; double maintenance |
 | before 2026-10 | Hard-coded classes, items, skills, units in code | deprecated | JSON catalog + Content Forge | Content needed to be editable, validated and testable without code |
 | before 2026-10 | Fixed-power fixed-HP goblins (authored 7-11 power, 30-55 HP) beside derived-stat heroes | deprecated | All combat units class-derived with a tier | Two incompatible battle scales; goblins could not level or share class rules |
@@ -17,5 +17,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10 | Tier power scaling applied to authored `power` | deprecated | Authored power is absolute | Double scaling broke world tuning deltas |
 
 ## Lessons (avoid repeating)
+
 - Hand-edited JSON and ad-hoc string patch scripts corrupted files; use `ContentCatalog.upsert` and the Edit tool (skill `patch-and-seed`).
 - Test expectations hard-coded to old numbers broke on every data change; derive them from rules.
+| 2026-10-15 | Milestone order starting with a balance pass (M1) on S1-S4 | deprecated | Build balance-relevant systems first, freeze, then balance | Only S1/S2 are balance-ready; tuning before gear, AI, combat extensions and progression are built would be redone |

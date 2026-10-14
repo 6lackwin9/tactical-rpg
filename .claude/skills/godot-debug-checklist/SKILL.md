@@ -17,6 +17,7 @@ Rule: when something fails, look it up in **Known issues** first. Only debug fro
 5. **Strict typing pass**: no `UNSAFE_*` warnings, no untyped loop vars, no unused params, no unsafe casts (use `DictUtil.array_of/dict_of/to_int/...`).
 6. **Data edits**: change catalog JSON only through `ContentCatalog.upsert` (validates, rewrites refs) in a seed script, then `validate_all()` must be `{}` and `save_all()` returns 0.
 7. **README** updated for every change; commit/push only when `check_project.ps1` is clean (trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`).
+8. **Markdown check**: when editing or creating `.md` files, verify 0 markdownlint warnings in the IDE Problems tab. Table delimiters must have spaces around pipes (`| --- | --- |`, MD060), headings and lists surrounded by single blank lines (MD022, MD032), and no consecutive blank lines (MD012).
 
 ## Debug method (cheap first)
 
@@ -27,7 +28,10 @@ Rule: when something fails, look it up in **Known issues** first. Only debug fro
 ## Known issues
 
 | Symptom | Cause | Fix |
-|---|---|---|
+| --- | --- | --- |
+| Markdown table formatting warning (`MD060`) | Table delimiter `\|---\|---\|` lacks padding spaces | Pad with spaces: `\| --- \| --- \|` |
+| Markdown heading/list blanks (`MD022`, `MD032`) | Missing blank line immediately before/after `#` heading or list | Add exactly 1 blank line above and below |
+| Markdown multiple blank lines (`MD012`) | Consecutive blank lines in `.md` file | Reduce to single blank line |
 | `Identifier "StatRules/Proficiency/..." not declared`, "Could not find type" | Global class cache stale after adding a `class_name` file | Run the editor scan (step 2) |
 | A script run hangs with no output | Compile errors in autoload-reachable scripts | Run `--check-only`, fix errors, retry |
 | Whole file truncated after a patch script | `String.find()` returned -1 and `substr(0, -1)`/`substr(-1)` was used | Check every `find()` result before slicing; verify with `git diff --stat` |

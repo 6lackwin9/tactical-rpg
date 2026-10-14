@@ -5,7 +5,7 @@ Target: every class between **40% and 60%** average duel win rate at each tested
 ## Run 2026-10-15 (baseline, level 5, 3 seeds, systems S1-S4 before any tuning)
 
 | Class | Duel avg | In 40-60%? | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | warrior | 100% | no | armor 25 (plate + kite shield), HP 314 |
 | berserker | 80% | no | Reckless Swing 1.7x |
 | brawler | 53% | yes | |

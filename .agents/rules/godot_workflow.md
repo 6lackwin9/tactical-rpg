@@ -23,7 +23,7 @@ After making any code edits or additions to scripts (`*.gd`), scenes (`*.tscn`),
    - All GDScript files must pass Godot parser syntax check (`--check-only`) with 0 errors.
    - Global class cache and imports must compile cleanly (`--editor --quit-after 50`).
    - Headless integration test suite (`test_arena.tscn`) must execute and pass 100% of assertions with exit code 0.
-3. **Auto-Remediate All Current Problems**: If any script errors, warnings, LSP diagnostics (IDE Problems tab), or test assertion failures occur, the agent MUST diagnose the root cause, fix the code, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 assertion failures)** before proceeding to documentation or committing.
+3. **Auto-Remediate All Current Problems**: If any script errors, warnings, markdownlint diagnostics, LSP diagnostics (IDE Problems tab), or test assertion failures occur, the agent MUST diagnose the root cause, fix the code/docs, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 assertion failures)** before proceeding to documentation or committing.
 
 ## 4. Mandatory Documentation & Commit Protocol
 
@@ -169,11 +169,18 @@ Whenever creating or modifying markdown files (`README.md`, rules, docs), strict
 
 1. **Headings (MD022)**: Every heading (`#`, `##`, `###`, etc.) must be preceded by exactly 1 blank line and followed by exactly 1 blank line.
 2. **Lists (MD032)**: All bulleted or numbered lists must have a blank line before the first list item and a blank line after the last list item.
-3. **Fenced Code Blocks (MD031 & MD040)**:
+3. **Table Column Style & Dividers (MD060)**:
+   - Always include whitespace around delimiter pipes: `| --- | --- |` (never `|---|---|`).
+   - Pad table cell contents with spaces: `| Header 1 | Header 2 |` (never `|Header 1|Header 2|`).
+4. **Multiple Consecutive Blank Lines (MD012)**:
+   - Do not use multiple consecutive blank lines. Maintain at most one blank line between sections, paragraphs, lists, or blocks.
+5. **Fenced Code Blocks (MD031 & MD040)**:
    - Must be preceded by a blank line and followed by a blank line.
    - Inside list items, indent sub-content and maintain surrounding blank lines.
    - Every fenced code block must declare an explicit language identifier (`gdscript`, `bash`, `powershell`, `text`, etc.).
-4. **Spacing & EOF (MD009, MD010, MD047)**:
+6. **Spacing & EOF (MD009, MD010, MD047)**:
    - No trailing whitespace at the end of lines.
    - No hard tabs (use spaces).
    - Every file must terminate with a single trailing newline.
+7. **IDE Markdownlint Verification**:
+   - Whenever any markdown file (`*.md`) is created or edited, check the IDE Problems tab to ensure **0 markdownlint warnings/errors** remain before concluding the turn or committing.

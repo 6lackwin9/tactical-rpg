@@ -3,7 +3,7 @@
 Builders put code where this file says; if a path is missing from here, ask the planner before creating it. Placeholder folders contain a `README.md` that states purpose, planned files and the data they will use. Update this file when a placeholder is filled.
 
 | Path | Purpose | System | Status |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `scripts/core/specs/` | StatRules, ClassArchetype, Proficiency, Passives, CharacterStats | S2 | done |
 | `scripts/core/combat/`, `scripts/core/inventory/` | Combatant, DamageCalculator, equipment, inventory | S1, S3 | done |
 | `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses | S1, S4 | done |

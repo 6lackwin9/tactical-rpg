@@ -5,7 +5,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 ## Layers (who owns what)
 
 | Layer | Owns | Entry points |
-|---|---|---|
+| --- | --- | --- |
 | Base catalog (lore-free) | skills, items, passives, classes, units, encounters as JSON | `scripts/content/` (`ContentCatalog` store+validation, `ContentSchema` field defs, `ContentFactory` JSON -> engine objects), data in `data/catalog/*.json` |
 | World layer (lore) | worlds, regions, locations, factions, characters, named items, disciplines, quests, lore, encounters; inheritance between worlds | `scripts/world/` (`WorldCatalog`, `WorldSchema`, `WorldFactory`), data in `data/worlds/<id>/` |
 | Rules/specs | stat rules, classes, proficiency, passives, character stats | `scripts/core/specs/` |
