@@ -51,45 +51,47 @@ var know_stat: int:
 	get: return _core_stats.get("KNOW", 10)
 	set(v): _core_stats["KNOW"] = v
 
-var mastery: MasterySystem
+var proficiency: Proficiency          # what this unit can wield and how well (class + passives)
 var modifiers: Array[StatModifier] = []
 
-func _init(p_archetype: ClassArchetype = null, p_level: int = 1) -> void:
-	mastery = MasterySystem.new()
-	if p_archetype != null:
-		class_archetype = p_archetype
-		for s: String in _core_stats:
-			_core_stats[s] = class_archetype.get_base_stat(s)
-
-		for w_type: String in class_archetype.innate_masteries:
-			var raw_lvl: Variant = class_archetype.innate_masteries[w_type]
-			var lvl: int = raw_lvl if raw_lvl is int else 0
-			if lvl > 0:
-				mastery.set_weapon_mastery(w_type, lvl)
-	else:
-		class_archetype = ClassArchetype.create_warrior()
-
+# A unit of `p_level` of the class: class base stats + `p_spend` (spent from the level's
+# spend pool, see StatRules) + the class growth of every level gained. Points of the
+# pool not in `p_spend` stay unallocated for the player to spend later.
+func _init(p_archetype: ClassArchetype = null, p_level: int = 1, p_spend: Dictionary = {}) -> void:
+	class_archetype = p_archetype if p_archetype != null else ClassArchetype.create_warrior()
+	proficiency = class_archetype.make_proficiency()
+	for s: String in _core_stats:
+		_core_stats[s] = class_archetype.get_base_stat(s)
+	var target: int = clampi(p_level, 1, MAX_LEVEL)
+	var spent: int = 0
+	for s: String in StatRules.STATS:
+		var pts: int = maxi(0, DictUtil.int_of(p_spend, s))
+		_core_stats[s] += pts
+		spent += pts
 	level = 1
-	if p_level > 1:
-		for i in range(1, mini(p_level, MAX_LEVEL)):
-			level_up()
+	while level < target:
+		level += 1
+		_apply_growth()
+	unallocated_attribute_points = maxi(0, StatRules.spend_pool(target) - spent)
 
 func level_up() -> bool:
 	if level >= MAX_LEVEL:
 		return false
 
 	level += 1
+	_apply_growth()
 
-	# 1. Guaranteed stat gains from Class Archetype
-	if class_archetype != null:
-		for s: String in _core_stats:
-			_core_stats[s] += class_archetype.get_growth_for_stat(s)
-
-	# 2. Grant free attribute point for customization/flavor
-	unallocated_attribute_points += 1
+	# Free attribute point for customization (StatRules.FREE_PER_LEVEL)
+	unallocated_attribute_points += StatRules.FREE_PER_LEVEL
 
 	leveled_up.emit(level)
 	return true
+
+# Guaranteed class-weighted stat gains of one level.
+func _apply_growth() -> void:
+	if class_archetype != null:
+		for s: String in _core_stats:
+			_core_stats[s] += class_archetype.get_growth_for_stat(s)
 
 func add_free_attribute_points(amount: int) -> void:
 	unallocated_attribute_points += maxi(0, amount)
@@ -117,10 +119,6 @@ func get_base_stat(stat_name: String) -> int:
 func get_effective_stat(stat_name: String, context: Dictionary = {}) -> int:
 	var clean: String = stat_name.to_upper()
 	var base_val: int = get_base_stat(clean)
-
-	# Add contextual mastery bonus (e.g. background knowledge -> +KNOW in specific regions)
-	if mastery != null:
-		base_val += mastery.get_conditional_stat_bonus(clean, context)
 
 	# Apply modifiers stack
 	var flat_sum: int = 0

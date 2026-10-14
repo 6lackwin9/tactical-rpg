@@ -55,7 +55,7 @@ static func named_item(item_entry: Dictionary) -> Item:
 	base["id"] = "%s__%s" % [str(base.get("id", "item")), str(item_entry.get("_qid", item_entry.get("id", ""))).replace(":", "_")]
 	return ContentFactory.item(base)
 
-# Applies a character's named items, disciplines and tuning to its freshly spawned unit.
+# Applies a character's named items, inherited passives and tuning to its freshly spawned unit.
 # `world_id` is the world the character is played in (refs resolve from there).
 static func apply_character(c: Combatant, character: Dictionary, world_id: String) -> void:
 	c.lore_ref = str(character.get("_qid", character.get("id", "")))
@@ -71,22 +71,31 @@ static func apply_character(c: Combatant, character: Dictionary, world_id: Strin
 			var eq: Equipment = worn
 			c.inventory.equip(eq, eq.slot)
 			geared = true
-	var disc_raw: Variant = character.get("disciplines", [])
-	var disc_refs: Array = disc_raw if disc_raw is Array else []
-	for ref: Variant in disc_refs:
-		var discipline: Dictionary = WorldCatalog.resolve(world_id, "disciplines", str(ref))
-		if discipline.is_empty() or c.stats == null or c.stats.mastery == null:
-			continue
-		var mastery: String = str(discipline.get("mastery", ""))
-		var rank: int = DictUtil.to_int(discipline.get("rank", 1), 1)
-		if c.stats.mastery.get_weapon_mastery(mastery) < rank:
-			c.stats.mastery.set_weapon_mastery(mastery, rank)
+	ContentFactory.apply_passives(c, character_passives(character, world_id))
 	# Only class-derived units take their vitals from stats and gear; fixed units keep theirs.
 	var base_unit: Dictionary = ContentCatalog.get_entry("units", str(character.get("base_unit", "")))
 	if geared and c.stats != null and str(base_unit.get("stat_mode", "fixed")) == "derived":
 		c.sync_from_stats_and_gear()
 		c.hp = c.max_hp
 	apply_tuning(c, character.get("tuning", {}))
+
+# The base passive ids a character inherits, once each: its own, its faction's, its
+# disciplines' and its named items' (the lore sources; classes and base units grant none).
+static func character_passives(character: Dictionary, world_id: String) -> Array[String]:
+	var out: Array[String] = []
+	_add_ids(out, character.get("passives", []))
+	var faction: Dictionary = WorldCatalog.resolve(world_id, "factions", str(character.get("faction", "")))
+	_add_ids(out, faction.get("grants", []))
+	for ref: Variant in DictUtil.array_of(character.get("disciplines", [])):
+		_add_ids(out, WorldCatalog.resolve(world_id, "disciplines", str(ref)).get("passives", []))
+	for ref: Variant in DictUtil.array_of(character.get("named_items", [])):
+		_add_ids(out, WorldCatalog.resolve(world_id, "items", str(ref)).get("grants", []))
+	return out
+
+static func _add_ids(out: Array[String], raw: Variant) -> void:
+	for id: Variant in DictUtil.array_of(raw):
+		if not out.has(str(id)):
+			out.append(str(id))
 
 # Explicit gameplay deltas vs the base unit (see WorldSchema.TUNING_KEYS).
 static func apply_tuning(c: Combatant, raw: Variant) -> void:
@@ -132,6 +141,12 @@ static func divergence(character: Dictionary, world_id: String) -> String:
 		var dnames: Array[String] = []
 		for ref: Variant in DictUtil.array_of(disc_raw):
 			var d: Dictionary = WorldCatalog.resolve(world_id, "disciplines", str(ref))
-			dnames.append("%s (%s %d)" % [str(d.get("name", str(ref))), str(d.get("mastery", "?")), DictUtil.to_int(d.get("rank", 1))])
+			dnames.append(str(d.get("name", str(ref))))
 		parts.append("trained: " + ", ".join(dnames))
+	var inherited: Array[String] = character_passives(character, world_id)
+	if not inherited.is_empty():
+		var pnames: Array[String] = []
+		for id: String in inherited:
+			pnames.append(str(ContentCatalog.get_entry("passives", id).get("name", id)))
+		parts.append("passives: " + ", ".join(pnames))
 	return "; ".join(parts)

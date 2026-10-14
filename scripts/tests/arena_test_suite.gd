@@ -6,11 +6,12 @@ extends RefCounted
 # Runs every headless suite (exit code for check_project.ps1):
 #  1. Combat UI Framework (CombatSession + CombatDockHost panels, Goblin Ambush)
 #  2. Core Combat Rules (CoreRulesTestSuite: guard, stances, Focus, casualties, withdrawal, feed)
-#  3. Character Specs & Inventory (6-stat framework, progression, masteries, gear)
+#  3. Character Specs & Inventory (6-stat framework, progression, proficiency, passives, gear)
 #  4. Gear Equip UI & Test Dummy (equipment modal, dummy, damage formula)
 #  5. Combat Session Flow (catalog Goblin Ambush: wave, replay, rounds, auto-play, reset)
 #  6. Art, Terrain & Combat Zones (tokens, portraits, tiles, icons, zones)
 #  7. Planning, Stances, AP & Enemy AI
+#  7b. Class & unit rules (ClassRulesTestSuite)
 #  8. Content Catalog & Forge (ContentTestSuite)
 #  9. Scene Runner (RunnerTestSuite)
 # 10. World Engine & World Forge (WorldTestSuite)
@@ -20,6 +21,7 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 	var results: Array[bool] = [
 		run_combat_ui_framework_test(tree_parent),
 		CoreRulesTestSuite.run(),
+		ClassRulesTestSuite.run(),
 		run_character_specs_and_inventory_test(),
 		run_gear_equip_and_test_dummy_suite(tree_parent),
 		run_combat_session_flow_test(),
@@ -263,22 +265,23 @@ static func run_character_specs_and_inventory_test() -> bool:
 	var stats := CharacterStats.new(warrior_arch, 1)
 
 	var base_stats_ok: bool = (
-		stats.str_stat == 16 and
-		stats.dex_stat == 10 and
-		stats.int_stat == 8 and
+		stats.str_stat == 15 and
+		stats.dex_stat == 9 and
+		stats.int_stat == 7 and
 		stats.cons_stat == 14 and
-		stats.perc_stat == 10 and
+		stats.perc_stat == 9 and
 		stats.know_stat == 8 and
+		StatRules.total_of(warrior_arch.base_stats) == StatRules.CLASS_BUDGET and
+		stats.unallocated_attribute_points == StatRules.spend_pool(1) and
 		stats.level == 1
 	)
 
 	# 2. Derived Max HP & Speed
-	# Max HP = 60 + (14 * 8) + (16 * 2) = 60 + 112 + 32 = 204
-	# Speed = 8 + 10 = 18
+	# Max HP = 60 + (14 * 8) + (15 * 2) = 202; Speed = 8 + 9 = 17; melee = round(15 * 1.5)
 	var derived_stats_ok: bool = (
-		stats.get_max_hp() == 204 and
-		stats.get_initiative_speed() == 18 and
-		stats.get_melee_power() == 24
+		stats.get_max_hp() == 202 and
+		stats.get_initiative_speed() == 17 and
+		stats.get_melee_power() == 23
 	)
 
 	# 3. Guaranteed level up growths (Level 1 -> 2)
@@ -287,39 +290,37 @@ static func run_character_specs_and_inventory_test() -> bool:
 	var growths_ok: bool = (
 		lvl_ok and
 		stats.level == 2 and
-		stats.str_stat == 18 and
+		stats.str_stat == 17 and
 		stats.cons_stat == 16 and
-		stats.perc_stat == 11 and
-		stats.unallocated_attribute_points == 1
+		stats.perc_stat == 10 and
+		stats.unallocated_attribute_points == StatRules.spend_pool(1) + StatRules.FREE_PER_LEVEL
 	)
 
 	# 4. Allocate 1 free point from level up
-	var alloc_lvl_point_ok: bool = stats.allocate_attribute_point("INT") and stats.int_stat == 9 and stats.unallocated_attribute_points == 0
+	var alloc_lvl_point_ok: bool = stats.allocate_attribute_point("INT") and stats.int_stat == 8 and stats.unallocated_attribute_points == StatRules.spend_pool(2) - 1
 
 	# 5. Outside Event Stat Points (e.g. Ancient Shrine)
 	stats.add_free_attribute_points(2)
 	var alloc_event_points_ok: bool = (
-		stats.unallocated_attribute_points == 2 and
+		stats.unallocated_attribute_points == StatRules.spend_pool(2) + 1 and
 		stats.allocate_attribute_point("DEX") and
 		stats.allocate_attribute_point("KNOW") and
-		stats.dex_stat == 11 and
+		stats.dex_stat == 10 and
 		stats.know_stat == 9 and
-		stats.unallocated_attribute_points == 0
+		stats.unallocated_attribute_points == StatRules.spend_pool(2) - 1
 	)
 
-	# 6. Horizontal Progression: Mastery System & Contextual Bonuses
-	stats.mastery.set_weapon_mastery("sword", 2)
-	stats.mastery.set_lore_mastery("ancient_ruins", 1)
+	# 6. Proficiency (class gear training) and passives (granted by lore sources, never by the class)
+	var sword_power_bonus: int = stats.proficiency.get_weapon_power_bonus("sword")
+	var sword_discount: int = stats.proficiency.get_weapon_requirement_discount("sword")
+	var sage := Combatant.new("Sage", 100, 12, 1, stats)
+	ContentFactory.apply_passives(sage, ["ruin_lore"])
+	var ruins_context: Dictionary = {"biome": "ruins"}
+	var mastery_ok: bool = (sword_power_bonus == 3 and sword_discount == 6 and stats.proficiency.level_of("bow") == 0
+		and stats.get_effective_stat("KNOW", ruins_context) == 12 and stats.get_effective_stat("KNOW") == 9 and sage.passives.has("ruin_lore"))
 
-	var ruins_context: Dictionary = {"biome": "ancient_ruins"}
-	# Weapon mastery moved from STR to Weapon Power bonus (+2 Wep Power/rank = +4) (Requirement 2)
-	var sword_power_bonus: int = stats.mastery.get_weapon_power_bonus("sword")
-	# KNOW base 9 + (Rank 1 * 2 = 2) = 11
-	var mastery_know: int = stats.get_effective_stat("KNOW", ruins_context)
-	var mastery_ok: bool = (sword_power_bonus == 4 and mastery_know == 11)
-
-	# 7. Equipment Stat Requirements & Mastery Threshold Discount
-	# Character STR is 18; Sword Mastery Rank 2 grants a 4-point requirement discount (eff STR 18 + 4 = 22)
+	# 7. Equipment Stat Requirements & Proficiency Threshold Discount
+	# Character STR is 17; sword proficiency 3 grants a 6-point requirement discount (eff STR 17 + 6 = 23)
 	var greatsword := Equipment.new(
 		"iron_greatsword",
 		"Iron Greatsword",
@@ -334,12 +335,12 @@ static func run_character_specs_and_inventory_test() -> bool:
 		]
 	)
 
-	var meets_req_ok: bool = greatsword.meets_requirements(stats, stats.mastery)
+	var meets_req_ok: bool = greatsword.meets_requirements(stats, stats.proficiency)
 
-	# 8. Threshold Tiers Unlocked (STR 18 + discount 4 = 22 meets Tier 2 threshold of 22!)
-	# Base 18 + Tier 4 + Sword Mastery (Rank 2 * 2) 4 = 26
-	var active_tiers: Array[Dictionary] = greatsword.get_active_threshold_tiers(stats, stats.mastery)
-	var tiers_ok: bool = (active_tiers.size() == 1 and greatsword.get_effective_equipment_power(stats, stats.mastery) == 26)
+	# 8. Threshold Tiers Unlocked (STR 17 + discount 6 = 23 meets Tier 2 threshold of 22)
+	# Base 18 + Tier 4 + sword proficiency 3 = 25
+	var active_tiers: Array[Dictionary] = greatsword.get_active_threshold_tiers(stats, stats.proficiency)
+	var tiers_ok: bool = (active_tiers.size() == 1 and greatsword.get_effective_equipment_power(stats, stats.proficiency) == 25)
 
 	# 9. Deficit Wield Penalty Check (Character with 11 DEX tries to wield Longbow requiring 24 DEX)
 	var longbow := Equipment.new(
@@ -351,13 +352,13 @@ static func run_character_specs_and_inventory_test() -> bool:
 		16,
 		{"DEX": 24}
 	)
-	var bow_penalty: Dictionary = longbow.get_wield_penalty(stats, stats.mastery)
+	var bow_penalty: Dictionary = longbow.get_wield_penalty(stats, stats.proficiency)
 	var penalty_ok: bool = (
-		not longbow.meets_requirements(stats, stats.mastery) and
+		not longbow.meets_requirements(stats, stats.proficiency) and
 		bow_penalty["is_penalized"] == true and
 		bow_penalty["deficit"] > 0 and
-		longbow.get_effective_equipment_power(stats, stats.mastery) < 16 and
-		longbow.get_effective_block_cost(stats, stats.mastery) > 1
+		longbow.get_effective_equipment_power(stats, stats.proficiency) < 16 and
+		longbow.get_effective_block_cost(stats, stats.proficiency) > 1
 	)
 
 	# 10. Combatant Integration, Inventory & Battle Pouch Consumable
@@ -384,8 +385,8 @@ static func run_character_specs_and_inventory_test() -> bool:
 	print("  [LevelUp] Level 2 guaranteed growths applied: %s" % ("PASS" if growths_ok else "FAIL"))
 	print("  [LevelUp] Free attribute points allocated: %s" % ("PASS" if alloc_lvl_point_ok else "FAIL"))
 	print("  [Event] Outside event points awarded & spent: %s" % ("PASS" if alloc_event_points_ok else "FAIL"))
-	print("  [Mastery] Horizontal progression contextual bonuses: %s" % ("PASS" if mastery_ok else "FAIL"))
-	print("  [Gear] Stat requirement & mastery discount check: %s" % ("PASS" if meets_req_ok else "FAIL"))
+	print("  [Proficiency] Gear training and passive stat bonuses: %s" % ("PASS" if mastery_ok else "FAIL"))
+	print("  [Gear] Stat requirement & proficiency discount check: %s" % ("PASS" if meets_req_ok else "FAIL"))
 	print("  [Gear] Threshold tiers active boosts unlocked: %s" % ("PASS" if tiers_ok else "FAIL"))
 	print("  [Gear] Deficit wield penalty applied: %s" % ("PASS" if penalty_ok else "FAIL"))
 	print("  [Inventory] Battle pouch item consumed in combat: %s" % ("PASS" if pouch_used_ok else "FAIL"))
@@ -438,14 +439,14 @@ static func run_gear_equip_and_test_dummy_suite(tree_parent: Node = null) -> boo
 	)
 
 	# 4. Claymore Threshold Tier (+4 Power at 18 STR)
-	var tier_boost: int = claymore.get_unlocked_threshold_power_boost(warrior.stats, warrior.stats.mastery)
+	var tier_boost: int = claymore.get_unlocked_threshold_power_boost(warrior.stats, warrior.stats.proficiency)
 	var threshold_boost_ok: bool = (tier_boost == 4)
 
 	# 5. Deficit penalty check on Titan Warhammer (requires 20 STR)
 	var warhammer := ItemCatalog.create_titan_warhammer()
 	stash.add_item(warhammer)
 	modal._equip_item(warhammer)
-	var penalty: Dictionary = warhammer.get_wield_penalty(warrior.stats, warrior.stats.mastery)
+	var penalty: Dictionary = warhammer.get_wield_penalty(warrior.stats, warrior.stats.proficiency)
 	var is_pen: bool = penalty.get("is_penalized", false)
 	var deficit_ok: bool = (is_pen and penalty.get("deficit", 0) > 0)
 
@@ -883,7 +884,7 @@ static func run_planning_and_ai_test() -> bool:
 			engage_count += 1
 		elif o.step.mode == PlanStep.Mode.AREA:
 			area_count += 1
-	var targets_ok: bool = engage_count == SkillCatalog.single_attacks(gh, 3).size() and area_count == SkillCatalog.area_attacks(3).size() and ally_opts.is_empty() and tile_opts.size() == 1 + area_count and exit_opts.size() == 1
+	var targets_ok: bool = engage_count == SkillCatalog.single_attacks(gh, 3).size() and area_count == SkillCatalog.area_attacks(3, gh).size() and ally_opts.is_empty() and tile_opts.size() == 1 + area_count and exit_opts.size() == 1
 	for o: PlanOption in foe_opts:
 		if o.step.mode == PlanStep.Mode.ENGAGE:
 			targets_ok = targets_ok and o.step.target == gfoe and o.valid
@@ -1086,11 +1087,11 @@ static func run_planning_and_ai_test() -> bool:
 		if o.step.mode == PlanStep.Mode.AREA and o.step.skill.id == "volley" and not o.valid:
 			out_of_reach = true
 	area_ok = area_ok and out_of_reach
-	# allies: the Ranger can take the Warrior's tile once the (faster) Warrior moves off it in block 1
+	# allies: the slower ally can take the faster ally's tile once that one moves off it in block 1
 	var csession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	csession.start()
-	var cw: Combatant = csession.allies[0]
-	var cr: Combatant = csession.allies[1]
+	var cw: Combatant = csession.allies[0] if csession.allies[0].speed >= csession.allies[1].speed else csession.allies[1]
+	var cr: Combatant = csession.allies[1] if cw == csession.allies[0] else csession.allies[0]
 	var w_start: Vector2i = csession.grid.get_position(cw)
 	var blocked_before: String = ""
 	for o: PlanOption in csession.plan_cell_options(w_start):
@@ -1098,7 +1099,7 @@ static func run_planning_and_ai_test() -> bool:
 	csession.select_combatant(cr)
 	var before_opts: Array[PlanOption] = csession.plan_cell_options(w_start)
 	blocked_before = before_opts[0].reason if not before_opts.is_empty() and not before_opts[0].valid else ""
-	csession.plan_add_step(cw, PlanStep.engage(strike, csession.enemies[1]))   # Warrior steps to (4,4)
+	csession.plan_add_step(cw, PlanStep.go_to(mover, Vector2i(2, 6)))   # the faster ally steps off its tile
 	var cw_dest: Vector2i = csession.planned_position(cw)
 	var into_vacated: String = csession.plan_add_step(cr, PlanStep.go_to(mover, w_start))
 	var into_dest: String = csession.plan_add_step(cr, PlanStep.go_to(mover, cw_dest))

@@ -138,7 +138,7 @@ func _spawn(unit_id: String, display_name: String) -> Combatant:
 		units_by_id[unit_id] = []
 	var list: Array = units_by_id[unit_id]
 	list.append(c)
-	unit_classes[c] = str(entry.get("art", "unit"))
+	unit_classes[c] = ContentFactory.art_of(entry)
 	ai_profiles[c] = ContentFactory.ai_profile(entry, c)
 	return c
 

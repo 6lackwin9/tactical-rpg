@@ -18,7 +18,7 @@ static func texture_for(kind: String, entry: Dictionary) -> Texture2D:
 					team = UnitArt.Team.HOSTILE
 				"neutral":
 					team = UnitArt.Team.NEUTRAL
-			return UnitArt.portrait(str(entry.get("art", "unit")), team)
+			return UnitArt.portrait(ContentFactory.art_of(entry), team)
 	return null
 
 static func describe(kind: String, entry: Dictionary) -> String:
@@ -29,6 +29,12 @@ static func describe(kind: String, entry: Dictionary) -> String:
 			text = _skill(e)
 		"items":
 			text = _item(e)
+		"passives":
+			text = "[b]%s[/b]
+%s
+
+%s
+" % [str(e["name"]), Passives.describe(e), str(e["description"])]
 		"classes":
 			text = _class(e)
 		"units":
@@ -106,7 +112,22 @@ static func _class(e: Dictionary) -> String:
 		for key: String in ContentSchema.STAT_KEYS:
 			parts.append("%s %d" % [key, st.get_base_stat(key)])
 		t += _line("Level %d" % lvl, "%s  •  HP %d, speed %d" % [" ".join(parts), st.get_max_hp({}), st.get_initiative_speed(0, {})])
-	t += _line("Gear", ", ".join(arch.allowed_gear_types) if not arch.allowed_gear_types.is_empty() else "anything")
+	var base_total: int = StatRules.total_of(arch.base_stats)
+	t += _line("Budget", "%d / %d (growth %d / %d per level)%s" % [base_total, StatRules.CLASS_BUDGET, StatRules.total_of(arch.growth_per_level), StatRules.GROWTH_TOTAL, "" if base_total == StatRules.CLASS_BUDGET else " [color=#f87171](off budget)[/color]"])
+	var prof: Proficiency = arch.make_proficiency()
+	var trained: Array[String] = []
+	for key: Variant in prof.entries:
+		trained.append("%s %d (x%.2f)" % [str(key), prof.level_of(str(key)), prof.scaling_of(str(key))])
+	t += _line("Proficiency", ", ".join(trained) if not trained.is_empty() else "none")
+	var path_parts: Array[String] = []
+	for step: Dictionary in arch.skill_path:
+		path_parts.append("Lv%d %s" % [DictUtil.to_int(step.get("level", 1)), str(ContentCatalog.get_entry("skills", str(step.get("skill", ""))).get("name", step.get("skill", "")))])
+	t += _line("Skill path", ", ".join(path_parts) if not path_parts.is_empty() else "none")
+	var kit: Array[String] = []
+	for slot: String in ContentSchema.LOADOUT_SLOTS:
+		if arch.loadout.has(slot):
+			kit.append(str(ContentCatalog.get_entry("items", str(arch.loadout[slot])).get("name", arch.loadout[slot])))
+	t += _line("Default gear", ", ".join(kit) if not kit.is_empty() else "none")
 	t += "\n%s\n" % str(e.get("description", ""))
 	return t
 
@@ -114,6 +135,9 @@ static func _unit(e: Dictionary) -> String:
 	var c: Combatant = ContentFactory.unit(e, "", 12)
 	var profile: AiProfile = ContentFactory.ai_profile(e, c)
 	var t: String = "[b]%s[/b]  (%s)\n" % [c.name, str(e["side"])]
+	if str(e["stat_mode"]) == "derived" and not str(e["class_id"]).is_empty():
+		var spend: Dictionary = ContentFactory._ints(e["spend"])
+		t += _line("Build", "%s level %d, %s tier (HP x%.1f, power x%.1f), %s" % [str(e["class_id"]).capitalize(), DictUtil.to_int(e["level"], 1), str(e["tier"]), c.hp_scale, c.power_scale, ("spend " + str(spend)) if not spend.is_empty() else "spend follows the class"])
 	t += _line("Vitals", "HP %d, speed %d (%d tiles / block), range %d, AP %d" % [c.max_hp, c.speed, c.move_per_block(), c.attack_range, c.max_ap])
 	var power_res: Dictionary = DamageCalculator.attack_power(c, c.attack_range > 1)
 	var power_parts: String = "authored" if DictUtil.to_bool(power_res["authored"]) else "weapon %.0f + unit %.0f (%s)" % [DictUtil.to_float(power_res["weapon_power"]), DictUtil.to_float(power_res["unit_power"]), str(power_res["stat_name"])]

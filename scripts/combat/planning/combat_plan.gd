@@ -551,18 +551,22 @@ func _blocked_for(c: Combatant, moves: Dictionary) -> Dictionary:
 			blocked[start] = true
 	return blocked
 
-# Each planning unit's opening move: {to, end, leave}. Units are evaluated in the
-# order they were planned; each sees the tiles claimed by the units planned before
-# it (earlier plans have priority), so two units never claim the same tile. A unit
+# Each planning unit's opening move: {to, end, leave}. Units are evaluated fastest
+# first (ties in planning order); each sees the tiles claimed by the units before
+# it, so two units never claim the same tile. A unit
 # can step into a tile an earlier, faster friend vacates in block 1.
 func _ally_moves() -> Dictionary:
 	var moves: Dictionary = {}
+	var units: Array[Combatant] = []
 	for key: Variant in sequences:
 		if key is Combatant:
-			var unit: Combatant = key
-			var move: Dictionary = _first_move(unit, _blocked_for(unit, moves))
-			if not move.is_empty():
-				moves[unit] = move
+			var member: Combatant = key
+			units.append(member)
+	units.sort_custom(func(a: Combatant, b: Combatant) -> bool: return a.speed > b.speed)   # stable: ties keep planning order
+	for unit: Combatant in units:
+		var move: Dictionary = _first_move(unit, _blocked_for(unit, moves))
+		if not move.is_empty():
+			moves[unit] = move
 	return moves
 # Destination and end block of `c`'s opening move, evaluated against `blocked`.
 func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:

@@ -134,8 +134,8 @@ static func consumable_effect_text(con: Consumable) -> String:
 static func equipment_summary(eq: Equipment, st: CharacterStats) -> String:
 	var parts: Array[String] = []
 	if eq.base_power > 0:
-		var tier: int = eq.get_unlocked_threshold_power_boost(st, st.mastery) if st != null else 0
-		var pen: Dictionary = eq.get_wield_penalty(st, st.mastery) if st != null else {}
+		var tier: int = eq.get_unlocked_threshold_power_boost(st, st.proficiency) if st != null else 0
+		var pen: Dictionary = eq.get_wield_penalty(st, st.proficiency) if st != null else {}
 		if tier > 0:
 			parts.append("Pwr %d (+%d tier)" % [eq.base_power + tier, tier])
 		elif dict_bool(pen, "is_penalized"):

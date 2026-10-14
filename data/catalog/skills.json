@@ -15,7 +15,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "power_strike",
@@ -30,7 +32,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "heavy_blow",
@@ -45,7 +49,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "offhand_jab",
@@ -60,7 +66,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "shield_bash",
@@ -76,7 +84,9 @@
 			"status_effect": "stagger",
 			"status_potency": 70,
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "hamstring",
@@ -92,7 +102,9 @@
 			"status_effect": "root",
 			"status_potency": 80,
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "shockwave",
@@ -107,7 +119,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 0,
-			"reach_max": 0
+			"reach_max": 0,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "volley",
@@ -122,7 +136,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 2,
-			"reach_max": 3
+			"reach_max": 3,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "firebomb",
@@ -137,7 +153,9 @@
 			"stance": "AUTO",
 			"status_effect": "",
 			"reach_min": 2,
-			"reach_max": 2
+			"reach_max": 2,
+			"weapon_types": [],
+			"min_proficiency": 0
 		},
 		{
 			"id": "guard",
@@ -231,6 +249,196 @@
 			"description": "Catch your breath: recover 2 AP and return to Neutral stance, free.",
 			"system": true,
 			"recover_ap": 2
+		},
+		{
+			"id": "sunder",
+			"name": "Sunder",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "Armor-breaking chop: 120% power, may Stagger. Needs axe/mace/hammer training 2.",
+			"power_mult": 1.2,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "stagger",
+			"status_potency": 50,
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"axe",
+				"mace",
+				"hammer"
+			],
+			"min_proficiency": 2
+		},
+		{
+			"id": "reckless_swing",
+			"name": "Reckless Swing",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "All-in swing: 170% power. Needs axe/sword/hammer training 2.",
+			"power_mult": 1.7,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "",
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"axe",
+				"sword",
+				"hammer"
+			],
+			"min_proficiency": 2
+		},
+		{
+			"id": "aimed_shot",
+			"name": "Aimed Shot",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "A patient shot: 140% power. Needs bow/crossbow training 2.",
+			"power_mult": 1.4,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "",
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"bow",
+				"crossbow"
+			],
+			"min_proficiency": 2
+		},
+		{
+			"id": "pinning_shot",
+			"name": "Pinning Shot",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "80% power, may Root the target (no moving) next round. Needs a bow or crossbow.",
+			"power_mult": 0.8,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "root",
+			"status_potency": 80,
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"bow",
+				"crossbow"
+			],
+			"min_proficiency": 1
+		},
+		{
+			"id": "arcane_bolt",
+			"name": "Arcane Bolt",
+			"kind": "ATTACK",
+			"level": 1,
+			"blocks": 2,
+			"description": "A bolt of raw force: 110% power. Needs a staff, orb or wand.",
+			"power_mult": 1.1,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "",
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"staff",
+				"orb",
+				"wand",
+				"tome"
+			],
+			"min_proficiency": 1
+		},
+		{
+			"id": "hex",
+			"name": "Hex",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "60% power, likely to Stagger the target next round. Needs staff/orb/wand training 2.",
+			"power_mult": 0.6,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "stagger",
+			"status_potency": 90,
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"staff",
+				"orb",
+				"wand"
+			],
+			"min_proficiency": 2
+		},
+		{
+			"id": "haymaker",
+			"name": "Haymaker",
+			"kind": "ATTACK",
+			"level": 3,
+			"blocks": 3,
+			"description": "Wild roundhouse: 200% power, may Stun. Needs fist/mace/hammer training 2.",
+			"power_mult": 2.0,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "stun",
+			"status_potency": 50,
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"fist",
+				"mace",
+				"hammer"
+			],
+			"min_proficiency": 2
+		},
+		{
+			"id": "body_blow",
+			"name": "Body Blow",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "A winding blow: may Stagger. Needs fist/mace training.",
+			"power_mult": 1.0,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "stagger",
+			"status_potency": 50,
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"fist",
+				"mace"
+			],
+			"min_proficiency": 1
+		},
+		{
+			"id": "quick_stab",
+			"name": "Quick Stab",
+			"kind": "ATTACK",
+			"level": 1,
+			"blocks": 1,
+			"description": "A fast thrust for one block. Needs a dagger.",
+			"power_mult": 0.6,
+			"area": "NONE",
+			"offhand": false,
+			"stance": "AUTO",
+			"status_effect": "",
+			"reach_min": 0,
+			"reach_max": 0,
+			"weapon_types": [
+				"dagger"
+			],
+			"min_proficiency": 1
 		}
 	]
 }

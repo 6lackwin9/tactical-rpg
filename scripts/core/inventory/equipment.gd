@@ -154,16 +154,16 @@ func get_tier_requirements_display() -> String:
 
 	return "[Req %s]" % "; ".join(parts)
 
-func get_requirement_status_summary(stats: CharacterStats, mastery: MasterySystem) -> Dictionary:
-	var meets: bool = meets_requirements(stats, mastery)
-	var pen: Dictionary = get_wield_penalty(stats, mastery)
+func get_requirement_status_summary(stats: CharacterStats, prof: Proficiency) -> Dictionary:
+	var meets: bool = meets_requirements(stats, prof)
+	var pen: Dictionary = get_wield_penalty(stats, prof)
 	var is_pen: bool = pen.get("is_penalized", false)
 	var raw_def: Variant = pen.get("deficit", 0)
 	var def_num: int = raw_def if raw_def is int else 0
 	var raw_ratio: Variant = pen.get("power_penalty_ratio", 0.0)
 	var pen_ratio: float = raw_ratio if raw_ratio is float else 0.0
 	var pen_pct: int = int(roundf(pen_ratio * 100.0))
-	var tier_boost: int = get_unlocked_threshold_power_boost(stats, mastery)
+	var tier_boost: int = get_unlocked_threshold_power_boost(stats, prof)
 
 	var status_tag := ""
 	var tag_color := Color.WHITE
@@ -203,16 +203,16 @@ func get_stat_bonuses_display() -> String:
 	return ", ".join(parts)
 
 # ------------------------------------------------------------------------------
-# Stat Requirements & Class Mastery Threshold Discount
+# Stat Requirements & Proficiency Threshold Discount
 # ------------------------------------------------------------------------------
 
-func meets_requirements(stats: CharacterStats, mastery: MasterySystem) -> bool:
+func meets_requirements(stats: CharacterStats, prof: Proficiency) -> bool:
 	if required_stats.is_empty() or stats == null:
 		return true
 
 	var discount: int = 0
-	if mastery != null and not weapon_type.is_empty():
-		discount = mastery.get_weapon_requirement_discount(weapon_type)
+	if prof != null and not weapon_type.is_empty():
+		discount = prof.get_weapon_requirement_discount(weapon_type)
 
 	for req_stat: String in required_stats:
 		var raw_req: Variant = required_stats[req_stat]
@@ -224,7 +224,7 @@ func meets_requirements(stats: CharacterStats, mastery: MasterySystem) -> bool:
 	return true
 
 # Calculates penalty details if character attempts to wield without meeting requirements
-func get_wield_penalty(stats: CharacterStats, mastery: MasterySystem) -> Dictionary:
+func get_wield_penalty(stats: CharacterStats, prof: Proficiency) -> Dictionary:
 	var result: Dictionary = {
 		"is_penalized": false,
 		"power_penalty_ratio": 0.0,
@@ -232,12 +232,12 @@ func get_wield_penalty(stats: CharacterStats, mastery: MasterySystem) -> Diction
 		"deficit": 0
 	}
 
-	if meets_requirements(stats, mastery) or stats == null:
+	if meets_requirements(stats, prof) or stats == null:
 		return result
 
 	var discount: int = 0
-	if mastery != null and not weapon_type.is_empty():
-		discount = mastery.get_weapon_requirement_discount(weapon_type)
+	if prof != null and not weapon_type.is_empty():
+		discount = prof.get_weapon_requirement_discount(weapon_type)
 
 	var max_deficit: int = 0
 	for req_stat: String in required_stats:
@@ -257,14 +257,14 @@ func get_wield_penalty(stats: CharacterStats, mastery: MasterySystem) -> Diction
 	return result
 
 # Returns all unlocked threshold tiers when exceeding base requirements
-func get_active_threshold_tiers(stats: CharacterStats, mastery: MasterySystem) -> Array[Dictionary]:
+func get_active_threshold_tiers(stats: CharacterStats, prof: Proficiency) -> Array[Dictionary]:
 	var active_tiers: Array[Dictionary] = []
 	if stats == null or threshold_tiers.is_empty():
 		return active_tiers
 
 	var discount: int = 0
-	if mastery != null and not weapon_type.is_empty():
-		discount = mastery.get_weapon_requirement_discount(weapon_type)
+	if prof != null and not weapon_type.is_empty():
+		discount = prof.get_weapon_requirement_discount(weapon_type)
 
 	for tier: Dictionary in threshold_tiers:
 		var stat_key: String = tier.get("stat", "STR")
@@ -276,32 +276,32 @@ func get_active_threshold_tiers(stats: CharacterStats, mastery: MasterySystem) -
 	return active_tiers
 
 # Helper: sum of unlocked bonus power across all active threshold tiers
-func get_unlocked_threshold_power_boost(stats: CharacterStats, mastery: MasterySystem) -> int:
+func get_unlocked_threshold_power_boost(stats: CharacterStats, prof: Proficiency) -> int:
 	var total_boost: int = 0
-	var active_tiers: Array[Dictionary] = get_active_threshold_tiers(stats, mastery)
+	var active_tiers: Array[Dictionary] = get_active_threshold_tiers(stats, prof)
 	for tier: Dictionary in active_tiers:
 		var raw_bonus: Variant = tier.get("bonus_power", 0)
 		if raw_bonus is int:
 			total_boost += raw_bonus
 	return total_boost
 
-# Effective power including tier boosts, mastery boosts and deficit penalties (Requirements 1 & 2)
-func get_effective_equipment_power(stats: CharacterStats, mastery: MasterySystem) -> int:
+# Effective power including tier boosts, proficiency boosts and deficit penalties (Requirements 1 & 2)
+func get_effective_equipment_power(stats: CharacterStats, prof: Proficiency) -> int:
 	var total_power: int = base_power
 
 	# Add threshold tier bonuses
-	var active_tiers: Array[Dictionary] = get_active_threshold_tiers(stats, mastery)
+	var active_tiers: Array[Dictionary] = get_active_threshold_tiers(stats, prof)
 	for tier: Dictionary in active_tiers:
 		var bonus_raw: Variant = tier.get("bonus_power", 0)
 		var bonus: int = bonus_raw if bonus_raw is int else 0
 		total_power += bonus
 
-	# Add weapon mastery bonus power (Requirement 2)
-	if mastery != null and not weapon_type.is_empty():
-		total_power += mastery.get_weapon_power_bonus(weapon_type)
+	# Add weapon proficiency bonus power
+	if prof != null and not weapon_type.is_empty():
+		total_power += prof.get_weapon_power_bonus(weapon_type)
 
 	# Deduct deficit penalties: Wep Power * (1 - Deficit)
-	var penalty: Dictionary = get_wield_penalty(stats, mastery)
+	var penalty: Dictionary = get_wield_penalty(stats, prof)
 	if penalty.get("is_penalized", false):
 		var ratio_raw: Variant = penalty.get("power_penalty_ratio", 0.0)
 		var ratio: float = ratio_raw if ratio_raw is float else 0.0
@@ -309,9 +309,11 @@ func get_effective_equipment_power(stats: CharacterStats, mastery: MasterySystem
 
 	return total_power
 
-func get_effective_block_cost(stats: CharacterStats, mastery: MasterySystem) -> int:
+func get_effective_block_cost(stats: CharacterStats, prof: Proficiency) -> int:
 	var cost: int = block_cost
-	var penalty: Dictionary = get_wield_penalty(stats, mastery)
+	var penalty: Dictionary = get_wield_penalty(stats, prof)
 	if penalty["is_penalized"]:
 		cost += penalty["extra_block_cost"]
-	return cost
+	if prof != null and not weapon_type.is_empty():
+		cost -= prof.block_cost_reduction(weapon_type)   # master-level training
+	return maxi(1, cost)

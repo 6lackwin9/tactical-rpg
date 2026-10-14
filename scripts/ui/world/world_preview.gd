@@ -40,7 +40,7 @@ static func texture_for(kind: String, entry: Dictionary) -> Texture2D:
 					team = UnitArt.Team.HOSTILE
 				"npc":
 					team = UnitArt.Team.NEUTRAL
-			return UnitArt.portrait(str(base.get("art", "unit")), team)
+			return UnitArt.portrait(ContentFactory.art_of(base), team)
 		"items":
 			var named: Item = WorldFactory.named_item(entry)
 			return ItemArt.icon(named) if named != null else null
@@ -86,7 +86,7 @@ static func describe(world_id: String, kind: String, entry: Dictionary) -> Strin
 			text = _item(world_id, e)
 		"disciplines":
 			text = "[b]%s[/b]\n" % str(e["name"])
-			text += _line("Plays as", "base mastery [b]%s[/b], rank %d" % [str(e["mastery"]), DictUtil.to_int(e["rank"])])
+			text += _line("Grants", _passive_names(e["passives"]))
 			text += _line("Taught by", _name_of(world_id, "characters", str(e["teacher"])))
 			text += _line("Faction", _name_of(world_id, "factions", str(e["faction"])))
 			text += _line("Trained by", _list_where(world_id, "characters", "disciplines", e))
@@ -219,3 +219,9 @@ static func describe_world(world_id: String) -> String:
 	text += _line("Entries", ", ".join(counts))
 	text += "\n" + _esc(str(m["description"]))
 	return text
+
+static func _passive_names(ids: Variant) -> String:
+	var names: PackedStringArray = PackedStringArray()
+	for id: Variant in DictUtil.array_of(ids):
+		names.append(str(ContentCatalog.get_entry("passives", str(id)).get("name", str(id))))
+	return ", ".join(names) if not names.is_empty() else "-"

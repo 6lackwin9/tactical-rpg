@@ -6,8 +6,7 @@
 			"id": "ember_blade",
 			"name": "Ember Blade",
 			"description": "The Wardens' close-order sword drill: short strokes, never overextend.",
-			"mastery": "sword",
-			"rank": 1,
+			"passives": ["steady_nerves"],
 			"teacher": "",
 			"faction": "ember_wardens",
 			"tags": []
@@ -16,8 +15,7 @@
 			"id": "cinder_archery",
 			"name": "Cinder Archery",
 			"description": "Shooting through smoke and heat shimmer; scouts learn to aim at the shape, not the glare.",
-			"mastery": "bow",
-			"rank": 2,
+			"passives": ["keen_senses"],
 			"teacher": "",
 			"faction": "ember_wardens",
 			"tags": []

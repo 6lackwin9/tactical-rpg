@@ -159,7 +159,7 @@ func _build_item_card(item: Item) -> void:
 			warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			info.add_child(warn)
 		elif st != null:
-			var status: Dictionary = eq.get_requirement_status_summary(st, st.mastery)
+			var status: Dictionary = eq.get_requirement_status_summary(st, st.proficiency)
 			var badge_text: String = ("%s  %s" % [str(status.get("req_display", "")), str(status.get("status_tag", ""))]).strip_edges()
 			if not badge_text.is_empty():
 				var badge_col: Color = status.get("tag_color", Color.WHITE)

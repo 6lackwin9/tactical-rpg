@@ -59,29 +59,32 @@ static func _test_unified_formula() -> bool:
 	var brawler := Combatant.new("Fists", 50, 10, 1, CharacterStats.new(ClassArchetype.create("brawler"), 1))
 	var fists: Dictionary = DamageCalculator.attack_power(brawler)
 	checks["unarmed STR+DEX"] = DictUtil.to_int(fists["attack_power"]) == brawler.stats.get_effective_stat("STR") + brawler.stats.get_effective_stat("DEX") and DictUtil.to_float(fists["weapon_power"]) == 0.0
-	# Weapon: (base + tier + mastery) + scaling stat x 1.5 (the dojo warrior's broadsword: 18 + 2 mastery + 20 STR x 1.5 = 50).
+	# Weapon: (base + tier + training) + scaling stat x the class's scaling for the gear (the dojo warrior's
+	# broadsword: 18 + 3 sword training + STR x 1.5).
 	var warrior: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_warrior"))
 	var armed: Dictionary = DamageCalculator.attack_power(warrior)
-	checks["weapon + unit power"] = DictUtil.to_int(armed["attack_power"]) == 50 and DictUtil.to_int(armed["total_w_power"]) == 20 and is_equal_approx(DictUtil.to_float(armed["unit_power"]), 30.0)
+	var warrior_str: float = float(warrior.stats.get_effective_stat("STR"))
+	checks["weapon + unit power"] = (DictUtil.to_int(armed["total_w_power"]) == 21 and DictUtil.to_int(armed["training_pwr"]) == 3
+		and is_equal_approx(DictUtil.to_float(armed["unit_power"]), warrior_str * 1.5) and DictUtil.to_int(armed["attack_power"]) == roundi(21.0 + warrior_str * 1.5))
 	# A melee weapon adds nothing to a ranged shot; authored strike power overrides everything.
 	var gated: Dictionary = DamageCalculator.attack_power(warrior, true)
 	checks["unsuited weapon adds 0"] = DictUtil.to_float(gated["weapon_power"]) == 0.0 and str(gated["stat_name"]) == "DEX"
-	var goblin: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "goblin_brawler"))
-	checks["authored power"] = DamageCalculator.power_of(goblin) == 10
+	var goblin: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "training_dummy"))
+	checks["authored power"] = DamageCalculator.power_of(goblin) == 20
 	# Armor: rating / (rating + 50), gear + STR / 4 unless authored.
 	var target := Combatant.new("Target", 500, 10, 1)
 	target.armor_override = 20
 	var base_hit: Dictionary = DamageCalculator.compute(goblin, target, false, false)
-	checks["armor curve"] = DictUtil.to_int(base_hit["final_dmg"]) == roundi(10.0 * (1.0 - 20.0 / 70.0)) and is_equal_approx(DamageCalculator.armor_reduction(10), 10.0 / 60.0)
+	checks["armor curve"] = DictUtil.to_int(base_hit["final_dmg"]) == roundi(20.0 * (1.0 - 20.0 / 70.0)) and is_equal_approx(DamageCalculator.armor_reduction(10), 10.0 / 60.0)
 	var plated: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_warrior"))
 	plated.inventory.equip(ItemCatalog.create_steel_plate_cuirass(), Equipment.EquipSlot.BODY)
 	checks["gear armor rating"] = DamageCalculator.armor_rating(plated) == plated.stats.get_mitigation_rating(plated.inventory.get_total_flat_mitigation())
-	# Crits: 5% + 1% per DEX above 10, x1.5.
+	# Crits: 5% + 1% per DEX above 10 + 1% per weapon training level above 1, x1.5.
 	target.armor_override = 0
 	var normal: int = DictUtil.to_int(DamageCalculator.compute(warrior, target, false, false)["final_dmg"])
 	var crit: int = DictUtil.to_int(DamageCalculator.compute(warrior, target, false, false, 1.0, true)["final_dmg"])
 	var dex: int = warrior.stats.get_effective_stat("DEX")
-	checks["crit x1.5 and chance"] = crit == roundi(float(normal) * 1.5) and is_equal_approx(DamageCalculator.crit_chance(warrior), 5.0 + float(maxi(0, dex - 10)))
+	checks["crit x1.5 and chance"] = crit == roundi(float(normal) * 1.5) and is_equal_approx(DamageCalculator.crit_chance(warrior), 5.0 + float(maxi(0, dex - 10)) + warrior.stats.proficiency.crit_bonus("sword"))
 	# Seeded: the same seed rolls the same crits (and crits do happen).
 	var rolls: Array[String] = []
 	for attempt: int in range(2):

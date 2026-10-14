@@ -75,7 +75,7 @@ static func roll_over(c: Combatant, ap_regen: int) -> Array[String]:
 	var debt_penalty: String = debt_status(maxi(0, -c.ap))
 	if not debt_penalty.is_empty():
 		c.statuses[debt_penalty] = true
-	c.ap = c.max_ap if ap_regen < 0 else mini(c.max_ap, c.ap + ap_regen)
+	c.ap = c.max_ap if ap_regen < 0 else mini(c.max_ap, c.ap + ap_regen + c.ap_regen_bonus)
 	var active: Array[String] = []
 	for status: Variant in c.statuses:
 		active.append(str(status))

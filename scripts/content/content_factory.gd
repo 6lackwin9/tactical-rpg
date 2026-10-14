@@ -47,6 +47,8 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.status_potency = DictUtil.to_int(e["status_potency"])
 	s.reach_min = DictUtil.to_int(e["reach_min"])
 	s.reach_max = DictUtil.to_int(e["reach_max"])
+	s.weapon_types = _strings(e["weapon_types"])
+	s.min_proficiency = DictUtil.to_int(e["min_proficiency"])
 	s.mitigation = DictUtil.to_float(e["mitigation"])
 	s.boost = DictUtil.to_float(e["boost"])
 	s.boost_rounds = DictUtil.to_int(e["boost_rounds"])
@@ -61,7 +63,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"power_mult": s.power_mult, "area": _name(SkillDef.Area.keys(), s.area), "offhand": s.offhand,
 		"stance": "AUTO" if s.stance_override < 0 else _name(CombatTypes.StanceType.keys(), s.stance_override),
 		"status_effect": s.status_effect, "status_potency": s.status_potency,
-		"reach_min": s.reach_min, "reach_max": s.reach_max, "mitigation": s.mitigation,
+		"reach_min": s.reach_min, "reach_max": s.reach_max, "weapon_types": s.weapon_types, "min_proficiency": s.min_proficiency, "mitigation": s.mitigation,
 		"boost": s.boost, "boost_rounds": s.boost_rounds, "recover_ap": s.recover_ap,
 	})
 
@@ -147,73 +149,146 @@ static func item_fits_slot(entry: Dictionary, slot_name: String) -> bool:
 	return eq.can_equip_in_slot(_enum(Equipment.EquipSlot.keys(), slot_name, 0) as Equipment.EquipSlot)
 
 # ------------------------------------------------------------------------------
+# Passives
+# ------------------------------------------------------------------------------
+
+# Applies the catalog passives `ids` to `c` (each once). Sources (world background,
+# faction, quest, lore, items) decide which; classes and base units grant none.
+static func apply_passives(c: Combatant, ids: Array[String]) -> void:
+	for id: String in ids:
+		var passive: Dictionary = ContentCatalog.get_entry("passives", id)
+		if not passive.is_empty():
+			Passives.apply(c, passive)
+
+# ------------------------------------------------------------------------------
 # Classes
 # ------------------------------------------------------------------------------
 
 static func class_archetype(entry: Dictionary) -> ClassArchetype:
 	var e: Dictionary = ContentSchema.normalize("classes", entry)
-	return ClassArchetype.new(str(e["id"]), str(e["name"]), _ints(e["base_stats"]), _ints(e["growth"]), _ints(e["masteries"]), _strings(e["allowed_gear"]))
+	var c := ClassArchetype.new(str(e["id"]), str(e["name"]))
+	c.description = str(e["description"])
+	c.base_stats = _ints(e["base_stats"])
+	c.growth_per_level = _ints(e["growth"])
+	c.proficiency = DictUtil.dict_of(e["proficiency"]).duplicate(true)
+	for step: Variant in DictUtil.array_of(e["skill_path"]):
+		var s: Dictionary = DictUtil.dict_of(step)
+		c.skill_path.append({"level": DictUtil.to_int(s.get("level", 1), 1), "skill": str(s.get("skill", ""))})
+	c.art = str(e["art"])
+	c.ai_role = str(e["ai_role"])
+	for slot: String in ContentSchema.LOADOUT_SLOTS:
+		if not str(e[slot]).is_empty():
+			c.loadout[slot] = str(e[slot])
+	if not _strings(e["pouch"]).is_empty():
+		c.loadout["pouch"] = _strings(e["pouch"])
+	return c
 
-static func class_to_entry(c: ClassArchetype, description: String = "") -> Dictionary:
-	return ContentSchema.normalize("classes", {
-		"id": c.id, "name": c.display_name, "description": description, "base_stats": c.base_stats,
-		"growth": c.growth_per_level, "masteries": c.innate_masteries, "allowed_gear": c.allowed_gear_types,
-	})
+static func class_to_entry(c: ClassArchetype) -> Dictionary:
+	var e: Dictionary = {
+		"id": c.id, "name": c.display_name, "description": c.description, "art": c.art, "ai_role": c.ai_role,
+		"base_stats": c.base_stats, "growth": c.growth_per_level, "proficiency": c.proficiency, "skill_path": c.skill_path,
+	}
+	for slot: String in ContentSchema.LOADOUT_SLOTS:
+		e[slot] = str(c.loadout.get(slot, ""))
+	e["pouch"] = c.loadout.get("pouch", [])
+	return ContentSchema.normalize("classes", e)
 
 # ------------------------------------------------------------------------------
 # Units
 # ------------------------------------------------------------------------------
 
+# Token / portrait key of a unit entry: its own art, else its class's, else a plain unit.
+static func art_of(entry: Dictionary) -> String:
+	var own: String = str(entry.get("art", ""))
+	if not own.is_empty():
+		return own
+	var arch: ClassArchetype = class_of(entry)
+	return arch.art if arch != null else "unit"
+
+# The class a unit entry builds on (null for fixed / unknown).
+static func class_of(e: Dictionary) -> ClassArchetype:
+	var class_id: String = str(e.get("class_id", ""))
+	if class_id.is_empty() or not ContentCatalog.has("classes", class_id):
+		return null
+	return ClassArchetype.create(class_id)
+
 # A fresh Combatant for unit `entry`, named `display_name` (default: the entry's).
-# AP comes from the entry, else `default_ap` (0 = Combatant default).
+# Class-derived units (the default): class base stats + spend + growth of their level,
+# the class's gear (per-slot overrides on the unit), the class skill path up to their
+# level plus extra skills, and the tier's HP / power scale. Fixed units keep their
+# authored vitals. AP comes from the entry, else `default_ap` (0 = Combatant default).
 static func unit(entry: Dictionary, display_name: String = "", default_ap: int = 0) -> Combatant:
 	var e: Dictionary = ContentSchema.normalize("units", entry)
 	var shown: String = display_name if not display_name.is_empty() else str(e["name"])
-	var class_id: String = str(e["class_id"])
-	var stats: CharacterStats = null
-	if not class_id.is_empty() and ContentCatalog.has("classes", class_id):
-		stats = CharacterStats.new(class_archetype(ContentCatalog.get_entry("classes", class_id)), DictUtil.to_int(e["level"]))
-	var derived: bool = str(e["stat_mode"]) == "derived"
+	var arch: ClassArchetype = class_of(e)
+	var derived: bool = str(e["stat_mode"]) == "derived" and arch != null
+	var level: int = DictUtil.to_int(e["level"], 1)
 	var c: Combatant
 	if derived:
-		c = Combatant.new(shown, 1, 1, 1, stats)
+		var spend: Dictionary = _ints(e["spend"])
+		if spend.is_empty():
+			spend = StatRules.auto_spend(arch.growth_per_level, StatRules.spend_pool(level))
+		c = Combatant.new(shown, 1, 1, 1, CharacterStats.new(arch, level, spend))
+	elif arch != null:
+		c = Combatant.new(shown, DictUtil.to_int(e["hp"]), DictUtil.to_int(e["speed"]), DictUtil.to_int(e["attack_range"]), CharacterStats.new(arch, level))
 	else:
-		c = Combatant.new(shown, DictUtil.to_int(e["hp"]), DictUtil.to_int(e["speed"]), DictUtil.to_int(e["attack_range"]), stats)
-	for slot: String in ContentSchema.LOADOUT_SLOTS:
-		var item_id: String = str(e[slot])
-		if item_id.is_empty() or not ContentCatalog.has("items", item_id):
-			continue
-		var built: Item = item(ContentCatalog.get_entry("items", item_id))
-		if built is Equipment:
-			var eq: Equipment = built
-			c.inventory.equip(eq, _enum(Equipment.EquipSlot.keys(), slot.to_upper(), 0))
-	for item_id: String in _strings(e["pouch"]):
-		if ContentCatalog.has("items", item_id):
-			var pouch_item: Item = item(ContentCatalog.get_entry("items", item_id))
-			if pouch_item is Consumable:
-				var con: Consumable = pouch_item
-				c.inventory.add_to_battle_pouch(con)
+		c = Combatant.new(shown, DictUtil.to_int(e["hp"]), DictUtil.to_int(e["speed"]), DictUtil.to_int(e["attack_range"]), CharacterStats.new())
+	_equip(c, e, arch)
 	if derived:
+		c.tier = str(e["tier"])
+		c.hp_scale = StatRules.tier_hp(c.tier)
+		c.power_scale = StatRules.tier_power(c.tier)
 		c.sync_from_stats_and_gear()
 		c.hp = c.max_hp
+		var skills: Array[String] = arch.skills_at(level)
+		for extra: String in _strings(e["extra_skills"]):
+			if not skills.has(extra):
+				skills.append(extra)
+		c.known_skills = skills
 	var ap: int = DictUtil.to_int(e["ap"]) if DictUtil.to_int(e["ap"]) > 0 else default_ap
 	if ap > 0:
 		c.max_ap = ap
 		c.ap = ap
 	c.power_override = DictUtil.to_int(e["power"])
 	c.armor_override = DictUtil.to_int(e["armor"])
-	c.known_skills = _strings(e["skills"])
 	var resist: Dictionary = _ints(e["status_resist"])
 	for status: Variant in resist:
 		c.status_resist[status] = resist[status]
 	c.catalog_id = str(e["id"])
 	return c
 
-# How unit `entry` (spawned as `c`) plans its rounds.
+# Equips the class's default gear, with per-slot overrides from the unit entry.
+static func _equip(c: Combatant, e: Dictionary, arch: ClassArchetype) -> void:
+	for slot: String in ContentSchema.LOADOUT_SLOTS:
+		var item_id: String = str(e[slot])
+		if item_id.is_empty() and arch != null:
+			item_id = str(arch.loadout.get(slot, ""))
+		if item_id.is_empty() or not ContentCatalog.has("items", item_id):
+			continue
+		var built: Item = item(ContentCatalog.get_entry("items", item_id))
+		if built is Equipment:
+			var eq: Equipment = built
+			c.inventory.equip(eq, _enum(Equipment.EquipSlot.keys(), slot.to_upper(), 0))
+	var pouch: Array[String] = _strings(e["pouch"])
+	if pouch.is_empty() and arch != null:
+		pouch = _strings(arch.loadout.get("pouch", []))
+	for item_id: String in pouch:
+		if ContentCatalog.has("items", item_id):
+			var pouch_item: Item = item(ContentCatalog.get_entry("items", item_id))
+			if pouch_item is Consumable:
+				var con: Consumable = pouch_item
+				c.inventory.add_to_battle_pouch(con)
+
+# How unit `entry` plans its rounds: its AI role (or the class's), thresholds and skill cap.
 static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	var e: Dictionary = ContentSchema.normalize("units", entry)
-	var role: AiProfile.Role = _enum(AiProfile.Role.keys(), str(e["ai_role"]), 0) as AiProfile.Role
-	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), DictUtil.to_int(e["skill_cap"]))
+	var arch: ClassArchetype = class_of(e)
+	var role_name: String = str(e["ai_role"]) if not str(e["ai_role"]).is_empty() else (arch.ai_role if arch != null else "AGGRESSOR")
+	var role: AiProfile.Role = _enum(AiProfile.Role.keys(), role_name, 0) as AiProfile.Role
+	var cap: int = DictUtil.to_int(e["skill_cap"])
+	if cap <= 0:
+		cap = StatRules.skill_cap_for_level(DictUtil.to_int(e["level"], 1)) if arch != null else 1
+	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), cap)
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])
 	if str(e["target_pref"]) != "ROLE":

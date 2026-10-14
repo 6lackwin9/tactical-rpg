@@ -159,10 +159,10 @@ static func _test_tuning_items_disciplines() -> bool:
 	var plain: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "warrior"), "", 12)
 	var worn: Equipment = mara.inventory.get_equipped(Equipment.EquipSlot.BODY)
 	checks["named item worn"] = worn != null and worn.name == "Ember-Scale Brigandine" and worn.mitigation == ItemCatalog.create_equipment("arm_leather").mitigation + 2
-	checks["named item armor"] = DamageCalculator.armor_rating(mara) == DamageCalculator.armor_rating(plain) + worn.mitigation and mara.max_hp == plain.max_hp
-	# Disciplines raise the base mastery to their rank (and never lower it).
+	checks["named item armor"] = DamageCalculator.armor_rating(mara) == mara.stats.get_mitigation_rating(mara.inventory.get_total_flat_mitigation(), mara.get_weapon_context()) and mara.max_hp == plain.max_hp
+	# Disciplines and factions grant base passives (traits from the world, never part of the class).
 	var tev: Combatant = ash.unit("tev_quill")
-	checks["discipline rank"] = tev.stats.mastery.get_weapon_mastery("bow") == 2 and mara.stats.mastery.get_weapon_mastery("sword") >= 1
+	checks["discipline rank"] = tev.passives.has("keen_senses") and mara.passives.has("steady_nerves") and DictUtil.int_of(mara.status_resist, "stagger") >= 25
 	# Illegal tuning is rejected.
 	var bad: Array[String] = WorldCatalog.blocking_errors("ashlands", "characters", {"id": "x", "name": "X", "tuning": {"mana": 5}})
 	checks["unknown tuning rejected"] = not bad.is_empty() and bad[0].contains("Unknown")

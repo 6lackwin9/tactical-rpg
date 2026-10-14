@@ -7,9 +7,10 @@ extends RefCounted
 # area), the planner's damage estimates, the forecast, and the Gear Dojo.
 #
 #   Attack Power = Weapon Power + Unit Power
-#     Weapon Power = (Base + Tier bonus + Mastery bonus) x (1 - Deficit)
-#     Unit Power   = Stat x Scaling       (the weapon's scaling stat; 1.5 for now,
-#                                          see unit_power_scaling)
+#     Weapon Power = (Base + Tier bonus + Training bonus) x (1 - Deficit)
+#     Unit Power   = Stat x Scaling       (the weapon's scaling stat; Scaling = the
+#                                          class's Proficiency scaling for that gear)
+#     x tier power scale (Combatant.power_scale: minion 0.6 ... boss 1.2)
 #     Unarmed      = Weapon 0, Unit Power = STR + DEX
 #     A weapon that doesn't suit the attack (a sword for a ranged shot) adds
 #     nothing: Unit Power = DEX (ranged) or STR (melee) x Scaling.
@@ -35,9 +36,11 @@ const CRIT_MULT: float = 1.5
 # Attack power
 # ------------------------------------------------------------------------------
 
-# Unit-power scaling for `attacker` wielding `weapon` (null = unarmed). A hook for
-# class / weapon preferences (how easy the weapon is to wield); 1.5 for everyone now.
-static func unit_power_scaling(_attacker: Combatant, _weapon: Equipment) -> float:
+# Unit-power scaling for `attacker` wielding `weapon` (null = unarmed): how easy the
+# weapon is to wield for the unit's class (Proficiency scaling, 1.0-2.0; 1.5 default).
+static func unit_power_scaling(attacker: Combatant, weapon: Equipment) -> float:
+	if weapon != null and attacker.stats != null and attacker.stats.proficiency != null:
+		return attacker.stats.proficiency.scaling_of(weapon.weapon_type)
 	return DEFAULT_UNIT_SCALING
 
 # The weapon an attack swings: off-hand weapon (or bare hands) for off-hand
@@ -51,12 +54,12 @@ static func _stat(attacker: Combatant, stat_name: String, ctx: Dictionary) -> in
 	return attacker.stats.get_effective_stat(stat_name, ctx) if attacker.stats != null else 10
 
 # Attack power and its parts. Keys: authored, weapon, weapon_fits, base_w_power,
-# tier_boost, mastery_pwr, total_w_power, pen_ratio, def_amount, weapon_power,
+# tier_boost, training_pwr, total_w_power, pen_ratio, def_amount, weapon_power,
 # stat_name, stat_val, unit_scaling, unit_power, attack_power.
 static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offhand: bool = false) -> Dictionary:
 	var w: Equipment = weapon_for(attacker, use_offhand)
 	var res: Dictionary = {
-		"authored": false, "weapon": w, "weapon_fits": false, "base_w_power": 0, "tier_boost": 0, "mastery_pwr": 0,
+		"authored": false, "weapon": w, "weapon_fits": false, "base_w_power": 0, "tier_boost": 0, "training_pwr": 0,
 		"total_w_power": 0, "pen_ratio": 0.0, "def_amount": 0, "weapon_power": 0.0,
 		"stat_name": "", "stat_val": 0, "unit_scaling": 1.0, "unit_power": 0.0, "attack_power": 0,
 	}
@@ -64,7 +67,7 @@ static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offha
 		res["authored"] = true
 		res["stat_name"] = "authored"
 		res["unit_power"] = float(attacker.power_override)
-		res["attack_power"] = attacker.power_override
+		res["attack_power"] = attacker.power_override   # authored power is absolute: tiers don't scale it
 		return res
 	var ctx: Dictionary = {"weapon": w.weapon_type} if w != null else {}
 	if w == null:
@@ -81,16 +84,16 @@ static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offha
 		res["unit_scaling"] = scaling
 		var stat_name: String = w.scaling_stat if fits else ("DEX" if is_ranged else "STR")
 		if fits:
-			var tier: int = w.get_unlocked_threshold_power_boost(attacker.stats, attacker.stats.mastery) if attacker.stats != null else 0
-			var mastery: int = attacker.stats.mastery.get_weapon_power_bonus(w.weapon_type) if attacker.stats != null and attacker.stats.mastery != null else 0
-			var total: int = w.base_power + tier + mastery
+			var tier: int = w.get_unlocked_threshold_power_boost(attacker.stats, attacker.stats.proficiency) if attacker.stats != null else 0
+			var training: int = attacker.stats.proficiency.get_weapon_power_bonus(w.weapon_type) if attacker.stats != null and attacker.stats.proficiency != null else 0
+			var total: int = w.base_power + tier + training
 			res["base_w_power"] = w.base_power
 			res["tier_boost"] = tier
-			res["mastery_pwr"] = mastery
+			res["training_pwr"] = training
 			res["total_w_power"] = total
 			var pen_ratio: float = 0.0
 			if attacker.stats != null:
-				var pen: Dictionary = w.get_wield_penalty(attacker.stats, attacker.stats.mastery)
+				var pen: Dictionary = w.get_wield_penalty(attacker.stats, attacker.stats.proficiency)
 				if DictUtil.to_bool(pen.get("is_penalized", false)):
 					pen_ratio = DictUtil.to_float(pen.get("power_penalty_ratio", 0.0))
 					res["def_amount"] = DictUtil.to_int(pen.get("deficit", 0))
@@ -100,7 +103,8 @@ static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offha
 		res["stat_name"] = stat_name
 		res["stat_val"] = stat_val
 		res["unit_power"] = float(stat_val) * scaling
-	res["attack_power"] = maxi(1, roundi(DictUtil.to_float(res["weapon_power"]) + DictUtil.to_float(res["unit_power"])))
+	res["power_scale"] = attacker.power_scale
+	res["attack_power"] = maxi(1, roundi((DictUtil.to_float(res["weapon_power"]) + DictUtil.to_float(res["unit_power"])) * attacker.power_scale))
 	return res
 
 static func power_of(attacker: Combatant, is_ranged: bool = false, use_offhand: bool = false) -> int:
@@ -123,8 +127,15 @@ static func armor_rating(target: Combatant) -> int:
 static func armor_reduction(rating: int) -> float:
 	return float(maxi(0, rating)) / (float(maxi(0, rating)) + ARMOR_K)
 
+# Crit chance: DEX-based (CharacterStats) plus training in the wielded weapon type.
 static func crit_chance(attacker: Combatant) -> float:
-	return attacker.stats.get_crit_rate(attacker.get_weapon_context()) if attacker.stats != null else CRIT_BASE
+	if attacker.stats == null:
+		return CRIT_BASE
+	var ctx: Dictionary = attacker.get_weapon_context()
+	var chance: float = attacker.stats.get_crit_rate(ctx)
+	if attacker.stats.proficiency != null and ctx.has("weapon"):
+		chance += attacker.stats.proficiency.crit_bonus(str(ctx["weapon"]))
+	return chance
 
 # ------------------------------------------------------------------------------
 # A hit
@@ -192,12 +203,16 @@ static func describe(res: Dictionary) -> String:
 		parts.append("Strike power %d (authored)" % DictUtil.to_int(res["attack_power"]))
 	else:
 		var weapon_txt: String = "Weapon %.0f" % DictUtil.to_float(res["weapon_power"])
-		if DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["mastery_pwr"]) > 0:
-			weapon_txt += " (base %d +%d tier +%d mastery)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["mastery_pwr"])]
+		if DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["training_pwr"]) > 0:
+			weapon_txt += " (base %d +%d tier +%d training)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["training_pwr"])]
 		if DictUtil.to_float(res["pen_ratio"]) > 0.0:
 			weapon_txt += " -%d%% deficit" % roundi(DictUtil.to_float(res["pen_ratio"]) * 100.0)
 		var unit_txt: String = ("Unit %.0f (%s %d)" % [DictUtil.to_float(res["unit_power"]), str(res["stat_name"]), DictUtil.to_int(res["stat_val"])]) if str(res["stat_name"]) == "STR+DEX" else ("Unit %.0f (%s %d x %.1f)" % [DictUtil.to_float(res["unit_power"]), str(res["stat_name"]), DictUtil.to_int(res["stat_val"]), DictUtil.to_float(res["unit_scaling"])])
-		parts.append("%s + %s = %d" % [weapon_txt, unit_txt, DictUtil.to_int(res["attack_power"])])
+		var tier_scale: float = DictUtil.to_float(res.get("power_scale", 1.0), 1.0)
+		if is_equal_approx(tier_scale, 1.0):
+			parts.append("%s + %s = %d" % [weapon_txt, unit_txt, DictUtil.to_int(res["attack_power"])])
+		else:
+			parts.append("(%s + %s) x tier %.2f = %d" % [weapon_txt, unit_txt, tier_scale, DictUtil.to_int(res["attack_power"])])
 	var mults: Array[String] = []
 	if DictUtil.to_float(res.get("buff_mult", 1.0)) > 1.0:
 		mults.append("Focus x%.2f" % DictUtil.to_float(res["buff_mult"]))

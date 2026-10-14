@@ -63,12 +63,12 @@ static func _test_engine_parity() -> bool:
 	ItemCatalog.populate_party_starter_stash(stash)
 	var items_ok: bool = (claymore.base_power == 24 and claymore.is_two_handed and claymore.threshold_tiers.size() == 1
 		and DictUtil.int_of(claymore.required_stats, "STR") == 14 and ItemCatalog.create_healing_draught().max_stack == 5
-		and stash.items.size() == 17)
-	var classes_ok: bool = ClassArchetype.create_warrior().get_base_stat("STR") == 16 and ClassArchetype.create_berserker().allowed_gear_types.has("axe")
+		and stash.items.size() == 21)
+	var classes_ok: bool = ClassArchetype.create_warrior().get_base_stat("STR") == 15 and ClassArchetype.create_berserker().make_proficiency().level_of("axe") == 3
 	var enc := CatalogEncounter.new("goblin_skirmish")
 	enc.build()
-	var units_ok: bool = (enc.unit("warrior").max_hp == 100 and enc.unit("goblin_archer").attack_range == 3 and enc.unit("warrior").max_ap == 12
-		and enc.plan_context().power_of(enc.unit("warrior")) == 25 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
+	var units_ok: bool = (enc.unit("warrior").tier == "hero" and enc.unit("goblin_archer").attack_range >= 3 and enc.unit("warrior").max_ap == 12
+		and enc.unit("goblin_archer").hp_scale == 0.4 and enc.unit("warrior").max_hp > enc.unit("goblin_brawler").max_hp * 2 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
 		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.unit("goblin_shaman")) == "shaman" and enc.unit("warrior").catalog_id == "warrior")
 	return _report("Engine content comes from the catalog (skills, items, stash, classes, Goblin Skirmish)", skills_ok and items_ok and classes_ok and units_ok,
 		"skills %s, items %s, classes %s, units %s" % [skills_ok, items_ok, classes_ok, units_ok])
@@ -84,7 +84,7 @@ static func _test_round_trip() -> bool:
 		if JSON.stringify(ContentSchema.to_storage("items", back)) != JSON.stringify(ContentSchema.to_storage("items", e)):
 			bad.append(str(e["id"]))
 	for e: Dictionary in ContentCatalog.entries("classes"):
-		if JSON.stringify(ContentFactory.class_to_entry(ContentFactory.class_archetype(e), str(e["description"]))) != JSON.stringify(ContentSchema.normalize("classes", e)):
+		if JSON.stringify(ContentFactory.class_to_entry(ContentFactory.class_archetype(e))) != JSON.stringify(ContentSchema.normalize("classes", e)):
 			bad.append(str(e["id"]))
 	return _report("Skills, items and classes round-trip through engine objects unchanged", bad.is_empty(), ", ".join(bad))
 
@@ -105,6 +105,13 @@ static func _test_validation() -> bool:
 	checks["wrong slot"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "main_hand": "shd_kite"}), "can't be")
 	checks["2H + shield"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "main_hand": "wpn_claymore", "off_hand": "shd_kite"}), "two-handed")
 	checks["derived needs class"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "stat_mode": "derived"}), "need a class")
+	checks["class budget"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fat", "name": "Fat", "base_stats": {"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}}), "must total")
+	checks["class growth"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fast", "name": "Fast", "growth": {"STR": 3, "DEX": 3, "INT": 3}}), "gains exactly")
+	checks["class proficiency gear"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"banjo": {"level": 1}}}), "unknown gear type")
+	checks["class skill cap"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "heavy_blow"}]}), "too advanced")
+	checks["class gear training"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"sword": {"level": 1}}, "main_hand": "wpn_shortbow"}), "no training")
+	checks["spend pool"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "class_id": "warrior", "level": 1, "spend": {"STR": 9}}), "spends exactly 4")
+	checks["passive effects"] = _has_error(ContentCatalog.validate_entry("passives", {"id": "bad_pass", "name": "Bad", "effects": [{"type": "stat", "stat": "LUCK", "value": 2}]}), "unknown stat")
 	checks["empty encounter"] = _has_error(ContentCatalog.validate_entry("encounters", {"id": "void", "name": "Void"}), "at least one enemy")
 	checks["side filter"] = _has_error(ContentCatalog.validate_entry("encounters", {"id": "mix", "name": "Mix", "party": ["goblin_archer"], "enemies": ["warrior"]}), "can't be used here")
 	checks["in-use delete refused"] = ContentCatalog.remove("items", "wpn_shortbow").contains("still used")
@@ -125,10 +132,11 @@ static func _test_authoring() -> bool:
 		"power_mult": 1.3, "status_effect": "stagger", "status_potency": 30, "description": "Forge test skill."}))
 	errors.append_array(ContentCatalog.upsert("items", {"id": "test_glaive", "name": "Test Glaive", "item_type": "WEAPON", "slot": "MAIN_HAND",
 		"weapon_type": "sword", "base_power": 30, "two_handed": true, "scaling_stat": "STR", "required_stats": {"STR": 10}, "rarity": "RARE", "weight": 5.0}))
-	errors.append_array(ContentCatalog.upsert("classes", {"id": "test_paladin", "name": "Test Paladin", "base_stats": {"STR": 15, "CONS": 16, "INT": 12},
-		"growth": {"STR": 2, "CONS": 2}, "masteries": {"sword": 1}, "allowed_gear": ["sword", "plate"]}))
+	errors.append_array(ContentCatalog.upsert("classes", {"id": "test_paladin", "name": "Test Paladin", "art": "warrior",
+		"base_stats": {"STR": 14, "DEX": 8, "INT": 8, "CONS": 15, "PERC": 9, "KNOW": 8}, "growth": {"STR": 2, "CONS": 2, "PERC": 1},
+		"proficiency": {"sword": {"level": 2, "scaling": 1.5}, "plate": {"level": 2, "scaling": 1.5}}, "skill_path": [{"level": 1, "skill": "guard"}]}))
 	errors.append_array(ContentCatalog.upsert("units", {"id": "test_knight", "name": "Test Knight", "side": "party", "art": "warrior",
-		"class_id": "test_paladin", "level": 3, "stat_mode": "derived", "skill_cap": 2, "skills": ["test_cleave"], "ai_role": "AGGRESSOR",
+		"class_id": "test_paladin", "level": 3, "stat_mode": "derived", "skill_cap": 2, "extra_skills": ["test_cleave"], "ai_role": "AGGRESSOR",
 		"flee_ratio": 0.0, "main_hand": "test_glaive", "body": "arm_plate"}))
 	errors.append_array(ContentCatalog.upsert("units", {"id": "test_raider", "name": "Test Raider", "side": "enemy", "art": "brawler",
 		"stat_mode": "fixed", "hp": 30, "speed": 12, "attack_range": 1, "power": 8, "ai_role": "AGGRESSOR", "status_resist": {"stagger": 100}}))
@@ -149,7 +157,7 @@ static func _test_authoring() -> bool:
 	# Templates: duplicating keeps every field under a fresh id.
 	var copy_id: String = ContentCatalog.duplicate_entry("units", "goblin_archer")
 	var copy: Dictionary = ContentCatalog.get_entry("units", copy_id)
-	var templated: bool = copy_id == "goblin_archer_copy" and DictUtil.to_int(copy["attack_range"]) == 3 and str(copy["ai_role"]) == "SNIPER"
+	var templated: bool = copy_id == "goblin_archer_copy" and str(copy["class_id"]) == "ranger" and str(copy["tier"]) == "minion"
 	ContentCatalog.remove("units", copy_id)
 	ContentCatalog.save_all()
 	return _report("Author skill/item/class/units/encounter, save to disk, reload, rename refs, duplicate as template",
@@ -173,7 +181,7 @@ static func _test_authored_units_in_planning() -> bool:
 	var self_names: Array[String] = []
 	for opt: PlanOption in session.plan.target_options(knight, knight):
 		self_names.append(opt.step.skill.id)
-	var skills_ok: bool = attack_names.has("test_cleave") and not attack_names.has("strike") and self_names.has("rest") and not self_names.has("guard")
+	var skills_ok: bool = attack_names.has("test_cleave") and not attack_names.has("strike") and self_names.has("rest") and self_names.has("guard") and not self_names.has("brace")
 	session.dispose()
 	return _report("Authored units: class-derived vitals, gear, numbered duplicates, whitelisted skills, resistances", built_ok and skills_ok,
 		"built %s, attacks %s, self %s" % [built_ok, str(attack_names), str(self_names)])
@@ -261,8 +269,9 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	forge.form.set_value("id", "forge_scout")
 	forge.form.set_value("name", "Forge Scout")
 	forge.form.set_value("side", "party")
-	forge.form.set_value("art", "scout")
-	forge.form.set_value("skills", ["strike", "guard"])
+	forge.form.set_value("class_id", "scout")
+	forge.form.set_value("level", 3)
+	forge.form.set_value("tier", "standard")
 	checks["new unit applied"] = forge.apply() and ContentCatalog.has("units", "forge_scout")
 	forge.playtest()
 	var playing: bool = DictUtil.to_bool(host.call("is_playtesting"))

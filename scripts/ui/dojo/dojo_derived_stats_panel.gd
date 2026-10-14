@@ -108,7 +108,7 @@ func refresh() -> void:
 	var eff_dex: int = st.get_effective_stat("DEX", ctx)
 	var eff_int: int = st.get_effective_stat("INT", ctx)
 	var eff_cons: int = st.get_effective_stat("CONS", ctx)
-	var burden: int = inv.get_total_armor_burden() if inv != null else 0
+	var burden: int = hero.worn_burden()
 	var report: Dictionary = session.carry_report
 
 	# --- Offensive power (DamageCalculator: weapon power + unit power) ---
@@ -176,9 +176,9 @@ func _power_tip(title: String, res: Dictionary) -> String:
 	var weapon_txt: String = "%.0f" % DictUtil.to_float(res["weapon_power"])
 	if not DictUtil.to_bool(res["weapon_fits"]):
 		weapon_txt = "0 (weapon doesn't suit this attack)"
-	elif DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["mastery_pwr"]) > 0 or DictUtil.to_float(res["pen_ratio"]) > 0.0:
-		weapon_txt += " (base %d + tier %d + mastery %d, -%d%% deficit)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["mastery_pwr"]), roundi(DictUtil.to_float(res["pen_ratio"]) * 100.0)]
-	return _tip(title, "Weapon Power (base + tier + mastery, deficit) + Unit Power (stat × %.1f)" % DictUtil.to_float(res["unit_scaling"]),
+	elif DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["training_pwr"]) > 0 or DictUtil.to_float(res["pen_ratio"]) > 0.0:
+		weapon_txt += " (base %d + tier %d + training %d, -%d%% deficit)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["training_pwr"]), roundi(DictUtil.to_float(res["pen_ratio"]) * 100.0)]
+	return _tip(title, "Weapon Power (base + tier + training, deficit) + Unit Power (stat × %.1f)" % DictUtil.to_float(res["unit_scaling"]),
 		"%s + (%d %s × %.1f = %.0f) = [b]%d[/b]" % [weapon_txt, DictUtil.to_int(res["stat_val"]), str(res["stat_name"]), DictUtil.to_float(res["unit_scaling"]), DictUtil.to_float(res["unit_power"]), DictUtil.to_int(res["attack_power"])])
 
 func _tip(title: String, formula: String, calc: String) -> String:

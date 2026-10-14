@@ -34,7 +34,7 @@ tactical-rpg/
 │   └── catalog/                  # Content catalog (JSON, edited in the Content Forge): the single source of game content
 │       ├── skills.json               # Every skill tier (attacks, defends, focus, rest + engine skills marked "system")
 │       ├── items.json                # Weapons, shields, armor, accessories, consumables ("starter_stash" flag)
-│       ├── classes.json              # Class archetypes: base stats, growth, masteries, gear proficiencies
+│       ├── classes.json              # The six base classes: stats, growth, gear proficiency dict, skill path, loadout, art
 │       ├── units.json                # Party members & enemies: vitals or class/level-derived, loadout, skills, AI profile
 │       └── encounters.json           # Battles: zone, exits, round rules, party & enemy rosters
 │   └── worlds/                   # Lore worlds (JSON, edited in the World Forge): modular, inheritable; reference catalog assets
@@ -76,7 +76,9 @@ tactical-rpg/
 │   │   ├── specs/                # Character specs, 6-stat framework & progression models
 │   │   │   ├── character_stats.gd        # 6 stats (STR, DEX, INT | CONS, PERC, KNOW), leveling (1-10), derived stats
 │   │   │   ├── class_archetype.gd        # Base stats, growths & proficiencies; presets come from the catalog (create(id))
-│   │   │   ├── mastery_system.gd         # Horizontal progression (weapon proficiencies, lore, faction scores)
+│   │   │   ├── stat_rules.gd             # Enforced rules: class budget & growth, spend pool, tiers, skill cap by level
+│   │   │   ├── proficiency.gd            # Gear proficiency dict {type: {level, scaling}} and what training does
+│   │   │   ├── passives.gd               # Passive effects granted by sources (stat, proficiency, resist, AP regen, skill)
 │   │   │   └── stat_modifier.gd          # Composable flat/percent modifiers with contextual gating
 │   │   ├── inventory/            # Gear, equipment requirements & inventory containers
 │   │   │   ├── item.gd                   # Base item model (type, rarity, weight, value)
@@ -140,6 +142,7 @@ tactical-rpg/
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   ├── arena_test_suite.gd       # Combat, planning, AI, art & session suites (runs the content suite last)
 │   │   ├── core_rules_test_suite.gd  # Core combat rules via the planner: guard & matchup, stances, Focus, casualties, withdrawal, feed
+│   │   ├── class_rules_test_suite.gd # Six classes: budget/growth, spend variance, tiers, proficiency, passives, skill paths
 │   │   ├── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
 │   │   ├── runner_test_suite.gd      # Scene Runner: scene list, launch/restart/menu, unsaved-work guard, hot reload
 │   │   └── world_test_suite.gd       # Worlds: shipped data, inheritance, same-base/different-lore parity, tuning, renames, connections, Forge UI, runner
@@ -153,7 +156,7 @@ tactical-rpg/
 │       ├── dojo/                     # Gear Dojo & Party/Stash components (extend DojoPanel)
 │       │   ├── dojo_panel.gd             # UiPanel adapter with a typed DojoSession
 │       │   ├── dojo_workspace.gd         # Toolbar, desk, window toggles, layout presets, persistence, overlays
-│       │   ├── dojo_unit_inspector_panel.gd  # Component 1: identity, 6 stats, masteries (static layout)
+│       │   ├── dojo_unit_inspector_panel.gd  # Component 1: identity, 6 stats, gear proficiency & passives (static layout)
 │       │   ├── dojo_gear_panel.gd        # Component 2: equipped gear, pouch & Quick Setup
 │       │   ├── dojo_stage_panel.gd       # Component 3: combat region (hero vs dummy, vitals, FX)
 │       │   ├── dojo_console_panel.gd     # Component 4: test console (attacks, skills, modifiers, benchmarks)
@@ -227,13 +230,13 @@ tactical-rpg/
 Every hit goes through `DamageCalculator.compute`: arena attacks (single-target and each victim of an area attack), the planner's `~N dmg` estimates, the tactical forecast and the Gear Dojo.
 
 - **Attack Power = Weapon Power + Unit Power**
-  - *Weapon Power* = (base + threshold-tier bonus + mastery bonus) × (1 - stat deficit). A weapon that doesn't suit the attack (a sword for a ranged shot) adds 0.
-  - *Unit Power* = the weapon's scaling stat × **1.5** (`DamageCalculator.unit_power_scaling`, the hook for future class / weapon-ease preferences). A weapon that doesn't suit the attack uses DEX (ranged) or STR (melee).
+  - *Weapon Power* = (base + threshold-tier bonus + proficiency training) × (1 - stat deficit). A weapon that doesn't suit the attack (a sword for a ranged shot) adds 0.
+  - *Unit Power* = the weapon's scaling stat × the class's **proficiency scaling** for that gear (1.0-2.0, default 1.5; `DamageCalculator.unit_power_scaling`), then × the unit's **tier power** (hero 1.0 ... minion 0.6, boss 1.2). A weapon that doesn't suit the attack uses DEX (ranged) or STR (melee).
   - *Unarmed*: Weapon Power 0, Unit Power **STR + DEX**. Off-hand jabs use the off-hand weapon, or bare hands.
-  - *Authored strike power* (a unit's `power` > 0 in the catalog, e.g. the goblins) replaces the whole sum.
+  - *Authored strike power* (a unit's `power` > 0 in the catalog, e.g. the goblins) is absolute (tiers don't scale it); used by fixed units such as the training dummy.
 - **Hit = Attack Power × Focus × Skill × Stance Matchup × Crit × (1 - Guard) × (1 - Armor)**, rounded once, minimum 1.
   - *Stance Matchup*: 1.25 / 0.75 / 1.0 (section 2).
-  - *Crit*: **5% + 1% per DEX above 10**, damage **×1.5**. Rolled with the battle's seeded RNG (the encounter's `rng_seed`; the Dojo's own seeded RNG), so replays repeat exactly.
+  - *Crit*: **5% + 1% per DEX above 10 + 1% per weapon training level above 1**, damage **×1.5**. Rolled with the battle's seeded RNG (the encounter's `rng_seed`; the Dojo's own seeded RNG), so replays repeat exactly.
   - *Guard*: Defend skills (Guard -30%, Brace -50%, Fortress -70%).
   - *Armor*: rating = equipped gear mitigation + STR / 4 (or the unit's authored `armor`, the training dummy has 0); damage × (1 - rating / (rating + 50)): 10 → -17%, 20 → -29%, 40 → -44%.
 - **Estimates** (`DamageCalculator.expected`): the same formula with no crit and no guard (unknown ahead), armor included. Log cells show the hit actually dealt and, in debug builds, the full breakdown on hover (`DamageCalculator.describe`).
@@ -278,26 +281,22 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
   - Synchronized multi-unit timeline modal.
 - **Visual Combat FX**: Tweened attacker lunges, directional impacts, damage flash, stance pulse glows, and floating combat text (`-25 [MIT]`, `⚑ WITHDRAWN!`, `💀 DEFEATED!`).
 
-### 6. Character Specs, 6-Stat Framework & Mastery Engine (System 5)
+### 6. Classes, Units, Proficiency & Passives (System 5)
 
 - **6-Stat Architecture**:
-  - **3 Active Stats (Combat-Primary)**: `STR` (Physical Power, Armor Burden mitigation), `DEX` (Initiative Speed, Ranged Power, Crit Hit Rate), `INT` (Tactical & Skill Power, Buff potency, Debuff Resistance).
-  - **3 Passive Stats (Non-Combat-Primary)**: `CONS` (Travel endurance, Max HP scaling), `PERC` (Secret/trap spotting, Timeline intent unmasking), `KNOW` (Lore/dialogue, route danger reduction, tactical forecast intel).
-- **Derived Combat Metrics**:
-  - **Max HP**: $60 + (\text{CONS} \times 8) + (\text{STR} \times 2) + \text{Accessory HP}$.
-  - **Initiative Speed**: $\max(1, 8 + \text{DEX} - \text{Total Armor Burden} + \text{Accessory Speed})$.
-  - **Crit Hit Rate** (DEX-based): $5\% + 1\%$ per DEX above 10, $1.5\times$ critical damage (section 2b).
-  - **Debuff Resistance** (INT-based): $\text{INT} \times 2.5\%$, mitigating status ailment chance and penalty severity.
-  - **Effective Melee / Ranged Power**:
-    $$\text{Attack Power} = \text{Weapon Power} \times (1 - \text{Deficit}) + \text{Stat} \times 1.5 \quad (\text{unarmed: STR + DEX})$$
-    where $\text{Weapon Power} = \text{Base Power} + \text{Tier Bonus} + \text{Mastery Bonus}$.
-- **10-Level Cap & Progression**:
-  - Guaranteed stat growths per level based on Class Archetype (`Warrior`, `Ranger`, `Shaman`, `Brawler`, `Scout`, `Berserker`).
-  - 1 free attribute point per level for customization and flavor.
-  - Bulk of free points awarded via outside exploration events (ancient shrines, quest rewards, tomes).
-- **Horizontal Progression (Mastery System)**:
-  - Weapon Masteries (Sword, Bow, Staff, etc.): Provide stat threshold discounts and direct Weapon Power bonuses ($+2\text{ Weapon Power}$ per rank) affecting combat damage calculations.
-  - Lore & Faction Masteries: Contextual knowledge bonuses in specific biomes or dialogue interactions.
+  - **3 Active Stats**: `STR` (Physical Power, armor), `DEX` (Initiative Speed, Ranged Power, Crit), `INT` (Tactical & Skill Power, Debuff Resistance).
+  - **3 Passive Stats**: `CONS` (Max HP), `PERC` (spotting, intent unmasking), `KNOW` (lore, forecast intel).
+- **Derived Combat Metrics**: Max HP = 60 + CONS x 8 + STR x 2 (x tier HP scale); Initiative Speed = max(1, 8 + DEX - armor burden); Crit = 5% + 1% per DEX above 10 (+ training); Attack Power per section 2b.
+- **Base rules (`StatRules`, enforced by the catalog)**:
+  - Exactly **six base classes**: Warrior, Ranger, Shaman, Brawler, Scout, Berserker.
+  - Every class has the **same level-1 stat budget (62)** (6-18 per stat) and the **same growth (5 points per level, max 3 per stat)**: classes differ only in distribution.
+  - **Units of one class differ by their spend pool**: `4 + (level - 1)` free points, spent exactly (authored for NPCs / enemies; the player chooses for party members; empty = follow the class weights).
+  - **Levels 1-10**; the skill-level cap follows the level (`ceil(level / 2)`).
+- **Classes vs units**: a *class* is stats + gear + skills (stat distribution, growth, gear proficiency, skill path, default loadout, art, AI role), lore-free. A *unit* is a class + level + side (party / enemy / neutral) + **tier** (hero, minion, standard, elite, boss: scale HP and power) + spend + optional gear / extra-skill overrides. Enemies use the same class curve at a tier, so a goblin is *lore* on top of a minion Brawler; worlds set levels and explicit tuning deltas. Fixed-stat units (e.g. the training dummy) remain possible.
+- **Gear proficiency** (`Proficiency`): an editable dictionary `{gear type: {level 1-3, scaling 1.0-2.0}}` per class. Unlisted gear can't be equipped. Levels give +1 Weapon Power each, a 2-point stat-requirement discount each, +1% crit per level above 1, -1 armor burden per level above 1, level 3 weapons cost one block less, and gate skills that need training (`SkillDef.weapon_types` / `min_proficiency`). `scaling` is how easy the gear is to wield: the multiplier on the scaling stat in Unit Power.
+- **Skills**: each class has a **skill path** (`[{level, skill}]`); a unit knows the path up to its level plus `extra_skills` and skills learned in play (`Combatant.learn_skill`, passives of type `skill`). The planner and AI only offer skills the unit can use (`Combatant.can_use`).
+- **Passives (replace mastery)**: lore-free templates in `data/catalog/passives.json` with effects `stat` (optionally only in a context, e.g. ruins), `proficiency`, `resist`, `ap_regen`, `skill`. Classes and base units grant none: **sources** (a world character's own list, faction `grants`, discipline `passives`, named item `grants`; later quests and lore) do, via `WorldFactory.character_passives`.
+- **Progression**: guaranteed class growth each level plus 1 free point per level; bonus points from events (`add_free_attribute_points`).
 
 ### 7. Equipment, Requirements & Inventory Engine (System 7)
 
@@ -333,7 +332,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Headless Session + Modular Windows**: All dojo state and rules live in `DojoSession` (`RefCounted`, no UI). Six independent panel components render from it, each hosted in a floating `UiWindow` inside `DojoWorkspace`. Panels never talk to each other, only to the session, so any of them can be closed, moved, or reused elsewhere.
 - **Window System**: Drag by the title bar, resize from the bottom-right grip, collapse with `–` (or double-click the title), close with `✕`, and reopen from the toolbar `Windows:` toggles. Clicking a window raises it. Three layout presets (`Workbench`, `Combat Focus`, `Gear Focus`) plus `⟲ Re-tile`; window geometry is stored as fractions of the desk and persisted to `user://gear_dojo_layout.cfg`, so layouts survive restarts and window resizes.
 - **The Six Components**:
-  1. **Unit Inspector**: portrait, level/HP, the 6 base attributes with BBCode hover breakdowns (base, mastery, gear, buffs) and weapon masteries. `Unspent Points` opens the **Allocate** overlay (the `-` button only undoes newly allocated points; `Reset`/`Confirm`/`Cancel`), so the inspector itself never changes layout.
+  1. **Unit Inspector**: portrait, level/HP, the 6 base attributes with BBCode hover breakdowns (base, passives, gear, buffs) and gear proficiency. `Unspent Points` opens the **Allocate** overlay (the `-` button only undoes newly allocated points; `Reset`/`Confirm`/`Cancel`), so the inspector itself never changes layout.
   2. **Unit Gear**: Main Hand, Off Hand, Body Armor, Accessories and the 3-slot Battle Pouch as cards. `Equip`/`Swap`/`Load` open an overlay picker filtered to class-eligible stash items valid for that slot; `Unequip` returns gear to the stash. **Quick Setup** applies a one-click loadout preset (Sword & Board, Claymore Bruiser, Claymore + Backup Blade, Titan Hammer deficit test, Dual Wield, Archer with dagger backup, Blade & Dagger, Arcanist), spawning missing pieces and reporting items the class cannot wield. `Stash Manager` opens the Party & Stash screen. Cards for a 2H main + off-hand weapon show which weapon is `ACTIVE` or `sheathed`.
   3. **Combat Region**: hero and dummy tokens on a target mat with live HP bars, stance, guard, Focus, AP and statuses (the dummy's strike power and queued statuses too), lunge, shake and glow animations, floating combat text, plus `Toggle Dummy Defend`, `Full Heal Dummy` and `Dummy Attacks` controls.
   4. **Test Console**: a **catalog skill picker** (every Attack / Defend / Focus skill plus Rest from the content catalog, so skills made in the Content Forge can be tested here) with its description, AP cost (incl. the automatic +1 stance switch), resulting stance and expected hit on the dummy; **Use Skill** applies it with the battle rules (AP spent, debt allowed; stance switch; attacks use the skill multiplier and roll its status on the dummy; Defend skills guard until the next round; Focus boosts; Rest recovers AP); a **Round / AP** line with **Next Round** (Focus ticks, guards drop, statuses roll over, +4 AP); **weapon tests** (Main / Off-Hand / Dual Strike / Ranged Shot, auto-gated by the equipped weapons, `Switch Weapon (1b)`, `Stance Shift`); **Dummy Attacks** (the dummy's attack skill and strike power, attack on demand, **Counterattack** after every hero skill, `Heal Hero`); `Force Crit`; the battle pouch; and **Benchmark ×10 / ×100** of the selected attack skill (min/avg/max, crit count, expected damage per swing, swings to defeat the dummy).
@@ -343,7 +342,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 
 ### 9. Content Catalog & Content Forge (`content_forge.tscn`)
 
-- **One catalog for all content** (`data/catalog/*.json`): skills, items, classes, units (party members and enemies) and encounters are data, not code. Every object that existed in code was seeded into it unchanged (19 skills, 18 items, 6 classes, 13 units incl. the Skirmish and Ambush goblins, the Gear Dojo heroes and the training dummy) plus 3 encounters (Goblin Skirmish, Goblin Ambush, Veterans' Drill), and the engine reads it: `SkillCatalog`, `ItemCatalog.create(id)` (the old `create_*` helpers are shorthands), `ClassArchetype.create(id)`, the party starter stash (`starter_stash` flag), every battle (`CatalogEncounter`) and the Gear Dojo heroes/dummy.
+- **One catalog for all content** (`data/catalog/*.json`): skills, items, classes, units (party members and enemies) and encounters are data, not code. Every object that existed in code was seeded into it unchanged (28 skills, 22 items, 9 passives, 6 classes, 13 units incl. the Skirmish and Ambush goblins, the Gear Dojo heroes and the training dummy) plus 3 encounters (Goblin Skirmish, Goblin Ambush, Veterans' Drill), and the engine reads it: `SkillCatalog`, `ItemCatalog.create(id)` (the old `create_*` helpers are shorthands), `ClassArchetype.create(id)`, the party starter stash (`starter_stash` flag), every battle (`CatalogEncounter`) and the Gear Dojo heroes/dummy.
 - **Schema-driven** (`ContentSchema`): each kind is a field list (type, default, range, enum options, references, conditional fields such as attack-only or consumable-only fields, help text). It normalises JSON (types, defaults, key order), drives validation and builds the editor form. Enums are stored by name (`"ATTACK"`, `"MAIN_HAND"`), so the files read and diff well.
 - **Validation** (`ContentCatalog.validate_entry / validate_all`): snake_case unique ids, enum values, references that resolve and fit (a party roster only takes party units, an off-hand slot only off-hand gear), skill rules (engine-only kinds, reach bands, LINE areas, status potency), item slot rules, two-handed weapon + shield, derived units needing a class, encounter rosters and exit tiles. In-use and engine (`system`) entries can't be deleted; renaming an id rewrites every reference to it.
 - **Units**: `fixed` vitals (HP / speed / range, like the goblins) or `derived` from class + level + gear (like the dojo heroes); loadout per slot plus battle pouch; AP pool; strike power (0 = weapon + unit power) and armor rating (-1 = gear + STR / 4); skill cap and an optional **known-skills list** (only those leveled skills are offered to the planner and the AI; Move, Rest and other engine skills are always known); AI role, targeting, flee / guard thresholds; per-status resistances.
@@ -363,8 +362,8 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 The Content Forge catalog is the **lore-free base library** (skills, items, classes, units, encounters). Worlds are a second layer: they give those assets names, backgrounds, factions and places, and never carry gameplay of their own.
 
 - **Worlds are folders** (`data/worlds/<id>/`): `world.json` (name, tagline, description, `extends`, `connects`) plus one JSON file per element kind. Kinds: **regions**, **locations** (exits, encounters), **factions** (relations), **characters** (party, NPCs, enemies), **named items**, **disciplines**, **quests** (steps, requirements, rewards), **lore entries** and **encounters**. Entries have local snake_case ids; the **qualified id** is `world:id`.
-- **Base class + lore** (`WorldFactory`): a character names a **base unit** (`base_unit`), a named item a **base item** (`base_item`), a discipline a **base mastery** (`sword`, `bow`, ...). The base asset decides how it plays; the entry adds name, title, background, personality, faction, home, art. Two characters (in one world or two) can point at the same base unit with different lore and behave identically: same vitals, class, skills, AI, damage.
-- **Explicit divergence only**: a character may add `tuning` deltas (`hp_pct`, `power`, `armor`, `speed`, `ap`), named items (worn on top of the base loadout, one per slot) and disciplines (raise the base mastery to the discipline's rank). Item tuning (`power`, `mitigation`, `burden`) and extra stat bonuses likewise. The World Forge shows **"Differs from base"** and the base unit's numbers side by side, so you can always see where a world deviates (Captain Dredge: hp +20%, power +2, armor +1).
+- **Base class + lore** (`WorldFactory`): a character names a **base unit** (`base_unit`), a named item a **base item** (`base_item`), a discipline a list of **base passives** (`passives.json`: gear training, stat edges, resistances, AP regen, skills). The base asset decides how it plays; the entry adds name, title, background, personality, faction, home, art. Two characters (in one world or two) can point at the same base unit with different lore and behave identically: same vitals, class, skills, AI, damage.
+- **Explicit divergence only**: a character may add `tuning` deltas (`hp_pct`, `power`, `armor`, `speed`, `ap`), named items (worn on top of the base loadout, one per slot) and inherited **passives** (the character's own, its faction's `grants`, its disciplines' and its named items' `grants`). Item tuning (`power`, `mitigation`, `burden`) and extra stat bonuses likewise. The World Forge shows **"Differs from base"** and the base unit's numbers side by side, so you can always see where a world deviates (Captain Dredge: hp +20%, power +2, armor +1).
 - **Inheritance**: `extends` lists parent worlds; `lineage()` is the load order (ancestors first, the world last). A world sees every ancestor entry. Unqualified references resolve in the entry's own world, then up the lineage (nearest wins); `world:id` is explicit. Everything is namespaced, so two worlds never collide.
 - **Overrides**: an entry with `override: "ashlands:mara_voss"` replaces that ancestor entry **for its own world and every world below it** (the parent is untouched), and every reference to the old id (even the old id used in an inherited encounter) now resolves to the override. This is how one world re-skins another: `tidewrack` overrides Mara, Tev and the five goblins, so **playing the inherited `tidewrack:courtyard_skirmish` is the same battle with different people**.
 - **Connecting worlds**: `connects` links worlds without inheriting: a location may exit into `ashlands:warden_keep` from `iron_reaches`; qualified references to a world that is neither an ancestor nor connected are validation errors. Connections are inherited by child worlds.
@@ -379,11 +378,11 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **10 test suites** covering **91 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **11 test suites** covering **96 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
-3. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines, derived attributes, level-up guaranteed growths, free point allocation, event point rewards, horizontal mastery weapon power bonus, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
+3. **Character Specs & Inventory Test** (10 assertions): Archetype 6-stat baselines (equal budget), derived attributes, level-up guaranteed growths, free point allocation, event point rewards, proficiency training and contextual passive bonuses, equipment stat requirement check, threshold tiers boost, deficit wield penalties, and battle pouch consumable usage in combat.
 4. **Gear Equip UI & Test Dummy Suite** (10 assertions): Equipment modal mounting, hero switching, stash equipping, Claymore Threshold Tier 1 (+4 Power) boost, Titan Warhammer deficit penalty, armor burden speed penalty, unequipped item return to stash, training dummy 500 HP baseline, base strike and 50% defense mitigation formula, battle pouch consumable damage & removal.
 5. **Combat Session Flow Test** (8 assertions): the catalog Goblin Ambush through `CombatSession` headlessly: only deployed enemies in view before the wave, the wave event at `R1-B04`, Round 1 resolving into replay with round advance offered, replay by log points, state carried into Round 2 with past rounds reviewable, later rounds (AI presets) playing on to a conclusion, timer-free auto-play (including Play pressed while planning), and round reset.
 6. **Art, Terrain & Zones Test** (9 assertions): team-colored class tokens and portraits, encounter art follows sides, terrain glyph round-trip and walkability, all 8 zones valid, grid blocks blocked tiles, the Goblin Ambush (wave included) deploying and concluding on every zone, tile and item icon rasterization.
@@ -394,7 +393,7 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 
 Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
-- **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword mastery, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
+- **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword training, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
 - **Session behavior (Dojo-19 to 25)**: Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
 - **UI smoke tests (Dojo-26, 27)**: all six panels mount in the workspace and the Test Log mirrors the session log; the Party & Stash screen shares the session (party list, selection, stash equip).
 - **Slots, filters & carry (Dojo-28 to 32)**: off-hand-only weapons and shields, per-slot stash filters (shield under Off Hand) plus stat/rarity/damage/hand/usable/search/sort custom filters, a party viewer that always shows 4 slots, per-unit burden vs party-wide carry overload, and overlay windows opening/closing on request.
@@ -506,7 +505,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Core models & interactive equipment UI implemented.*
 
 - [x] Shared party bag container model and 3-slot combat battle pouches.
-- [x] Stat-gated equipment with tiered thresholds, deficit penalties, and weapon mastery discounts.
+- [x] Stat-gated equipment with tiered thresholds, deficit penalties, and gear proficiency discounts.
 - [x] Combat consumable usage and HP/buff application.
 - [x] Party & Stash screen (`CharacterEquipmentModal`): party viewer, gear loadout and filterable stash in three columns.
 - [x] Preset catalog (`ItemCatalog`) with weapons, armor, shields, and accessories.
@@ -518,7 +517,8 @@ The following modular systems and capabilities are planned according to the mast
 
 - [x] 6-stat architecture (STR, DEX, INT | CONS, PERC, KNOW) and derived formulas.
 - [x] 10-level cap with guaranteed class growths and free attribute point allocation.
-- [x] Horizontal mastery system (Weapon Masteries, Lore/Biome Masteries, Faction scores).
+- [x] Enforced class rules (`StatRules`): equal budget and growth, authored spend pool, tiers, skill cap by level; editable gear Proficiency dict; Passives replace mastery (granted by world sources, never by classes).
+- [x] Class skill paths by level plus event-learned extra skills (`Combatant.learn_skill`).
 - [x] Integration with `Combatant` model.
 - [x] UI Character Sheet & gear equip modal (`CharacterEquipmentModal`) and the modular Gear Dojo workspace (`gear_dojo.tscn`).
 - [ ] Passive trait slot selection and talent trees.
@@ -588,11 +588,11 @@ The following modular systems and capabilities are planned according to the mast
 *Status: lore data model, inheritance, overrides, connections, World Forge and playable world battles implemented; the systems that consume quests, dialogue and maps are still roadmap items.*
 
 - [x] Modular worlds with inheritance, namespaced ids, explicit overrides and cross-world connections.
-- [x] Regions, locations, factions, characters, named items, disciplines (mapped onto base masteries), quests, lore and encounters as data, all referencing base catalog assets with explicit tuning deltas only.
+- [x] Regions, locations, factions, characters, named items, disciplines (mapped onto base passives), quests, lore and encounters as data, all referencing base catalog assets with explicit tuning deltas only.
 - [x] World Forge editor and playable world encounters (Scene Runner, `--encounter=world:id`).
 - [ ] Quest runtime (accept, track steps, rewards) and dialogue, once the NPC / dialogue engine exists (`quests` and `characters` data are ready).
 - [ ] World map travel over regions / locations (location exits are the graph; `encounters` mark where fights trigger) and persistent world state per save.
-- [ ] Data-driven mastery types (worlds introducing brand-new mastery categories) once the mastery system is data-driven.
+- [ ] Quest and lore rewards that grant passives and event-learned skills at runtime (the data and `Combatant.learn_skill` exist; no save/progress layer yet).
 - [ ] Faction reputation and relations affecting encounters, prices and quests (relations are authored already).
 - [ ] Conflict reporting when two parents define the same local id, and a graphical inheritance view in the World Forge.
 - [ ] World packs: export / import a world folder as a shareable module with its base-catalog dependencies listed.

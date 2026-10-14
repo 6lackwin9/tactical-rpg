@@ -21,8 +21,6 @@ extends RefCounted
 
 const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters"]
 
-# Mastery types a discipline can map onto (weapon proficiencies and lore masteries).
-const MASTERY_TYPES: Array[String] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "orb", "tome", "shield", "wilderness", "ancient_ruins"]
 # Deltas a character may apply to its base unit (flat unless _pct).
 const TUNING_KEYS: Array[String] = ["hp_pct", "power", "armor", "speed", "ap"]
 # Deltas a named item may apply to its base item.
@@ -140,6 +138,7 @@ static func _faction_fields() -> Array[Dictionary]:
 		_f("description", "Description", "text", ""),
 		_f("home", "Home region", "ref", "", {"ref": "regions", "optional": true}),
 		_f("relations", "Relations", "json", {}, {"help": "{\"faction_id\": \"ally|rival|enemy|neutral\"}"}),
+		_f("grants", "Member passives", "refs", [], {"ref": "base:passives", "help": "Every member of the faction gets these base passives."}),
 	]
 
 static func _character_fields() -> Array[Dictionary]:
@@ -154,7 +153,8 @@ static func _character_fields() -> Array[Dictionary]:
 		_f("personality", "Personality", "string", ""),
 		_f("faction", "Faction", "ref", "", {"ref": "factions", "optional": true}),
 		_f("home", "Home", "ref", "", {"ref": "locations", "optional": true}),
-		_f("disciplines", "Disciplines", "refs", [], {"ref": "disciplines", "help": "Trained disciplines: raise the matching base mastery to the discipline's rank."}),
+		_f("disciplines", "Disciplines", "refs", [], {"ref": "disciplines", "help": "Trained disciplines: each grants its passives."}),
+		_f("passives", "Passives", "refs", [], {"ref": "base:passives", "help": "Traits from the character's background (also granted: its faction's, its disciplines' and its named items')."}),
 		_f("named_items", "Named items", "refs", [], {"ref": "items", "help": "Equipped on top of the base loadout, each in its own slot."}),
 		_f("tuning", "Tuning deltas", "json", {}, {"help": "Explicit gameplay deltas vs the base unit: {\"hp_pct\": 10, \"power\": 3, \"armor\": 2, \"speed\": 1, \"ap\": 2}. Empty = identical to the base."}),
 	]
@@ -169,6 +169,7 @@ static func _item_fields() -> Array[Dictionary]:
 		_f("owner", "Original owner", "ref", "", {"ref": "characters", "optional": true}),
 		_f("tuning", "Tuning deltas", "json", {}, {"help": "{\"power\": 2, \"mitigation\": 1, \"burden\": -1}. Empty = identical to the base item."}),
 		_f("stat_bonuses", "Extra stat bonuses", "stats", {}, {"keys": ContentSchema.STAT_KEYS}),
+		_f("grants", "Wearer passives", "refs", [], {"ref": "base:passives", "help": "Base passives granted while the item is worn by a character."}),
 	]
 
 static func _discipline_fields() -> Array[Dictionary]:
@@ -176,8 +177,7 @@ static func _discipline_fields() -> Array[Dictionary]:
 		_f("id", "ID", "id", ""),
 		_f("name", "Name", "string", "New Discipline"),
 		_f("description", "Description", "text", ""),
-		_f("mastery", "Teaches mastery", "enum", "sword", {"options": MASTERY_TYPES, "help": "The base mastery this discipline trains."}),
-		_f("rank", "Rank taught", "int", 1, {"min": 1, "max": 3}),
+		_f("passives", "Grants passives", "refs", [], {"ref": "base:passives", "help": "The base passives this discipline teaches (gear training, stat edges, resistances...)."}),
 		_f("teacher", "Taught by", "ref", "", {"ref": "characters", "optional": true}),
 		_f("faction", "Faction", "ref", "", {"ref": "factions", "optional": true}),
 	]

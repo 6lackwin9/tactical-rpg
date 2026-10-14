@@ -272,6 +272,15 @@ static func references_to(kind: String, id: String) -> Array[String]:
 				var label: String = "%s:%s" % [other_kind, str(e.get("id", ""))]
 				if hit and not users.has(label):
 					users.append(label)
+	if kind == "skills":
+		for c: Dictionary in entries("classes"):
+			for step: Variant in DictUtil.array_of(c.get("skill_path", [])):
+				if str(DictUtil.dict_of(step).get("skill", "")) == id and not users.has("classes:%s" % str(c.get("id", ""))):
+					users.append("classes:%s" % str(c.get("id", "")))
+		for p: Dictionary in entries("passives"):
+			for fx: Variant in DictUtil.array_of(p.get("effects", [])):
+				if str(DictUtil.dict_of(fx).get("skill", "")) == id and not users.has("passives:%s" % str(p.get("id", ""))):
+					users.append("passives:%s" % str(p.get("id", "")))
 	return users
 
 static func _rename_refs(kind: String, old_id: String, new_id: String) -> void:
@@ -291,6 +300,19 @@ static func _rename_refs(kind: String, old_id: String, new_id: String) -> void:
 				elif value is String and str(value) == old_id:
 					e[key] = new_id
 					_dirty_map()[other_kind] = true
+	if kind == "skills":
+		for c: Dictionary in entries("classes"):
+			for step: Variant in DictUtil.array_of(c.get("skill_path", [])):
+				var s: Dictionary = DictUtil.dict_of(step)
+				if str(s.get("skill", "")) == old_id:
+					s["skill"] = new_id
+					_dirty_map()["classes"] = true
+		for p: Dictionary in entries("passives"):
+			for fx: Variant in DictUtil.array_of(p.get("effects", [])):
+				var d: Dictionary = DictUtil.dict_of(fx)
+				if str(d.get("skill", "")) == old_id:
+					d["skill"] = new_id
+					_dirty_map()["passives"] = true
 
 # ------------------------------------------------------------------------------
 # Validation
@@ -333,6 +355,10 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 			errors.append_array(_skill_errors(e))
 		"items":
 			errors.append_array(_item_errors(e))
+		"passives":
+			errors.append_array(_passive_errors(e))
+		"classes":
+			errors.append_array(_class_errors(e))
 		"units":
 			errors.append_array(_unit_errors(e))
 		"encounters":
@@ -364,6 +390,9 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 			errors.append("Set reach max too (or leave both at 0 for the unit's default band).")
 		if str(e["area"]) == "LINE" and DictUtil.to_int(e["reach_max"]) > 1:
 			errors.append("LINE areas start from an adjacent tile; leave the reach at 0 or 1.")
+		for gear: String in ContentFactory._strings(e["weapon_types"]):
+			if not Proficiency.gear_types().has(gear):
+				errors.append("Needs weapon type: unknown gear type '%s'." % gear)
 		if not str(e["status_effect"]).is_empty() and DictUtil.to_int(e["status_potency"]) <= 0:
 			errors.append("Give the status a potency above 0.")
 	return errors
@@ -402,11 +431,68 @@ static func _item_errors(e: Dictionary) -> Array[String]:
 				errors.append("A consumable should heal, damage or buff.")
 	return errors
 
-static func _unit_errors(e: Dictionary) -> Array[String]:
+static func _passive_errors(e: Dictionary) -> Array[String]:
+	return Passives.validate_effects(e["effects"], func(skill_id: String) -> bool: return has("skills", skill_id))
+
+# Class rules: equal stat budget and growth (StatRules), valid proficiency, a skill path whose
+# skills fit the level cap, and default gear the class can wield.
+static func _class_errors(e: Dictionary) -> Array[String]:
+	var errors: Array[String] = StatRules.validate_class(ContentFactory._ints(e["base_stats"]), ContentFactory._ints(e["growth"]))
+	if not UnitArt.CLASS_KEYS.has(str(e["art"])):
+		errors.append("Art '%s' isn't a known token/portrait key." % str(e["art"]))
+	var prof_raw: Variant = e["proficiency"]
+	var weapons: int = 0
+	if not (prof_raw is Dictionary) or (prof_raw as Dictionary).is_empty():
+		errors.append("A class needs a gear proficiency dictionary.")
+	else:
+		var prof: Dictionary = prof_raw
+		for key: Variant in prof:
+			var gear: String = str(key)
+			var entry: Dictionary = DictUtil.dict_of(prof[key])
+			if not Proficiency.gear_types().has(gear):
+				errors.append("Proficiency: unknown gear type '%s'." % gear)
+			if not entry.has("level") or DictUtil.to_int(entry.get("level", 0)) < 1 or DictUtil.to_int(entry.get("level", 0)) > Proficiency.MAX_LEVEL:
+				errors.append("Proficiency %s: level must be 1-%d." % [gear, Proficiency.MAX_LEVEL])
+			var scaling: float = DictUtil.to_float(entry.get("scaling", Proficiency.DEFAULT_SCALING), -1.0)
+			if scaling < Proficiency.MIN_SCALING or scaling > Proficiency.MAX_SCALING:
+				errors.append("Proficiency %s: scaling must be %.1f-%.1f." % [gear, Proficiency.MIN_SCALING, Proficiency.MAX_SCALING])
+			if Proficiency.WEAPON_TYPES.has(gear):
+				weapons += 1
+		if weapons == 0:
+			errors.append("Proficiency needs at least one weapon type.")
+	var path: Variant = e["skill_path"]
+	if not (path is Array):
+		errors.append("The skill path must be a list of {level, skill}.")
+	else:
+		var last_level: int = 0
+		var has_start: bool = false
+		for step_raw: Variant in (path as Array):
+			var step: Dictionary = DictUtil.dict_of(step_raw)
+			var skill_id: String = str(step.get("skill", ""))
+			var level: int = DictUtil.to_int(step.get("level", 0))
+			var skill: Dictionary = get_entry("skills", skill_id)
+			if level < 1 or level > StatRules.MAX_LEVEL:
+				errors.append("Skill path: level %d is outside 1-%d." % [level, StatRules.MAX_LEVEL])
+			if level < last_level:
+				errors.append("Skill path must be listed in ascending level order.")
+			last_level = maxi(last_level, level)
+			if level == 1:
+				has_start = true
+			if skill.is_empty():
+				errors.append("Skill path: unknown skill '%s'." % skill_id)
+			elif DictUtil.to_bool(skill.get("system", false)):
+				errors.append("Skill path: '%s' is an engine skill (always known)." % skill_id)
+			elif DictUtil.to_int(skill.get("level", 1)) > StatRules.skill_cap_for_level(level):
+				errors.append("Skill path: %s (skill level %d) is too advanced for unit level %d (cap %d)." % [skill_id, DictUtil.to_int(skill.get("level", 1)), level, StatRules.skill_cap_for_level(level)])
+		if not has_start:
+			errors.append("The skill path needs at least one level-1 skill.")
+	errors.append_array(_loadout_errors(e, ContentFactory.class_archetype(e).make_proficiency(), true))
+	return errors
+
+# Gear problems of a class or unit entry: every item fits its slot, is trained for by
+# `prof` (when `check_training`), and a two-handed weapon isn't paired with a shield.
+static func _loadout_errors(e: Dictionary, prof: Proficiency, check_training: bool) -> Array[String]:
 	var errors: Array[String] = []
-	if str(e["stat_mode"]) == "derived" and str(e["class_id"]).is_empty():
-		errors.append("Derived vitals need a class.")
-	# Each loadout item must fit its slot (an off-hand slot takes shields, off-hand and 1H weapons).
 	for slot: String in ContentSchema.LOADOUT_SLOTS:
 		var item_id: String = str(e.get(slot, ""))
 		if item_id.is_empty():
@@ -414,15 +500,28 @@ static func _unit_errors(e: Dictionary) -> Array[String]:
 		var item: Dictionary = get_entry("items", item_id)
 		if item.is_empty():
 			continue
-		var engine_slot: String = slot.to_upper()
-		if not ContentFactory.item_fits_slot(item, engine_slot):
+		if not ContentFactory.item_fits_slot(item, slot.to_upper()):
 			errors.append("%s can't be equipped in %s." % [str(item.get("name", item_id)), slot.capitalize()])
-	var main_id: String = str(e.get("main_hand", ""))
-	if not main_id.is_empty() and not str(e.get("off_hand", "")).is_empty():
-		var main: Dictionary = get_entry("items", main_id)
-		var off: Dictionary = get_entry("items", str(e["off_hand"]))
-		if DictUtil.to_bool(main.get("two_handed", false)) and str(off.get("item_type", "")) == "SHIELD":
-			errors.append("A two-handed weapon can't be paired with a shield.")
+		elif check_training and not str(item.get("weapon_type", "")).is_empty() and not prof.can_use(str(item["weapon_type"])):
+			errors.append("This class has no training in '%s' (%s)." % [str(item["weapon_type"]), str(item.get("name", item_id))])
+	var main: Dictionary = get_entry("items", str(e.get("main_hand", "")))
+	var off: Dictionary = get_entry("items", str(e.get("off_hand", "")))
+	if DictUtil.to_bool(main.get("two_handed", false)) and not off.is_empty():
+		errors.append("A two-handed weapon can't be paired with an off-hand item.")
+	return errors
+
+static func _unit_errors(e: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var fixed: bool = str(e["stat_mode"]) == "fixed"
+	var arch: ClassArchetype = ContentFactory.class_of(e)
+	if not fixed and arch == null:
+		errors.append("Class-derived units need a class (or set the stat model to fixed).")
+	if not fixed:
+		errors.append_array(StatRules.validate_spend(ContentFactory._ints(e["spend"]), DictUtil.to_int(e["level"], 1)))
+	elif not (e["spend"] as Dictionary).is_empty():
+		errors.append("Fixed units don't spend points.")
+	var prof: Proficiency = arch.make_proficiency() if arch != null else Proficiency.new()
+	errors.append_array(_loadout_errors(e, prof, arch != null))
 	return errors
 
 static func _encounter_errors(e: Dictionary) -> Array[String]:

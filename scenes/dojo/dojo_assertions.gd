@@ -20,24 +20,24 @@ static func run(session: DojoSession, host: Node) -> bool:
 		print("  [Dojo-1] Baseline hero and dummy initialization: PASS")
 
 	# Assert 2: Base Attack Calculation (Revised Formula & Sword Mastery to Wep Power)
-	# Warrior Lv 2: Base STR 18 + Bear Ring (+2) = 20 STR. Sword mastery Lv 1 (+2 Wep Power).
-	# Steel Broadsword: 18 Base + 2 Mastery = 20 Wep Power.
-	# Power = 20 + (20 * 1.5) = 50.
+	# Warrior Lv 2: STR 15 base + 2 growth + 2 spent + Bear Ring (+2) = 21 STR. Sword training 3 (+3 Wep Power).
+	# Steel Broadsword: 18 Base + 3 training = 21 Wep Power.
+	# Power = 21 + (21 * 1.5) = 52.5 -> 53.
 	var initial_power: int = w.get_effective_power(false)
 	var calc_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
 	var dmg: int = d.take_damage(UiTheme.dict_int(calc_res, "final_dmg"))
-	if dmg != 50 or initial_power != 50:
-		print("  [Dojo-2] Base melee attack calculation: FAIL (dmg: %d, pwr: %d != 50)" % [dmg, initial_power])
+	if dmg != 53 or initial_power != 53:
+		print("  [Dojo-2] Base melee attack calculation: FAIL (dmg: %d, pwr: %d != 53)" % [dmg, initial_power])
 		passed = false
 	else:
-		print("  [Dojo-2] Base melee attack calculation: PASS (50 Power, %d DMG, Sword Mastery in Wep Power)" % dmg)
+		print("  [Dojo-2] Base melee attack calculation: PASS (53 Power, %d DMG, sword training in Wep Power)" % dmg)
 
 	# Assert 3: Dummy Mitigation Toggle
 	d.defense_mitigation_ratio = 0.5
 	var mit_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
 	var half_dmg: int = d.take_damage(UiTheme.dict_int(mit_res, "final_dmg"), true)
-	if half_dmg != 25:
-		print("  [Dojo-3] 50%% mitigation defense barrier calculation: FAIL (%d != 25)" % half_dmg)
+	if half_dmg != 27:
+		print("  [Dojo-3] 50%% mitigation defense barrier calculation: FAIL (%d != 27)" % half_dmg)
 		passed = false
 	else:
 		print("  [Dojo-3] 50%% mitigation defense barrier calculation: PASS (%d DMG)" % half_dmg)
@@ -47,8 +47,8 @@ static func run(session: DojoSession, host: Node) -> bool:
 	d.defense_mitigation_ratio = 0.0
 	var focus_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
 	var boosted_dmg: int = d.take_damage(UiTheme.dict_int(focus_res, "final_dmg"), true)
-	if boosted_dmg != 75:
-		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: FAIL (%d != 75)" % boosted_dmg)
+	if boosted_dmg != 80:
+		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: FAIL (%d != 80)" % boosted_dmg)
 		passed = false
 	else:
 		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: PASS (%d DMG)" % boosted_dmg)
@@ -58,7 +58,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	var claymore := ItemCatalog.create_iron_claymore()
 	w.inventory.equip(claymore)
 	w.sync_from_stats_and_gear()
-	var tier_boost: int = claymore.get_unlocked_threshold_power_boost(w.stats, w.stats.mastery)
+	var tier_boost: int = claymore.get_unlocked_threshold_power_boost(w.stats, w.stats.proficiency)
 	if tier_boost != 4:
 		print("  [Dojo-5] Claymore threshold tier bonus at 18 STR: FAIL (got %d)" % tier_boost)
 		passed = false
@@ -69,7 +69,8 @@ static func run(session: DojoSession, host: Node) -> bool:
 	var titan := ItemCatalog.create_titan_warhammer()
 	w.inventory.equip(titan)
 	w.sync_from_stats_and_gear()
-	var pen := titan.get_wield_penalty(w.stats, w.stats.mastery)
+	var untrained := CharacterStats.new(ClassArchetype.create("shaman"), 1)   # the warrior's hammer training (+2 discount) covers the Titan's 22 STR
+	var pen := titan.get_wield_penalty(untrained, untrained.proficiency)
 	if not UiTheme.dict_bool(pen, "is_penalized"):
 		print("  [Dojo-6] Titan Warhammer deficit penalty check: FAIL")
 		passed = false
@@ -154,7 +155,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	w.inventory.equip(shortsword, Equipment.EquipSlot.OFF_HAND)
 	w.sync_from_stats_and_gear()
 	var off_str_pwr: int = w.get_offhand_power()
-	var expected_shortsword_pwr: int = shortsword.get_effective_equipment_power(w.stats, w.stats.mastery) + int(roundf(float(w.stats.get_effective_stat("STR")) * 1.5))
+	var expected_shortsword_pwr: int = shortsword.get_effective_equipment_power(w.stats, w.stats.proficiency) + int(roundf(float(w.stats.get_effective_stat("STR")) * w.stats.proficiency.scaling_of("sword")))
 	if off_str_pwr != expected_shortsword_pwr:
 		print("  [Dojo-13] Off-hand Shortsword STR scaling: FAIL (%d != %d)" % [off_str_pwr, expected_shortsword_pwr])
 		passed = false
@@ -165,8 +166,8 @@ static func run(session: DojoSession, host: Node) -> bool:
 	w.inventory.equip(knife, Equipment.EquipSlot.OFF_HAND)
 	w.sync_from_stats_and_gear()
 	var off_dex_pwr: int = w.get_offhand_power()
-	var expected_knife_pwr: int = knife.get_effective_equipment_power(w.stats, w.stats.mastery) + int(roundf(float(w.stats.get_effective_stat("DEX")) * 1.5))
-	if off_dex_pwr != expected_knife_pwr:
+	var expected_knife_pwr: int = knife.get_effective_equipment_power(w.stats, w.stats.proficiency) + int(roundf(float(w.stats.get_effective_stat("DEX")) * w.stats.proficiency.scaling_of("dagger")))
+	if absi(off_dex_pwr - expected_knife_pwr) > 1:   # penalised weapon power and unit power round separately
 		print("  [Dojo-13b] Off-hand Knife DEX scaling: FAIL (%d != %d)" % [off_dex_pwr, expected_knife_pwr])
 		passed = false
 	else:
@@ -214,6 +215,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 		print("  [Dojo-16] Critical damage x%.1f multiplier in combat formula: PASS (%d -> %d DMG)" % [DamageCalculator.CRIT_MULT, norm_dmg, crit_dmg])
 
 	# Assert 17: Stat Allocation Logic (only newly allocated points can be removed)
+	w.stats.add_free_attribute_points(2)   # a fully spent unit has nothing to allocate
 	var unspent_pre: int = w.stats.unspent_attribute_points
 	session.begin_allocation()
 	session.allocate_point("STR")
@@ -610,6 +612,8 @@ static func _run_slot_filter_and_carry_assertions(session: DojoSession, host: No
 	)
 
 	# Per-unit burden: stripping only the warrior's armor must not change the ranger's speed.
+	warrior.inventory.equip(ItemCatalog.create_steel_plate_cuirass(), Equipment.EquipSlot.BODY)   # the leather brigandine is trained away to 0 burden
+	warrior.sync_from_stats_and_gear()
 	var ranger_speed_before: int = ranger.speed
 	var warrior_speed_before: int = warrior.speed
 	session.unequip_slot(Equipment.EquipSlot.BODY)
@@ -651,6 +655,7 @@ static func _run_slot_filter_and_carry_assertions(session: DojoSession, host: No
 	var panels: Array[DojoPanel] = [inspector, gear, stash_panel]
 	workspace.setup(session, panels)
 	var layer: UiOverlayLayer = workspace.get_overlay_layer()
+	session.party_allies[0].stats.add_free_attribute_points(2)   # a fully spent unit has nothing to allocate
 	inspector._on_points_pressed()
 	var allocation_open: bool = layer.has_overlay("allocate") and session.is_allocating_stats
 	gear.overlay_requested.emit(DojoPickerPanel.for_slot(Equipment.EquipSlot.MAIN_HAND))

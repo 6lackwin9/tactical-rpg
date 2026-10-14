@@ -43,7 +43,7 @@ static func find(skill_id: String) -> SkillDef:
 static func available(kind: SkillDef.Kind, skill_cap: int, c: Combatant = null) -> Array[SkillDef]:
 	var result: Array[SkillDef] = []
 	for s: SkillDef in all():
-		if s.kind == kind and s.level <= skill_cap and (c == null or c.knows_skill(s.id)):
+		if s.kind == kind and s.level <= skill_cap and (c == null or c.can_use(s)):
 			result.append(s)
 	return result
 

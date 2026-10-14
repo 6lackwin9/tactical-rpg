@@ -19,9 +19,9 @@ extends RefCounted
 # Enum values are stored by name ("ATTACK", "MAIN_HAND") so the JSON stays readable.
 # ==============================================================================
 
-const KINDS: Array[String] = ["skills", "items", "classes", "units", "encounters"]
+const KINDS: Array[String] = ["skills", "items", "passives", "classes", "units", "encounters"]
 
-const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]
+const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]   # = StatRules.STATS
 const EQUIP_TYPES: Array[String] = ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"]
 const LOADOUT_SLOTS: Array[String] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"]
 
@@ -31,6 +31,8 @@ static func kind_label(kind: String) -> String:
 			return "Skills"
 		"items":
 			return "Items"
+		"passives":
+			return "Passives"
 		"classes":
 			return "Classes"
 		"units":
@@ -45,6 +47,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			return _skill_fields()
 		"items":
 			return _item_fields()
+		"passives":
+			return _passive_fields()
 		"classes":
 			return _class_fields()
 		"units":
@@ -87,6 +91,8 @@ static func _skill_fields() -> Array[Dictionary]:
 		_f("status_potency", "Status potency %", "int", 0, {"min": 0, "max": 200, "when": {"key": "status_effect", "not_in": [""]}, "help": "Chance = potency - target debuff resistance - passive resistance."}),
 		_f("reach_min", "Reach min", "int", 0, {"min": 0, "max": 8, "when": attack, "help": "0 = the unit's default band (melee 1, ranged 2-3)."}),
 		_f("reach_max", "Reach max", "int", 0, {"min": 0, "max": 8, "when": attack}),
+		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types (class-derived units only)."}),
+		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "when": attack, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),
 		_f("mitigation", "Mitigation", "float", 0.5, {"min": 0.0, "max": 0.95, "step": 0.05, "when": {"key": "kind", "in": ["DEFEND"]}}),
 		_f("boost", "Attack boost x", "float", 1.5, {"min": 1.0, "max": 5.0, "step": 0.05, "when": {"key": "kind", "in": ["FOCUS"]}}),
 		_f("boost_rounds", "Boost rounds", "int", 2, {"min": 1, "max": 10, "when": {"key": "kind", "in": ["FOCUS"]}}),
@@ -131,16 +137,36 @@ static func _item_fields() -> Array[Dictionary]:
 		_f("max_stack", "Max stack", "int", 1, {"min": 1, "max": 999, "when": {"key": "item_type", "in": ["CONSUMABLE", "MATERIAL", "QUEST"]}}),
 	]
 
-static func _class_fields() -> Array[Dictionary]:
+static func _passive_fields() -> Array[Dictionary]:
 	return [
+		_f("id", "ID", "id", ""),
+		_f("name", "Name", "string", "New Passive"),
+		_f("description", "Description", "text", ""),
+		_f("effects", "Effects", "json", [], {"help": "[{\"type\": \"stat\", \"stat\": \"KNOW\", \"value\": 3, \"context\": {\"biome\": \"ruins\"}}, {\"type\": \"proficiency\", \"gear\": \"sword\", \"levels\": 1}, {\"type\": \"resist\", \"status\": \"stagger\", \"value\": 25}, {\"type\": \"ap_regen\", \"value\": 1}, {\"type\": \"skill\", \"skill\": \"quick_stab\"}]"}),
+	]
+
+# Default gear of a class (and per-slot overrides on units): one item id per slot.
+static func _loadout_fields(inherit: bool) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for slot: String in LOADOUT_SLOTS:
+		out.append(_f(slot, slot.capitalize().replace("_", " "), "ref", "", {"ref": "items", "optional": true, "ref_filter": {"item_type": EQUIP_TYPES}, "help": "Empty = the class's gear." if inherit else "Default gear of the class."}))
+	out.append(_f("pouch", "Battle pouch", "refs", [], {"ref": "items", "ref_filter": {"item_type": ["CONSUMABLE"]}}))
+	return out
+
+static func _class_fields() -> Array[Dictionary]:
+	var list: Array[Dictionary] = [
 		_f("id", "ID", "id", ""),
 		_f("name", "Name", "string", "New Class"),
 		_f("description", "Description", "text", ""),
-		_f("base_stats", "Base stats", "stats", {}, {"keys": STAT_KEYS, "help": "Missing stats start at 10."}),
-		_f("growth", "Growth / level", "stats", {}, {"keys": STAT_KEYS}),
-		_f("masteries", "Innate masteries", "json", {}, {"help": "{\"sword\": 1, \"shield\": 1}"}),
-		_f("allowed_gear", "Gear proficiencies", "strings", [], {"help": "Gear types the class may equip (empty = anything). Accessories are always allowed."}),
+		_f("art", "Art", "enum", "warrior", {"options_from": "art", "help": "Token / portrait template (UnitArt)."}),
+		_f("ai_role", "Default AI role", "enum", "AGGRESSOR", {"options": ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"]}),
+		_f("base_stats", "Base stats (Lv 1)", "stats", {}, {"keys": STAT_KEYS, "help": "Every class totals exactly 62 (6-18 per stat): classes differ only in distribution."}),
+		_f("growth", "Growth / level", "stats", {}, {"keys": STAT_KEYS, "help": "Every class gains exactly 5 per level (max 3 per stat); units also get 1 free point per level to spend."}),
+		_f("proficiency", "Gear proficiency", "json", {}, {"help": "{\"sword\": {\"level\": 3, \"scaling\": 1.5}, \"leather\": {\"level\": 2, \"scaling\": 1.5}}. Level 1-3 (power, requirement discount, crit, burden, block cost, skill gates); scaling 1.0-2.0 = how easy the gear is to wield (Unit Power multiplier). Unlisted gear can't be equipped."}),
+		_f("skill_path", "Skill path", "json", [], {"help": "[{\"level\": 1, \"skill\": \"strike\"}, {\"level\": 3, \"skill\": \"sunder\"}]: skills learned by unit level (extra skills come from events and passives)."}),
 	]
+	list.append_array(_loadout_fields(false))
+	return list
 
 static func _unit_fields() -> Array[Dictionary]:
 	var fixed: Dictionary = {"key": "stat_mode", "in": ["fixed"]}
@@ -148,29 +174,29 @@ static func _unit_fields() -> Array[Dictionary]:
 		_f("id", "ID", "id", ""),
 		_f("name", "Name", "string", "New Unit", {"help": "Shown on the field; duplicates in one encounter get a number."}),
 		_f("side", "Side", "enum", "enemy", {"options": ["party", "enemy", "neutral"]}),
-		_f("art", "Art", "enum", "warrior", {"options_from": "art", "help": "Token / portrait template (UnitArt)."}),
 		_f("description", "Description", "text", ""),
-		_f("class_id", "Class", "ref", "", {"ref": "classes", "optional": true, "help": "Stats, growth and gear proficiencies (empty = generic 10s)."}),
-		_f("level", "Level", "int", 1, {"min": 1, "max": 10}),
-		_f("stat_mode", "Vitals", "enum", "fixed", {"options": ["fixed", "derived"], "help": "fixed: HP / speed / range below. derived: from class, level and gear."}),
+		_f("class_id", "Class", "ref", "", {"ref": "classes", "optional": true, "help": "One of the base classes: stats, growth, gear proficiency, skill path and default gear come from it."}),
+		_f("level", "Level", "int", 1, {"min": 1, "max": StatRules.MAX_LEVEL}),
+		_f("tier", "Tier", "enum", "hero", {"options": ["hero", "minion", "standard", "elite", "boss"], "help": "Scales class-derived HP and attack power (minion 40% / 60% ... boss 170% / 120%). Heroes: 100%."}),
+		_f("spend", "Spend points", "stats", {}, {"keys": STAT_KEYS, "help": "4 + (level - 1) free points, spent exactly (empty = follow the class weights). This is what makes two units of one class differ."}),
+		_f("stat_mode", "Stat model", "enum", "derived", {"options": ["derived", "fixed"], "help": "derived: from class, level, spend and gear. fixed: hand-authored vitals (special units such as the training dummy)."}),
 		_f("hp", "HP", "int", 50, {"min": 1, "max": 9999, "when": fixed}),
 		_f("speed", "Speed", "int", 12, {"min": 1, "max": 40, "when": fixed}),
 		_f("attack_range", "Range", "int", 1, {"min": 1, "max": 6, "when": fixed}),
 		_f("ap", "AP pool", "int", 0, {"min": 0, "max": 40, "help": "0 = the encounter's unit AP."}),
 		_f("power", "Strike power", "int", 0, {"min": 0, "max": 500, "help": "0 = weapon power + unit power (unarmed: STR + DEX). Set to override."}),
 		_f("armor", "Armor rating", "int", -1, {"min": -1, "max": 200, "help": "-1 = gear mitigation + STR / 4. Damage taken is cut by rating / (rating + 50)."}),
-		_f("skill_cap", "Skill level cap", "int", 1, {"min": 1, "max": 5}),
-		_f("skills", "Known skills", "refs", [], {"ref": "skills", "ref_filter": {"system": false}, "help": "Empty = every skill up to the cap."}),
-		_f("ai_role", "AI role", "enum", "AGGRESSOR", {"options": ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"]}),
+		_f("art", "Art", "enum", "", {"options_from": "art_inherit", "help": "Token / portrait template (empty = the class's)."}),
+		_f("skill_cap", "Skill level cap", "int", 0, {"min": 0, "max": 5, "help": "0 = from level (levels 1-2 -> 1 ... 9-10 -> 5)."}),
+		_f("extra_skills", "Extra skills", "refs", [], {"ref": "skills", "ref_filter": {"system": false}, "help": "Skills beyond the class path (learned through events)."}),
+		_f("ai_role", "AI role", "enum", "", {"options": ["", "AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"], "help": "Empty = the class's role."}),
 		_f("target_pref", "Targets", "enum", "ROLE", {"options": ["ROLE", "NEAREST", "WEAKEST"], "help": "ROLE: aggressors pick the nearest foe, others the weakest."}),
 		_f("flee_ratio", "Flee at HP", "float", 0.25, {"min": 0.0, "max": 1.0, "step": 0.05, "help": "Withdraw at or below this HP fraction (0 = never)."}),
 		_f("defend_below", "Guard at HP", "float", 0.4, {"min": 0.0, "max": 1.0, "step": 0.05}),
 		_f("prefer_level", "Preferred skill level", "int", 0, {"min": 0, "max": 5, "help": "0 = highest affordable."}),
 		_f("status_resist", "Status resist %", "stats", {}, {"keys": [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT], "help": "100 = immune."}),
 	]
-	for slot: String in LOADOUT_SLOTS:
-		list.append(_f(slot, slot.capitalize(), "ref", "", {"ref": "items", "optional": true, "ref_filter": {"item_type": EQUIP_TYPES}}))
-	list.append(_f("pouch", "Battle pouch", "refs", [], {"ref": "items", "ref_filter": {"item_type": ["CONSUMABLE"]}}))
+	list.append_array(_loadout_fields(true))
 	return list
 
 static func _encounter_fields() -> Array[Dictionary]:
@@ -205,6 +231,10 @@ static func options_of(f: Dictionary) -> Array[String]:
 			return CombatZones.zone_ids()
 		"art":
 			out.assign(UnitArt.CLASS_KEYS)
+			return out
+		"art_inherit":
+			out.append("")
+			out.append_array(UnitArt.CLASS_KEYS)
 			return out
 		"status":
 			out.assign(["", StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT])

@@ -26,8 +26,8 @@ static func build_strike(title: String, attacker_name: String, target: Combatant
 			var pwr_parts: Array[String] = ["Base %d" % UiTheme.dict_int(res, "base_w_power")]
 			if UiTheme.dict_int(res, "tier_boost") > 0:
 				pwr_parts.append("[color=#fbbf24]Tier +%d[/color]" % UiTheme.dict_int(res, "tier_boost"))
-			if UiTheme.dict_int(res, "mastery_pwr") > 0:
-				pwr_parts.append("[color=#a855f7]Mastery +%d[/color]" % UiTheme.dict_int(res, "mastery_pwr"))
+			if UiTheme.dict_int(res, "training_pwr") > 0:
+				pwr_parts.append("[color=#a855f7]Training +%d[/color]" % UiTheme.dict_int(res, "training_pwr"))
 			lines.append("1. Weapon Power: [color=#e2e8f0]%d[/color] (%s)" % [UiTheme.dict_int(res, "total_w_power"), ", ".join(pwr_parts)])
 			var pen_ratio: float = UiTheme.dict_float(res, "pen_ratio")
 			if pen_ratio > 0.0:

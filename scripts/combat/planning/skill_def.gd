@@ -42,6 +42,8 @@ var status_effect: String = "" # status rolled on hit (StatusEffects), active ne
 var status_potency: int = 0
 var reach_min: int = 0          # skill-specific reach band (0 = the unit's default band)
 var reach_max: int = 0
+var weapon_types: Array[String] = []   # gear types that may use it (empty = any); class-derived units only
+var min_proficiency: int = 0           # training level in the wielded weapon type needed (0 = none)
 var description: String = ""
 var system: bool = false       # engine skill (Move, Rest, Switch Target, status blocks): always known, not deletable
 

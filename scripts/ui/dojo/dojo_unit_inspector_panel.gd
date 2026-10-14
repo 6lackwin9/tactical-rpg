@@ -38,7 +38,7 @@ func _init() -> void:
 	_build_identity(vbox)
 	_build_stats(vbox)
 
-	vbox.add_child(UiTheme.header("WEAPON MASTERIES"))
+	vbox.add_child(UiTheme.header("PROFICIENCY & PASSIVES"))
 	_mastery_vbox = VBoxContainer.new()
 	_mastery_vbox.add_theme_constant_override("separation", 2)
 	vbox.add_child(_mastery_vbox)
@@ -163,25 +163,41 @@ func refresh() -> void:
 			var box: UiTipPanel = box_raw
 			box.tooltip_text = _stat_tooltip(key, hero, ctx)
 
-	_render_masteries(st)
+	_render_proficiency(hero)
 
-func _render_masteries(st: CharacterStats) -> void:
+func _render_proficiency(hero: Combatant) -> void:
 	UiTheme.clear_children(_mastery_vbox)
-	if st.mastery == null or st.mastery.weapon_masteries.is_empty():
-		_mastery_vbox.add_child(UiTheme.label("— No weapon masteries —", UiTheme.FONT_SM, UiTheme.COL_MUTED))
-		return
-	for w_type: String in st.mastery.weapon_masteries:
-		var rank: int = st.mastery.get_weapon_mastery(w_type)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		row.add_child(UiTheme.label(w_type.capitalize(), UiTheme.FONT_SM, UiTheme.COL_TEXT))
-		var detail: Label = UiTheme.label("Rank %d  •  +%d Wep Power, -%d Req" % [rank, rank * 2, st.mastery.get_weapon_requirement_discount(w_type)], 9, UiTheme.COL_WARN)
-		detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		detail.custom_minimum_size = Vector2(60, 0)
-		row.add_child(detail)
-		_mastery_vbox.add_child(row)
+	var st: CharacterStats = hero.stats
+	if st.proficiency == null or (st.proficiency.entries.is_empty() and st.proficiency.bonus_levels.is_empty()):
+		_mastery_vbox.add_child(UiTheme.label("— No trained gear —", UiTheme.FONT_SM, UiTheme.COL_MUTED))
+	else:
+		var types: Array[String] = []
+		for key: Variant in st.proficiency.entries:
+			types.append(str(key))
+		for key: Variant in st.proficiency.bonus_levels:
+			if not types.has(str(key)):
+				types.append(str(key))
+		for gear: String in types:
+			var level: int = st.proficiency.level_of(gear)
+			var bonus: int = DictUtil.int_of(st.proficiency.bonus_levels, gear)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 6)
+			row.add_child(UiTheme.label(gear.capitalize(), UiTheme.FONT_SM, UiTheme.COL_TEXT))
+			var text: String = "Lv %d%s  •  scaling x%.2f  •  +%d Wep Power, -%d Req" % [level, (" (+%d passive)" % bonus) if bonus > 0 else "", st.proficiency.scaling_of(gear), st.proficiency.get_weapon_power_bonus(gear), st.proficiency.get_weapon_requirement_discount(gear)]
+			var detail: Label = UiTheme.label(text, 9, UiTheme.COL_WARN)
+			detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			detail.custom_minimum_size = Vector2(60, 0)
+			row.add_child(detail)
+			_mastery_vbox.add_child(row)
+	if not hero.passives.is_empty():
+		var names: Array[String] = []
+		for id: String in hero.passives:
+			names.append(str(ContentCatalog.get_entry("passives", id).get("name", id)))
+		var passives_lbl: Label = UiTheme.label("Passives: " + ", ".join(names), UiTheme.FONT_SM, UiTheme.COL_INFO)
+		passives_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_mastery_vbox.add_child(passives_lbl)
 
 func _stat_tooltip(key: String, hero: Combatant, ctx: Dictionary) -> String:
 	var st: CharacterStats = hero.stats
@@ -202,10 +218,9 @@ func _stat_tooltip(key: String, hero: Combatant, ctx: Dictionary) -> String:
 	lines.append("Base [b]%d[/b]  (Lv %d %s)  →  Effective [color=#4ade80][b]%d[/b][/color]" % [base_val, st.level, st.archetype.display_name if st.archetype != null else "Hero", eff_val])
 
 	var bonus_lines: Array[String] = []
-	if st.mastery != null and ctx.has("weapon"):
-		var mastery_bonus: int = st.mastery.get_conditional_stat_bonus(key, ctx)
-		if mastery_bonus > 0:
-			bonus_lines.append("• Mastery (%s): +%d" % [str(ctx["weapon"]).capitalize(), mastery_bonus])
+	for mod: StatModifier in st.modifiers:
+		if mod.stat_name.to_upper() == key and mod.source_id.begins_with("passive:") and mod.matches_context(ctx):
+			bonus_lines.append("• %s: %+d" % [str(ContentCatalog.get_entry("passives", mod.source_id.trim_prefix("passive:")).get("name", mod.source_id)), mod.flat_bonus])
 	if hero.inventory != null:
 		for eq: Equipment in hero.inventory._iter_equipped_gear():
 			var gear_bonus: int = 0

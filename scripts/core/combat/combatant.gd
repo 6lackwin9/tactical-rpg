@@ -34,7 +34,13 @@ var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (ba
 var power_override: int = 0    # authored strike power (> 0 replaces weapon + unit power; see DamageCalculator)
 var armor_override: int = -1    # authored armor rating (>= 0 replaces gear mitigation + STR / 4)
 var lore_ref: String = ""           # world character it plays (WorldCatalog qualified id), empty for plain catalog units
-var known_skills: Array[String] = []   # leveled skills this unit may plan (empty = every skill up to its cap)
+var known_skills: Array[String] = []   # skills this unit may plan: class path up to its level + extras (empty = unrestricted)
+var granted_skills: Array[String] = []  # skills learned beyond the class path (passives, in-game events); persist on the unit
+var passives: Array[String] = []        # ids of the passives applied to this unit (see Passives)
+var ap_regen_bonus: int = 0             # extra AP regained each round (passives)
+var hp_scale: float = 1.0               # tier multiplier on class-derived HP
+var power_scale: float = 1.0            # tier multiplier on attack power (DamageCalculator)
+var tier: String = "hero"               # StatRules.TIERS key
 var catalog_id: String = ""         # ContentCatalog unit id it was spawned from (empty = built in code)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)
 var active_buffs: Array[StatModifier] = []
@@ -56,9 +62,38 @@ func _init(p_name: String, p_hp: int, p_speed: int, p_attack_range: int = 1, p_s
 func min_attack_range() -> int:
 	return 2 if attack_range > 1 else 1
 
-# Move, Rest and other system skills are always known; a whitelist limits the rest.
+# Move, Rest and other system skills are always known; class-derived units know their
+# class path (up to their level), learned extras and granted skills.
 func knows_skill(skill_id: String) -> bool:
-	return known_skills.is_empty() or known_skills.has(skill_id) or SkillCatalog.is_system(skill_id)
+	return known_skills.is_empty() or known_skills.has(skill_id) or granted_skills.has(skill_id) or SkillCatalog.is_system(skill_id)
+
+# Known AND trained for: skills with min_proficiency need the right gear type at that
+# proficiency level (class-derived units only; hand-built units are unrestricted).
+func can_use(skill: SkillDef) -> bool:
+	if not knows_skill(skill.id):
+		return false
+	if known_skills.is_empty() or skill.min_proficiency <= 0 or stats == null or stats.proficiency == null:
+		return true
+	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+	var type: String = weapon.weapon_type if weapon != null else ""
+	if not skill.weapon_types.is_empty() and not skill.weapon_types.has(type):
+		return false
+	return stats.proficiency.level_of(type) >= skill.min_proficiency
+
+# Learns a skill beyond the class path (an in-game event); persists on the unit.
+func learn_skill(skill_id: String) -> void:
+	if not granted_skills.has(skill_id):
+		granted_skills.append(skill_id)
+
+# Armor burden after training (Proficiency.burden_reduction per worn piece).
+func worn_burden() -> int:
+	var total: int = 0
+	if inventory == null:
+		return 0
+	for eq: Equipment in inventory._iter_equipped_gear():
+		var cut: int = stats.proficiency.burden_reduction(eq.weapon_type) if stats != null and stats.proficiency != null else 0
+		total += maxi(0, eq.burden - cut)
+	return total
 
 func has_status(status: String) -> bool:
 	return statuses.has(status)
@@ -71,7 +106,7 @@ func debuff_resistance() -> float:
 func move_per_block() -> int:
 	return clampi(floori(float(speed + 2) / 5.0), 1, 4)
 
-# Stat-context dictionary used for weapon-conditional bonuses (masteries etc.).
+# Stat-context dictionary used for weapon-conditional bonuses (passives etc.).
 func get_weapon_context() -> Dictionary:
 	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
 	return {"weapon": weapon.weapon_type} if weapon != null else {}
@@ -88,11 +123,11 @@ func sync_from_stats_and_gear() -> void:
 					if bonus_val != 0:
 						stats.add_modifier(StatModifier.new(st_k.to_upper(), bonus_val, 0.0, "gear", "always", -1))
 
-		var burden: int = inventory.get_total_armor_burden() if inventory != null else 0
+		var burden: int = worn_burden()
 		var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
 		var base_rng: int = weapon.base_range if weapon != null else 1
 		var ctx: Dictionary = {"weapon": weapon.weapon_type} if weapon != null else {}
-		max_hp = stats.get_max_hp(ctx)
+		max_hp = maxi(1, roundi(float(stats.get_max_hp(ctx)) * hp_scale))
 		hp = mini(hp, max_hp)
 		speed = maxi(1, stats.get_initiative_speed(burden, ctx) - carry_speed_penalty)
 		attack_range = stats.get_effective_range(base_rng, ctx)
