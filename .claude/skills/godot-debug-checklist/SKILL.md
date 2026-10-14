@@ -51,3 +51,4 @@ Rule: when something fails, look it up in **Known issues** first. Only debug fro
 | IDE shows UNSAFE warnings referencing removed classes (`MasterySystem`) | Stale language-server state | Ignore until the editor scan; trust `--check-only` |
 | `reset_round` test uses stale Combatant objects | At round 1 `reset_round()` calls `start()`, which rebuilds every Combatant | Test round-reset behaviour from round 2 (advance first) and re-fetch units after reset |
 | New level-2+ catalog skill changes existing AI/test numbers | Hand-built units with empty `known_skills` know every skill | Mark new example skills `learned_only: true` or add them via `extra_skills` |
+| Self-buff granted by a DEFEND skill vanishes immediately | The skill's own stance switch calls `set_stance`, which removes riposte | Grant in `on_start` after the stance switch (`StatusEffects.grant_now`) |

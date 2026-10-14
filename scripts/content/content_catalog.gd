@@ -394,12 +394,18 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 			errors.append("Heal per stat point needs a heal stat (INT or KNOW).")
 		if heal_mult <= 0.0 and not heal_stat.is_empty():
 			errors.append("Heal stat is set but heal per stat point is 0.")
-		if not grant.is_empty() and not StatusEffects.buffs().has(grant):
-			errors.append("Grants: '%s' is not a buff status (%s)." % [grant, ", ".join(StatusEffects.buffs())])
+		if not grant.is_empty() and not StatusEffects.support_buffs().has(grant):
+			errors.append("Grants: '%s' is not a support buff status (%s)." % [grant, ", ".join(StatusEffects.support_buffs())])
 		if DictUtil.to_int(e["reach_max"]) > 0 and DictUtil.to_int(e["reach_min"]) > DictUtil.to_int(e["reach_max"]):
 			errors.append("Reach min is above reach max.")
 		if grant == StatusEffects.TAUNT and str(e["target_mode"]) != "SELF":
 			errors.append("Taunt is cast on the taunter itself: set Targets to SELF.")
+	elif kind == "DEFEND":
+		var defend_grant: String = str(e["grant_status"])
+		if not defend_grant.is_empty() and not StatusEffects.defend_buffs().has(defend_grant):
+			errors.append("Grants: '%s' is not a defend buff status (%s)." % [defend_grant, ", ".join(StatusEffects.defend_buffs())])
+		if DictUtil.to_int(e["heal_base"]) > 0 or DictUtil.to_float(e["heal_mult"]) > 0.0:
+			errors.append("Heal belongs to SUPPORT skills.")
 	elif not str(e["grant_status"]).is_empty() or DictUtil.to_int(e["heal_base"]) > 0 or DictUtil.to_float(e["heal_mult"]) > 0.0:
 		errors.append("Heal and Grants belong to SUPPORT skills.")
 	if kind != "ATTACK" and DictUtil.to_int(e["dash_tiles"]) > 0:

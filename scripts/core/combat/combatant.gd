@@ -31,6 +31,7 @@ var statuses: Dictionary = {}           # active this round: status name -> true
 var pending_statuses: Dictionary = {}   # inflicted this round, active next round
 var status_rounds_left: Dictionary = {} # active status -> rounds left, this one included (multi-round buffs / bleed)
 var pending_status_rounds: Dictionary = {}   # queued status -> rounds it will last once active
+var riposted: Dictionary = {}           # attackers this unit already countered this round (RiposteRules)
 var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
 var power_override: int = 0    # authored strike power (> 0 replaces weapon + unit power; see DamageCalculator)
@@ -102,6 +103,12 @@ func worn_burden() -> int:
 
 func has_status(status: String) -> bool:
 	return statuses.has(status)
+
+func remove_status(status: String) -> void:
+	statuses.erase(status)
+	status_rounds_left.erase(status)
+	pending_statuses.erase(status)
+	pending_status_rounds.erase(status)
 
 # Debuff resistance (%): from INT via the stat sheet.
 func debuff_resistance() -> float:
@@ -188,6 +195,7 @@ func set_stance(p_stance: CombatTypes.StanceType) -> void:
 	if current_stance != p_stance:
 		current_stance = p_stance
 		stance_hold_duration = 0
+		remove_status(StatusEffects.RIPOSTE)   # riposte is a stance-bound buff
 		stance_changed.emit(current_stance)
 
 func add_buff(mod: StatModifier) -> void:
@@ -204,6 +212,7 @@ func apply_attack_boost(multiplier: float, duration_rounds: int) -> void:
 	print("[%s] gains Attack Boost (%.1fx) for %d rounds!" % [name, attack_boost_multiplier, attack_boost_rounds_remaining])
 
 func tick_round_buffs() -> void:
+	riposted.clear()
 	if attack_boost_rounds_remaining > 0:
 		attack_boost_rounds_remaining -= 1
 		if attack_boost_rounds_remaining <= 0:

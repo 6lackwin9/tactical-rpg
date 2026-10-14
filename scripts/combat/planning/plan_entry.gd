@@ -74,7 +74,10 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			support.est_heal = est_heal
 			command = support
 		SkillDef.Kind.DEFEND:
-			command = DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
+			var defend := DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
+			defend.grant_status = skill.grant_status
+			defend.status_rounds = skill.status_rounds
+			command = defend
 		SkillDef.Kind.FOCUS:
 			command = FocusCommand.new(actor, skill.boost, skill.boost_rounds, skill.blocks, 0)
 		SkillDef.Kind.MOVE:

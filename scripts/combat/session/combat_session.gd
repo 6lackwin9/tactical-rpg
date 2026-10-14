@@ -252,6 +252,8 @@ func _step_resolution() -> void:
 		var act: CombatResolver.ScheduledAction = _pending_actions.pop_front()
 		resolver.execute_single_action(act)
 		_append_entry(CombatLogBuilder.from_action(act, current_round, current_block, allies, grid), true)
+		for reaction: Dictionary in act.command.reactions:
+			_append_entry(CombatLogBuilder.riposte_entry(reaction, current_round, current_block, allies), true)
 
 	if _pending_actions.is_empty():
 		resolver.block_completed.emit(current_block)
@@ -583,6 +585,9 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		c.attack_boost_rounds_remaining = DictUtil.int_of(snap.attack_boost_rds, c)
 		c.defense_mitigation_ratio = DictUtil.float_of(snap.defense_mit, c)
 		c.ap = DictUtil.int_of(snap.aps, c, c.max_ap)
+		c.statuses = _dict_of(snap.statuses, c)
+		c.status_rounds_left = _dict_of(snap.status_rounds, c)
+		c.riposted.clear()
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
 			grid.combatant_positions[c] = pos_raw
@@ -663,7 +668,17 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 		snap.attack_boost_rds[c] = c.attack_boost_rounds_remaining
 		snap.defense_mit[c] = c.defense_mitigation_ratio
 		snap.aps[c] = c.ap
+		snap.statuses[c] = c.statuses.duplicate()
+		snap.status_rounds[c] = c.status_rounds_left.duplicate()
 	return snap
+
+# A copy of the per-unit dictionary stored in a snapshot (empty when missing).
+static func _dict_of(source: Dictionary, key: Combatant) -> Dictionary:
+	var raw: Variant = source.get(key, {})
+	if raw is Dictionary:
+		var found: Dictionary = raw
+		return found.duplicate()
+	return {}
 
 # ------------------------------------------------------------------------------
 # 3. Unit state queries (snapshot-aware)

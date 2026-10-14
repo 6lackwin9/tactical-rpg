@@ -12,6 +12,9 @@ extends RefCounted
 #   BLEED    (debuff) loses BLEED_PCT of max HP at the end of the round; ignores guard and armor
 #   HASTE    (buff) +HASTE_TILES tiles per move block while active
 #   TAUNT    (buff on the taunter) enemy AI units that can reach it must target it
+#   RIPOSTE  (buff, DEFEND skill) counters adjacent melee attackers (RiposteRules). Unlike the
+#            queued statuses it is active IMMEDIATELY (from the block the skill starts, see
+#            grant_now) and is removed by any stance change (Combatant.set_stance)
 # Debuffs come from attack skills (rolled against resistance) and AP debt
 # (overspending: 3+ debt staggers, 5+ stuns; no resist roll, it's self-inflicted).
 # Buffs come from SUPPORT skills (SupportCommand) and skip resistance.
@@ -23,6 +26,7 @@ const ROOT: String = "root"
 const BLEED: String = "bleed"
 const HASTE: String = "haste"
 const TAUNT: String = "taunt"
+const RIPOSTE: String = "riposte"
 
 const BLEED_PCT: float = 0.06    # of max HP per round while bleeding (minimum 1)
 const HASTE_TILES: int = 1       # extra tiles per move block while hasted
@@ -34,9 +38,17 @@ const DEBT_STUN: int = 5
 static func debuffs() -> Array[String]:
 	return [STAGGER, STUN, ROOT, BLEED]
 
-# Statuses a SUPPORT skill can grant (no resistance roll).
+# Every buff status (no resistance roll).
 static func buffs() -> Array[String]:
+	return [HASTE, TAUNT, RIPOSTE]
+
+# Buffs a SUPPORT skill can grant (queued for next round).
+static func support_buffs() -> Array[String]:
 	return [HASTE, TAUNT]
+
+# Buffs a DEFEND skill can grant (active immediately).
+static func defend_buffs() -> Array[String]:
+	return [RIPOSTE]
 
 # Valid keys of a unit's / passive's status_resist.
 static func resistable() -> Array[String]:
@@ -60,6 +72,8 @@ static func display_name(status: String) -> String:
 			return "Hasted"
 		TAUNT:
 			return "Taunting"
+		RIPOSTE:
+			return "Riposte"
 	return status.capitalize()
 
 # Blocks the status takes away from a round.
@@ -94,6 +108,12 @@ static func queue(target: Combatant, status: String, rounds: int = 1) -> void:
 	target.pending_statuses[status] = true
 	target.pending_status_rounds[status] = maxi(DictUtil.int_of(target.pending_status_rounds, status), maxi(1, rounds))
 
+# Makes a buff active right now (self-buffs from DEFEND skills), lasting `rounds` rounds
+# counting the current one (the longer wins).
+static func grant_now(target: Combatant, status: String, rounds: int = 1) -> void:
+	target.statuses[status] = true
+	target.status_rounds_left[status] = maxi(DictUtil.int_of(target.status_rounds_left, status), maxi(1, rounds))
+
 # Next-round penalty for overspending: "" or the status it causes.
 static func debt_status(debt: int) -> String:
 	if debt >= DEBT_STUN:
@@ -121,6 +141,7 @@ static func roll_over(c: Combatant, ap_regen: int) -> Array[String]:
 		c.status_rounds_left[str(status)] = maxi(DictUtil.int_of(c.status_rounds_left, status), DictUtil.int_of(c.pending_status_rounds, status, 1))
 	c.pending_statuses.clear()
 	c.pending_status_rounds.clear()
+	c.riposted.clear()
 	var debt_penalty: String = debt_status(maxi(0, -c.ap))
 	if not debt_penalty.is_empty():
 		c.statuses[debt_penalty] = true

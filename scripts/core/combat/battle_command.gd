@@ -13,6 +13,7 @@ var priority: int = 0  # High-priority actions (Switch Target, Defend) resolve f
 var block_cost: int = 1  # Timeline duration in blocks
 var command_name: String = "Command"
 var execution_log: String = ""
+var reactions: Array[Dictionary] = []   # counters this command provoked (RiposteRules.counter results), logged after it
 
 var ap_cost: int = 0                 # skill AP (excludes the stance switch)
 var stance_switch_cost: int = 0     # extra AP for changing stance on start

@@ -159,6 +159,26 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.detail_text = act.command.command_name
 	return entry
 
+# A riposte: the defender countered the attack that just resolved (one cell per counter).
+static func riposte_entry(reaction: Dictionary, round_num: int, block_num: int, allies: Array[Combatant]) -> ActionLogEntry:
+	var entry := ActionLogEntry.new(round_num, block_num)
+	var defender: Combatant = reaction["defender"]
+	var attacker: Combatant = reaction["attacker"]
+	entry.actor_name = defender.name
+	entry.actor_is_ally = allies.has(defender)
+	entry.target_name = attacker.name
+	entry.target_is_ally = allies.has(attacker)
+	entry.category = "ATTACK"
+	entry.skill_name = "Riposte"
+	entry.skill_subtype = "Counter"
+	entry.value_num = DictUtil.to_int(reaction["damage"])
+	entry.damage = entry.value_num
+	entry.breakdown = str(reaction["breakdown"])
+	entry.outcome_tag = "DEFEATED" if DictUtil.to_bool(reaction["defeated"]) else ("CRIT" if DictUtil.to_bool(reaction["crit"]) else "COUNTER")
+	entry.status_text = "Target HP: %d/%d" % [attacker.hp, attacker.max_hp]
+	entry.detail_text = "Countered for %d" % entry.damage
+	return entry
+
 # A chase: the attacker closed a one-tile gap as its attack started.
 static func chase_entry(act: CombatResolver.ScheduledAction, round_num: int, block_num: int, allies: Array[Combatant], grid: CombatGrid, message: String) -> ActionLogEntry:
 	var entry := ActionLogEntry.new(round_num, block_num)
@@ -216,6 +236,8 @@ static func format_resolver_message(msg: String) -> String:
 		formatted = "[color=#38bdf8]➜ [b]Chase:[/b] " + msg.substr(8) + "[/color]"
 	elif msg.begins_with("[Support]"):
 		formatted = "[color=#4ade80]✚ " + msg.substr(10) + "[/color]"
+	elif msg.begins_with("[Riposte]"):
+		formatted = "[color=#60a5fa]⚔ [b]" + msg + "[/b][/color]"
 	elif msg.begins_with("[Bleed]"):
 		formatted = "[color=#f87171]🩸 " + msg.substr(8) + "[/color]"
 	elif msg.begins_with("[Dash]") or msg.begins_with("[Dash Blocked]"):

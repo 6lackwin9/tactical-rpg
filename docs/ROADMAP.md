@@ -21,7 +21,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | placeholder | S6, S8 | README System 2 |
 | S10 | World map and travel: routes, travel events, supplies | placeholder | S9 | README System 1 |
 | S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | placeholder | S8 | README System 9 |
-| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; terrain and combos remain) | S1, S2 | README System 6 |
+| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; terrain and combos remain; riposte done in M2a) | S1, S2 | README System 6 |
 | S13 | Save/load and game state, new-game flow, main menu | placeholder | S7 | Needed before any playable loop |
 | S14 | Audio, animation and asset pipeline, asset-load tests | placeholder | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |

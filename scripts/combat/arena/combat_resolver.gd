@@ -215,7 +215,8 @@ func execute_single_action(action: ScheduledAction) -> void:
 	action.command.execute()
 	if not action.command.execution_log.is_empty():
 		log_emitted.emit(action.command.execution_log)
-
+	for reaction: Dictionary in action.command.reactions:
+		log_emitted.emit(str(reaction["log"]))
 
 	# Check for knockouts or withdrawals and cancel future actions
 	for c: Combatant in registered_combatants:

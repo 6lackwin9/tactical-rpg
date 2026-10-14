@@ -14,6 +14,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `tools/` | fc.sh, balance_sim.gd, parse_all.gd | S15 | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |
+| `scripts/combat/status/riposte_rules.gd`, `scripts/tests/riposte_test_suite.gd` | riposte counter rules and suite (M2a) | S12 | done |
 | `scripts/progression/` | persistent unit state, XP, level-up flow, spend allocation | S7 | placeholder |
 | `scripts/quests/` | quest state machine, flags, rewards (grants passives/skills/items) | S8 | placeholder |
 | `scripts/exploration/` | region maps, location interactions, encounter triggers | S9 | placeholder |

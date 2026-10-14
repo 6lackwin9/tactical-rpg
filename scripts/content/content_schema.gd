@@ -77,6 +77,7 @@ static func _skill_fields() -> Array[Dictionary]:
 	var attack: Dictionary = {"key": "kind", "in": ["ATTACK"]}
 	var support: Dictionary = {"key": "kind", "in": ["SUPPORT"]}
 	var reaching: Dictionary = {"key": "kind", "in": ["ATTACK", "SUPPORT"]}
+	var buffing: Dictionary = {"key": "kind", "in": ["SUPPORT", "DEFEND"]}
 	return [
 		_f("id", "ID", "id", "", {"help": "Unique snake_case id used by units and tests."}),
 		_f("name", "Name", "string", "New Skill"),
@@ -92,14 +93,14 @@ static func _skill_fields() -> Array[Dictionary]:
 		_f("status_effect", "Inflicts", "enum", "", {"options_from": "status", "when": attack}),
 		_f("status_potency", "Status potency %", "int", 0, {"min": 0, "max": 200, "when": {"key": "status_effect", "not_in": [""]}, "help": "Chance = potency - target debuff resistance - passive resistance."}),
 		_f("dash_tiles", "Gap-close tiles", "int", 0, {"min": 0, "max": 6, "when": attack, "help": "Lunge: move up to this many tiles to get into reach, then strike. Only offered while the target is out of reach; it is the unit's move for the round (one per round, blocked by root, terrain and units). AP is the skill's level alone."}),
-		_f("status_rounds", "Status rounds", "int", 1, {"min": 1, "max": 5, "when": reaching, "help": "How many rounds an inflicted / granted status lasts once active (it starts next round)."}),
+		_f("status_rounds", "Status rounds", "int", 1, {"min": 1, "max": 5, "when": {"key": "kind", "in": ["ATTACK", "SUPPORT", "DEFEND"]}, "help": "How many rounds an inflicted / granted status lasts once active (it starts next round; a DEFEND skill's riposte is active at once and counts the current round)."}),
 		_f("reach_min", "Reach min", "int", 0, {"min": 0, "max": 8, "when": reaching, "help": "0 = the unit's default band (attacks: melee 1, ranged 2-3; support: 0-3)."}),
 		_f("reach_max", "Reach max", "int", 0, {"min": 0, "max": 8, "when": reaching}),
 		_f("target_mode", "Targets", "enum", "ALLY_OR_SELF", {"options": ["SELF", "ALLY", "ALLY_OR_SELF"], "when": support, "help": "SELF: the caster only. ALLY: a friendly unit other than the caster. ALLY_OR_SELF: either."}),
 		_f("heal_stat", "Heal scales with", "enum", "", {"options": ["", "INT", "KNOW"], "when": support, "help": "Heal = heal base + stat x heal per point (SupportRules.heal_amount), never DamageCalculator."}),
 		_f("heal_base", "Heal base", "int", 0, {"min": 0, "max": 500, "when": support}),
 		_f("heal_mult", "Heal per stat point", "float", 0.0, {"min": 0.0, "max": 10.0, "step": 0.05, "when": support}),
-		_f("grant_status", "Grants", "enum", "", {"options_from": "status_buff", "when": support, "help": "Buff queued on the target for next round: haste (+1 tile per move block) or taunt (enemy AI must target it while reachable)."}),
+		_f("grant_status", "Grants", "enum", "", {"options_from": "status_buff", "when": buffing, "help": "SUPPORT: haste (+1 tile per move block) or taunt (enemy AI must target it while reachable), queued for next round. DEFEND: riposte (counters adjacent melee attackers for 50% power), active at once, lost on a stance change."}),
 		_f("learned_only", "Learn only", "bool", false, {"help": "Unrestricted hand-built units (tests, sandbox) don't know it unless they learn it; class-derived units get it from skill paths / extra skills as usual."}),
 		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types (class-derived units only)."}),
 		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "when": attack, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),

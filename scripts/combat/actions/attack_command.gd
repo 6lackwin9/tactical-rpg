@@ -147,6 +147,7 @@ func execute() -> void:
 	last_damage = 0
 	last_breakdown = ""
 	last_crit = false
+	reactions.clear()
 	if not source.is_active():
 		print("[%s] cannot act (defeated or withdrawn)." % source.name)
 		execution_log = "[Action Failed] %s cannot act (unit is inactive)." % source.name
@@ -203,6 +204,11 @@ func execute() -> void:
 			details.append("resisted %s (%d%%)" % [StatusEffects.display_name(status_effect).to_lower(), chance])
 
 	var detail_suffix: String = (" (" + ", ".join(details) + ")") if not details.is_empty() else ""
+
+	# A riposting target answers a melee hit it survived (once per attacker per round).
+	var counter: Dictionary = RiposteRules.counter(source, effective_target, grid, source.attack_range > 1 and not use_offhand, rng)
+	if not counter.is_empty():
+		reactions.append(counter)
 
 	if not effective_target.is_alive():
 		execution_log = "[Attack] %s struck %s for %d damage%s -> %s DEFEATED!" % [

@@ -26,6 +26,7 @@ func _init(p_source: Combatant, p_grid: CombatGrid, p_cells: Array[Vector2i], p_
 func execute() -> void:
 	last_damage = 0
 	last_hits = 0
+	reactions.clear()
 	if not source.is_active():
 		execution_log = "[Action Failed] %s cannot act (unit is inactive)." % source.name
 		return
@@ -41,6 +42,9 @@ func execute() -> void:
 		last_hits += 1
 		parts.append("%s %d%s%s" % [victim.name, taken, " CRIT" if DictUtil.to_bool(res["is_crit"]) else "", " DEFEATED" if not victim.is_alive() else ""])
 		breakdowns.append("%s: %s" % [victim.name, DamageCalculator.describe(res)])
+		var counter: Dictionary = RiposteRules.counter(source, victim, grid, source.attack_range > 1, rng)
+		if not counter.is_empty():
+			reactions.append(counter)
 	last_breakdown = "\n".join(breakdowns)
 	if last_hits == 0:
 		execution_log = "[Area Miss] %s's %s hit nobody." % [source.name, command_name]

@@ -8,6 +8,16 @@ func _init(p_source: Combatant, p_mitigation_ratio: float = 0.5, p_block_cost: i
 	mitigation_ratio = p_mitigation_ratio
 	command_name = "Defend"
 
+var grant_status: String = ""   # buff made active the moment the defend starts (StatusEffects.defend_buffs(), e.g. riposte)
+var status_rounds: int = 1      # rounds it lasts, counting the current one
+
+# Runs after AP and the (Defensive) stance switch, so the riposte survives its own skill's switch.
+func on_start() -> String:
+	if grant_status.is_empty() or not source.is_active():
+		return ""
+	StatusEffects.grant_now(source, grant_status, status_rounds)
+	return "[Riposte] %s readies a riposte (%d round%s, ends on a stance change)" % [source.name, status_rounds, "" if status_rounds == 1 else "s"]
+
 func execute() -> void:
 	if not source.is_alive():
 		return
