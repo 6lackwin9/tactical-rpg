@@ -22,6 +22,8 @@
 
 ## Agents and tools (built)
 
+(Skills: godot-debug-checklist, patch-and-seed, planner. Agents: design-brainstorm, builder, balance, change-reviewer.)
+
 | Tool | Use |
 |---|---|
 | `tools/fc.sh parse / arena / dojo / run / sim / all` | Compact checks and scratch scripts (see header of the script) |
@@ -31,3 +33,14 @@
 | Skills `godot-debug-checklist`, `patch-and-seed` | Known issues and safe editing |
 
 Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserker 80%, brawler 53%, scout 47%, ranger 20%, shaman 0% (cannot beat a minion of itself: stalemates). Hero loses 1v3 minions and 1v1 bosses; elite = mirror (50%). These are open balance questions, not decisions.
+
+## Iteration loop (agreed 2026-10-15)
+
+1. **Brainstorm** (`design-brainstorm`): options for systems -> `docs/ROADMAP.md` entries as `proposed`. User approves.
+2. **Plan** (main session, skill `planner`): milestones + change lists; user confirms before any change.
+3. **Build** (`builder` agent, feature branch `feat/<id>-<slug>`): implement + tests, report.
+4. **Review/ship** (planner): review (+ `change-reviewer`), summary to user, README/docs, `check_project.ps1`, commit, merge to `main`, push.
+5. **Balance** (`balance` agent, clean `main`, only `balance-ready` systems): `docs/BALANCE_REPORT.md`.
+6. **Discuss** (`design-brainstorm` + user): fixes or logic changes -> back to step 1. Dropped ideas go to `docs/HISTORY.md` with reasons.
+
+Sims are parallel-safe (own sandbox per run); builders on separate systems use separate worktrees.

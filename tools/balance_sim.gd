@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Balance simulator: headless AI-vs-AI battles on a sandbox copy of the catalog.
-#   tools/fc.sh run tools/balance_sim.gd -- duel 5        class round-robin, hero vs hero at level 5
+#   tools/fc.sh sim duel 5 [seeds]   class round-robin, hero vs hero at level 5 (seeds default 3, use 10 near the 40-60% bracket)
 #   tools/fc.sh run tools/balance_sim.gd -- tier 5        each class: hero vs minion/standard/elite/boss of itself (1v1 and 1 vs 3)
 #   tools/fc.sh run tools/balance_sim.gd -- levels        mirror matches: level N hero vs level N+2 hero, per class
 # Score = share of battles the left unit wins (a timeout is decided by remaining HP fraction).
@@ -10,16 +10,21 @@ extends SceneTree
 # a hero beats a same-level minion in most 1v1s and loses to a boss.
 
 const CLASSES: Array[String] = ["warrior", "ranger", "shaman", "brawler", "scout", "berserker"]
-const SEEDS: Array[int] = [11, 23, 37]
-const SANDBOX: String = "user://balance_sim"
+var seeds: Array[int] = [11, 23, 37]
+var sandbox: String = ""   # per run, so sims can run in parallel
 
 func _initialize() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var mode: String = args[0] if args.size() > 0 else "duel"
 	var level: int = int(args[1]) if args.size() > 1 else 5
+	var seed_count: int = int(args[2]) if args.size() > 2 else 3
+	seeds.clear()
+	for i: int in range(seed_count):
+		seeds.append(11 + i * 12)
+	sandbox = "user://balance_sim_%d" % OS.get_process_id()
 	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	ContentCatalog.fork_to(SANDBOX)
+		DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
+	ContentCatalog.fork_to(sandbox)
 	match mode:
 		"duel":
 			_duel(level)
@@ -29,6 +34,8 @@ func _initialize() -> void:
 			_levels()
 		_:
 			_out("modes: duel [level] | tier [level] | levels")
+	for kind: String in ContentSchema.KINDS:
+		DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	quit()
 
@@ -76,7 +83,7 @@ func _fight(left: Array[String], right: Array[String], seed_value: int) -> float
 func _matchup(a_ids: Array[String], b_ids: Array[String]) -> float:
 	var total: float = 0.0
 	var n: int = 0
-	for s: int in SEEDS:
+	for s: int in seeds:
 		total += _fight(a_ids, b_ids, s)
 		total += 1.0 - _fight(b_ids, a_ids, s)
 		n += 2
