@@ -22,3 +22,7 @@
 | Passives lifetime | Permanent by default; scripted fights/events may grant temporary ones for that fight/event | User 2026-10-15 |
 | Playable scope | One small campaign first; more campaigns later; unify stories across worlds after several exist; UGC story mode is a later engine goal | User 2026-10-15 |
 | Build order | Systems first (S7/S13, S12-A with S4-A and S3, S8...), balance pass only after the balance-relevant rules are frozen (supersedes M1-first) | User 2026-10-15 |
+| Gear budget | Option A: class default loadouts validated against a budget in `ContentCatalog` (warning level); fill gaps with items. Special items may break it with a documented trade-off | User 2026-10-15 |
+| Travel supplies | Reduced implementation only (single counter, no fail state), later slice | User 2026-10-15 |
+| Class roster (six) | Warrior (tank: high defense, less offense and mobility), Ranger, Priest (support/heal), Brawler (gap closer), Rogue (reworked Scout, gap closer), Mage (ranged damage). Replaces Shaman, Berserker, Scout | User 2026-10-15: add a support class, keep at least two ranged offensive classes, avoid a melee-heavy start |
+| Enemy scaling | Still one base curve, no per-world tier tables | User 2026-10-15: keep balance consistent across worlds, no separate balance pass |
