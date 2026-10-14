@@ -248,7 +248,10 @@ func _refs_widget(f: Dictionary, value: Variant) -> Control:
 	add_row.add_child(add_btn)
 	box.add_child(add_row)
 	if current.is_empty():
-		box.add_child(UiTheme.label(str(f.get("help", "(empty)")), UiTheme.FONT_SM, UiTheme.COL_MUTED))
+		var hint: Label = UiTheme.label(str(f.get("help", "(empty)")), UiTheme.FONT_SM, UiTheme.COL_MUTED)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # a long hint must never widen the form
+		hint.custom_minimum_size.x = 60
+		box.add_child(hint)
 	return box
 
 func _stats_widget(f: Dictionary, value: Variant) -> Control:

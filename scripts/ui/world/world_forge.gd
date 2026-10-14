@@ -328,8 +328,7 @@ func _sync_kind_buttons() -> void:
 		btn.set_pressed_no_signal(str(k) == kind)
 
 func _open_manifest() -> void:
-	_list.clear()
-	_list_refs.clear()
+	_list_worlds()
 	_inherit_note.visible = false
 	form.visible = not world_id.is_empty()
 	if world_id.is_empty():
@@ -340,10 +339,28 @@ func _open_manifest() -> void:
 	draft_dirty = false
 	_refresh_side_panels()
 
-func refresh_list() -> void:
+# Overview: the left list shows every world (click to switch), with its inheritance.
+func _list_worlds() -> void:
 	_list.clear()
 	_list_refs.clear()
-	if kind == OVERVIEW or world_id.is_empty():
+	for w: String in WorldCatalog.world_ids():
+		var m: Dictionary = WorldCatalog.manifest(w)
+		var parents: Array[String] = WorldCatalog._strings(m.get("extends", []))
+		var extra: String = ("  ⇢ extends %s" % ", ".join(parents)) if not parents.is_empty() else "  (root)"
+		_list.add_item("%s%s" % [str(m.get("name", w)), extra])
+		_list.set_item_tooltip(_list.item_count - 1, w)
+		_list_refs.append(w)
+		if w == world_id:
+			_list.select(_list.item_count - 1)
+
+func refresh_list() -> void:
+	if kind == OVERVIEW:
+		_list_worlds()
+		_update_dirty_label()
+		return
+	_list.clear()
+	_list_refs.clear()
+	if world_id.is_empty():
 		_update_dirty_label()
 		return
 	var needle: String = _search.text.strip_edges().to_lower()
@@ -373,6 +390,10 @@ func refresh_list() -> void:
 
 # Opens entry `ref` (a local id or qualified id): own entries are editable, inherited ones read-only.
 func select(ref: String, force: bool = false) -> void:
+	if kind == OVERVIEW:
+		if ref != world_id:
+			set_world(ref)
+		return
 	if not force and not commit_draft():
 		refresh_list()
 		return
