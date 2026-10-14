@@ -26,3 +26,7 @@
 | Travel supplies | Reduced implementation only (single counter, no fail state), later slice | User 2026-10-15 |
 | Class roster (six) | Warrior (tank: high defense, less offense and mobility), Ranger, Priest (support/heal), Brawler (gap closer), Rogue (reworked Scout, gap closer), Mage (ranged damage). Replaces Shaman, Berserker, Scout | User 2026-10-15: add a support class, keep at least two ranged offensive classes, avoid a melee-heavy start |
 | Enemy scaling | Still one base curve, no per-world tier tables | User 2026-10-15: keep balance consistent across worlds, no separate balance pass |
+| Mage / Ranger split | Mage: INT-heavy ranged damage with AoE focus. Ranger: single-target ranged damage, AoE only for chip damage | User 2026-10-15 |
+| Warrior tank | Highest HP/armor, taunt to protect allies, mostly reactive damage (counter-style) rather than proactive | User 2026-10-15 |
+| Berserker behaviour | Goblin berserkers become Brawler minions with an aggressive AI profile (never flee, charge) | User 2026-10-15 |
+| Milestone order | M1 engine (S12-A + S4-A) -> M2 roster/items/gear budget -> M3 progression data + save schema | User 2026-10-15 |
