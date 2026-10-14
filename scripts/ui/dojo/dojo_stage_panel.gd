@@ -50,11 +50,12 @@ func _init() -> void:
 	_hero_vitals = _build_vitals_card(cards, "HERO", Color(0.4, 0.8, 1.0))
 	_dummy_vitals = _build_vitals_card(cards, "TRAINING DUMMY", Color(0.95, 0.85, 0.4))
 
-	var controls := HBoxContainer.new()
-	controls.add_theme_constant_override("separation", 4)
+	var controls := HFlowContainer.new()
+	controls.add_theme_constant_override("h_separation", 4)
 	vbox.add_child(controls)
-	controls.add_child(UiTheme.button("🛡 Toggle Dummy Defend", "Switch the dummy between 0% and 50% damage mitigation", func() -> void: session.toggle_dummy_defense()))
+	controls.add_child(UiTheme.button("🛡 Toggle Dummy Defend", "Dummy guards (-50%, Defensive stance) or stands Neutral", func() -> void: session.toggle_dummy_defense()))
 	controls.add_child(UiTheme.button("💖 Full Heal Dummy", "Restore the dummy to full HP", func() -> void: session.heal_dummy()))
+	controls.add_child(UiTheme.button("⚔ Dummy Attacks", "The dummy strikes the active hero with its chosen skill (Console: Dummy Attacks)", func() -> void: session.dummy_attack()))
 
 func _build_mat(parent: Control) -> void:
 	var mat_panel := PanelContainer.new()
@@ -165,19 +166,28 @@ func refresh() -> void:
 		hero_bits.append("🛡 Guard %d%%" % int(roundf(hero.defense_mitigation_ratio * 100.0)))
 	if hero.attack_boost_rounds_remaining > 0:
 		hero_bits.append("✦ ATK ×%.1f (%d rds)" % [hero.attack_boost_multiplier, hero.attack_boost_rounds_remaining])
+	hero_bits.append("AP %d/%d" % [hero.ap, hero.max_ap])
+	for status: Variant in hero.statuses:
+		hero_bits.append("⚡ %s" % StatusEffects.display_name(str(status)))
+	if not hero.is_alive():
+		hero_bits = ["💀 Down - use Heal Hero"]
 	_hero_vitals.status.text = " • ".join(hero_bits)
 
 	_set_vitals(_dummy_vitals, _dummy.mini_bar, dummy)
 	var mit_pct: int = int(roundf(dummy.defense_mitigation_ratio * 100.0))
+	var dummy_bits: Array[String] = ["%s stance" % CombatTypes.stance_to_string(dummy.current_stance), "⚔ %d power" % DamageCalculator.power_of(dummy)]
+	if mit_pct > 0:
+		dummy_bits.append("🛡 Guard %d%%" % mit_pct)
+	for status: Variant in dummy.statuses:
+		dummy_bits.append("⚡ %s" % StatusEffects.display_name(str(status)))
+	for status: Variant in dummy.pending_statuses:
+		dummy_bits.append("%s next round" % StatusEffects.display_name(str(status)))
 	if not dummy.is_alive():
 		_dummy_vitals.status.text = "💀 Defeated - use Full Heal"
 		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_BAD)
-	elif mit_pct > 0:
-		_dummy_vitals.status.text = "🛡 Defending (%d%% mitigation)" % mit_pct
-		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_INFO)
 	else:
-		_dummy_vitals.status.text = "Neutral (0% mitigation)"
-		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_GOOD)
+		_dummy_vitals.status.text = " • ".join(dummy_bits)
+		_dummy_vitals.status.add_theme_color_override("font_color", UiTheme.COL_INFO if mit_pct > 0 else UiTheme.COL_GOOD)
 	_layout_tokens()
 
 func _set_vitals(vitals: VitalsView, mini_bar: ProgressBar, unit: Combatant) -> void:

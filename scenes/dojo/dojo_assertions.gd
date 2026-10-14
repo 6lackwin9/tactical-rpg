@@ -247,6 +247,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	passed = _run_session_assertions(session) and passed
 	passed = _run_ui_smoke_assertions(session, host) and passed
 	passed = _run_slot_filter_and_carry_assertions(session, host) and passed
+	passed = _run_skill_and_dummy_assertions(session) and passed
 	return passed
 
 # ------------------------------------------------------------------------------
@@ -667,6 +668,93 @@ static func _run_slot_filter_and_carry_assertions(session: DojoSession, host: No
 		passed = false
 	else:
 		print("  [Dojo-32] Overlay windows open on request and close on completion: PASS")
+	return passed
+
+# ------------------------------------------------------------------------------
+# Catalog skills, the dummy fighting back, and rounds
+# ------------------------------------------------------------------------------
+
+static func _check(tag: String, label: String, ok: bool, detail: String = "") -> bool:
+	print("  [%s] %s: %s%s" % [tag, label, "PASS" if ok else "FAIL", (" (%s)" % detail) if not detail.is_empty() else ""])
+	return ok
+
+static func _run_skill_and_dummy_assertions(session: DojoSession) -> bool:
+	session.reset()
+	var hero: Combatant = session.active_hero
+	var dummy: Combatant = session.test_dummy
+	var passed: bool = true
+
+	# 33: the console's skills are the catalog's (engine-only skills hidden)
+	var ids: Array[String] = []
+	for s: SkillDef in session.usable_skills():
+		ids.append(s.id)
+	var catalog_ok: bool = ids.has("strike") and ids.has("power_strike") and ids.has("shield_bash") and ids.has("brace") and ids.has("focus") and ids.has("rest") and not ids.has("move") and not ids.has("stunned")
+	passed = _check("Dojo-33", "Console skills come from the content catalog", catalog_ok, "%d skills" % ids.size()) and passed
+
+	# 34: Power Strike = the battle rules: AP (level + stance switch), Offensive stance, DamageCalculator hit
+	var power_strike: SkillDef = SkillCatalog.find("power_strike")
+	var ap_before: int = hero.ap
+	var expected_cost: int = session.skill_ap(power_strike)
+	var probe := RandomNumberGenerator.new()
+	probe.seed = session.rng.seed
+	probe.state = session.rng.state
+	var expected: int = UiTheme.dict_int(DamageCalculator.compute(hero, dummy, false, false, power_strike.power_mult, false, probe, power_strike.stance()), "final_dmg")
+	var hp_before: int = dummy.hp
+	session.use_skill("power_strike")
+	var dealt: int = hp_before - dummy.hp
+	var strike_ok: bool = dealt == expected and hero.ap == ap_before - expected_cost and expected_cost == 3 and hero.current_stance == CombatTypes.StanceType.OFFENSIVE
+	passed = _check("Dojo-34", "Power Strike follows battle rules (2 AP + 1 switch, Offensive, x1.5 hit)", strike_ok, "dealt %d expected %d, AP %d -> %d" % [dealt, expected, ap_before, hero.ap]) and passed
+
+	# 35: Brace guards (-50%, Defensive); the dummy's attack uses its power, stance and crit vs the hero's guard & armor
+	session.use_skill("brace")
+	var guard_ok: bool = is_equal_approx(hero.defense_mitigation_ratio, 0.5) and hero.current_stance == CombatTypes.StanceType.DEFENSIVE
+	var probe2 := RandomNumberGenerator.new()
+	probe2.seed = session.rng.seed
+	probe2.state = session.rng.state
+	var log_before: int = session.log_entries.size()
+	var hero_hp: int = hero.hp
+	var predicted: Dictionary = DamageCalculator.compute(dummy, hero, false, false, 1.0, false, probe2, CombatTypes.StanceType.OFFENSIVE)
+	session.dummy_attack()
+	var hit_entry: DojoLogEntry = session.log_entries[session.log_entries.size() - 1]
+	var dummy_ok: bool = (guard_ok and hero_hp - hero.hp == UiTheme.dict_int(predicted, "final_dmg") and session.log_entries.size() == log_before + 1
+		and hit_entry.category == "ATTACK" and hit_entry.actor_name == dummy.name and not hit_entry.actor_is_ally and hit_entry.target_name == hero.name
+		and DamageCalculator.power_of(dummy) == 20 and not hit_entry.breakdown_bbcode.is_empty())
+	passed = _check("Dojo-35", "Dummy attacks the hero through the same formula (guard, armor, stance)", dummy_ok, "took %d, predicted %d" % [hero_hp - hero.hp, UiTheme.dict_int(predicted, "final_dmg")]) and passed
+
+	# 36: counterattack: every hero skill is answered by the dummy
+	session.set_dummy_counter(true)
+	var before_counter: int = session.log_entries.size()
+	var hp_counter: int = hero.hp
+	session.use_skill("strike")
+	var last: DojoLogEntry = session.log_entries[session.log_entries.size() - 1]
+	var counter_ok: bool = session.log_entries.size() == before_counter + 2 and last.actor_name == dummy.name and hero.hp < hp_counter
+	session.set_dummy_counter(false)
+	passed = _check("Dojo-36", "Counterattack: the dummy answers each hero skill", counter_ok) and passed
+
+	# 37: a stunned dummy loses its action; next round ticks Focus, drops the guard and regains AP
+	dummy.statuses[StatusEffects.STUN] = true
+	var hp_stun: int = hero.hp
+	session.dummy_attack()
+	var stunned_ok: bool = hero.hp == hp_stun and session.log_entries[session.log_entries.size() - 1].outcome_tag == StatusEffects.display_name(StatusEffects.STUN).to_upper()
+	session.use_skill("focus")
+	session.use_skill("brace")
+	var ap_round: int = hero.ap
+	session.next_round()
+	var round_ok: bool = (stunned_ok and session.round_num == 2 and hero.defense_mitigation_ratio == 0.0 and hero.attack_boost_rounds_remaining == 1
+		and hero.ap == mini(hero.max_ap, ap_round + DojoSession.ROUND_AP_REGEN) and not dummy.has_status(StatusEffects.STUN))
+	passed = _check("Dojo-37", "Stunned dummy loses its action; Next Round ticks Focus, drops guard, +4 AP", round_ok, "AP %d -> %d" % [ap_round, hero.ap]) and passed
+
+	# 38: Rest recovers AP; a down hero can't act until healed
+	hero.ap = 3
+	session.use_skill("rest")
+	var rest_ok: bool = hero.ap == 3 + SkillCatalog.find("rest").recover_ap and hero.current_stance == CombatTypes.StanceType.NEUTRAL
+	hero.hp = 0
+	var log_down: int = session.log_entries.size()
+	session.use_skill("strike")
+	var refused: bool = session.log_entries[session.log_entries.size() - 1].outcome_tag == "FAILED" and session.log_entries.size() == log_down + 1
+	session.heal_hero()
+	passed = _check("Dojo-38", "Rest recovers AP; a downed hero is refused until Heal Hero", rest_ok and refused and hero.hp == hero.max_hp) and passed
+	session.reset()
 	return passed
 
 # Frees a test-built node immediately (tests exit right after, so deferred frees would leak).

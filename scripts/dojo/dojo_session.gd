@@ -17,7 +17,8 @@ signal stage_fx(kind: String, on_hero: bool, text: String, color: Color)
 const DUMMY_MAX_HP: int = 500
 const MAX_LOG_ENTRIES: int = 300
 const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]
-const DEFEND_MITIGATION: float = 0.5
+const ROUND_AP_REGEN: int = 4        # AP regained each round, as in battles
+const HERO_AP: int = 12              # the battle AP pool
 const MAX_PARTY_SIZE: int = 4
 
 var party_allies: Array[Combatant] = []
@@ -31,7 +32,12 @@ var carry_report: Dictionary = {}
 var force_crit: bool = false
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # crit rolls (seeded on reset, so benchmarks repeat)
 const RNG_SEED: int = 1337
-var skill_mult: float = 1.0
+
+# Catalog skills (the console's skill picker) and the dummy's side of the fight
+var selected_skill_id: String = "strike"
+var dummy_skill_id: String = "strike"
+var dummy_counter: bool = false     # the dummy strikes back after every hero skill
+var round_num: int = 1
 
 # Stat allocation session
 var is_allocating_stats: bool = false
@@ -107,12 +113,18 @@ func init_data() -> void:
 	test_dummy.max_hp = DUMMY_MAX_HP
 	test_dummy.hp = DUMMY_MAX_HP
 	test_dummy.defense_mitigation_ratio = 0.0
+	for hero: Combatant in party_allies:
+		hero.max_ap = HERO_AP
+		hero.ap = HERO_AP
 
 	stash_filter = StashFilter.new()
 	carry_report = PartyCarry.apply(party_allies, shared_stash)
 
 	force_crit = false
-	skill_mult = 1.0
+	selected_skill_id = "strike"
+	dummy_skill_id = "strike"
+	dummy_counter = false
+	round_num = 1
 	_clear_allocation_state()
 
 func reset() -> void:
@@ -141,8 +153,15 @@ func set_active_hero(hero: Combatant) -> void:
 func set_force_crit(enabled: bool) -> void:
 	force_crit = enabled
 
-func set_skill_mult(value: float) -> void:
-	skill_mult = value
+func set_dummy_counter(enabled: bool) -> void:
+	dummy_counter = enabled
+	_notify()
+
+# The dummy's strike power (authored; 0 = from its stats: unarmed STR + DEX).
+func set_dummy_power(value: int) -> void:
+	if test_dummy != null:
+		test_dummy.power_override = maxi(0, value)
+		_notify()
 
 # ------------------------------------------------------------------------------
 # 2. Test Log
@@ -156,14 +175,16 @@ func log_action(
 	outcome: String = "",
 	breakdown: String = "",
 	target_name: String = "",
-	target_is_ally: bool = false
+	target_is_ally: bool = false,
+	actor: Combatant = null
 ) -> DojoLogEntry:
 	_action_counter += 1
 	var entry := DojoLogEntry.new()
 	entry.category = category
 	entry.skill_name = skill_name
-	entry.actor_name = active_hero.name if active_hero != null else "Dojo"
-	entry.actor_is_ally = true
+	var acting: Combatant = actor if actor != null else active_hero
+	entry.actor_name = acting.name if acting != null else "Dojo"
+	entry.actor_is_ally = acting == null or acting != test_dummy
 	entry.target_name = target_name
 	entry.target_is_ally = target_is_ally
 	entry.detail_text = detail
@@ -325,8 +346,8 @@ func _perform_dual_strike() -> void:
 
 # Computes and applies one weapon hit to the dummy; breakdown text is captured
 # immediately so multi-hit skills report the dummy's HP after each hit.
-func _apply_hit(title: String, is_ranged: bool, use_offhand: bool) -> Dictionary:
-	var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, use_offhand, skill_mult, force_crit, rng)
+func _apply_hit(title: String, is_ranged: bool, use_offhand: bool, mult: float = 1.0) -> Dictionary:
+	var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, use_offhand, mult, force_crit, rng)
 	var actual_dmg: int = test_dummy.take_damage(UiTheme.dict_int(res, "final_dmg"), true)
 	var is_crit: bool = UiTheme.dict_bool(res, "is_crit")
 	var mitigated: bool = UiTheme.dict_float(res, "mit_ratio") > 0.0
@@ -365,25 +386,160 @@ func _emit_hit_fx(hit: Dictionary) -> void:
 	var fx_color: Color = UiTheme.COL_INFO if (mitigated and not is_crit) else (UiTheme.COL_WARN if is_crit else UiTheme.COL_BAD)
 	stage_fx.emit("strike", true, fx_text, fx_color)
 
-func use_focus() -> void:
-	if active_hero == null:
+# ------------------------------------------------------------------------------
+# Catalog skills: the same skills, costs and stance rules as in battles
+# ------------------------------------------------------------------------------
+
+# Skills the hero can test: every catalog Attack / Defend / Focus skill plus Rest
+# (engine-only skills such as Move or status blocks are left out).
+func usable_skills() -> Array[SkillDef]:
+	var out: Array[SkillDef] = []
+	for s: SkillDef in SkillCatalog.all():
+		if s.kind == SkillDef.Kind.ATTACK or s.kind == SkillDef.Kind.DEFEND or s.kind == SkillDef.Kind.FOCUS or s.kind == SkillDef.Kind.REST:
+			out.append(s)
+	return out
+
+# Attack skills (the dummy's options; the benchmark's).
+func attack_skills() -> Array[SkillDef]:
+	var out: Array[SkillDef] = []
+	for s: SkillDef in usable_skills():
+		if s.kind == SkillDef.Kind.ATTACK:
+			out.append(s)
+	return out
+
+func selected_skill() -> SkillDef:
+	var s: SkillDef = SkillCatalog.find(selected_skill_id)
+	return s if s != null else SkillCatalog.find("strike")
+
+# The selected skill if it is an attack, otherwise Strike.
+func benchmark_skill() -> SkillDef:
+	var s: SkillDef = selected_skill()
+	return s if s.kind == SkillDef.Kind.ATTACK else SkillCatalog.find("strike")
+
+func select_skill(skill_id: String) -> void:
+	if SkillCatalog.find(skill_id) != null:
+		selected_skill_id = skill_id
+		_notify()
+
+func select_dummy_skill(skill_id: String) -> void:
+	var s: SkillDef = SkillCatalog.find(skill_id)
+	if s != null and s.kind == SkillDef.Kind.ATTACK:
+		dummy_skill_id = skill_id
+		_notify()
+
+# AP the hero would pay for `skill` now: skill cost + automatic stance switch.
+func skill_ap(skill: SkillDef) -> int:
+	return skill.ap_cost(active_hero) + skill.switch_cost(active_hero.current_stance)
+
+# Uses a catalog skill as in battle: pays AP (debt allowed), switches stance,
+# then strikes the dummy (attacks), raises a guard (defend), boosts (focus) or
+# recovers AP (rest). The dummy may counterattack afterwards.
+func use_skill(skill_id: String = "") -> void:
+	if active_hero == null or test_dummy == null:
 		return
-	active_hero.apply_attack_boost(1.5, 2)
-	log_action("BUFF", "Focus", "+50% ATK for 2 rounds", 50, "BUFF +50%", "[color=#c084fc]Focus: attack boost ×1.5 for 2 rounds.[/color]")
-	stage_fx.emit("glow", true, "✦ +50% ATK (2 rds)", Color(1.0, 0.85, 0.2))
+	var skill: SkillDef = SkillCatalog.find(skill_id) if not skill_id.is_empty() else selected_skill()
+	if skill == null:
+		_log_failure("Skill", "Unknown skill '%s'" % skill_id)
+		return
+	if not active_hero.is_alive():
+		_log_failure(skill.display_name, "%s is down - Heal Hero first" % active_hero.name)
+		return
+	if skill.kind == SkillDef.Kind.ATTACK and not test_dummy.is_alive():
+		_log_failure(skill.display_name, "The dummy is defeated - use Full Heal")
+		return
+	var cost: int = skill_ap(skill)
+	var switched: bool = skill.switch_cost(active_hero.current_stance) > 0
+	active_hero.ap -= cost
+	active_hero.set_stance(skill.stance_after(active_hero.current_stance))
+	var ap_note: String = "%d AP%s, %d left%s" % [cost, " (incl. +1 stance switch)" if switched else "", active_hero.ap, " - AP debt!" if active_hero.ap < 0 else ""]
+	match skill.kind:
+		SkillDef.Kind.ATTACK:
+			var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory != null else null
+			var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
+			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.offhand, skill.power_mult)
+			var detail: String = "%s • %s" % [str(hit.get("detail", "")), ap_note]
+			if skill.is_area():
+				detail += " • area: the dummy is the only target here"
+			if not skill.status_effect.is_empty() and test_dummy.is_alive():
+				var chance: int = StatusEffects.apply_chance(test_dummy, skill.status_effect, skill.status_potency)
+				var landed: bool = StatusEffects.try_inflict(test_dummy, skill.status_effect, skill.status_potency, rng)
+				detail += " • %s %s (%d%%)" % [StatusEffects.display_name(skill.status_effect), "next round" if landed else "resisted", chance]
+			log_action("ATTACK", skill.display_name, detail, UiTheme.dict_int(hit, "dmg"), str(hit.get("outcome", "HIT")), str(hit.get("breakdown", "")), test_dummy.name)
+			_emit_hit_fx(hit)
+		SkillDef.Kind.DEFEND:
+			active_hero.defense_mitigation_ratio = skill.mitigation
+			log_action("DEFEND", skill.display_name, "Guard -%d%% until the next round • %s" % [roundi(skill.mitigation * 100.0), ap_note], roundi(skill.mitigation * 100.0), "GUARD")
+			stage_fx.emit("glow", true, "🛡 %s -%d%%" % [skill.display_name, roundi(skill.mitigation * 100.0)], UiTheme.COL_INFO)
+		SkillDef.Kind.FOCUS:
+			active_hero.apply_attack_boost(skill.boost, skill.boost_rounds)
+			log_action("BUFF", skill.display_name, "Attack x%.2f for %d rounds • %s" % [skill.boost, skill.boost_rounds, ap_note], roundi((skill.boost - 1.0) * 100.0), "BUFF x%.2f" % skill.boost)
+			stage_fx.emit("glow", true, "✦ x%.2f ATK (%d rds)" % [skill.boost, skill.boost_rounds], Color(1.0, 0.85, 0.2))
+		_:
+			var before: int = active_hero.ap
+			active_hero.ap = mini(active_hero.max_ap, active_hero.ap + skill.recover_ap)
+			log_action("BUFF", skill.display_name, "+%d AP (now %d/%d), back to Neutral" % [active_hero.ap - before, active_hero.ap, active_hero.max_ap], active_hero.ap - before, "+%d AP" % (active_hero.ap - before))
+			stage_fx.emit("text", true, "💤 +%d AP" % (active_hero.ap - before), UiTheme.COL_GOOD)
+	if dummy_counter and test_dummy.is_alive() and active_hero.is_alive():
+		dummy_attack()
+		return
 	_notify()
 
-func toggle_defend() -> void:
+# ------------------------------------------------------------------------------
+# The dummy strikes back (same formula: its power, stance, crit vs the hero's guard & armor)
+# ------------------------------------------------------------------------------
+
+func dummy_attack() -> void:
+	if active_hero == null or test_dummy == null:
+		return
+	var skill: SkillDef = SkillCatalog.find(dummy_skill_id)
+	if skill == null:
+		skill = SkillCatalog.find("strike")
+	if not test_dummy.is_alive():
+		_log_failure("Dummy " + skill.display_name, "The dummy is defeated")
+		return
+	if not active_hero.is_alive():
+		_log_failure("Dummy " + skill.display_name, "%s is already down" % active_hero.name)
+		return
+	if test_dummy.has_status(StatusEffects.STUN) or test_dummy.has_status(StatusEffects.STAGGER):
+		var lost: String = StatusEffects.STUN if test_dummy.has_status(StatusEffects.STUN) else StatusEffects.STAGGER
+		log_action("EVENT", "Dummy " + skill.display_name, "The dummy is %s and loses its action this round" % StatusEffects.display_name(lost).to_lower(), 0, StatusEffects.display_name(lost).to_upper(), "", active_hero.name, true, test_dummy)
+		_notify()
+		return
+	# Attacking: the dummy drops its guard and enters the skill's stance.
+	test_dummy.defense_mitigation_ratio = 0.0
+	test_dummy.set_stance(skill.stance())
+	var res: Dictionary = DamageCalculator.compute(test_dummy, active_hero, test_dummy.attack_range > 1 and not skill.offhand, skill.offhand, skill.power_mult, false, rng)
+	var dealt: int = active_hero.take_damage(UiTheme.dict_int(res, "final_dmg"), true)
+	var is_crit: bool = UiTheme.dict_bool(res, "is_crit")
+	var outcome: String = "DEFEATED" if not active_hero.is_alive() else ("CRIT" if is_crit else ("MITIGATED" if UiTheme.dict_float(res, "mit_ratio") > 0.0 else "HIT"))
+	var breakdown: String = DojoBreakdown.build_strike("Dummy " + skill.display_name, test_dummy.name, active_hero, res, dealt)
+	log_action("ATTACK", "Dummy " + skill.display_name, "%d ATK vs %s (%s stance)" % [UiTheme.dict_int(res, "final_attack_power"), active_hero.name, CombatTypes.stance_to_string(active_hero.current_stance)], dealt, outcome, breakdown, active_hero.name, true, test_dummy)
+	stage_fx.emit("strike", false, ("CRIT -%d" % dealt) if is_crit else "-%d" % dealt, UiTheme.COL_WARN if is_crit else UiTheme.COL_BAD)
+	_notify()
+
+func heal_hero() -> void:
 	if active_hero == null:
 		return
-	if active_hero.defense_mitigation_ratio > 0.0:
-		active_hero.defense_mitigation_ratio = 0.0
-		log_action("DEFEND", "Guard Down", "Defensive guard dropped", 0, "NEUTRAL")
-		stage_fx.emit("text", true, "Guard down", UiTheme.COL_MUTED)
-	else:
-		active_hero.defense_mitigation_ratio = DEFEND_MITIGATION
-		log_action("DEFEND", "Shield Defend", "50% damage mitigation active", 50, "MITIGATED 50%")
-		stage_fx.emit("glow", true, "🛡 DEFEND [50% MIT]", UiTheme.COL_INFO)
+	active_hero.hp = active_hero.max_hp
+	log_action("EVENT", "Hero Heal", "%s restored to %d / %d HP" % [active_hero.name, active_hero.hp, active_hero.max_hp], active_hero.max_hp, "+HEAL")
+	stage_fx.emit("text", true, "💖 %d HP" % active_hero.max_hp, UiTheme.COL_GOOD)
+	_notify()
+
+# Ends the round as a battle would: Focus ticks down, guards drop, statuses roll
+# over (queued ones take effect, AP debt is paid back) and units regain +4 AP.
+func next_round() -> void:
+	if active_hero == null or test_dummy == null:
+		return
+	round_num += 1
+	var notes: Array[String] = []
+	for c: Combatant in [active_hero, test_dummy]:
+		c.tick_round_buffs()
+		var active: Array[String] = StatusEffects.roll_over(c, ROUND_AP_REGEN)
+		for status: String in active:
+			notes.append("%s %s" % [c.name, StatusEffects.display_name(status).to_lower()])
+	active_hero.defense_mitigation_ratio = 0.0
+	log_action("EVENT", "Round %d" % round_num, "Focus ticks, guard drops, +%d AP (now %d/%d)%s" % [ROUND_AP_REGEN, active_hero.ap, active_hero.max_ap, ("; " + ", ".join(notes)) if not notes.is_empty() else ""], round_num, "ROUND")
+	stage_fx.emit("text", true, "⏭ Round %d" % round_num, UiTheme.COL_INFO)
 	_notify()
 
 # Cycles the hero's stance: Neutral -> Offensive -> Tactical -> Defensive -> Neutral.
@@ -455,11 +611,12 @@ func heal_dummy() -> void:
 func run_benchmark(count: int) -> void:
 	if active_hero == null or test_dummy == null or active_hero.inventory == null:
 		return
+	var skill: SkillDef = benchmark_skill()
 	var main_w: Equipment = active_hero.inventory.get_main_weapon()
-	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon()
-	var title: String = "Benchmark ×%d (%s)" % [count, "Ranged" if is_ranged else "Melee"]
+	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
+	var title: String = "Benchmark ×%d %s (%s)" % [count, skill.display_name, "Ranged" if is_ranged else "Melee"]
 
-	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, null)
+	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_mult, false, null)
 	var base_hit: int = UiTheme.dict_int(base_res, "final_dmg")
 	var crit_rate: float = clampf(UiTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
 
@@ -468,7 +625,7 @@ func run_benchmark(count: int) -> void:
 	var max_hit: int = 0
 	var crits: int = 0
 	for i: int in range(count):
-		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, false, skill_mult, false, rng)
+		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_mult, false, rng)
 		var dmg: int = UiTheme.dict_int(res, "final_dmg")
 		total += dmg
 		min_hit = dmg if i == 0 else mini(min_hit, dmg)

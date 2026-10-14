@@ -13,7 +13,7 @@ const ROW_DEFS: Array[Dictionary] = [
 	{"id": "offhand", "label": "Off-Hand Power", "color": Color(0.9, 0.6, 0.4)},
 	{"id": "speed", "label": "Initiative Speed", "color": Color(0.35, 0.85, 0.95)},
 	{"id": "hp", "label": "Maximum Health", "color": Color(0.95, 0.4, 0.4)},
-	{"id": "mit", "label": "Flat Mitigation", "color": Color(0.7, 0.85, 1.0)},
+	{"id": "mit", "label": "Armor", "color": Color(0.7, 0.85, 1.0)},
 	{"id": "burden", "label": "Unit Burden", "color": Color(0.9, 0.8, 0.35)},
 	{"id": "carry", "label": "Party Carry", "color": Color(0.5, 0.85, 0.65)},
 	{"id": "range", "label": "Attack Range", "color": Color(0.6, 0.9, 0.8)},
