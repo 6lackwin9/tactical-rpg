@@ -1,0 +1,15 @@
+{
+	"kind": "regions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "tidewrack_coast",
+			"name": "The Tidewrack Coast",
+			"description": "A coast of lighthouses, wrecks and long grey beaches.",
+			"climate": "storm-cut cliffs and tidal flats",
+			"parent": "",
+			"faction": "harbour_guard",
+			"tags": []
+		}
+	]
+}

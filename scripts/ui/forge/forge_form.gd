@@ -12,6 +12,7 @@ signal edited(key: String)
 
 const LABEL_W: int = 150
 
+var source: ForgeSource = ContentForgeSource.new()   # where fields and reference choices come from
 var kind: String = ""
 var draft: Dictionary = {}
 var json_errors: Dictionary = {}   # key -> parse error of a json field (draft keeps the last good value)
@@ -24,10 +25,10 @@ func _init() -> void:
 
 func edit(p_kind: String, entry: Dictionary) -> void:
 	kind = p_kind
-	draft = ContentSchema.normalize(kind, entry)
+	draft = source.normalize(kind, entry)
 	json_errors.clear()
 	_controllers.clear()
-	for f: Dictionary in ContentSchema.fields(kind):
+	for f: Dictionary in source.fields(kind):
 		var cond: Variant = f.get("when", null)
 		if cond is Dictionary:
 			var cond_dict: Dictionary = cond
@@ -42,7 +43,7 @@ func rebuild() -> void:
 	_grid.add_theme_constant_override("v_separation", 6)
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(_grid)
-	for f: Dictionary in ContentSchema.fields(kind):
+	for f: Dictionary in source.fields(kind):
 		if not ContentSchema.is_visible(f, draft):
 			continue
 		if str(f["key"]) == "system" and not DictUtil.to_bool(draft.get("system", false)):
@@ -79,7 +80,7 @@ func _put(key: String, value: Variant) -> void:
 
 # Sets a field programmatically (coerced like form input) and refreshes the form.
 func set_value(key: String, value: Variant) -> void:
-	var f: Dictionary = ContentSchema.field(kind, key)
+	var f: Dictionary = source.field(kind, key)
 	if f.is_empty():
 		return
 	draft[key] = ContentSchema.coerce(f, value)
@@ -125,11 +126,12 @@ func _widget(f: Dictionary) -> Control:
 			check.toggled.connect(func(on: bool) -> void: _put(key, on))
 			return check
 		"enum":
-			return _enum_widget(key, ContentSchema.options_of(f), str(value), readonly)
+			return _enum_widget(key, source.options_of(f), str(value), readonly)
 		"ref":
 			var ids: Array[String] = [""]
-			ids.append_array(_ref_ids(f))
-			return _enum_widget(key, ids, str(value), readonly, str(f.get("ref", "")))
+			for choice: Dictionary in source.ref_choices(f):
+				ids.append(str(choice["value"]))
+			return _enum_widget(key, ids, str(value), readonly, f)
 		"refs":
 			return _refs_widget(f, value)
 		"stats":
@@ -170,28 +172,16 @@ func _widget(f: Dictionary) -> Control:
 			return json_edit
 	return UiTheme.label(str(value))
 
-func _ref_ids(f: Dictionary) -> Array[String]:
-	var out: Array[String] = []
-	for e: Dictionary in ContentCatalog.entries(str(f.get("ref", ""))):
-		if ContentSchema.passes_filter(f, e):
-			out.append(str(e.get("id", "")))
-	return out
-
-static func ref_label(ref_kind: String, id: String) -> String:
-	if id.is_empty():
-		return "(none)"
-	if ref_kind.is_empty():
-		return id
-	var e: Dictionary = ContentCatalog.get_entry(ref_kind, id)
-	return "%s  [%s]" % [str(e.get("name", "?")), id] if not e.is_empty() else "%s (missing)" % id
-
-func _enum_widget(key: String, options: Array[String], value: String, readonly: bool, ref_kind: String = "") -> OptionButton:
+func _enum_widget(key: String, options: Array[String], value: String, readonly: bool, ref_field: Dictionary = {}) -> OptionButton:
 	var opt := OptionButton.new()
+	opt.fit_to_longest_item = false
+	opt.clip_text = true
+	opt.custom_minimum_size.x = 60
 	var list: Array[String] = options.duplicate()
 	if not list.has(value):
 		list.append(value)   # keep an unknown value visible (validation reports it)
 	for i: int in range(list.size()):
-		var shown: String = ref_label(ref_kind, list[i]) if not ref_kind.is_empty() else (list[i] if not list[i].is_empty() else "(none)")
+		var shown: String = source.ref_label(ref_field, list[i]) if not ref_field.is_empty() else (list[i] if not list[i].is_empty() else "(none)")
 		opt.add_item(shown, i)
 		opt.set_item_metadata(i, list[i])
 		if list[i] == value:
@@ -202,7 +192,6 @@ func _enum_widget(key: String, options: Array[String], value: String, readonly: 
 
 func _refs_widget(f: Dictionary, value: Variant) -> Control:
 	var key: String = str(f["key"])
-	var ref_kind: String = str(f.get("ref", ""))
 	var current: Array[String] = []
 	if value is Array:
 		var arr: Array = value
@@ -212,7 +201,7 @@ func _refs_widget(f: Dictionary, value: Variant) -> Control:
 	box.add_theme_constant_override("separation", 2)
 	for i: int in range(current.size()):
 		var row := HBoxContainer.new()
-		var tag: Label = UiTheme.label("• " + ref_label(ref_kind, current[i]), UiTheme.FONT_MD)
+		var tag: Label = UiTheme.label("• " + source.ref_label(f, current[i]), UiTheme.FONT_MD)
 		tag.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(tag)
 		var index: int = i
@@ -237,10 +226,14 @@ func _refs_widget(f: Dictionary, value: Variant) -> Control:
 	var add_row := HBoxContainer.new()
 	var picker := OptionButton.new()
 	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker.fit_to_longest_item = false
+	picker.clip_text = true
+	picker.custom_minimum_size.x = 60
 	var dupes: bool = DictUtil.to_bool(f.get("dupes", false))
-	for id: String in _ref_ids(f):
+	for choice: Dictionary in source.ref_choices(f):
+		var id: String = str(choice["value"])
 		if dupes or not current.has(id):
-			picker.add_item(ref_label(ref_kind, id))
+			picker.add_item(str(choice["label"]))
 			picker.set_item_metadata(picker.item_count - 1, id)
 	add_row.add_child(picker)
 	var add_btn: Button = UiTheme.button("+ Add", "Add the selected entry", func() -> void:

@@ -106,24 +106,34 @@ func _ids(key: String) -> Array[String]:
 	if raw is Array:
 		var list: Array = raw
 		for v: Variant in list:
-			if ContentCatalog.has("units", str(v)):
+			if not _unit_entry(str(v)).is_empty():
 				out.append(str(v))
 	return out
+
+# The unit entry roster id `unit_id` spawns from (virtual: a catalog unit here; a
+# world character in WorldEncounter). Empty = unknown, skipped.
+func _unit_entry(unit_id: String) -> Dictionary:
+	return ContentCatalog.get_entry("units", unit_id)
+
+# Virtual: tweak a freshly spawned unit (world lore, tuning, items).
+func _customize(_c: Combatant, _unit_id: String) -> void:
+	pass
 
 # Display names by roster slot; repeated names are numbered (Goblin Archer, Goblin Archer 2).
 func _display_names(roster: Array[String]) -> Dictionary:
 	var seen: Dictionary = {}
 	var out: Dictionary = {}
 	for i: int in range(roster.size()):
-		var base: String = str(ContentCatalog.get_entry("units", roster[i]).get("name", roster[i]))
+		var base: String = str(_unit_entry(roster[i]).get("name", roster[i]))
 		var n: int = DictUtil.int_of(seen, base) + 1
 		seen[base] = n
 		out[i] = base if n == 1 else "%s %d" % [base, n]
 	return out
 
 func _spawn(unit_id: String, display_name: String) -> Combatant:
-	var entry: Dictionary = ContentCatalog.get_entry("units", unit_id)
+	var entry: Dictionary = _unit_entry(unit_id)
 	var c: Combatant = ContentFactory.unit(entry, display_name, unit_ap)
+	_customize(c, unit_id)
 	if not units_by_id.has(unit_id):
 		units_by_id[unit_id] = []
 	var list: Array = units_by_id[unit_id]

@@ -37,6 +37,11 @@ tactical-rpg/
 │       ├── classes.json              # Class archetypes: base stats, growth, masteries, gear proficiencies
 │       ├── units.json                # Party members & enemies: vitals or class/level-derived, loadout, skills, AI profile
 │       └── encounters.json           # Battles: zone, exits, round rules, party & enemy rosters
+│   └── worlds/                   # Lore worlds (JSON, edited in the World Forge): modular, inheritable; reference catalog assets
+│       ├── ashlands/                 # Root world: Ember Wardens vs the Ashen Horde (regions, locations, factions, characters, named item, disciplines, quest, lore, 2 encounters)
+│       ├── tidewrack/                # extends ashlands: the same war re-skinned (overrides) plus its own coast, characters and encounter; a tuned boss
+│       └── iron_reaches/             # separate world that connects to ashlands (a road into Warden Keep) without inheriting
+│           └── world.json + regions / locations / factions / characters / items / disciplines / quests / lore / encounters .json per world
 ├── scenes/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
@@ -47,6 +52,8 @@ tactical-rpg/
 │   ├── gear_dojo.gd              # Thin bootstrap: builds DojoSession, mounts the window workspace or runs assertions
 │   ├── content_forge.tscn        # Content Forge: author skills, items, classes, units & encounters; playtest in the arena
 │   ├── content_forge.gd          # Mounts ContentForge; swaps in combat_arena for playtests ("Back to Forge")
+│   ├── world_forge.tscn          # World Forge: author lore worlds; play their battles
+│   ├── world_forge.gd            # Mounts WorldForge; swaps in combat_arena for "Play this encounter"
 │   └── dojo/
 │       └── dojo_assertions.gd        # 42 headless dojo assertions (rules, session actions, filters, carry, catalog skills, dummy attacks, UI)
 ├── scripts/
@@ -54,6 +61,10 @@ tactical-rpg/
 │   │   ├── content_schema.gd         # Field lists per kind: types, defaults, ranges, enums, refs, conditional fields; normalising
 │   │   ├── content_catalog.gd        # Load/save JSON, CRUD, duplicate-as-template, reference tracking & renames, validation, sandbox fork
 │   │   └── content_factory.gd        # Entries <-> engine objects (SkillDef, Item, ClassArchetype, Combatant + AiProfile)
+│   ├── world/                    # World engine (headless): the lore layer over the content catalog
+│   │   ├── world_schema.gd           # Element kinds (regions, locations, factions, characters, items, disciplines, quests, lore, encounters), fields, tuning keys
+│   │   ├── world_catalog.gd          # Worlds on disk, inheritance (lineage), namespaced ids, overrides, connections, references & renames, validation, sandbox fork
+│   │   └── world_factory.gd          # World character / named item -> playable unit / item (base asset + lore + tuning, disciplines)
 │   ├── core/                     # Foundational rules engine primitives & base models
 │   │   ├── combat/               # Core unit, stance & command models
 │   │   │   ├── battle_command.gd         # Base command: blocks, AP + stance switch at start, initiative, effect at end
@@ -90,7 +101,9 @@ tactical-rpg/
 │   │   ├── session/              # Headless combat session & encounter definitions
 │   │   │   ├── combat_session.gd         # Battle state: rounds, resolution, snapshots, replay, selection, log
 │   │   │   ├── combat_encounter.gd       # Encounter plug-in base (combatants, deployment, plans, triggers, art)
-│   │   │   ├── catalog_encounter.gd      # Any catalog encounter in the real engine: spawns units, AI profiles, deployment, reinforcement wave
+│   │   │   ├── catalog_encounter.gd      # Any catalog encounter in the real engine: spawns units, AI profiles, deployment, reinforcement wave (virtual _unit_entry / _customize)
+│   │   │   ├── world_encounter.gd        # A world's battle played in that world: rosters are world characters (lore names, art, named items, tuning)
+│   │   │   ├── encounter_source.gd       # Lists / creates every battle: catalog ids ("goblin_ambush") and world ids ("tidewrack:strand_clash")
 │   │   │   └── combat_log_builder.gd     # Resolved actions -> log cells; resolver messages -> BBCode
 │   │   ├── planning/             # Round command sequences (headless)
 │   │   │   ├── skill_def.gd              # One skill tier: level 1-5, AP cost = level (Move per tile, Rest free), stance pool, auto switch cost
@@ -128,7 +141,8 @@ tactical-rpg/
 │   │   ├── arena_test_suite.gd       # Combat, planning, AI, art & session suites (runs the content suite last)
 │   │   ├── core_rules_test_suite.gd  # Core combat rules via the planner: guard & matchup, stances, Focus, casualties, withdrawal, feed
 │   │   ├── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
-│   │   └── runner_test_suite.gd      # Scene Runner: scene list, launch/restart/menu, unsaved-work guard, hot reload
+│   │   ├── runner_test_suite.gd      # Scene Runner: scene list, launch/restart/menu, unsaved-work guard, hot reload
+│   │   └── world_test_suite.gd       # Worlds: shipped data, inheritance, same-base/different-lore parity, tuning, renames, connections, Forge UI, runner
 │   └── ui/                       # View layer, docks, components & full-screen modals
 │       ├── framework/                # Neutral UI framework shared by the dojo and the combat UI
 │       │   ├── ui_panel.gd               # Panel base: metadata, bind(session), refresh(), overlay requests
@@ -165,9 +179,14 @@ tactical-rpg/
 │       │   ├── scene_runner.gd           # Scene list, launch / restart / back to menu, unsaved-work guard, suite runs, F5/F6/F10
 │       │   └── script_reloader.gd        # Hot reload: recompiles scripts edited on disk (GDScript.reload)
 │       ├── forge/                    # Content Forge authoring UI
+│       │   ├── forge_source.gd           # What a ForgeForm edits (fields + reference choices); ContentForgeSource is the catalog's
 │       │   ├── content_forge.gd          # Kind tabs, entry list (search/side filter), form, preview, problems, save, playtest
 │       │   ├── forge_form.gd             # Schema-driven editor: one widget per field, conditional fields, ref pickers
 │       │   └── forge_preview.gd          # What an entry becomes in the engine (stats, reach, damage, deployment), icons/portraits
+│       ├── world/                    # World Forge authoring UI
+│       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
+│       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
+│       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
 │       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, tweens & floating text
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
@@ -339,13 +358,28 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **In-scene controls**: a small **☰ Menu / ↻ / ⟳** pill (bottom-right) and keys **F10** (menu), **F6** (restart the scene), **F5** (reload edited scripts, then restart). Leaving the Content Forge with unsaved catalog edits asks for a second press and then discards them.
 - **Hot reload** (`ScriptReloader`): remembers each script's modification time and recompiles the edited ones in place (`GDScript.reload`), clearing static caches built by the old code and re-reading the catalog JSON. New files or new `class_name`s can't join a running game's class registry: the menu lists them and **⏻ Restart runner** starts a fresh process.
 - **Test suites**: **▶ Arena suite / ▶ Dojo suite** run `test_arena.tscn` / `gear_dojo.tscn` headless in a separate process (the menu stays usable) and show the PASS / FAIL lines with a summary.
+### 11. World Engine & World Forge (`world_forge.tscn`)
+
+The Content Forge catalog is the **lore-free base library** (skills, items, classes, units, encounters). Worlds are a second layer: they give those assets names, backgrounds, factions and places, and never carry gameplay of their own.
+
+- **Worlds are folders** (`data/worlds/<id>/`): `world.json` (name, tagline, description, `extends`, `connects`) plus one JSON file per element kind. Kinds: **regions**, **locations** (exits, encounters), **factions** (relations), **characters** (party, NPCs, enemies), **named items**, **disciplines**, **quests** (steps, requirements, rewards), **lore entries** and **encounters**. Entries have local snake_case ids; the **qualified id** is `world:id`.
+- **Base class + lore** (`WorldFactory`): a character names a **base unit** (`base_unit`), a named item a **base item** (`base_item`), a discipline a **base mastery** (`sword`, `bow`, ...). The base asset decides how it plays; the entry adds name, title, background, personality, faction, home, art. Two characters (in one world or two) can point at the same base unit with different lore and behave identically: same vitals, class, skills, AI, damage.
+- **Explicit divergence only**: a character may add `tuning` deltas (`hp_pct`, `power`, `armor`, `speed`, `ap`), named items (worn on top of the base loadout, one per slot) and disciplines (raise the base mastery to the discipline's rank). Item tuning (`power`, `mitigation`, `burden`) and extra stat bonuses likewise. The World Forge shows **"Differs from base"** and the base unit's numbers side by side, so you can always see where a world deviates (Captain Dredge: hp +20%, power +2, armor +1).
+- **Inheritance**: `extends` lists parent worlds; `lineage()` is the load order (ancestors first, the world last). A world sees every ancestor entry. Unqualified references resolve in the entry's own world, then up the lineage (nearest wins); `world:id` is explicit. Everything is namespaced, so two worlds never collide.
+- **Overrides**: an entry with `override: "ashlands:mara_voss"` replaces that ancestor entry **for its own world and every world below it** (the parent is untouched), and every reference to the old id (even the old id used in an inherited encounter) now resolves to the override. This is how one world re-skins another: `tidewrack` overrides Mara, Tev and the five goblins, so **playing the inherited `tidewrack:courtyard_skirmish` is the same battle with different people**.
+- **Connecting worlds**: `connects` links worlds without inheriting: a location may exit into `ashlands:warden_keep` from `iron_reaches`; qualified references to a world that is neither an ancestor nor connected are validation errors. Connections are inherited by child worlds.
+- **Safe editing** (`WorldCatalog`): validation reports unknown base assets, role mismatches (a party roster only takes party characters), duplicate references, slot clashes between named items, unknown tuning keys, override targets, circular regions / inheritance. **Blocking errors** (ids, enums, json shape, override validity) stop an entry from being stored; **unresolved references** don't (worlds are full of mutual references: two locations exiting into each other), they are listed as problems, shown with a warning mark, and checked by *Validate All* and before playing. Renaming an id rewrites every reference to it (plain refs, json refs such as exits / quest steps / faction relations, override pointers) across the world, its descendants and connected worlds; in-use entries and extended worlds can't be deleted.
+- **Playing worlds**: `WorldEncounter` runs a world's encounter in the real combat engine with the world's characters (lore names in the roster, log and inspector, their named items and tuning); `EncounterSource` lists catalog and world battles together (`tidewrack:strand_clash`), so the **Scene Runner's arena picker** and `combat_arena -- --encounter=ashlands:pass_ambush` run them. Quests, dialogue and map travel are authored as data now and become playable with those systems.
+- **World Forge** (Scene Runner > World Forge): world picker, **+ New World** (id, name, parent), element tabs plus an Overview (manifest, inheritance, counts); a merged entry list where inherited entries are marked with their origin world and are read-only, with **New / Duplicate / Override / Delete**; the shared schema-driven form (reference pickers show `Name [id]` plus the origin world); a lore preview with *Plays as*, *Differs from base* and *Used by*; live problems; **Apply / Revert / Save (Ctrl+S) / Reload / Validate All**; **Play this encounter** in the arena with a *Back to World Forge* button; unsaved edits are guarded by the Scene Runner.
+- **Shipped worlds**: `ashlands` (root: Ember Wardens vs the Ashen Horde, the Courtyard skirmish and a wave ambush), `tidewrack` (extends it: Harbour Guard vs Reef Raiders, overrides, own coast and battle, one tuned boss) and `iron_reaches` (connected: a guild road into Warden Keep).
+
 ---
 
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **9 test suites** covering **82 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **10 test suites** covering **91 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
@@ -356,6 +390,7 @@ The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) execu
 7. **Planning, Stances, AP & Enemy AI Test** (16 assertions): reach bands and the off-hand jab, move-first, Root, seeded status rolls and immunity, area friendly fire, allies moving into vacated tiles, AP debt penalties (Stagger/Stun blocks), on-grid input options (per target / tile), round rules (6 blocks, AP pool + regen, one move per round, centre tie-break for equal routes, target switching, insurance attacks, attack follow, damage in the log, auto-play on confirm), skill AP = level (Move per tile, Rest free) with effect modifiers and speed-based tiles per block, the rock-paper-scissors stance matrix and automatic +1 AP switch costs, sequences compiling to the lowest free blocks with Engage inserting 1-block moves, mid-sequence stance switching, projected "runs dry" instead of refusal, flagged invalid edits blocking Confirm, Confirm scheduling party and AI plans with AP spent at runtime, units stopping when they can't pay, Rest recovering AP, AI presets, role patterns (walls, sniper retreat, support Focus, flee, Engage chasing a moved target), deterministic AI-vs-AI skirmishes on all 8 zones, the one-tile chase only for targeted attacks (not after a tile move; ranged units back off), and round reset refilling AP.
 8. **Content Catalog & Forge Test** (9 assertions, [content_test_suite.gd](scripts/tests/content_test_suite.gd)): the shipped catalog loads and validates; the engine's skills, items, stash, classes and Goblin Skirmish come from it; skills, items and classes round-trip through engine objects unchanged; validation catches bad ids, kinds, reach, slots, references and rosters and refuses unsafe deletes; on a sandbox copy: authoring a skill, item, class, units and an encounter, saving, reloading, renaming an id (references follow) and duplicating as a template; authored units bring class-derived vitals, gear, numbered duplicates, whitelisted skills and resistances into planning; the authored encounter (and the shipped Veterans' Drill) plays out in the full engine using the new skill; and the Forge UI (template, conditional fields, refused invalid draft, delete, new unit, playtest in the arena and back, save).
 9. **Scene Runner Test** (5 assertions, [runner_test_suite.gd](scripts/tests/runner_test_suite.gd)): every runnable scene listed (runner and test harness hidden), suite output parsing, launching the arena with a chosen catalog encounter plus restart and back to the menu, the unsaved-Forge-work guard (second press discards), and hot-reloading a script in place.
+10. **World Engine & World Forge Test** (9 assertions, [world_test_suite.gd](scripts/tests/world_test_suite.gd)): the shipped worlds load and validate (every element kind, lineage, descendants); inheritance (namespaced ids, overrides replace for the child only and old ids redirect, nearest-wins resolution, cycles and unknown parents rejected); same base / different lore (names differ, every stat, class, skill, AI plan and damage matches between `ashlands` and `tidewrack`, except the deliberately tuned boss); tuning deltas, named items (armor + mitigation, fixed vitals untouched) and disciplines apply exactly; world encounters (wave ambush, own battle, an inherited battle re-skinned) play to the end in the real engine with lore names, and `EncounterSource` lists both layers; on a sandbox copy: connections without inheriting, unconnected worlds refused, role / base / override / slot checks and safe deletes; authoring (new world, dangling references while drafting, overrides, renames rewriting plain / json / cross-world / override references, templates, save & reload); and the World Forge UI (create world, inherited read-only, override, dangling refs, tuning, play in the arena, save, delete) plus the Scene Runner launching a world battle.
 
 Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
@@ -402,15 +437,16 @@ run.bat
 
 Or open the project in **Godot 4.7+** and press Play: the main scene is the Scene Runner. From its menu:
 
-- **Combat Arena** (pick any catalog encounter), **Content Forge**, **Gear & Skill Dojo**, plus any other scene added under `scenes/` (listed automatically).
+- **Combat Arena** (pick any catalog encounter or any world's battle), **Content Forge**, **World Forge**, **Gear & Skill Dojo**, plus any other scene added under `scenes/` (listed automatically).
 - In a running scene, the **☰ Menu** pill (bottom-right) or **F10** returns to the menu, **F6** restarts the scene, **F5** reloads edited scripts and restarts it.
 - **⟳ Reload scripts** recompiles scripts edited on disk (the menu shows how many are pending); brand-new files or new `class_name`s need **⏻ Restart runner**, which starts a fresh process.
 - **▶ Arena suite / ▶ Dojo suite** run the headless test scenes in a separate process and show their PASS / FAIL lines.
 
-The Content Forge saves to `data/catalog/*.json` (run from the project, not an exported build). To run a catalog encounter directly:
+The Content Forge saves to `data/catalog/*.json` (run from the project, not an exported build). To run a catalog or world encounter directly:
 
 ```cmd
 "C:\Program Files\Godot\godot.exe" --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill
+"C:\Program Files\Godot\godot.exe" --path . res://scenes/combat_arena.tscn -- --encounter=tidewrack:strand_clash
 ```
 
 ---
@@ -546,3 +582,17 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] **Gear in battles**: loadouts now drive attack power and armor in battles; weapon block costs and active-weapon switching still don't affect the arena.
 - [ ] **Fixed units' stat block**: units without a class get the default stat sheet (the Warrior archetype at level 1), which sets their crit chance, armor (STR / 4) and status resistance; give them a neutral baseline or author classes for them.
 - [ ] **Reinforcements**: one wave per encounter; multiple waves, conditional triggers (e.g. "when the scout escapes") and explicit spawn tiles.
+
+### 13. World Engine Follow-ups
+
+*Status: lore data model, inheritance, overrides, connections, World Forge and playable world battles implemented; the systems that consume quests, dialogue and maps are still roadmap items.*
+
+- [x] Modular worlds with inheritance, namespaced ids, explicit overrides and cross-world connections.
+- [x] Regions, locations, factions, characters, named items, disciplines (mapped onto base masteries), quests, lore and encounters as data, all referencing base catalog assets with explicit tuning deltas only.
+- [x] World Forge editor and playable world encounters (Scene Runner, `--encounter=world:id`).
+- [ ] Quest runtime (accept, track steps, rewards) and dialogue, once the NPC / dialogue engine exists (`quests` and `characters` data are ready).
+- [ ] World map travel over regions / locations (location exits are the graph; `encounters` mark where fights trigger) and persistent world state per save.
+- [ ] Data-driven mastery types (worlds introducing brand-new mastery categories) once the mastery system is data-driven.
+- [ ] Faction reputation and relations affecting encounters, prices and quests (relations are authored already).
+- [ ] Conflict reporting when two parents define the same local id, and a graphical inheritance view in the World Forge.
+- [ ] World packs: export / import a world folder as a shareable module with its base-catalog dependencies listed.

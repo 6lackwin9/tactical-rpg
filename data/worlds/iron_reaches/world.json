@@ -1,0 +1,11 @@
+{
+	"id": "iron_reaches",
+	"name": "The Iron Reaches",
+	"tagline": "Mines, forges and a road south.",
+	"description": "A mining highland that does not inherit the Ashlands but is linked to them: its road leads down into Warden Keep.",
+	"extends": [],
+	"connects": [
+		"ashlands"
+	],
+	"version": 1
+}

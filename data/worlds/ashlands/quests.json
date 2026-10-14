@@ -1,0 +1,28 @@
+{
+	"kind": "quests",
+	"version": 1,
+	"entries": [
+		{
+			"id": "hold_the_courtyard",
+			"name": "Hold the Courtyard",
+			"description": "The Horde is massing. Mara needs the courtyard held until the keep's gates can be reinforced.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Rally at Warden Keep",
+					"location": "warden_keep"
+				},
+				{
+					"text": "Drive the warband out of the Ruined Courtyard",
+					"location": "ruined_courtyard",
+					"encounter": "courtyard_skirmish"
+				}
+			],
+			"reward": "The Wardens' thanks, and a share of the keep's winter stores.",
+			"tags": []
+		}
+	]
+}

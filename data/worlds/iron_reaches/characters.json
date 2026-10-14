@@ -1,0 +1,22 @@
+{
+	"kind": "characters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "orsa_tallow",
+			"name": "Orsa Tallow",
+			"title": "Guildmistress",
+			"role": "npc",
+			"base_unit": "warrior",
+			"art": "",
+			"background": "Sells the Wardens steel at cost and never says why.",
+			"personality": "",
+			"faction": "forge_guild",
+			"home": "slag_gate",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		}
+	]
+}

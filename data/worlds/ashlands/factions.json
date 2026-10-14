@@ -1,0 +1,28 @@
+{
+	"kind": "factions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ember_wardens",
+			"name": "Ember Wardens",
+			"motto": "Keep one fire lit.",
+			"description": "A border order of soldiers and scouts sworn to hold the Cinder Pass. Poorly funded, fiercely loyal.",
+			"home": "",
+			"relations": {
+				"ashen_horde": "enemy"
+			},
+			"tags": []
+		},
+		{
+			"id": "ashen_horde",
+			"name": "The Ashen Horde",
+			"motto": "Burn what burns.",
+			"description": "Loose goblin warbands united by hunger and a few loud chieftains.",
+			"home": "",
+			"relations": {
+				"ember_wardens": "enemy"
+			},
+			"tags": []
+		}
+	]
+}

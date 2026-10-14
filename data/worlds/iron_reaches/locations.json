@@ -1,0 +1,21 @@
+{
+	"kind": "locations",
+	"version": 1,
+	"entries": [
+		{
+			"id": "slag_gate",
+			"name": "Slag Gate",
+			"description": "The guild's southern toll gate.",
+			"kind": "gate",
+			"region": "ore_highlands",
+			"exits": [
+				{
+					"to": "ashlands:warden_keep",
+					"label": "the south road to Warden Keep"
+				}
+			],
+			"encounters": [],
+			"tags": []
+		}
+	]
+}

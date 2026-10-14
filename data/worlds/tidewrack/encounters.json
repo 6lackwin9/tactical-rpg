@@ -1,0 +1,41 @@
+{
+	"kind": "encounters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "strand_clash",
+			"name": "Clash at Wreck Strand",
+			"description": "The Harbour Guard meet the raiders on the tide flats.",
+			"intro": "The tide is going out and the raiders are coming in.",
+			"location": "wreck_strand",
+			"zone": "river_crossing",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					8,
+					4
+				]
+			],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"ilse_marrow",
+				"pell_driftwood"
+			],
+			"enemies": [
+				"brannoch_saltfist",
+				"gull_skirmisher",
+				"salt_archer",
+				"captain_dredge"
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Reinforcements arrive!",
+			"tags": []
+		}
+	]
+}

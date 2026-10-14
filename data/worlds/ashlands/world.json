@@ -1,0 +1,9 @@
+{
+	"id": "ashlands",
+	"name": "The Ashlands",
+	"tagline": "Where the embers never quite die.",
+	"description": "A burnt frontier on the edge of the old empire. The Ember Wardens hold the passes against the Ashen Horde, goblin warbands that crawl out of the cinder wastes every dry season.",
+	"extends": [],
+	"connects": [],
+	"version": 1
+}

@@ -13,6 +13,7 @@ extends RefCounted
 #  7. Planning, Stances, AP & Enemy AI
 #  8. Content Catalog & Forge (ContentTestSuite)
 #  9. Scene Runner (RunnerTestSuite)
+# 10. World Engine & World Forge (WorldTestSuite)
 # ==============================================================================
 
 static func run_all_tests(tree_parent: Node = null) -> bool:
@@ -26,6 +27,7 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 		run_planning_and_ai_test(),
 		ContentTestSuite.run(tree_parent),
 		RunnerTestSuite.run(tree_parent),
+		WorldTestSuite.run(tree_parent),
 	]
 	return not results.has(false)
 

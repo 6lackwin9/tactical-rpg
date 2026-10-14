@@ -33,6 +33,7 @@ var status_resist: Dictionary = {}      # passive resistance per status (+%; 100
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
 var power_override: int = 0    # authored strike power (> 0 replaces weapon + unit power; see DamageCalculator)
 var armor_override: int = -1    # authored armor rating (>= 0 replaces gear mitigation + STR / 4)
+var lore_ref: String = ""           # world character it plays (WorldCatalog qualified id), empty for plain catalog units
 var known_skills: Array[String] = []   # leveled skills this unit may plan (empty = every skill up to its cap)
 var catalog_id: String = ""         # ContentCatalog unit id it was spawned from (empty = built in code)
 var carry_speed_penalty: int = 0   # Party overload penalty applied by PartyCarry (shared by all units)

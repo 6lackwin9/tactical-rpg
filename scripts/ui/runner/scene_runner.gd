@@ -22,9 +22,11 @@ const PREFS_PATH: String = "user://scene_runner.cfg"
 # that isn't hidden is listed under "Other scenes".
 const SCENES: Array[Dictionary] = [
 	{"path": "res://scenes/combat_arena.tscn", "name": "Combat Arena", "icon": "⚔",
-		"desc": "Plan and fight a battle. Pick any encounter from the content catalog.", "encounters": true},
+		"desc": "Plan and fight a battle. Pick a catalog encounter or any world's battle (played with that world's characters).", "encounters": true},
 	{"path": "res://scenes/content_forge.tscn", "name": "Content Forge", "icon": "⚒",
 		"desc": "Create and edit skills, items, classes, units and encounters; playtest them in the arena."},
+	{"path": "res://scenes/world_forge.tscn", "name": "World Forge", "icon": "🌍",
+		"desc": "Build modular lore worlds: regions, factions, characters, named items, quests and encounters that inherit lore-free base assets; play their battles."},
 	{"path": "res://scenes/gear_dojo.tscn", "name": "Gear & Skill Dojo", "icon": "🛡",
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
 ]
@@ -64,6 +66,7 @@ func _exit_tree() -> void:
 		_suite_thread.wait_to_finish()
 	SkillCatalog.clear_cache()
 	ContentCatalog.clear_cache()
+	WorldCatalog.clear_cache()
 
 # ------------------------------------------------------------------------------
 # Scene list
@@ -97,8 +100,8 @@ func launch(path: String, encounter_id: String = "") -> bool:
 		_set_status("Couldn't load %s." % path, true)
 		return false
 	var scene: Node = packed.instantiate()
-	if not encounter_id.is_empty() and ContentCatalog.has("encounters", encounter_id) and "encounter" in scene:
-		scene.set("encounter", CatalogEncounter.new(encounter_id))
+	if not encounter_id.is_empty() and EncounterSource.exists(encounter_id) and "encounter" in scene:
+		scene.set("encounter", EncounterSource.create(encounter_id))
 	active_scene = scene
 	active_path = path
 	active_encounter = encounter_id
@@ -337,10 +340,10 @@ func _scene_card(parent: Control, s: Dictionary) -> void:
 	var path: String = str(s["path"])
 	if DictUtil.to_bool(s.get("encounters", false)):
 		_encounter_pick = OptionButton.new()
-		_encounter_pick.tooltip_text = "Content-catalog encounter to load"
-		for id: String in ContentCatalog.ids("encounters"):
-			_encounter_pick.add_item(str(ContentCatalog.get_entry("encounters", id).get("name", id)))
-			_encounter_pick.set_item_metadata(_encounter_pick.item_count - 1, id)
+		_encounter_pick.tooltip_text = "Any encounter: lore-free catalog battles, or a world's battle played with that world's characters"
+		for opt: Dictionary in EncounterSource.options():
+			_encounter_pick.add_item(str(opt["label"]))
+			_encounter_pick.set_item_metadata(_encounter_pick.item_count - 1, str(opt["id"]))
 		info.add_child(_encounter_pick)
 	var go: Button = UiTheme.button("▶ Launch", "Run %s" % path, func() -> void: launch(path, selected_encounter() if DictUtil.to_bool(s.get("encounters", false)) else ""), UiTheme.FONT_MD)
 	go.custom_minimum_size = Vector2(96, 34)

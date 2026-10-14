@@ -1,0 +1,15 @@
+{
+	"kind": "regions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ore_highlands",
+			"name": "The Ore Highlands",
+			"description": "Cold terraces cut into the mountain, lit by furnace glow.",
+			"climate": "terraced mine slopes",
+			"parent": "",
+			"faction": "forge_guild",
+			"tags": []
+		}
+	]
+}

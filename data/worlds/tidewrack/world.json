@@ -1,0 +1,11 @@
+{
+	"id": "tidewrack",
+	"name": "Tidewrack Coast",
+	"tagline": "The same war, wetter.",
+	"description": "A salt-bitten coast where the old Warden order is a harbour guard and the Horde's descendants sail as Reef Raiders. It inherits the Ashlands and re-skins them: the same battles, the same behaviour, new faces.",
+	"extends": [
+		"ashlands"
+	],
+	"connects": [],
+	"version": 1
+}

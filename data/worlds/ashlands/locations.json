@@ -1,0 +1,39 @@
+{
+	"kind": "locations",
+	"version": 1,
+	"entries": [
+		{
+			"id": "warden_keep",
+			"name": "Warden Keep",
+			"description": "A squat basalt keep, its hearth never allowed to go cold.",
+			"kind": "fortress",
+			"region": "ashen_marches",
+			"exits": [
+				{
+					"to": "ruined_courtyard",
+					"label": "the old road"
+				}
+			],
+			"encounters": [],
+			"tags": []
+		},
+		{
+			"id": "ruined_courtyard",
+			"name": "The Ruined Courtyard",
+			"description": "What is left of a watch post: broken arches and a sooty cobbled square, ideal for an ambush.",
+			"kind": "ruin",
+			"region": "cinder_pass",
+			"exits": [
+				{
+					"to": "warden_keep",
+					"label": "back to the keep"
+				}
+			],
+			"encounters": [
+				"courtyard_skirmish",
+				"pass_ambush"
+			],
+			"tags": []
+		}
+	]
+}

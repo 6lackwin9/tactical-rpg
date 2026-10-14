@@ -49,3 +49,15 @@ static func to_bool(v: Variant, fallback: bool = false) -> bool:
 		var s: String = v
 		return s.to_lower() in ["true", "1", "yes"]
 	return fallback
+# Safe typed views of Variant values (JSON-shaped data).
+static func array_of(v: Variant) -> Array:
+	if v is Array:
+		var a: Array = v
+		return a
+	return []
+
+static func dict_of(v: Variant) -> Dictionary:
+	if v is Dictionary:
+		var d: Dictionary = v
+		return d
+	return {}

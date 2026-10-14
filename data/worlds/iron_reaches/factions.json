@@ -1,0 +1,17 @@
+{
+	"kind": "factions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "forge_guild",
+			"name": "The Forge Guild",
+			"motto": "Strike true.",
+			"description": "Smiths and miners who trade slag-steel to anyone who pays.",
+			"home": "",
+			"relations": {
+				"ashlands:ember_wardens": "ally"
+			},
+			"tags": []
+		}
+	]
+}

@@ -1,0 +1,24 @@
+{
+	"kind": "regions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ashen_marches",
+			"name": "The Ashen Marches",
+			"description": "Rolling black hills where every road is lined with the ribs of old watchtowers.",
+			"climate": "burnt scrub and ash drifts",
+			"parent": "",
+			"faction": "ember_wardens",
+			"tags": []
+		},
+		{
+			"id": "cinder_pass",
+			"name": "Cinder Pass",
+			"description": "The only way through the Marches. Hold it and the Horde stays out.",
+			"climate": "narrow volcanic gorge",
+			"parent": "ashen_marches",
+			"faction": "ember_wardens",
+			"tags": []
+		}
+	]
+}

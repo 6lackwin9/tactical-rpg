@@ -30,12 +30,12 @@ func _ready() -> void:
 
 # `-- --encounter=<id>` loads any content-catalog encounter into the arena, e.g.
 #   godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill
-static func encounter_from_args(args: PackedStringArray) -> CatalogEncounter:
+static func encounter_from_args(args: PackedStringArray) -> CombatEncounter:
 	for arg: String in args:
 		if arg.begins_with("--encounter="):
 			var id: String = arg.trim_prefix("--encounter=")
-			if ContentCatalog.has("encounters", id):
-				return CatalogEncounter.new(id)
+			if EncounterSource.exists(id):
+				return EncounterSource.create(id)
 			push_warning("combat_arena: unknown encounter '%s', using the default." % id)
 	return null
 

@@ -1,0 +1,140 @@
+{
+	"kind": "characters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "mara_voss",
+			"name": "Mara Voss",
+			"title": "Captain of the Ember Wardens",
+			"role": "party",
+			"base_unit": "warrior",
+			"art": "",
+			"background": "Raised in the keep's kitchens, Mara earned her captaincy by holding the Courtyard alone for two nights. She trusts drills over speeches.",
+			"personality": "dry, stubborn, protective",
+			"faction": "ember_wardens",
+			"home": "warden_keep",
+			"disciplines": [
+				"ember_blade"
+			],
+			"named_items": [
+				"ember_brigandine"
+			],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "tev_quill",
+			"name": "Tev Quill",
+			"title": "Scout of the Pass",
+			"role": "party",
+			"base_unit": "ranger",
+			"art": "",
+			"background": "A quiet orphan of the Marches who reads smoke like other people read books.",
+			"personality": "watchful, wry",
+			"faction": "ember_wardens",
+			"home": "warden_keep",
+			"disciplines": [
+				"cinder_archery"
+			],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "hest_the_quartermaster",
+			"name": "Hest the Quartermaster",
+			"title": "Keeper of the Stores",
+			"role": "npc",
+			"base_unit": "warrior",
+			"art": "",
+			"background": "Counts every arrow twice and every soldier three times.",
+			"personality": "",
+			"faction": "ember_wardens",
+			"home": "warden_keep",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "skarn_ironjaw",
+			"name": "Skarn Ironjaw",
+			"title": "Brawler of the Horde",
+			"role": "enemy",
+			"base_unit": "goblin_brawler",
+			"art": "",
+			"background": "Cracked his jaw on a Warden shield and never stopped grinning about it.",
+			"personality": "",
+			"faction": "ashen_horde",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "vex_cutpurse",
+			"name": "Vex the Cutpurse",
+			"title": "Skirmisher",
+			"role": "enemy",
+			"base_unit": "goblin_skirmisher",
+			"art": "",
+			"background": "Goes for whoever bleeds first.",
+			"personality": "",
+			"faction": "ashen_horde",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "nok_flamebow",
+			"name": "Nok Flamebow",
+			"title": "Horde Archer",
+			"role": "enemy",
+			"base_unit": "goblin_archer",
+			"art": "",
+			"background": "Fires pitch-tipped arrows from the ridgeline and runs when anyone gets close.",
+			"personality": "",
+			"faction": "ashen_horde",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "gruk_smokecaller",
+			"name": "Gruk Smokecaller",
+			"title": "Warband Shaman",
+			"role": "enemy",
+			"base_unit": "goblin_shaman",
+			"art": "",
+			"background": "Claims the ash talks to him. It mostly says 'attack'.",
+			"personality": "",
+			"faction": "ashen_horde",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		},
+		{
+			"id": "bolg_redhand",
+			"name": "Bolg Redhand",
+			"title": "Berserker",
+			"role": "enemy",
+			"base_unit": "goblin_berserker",
+			"art": "",
+			"background": "Has never retreated, mostly because he forgets there is a direction for it.",
+			"personality": "",
+			"faction": "ashen_horde",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"tags": []
+		}
+	]
+}

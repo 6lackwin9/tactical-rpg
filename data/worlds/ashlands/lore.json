@@ -1,0 +1,20 @@
+{
+	"kind": "lore",
+	"version": 1,
+	"entries": [
+		{
+			"id": "the_long_dry",
+			"name": "The Long Dry",
+			"category": "history",
+			"text": "Every dry season the wells of the cinder wastes run out and the Horde marches. The Wardens call it the Long Dry, and keep a tally of how many they have survived.",
+			"tags": []
+		},
+		{
+			"id": "one_fire_lit",
+			"name": "Keep One Fire Lit",
+			"category": "myth",
+			"text": "The first Warden swore never to let the keep's hearth go cold. The Wardens say the Horde fears the glow more than the steel.",
+			"tags": []
+		}
+	]
+}
