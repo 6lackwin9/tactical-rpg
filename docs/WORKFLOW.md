@@ -19,7 +19,15 @@
 3. `tools/fc.sh parse`, then `tools/fc.sh arena` (or `dojo`); fix from the compact failure list.
 4. Before commit: `check_project.ps1` clean, README + docs updated.
 
-## Planned (ask before building)
 
-- Balance sim runner: headless AI-vs-AI over class x tier x level, reporting win rate and rounds-to-kill.
-- Design/brainstorm agent (reads the brief, proposes options, asks) and review agent (typing + known-issues checks).
+## Agents and tools (built)
+
+| Tool | Use |
+|---|---|
+| `tools/fc.sh parse / arena / dojo / run / sim / all` | Compact checks and scratch scripts (see header of the script) |
+| `tools/balance_sim.gd` (via `fc.sh sim duel\|tier\|levels [level]`) | Headless AI-vs-AI win-rate tables, sides swapped, 3 seeds. Duel at one level takes about 90 s |
+| Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
+| Agent `change-reviewer` | Pre-commit review: fast checks, strict typing, docs/README, known-issues match; read-only |
+| Skills `godot-debug-checklist`, `patch-and-seed` | Known issues and safe editing |
+
+Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserker 80%, brawler 53%, scout 47%, ranger 20%, shaman 0% (cannot beat a minion of itself: stalemates). Hero loses 1v3 minions and 1v1 bosses; elite = mirror (50%). These are open balance questions, not decisions.

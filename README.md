@@ -399,6 +399,10 @@ Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** 
 - **Slots, filters & carry (Dojo-28 to 32)**: off-hand-only weapons and shields, per-slot stash filters (shield under Off Hand) plus stat/rarity/damage/hand/usable/search/sort custom filters, a party viewer that always shows 4 slots, per-unit burden vs party-wide carry overload, and overlay windows opening/closing on request.
 - **Catalog skills & the dummy fighting back (Dojo-33 to 38)**: the console's skills are the catalog's; Power Strike follows the battle rules (2 AP + 1 switch, Offensive, the exact seeded hit); Brace guards and the dummy's attack goes through the same formula (its power and stance vs the hero's guard and armor) and is logged as the dummy's; Counterattack answers every hero skill; a stunned dummy loses its action and Next Round ticks Focus, drops the guard and regains +4 AP (debt included); Rest recovers AP and a downed hero is refused until healed.
 
+### Agent workflow tools
+
+`CLAUDE.md` indexes `docs/` (game brief, roadmap, decisions, workflow). `tools/fc.sh` gives compact checks (`parse`, `arena`, `dojo`, `run`, `all`) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.
+
 ### Automated Check Script (`check_project.ps1`)
 
 Runs in 4 phases:

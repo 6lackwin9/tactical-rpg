@@ -5,6 +5,7 @@
 #   tools/fc.sh dojo [pattern]   run the dojo suite the same way
 #   tools/fc.sh run <script.gd>  run a SceneTree script (scratch debugging), noise filtered
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
+#   tools/fc.sh sim <duel|tier|levels> [level]   balance simulation table (see tools/balance_sim.gd)
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 GODOT="${GODOT:-/c/Program Files/Godot/godot.exe}"
@@ -44,6 +45,7 @@ case "$1" in
   arena) suite res://scenes/test_arena.tscn arena "$2" ;;
   dojo) suite res://scenes/gear_dojo.tscn dojo "$2" ;;
   run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;
+  sim) timeout 900 "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //" ;;
   all) parse; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
   *) sed -n 2,9p "$0" ;;
 esac
