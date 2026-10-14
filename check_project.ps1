@@ -2,7 +2,9 @@
 # Tactical RPG - Automated Project Error & Test Check Script
 # ==============================================================================
 param (
-    [switch]$VerboseOutput
+    [switch]$VerboseOutput,
+    [switch]$Quiet,   # print only failures and the summary (saves ~10k tokens of PASS lines per run)
+    [switch]$Fast   # parse all scripts in ONE Godot process (~3 s) instead of one launch per file (~2.5 min)
 )
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -68,6 +70,17 @@ $gdFiles = Get-ChildItem -Path $projectRoot -Recurse -Filter "*.gd" | Where-Obje
 $scriptErrors = 0
 $scriptsChecked = 0
 
+if ($Fast) {
+    $fastResult = Invoke-GodotProcess -Arguments @("--headless", "--path", ".", "-s", "tools/parse_all.gd")
+    $scriptsChecked = $gdFiles.Count
+    if ($fastResult.Output -match "SCRIPT ERROR|Parse Error|Compile Error|FAIL res://") {
+        $scriptErrors = 1
+        Write-Host "  [FAIL] $($fastResult.Output)" -ForegroundColor DarkRed
+    }
+    $gdFiles = @()
+}
+
+
 foreach ($file in $gdFiles) {
     $relPath = $file.FullName.Replace($projectRoot + "\", "").Replace("\", "/")
     $resPath = "res://$relPath"
@@ -127,14 +140,14 @@ foreach ($suite in $testSuites) {
     foreach ($line in $testLines) {
         if ($line -match "PASS") {
             $passCount++
-            Write-Host "  $line" -ForegroundColor Green
+            if (-not $Quiet) { Write-Host "  $line" -ForegroundColor Green }
         }
         elseif ($line -match "FAIL") {
             $failCount++
             Write-Host "  $line" -ForegroundColor Red
         }
         elseif ($line -match "=== STARTING" -or $line -match "=== FINAL" -or $line -match "=== COMBAT" -or $line -match "=== RESOLUTION") {
-            Write-Host "  $line" -ForegroundColor Cyan
+            if (-not $Quiet) { Write-Host "  $line" -ForegroundColor Cyan }
         }
     }
 

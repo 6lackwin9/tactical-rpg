@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fast check: compact, failure-first output. Usage:
 #   tools/fc.sh parse            refresh class cache if .gd files were added, then parse-check changed files
+#   tools/fc.sh parse-all        parse EVERY .gd in one process (~seconds; check_project.ps1 launches Godot once per file)
 #   tools/fc.sh arena [pattern]  run the arena suite; print totals, FAIL/SCRIPT ERROR lines, and lines matching [pattern]
 #   tools/fc.sh dojo [pattern]   run the dojo suite the same way
 #   tools/fc.sh run <script.gd>  run a SceneTree script (scratch debugging), noise filtered
@@ -42,6 +43,7 @@ suite() {  # $1 = scene, $2 = label, $3 = optional pattern
 
 case "$1" in
   parse) parse ;;
+  parse-all) res=$(timeout 300 "$GODOT" --headless --path . -s tools/parse_all.gd 2>&1 | grep -E "^§|SCRIPT ERROR|Parse Error|Compile Error" -A1 | sed "s/^§ //"); echo "$res"; echo "$res" | grep -Eq "SCRIPT ERROR|Parse Error|Compile Error|FAIL" && status=1 ;;
   arena) suite res://scenes/test_arena.tscn arena "$2" ;;
   dojo) suite res://scenes/gear_dojo.tscn dojo "$2" ;;
   run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;

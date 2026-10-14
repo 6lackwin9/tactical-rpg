@@ -405,7 +405,7 @@ Support skills (heal/buff on allies, `SupportRules`), gap-close attacks (`dash_t
 
 ### Agent workflow tools
 
-`CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles (brainstorm, builder, balance, reviewer; the main session plans via the `planner` skill). `tools/fc.sh` gives compact checks (`parse`, `arena`, `dojo`, `run`, `all`) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.
+`CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles (brainstorm, builder, balance, reviewer; the main session plans via the `planner` skill). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.
 
 ### Automated Check Script (`check_project.ps1`)
 
