@@ -259,7 +259,7 @@ static func _test_catalog() -> bool:
 	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
 	checks["sandbox fork"] = forked
 	if forked:
-		checks["a DEFEND skill may only grant riposte"] = not ContentCatalog.upsert("skills", {"id": "bad_def", "name": "x", "kind": "DEFEND", "grant_status": "haste"}).is_empty()
+		checks["a DEFEND skill may only grant a buff (riposte or a support buff), never a debuff"] = not ContentCatalog.upsert("skills", {"id": "bad_def", "name": "x", "kind": "DEFEND", "grant_status": "stagger"}).is_empty()
 		checks["a SUPPORT skill may not grant riposte"] = not ContentCatalog.upsert("skills", {"id": "bad_sup", "name": "x", "kind": "SUPPORT", "target_mode": "SELF", "grant_status": "riposte"}).is_empty()
 		checks["an attack may not grant riposte"] = not ContentCatalog.upsert("skills", {"id": "bad_atk", "name": "x", "kind": "ATTACK", "grant_status": "riposte"}).is_empty()
 		checks["a valid riposting defend is accepted"] = ContentCatalog.upsert("skills", {"id": "good_def", "name": "Good", "kind": "DEFEND", "mitigation": 0.1, "grant_status": "riposte", "status_rounds": 3}).is_empty()

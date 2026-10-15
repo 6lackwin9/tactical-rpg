@@ -470,8 +470,10 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 			errors.append("Taunt is cast on the taunter itself: set Targets to SELF.")
 	elif kind == "DEFEND":
 		var defend_grant: String = str(e["grant_status"])
-		if not defend_grant.is_empty() and not StatusEffects.defend_buffs().has(defend_grant):
-			errors.append("Grants: '%s' is not a defend buff status (%s)." % [defend_grant, ", ".join(StatusEffects.defend_buffs())])
+		var defend_options: Array[String] = StatusEffects.defend_buffs()
+		defend_options.append_array(StatusEffects.support_buffs())
+		if not defend_grant.is_empty() and not defend_options.has(defend_grant):
+			errors.append("Grants: '%s' is not a defend or support buff status (%s)." % [defend_grant, ", ".join(defend_options)])
 		if DictUtil.to_int(e["heal_base"]) > 0 or DictUtil.to_float(e["heal_mult"]) > 0.0:
 			errors.append("Heal belongs to SUPPORT skills.")
 	elif not str(e["grant_status"]).is_empty() or DictUtil.to_int(e["heal_base"]) > 0 or DictUtil.to_float(e["heal_mult"]) > 0.0:

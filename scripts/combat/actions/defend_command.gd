@@ -15,8 +15,12 @@ var status_rounds: int = 1      # rounds it lasts, counting the current one
 func on_start() -> String:
 	if grant_status.is_empty() or not source.is_active():
 		return ""
-	StatusEffects.grant_now(source, grant_status, status_rounds)
-	return "[Riposte] %s readies a riposte (%d round%s, ends on a stance change)" % [source.name, status_rounds, "" if status_rounds == 1 else "s"]
+	if StatusEffects.defend_buffs().has(grant_status):
+		StatusEffects.grant_now(source, grant_status, status_rounds)
+		return "[Riposte] %s readies a riposte (%d round%s, ends on a stance change)" % [source.name, status_rounds, "" if status_rounds == 1 else "s"]
+	# A support-grant buff (taunt) is queued like every support buff: it starts next round.
+	StatusEffects.queue(source, grant_status, status_rounds)
+	return "[%s] %s will be %s next round (%d round%s)" % [grant_status.capitalize(), source.name, StatusEffects.display_name(grant_status).to_lower(), status_rounds, "" if status_rounds == 1 else "s"]
 
 func execute() -> void:
 	if not source.is_alive():

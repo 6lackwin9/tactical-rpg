@@ -55,6 +55,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 		SkillDef.Kind.ATTACK:
 			if skill.is_area():
 				var area := AreaAttackCommand.new(actor, grid, cells, skill.power_for(actor), skill.blocks)
+				area.status_rounds = skill.status_rounds
 				command = area
 			else:
 				var attack := AttackCommand.new(actor, target, skill.power_for(actor), skill.blocks, 0, grid)

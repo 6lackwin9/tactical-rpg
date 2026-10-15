@@ -18,6 +18,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(EnginePiecesTestSuite.run())
 	results.append(StatusRegistryTestSuite.run())
 	results.append(WeakenTestSuite.run())
+results.append(SkillEngineTestSuite.run())
 	results.append(FoundationTestSuite.run())
 	results.append(CharacterSpecsTestSuite.run(tree_parent))
 	results.append(GearEquipTestSuite.run(tree_parent))

@@ -11,6 +11,7 @@ extends BattleCommand
 var grid: CombatGrid = null
 var cells: Array[Vector2i] = []
 var skill_mult: float = 1.0
+var status_rounds: int = 1       # how long an inflicted status lasts once active
 
 var last_damage: int = 0         # total dealt
 var last_hits: int = 0
@@ -37,12 +38,13 @@ func execute() -> void:
 		if victim == null or victim == source or not victim.is_active():
 			continue
 		if skill_mult <= 0.0:
-			continue   # a zero-power area attack never damages or provokes (area status application is not supported yet)
+			continue   # a zero-power area attack never damages or provokes (schema rejects it; D1 rule kept)
 		var res: Dictionary = DamageCalculator.compute(source, victim, source.attack_range > 1, false, skill_mult, false, rng)
 		var taken: int = victim.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage += taken
 		last_hits += 1
-		parts.append("%s %d%s%s" % [victim.name, taken, " CRIT" if DictUtil.to_bool(res["is_crit"]) else "", " DEFEATED" if not victim.is_alive() else ""])
+		var status_note: String = _roll_status(victim)   # one independent roll per unit hit
+		parts.append("%s %d%s%s%s" % [victim.name, taken, " CRIT" if DictUtil.to_bool(res["is_crit"]) else "", " DEFEATED" if not victim.is_alive() else "", status_note])
 		breakdowns.append("%s: %s" % [victim.name, DamageCalculator.describe(res)])
 		var counter: Dictionary = RiposteRules.counter(source, victim, grid, source.attack_range > 1, rng)
 		if not counter.is_empty():
@@ -52,3 +54,12 @@ func execute() -> void:
 		execution_log = "[Area Miss] %s's %s hit nobody." % [source.name, command_name]
 	else:
 		execution_log = "[Attack] %s's %s hit %d unit%s for %d damage (%s)" % [source.name, command_name, last_hits, "" if last_hits == 1 else "s", last_damage, ", ".join(parts)]
+
+# Rolls the skill's status on one unit hit (allies too: friendly fire). Returns a log suffix.
+func _roll_status(victim: Combatant) -> String:
+	if status_effect.is_empty() or not victim.is_alive():
+		return ""
+	var chance: int = StatusEffects.apply_chance(victim, status_effect, status_potency)
+	if StatusEffects.try_inflict(victim, status_effect, status_potency, rng, status_rounds, status_magnitude):
+		return " [%s next round (%d%%)]" % [StatusEffects.display_name(status_effect), chance]
+	return " [resisted %s (%d%%)]" % [StatusEffects.display_name(status_effect).to_lower(), chance]
