@@ -67,6 +67,38 @@ static func area_attacks(skill_cap: int, c: Combatant = null) -> Array[SkillDef]
 			result.append(s)
 	return result
 
+# SUPPORT skills that remove debuffs and do not heal (cleanse-only), for c.
+static func cleanse_only(skill_cap: int, c: Combatant = null) -> Array[SkillDef]:
+	var result: Array[SkillDef] = []
+	for s: SkillDef in available(SkillDef.Kind.SUPPORT, skill_cap, c):
+		if s.cleanses() and not s.heals():
+			result.append(s)
+	return result
+
+# SUPPORT / DEFEND skills of `kind` that grant `status` and do not heal.
+static func granting(kind: SkillDef.Kind, status: String, skill_cap: int, c: Combatant = null) -> Array[SkillDef]:
+	var result: Array[SkillDef] = []
+	for s: SkillDef in available(kind, skill_cap, c):
+		if s.grant_status == status and not s.heals():
+			result.append(s)
+	return result
+
+# SUPPORT skills granting a buff other than `except_status`, with no heal (haste-like ally buffs).
+static func ally_buffs(except_status: String, skill_cap: int, c: Combatant = null) -> Array[SkillDef]:
+	var result: Array[SkillDef] = []
+	for s: SkillDef in available(SkillDef.Kind.SUPPORT, skill_cap, c):
+		if not s.grant_status.is_empty() and s.grant_status != except_status and not s.heals():
+			result.append(s)
+	return result
+
+# Zero-power ATTACK skills that inflict a status (debuff-only attacks such as Intimidate), for c.
+static func debuff_attacks(skill_cap: int, c: Combatant = null) -> Array[SkillDef]:
+	var result: Array[SkillDef] = []
+	for s: SkillDef in available(SkillDef.Kind.ATTACK, skill_cap, c):
+		if not s.deals_damage() and not s.is_area() and not s.status_effect.is_empty():
+			result.append(s)
+	return result
+
 static func lowest(kind: SkillDef.Kind) -> SkillDef:
 	for s: SkillDef in all():
 		if s.kind == kind:

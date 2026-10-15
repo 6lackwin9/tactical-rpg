@@ -271,7 +271,7 @@ static func _test_undo_round() -> bool:
 	var checks: Dictionary = {}
 	var session := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	session.start()
-	session.plan_apply_preset_all("balanced")
+	session.plan_apply_preset_all("aggressive")   # AI1: the balanced preset can end round 1 in a riposte stance (carried into round 2); the all-out one never guards
 	session.confirm_plan()
 	for i: int in range(600):
 		if session.phase == CombatSession.Phase.REPLAY:

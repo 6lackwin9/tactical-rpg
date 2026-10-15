@@ -26,6 +26,15 @@ var target_pref: TargetPref = TargetPref.NEAREST
 var prefer_level: int = 0       # skill level to favour (0 = highest affordable)
 var reckless: bool = false      # never flees or guards, always charges the nearest foe (berserker behaviour)
 var heal_below: float = 0.7     # SUPPORT role: heal the most wounded ally at or below this HP fraction
+var smart_skills: bool = true   # AI1: use disengage, area, cleanse, taunt/haste, debuff and riposte skills (false = the pre-AI1 behaviour, for A/B runs)
+var area_min_foes: int = 2      # AI1: an area attack is chosen only if it hits at least this many foes (clamped to 1..6 on use)
+
+const AREA_MIN_FOES_MIN: int = 1
+const AREA_MIN_FOES_MAX: int = 6
+
+# area_min_foes as the AI uses it.
+func area_threshold() -> int:
+	return clampi(area_min_foes, AREA_MIN_FOES_MIN, AREA_MIN_FOES_MAX)
 
 static func create(p_role: Role, p_flee_ratio: float = 0.25, p_skill_cap: int = 1) -> AiProfile:
 	var profile := AiProfile.new()
@@ -45,6 +54,8 @@ func duplicate_profile() -> AiProfile:
 	copy.prefer_level = prefer_level
 	copy.reckless = reckless
 	copy.heal_below = heal_below
+	copy.smart_skills = smart_skills
+	copy.area_min_foes = area_min_foes
 	return copy
 
 static func role_name(p_role: Role) -> String:

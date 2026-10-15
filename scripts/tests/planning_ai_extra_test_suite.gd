@@ -221,18 +221,32 @@ static func compute() -> Dictionary:
 		psession.plan_apply_preset(hero, preset_id)
 		presets_ok = presets_ok and psession.plan.is_valid(hero) and not psession.plan.compile(hero).runs_dry()
 	psession.plan_apply_preset(hero, "aggressive")
+	# AI1: the draft may open with a SUPPORT cast (taunt); everything else must be an attack
 	var aggressive_ok: bool = not psession.plan.steps_of(hero).is_empty()
+	var aggressive_engages: int = 0
 	for s: PlanStep in psession.plan.steps_of(hero):
-		aggressive_ok = aggressive_ok and s.mode == PlanStep.Mode.ENGAGE
+		var support_cast: bool = s.skill != null and s.skill.kind == SkillDef.Kind.SUPPORT
+		aggressive_ok = aggressive_ok and (s.mode == PlanStep.Mode.ENGAGE or support_cast)
+		aggressive_engages += 1 if s.mode == PlanStep.Mode.ENGAGE else 0
+	aggressive_ok = aggressive_ok and aggressive_engages >= 1
 	psession.plan_apply_preset(hero, "focus_weakest")
 	var focus_steps: Array[PlanStep] = psession.plan.steps_of(hero)
-	var weakest_ok: bool = not focus_steps.is_empty() and focus_steps[0].mode == PlanStep.Mode.ENGAGE and focus_steps[0].target == weakest
+	var first_attack: PlanStep = null
+	for s: PlanStep in focus_steps:
+		if first_attack == null and s.mode == PlanStep.Mode.ENGAGE:
+			first_attack = s
+	var weakest_ok: bool = first_attack != null and first_attack.target == weakest
 	psession.plan_apply_preset(hero, "economy")
 	var economy_ok: bool = not psession.plan.steps_of(hero).is_empty()
 	for s: PlanStep in psession.plan.steps_of(hero):
 		economy_ok = economy_ok and (s.skill == null or s.skill.level == 1)
 	psession.plan_apply_preset(hero, "defensive")
-	var defensive_ok: bool = not psession.plan.steps_of(hero).is_empty() and psession.plan.steps_of(hero)[0].mode == PlanStep.Mode.SELF and psession.plan.steps_of(hero)[0].skill.kind == SkillDef.Kind.DEFEND
+	# AI1: a SUPPORT cast (taunt) may precede the guard; the first non-support step is the guard
+	var first_action: PlanStep = null
+	for s: PlanStep in psession.plan.steps_of(hero):
+		if first_action == null and s.skill != null and s.skill.kind != SkillDef.Kind.SUPPORT:
+			first_action = s
+	var defensive_ok: bool = first_action != null and first_action.mode == PlanStep.Mode.SELF and first_action.skill.kind == SkillDef.Kind.DEFEND
 	psession.plan_apply_preset(hero, "withdraw")
 	var withdraw_steps: Array[PlanStep] = psession.plan.steps_of(hero)
 	var withdraw_ok: bool = not withdraw_steps.is_empty() and withdraw_steps[0].mode == PlanStep.Mode.WITHDRAW
