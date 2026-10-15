@@ -36,7 +36,7 @@ If the custom agent types are not yet callable (agent files added this session),
 
 1. Review each report; run `change-reviewer` (and `tools/fc.sh all`). If a builder failed the same thing twice, ask the user rather than retry.
 2. Apply the builders' "docs delta" (README, GAME_BRIEF, STRUCTURE, DECISIONS / HISTORY append-only), update `docs/ROADMAP.md` and `docs/TASKS.md` statuses.
-3. Append a row to the "Agent run log" in `docs/WORKFLOW.md` (task, agents, tokens/minutes, result).
+3. Append a row to the "Agent run log" in `docs/WORKFLOW.md` and update `docs/AGENT_MAP.md` (move the finished agent from Active to its milestone section; add new dispatches to Active when you launch them).
 4. Run `check_project.ps1 -Fast -Quiet`. If clean: commit with the trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`, merge to `main` (fast-forward), push, remove the worktree and branch.
 5. If the system is now stable, ask the user whether to mark it `balance-ready`.
 

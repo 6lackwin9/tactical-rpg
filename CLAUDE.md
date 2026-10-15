@@ -9,6 +9,7 @@ Read these instead of crawling the code:
 - `docs/HISTORY.md`: deprecated/tried ideas with reasons (append-only; never re-propose without new reasons)
 - `docs/BALANCE_REPORT.md`: latest balance runs and open issues
 - `docs/TASKS.md`: task queue (lanes, dependencies, status); specs in `docs/specs/`
+- `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained)
 - `docs/WORKFLOW.md`: tools and how to iterate
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
 - Skill `godot-debug-checklist`: known issues table; consult BEFORE debugging
