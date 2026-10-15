@@ -209,6 +209,34 @@ static func upsert(kind: String, entry: Dictionary, replace_id: String = "") -> 
 	_touched(kind)
 	return errors
 
+# Atomic multi-entry upsert (all or none): a set of entries that are only valid TOGETHER, e.g. every rank row of a skill
+# family whose `advanced` flag must change on all rows at once. Each entry replaces the entry with its id (or is appended);
+# every entry is then validated against the catalog as it would look with ALL of them applied. Any problem restores
+# the previous state and returns the problems (each prefixed with the entry id); nothing changes.
+static func upsert_many(kind: String, new_entries: Array) -> Array[String]:
+	_ensure_loaded()
+	var list: Array = _data_map()[kind]
+	var backup: Array = list.duplicate()
+	var applied: Array[Dictionary] = []
+	for raw: Variant in new_entries:
+		var clean: Dictionary = ContentSchema.normalize(kind, DictUtil.dict_of(raw))
+		var at: int = _index_of(kind, str(clean.get("id", "")))
+		if at >= 0:
+			list[at] = clean
+		else:
+			list.append(clean)
+		applied.append(clean)
+	var errors: Array[String] = []
+	for clean: Dictionary in applied:
+		for problem: String in validate_entry(kind, clean, str(clean.get("id", ""))):
+			errors.append("%s: %s" % [str(clean.get("id", "")), problem])
+	if not errors.is_empty():
+		list.clear()
+		list.append_array(backup)
+		return errors
+	_touched(kind)
+	return errors
+
 # Removes an entry unless something still references it. Returns "" or why not.
 static func remove(kind: String, id: String) -> String:
 	var at: int = _index_of(kind, id)

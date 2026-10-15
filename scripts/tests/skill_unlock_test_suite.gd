@@ -38,6 +38,7 @@ static func run() -> bool:
 	ok = _test_constants() and ok
 	ok = _test_fixture_rules() and ok
 	ok = _test_shipped_data() and ok
+	ok = _test_upsert_many() and ok
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	return ok
 
@@ -337,3 +338,27 @@ static func _test_shipped_data() -> bool:
 				tier_ok = tier_ok and u2.tier_unlocked(r) == want
 	checks["shipped multi-tier families: a tier is unlocked iff the unit level reaches unlock + offset"] = tier_ok
 	return _report("Shipped data under the new rule", checks)
+
+# ContentCatalog.upsert_many is atomic: a family whose rows are only valid together changes all at once, or not at all.
+static func _test_upsert_many() -> bool:
+	var checks: Dictionary = {}
+	var sandbox: String = "user://sk2_upsert_many_test"
+	for kind: String in ContentSchema.KINDS:
+		DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
+	checks["sandbox fork"] = ContentCatalog.fork_to(sandbox) == OK
+	if checks["sandbox fork"]:
+		var before: Array[Dictionary] = ContentCatalog.entries("skills")
+		var head: Dictionary = ContentCatalog.get_entry("skills", "mend")
+		var r2: Dictionary = ContentCatalog.get_entry("skills", "mend_2")
+		var r3: Dictionary = ContentCatalog.get_entry("skills", "mend_3")
+		var one_alone: Array[String] = ContentCatalog.upsert("skills", head.merged({"advanced": true}, true))
+		checks["a single rank alone is refused (advanced must match)"] = not one_alone.is_empty() and not DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend").get("advanced", false))
+		var bad: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"advanced": true}, true), r2.merged({"advanced": true}, true)])
+		checks["a partial family is refused as a set"] = not bad.is_empty()
+		checks["a refused set changes nothing"] = ContentCatalog.entries("skills").size() == before.size() and not DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend_2").get("advanced", false)) and not DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend").get("advanced", false))
+		var good: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"advanced": true}, true), r2.merged({"advanced": true}, true), r3.merged({"advanced": true}, true)])
+		checks["the whole family changes together"] = good.is_empty() and DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend").get("advanced", false)) and DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend_3").get("advanced", false))
+		for kind: String in ContentSchema.KINDS:
+			DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
+	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	return _report("upsert_many applies a rank family atomically (all or none)", checks)

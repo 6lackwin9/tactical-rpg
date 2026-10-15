@@ -69,12 +69,12 @@
 					"skill": "shield_bash"
 				},
 				{
-					"level": 4,
-					"skill": "intimidate"
+					"level": 3,
+					"skill": "riposte"
 				},
 				{
-					"level": 5,
-					"skill": "riposte"
+					"level": 4,
+					"skill": "intimidate"
 				},
 				{
 					"level": 5,

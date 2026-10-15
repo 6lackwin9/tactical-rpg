@@ -115,6 +115,42 @@
 					"skill": "quick_stab"
 				}
 			]
+		},
+		{
+			"id": "field_medic",
+			"name": "Field Medic",
+			"description": "Opens healing families one level earlier.",
+			"effects": [
+				{
+					"type": "unlock",
+					"group": "heal",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "arcane_study",
+			"name": "Arcane Study",
+			"description": "Opens spell families one level earlier.",
+			"effects": [
+				{
+					"type": "unlock",
+					"group": "spell",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "riposte_drill",
+			"name": "Riposte Drill",
+			"description": "Opens Riposte two levels earlier (level 1 for a warrior).",
+			"effects": [
+				{
+					"type": "unlock",
+					"family": "riposte",
+					"levels": 2
+				}
+			]
 		}
 	]
 }
