@@ -85,7 +85,7 @@ static func _skill(e: Dictionary) -> String:
 		SkillDef.Kind.FOCUS:
 			t += _line("Boost", "x%.2f attack for %d rounds" % [s.boost, s.boost_rounds])
 		SkillDef.Kind.REST:
-			t += _line("Recover", "+%d AP, back to Neutral" % s.recover_ap)
+			t += _line("Recover", "+%d AP, Tactical stance" % s.recover_ap)
 		SkillDef.Kind.DISENGAGE:
 			t += _line("Jump", "up to %d tiles away from the nearest (or a chosen) enemy; leaps over units, not walls; the unit's move for the round (first, refused when rooted); AP = level, keeps the stance" % s.jump_tiles)
 		SkillDef.Kind.SUPPORT:

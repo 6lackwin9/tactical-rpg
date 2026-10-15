@@ -3,7 +3,7 @@ extends BattleCommand
 
 # ==============================================================================
 # Tactical RPG - Rest Command (an idle block that recovers AP)
-# Costs no AP, returns the unit to Neutral stance for free (set on start by the
+# Costs no AP, puts the unit in Tactical stance for free (set on start by the
 # planner) and restores recover_ap when the block resolves.
 # ==============================================================================
 

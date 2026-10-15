@@ -160,7 +160,7 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.skill_subtype = "Recover AP"
 		entry.value_num = rest.recover_ap
 		entry.outcome_tag = "+%d AP" % rest.recover_ap
-		entry.detail_text = "Catches their breath and returns to Neutral"
+		entry.detail_text = "Catches their breath and settles into Tactical"
 		entry.status_text = "Recovering"
 
 

@@ -451,7 +451,7 @@ func use_skill(skill_id: String = "") -> void:
 	var switched: bool = skill.switch_cost(active_hero.current_stance) > 0
 	active_hero.ap -= cost
 	active_hero.set_stance(skill.stance_after(active_hero.current_stance))
-	var ap_note: String = "%d AP%s, %d left%s" % [cost, " (incl. +1 stance switch)" if switched else "", active_hero.ap, " - AP debt!" if active_hero.ap < 0 else ""]
+	var ap_note: String = "%d AP%s, %d left%s" % [cost, " (incl. +%d stance switch)" % CombatTypes.STANCE_SWITCH_COST if switched else "", active_hero.ap, " - AP debt!" if active_hero.ap < 0 else ""]
 	match skill.kind:
 		SkillDef.Kind.ATTACK:
 			var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory != null else null
@@ -477,7 +477,7 @@ func use_skill(skill_id: String = "") -> void:
 		_:
 			var before: int = active_hero.ap
 			active_hero.ap = mini(active_hero.max_ap, active_hero.ap + skill.recover_ap)
-			log_action("BUFF", skill.display_name, "+%d AP (now %d/%d), back to Neutral" % [active_hero.ap - before, active_hero.ap, active_hero.max_ap], active_hero.ap - before, "+%d AP" % (active_hero.ap - before))
+			log_action("BUFF", skill.display_name, "+%d AP (now %d/%d), now %s" % [active_hero.ap - before, active_hero.ap, active_hero.max_ap, CombatTypes.stance_to_string(active_hero.current_stance)], active_hero.ap - before, "+%d AP" % (active_hero.ap - before))
 			stage_fx.emit("text", true, "💤 +%d AP" % (active_hero.ap - before), UiTheme.COL_GOOD)
 	if dummy_counter and test_dummy.is_alive() and active_hero.is_alive():
 		dummy_attack()

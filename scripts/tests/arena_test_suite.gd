@@ -765,8 +765,12 @@ static func run_planning_and_ai_test() -> bool:
 	var guard_skill: SkillDef = SkillCatalog.find("guard")
 	var mover: SkillDef = SkillCatalog.find("move")
 	var rest_skill: SkillDef = SkillCatalog.find("rest")
-	var switch_ok: bool = strike.switch_cost(N) == 1 and strike.switch_cost(O) == 0 and guard_skill.switch_cost(O) == 1 and guard_skill.switch_cost(D) == 0
-	switch_ok = switch_ok and mover.switch_cost(T) == 0 and mover.stance_after(T) == T and rest_skill.switch_cost(D) == 0 and rest_skill.stance_after(D) == N
+	var sw: int = CombatTypes.STANCE_SWITCH_COST
+	var switch_ok: bool = strike.switch_cost(N) == sw and strike.switch_cost(O) == 0 and guard_skill.switch_cost(O) == sw and guard_skill.switch_cost(D) == 0
+	# Rest enters the stance SkillDef.stance() names (Tactical) for free, from any stance; the skill after Rest pays the usual switch.
+	var focus_skill: SkillDef = SkillCatalog.find("focus")
+	switch_ok = switch_ok and mover.switch_cost(T) == 0 and mover.stance_after(T) == T and rest_skill.switch_cost(D) == 0 and rest_skill.stance_after(D) == rest_skill.stance() and rest_skill.stance() == T
+	switch_ok = switch_ok and focus_skill.switch_cost(rest_skill.stance()) == 0 and strike.switch_cost(rest_skill.stance()) == sw and guard_skill.switch_cost(rest_skill.stance()) == sw
 	var stance_ok: bool = rps_ok and switch_ok
 
 	# 3. Sequence compile: lowest free blocks, Engage auto-moves, AP incl. stance switch
@@ -893,6 +897,20 @@ static func run_planning_and_ai_test() -> bool:
 	var rest_steps: Array[PlanStep] = [PlanStep.self_skill(rest_skill), PlanStep.engage(strike, dummy)]
 	_run_steps(spent, rctx, rest_steps)
 	var rest_ok: bool = dummy.hp < 100 and spent.ap == 0
+	# B1: a rested unit is in the stance SkillDef.stance() names (Tactical); Focus after Rest pays no switch, an attack pays STANCE_SWITCH_COST
+	rest_ok = rest_ok and rest_skill.stance() == CombatTypes.StanceType.TACTICAL
+	var focus_rest: SkillDef = SkillCatalog.find("focus")
+	spent.ap = 0
+	spent.set_stance(CombatTypes.StanceType.NEUTRAL)
+	var rest_focus_steps: Array[PlanStep] = [PlanStep.self_skill(rest_skill), PlanStep.self_skill(focus_rest)]
+	_run_steps(spent, rctx, rest_focus_steps)
+	rest_ok = rest_ok and spent.current_stance == rest_skill.stance() and focus_rest.stance() == rest_skill.stance()
+	rest_ok = rest_ok and spent.ap == mini(spent.max_ap, rest_skill.recover_ap) - focus_rest.ap_cost(spent)
+	spent.ap = 0
+	spent.set_stance(CombatTypes.StanceType.DEFENSIVE)
+	var rest_atk_steps: Array[PlanStep] = [PlanStep.self_skill(rest_skill), PlanStep.engage(strike, dummy)]
+	_run_steps(spent, rctx, rest_atk_steps)
+	rest_ok = rest_ok and spent.current_stance == strike.stance() and spent.ap == mini(spent.max_ap, rest_skill.recover_ap) - strike.ap_cost(spent) - CombatTypes.STANCE_SWITCH_COST
 	var runtime_ok: bool = stops_ok and said_exhausted and rest_ok
 
 	# 5c. On-grid input model: options per clicked target / tile, hover previews, status line

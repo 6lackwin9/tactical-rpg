@@ -754,7 +754,7 @@ static func _run_skill_and_dummy_assertions(session: DojoSession) -> bool:
 	# 38: Rest recovers AP; a down hero can't act until healed
 	hero.ap = 3
 	session.use_skill("rest")
-	var rest_ok: bool = hero.ap == 3 + SkillCatalog.find("rest").recover_ap and hero.current_stance == CombatTypes.StanceType.NEUTRAL
+	var rest_ok: bool = hero.ap == 3 + SkillCatalog.find("rest").recover_ap and hero.current_stance == SkillCatalog.find("rest").stance()
 	hero.hp = 0
 	var log_down: int = session.log_entries.size()
 	session.use_skill("strike")

@@ -11,9 +11,9 @@ extends RefCounted
 #
 # Stances (rock-paper-scissors: Offensive > Tactical > Defensive > Offensive):
 #   Attack -> Offensive, Defend -> Defensive, Focus -> Tactical.
-#   Move keeps whatever stance the unit is in; Rest returns it to Neutral.
-# Using a skill from another stance switches stance automatically for +1 AP
-# (no block cost). Rest switches to Neutral for free.
+#   Move keeps whatever stance the unit is in; Rest puts it in Tactical.
+# Using a skill from another stance switches stance automatically for
+# CombatTypes.STANCE_SWITCH_COST AP (no block cost). Rest enters Tactical for free.
 # ==============================================================================
 
 # SUPPORT: heals and/or grants a buff status to itself or a friendly unit (SupportRules,
@@ -124,6 +124,8 @@ func stance() -> CombatTypes.StanceType:
 			return CombatTypes.StanceType.DEFENSIVE
 		Kind.FOCUS:
 			return CombatTypes.StanceType.TACTICAL
+		Kind.REST:
+			return CombatTypes.StanceType.TACTICAL
 	return CombatTypes.StanceType.NEUTRAL
 
 func keeps_stance() -> bool:
@@ -132,11 +134,11 @@ func keeps_stance() -> bool:
 func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
 	return current if keeps_stance() else stance()
 
-# Automatic stance-switch penalty (AP): changing stance costs 1; Move and Rest never do.
+# Automatic stance-switch penalty (AP): changing stance costs STANCE_SWITCH_COST; Move and Rest never pay (Rest enters Tactical for free).
 func switch_cost(current: CombatTypes.StanceType) -> int:
 	if kind == Kind.REST or keeps_stance():
 		return 0
-	return 0 if current == stance() else 1
+	return 0 if current == stance() else CombatTypes.STANCE_SWITCH_COST
 
 # True when a SUPPORT skill heals.
 func heals() -> bool:

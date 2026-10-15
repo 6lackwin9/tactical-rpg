@@ -13,6 +13,7 @@ enum StanceType {
 	TACTICAL
 }
 
+const STANCE_SWITCH_COST: int = 1   # AP paid when a skill changes the unit's stance (Move/Rest/keepers never pay)
 const STANCE_ADVANTAGE: float = 1.25
 const STANCE_DISADVANTAGE: float = 0.75
 

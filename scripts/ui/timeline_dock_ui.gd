@@ -414,7 +414,7 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		clip_style.bg_color = Color(0.1, 0.3, 0.2, 0.95)
 		clip_style.border_color = Color(0.3, 0.85, 0.5, 1.0)
 		icon_str = "💤"
-		subtitle = "+AP, Neutral"
+		subtitle = "+AP, Tactical"
 	elif act.command is TargetCommand:
 		clip_style.bg_color = Color(0.08, 0.38, 0.24, 0.95)
 		clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
