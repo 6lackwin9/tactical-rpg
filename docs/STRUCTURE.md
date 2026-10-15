@@ -10,7 +10,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
 | `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
-| `scripts/tests/`, `scenes/dojo/dojo_assertions.gd` | headless suites | all | done |
+| `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` | headless suites; a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd, overlap.sh | S15 | done |
