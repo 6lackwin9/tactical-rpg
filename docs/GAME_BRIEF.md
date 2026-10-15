@@ -78,3 +78,8 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 - Add a test suite: new `scripts/tests/<name>_test_suite.gd` + one `results.append` line in `scripts/tests/suite_registry.gd`; shared helpers in `TestHelpers`. Never add tests to `arena_test_suite.gd`.
 
 - Area attacks roll the skill's status once per unit hit (allies included). A DEFEND skill may grant riposte (immediate) or a support buff (taunt, haste: queued next round).
+
+## Progression and saves (M3)
+
+- `PartyState` / `UnitState` (scripts/progression/): level derives from `total_xp` (`XpCurve`, data/progression/xp_curve.json); `LevelUp.award_encounter` gives full XP to every active member; `PartyBuilder.build` turns a state into a Combatant (same `ContentFactory.unit` path as catalog units). `PARTY_MAX` = 4 active, roster unbounded.
+- `GameState` + `SaveGame` (scripts/game_state/): single slot file `user://saves/slot_<n>.json`, envelope `SaveGame.VERSION` = 1, migrations in `save_migrations.gd`; `NewGame.create` builds a starting state.

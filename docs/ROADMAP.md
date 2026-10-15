@@ -16,13 +16,13 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S4 | Enemy AI (roles, presets, targeting) | done (M1: kiting, no idle turns, support heals, reckless profile) | S1 | Shaman/ranger AI wastes turns: candidate fix |
 | S5 | Content catalog + Content Forge | done | - | Data pipeline for S2/S3/S6 |
 | S6 | World engine + World Forge (lore layer, inheritance) | done | S5 | Characters, factions, items, quests as data |
-| S7 | Party and progression: persistent unit state (spend, learned skills, passives), level-up UI, XP | proposed | S2 | First gameplay-facing gap |
+| S7 | Party and progression: persistent unit state (spend, learned skills, passives), level-up UI, XP | done (M3 data model; level-up UI still open) | S2 | First gameplay-facing gap |
 | S8 | Quests and lore runtime: quest state, rewards granting passives/skills/items, flags | proposed | S6, S7 | Sources of passives |
 | S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | placeholder | S6, S8 | README System 2 |
 | S10 | World map and travel: routes, travel events, supplies | placeholder | S9 | README System 1 |
 | S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | placeholder | S8 | README System 9 |
 | S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; terrain and combos remain; riposte done in M2a) | S1, S2 | README System 6 |
-| S13 | Save/load and game state, new-game flow, main menu | placeholder | S7 | Needed before any playable loop |
+| S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; menus still open) | S7 | Needed before any playable loop |
 | S14 | Audio, animation and asset pipeline, asset-load tests | placeholder | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |
 

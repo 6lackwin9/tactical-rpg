@@ -12,6 +12,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` | headless suites; a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
+| `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd, overlap.sh | S15 | done |
@@ -23,14 +24,14 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/skill_family_test_suite.gd` | skill families (family/tier/basic), planner tier grouping, active loadout (M2c-2a1) | S12 | done |
 | `scripts/combat/actions/disengage_command.gd`, `scripts/tests/engine_pieces_test_suite.gd` | disengage jump command; cleanse / disengage / SWEEP / unarmed suite (M2c-2a2) | S12 | done |
 | `scripts/combat/status/status_registry.gd`, `scripts/tests/status_registry_test_suite.gd`, `scripts/tests/foundation_test_suite.gd` | single status table with stacking rules; suites for it and for slice A (skill potency hook, `unarmed` token, derived weapon hands) | S12 | done |
-| `scripts/progression/` | persistent unit state, XP, level-up flow, spend allocation | S7 | placeholder |
+| `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest state machine, flags, rewards (grants passives/skills/items) | S8 | placeholder |
 | `scripts/exploration/` | region maps, location interactions, encounter triggers | S9 | placeholder |
 | `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
 | `scripts/dialogue/` | dialogue trees, speakers, shops, reputation | S11 | placeholder |
-| `scripts/game_state/` | save/load, new game, global flags, session-wide state | S13 | placeholder |
+| `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3) | S13 | done |
 | `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
-| `data/progression/` | XP curves, level rewards | S7 | placeholder |
+| `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quest definitions (lore-free templates) | S8 | placeholder |
 | `data/dialogue/` | dialogue trees | S11 | placeholder |
 | `assets/` | audio, fonts, extra art | S14 | placeholder |
