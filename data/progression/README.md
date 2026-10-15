@@ -1,9 +1,5 @@
-# data/progression (placeholder)
+# data/progression
 
-System: S7. Status: placeholder, nothing built. See docs/STRUCTURE.md and docs/ROADMAP.md.
+System: S7. Status: done (M3).
 
-Purpose: XP curves and level rewards (JSON).
-
-Planned files: xp_curve.json
-
-Rules: gameplay logic as RefCounted rules engines, data validated through a catalog, one test suite in scripts/tests/. Update docs/STRUCTURE.md when this folder is filled.
+`xp_curve.json`: `xp_to_next` (MAX_LEVEL - 1 positive ints) and `kill_xp` (base, per_level, tier multipliers for every `StatRules` tier, level-delta step/min/max). Validated by `XpCurve.validate`; an invalid file falls back to defaults. Starting values for BAL1. Edit the file directly (it is not a catalog kind).

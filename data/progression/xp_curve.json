@@ -1,0 +1,12 @@
+{
+	"version": 1,
+	"xp_to_next": [40, 70, 110, 160, 220, 290, 370, 460, 560],
+	"kill_xp": {
+		"base": 10,
+		"per_level": 5,
+		"tier_mult": {"minion": 0.5, "standard": 1.0, "elite": 2.0, "boss": 5.0, "hero": 1.0},
+		"level_delta_step": 0.15,
+		"level_delta_min": 0.25,
+		"level_delta_max": 2.0
+	}
+}
