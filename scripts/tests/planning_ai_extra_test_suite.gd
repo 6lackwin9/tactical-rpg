@@ -233,7 +233,7 @@ static func compute() -> Dictionary:
 	var focus_steps: Array[PlanStep] = psession.plan.steps_of(hero)
 	var first_attack: PlanStep = null
 	for s: PlanStep in focus_steps:
-		if first_attack == null and s.mode == PlanStep.Mode.ENGAGE:
+		if first_attack == null and s.mode == PlanStep.Mode.ENGAGE and s.skill.deals_damage():
 			first_attack = s
 	var weakest_ok: bool = first_attack != null and first_attack.target == weakest
 	psession.plan_apply_preset(hero, "economy")
@@ -241,10 +241,10 @@ static func compute() -> Dictionary:
 	for s: PlanStep in psession.plan.steps_of(hero):
 		economy_ok = economy_ok and (s.skill == null or s.skill.level == 1)
 	psession.plan_apply_preset(hero, "defensive")
-	# AI1: a SUPPORT cast (taunt) may precede the guard; the first non-support step is the guard
+	# AI1: SUPPORT casts (taunt) and zero-power debuff casts (intimidate) may precede the guard; the first other step is the guard
 	var first_action: PlanStep = null
 	for s: PlanStep in psession.plan.steps_of(hero):
-		if first_action == null and s.skill != null and s.skill.kind != SkillDef.Kind.SUPPORT:
+		if first_action == null and s.skill != null and s.skill.kind != SkillDef.Kind.SUPPORT and (s.skill.kind != SkillDef.Kind.ATTACK or s.skill.deals_damage()):
 			first_action = s
 	var defensive_ok: bool = first_action != null and first_action.mode == PlanStep.Mode.SELF and first_action.skill.kind == SkillDef.Kind.DEFEND
 	psession.plan_apply_preset(hero, "withdraw")
