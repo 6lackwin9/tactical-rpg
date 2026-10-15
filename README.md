@@ -463,6 +463,10 @@ The tactical AI (enemies and preset drafts) now uses disengage, area attacks (ne
 
 Skills open by unit level: a tier is castable at the family unlock level plus a per-tier offset (0, 2, 4). AP is only the per-round budget. Advanced families need level 5 or higher; KNOW and the new `unlock` passive effect can lower unlock levels (max 2). Unlock levels freeze during battle. Tested in `skill_unlock_test_suite.gd`.
 
+### Atomic family edits (SK2-A)
+
+`ContentCatalog.upsert_many` applies a set of entries all-or-none (a skill family whose ranks must change together). The SK2 data step flags the 11 advanced families, moves the warrior's riposte to level 3 and adds the passive templates `field_medic`, `arcane_study` and `riposte_drill`.
+
 ### Agent workflow tools
 
 `CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.
