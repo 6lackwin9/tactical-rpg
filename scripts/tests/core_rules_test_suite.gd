@@ -125,7 +125,7 @@ static func _test_guard_and_matchup() -> bool:
 	grid.place_combatant(guard, Vector2i(4, 4))
 	grid.place_combatant(hitter2, Vector2i(3, 6))
 	grid.place_combatant(dummy, Vector2i(4, 6))
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, _side([hitter, hitter2]), _side([guard, dummy]))
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, _side([hitter, hitter2]), _side([guard, dummy]))
 	var resolver: CombatResolver = _commit(ctx, {
 		hitter: [PlanStep.engage(strike, guard)], guard: [PlanStep.self_skill(guard_skill)],
 		hitter2: [PlanStep.engage(strike, dummy)],
@@ -161,7 +161,7 @@ static func _test_stances_persist() -> bool:
 	grid.place_combatant(target, Vector2i(4, 4))
 	grid.place_combatant(striker, Vector2i(3, 6))
 	grid.place_combatant(target2, Vector2i(4, 6))
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, _side([basher, striker]), _side([target, target2]))
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, _side([basher, striker]), _side([target, target2]))
 	var plan_check := CombatPlan.new(ctx)
 	plan_check.add_step(basher, PlanStep.engage(SkillCatalog.find("shield_bash"), target))
 	var projected: CombatTypes.StanceType = plan_check.compile(basher).stance
@@ -186,7 +186,7 @@ static func _test_focus_duration() -> bool:
 	var foe := Combatant.new("Foe", 300, 10, 1)
 	grid.place_combatant(caster, Vector2i(3, 4))
 	grid.place_combatant(foe, Vector2i(5, 4))
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, _side([caster]), _side([foe]))
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, _side([caster]), _side([foe]))
 	var resolver: CombatResolver = _commit(ctx, {caster: [PlanStep.self_skill(focus)]})
 	resolver.resolve_round()
 	var after_r1: float = caster.attack_boost_multiplier
@@ -202,7 +202,7 @@ static func _test_casualty_cancellation() -> bool:
 	var victim := Combatant.new("Victim", 5, 10, 1)
 	grid.place_combatant(killer, Vector2i(3, 4))
 	grid.place_combatant(victim, Vector2i(4, 4))
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, _side([killer]), _side([victim]))
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, _side([killer]), _side([victim]))
 	var resolver := CombatResolver.new()
 	resolver.grid = grid
 	resolver.total_blocks = ctx.total_blocks
@@ -234,7 +234,7 @@ static func _test_withdrawal() -> bool:
 	var holder := Combatant.new("Holder", 50, 10, 1)
 	grid.place_combatant(runner, Vector2i(6, 4))
 	grid.place_combatant(holder, Vector2i(2, 4))
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, _side([holder]), _side([runner]))
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, _side([holder]), _side([runner]))
 	var resolver: CombatResolver = _commit(ctx, {runner: [PlanStep.withdraw()]})
 	var foes: Array[Combatant] = [runner]
 	var friends: Array[Combatant] = [holder]
@@ -252,7 +252,7 @@ static func _test_feed_from_catalog_battle() -> bool:
 		session.plan_apply_preset_all("balanced")
 		if not session.confirm_plan():
 			break
-		ArenaTestSuite._resolve_until_replay(session)
+		TestHelpers.resolve_until_replay(session)
 		if session.combat_over or not session.can_advance_round():
 			break
 		session.advance_round()

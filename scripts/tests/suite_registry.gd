@@ -1,0 +1,30 @@
+class_name SuiteRegistry
+extends RefCounted
+
+# Every headless suite in run order. To add a suite: write scripts/tests/<name>_test_suite.gd
+# (class_name <Name>TestSuite, static func run(...) -> bool) and add ONE results.append line below.
+# Nothing else needs editing; ArenaTestSuite.run_all_tests just calls this.
+
+static func run_all(tree_parent: Node = null) -> bool:
+	var results: Array[bool] = []
+	results.append(CombatUiFrameworkTestSuite.run(tree_parent))
+	results.append(CoreRulesTestSuite.run())
+	results.append(ClassRulesTestSuite.run())
+	results.append(CombatExtensionsTestSuite.run())
+	results.append(RiposteTestSuite.run())
+	results.append(GearBudgetTestSuite.run())
+	results.append(FocusGearTestSuite.run())
+	results.append(SkillFamilyTestSuite.run())
+	results.append(EnginePiecesTestSuite.run())
+	results.append(StatusRegistryTestSuite.run())
+	results.append(WeakenTestSuite.run())
+	results.append(FoundationTestSuite.run())
+	results.append(CharacterSpecsTestSuite.run(tree_parent))
+	results.append(GearEquipTestSuite.run(tree_parent))
+	results.append(CombatSessionFlowTestSuite.run(tree_parent))
+	results.append(ArtTerrainTestSuite.run(tree_parent))
+	results.append(PlanningTestSuite.run(tree_parent))
+	results.append(ContentTestSuite.run(tree_parent))
+	results.append(RunnerTestSuite.run(tree_parent))
+	results.append(WorldTestSuite.run(tree_parent))
+	return not results.has(false)

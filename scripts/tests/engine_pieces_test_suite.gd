@@ -57,7 +57,7 @@ static func _setup(ally_cells: Array[Vector2i], foe_cells: Array[Vector2i]) -> R
 		var f := Combatant.new("Foe%d" % i, 200, 10, 1)
 		grid.place_combatant(f, foe_cells[i])
 		foes.append(f)
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, allies, foes, 5)
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, allies, foes, 5)
 	var rig := Rig.new()
 	rig.grid = grid
 	rig.allies = allies
@@ -143,7 +143,7 @@ static func _test_cleanse_combined() -> bool:
 	var plan: CombatPlan = setup.plan
 	var problem: String = plan.add_step(allies[0], PlanStep.ally(greater, allies[1]))
 	checks["planner accepts the combined skill"] = problem.is_empty()
-	var messages: Array[String] = ArenaTestSuite._run_steps(allies[0], setup.ctx, [PlanStep.ally(greater, allies[1])])
+	var messages: Array[String] = TestHelpers.run_steps(allies[0], setup.ctx, [PlanStep.ally(greater, allies[1])])
 	var logged: bool = false
 	for m: String in messages:
 		logged = logged or (m.begins_with("[Support]") and "cleansed" in m)
@@ -334,7 +334,7 @@ static func _test_disengage_execution() -> bool:
 	plan.add_step(hero, PlanStep.self_skill(backflip))
 	var dest: Vector2i = plan.compile(hero).pos
 	var ap_before: int = hero.ap
-	var messages: Array[String] = ArenaTestSuite._run_steps(hero, setup.ctx, [PlanStep.self_skill(backflip)])
+	var messages: Array[String] = TestHelpers.run_steps(hero, setup.ctx, [PlanStep.self_skill(backflip)])
 	var jumped: bool = false
 	for m: String in messages:
 		jumped = jumped or m.begins_with("[Disengage]")
@@ -428,7 +428,7 @@ static func _test_sweep_planning() -> bool:
 	var hp_before: Dictionary = {}
 	for c: Combatant in allies + foes:
 		hp_before[c] = c.hp
-	ArenaTestSuite._run_steps(allies[0], setup.ctx, [aimed])
+	TestHelpers.run_steps(allies[0], setup.ctx, [aimed])
 	checks["foes and the ally in the L take damage"] = foes[0].hp < int(hp_before[foes[0]]) and foes[1].hp < int(hp_before[foes[1]]) and allies[1].hp < int(hp_before[allies[1]])
 	checks["caster and bystander untouched"] = allies[0].hp == int(hp_before[allies[0]]) and foes[2].hp == int(hp_before[foes[2]])
 	var dmg: int = int(hp_before[foes[0]]) - foes[0].hp

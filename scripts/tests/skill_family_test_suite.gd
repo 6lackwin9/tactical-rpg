@@ -117,7 +117,7 @@ static func _test_planner_tiers() -> bool:
 		var foe := Combatant.new("Foe", 200, 10, 1)
 		grid.place_combatant(hero, Vector2i(3, 4))
 		grid.place_combatant(foe, Vector2i(4, 4))
-		var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, [hero], [foe], cap)
+		var ctx: PlanContext = TestHelpers.hand_ctx(grid, [hero], [foe], cap)
 		var plan := CombatPlan.new(ctx)
 		var options: Array[PlanOption] = plan.target_options(hero, foe)
 		var groups: Array[Dictionary] = PlanOption.group_by_family(options)
@@ -191,7 +191,7 @@ static func _test_loadout_filter() -> bool:
 	var foe := Combatant.new("Foe", 200, 10, 1)
 	grid.place_combatant(mage, Vector2i(3, 4))
 	grid.place_combatant(foe, Vector2i(5, 4))
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, [mage], [foe], 5)
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, [mage], [foe], 5)
 	var plan := CombatPlan.new(ctx)
 	var planned: Array[String] = []
 	for o: PlanOption in plan.target_options(mage, foe):

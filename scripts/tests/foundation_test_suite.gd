@@ -94,7 +94,7 @@ static func _test_potency_damage() -> bool:
 	grid.place_combatant(plain_foe, Vector2i(4, 6))
 	var allies: Array[Combatant] = [keen, plain]
 	var foes: Array[Combatant] = [keen_foe, plain_foe]
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, allies, foes)
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, allies, foes)
 	Passives.apply(keen, {"id": "t_pot_dmg", "name": "Keen", "effects": [{"type": "skill_potency", "family": strike.family_id(), "value": bonus}]})
 	var resolver: CombatResolver = CoreRulesTestSuite._commit(ctx, {
 		keen: [PlanStep.engage(strike, keen_foe)], plain: [PlanStep.engage(strike, plain_foe)],

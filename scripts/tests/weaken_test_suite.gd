@@ -147,7 +147,7 @@ static func _test_hook() -> bool:
 	var strike: SkillDef = SkillCatalog.find("strike")
 	var base_power: float = strike.power_for(atk)
 	var reduced: float = base_power * (1.0 - float(MAG) / 100.0)
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, [atk], [foe], 3)
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, [atk], [foe], 3)
 	var plan := CombatPlan.new(ctx)
 	var stance: CombatTypes.StanceType = strike.stance()
 	var est_base: int = plan.estimate_damage(atk, strike, stance, foe)
@@ -224,7 +224,7 @@ static func _test_zero_power() -> bool:
 	StatusEffects.grant_now(tank, StatusEffects.RIPOSTE, 2)
 	var roar: SkillDef = _attack_skill("t_roar", 0.0, StatusEffects.WEAKEN, MAG)
 	checks["a zero-power attack deals no damage by definition"] = not roar.deals_damage() and is_equal_approx(roar.power_for(warrior), 0.0)
-	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, [warrior], [tank], 3)
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, [warrior], [tank], 3)
 	var plan := CombatPlan.new(ctx)
 	checks["the planner estimate is 0"] = plan.estimate_damage(warrior, roar, roar.stance(), tank) == 0
 	var entry: PlanEntry = PlanEntry.create(roar, 1, 0)
@@ -352,7 +352,7 @@ static func _check_model(label: String, skills: Array[SkillDef], checks: Diction
 	for s: SkillDef in skills:
 		var grid: CombatGrid = _grid()
 		var tank: Combatant = _unit("Tank", grid, Vector2i(3, 4))
-		var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, [tank], [], 3)
+		var ctx: PlanContext = TestHelpers.hand_ctx(grid, [tank], [], 3)
 		var plan := CombatPlan.new(ctx)
 		var steps: Array[PlanStep] = [PlanStep.self_skill(s)]
 		plan.set_steps(tank, steps)
