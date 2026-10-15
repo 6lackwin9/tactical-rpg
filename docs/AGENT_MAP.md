@@ -131,3 +131,15 @@ Model comparison plan (to pick the right model per task; change one thing at a t
 | asset-builder | haiku vs inherited | validate_all clean on first try, spec deviations |
 | design-brainstorm | opus vs inherited | spec completeness and number of questions raised |
 | logic-builder | keep inherited; try opus on one large task only | tokens, minutes, reviewer findings |
+
+Trial protocol (user decision 2026-10-16: compare tokens and minutes only; cost is tracked in the usage page, token efficiency stands in for cost efficiency):
+
+1. Trial 1 (reviewer): when the next feature branch is ready, run two `change-reviewer` agents with an IDENTICAL prompt on the same worktree, one with `model: haiku` and one inherited (Sonnet 5.5). Record tokens, minutes, tool calls and the list of distinct findings (true defects, false alarms, misses relative to the union).
+2. Pick the model per agent type from the results and record it in the agent definition (`model:` frontmatter) and in `docs/DECISIONS.md`.
+3. Repeat for `asset-builder` (first data task) and `design-brainstorm` (next spec), one trial per type.
+
+Trial results:
+
+| Trial | Model | Tokens | Minutes | Real defects found | False alarms | Missed (vs union) |
+| --- | --- | --- | --- | --- | --- | --- |
+| (pending: first branch to review) | | | | | | |
