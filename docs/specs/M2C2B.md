@@ -83,7 +83,7 @@ Each is a new family with explicit tiers; it improves a starter family in one sl
 | riposte | DEFEND | riposte / riposte_2 / riposte_3 | 1 / 2 / 3 | 2 | mitigation 0.15 / 0.20 / 0.25; grant riposte; rounds 2 / 3 / 3 | SELF | D1 (rows authored in D1-A) |
 | intimidate | ATTACK (no damage) | intimidate / intimidate_2 / intimidate_3 | 1 / 2 / 3 | 1 | weaken magnitude 15 / 20 / 25, chance 70 / 75 / 80, rounds 2 / 2 / 3 | R 1-2 / 1-2 / 1-3 | D1 (rows authored in D1-A) |
 | shield_wall (advanced) | DEFEND | shield_wall / shield_wall_2 / shield_wall_3 | 3 / 4 / 5 | 3 | mitigation 0.35 / 0.45 / 0.55; grant taunt, status_rounds 1 / 2 / 3; no weapon gating (a shield requirement is not expressible on DEFEND) | SELF | X2 |
-| focus | FOCUS | focus / focus_2 / focus_3 | 2 / 3 / 4 | 2 | boost 1.50 all tiers (keeps the shipped T1 and the +50% ceiling); boost_rounds 2 / 3 / 3 | SELF | A (replaces deep_focus, already removed) |
+| focus | FOCUS | focus / focus_2 / focus_3 | 2 / 3 / 4 | 2 / 2 / 1 (T3 drops to 1 block: user decision 2026-10-16, since T3 adds no boost) | boost 1.50 all tiers (keeps the shipped T1 and the +50% ceiling); boost_rounds 2 / 3 / 3 | SELF | A (replaces deep_focus, already removed) |
 | mend | SUPPORT | mend / mend_2 / mend_3 | 2 / 3 / 4 | 2 | heal_stat KNOW; heal_base 8 / 10 / 12; heal_mult 1.5 / 1.8 / 2.1 | ALLY_OR_SELF, R 0-0 (default 0-3) | A |
 | purify | SUPPORT | purify / purify_2 / purify_3 | 2 / 3 / 4 | 1 | cleanse ["stun"] / ["stun", "bleed"] / ["all"] (T1 was `all`: see open question 2) | ALLY_OR_SELF, R 0-0 | A |
 | rally | SUPPORT | rally / rally_2 / rally_3 | 1 / 2 / 3 | 1 | grant haste; status_rounds 1 / 2 / 2 | ALLY; R 0-0 / 0-0 / 1-4 (+1 reach at T3) | A |
