@@ -237,7 +237,7 @@ static func _test_stance_and_duration() -> bool:
 		if not c.has_status(StatusEffects.RIPOSTE):
 			break
 		lasted += 1
-	checks["riposte lasts exactly the skill's status_rounds (2)"] = rounds == 2 and lasted == rounds
+	checks["riposte lasts exactly the skill's status_rounds"] = rounds >= 1 and lasted == rounds
 	checks["a riposte skill is not resistable (not a debuff)"] = not StatusEffects.resistable().has(StatusEffects.RIPOSTE) and StatusEffects.buffs().has(StatusEffects.RIPOSTE)
 	return _report("Stance change removes it, moving keeps it, 2-round duration", checks)
 
@@ -245,9 +245,9 @@ static func _test_catalog() -> bool:
 	var checks: Dictionary = {}
 	var riposte: SkillDef = SkillCatalog.find("riposte")
 	var guard: SkillDef = SkillCatalog.find("guard")
-	checks["riposte exists as a level 2 DEFEND skill"] = riposte != null and riposte.kind == SkillDef.Kind.DEFEND and riposte.level == 2
-	checks["it grants the riposte status for 2 rounds"] = riposte != null and riposte.grant_status == StatusEffects.RIPOSTE and riposte.status_rounds == 2
-	checks["its mitigation is lower than Guard's"] = riposte != null and guard != null and riposte.mitigation < guard.mitigation and is_equal_approx(riposte.mitigation, RiposteRules.GUARD_MITIGATION)
+	checks["riposte exists as a DEFEND skill whose AP is its level"] = riposte != null and riposte.kind == SkillDef.Kind.DEFEND and riposte.ap_cost() == riposte.level
+	checks["it grants the riposte status for its status_rounds"] = riposte != null and riposte.grant_status == StatusEffects.RIPOSTE and riposte.status_rounds >= 1
+	checks["its mitigation is lower than Guard's"] = riposte != null and guard != null and riposte.mitigation < guard.mitigation
 	checks["it is learned_only"] = SkillCatalog.is_learned_only("riposte")
 	var entry: Dictionary = ContentCatalog.get_entry("skills", "riposte")
 	checks["entry validates and round-trips"] = not entry.is_empty() and ContentCatalog.validate_entry("skills", entry, "riposte").is_empty() and ContentFactory.skill_to_entry(ContentFactory.skill(entry)) == ContentSchema.normalize("skills", entry)

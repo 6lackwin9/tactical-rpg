@@ -65,6 +65,7 @@ var offhand: bool = false      # ATTACK: melee off-hand jab (range 1) for ranged
 var stance_override: int = -1  # ATTACK in another stance pool (e.g. Shield Bash is Defensive)
 var status_effect: String = "" # status rolled on hit (StatusEffects), active next round
 var status_potency: int = 0
+var status_magnitude: int = 0   # weaken only: percent the inflicted instance carries (not rolled; 1-25)
 var reach_min: int = 0          # skill-specific reach band (0 = the unit's default band)
 var reach_max: int = 0
 var weapon_types: Array[String] = []   # gear types that may use it (empty = any); class-derived units only
@@ -99,10 +100,15 @@ static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_b
 func family_id() -> String:
 	return id if family.is_empty() else family
 
-# power_mult as `user` applies it: the skill's multiplier x the user's family potency (Combatant.potency_for).
-# This is the ONLY place potency enters attack damage (the value fed to DamageCalculator as skill_mult).
+# power_mult as `user` applies it: the skill's multiplier x the user's family potency (Combatant.potency_for)
+# x the user's weaken factor (Combatant.weaken_factor, 1.0 when not weakened).
+# This is the ONLY place potency and weaken enter attack damage (the value fed to DamageCalculator as skill_mult).
 func power_for(user: Combatant) -> float:
-	return power_mult if user == null else power_mult * user.potency_for_skill(self)
+	return power_mult if user == null else power_mult * user.potency_for_skill(self) * user.weaken_factor()
+
+# False for a zero-power ATTACK (a debuff-only attack): it deals no damage and is never a hit for reactions.
+func deals_damage() -> bool:
+	return kind != Kind.ATTACK or power_mult > 0.0
 
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.

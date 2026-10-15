@@ -110,6 +110,10 @@ static func _row_text(option: PlanOption) -> String:
 	var text: String = "%s   %s · %db" % [name_text, cost, option.blocks]
 	if option.damage > 0:
 		text += " · ~%d dmg" % option.damage
+	elif step.skill != null and step.skill.kind == SkillDef.Kind.ATTACK and not step.skill.deals_damage():
+		text += " · No damage"
+		if not step.skill.status_effect.is_empty():
+			text += " · %s%s" % [StatusEffects.display_name(step.skill.status_effect), (" -%d%%" % step.skill.status_magnitude) if step.skill.status_magnitude > 0 else ""]
 	if option.switches_target:
 		text += " · switch target"
 	return text

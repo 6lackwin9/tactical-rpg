@@ -70,6 +70,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			command.status_potency = skill.status_potency
 			if not skill.status_effect.is_empty():
 				command.status_potency += actor.status_potency_bonus()   # item / passive status_potency effects
+			command.status_magnitude = skill.status_magnitude
 		SkillDef.Kind.STATUS:
 			command = StatusBlockCommand.new(actor, status_name)
 		SkillDef.Kind.SUPPORT:

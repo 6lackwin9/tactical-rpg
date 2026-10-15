@@ -45,6 +45,7 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.stance_override = -1 if str(e["stance"]) == "AUTO" else _enum(CombatTypes.StanceType.keys(), str(e["stance"]), -1)
 	s.status_effect = str(e["status_effect"])
 	s.status_potency = DictUtil.to_int(e["status_potency"])
+	s.status_magnitude = DictUtil.to_int(e["status_magnitude"])
 	s.reach_min = DictUtil.to_int(e["reach_min"])
 	s.reach_max = DictUtil.to_int(e["reach_max"])
 	s.weapon_types = _strings(e["weapon_types"])
@@ -75,7 +76,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"level": s.level, "blocks": s.blocks, "description": s.description, "system": s.system,
 		"power_mult": s.power_mult, "area": _name(SkillDef.Area.keys(), s.area), "offhand": s.offhand,
 		"stance": "AUTO" if s.stance_override < 0 else _name(CombatTypes.StanceType.keys(), s.stance_override),
-		"status_effect": s.status_effect, "status_potency": s.status_potency,
+		"status_effect": s.status_effect, "status_potency": s.status_potency, "status_magnitude": s.status_magnitude,
 		"reach_min": s.reach_min, "reach_max": s.reach_max, "weapon_types": s.weapon_types, "min_proficiency": s.min_proficiency, "mitigation": s.mitigation,
 		"boost": s.boost, "boost_rounds": s.boost_rounds, "recover_ap": s.recover_ap,
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),

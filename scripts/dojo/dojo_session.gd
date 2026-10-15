@@ -456,17 +456,18 @@ func use_skill(skill_id: String = "") -> void:
 		SkillDef.Kind.ATTACK:
 			var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory != null else null
 			var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
-			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.offhand, skill.power_for(active_hero))
+			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.offhand, skill.power_for(active_hero)) if skill.deals_damage() else {"detail": "No damage", "outcome": "STATUS"}
 			var detail: String = "%s • %s" % [str(hit.get("detail", "")), ap_note]
 			if skill.is_area():
 				detail += " • area: the dummy is the only target here"
 			if not skill.status_effect.is_empty() and test_dummy.is_alive():
 				var hit_potency: int = skill.status_potency + active_hero.status_potency_bonus()   # + item / passive status_potency effects
 				var chance: int = StatusEffects.apply_chance(test_dummy, skill.status_effect, hit_potency)
-				var landed: bool = StatusEffects.try_inflict(test_dummy, skill.status_effect, hit_potency, rng)
+				var landed: bool = StatusEffects.try_inflict(test_dummy, skill.status_effect, hit_potency, rng, 1, skill.status_magnitude)
 				detail += " • %s %s (%d%%)" % [StatusEffects.display_name(skill.status_effect), "next round" if landed else "resisted", chance]
 			log_action("ATTACK", skill.display_name, detail, UiTheme.dict_int(hit, "dmg"), str(hit.get("outcome", "HIT")), str(hit.get("breakdown", "")), test_dummy.name)
-			_emit_hit_fx(hit)
+			if skill.deals_damage():
+				_emit_hit_fx(hit)
 		SkillDef.Kind.DEFEND:
 			active_hero.defense_mitigation_ratio = skill.mitigation
 			log_action("DEFEND", skill.display_name, "Guard -%d%% until the next round • %s" % [roundi(skill.mitigation * 100.0), ap_note], roundi(skill.mitigation * 100.0), "GUARD")

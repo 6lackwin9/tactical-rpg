@@ -206,6 +206,7 @@ func reset_round() -> void:
 	for c: Combatant in resolver.registered_combatants:
 		c.pending_statuses.clear()   # statuses inflicted in the undone round never happened
 		c.pending_status_rounds.clear()
+		c.pending_status_magnitudes.clear()
 	_begin_round(current_round, false)
 
 func reset_battle() -> void:
@@ -596,6 +597,7 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		c.ap = DictUtil.int_of(snap.aps, c, c.max_ap)
 		c.statuses = _dict_of(snap.statuses, c)
 		c.status_rounds_left = _dict_of(snap.status_rounds, c)
+		c.status_magnitudes = _dict_of(snap.status_magnitudes, c)
 		c.riposted.clear()
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
@@ -679,6 +681,7 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 		snap.aps[c] = c.ap
 		snap.statuses[c] = c.statuses.duplicate()
 		snap.status_rounds[c] = c.status_rounds_left.duplicate()
+		snap.status_magnitudes[c] = c.status_magnitudes.duplicate()
 	return snap
 
 # A copy of the per-unit dictionary stored in a snapshot (empty when missing).

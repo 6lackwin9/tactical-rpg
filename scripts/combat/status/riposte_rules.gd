@@ -9,12 +9,11 @@ extends RefCounted
 #   - the attacker stands adjacent (distance 1) to the defender when the hit lands
 #   - the defender survived the hit and the attacker is still on the field
 # The counter is a normal DamageCalculator.compute hit with skill_mult = COUNTER_MULT
-# (50% of the defender's attack power; Focus, stance matchup, crit, guard and armor apply
+# (50% of the defender's attack power, times its weaken factor; Focus, stance matchup, crit, guard and armor apply
 # as always). Riposte is removed by any stance change (Combatant.set_stance).
 # ==============================================================================
 
-const COUNTER_MULT: float = 0.5
-const GUARD_MITIGATION: float = 0.15   # the example skill's guard; always below Guard (0.3)
+const COUNTER_MULT: float = 0.5   # the only riposte constant: AP (level), mitigation and rounds live in the skill rows
 
 # True when `defender` would counter `attacker`'s melee hit right now.
 static func can_counter(attacker: Combatant, defender: Combatant, grid: CombatGrid, ranged: bool) -> bool:
@@ -34,7 +33,7 @@ static func counter(attacker: Combatant, defender: Combatant, grid: CombatGrid, 
 	if not can_counter(attacker, defender, grid, ranged):
 		return {}
 	defender.riposted[attacker] = true
-	var res: Dictionary = DamageCalculator.compute(defender, attacker, false, false, COUNTER_MULT, false, rng)
+	var res: Dictionary = DamageCalculator.compute(defender, attacker, false, false, COUNTER_MULT * defender.weaken_factor(), false, rng)
 	var taken: int = attacker.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 	var crit: bool = DictUtil.to_bool(res["is_crit"])
 	var defeated: bool = not attacker.is_alive()

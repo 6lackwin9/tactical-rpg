@@ -21,6 +21,7 @@ extends RefCounted
 #   display        player-facing name
 #   grant          buffs only: "support" (queued by a SUPPORT skill) or "defend" (active now, DEFEND skill); "" for debuffs
 #
+# Weaken is the first status with a magnitude (percent): it travels in the `potency` channel of stack(), capped by `cap`.
 # HOW TO ADD A STATUS (e.g. weaken, slice D):
 #   1. add `const WEAKEN: String = "weaken"` to StatusEffects and one row to ROWS below (all fields);
 #   2. effects of the status live where they act (blocked_blocks, damage hook, ...), never in the registry;
@@ -43,6 +44,7 @@ const ROWS: Array[Dictionary] = [
 	{"id": "stun", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Stunned", "grant": ""},
 	{"id": "root", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Rooted", "grant": ""},
 	{"id": "bleed", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Bleeding", "grant": ""},
+	{"id": "weaken", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 25, "display": "Weakened", "grant": ""},
 	{"id": "haste", "kind": KIND_BUFF, "resistable": false, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Hasted", "grant": "support"},
 	{"id": "taunt", "kind": KIND_BUFF, "resistable": false, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Taunting", "grant": "support"},
 	{"id": "riposte", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Riposte", "grant": "defend"},

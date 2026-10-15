@@ -173,37 +173,43 @@ func execute() -> void:
 
 	source.active_target = effective_target   # the lock a later attack must switch away from
 
-	# The one damage formula: attack power x Focus x skill x stance x crit, then guard and armor.
-	var res: Dictionary = DamageCalculator.compute(source, effective_target, source.attack_range > 1 and not use_offhand, use_offhand, skill_mult, false, rng)
-	var taken: int = effective_target.take_damage(DictUtil.to_int(res["final_dmg"]), true)
-	last_damage = taken
-	last_crit = DictUtil.to_bool(res["is_crit"])
-	last_breakdown = DamageCalculator.describe(res)
-	print("[%s] strikes [%s]: %s" % [source.name, effective_target.name, last_breakdown])
-
 	var details: Array[String] = []
-	var stance_mult: float = DictUtil.to_float(res["stance_factor"])
-	if stance_mult > 1.05:
-		details.append("x%.2f Stance Adv" % stance_mult)
-	elif stance_mult < 0.95:
-		details.append("x%.2f Stance Disadv" % stance_mult)
-	if DictUtil.to_float(res["buff_mult"]) > 1.0:
-		details.append("x%.1f Focus" % DictUtil.to_float(res["buff_mult"]))
-	if last_crit:
-		details.append("CRIT x%.1f" % DictUtil.to_float(res["crit_dmg_mult"]))
-	if DictUtil.to_float(res["mit_ratio"]) > 0.0:
-		details.append("-%d%% Guard" % roundi(DictUtil.to_float(res["mit_ratio"]) * 100.0))
-	if DictUtil.to_int(res["armor_rating"]) > 0:
-		details.append("-%d%% Armor" % roundi(DictUtil.to_float(res["armor_ratio"]) * 100.0))
+	var damaging: bool = skill_mult > 0.0   # a zero-power attack (intimidate) only rolls its status: no damage, no crit, no reaction
+	if damaging:
+		# The one damage formula: attack power x Focus x skill x stance x crit, then guard and armor.
+		var res: Dictionary = DamageCalculator.compute(source, effective_target, source.attack_range > 1 and not use_offhand, use_offhand, skill_mult, false, rng)
+		var taken_now: int = effective_target.take_damage(DictUtil.to_int(res["final_dmg"]), true)
+		last_damage = taken_now
+		last_crit = DictUtil.to_bool(res["is_crit"])
+		last_breakdown = DamageCalculator.describe(res)
+		print("[%s] strikes [%s]: %s" % [source.name, effective_target.name, last_breakdown])
+		var stance_mult: float = DictUtil.to_float(res["stance_factor"])
+		if stance_mult > 1.05:
+			details.append("x%.2f Stance Adv" % stance_mult)
+		elif stance_mult < 0.95:
+			details.append("x%.2f Stance Disadv" % stance_mult)
+		if DictUtil.to_float(res["buff_mult"]) > 1.0:
+			details.append("x%.1f Focus" % DictUtil.to_float(res["buff_mult"]))
+		if last_crit:
+			details.append("CRIT x%.1f" % DictUtil.to_float(res["crit_dmg_mult"]))
+		if DictUtil.to_float(res["mit_ratio"]) > 0.0:
+			details.append("-%d%% Guard" % roundi(DictUtil.to_float(res["mit_ratio"]) * 100.0))
+		if DictUtil.to_int(res["armor_rating"]) > 0:
+			details.append("-%d%% Armor" % roundi(DictUtil.to_float(res["armor_ratio"]) * 100.0))
+	var taken: int = last_damage
 
 	if not status_effect.is_empty() and effective_target.is_alive():
 		var chance: int = StatusEffects.apply_chance(effective_target, status_effect, status_potency)
-		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng, status_rounds):
+		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng, status_rounds, status_magnitude):
 			details.append("%s next round (%d%%)" % [StatusEffects.display_name(status_effect), chance])
 		else:
 			details.append("resisted %s (%d%%)" % [StatusEffects.display_name(status_effect).to_lower(), chance])
 
 	var detail_suffix: String = (" (" + ", ".join(details) + ")") if not details.is_empty() else ""
+
+	if not damaging:
+		execution_log = "[Status] %s -> %s%s" % [source.name, effective_target.name, detail_suffix]
+		return
 
 	# A riposting target answers a melee hit it survived (once per attacker per round).
 	var counter: Dictionary = RiposteRules.counter(source, effective_target, grid, source.attack_range > 1 and not use_offhand, rng)

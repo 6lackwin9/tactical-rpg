@@ -10,6 +10,8 @@ extends RefCounted
 #   STUN     blocks 1-2 can't be used (the unit acts from block 3)
 #   ROOT     the unit can't move this round
 #   BLEED    (debuff) loses BLEED_PCT of max HP at the end of the round; ignores guard and armor
+#   WEAKEN   (debuff) the unit's outgoing skill power (SkillDef.power_for, riposte counter) is cut by the
+#            instance's magnitude percent (Combatant.weaken_factor); magnitude capped at 25 by the registry
 #   HASTE    (buff) +HASTE_TILES tiles per move block while active
 #   TAUNT    (buff on the taunter) enemy AI units that can reach it must target it
 #   RIPOSTE  (buff, DEFEND skill) counters adjacent melee attackers (RiposteRules). Unlike the
@@ -30,6 +32,7 @@ const BLEED: String = "bleed"
 const HASTE: String = "haste"
 const TAUNT: String = "taunt"
 const RIPOSTE: String = "riposte"
+const WEAKEN: String = "weaken"
 
 const BLEED_PCT: float = 0.06    # of max HP per round while bleeding (minimum 1)
 const HASTE_TILES: int = 1       # extra tiles per move block while hasted
@@ -87,20 +90,29 @@ static func apply_chance(target: Combatant, status: String, potency: int) -> int
 	return clampi(roundi(float(potency) - resist), 0, 100)
 
 # Rolls a skill-inflicted status. On success it is queued for the target's next round.
-static func try_inflict(target: Combatant, status: String, potency: int, rng: RandomNumberGenerator, rounds: int = 1) -> bool:
+static func try_inflict(target: Combatant, status: String, potency: int, rng: RandomNumberGenerator, rounds: int = 1, magnitude: int = 0) -> bool:
 	if target == null or not target.is_alive():
 		return false
 	var chance: int = apply_chance(target, status, potency)
 	var roll: int = rng.randi_range(1, 100) if rng != null else 100
 	if roll > chance:
 		return false
-	queue(target, status, rounds)
+	queue(target, status, rounds, magnitude)
 	return true
 
+# True for statuses whose instance carries a magnitude (percent) next to its rounds.
+static func has_magnitude(status: String) -> bool:
+	return status == WEAKEN
+
 # Queues a status for the target's next round, lasting `rounds` rounds (the longer wins).
-static func queue(target: Combatant, status: String, rounds: int = 1) -> void:
+# `magnitude` is stored only for statuses that carry one; a repeat keeps the stronger (registry stack rule and cap).
+static func queue(target: Combatant, status: String, rounds: int = 1, magnitude: int = 0) -> void:
 	target.pending_statuses[status] = true
-	target.pending_status_rounds[status] = DictUtil.to_int(stack(DictUtil.int_of(target.pending_status_rounds, status), 0, rounds, 0, status)["rounds"])
+	var existing_rounds: int = DictUtil.int_of(target.pending_status_rounds, status)
+	var combined: Dictionary = stack(existing_rounds, DictUtil.int_of(target.pending_status_magnitudes, status), rounds, magnitude, status)
+	target.pending_status_rounds[status] = DictUtil.to_int(combined["rounds"])
+	if has_magnitude(status):
+		target.pending_status_magnitudes[status] = DictUtil.to_int(combined["potency"])
 
 # Makes a buff active right now (self-buffs from DEFEND skills), lasting `rounds` rounds
 # counting the current one (the longer wins).
@@ -119,6 +131,8 @@ static func remove(target: Combatant, status: String) -> bool:
 	target.status_rounds_left.erase(status)
 	target.pending_statuses.erase(status)
 	target.pending_status_rounds.erase(status)
+	target.status_magnitudes.erase(status)
+	target.pending_status_magnitudes.erase(status)
 	return found
 
 # Next-round penalty for overspending: "" or the status it causes.
@@ -138,16 +152,25 @@ static func roll_over(c: Combatant, ap_regen: int) -> Array[String]:
 		var left: int = DictUtil.int_of(c.status_rounds_left, status) - 1
 		if left > 0:
 			carried[str(status)] = left
+	var old_magnitudes: Dictionary = c.status_magnitudes.duplicate()
 	c.statuses.clear()
 	c.status_rounds_left.clear()
+	c.status_magnitudes.clear()
 	for status: Variant in carried:
 		c.statuses[str(status)] = true
 		c.status_rounds_left[str(status)] = carried[status]
+		if old_magnitudes.has(status):
+			c.status_magnitudes[str(status)] = old_magnitudes[status]
 	for status: Variant in c.pending_statuses:
+		var queued_rounds: int = DictUtil.int_of(c.pending_status_rounds, status, 1)
+		if has_magnitude(str(status)):
+			var merged: Dictionary = stack(DictUtil.int_of(c.status_rounds_left, status), DictUtil.int_of(c.status_magnitudes, status), queued_rounds, DictUtil.int_of(c.pending_status_magnitudes, status), str(status))
+			c.status_magnitudes[str(status)] = DictUtil.to_int(merged["potency"])
 		c.statuses[str(status)] = true
-		c.status_rounds_left[str(status)] = maxi(DictUtil.int_of(c.status_rounds_left, status), DictUtil.int_of(c.pending_status_rounds, status, 1))
+		c.status_rounds_left[str(status)] = maxi(DictUtil.int_of(c.status_rounds_left, status), queued_rounds)
 	c.pending_statuses.clear()
 	c.pending_status_rounds.clear()
+	c.pending_status_magnitudes.clear()
 	c.riposted.clear()
 	var debt_penalty: String = debt_status(maxi(0, -c.ap))
 	if not debt_penalty.is_empty():

@@ -22,3 +22,4 @@ var defense_mit: Dictionary = {}       # Combatant -> float
 var aps: Dictionary = {}               # Combatant -> int (runtime AP)
 var statuses: Dictionary = {}          # Combatant -> Dictionary (active statuses, copy)
 var status_rounds: Dictionary = {}     # Combatant -> Dictionary (rounds left per status, copy)
+var status_magnitudes: Dictionary = {} # Combatant -> Dictionary (magnitude percent per status, copy)

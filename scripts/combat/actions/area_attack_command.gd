@@ -36,6 +36,8 @@ func execute() -> void:
 		var victim: Combatant = grid.get_combatant_at(cell)
 		if victim == null or victim == source or not victim.is_active():
 			continue
+		if skill_mult <= 0.0:
+			continue   # a zero-power area attack never damages or provokes (area status application is not supported yet)
 		var res: Dictionary = DamageCalculator.compute(source, victim, source.attack_range > 1, false, skill_mult, false, rng)
 		var taken: int = victim.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage += taken

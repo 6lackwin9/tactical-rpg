@@ -14,6 +14,7 @@ extends RefCounted
 #  7b. Class & unit rules (ClassRulesTestSuite)
 #  7c. Combat extensions: ally targeting, gap-close, haste/bleed/taunt, AI fixes (CombatExtensionsTestSuite)
 #  7d. Riposte: reactive counter damage (RiposteTestSuite)
+#  7d2. Weaken status, zero-power attacks, data-driven riposte tiers (WeakenTestSuite)
 #  7e. Gear budget: weighted item values, class loadout band, soft warnings (GearBudgetTestSuite)
 #  7g. Focus gear: orb / tome off-hand rules, item effects, spell reach (FocusGearTestSuite)
 #  7f. Skill families and active loadout (SkillFamilyTestSuite)
@@ -34,6 +35,7 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 		SkillFamilyTestSuite.run(),
 		EnginePiecesTestSuite.run(),
 		StatusRegistryTestSuite.run(),
+		WeakenTestSuite.run(),
 		FoundationTestSuite.run(),
 		run_character_specs_and_inventory_test(),
 		run_gear_equip_and_test_dummy_suite(tree_parent),
@@ -744,7 +746,7 @@ static func run_planning_and_ai_test() -> bool:
 	for s: SkillDef in SkillCatalog.all():
 		if s.kind == SkillDef.Kind.ATTACK or s.kind == SkillDef.Kind.DEFEND or s.kind == SkillDef.Kind.FOCUS:
 			skills_ok = skills_ok and s.ap_cost() == s.level
-	var l2_ok: bool = SkillCatalog.find("hamstring").ap_cost() == 2 and SkillCatalog.find("riposte").ap_cost() == 2 and SkillCatalog.find("focus").ap_cost() == 2
+	var l2_ok: bool = SkillCatalog.find("hamstring").ap_cost() == 2 and SkillCatalog.find("riposte").ap_cost() == SkillCatalog.find("riposte").level and SkillCatalog.find("focus").ap_cost() == 2
 	var modded := Combatant.new("Modded", 10, 10, 1)
 	modded.ap_cost_modifier = 1
 	var mod_ok: bool = SkillCatalog.find("strike").ap_cost(modded) == 2 and SkillCatalog.find("haymaker").ap_cost(modded) == 4 and SkillCatalog.find("move").ap_cost(modded) == 2 and SkillCatalog.find("rest").ap_cost(modded) == 0

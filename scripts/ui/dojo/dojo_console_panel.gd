@@ -188,7 +188,7 @@ func refresh() -> void:
 	var skill: SkillDef = session.selected_skill()
 	var info: String = "[color=#94a3b8]%s[/color]\n%d AP%s • %s stance" % [skill.description, session.skill_ap(skill), (" (incl. +%d switch)" % CombatTypes.STANCE_SWITCH_COST) if skill.switch_cost(hero.current_stance) > 0 else "", CombatTypes.stance_to_string(skill.stance_after(hero.current_stance))]
 	if skill.kind == SkillDef.Kind.ATTACK and session.test_dummy != null:
-		info += " • ~%d dmg on the dummy" % DamageCalculator.expected(hero, session.test_dummy, skill, skill.stance())
+		info += (" • ~%d dmg on the dummy" % DamageCalculator.expected(hero, session.test_dummy, skill, skill.stance())) if skill.deals_damage() else " • No damage"
 	_skill_info.text = info
 	_round_lbl.text = "Round %d • AP %d / %d%s" % [session.round_num, hero.ap, hero.max_ap, " (debt)" if hero.ap < 0 else ""]
 

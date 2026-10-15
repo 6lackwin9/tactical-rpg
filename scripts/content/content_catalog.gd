@@ -476,6 +476,18 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 			errors.append("Heal belongs to SUPPORT skills.")
 	elif not str(e["grant_status"]).is_empty() or DictUtil.to_int(e["heal_base"]) > 0 or DictUtil.to_float(e["heal_mult"]) > 0.0:
 		errors.append("Heal and Grants belong to SUPPORT skills.")
+	var status_id: String = str(e["status_effect"])
+	var magnitude: int = DictUtil.to_int(e["status_magnitude"])
+	if status_id == StatusEffects.WEAKEN:
+		if magnitude < 1 or magnitude > StatusRegistry.cap_of(StatusEffects.WEAKEN):
+			errors.append("weaken needs a magnitude 1-%d" % StatusRegistry.cap_of(StatusEffects.WEAKEN))
+	elif magnitude != 0:
+		errors.append("magnitude only applies to weaken")
+	if kind == "ATTACK" and DictUtil.to_float(e["power_mult"]) <= 0.0:
+		if status_id.is_empty():
+			errors.append("A skill with no damage needs a status")
+		if str(e["area"]) != "NONE":
+			errors.append("A skill with no damage can't be an area attack.")
 	if kind != "ATTACK" and DictUtil.to_int(e["dash_tiles"]) > 0:
 		errors.append("Gap-close tiles belong to ATTACK skills.")
 	if kind != "SUPPORT" and not ContentFactory._strings(e["cleanse_statuses"]).is_empty():

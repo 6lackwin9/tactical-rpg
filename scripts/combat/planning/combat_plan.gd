@@ -706,6 +706,8 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 # Expected hit (DamageCalculator.expected): attack power x Focus x skill x stance
 # matchup (against the target's stance now) x armor. No crit; guard is unknown ahead.
 func estimate_damage(c: Combatant, skill: SkillDef, attacker_stance: CombatTypes.StanceType, foe: Combatant) -> int:
+	if not skill.deals_damage():
+		return 0   # a zero-power attack (intimidate) deals nothing
 	return DamageCalculator.expected(c, foe, skill, attacker_stance)
 
 # ------------------------------------------------------------------------------
