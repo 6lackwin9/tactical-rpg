@@ -55,3 +55,10 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 
 - Skills carry `family` + `tier`; the planner offers each affordable tier (AP = tier's level, within the unit's skill cap) grouped by family ("Mend I / II / III", `PlanOption.group_by_family`). Basics (strike, guard, offhand_jab) are always active.
 - Active loadout: max 5 class families + 3 extra (`StatRules.MAX_CLASS_SLOTS/MAX_EXTRA_SLOTS`); `Combatant.set_loadout` only outside battle (locked by `CombatSession.start`). Empty loadout = unrestricted (hand-built units).
+
+## Engine pieces (M2c-2a2)
+
+- Cleanse: SUPPORT field `cleanse_statuses` (debuff ids or `all`) removes active AND pending debuffs via `SupportRules.apply` (never buffs; combinable with heal and `grant_status`). Planner options list what is removed and warn "Nothing to cleanse". Example `purify`.
+- Disengage: `SkillDef.Kind.DISENGAGE` + `jump_tiles`; `CombatPlan._apply_disengage` picks the landing tile (farthest from the nearest/chosen foe, then shortest jump, nearest centre, lowest x/y; a GOTO step names the tile), `DisengageCommand` jumps (over units, not walls). It is the unit's move for the round (first, refused when rooted), AP = skill level. Example `backflip`.
+- `Area.SWEEP`: the L (1,0) (1,1) (0,1) rotated into the quadrant of a diagonal aim tile; friendly fire as other areas. Example `sweep_kick`.
+- Unarmed: `DamageCalculator` already uses STR+DEX with no weapon; `GearBudget.UNARMED_VALUE` (14) counts for an empty main hand.

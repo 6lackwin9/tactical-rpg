@@ -17,6 +17,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/combat/status/riposte_rules.gd`, `scripts/tests/riposte_test_suite.gd` | riposte counter rules and suite (M2a) | S12 | done |
 | `scripts/core/specs/gear_budget.gd`, `scripts/tests/gear_budget_test_suite.gd` | GearBudget weights, loadout band, soft warnings; suite (M2d) | S3 | done |
 | `scripts/tests/skill_family_test_suite.gd` | skill families (family/tier/basic), planner tier grouping, active loadout (M2c-2a1) | S12 | done |
+| `scripts/combat/actions/disengage_command.gd`, `scripts/tests/engine_pieces_test_suite.gd` | disengage jump command; cleanse / disengage / SWEEP / unarmed suite (M2c-2a2) | S12 | done |
 | `scripts/progression/` | persistent unit state, XP, level-up flow, spend allocation | S7 | placeholder |
 | `scripts/quests/` | quest state machine, flags, rewards (grants passives/skills/items) | S8 | placeholder |
 | `scripts/exploration/` | region maps, location interactions, encounter triggers | S9 | placeholder |

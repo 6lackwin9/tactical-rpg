@@ -59,6 +59,17 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 			entry.status_text = "Position: %s" % str(entry.coord_to)
 		entry.detail_text = "Walked %d of %d planned tiles" % [move.moved_tiles, move.path.size()]
 
+	elif act.command is DisengageCommand:
+		var jump: DisengageCommand = act.command as DisengageCommand
+		entry.category = "MOVE"
+		entry.skill_name = jump.command_name
+		entry.skill_subtype = "Disengage"
+		entry.value_num = jump.moved_tiles
+		entry.coord_to = grid.get_position(act.combatant) if grid != null else Vector2i(-1, -1)
+		entry.outcome_tag = "JUMPED" if jump.landed else "FAILED"
+		entry.status_text = ("Position: %s" % str(entry.coord_to))
+		entry.detail_text = jump.execution_log.trim_prefix("[Disengage] ")
+
 	elif act.command is DefendCommand:
 		var defend: DefendCommand = act.command as DefendCommand
 		entry.category = "DEFEND"
@@ -125,6 +136,8 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 			entry.outcome_tag = "+%d HP" % support.last_heal
 		elif not support.last_status.is_empty():
 			entry.outcome_tag = StatusEffects.display_name(support.last_status).to_upper()
+		elif not support.last_cleansed.is_empty():
+			entry.outcome_tag = "CLEANSED"
 		else:
 			entry.outcome_tag = "EXECUTED"
 		if not support.last_status.is_empty():

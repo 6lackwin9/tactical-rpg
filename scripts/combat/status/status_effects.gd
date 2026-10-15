@@ -114,6 +114,19 @@ static func grant_now(target: Combatant, status: String, rounds: int = 1) -> voi
 	target.statuses[status] = true
 	target.status_rounds_left[status] = maxi(DictUtil.int_of(target.status_rounds_left, status), maxi(1, rounds))
 
+# True when `status` is active now or queued for next round.
+static func has_any(target: Combatant, status: String) -> bool:
+	return target.statuses.has(status) or target.pending_statuses.has(status)
+
+# Removes `status` from the target, active and pending alike. Returns true if anything was removed.
+static func remove(target: Combatant, status: String) -> bool:
+	var found: bool = has_any(target, status)
+	target.statuses.erase(status)
+	target.status_rounds_left.erase(status)
+	target.pending_statuses.erase(status)
+	target.pending_status_rounds.erase(status)
+	return found
+
 # Next-round penalty for overspending: "" or the status it causes.
 static func debt_status(debt: int) -> String:
 	if debt >= DEBT_STUN:

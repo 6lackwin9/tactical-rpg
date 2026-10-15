@@ -30,6 +30,7 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 		RiposteTestSuite.run(),
 		GearBudgetTestSuite.run(),
 		SkillFamilyTestSuite.run(),
+		EnginePiecesTestSuite.run(),
 		run_character_specs_and_inventory_test(),
 		run_gear_equip_and_test_dummy_suite(tree_parent),
 		run_combat_session_flow_test(),

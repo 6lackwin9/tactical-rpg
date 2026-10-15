@@ -19,6 +19,8 @@ var damage: int = 0         # expected hit for attack options
 var switches_target: bool = false
 var heal: int = 0           # expected HP restored (support options)
 var grants: String = ""     # buff status the option grants (support options)
+var cleanses: Array[String] = []   # debuffs the option would remove right now (support options)
+var jump_to: Vector2i = Vector2i(-1, -1)   # disengage options: the landing tile the planner chose
 
 # The skill family of the option's step ("" for steps without a skill, e.g. withdraw) and its tier.
 func family() -> String:
@@ -71,8 +73,15 @@ func cost_text() -> String:
 		text += " • ~%d dmg" % damage
 	if heal > 0:
 		text += " • ~+%d HP" % heal
+	if not cleanses.is_empty():
+		var names: Array[String] = []
+		for status: String in cleanses:
+			names.append(StatusEffects.display_name(status))
+		text += " • cleanses %s" % ", ".join(names)
 	if not grants.is_empty():
 		text += " • %s" % StatusEffects.display_name(grants)
+	if jump_to != Vector2i(-1, -1):
+		text += " • jumps to %s" % str(jump_to)
 	if not warning.is_empty():
 		text += "\n⚠ " + warning
 	return text

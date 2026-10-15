@@ -241,6 +241,11 @@ func _trail(from: Vector2i, entries: Array[PlanEntry], skip: int, marks: Array[V
 	var pos: Vector2i = from
 	for i: int in range(skip, entries.size()):
 		var e: PlanEntry = entries[i]
+		if e.skill.kind == SkillDef.Kind.DISENGAGE and e.pos_after != e.pos_before:
+			pos = e.pos_after   # a jump: the landing tile only, no walked trail
+			trail.append(pos)
+			marks.append(pos)
+			continue
 		if e.skill.kind != SkillDef.Kind.MOVE or e.pos_after == e.pos_before:
 			continue
 		for d: Vector2i in e.path:

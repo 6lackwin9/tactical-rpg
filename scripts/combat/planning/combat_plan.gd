@@ -240,6 +240,8 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 		return "%s isn't unlocked yet (needs skill level %d)." % [step.skill.display_name, step.skill.level]
 	if step.skill != null and not c.knows_skill(step.skill.id):
 		return "%s doesn't know %s." % [c.name, step.skill.display_name]
+	if step.skill != null and step.skill.kind == SkillDef.Kind.DISENGAGE:
+		return _apply_disengage(c, st, step, index)
 	match step.mode:
 		PlanStep.Mode.SELF:
 			if step.skill.kind == SkillDef.Kind.SUPPORT:
@@ -430,6 +432,106 @@ func _apply_dash(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 		st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - entry.est_damage
 	return attack_problem
 
+# Disengage: a jump of up to `jump_tiles` tiles that ends farther from the threat (the chosen
+# foe in step.target, otherwise the nearest one) than the unit stands now. Landing tiles are
+# walkable, free (planned allies included), non-exit tiles reachable through walkable tiles in at
+# most jump_tiles steps (units may be leapt over, walls may not). A GOTO step names the tile
+# (step.cell); otherwise the best one is chosen and stored in step.cell: the farthest from the
+# threat, then the shortest jump, then nearest the arena centre, then lowest x, then lowest y.
+# The jump is the unit's move for the round (first, once, refused when rooted); AP = skill level.
+func _apply_disengage(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	var skill: SkillDef = step.skill
+	var problem: String = _move_problem(c, st)
+	if not problem.is_empty():
+		return "%s can't disengage: %s" % [c.name, problem]
+	var grid: CombatGrid = context.grid
+	var threat: Combatant = step.target
+	if threat == null:
+		var best_dist: int = 1 << 20
+		for foe: Combatant in context.foes_of(c):
+			if foe.is_active() and grid.has_combatant(foe):
+				var d: int = grid.get_distance(st.pos, grid.get_position(foe))
+				if d < best_dist:
+					best_dist = d
+					threat = foe
+	if threat == null or not threat.is_active() or not grid.has_combatant(threat) or not context.foes_of(c).has(threat):
+		return "No enemy to jump away from."
+	var threat_pos: Vector2i = grid.get_position(threat)
+	var here: int = grid.get_distance(st.pos, threat_pos)
+	var blocked: Dictionary = blocked_cells(c)
+	var reachable: Dictionary = jump_tiles_from(st.pos, skill.jump_tiles)
+	var dest: Vector2i = NO_CELL
+	var dest_steps: int = 0
+	if step.cell != NO_CELL:
+		if not reachable.has(step.cell) or blocked.has(step.cell):
+			return "%s can't jump to %s (walls, other units or more than %d tiles)." % [c.name, str(step.cell), skill.jump_tiles]
+		if grid.get_distance(step.cell, threat_pos) <= here:
+			return "%s is not away from %s: a disengage must end farther from the enemy." % [str(step.cell), threat.name]
+		dest = step.cell
+		dest_steps = DictUtil.int_of(reachable, dest)
+	else:
+		for key: Variant in reachable:
+			var cell: Vector2i = key
+			if blocked.has(cell):
+				continue
+			var d: int = grid.get_distance(cell, threat_pos)
+			if d <= here:
+				continue
+			if dest == NO_CELL or _better_jump(grid, cell, d, DictUtil.int_of(reachable, cell), dest, grid.get_distance(dest, threat_pos), dest_steps):
+				dest = cell
+				dest_steps = DictUtil.int_of(reachable, cell)
+		if dest == NO_CELL:
+			return "No free tile within %d to jump to away from %s." % [skill.jump_tiles, threat.name]
+		step.cell = dest
+	var from: Vector2i = st.pos
+	var add_problem: String = _add_entry(c, st, skill, index, threat)
+	if add_problem.is_empty():
+		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		entry.tiles = dest_steps
+		entry.pos_before = from
+		entry.pos_after = dest
+		entry.goal = dest
+		st.pos = dest
+		st.moved = true
+		st.positioned = true
+	return add_problem
+
+# Tiebreak of the auto-chosen landing tile (see _apply_disengage): true when `a` beats `b`.
+func _better_jump(grid: CombatGrid, a: Vector2i, a_dist: int, a_steps: int, b: Vector2i, b_dist: int, b_steps: int) -> bool:
+	if a_dist != b_dist:
+		return a_dist > b_dist
+	if a_steps != b_steps:
+		return a_steps < b_steps
+	var a_centre: int = grid.get_distance(a, CombatGrid.CENTER)
+	var b_centre: int = grid.get_distance(b, CombatGrid.CENTER)
+	if a_centre != b_centre:
+		return a_centre < b_centre
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y < b.y
+
+# Tiles reachable from `from` in at most `max_steps` steps over walkable, non-exit tiles, ignoring
+# whoever stands on them (a jump leaps over units): {cell: steps}. `from` itself is excluded.
+func jump_tiles_from(from: Vector2i, max_steps: int) -> Dictionary:
+	var grid: CombatGrid = context.grid
+	var depth: Dictionary = {from: 0}
+	var queue: Array[Vector2i] = [from]
+	var head: int = 0
+	while head < queue.size():
+		var cur: Vector2i = queue[head]
+		head += 1
+		var cur_depth: int = DictUtil.int_of(depth, cur)
+		if cur_depth >= max_steps:
+			continue
+		for d: Vector2i in DIRS:
+			var nxt: Vector2i = cur + d
+			if depth.has(nxt) or not grid.is_valid_coord(nxt) or not grid.is_walkable(nxt) or grid.is_exit_tile(nxt):
+				continue
+			depth[nxt] = cur_depth + 1
+			queue.append(nxt)
+	depth.erase(from)
+	return depth
+
 # A SUPPORT skill cast on the caster itself (SELF or ALLY_OR_SELF skills).
 func _apply_support_self(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 	if step.skill.target_mode == SkillDef.TargetMode.ALLY:
@@ -438,6 +540,7 @@ func _apply_support_self(c: Combatant, st: SimState, step: PlanStep, index: int)
 	if problem.is_empty():
 		var entry: PlanEntry = st.entries[st.entries.size() - 1]
 		entry.est_heal = SupportRules.effective_heal(c, SupportRules.heal_amount(c, step.skill))
+		entry.est_cleanse = SupportRules.cleansable(c, step.skill)
 	return problem
 
 # A SUPPORT skill on a friendly unit. Out of reach, the caster walks into the skill's
@@ -475,6 +578,7 @@ func _apply_ally(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 	if add_problem.is_empty():
 		var entry: PlanEntry = st.entries[st.entries.size() - 1]
 		entry.est_heal = SupportRules.effective_heal(ally, SupportRules.heal_amount(c, skill))
+		entry.est_cleanse = SupportRules.cleansable(ally, skill)
 	return add_problem
 
 # Area attack aimed at a tile: no auto-move, the tile must already be in reach.
@@ -489,7 +593,9 @@ func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 	var dist: int = grid.get_distance(st.pos, step.cell)
 	if skill.area == SkillDef.Area.LINE and (dist != 1):
 		return "%s needs a tile right next to %s." % [skill.display_name, c.name]
-	if skill.area != SkillDef.Area.LINE and (dist < band.x or dist > band.y):
+	if skill.area == SkillDef.Area.SWEEP and (absi(step.cell.x - st.pos.x) != 1 or absi(step.cell.y - st.pos.y) != 1):
+		return "%s is aimed at a diagonal neighbour of %s (picks the quadrant)." % [skill.display_name, c.name]
+	if skill.area != SkillDef.Area.LINE and skill.area != SkillDef.Area.SWEEP and (dist < band.x or dist > band.y):
 		return "That tile is out of reach for %s (distance %d, needs %d-%d)." % [skill.display_name, dist, band.x, band.y]
 	var cells: Array[Vector2i] = []
 	for cell: Vector2i in skill.area_cells(st.pos, step.cell):
@@ -670,7 +776,8 @@ func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 	if steps.is_empty() or not c.is_active():
 		return {}
 	var mode: PlanStep.Mode = steps[0].mode
-	if mode != PlanStep.Mode.MOVE and mode != PlanStep.Mode.GOTO and mode != PlanStep.Mode.WITHDRAW and mode != PlanStep.Mode.ENGAGE and mode != PlanStep.Mode.ALLY:
+	var jumps: bool = steps[0].skill != null and steps[0].skill.kind == SkillDef.Kind.DISENGAGE
+	if not jumps and mode != PlanStep.Mode.MOVE and mode != PlanStep.Mode.GOTO and mode != PlanStep.Mode.WITHDRAW and mode != PlanStep.Mode.ENGAGE and mode != PlanStep.Mode.ALLY:
 		return {}
 	var previous: Variant = _blocked_override
 	_blocked_override = blocked
@@ -682,7 +789,7 @@ func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 	var leave: int = -1
 	var last: PlanEntry = null
 	for e: PlanEntry in st.entries:
-		if e.skill.kind == SkillDef.Kind.MOVE:
+		if e.skill.kind == SkillDef.Kind.MOVE or (e.skill.kind == SkillDef.Kind.DISENGAGE and e.pos_after != e.pos_before):
 			if leave < 0:
 				leave = e.end_block()
 			last = e
@@ -729,6 +836,8 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, c):
 			if skill.target_mode != SkillDef.TargetMode.ALLY:
 				out.append(_probe(c, PlanStep.self_skill(skill), base))
+		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.DISENGAGE, cap, c):
+			out.append(_probe(c, PlanStep.self_skill(skill), base))   # auto landing tile, away from the nearest foe
 	elif context.friends_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
 		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, c):
 			if skill.targets_ally():
@@ -736,6 +845,8 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 	elif context.foes_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
 		for skill: SkillDef in SkillCatalog.single_attacks(c, cap):
 			out.append(_probe(c, PlanStep.engage(skill, target), base))
+		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.DISENGAGE, cap, c):
+			out.append(_probe(c, PlanStep.engage(skill, target), base))   # jump away from this foe
 		var foe_cell: Vector2i = context.grid.get_position(target)
 		for skill: SkillDef in SkillCatalog.area_attacks(cap, c):
 			out.append(_probe(c, PlanStep.area_at(skill, foe_cell), base))
@@ -751,6 +862,8 @@ func cell_options(c: Combatant, cell: Vector2i) -> Array[PlanOption]:
 		out.append(_probe(c, PlanStep.withdraw(), base))
 		return out
 	out.append(_probe(c, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), cell), base))
+	for jump: SkillDef in SkillCatalog.available(SkillDef.Kind.DISENGAGE, context.skill_cap_of(c), c):
+		out.append(_probe(c, PlanStep.go_to(jump, cell), base))
 	for skill: SkillDef in SkillCatalog.area_attacks(context.skill_cap_of(c), c):
 		out.append(_probe(c, PlanStep.area_at(skill, cell), base))
 	return out
@@ -788,11 +901,21 @@ func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 		if e.skill.kind == SkillDef.Kind.ATTACK:
 			option.damage = e.est_damage
 			hits_allies += e.hits_allies
+		if e.skill.kind == SkillDef.Kind.DISENGAGE:
+			option.jump_to = e.pos_after
 		if e.skill.kind == SkillDef.Kind.SUPPORT:
 			option.heal = e.est_heal
 			option.grants = e.skill.grant_status
-			if e.skill.heals() and e.est_heal <= 0 and e.skill.grant_status.is_empty():
-				support_note = "Nothing to heal: %s is at full HP." % (e.target.name if e.target != null else "the target")
+			option.cleanses = e.est_cleanse
+			var who: String = e.target.name if e.target != null else "the target"
+			var useful: bool = (e.skill.heals() and e.est_heal > 0) or (e.skill.cleanses() and not e.est_cleanse.is_empty())
+			if e.skill.grant_status.is_empty() and not useful and (e.skill.heals() or e.skill.cleanses()):
+				if e.skill.heals() and e.skill.cleanses():
+					support_note = "Nothing to heal or cleanse: %s is at full HP with no debuffs to remove." % who
+				elif e.skill.heals():
+					support_note = "Nothing to heal: %s is at full HP." % who
+				else:
+					support_note = "Nothing to cleanse: %s has no debuffs to remove." % who
 	var debt: int = st.debt()
 	if debt > 0:
 		var penalty: String = StatusEffects.debt_status(debt)

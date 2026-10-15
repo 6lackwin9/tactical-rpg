@@ -22,6 +22,9 @@ const W_EXTRA_BLOCK: float = -3.0
 const TARGET_BUDGET: float = 23.0
 const TOLERANCE: float = 0.20
 
+# Value of an empty main hand (bare hands): about a typical one-handed weapon (shortsword 14, tome 14, stiletto 15, knuckles 12).
+const UNARMED_VALUE: float = 14.0
+
 static func band_low() -> float:
 	return TARGET_BUDGET * (1.0 - TOLERANCE)
 
@@ -62,6 +65,10 @@ static func loadout_breakdown(class_entry: Dictionary) -> Array[Dictionary]:
 			continue
 		rows.append({"slot": slot, "id": id, "name": str(item.get("name", id)), "value": item_value(item),
 			"special": is_special(item), "note": str(item.get("special_note", ""))})
+	# Bare hands are a weapon of sorts (STR+DEX unit power): an empty main hand counts UNARMED_VALUE, so an
+	# unarmed class (brawler-style) isn't read as under budget. A class with no gear at all stays unjudged.
+	if not rows.is_empty() and str(class_entry.get("main_hand", "")).is_empty():
+		rows.append({"slot": "main_hand", "id": "", "name": "Unarmed", "value": UNARMED_VALUE, "special": false, "note": ""})
 	return rows
 
 # Sum over all slots (special items included).

@@ -18,14 +18,22 @@ extends RefCounted
 
 # SUPPORT: heals and/or grants a buff status to itself or a friendly unit (SupportRules,
 # SupportCommand). It keeps the unit's stance like Move does (no switch cost).
-enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS, SUPPORT }
+#
+# DISENGAGE (M2c-2a2): a jump of up to `jump_tiles` tiles AWAY from the nearest (or a chosen) enemy.
+# It is the unit's move for the round (first in the sequence, refused when rooted), costs AP = the
+# skill's level (not per tile), leaps over units but not walls, and keeps the stance like Move.
+enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS, SUPPORT, DISENGAGE }
 
 # SUPPORT targeting: the caster only, a friendly unit other than the caster, or either.
 enum TargetMode { SELF, ALLY, ALLY_OR_SELF }
 
 # Area attacks target a tile: PLUS = tile + 4 neighbours, BURST = 3x3, LINE = 3 tiles
 # straight out from the caster (aim at an adjacent tile).
-enum Area { NONE, PLUS, BURST, LINE }
+# SWEEP (Brawler): an L of three tiles around the caster, (1,0) (1,1) (0,1) rotated into the quadrant
+# of the aim tile, which is a DIAGONAL neighbour of the caster.
+enum Area { NONE, PLUS, BURST, LINE, SWEEP }
+
+const CLEANSE_ALL: String = "all"   # keyword in cleanse_statuses: every debuff
 
 const SUPPORT_REACH: int = 3   # default reach of a SUPPORT skill (or the caster's attack range if longer)
 const MIN_LEVEL: int = 1
@@ -57,6 +65,8 @@ var heal_stat: String = ""      # SUPPORT: stat the heal scales with ("INT" / "K
 var heal_base: int = 0          # SUPPORT: flat heal
 var heal_mult: float = 0.0      # SUPPORT: heal per point of heal_stat (see SupportRules.heal_amount)
 var grant_status: String = ""   # SUPPORT: buff status given to the target (StatusEffects.buffs())
+var cleanse_statuses: Array[String] = []   # SUPPORT: debuffs removed from the target, active and pending (CLEANSE_ALL = every debuff; empty = none)
+var jump_tiles: int = 0         # DISENGAGE: how many tiles the jump covers at most
 var learned_only: bool = false  # unrestricted (hand-built) units don't know it unless they learn it
 var family: String = ""         # skill family (tiers of one skill); empty = its own id (see family_id())
 var tier: int = 1               # position in the family (1..5); each tier is its own skill with its own AP, blocks and power
@@ -101,7 +111,7 @@ func stance() -> CombatTypes.StanceType:
 	return CombatTypes.StanceType.NEUTRAL
 
 func keeps_stance() -> bool:
-	return kind == Kind.MOVE or kind == Kind.TARGET or kind == Kind.STATUS or (kind == Kind.SUPPORT and stance_override < 0)
+	return kind == Kind.MOVE or kind == Kind.TARGET or kind == Kind.STATUS or kind == Kind.DISENGAGE or (kind == Kind.SUPPORT and stance_override < 0)
 
 func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
 	return current if keeps_stance() else stance()
@@ -115,6 +125,20 @@ func switch_cost(current: CombatTypes.StanceType) -> int:
 # True when a SUPPORT skill heals.
 func heals() -> bool:
 	return kind == Kind.SUPPORT and (heal_base > 0 or heal_mult > 0.0)
+
+# True when a SUPPORT skill removes debuffs.
+func cleanses() -> bool:
+	return kind == Kind.SUPPORT and not cleanse_statuses.is_empty()
+
+# The debuff ids this skill removes (the keyword expands to every debuff), in StatusEffects.debuffs() order.
+func cleanse_list() -> Array[String]:
+	var out: Array[String] = []
+	if kind != Kind.SUPPORT:
+		return out
+	for status: String in StatusEffects.debuffs():
+		if cleanse_statuses.has(CLEANSE_ALL) or cleanse_statuses.has(status):
+			out.append(status)
+	return out
 
 # True when the skill must be aimed at a friendly unit other than the caster (or may be).
 func targets_ally() -> bool:
@@ -130,6 +154,8 @@ func icon() -> String:
 	if kind == Kind.SUPPORT:
 		return "+"
 	match kind:
+		Kind.DISENGAGE:
+			return "⤴"
 		Kind.ATTACK:
 			return "⚔"
 		Kind.DEFEND:
@@ -149,7 +175,7 @@ func icon() -> String:
 func reach_for(c: Combatant) -> Vector2i:
 	if reach_max > 0:
 		return Vector2i(reach_min, reach_max)
-	if offhand or area == Area.LINE:
+	if offhand or area == Area.LINE or area == Area.SWEEP:
 		return Vector2i(1, 1)
 	if c.attack_range > 1:
 		return Vector2i(2, maxi(3, c.attack_range))
@@ -172,6 +198,9 @@ func area_cells(from: Vector2i, cell: Vector2i) -> Array[Vector2i]:
 			var dir: Vector2i = cell - from
 			for i: int in range(1, 4):
 				cells.append(from + dir * i)
+		Area.SWEEP:
+			var quadrant := Vector2i(signi(cell.x - from.x), signi(cell.y - from.y))
+			cells = [from + Vector2i(quadrant.x, 0), from + quadrant, from + Vector2i(0, quadrant.y)]
 		_:
 			cells = [cell]
 	return cells

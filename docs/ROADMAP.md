@@ -11,7 +11,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | # | Area | Status | Depends on | Notes |
 | --- | --- | --- | --- | --- |
 | S1 | Combat core: block resolver, planner, stances, AP, damage formula, statuses | balance-ready | - | `DamageCalculator` is the only formula |
-| S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | in-progress (M2c-1 roster data and M2c-2a1 skill families/loadout done; M2c-2a2 engine pieces, then M2c-2b content next) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
+| S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | in-progress (M2c-1 roster, M2c-2a1 families/loadout and M2c-2a2 engine pieces done; M2c-2b content next) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
 | S3 | Gear and inventory: requirements, tiers, burden, carry, stash | done (gear budget guard added in M2d) | S1 | Gear budget per class is an open balance lever |
 | S4 | Enemy AI (roles, presets, targeting) | done (M1: kiting, no idle turns, support heals, reckless profile) | S1 | Shaman/ranger AI wastes turns: candidate fix |
 | S5 | Content catalog + Content Forge | done | - | Data pipeline for S2/S3/S6 |
@@ -131,3 +131,9 @@ Q1 May S1 lose `balance-ready` if S12 needs a formula change? Q2 Gear budget: so
 | Id | Item | When | Rules |
 | --- | --- | --- | --- |
 | R1 | Split oversized test files: `arena_test_suite.gd` (~1400 lines, older groups: combat UI, character specs, gear/dummy, session flow, art/terrain, planning/AI) into one file per group with a small runner; later `combat_extensions_test_suite.gd` (~800) by feature and `dojo_assertions.gd` (~770) | after M2c merges | Pure refactor on its own branch and review; no behaviour or number changes; total assertion count before = after |
+
+## Open engine items (tracked)
+
+- AI hooks: TacticalAI ignores DISENGAGE, SWEEP (area) and cleanse-only skills (needed if enemies should use them) - schedule with the AI follow-ups or M2c-2b.
+- Disengage "once per round" and "after a MOVE" are not enforced/modelled (same as plain MOVE).
+- Skill-tier picker is not rendered in the planner UI yet (grouping API exists).

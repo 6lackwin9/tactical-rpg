@@ -68,7 +68,8 @@ static func _skill(e: Dictionary) -> String:
 			t += _line("Reach", "melee unit %d-%d, ranged unit %d-%d" % [mb.x, mb.y, rb.x, rb.y])
 			t += _line("Damage", "attack power x %.2f  (~%d at power 20, ~%d at power 40; then stance, crit, guard, armor)" % [s.power_mult, roundi(20.0 * s.power_mult), roundi(40.0 * s.power_mult)])
 			if s.is_area():
-				t += _line("Area", "%s: %d tiles, hits allies too" % [SkillDef.Area.keys()[s.area], s.area_cells(Vector2i(4, 6), Vector2i(4, 5)).size()])
+				var aim: Vector2i = Vector2i(5, 5) if s.area == SkillDef.Area.SWEEP else Vector2i(4, 5)
+				t += _line("Area", "%s: %d tiles, hits allies too" % [SkillDef.Area.keys()[s.area], s.area_cells(Vector2i(4, 6), aim).size()])
 			if not s.status_effect.is_empty():
 				t += _line("Status", "%s on hit (potency %d%%), next round" % [StatusEffects.display_name(s.status_effect), s.status_potency])
 			if s.dash_tiles > 0:
@@ -81,11 +82,18 @@ static func _skill(e: Dictionary) -> String:
 			t += _line("Boost", "x%.2f attack for %d rounds" % [s.boost, s.boost_rounds])
 		SkillDef.Kind.REST:
 			t += _line("Recover", "+%d AP, back to Neutral" % s.recover_ap)
+		SkillDef.Kind.DISENGAGE:
+			t += _line("Jump", "up to %d tiles away from the nearest (or a chosen) enemy; leaps over units, not walls; the unit's move for the round (first, refused when rooted); AP = level, keeps the stance" % s.jump_tiles)
 		SkillDef.Kind.SUPPORT:
 			var band: Vector2i = s.support_reach(Combatant.new("caster", 50, 12, 1))
 			t += _line("Targets", "%s, reach %d-%d" % [SkillDef.TargetMode.keys()[s.target_mode], band.x, band.y])
 			if s.heals():
 				t += _line("Heal", "%d + %s x %.2f (SupportRules, never the damage formula)" % [s.heal_base, s.heal_stat if not s.heal_stat.is_empty() else "-", s.heal_mult])
+			if s.cleanses():
+				var names: Array[String] = []
+				for status: String in s.cleanse_list():
+					names.append(StatusEffects.display_name(status))
+				t += _line("Cleanses", "%s from the target, active and pending (never buffs)" % ", ".join(names))
 			if not s.grant_status.is_empty():
 				t += _line("Grants", "%s next round, %d round%s" % [StatusEffects.display_name(s.grant_status), s.status_rounds, "" if s.status_rounds == 1 else "s"])
 	t += "\n%s\n" % s.description

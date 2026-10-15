@@ -26,6 +26,16 @@ static func effective_heal(target: Combatant, amount: int) -> int:
 		return 0
 	return clampi(amount, 0, target.max_hp - target.hp)
 
+# Debuffs `skill` would remove from `target` right now (active or pending), in StatusEffects.debuffs() order.
+static func cleansable(target: Combatant, skill: SkillDef) -> Array[String]:
+	var out: Array[String] = []
+	if target == null or skill == null:
+		return out
+	for status: String in skill.cleanse_list():
+		if StatusEffects.has_any(target, status):
+			out.append(status)
+	return out
+
 # True when `target` is a legal target for `skill` cast by `caster`, ignoring distance.
 static func target_problem(caster: Combatant, skill: SkillDef, target: Combatant, friends: Array[Combatant]) -> String:
 	if target == null or not target.is_active():
@@ -44,6 +54,11 @@ static func target_problem(caster: Combatant, skill: SkillDef, target: Combatant
 static func apply(caster: Combatant, target: Combatant, skill: SkillDef, rounds: int) -> Dictionary:
 	var healed: int = 0
 	var granted: String = ""
+	var cleansed: Array[String] = []
+	# Cleanse first: a skill that both removes and grants the same kind of status keeps the new one.
+	for status: String in skill.cleanse_list():
+		if StatusEffects.remove(target, status):
+			cleansed.append(status)
 	if skill.heals():
 		var before: int = target.hp
 		target.heal(heal_amount(caster, skill))
@@ -51,4 +66,4 @@ static func apply(caster: Combatant, target: Combatant, skill: SkillDef, rounds:
 	if not skill.grant_status.is_empty():
 		StatusEffects.queue(target, skill.grant_status, rounds)
 		granted = skill.grant_status
-	return {"healed": healed, "status": granted}
+	return {"healed": healed, "status": granted, "cleansed": cleansed}

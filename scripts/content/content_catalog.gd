@@ -452,8 +452,12 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 		var heal_mult: float = DictUtil.to_float(e["heal_mult"])
 		var heal_base: int = DictUtil.to_int(e["heal_base"])
 		var grant: String = str(e["grant_status"])
-		if heal_base <= 0 and heal_mult <= 0.0 and grant.is_empty():
-			errors.append("A support skill needs a heal (base or per-stat) or a granted status.")
+		var cleanse: Array[String] = ContentFactory._strings(e["cleanse_statuses"])
+		if heal_base <= 0 and heal_mult <= 0.0 and grant.is_empty() and cleanse.is_empty():
+			errors.append("A support skill needs a heal (base or per-stat), a cleanse or a granted status.")
+		for status: String in cleanse:
+			if status != SkillDef.CLEANSE_ALL and not StatusEffects.debuffs().has(status):
+				errors.append("Cleanses: '%s' is not a debuff status (%s, or '%s')." % [status, ", ".join(StatusEffects.debuffs()), SkillDef.CLEANSE_ALL])
 		if heal_mult > 0.0 and not SupportRules.HEAL_STATS.has(heal_stat):
 			errors.append("Heal per stat point needs a heal stat (INT or KNOW).")
 		if heal_mult <= 0.0 and not heal_stat.is_empty():
@@ -474,6 +478,16 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 		errors.append("Heal and Grants belong to SUPPORT skills.")
 	if kind != "ATTACK" and DictUtil.to_int(e["dash_tiles"]) > 0:
 		errors.append("Gap-close tiles belong to ATTACK skills.")
+	if kind != "SUPPORT" and not ContentFactory._strings(e["cleanse_statuses"]).is_empty():
+		errors.append("Cleanses belongs to SUPPORT skills.")
+	if kind == "DISENGAGE":
+		if DictUtil.to_int(e["jump_tiles"]) < 1:
+			errors.append("A disengage skill needs jump tiles of at least 1.")
+	elif DictUtil.to_int(e["jump_tiles"]) > 0:
+		errors.append("Jump tiles belong to DISENGAGE skills.")
+	if kind == "ATTACK" and str(e["area"]) == "SWEEP":
+		if DictUtil.to_int(e["dash_tiles"]) > 0 or DictUtil.to_int(e["reach_max"]) > 1:
+			errors.append("SWEEP hits the L of tiles around you; leave reach at 0 or 1 and no gap-close.")
 	if kind == "ATTACK":
 		if DictUtil.to_int(e["dash_tiles"]) > 0:
 			if str(e["area"]) != "NONE":

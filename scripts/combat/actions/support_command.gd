@@ -16,6 +16,7 @@ var est_heal: int = 0           # planner's expected heal (clamped to missing HP
 # Filled in by execute() (read by the log).
 var last_heal: int = 0
 var last_status: String = ""
+var last_cleansed: Array[String] = []
 var failed: bool = false
 
 func _init(p_source: Combatant, p_target: Combatant, p_skill: SkillDef, p_grid: CombatGrid, p_block_cost: int = 1) -> void:
@@ -40,6 +41,7 @@ func can_execute() -> bool:
 func execute() -> void:
 	last_heal = 0
 	last_status = ""
+	last_cleansed = []
 	failed = false
 	if not source.is_active():
 		failed = true
@@ -56,9 +58,15 @@ func execute() -> void:
 	var result: Dictionary = SupportRules.apply(source, target, skill, skill.status_rounds)
 	last_heal = DictUtil.to_int(result["healed"])
 	last_status = str(result["status"])
+	last_cleansed = ContentFactory._strings(result["cleansed"])
 	var parts: Array[String] = []
 	if skill.heals():
 		parts.append("healed %d (HP %d/%d)" % [last_heal, target.hp, target.max_hp])
+	if skill.cleanses():
+		var names: Array[String] = []
+		for status: String in last_cleansed:
+			names.append(StatusEffects.display_name(status))
+		parts.append("cleansed %s" % (", ".join(names) if not names.is_empty() else "nothing"))
 	if not last_status.is_empty():
 		parts.append("%s next round%s" % [StatusEffects.display_name(last_status), "" if skill.status_rounds <= 1 else (" for %d rounds" % skill.status_rounds)])
 	var who: String = "themselves" if target == source else target.name

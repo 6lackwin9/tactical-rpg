@@ -60,6 +60,8 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.heal_base = DictUtil.to_int(e["heal_base"])
 	s.heal_mult = DictUtil.to_float(e["heal_mult"])
 	s.grant_status = str(e["grant_status"])
+	s.cleanse_statuses = _strings(e["cleanse_statuses"])
+	s.jump_tiles = DictUtil.to_int(e["jump_tiles"])
 	s.learned_only = DictUtil.to_bool(e["learned_only"])
 	s.family = "" if str(e["family"]) == s.id else str(e["family"])
 	s.tier = DictUtil.to_int(e["tier"], 1)
@@ -78,6 +80,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"boost": s.boost, "boost_rounds": s.boost_rounds, "recover_ap": s.recover_ap,
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
 		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
+		"cleanse_statuses": s.cleanse_statuses, "jump_tiles": s.jump_tiles,
 		"family": s.family, "tier": s.tier, "basic": s.basic,
 	})
 

@@ -24,6 +24,7 @@ var skill_ap: int = 0                     # AP for the skill itself
 var blocks_override: int = 0               # MOVE: 1-2 blocks depending on the path length (0 = the skill's own)
 var est_damage: int = 0                   # ATTACK: expected hit (DamageCalculator.expected); area: total on foes
 var est_heal: int = 0                     # SUPPORT: expected HP restored (clamped to the target's missing HP)
+var est_cleanse: Array[String] = []       # SUPPORT: debuffs the cast would remove from its target right now
 var cells: Array[Vector2i] = []           # ATTACK (area): tiles hit
 var hits_allies: int = 0                  # ATTACK (area): allies standing in the area (friendly fire)
 var status_name: String = ""               # STATUS: the status that took this block
@@ -88,6 +89,8 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			walk.goal = goal
 			walk.approach_target = target
 			command = walk
+		SkillDef.Kind.DISENGAGE:
+			command = DisengageCommand.new(actor, grid, pos_after, skill.jump_tiles, skill.blocks)
 		SkillDef.Kind.TARGET:
 			command = TargetCommand.new(actor, target, 2)
 		_:

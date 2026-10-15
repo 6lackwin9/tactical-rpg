@@ -135,6 +135,19 @@ func move_combatant(combatant: Combatant, offset: Vector2i) -> bool:
 	print("[%s] moved from %s to %s." % [combatant.name, str(current_pos), str(target_pos)])
 	return true
 
+# Jump: puts the combatant on `coord` if it is a valid, walkable, free, non-exit tile (intermediate
+# tiles don't matter). Returns false and changes nothing otherwise.
+func jump_combatant(combatant: Combatant, coord: Vector2i) -> bool:
+	if not combatant.is_active() or not combatant_positions.has(combatant):
+		return false
+	if not is_valid_coord(coord) or not is_walkable(coord) or is_exit_tile(coord) or is_occupied(coord):
+		return false
+	var from_pos: Vector2i = get_position(combatant)
+	combatant_positions[combatant] = coord
+	combatant_moved.emit(combatant, from_pos, coord)
+	print("[%s] jumped from %s to %s." % [combatant.name, str(from_pos), str(coord)])
+	return true
+
 ## Deploys combatants in a radial pattern centered around CENTER (4, 4).
 ## Ensures every combatant is positioned so that its distance to CENTER <= combatant.attack_range.
 func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> void:
