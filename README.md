@@ -431,6 +431,10 @@ Skills are grouped into families with tiers chosen at planning time (higher tier
 
 Basic skills are now six single-tier skills (strike, guard, move, rest, switch_target, offhand_jab); the old variants (power strike, heavy blow, brace, fortress, deep focus) are gone. New: a `StatusRegistry` for all statuses and stacking rules, the `unarmed` skill token, derived weapon hands (`main_1h`, `main_2h`, `off`), and a `skill_potency` passive hook. Tested in `status_registry_test_suite.gd` and `foundation_test_suite.gd`.
 
+### Rest and stance (B1)
+
+Rest now puts the unit in Tactical stance (free entry). The skill after Rest pays the usual `CombatTypes.STANCE_SWITCH_COST` (1) only if its stance differs: Rest then Focus has no switch cost, Rest then an attack or Defend costs +1.
+
 ### Agent workflow tools
 
 `CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.

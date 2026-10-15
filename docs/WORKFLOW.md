@@ -70,3 +70,5 @@ Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many t
 - Parallel runs need separate git worktrees (one per concurrent builder, one read-only `main` worktree for balance); `tools/fc.sh` logs go to a per-worktree folder, sims use per-process sandboxes. The first Godot run in a new worktree imports the project (one-time delay).
 - Schema-first handshake: the logic-builder merges the schema slice first; the asset-builder then fills data in parallel with the remaining logic work (different folders, clean merges).
 - Builders end with a "docs delta" so the planner can update README, GAME_BRIEF, STRUCTURE and DECISIONS quickly.
+
+| B1 rest to tactical (parallel pilot: logic-builder in a worktree + design-brainstorm writing C1/D1/M2C2B specs 131k / 7) | 47k / 10 | none (tiny change; fc.sh all re-run after rebase) | merged (see git log: B1) |
