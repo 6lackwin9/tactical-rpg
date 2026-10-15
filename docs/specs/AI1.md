@@ -63,3 +63,8 @@ None.
 
 1. Should enemies use the Riposte buff at all (rule 8)? It makes warriors on the enemy side slower to kill and may need a stance rule check; default: yes, once per round only when above `defend_below`. Drop rule 8 if you prefer keeping enemy tanks plain.
 2. Area attacks that would hit allies: forbidden (default). Allow when foes hit >= 3 and allies hit == 1?
+
+## Answers (user, 2026-10-16)
+
+1. Enemy AI uses the riposte buff (default rule 8: once per round, only when above its defend threshold).
+2. The AI never picks an area attack that would hit its own side (default); the engine still applies friendly fire to everyone, as today.

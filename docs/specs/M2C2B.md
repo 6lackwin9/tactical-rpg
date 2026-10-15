@@ -6,7 +6,7 @@ Lane: asset (plus the small logic prerequisite M2C2B-L and the test updates, log
 
 ## Goal
 
-Author the class skill content under the final skill model: every class family has explicit tiers 1-3, advanced families are separate families (base AP 3), basics are the six single-tier skills, the default active loadout is the first 5 class families of the path (max 5 class families + 3 extra, basics free), the unarmed token is used by the Brawler, the Mage has no volley, and the Warrior's default 5 are taunt_shout, riposte, shield_bash, intimidate, sunder. Source: `docs/M2C2_SKILL_DRAFT.md` v2 plus Revision 3 with the 2026-10-15/16 answers applied (DECISIONS.md rows 'M2c-2b design answers', 'Basics v3', 'Weapon hands', 'Riposte tuning', 'Status registry', 'Tier numbers', 'Slice A foundation'). All numbers are starting values for the balance pass (BAL1); no sims were run.
+Author the class skill content under the final skill model: every class family has explicit tiers 1-3, advanced families are separate families (base AP 3), basics are the six single-tier skills, the default active loadout is the first 5 class families of the path (max 5 class families + 3 extra, basics free), the unarmed token is used by the Brawler, the Mage has no volley, and the Warrior's default 5 are taunt_shout, riposte, shield_bash, intimidate, sunder. Source: `docs/archive/M2C2_SKILL_DRAFT.md (archived)` v2 plus Revision 3 with the 2026-10-15/16 answers applied (DECISIONS.md rows 'M2c-2b design answers', 'Basics v3', 'Weapon hands', 'Riposte tuning', 'Status registry', 'Tier numbers', 'Slice A foundation'). All numbers are starting values for the balance pass (BAL1); no sims were run.
 
 ## Schema contract (logic lane)
 

@@ -5,6 +5,7 @@
 #   tools/fc.sh arena [pattern]  run the arena suite; print totals, FAIL/SCRIPT ERROR lines, and lines matching [pattern]
 #   tools/fc.sh dojo [pattern]   run the dojo suite the same way
 #   tools/fc.sh run <script.gd>  run a SceneTree script (scratch debugging), noise filtered
+#   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
 #   tools/fc.sh sim <duel|tier|levels> [level]   balance simulation table (see tools/balance_sim.gd)
 # Exit code 1 when anything failed.
@@ -41,6 +42,16 @@ suite() {  # $1 = scene, $2 = label, $3 = optional pattern
   grep -q "SCRIPT ERROR" "$OUT/$2.out" && status=1
 }
 
+docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB (split by domain behind an index)
+  local f lines bytes warned=0
+  for f in CLAUDE.md docs/*.md docs/specs/*.md; do
+    [ -f "$f" ] || continue
+    lines=$(wc -l < "$f"); bytes=$(wc -c < "$f")
+    if [ "$lines" -gt 300 ] || [ "$bytes" -gt 25000 ]; then echo "[docs] WARN $f is $lines lines / $bytes bytes: split by domain behind an index"; warned=1; fi
+  done
+  [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
+}
+
 case "$1" in
   parse) parse ;;
   parse-all) res=$(timeout 300 "$GODOT" --headless --path . -s tools/parse_all.gd 2>&1 | grep -E "^§|SCRIPT ERROR|Parse Error|Compile Error" -A1 | sed "s/^§ //"); echo "$res"; echo "$res" | grep -Eq "SCRIPT ERROR|Parse Error|Compile Error|FAIL" && status=1 ;;
@@ -48,7 +59,8 @@ case "$1" in
   dojo) suite res://scenes/gear_dojo.tscn dojo "$2" ;;
   run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;
   sim) timeout 900 "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //" ;;
-  all) parse; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
+  docs) docs_check ;;
+  all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
   *) sed -n 2,9p "$0" ;;
 esac
 exit $status

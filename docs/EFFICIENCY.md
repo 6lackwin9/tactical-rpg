@@ -48,3 +48,8 @@ Agent types are reused; instances are fresh per call. Fresh instance for reviews
 ## Parallel lanes (2026-10-16)
 
 Idle time while a single builder ran (4-23 min) was the largest remaining cost. Fixes: split the builder into `logic-builder` and `asset-builder` with disjoint file ownership; run `design-brainstorm` ahead of the builders writing specs; run `balance` continuously in its own `main` worktree; reviews in the background; `fc.sh` logs per worktree. Expected costs: same tokens, less wall time; one-time worktree import delay; merge discipline matters (schema first, data files only touched by the asset lane). Re-measure after the first parallel milestone and update this section.
+
+## Doc housekeeping (2026-10-16)
+
+- Done: superseded drafts go to `docs/archive/`; `tools/fc.sh docs` (also in `fc.sh all`) warns when an agent-facing doc passes 300 lines or 25 KB.
+- Parked for the next heavy edit (user: pick up then, not now): (3) split `docs/DECISIONS.md` by domain behind a short index once it passes ~25 KB (18 KB at the time of writing; rows are long single lines); (4) turn the 640-line README into an overview plus per-system files in `docs/features/` when it next needs a large update. Agents do not read the README, so the benefit is safer edits for the planner.
