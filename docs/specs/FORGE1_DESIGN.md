@@ -5,6 +5,8 @@ Depends on: SK2 (its `advanced` / `unlock_offset` fields become part of the rank
 Lane: design now; later logic (schema first) then asset
 Touches (when approved): `scripts/content/content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `scripts/ui/forge/*` (form, forge, preview, source), `scripts/core/specs/passives.gd` (effect grammar exposed as data), `scripts/core/inventory/equipment.gd` (threshold effects, FG2 only), `scripts/core/specs/gear_budget.gd` (FG2), new `data/catalog/item_families.json` (FG2), tests listed in section 7
 
+Superseded in part (2026-10-16): the SKILLS part of this file (section 1, the skill rows of section 2 and the FG1 skill items in sections 6 and 7) is superseded by `docs/specs/FORGE1_SKILLS.md` (kind matrix, ranks in one entry with flat rows in memory instead of S1, typed guard rails). Nothing below is deleted; classes, items and units sections stay as the starting point for their own later passes.
+
 HISTORY.md check: nothing here re-proposes a deprecated idea. Relevant rows: "Hard-coded classes, items, skills in code -> JSON catalog + Forge" (we keep the catalog; we only change how it is presented and validated), "Gear proficiency as a plain allowed list" (the proficiency dict stays a dict), "Mastery" (not touched). DECISIONS respected: skill tiers stay separate skill ids grouped by `family`+`tier`, basics are the six single-tier skills, item `effects` use the passive grammar, GearBudget values items, hands main_1h/main_2h/off, special items with notes, tier numbers explicit per row, edits through `ContentCatalog.upsert`.
 
 ## 0. Findings that shape the proposal
@@ -21,6 +23,8 @@ HISTORY.md check: nothing here re-proposes a deprecated idea. Relevant rows: "Ha
 | The Forge already blocks `apply()` while `draft_problems()` is non-empty and shows errors in a side list; the list marks invalid entries with a warning sign; `remove()` refuses `system` entries and referenced entries. Missing: basics deletion rule, live disabled Apply/Save with reasons in the preview, typed editors (`json` and comma `strings` widgets are raw text), search is a single text box (plus a unit side filter) | Guard rails are an extension of what exists, not a rebuild |
 
 ## 1. SKILLS
+
+> Superseded by `docs/specs/FORGE1_SKILLS.md` (kept below as history; the storage recommendation S1 in 1.9 is replaced by S3 there).
 
 ### 1.1 Skill kinds (user 1.1 / 1.4)
 
