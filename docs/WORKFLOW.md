@@ -22,7 +22,7 @@
 
 ## Agents and tools (built)
 
-(Skills: godot-debug-checklist, patch-and-seed, planner. Agents: design-brainstorm, builder, balance, change-reviewer.)
+(Skills: godot-debug-checklist, patch-and-seed, planner. Agents: design-brainstorm, logic-builder, asset-builder, balance, change-reviewer.)
 
 | Tool | Use |
 | --- | --- |
@@ -63,3 +63,10 @@ Agent instances are fresh per call and idle once they report, so the agent list 
 | M2c-2 slice A foundation | 213k / 20 | 51k / 4 | merged (see git log: slice A foundation) |
 
 Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many tests cost the most); reviewers cost 25-50k and about 2-3 minutes and have caught a real defect in most runs (stale status durations, rename hazard, unused-skill gaps).
+
+## Parallel lanes (agreed 2026-10-16)
+
+- Lanes: design (`design-brainstorm`), logic (`logic-builder`), asset (`asset-builder`), balance (`balance`), review (`change-reviewer`); the main session plans and merges. Details and file ownership: skill `planner`; queue: `docs/TASKS.md`; contracts: `docs/specs/`.
+- Parallel runs need separate git worktrees (one per concurrent builder, one read-only `main` worktree for balance); `tools/fc.sh` logs go to a per-worktree folder, sims use per-process sandboxes. The first Godot run in a new worktree imports the project (one-time delay).
+- Schema-first handshake: the logic-builder merges the schema slice first; the asset-builder then fills data in parallel with the remaining logic work (different folders, clean merges).
+- Builders end with a "docs delta" so the planner can update README, GAME_BRIEF, STRUCTURE and DECISIONS quickly.

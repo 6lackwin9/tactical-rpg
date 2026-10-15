@@ -44,3 +44,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 
 ## Agent reuse (2026-10-15)
 Agent types are reused; instances are fresh per call. Fresh instance for reviews (independence), balance runs and new milestones; resume the same instance (SendMessage) for follow-ups to its own work; do tiny fixes in the main session. A long-lived builder's context grows and every follow-up re-reads it.
+
+## Parallel lanes (2026-10-16)
+
+Idle time while a single builder ran (4-23 min) was the largest remaining cost. Fixes: split the builder into `logic-builder` and `asset-builder` with disjoint file ownership; run `design-brainstorm` ahead of the builders writing specs; run `balance` continuously in its own `main` worktree; reviews in the background; `fc.sh` logs per worktree. Expected costs: same tokens, less wall time; one-time worktree import delay; merge discipline matters (schema first, data files only touched by the asset lane). Re-measure after the first parallel milestone and update this section.

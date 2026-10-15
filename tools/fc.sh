@@ -10,7 +10,7 @@
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 GODOT="${GODOT:-/c/Program Files/Godot/godot.exe}"
-OUT="${TMPDIR:-/tmp}/fc"
+OUT="${TMPDIR:-/tmp}/fc/$(pwd | md5sum | cut -c1-8)"   # one log folder per worktree so parallel lanes never overwrite each other
 mkdir -p "$OUT"
 status=0
 

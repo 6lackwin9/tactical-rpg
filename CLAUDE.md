@@ -8,16 +8,18 @@ Read these instead of crawling the code:
 - `docs/DECISIONS.md`: settled decisions (do not re-litigate)
 - `docs/HISTORY.md`: deprecated/tried ideas with reasons (append-only; never re-propose without new reasons)
 - `docs/BALANCE_REPORT.md`: latest balance runs and open issues
+- `docs/TASKS.md`: task queue (lanes, dependencies, status); specs in `docs/specs/`
 - `docs/WORKFLOW.md`: tools and how to iterate
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
 - Skill `godot-debug-checklist`: known issues table; consult BEFORE debugging
 
-## Roles (agents cannot message each other; the main session routes via the docs above)
+## Roles and lanes (agents cannot message each other; the main session routes via the docs above)
 
-- Main session = **planner** (skill `planner`): milestones, change lists, user confirmation gate, review, commit/push, README/docs.
-- `design-brainstorm` agent: options, roadmap proposals, balance fixes (writes only docs/).
-- `builder` agent: implements an approved change list on a feature branch `feat/<id>-<slug>`; never commits.
-- `balance` agent: sims on clean `main`, only `balance-ready` systems, writes `docs/BALANCE_REPORT.md`.
+- Main session = **planner** (skill `planner`): task queue (`docs/TASKS.md`), dispatch in parallel lanes, user confirmation gate, review, commit/push, README/docs.
+- `design-brainstorm` agent (design lane): options, specs in `docs/specs/`, roadmap proposals; writes only `docs/`; works ahead while builders run.
+- `logic-builder` agent (logic lane): engine, schema, validation, tests in a feature worktree; never edits shipped data; never commits.
+- `asset-builder` agent (asset lane): fills `data/` through `ContentCatalog.upsert` against a merged schema; no code, no tests.
+- `balance` agent (balance lane): sims in its own clean `main` worktree on `balance-ready` systems; writes `docs/BALANCE_REPORT.md`.
 - `change-reviewer` agent: read-only pre-commit review.
 
 ## Standing rules
