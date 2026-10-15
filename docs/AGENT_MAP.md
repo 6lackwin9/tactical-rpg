@@ -4,7 +4,11 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-No agents running.
+| Task | Agent | Lane | Worktree and branch | Started |
+| --- | --- | --- | --- | --- |
+| R1 split arena_test_suite.gd into per-group suites and a registry | logic-builder | logic | `ngp-r1` / `feat/r1` | 2026-10-16 |
+| M2C2B-L engine gaps (status on area attacks, taunt from defend skills) | logic-builder | logic | `ngp-skl` / `feat/skl` | 2026-10-16 |
+| M3 progression data model + save schema | logic-builder | logic | `ngp-m3` / `feat/m3` | 2026-10-16 |
 
 ## Finished, by milestone (newest first)
 
