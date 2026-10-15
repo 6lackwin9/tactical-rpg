@@ -11,7 +11,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | # | Area | Status | Depends on | Notes |
 | --- | --- | --- | --- | --- |
 | S1 | Combat core: block resolver, planner, stances, AP, damage formula, statuses | balance-ready | - | `DamageCalculator` is the only formula |
-| S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | done (roster rework approved: warrior, ranger, priest, brawler, rogue, mage) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
+| S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | in-progress (M2c-1 roster data done; M2c-2 skills and unit polish next) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
 | S3 | Gear and inventory: requirements, tiers, burden, carry, stash | done (gear budget guard added in M2d) | S1 | Gear budget per class is an open balance lever |
 | S4 | Enemy AI (roles, presets, targeting) | done (M1: kiting, no idle turns, support heals, reckless profile) | S1 | Shaman/ranger AI wastes turns: candidate fix |
 | S5 | Content catalog + Content Forge | done | - | Data pipeline for S2/S3/S6 |

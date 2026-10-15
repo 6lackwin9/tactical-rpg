@@ -9,7 +9,7 @@ extends SceneTree
 # Healthy targets: duels 35-65% per class (6 classes, each beats some and loses to some),
 # a hero beats a same-level minion in most 1v1s and loses to a boss.
 
-const CLASSES: Array[String] = ["warrior", "ranger", "shaman", "brawler", "scout", "berserker"]
+const CLASSES: Array[String] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]
 var seeds: Array[int] = [11, 23, 37]
 var sandbox: String = ""   # per run, so sims can run in parallel
 

@@ -64,12 +64,12 @@ static func _test_engine_parity() -> bool:
 	var items_ok: bool = (claymore.base_power == 24 and claymore.is_two_handed and claymore.threshold_tiers.size() == 1
 		and DictUtil.int_of(claymore.required_stats, "STR") == 14 and ItemCatalog.create_healing_draught().max_stack == 5
 		and stash.items.size() == 21)
-	var classes_ok: bool = ClassArchetype.create_warrior().get_base_stat("STR") == 15 and ClassArchetype.create_berserker().make_proficiency().level_of("axe") == 3
+	var classes_ok: bool = ClassArchetype.create_warrior().get_base_stat("STR") == DictUtil.to_int(DictUtil.dict_of(ContentCatalog.get_entry("classes", "warrior")["base_stats"])["STR"]) and ClassArchetype.create("brawler").make_proficiency().level_of("fist") == 3
 	var enc := CatalogEncounter.new("goblin_skirmish")
 	enc.build()
 	var units_ok: bool = (enc.unit("warrior").tier == "hero" and enc.unit("goblin_archer").attack_range >= 3 and enc.unit("warrior").max_ap == 12
 		and enc.unit("goblin_archer").hp_scale == 0.4 and enc.unit("warrior").max_hp > enc.unit("goblin_brawler").max_hp * 2 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
-		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.unit("goblin_shaman")) == "shaman" and enc.unit("warrior").catalog_id == "warrior")
+		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.unit("goblin_shaman")) == "priest" and enc.unit("warrior").catalog_id == "warrior")
 	return _report("Engine content comes from the catalog (skills, items, stash, classes, Goblin Skirmish)", skills_ok and items_ok and classes_ok and units_ok,
 		"skills %s, items %s, classes %s, units %s" % [skills_ok, items_ok, classes_ok, units_ok])
 
@@ -269,7 +269,7 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	forge.form.set_value("id", "forge_scout")
 	forge.form.set_value("name", "Forge Scout")
 	forge.form.set_value("side", "party")
-	forge.form.set_value("class_id", "scout")
+	forge.form.set_value("class_id", "rogue")
 	forge.form.set_value("level", 3)
 	forge.form.set_value("tier", "standard")
 	checks["new unit applied"] = forge.apply() and ContentCatalog.has("units", "forge_scout")

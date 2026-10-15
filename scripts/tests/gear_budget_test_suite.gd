@@ -107,7 +107,7 @@ static func _test_m2b_items() -> bool:
 			var r: Array = M2B_RANGES[id]
 			var v: float = GearBudget.item_value(e)
 			print("      m2b %s value %.1f (range %.0f-%.0f)" % [id, v, DictUtil.to_float(r[0]), DictUtil.to_float(r[1])])
-			in_range = in_range and v >= DictUtil.to_float(r[0]) and v <= DictUtil.to_float(r[1]) and not GearBudget.is_special(e)
+			in_range = in_range and v >= DictUtil.to_float(r[0]) and v <= DictUtil.to_float(r[1]) and (id == "shd_tower" or not GearBudget.is_special(e))
 	c["all M2b items present"] = present
 	c["values inside slot ranges, non-special"] = in_range
 	c["not in the starter stash"] = not_stash
@@ -123,6 +123,7 @@ static func _test_m2b_items() -> bool:
 	var tower: Dictionary = ContentCatalog.get_entry("items", "shd_tower")
 	var kite: Dictionary = ContentCatalog.get_entry("items", "shd_kite")
 	c["tower shield not strictly better than kite"] = DictUtil.to_int(tower["mitigation"]) > DictUtil.to_int(kite["mitigation"]) and (DictUtil.to_int(tower["burden"]) > DictUtil.to_int(kite["burden"]) or DictUtil.to_int(tower["block_cost"]) > DictUtil.to_int(kite["block_cost"]))
+	c["tower shield is a documented special (M2c-1 tank warrior)"] = GearBudget.is_special(tower) and not str(tower["special_note"]).strip_edges().is_empty()
 	# Cloth armor is gated by the proficiency dict: the warrior cannot wear it, a cloth-trained class can.
 	var warrior: ClassArchetype = ClassArchetype.create("warrior")
 	var cloth_user: ClassArchetype = null

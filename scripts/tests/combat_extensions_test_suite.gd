@@ -703,8 +703,8 @@ static func _test_reckless() -> bool:
 	var reckless_target: Combatant = _first_engage_target(TacticalAI.build_steps(berserker, ctx, picky))
 	checks["reckless charges the nearest even when told to hunt the weakest"] = plain_target == weak and reckless_target == near and grid.get_distance(Vector2i(4, 4), Vector2i(6, 4)) < grid.get_distance(Vector2i(4, 4), Vector2i(1, 6))
 
-	var entry_profile: AiProfile = ContentFactory.ai_profile({"class_id": "berserker", "level": 3, "reckless": true, "flee_ratio": 0.0}, berserker)
-	var other_profile: AiProfile = ContentFactory.ai_profile({"class_id": "berserker", "level": 3}, berserker)
+	var entry_profile: AiProfile = ContentFactory.ai_profile({"class_id": "brawler", "level": 3, "reckless": true, "flee_ratio": 0.0}, berserker)
+	var other_profile: AiProfile = ContentFactory.ai_profile({"class_id": "brawler", "level": 3}, berserker)
 	checks["the unit's AI field sets the profile"] = entry_profile.reckless and not other_profile.reckless
 	return _report("Reckless profile", checks)
 
@@ -729,7 +729,7 @@ static func _test_catalog_and_schema() -> bool:
 	for cls: Dictionary in ContentCatalog.entries("classes"):
 		for step: Variant in DictUtil.array_of(cls.get("skill_path", [])):
 			in_a_path = in_a_path or ids.has(str(DictUtil.dict_of(step).get("skill", "")))
-	checks["not in any class skill path yet (M2)"] = not in_a_path
+	checks["example skills sit in class paths (M2c-1), still learned-only"] = in_a_path
 	checks["learned_only: hand-built units don't know them until they learn them"] = (func() -> bool:
 		var c := Combatant.new("U", 10, 10, 1)
 		var before: bool = c.knows_skill("mend") or c.knows_skill("lunge")
@@ -737,8 +737,8 @@ static func _test_catalog_and_schema() -> bool:
 		return not before and c.knows_skill("mend") and not c.knows_skill("lunge") and c.knows_skill("strike")).call()
 
 	# Class-derived units get them through extra_skills.
-	var with_extra: Combatant = ContentFactory.unit({"id": "t_healer", "name": "T", "class_id": "shaman", "level": 3, "side": "party", "extra_skills": ["mend"]})
-	var without: Combatant = ContentFactory.unit({"id": "t_plain", "name": "P", "class_id": "shaman", "level": 3, "side": "party"})
+	var with_extra: Combatant = ContentFactory.unit({"id": "t_healer", "name": "T", "class_id": "mage", "level": 3, "side": "party", "extra_skills": ["mend"]})
+	var without: Combatant = ContentFactory.unit({"id": "t_plain", "name": "P", "class_id": "mage", "level": 3, "side": "party"})
 	checks["extra_skills grants a learned-only skill; others lack it"] = with_extra.can_use(SkillCatalog.find("mend")) and not without.can_use(SkillCatalog.find("mend"))
 
 	# Status resist keys and passive validation include bleed (and refuse buffs).

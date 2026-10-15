@@ -19,7 +19,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Stats: STR DEX INT CONS PERC KNOW. Max HP = 60 + CONS*8 + STR*2 (x tier HP). Speed = max(1, 8 + DEX - armor burden). Crit = 5% + 1%/DEX above 10 + 1%/weapon training level above 1, x1.5.
 - Damage: `DamageCalculator.compute` is the ONLY formula. Attack Power = (weapon power + training) + scaling stat x proficiency scaling (1.0-2.0, default 1.5), x tier power. Authored unit `power` is absolute. Hit = Attack x Focus x Skill x Stance matchup (1.25/0.75/1) x Crit x (1-Guard) x (1-Armor), armor = rating/(rating+50).
 - Combat: 6 blocks per round, simultaneous resolution, AP pool with regen, skill AP = skill level, stances Offensive > Tactical > Defensive > Offensive, +1 AP stance switch, AP debt allowed.
-- Classes (exactly six): warrior, ranger, shaman, brawler, scout, berserker. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill cap = ceil(level/2), tiers hero/minion/standard/elite/boss scale HP and power.
+- Classes (exactly six): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill cap = ceil(level/2), tiers hero/minion/standard/elite/boss scale HP and power.
 - Proficiency: `{gear type: {level 1-3, scaling 1.0-2.0}}` per class; unlisted gear unequippable; training gives +1 power, -2 requirement, crit, burden, block cost (lvl 3), skill gating (`SkillDef.weapon_types/min_proficiency`).
 - Passives: catalog templates (stat w/ context, proficiency, resist, ap_regen, skill). Granted only by SOURCES (world character, faction `grants`, discipline `passives`, named item `grants`; later quests/lore). Never by classes/base units.
 - Skills: class `skill_path` by level + `extra_skills` + `Combatant.learn_skill`. `Combatant.can_use` gates planner/AI.
@@ -30,7 +30,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 
 - Speed varies a lot by class (ranger ~35, warrior ~16 at level 5); never assume the warrior is faster.
 - The planner resolves "friend vacates tile" fastest-first.
-- Dojo warrior (Lv2) hits the dummy for 53 (tests encode this).
+- Dojo warrior (Lv2, tank kit) hits the dummy for 47; dojo tests now derive this from the stats and weapon.
 
 ## Where to look for X
 

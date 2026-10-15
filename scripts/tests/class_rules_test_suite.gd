@@ -9,7 +9,7 @@ extends RefCounted
 # and class skill paths unlock by level with event-learned extras.
 # ==============================================================================
 
-const CLASSES: Array[String] = ["warrior", "ranger", "shaman", "brawler", "scout", "berserker"]
+const CLASSES: Array[String] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]
 
 static func _report(label: String, ok: bool, detail: String = "") -> bool:
 	print("    [Classes] %s: %s%s" % [label, "PASS" if ok else "FAIL", (" (%s)" % detail) if not detail.is_empty() else ""])
@@ -56,6 +56,22 @@ static func _test_six_classes() -> bool:
 	checks["equal growth per level"] = growth_ok
 	checks["every class has art"] = art_ok
 	checks["every class has a starting skill set and gear"] = starts_ok
+	# Loadouts sit inside the gear budget band (a documented special item may push it over); no class warnings.
+	var band_ok: bool = true
+	for entry: Dictionary in ContentCatalog.entries("classes"):
+		band_ok = band_ok and (GearBudget.in_band(GearBudget.loadout_value(entry)) or GearBudget.has_documented_special(entry))
+		band_ok = band_ok and ContentCatalog.warnings_for("classes", entry).is_empty()
+	checks["loadouts inside the gear budget (or documented special)"] = band_ok
+	# Role identity: the warrior is the tank (best armor rating and HP), the mage the INT caster, the priest supports.
+	var tank_ok: bool = true
+	var warrior_unit: Combatant = ContentFactory.unit({"id": "t_tank", "name": "T", "class_id": "warrior", "level": 5})
+	for id: String in CLASSES:
+		if id == "warrior":
+			continue
+		var other: Combatant = ContentFactory.unit({"id": "t_o_" + id, "name": "T", "class_id": id, "level": 5})
+		tank_ok = tank_ok and DamageCalculator.armor_rating(warrior_unit) > DamageCalculator.armor_rating(other) and warrior_unit.max_hp >= other.max_hp
+	checks["warrior has the best armor and HP"] = tank_ok
+	checks["caster and support roles"] = ClassArchetype.create("mage").get_base_stat("INT") == 17 and ClassArchetype.create("priest").ai_role == "SUPPORT"
 	# The rules reject drift.
 	checks["off-budget class refused"] = not StatRules.validate_class({"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}, {"STR": 5}).is_empty()
 	checks["growth over cap refused"] = not StatRules.validate_class({"STR": 12, "DEX": 10, "INT": 10, "CONS": 10, "PERC": 10, "KNOW": 10}, {"STR": 5}).is_empty()
@@ -103,8 +119,8 @@ static func _test_proficiency() -> bool:
 	checks["scaling changes unit power"] = DamageCalculator.power_of(high) > DamageCalculator.power_of(low)
 	# Gear the class has no training in can't be equipped.
 	var greataxe := Equipment.new("t_axe", "Axe", Equipment.EquipSlot.MAIN_HAND, "axe", Item.ItemType.WEAPON, 20, {})
-	var shaman: ClassArchetype = ClassArchetype.create("shaman")
-	checks["untrained gear refused"] = arch.can_equip_gear(greataxe) and not shaman.can_equip_gear(greataxe)
+	var priest: ClassArchetype = ClassArchetype.create("priest")
+	checks["untrained gear refused"] = arch.can_equip_gear(greataxe) and not priest.can_equip_gear(greataxe)
 	# Skills that need training are gated.
 	var aimed: SkillDef = SkillCatalog.find("aimed_shot")
 	var archer: Combatant = ContentFactory.unit({"id": "t_arch", "name": "T", "class_id": "ranger", "level": 5})
@@ -118,7 +134,7 @@ static func _test_passives() -> bool:
 	for id: String in ContentCatalog.ids("classes"):
 		var arch: ClassArchetype = ClassArchetype.create(id)
 		checks["class %s grants no passive" % id] = not arch.proficiency.has("passives") and not ContentFactory.unit({"id": "t_p", "name": "T", "class_id": id, "level": 1}).passives.size() > 0
-	var unit: Combatant = ContentFactory.unit({"id": "t_pass", "name": "T", "class_id": "scout", "level": 1})
+	var unit: Combatant = ContentFactory.unit({"id": "t_pass", "name": "T", "class_id": "rogue", "level": 1})
 	var base_regen: int = unit.ap_regen_bonus
 	var bow_before: int = unit.stats.proficiency.level_of("bow")
 	var know_before: int = unit.stats.get_effective_stat("KNOW", {"biome": "ruins"})
@@ -129,7 +145,7 @@ static func _test_passives() -> bool:
 	checks["contextual stat passive"] = unit.stats.get_effective_stat("KNOW", {"biome": "ruins"}) == know_before + 3 and unit.stats.get_effective_stat("KNOW") == unit.stats.get_base_stat("KNOW")
 	checks["skill passive"] = unit.granted_skills.has("quick_stab")
 	checks["each passive applies once"] = unit.passives.count("second_wind") == 1
-	var untrained: Combatant = ContentFactory.unit({"id": "t_pass2", "name": "T", "class_id": "shaman", "level": 1})
+	var untrained: Combatant = ContentFactory.unit({"id": "t_pass2", "name": "T", "class_id": "priest", "level": 1})
 	ContentFactory.apply_passives(untrained, ["axe_training"])
 	checks["passive can open new gear"] = untrained.stats.proficiency.can_use("axe") and untrained.stats.proficiency.scaling_of("axe") < Proficiency.DEFAULT_SCALING
 	return _report("Passives: stat (with context), proficiency, resist, AP regen, skill; applied once, never from classes", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
@@ -138,8 +154,8 @@ static func _test_skill_paths() -> bool:
 	var checks: Dictionary = {}
 	var low: Combatant = ContentFactory.unit({"id": "t_s1", "name": "T", "class_id": "warrior", "level": 1})
 	var mid: Combatant = ContentFactory.unit({"id": "t_s5", "name": "T", "class_id": "warrior", "level": 5})
-	checks["level 1 knows the opening skills"] = low.knows_skill("strike") and low.knows_skill("guard") and not low.knows_skill("heavy_blow")
-	checks["path unlocks by level"] = mid.knows_skill("heavy_blow") and mid.known_skills.size() > low.known_skills.size()
+	checks["level 1 knows the opening skills"] = low.knows_skill("strike") and low.knows_skill("guard") and not low.knows_skill("shield_bash")
+	checks["path unlocks by level"] = mid.knows_skill("shield_bash") and mid.known_skills.size() > low.known_skills.size()
 	checks["system skills always known"] = low.knows_skill("rest") and low.knows_skill("move")
 	checks["event learning adds a skill"] = not low.knows_skill("hamstring") and (func() -> bool:
 		low.learn_skill("hamstring")

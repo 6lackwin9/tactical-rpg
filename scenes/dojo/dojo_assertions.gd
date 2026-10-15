@@ -20,24 +20,24 @@ static func run(session: DojoSession, host: Node) -> bool:
 		print("  [Dojo-1] Baseline hero and dummy initialization: PASS")
 
 	# Assert 2: Base Attack Calculation (Revised Formula & Sword Mastery to Wep Power)
-	# Warrior Lv 2: STR 15 base + 2 growth + 2 spent + Bear Ring (+2) = 21 STR. Sword training 3 (+3 Wep Power).
-	# Steel Broadsword: 18 Base + 3 training = 21 Wep Power.
-	# Power = 21 + (21 * 1.5) = 52.5 -> 53.
+	# Power = Wep Power (broadsword 18 + sword training 3) + effective STR (class base + growth + spend + Bear Ring) x 1.5, derived from the hero's real stats (the tank warrior hits for 47).
+	var weapon: Equipment = w.inventory.get_main_weapon()
+	var expected_power: int = weapon.get_effective_equipment_power(w.stats, w.stats.proficiency) + roundi(w.stats.get_effective_stat("STR") * 1.5)
 	var initial_power: int = w.get_effective_power(false)
 	var calc_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
 	var dmg: int = d.take_damage(UiTheme.dict_int(calc_res, "final_dmg"))
-	if dmg != 53 or initial_power != 53:
-		print("  [Dojo-2] Base melee attack calculation: FAIL (dmg: %d, pwr: %d != 53)" % [dmg, initial_power])
+	if dmg != expected_power or initial_power != expected_power:
+		print("  [Dojo-2] Base melee attack calculation: FAIL (dmg: %d, pwr: %d != %d)" % [dmg, initial_power, expected_power])
 		passed = false
 	else:
-		print("  [Dojo-2] Base melee attack calculation: PASS (53 Power, %d DMG, sword training in Wep Power)" % dmg)
+		print("  [Dojo-2] Base melee attack calculation: PASS (%d Power, %d DMG, sword training in Wep Power)" % [expected_power, dmg])
 
 	# Assert 3: Dummy Mitigation Toggle
 	d.defense_mitigation_ratio = 0.5
 	var mit_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
 	var half_dmg: int = d.take_damage(UiTheme.dict_int(mit_res, "final_dmg"), true)
-	if half_dmg != 27:
-		print("  [Dojo-3] 50%% mitigation defense barrier calculation: FAIL (%d != 27)" % half_dmg)
+	if half_dmg != roundi(expected_power * 0.5):
+		print("  [Dojo-3] 50%% mitigation defense barrier calculation: FAIL (%d != %d)" % [half_dmg, roundi(expected_power * 0.5)])
 		passed = false
 	else:
 		print("  [Dojo-3] 50%% mitigation defense barrier calculation: PASS (%d DMG)" % half_dmg)
@@ -47,8 +47,8 @@ static func run(session: DojoSession, host: Node) -> bool:
 	d.defense_mitigation_ratio = 0.0
 	var focus_res: Dictionary = DamageCalculator.compute(w, d, false, false, 1.0, false)
 	var boosted_dmg: int = d.take_damage(UiTheme.dict_int(focus_res, "final_dmg"), true)
-	if boosted_dmg != 80:
-		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: FAIL (%d != 80)" % boosted_dmg)
+	if boosted_dmg != roundi(expected_power * 1.5):
+		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: FAIL (%d != %d)" % [boosted_dmg, roundi(expected_power * 1.5)])
 		passed = false
 	else:
 		print("  [Dojo-4] Focus buff 1.5x power multiplier calculation: PASS (%d DMG)" % boosted_dmg)
@@ -69,7 +69,7 @@ static func run(session: DojoSession, host: Node) -> bool:
 	var titan := ItemCatalog.create_titan_warhammer()
 	w.inventory.equip(titan)
 	w.sync_from_stats_and_gear()
-	var untrained := CharacterStats.new(ClassArchetype.create("shaman"), 1)   # the warrior's hammer training (+2 discount) covers the Titan's 22 STR
+	var untrained := CharacterStats.new(ClassArchetype.create("priest"), 1)   # the warrior's hammer training (+2 discount) covers the Titan's 22 STR
 	var pen := titan.get_wield_penalty(untrained, untrained.proficiency)
 	if not UiTheme.dict_bool(pen, "is_penalized"):
 		print("  [Dojo-6] Titan Warhammer deficit penalty check: FAIL")

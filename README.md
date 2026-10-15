@@ -288,7 +288,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
   - **3 Passive Stats**: `CONS` (Max HP), `PERC` (spotting, intent unmasking), `KNOW` (lore, forecast intel).
 - **Derived Combat Metrics**: Max HP = 60 + CONS x 8 + STR x 2 (x tier HP scale); Initiative Speed = max(1, 8 + DEX - armor burden); Crit = 5% + 1% per DEX above 10 (+ training); Attack Power per section 2b.
 - **Base rules (`StatRules`, enforced by the catalog)**:
-  - Exactly **six base classes**: Warrior, Ranger, Shaman, Brawler, Scout, Berserker.
+  - Exactly **six base classes**: Warrior (tank), Ranger, Priest (support), Brawler, Rogue, Mage.
   - Every class has the **same level-1 stat budget (62)** (6-18 per stat) and the **same growth (5 points per level, max 3 per stat)**: classes differ only in distribution.
   - **Units of one class differ by their spend pool**: `4 + (level - 1)` free points, spent exactly (authored for NPCs / enemies; the player chooses for party members; empty = follow the class weights).
   - **Levels 1-10**; the skill-level cap follows the level (`ceil(level / 2)`).
@@ -414,6 +414,10 @@ A defensive self-buff skill (`riposte`, mitigation 0.15) grants the `riposte` st
 ### New gear and placeholder art (M2b)
 
 Eight new items for the reworked roster (cloth robes, cleric vestment, mage robe, tower shield, wand, mage staff, cleric mace, and the special `wpn_glass_wand`), none in the starter stash; placeholder `priest`, `mage` and `rogue` token/portrait keys and a wand icon. Not yet in any class loadout (M2c).
+
+### Reworked roster (M2c-1)
+
+Six classes: Warrior (tank, special tower shield), Ranger, Priest (support), Brawler, Rogue, Mage. Loadouts sit in the gear budget band (the tower shield is the documented special). Goblin units now use the Priest, Brawler (reckless) and Rogue classes. Skill paths use existing skills for now; the new skill set is M2c-2.
 
 ### Agent workflow tools
 

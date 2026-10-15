@@ -1,5 +1,7 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+> NOTE 2026-10-15: the roster was reworked (M2c-1: warrior tank, ranger, priest, brawler, rogue, mage; M1 combat extensions; AI fixes). The tables below describe the OLD roster (shaman/berserker/scout) and are STALE; rerun `tools/fc.sh sim ...` once the balance-relevant systems are frozen.
+
 Target: every class between **40% and 60%** average duel win rate at each tested level (10 seeds near the bracket). Only systems marked `balance-ready` in `docs/ROADMAP.md` are tested. Append new runs on top; never delete old runs (history).
 
 ## Run 2026-10-15 (baseline, level 5, 3 seeds, systems S1-S4 before any tuning)

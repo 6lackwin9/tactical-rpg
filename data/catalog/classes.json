@@ -5,20 +5,20 @@
 		{
 			"id": "warrior",
 			"name": "Warrior",
-			"description": "Front-line fighter: strength and constitution, swords and shields, plate.",
+			"description": "Tank: huge constitution, tower shield and plate; a wall that holds the line and hits lightly.",
 			"art": "warrior",
 			"ai_role": "AGGRESSOR",
 			"base_stats": {
-				"STR": 15,
-				"DEX": 9,
-				"INT": 7,
-				"CONS": 14,
+				"STR": 13,
+				"DEX": 7,
+				"INT": 6,
+				"CONS": 17,
 				"PERC": 9,
-				"KNOW": 8
+				"KNOW": 10
 			},
 			"growth": {
-				"STR": 2,
-				"CONS": 2,
+				"CONS": 3,
+				"STR": 1,
 				"PERC": 1
 			},
 			"proficiency": {
@@ -26,19 +26,15 @@
 					"level": 3,
 					"scaling": 1.5
 				},
-				"axe": {
-					"level": 2,
-					"scaling": 1.5
-				},
 				"mace": {
 					"level": 2,
 					"scaling": 1.5
 				},
-				"hammer": {
-					"level": 1,
-					"scaling": 1.25
+				"axe": {
+					"level": 2,
+					"scaling": 1.5
 				},
-				"fist": {
+				"hammer": {
 					"level": 1,
 					"scaling": 1.25
 				},
@@ -51,8 +47,8 @@
 					"scaling": 1.5
 				},
 				"leather": {
-					"level": 2,
-					"scaling": 1.5
+					"level": 1,
+					"scaling": 1.25
 				}
 			},
 			"skill_path": [
@@ -65,8 +61,12 @@
 					"skill": "guard"
 				},
 				{
+					"level": 2,
+					"skill": "taunt_shout"
+				},
+				{
 					"level": 3,
-					"skill": "power_strike"
+					"skill": "riposte"
 				},
 				{
 					"level": 3,
@@ -77,16 +77,12 @@
 					"skill": "brace"
 				},
 				{
-					"level": 5,
-					"skill": "heavy_blow"
-				},
-				{
 					"level": 7,
 					"skill": "fortress"
 				}
 			],
-			"main_hand": "wpn_broadsword",
-			"off_hand": "shd_kite",
+			"main_hand": "wpn_hand_axe",
+			"off_hand": "shd_tower",
 			"head": "",
 			"body": "arm_plate",
 			"accessory_1": "",
@@ -186,99 +182,9 @@
 			]
 		},
 		{
-			"id": "shaman",
-			"name": "Shaman",
-			"description": "Support caster: intelligence and knowledge, staves and orbs.",
-			"art": "shaman",
-			"ai_role": "SUPPORT",
-			"base_stats": {
-				"STR": 6,
-				"DEX": 9,
-				"INT": 15,
-				"CONS": 9,
-				"PERC": 10,
-				"KNOW": 13
-			},
-			"growth": {
-				"INT": 2,
-				"KNOW": 2,
-				"CONS": 1
-			},
-			"proficiency": {
-				"staff": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"orb": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"wand": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"tome": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"dagger": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"cloth": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"leather": {
-					"level": 1,
-					"scaling": 1.25
-				}
-			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "arcane_bolt"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
-				{
-					"level": 3,
-					"skill": "focus"
-				},
-				{
-					"level": 3,
-					"skill": "hex"
-				},
-				{
-					"level": 5,
-					"skill": "firebomb"
-				},
-				{
-					"level": 5,
-					"skill": "deep_focus"
-				}
-			],
-			"main_hand": "wpn_staff",
-			"off_hand": "",
-			"head": "",
-			"body": "",
-			"accessory_1": "",
-			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion",
-				"con_fire_bomb"
-			]
-		},
-		{
 			"id": "brawler",
 			"name": "Brawler",
-			"description": "Bruiser: fists, maces and a thick hide.",
+			"description": "Bruiser: fists, maces and a thick hide; closes the gap and hits hard.",
 			"art": "brawler",
 			"ai_role": "AGGRESSOR",
 			"base_stats": {
@@ -307,23 +213,23 @@
 					"level": 2,
 					"scaling": 1.5
 				},
-				"axe": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"sword": {
-					"level": 1,
-					"scaling": 1.25
-				},
 				"leather": {
 					"level": 3,
 					"scaling": 1.5
+				},
+				"axe": {
+					"level": 1,
+					"scaling": 1.25
 				},
 				"plate": {
 					"level": 1,
 					"scaling": 1.25
 				},
 				"shield": {
+					"level": 1,
+					"scaling": 1.25
+				},
+				"sword": {
 					"level": 1,
 					"scaling": 1.25
 				}
@@ -343,11 +249,11 @@
 				},
 				{
 					"level": 3,
-					"skill": "body_blow"
+					"skill": "lunge"
 				},
 				{
 					"level": 3,
-					"skill": "power_strike"
+					"skill": "body_blow"
 				},
 				{
 					"level": 4,
@@ -371,10 +277,88 @@
 			"pouch": []
 		},
 		{
-			"id": "scout",
-			"name": "Scout",
-			"description": "Fast skirmisher: dexterity and perception, daggers and speed.",
-			"art": "scout",
+			"id": "priest",
+			"name": "Priest",
+			"description": "Support: heals and rallies allies; knowledge, maces and cloth.",
+			"art": "priest",
+			"ai_role": "SUPPORT",
+			"base_stats": {
+				"STR": 6,
+				"DEX": 8,
+				"INT": 11,
+				"CONS": 12,
+				"PERC": 10,
+				"KNOW": 15
+			},
+			"growth": {
+				"KNOW": 2,
+				"CONS": 1,
+				"INT": 1,
+				"PERC": 1
+			},
+			"proficiency": {
+				"mace": {
+					"level": 3,
+					"scaling": 1.5
+				},
+				"staff": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"shield": {
+					"level": 1,
+					"scaling": 1.25
+				},
+				"dagger": {
+					"level": 1,
+					"scaling": 1.25
+				},
+				"cloth": {
+					"level": 3,
+					"scaling": 1.5
+				},
+				"leather": {
+					"level": 1,
+					"scaling": 1.25
+				}
+			},
+			"skill_path": [
+				{
+					"level": 1,
+					"skill": "strike"
+				},
+				{
+					"level": 1,
+					"skill": "guard"
+				},
+				{
+					"level": 2,
+					"skill": "rally"
+				},
+				{
+					"level": 3,
+					"skill": "mend"
+				},
+				{
+					"level": 5,
+					"skill": "focus"
+				}
+			],
+			"main_hand": "wpn_cleric_mace",
+			"off_hand": "",
+			"head": "",
+			"body": "arm_cleric_vestment",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"con_heal_potion"
+			]
+		},
+		{
+			"id": "rogue",
+			"name": "Rogue",
+			"description": "Fast skirmisher: daggers and speed; dashes in, cuts and slips away.",
+			"art": "rogue",
 			"ai_role": "SKIRMISHER",
 			"base_stats": {
 				"STR": 9,
@@ -394,25 +378,25 @@
 					"level": 3,
 					"scaling": 1.5
 				},
-				"sword": {
-					"level": 2,
+				"leather": {
+					"level": 3,
 					"scaling": 1.5
 				},
 				"bow": {
 					"level": 2,
 					"scaling": 1.5
 				},
-				"fist": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"leather": {
-					"level": 3,
-					"scaling": 1.5
-				},
 				"cloth": {
 					"level": 2,
 					"scaling": 1.5
+				},
+				"sword": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"fist": {
+					"level": 1,
+					"scaling": 1.25
 				}
 			},
 			"skill_path": [
@@ -430,19 +414,15 @@
 				},
 				{
 					"level": 3,
-					"skill": "hamstring"
+					"skill": "lunge"
+				},
+				{
+					"level": 3,
+					"skill": "bleeding_cut"
 				},
 				{
 					"level": 4,
-					"skill": "power_strike"
-				},
-				{
-					"level": 5,
-					"skill": "deep_focus"
-				},
-				{
-					"level": 7,
-					"skill": "brace"
+					"skill": "hamstring"
 				}
 			],
 			"main_hand": "wpn_stiletto",
@@ -454,55 +434,55 @@
 			"pouch": []
 		},
 		{
-			"id": "berserker",
-			"name": "Berserker",
-			"description": "Reckless striker: raw strength, axes and little defense.",
-			"art": "berserker",
-			"ai_role": "AGGRESSOR",
+			"id": "mage",
+			"name": "Mage",
+			"description": "Glass caster: intelligence and area damage from range.",
+			"art": "mage",
+			"ai_role": "SNIPER",
 			"base_stats": {
-				"STR": 17,
-				"DEX": 10,
-				"INT": 6,
-				"CONS": 13,
-				"PERC": 8,
-				"KNOW": 8
+				"STR": 6,
+				"DEX": 9,
+				"INT": 17,
+				"CONS": 8,
+				"PERC": 10,
+				"KNOW": 12
 			},
 			"growth": {
-				"STR": 3,
-				"CONS": 1,
-				"DEX": 1
+				"INT": 3,
+				"KNOW": 1,
+				"PERC": 1
 			},
 			"proficiency": {
-				"axe": {
+				"staff": {
 					"level": 3,
 					"scaling": 1.5
 				},
-				"hammer": {
+				"wand": {
+					"level": 3,
+					"scaling": 1.5
+				},
+				"orb": {
+					"level": 3,
+					"scaling": 1.5
+				},
+				"tome": {
 					"level": 2,
 					"scaling": 1.5
 				},
-				"sword": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"mace": {
+				"dagger": {
 					"level": 1,
 					"scaling": 1.25
 				},
-				"fist": {
-					"level": 2,
+				"cloth": {
+					"level": 3,
 					"scaling": 1.5
-				},
-				"leather": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"plate": {
-					"level": 1,
-					"scaling": 1.25
 				}
 			},
 			"skill_path": [
+				{
+					"level": 1,
+					"skill": "arcane_bolt"
+				},
 				{
 					"level": 1,
 					"skill": "strike"
@@ -513,32 +493,30 @@
 				},
 				{
 					"level": 3,
-					"skill": "reckless_swing"
+					"skill": "volley"
 				},
 				{
 					"level": 3,
-					"skill": "power_strike"
+					"skill": "focus"
 				},
 				{
 					"level": 4,
-					"skill": "sunder"
+					"skill": "hex"
 				},
 				{
 					"level": 5,
-					"skill": "heavy_blow"
-				},
-				{
-					"level": 7,
-					"skill": "shockwave"
+					"skill": "firebomb"
 				}
 			],
-			"main_hand": "wpn_battle_axe",
+			"main_hand": "wpn_wand",
 			"off_hand": "",
 			"head": "",
-			"body": "arm_leather",
+			"body": "arm_mage_robe",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [
+				"con_heal_potion"
+			]
 		}
 	]
 }
