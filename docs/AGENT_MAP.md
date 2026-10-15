@@ -4,11 +4,11 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-| Task | Agent | Lane | Worktree and branch | Started |
-| --- | --- | --- | --- | --- |
-| R1 split arena_test_suite.gd into per-group suites and a registry | logic-builder | logic | `ngp-r1` / `feat/r1` | 2026-10-16 |
-| M2C2B-L engine gaps (status on area attacks, taunt from defend skills) | logic-builder | logic | `ngp-skl` / `feat/skl` | 2026-10-16 |
-| M3 progression data model + save schema | logic-builder | logic | `ngp-m3` / `feat/m3` | 2026-10-16 |
+| Task | Agent | Model | Lane | Worktree and branch | Started |
+| --- | --- | --- | --- | --- | --- |
+| R1 split arena_test_suite.gd into per-group suites and a registry | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-r1` / `feat/r1` | 2026-10-16 |
+| M2C2B-L engine gaps (status on area attacks, taunt from defend skills) | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-skl` / `feat/skl` | 2026-10-16 |
+| M3 progression data model + save schema | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-m3` / `feat/m3` | 2026-10-16 |
 
 ## Finished, by milestone (newest first)
 
@@ -110,3 +110,24 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 | --- | --- | --- | --- |
 | design-brainstorm (general-purpose) | Roadmap proposals | 56k / 1.5 | Proposed designs in ROADMAP |
 
+
+## Cost tracking (started 2026-10-16)
+
+What can be measured:
+
+- Subagents: each report gives total tokens, tool calls and minutes (tables above). Before 2026-10-16 every agent ran on the model the main session used (Sonnet 5.5): no agent definition sets a model, so they inherit it. From now on the Model column records the model passed on each dispatch (`sonnet`, `opus`, `haiku`, `fable` or "inherited").
+- Main session (planner): I can read a remaining-token counter after each tool call. The delta between two points is logged below per milestone. It is an approximate indicator (it is not split into input, output and cached tokens, and it does not include subagent usage).
+- Money: no prices are stored here. If you give a $/million-tokens figure per model, the planner can add a cost column.
+
+| Point | Counter value | Delta since previous | Note |
+| --- | --- | --- | --- |
+| Baseline (R1, M2C2B-L, M3 running) | about 14,988,000 | - | start of tracking |
+
+Model comparison plan (to pick the right model per task; change one thing at a time): run the same agent type on another model for a comparable task and compare tokens, minutes and defects found.
+
+| Agent type | Suggested trial | What to compare |
+| --- | --- | --- |
+| change-reviewer | haiku vs inherited | defects found on the same diff, tokens, minutes |
+| asset-builder | haiku vs inherited | validate_all clean on first try, spec deviations |
+| design-brainstorm | opus vs inherited | spec completeness and number of questions raised |
+| logic-builder | keep inherited; try opus on one large task only | tokens, minutes, reviewer findings |
