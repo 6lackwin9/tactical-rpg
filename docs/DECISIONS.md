@@ -49,3 +49,6 @@
 | Ranger | Gets a disengage (jump back out of melee range); single-target ranged | User 2026-10-15 |
 | Brawler | Jump into a hostile area and fight several melee enemies with L-shaped sweeps (hits (1,0), (1,1), (0,1) from origin (0,0), rotating with aim); power from STR+DEX hybrid because it fights bare-handed/knuckles | User 2026-10-15 |
 | Mage | Volley removed for the mage; elemental damage vs the ranger's physical is parked on the backburner; AoE cross-pattern may be shared later via different skills | User 2026-10-15 |
+| Advanced skills (user 2026-10-15) | Advanced versions IMPROVE the starter class skill (e.g. Mend = simple heal; Greater Mend adds a cleanse or a buff), they do not just scale it; skill levels scale the power of a skill at higher AP cost | tier selection (preset vs at planning time) pending |
+| Skill loadout (user 2026-10-15) | A unit has at most 5 class skills + 3 extra slots ACTIVE in combat; a character may own a longer skill list but sets the active loadout outside combat and cannot change it during combat. Basics counted separately | User 2026-10-15 |
+| Brawler unarmed (user 2026-10-15) | Brawler stays unarmed (no knuckles item for now); unarmed combat mechanics are explored through the class (STR+DEX hybrid) | User 2026-10-15 |
