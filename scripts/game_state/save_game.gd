@@ -63,11 +63,9 @@ static func write(state: GameState, slot: int = 1) -> Array[String]:
 	file.store_string(JSON.stringify(envelope, "\t"))
 	file.close()
 	if DirAccess.rename_absolute(tmp_path, final_path) != OK:
-		if FileAccess.file_exists(final_path):
-			DirAccess.remove_absolute(final_path)
-		if DirAccess.rename_absolute(tmp_path, final_path) != OK:
-			DirAccess.remove_absolute(tmp_path)
-			errors.append("Can't move the save into place.")
+		# keep the previous save intact: never delete the final file before the new one is in place
+		DirAccess.remove_absolute(tmp_path)
+		errors.append("Can't move the save into place (the previous save was kept).")
 	return errors
 
 # {"ok": bool, "errors": Array[String], "warnings": Array[String], "state": GameState or null}

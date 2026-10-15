@@ -97,7 +97,7 @@ static func _test_game_state() -> bool:
 	no_world.world_id = ""
 	checks["validate_world_required"] = not no_world.validate().is_empty()
 	var text: String = JSON.stringify(g.to_dict())
-	var back: GameState = GameState.from_dict(JSON.parse_string(text) as Dictionary)
+	var back: GameState = GameState.from_dict(DictUtil.dict_of(JSON.parse_string(text)))
 	checks["json_roundtrip_equal"] = back.equals(g)
 	checks["ints_preserved"] = back.party.members[0].total_xp is int and back.flags["intro.done"] == true and back.quests["q1"]["stage"] is int
 	var changed: GameState = GameState.from_dict(g.to_dict())

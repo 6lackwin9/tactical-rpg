@@ -342,7 +342,7 @@ static func _test_validation() -> bool:
 	var neg: UnitState = UnitState.at_level(uid, 2)
 	neg.total_xp = -1
 	checks["negative_xp"] = not neg.validate().is_empty()
-	var rt: UnitState = UnitState.from_dict(JSON.parse_string(JSON.stringify(good.to_dict())) as Dictionary)
+	var rt: UnitState = UnitState.from_dict(DictUtil.dict_of(JSON.parse_string(JSON.stringify(good.to_dict()))))
 	checks["json_roundtrip_equal"] = rt.equals(good) and rt.total_xp is int
 	return _report("state validation", checks)
 
