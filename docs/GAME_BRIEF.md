@@ -76,3 +76,5 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 - Items have an `effects` list (passive grammar restricted to item types: `skill_potency` by family or group `spell`/`heal`, `status_potency` 1..25, `spell_reach` 1..2, `resist`). They apply only while equipped and are rebuilt on every `sync_from_stats_and_gear` (`Combatant.rebuild_gear_effects`), kept in separate `gear_*` fields. Spell = ATTACK skill gated on staff or wand; heal = healing SUPPORT skill. Gear spell reach is clamped to 1. Orb and tome are off-hand only; a 2H main weapon refuses them.
 
 - Add a test suite: new `scripts/tests/<name>_test_suite.gd` + one `results.append` line in `scripts/tests/suite_registry.gd`; shared helpers in `TestHelpers`. Never add tests to `arena_test_suite.gd`.
+
+- Area attacks roll the skill's status once per unit hit (allies included). A DEFEND skill may grant riposte (immediate) or a support buff (taunt, haste: queued next round).
