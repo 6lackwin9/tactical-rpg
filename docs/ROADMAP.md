@@ -132,7 +132,43 @@ Q1 May S1 lose `balance-ready` if S12 needs a formula change? Q2 Gear budget: so
 | --- | --- | --- | --- |
 | R1 | Split oversized test files: `arena_test_suite.gd` (~1400 lines, older groups: combat UI, character specs, gear/dummy, session flow, art/terrain, planning/AI) into one file per group with a small runner; later `combat_extensions_test_suite.gd` (~800) by feature and `dojo_assertions.gd` (~770) | after M2c merges | Pure refactor on its own branch and review; no behaviour or number changes; total assertion count before = after |
 
+## Milestone plan v2 (coarse) - status: proposed (design-brainstorm 2026-10-16; the user approves each milestone)
+
+Principle (user 2026-10-16): few, coarse milestones. Each is ONE logic task (one branch) plus at most ONE asset task (one branch); the schema is the first commit of the logic task and only when the asset task needs it; no a/b/c sub-slices. Builder time uses the run log in `docs/WORKFLOW.md` (4-23 min). Supersedes the sub-slice plans for D1-A, C1-A2 and AI1 (they are folded in below). Nothing here is `approved`.
+
+| Milestone | Goal | Lane split (branches) | Depends on | Size (rough builder min) | Balance-ready afterwards |
+| --- | --- | --- | --- | --- | --- |
+| R1 (optional, first) | Split `arena_test_suite.gd` (1464 lines) into per-group suites with one suite registry; rule from then on: new tests go in new suite files, never in arena_test_suite | 1 logic branch (tests only) | C1-A1 and D1-L merged | 10-15, mechanical | none (pure refactor, assertion count equal) |
+| SK = M2C2B-L + M2C2B | Finish skill content: engine gaps X1 (status on area attacks) and X2 (DEFEND may grant taunt), then all class skill content | logic `M2C2B-L` (schema commit first, 8-10 min); asset `M2C2B` (one branch: C1-A2, D1-A, families, paths, units, test updates; 20-25 min; the four X skills are its last commits) | C1-A1, D1-L, M2C2B-L schema commit | 30-35 total, two builders | S2 classes and skills (but only after BAL1 confirms) |
+| AI1 | AI uses disengage, area attacks, cleanse-only, buffs, taunt, riposte, intimidate; `smart_skills` switch for A/B | 1 logic branch | D1-L (tests use shipped skills, content not needed) | 12-18 | S4 AI presets |
+| M3 | S7 data model + S13 save schema + XP curve + new-game constructor, merged | 1 logic branch, no asset task | none (parallel-safe) | 18-23; the upper end of one builder: if the first run is cut, the minimum split is two parts (progression state/curve; save/IO), do NOT pre-split | S7 curve (rules), S13 none |
+| M4 | S8 quests and flags runtime; structured quest steps and rewards on top of the existing world quest schema; sample campaign quests | logic `M4-L` (schema commit first; 12-16 min) + asset `M4-A` (sample quests in one world, 5-8 min) | M3 (flags and state container) | 20-24 total | S8 reward budget rules |
+| BAL1 | Balance rerun: duel bracket 40-60% for all six classes, tiers, levels, 1v3, boss, `smart_skills` on/off | 1 balance run on clean main | SK, AI1, M3 merged (M4 may still be building: it does not touch combat numbers) | n/a | S1, S2, S4 and S7 curve become `balance-ready` |
+
+Why M3 merges S7 and S13: the save file IS the party snapshot (level via XP, spend, learned skills, passives, loadout, gear, flags). Building them apart forces a schema retrofit and a second migration. UI (level-up screen, menus, new-game screen) is NOT in M3 and is the next milestone after M4 (S7 UI + S13 menus), then S9/S11/S10 as in the suggested build order.
+
+Order and parallelism (builder cap 3): R1 (optional) -> start SK-L, AI1 and M3 together (disjoint Touches) -> M2C2B asset when SK-L's schema commit and C1-A1/D1-L are merged -> M4 after M3 -> BAL1 after SK/AI1/M3. The critical path is C1-A1/D1-L -> SK-L -> M2C2B -> BAL1.
+
+### Hub-file overlap matrix (E = edits, a = additive one-function only, t = registration line only)
+
+| Hub file | R1 | SK-L | M2C2B | AI1 | M3 | M4 |
+| --- | --- | --- | --- | --- | --- | --- |
+| content_schema.gd | - | E (skill part) | - | - | - | - |
+| content_catalog.gd | - | E (DEFEND grant validation) | upsert only | - | - | E (quests kind validation, if base) |
+| content_factory.gd | - | - | - | - | a | - |
+| skill_def.gd | - | E | - | a (read helper, only if D1-L lacks it) | - | - |
+| combatant.gd | - | - | - | - | - (state is applied through the public API) | - |
+| arena_test_suite.gd | E (split) | - | E (loadout-driven kits) | t | t | t |
+| other test suites | - | new suite | E (about 10 suites) | new suite | new suites | new suite |
+| world_schema.gd / world_catalog.gd | - | - | - | - | - | E |
+
+Findings: (1) `arena_test_suite.gd` and the older suites are the real conflict magnet: M2C2B edits about 10 suites. Do NOT run R1 in parallel with M2C2B; run R1 before it (or skip R1 and accept M2C2B owning those edits, with AI1/M3 using only new suite files plus one registration line each). (2) The content hubs (`content_schema/catalog/factory`, `skill_def`) are touched by only one milestone at a time in this plan (SK-L), so no split is needed now; a split of `content_catalog.gd` (717 lines) and `content_schema.gd` (433) by kind (skill/item/class/unit validators) is only worth a separate refactor R2 if M4 and a later item or skill schema change collide; schedule it after M3 if wanted, not before. (3) `combatant.gd` is deliberately not edited by any milestone here: M3 builds a combatant from a state through existing setters. (4) Registration lines in `run_all_tests` conflict textually but trivially; R1 should turn the list into a registry file so each milestone appends one line. (5) Rule for builders: new tests go in a new `*_test_suite.gd`, never into arena_test_suite.
+
+Recommendation on R1: schedule it BEFORE starting the parallel work if it can run now while C1-A1/D1-L finish (it only moves test code); otherwise start SK-L, AI1 and M3 immediately (their Touches are disjoint) and run R1 between SK-L and M2C2B asset only if the M2C2B asset branch has not started. It is not a blocker for anything.
+
 ## Open engine items (tracked)
+
+- Plan v2 covers the items below: AI hooks -> AI1; the skill-tier picker UI and "once per round" disengage remain unscheduled (UI pass / later logic).
 
 - AI hooks: TacticalAI ignores DISENGAGE, SWEEP (area) and cleanse-only skills (needed if enemies should use them) - schedule with the AI follow-ups or M2c-2b.
 - Disengage "once per round" and "after a MOVE" are not enforced/modelled (same as plain MOVE).
