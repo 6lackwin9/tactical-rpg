@@ -61,6 +61,9 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.heal_mult = DictUtil.to_float(e["heal_mult"])
 	s.grant_status = str(e["grant_status"])
 	s.learned_only = DictUtil.to_bool(e["learned_only"])
+	s.family = "" if str(e["family"]) == s.id else str(e["family"])
+	s.tier = DictUtil.to_int(e["tier"], 1)
+	s.basic = DictUtil.to_bool(e["basic"])
 	s.system = DictUtil.to_bool(e["system"])
 	return s
 
@@ -75,6 +78,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"boost": s.boost, "boost_rounds": s.boost_rounds, "recover_ap": s.recover_ap,
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
 		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
+		"family": s.family, "tier": s.tier, "basic": s.basic,
 	})
 
 # ------------------------------------------------------------------------------
@@ -258,6 +262,8 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 			if not skills.has(extra):
 				skills.append(extra)
 		c.known_skills = skills
+		var slots: Dictionary = loadout_of(e, arch, level)
+		c.set_loadout(_strings(slots["class"]), _strings(slots["extra"]))
 	var ap: int = DictUtil.to_int(e["ap"]) if DictUtil.to_int(e["ap"]) > 0 else default_ap
 	if ap > 0:
 		c.max_ap = ap
@@ -269,6 +275,42 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 		c.status_resist[status] = resist[status]
 	c.catalog_id = str(e["id"])
 	return c
+
+# Non-basic skill families of `skill_ids`, first occurrence order.
+static func families_of(skill_ids: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	for id: String in skill_ids:
+		var fam: String = SkillCatalog.family_of(id)
+		if not SkillCatalog.is_always_active(id) and not out.has(fam):
+			out.append(fam)
+	return out
+
+# The active loadout of unit entry `e`: {"class": [families], "extra": [families]}.
+# Default: the first MAX_CLASS_SLOTS class-path families reached by `level` (path order), then the
+# extra skills' families (MAX_EXTRA_SLOTS). A `loadout` list overrides it (families on the class path
+# are class slots, others extra slots); it is validated by ContentCatalog, not trimmed here.
+static func loadout_of(e: Dictionary, arch: ClassArchetype, level: int) -> Dictionary:
+	var path_all: Array[String] = []
+	for step: Dictionary in arch.skill_path:
+		path_all.append(str(step.get("skill", "")))
+	var path_families: Array[String] = families_of(path_all)
+	var listed: Array[String] = _strings(e.get("loadout", []))
+	var class_out: Array[String] = []
+	var extra_out: Array[String] = []
+	if not listed.is_empty():
+		for fam: String in listed:
+			if path_families.has(fam):
+				class_out.append(fam)
+			else:
+				extra_out.append(fam)
+		return {"class": class_out, "extra": extra_out}
+	for fam: String in families_of(arch.skills_at(level)):
+		if class_out.size() < StatRules.MAX_CLASS_SLOTS:
+			class_out.append(fam)
+	for fam: String in families_of(_strings(e.get("extra_skills", []))):
+		if not class_out.has(fam) and not path_families.has(fam) and extra_out.size() < StatRules.MAX_EXTRA_SLOTS:
+			extra_out.append(fam)
+	return {"class": class_out, "extra": extra_out}
 
 # Equips the class's default gear, with per-slot overrides from the unit entry.
 static func _equip(c: Combatant, e: Dictionary, arch: ClassArchetype) -> void:

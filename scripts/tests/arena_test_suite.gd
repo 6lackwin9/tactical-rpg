@@ -15,6 +15,7 @@ extends RefCounted
 #  7c. Combat extensions: ally targeting, gap-close, haste/bleed/taunt, AI fixes (CombatExtensionsTestSuite)
 #  7d. Riposte: reactive counter damage (RiposteTestSuite)
 #  7e. Gear budget: weighted item values, class loadout band, soft warnings (GearBudgetTestSuite)
+#  7f. Skill families and active loadout (SkillFamilyTestSuite)
 #  8. Content Catalog & Forge (ContentTestSuite)
 #  9. Scene Runner (RunnerTestSuite)
 # 10. World Engine & World Forge (WorldTestSuite)
@@ -28,6 +29,7 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 		CombatExtensionsTestSuite.run(),
 		RiposteTestSuite.run(),
 		GearBudgetTestSuite.run(),
+		SkillFamilyTestSuite.run(),
 		run_character_specs_and_inventory_test(),
 		run_gear_equip_and_test_dummy_suite(tree_parent),
 		run_combat_session_flow_test(),

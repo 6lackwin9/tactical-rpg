@@ -30,6 +30,10 @@ const GROWTH_STAT_MAX: int = 3
 const SPEND_BASE: int = 4             # free points at level 1
 const FREE_PER_LEVEL: int = 1         # free points gained per level above 1
 const MAX_LEVEL: int = 10
+const MAX_CLASS_SLOTS: int = 5        # active class skill families in combat (basics counted separately)
+const MAX_EXTRA_SLOTS: int = 3        # active extra-slot skill families
+const MAX_TIER: int = 5               # tiers of a basic skill family
+const MAX_CLASS_TIER: int = 3         # tiers of a class skill family
 
 # tier -> {hp, power}: multipliers on the class-derived HP and attack power.
 const TIERS: Dictionary = {

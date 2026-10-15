@@ -58,6 +58,9 @@ var heal_base: int = 0          # SUPPORT: flat heal
 var heal_mult: float = 0.0      # SUPPORT: heal per point of heal_stat (see SupportRules.heal_amount)
 var grant_status: String = ""   # SUPPORT: buff status given to the target (StatusEffects.buffs())
 var learned_only: bool = false  # unrestricted (hand-built) units don't know it unless they learn it
+var family: String = ""         # skill family (tiers of one skill); empty = its own id (see family_id())
+var tier: int = 1               # position in the family (1..5); each tier is its own skill with its own AP, blocks and power
+var basic: bool = false         # available to every class (counted outside the loadout slots)
 var description: String = ""
 var system: bool = false       # engine skill (Move, Rest, Switch Target, status blocks): always known, not deletable
 
@@ -70,6 +73,10 @@ static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_b
 	skill.blocks = p_blocks
 	skill.description = p_description
 	return skill
+
+# The family this skill belongs to (its own id when it stands alone).
+func family_id() -> String:
+	return id if family.is_empty() else family
 
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.

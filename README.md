@@ -378,7 +378,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **14 test suites** covering **120 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **15 test suites** covering **129 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
@@ -418,6 +418,10 @@ Eight new items for the reworked roster (cloth robes, cleric vestment, mage robe
 ### Reworked roster (M2c-1)
 
 Six classes: Warrior (tank, special tower shield), Ranger, Priest (support), Brawler, Rogue, Mage. Loadouts sit in the gear budget band (the tower shield is the documented special). Goblin units now use the Priest, Brawler (reckless) and Rogue classes. Skill paths use existing skills for now; the new skill set is M2c-2.
+
+### Skill families and loadouts (M2c-2a1)
+
+Skills are grouped into families with tiers chosen at planning time (higher tier = more AP and power). A unit has an active loadout of at most 5 class families plus 3 extra families (basics free); it is set outside combat and locked in battle. Existing units and numbers are unchanged. Tested in `skill_family_test_suite.gd`.
 
 ### Agent workflow tools
 

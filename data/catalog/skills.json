@@ -18,6 +18,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": true,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -38,6 +41,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "strike",
+			"tier": 2,
+			"basic": true,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -58,6 +64,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "strike",
+			"tier": 3,
+			"basic": true,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -78,6 +87,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": true,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -99,6 +111,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -120,6 +135,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -140,6 +158,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -160,6 +181,9 @@
 			"status_rounds": 1,
 			"reach_min": 2,
 			"reach_max": 3,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -180,6 +204,9 @@
 			"status_rounds": 1,
 			"reach_min": 2,
 			"reach_max": 2,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -193,6 +220,9 @@
 			"description": "Raise a light guard: -30% damage.",
 			"status_rounds": 1,
 			"grant_status": "",
+			"family": "",
+			"tier": 1,
+			"basic": true,
 			"learned_only": false,
 			"mitigation": 0.3
 		},
@@ -205,6 +235,9 @@
 			"description": "Brace for impact: -50% damage.",
 			"status_rounds": 1,
 			"grant_status": "",
+			"family": "guard",
+			"tier": 2,
+			"basic": true,
 			"learned_only": false,
 			"mitigation": 0.5
 		},
@@ -217,6 +250,9 @@
 			"description": "Dig in: -70% damage.",
 			"status_rounds": 1,
 			"grant_status": "",
+			"family": "guard",
+			"tier": 3,
+			"basic": true,
 			"learned_only": false,
 			"mitigation": 0.7
 		},
@@ -227,6 +263,9 @@
 			"level": 2,
 			"blocks": 2,
 			"description": "+50% attack for 2 rounds.",
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"boost": 1.5,
 			"boost_rounds": 2
@@ -238,6 +277,9 @@
 			"level": 3,
 			"blocks": 2,
 			"description": "+75% attack for 3 rounds.",
+			"family": "focus",
+			"tier": 2,
+			"basic": false,
 			"learned_only": false,
 			"boost": 1.75,
 			"boost_rounds": 3
@@ -250,6 +292,9 @@
 			"blocks": 1,
 			"description": "Move up to 2 blocks (speed-based tiles per block), once per round: 1 AP per tile. Keeps your stance.",
 			"system": true,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false
 		},
 		{
@@ -260,6 +305,9 @@
 			"blocks": 1,
 			"description": "Lock onto a different enemy (no AP). Added automatically when an attack changes target.",
 			"system": true,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false
 		},
 		{
@@ -270,6 +318,9 @@
 			"blocks": 1,
 			"description": "Block lost to Stagger.",
 			"system": true,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false
 		},
 		{
@@ -280,6 +331,9 @@
 			"blocks": 1,
 			"description": "Block lost to Stun.",
 			"system": true,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false
 		},
 		{
@@ -290,6 +344,9 @@
 			"blocks": 1,
 			"description": "Catch your breath: recover 2 AP and return to Neutral stance, free.",
 			"system": true,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"recover_ap": 2
 		},
@@ -310,6 +367,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"axe",
@@ -334,6 +394,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"axe",
@@ -358,6 +421,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -382,6 +448,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -405,6 +474,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -431,6 +503,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -456,6 +531,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -481,6 +559,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -504,6 +585,9 @@
 			"status_rounds": 1,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": false,
 			"weapon_types": [
 				"dagger"
@@ -525,6 +609,9 @@
 			"heal_base": 8,
 			"heal_mult": 1.5,
 			"grant_status": "",
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": true
 		},
 		{
@@ -542,6 +629,9 @@
 			"heal_base": 0,
 			"heal_mult": 0.0,
 			"grant_status": "haste",
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": true
 		},
 		{
@@ -559,6 +649,9 @@
 			"heal_base": 0,
 			"heal_mult": 0.0,
 			"grant_status": "taunt",
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": true
 		},
 		{
@@ -577,6 +670,9 @@
 			"status_rounds": 1,
 			"reach_min": 1,
 			"reach_max": 1,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -598,6 +694,9 @@
 			"status_rounds": 2,
 			"reach_min": 0,
 			"reach_max": 0,
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -611,6 +710,9 @@
 			"description": "Light guard (-15%) and a riposte stance: for 2 rounds, adjacent melee attackers that you survive are countered for 50% of your attack power (once per attacker per round). Any stance change ends it; moving does not.",
 			"status_rounds": 2,
 			"grant_status": "riposte",
+			"family": "",
+			"tier": 1,
+			"basic": false,
 			"learned_only": true,
 			"mitigation": 0.15
 		}

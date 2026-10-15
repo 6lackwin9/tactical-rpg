@@ -313,6 +313,18 @@ static func _rename_refs(kind: String, old_id: String, new_id: String) -> void:
 				if str(d.get("skill", "")) == old_id:
 					d["skill"] = new_id
 					_dirty_map()["passives"] = true
+		for s: Dictionary in entries("skills"):
+			if str(s.get("family", "")) == old_id:
+				s["family"] = new_id
+				_dirty_map()["skills"] = true
+		for u: Dictionary in entries("units"):
+			var loadout: Variant = u.get("loadout", [])
+			if loadout is Array:
+				var fams: Array = loadout
+				for i: int in range(fams.size()):
+					if str(fams[i]) == old_id:
+						fams[i] = new_id
+						_dirty_map()["units"] = true
 
 # ------------------------------------------------------------------------------
 # Validation
@@ -399,9 +411,40 @@ static func warnings_all() -> Dictionary:
 				out["%s:%s" % [kind, str(e.get("id", ""))]] = found
 	return out
 
+# Skill family rules: a valid family id, tier within the family cap (basic 5, class 3), tiers unique
+# per family, one kind per family, and basic-ness shared by the whole family.
+static func _family_errors(e: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var id: String = str(e.get("id", ""))
+	var family: String = str(e.get("family", ""))
+	if family.is_empty():
+		family = id
+	elif not ContentSchema.is_valid_id(family):
+		errors.append("Family '%s' must be lowercase snake_case (a-z, 0-9, _)." % family)
+	var tier: int = DictUtil.to_int(e.get("tier", 1), 1)
+	var basic: bool = DictUtil.to_bool(e.get("basic", false))
+	var cap: int = StatRules.MAX_TIER if basic else StatRules.MAX_CLASS_TIER
+	if tier > cap and not DictUtil.to_bool(e.get("system", false)):
+		errors.append("Tier %d is above the %d-tier limit for %s skills." % [tier, cap, "basic" if basic else "class"])
+	for other: Dictionary in entries("skills"):
+		var other_id: String = str(other.get("id", ""))
+		if other_id == id:
+			continue
+		var other_family: String = str(other.get("family", ""))
+		if (other_family if not other_family.is_empty() else other_id) != family:
+			continue
+		if DictUtil.to_int(other.get("tier", 1), 1) == tier:
+			errors.append("Family '%s' already has a tier %d skill (%s)." % [family, tier, other_id])
+		if str(other.get("kind", "")) != str(e.get("kind", "")):
+			errors.append("Family '%s' mixes kinds (%s is %s)." % [family, other_id, str(other.get("kind", ""))])
+		if DictUtil.to_bool(other.get("basic", false)) != basic:
+			errors.append("Family '%s': basic must match across all tiers (%s differs)." % [family, other_id])
+	return errors
+
 static func _skill_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	var kind: String = str(e["kind"])
+	errors.append_array(_family_errors(e))
 	if not DictUtil.to_bool(e.get("system", false)) and kind in ["MOVE", "TARGET", "STATUS"]:
 		errors.append("%s skills are engine-only; author an ATTACK, DEFEND, FOCUS, REST or SUPPORT skill." % kind)
 	if kind == "SUPPORT":
@@ -577,6 +620,40 @@ static func _unit_errors(e: Dictionary) -> Array[String]:
 		errors.append("Fixed units don't spend points.")
 	var prof: Proficiency = arch.make_proficiency() if arch != null else Proficiency.new()
 	errors.append_array(_loadout_errors(e, prof, arch != null))
+	if arch != null and not fixed:
+		errors.append_array(_skill_loadout_errors(e, arch))
+	return errors
+
+# Active skill loadout of a unit: listed families must be owned (class path up to its level or extra skills),
+# non-basic, unique, and fit MAX_CLASS_SLOTS class + MAX_EXTRA_SLOTS extra slots. The DEFAULT loadout
+# (no `loadout` list) is trimmed to the limits, so only an explicit list can break them.
+static func _skill_loadout_errors(e: Dictionary, arch: ClassArchetype) -> Array[String]:
+	var errors: Array[String] = []
+	var listed: Array[String] = ContentFactory._strings(e.get("loadout", []))
+	if listed.is_empty():
+		return errors
+	var level: int = DictUtil.to_int(e.get("level", 1), 1)
+	var owned_ids: Array[String] = arch.skills_at(level)
+	owned_ids.append_array(ContentFactory._strings(e.get("extra_skills", [])))
+	var owned: Array[String] = ContentFactory.families_of(owned_ids)
+	var seen: Array[String] = []
+	for fam: String in listed:
+		if seen.has(fam):
+			errors.append("Loadout: family '%s' is listed twice." % fam)
+		seen.append(fam)
+		if SkillCatalog.family_tiers(fam).is_empty():
+			errors.append("Loadout: unknown skill family '%s'." % fam)
+		elif SkillCatalog.is_basic_family(fam):
+			errors.append("Loadout: '%s' is a basic family (always active, no slot)." % fam)
+		elif not owned.has(fam):
+			errors.append("Loadout: the unit does not own the skill family '%s'." % fam)
+	var slots: Dictionary = ContentFactory.loadout_of(e, arch, level)
+	var class_count: int = ContentFactory._strings(slots["class"]).size()
+	var extra_count: int = ContentFactory._strings(slots["extra"]).size()
+	if class_count > StatRules.MAX_CLASS_SLOTS:
+		errors.append("Loadout: %d class families (max %d)." % [class_count, StatRules.MAX_CLASS_SLOTS])
+	if extra_count > StatRules.MAX_EXTRA_SLOTS:
+		errors.append("Loadout: %d extra families (max %d)." % [extra_count, StatRules.MAX_EXTRA_SLOTS])
 	return errors
 
 static func _encounter_errors(e: Dictionary) -> Array[String]:

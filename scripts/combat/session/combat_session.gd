@@ -115,6 +115,7 @@ func start() -> void:
 		resolver.register_combatant(c)
 	for c: Combatant in enemies:
 		resolver.register_combatant(c)
+	_set_loadouts_locked(true)
 
 	log_reset.emit()
 	mounted.emit()
@@ -169,9 +170,17 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	selected_combatant = first_active
 	_notify()
 
+# The active skill loadout can only change outside combat: locked from start() until dispose().
+func _set_loadouts_locked(locked: bool) -> void:
+	for c: Combatant in allies:
+		c.loadout_locked = locked
+	for c: Combatant in enemies:
+		c.loadout_locked = locked
+
 # Breaks reference cycles of the current battle (units locking onto each other via
 # active_target) so a finished or abandoned battle can be freed. Safe to repeat.
 func dispose() -> void:
+	_set_loadouts_locked(false)
 	for c: Combatant in allies:
 		c.active_target = null
 	for c: Combatant in enemies:

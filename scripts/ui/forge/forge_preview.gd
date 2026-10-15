@@ -53,6 +53,12 @@ static func _skill(e: Dictionary) -> String:
 	var t: String = "[b]%s[/b]  %s\n" % [s.label(), "[color=#fbbf24](system)[/color]" if s.system else ""]
 	t += _line("Cost", "%d AP%s, %d block%s" % [s.ap_cost(), " per tile" if s.kind == SkillDef.Kind.MOVE else "", s.blocks, "" if s.blocks == 1 else "s"])
 	t += _line("Stance", CombatTypes.stance_to_string(s.stance()) if s.kind != SkillDef.Kind.MOVE else "keeps the current stance")
+	var siblings: Array[String] = []
+	for sib: Dictionary in ContentCatalog.entries("skills"):
+		var sib_family: String = str(sib.get("family", "")) if not str(sib.get("family", "")).is_empty() else str(sib.get("id", ""))
+		if sib_family == s.family_id() and str(sib.get("id", "")) != s.id:
+			siblings.append("%s (tier %d)" % [str(sib.get("name", "")), DictUtil.to_int(sib.get("tier", 1), 1)])
+	t += _line("Family", "%s, tier %d%s%s" % [s.family_id(), s.tier, " (basic)" if s.basic else "", (", with " + ", ".join(siblings)) if not siblings.is_empty() else ""])
 	match s.kind:
 		SkillDef.Kind.ATTACK:
 			var melee := Combatant.new("melee", 50, 12, 1)
@@ -173,6 +179,8 @@ static func _unit(e: Dictionary) -> String:
 		if not s.system and s.level <= profile.skill_cap and c.knows_skill(s.id) and not (s.offhand and c.attack_range <= 1):
 			known.append(s.display_name)
 	t += _line("Skills (cap %d)" % profile.skill_cap, ", ".join(known) if not known.is_empty() else "none")
+	if not c.active_families.is_empty():
+		t += _line("Loadout", "class %d/%d: %s; extra %d/%d: %s" % [c.active_class_families.size(), StatRules.MAX_CLASS_SLOTS, ", ".join(c.active_class_families), c.active_extra_families.size(), StatRules.MAX_EXTRA_SLOTS, ", ".join(c.active_extra_families) if not c.active_extra_families.is_empty() else "none"])
 	var gear: Array[String] = []
 	for eq: Equipment in c.inventory._iter_equipped_gear():
 		gear.append(eq.name)

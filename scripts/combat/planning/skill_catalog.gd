@@ -72,3 +72,80 @@ static func lowest(kind: SkillDef.Kind) -> SkillDef:
 		if s.kind == kind:
 			return s
 	return null
+
+# ------------------------------------------------------------------------------
+# Skill families (tiers of one skill, chosen at planning time)
+# ------------------------------------------------------------------------------
+
+# The family of a skill (its own id when it stands alone or is unknown).
+static func family_of(skill_id: String) -> String:
+	var s: SkillDef = find(skill_id)
+	return skill_id if s == null else s.family_id()
+
+# Every tier of `family`, lowest tier first (ties keep file order).
+static func family_tiers(family: String) -> Array[SkillDef]:
+	var result: Array[SkillDef] = []
+	for s: SkillDef in all():
+		if s.family_id() == family:
+			result.append(s)
+	result.sort_custom(func(a: SkillDef, b: SkillDef) -> bool: return a.tier < b.tier)
+	return result
+
+# Every family id, in file order of its first skill.
+static func families() -> Array[String]:
+	var result: Array[String] = []
+	for s: SkillDef in all():
+		if not result.has(s.family_id()):
+			result.append(s.family_id())
+	return result
+
+# Display name of a family: its lowest tier ("Mend" for Mend I / II / III).
+static func family_name(family: String) -> String:
+	var tiers: Array[SkillDef] = family_tiers(family)
+	return family if tiers.is_empty() else tiers[0].display_name
+
+# A basic family (any tier flagged basic) is available to every class and costs no loadout slot.
+static func is_basic_family(family: String) -> bool:
+	for s: SkillDef in family_tiers(family):
+		if s.basic:
+			return true
+	return false
+
+# Basic or engine skill: always passes the active-loadout filter.
+static func is_always_active(skill_id: String) -> bool:
+	var s: SkillDef = find(skill_id)
+	return s != null and (s.system or is_basic_family(s.family_id()))
+
+# `kind` skills the unit can plan, grouped by family with the affordable tiers (tier <= cap by AP level)
+# lowest first: [{"family": id, "name": text, "tiers": Array[SkillDef]}], families in file order.
+static func grouped(kind: SkillDef.Kind, skill_cap: int, c: Combatant = null) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for s: SkillDef in available(kind, skill_cap, c):
+		var fam: String = s.family_id()
+		var group: Dictionary = {}
+		for g: Dictionary in out:
+			if str(g["family"]) == fam:
+				group = g
+		if group.is_empty():
+			var tiers: Array[SkillDef] = []
+			group = {"family": fam, "name": family_name(fam), "tiers": tiers}
+			out.append(group)
+		var list: Array[SkillDef] = group["tiers"]
+		list.append(s)
+	for g: Dictionary in out:
+		var list: Array[SkillDef] = g["tiers"]
+		list.sort_custom(func(a: SkillDef, b: SkillDef) -> bool: return a.tier < b.tier)
+	return out
+
+static func roman(n: int) -> String:
+	return ["", "I", "II", "III", "IV", "V"][clampi(n, 0, 5)]
+
+# "Mend I / II / III" for a group from grouped() (single tier: just the name).
+static func group_label(group: Dictionary) -> String:
+	var tiers: Array[SkillDef] = group["tiers"]
+	if tiers.size() <= 1:
+		return str(group["name"]) if tiers.is_empty() else tiers[0].display_name
+	var parts: Array[String] = []
+	for s: SkillDef in tiers:
+		parts.append(roman(s.tier))
+	return "%s %s" % [str(group["name"]), " / ".join(parts)]

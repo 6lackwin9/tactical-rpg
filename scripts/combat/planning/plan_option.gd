@@ -20,6 +20,42 @@ var switches_target: bool = false
 var heal: int = 0           # expected HP restored (support options)
 var grants: String = ""     # buff status the option grants (support options)
 
+# The skill family of the option's step ("" for steps without a skill, e.g. withdraw) and its tier.
+func family() -> String:
+	return "" if step == null or step.skill == null else step.skill.family_id()
+
+func tier() -> int:
+	return 0 if step == null or step.skill == null else step.skill.tier
+
+# Groups options into [{"family": id, "name": text, "label": "Mend I / II / III", "options": Array[PlanOption]}]
+# in first-seen order; options of one family and target stay together, tiers lowest first. Skill-less steps are skipped.
+# (A group holds one option per affordable tier per target, so UIs list tiers of the clicked target side by side.)
+static func group_by_family(options: Array[PlanOption]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for o: PlanOption in options:
+		var fam: String = o.family()
+		if fam.is_empty():
+			continue
+		var group: Dictionary = {}
+		for g: Dictionary in out:
+			if str(g["family"]) == fam:
+				group = g
+		if group.is_empty():
+			var list: Array[PlanOption] = []
+			group = {"family": fam, "name": SkillCatalog.family_name(fam), "label": "", "options": list}
+			out.append(group)
+		var members: Array[PlanOption] = group["options"]
+		members.append(o)
+	for g: Dictionary in out:
+		var members: Array[PlanOption] = g["options"]
+		members.sort_custom(func(a: PlanOption, b: PlanOption) -> bool: return a.tier() < b.tier())
+		var tiers: Array[SkillDef] = []
+		for o: PlanOption in members:
+			if not tiers.has(o.step.skill):
+				tiers.append(o.step.skill)
+		g["label"] = SkillCatalog.group_label({"name": g["name"], "tiers": tiers})
+	return out
+
 func cost_text() -> String:
 	if not valid:
 		return reason

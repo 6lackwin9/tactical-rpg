@@ -39,6 +39,10 @@ var armor_override: int = -1    # authored armor rating (>= 0 replaces gear miti
 var lore_ref: String = ""           # world character it plays (WorldCatalog qualified id), empty for plain catalog units
 var known_skills: Array[String] = []   # skills this unit may plan: class path up to its level + extras (empty = unrestricted)
 var granted_skills: Array[String] = []  # skills learned beyond the class path (passives, in-game events); persist on the unit
+var active_class_families: Array[String] = []  # active loadout: class skill families (max StatRules.MAX_CLASS_SLOTS)
+var active_extra_families: Array[String] = []  # active loadout: extra-slot families (max StatRules.MAX_EXTRA_SLOTS)
+var active_families: Array[String] = []        # class + extra families; empty = no restriction (hand-built units)
+var loadout_locked: bool = false               # set by CombatSession while a battle runs: the loadout can't change
 var passives: Array[String] = []        # ids of the passives applied to this unit (see Passives)
 var ap_regen_bonus: int = 0             # extra AP regained each round (passives)
 var hp_scale: float = 1.0               # tier multiplier on class-derived HP
@@ -68,10 +72,66 @@ func min_attack_range() -> int:
 # Move, Rest and other system skills are always known; class-derived units know their
 # class path (up to their level), learned extras and granted skills.
 func knows_skill(skill_id: String) -> bool:
+	if not owns_skill(skill_id):
+		return false
+	# An active loadout hides owned skills whose family is not slotted (basics and engine skills stay).
+	return active_families.is_empty() or SkillCatalog.is_always_active(skill_id) or active_families.has(SkillCatalog.family_of(skill_id))
+
+# Owned (class path + extras + learned), regardless of the active loadout.
+func owns_skill(skill_id: String) -> bool:
 	if known_skills.has(skill_id) or granted_skills.has(skill_id) or SkillCatalog.is_system(skill_id):
 		return true
 	# Unrestricted (hand-built) units know every skill except those that must be learned explicitly.
 	return known_skills.is_empty() and not SkillCatalog.is_learned_only(skill_id)
+
+# Non-basic families this unit owns (class path + extras + learned), in owned-list order.
+func owned_families() -> Array[String]:
+	var out: Array[String] = []
+	var ids: Array[String] = []
+	ids.append_array(known_skills)
+	ids.append_array(granted_skills)
+	for id: String in ids:
+		var fam: String = SkillCatalog.family_of(id)
+		if not out.has(fam) and not SkillCatalog.is_always_active(id):
+			out.append(fam)
+	return out
+
+# Sets the active loadout (outside combat only). Returns an error text, empty on success; on error nothing changes.
+func set_loadout(class_families: Array[String], extra_families: Array[String]) -> String:
+	if loadout_locked:
+		return "The loadout can't be changed during combat."
+	if class_families.size() > StatRules.MAX_CLASS_SLOTS:
+		return "At most %d class skill families can be active (got %d)." % [StatRules.MAX_CLASS_SLOTS, class_families.size()]
+	if extra_families.size() > StatRules.MAX_EXTRA_SLOTS:
+		return "At most %d extra skill families can be active (got %d)." % [StatRules.MAX_EXTRA_SLOTS, extra_families.size()]
+	var owned: Array[String] = owned_families()
+	var seen: Array[String] = []
+	for fam: String in class_families + extra_families:
+		if seen.has(fam):
+			return "Family '%s' is listed twice." % fam
+		seen.append(fam)
+		if SkillCatalog.is_basic_family(fam):
+			return "'%s' is a basic family (always active, no slot)." % fam
+		if not owned.has(fam):
+			return "This unit does not own the skill family '%s'." % fam
+	active_class_families = class_families.duplicate()
+	active_extra_families = extra_families.duplicate()
+	_refresh_active()
+	return ""
+
+# Back to "no restriction" (every owned skill usable). Outside combat only.
+func clear_loadout() -> String:
+	if loadout_locked:
+		return "The loadout can't be changed during combat."
+	active_class_families.clear()
+	active_extra_families.clear()
+	_refresh_active()
+	return ""
+
+func _refresh_active() -> void:
+	active_families.clear()
+	active_families.append_array(active_class_families)
+	active_families.append_array(active_extra_families)
 
 # Known AND trained for: skills with min_proficiency need the right gear type at that
 # proficiency level (class-derived units only; hand-built units are unrestricted).
@@ -90,6 +150,11 @@ func can_use(skill: SkillDef) -> bool:
 func learn_skill(skill_id: String) -> void:
 	if not granted_skills.has(skill_id):
 		granted_skills.append(skill_id)
+		# With an active loadout, a newly learned non-basic family takes a free extra slot (else it stays owned but inactive).
+		var fam: String = SkillCatalog.family_of(skill_id)
+		if not active_families.is_empty() and not SkillCatalog.is_always_active(skill_id) and not active_families.has(fam) and active_extra_families.size() < StatRules.MAX_EXTRA_SLOTS:
+			active_extra_families.append(fam)
+			_refresh_active()
 
 # Armor burden after training (Proficiency.burden_reduction per worn piece).
 func worn_burden() -> int:

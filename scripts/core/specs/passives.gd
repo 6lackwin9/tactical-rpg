@@ -87,8 +87,7 @@ static func apply(c: Combatant, passive: Dictionary) -> void:
 				c.ap_regen_bonus += DictUtil.to_int(e.get("value", 0))
 			"skill":
 				var skill_id: String = str(e.get("skill", ""))
-				if not c.granted_skills.has(skill_id):
-					c.granted_skills.append(skill_id)
+				c.learn_skill(skill_id)   # also slots its family into a free extra slot of an active loadout
 
 # One-line summary of what a passive does.
 static func describe(passive: Dictionary) -> String:
