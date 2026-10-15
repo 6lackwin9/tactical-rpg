@@ -72,3 +72,8 @@ Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many t
 - Builders end with a "docs delta" so the planner can update README, GAME_BRIEF, STRUCTURE and DECISIONS quickly.
 
 | B1 rest to tactical (parallel pilot: logic-builder in a worktree + design-brainstorm writing C1/D1/M2C2B specs 131k / 7) | 47k / 10 | none (tiny change; fc.sh all re-run after rebase) | merged (see git log: B1) |
+
+## Parallel safety (2026-10-16)
+
+- Every task row in `docs/TASKS.md` and every spec lists its `Touches`; parallel only when they do not overlap. Cap: 3 builders at once.
+- `tools/overlap.sh` lists files edited in more than one active worktree (exit 1 when any). First run (C1-L vs D1-L): 8 shared scripts (`skill_def.gd`, `combatant.gd`, `content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `plan_entry.gd`, `status_effects.gd`, `dojo_session.gd`) plus `items.json` for C1-A1 vs C1-L: the "independent" judgement was optimistic, so expect small merge conflicts there. Lesson: shared hub files make most logic tasks overlap; sequence tasks that both change schema/validation, or merge the schema slices first.

@@ -29,8 +29,9 @@ If the custom agent types are not yet callable (agent files added this session),
 
 1. Create worktrees for parallel lanes from clean `main` (`git worktree add ../<repo>-<id> -b feat/<id>-<slug>`); use one worktree per concurrent builder and one read-only `main` worktree for the balance agent. `git status` must be clean first. Give each agent its worktree path, branch and spec.
 2. Schema-first handshake: for a task with new schema, run the `logic-builder` on the schema slice first; review and merge it quickly (small), then start the `asset-builder` (branching from the updated `main`) in parallel with the logic-builder's remaining behaviour work. They edit different folders, so merges stay clean. Merge order: schema slice, then logic, then data (or data first if its tests are generic); run the full check after each merge.
-3. Keep agents busy: while builders run, `design-brainstorm` writes the next specs and the `balance` agent runs on frozen systems; reviewers run in the background on finished branches while the next task starts. Independent tasks with no shared files run in separate worktrees at the same time.
-4. Mark tasks `in-progress` in `docs/TASKS.md`.
+3. Parallel limits: at most 3 builders (logic + asset) at once; tasks run in parallel only when their `Touches` (docs/TASKS.md) do not overlap, otherwise sequence them (merge the smaller or more foundational one first). Run `tools/overlap.sh` while worktrees are active and before every merge: it lists files edited in more than one worktree. The shared hub files (`content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `skill_def.gd`, `combatant.gd`, `arena_test_suite.gd`) are the usual conflict points, so give two logic tasks that both need them a merge order up front.
+4. Keep agents busy: while builders run, `design-brainstorm` writes the next specs and the `balance` agent runs on frozen systems; reviewers run in the background on finished branches while the next task starts. Independent tasks with no shared files run in separate worktrees at the same time.
+5. Mark tasks `in-progress` in `docs/TASKS.md`.
 
 ## 3. Review and ship
 

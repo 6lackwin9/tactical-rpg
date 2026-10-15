@@ -11,7 +11,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
 | `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
 | `scripts/tests/`, `scenes/dojo/dojo_assertions.gd` | headless suites | all | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd, overlap.sh | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |

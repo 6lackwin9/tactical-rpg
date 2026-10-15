@@ -10,6 +10,7 @@ One file per task: `docs/specs/<task-id>.md`, written by the `design-brainstorm`
 Status: proposed | approved | in-progress | done
 Depends on: <task ids>
 Lane: logic | asset | both
+Touches: files or areas this task edits (e.g. `scripts/combat/status/*`, `content_schema.gd`, `data/catalog/skills.json`); the planner runs tasks in parallel only if their Touches do not overlap
 
 ## Goal
 One paragraph.
