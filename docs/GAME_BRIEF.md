@@ -70,3 +70,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 - `unarmed` is a valid skill `weapon_types` token (no main-hand weapon; proficiency uses the class's `fist` level).
 - Items have a derived hand: `main_1h`, `main_2h` or `off` (`Equipment.hand()`).
 - `Combatant.potency_for(family)` / `SkillDef.power_for(user)` scale skill output; the `skill_potency` passive effect feeds it. Default behaviour unchanged.
+
+## Item effects (C1-L)
+
+- Items have an `effects` list (passive grammar restricted to item types: `skill_potency` by family or group `spell`/`heal`, `status_potency` 1..25, `spell_reach` 1..2, `resist`). They apply only while equipped and are rebuilt on every `sync_from_stats_and_gear` (`Combatant.rebuild_gear_effects`), kept in separate `gear_*` fields. Spell = ATTACK skill gated on staff or wand; heal = healing SUPPORT skill. Gear spell reach is clamped to 1. Orb and tome are off-hand only; a 2H main weapon refuses them.
