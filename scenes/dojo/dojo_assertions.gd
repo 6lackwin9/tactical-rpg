@@ -693,26 +693,28 @@ static func _run_skill_and_dummy_assertions(session: DojoSession) -> bool:
 	var ids: Array[String] = []
 	for s: SkillDef in session.usable_skills():
 		ids.append(s.id)
-	var catalog_ok: bool = ids.has("strike") and ids.has("power_strike") and ids.has("shield_bash") and ids.has("brace") and ids.has("focus") and ids.has("rest") and not ids.has("move") and not ids.has("stunned")
+	var catalog_ok: bool = ids.has("strike") and ids.has("riposte") and ids.has("shield_bash") and ids.has("guard") and ids.has("focus") and ids.has("rest") and not ids.has("move") and not ids.has("stunned")
 	passed = _check("Dojo-33", "Console skills come from the content catalog", catalog_ok, "%d skills" % ids.size()) and passed
 
-	# 34: Power Strike = the battle rules: AP (level + stance switch), Offensive stance, DamageCalculator hit
-	var power_strike: SkillDef = SkillCatalog.find("power_strike")
+	# 34: a level-2 attack (Hamstring, x0.8) = the battle rules: AP (level + stance switch), its stance, DamageCalculator hit
+	var power_strike: SkillDef = SkillCatalog.find("hamstring")
 	var ap_before: int = hero.ap
+	var stance_before: CombatTypes.StanceType = hero.current_stance
 	var expected_cost: int = session.skill_ap(power_strike)
 	var probe := RandomNumberGenerator.new()
 	probe.seed = session.rng.seed
 	probe.state = session.rng.state
 	var expected: int = UiTheme.dict_int(DamageCalculator.compute(hero, dummy, false, false, power_strike.power_mult, false, probe, power_strike.stance()), "final_dmg")
 	var hp_before: int = dummy.hp
-	session.use_skill("power_strike")
+	session.use_skill(power_strike.id)
 	var dealt: int = hp_before - dummy.hp
-	var strike_ok: bool = dealt == expected and hero.ap == ap_before - expected_cost and expected_cost == 3 and hero.current_stance == CombatTypes.StanceType.OFFENSIVE
-	passed = _check("Dojo-34", "Power Strike follows battle rules (2 AP + 1 switch, Offensive, x1.5 hit)", strike_ok, "dealt %d expected %d, AP %d -> %d" % [dealt, expected, ap_before, hero.ap]) and passed
+	var strike_ok: bool = (dealt == expected and hero.ap == ap_before - expected_cost and expected_cost == power_strike.level + power_strike.switch_cost(stance_before)
+		and hero.current_stance == power_strike.stance_after(stance_before) and hero.current_stance == CombatTypes.StanceType.OFFENSIVE)
+	passed = _check("Dojo-34", "A level-2 attack follows battle rules (level AP + stance switch, Offensive, skill power_mult hit)", strike_ok, "dealt %d expected %d, AP %d -> %d" % [dealt, expected, ap_before, hero.ap]) and passed
 
-	# 35: Brace guards (-50%, Defensive); the dummy's attack uses its power, stance and crit vs the hero's guard & armor
-	session.use_skill("brace")
-	var guard_ok: bool = is_equal_approx(hero.defense_mitigation_ratio, 0.5) and hero.current_stance == CombatTypes.StanceType.DEFENSIVE
+	# 35: Guard mitigates (the skill's mitigation, Defensive); the dummy's attack uses its power, stance and crit vs the hero's guard & armor
+	session.use_skill("guard")
+	var guard_ok: bool = is_equal_approx(hero.defense_mitigation_ratio, SkillCatalog.find("guard").mitigation) and hero.current_stance == CombatTypes.StanceType.DEFENSIVE
 	var probe2 := RandomNumberGenerator.new()
 	probe2.seed = session.rng.seed
 	probe2.state = session.rng.state
@@ -742,7 +744,7 @@ static func _run_skill_and_dummy_assertions(session: DojoSession) -> bool:
 	session.dummy_attack()
 	var stunned_ok: bool = hero.hp == hp_stun and session.log_entries[session.log_entries.size() - 1].outcome_tag == StatusEffects.display_name(StatusEffects.STUN).to_upper()
 	session.use_skill("focus")
-	session.use_skill("brace")
+	session.use_skill("guard")
 	var ap_round: int = hero.ap
 	session.next_round()
 	var round_ok: bool = (stunned_ok and session.round_num == 2 and hero.defense_mitigation_ratio == 0.0 and hero.attack_boost_rounds_remaining == 1

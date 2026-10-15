@@ -53,7 +53,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 
 ## Skill families and loadouts (M2c-2a1)
 
-- Skills carry `family` + `tier`; the planner offers each affordable tier (AP = tier's level, within the unit's skill cap) grouped by family ("Mend I / II / III", `PlanOption.group_by_family`). Basics (strike, guard, offhand_jab) are always active.
+- Skills carry `family` + `tier`; the planner offers each affordable tier (AP = tier's level, within the unit's skill cap) grouped by family ("Mend I / II / III", `PlanOption.group_by_family`). Basics are exactly strike, guard, move, rest, switch_target and offhand_jab: single tier, always active, no variants (their late-game scaling will come from gear affixes and passives through the `skill_potency` hook).
 - Active loadout: max 5 class families + 3 extra (`StatRules.MAX_CLASS_SLOTS/MAX_EXTRA_SLOTS`); `Combatant.set_loadout` only outside battle (locked by `CombatSession.start`). Empty loadout = unrestricted (hand-built units).
 
 ## Engine pieces (M2c-2a2)
@@ -62,3 +62,10 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 - Disengage: `SkillDef.Kind.DISENGAGE` + `jump_tiles`; `CombatPlan._apply_disengage` picks the landing tile (farthest from the nearest/chosen foe, then shortest jump, nearest centre, lowest x/y; a GOTO step names the tile), `DisengageCommand` jumps (over units, not walls). It is the unit's move for the round (first, refused when rooted), AP = skill level. Example `backflip`.
 - `Area.SWEEP`: the L (1,0) (1,1) (0,1) rotated into the quadrant of a diagonal aim tile; friendly fire as other areas. Example `sweep_kick`.
 - Unarmed: `DamageCalculator` already uses STR+DEX with no weapon; `GearBudget.UNARMED_VALUE` (14) counts for an empty main hand.
+
+## Foundation (slice A)
+
+- `StatusRegistry` is the single table of statuses (kind, resistable, default rounds, stacking rule, cap); `StatusEffects.debuffs()/buffs()/resistable()` derive from it; add a status by following the checklist in its header.
+- `unarmed` is a valid skill `weapon_types` token (no main-hand weapon; proficiency uses the class's `fist` level).
+- Items have a derived hand: `main_1h`, `main_2h` or `off` (`Equipment.hand()`).
+- `Combatant.potency_for(family)` / `SkillDef.power_for(user)` scale skill output; the `skill_potency` passive effect feeds it. Default behaviour unchanged.

@@ -31,6 +31,8 @@ static func run_all_tests(tree_parent: Node = null) -> bool:
 		GearBudgetTestSuite.run(),
 		SkillFamilyTestSuite.run(),
 		EnginePiecesTestSuite.run(),
+		StatusRegistryTestSuite.run(),
+		FoundationTestSuite.run(),
 		run_character_specs_and_inventory_test(),
 		run_gear_equip_and_test_dummy_suite(tree_parent),
 		run_combat_session_flow_test(),
@@ -740,12 +742,12 @@ static func run_planning_and_ai_test() -> bool:
 	for s: SkillDef in SkillCatalog.all():
 		if s.kind == SkillDef.Kind.ATTACK or s.kind == SkillDef.Kind.DEFEND or s.kind == SkillDef.Kind.FOCUS:
 			skills_ok = skills_ok and s.ap_cost() == s.level
-	var l2_ok: bool = SkillCatalog.find("power_strike").ap_cost() == 2 and SkillCatalog.find("brace").ap_cost() == 2 and SkillCatalog.find("focus").ap_cost() == 2
+	var l2_ok: bool = SkillCatalog.find("hamstring").ap_cost() == 2 and SkillCatalog.find("riposte").ap_cost() == 2 and SkillCatalog.find("focus").ap_cost() == 2
 	var modded := Combatant.new("Modded", 10, 10, 1)
 	modded.ap_cost_modifier = 1
-	var mod_ok: bool = SkillCatalog.find("strike").ap_cost(modded) == 2 and SkillCatalog.find("heavy_blow").ap_cost(modded) == 4 and SkillCatalog.find("move").ap_cost(modded) == 2 and SkillCatalog.find("rest").ap_cost(modded) == 0
+	var mod_ok: bool = SkillCatalog.find("strike").ap_cost(modded) == 2 and SkillCatalog.find("haymaker").ap_cost(modded) == 4 and SkillCatalog.find("move").ap_cost(modded) == 2 and SkillCatalog.find("rest").ap_cost(modded) == 0
 	modded.ap_cost_modifier = -5
-	mod_ok = mod_ok and SkillCatalog.find("heavy_blow").ap_cost(modded) == 1
+	mod_ok = mod_ok and SkillCatalog.find("haymaker").ap_cost(modded) == 1
 	var fast := Combatant.new("Fast", 10, 15, 1)
 	var slow := Combatant.new("Slow", 10, 8, 1)
 	var speed_ok: bool = fast.move_per_block() == 3 and slow.move_per_block() == 2 and Combatant.new("Tortoise", 10, 1, 1).move_per_block() == 1
@@ -760,10 +762,10 @@ static func run_planning_and_ai_test() -> bool:
 	rps_ok = rps_ok and CombatTypes.get_matchup_multiplier(T, O) == 0.75 and CombatTypes.get_matchup_multiplier(D, T) == 0.75 and CombatTypes.get_matchup_multiplier(O, D) == 0.75
 	rps_ok = rps_ok and CombatTypes.get_matchup_multiplier(N, O) == 1.0 and CombatTypes.get_matchup_multiplier(T, N) == 1.0 and CombatTypes.get_matchup_multiplier(O, O) == 1.0
 	var strike: SkillDef = SkillCatalog.find("strike")
-	var brace: SkillDef = SkillCatalog.find("brace")
+	var guard_skill: SkillDef = SkillCatalog.find("guard")
 	var mover: SkillDef = SkillCatalog.find("move")
 	var rest_skill: SkillDef = SkillCatalog.find("rest")
-	var switch_ok: bool = strike.switch_cost(N) == 1 and strike.switch_cost(O) == 0 and brace.switch_cost(O) == 1 and brace.switch_cost(D) == 0
+	var switch_ok: bool = strike.switch_cost(N) == 1 and strike.switch_cost(O) == 0 and guard_skill.switch_cost(O) == 1 and guard_skill.switch_cost(D) == 0
 	switch_ok = switch_ok and mover.switch_cost(T) == 0 and mover.stance_after(T) == T and rest_skill.switch_cost(D) == 0 and rest_skill.stance_after(D) == N
 	var stance_ok: bool = rps_ok and switch_ok
 
@@ -773,13 +775,12 @@ static func run_planning_and_ai_test() -> bool:
 	_pin_skirmish_layout(session)
 	var warrior: Combatant = session.allies[0]
 	var foe: Combatant = session.enemies[0]
-	warrior.learn_skill("power_strike")   # the tank warrior's path no longer includes these; learn them for the planner checks
-	warrior.learn_skill("heavy_blow")
-	var power_strike: SkillDef = SkillCatalog.find("power_strike")
-	var first: String = session.plan_add_step(warrior, PlanStep.engage(power_strike, foe))
+	warrior.learn_skill("hamstring")   # the tank warrior's path does not include it; learn this L2 attack for the planner checks
+	var committed: SkillDef = SkillCatalog.find("hamstring")   # a level-2 attack with no weapon gating
+	var first: String = session.plan_add_step(warrior, PlanStep.engage(committed, foe))
 	var compiled: CombatPlan.SimState = session.plan.compile(warrior)
 	var attack_entry: PlanEntry = compiled.entries[compiled.entries.size() - 1] if not compiled.entries.is_empty() else null
-	var chain_ok: bool = first.is_empty() and attack_entry != null and attack_entry.skill == power_strike and attack_entry.target == foe and attack_entry.switch_ap == 1
+	var chain_ok: bool = first.is_empty() and attack_entry != null and attack_entry.skill == committed and attack_entry.target == foe and attack_entry.switch_ap == 1
 	var blocks_ok: bool = true
 	var expected_block: int = 1
 	var ap_sum: int = 0
@@ -807,8 +808,8 @@ static func run_planning_and_ai_test() -> bool:
 
 	# AP is a runtime resource: over-committing is allowed, the plan projects where it runs dry
 	session.plan_clear(warrior)
-	warrior.ap = 3   # a Heavy Blow (3 AP + 1 stance switch) is more than the unit can pay
-	var _last_problem: String = session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("heavy_blow"), session.enemies[1]))
+	warrior.ap = committed.ap_cost()   # the skill plus its +1 stance switch is more than the unit can pay
+	var _last_problem: String = session.plan_add_step(warrior, PlanStep.engage(committed, session.enemies[1]))
 	_last_problem += session.plan_add_step(warrior, PlanStep.engage(SkillCatalog.find("strike"), session.enemies[1]))
 	var dry_state: CombatPlan.SimState = session.plan.compile(warrior)
 	var dry_ok: bool = dry_state.runs_dry() and dry_state.dry_step >= 0 and dry_state.ap_left < 0 and dry_state.debt() > 0 and session.plan_is_valid()
@@ -844,7 +845,7 @@ static func run_planning_and_ai_test() -> bool:
 	var preview: CombatResolver.ScheduledAction = session.find_recorded_action(warrior, 1)
 	var preview_ok: bool = preview != null
 	var confirmed: bool = session.confirm_plan()
-	var locked_ok: bool = confirmed and not session.is_planning() and not session.plan_add_step(warrior, PlanStep.self_skill(brace)).is_empty()
+	var locked_ok: bool = confirmed and not session.is_planning() and not session.plan_add_step(warrior, PlanStep.self_skill(guard_skill)).is_empty()
 	var party_scheduled: bool = false
 	var enemy_scheduled: bool = false
 	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
@@ -971,7 +972,7 @@ static func run_planning_and_ai_test() -> bool:
 	rhero.speed = 15
 	# AP carries over: +4 each round up to the pool
 	var ap_before: int = rhero.ap
-	rsession.plan_add_step(rhero, PlanStep.self_skill(SkillCatalog.find("brace")))
+	rsession.plan_add_step(rhero, PlanStep.self_skill(SkillCatalog.find("guard")))
 	rsession.confirm_plan()
 	var autoplayed: bool = rsession.is_auto_playing
 	_resolve_until_replay(rsession)

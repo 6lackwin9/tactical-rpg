@@ -45,6 +45,7 @@ var active_families: Array[String] = []        # class + extra families; empty =
 var loadout_locked: bool = false               # set by CombatSession while a battle runs: the loadout can't change
 var passives: Array[String] = []        # ids of the passives applied to this unit (see Passives)
 var ap_regen_bonus: int = 0             # extra AP regained each round (passives)
+var potency_bonus: Dictionary = {}      # skill family id -> float bonus (+0.25 = +25% magnitude); empty = none (see potency_for)
 var hp_scale: float = 1.0               # tier multiplier on class-derived HP
 var power_scale: float = 1.0            # tier multiplier on attack power (DamageCalculator)
 var tier: String = "hero"               # StatRules.TIERS key
@@ -133,18 +134,29 @@ func _refresh_active() -> void:
 	active_families.append_array(active_class_families)
 	active_families.append_array(active_extra_families)
 
+# Multiplier a unit applies to the magnitude of a skill of `family` (1.0 + bonus; 1.0 = no bonus).
+# Gear affixes / passives ("skill_potency") fill potency_bonus; the planner multiplies it into the
+# skill's power_mult (attacks) or heal (support). DamageCalculator.compute never sees it.
+func potency_for(family: String) -> float:
+	return 1.0 + DictUtil.float_of(potency_bonus, family)
+
+# The weapon type that counts for skill gating: the main-hand weapon's type, or UNARMED_TOKEN with an empty main hand.
+func wielded_type() -> String:
+	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+	return weapon.weapon_type if weapon != null else SkillDef.UNARMED_TOKEN
+
 # Known AND trained for: skills with min_proficiency need the right gear type at that
 # proficiency level (class-derived units only; hand-built units are unrestricted).
+# Unarmed (no main-hand weapon) is the token `unarmed`; its proficiency is the class's `fist` level.
 func can_use(skill: SkillDef) -> bool:
 	if not knows_skill(skill.id):
 		return false
 	if known_skills.is_empty() or skill.min_proficiency <= 0 or stats == null or stats.proficiency == null:
 		return true
-	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
-	var type: String = weapon.weapon_type if weapon != null else ""
+	var type: String = wielded_type()
 	if not skill.weapon_types.is_empty() and not skill.weapon_types.has(type):
 		return false
-	return stats.proficiency.level_of(type) >= skill.min_proficiency
+	return stats.proficiency.level_of(SkillDef.UNARMED_PROFICIENCY if type == SkillDef.UNARMED_TOKEN else type) >= skill.min_proficiency
 
 # Learns a skill beyond the class path (an in-game event); persists on the unit.
 func learn_skill(skill_id: String) -> void:

@@ -237,7 +237,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Hit = Attack Power × Focus × Skill × Stance Matchup × Crit × (1 - Guard) × (1 - Armor)**, rounded once, minimum 1.
   - *Stance Matchup*: 1.25 / 0.75 / 1.0 (section 2).
   - *Crit*: **5% + 1% per DEX above 10 + 1% per weapon training level above 1**, damage **×1.5**. Rolled with the battle's seeded RNG (the encounter's `rng_seed`; the Dojo's own seeded RNG), so replays repeat exactly.
-  - *Guard*: Defend skills (Guard -30%, Brace -50%, Fortress -70%).
+  - *Guard*: Defend skills (Guard -30%; stronger tiers come from class skill families such as shield wall, not basic variants).
   - *Armor*: rating = equipped gear mitigation + STR / 4 (or the unit's authored `armor`, the training dummy has 0); damage × (1 - rating / (rating + 50)): 10 → -17%, 20 → -29%, 40 → -44%.
 - **Estimates** (`DamageCalculator.expected`): the same formula with no crit and no guard (unknown ahead), armor included. Log cells show the hit actually dealt and, in debug builds, the full breakdown on hover (`DamageCalculator.describe`).
 - **Future**: weapon-focused skills may scale only Weapon Power; class / weapon preferences may change the 1.5 scaling.
@@ -378,7 +378,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **16 test suites** covering **139 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **18 test suites** covering **152 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
@@ -397,7 +397,7 @@ Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** 
 - **Session behavior (Dojo-19 to 25)**: Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
 - **UI smoke tests (Dojo-26, 27)**: all six panels mount in the workspace and the Test Log mirrors the session log; the Party & Stash screen shares the session (party list, selection, stash equip).
 - **Slots, filters & carry (Dojo-28 to 32)**: off-hand-only weapons and shields, per-slot stash filters (shield under Off Hand) plus stat/rarity/damage/hand/usable/search/sort custom filters, a party viewer that always shows 4 slots, per-unit burden vs party-wide carry overload, and overlay windows opening/closing on request.
-- **Catalog skills & the dummy fighting back (Dojo-33 to 38)**: the console's skills are the catalog's; Power Strike follows the battle rules (2 AP + 1 switch, Offensive, the exact seeded hit); Brace guards and the dummy's attack goes through the same formula (its power and stance vs the hero's guard and armor) and is logged as the dummy's; Counterattack answers every hero skill; a stunned dummy loses its action and Next Round ticks Focus, drops the guard and regains +4 AP (debt included); Rest recovers AP and a downed hero is refused until healed.
+- **Catalog skills & the dummy fighting back (Dojo-33 to 38)**: the console's skills are the catalog's; a catalog attack skill (Hamstring) follows the battle rules (2 AP + 1 switch, Offensive, the exact seeded hit); Brace guards and the dummy's attack goes through the same formula (its power and stance vs the hero's guard and armor) and is logged as the dummy's; Counterattack answers every hero skill; a stunned dummy loses its action and Next Round ticks Focus, drops the guard and regains +4 AP (debt included); Rest recovers AP and a downed hero is refused until healed.
 
 ### Combat extensions (M1)
 
@@ -426,6 +426,10 @@ Skills are grouped into families with tiers chosen at planning time (higher tier
 ### Engine pieces (M2c-2a2)
 
 `cleanse` (support skills can remove debuffs from an ally, combinable with heal and buff), the `DISENGAGE` jump (move away from the nearest foe), the L-shaped `SWEEP` area for the Brawler, and a gear-budget value for unarmed loadouts. Example skills `purify`, `backflip`, `sweep_kick` are in the catalog (learned_only). Tested in `engine_pieces_test_suite.gd`.
+
+### Foundation cleanup (slice A)
+
+Basic skills are now six single-tier skills (strike, guard, move, rest, switch_target, offhand_jab); the old variants (power strike, heavy blow, brace, fortress, deep focus) are gone. New: a `StatusRegistry` for all statuses and stacking rules, the `unarmed` skill token, derived weapon hands (`main_1h`, `main_2h`, `off`), and a `skill_potency` passive hook. Tested in `status_registry_test_suite.gd` and `foundation_test_suite.gd`.
 
 ### Agent workflow tools
 

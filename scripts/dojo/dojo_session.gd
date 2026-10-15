@@ -456,7 +456,7 @@ func use_skill(skill_id: String = "") -> void:
 		SkillDef.Kind.ATTACK:
 			var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory != null else null
 			var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
-			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.offhand, skill.power_mult)
+			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.offhand, skill.power_for(active_hero))
 			var detail: String = "%s • %s" % [str(hit.get("detail", "")), ap_note]
 			if skill.is_area():
 				detail += " • area: the dummy is the only target here"
@@ -616,7 +616,7 @@ func run_benchmark(count: int) -> void:
 	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
 	var title: String = "Benchmark ×%d %s (%s)" % [count, skill.display_name, "Ranged" if is_ranged else "Melee"]
 
-	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_mult, false, null)
+	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_for(active_hero), false, null)
 	var base_hit: int = UiTheme.dict_int(base_res, "final_dmg")
 	var crit_rate: float = clampf(UiTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
 
@@ -625,7 +625,7 @@ func run_benchmark(count: int) -> void:
 	var max_hit: int = 0
 	var crits: int = 0
 	for i: int in range(count):
-		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_mult, false, rng)
+		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_for(active_hero), false, rng)
 		var dmg: int = UiTheme.dict_int(res, "final_dmg")
 		total += dmg
 		min_hit = dmg if i == 0 else mini(min_hit, dmg)

@@ -18,7 +18,8 @@ static func heal_amount(caster: Combatant, skill: SkillDef) -> int:
 	var stat_value: int = 0
 	if not skill.heal_stat.is_empty() and caster.stats != null:
 		stat_value = caster.stats.get_effective_stat(skill.heal_stat, caster.get_weapon_context())
-	return maxi(0, skill.heal_base + roundi(float(stat_value) * skill.heal_mult))
+	var base: int = skill.heal_base + roundi(float(stat_value) * skill.heal_mult)
+	return maxi(0, roundi(float(base) * caster.potency_for(skill.family_id())))   # potency 1.0 = unchanged
 
 # HP `target` would actually regain from `amount` (clamped to its missing HP).
 static func effective_heal(target: Combatant, amount: int) -> int:

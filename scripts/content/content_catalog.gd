@@ -503,8 +503,8 @@ static func _skill_errors(e: Dictionary) -> Array[String]:
 		if str(e["area"]) == "LINE" and DictUtil.to_int(e["reach_max"]) > 1:
 			errors.append("LINE areas start from an adjacent tile; leave the reach at 0 or 1.")
 		for gear: String in ContentFactory._strings(e["weapon_types"]):
-			if not Proficiency.gear_types().has(gear):
-				errors.append("Needs weapon type: unknown gear type '%s'." % gear)
+			if not SkillDef.weapon_type_tokens().has(gear):
+				errors.append("Needs weapon type: unknown gear type '%s' (gear types or '%s')." % [gear, SkillDef.UNARMED_TOKEN])
 		if not str(e["status_effect"]).is_empty() and DictUtil.to_int(e["status_potency"]) <= 0:
 			errors.append("Give the status a potency above 0.")
 	return errors
@@ -519,6 +519,8 @@ static func _item_errors(e: Dictionary) -> Array[String]:
 				errors.append("Weapons go in MAIN_HAND or OFF_HAND.")
 			if DictUtil.to_bool(e["two_handed"]) and slot != "MAIN_HAND":
 				errors.append("Two-handed weapons use the MAIN_HAND slot.")
+			if DictUtil.to_bool(e["two_handed"]) and not str(e["off_hand_category"]).is_empty():
+				errors.append("Hand conflict: a two-handed weapon (main_2h) can't also be an off-hand category weapon (off).")
 			var tiers: Variant = e["threshold_tiers"]
 			if not (tiers is Array):
 				errors.append("Threshold tiers must be a list.")

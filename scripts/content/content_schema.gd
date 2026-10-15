@@ -103,11 +103,11 @@ static func _skill_fields() -> Array[Dictionary]:
 		_f("grant_status", "Grants", "enum", "", {"options_from": "status_buff", "when": buffing, "help": "SUPPORT: haste (+1 tile per move block) or taunt (enemy AI must target it while reachable), queued for next round. DEFEND: riposte (counters adjacent melee attackers for 50% power), active at once, lost on a stance change."}),
 		_f("cleanse_statuses", "Cleanses", "strings", [], {"when": support, "help": "Debuffs removed from the target (active and pending, never buffs): stagger, stun, root, bleed, or the keyword 'all' for every debuff. Empty = none. Combine freely with heal and grants."}),
 		_f("jump_tiles", "Jump tiles", "int", 0, {"min": 0, "max": 6, "when": {"key": "kind", "in": ["DISENGAGE"]}, "help": "Disengage: jump up to this many tiles away from the nearest (or a chosen) enemy. It is the unit's move for the round (first in the sequence, refused when rooted); AP is the skill's level; units can be leapt over, walls cannot."}),
-		_f("family", "Skill family", "string", "", {"help": "Groups tiers of one skill (e.g. strike / power_strike / heavy_blow share family 'strike'). Empty = its own id."}),
+		_f("family", "Skill family", "string", "", {"help": "Groups tiers of one skill (e.g. a class skill 'mend' / 'mend_2' / 'mend_3' share family 'mend'). Basics are single-tier. Empty = its own id."}),
 		_f("tier", "Tier in family", "int", 1, {"min": 1, "max": 5, "help": "1-5 for basics, 1-3 for class skills. Chosen at planning time; the AP cost is the skill's Level."}),
 		_f("basic", "Basic skill", "bool", false, {"help": "Available to every class; not counted against the active loadout slots."}),
 		_f("learned_only", "Learn only", "bool", false, {"help": "Unrestricted hand-built units (tests, sandbox) don't know it unless they learn it; class-derived units get it from skill paths / extra skills as usual."}),
-		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types (class-derived units only)."}),
+		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types, or the token 'unarmed' (no main-hand weapon; its proficiency is the class's fist level). Class-derived units only."}),
 		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "when": attack, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),
 		_f("mitigation", "Mitigation", "float", 0.5, {"min": 0.0, "max": 0.95, "step": 0.05, "when": {"key": "kind", "in": ["DEFEND"]}}),
 		_f("boost", "Attack boost x", "float", 1.5, {"min": 1.0, "max": 5.0, "step": 0.05, "when": {"key": "kind", "in": ["FOCUS"]}}),
@@ -160,7 +160,7 @@ static func _passive_fields() -> Array[Dictionary]:
 		_f("id", "ID", "id", ""),
 		_f("name", "Name", "string", "New Passive"),
 		_f("description", "Description", "text", ""),
-		_f("effects", "Effects", "json", [], {"help": "[{\"type\": \"stat\", \"stat\": \"KNOW\", \"value\": 3, \"context\": {\"biome\": \"ruins\"}}, {\"type\": \"proficiency\", \"gear\": \"sword\", \"levels\": 1}, {\"type\": \"resist\", \"status\": \"stagger\", \"value\": 25}, {\"type\": \"ap_regen\", \"value\": 1}, {\"type\": \"skill\", \"skill\": \"quick_stab\"}]"}),
+		_f("effects", "Effects", "json", [], {"help": "[{\"type\": \"stat\", \"stat\": \"KNOW\", \"value\": 3, \"context\": {\"biome\": \"ruins\"}}, {\"type\": \"proficiency\", \"gear\": \"sword\", \"levels\": 1}, {\"type\": \"resist\", \"status\": \"stagger\", \"value\": 25}, {\"type\": \"ap_regen\", \"value\": 1}, {\"type\": \"skill\", \"skill\": \"quick_stab\"}, {\"type\": \"skill_potency\", \"family\": \"strike\", \"value\": 0.25}]"}),
 	]
 
 # Default gear of a class (and per-slot overrides on units): one item id per slot.

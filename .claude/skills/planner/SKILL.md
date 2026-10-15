@@ -22,7 +22,7 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 1. Review the builder report; run `change-reviewer` (and `tools/fc.sh all`). If the builder failed the same thing twice, the answer is to ask the user, not to retry.
 2. Summarise the implemented changes to the user (files, behaviour, tests, deviations).
 3. Update README, `docs/ROADMAP.md` (status), `docs/STRUCTURE.md` (placeholder -> done), `docs/DECISIONS.md` / `docs/HISTORY.md` (anything replaced: append, never delete).
-4. Run `check_project.ps1`. If clean: commit with the trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`, merge to `main` (fast-forward), push, delete the branch.
+4. Append a row to the "Agent run log" in `docs/WORKFLOW.md` (milestone, builder and reviewer tokens/minutes, result). Run `check_project.ps1 -Fast -Quiet`. If clean: commit with the trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`, merge to `main` (fast-forward), push, delete the branch.
 5. If the system is now stable, ask the user whether to mark it `balance-ready` so the `balance` agent may tune it.
 
 ## Balance loop

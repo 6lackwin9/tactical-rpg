@@ -44,3 +44,22 @@ Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserke
 6. **Discuss** (`design-brainstorm` + user): fixes or logic changes -> back to step 1. Dropped ideas go to `docs/HISTORY.md` with reasons.
 
 Sims are parallel-safe (own sandbox per run); builders on separate systems use separate worktrees.
+
+## Agent run log (append-only; the planner adds a row after each milestone)
+
+Agent instances are fresh per call and idle once they report, so the agent list grows; this table is the readable record. Tokens and minutes are from the agent's own report.
+
+| Milestone | Builder (tokens / min) | Reviewer (tokens / min) | Result |
+| --- | --- | --- | --- |
+| Roadmap brainstorm | general-purpose as brainstorm (56k / 1.5) | - | Proposed designs in ROADMAP |
+| M1 combat extensions | 300k / 23 | 30k / 2.5 | merged `964ebb0` |
+| M2a riposte | 128k / 9 | 33k / 2 | merged `dbedab2` |
+| M2d gear budget | 66k / 8 | 24k / 2 | merged `3a68cb2` |
+| M2b items and art | 68k / 4 | none (small data change) | merged `f654d78` |
+| M2c-1 classes (+ skill draft by brainstorm 41k / 2) | 109k / 12 | 29k / 2 | merged `4db678c` |
+| M2c-2a1 skill families | 126k / 7 | 37k / 2 | merged `17c852c` |
+| M2c-2a2 engine pieces | 188k / 13 | 51k / 3 | merged `a23405f` |
+| M2c-2b skill draft v2 and revision 3 (brainstorm) | - | - | draft only (51k / 3 and 47k / 2.5) |
+| M2c-2 slice A foundation | 213k / 20 | 51k / 4 | merged (see git log: slice A foundation) |
+
+Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many tests cost the most); reviewers cost 25-50k and about 2-3 minutes and have caught a real defect in most runs (stale status durations, rename hazard, unused-skill gaps).

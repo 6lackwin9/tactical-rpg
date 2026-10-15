@@ -54,10 +54,10 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	match skill.kind:
 		SkillDef.Kind.ATTACK:
 			if skill.is_area():
-				var area := AreaAttackCommand.new(actor, grid, cells, skill.power_mult, skill.blocks)
+				var area := AreaAttackCommand.new(actor, grid, cells, skill.power_for(actor), skill.blocks)
 				command = area
 			else:
-				var attack := AttackCommand.new(actor, target, skill.power_mult, skill.blocks, 0, grid)
+				var attack := AttackCommand.new(actor, target, skill.power_for(actor), skill.blocks, 0, grid)
 				attack.use_offhand = skill.offhand
 				attack.follow_tiles = 1 if (chase and skill.dash_tiles <= 0) else 0   # one-tile adjustment when the attack starts
 				attack.dash_tiles = skill.dash_tiles

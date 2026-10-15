@@ -112,10 +112,10 @@ static func _test_unified_formula() -> bool:
 			failed.append(str(key))
 	return _report("One damage formula: weapon + unit power, unarmed STR+DEX, armor curve, seeded x1.5 crits, planner estimate", failed.is_empty(), ", ".join(failed))
 
-# A Brace (-50%) taken in Defensive stance against an Offensive strike: matchup 0.75, then the guard.
+# A Guard (mitigation from the catalog) taken in Defensive stance against an Offensive strike: matchup 0.75, then the guard.
 static func _test_guard_and_matchup() -> bool:
 	var strike: SkillDef = SkillCatalog.find("strike")
-	var brace: SkillDef = SkillCatalog.find("brace")
+	var guard_skill: SkillDef = SkillCatalog.find("guard")
 	var grid := _grid()
 	var hitter := Combatant.new("Hitter", 100, 12, 1)
 	var guard := Combatant.new("Guard", 100, 10, 1)
@@ -127,7 +127,7 @@ static func _test_guard_and_matchup() -> bool:
 	grid.place_combatant(dummy, Vector2i(4, 6))
 	var ctx: PlanContext = ArenaTestSuite._hand_ctx(grid, _side([hitter, hitter2]), _side([guard, dummy]))
 	var resolver: CombatResolver = _commit(ctx, {
-		hitter: [PlanStep.engage(strike, guard)], guard: [PlanStep.self_skill(brace)],
+		hitter: [PlanStep.engage(strike, guard)], guard: [PlanStep.self_skill(guard_skill)],
 		hitter2: [PlanStep.engage(strike, dummy)],
 	})
 	var crits: Dictionary = {}   # attacker -> rolled a (seeded) crit
@@ -141,12 +141,12 @@ static func _test_guard_and_matchup() -> bool:
 	var crit_g: float = DamageCalculator.CRIT_MULT if DictUtil.to_bool(crits.get(hitter, false)) else 1.0
 	var crit_o: float = DamageCalculator.CRIT_MULT if DictUtil.to_bool(crits.get(hitter2, false)) else 1.0
 	# one formula, one rounding: power x matchup x crit x (1 - guard)
-	var expected_guarded: int = maxi(1, roundi(float(power) * CombatTypes.STANCE_DISADVANTAGE * crit_g * (1.0 - brace.mitigation)))
+	var expected_guarded: int = maxi(1, roundi(float(power) * CombatTypes.STANCE_DISADVANTAGE * crit_g * (1.0 - guard_skill.mitigation)))
 	var expected_open: int = maxi(1, roundi(float(power) * crit_o))
 	var guarded_taken: int = 100 - guard.hp
 	var open_taken: int = 100 - dummy.hp
 	var ok: bool = guarded_taken == expected_guarded and open_taken == expected_open and guarded_taken < open_taken
-	return _report("Guard mitigation and stance matchup: Brace -50% in Defensive vs an Offensive strike (x0.75)", ok,
+	return _report("Guard mitigation and stance matchup: Guard in Defensive vs an Offensive strike (x0.75)", ok,
 		"guarded %d (expected %d), unguarded %d (expected %d), crits %s" % [guarded_taken, expected_guarded, open_taken, expected_open, str(crits.values())])
 
 # Stances set by a skill stay after it resolves and carry into the next round;

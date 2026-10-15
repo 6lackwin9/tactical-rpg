@@ -108,7 +108,7 @@ static func _test_validation() -> bool:
 	checks["class budget"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fat", "name": "Fat", "base_stats": {"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}}), "must total")
 	checks["class growth"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fast", "name": "Fast", "growth": {"STR": 3, "DEX": 3, "INT": 3}}), "gains exactly")
 	checks["class proficiency gear"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"banjo": {"level": 1}}}), "unknown gear type")
-	checks["class skill cap"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "heavy_blow"}]}), "too advanced")
+	checks["class skill cap"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "riposte"}]}), "too advanced")
 	checks["class gear training"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"sword": {"level": 1}}, "main_hand": "wpn_shortbow"}), "no training")
 	checks["spend pool"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "class_id": "warrior", "level": 1, "spend": {"STR": 9}}), "spends exactly 4")
 	checks["passive effects"] = _has_error(ContentCatalog.validate_entry("passives", {"id": "bad_pass", "name": "Bad", "effects": [{"type": "stat", "stat": "LUCK", "value": 2}]}), "unknown stat")
@@ -181,7 +181,7 @@ static func _test_authored_units_in_planning() -> bool:
 	var self_names: Array[String] = []
 	for opt: PlanOption in session.plan.target_options(knight, knight):
 		self_names.append(opt.step.skill.id)
-	var skills_ok: bool = attack_names.has("test_cleave") and not attack_names.has("strike") and self_names.has("rest") and self_names.has("guard") and not self_names.has("brace")
+	var skills_ok: bool = attack_names.has("test_cleave") and not attack_names.has("strike") and self_names.has("rest") and self_names.has("guard") and not self_names.has("focus")
 	session.dispose()
 	return _report("Authored units: class-derived vitals, gear, numbered duplicates, whitelisted skills, resistances", built_ok and skills_ok,
 		"built %s, attacks %s, self %s" % [built_ok, str(attack_names), str(self_names)])

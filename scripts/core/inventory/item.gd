@@ -61,6 +61,10 @@ func is_weapon() -> bool:
 func is_shield() -> bool:
 	return item_type == ItemType.SHIELD
 
+# Hand the item occupies: "main_1h", "main_2h", "off", or "" for items that are not held (see Equipment.hand).
+func hand() -> String:
+	return ""
+
 static func type_to_string(p_type: ItemType) -> String:
 	match p_type:
 		ItemType.WEAPON:

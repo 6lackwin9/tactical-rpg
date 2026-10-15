@@ -90,6 +90,32 @@ func can_equip_in_slot(target: EquipSlot) -> bool:
 		return target == EquipSlot.ACCESSORY_1 or target == EquipSlot.ACCESSORY_2
 	return target == slot
 
+const HAND_MAIN_1H: String = "main_1h"
+const HAND_MAIN_2H: String = "main_2h"
+const HAND_OFF: String = "off"
+const HANDS: Array[String] = [HAND_MAIN_1H, HAND_MAIN_2H, HAND_OFF]
+
+# Which hand the item occupies (DERIVED, never stored): shields and off-hand-category weapons
+# are `off`, two-handed weapons `main_2h`, every other weapon `main_1h`. Armor and accessories: "".
+# With a main_2h weapon the off hand is empty, so the off-hand jab attacks with bare hands (STR+DEX).
+func hand() -> String:
+	if is_shield():
+		return HAND_OFF
+	if not is_weapon():
+		return ""
+	if is_two_handed:
+		return HAND_MAIN_2H
+	if is_off_hand_weapon():
+		return HAND_OFF
+	return HAND_MAIN_1H
+
+static func hand_display_name(h: String) -> String:
+	match h:
+		HAND_MAIN_1H: return "main hand, one-handed"
+		HAND_MAIN_2H: return "main hand, two-handed"
+		HAND_OFF: return "off hand"
+	return "-"
+
 func is_ranged_weapon() -> bool:
 	if item_type != ItemType.WEAPON:
 		return false

@@ -1,0 +1,141 @@
+class_name StatusRegistryTestSuite
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - Status Registry Test Suite (slice A, foundation cleanup)
+# The registry is the single table of statuses; StatusEffects derives its lists from it. The
+# derived lists must equal the literals they replaced, every StatusEffects id constant needs a
+# row, and each stacking rule's math (with caps) is checked on explicit rules via stack_with.
+# ==============================================================================
+
+static func _report(label: String, checks: Dictionary) -> bool:
+	var failed: Array[String] = []
+	for key: Variant in checks:
+		if not DictUtil.to_bool(checks[key]):
+			failed.append(str(key))
+	var ok: bool = failed.is_empty()
+	print("    [StatusRegistry] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
+	return ok
+
+static func run() -> bool:
+	print("\n=======================================================")
+	print("=== STARTING STATUS REGISTRY TEST (slice A)          ===")
+	print("=======================================================")
+	var ok: bool = true
+	ok = _test_registry_complete() and ok
+	ok = _test_derived_lists() and ok
+	ok = _test_stacking_rules() and ok
+	ok = _test_stack_in_effects() and ok
+	return ok
+
+# Every String constant of StatusEffects is a status id (the numeric ones are tuning values).
+static func _status_constants() -> Array[String]:
+	var script: GDScript = StatusEffects
+	var out: Array[String] = []
+	var map: Dictionary = script.get_script_constant_map()
+	for key: Variant in map:
+		var value: Variant = map[key]
+		if value is String:
+			out.append(str(value))
+	out.sort()
+	return out
+
+static func _test_registry_complete() -> bool:
+	var checks: Dictionary = {}
+	var consts: Array[String] = _status_constants()
+	var ids: Array[String] = StatusRegistry.ids()
+	var sorted_ids: Array[String] = ids.duplicate()
+	sorted_ids.sort()
+	checks["there are seven statuses"] = consts.size() == 7
+	var covered: bool = true
+	for id: String in consts:
+		covered = covered and StatusRegistry.has(id)
+	checks["every StatusEffects id constant has a registry row"] = covered
+	checks["every row is a StatusEffects id constant"] = sorted_ids == consts
+	checks["the rows are well formed (kinds, rules, grants, names)"] = StatusRegistry.row_errors().is_empty()
+	checks["covers stagger, stun, root, bleed, haste, taunt, riposte"] = ids == ["stagger", "stun", "root", "bleed", "haste", "taunt", "riposte"]
+	var all_known_rules: bool = true
+	for id: String in ids:
+		all_known_rules = all_known_rules and StatusRegistry.RULES.has(StatusRegistry.stacking_of(id)) and StatusRegistry.default_rounds(id) >= 1
+	checks["every status has a known stacking rule and default rounds"] = all_known_rules
+	checks["today every status refreshes to the max duration, uncapped"] = ids.all(func(id: String) -> bool: return StatusRegistry.stacking_of(id) == StatusRegistry.REFRESH_MAX_DURATION and StatusRegistry.cap_of(id) == 0)
+	checks["an unknown status has no row"] = not StatusRegistry.has("weaken") and StatusRegistry.row("weaken").is_empty()
+	# row_errors catches bad rows (checked on a copy of the validation inputs through the public rules).
+	checks["only debuffs are resistable"] = StatusRegistry.ids_where(StatusRegistry.KIND_BUFF, true).is_empty()
+	return _report("Registry covers every status constant and is well formed", checks)
+
+static func _test_derived_lists() -> bool:
+	var checks: Dictionary = {}
+	# The literals the registry replaced (previous behaviour must be identical).
+	checks["debuffs() unchanged"] = StatusEffects.debuffs() == [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT, StatusEffects.BLEED]
+	checks["buffs() unchanged"] = StatusEffects.buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.RIPOSTE]
+	checks["support_buffs() unchanged"] = StatusEffects.support_buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT]
+	checks["defend_buffs() unchanged"] = StatusEffects.defend_buffs() == [StatusEffects.RIPOSTE]
+	checks["resistable() unchanged (= debuffs)"] = StatusEffects.resistable() == [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT, StatusEffects.BLEED] and StatusEffects.resistable() == StatusEffects.debuffs()
+	var names: Dictionary = {StatusEffects.STAGGER: "Staggered", StatusEffects.STUN: "Stunned", StatusEffects.ROOT: "Rooted", StatusEffects.BLEED: "Bleeding", StatusEffects.HASTE: "Hasted", StatusEffects.TAUNT: "Taunting", StatusEffects.RIPOSTE: "Riposte"}
+	var names_ok: bool = true
+	for id: Variant in names:
+		names_ok = names_ok and StatusEffects.display_name(str(id)) == str(names[id])
+	checks["display_name() unchanged"] = names_ok
+	checks["an unknown status is capitalised"] = StatusEffects.display_name("mystery") == "Mystery"
+	checks["debuffs and buffs partition the registry"] = StatusEffects.debuffs().size() + StatusEffects.buffs().size() == StatusRegistry.ids().size()
+	checks["catalog validation still accepts exactly the debuffs"] = ContentCatalog.validate_entry("skills", {"id": "t_reg_ok", "name": "R", "kind": "ATTACK", "status_effect": "root", "status_potency": 50}).is_empty() and not ContentCatalog.validate_entry("skills", {"id": "t_reg_bad", "name": "R", "kind": "ATTACK", "status_effect": "haste", "status_potency": 50}).is_empty()
+	return _report("Derived lists equal the literals they replaced", checks)
+
+static func _test_stacking_rules() -> bool:
+	var checks: Dictionary = {}
+	var refresh: String = StatusRegistry.REFRESH_MAX_DURATION
+	var extend: String = StatusRegistry.EXTEND_DURATION
+	var stack_p: String = StatusRegistry.STACK_POTENCY
+	var none: String = StatusRegistry.NONE
+	# refresh_max_duration: the longer duration and the stronger potency win.
+	var r1: Dictionary = StatusRegistry.stack_with(refresh, 0, 2, 40, 3, 30)
+	checks["refresh: longer rounds win, stronger potency wins"] = r1["rounds"] == 3 and r1["potency"] == 40
+	var r2: Dictionary = StatusRegistry.stack_with(refresh, 0, 3, 20, 1, 60)
+	checks["refresh: a shorter reapplication does not shorten"] = r2["rounds"] == 3 and r2["potency"] == 60
+	# extend_duration: rounds add up (capped by cap), potency is the stronger.
+	var e1: Dictionary = StatusRegistry.stack_with(extend, 0, 2, 25, 3, 20)
+	checks["extend: rounds add up"] = e1["rounds"] == 5 and e1["potency"] == 25
+	var e2: Dictionary = StatusRegistry.stack_with(extend, 4, 3, 25, 3, 20)
+	checks["extend: rounds cap at the cap"] = e2["rounds"] == 4
+	# stack_potency: potency adds (capped), rounds = longer.
+	var s1: Dictionary = StatusRegistry.stack_with(stack_p, 0, 2, 10, 1, 15)
+	checks["stack_potency: potency adds, rounds = longer"] = s1["rounds"] == 2 and s1["potency"] == 25
+	var s2: Dictionary = StatusRegistry.stack_with(stack_p, 25, 2, 20, 2, 20)
+	checks["stack_potency: potency caps at the cap"] = s2["potency"] == 25 and s2["rounds"] == 2
+	# none: the first application stays while it lasts.
+	var n1: Dictionary = StatusRegistry.stack_with(none, 0, 1, 15, 3, 25)
+	checks["none: the existing application is kept"] = n1["rounds"] == 1 and n1["potency"] == 15
+	# cap with refresh/none limits potency (the weaken 25% case).
+	var c1: Dictionary = StatusRegistry.stack_with(none, 25, 0, 0, 2, 40)
+	checks["a fresh application is clamped to the cap"] = c1["rounds"] == 2 and c1["potency"] == 25
+	var c2: Dictionary = StatusRegistry.stack_with(refresh, 25, 2, 25, 2, 30)
+	checks["refresh: potency is capped"] = c2["potency"] == 25
+	# Nothing existing: every rule returns the new application (rounds at least 1).
+	var fresh_ok: bool = true
+	for rule: String in StatusRegistry.RULES:
+		var f: Dictionary = StatusRegistry.stack_with(rule, 0, 0, 0, 0, 30)
+		fresh_ok = fresh_ok and f["rounds"] == 1 and f["potency"] == 30
+	checks["with nothing existing every rule returns the new one (min 1 round)"] = fresh_ok
+	var unknown: Dictionary = StatusRegistry.stack_with("bogus", 0, 2, 10, 1, 20)
+	checks["an unknown rule behaves as refresh_max_duration"] = unknown["rounds"] == 2 and unknown["potency"] == 20
+	return _report("Each stacking rule's math and caps", checks)
+
+static func _test_stack_in_effects() -> bool:
+	var checks: Dictionary = {}
+	# StatusEffects.stack goes through the registry row of the status (all refresh_max_duration today).
+	var st: Dictionary = StatusEffects.stack(2, 50, 1, 70, StatusEffects.BLEED)
+	checks["StatusEffects.stack uses the registry rule"] = st["rounds"] == 2 and st["potency"] == 70
+	checks["an unknown status refreshes"] = StatusEffects.stack(1, 0, 3, 0, "mystery")["rounds"] == 3
+	# queue / grant_now keep their outcomes: the longer duration wins, minimum one round.
+	var c := Combatant.new("Reg", 100, 10, 1)
+	StatusEffects.queue(c, StatusEffects.ROOT, 2)
+	StatusEffects.queue(c, StatusEffects.ROOT, 1)
+	checks["queue keeps the longer duration"] = DictUtil.int_of(c.pending_status_rounds, StatusEffects.ROOT) == 2
+	StatusEffects.queue(c, StatusEffects.STUN, 0)
+	checks["queue lasts at least one round"] = DictUtil.int_of(c.pending_status_rounds, StatusEffects.STUN) == 1
+	StatusEffects.grant_now(c, StatusEffects.RIPOSTE, 2)
+	StatusEffects.grant_now(c, StatusEffects.RIPOSTE, 3)
+	StatusEffects.grant_now(c, StatusEffects.RIPOSTE, 1)
+	checks["grant_now keeps the longer duration"] = DictUtil.int_of(c.status_rounds_left, StatusEffects.RIPOSTE) == 3 and c.statuses.has(StatusEffects.RIPOSTE)
+	return _report("StatusEffects applies the registry's stacking rule", checks)

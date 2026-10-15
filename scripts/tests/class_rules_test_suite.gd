@@ -169,5 +169,5 @@ static func _test_skill_paths() -> bool:
 			var skill: SkillDef = SkillCatalog.find(str(step["skill"]))
 			legal = legal and skill != null and skill.level <= StatRules.skill_cap_for_level(DictUtil.to_int(step["level"]))
 	checks["paths respect the level cap"] = legal
-	checks["planner honours known skills"] = SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "strike") and not SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "power_strike")
+	checks["planner honours known skills"] = SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "strike") and not SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "shield_bash")
 	return _report("Class skill paths unlock by level; events and authoring add skills; the planner respects them", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))

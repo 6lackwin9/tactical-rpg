@@ -18,6 +18,9 @@ extends RefCounted
 # Debuffs come from attack skills (rolled against resistance) and AP debt
 # (overspending: 3+ debt staggers, 5+ stuns; no resist roll, it's self-inflicted).
 # Buffs come from SUPPORT skills (SupportCommand) and skip resistance.
+# The list of statuses, their kind, resistability, default rounds, stacking rule, cap and display
+# name lives in StatusRegistry (the single table; the lists below derive from it, and its header
+# explains how to add a status).
 # ==============================================================================
 
 const STAGGER: String = "stagger"
@@ -36,45 +39,36 @@ const DEBT_STUN: int = 5
 
 # Statuses an attack skill can inflict on a foe (rolled against resistance).
 static func debuffs() -> Array[String]:
-	return [STAGGER, STUN, ROOT, BLEED]
+	return StatusRegistry.ids_where(StatusRegistry.KIND_DEBUFF)
 
 # Every buff status (no resistance roll).
 static func buffs() -> Array[String]:
-	return [HASTE, TAUNT, RIPOSTE]
+	return StatusRegistry.ids_where(StatusRegistry.KIND_BUFF)
 
 # Buffs a SUPPORT skill can grant (queued for next round).
 static func support_buffs() -> Array[String]:
-	return [HASTE, TAUNT]
+	return StatusRegistry.ids_where(StatusRegistry.KIND_BUFF, false, "support")
 
 # Buffs a DEFEND skill can grant (active immediately).
 static func defend_buffs() -> Array[String]:
-	return [RIPOSTE]
+	return StatusRegistry.ids_where(StatusRegistry.KIND_BUFF, false, "defend")
 
 # Valid keys of a unit's / passive's status_resist.
 static func resistable() -> Array[String]:
-	return debuffs()
+	return StatusRegistry.ids_where(StatusRegistry.KIND_DEBUFF, true)
+
+# Applies the status's stacking rule to an existing and a new application: {"rounds", "potency"}.
+# See StatusRegistry.stack; every status is refresh_max_duration today.
+static func stack(existing_rounds: int, existing_potency: int, new_rounds: int, new_potency: int, status: String) -> Dictionary:
+	return StatusRegistry.stack(existing_rounds, existing_potency, new_rounds, new_potency, status)
 
 # Damage a bleeding unit takes at the end of the round (a flat share of max HP).
 static func bleed_damage(c: Combatant) -> int:
 	return maxi(1, roundi(float(c.max_hp) * BLEED_PCT))
 
 static func display_name(status: String) -> String:
-	match status:
-		STAGGER:
-			return "Staggered"
-		STUN:
-			return "Stunned"
-		ROOT:
-			return "Rooted"
-		BLEED:
-			return "Bleeding"
-		HASTE:
-			return "Hasted"
-		TAUNT:
-			return "Taunting"
-		RIPOSTE:
-			return "Riposte"
-	return status.capitalize()
+	var shown: String = str(StatusRegistry.row(status).get("display", ""))
+	return shown if not shown.is_empty() else status.capitalize()
 
 # Blocks the status takes away from a round.
 static func blocked_blocks(status: String) -> Array[int]:
@@ -106,13 +100,13 @@ static func try_inflict(target: Combatant, status: String, potency: int, rng: Ra
 # Queues a status for the target's next round, lasting `rounds` rounds (the longer wins).
 static func queue(target: Combatant, status: String, rounds: int = 1) -> void:
 	target.pending_statuses[status] = true
-	target.pending_status_rounds[status] = maxi(DictUtil.int_of(target.pending_status_rounds, status), maxi(1, rounds))
+	target.pending_status_rounds[status] = DictUtil.to_int(stack(DictUtil.int_of(target.pending_status_rounds, status), 0, rounds, 0, status)["rounds"])
 
 # Makes a buff active right now (self-buffs from DEFEND skills), lasting `rounds` rounds
 # counting the current one (the longer wins).
 static func grant_now(target: Combatant, status: String, rounds: int = 1) -> void:
 	target.statuses[status] = true
-	target.status_rounds_left[status] = maxi(DictUtil.int_of(target.status_rounds_left, status), maxi(1, rounds))
+	target.status_rounds_left[status] = DictUtil.to_int(stack(DictUtil.int_of(target.status_rounds_left, status), 0, rounds, 0, status)["rounds"])
 
 # True when `status` is active now or queued for next round.
 static func has_any(target: Combatant, status: String) -> bool:

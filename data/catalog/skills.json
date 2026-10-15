@@ -26,52 +26,6 @@
 			"min_proficiency": 0
 		},
 		{
-			"id": "power_strike",
-			"name": "Power Strike",
-			"kind": "ATTACK",
-			"level": 2,
-			"blocks": 2,
-			"description": "A committed blow: +50% power.",
-			"power_mult": 1.5,
-			"area": "NONE",
-			"offhand": false,
-			"stance": "AUTO",
-			"status_effect": "",
-			"dash_tiles": 0,
-			"status_rounds": 1,
-			"reach_min": 0,
-			"reach_max": 0,
-			"family": "strike",
-			"tier": 2,
-			"basic": true,
-			"learned_only": false,
-			"weapon_types": [],
-			"min_proficiency": 0
-		},
-		{
-			"id": "heavy_blow",
-			"name": "Heavy Blow",
-			"kind": "ATTACK",
-			"level": 3,
-			"blocks": 3,
-			"description": "A slow, crushing blow: +140% power.",
-			"power_mult": 2.4,
-			"area": "NONE",
-			"offhand": false,
-			"stance": "AUTO",
-			"status_effect": "",
-			"dash_tiles": 0,
-			"status_rounds": 1,
-			"reach_min": 0,
-			"reach_max": 0,
-			"family": "strike",
-			"tier": 3,
-			"basic": true,
-			"learned_only": false,
-			"weapon_types": [],
-			"min_proficiency": 0
-		},
-		{
 			"id": "offhand_jab",
 			"name": "Off-hand Jab",
 			"kind": "ATTACK",
@@ -227,36 +181,6 @@
 			"mitigation": 0.3
 		},
 		{
-			"id": "brace",
-			"name": "Brace",
-			"kind": "DEFEND",
-			"level": 2,
-			"blocks": 2,
-			"description": "Brace for impact: -50% damage.",
-			"status_rounds": 1,
-			"grant_status": "",
-			"family": "guard",
-			"tier": 2,
-			"basic": true,
-			"learned_only": false,
-			"mitigation": 0.5
-		},
-		{
-			"id": "fortress",
-			"name": "Fortress",
-			"kind": "DEFEND",
-			"level": 3,
-			"blocks": 3,
-			"description": "Dig in: -70% damage.",
-			"status_rounds": 1,
-			"grant_status": "",
-			"family": "guard",
-			"tier": 3,
-			"basic": true,
-			"learned_only": false,
-			"mitigation": 0.7
-		},
-		{
 			"id": "focus",
 			"name": "Focus",
 			"kind": "FOCUS",
@@ -271,20 +195,6 @@
 			"boost_rounds": 2
 		},
 		{
-			"id": "deep_focus",
-			"name": "Deep Focus",
-			"kind": "FOCUS",
-			"level": 3,
-			"blocks": 2,
-			"description": "+75% attack for 3 rounds.",
-			"family": "focus",
-			"tier": 2,
-			"basic": false,
-			"learned_only": false,
-			"boost": 1.75,
-			"boost_rounds": 3
-		},
-		{
 			"id": "move",
 			"name": "Move",
 			"kind": "MOVE",
@@ -294,7 +204,7 @@
 			"system": true,
 			"family": "",
 			"tier": 1,
-			"basic": false,
+			"basic": true,
 			"learned_only": false
 		},
 		{
@@ -307,7 +217,7 @@
 			"system": true,
 			"family": "",
 			"tier": 1,
-			"basic": false,
+			"basic": true,
 			"learned_only": false
 		},
 		{
@@ -346,7 +256,7 @@
 			"system": true,
 			"family": "",
 			"tier": 1,
-			"basic": false,
+			"basic": true,
 			"learned_only": false,
 			"recover_ap": 2
 		},
@@ -520,7 +430,7 @@
 			"kind": "ATTACK",
 			"level": 3,
 			"blocks": 3,
-			"description": "Wild roundhouse: 200% power, may Stun. Needs fist/mace/hammer training 2.",
+			"description": "Wild roundhouse: 200% power, may Stun. Needs fist/mace/hammer training 2 or bare hands.",
 			"power_mult": 2.0,
 			"area": "NONE",
 			"offhand": false,
@@ -538,7 +448,8 @@
 			"weapon_types": [
 				"fist",
 				"mace",
-				"hammer"
+				"hammer",
+				"unarmed"
 			],
 			"min_proficiency": 2
 		},
@@ -548,7 +459,7 @@
 			"kind": "ATTACK",
 			"level": 2,
 			"blocks": 2,
-			"description": "A winding blow: may Stagger. Needs fist/mace training.",
+			"description": "A winding blow: may Stagger. Needs fist/mace training or bare hands.",
 			"power_mult": 1.0,
 			"area": "NONE",
 			"offhand": false,
@@ -565,7 +476,8 @@
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
-				"mace"
+				"mace",
+				"unarmed"
 			],
 			"min_proficiency": 1
 		},

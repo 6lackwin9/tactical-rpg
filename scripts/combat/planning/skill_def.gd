@@ -24,6 +24,17 @@ extends RefCounted
 # skill's level (not per tile), leaps over units but not walls, and keeps the stance like Move.
 enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS, SUPPORT, DISENGAGE }
 
+# `weapon_types` token for "no main-hand weapon equipped" (bare hands). Its proficiency is the
+# class's UNARMED_PROFICIENCY gear level (`fist`), so min_proficiency applies to it as well.
+const UNARMED_TOKEN: String = "unarmed"
+const UNARMED_PROFICIENCY: String = "fist"
+
+# Every valid `weapon_types` entry: the gear types plus the unarmed token.
+static func weapon_type_tokens() -> Array[String]:
+	var out: Array[String] = Proficiency.gear_types()
+	out.append(UNARMED_TOKEN)
+	return out
+
 # SUPPORT targeting: the caster only, a friendly unit other than the caster, or either.
 enum TargetMode { SELF, ALLY, ALLY_OR_SELF }
 
@@ -87,6 +98,11 @@ static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_b
 # The family this skill belongs to (its own id when it stands alone).
 func family_id() -> String:
 	return id if family.is_empty() else family
+
+# power_mult as `user` applies it: the skill's multiplier x the user's family potency (Combatant.potency_for).
+# This is the ONLY place potency enters attack damage (the value fed to DamageCalculator as skill_mult).
+func power_for(user: Combatant) -> float:
+	return power_mult if user == null else power_mult * user.potency_for(family_id())
 
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.

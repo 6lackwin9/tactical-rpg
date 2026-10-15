@@ -39,7 +39,7 @@ Rule: when something fails, look it up in **Known issues** first. Only debug fro
 | `printf`/heredoc wrote a literal newline inside a string literal | Shell expanded `\n` | Fix with Edit; write GDScript via Write/Edit, not shell |
 | `sed` line edits corrupt match blocks | Line numbers shifted | Never use sed ranges; use Edit |
 | Unit stat/number tests fail after class/data changes | Test hard-codes old values (class budgets, speeds, power) | Print real values, derive expectations from rules (`StatRules`, `Proficiency`) not magic numbers |
-| Skill missing for a class unit (`heavy_blow` etc.) | `known_skills` = class path up to level; skill cap = `ceil(level/2)`; `min_proficiency` gating | Raise unit level or add `extra_skills`; check `Combatant.can_use` |
+| Skill missing for a class unit (`riposte` etc.) | `known_skills` = class path up to level; skill cap = `ceil(level/2)`; `min_proficiency` gating | Raise unit level or add `extra_skills`; check `Combatant.can_use` |
 | Catalog refuses a class/unit | `StatRules`: budget 62, growth 5 (max 3/stat), spend exactly `4 + (level-1)` or empty, skill level <= cap of its path step, loadout gear must be trained and fit the slot | Read the validation message; fix data, not the rule |
 | Off-hand-only items (`wpn_dagger`, tome) rejected in MAIN_HAND | `off_hand_category` set | Use a main-hand item (e.g. `wpn_stiletto`) |
 | Authored `power` unit does double scaling | Tier `power_scale` must not apply to authored power | Authored power is absolute (DamageCalculator) |

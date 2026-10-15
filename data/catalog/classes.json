@@ -71,14 +71,6 @@
 				{
 					"level": 3,
 					"skill": "shield_bash"
-				},
-				{
-					"level": 4,
-					"skill": "brace"
-				},
-				{
-					"level": 7,
-					"skill": "fortress"
 				}
 			],
 			"main_hand": "wpn_hand_axe",
@@ -164,10 +156,6 @@
 				{
 					"level": 5,
 					"skill": "focus"
-				},
-				{
-					"level": 7,
-					"skill": "deep_focus"
 				}
 			],
 			"main_hand": "wpn_shortbow",
@@ -262,10 +250,6 @@
 				{
 					"level": 5,
 					"skill": "haymaker"
-				},
-				{
-					"level": 7,
-					"skill": "brace"
 				}
 			],
 			"main_hand": "wpn_flanged_mace",

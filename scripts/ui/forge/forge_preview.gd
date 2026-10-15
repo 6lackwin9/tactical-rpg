@@ -67,6 +67,10 @@ static func _skill(e: Dictionary) -> String:
 			var rb: Vector2i = s.reach_for(ranged)
 			t += _line("Reach", "melee unit %d-%d, ranged unit %d-%d" % [mb.x, mb.y, rb.x, rb.y])
 			t += _line("Damage", "attack power x %.2f  (~%d at power 20, ~%d at power 40; then stance, crit, guard, armor)" % [s.power_mult, roundi(20.0 * s.power_mult), roundi(40.0 * s.power_mult)])
+			if not s.weapon_types.is_empty() or s.min_proficiency > 0:
+				var wanted: String = "/".join(s.weapon_types) if not s.weapon_types.is_empty() else "any weapon"
+				var unarmed_note: String = " (unarmed = no main-hand weapon, trained by the class's fist level)" if s.weapon_types.has(SkillDef.UNARMED_TOKEN) else ""
+				t += _line("Needs", "%s%s, training %d+" % [wanted, unarmed_note, s.min_proficiency])
 			if s.is_area():
 				var aim: Vector2i = Vector2i(5, 5) if s.area == SkillDef.Area.SWEEP else Vector2i(4, 5)
 				t += _line("Area", "%s: %d tiles, hits allies too" % [SkillDef.Area.keys()[s.area], s.area_cells(Vector2i(4, 6), aim).size()])
@@ -107,6 +111,8 @@ static func _item(e: Dictionary) -> String:
 	if it is Equipment:
 		var eq: Equipment = it
 		t += _line("Slot", Equipment.slot_display_name(eq.slot) + (" (two-handed)" if eq.is_two_handed else ""))
+		if not eq.hand().is_empty():
+			t += _line("Hand", "%s (derived: %s)" % [Equipment.hand_display_name(eq.hand()), eq.hand()])
 		var summary: String = UiTheme.equipment_summary(eq, CharacterStats.new())
 		t += _line("Stats", summary if not summary.is_empty() else "-")
 		if not eq.required_stats.is_empty():

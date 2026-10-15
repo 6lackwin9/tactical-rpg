@@ -15,9 +15,14 @@ extends RefCounted
 #   resist       {"status": "stagger", "value": 25}   status resistance % (100 = immune); status is any of StatusEffects.resistable() (stagger, stun, root, bleed)
 #   ap_regen     {"value": 1}   extra AP regained each round
 #   skill        {"skill": "quick_stab"}   a skill the unit may use beyond its class path
+#   skill_potency {"family": "strike", "value": 0.25}   +25% magnitude (attack power_mult / heal) for that
+#                skill family: adds to Combatant.potency_bonus, read via Combatant.potency_for. Gear affixes
+#                and passives use this to scale the single-tier basics later (value -0.9..2.0, not 0)
 # ==============================================================================
 
-const TYPES: Array[String] = ["stat", "proficiency", "resist", "ap_regen", "skill"]
+const TYPES: Array[String] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency"]
+const POTENCY_MIN: float = -0.9
+const POTENCY_MAX: float = 2.0
 
 # Problems with an effects list (empty = valid). `skill_exists` resolves skill ids.
 static func validate_effects(effects: Variant, skill_exists: Callable) -> Array[String]:
@@ -57,6 +62,12 @@ static func validate_effects(effects: Variant, skill_exists: Callable) -> Array[
 			"skill":
 				if not skill_exists.call(str(e.get("skill", ""))):
 					errors.append("%s: unknown skill '%s'." % [at, str(e.get("skill", ""))])
+			"skill_potency":
+				if not skill_exists.call(str(e.get("family", ""))):
+					errors.append("%s: unknown skill family '%s'." % [at, str(e.get("family", ""))])
+				var pv: float = DictUtil.to_float(e.get("value", 0.0))
+				if is_zero_approx(pv) or pv < POTENCY_MIN or pv > POTENCY_MAX:
+					errors.append("%s: potency bonus must be non-zero, %.1f to %.1f (0.25 = +25%%)." % [at, POTENCY_MIN, POTENCY_MAX])
 			_:
 				errors.append("%s: unknown effect type '%s' (use %s)." % [at, type, ", ".join(TYPES)])
 	return errors
@@ -88,6 +99,9 @@ static func apply(c: Combatant, passive: Dictionary) -> void:
 			"skill":
 				var skill_id: String = str(e.get("skill", ""))
 				c.learn_skill(skill_id)   # also slots its family into a free extra slot of an active loadout
+			"skill_potency":
+				var family: String = str(e.get("family", ""))
+				c.potency_bonus[family] = DictUtil.float_of(c.potency_bonus, family) + DictUtil.to_float(e.get("value", 0.0))
 
 # One-line summary of what a passive does.
 static func describe(passive: Dictionary) -> String:
@@ -109,4 +123,6 @@ static func describe(passive: Dictionary) -> String:
 				parts.append("+%d AP per round" % DictUtil.to_int(e.get("value", 0)))
 			"skill":
 				parts.append("learns %s" % str(e.get("skill", "")))
+			"skill_potency":
+				parts.append("%+d%% %s power" % [roundi(DictUtil.to_float(e.get("value", 0.0)) * 100.0), str(e.get("family", ""))])
 	return "; ".join(parts) if not parts.is_empty() else "no effects"
