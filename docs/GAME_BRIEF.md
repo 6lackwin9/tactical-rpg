@@ -83,3 +83,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 
 - `PartyState` / `UnitState` (scripts/progression/): level derives from `total_xp` (`XpCurve`, data/progression/xp_curve.json); `LevelUp.award_encounter` gives full XP to every active member; `PartyBuilder.build` turns a state into a Combatant (same `ContentFactory.unit` path as catalog units). `PARTY_MAX` = 4 active, roster unbounded.
 - `GameState` + `SaveGame` (scripts/game_state/): single slot file `user://saves/slot_<n>.json`, envelope `SaveGame.VERSION` = 1, migrations in `save_migrations.gd`; `NewGame.create` builds a starting state.
+
+## AI skill use (AI1)
+
+- `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte when `AiProfile.smart_skills` is true (default); false = old behaviour. Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`.

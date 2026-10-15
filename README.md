@@ -455,6 +455,10 @@ Party state, XP curve (starting values in `data/progression/xp_curve.json`), lev
 
 All six classes now have their real kits: three-tier skill families, eight advanced families that replace two starters in one slot, intimidate for the Warrior, riposte at AP 3/2/1, orb and tome focus items with effects, and rogue and mage party units. Default loadout = the first five path families. Authored by idempotent seeds in `data/seeds/`.
 
+### AI skill use (AI1)
+
+The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. `AiProfile.smart_skills` switches it off for A/B balance runs. Tested in `ai_skills_test_suite.gd`.
+
 ### Agent workflow tools
 
 `CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.

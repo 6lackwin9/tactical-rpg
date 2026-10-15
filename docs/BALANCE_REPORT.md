@@ -18,3 +18,5 @@ Target: every class between **40% and 60%** average duel win rate at each tested
 Tier 1v1 (hero vs own class): minion 100%, standard 100%, elite 50%, boss 0%. 1v3 minions: hero loses (except shaman stalemates).
 
 Issues for the brainstorm agent: (1) warrior dominance from gear budget; (2) shaman damage + armor + AI turn waste; (3) ranger durability/AI; (4) are 1v3 and boss outcomes intended?
+
+> NOTE 2026-10-16: since the baseline run below, the game gained new class kits (M2C2B), the AI1 skill use (riposte finisher, taunt, disengage, areas), statuses and gear effects. BAL1 must A/B `AiProfile.smart_skills` and rerun duel, tier and level tables; XP curve values are starting values.
