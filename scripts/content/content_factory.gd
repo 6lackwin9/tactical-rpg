@@ -123,6 +123,7 @@ static func item(entry: Dictionary) -> Item:
 		eq.burden = DictUtil.to_int(e["burden"])
 		eq.mitigation = DictUtil.to_int(e["mitigation"])
 		eq.stat_bonuses = _ints(e["stat_bonuses"])
+		eq.effects = DictUtil.array_of(e["effects"]).duplicate(true)
 		result = eq
 	else:
 		result = Item.new(str(e["id"]), str(e["name"]), _enum(Item.ItemType.keys(), type, Item.ItemType.MATERIAL) as Item.ItemType,
@@ -150,6 +151,7 @@ static func item_to_entry(it: Item, starter_stash: bool = false) -> Dictionary:
 			"off_hand_category": eq.off_hand_category, "scaling_stat": eq.scaling_stat,
 			"block_cost": eq.block_cost, "burden": eq.burden, "mitigation": eq.mitigation,
 			"required_stats": eq.required_stats, "stat_bonuses": eq.stat_bonuses, "threshold_tiers": eq.threshold_tiers,
+			"effects": eq.effects,
 		})
 	elif it is Consumable:
 		var con: Consumable = it

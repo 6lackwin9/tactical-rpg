@@ -83,7 +83,7 @@ static func blocked_blocks(status: String) -> Array[int]:
 # Chance (0-100) that `potency` lands on `target`: potency minus the target's
 # debuff resistance and any passive resistance to this status (100+ = immune).
 static func apply_chance(target: Combatant, status: String, potency: int) -> int:
-	var resist: float = target.debuff_resistance() + float(DictUtil.int_of(target.status_resist, status))
+	var resist: float = target.debuff_resistance() + float(target.resist_for(status))
 	return clampi(roundi(float(potency) - resist), 0, 100)
 
 # Rolls a skill-inflicted status. On success it is queued for the target's next round.

@@ -46,6 +46,15 @@ var loadout_locked: bool = false               # set by CombatSession while a ba
 var passives: Array[String] = []        # ids of the passives applied to this unit (see Passives)
 var ap_regen_bonus: int = 0             # extra AP regained each round (passives)
 var potency_bonus: Dictionary = {}      # skill family id -> float bonus (+0.25 = +25% magnitude); empty = none (see potency_for)
+var potency_group: Dictionary = {}      # skill group ("spell" / "heal") -> float bonus from passives
+# Gear-sourced bonuses (item `effects`): cleared and rebuilt from the equipment by rebuild_gear_effects, never permanent.
+var gear_potency_family: Dictionary = {}   # skill family id -> float bonus
+var gear_potency_group: Dictionary = {}    # skill group -> float bonus
+var gear_status_resist: Dictionary = {}    # status -> resistance %
+var gear_status_potency: int = 0           # +points of hit chance on statuses inflicted by attack skills
+var gear_spell_reach: int = 0              # raw sum of gear spell_reach (read through spell_reach_bonus, which clamps it)
+var passive_status_potency: int = 0        # the same from passives
+var passive_spell_reach: int = 0
 var hp_scale: float = 1.0               # tier multiplier on class-derived HP
 var power_scale: float = 1.0            # tier multiplier on attack power (DamageCalculator)
 var tier: String = "hero"               # StatRules.TIERS key
@@ -138,7 +147,40 @@ func _refresh_active() -> void:
 # Gear affixes / passives ("skill_potency") fill potency_bonus; the planner multiplies it into the
 # skill's power_mult (attacks) or heal (support). DamageCalculator.compute never sees it.
 func potency_for(family: String) -> float:
-	return 1.0 + DictUtil.float_of(potency_bonus, family)
+	return 1.0 + DictUtil.float_of(potency_bonus, family) + DictUtil.float_of(gear_potency_family, family)
+
+# potency_for(family) plus the bonuses of every skill group `skill` belongs to (passives and gear).
+# SkillDef.power_for and SupportRules.heal_amount read this; with no bonuses it equals potency_for.
+func potency_for_skill(skill: SkillDef) -> float:
+	var total: float = potency_for(skill.family_id())
+	for group: String in Passives.GROUPS:
+		if skill.in_group(group):
+			total += DictUtil.float_of(potency_group, group) + DictUtil.float_of(gear_potency_group, group)
+	return total
+
+# Extra hit-chance points on statuses inflicted by this unit's attack skills.
+func status_potency_bonus() -> int:
+	return gear_status_potency + passive_status_potency
+
+# Extra maximum reach of spell skills: gear is clamped to Passives.GEAR_REACH_CAP, passives add on top.
+func spell_reach_bonus() -> int:
+	return mini(gear_spell_reach, Passives.GEAR_REACH_CAP) + passive_spell_reach
+
+# Resistance % to `status` from passives and gear (100 = immune).
+func resist_for(status: String) -> int:
+	return mini(100, DictUtil.int_of(status_resist, status) + DictUtil.int_of(gear_status_resist, status))
+
+# Clears every gear-sourced bonus and re-applies the `effects` of the equipped items (called on equip changes).
+func rebuild_gear_effects() -> void:
+	gear_potency_family.clear()
+	gear_potency_group.clear()
+	gear_status_resist.clear()
+	gear_status_potency = 0
+	gear_spell_reach = 0
+	if inventory == null:
+		return
+	for eq: Equipment in inventory._iter_equipped_gear():
+		Passives.apply_effects(self, eq.effects, "gear:" + eq.id, true)
 
 # The weapon type that counts for skill gating: the main-hand weapon's type, or UNARMED_TOKEN with an empty main hand.
 func wielded_type() -> String:
@@ -203,6 +245,7 @@ func get_weapon_context() -> Dictionary:
 	return {"weapon": weapon.weapon_type} if weapon != null else {}
 
 func sync_from_stats_and_gear() -> void:
+	rebuild_gear_effects()
 	if stats != null:
 		# Sync equipped gear stat bonuses into character stats modifiers (Requirement 1)
 		stats.remove_modifier("gear")

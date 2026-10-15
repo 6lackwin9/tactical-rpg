@@ -461,8 +461,9 @@ func use_skill(skill_id: String = "") -> void:
 			if skill.is_area():
 				detail += " • area: the dummy is the only target here"
 			if not skill.status_effect.is_empty() and test_dummy.is_alive():
-				var chance: int = StatusEffects.apply_chance(test_dummy, skill.status_effect, skill.status_potency)
-				var landed: bool = StatusEffects.try_inflict(test_dummy, skill.status_effect, skill.status_potency, rng)
+				var hit_potency: int = skill.status_potency + active_hero.status_potency_bonus()   # + item / passive status_potency effects
+				var chance: int = StatusEffects.apply_chance(test_dummy, skill.status_effect, hit_potency)
+				var landed: bool = StatusEffects.try_inflict(test_dummy, skill.status_effect, hit_potency, rng)
 				detail += " • %s %s (%d%%)" % [StatusEffects.display_name(skill.status_effect), "next round" if landed else "resisted", chance]
 			log_action("ATTACK", skill.display_name, detail, UiTheme.dict_int(hit, "dmg"), str(hit.get("outcome", "HIT")), str(hit.get("breakdown", "")), test_dummy.name)
 			_emit_hit_fx(hit)
@@ -669,6 +670,8 @@ func get_eligible_stash_items(slot: Equipment.EquipSlot) -> Array[Equipment]:
 		# A 2H main weapon cannot be paired with a shield (only an off-hand weapon).
 		if slot == Equipment.EquipSlot.OFF_HAND and main_held != null and main_held.is_two_handed and not eq.is_weapon():
 			continue
+		if slot == Equipment.EquipSlot.OFF_HAND and eq.conflicts_with_main(main_held):   # an orb / tome needs a one-handed main hand
+			continue
 		result.append(eq)
 	return result
 
@@ -858,6 +861,10 @@ func _equip_internal(item: Equipment, slot: Equipment.EquipSlot, announce: bool)
 	if slot == Equipment.EquipSlot.OFF_HAND:
 		# A 2H main weapon cannot carry a shield, but an off-hand weapon is fine (needs Switch Weapon to use).
 		var main_w: Equipment = inv.get_main_weapon()
+		if item.conflicts_with_main(main_w):
+			if announce:
+				_log_failure("Equip", "%s needs a one-handed main hand: 2H %s leaves the off hand empty" % [item.name, main_w.name])
+			return false
 		if main_w != null and main_w.is_two_handed and not item.is_weapon():
 			if announce:
 				_log_failure("Equip", "2H %s cannot be paired with %s - only an off-hand weapon (swap with Switch Weapon)" % [main_w.name, item.name])
@@ -865,7 +872,7 @@ func _equip_internal(item: Equipment, slot: Equipment.EquipSlot, announce: bool)
 	if slot == Equipment.EquipSlot.MAIN_HAND and item.is_two_handed:
 		# Shields cannot be held with a 2H weapon; an off-hand weapon stays as the switch-to weapon.
 		var held_off: Equipment = inv.get_equipped(Equipment.EquipSlot.OFF_HAND)
-		if held_off != null and not held_off.is_weapon():
+		if held_off != null and (not held_off.is_weapon() or held_off.conflicts_with_main(item)):
 			_unequip_to_stash(Equipment.EquipSlot.OFF_HAND)
 			if announce:
 				log_action("EVENT", "Unequip", "%s stowed: %s is 2-Handed" % [held_off.name, item.name], 0, "STASHED")

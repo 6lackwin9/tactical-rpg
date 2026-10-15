@@ -102,7 +102,7 @@ func family_id() -> String:
 # power_mult as `user` applies it: the skill's multiplier x the user's family potency (Combatant.potency_for).
 # This is the ONLY place potency enters attack damage (the value fed to DamageCalculator as skill_mult).
 func power_for(user: Combatant) -> float:
-	return power_mult if user == null else power_mult * user.potency_for(family_id())
+	return power_mult if user == null else power_mult * user.potency_for_skill(self)
 
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.
@@ -143,6 +143,16 @@ func switch_cost(current: CombatTypes.StanceType) -> int:
 # True when a SUPPORT skill heals.
 func heals() -> bool:
 	return kind == Kind.SUPPORT and (heal_base > 0 or heal_mult > 0.0)
+
+# Skill groups (DERIVED, nothing stored; see Passives.GROUPS): "spell" = an ATTACK skill gated on a staff or wand,
+# "heal" = a SUPPORT skill that heals. Item / passive group bonuses apply to every skill in the group.
+func in_group(group: String) -> bool:
+	match group:
+		"spell":
+			return kind == Kind.ATTACK and (weapon_types.has("staff") or weapon_types.has("wand"))
+		"heal":
+			return heals()
+	return false
 
 # True when a SUPPORT skill removes debuffs.
 func cleanses() -> bool:
@@ -191,13 +201,14 @@ func icon() -> String:
 # Distance band (min, max) at which `c` can use this attack: skill-specific if set;
 # off-hand jabs and line areas 1; ranged units 2..3 (or their longer range); melee 1..range.
 func reach_for(c: Combatant) -> Vector2i:
+	var extra: int = c.spell_reach_bonus() if in_group("spell") and area != Area.LINE and area != Area.SWEEP else 0   # spell_reach effects (not LINE / SWEEP)
 	if reach_max > 0:
-		return Vector2i(reach_min, reach_max)
+		return Vector2i(reach_min, reach_max + extra)
 	if offhand or area == Area.LINE or area == Area.SWEEP:
 		return Vector2i(1, 1)
 	if c.attack_range > 1:
-		return Vector2i(2, maxi(3, c.attack_range))
-	return Vector2i(1, c.attack_range)
+		return Vector2i(2, maxi(3, c.attack_range) + extra)
+	return Vector2i(1, c.attack_range + extra)
 
 func is_area() -> bool:
 	return area != Area.NONE

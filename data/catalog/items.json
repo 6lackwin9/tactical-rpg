@@ -29,6 +29,7 @@
 				"STR": 14
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": [
 				{
 					"stat": "STR",
@@ -65,6 +66,7 @@
 				"STR": 22
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": [
 				{
 					"stat": "STR",
@@ -101,6 +103,7 @@
 				"DEX": 13
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": [
 				{
 					"stat": "DEX",
@@ -137,6 +140,7 @@
 				"STR": 10
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -166,6 +170,7 @@
 				"STR": 10
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -195,6 +200,7 @@
 				"STR": 10
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -224,6 +230,7 @@
 				"DEX": 12
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": [
 				{
 					"stat": "DEX",
@@ -240,16 +247,16 @@
 			"rarity": "UNCOMMON",
 			"weight": 1.5,
 			"value": 45,
-			"description": "Bound grimoire wieldable in off-hand to channel tactical spells (INT scaling).",
+			"description": "A bound book of rites held in the off hand. Strengthens healing and the grip of curses.",
 			"damage_type": "magic",
 			"icon_id": "",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "orb",
-			"base_power": 14,
-			"base_range": 2,
+			"slot": "OFF_HAND",
+			"weapon_type": "tome",
+			"base_power": 0,
+			"base_range": 1,
 			"two_handed": false,
 			"off_hand_category": "tome",
 			"scaling_stat": "INT",
@@ -257,9 +264,12 @@
 			"burden": 0,
 			"mitigation": 0,
 			"required_stats": {
-				"INT": 12
+				"KNOW": 11
 			},
-			"stat_bonuses": {},
+			"stat_bonuses": {
+				"KNOW": 1
+			},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -289,6 +299,7 @@
 				"INT": 14
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": [
 				{
 					"stat": "INT",
@@ -320,7 +331,8 @@
 			"required_stats": {
 				"STR": 12
 			},
-			"stat_bonuses": {}
+			"stat_bonuses": {},
+			"effects": []
 		},
 		{
 			"id": "shd_buckler",
@@ -344,7 +356,8 @@
 			"required_stats": {
 				"DEX": 10
 			},
-			"stat_bonuses": {}
+			"stat_bonuses": {},
+			"effects": []
 		},
 		{
 			"id": "arm_plate",
@@ -368,7 +381,8 @@
 			"required_stats": {
 				"CONS": 12
 			},
-			"stat_bonuses": {}
+			"stat_bonuses": {},
+			"effects": []
 		},
 		{
 			"id": "arm_leather",
@@ -392,7 +406,8 @@
 			"required_stats": {
 				"DEX": 10
 			},
-			"stat_bonuses": {}
+			"stat_bonuses": {},
+			"effects": []
 		},
 		{
 			"id": "acc_bear_ring",
@@ -417,7 +432,8 @@
 			"stat_bonuses": {
 				"STR": 2,
 				"CONS": 2
-			}
+			},
+			"effects": []
 		},
 		{
 			"id": "acc_swift_amulet",
@@ -441,7 +457,8 @@
 			"required_stats": {},
 			"stat_bonuses": {
 				"DEX": 3
-			}
+			},
+			"effects": []
 		},
 		{
 			"id": "con_heal_potion",
@@ -530,6 +547,7 @@
 				"STR": 10
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -559,6 +577,7 @@
 				"STR": 15
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -588,6 +607,7 @@
 				"STR": 11
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -617,6 +637,7 @@
 				"DEX": 11
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -639,7 +660,8 @@
 			"burden": 0,
 			"mitigation": 2,
 			"required_stats": {},
-			"stat_bonuses": {}
+			"stat_bonuses": {},
+			"effects": []
 		},
 		{
 			"id": "arm_cleric_vestment",
@@ -663,7 +685,8 @@
 			"required_stats": {},
 			"stat_bonuses": {
 				"KNOW": 1
-			}
+			},
+			"effects": []
 		},
 		{
 			"id": "arm_mage_robe",
@@ -687,7 +710,8 @@
 			"required_stats": {},
 			"stat_bonuses": {
 				"INT": 2
-			}
+			},
+			"effects": []
 		},
 		{
 			"id": "shd_tower",
@@ -711,7 +735,8 @@
 			"required_stats": {
 				"STR": 15
 			},
-			"stat_bonuses": {}
+			"stat_bonuses": {},
+			"effects": []
 		},
 		{
 			"id": "wpn_wand",
@@ -740,6 +765,7 @@
 				"INT": 11
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -769,6 +795,7 @@
 				"INT": 15
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -800,6 +827,7 @@
 			"stat_bonuses": {
 				"KNOW": 1
 			},
+			"effects": [],
 			"threshold_tiers": []
 		},
 		{
@@ -829,6 +857,7 @@
 				"INT": 14
 			},
 			"stat_bonuses": {},
+			"effects": [],
 			"threshold_tiers": []
 		}
 	]

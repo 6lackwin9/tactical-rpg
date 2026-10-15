@@ -94,9 +94,9 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "arcanist",
 			"name": "Arcanist",
-			"desc": "2H Runed Staff with a Mystic Tome off-hand (INT scaling, Switch Weapon to cast)",
+			"desc": "1H Wand with a Mystic Tome off-hand (a tome needs a one-handed main hand; the 2H staff leaves the off hand empty)",
 			"gear": [
-				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_runed_staff},
+				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_wand},
 				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_mystic_tome},
 			],
 			"pouch": [ItemCatalog.create_focus_elixir],

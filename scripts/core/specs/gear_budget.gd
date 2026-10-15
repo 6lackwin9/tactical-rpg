@@ -17,6 +17,10 @@ const W_MITIGATION: float = 1.5
 const W_STAT_POINT: float = 2.0
 const W_BURDEN: float = -2.0
 const W_EXTRA_BLOCK: float = -3.0
+# Item effects (C1): potency is x20 per 1.0 (+0.10 = 2.0), status potency 0.2 per hit-chance point, spell reach 3.0 per tile.
+const W_SKILL_POTENCY: float = 20.0
+const W_STATUS_POTENCY: float = 0.2
+const W_SPELL_REACH: float = 3.0
 
 # Target loadout value (near the median of the six original class loadouts: 19 19 22 24 27 35) and allowed fraction either side.
 const TARGET_BUDGET: float = 23.0
@@ -51,6 +55,15 @@ static func item_value(entry: Dictionary) -> float:
 	v += bonus_total * W_STAT_POINT
 	v += DictUtil.to_int(e["burden"]) * W_BURDEN
 	v += maxi(0, DictUtil.to_int(e["block_cost"]) - 1) * W_EXTRA_BLOCK
+	for raw: Variant in DictUtil.array_of(e["effects"]):
+		var fx: Dictionary = DictUtil.dict_of(raw)
+		match str(fx.get("type", "")):
+			"skill_potency":
+				v += DictUtil.to_float(fx.get("value", 0.0)) * W_SKILL_POTENCY
+			"status_potency":
+				v += DictUtil.to_int(fx.get("value", 0)) * W_STATUS_POTENCY
+			"spell_reach":
+				v += DictUtil.to_int(fx.get("value", 0)) * W_SPELL_REACH
 	return v
 
 # Per-slot breakdown: [{slot, id, name, value, special, note}] for filled gear slots.

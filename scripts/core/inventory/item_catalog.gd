@@ -58,6 +58,9 @@ static func create_shadow_dagger() -> Equipment:
 static func create_mystic_tome() -> Equipment:
 	return create_equipment("wpn_tome")
 
+static func create_wand() -> Equipment:
+	return create_equipment("wpn_wand")
+
 static func create_runed_staff() -> Equipment:
 	return create_equipment("wpn_staff")
 

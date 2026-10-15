@@ -27,6 +27,7 @@ var off_hand_category: String = "" # shield, shortsword, knuckles, dagger, knife
 var scaling_stat: String = "STR"   # STR, DEX, or INT scaling
 var stat_bonuses: Dictionary = {}        # Stat Name (String) -> Bonus (int)
 var unlocked_commands: Array[String] = [] # e.g. ["DefendCommand", "FocusCommand"]
+var effects: Array = []                  # item effects (Passives grammar, ITEM_TYPES only); apply while equipped
 
 # Stat Requirements (e.g. {"STR": 16})
 var required_stats: Dictionary = {}
@@ -89,6 +90,17 @@ func can_equip_in_slot(target: EquipSlot) -> bool:
 	if slot == EquipSlot.ACCESSORY_1 or slot == EquipSlot.ACCESSORY_2:
 		return target == EquipSlot.ACCESSORY_1 or target == EquipSlot.ACCESSORY_2
 	return target == slot
+
+# Orb and tome: off-hand-only casting aids. They are never two-handed, and a two-handed main weapon
+# leaves the off hand empty, so they cannot be paired with one (see conflicts_with_main).
+const FOCUS_TYPES: Array[String] = ["orb", "tome"]
+
+func is_focus() -> bool:
+	return is_weapon() and FOCUS_TYPES.has(weapon_type)
+
+# True when this item cannot be held together with `main` (a focus needs a main hand that is not two-handed).
+func conflicts_with_main(main: Equipment) -> bool:
+	return is_focus() and main != null and main.is_two_handed
 
 const HAND_MAIN_1H: String = "main_1h"
 const HAND_MAIN_2H: String = "main_2h"
