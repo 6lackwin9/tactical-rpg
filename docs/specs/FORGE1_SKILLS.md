@@ -1,10 +1,10 @@
 # FORGE1_SKILLS: Skill tab of the Content Forge (family as template, ranks from modifiers, dynamic descriptions)
 
-Status: proposed (ready for approval; supersedes the skills part of `FORGE1_DESIGN.md`, now archived in `docs/archive/FORGE1_DESIGN_SKILLS.md`)
+Status: proposed (revised with DECISIONS "FORGE1 skill answers 2" and "FORGE1 class answers"; ready for approval; supersedes the skills part of `FORGE1_DESIGN.md`, now archived in `docs/archive/FORGE1_DESIGN_SKILLS.md`)
 Depends on: SK2 (done; `advanced`, `unlock_offset`, `upsert_many` exist)
 Lane: logic (SKILL1-L, schema commit first), then one small asset task (SKILL1-A, migration seed)
-Appendix: `docs/specs/FORGE1_SKILLS_MATRIX.md` (field by kind matrix, per-field guard rails, typed controls, form sections, filters, test table). Section letters A-K below refer to it.
-Touches (when approved): `skill_def.gd`, new `skill_kinds.gd`, `skill_ranks.gd`, `skill_text.gd`, `content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `scripts/ui/forge/*` (new `skill_form_model.gd`), `data/catalog/skills.json` (127 rows to 49 entries), seed `data/seeds/skill1_ranks.gd`, tests in appendix K. Items, classes and units are NOT in this spec.
+Appendix: `docs/specs/FORGE1_SKILLS_MATRIX.md` (field by kind matrix, per-field guard rails, typed controls, form sections, filters, tests K, tokens L, origin key fields M). Section letters A-M below refer to it.
+Touches (when approved): see section 9 for the file list per commit; data: `data/catalog/skills.json` (127 rows to 49 entries), class paths (basics removed), seed `data/seeds/skill1_ranks.gd`. The classes and items passes reference section 12 (Shared Forge rules); their editors are NOT in this spec.
 
 HISTORY.md check: nothing here re-proposes a deprecated idea. Related rows kept: "Hard-coded classes, items, skills in code -> JSON catalog + Forge", DECISIONS "Skill model v2" (advanced skills are separate families), "Tier numbers" (every rank keeps explicit numbers), "Basics v3" (basics are single-tier), "Content edits through `ContentCatalog.upsert`". One earlier recommendation is replaced on its original reason: `FORGE1_DESIGN.md` 1.9 chose flat storage plus a grouped view (S1) because a nested file looked too costly; section 2 gets the nested file cheaply (flat rows in memory), so S1 is superseded. The description token system was listed out of scope in the first draft; the user asked for it (DECISIONS "FORGE1 skills answers").
 
@@ -23,7 +23,9 @@ A skill is ONE thing to author: a family template (identity, cost, targeting, ga
 | 5 | Dynamic descriptions: one template description with tokens resolved per rank | section 5 |
 | 6 | The family is the template; each rank is derived from it by that rank's modifiers, resolved against the base (no cascade) | section 3 |
 | 7 | Caps: name 32, description 240 | appendix F |
-| 8 | OPEN: `evolves_from` | section 11 |
+| 8 | `evolves_from` accepted: optional link advanced -> base; owning an advanced family requires owning its base | section 11 |
+| 9 | Basic skills are not valid in class paths; every unit owns all basics from level 1 automatically | section 11.2 |
+| 10 | Every Forge kind gets `origin` (system / user): key fields of system assets are locked, delete only for user assets, explicit promote | section 12 |
 
 ## 2. Storage (S3) and API
 
@@ -103,7 +105,7 @@ Modifier table. A rank modifier is an ABSOLUTE replacement value for one field, 
 | jump_tiles | yes | absolute int | 1-6 | 1 |
 | recover_ap | yes | absolute int | 0-12 | 0 (engine row only) |
 | name, description | no | derived (name) / template (description) | n/a | n/a |
-| everything else (`kind`, `basic`, `learned_only`, `advanced`, `evolves_from`, `system`, `stance`, `weapon_types`, `min_proficiency`, `area`, `offhand`, `status_effect`, `target_mode`, `heal_stat`) | no (base-only) | n/a | n/a | identical across ranks in every shipped family |
+| everything else (`kind`, `basic`, `learned_only`, `advanced`, `evolves_from`, `origin`, `system`, `stance`, `weapon_types`, `min_proficiency`, `area`, `offhand`, `status_effect`, `target_mode`, `heal_stat`) | no (base-only) | n/a | n/a | identical across ranks in every shipped family |
 
 Why absolute values and not multiplier or offset:
 
@@ -135,29 +137,7 @@ The family carries ONE description: a template with `{token}` placeholders. At e
 
 ### 5.1 Tokens
 
-Kind column lists where the token is valid (sections from section 4). Values are the effective field values of the rank being rendered.
-
-| Token | Source | Valid for | Output example |
-| --- | --- | --- | --- |
-| `{name}` | derived rank name | all | `Mend II` |
-| `{ap}` | `level` | kinds with AP | `3 AP` |
-| `{blocks}` | `blocks` | all | `2 blocks` |
-| `{power}` | `power_mult` x 100 | ATTACK | `200%` |
-| `{dash}` | `dash_tiles` | ATTACK | `4 tiles` |
-| `{reach}` | `reach_min`, `reach_max` | ATTACK, SUPPORT | `3 tiles`, `2-3 tiles`, `1 tile` |
-| `{weapons}` | `weapon_types` joined by `/` | gate kinds | `bow/crossbow` |
-| `{proficiency}` | `min_proficiency` | gate kinds | `3` |
-| `{status}` | ATTACK: `status_effect`; SUPPORT, DEFEND: `grant_status`; display name from the registry | ATTACK, SUPPORT, DEFEND | `Stagger`, `Haste` |
-| `{potency}` | `status_potency` | ATTACK | `50%` |
-| `{magnitude}` | `status_magnitude` | ATTACK with weaken | `20%` |
-| `{rounds}` | ATTACK, SUPPORT, DEFEND: `status_rounds`; FOCUS: `boost_rounds` | those kinds | `1 round`, `2 rounds` |
-| `{heal}` | `heal_base`, `heal_mult`, `heal_stat` | SUPPORT with a heal | `10 + 1.8 x KNOW`, `12`, `1.5 x INT` |
-| `{cleanse}` | `cleanse_statuses` | SUPPORT with a cleanse | `stun`, `stun, bleed`, `all statuses` |
-| `{mitigation}` | `mitigation` x 100 (author writes the sign) | DEFEND | `35%` |
-| `{boost}` | `boost` | FOCUS | `x1.5` |
-| `{jump}` | `jump_tiles` | DISENGAGE | `3 tiles` |
-| `{recover}` | `recover_ap` | REST | `2 AP` |
-| `{unlock}` | effective `unlock_offset` (auto resolved to `2 x (n - 1)`) | non-basic, non-system | `+4` (`+0` for rank 1) |
+The token table (token, source field, valid kinds, example) is appendix L: `name ap blocks power dash reach weapons proficiency status potency magnitude rounds heal cleanse mitigation boost jump recover unlock`. Values are the effective field values of the rank being rendered.
 
 Family unlock level lives in class paths, not in the skill, so the template cannot print an absolute character level (out of scope).
 
@@ -213,7 +193,7 @@ Typed controls only (appendix G): no free text except id, name and description t
 | --- | --- |
 | New schema field keys | `section` (string list), `group` (Forge section id), `rank` (bool, rank-modifiable), `dyn_min` / `dyn_max` / `enabled_when` (named rules resolved in `SkillFormModel`), `filters` (per kind) |
 | New field types | `ranks` (list of Dictionary), `multi_pick` (list of string with `options` / `options_from`), `template` (text with tokens and `SkillText` validation); `strings` stays for other kinds |
-| New / changed skill fields | `evolves_from` (ref `skills`, default "", only if approved, section 11); `description` becomes a template; `weapon_types` / `min_proficiency` visible for ATTACK, DEFEND, SUPPORT; `name` max 32, `description` max 240 |
+| New / changed skill fields | `evolves_from` (ref `skills`, default "", section 11); `origin` (enum system / user, default system, section 12; every kind); `description` becomes a template; `weapon_types` / `min_proficiency` visible for ATTACK, DEFEND, SUPPORT; `name` max 32, `description` max 240 |
 | Stored keys removed | `family`, `tier` for ranked entries (legacy flat rows still carry them) |
 | `ContentCatalog` | `VERSIONS` (skills 2); ranked API (section 2); `validate_skill_entry`; `_family_errors` gains non-rank fields identical, id convention, contiguous tiers, rank cap (basic 1, class 3) |
 | `SkillKinds` | section 4; `REQUIRED_IDS` invariant in `validate_all` |
@@ -226,42 +206,101 @@ Typed controls only (appendix G): no free text except id, name and description t
 | Step | Content |
 | --- | --- |
 | 1 | Run `data/seeds/skill1_ranks.gd` (idempotent): snapshot all flat rows, run section 5.5 conversion, `ContentCatalog.save("skills")`, `reload_from_disk()`, compare every expanded row field by field (including name and description). Expected: rows 127, entries 49, 39 entries with `ranks` of length 2, 10 without, `validate_all()` empty; print template/literal counts and any name or description over the caps (must be none; if some exist the seed lists them and stops) |
-| 2 | Only if `evolves_from` is approved: set the confirmed pairings (section 11) through `upsert_skill` |
-| 3 | No numbers, names or ids change |
+| 2 | Set `evolves_from` for the seven pairings of section 11.1 through `upsert_skill` inside `begin_system_edit` / `end_system_edit` (key field of a system asset) |
+| 3 | Remove every basic skill row (`strike`, `guard`, and any other basic) from all class `skill_path`s (section 11.2); print each removal |
+| 4 | Audit every class path and unit `extra_skills` for an advanced family without its base (section 11.3); print violators and stop, the user decides the fix |
+| 5 | No numbers, names or ids change; `origin` is absent everywhere (= system) |
 
 ## 9. Milestones (coarse)
 
 | Task | Lane | Content | Depends on |
 | --- | --- | --- | --- |
-| SKILL1-L | logic | Commit 1 (schema first): `SkillKinds`, section/`rank` schema keys, `SkillRanks`, `SkillText`, version map, loader/saver, ranked API, extended `_family_errors`, gate for DEFEND/SUPPORT, basics one rank, name/description caps, `validate_skill_entry`, `REQUIRED_IDS`, tests. Commit 2 (Forge): family-first form, ranks section, description editor with live preview, typed controls, filter bar, disabled Save with reasons. SKILL1-A is released after commit 1 | SK2 (done) |
+| SKILL1-L | logic | Commit 1 (schema first, also the shared infrastructure for classes and items): `SkillKinds`, section/`rank` schema keys, `SkillRanks`, `SkillText`, version map, loader/saver, ranked API, extended `_family_errors`, DEFEND/SUPPORT gate, basics one rank, caps, `validate_skill_entry`, `REQUIRED_IDS`; `evolves_from` and the ownership rules (11); basics auto-grant and class-path rules (11.2); shared Forge rules `origin` (12); the typed controls (`forge_form.gd`, appendix G); tests. Commit 2 (Forge UI for skills): family-first form, ranks section, description editor with live preview, filter bar, disabled Save with reasons, `SkillFormModel`. SKILL1-A is released after commit 1 | SK2 (done) |
 | SKILL1-A | asset | Section 8 | SKILL1-L commit 1 |
 
-Ordering: SK2-L and SK2-A are merged, so SKILL1-L can start once approved. It edits hub files (`skill_def.gd`, `content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `forge_preview.gd`, `combat_plan.gd` one loop, `forge_form.gd`, `content_forge.gd`), so do not run it in parallel with another task touching them. Parallel-safe: balance sims, the M4 quest runtime, items and classes design passes (docs only).
+Commit 1 files: `scripts/combat/planning/skill_def.gd`, `skill_catalog.gd` (basics list); new `scripts/content/skill_kinds.gd`, `skill_ranks.gd`, `skill_text.gd`; `content_schema.gd` (`origin` on every kind, `evolves_from`, section keys, typed field types); `content_catalog.gd` (loader/saver, ranked API, origin enforcement, `promote`, system-edit scope, family and class-path rules); `content_factory.gd` (basics grant); `scripts/core/combat/combatant.gd` (`can_own_family`, `learn_skill`); `scripts/core/specs/passives.gd` (grant refusal); `scripts/ui/forge/forge_form.gd` (typed controls, locked fields); `scripts/ui/forge/content_forge.gd` (Delete disabled, Promote button); tests: new `skill_ranks`, `skill_text`, `origin` suites plus edits listed in appendix K, registered in `scripts/tests/suite_registry.gd`. Commit 2: `forge_preview.gd`, `content_forge.gd`, new `scripts/ui/forge/skill_form_model.gd`, `combat_plan.gd` (one loop), `skill_form_model` suite.
+
+Ordering: SK2-L and SK2-A are merged, so SKILL1-L can start once approved. It edits hub files (listed above), so do not run it in parallel with another task touching them. Rules that SKILL1-L commit 1 makes errors (basic in a class path, advanced without base) fail `validate_all` on the shipped data until SKILL1-A runs; the branch merges only after both. Parallel-safe: balance sims, the M4 quest runtime, items and classes design passes (docs only).
 
 ## 10. Out of scope
 
 Items, classes, units, passives editors and the effect-list editor; engine kind merging; changing skill ids, rank ids, or any number; rewriting descriptions beyond the mechanical conversion; absolute character-level text in descriptions; multiplier/offset modifiers; making `SkillDef` nested; `dojo_session` effect duplication; new gameplay content; balance; any implementation. Tests: appendix K.
 
-## 11. Open question: `evolves_from`
+## 11. Family link (`evolves_from`) and ownership (accepted)
 
-Add an optional, display-only link from an advanced family to the base family it upgrades ("Greater Mend upgrades Mend")? Nothing in the engine reads it; advanced skills stay separate families (DECISIONS "Skill model v2"). Rules if accepted: ref to a head skill, not system, not basic, not itself, no cycle; Forge picker filtered accordingly; planner/progression text may use it later.
+`evolves_from` is an optional key field (ref to a head skill, default "") that links an advanced family to the base family it upgrades. The engine now reads it for the ownership gate; ranks and ids are unchanged, and advanced skills stay separate families (DECISIONS "Skill model v2").
 
-Recommendation: accept it as an optional field, shipped with SKILL1-L commit 1 (small: one schema field, one validator rule, one filter chip) and filled by SKILL1-A only for the pairings the user confirms. It documents the design intent in data, helps the Forge show "Used by", and costs nothing at runtime. If the user declines, drop the field, its validator rule, the filter chip, and step 2 of section 8.
+Field rules: non-empty only when `advanced` is true; the target is a head skill that is not `system`, not `basic`, not `advanced` (one step only), not itself; no cycle; Forge picker filtered accordingly. A base with dependents cannot be deleted (`references_to` counts the field).
 
-Proposed pairings for the 11 advanced families (judged from names and descriptions; basic skills cannot be a target, `guard` is basic):
+### 11.1 Accepted pairings (SKILL1-A step 2)
 
-| Advanced family | Proposed base | Confidence |
-| --- | --- | --- |
-| greater_mend | mend | high |
-| deadeye | aimed_shot | high (200% stagger bow/crossbow shot) |
-| judgement | smite | high (mace/staff stagger) |
-| charge_in | lunge | high (dash plus stagger) |
-| lacerate | bleeding_cut | high (dagger bleed) |
-| assassinate | quick_stab | high (dagger, 200%) |
-| cyclone_kick | sweep_kick | high (sweep plus stagger) |
-| renewal | rally | uncertain (heal plus haste; check what rally does) |
-| inferno | firebomb | uncertain (burst bleed, staff/wand; arcane_bolt is the other candidate) |
-| glacial_burst | arcane_bolt | uncertain (burst root; firebomb is the other candidate) |
-| shield_wall | none proposed | uncertain (riposte? shield_bash? `guard` is basic and not allowed) |
+| Advanced family | Base |
+| --- | --- |
+| greater_mend | mend |
+| deadeye | aimed_shot |
+| judgement | smite |
+| charge_in | lunge |
+| lacerate | bleeding_cut |
+| assassinate | quick_stab |
+| cyclone_kick | sweep_kick |
 
-Questions the user must answer: (1) accept `evolves_from` or decline; (2) if accepted, confirm or correct the four uncertain rows (an empty value is allowed).
+`renewal`, `inferno`, `glacial_burst` and `shield_wall` have no base for now: `evolves_from` stays empty and no ownership requirement applies. Setting one later is a normal key-field edit.
+
+### 11.2 Basic skills
+
+Basics are NOT valid in a class path and exist only in the skills tab. Every unit owns all basic skills (`SkillDef.basic`) from level 1 automatically.
+
+1. `ContentFactory.unit` grants every basic via `SkillCatalog` (the basics list) instead of relying on class path rows; ids are de-duplicated against `extra_skills`. Basics need no unlock level and cannot be removed from a unit.
+2. `_class_errors` rejects a basic skill in `skill_path` (message names class and skill).
+3. The shipped class paths contain `strike` / `guard` rows; SKILL1-A step 3 removes them. The default loadout and AI read owned families, so behaviour is unchanged (acceptance: class, arena, planning and progression suites pass).
+4. Basics are origin system (section 12).
+
+### 11.3 Ownership requires the base
+
+A unit may only own or learn an advanced family if it owns the base family (`evolves_from`). A family with an empty `evolves_from` has no requirement.
+
+1. Class path validation: an advanced step with a non-empty `evolves_from` requires the base family in the SAME path at an unlock level <= the advanced level (equal is allowed). Message names class, advanced family and base.
+2. Unit validation: an advanced family in `extra_skills` or `loadout` needs the base in the class path (at any level) or in `extra_skills`.
+3. Engine: `Combatant.can_own_family(family_id) -> bool` (true if not advanced, `evolves_from` empty, or `owns_skill(base)`). `learn_skill` refuses (no-op plus `push_warning`) when it is false; passive grants (`passives.gd` line that calls `learn_skill`) go through the same check, so an advanced grant without the base does nothing.
+4. Saves keep what they already own (no stripping); the check applies to new learning only.
+5. Forge: the skill form shows "Requires: Mend" next to `evolves_from`; the class path editor (classes pass) filters or flags the same rule.
+
+## 12. Shared Forge rules (the classes and items passes reference this section)
+
+### 12.1 Origin
+
+Every Forge kind (skills, classes, items, passives, units, and so on) gets one common schema field.
+
+| Item | Contract |
+| --- | --- |
+| Field | `origin`, enum `system` or `user`, default `system` |
+| Storage | `to_storage` omits the default, so only user assets carry `"origin": "user"`; ranked skills store it once on the entry and expansion copies it to every rank row (base-only field) |
+| Migration | no data change: every existing row has no `origin` and loads as `system` |
+| New assets | `upsert` / `upsert_skill` of an id that does not exist stores `user`; a new asset cannot be created as `system` outside the system-edit scope |
+| Validation | unknown value is an error; `validate_all` requires every basic, every `SkillKinds.REQUIRED_IDS` skill and every `system: true` engine row to be origin system |
+
+### 12.2 Key fields (locked on system assets)
+
+Shipped assets are system. Their KEY fields are read-only in the Forge; non-key fields (numbers, text) stay editable. The schema marks them `key: true`. Skill key fields (table in appendix M): `id`, `kind`, rank structure (number of ranks), family link (`evolves_from`, `advanced`), plus the identity flags `basic`, `system`, `origin`. Classes and items define their lists in their own specs.
+
+UI: a locked control is shown disabled with the reason ("System asset: key field locked. Create your own copy to change it") as tooltip and a lock icon; the ranks section hides add and remove rank for system skills. Enforcement is not UI-only: `upsert_skill` and `upsert` compare the key fields of an existing system asset with the stored one and return an error naming the field (nothing changes).
+
+### 12.3 Delete and promote
+
+1. DELETE is allowed only for `origin = user`. `ContentCatalog.remove` and `remove_skill` refuse system assets with the reason, in addition to the existing refusals (referenced, `basic`, `REQUIRED_IDS`). The Forge disables Delete with the reason as tooltip. Basics are origin system, so the basics-cannot-be-deleted rule is now a special case of this rule (the explicit `basic` refusal stays as a second guard).
+2. A user asset that a game test uses is converted with the explicit action "Promote to system" (`ContentCatalog.promote(kind, id) -> String`, empty on success): sets `origin` to system, saves, and delete is locked from then on. A confirmation names the consequences (key fields locked, delete locked). Promote is one-way inside the Forge; a demote is only possible by editing the file (git) or in the system-edit scope.
+3. Duplicate (copy to a new id) creates a user asset, giving a way to change key fields of a system asset's copy.
+
+### 12.4 Interaction with `upsert` / `remove` and seeds
+
+1. `ContentCatalog.upsert` and `upsert_many` of an existing system asset: key-field changes are errors, other changes apply. A new id gets `user`. Tests and runtime fixtures that upsert new ids therefore stay removable by `remove`.
+2. Seeds and migrations that must change a key field of a system asset (SKILL1-A step 2) wrap the calls in `begin_system_edit()` / `end_system_edit()`. Only seeds and tests call them, never the Forge; the scope resets on `reload_from_disk`.
+3. `remove()` of a system asset is refused even inside the system-edit scope unless the scope's `allow_remove` flag is set (seed cleanups only).
+4. `references_to` is unchanged; a user asset referencing a system asset is normal, the reverse (a system asset referencing a user asset) makes the user asset not deletable until promoted or unreferenced and a warning on `validate_all`.
+
+Tests: appendix M (`origin_test_suite.gd`).
+
+## 13. Questions for the user
+
+1. Can the Forge create NEW basic skills (they would be granted to every unit)? Proposal: no for now; the `basic` box is disabled on new skills with a tooltip; revisit with a balance pass.
+2. Should Promote be allowed to be undone in the Forge (demote), or file-edit only? Proposal: file-edit only.
