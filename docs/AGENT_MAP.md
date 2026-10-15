@@ -6,11 +6,37 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 | Task | Agent | Model | Lane | Worktree and branch | Started |
 | --- | --- | --- | --- | --- | --- |
-| R1 split arena_test_suite.gd into per-group suites and a registry | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-r1` / `feat/r1` | 2026-10-16 |
-| M2C2B-L engine gaps (status on area attacks, taunt from defend skills) | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-skl` / `feat/skl` | 2026-10-16 |
-| M3 progression data model + save schema | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-m3` / `feat/m3` | 2026-10-16 |
+| AI1 AI use of the new skill kinds | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-ai1` / `feat/ai1` | 2026-10-16 |
+| M2C2B class skill content (+ C1-A2, D1-A) | asset-builder | Sonnet 5.5 (inherited) | asset | `ngp-m2c2b` / `feat/m2c2b` | 2026-10-16 |
 
 ## Finished, by milestone (newest first)
+
+### Model trial 1 (reviewer, inherited vs haiku)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer (haiku) | M2C2B-L static review | 70k / 3.5 | 1 test gap + nits |
+| change-reviewer (inherited) | M2C2B-L static review | 28.5k / 1 | clean + nits |
+
+### M3 progression and save
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | Party state, XP curve, versioned save | 117k / 12 | merged |
+| change-reviewer | Review | 34k / 1 | merged (rename fallback hardened) |
+
+### M2C2B-L area statuses and defend taunt
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | X1 area statuses, X2 defend grants | 69k / 11 | merged |
+
+### R1 test split
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | Per-group suites, SuiteRegistry, TestHelpers | 56k / 12 | merged |
+
 
 ### Milestone planning (brainstorm in builder idle time)
 
