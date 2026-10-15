@@ -77,3 +77,8 @@ Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many t
 
 - Every task row in `docs/TASKS.md` and every spec lists its `Touches`; parallel only when they do not overlap. Cap: 3 builders at once.
 - `tools/overlap.sh` lists files edited in more than one active worktree (exit 1 when any). First run (C1-L vs D1-L): 8 shared scripts (`skill_def.gd`, `combatant.gd`, `content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `plan_entry.gd`, `status_effects.gd`, `dojo_session.gd`) plus `items.json` for C1-A1 vs C1-L: the "independent" judgement was optimistic, so expect small merge conflicts there. Lesson: shared hub files make most logic tasks overlap; sequence tasks that both change schema/validation, or merge the schema slices first.
+
+| C1 orb/tome (parallel: C1-L, D1-L, C1-A1) | logic 155k / 14, asset 23k / 2 | 42k / 3 | merged |
+| D1 weaken/riposte | logic 154k / 23 | 35k / 6 | merged |
+
+Note (2026-10-16): the first three-way parallel run merged cleanly except for `items.json` (resolved by re-running the idempotent asset seed after taking main's file) and three small hunks in `plan_entry.gd`, `skill_def.gd`, `dojo_session.gd` (C1/D1 hooks overlapped, as `tools/overlap.sh` predicted). A worktree needs an editor class-cache scan after a rebase that brings in new `class_name` files.

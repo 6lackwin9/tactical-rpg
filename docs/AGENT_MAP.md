@@ -4,20 +4,30 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-| Task | Agent | Lane | Worktree and branch | Started |
-| --- | --- | --- | --- | --- |
-| C1-L orb/tome schema, item effects | logic-builder | logic | `ngp-c1l` / `feat/c1l` | 2026-10-16 |
-| D1-L weaken status, riposte tiers | logic-builder | logic | `ngp-d1l` / `feat/d1l` | 2026-10-16 |
-
-Waiting to merge: C1-A1 (asset-builder, done, worktree `ngp-c1a1` / `feat/c1a1`; merges after the logic branches).
+No agents running.
 
 ## Finished, by milestone (newest first)
+
+### Milestone planning (brainstorm in builder idle time)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | Milestone plan v2 (coarse), AI1 and M3 specs | 91k / 4 | docs, awaiting your answers |
+
+### D1 weaken and riposte
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | D1-L weaken, magnitude, zero-power attacks, riposte data | 154k / 23 | merged (D1-A folds into M2C2B assets) |
+| change-reviewer | Review of merged commit | 35k / 6 | clean |
+
 ### C1 orb and tome
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
-| asset-builder | C1-A1 gating, priest proficiency, tome retype | 23k / 2 | done, waiting to merge |
-| logic-builder | C1-L | - | active |
+| asset-builder | C1-A1 gating, priest proficiency, tome retype | 23k / 2 | merged |
+| logic-builder | C1-L orb/tome rules, item effects, gear bonuses | 155k / 14 | merged |
+| change-reviewer | Review | 42k / 3 | merged (hand-rule gap accepted) |
 
 ### B1 rest to Tactical (first parallel pilot)
 
