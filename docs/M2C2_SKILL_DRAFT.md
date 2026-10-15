@@ -5,7 +5,7 @@ Scope: skill families, class paths and loadouts for warrior, ranger, priest, bra
 ## Rules used
 
 - Skill model v2: a FAMILY has tiers 1-3 (basics strike and guard run to tier 5; offhand_jab has one tier). The tier is chosen at planning time. A tier's catalog `level` field is its AP cost. Unit skill cap = `ceil(unit level / 2)` (1-5), so AP 3 needs unit level 5+, AP 4 needs 7+, AP 5 needs 9+.
-- Standard class-family scaling (used unless a row says otherwise): T2 = T1 AP +1, power x1.25; T3 = T1 AP +2, power x1.5 and +1 block. Status potency +5 per tier, status rounds +0 or +1 where noted.
+- Standard class-family scaling (used unless a row says otherwise): T2 = T1 AP +1, power x1.25; T3 = T1 AP +2, power x1.5 and +1 block (SUPERSEDED by Revision 3: no extra block at T3). Status potency +5 per tier, status rounds +0 or +1 where noted.
 - ADVANCED families are separate families with their own tiers 1-3, base AP 3 (T1 AP 3 / T2 AP 4 / T3 AP 5), and extra effects that improve a starter skill in ONE slot, so a unit can drop the starter(s). No class-skill level 4-5 singles.
 - Active loadout: max 5 class families + 3 extra slots; basics are free. A class path may own more than 5 families (unlocked by unit level); the default loadout is the FIRST 5 families of the path. Others are optional swaps set outside battle.
 - New tier ids: `<id>_2`, `<id>_3` (existing ids stay T1, or keep their own ids where already tiered: power_strike, heavy_blow, brace, fortress, deep_focus). Existing skills still have `family: ""` for most ids, so migration sets `family` and `tier` on them.
@@ -15,7 +15,7 @@ Scope: skill families, class paths and loadouts for warrior, ranger, priest, bra
 
 Tier cells read T1 / T2 / T3. "Exist" = already in `skills.json` (re-tiered/reused); NEW = to author.
 
-### Basics (free, everyone)
+### Basics (free, everyone) (SUPERSEDED by Revision 3 section R1: basics keep only base versions)
 
 | Family | Tiers (id) | AP | Blocks | Power | Notes | Exist/NEW |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -79,7 +79,7 @@ Path rows are `{unit level: family}`; default = first 5 rows. Advanced families 
 
 | Class | Default 5 (unit level) | Later / advanced (unit level) | Swap rule |
 | --- | --- | --- | --- |
-| Warrior (tank, taunt, self mitigation, riposte, low offense) | taunt_shout (1), riposte (3), shield_bash (3), hamstring (4), sunder (5) | shield_wall (5), shockwave line family (7, optional chip, not re-tiered here) | shield_wall replaces taunt_shout and frees the slot for sunder/a 3rd extra |
+| Warrior (tank, taunt, self mitigation, riposte, low offense) | taunt_shout (1), riposte (3), shield_bash (3), hamstring (4), sunder (5) (SUPERSEDED: hamstring becomes intimidate, see R4) | shield_wall (5), shockwave line family (7, optional chip, not re-tiered here) | shield_wall replaces taunt_shout and frees the slot for sunder/a 3rd extra |
 | Ranger (single-target ranged, chip AoE, disengage) | aimed_shot (1), pinning_shot (3), leap_back (3), barbed_arrow (5), volley (5) | deadeye (5), focus (5) | deadeye replaces aimed_shot; focus swaps in for volley when chip AoE is not needed |
 | Priest (heal, buffs, cleanse, light smite; mace/staff/orb, no shield) | smite (1), rally (1), mend (3), purify (3), hex (5) | greater_mend (5), renewal (5), judgement (7) | greater_mend replaces mend + purify (2 slots freed); renewal replaces mend + rally; judgement replaces smite |
 | Brawler (unarmed STR+DEX bruiser) | lunge (1), body_blow (3), sweep_kick (3), hamstring (4), haymaker (5) | charge_in (5), cyclone_kick (5) | charge_in replaces lunge; cyclone_kick replaces sweep_kick; hamstring is the first to drop |
@@ -127,6 +127,8 @@ Residual gaps (accepted): only the priest heals/cleanses/buffs; the warrior and 
 
 ## 6. Open questions
 
+Questions 1, 2, 3, 5, 6 and 7 were answered on 2026-10-15 (see DECISIONS.md, M2c-2b design answers) and are covered by Revision 3 below.
+
 1. Brawler gating: clear `weapon_types` on body_blow/haymaker (unarmed allowed), or add an "unarmed" weapon type token?
 2. Rogue and brawler gap-closers: confirm brawler keeps `lunge` (and charge_in) while the rogue gets its own dagger `pounce`, instead of sharing one skill.
 3. Hamstring appears in warrior, brawler and rogue defaults. Acceptable overlap, or should the brawler/warrior get a distinct 5th family?
@@ -134,3 +136,138 @@ Residual gaps (accepted): only the priest heals/cleanses/buffs; the warrior and 
 5. Priest weapons: the catalog has no tome item (mace, staff, orb, wand exist). Add a tome item type in M2b scope or leave it out?
 6. Tier scaling: use the uniform +25%/+50% rule above, or let a balance pass tune each family?
 7. Per-tier riposte counter percent needs a small engine change; do it in M2c-2b or leave the counter at 50%?
+
+## Revision 3 proposals (status: proposed, not approved)
+
+Honours the 2026-10-15 "M2c-2b design answers" row. HISTORY.md checked: no deprecated idea is revived (removing tier variants of basics is new; the tier model itself is unchanged for class families). No sims were run; every number is a starting value for the balance pass.
+
+### R1. Basic skill set
+
+Migration cost (grep of `scripts/` and `scenes/`, 37 hits in 8 files; `world_schema.gd` is a false positive, it is the "fortress" map kind):
+
+- `arena_test_suite.gd`: 13 hits (AP-cost checks around lines 743-748, switch cost 763-766, planner chain 776-811, locked plan 847, 974).
+- `skill_family_test_suite.gd`: 9 hits (family lists lines 51-53, 65, 237, 295-336).
+- `dojo_assertions.gd`: 7 hits (catalog check, power_strike damage probe, brace, lines 696-745).
+- `core_rules_test_suite.gd`: 3 hits (brace mitigation, lines 118-144).
+- `content_test_suite.gd`: 2 hits (line 111 "too advanced" uses heavy_blow; line 184 uses brace).
+- `class_rules_test_suite.gd`: 1 hit (line 172).
+- `content_schema.gd`: 1 hit (help text only).
+- Data: `skills.json` rows power_strike, heavy_blow, brace, fortress, deep_focus, plus `skill_path` entries in `classes.json` (warrior, brawler).
+
+| Option | Basic set | Effect | Cost and risk |
+| --- | --- | --- | --- |
+| A (minimal) | strike, guard, move, rest, switch_target, offhand_jab | Six ids. Strike is ONE skill; power comes from weapon and level, AP stays 1 and 2 blocks. Guard is one skill. | Lowest. Risk: no AP sink for basics, so AP above 3 only matters for class skills. Tests that pivot on power_strike/brace move to class-skill equivalents. |
+| B (A plus shove) | A plus a new 1 AP `shove` (push 1 tile, no damage, melee) | Every unit gets a positional answer and a cheap peel. | Needs a new push engine piece (not in the brief); defer. |
+| C (keep an AP sink) | A, but the planner lets the player add 1-2 AP to a strike block for +25% / +50% power | Preserves AP-spending choice without separate ids. | Re-creates the removed variants in disguise and touches planner UI; against the spirit of the decision. |
+
+Per-id disposition:
+
+| Existing id | Becomes | Note |
+| --- | --- | --- |
+| strike, guard, move, rest, switch_target, offhand_jab | basic, kept | single tier each; `family` is its own id |
+| power_strike, heavy_blow, brace, fortress | REMOVED | delete rows; fix `skill_path` references and the tests above |
+| deep_focus | REMOVED | focus is a class family (ranger, mage), tiers focus / focus_2 / focus_3 |
+
+Ranged is covered because strike uses the weapon reach (bow, wand); a basic buff is not needed, focus stays class-owned.
+
+Recommendation: A. Strike has no selectable tiers and scales through weapon power and unit level as today.
+
+### R2. Non-attack tier scaling baseline
+
+AP is always T1 + 0 / +1 / +2. Blocks never grow at T3 (decision); blocks are per-skill and fixed across tiers.
+
+| Type | Magnitude | Duration or potency | Reach or area | Sanity range |
+| --- | --- | --- | --- | --- |
+| heal (mend) | whole heal x1.25 (T2), x1.5 (T3) | n/a | +0 | T3 heal at most 60% of target max HP at level 9 |
+| ally buff (haste) | effect level fixed | rounds 1 / 2 / 2 | +1 reach at T3 | at most 2 rounds |
+| self buff (focus) | existing effect +1 step per tier | duration +0 | SELF | at most 3 steps; total buff <= +50% |
+| defend (guard, riposte, shield wall) | mitigation +0.05 per tier | rounds +0 / +1 / +1 | SELF | total mitigation at most 0.60 (check against current fortress) |
+| taunt | none | rounds 2 / 3 / 3 | radius +0 | at most 3 rounds |
+| cleanse | NOT scaled by magnitude | T1 one type, T2 two types, T3 all | +0 | AP rises per the standard rule |
+| debuff (weaken, hamstring, stagger) | potency +5 per tier | rounds +0 / +0 / +1 | +0 | potency 50-95, rounds at most 3 |
+| gap-close (lunge, pounce) | dash 3 / 3 / 4 | n/a | n/a | dash at most 4 |
+| disengage (leap_back, backflip) | jump 2 / 3 / 3 | n/a | n/a | jump at most 3 |
+| DoT (bleed) | potency +5 per tier | 2 rounds all tiers | +0 | potency 60-100 |
+| move, rest, switch_target | NOT scaled | n/a | n/a | basics, single tier |
+
+Should not scale by tier: cleanse magnitude, move, rest, switch_target, offhand_jab. Flag: sim guard/riposte at T3 before locking the 0.60 ceiling.
+
+### R3. Weapon types pass
+
+| weapon_type | Slot | Item today | Class proficiency (level) |
+| --- | --- | --- | --- |
+| sword | main | wpn_claymore, wpn_broadsword, wpn_shortsword | warrior 3, rogue 2, ranger 1, brawler 1 |
+| axe | main | wpn_hand_axe, wpn_battle_axe | warrior 2, brawler 1 |
+| mace | main | wpn_flanged_mace, wpn_cleric_mace | brawler 3, priest 3, warrior 2 |
+| hammer | main | wpn_warhammer | brawler 2, warrior 1 |
+| fist | main | wpn_knuckles | brawler 3, rogue 1 |
+| dagger | main (off-hand via `off_hand_category`) | wpn_dagger, wpn_stiletto | rogue 3, ranger 2, priest 1, mage 1 |
+| bow | main | wpn_shortbow | ranger 3, rogue 2 |
+| crossbow | main | NONE | ranger 2 |
+| staff | main | wpn_staff, wpn_mage_staff | mage 3, priest 2 |
+| wand | main | wpn_wand, wpn_glass_wand | mage 3 |
+| orb | off-hand (schema `off_hand_category`) | wpn_tome (mis-typed: weapon_type orb, slot MAIN_HAND) | mage 3 |
+| tome | off-hand | NONE | mage 2 |
+| shield | off-hand | shd_kite, shd_buckler, shd_tower | warrior 3, priest 1, brawler 1 |
+| plate, leather, cloth | body | arm_plate, arm_leather, three robes | by class |
+
+Gaps: crossbow and tome have no item; wpn_tome is a main-hand typed orb; the mage and priest have no off-hand item at all. Every class has a valid main hand. Two-handed flags live on the item (`two_handed`), not the type.
+
+| Option | Orb (off-hand) | Tome (off-hand) | Cost and risk |
+| --- | --- | --- | --- |
+| A (power vs utility) | spell damage: +damage on spells, +1 spell reach | support: +heal power, +5 debuff potency, no reach | Clear identity; mage leans orb, priest leans tome. Two new stat blocks and gear budget entries. |
+| B (stat flavour only) | +magic stat | +INT or KNOW stat | Cheap, but both feel the same. |
+
+Recommendation: A. Priest = mace and staff main, tome and orb off-hand, NO shield (drop shield 1; tome 3, orb 2). Mage = staff and wand main, orb 3 and tome 2 off-hand. Re-type wpn_tome to `slot OFF_HAND`, `weapon_type tome`; author one new `wpn_orb`. Caster skill gating that names "orb" in v2 (arcane_bolt, arc_lance, hex, firebomb, inferno, glacial_burst, smite) must read staff/wand (main hand) only, since an off-hand orb cannot be the casting weapon; crossbow stays a gap.
+
+### R4. Weaken status, intimidate and riposte
+
+Weaken (engine status):
+
+| Field | Proposal |
+| --- | --- |
+| Effect | afflicted unit's outgoing power multiplier x(1 - magnitude): 15% / 20% / 25% by tier |
+| Duration | 2 rounds (T3: 3), ticks at round end like other statuses |
+| Application | chance = potency 70 / 75 / 80, reduced by `debuff_resistance` and `status_resist["weaken"]` (100 = immune), same path as stagger and root |
+| Resist key | `weaken` |
+| Hook | NOT in `DamageCalculator.compute`; the code that builds the `power_mult` input multiplies it by (1 - magnitude), so formula tests stay untouched |
+| Stacking | none; reapplying refreshes duration. Magnitude capped at 25% |
+
+Intimidate family (warrior 4th family, replaces hamstring in the default path):
+
+| Tier | AP | Blocks | Reach | Status |
+| --- | --- | --- | --- | --- |
+| intimidate | 1 | 1 | 0-2, single target, no damage | weaken 15%, potency 70, 2 rounds |
+| intimidate_2 | 2 | 1 | 0-2 | weaken 20%, potency 75, 2 rounds |
+| intimidate_3 | 3 | 1 | 0-3 | weaken 25%, potency 80, 3 rounds |
+
+Riposte tweak (counter stays 50%):
+
+| Option | AP T1 / T2 / T3 | Mitigation | Effect |
+| --- | --- | --- | --- |
+| A (AP cut) | 1 / 2 / 3 (was 2 / 3 / 4) | 0.15 / 0.20 / 0.25 | Cheap reactive stance, combinable with another skill. Risk: overlap with guard; compare in a sim. |
+| B (mitigation raise) | 2 / 3 / 4 | 0.25 / 0.30 / 0.35 | Deliberate 2 AP commitment that pays defensively. |
+| C (both) | 1 / 2 / 3 | 0.20 / 0.25 / 0.30 | Likely too strong; sim first. |
+
+Recommendation: A, rounds stay 2 / 3 / 3. `riposte_test_suite.gd` T1 AP expectation changes from 2 to 1.
+
+### R5. Open questions and implementation order
+
+Open questions:
+
+1. Strike without tiers: accept no basic AP sink (R1 option A), or keep a charged strike (option C)?
+2. Focus: stay class-owned (ranger, mage) or become the single basic buff?
+3. Confirm orb and tome are off-hand only and caster skills gate on main-hand staff/wand.
+4. Priest loses shield proficiency: confirm (any priest hero or minion carrying a shield changes).
+5. Riposte: option A or B? Guard T1 mitigation must be read at build time to confirm no overlap.
+6. Weaken: cap 25% and no stacking acceptable?
+
+Proposed slice order (feature branches, engine before content):
+
+1. Basic-skill cleanup: remove power_strike, heavy_blow, brace, fortress, deep_focus, fix `skill_path`, update the 37 references; nothing new is built on removed ids.
+2. Unarmed token: skill `weapon_types` accepts `unarmed`; empty main hand counts as unarmed; fix the brawler gear budget test.
+3. Orb/tome typing: re-type wpn_tome, add wpn_orb, proficiency edits, off-hand validation per class.
+4. `weaken` status with the `power_mult` hook and test, then the intimidate family.
+5. Riposte AP/mitigation change and test.
+6. Optional ContentCatalog warning when a family's tiers break the R2 formulas.
+7. M2c-2b content (families, paths, minions) and a balance rerun against the 40-60% duel bracket.
