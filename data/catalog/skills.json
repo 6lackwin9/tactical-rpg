@@ -390,9 +390,7 @@
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
-				"orb",
-				"wand",
-				"tome"
+				"wand"
 			],
 			"min_proficiency": 1
 		},
@@ -419,7 +417,6 @@
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
-				"orb",
 				"wand"
 			],
 			"min_proficiency": 2

@@ -289,10 +289,6 @@
 					"level": 2,
 					"scaling": 1.5
 				},
-				"shield": {
-					"level": 1,
-					"scaling": 1.25
-				},
 				"dagger": {
 					"level": 1,
 					"scaling": 1.25
@@ -303,6 +299,14 @@
 				},
 				"leather": {
 					"level": 1,
+					"scaling": 1.25
+				},
+				"tome": {
+					"level": 3,
+					"scaling": 1.5
+				},
+				"orb": {
+					"level": 2,
 					"scaling": 1.25
 				}
 			},
