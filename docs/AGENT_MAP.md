@@ -4,12 +4,26 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-| Task | Agent | Model | Lane | Worktree and branch | Started |
-| --- | --- | --- | --- | --- | --- |
-| AI1 AI use of the new skill kinds | logic-builder | Sonnet 5.5 (inherited) | logic | `ngp-ai1` / `feat/ai1` | 2026-10-16 |
-| M2C2B class skill content (+ C1-A2, D1-A) | asset-builder | Sonnet 5.5 (inherited) | asset | `ngp-m2c2b` / `feat/m2c2b` | 2026-10-16 |
+No agents running.
 
 ## Finished, by milestone (newest first)
+
+### AI1 AI skill use
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | AI use of disengage, areas, cleanse, taunt, buffs, riposte | 205k / 20 (incl. 1 resumed fix) | merged |
+| change-reviewer | Review | 36k / 1 | merged |
+| design-brainstorm | SK2 unlock-rule spec | 79k / 3 | spec awaiting approval |
+
+### M2C2B class skill content
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | All six kits, C1-A2, D1-A, party units | 92k / 8 | merged |
+| logic-builder | Update 9 shipped test groups for the new kit | 75k / 6 | merged |
+| change-reviewer | Review | 56k / 1.5 | merged |
+
 
 ### Model trial 1 (reviewer, inherited vs haiku)
 

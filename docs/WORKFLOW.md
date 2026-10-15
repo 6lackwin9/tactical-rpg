@@ -82,3 +82,8 @@ Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many t
 | D1 weaken/riposte | logic 154k / 23 | 35k / 6 | merged |
 
 Note (2026-10-16): the first three-way parallel run merged cleanly except for `items.json` (resolved by re-running the idempotent asset seed after taking main's file) and three small hunks in `plan_entry.gd`, `skill_def.gd`, `dojo_session.gd` (C1/D1 hooks overlapped, as `tools/overlap.sh` predicted). A worktree needs an editor class-cache scan after a rebase that brings in new `class_name` files.
+
+| M2C2B skill content (asset 92k / 8 + test fix logic 75k / 6) | asset-builder then logic-builder | 56k / 1.5 | merged |
+| AI1 (logic 205k / 20 incl. one resumed fix) | logic-builder | 36k / 1 | merged |
+
+Throughput note (2026-10-16): R1, M2C2B-L, M3, AI1 and M2C2B ran as 3 parallel lanes; the planner's own merge work (rebase, registry conflicts, docs delta, cross-checks) is now the main serial cost. Parallel full-suite runs collide on fixed `user://` sandbox names (content tests): run the final suites one branch at a time, or make the sandbox names unique per process (follow-up task).
