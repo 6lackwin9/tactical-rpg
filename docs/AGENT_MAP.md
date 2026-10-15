@@ -142,4 +142,7 @@ Trial results:
 
 | Trial | Model | Tokens | Minutes | Real defects found | False alarms | Missed (vs union) |
 | --- | --- | --- | --- | --- | --- | --- |
-| (pending: first branch to review) | | | | | | |
+| 1 reviewer (M2C2B-L static review) | haiku | 69.6k | 3.5 | 1 test gap (a double status roll would not be detected) + 4 nits (self-referential haste check, unused loop var, help-text wording, trailer ambiguity) | 0 | 0 |
+| 1 reviewer (M2C2B-L static review) | Sonnet 5.5 (inherited) | 28.5k | 1.0 | 0 (all PASS) + 4 nits (rng order change, hardcoded [Riposte] log tag, outdated comment, weak seeded-repeat check) | 0 | 1 (the double-roll test gap) |
+
+Trial 1 conclusion (2026-10-16): on a static read-only review the inherited model used 41% of haiku's tokens (28.5k vs 69.6k) and 29% of its time (1 vs 3.5 minutes), because haiku explored far more (23 tool calls vs 4). Haiku found one real test gap the inherited model missed (the area-status test could not detect a double roll); the inherited model found no gap but its other nits were of similar value. Token efficiency favours the inherited model; haiku adds some extra thoroughness at 2.4x the tokens. Decision: keep reviewers on the inherited model; use haiku only when a second, deliberately thorough pass is wanted. Next trials: asset-builder (a small data task) and design-brainstorm (opus vs inherited), one per type. Other reviewer runs for reference (inherited model): M3 34k / 1, C1-L 42k / 3, D1-L 35k / 6.
