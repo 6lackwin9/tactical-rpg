@@ -83,6 +83,8 @@ var learned_only: bool = false  # unrestricted (hand-built) units don't know it 
 var family: String = ""         # skill family (tiers of one skill); empty = its own id (see family_id())
 var tier: int = 1               # position in the family (1..5); each tier is its own skill with its own AP, blocks and power
 var basic: bool = false         # available to every class (counted outside the loadout slots)
+var advanced: bool = false      # family-level flag: class-path steps need StatRules.ADVANCED_MIN_LEVEL, KNOW can open it earlier
+var unlock_offset: int = -1     # levels after the family's unlock level this row opens (-1 = derive from the tier, see tier_offset)
 var description: String = ""
 var system: bool = false       # engine skill (Move, Rest, Switch Target, status blocks): always known, not deletable
 
@@ -95,6 +97,13 @@ static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_b
 	skill.blocks = p_blocks
 	skill.description = p_description
 	return skill
+
+# Levels after the family's unlock level at which this row opens: the authored unlock_offset, else
+# StatRules.TIER_UNLOCK_STEP per tier above 1 (tiers 1 / 2 / 3 -> 0 / 2 / 4).
+func tier_offset() -> int:
+	if unlock_offset >= 0:
+		return unlock_offset
+	return StatRules.TIER_UNLOCK_STEP * maxi(0, tier - 1)
 
 # The family this skill belongs to (its own id when it stands alone).
 func family_id() -> String:

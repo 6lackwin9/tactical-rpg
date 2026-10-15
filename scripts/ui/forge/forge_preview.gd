@@ -190,9 +190,9 @@ static func _unit(e: Dictionary) -> String:
 	t += _line("AI", "%s, targets %s, flees at %d%% HP" % [AiProfile.role_name(profile.role), str(AiProfile.TargetPref.keys()[profile.target_pref]).to_lower(), roundi(profile.flee_ratio * 100.0)])
 	var known: Array[String] = []
 	for s: SkillDef in SkillCatalog.all():
-		if not s.system and s.level <= profile.skill_cap and c.knows_skill(s.id) and not (s.offhand and c.attack_range <= 1):
-			known.append(s.display_name)
-	t += _line("Skills (cap %d)" % profile.skill_cap, ", ".join(known) if not known.is_empty() else "none")
+		if not s.system and s.level <= profile.skill_cap and c.can_use(s) and not (s.offhand and c.attack_range <= 1):
+			known.append(s.display_name if s.basic or c.path_levels.is_empty() else "%s (from Lv%d)" % [s.display_name, c.skill_unlock_level(s)])
+	t += _line("Skills", ", ".join(known) if not known.is_empty() else "none")
 	if not c.active_families.is_empty():
 		t += _line("Loadout", "class %d/%d: %s; extra %d/%d: %s" % [c.active_class_families.size(), StatRules.MAX_CLASS_SLOTS, ", ".join(c.active_class_families), c.active_extra_families.size(), StatRules.MAX_EXTRA_SLOTS, ", ".join(c.active_extra_families) if not c.active_extra_families.is_empty() else "none"])
 	var gear: Array[String] = []

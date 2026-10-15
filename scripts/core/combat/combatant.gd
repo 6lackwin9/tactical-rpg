@@ -44,7 +44,17 @@ var granted_skills: Array[String] = []  # skills learned beyond the class path (
 var active_class_families: Array[String] = []  # active loadout: class skill families (max StatRules.MAX_CLASS_SLOTS)
 var active_extra_families: Array[String] = []  # active loadout: extra-slot families (max StatRules.MAX_EXTRA_SLOTS)
 var active_families: Array[String] = []        # class + extra families; empty = no restriction (hand-built units)
-var loadout_locked: bool = false               # set by CombatSession while a battle runs: the loadout can't change
+var loadout_locked: bool = false:              # set by CombatSession while a battle runs: the loadout and skill unlocks can't change
+	set(value):
+		if value:
+			_warm_unlock_cache()
+		loadout_locked = value
+# SK2 skill unlocks. path_levels = copy of the class path ({level, skill}); empty = no level gate (hand-built units).
+var path_levels: Array[Dictionary] = []
+var unlock_bonus_family: Dictionary = {}   # family id -> levels earlier (passives; max wins, never summed)
+var unlock_bonus_group: Dictionary = {}    # skill group -> levels earlier (passives)
+var _path_unlock: Dictionary = {}          # path family -> base unlock level U (lowest step level)
+var _unlock_cache: Dictionary = {}         # family -> effective unlock E; cleared by refresh_path_skills, frozen while locked
 var passives: Array[String] = []        # ids of the passives applied to this unit (see Passives)
 var ap_regen_bonus: int = 0             # extra AP regained each round (passives)
 var potency_bonus: Dictionary = {}      # skill family id -> float bonus (+0.25 = +25% magnitude); empty = none (see potency_for)
@@ -93,6 +103,13 @@ func knows_skill(skill_id: String) -> bool:
 func owns_skill(skill_id: String) -> bool:
 	if known_skills.has(skill_id) or granted_skills.has(skill_id) or SkillCatalog.is_system(skill_id):
 		return true
+	# Owning a class-path or extra family owns all its tiers (their castability is tier_unlocked's business).
+	# An explicitly learned skill (granted_skills) is owned as that exact row only.
+	if not path_levels.is_empty():   # only class-derived units own whole ladders; hand-built units own the exact rows they list
+		var fam: String = SkillCatalog.family_of(skill_id)
+		for id: String in known_skills:
+			if SkillCatalog.family_of(id) == fam:
+				return true
 	# Unrestricted (hand-built) units know every skill except those that must be learned explicitly.
 	return known_skills.is_empty() and not SkillCatalog.is_learned_only(skill_id)
 
@@ -193,7 +210,7 @@ func wielded_type() -> String:
 # proficiency level (class-derived units only; hand-built units are unrestricted).
 # Unarmed (no main-hand weapon) is the token `unarmed`; its proficiency is the class's `fist` level.
 func can_use(skill: SkillDef) -> bool:
-	if not knows_skill(skill.id):
+	if not knows_skill(skill.id) or not tier_unlocked(skill):
 		return false
 	if known_skills.is_empty() or skill.min_proficiency <= 0 or stats == null or stats.proficiency == null:
 		return true
@@ -201,6 +218,100 @@ func can_use(skill: SkillDef) -> bool:
 	if not skill.weapon_types.is_empty() and not skill.weapon_types.has(type):
 		return false
 	return stats.proficiency.level_of(SkillDef.UNARMED_PROFICIENCY if type == SkillDef.UNARMED_TOKEN else type) >= skill.min_proficiency
+
+# ------------------------------------------------------------------------------
+# Skill unlocks (SK2): class path levels decide ownership, tiers open at fixed steps after it.
+# ------------------------------------------------------------------------------
+
+# Installs the class path (copied) and recomputes ownership. Used by ContentFactory.unit.
+func set_class_path(steps: Array[Dictionary]) -> void:
+	path_levels = []
+	_path_unlock.clear()
+	for step: Dictionary in steps:
+		path_levels.append(step.duplicate())
+		var fam: String = SkillCatalog.family_of(str(step.get("skill", "")))
+		var lvl: int = DictUtil.to_int(step.get("level", 1), 1)
+		if not _path_unlock.has(fam) or lvl < DictUtil.int_of(_path_unlock, fam):
+			_path_unlock[fam] = lvl
+	_unlock_cache.clear()
+	refresh_path_skills()
+
+# KNOW for unlocks: base + spend + permanent flat bonuses (gear, passives); temporary combat buffs never count.
+func unlock_know() -> int:
+	if stats == null:
+		return 0
+	var total: int = stats.get_base_stat("KNOW")
+	for mod: StatModifier in stats.modifiers:
+		if mod.stat_name.to_upper() == "KNOW" and mod.is_permanent() and mod.matches_context({}):
+			total += mod.flat_bonus
+	return total
+
+# Levels earlier a class-path family opens: the larger of the passive bonus (family, then each group it belongs to)
+# and the KNOW reduction (advanced families only), capped at StatRules.MAX_UNLOCK_REDUCTION.
+func unlock_reduction(family: String) -> int:
+	var t1: SkillDef = SkillCatalog.tier_one(family)
+	if t1 == null or not _path_unlock.has(family):
+		return 0
+	var passive_r: int = DictUtil.int_of(unlock_bonus_family, family)
+	for group: String in Passives.GROUPS:
+		if t1.in_group(group):
+			passive_r = maxi(passive_r, DictUtil.int_of(unlock_bonus_group, group))
+	var know_r: int = StatRules.know_unlock_reduction(unlock_know()) if t1.advanced else 0
+	return mini(StatRules.MAX_UNLOCK_REDUCTION, maxi(passive_r, know_r))
+
+# E(f): the unit level at which `family` is owned. Class-path families: the path level minus the reduction, never below
+# the floor (1, or ADVANCED_UNLOCK_FLOOR for advanced families) and never raised. Off-path families (extras, learned):
+# StatRules.default_unlock of the tier-1 AP level. Frozen while loadout_locked.
+func family_unlock_level(family: String) -> int:
+	if _unlock_cache.has(family):
+		return DictUtil.int_of(_unlock_cache, family)
+	var t1: SkillDef = SkillCatalog.tier_one(family)
+	var result: int
+	if not _path_unlock.has(family):
+		result = StatRules.default_unlock(t1.level if t1 != null else 1)
+	else:
+		var base: int = DictUtil.int_of(_path_unlock, family)
+		var floor_level: int = StatRules.ADVANCED_UNLOCK_FLOOR if t1 != null and t1.advanced else 1
+		result = mini(base, maxi(floor_level, base - unlock_reduction(family)))
+	_unlock_cache[family] = result
+	return result
+
+# Unit level at which `skill` itself is castable: the family's unlock plus the row's tier offset (clamped to MAX_LEVEL).
+func skill_unlock_level(skill: SkillDef) -> int:
+	return mini(StatRules.MAX_LEVEL, family_unlock_level(skill.family_id()) + skill.tier_offset())
+
+# The level gate of can_use. Basics, engine skills and units without a class path (hand-built) are never gated.
+func tier_unlocked(skill: SkillDef) -> bool:
+	if path_levels.is_empty() or skill.system or skill.basic or stats == null:
+		return true
+	return stats.level >= skill_unlock_level(skill)
+
+# Recomputes the owned class-path skills (known_skills) from the unit level, KNOW and unlock passives; extras and
+# granted skills are kept. Does nothing while loadout_locked (a battle freezes ownership).
+func refresh_path_skills() -> void:
+	if loadout_locked or path_levels.is_empty() or stats == null:
+		return
+	_unlock_cache.clear()
+	var owned: Array[String] = []
+	for step: Dictionary in path_levels:
+		var id: String = str(step.get("skill", ""))
+		if stats.level >= family_unlock_level(SkillCatalog.family_of(id)) and not owned.has(id):
+			owned.append(id)
+	for id: String in known_skills:
+		if not owned.has(id) and not _is_path_skill(id):
+			owned.append(id)   # extras stay owned
+	known_skills = owned
+
+func _is_path_skill(skill_id: String) -> bool:
+	for step: Dictionary in path_levels:
+		if str(step.get("skill", "")) == skill_id:
+			return true
+	return false
+
+func _warm_unlock_cache() -> void:
+	_unlock_cache.clear()   # never freeze a stale cache
+	for fam: Variant in _path_unlock:
+		family_unlock_level(str(fam))
 
 # Learns a skill beyond the class path (an in-game event); persists on the unit.
 func learn_skill(skill_id: String) -> void:
@@ -277,6 +388,7 @@ func sync_from_stats_and_gear() -> void:
 		hp = mini(hp, max_hp)
 		speed = maxi(1, stats.get_initiative_speed(burden, ctx) - carry_speed_penalty)
 		attack_range = stats.get_effective_range(base_rng, ctx)
+		refresh_path_skills()   # gear can change KNOW
 
 # Attack power (weapon power + unit power, or the authored strike power): see DamageCalculator.
 func get_effective_power(is_ranged: bool = false, use_offhand: bool = false) -> int:

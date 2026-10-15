@@ -67,6 +67,8 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.family = "" if str(e["family"]) == s.id else str(e["family"])
 	s.tier = DictUtil.to_int(e["tier"], 1)
 	s.basic = DictUtil.to_bool(e["basic"])
+	s.advanced = DictUtil.to_bool(e["advanced"])
+	s.unlock_offset = DictUtil.to_int(e["unlock_offset"], -1)
 	s.system = DictUtil.to_bool(e["system"])
 	return s
 
@@ -82,7 +84,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
 		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
 		"cleanse_statuses": s.cleanse_statuses, "jump_tiles": s.jump_tiles,
-		"family": s.family, "tier": s.tier, "basic": s.basic,
+		"family": s.family, "tier": s.tier, "basic": s.basic, "advanced": s.advanced, "unlock_offset": s.unlock_offset,
 	})
 
 # ------------------------------------------------------------------------------
@@ -263,12 +265,13 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 		c.power_scale = StatRules.tier_power(c.tier)
 		c.sync_from_stats_and_gear()
 		c.hp = c.max_hp
-		var skills: Array[String] = arch.skills_at(level)
+		var extras: Array[String] = []
 		for extra: String in _strings(e["extra_skills"]):
-			if not skills.has(extra):
-				skills.append(extra)
-		c.known_skills = skills
-		var slots: Dictionary = loadout_of(e, arch, level)
+			if not extras.has(extra):
+				extras.append(extra)
+		c.known_skills = extras
+		c.set_class_path(arch.skill_path)   # owned path skills by level, KNOW and passives (Combatant.refresh_path_skills)
+		var slots: Dictionary = loadout_of(e, arch, level, c.known_skills)
 		c.set_loadout(_strings(slots["class"]), _strings(slots["extra"]))
 	var ap: int = DictUtil.to_int(e["ap"]) if DictUtil.to_int(e["ap"]) > 0 else default_ap
 	if ap > 0:
@@ -295,7 +298,7 @@ static func families_of(skill_ids: Array[String]) -> Array[String]:
 # Default: the first MAX_CLASS_SLOTS class-path families reached by `level` (path order), then the
 # extra skills' families (MAX_EXTRA_SLOTS). A `loadout` list overrides it (families on the class path
 # are class slots, others extra slots); it is validated by ContentCatalog, not trimmed here.
-static func loadout_of(e: Dictionary, arch: ClassArchetype, level: int) -> Dictionary:
+static func loadout_of(e: Dictionary, arch: ClassArchetype, level: int, owned_ids: Array[String] = []) -> Dictionary:
 	var path_all: Array[String] = []
 	for step: Dictionary in arch.skill_path:
 		path_all.append(str(step.get("skill", "")))
@@ -310,7 +313,15 @@ static func loadout_of(e: Dictionary, arch: ClassArchetype, level: int) -> Dicti
 			else:
 				extra_out.append(fam)
 		return {"class": class_out, "extra": extra_out}
-	for fam: String in families_of(arch.skills_at(level)):
+	# Owned path families in path order (the unit's real ownership when given, else the unreduced path levels).
+	var owned_path: Array[String] = []
+	if owned_ids.is_empty():
+		owned_path = arch.skills_at(level)
+	else:
+		for id: String in path_all:
+			if owned_ids.has(id):
+				owned_path.append(id)
+	for fam: String in families_of(owned_path):
 		if class_out.size() < StatRules.MAX_CLASS_SLOTS:
 			class_out.append(fam)
 	for fam: String in families_of(_strings(e.get("extra_skills", []))):
@@ -348,7 +359,7 @@ static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	var role: AiProfile.Role = _enum(AiProfile.Role.keys(), role_name, 0) as AiProfile.Role
 	var cap: int = DictUtil.to_int(e["skill_cap"])
 	if cap <= 0:
-		cap = StatRules.skill_cap_for_level(DictUtil.to_int(e["level"], 1)) if arch != null else 1
+		cap = AiProfile.NO_CEILING if arch != null else 1   # class-derived: no AP ceiling, the unlock levels gate (Combatant.tier_unlocked)
 	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), cap)
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])

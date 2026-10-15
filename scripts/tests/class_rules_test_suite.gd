@@ -162,12 +162,28 @@ static func _test_skill_paths() -> bool:
 		return low.knows_skill("hamstring")).call()
 	var extra: Combatant = ContentFactory.unit({"id": "t_s3", "name": "T", "class_id": "ranger", "level": 1, "extra_skills": ["hamstring"]})
 	checks["authored extra skills"] = extra.knows_skill("hamstring")
-	# Every path is level-legal (skill level <= cap of the step level).
+	# Every path is legal under the SK2 rules: advanced steps at ADVANCED_MIN_LEVEL+, one step per family, tier-1 rows only.
 	var legal: bool = true
 	for id: String in CLASSES:
+		var seen: Array[String] = []
 		for step: Dictionary in ClassArchetype.create(id).skill_path:
 			var skill: SkillDef = SkillCatalog.find(str(step["skill"]))
-			legal = legal and skill != null and skill.level <= StatRules.skill_cap_for_level(DictUtil.to_int(step["level"]))
-	checks["paths respect the level cap"] = legal
+			if skill == null:
+				legal = false
+				continue
+			legal = legal and skill.tier == 1 and not seen.has(skill.family_id())
+			legal = legal and (not skill.advanced or DictUtil.to_int(step["level"]) >= StatRules.ADVANCED_MIN_LEVEL)
+			seen.append(skill.family_id())
+	checks["paths: advanced steps >= ADVANCED_MIN_LEVEL, one step per family, tier-1 rows only"] = legal
+	# A unit owns exactly the path skills whose family unlock level (path level minus any reduction) it has reached.
+	var owns_by_level: bool = true
+	for id: String in CLASSES:
+		for lvl: int in [1, 3, 5, 7, 10]:
+			var unit: Combatant = ContentFactory.unit({"id": "t_sp_%s" % id, "name": "T", "class_id": id, "level": lvl})
+			for step: Dictionary in ClassArchetype.create(id).skill_path:
+				var sid: String = str(step["skill"])
+				var eff: int = unit.family_unlock_level(SkillCatalog.family_of(sid))
+				owns_by_level = owns_by_level and eff <= DictUtil.to_int(step["level"]) and (unit.known_skills.has(sid) == (lvl >= eff))
+	checks["path ownership follows the effective unlock level (never later than the path level)"] = owns_by_level
 	checks["planner honours known skills"] = SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "strike") and not SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "shield_bash")
 	return _report("Class skill paths unlock by level; events and authoring add skills; the planner respects them", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))

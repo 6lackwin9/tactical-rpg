@@ -107,6 +107,8 @@ static func _skill_fields() -> Array[Dictionary]:
 		_f("family", "Skill family", "string", "", {"help": "Groups tiers of one skill (e.g. a class skill 'mend' / 'mend_2' / 'mend_3' share family 'mend'). Basics are single-tier. Empty = its own id."}),
 		_f("tier", "Tier in family", "int", 1, {"min": 1, "max": 5, "help": "1-5 for basics, 1-3 for class skills. Chosen at planning time; the AP cost is the skill's Level."}),
 		_f("basic", "Basic skill", "bool", false, {"help": "Available to every class; not counted against the active loadout slots."}),
+		_f("advanced", "Advanced family", "bool", false, {"help": "Family-level flag (every tier must match). Advanced families sit at class path level 5+ and KNOW can open them up to 2 levels earlier (never below level 3)."}),
+		_f("unlock_offset", "Unlock offset", "int", -1, {"min": -1, "max": 8, "help": "Levels after the family's unlock level (its class path level) at which THIS tier opens. -1 = derive: 0 / 2 / 4 for tiers 1 / 2 / 3. Tier 1 is always 0."}),
 		_f("learned_only", "Learn only", "bool", false, {"help": "Unrestricted hand-built units (tests, sandbox) don't know it unless they learn it; class-derived units get it from skill paths / extra skills as usual."}),
 		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types, or the token 'unarmed' (no main-hand weapon; its proficiency is the class's fist level). Class-derived units only."}),
 		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "when": attack, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),
@@ -162,7 +164,7 @@ static func _passive_fields() -> Array[Dictionary]:
 		_f("id", "ID", "id", ""),
 		_f("name", "Name", "string", "New Passive"),
 		_f("description", "Description", "text", ""),
-		_f("effects", "Effects", "json", [], {"help": "[{\"type\": \"stat\", \"stat\": \"KNOW\", \"value\": 3, \"context\": {\"biome\": \"ruins\"}}, {\"type\": \"proficiency\", \"gear\": \"sword\", \"levels\": 1}, {\"type\": \"resist\", \"status\": \"stagger\", \"value\": 25}, {\"type\": \"ap_regen\", \"value\": 1}, {\"type\": \"skill\", \"skill\": \"quick_stab\"}, {\"type\": \"skill_potency\", \"family\": \"strike\", \"value\": 0.25}]"}),
+		_f("effects", "Effects", "json", [], {"help": "[{\"type\": \"stat\", \"stat\": \"KNOW\", \"value\": 3, \"context\": {\"biome\": \"ruins\"}}, {\"type\": \"proficiency\", \"gear\": \"sword\", \"levels\": 1}, {\"type\": \"resist\", \"status\": \"stagger\", \"value\": 25}, {\"type\": \"ap_regen\", \"value\": 1}, {\"type\": \"skill\", \"skill\": \"quick_stab\"}, {\"type\": \"skill_potency\", \"family\": \"strike\", \"value\": 0.25}, {\"type\": \"unlock\", \"family\": \"riposte\", \"levels\": 2}]"}),
 	]
 
 # Default gear of a class (and per-slot overrides on units): one item id per slot.
@@ -183,7 +185,7 @@ static func _class_fields() -> Array[Dictionary]:
 		_f("base_stats", "Base stats (Lv 1)", "stats", {}, {"keys": STAT_KEYS, "help": "Every class totals exactly 62 (6-18 per stat): classes differ only in distribution."}),
 		_f("growth", "Growth / level", "stats", {}, {"keys": STAT_KEYS, "help": "Every class gains exactly 5 per level (max 3 per stat); units also get 1 free point per level to spend."}),
 		_f("proficiency", "Gear proficiency", "json", {}, {"help": "{\"sword\": {\"level\": 3, \"scaling\": 1.5}, \"leather\": {\"level\": 2, \"scaling\": 1.5}}. Level 1-3 (power, requirement discount, crit, burden, block cost, skill gates); scaling 1.0-2.0 = how easy the gear is to wield (Unit Power multiplier). Unlisted gear can't be equipped."}),
-		_f("skill_path", "Skill path", "json", [], {"help": "[{\"level\": 1, \"skill\": \"strike\"}, {\"level\": 3, \"skill\": \"sunder\"}]: skills learned by unit level (extra skills come from events and passives)."}),
+		_f("skill_path", "Skill path", "json", [], {"help": "[{\"level\": 1, \"skill\": \"strike\"}, {\"level\": 3, \"skill\": \"sunder\"}]: the level at which each skill FAMILY (tier-1 row) is owned; its higher tiers open 2 and 4 levels later unless a row sets unlock_offset. Advanced families need level 5+. One step per family; extra skills come from events and passives."}),
 	]
 	list.append_array(_loadout_fields(false))
 	return list
@@ -207,7 +209,7 @@ static func _unit_fields() -> Array[Dictionary]:
 		_f("power", "Strike power", "int", 0, {"min": 0, "max": 500, "help": "0 = weapon power + unit power (unarmed: STR + DEX). Set to override."}),
 		_f("armor", "Armor rating", "int", -1, {"min": -1, "max": 200, "help": "-1 = gear mitigation + STR / 4. Damage taken is cut by rating / (rating + 50)."}),
 		_f("art", "Art", "enum", "", {"options_from": "art_inherit", "help": "Token / portrait template (empty = the class's)."}),
-		_f("skill_cap", "Skill level cap", "int", 0, {"min": 0, "max": 5, "help": "0 = from level (levels 1-2 -> 1 ... 9-10 -> 5)."}),
+		_f("skill_cap", "Skill level cap", "int", 0, {"min": 0, "max": 5, "help": "Explicit AP ceiling for the AI (0 = none: any affordable, unlocked tier). Skill unlocks follow the class path levels."}),
 		_f("extra_skills", "Extra skills", "refs", [], {"ref": "skills", "ref_filter": {"system": false}, "help": "Skills beyond the class path (learned through events)."}),
 		_f("loadout", "Active loadout", "strings", [], {"help": "Skill FAMILIES active in combat (max 5 class + 3 extra, basics are free). Empty = default: the first 5 class families reached by level plus the extra skills' families (max 3)."}),
 		_f("ai_role", "AI role", "enum", "", {"options": ["", "AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"], "help": "Empty = the class's role."}),

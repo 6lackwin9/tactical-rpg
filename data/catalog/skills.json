@@ -21,6 +21,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": true,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -44,6 +46,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": true,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -68,6 +72,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -92,6 +98,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -115,6 +123,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -138,6 +148,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -164,6 +176,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -183,6 +197,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": true,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"mitigation": 0.3
 		},
@@ -196,6 +212,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"boost": 1.5,
 			"boost_rounds": 2
@@ -211,6 +229,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": true,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false
 		},
 		{
@@ -224,6 +244,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": true,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false
 		},
 		{
@@ -237,6 +259,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false
 		},
 		{
@@ -250,6 +274,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false
 		},
 		{
@@ -263,6 +289,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": true,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"recover_ap": 2
 		},
@@ -286,6 +314,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"axe",
@@ -313,6 +343,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"axe",
@@ -340,6 +372,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -367,6 +401,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -393,6 +429,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -420,6 +458,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"mace",
@@ -448,6 +488,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -477,6 +519,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -504,6 +548,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"dagger"
@@ -529,6 +575,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -550,6 +598,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -571,6 +621,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -592,6 +644,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -616,6 +670,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -632,6 +688,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"mitigation": 0.15
 		},
@@ -656,6 +714,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -669,6 +729,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -690,6 +752,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -714,6 +778,8 @@
 			"family": "shield_bash",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -738,6 +804,8 @@
 			"family": "shield_bash",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -762,6 +830,8 @@
 			"family": "sunder",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"axe",
@@ -790,6 +860,8 @@
 			"family": "sunder",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"axe",
@@ -818,6 +890,8 @@
 			"family": "hamstring",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -842,6 +916,8 @@
 			"family": "hamstring",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -865,6 +941,8 @@
 			"family": "aimed_shot",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -891,6 +969,8 @@
 			"family": "aimed_shot",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -918,6 +998,8 @@
 			"family": "pinning_shot",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -945,6 +1027,8 @@
 			"family": "pinning_shot",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -972,6 +1056,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"bow",
@@ -999,6 +1085,8 @@
 			"family": "barbed_arrow",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"bow",
@@ -1026,6 +1114,8 @@
 			"family": "barbed_arrow",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"bow",
@@ -1052,6 +1142,8 @@
 			"family": "volley",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -1078,6 +1170,8 @@
 			"family": "volley",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"bow",
@@ -1104,6 +1198,8 @@
 			"family": "lunge",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1127,6 +1223,8 @@
 			"family": "lunge",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1150,6 +1248,8 @@
 			"family": "sweep_kick",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1173,6 +1273,8 @@
 			"family": "sweep_kick",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1197,6 +1299,8 @@
 			"family": "body_blow",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -1225,6 +1329,8 @@
 			"family": "body_blow",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -1253,6 +1359,8 @@
 			"family": "haymaker",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -1282,6 +1390,8 @@
 			"family": "haymaker",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"fist",
@@ -1310,6 +1420,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1335,6 +1447,8 @@
 			"family": "pounce",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1360,6 +1474,8 @@
 			"family": "pounce",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1385,6 +1501,8 @@
 			"family": "quick_stab",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"dagger"
@@ -1410,6 +1528,8 @@
 			"family": "quick_stab",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"dagger"
@@ -1436,6 +1556,8 @@
 			"family": "bleeding_cut",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1460,6 +1582,8 @@
 			"family": "bleeding_cut",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1483,6 +1607,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"mace",
@@ -1509,6 +1635,8 @@
 			"family": "smite",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"mace",
@@ -1535,6 +1663,8 @@
 			"family": "smite",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"mace",
@@ -1562,6 +1692,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"bow",
@@ -1589,6 +1721,8 @@
 			"family": "deadeye",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"bow",
@@ -1616,6 +1750,8 @@
 			"family": "deadeye",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"bow",
@@ -1643,6 +1779,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"mace",
@@ -1670,6 +1808,8 @@
 			"family": "judgement",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"mace",
@@ -1697,6 +1837,8 @@
 			"family": "judgement",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"mace",
@@ -1724,6 +1866,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1748,6 +1892,8 @@
 			"family": "charge_in",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1772,6 +1918,8 @@
 			"family": "charge_in",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -1796,6 +1944,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1822,6 +1972,8 @@
 			"family": "lacerate",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1848,6 +2000,8 @@
 			"family": "lacerate",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1873,6 +2027,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1898,6 +2054,8 @@
 			"family": "assassinate",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1923,6 +2081,8 @@
 			"family": "assassinate",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"dagger"
@@ -1948,6 +2108,8 @@
 			"family": "taunt_shout",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -1969,6 +2131,8 @@
 			"family": "taunt_shout",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -1981,6 +2145,8 @@
 			"family": "focus",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"boost": 1.5,
 			"boost_rounds": 3
@@ -1995,6 +2161,8 @@
 			"family": "focus",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"boost": 1.5,
 			"boost_rounds": 3
@@ -2018,6 +2186,8 @@
 			"family": "mend",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2039,6 +2209,8 @@
 			"family": "mend",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2063,6 +2235,8 @@
 			"family": "purify",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2086,6 +2260,8 @@
 			"family": "purify",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2107,6 +2283,8 @@
 			"family": "rally",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2128,6 +2306,8 @@
 			"family": "rally",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2151,6 +2331,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2174,6 +2356,8 @@
 			"family": "greater_mend",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2197,6 +2381,8 @@
 			"family": "greater_mend",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2218,6 +2404,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2239,6 +2427,8 @@
 			"family": "renewal",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2260,6 +2450,8 @@
 			"family": "renewal",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2273,6 +2465,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2286,6 +2480,8 @@
 			"family": "leap_back",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2299,6 +2495,8 @@
 			"family": "leap_back",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2312,6 +2510,8 @@
 			"family": "backflip",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2325,6 +2525,8 @@
 			"family": "backflip",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true
 		},
 		{
@@ -2347,6 +2549,8 @@
 			"family": "hex",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"mace",
@@ -2375,6 +2579,8 @@
 			"family": "hex",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"mace",
@@ -2402,6 +2608,8 @@
 			"family": "arcane_bolt",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -2428,6 +2636,8 @@
 			"family": "arcane_bolt",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -2454,6 +2664,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2480,6 +2692,8 @@
 			"family": "arc_lance",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2506,6 +2720,8 @@
 			"family": "arc_lance",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2532,6 +2748,8 @@
 			"family": "firebomb",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -2558,6 +2776,8 @@
 			"family": "firebomb",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": false,
 			"weapon_types": [
 				"staff",
@@ -2586,6 +2806,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -2611,6 +2833,8 @@
 			"family": "intimidate",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -2636,6 +2860,8 @@
 			"family": "intimidate",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -2652,6 +2878,8 @@
 			"family": "riposte",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"mitigation": 0.05
 		},
@@ -2667,6 +2895,8 @@
 			"family": "riposte",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"mitigation": 0.0
 		},
@@ -2690,6 +2920,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -2714,6 +2946,8 @@
 			"family": "cyclone_kick",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -2738,6 +2972,8 @@
 			"family": "cyclone_kick",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [],
 			"min_proficiency": 0
@@ -2762,6 +2998,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2789,6 +3027,8 @@
 			"family": "inferno",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2816,6 +3056,8 @@
 			"family": "inferno",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2843,6 +3085,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2870,6 +3114,8 @@
 			"family": "glacial_burst",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2897,6 +3143,8 @@
 			"family": "glacial_burst",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"weapon_types": [
 				"staff",
@@ -2916,6 +3164,8 @@
 			"family": "",
 			"tier": 1,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"mitigation": 0.35
 		},
@@ -2931,6 +3181,8 @@
 			"family": "shield_wall",
 			"tier": 2,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"mitigation": 0.45
 		},
@@ -2946,6 +3198,8 @@
 			"family": "shield_wall",
 			"tier": 3,
 			"basic": false,
+			"advanced": false,
+			"unlock_offset": -1,
 			"learned_only": true,
 			"mitigation": 0.55
 		}

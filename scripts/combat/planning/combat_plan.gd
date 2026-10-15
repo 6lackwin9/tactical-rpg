@@ -240,6 +240,8 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 		return "%s isn't unlocked yet (needs skill level %d)." % [step.skill.display_name, step.skill.level]
 	if step.skill != null and not c.knows_skill(step.skill.id):
 		return "%s doesn't know %s." % [c.name, step.skill.display_name]
+	if step.skill != null and not c.tier_unlocked(step.skill):
+		return "%s unlocks at unit level %d." % [step.skill.display_name, c.skill_unlock_level(step.skill)]
 	if step.skill != null and step.skill.kind == SkillDef.Kind.DISENGAGE:
 		return _apply_disengage(c, st, step, index)
 	match step.mode:

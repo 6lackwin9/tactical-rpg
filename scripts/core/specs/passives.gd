@@ -20,13 +20,18 @@ extends RefCounted
 #                and passives use this to scale the single-tier basics later (value -0.9..2.0, not 0).
 #                Exactly one of "family" (a skill id) or "group" ("spell" or "heal"): a group bonus applies to every
 #                skill of the group (Combatant.potency_for_skill; groups are derived, see SkillDef.in_group)
+#   unlock       {"family": "riposte" | "group": "heal", "levels": 1-2}   opens a class-path skill family (or every family of
+#                the group) that many unit levels earlier (Combatant.family_unlock_level). Never grants ownership; the
+#                largest value per family / group wins (never summed) and the total reduction is capped by
+#                StatRules.MAX_UNLOCK_REDUCTION. Passives only, not items.
 #   status_potency {"value": 5}   +5 points of hit chance for every status the unit inflicts with an attack skill (1..25)
 #   spell_reach   {"value": 1}    +1 maximum reach for spell skills (1..2; total gear bonus is clamped to GEAR_REACH_CAP)
 # Equipment carries the same grammar in its `effects` list, but only ITEM_TYPES are allowed there; item
 # effects apply while equipped and are rebuilt on every equip change (apply_effects with `gear` = true).
 # ==============================================================================
 
-const TYPES: Array[String] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach"]
+const TYPES: Array[String] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock"]
+const UNLOCK_LEVELS_MAX: int = 2
 const ITEM_TYPES: Array[String] = ["skill_potency", "status_potency", "spell_reach", "resist"]
 const GROUPS: Array[String] = ["spell", "heal"]
 const POTENCY_MIN: float = -0.9
@@ -92,6 +97,18 @@ static func validate_effects(effects: Variant, skill_exists: Callable, allow_emp
 				var pv: float = DictUtil.to_float(e.get("value", 0.0))
 				if is_zero_approx(pv) or pv < POTENCY_MIN or pv > POTENCY_MAX:
 					errors.append("%s: potency bonus must be non-zero, %.1f to %.1f (0.25 = +25%%)." % [at, POTENCY_MIN, POTENCY_MAX])
+			"unlock":
+				var u_family: bool = e.has("family") and not str(e["family"]).is_empty()
+				var u_group: bool = e.has("group") and not str(e["group"]).is_empty()
+				if u_family == u_group:
+					errors.append("%s: give exactly one of family (a skill id) or group (%s)." % [at, ", ".join(GROUPS)])
+				elif u_group and not GROUPS.has(str(e["group"])):
+					errors.append("%s: unknown skill group '%s' (use %s)." % [at, str(e["group"]), ", ".join(GROUPS)])
+				elif u_family and not skill_exists.call(str(e.get("family", ""))):
+					errors.append("%s: unknown skill family '%s'." % [at, str(e.get("family", ""))])
+				var ul: int = DictUtil.to_int(e.get("levels", 0))
+				if ul < 1 or ul > UNLOCK_LEVELS_MAX:
+					errors.append("%s: unlock levels must be 1-%d." % [at, UNLOCK_LEVELS_MAX])
 			"status_potency":
 				var sp: int = DictUtil.to_int(e.get("value", 0))
 				if sp < STATUS_POTENCY_MIN or sp > STATUS_POTENCY_MAX:
@@ -111,6 +128,7 @@ static func apply(c: Combatant, passive: Dictionary) -> void:
 		return
 	c.passives.append(id)
 	apply_effects(c, DictUtil.array_of(passive.get("effects", [])), "passive:" + id, false)
+	c.refresh_path_skills()   # a KNOW bonus can open an advanced family earlier
 
 # Puts an effects list on `c`. `gear` = true writes to the gear-sourced fields (cleared and rebuilt from the
 # equipment on every equip change, see Combatant.rebuild_gear_effects) instead of the permanent passive fields.
@@ -158,6 +176,14 @@ static func apply_effects(c: Combatant, effects: Array, source: String, gear: bo
 					c.gear_spell_reach += DictUtil.to_int(e.get("value", 0))
 				else:
 					c.passive_spell_reach += DictUtil.to_int(e.get("value", 0))
+			"unlock":
+				if not gear:
+					var levels: int = clampi(DictUtil.to_int(e.get("levels", 0)), 0, UNLOCK_LEVELS_MAX)
+					var u_group: String = str(e.get("group", ""))
+					var bonus: Dictionary = c.unlock_bonus_group if not u_group.is_empty() else c.unlock_bonus_family
+					var key: String = u_group if not u_group.is_empty() else str(e.get("family", ""))
+					bonus[key] = maxi(DictUtil.int_of(bonus, key), levels)
+					c.refresh_path_skills()
 
 # One-line summary of what a passive does.
 static func describe(passive: Dictionary) -> String:
@@ -186,4 +212,7 @@ static func describe(passive: Dictionary) -> String:
 				parts.append("%+d status chance" % DictUtil.to_int(e.get("value", 0)))
 			"spell_reach":
 				parts.append("%+d spell reach" % DictUtil.to_int(e.get("value", 0)))
+			"unlock":
+				var u_label: String = str(e.get("group", "")) + " group" if not str(e.get("group", "")).is_empty() else str(e.get("family", ""))
+				parts.append("opens %s %d levels earlier" % [u_label, DictUtil.to_int(e.get("levels", 0))])
 	return "; ".join(parts) if not parts.is_empty() else "no effects"

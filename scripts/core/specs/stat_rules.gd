@@ -15,7 +15,8 @@ extends RefCounted
 #             spend means "follow the class weights" (auto_spend).
 #   Tiers     Heroes and enemies share the class curve; the tier scales HP and
 #             attack power (a goblin brawler is a MINION Brawler).
-#   Skills    A unit's skill level cap follows its level (skill_cap_for_level).
+#   Skills    A class path step {level, skill} says when a family is owned; tiers open at fixed
+#             level steps after it (SK2). AP is only the per-round budget.
 #
 # validate_class / validate_spend return problem strings (empty = valid): the
 # catalog refuses classes and units that break these rules.
@@ -34,6 +35,15 @@ const MAX_CLASS_SLOTS: int = 5        # active class skill families in combat (b
 const MAX_EXTRA_SLOTS: int = 3        # active extra-slot skill families
 const MAX_TIER: int = 5               # tiers of a basic skill family
 const MAX_CLASS_TIER: int = 3         # tiers of a class skill family
+# Skill unlocks (SK2): a class path step says at which unit level a family is owned; its tiers open at
+# fixed steps after that (offset 0 / 2 / 4 for tiers 1 / 2 / 3 unless a row sets unlock_offset).
+const TIER_UNLOCK_STEP: int = 2
+const ADVANCED_MIN_LEVEL: int = 5     # an advanced family may not sit on a class path below this level
+const MAX_UNLOCK_REDUCTION: int = 2   # passives / KNOW lower a family's unlock by at most this many levels
+const ADVANCED_UNLOCK_FLOOR: int = 3  # an advanced family's effective unlock never drops below this
+const KNOW_UNLOCK_BASE: int = 12
+const KNOW_UNLOCK_STEP: int = 4
+const MAX_UNLOCK_OFFSET: int = 8      # largest explicit skill unlock_offset
 
 # tier -> {hp, power}: multipliers on the class-derived HP and attack power.
 const TIERS: Dictionary = {
@@ -60,9 +70,14 @@ static func tier_power(tier: String) -> float:
 static func spend_pool(level: int) -> int:
 	return SPEND_BASE + (clampi(level, 1, MAX_LEVEL) - 1) * FREE_PER_LEVEL
 
-# Highest skill level (AP cost) a unit of `level` may use: 1-2 -> 1, 3-4 -> 2 ... 9-10 -> 5.
-static func skill_cap_for_level(level: int) -> int:
-	return clampi(ceili(float(clampi(level, 1, MAX_LEVEL)) / 2.0), 1, 5)
+# Unlock level of a family that is NOT on the unit's class path (extras, learned skills): the old
+# "skill level <= ceil(unit level / 2)" rule inverted, i.e. 2 x AP level - 1. On-path families use their path level.
+static func default_unlock(ap_level: int) -> int:
+	return maxi(1, 2 * ap_level - 1)
+
+# Levels a KNOW score lowers an ADVANCED family's unlock by: (KNOW - base) / step, 0..MAX_UNLOCK_REDUCTION.
+static func know_unlock_reduction(know: int) -> int:
+	return clampi(floori(float(know - KNOW_UNLOCK_BASE) / float(KNOW_UNLOCK_STEP)), 0, MAX_UNLOCK_REDUCTION)
 
 static func total_of(stats: Dictionary) -> int:
 	var sum: int = 0

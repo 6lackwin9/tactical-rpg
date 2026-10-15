@@ -300,9 +300,12 @@ static func _test_default_loadout() -> bool:
 	for class_id: String in ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]:
 		var u: Combatant = ContentFactory.unit({"id": "t_sf_d" + class_id, "name": "U", "class_id": class_id, "level": 10, "extra_skills": extras})
 		checks["no class gets more than 5 class / 3 extra by default"] = checks["no class gets more than 5 class / 3 extra by default"] and u.active_class_families.size() <= StatRules.MAX_CLASS_SLOTS and u.active_extra_families.size() <= StatRules.MAX_EXTRA_SLOTS
-	var passive_unit: Combatant = ContentFactory.unit({"id": "t_sf_pu", "name": "P", "class_id": "mage", "level": 1})
+	# A granted (off-path) skill opens at StatRules.default_unlock(its AP level): castable from there, owned and slotted before.
+	var granted: SkillDef = SkillCatalog.find("riposte")
+	var open_level: int = mini(StatRules.MAX_LEVEL, StatRules.default_unlock(granted.level))
+	var passive_unit: Combatant = ContentFactory.unit({"id": "t_sf_pu", "name": "P", "class_id": "mage", "level": open_level})
 	Passives.apply(passive_unit, {"id": "t_sf_pass", "name": "x", "effects": [{"type": "skill", "skill": "riposte"}]})
-	checks["a passive-granted skill takes a free extra slot"] = passive_unit.can_use(SkillCatalog.find("riposte")) and passive_unit.active_extra_families.has("riposte")
+	checks["a passive-granted skill takes a free extra slot"] = passive_unit.can_use(granted) and passive_unit.active_extra_families.has("riposte")
 	return _report("Default loadout from class path and extra skills", checks)
 
 # ------------------------------------------------------------------------------

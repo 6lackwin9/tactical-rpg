@@ -439,12 +439,21 @@ static func _family_errors(e: Dictionary) -> Array[String]:
 			errors.append("Family '%s' mixes kinds (%s is %s)." % [family, other_id, str(other.get("kind", ""))])
 		if DictUtil.to_bool(other.get("basic", false)) != basic:
 			errors.append("Family '%s': basic must match across all tiers (%s differs)." % [family, other_id])
+		if DictUtil.to_bool(other.get("advanced", false)) != DictUtil.to_bool(e.get("advanced", false)):
+			errors.append("Family '%s': advanced must match across all tiers (%s differs)." % [family, other_id])
 	return errors
 
 static func _skill_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	var kind: String = str(e["kind"])
 	errors.append_array(_family_errors(e))
+	var unlock_offset: int = DictUtil.to_int(e.get("unlock_offset", -1), -1)
+	if unlock_offset < -1 or unlock_offset > StatRules.MAX_UNLOCK_OFFSET:
+		errors.append("Unlock offset must be -1 (derived) or 0-%d." % StatRules.MAX_UNLOCK_OFFSET)
+	elif unlock_offset > 0 and DictUtil.to_int(e.get("tier", 1), 1) == 1:
+		errors.append("A tier 1 skill opens at its family's unlock level: leave the unlock offset at -1 or 0.")
+	if DictUtil.to_bool(e.get("advanced", false)) and (DictUtil.to_bool(e.get("basic", false)) or DictUtil.to_bool(e.get("system", false))):
+		errors.append("Only class skills can be advanced (not basic or engine skills).")
 	if not DictUtil.to_bool(e.get("system", false)) and kind in ["MOVE", "TARGET", "STATUS"]:
 		errors.append("%s skills are engine-only; author an ATTACK, DEFEND, FOCUS, REST or SUPPORT skill." % kind)
 	if kind == "SUPPORT":
@@ -607,6 +616,7 @@ static func _class_errors(e: Dictionary) -> Array[String]:
 	else:
 		var last_level: int = 0
 		var has_start: bool = false
+		var seen_families: Array[String] = []
 		for step_raw: Variant in (path as Array):
 			var step: Dictionary = DictUtil.dict_of(step_raw)
 			var skill_id: String = str(step.get("skill", ""))
@@ -623,8 +633,17 @@ static func _class_errors(e: Dictionary) -> Array[String]:
 				errors.append("Skill path: unknown skill '%s'." % skill_id)
 			elif DictUtil.to_bool(skill.get("system", false)):
 				errors.append("Skill path: '%s' is an engine skill (always known)." % skill_id)
-			elif DictUtil.to_int(skill.get("level", 1)) > StatRules.skill_cap_for_level(level):
-				errors.append("Skill path: %s (skill level %d) is too advanced for unit level %d (cap %d)." % [skill_id, DictUtil.to_int(skill.get("level", 1)), level, StatRules.skill_cap_for_level(level)])
+			else:
+				var fam: String = str(skill.get("family", ""))
+				if fam.is_empty():
+					fam = skill_id
+				if DictUtil.to_int(skill.get("tier", 1), 1) != 1:
+					errors.append("Skill path: '%s' is a higher tier; list the tier 1 skill of the family (tiers open with it)." % skill_id)
+				if seen_families.has(fam):
+					errors.append("Skill path: family '%s' is listed more than once." % fam)
+				seen_families.append(fam)
+				if DictUtil.to_bool(skill.get("advanced", false)) and level < StatRules.ADVANCED_MIN_LEVEL:
+					errors.append("Skill path: %s is an advanced skill and needs unit level %d or higher (listed at %d)." % [skill_id, StatRules.ADVANCED_MIN_LEVEL, level])
 		if not has_start:
 			errors.append("The skill path needs at least one level-1 skill.")
 	errors.append_array(_loadout_errors(e, ContentFactory.class_archetype(e).make_proficiency(), true))

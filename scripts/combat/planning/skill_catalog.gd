@@ -5,13 +5,15 @@ extends RefCounted
 # Tactical RPG - Skill Catalog (the command tiers available for planning)
 # Built from the ContentCatalog "skills" entries (edit them in the Content Forge).
 # One family per command kind, tiered by level 1-3 today (4-5 reserved for
-# progression). A unit may use every skill up to its unlocked level
-# (AiProfile.skill_cap stands in for real skill progression for now).
+# progression). A unit may use every owned tier whose unlock level it has reached
+# (Combatant.tier_unlocked); AiProfile.skill_cap is only an explicit AP ceiling.
 # Move and Rest are single skills: Move is one block at 1 AP per tile (up to
 # Combatant.move_per_block() tiles), Rest is one free block that recovers AP.
 # ==============================================================================
 
 static var _all: Array[SkillDef] = []
+static var _by_id: Dictionary = {}      # skill id -> SkillDef (built with _all)
+static var _tier_one: Dictionary = {}   # family id -> its lowest-tier SkillDef
 
 static func all() -> Array[SkillDef]:
 	if _all.is_empty():
@@ -21,13 +23,34 @@ static func all() -> Array[SkillDef]:
 # Skills come from the content catalog (res://data/catalog/skills.json), in file
 # order: the first skill of a kind is its "lowest" (Strike, Move...).
 static func _build() -> void:
+	_by_id.clear()
+	_tier_one.clear()
 	for entry: Dictionary in ContentCatalog.entries("skills"):
-		_all.append(ContentFactory.skill(entry))
+		var s: SkillDef = ContentFactory.skill(entry)
+		_all.append(s)
+		if not _by_id.has(s.id):
+			_by_id[s.id] = s
+		if not _tier_one.has(s.family_id()):
+			_tier_one[s.family_id()] = s
+		else:
+			var low: SkillDef = _tier_one[s.family_id()]
+			if s.tier < low.tier:
+				_tier_one[s.family_id()] = s
 
 # Drops the static cache. Call on shutdown: a static Array holding instances of a
 # script keeps that script (and everything it references) alive past exit.
 static func clear_cache() -> void:
 	_all.clear()
+	_by_id.clear()
+	_tier_one.clear()
+
+# The lowest-tier row of `family` (null for an unknown family): it carries the family's group, advanced flag and base AP.
+static func tier_one(family: String) -> SkillDef:
+	all()
+	if not _tier_one.has(family):
+		return null
+	var s: SkillDef = _tier_one[family]
+	return s
 
 static func is_system(skill_id: String) -> bool:
 	var s: SkillDef = find(skill_id)
@@ -38,10 +61,11 @@ static func is_learned_only(skill_id: String) -> bool:
 	return s != null and s.learned_only
 
 static func find(skill_id: String) -> SkillDef:
-	for s: SkillDef in all():
-		if s.id == skill_id:
-			return s
-	return null
+	all()
+	if not _by_id.has(skill_id):
+		return null
+	var s: SkillDef = _by_id[skill_id]
+	return s
 
 # Skills of `kind` the unit has unlocked, lowest level first.
 static func available(kind: SkillDef.Kind, skill_cap: int, c: Combatant = null) -> Array[SkillDef]:

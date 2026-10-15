@@ -43,9 +43,6 @@ func spent() -> int:
 func unspent() -> int:
 	return StatRules.spend_pool(level()) - spent()
 
-func skill_cap() -> int:
-	return StatRules.skill_cap_for_level(level())
-
 func class_id() -> String:
 	return str(ContentCatalog.get_entry("units", base_unit).get("class_id", ""))
 
