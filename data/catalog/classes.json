@@ -61,16 +61,28 @@
 					"skill": "guard"
 				},
 				{
-					"level": 2,
+					"level": 1,
 					"skill": "taunt_shout"
 				},
 				{
 					"level": 3,
+					"skill": "shield_bash"
+				},
+				{
+					"level": 4,
+					"skill": "intimidate"
+				},
+				{
+					"level": 5,
 					"skill": "riposte"
 				},
 				{
-					"level": 3,
-					"skill": "shield_bash"
+					"level": 5,
+					"skill": "sunder"
+				},
+				{
+					"level": 5,
+					"skill": "shield_wall"
 				}
 			],
 			"main_hand": "wpn_hand_axe",
@@ -143,15 +155,27 @@
 				},
 				{
 					"level": 3,
+					"skill": "aimed_shot"
+				},
+				{
+					"level": 3,
 					"skill": "pinning_shot"
 				},
 				{
 					"level": 3,
+					"skill": "leap_back"
+				},
+				{
+					"level": 5,
+					"skill": "barbed_arrow"
+				},
+				{
+					"level": 5,
 					"skill": "volley"
 				},
 				{
-					"level": 4,
-					"skill": "aimed_shot"
+					"level": 5,
+					"skill": "deadeye"
 				},
 				{
 					"level": 5,
@@ -244,12 +268,24 @@
 					"skill": "body_blow"
 				},
 				{
+					"level": 3,
+					"skill": "sweep_kick"
+				},
+				{
 					"level": 4,
 					"skill": "hamstring"
 				},
 				{
 					"level": 5,
 					"skill": "haymaker"
+				},
+				{
+					"level": 5,
+					"skill": "charge_in"
+				},
+				{
+					"level": 5,
+					"skill": "cyclone_kick"
 				}
 			],
 			"main_hand": "wpn_flanged_mace",
@@ -320,7 +356,11 @@
 					"skill": "guard"
 				},
 				{
-					"level": 2,
+					"level": 1,
+					"skill": "smite"
+				},
+				{
+					"level": 1,
 					"skill": "rally"
 				},
 				{
@@ -328,12 +368,28 @@
 					"skill": "mend"
 				},
 				{
+					"level": 3,
+					"skill": "purify"
+				},
+				{
 					"level": 5,
-					"skill": "focus"
+					"skill": "hex"
+				},
+				{
+					"level": 5,
+					"skill": "greater_mend"
+				},
+				{
+					"level": 5,
+					"skill": "renewal"
+				},
+				{
+					"level": 7,
+					"skill": "judgement"
 				}
 			],
 			"main_hand": "wpn_cleric_mace",
-			"off_hand": "",
+			"off_hand": "wpn_tome",
 			"head": "",
 			"body": "arm_cleric_vestment",
 			"accessory_1": "",
@@ -394,15 +450,15 @@
 				},
 				{
 					"level": 1,
-					"skill": "quick_stab"
-				},
-				{
-					"level": 1,
 					"skill": "guard"
 				},
 				{
+					"level": 1,
+					"skill": "quick_stab"
+				},
+				{
 					"level": 3,
-					"skill": "lunge"
+					"skill": "pounce"
 				},
 				{
 					"level": 3,
@@ -410,7 +466,19 @@
 				},
 				{
 					"level": 4,
+					"skill": "backflip"
+				},
+				{
+					"level": 5,
 					"skill": "hamstring"
+				},
+				{
+					"level": 5,
+					"skill": "lacerate"
+				},
+				{
+					"level": 7,
+					"skill": "assassinate"
 				}
 			],
 			"main_hand": "wpn_stiletto",
@@ -469,10 +537,6 @@
 			"skill_path": [
 				{
 					"level": 1,
-					"skill": "arcane_bolt"
-				},
-				{
-					"level": 1,
 					"skill": "strike"
 				},
 				{
@@ -480,24 +544,36 @@
 					"skill": "guard"
 				},
 				{
-					"level": 3,
-					"skill": "volley"
+					"level": 1,
+					"skill": "arcane_bolt"
 				},
 				{
 					"level": 3,
-					"skill": "focus"
+					"skill": "arc_lance"
+				},
+				{
+					"level": 3,
+					"skill": "hex"
 				},
 				{
 					"level": 4,
-					"skill": "hex"
+					"skill": "focus"
 				},
 				{
 					"level": 5,
 					"skill": "firebomb"
+				},
+				{
+					"level": 5,
+					"skill": "glacial_burst"
+				},
+				{
+					"level": 7,
+					"skill": "inferno"
 				}
 			],
 			"main_hand": "wpn_wand",
-			"off_hand": "",
+			"off_hand": "wpn_orb",
 			"head": "",
 			"body": "arm_mage_robe",
 			"accessory_1": "",

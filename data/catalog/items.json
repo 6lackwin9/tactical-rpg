@@ -245,8 +245,8 @@
 			"name": "Mystic Spellbook",
 			"item_type": "WEAPON",
 			"rarity": "UNCOMMON",
-			"weight": 1.5,
-			"value": 45,
+			"weight": 1.2,
+			"value": 55,
 			"description": "A bound book of rites held in the off hand. Strengthens healing and the grip of curses.",
 			"damage_type": "magic",
 			"icon_id": "",
@@ -269,7 +269,17 @@
 			"stat_bonuses": {
 				"KNOW": 1
 			},
-			"effects": [],
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "heal",
+					"value": 0.1
+				},
+				{
+					"type": "status_potency",
+					"value": 5
+				}
+			],
 			"threshold_tiers": []
 		},
 		{
@@ -858,6 +868,46 @@
 			},
 			"stat_bonuses": {},
 			"effects": [],
+			"threshold_tiers": []
+		},
+		{
+			"id": "wpn_orb",
+			"name": "Focus Orb",
+			"item_type": "WEAPON",
+			"rarity": "UNCOMMON",
+			"weight": 0.8,
+			"value": 60,
+			"description": "A glass sphere held in the off hand. Sharpens spells and lets them reach one tile further.",
+			"damage_type": "magic",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "OFF_HAND",
+			"weapon_type": "orb",
+			"base_power": 0,
+			"base_range": 1,
+			"two_handed": false,
+			"off_hand_category": "orb",
+			"scaling_stat": "INT",
+			"block_cost": 1,
+			"burden": 0,
+			"mitigation": 0,
+			"required_stats": {
+				"INT": 12
+			},
+			"stat_bonuses": {},
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "spell",
+					"value": 0.1
+				},
+				{
+					"type": "spell_reach",
+					"value": 1
+				}
+			],
 			"threshold_tiers": []
 		}
 	]
