@@ -87,3 +87,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 ## AI skill use (AI1)
 
 - `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte when `AiProfile.smart_skills` is true (default); false = old behaviour. Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`.
+
+## Skill unlock rule (SK2)
+
+- A class path step `{level, skill}` owns a family. Tier t is castable at `unlock + unlock_offset` (offset default 0/2/4 for tiers 1/2/3). AP is only the per-round budget (no skill cap). Advanced families (`advanced`) need path level >= 5; KNOW lowers an advanced family by `(KNOW-12)/4` and the passive `unlock` effect lowers any path family; the larger of the two applies, max 2 levels, advanced floor 3. Constants in `StatRules` (TIER_UNLOCK_STEP, ADVANCED_MIN_LEVEL, MAX_UNLOCK_REDUCTION, ADVANCED_UNLOCK_FLOOR, KNOW_UNLOCK_BASE/STEP, MAX_UNLOCK_OFFSET). Unlock levels freeze while the loadout is locked (battle). Read: `Combatant.family_unlock_level`, `tier_unlocked`.

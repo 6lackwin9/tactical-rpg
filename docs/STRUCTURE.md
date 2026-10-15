@@ -14,6 +14,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
 | `scripts/tests/ai_skills_test_suite.gd` | AI use of the new skill kinds (AI1) | S4 | done |
+| `scripts/tests/skill_unlock_test_suite.gd`, `data/seeds/sk2_schema.gd` | SK2 unlock rule suite; schema default seed | S2, S12 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd, overlap.sh | S15 | done |
