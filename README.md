@@ -451,6 +451,10 @@ Area attacks now roll their status once per unit hit (allies included); defend s
 
 Party state, XP curve (starting values in `data/progression/xp_curve.json`), level-up spend, a builder that turns a saved unit into a combatant, and a versioned single-slot JSON save with migrations (`user://saves`). No UI yet. Tested in `progression_test_suite.gd` and `save_test_suite.gd`.
 
+### Class skill content (M2C2B)
+
+All six classes now have their real kits: three-tier skill families, eight advanced families that replace two starters in one slot, intimidate for the Warrior, riposte at AP 3/2/1, orb and tome focus items with effects, and rogue and mage party units. Default loadout = the first five path families. Authored by idempotent seeds in `data/seeds/`.
+
 ### Agent workflow tools
 
 `CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `change-reviewer`) live in `.claude/`.
