@@ -70,8 +70,18 @@ static func _test_migration() -> bool:
 	checks["tiers are numbered 1..n in order"] = tiers_ok
 	var strike: SkillDef = SkillCatalog.find("strike")
 	checks["strike keeps AP = level and 2 blocks"] = strike.ap_cost() == strike.level and strike.blocks == 2
-	checks["a single skill is its own family (tier 1)"] = SkillCatalog.family_of("mend") == "mend" and SkillCatalog.find("mend").tier == 1 and SkillCatalog.family_tiers("mend").size() == 1
-	checks["focus is a single class-owned skill"] = SkillCatalog.family_tiers("focus").size() == 1 and not SkillCatalog.is_basic_family("focus")
+	# A skill with no explicit family is its own family root; tier siblings point at the root.
+	var rooted_ok: bool = true
+	for s: SkillDef in SkillCatalog.all():
+		if s.family.is_empty():
+			rooted_ok = rooted_ok and SkillCatalog.family_of(s.id) == s.id and s.tier == 1
+	checks["a skill without a family is its own family (tier 1)"] = rooted_ok
+	for fam: String in ["mend", "focus"]:
+		var fam_tiers: Array[SkillDef] = SkillCatalog.family_tiers(fam)
+		var grouped_ok: bool = fam_tiers.size() > 1 and fam_tiers[0].id == fam and not SkillCatalog.is_basic_family(fam)
+		for s: SkillDef in fam_tiers:
+			grouped_ok = grouped_ok and SkillCatalog.family_of(s.id) == fam
+		checks["%s is a multi-tier class family rooted at its tier 1" % fam] = grouped_ok
 	checks["class families are not basic"] = not SkillCatalog.is_basic_family("focus") and not SkillCatalog.is_basic_family("mend")
 	checks["engine skills are always active"] = SkillCatalog.is_always_active("move") and SkillCatalog.is_always_active("rest")
 	var kinds_ok: bool = true
@@ -173,19 +183,29 @@ static func _mage() -> Combatant:
 static func _test_loadout_filter() -> bool:
 	var checks: Dictionary = {}
 	var mage: Combatant = _mage()
-	var firebomb: SkillDef = SkillCatalog.find("firebomb")
-	var volley: SkillDef = SkillCatalog.find("volley")
-	checks["default loadout: every owned class skill usable"] = mage.can_use(firebomb) and mage.can_use(volley)
-	var err: String = mage.set_loadout(["arcane_bolt", "volley", "focus", "hex"], [])
-	checks["set_loadout succeeds outside combat"] = err.is_empty() and mage.active_families.size() == 4
-	checks["a family outside the loadout is not usable"] = not mage.can_use(firebomb) and not mage.knows_skill("firebomb") and mage.owns_skill("firebomb")
-	checks["in-loadout families still usable"] = mage.can_use(volley) and mage.can_use(SkillCatalog.find("hex"))
+	# At level 5 the mage owns more class families than the 5 slots: the overflow family is hidden by default.
+	var defaults: Array[String] = mage.active_class_families.duplicate()
+	var overflow: Array[String] = []
+	for fam: String in mage.owned_families():
+		if not defaults.has(fam):
+			overflow.append(fam)
+	checks["the mage owns more families than the slots"] = defaults.size() == StatRules.MAX_CLASS_SLOTS and not overflow.is_empty()
+	var hidden_id: String = overflow[0] if not overflow.is_empty() else "firebomb"
+	var hidden: SkillDef = SkillCatalog.find(hidden_id)
+	var shown: SkillDef = SkillCatalog.find("firebomb")
+	checks["default loadout: every slotted class skill usable, the overflow one is not"] = mage.can_use(shown) and not mage.can_use(hidden) and mage.owns_skill(hidden_id)
+	# Keep four of the default five (always including the visible firebomb); the overflow family stays hidden.
+	var kept: Array[String] = ["arcane_bolt", "firebomb", "focus", "hex"]
+	var err: String = mage.set_loadout(kept, [])
+	checks["set_loadout succeeds outside combat"] = err.is_empty() and mage.active_families.size() == kept.size()
+	checks["a family outside the loadout is not usable"] = not mage.can_use(hidden) and not mage.knows_skill(hidden_id) and mage.owns_skill(hidden_id)
+	checks["in-loadout families still usable"] = mage.can_use(shown) and mage.can_use(SkillCatalog.find("hex"))
 	checks["basics stay usable without a slot"] = mage.can_use(SkillCatalog.find("strike")) and mage.can_use(SkillCatalog.find("guard"))
 	checks["engine skills stay usable"] = mage.knows_skill("move") and mage.knows_skill("rest")
 	var avail: Array[String] = _ids(SkillCatalog.available(SkillDef.Kind.ATTACK, 5, mage))
-	checks["SkillCatalog.available hides non-loadout skills"] = not avail.has("firebomb") and avail.has("volley") and avail.has("strike")
+	checks["SkillCatalog.available hides non-loadout skills"] = not avail.has(hidden_id) and avail.has("firebomb") and avail.has("strike")
 	var singles: Array[String] = _ids(SkillCatalog.single_attacks(mage, 5))
-	checks["single_attacks hides them too"] = not singles.has("firebomb") and singles.has("arcane_bolt")
+	checks["single_attacks hides them too"] = not singles.has(hidden_id) and singles.has("arcane_bolt")
 	# The planner offers no option for a hidden skill.
 	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [])
 	var foe := Combatant.new("Foe", 200, 10, 1)
@@ -200,13 +220,13 @@ static func _test_loadout_filter() -> bool:
 	for o: PlanOption in plan.cell_options(mage, Vector2i(4, 5)):
 		if o.step.skill != null:
 			planned.append(o.step.skill.id)
-	checks["planner options leave the hidden skill out"] = not planned.has("firebomb") and (planned.has("arcane_bolt") or planned.has("strike"))
-	var step := PlanStep.area_at(firebomb, Vector2i(5, 4))
+	checks["planner options leave the hidden skill out"] = not planned.has(hidden_id) and (planned.has("arcane_bolt") or planned.has("strike"))
+	var step := PlanStep.area_at(hidden, Vector2i(5, 4))
 	checks["a hand-planned hidden skill is rejected"] = plan.preview(mage, step).error_index >= 0
 	# Empty loadout = no restriction (hand-built units, old tests).
 	var plain := Combatant.new("Plain", 50, 10, 1)
-	checks["hand-built unit has no loadout and no restriction"] = plain.active_families.is_empty() and plain.can_use(firebomb)
-	checks["clear_loadout lifts the restriction"] = mage.clear_loadout().is_empty() and mage.can_use(firebomb)
+	checks["hand-built unit has no loadout and no restriction"] = plain.active_families.is_empty() and plain.can_use(shown)
+	checks["clear_loadout lifts the restriction"] = mage.clear_loadout().is_empty() and mage.can_use(hidden)
 	return _report("Active loadout hides non-loadout skills, keeps basics and engine skills", checks)
 
 # ------------------------------------------------------------------------------
@@ -226,7 +246,11 @@ static func _test_set_loadout_limits() -> bool:
 	checks["duplicate family refused"] = not mage.set_loadout(["hex", "hex"], []).is_empty()
 	checks["errors change nothing"] = mage.active_families == before
 	var owned: Array[String] = mage.owned_families()
-	checks["exactly 5 owned class families fit"] = owned.size() == StatRules.MAX_CLASS_SLOTS and mage.set_loadout(owned, []).is_empty()
+	var fit: Array[String] = owned.slice(0, StatRules.MAX_CLASS_SLOTS)
+	var over: Array[String] = owned.slice(0, StatRules.MAX_CLASS_SLOTS + 1)
+	checks["the mage owns more than the slot limit"] = owned.size() > StatRules.MAX_CLASS_SLOTS
+	checks["exactly 5 owned class families fit"] = fit.size() == StatRules.MAX_CLASS_SLOTS and mage.set_loadout(fit, []).is_empty()
+	checks["one more owned class family is refused"] = not mage.set_loadout(over, []).is_empty()
 	# Learned skills are owned and can fill extra slots.
 	mage.learn_skill("mend")
 	checks["a learned skill is owned"] = mage.owned_families().has("mend")
@@ -314,7 +338,9 @@ static func _test_unit_override() -> bool:
 	checks["4 extra families fail validation (max 3)"] = not extra_errors.is_empty() and ", ".join(extra_errors).contains(str(StatRules.MAX_EXTRA_SLOTS))
 	var many_class: Dictionary = base.duplicate(true)
 	many_class["level"] = 10
-	many_class["loadout"] = ["arcane_bolt", "volley", "focus", "hex", "firebomb"]
+	var mage_arch: ClassArchetype = ContentFactory.class_of({"class_id": "mage"})
+	var path_families: Array[String] = ContentFactory.families_of(mage_arch.skills_at(10))
+	many_class["loadout"] = path_families.slice(0, StatRules.MAX_CLASS_SLOTS)
 	checks["5 class families are allowed"] = ContentCatalog.validate_entry("units", many_class).is_empty()
 	return _report("Unit loadout override validation", checks)
 
@@ -363,16 +389,17 @@ static func _test_family_rename() -> bool:
 		DirAccess.remove_absolute(ContentCatalog.path_for(kind, "user://skill_family_sandbox"))
 	checks["sandbox fork"] = ContentCatalog.fork_to("user://skill_family_sandbox") == OK
 	if checks["sandbox fork"]:
-		# focus has no shipped sibling tier: add a fixture one, then rename the root.
-		checks["fixture sibling accepted"] = ContentCatalog.upsert("skills", {"id": "deep_focus", "name": "Deep Focus", "kind": "FOCUS", "level": 3, "family": "focus", "tier": 2}).is_empty()
-		var root: Dictionary = ContentCatalog.get_entry("skills", "focus")
-		root["id"] = "concentrate"
-		var errors: Array[String] = ContentCatalog.upsert("skills", root, "focus")
+		# A fixture family (root + one sibling tier), so no shipped tier can collide; then rename the root.
+		checks["fixture root accepted"] = ContentCatalog.upsert("skills", {"id": "t_ren", "name": "Ren", "kind": "FOCUS", "level": 2, "tier": 1}).is_empty()
+		checks["fixture sibling accepted"] = ContentCatalog.upsert("skills", {"id": "t_ren_deep", "name": "Ren Deep", "kind": "FOCUS", "level": 3, "family": "t_ren", "tier": 2}).is_empty()
+		var root: Dictionary = ContentCatalog.get_entry("skills", "t_ren")
+		root["id"] = "t_ren_new"
+		var errors: Array[String] = ContentCatalog.upsert("skills", root, "t_ren")
 		checks["rename accepted"] = errors.is_empty()
-		var sibling: Dictionary = ContentCatalog.get_entry("skills", "deep_focus")
-		checks["sibling tier follows the family"] = str(sibling.get("family", "")) == "concentrate"
-		checks["family still groups both tiers"] = SkillCatalog.family_tiers("concentrate").size() == 2
-		checks["no orphan family left"] = SkillCatalog.family_tiers("focus").is_empty()
+		var sibling: Dictionary = ContentCatalog.get_entry("skills", "t_ren_deep")
+		checks["sibling tier follows the family"] = str(sibling.get("family", "")) == "t_ren_new"
+		checks["family still groups both tiers"] = SkillCatalog.family_tiers("t_ren_new").size() == 2
+		checks["no orphan family left"] = SkillCatalog.family_tiers("t_ren").is_empty()
 		for kind: String in ContentSchema.KINDS:
 			DirAccess.remove_absolute(ContentCatalog.path_for(kind, "user://skill_family_sandbox"))
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)

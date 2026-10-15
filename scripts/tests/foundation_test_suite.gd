@@ -125,6 +125,10 @@ static func _test_potency_heal() -> bool:
 	var checks: Dictionary = {}
 	var mend: SkillDef = SkillCatalog.find("mend")
 	var priest: Combatant = ContentFactory.unit({"id": "t_fd_priest", "name": "P", "class_id": "priest", "level": 5})
+	# Gear may carry its own potency (e.g. the priest's off-hand tome); start from a bare potency table.
+	priest.potency_bonus.clear()
+	priest.potency_group.clear()
+	priest.gear_potency_group.clear()
 	var stat_value: int = priest.stats.get_effective_stat(mend.heal_stat, priest.get_weapon_context())
 	var base_heal: int = mend.heal_base + roundi(float(stat_value) * mend.heal_mult)
 	checks["no bonus: heal = heal_base + round(stat x heal_mult)"] = SupportRules.heal_amount(priest, mend) == base_heal and base_heal > 0
@@ -227,7 +231,7 @@ const HAND_TABLE: Dictionary = {
 	"wpn_battle_axe": "main_2h", "wpn_mage_staff": "main_2h",
 	"wpn_broadsword": "main_1h", "wpn_hand_axe": "main_1h", "wpn_flanged_mace": "main_1h", "wpn_stiletto": "main_1h",
 	"wpn_wand": "main_1h", "wpn_cleric_mace": "main_1h", "wpn_glass_wand": "main_1h",
-	"wpn_shortsword": "off", "wpn_knuckles": "off", "wpn_dagger": "off", "wpn_tome": "off",
+	"wpn_shortsword": "off", "wpn_knuckles": "off", "wpn_dagger": "off", "wpn_tome": "off", "wpn_orb": "off",
 	"shd_kite": "off", "shd_buckler": "off", "shd_tower": "off",
 	"arm_plate": "", "arm_leather": "", "arm_robe": "", "arm_cleric_vestment": "", "arm_mage_robe": "",
 	"acc_bear_ring": "", "acc_swift_amulet": "",

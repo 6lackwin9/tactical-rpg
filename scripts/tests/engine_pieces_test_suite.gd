@@ -74,6 +74,13 @@ static func _support(id: String, heal_base: int, cleanse: Array[String], grant: 
 	s.learned_only = false
 	return s
 
+# The purify tier that cleanses every debuff (lower tiers cleanse a named subset).
+static func _purify_all() -> SkillDef:
+	for tier: SkillDef in SkillCatalog.family_tiers("purify"):
+		if tier.cleanse_statuses.has(SkillDef.CLEANSE_ALL):
+			return tier
+	return null
+
 static func _afflict(c: Combatant) -> void:
 	c.statuses[StatusEffects.STAGGER] = true
 	c.status_rounds_left[StatusEffects.STAGGER] = 2
@@ -87,7 +94,7 @@ static func _afflict(c: Combatant) -> void:
 
 static func _test_cleanse_rules() -> bool:
 	var checks: Dictionary = {}
-	var purify: SkillDef = SkillCatalog.find("purify")
+	var purify: SkillDef = _purify_all()
 	checks["purify exists, is SUPPORT, learned_only"] = purify != null and purify.kind == SkillDef.Kind.SUPPORT and purify.learned_only
 	checks["'all' expands to every debuff, in order"] = purify.cleanse_list() == StatusEffects.debuffs() and purify.cleanses() and not purify.heals()
 	checks["purify validates with no heal or grant"] = ContentCatalog.validate_all().is_empty()
@@ -152,10 +159,10 @@ static func _test_cleanse_combined() -> bool:
 
 static func _test_cleanse_planner() -> bool:
 	var checks: Dictionary = {}
-	var purify: SkillDef = SkillCatalog.find("purify")
+	var purify: SkillDef = _purify_all()
 	var setup: Rig = _setup([Vector2i(3, 4), Vector2i(4, 4)], [Vector2i(8, 8)])
 	var allies: Array[Combatant] = setup.allies
-	allies[0].learn_skill("purify")
+	allies[0].learn_skill(purify.id)
 	var plan: CombatPlan = setup.plan
 	var healthy_options: Array[PlanOption] = plan.target_options(allies[0], allies[1])
 	var clean_option: PlanOption = null

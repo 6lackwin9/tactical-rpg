@@ -286,7 +286,10 @@ static func _field(key: String, prop: String) -> Variant:
 
 static func _test_cleanse() -> bool:
 	var checks: Dictionary = {}
-	var purify: SkillDef = SkillCatalog.find("purify")
+	var purify: SkillDef = null
+	for tier: SkillDef in SkillCatalog.family_tiers("purify"):
+		if tier.cleanse_statuses.has(SkillDef.CLEANSE_ALL):
+			purify = tier
 	var caster := Combatant.new("Caster", 100, 10, 1)
 	var active := Combatant.new("Active", 100, 10, 1)
 	_weaken_now(active, MAG)
