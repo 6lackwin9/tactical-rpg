@@ -3,13 +3,13 @@
 Status: spec (design-brainstorm 2026-10-17; user answers in DECISIONS "BAL2 answers (user 2026-10-17)"; awaiting approval)
 Depends on: SKILL1-L (merged; it touched the same content hub files)
 Lane: logic (one branch, commit order fixed)
-Touches: `tools/balance_sim.gd`, new `tools/sim/*.gd`, `tools/fc.sh` (sim timeout, usage), `scripts/core/specs/character_stats.gd` (`get_effective_range`), `scripts/content/content_schema.gd` (unit gear fields, `NO_ITEM`), `scripts/content/content_catalog.gd` (ref check, `_unit_errors`, `_item_errors`, class gear check), `scripts/content/content_factory.gd` (`_equip`), `scripts/content/asset_scan.gd` (ignore `none` if it reports refs), `scripts/core/specs/stat_rules.gd` (`TIERS`), `scripts/tests/class_rules_test_suite.gd` (line 100), `scripts/tests/engine_pieces_test_suite.gd` (`_test_unarmed`), new `scripts/tests/bal2_rules_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`, README
+Touches: `tools/balance_sim.gd`, new `tools/sim/*.gd`, `tools/fc.sh` (sim timeout, usage), `scripts/core/specs/character_stats.gd` (`get_effective_range`), `scripts/content/content_schema.gd` (unit gear fields, `NO_ITEM`), `scripts/content/content_catalog.gd` (ref check, `_unit_errors`, `_item_errors`, class gear check), `scripts/content/content_factory.gd` (`_equip`), `scripts/content/asset_scan.gd` (ignore `none` if it reports refs), `scripts/core/specs/stat_rules.gd` (`TIERS`), `scripts/core/combat/damage_calculator.gd` (unarmed branch, crit), `scripts/core/specs/gear_budget.gd` (`UNARMED_VALUE`), `scripts/tests/class_rules_test_suite.gd` (line 100), `scripts/tests/engine_pieces_test_suite.gd` (`_test_unarmed`), new `scripts/tests/bal2_rules_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`, README
 
 Companion spec: `docs/specs/BAL2_SIM.md` holds the full sim contract (arguments, scores, metrics, party mode, role limit tests, composition sweep, target options). This file fixes the commit order and the engine/data-layer parts.
 
 ## Goal
 
-Make the balance numbers trustworthy before any data is tuned: a sim that measures margins, variants, parties and role performance (commit 1); remove the engine bug that turns melee units into ranged ones at PERC 18 (commit 2); let a unit say "no item here" per slot (commit 3, unblocks BAL2-A); set the elite and boss tier values the user picked (commit 4). Commit 3 also makes two tests independent of the brawler's and warrior's shipped gear, because BAL2-A changes both.
+Make the balance numbers trustworthy before any data is tuned: a sim that measures margins, variants, parties and role performance (commit 1); remove the engine bug that turns melee units into ranged ones at PERC 18 (commit 2); let a unit say "no item here" per slot (commit 3, unblocks BAL2-A); set the elite and boss tier values the user picked (commit 4); give a bare-handed, fist-trained unit a weapon-equivalent base so the brawler can go unarmed (commit 5, user 2026-10-17 option A). Commit 3 also makes two tests independent of the brawler's and warrior's shipped gear, because BAL2-A changes both.
 
 ## Commit order
 
@@ -20,8 +20,9 @@ Make the balance numbers trustworthy before any data is tuned: a sim that measur
 | 2 | PERC range: +1 only for ranged weapons | this file, Rules 2 | every BAL2 number |
 | 3 | Unit gear sentinel `none` + gear-independent unarmed and tier tests | this file, Schema 3 and Rules 3 | BAL2-A |
 | 4 | `StatRules.TIERS` elite 1.25 / 1.1, boss 1.5 / 1.1 | this file, Rules 4 | BAL2 tier table |
+| 5 | Trained fists: unarmed base 15 + fist training for fist level >= 2, `GearBudget.UNARMED_VALUE` 15, tests | this file, Rules 5 | BAL2-A commit A6 (brawler unarmed) |
 
-Commits 1a and 1b only touch `tools/`. If 1b runs long, the planner may merge 1a + 2 + 3 + 4 first and land 1b as a follow-up branch (BAL2-A needs only commit 3).
+Commits 1a and 1b only touch `tools/`. If 1b runs long, the planner may merge 1a + 2 + 3 + 4 + 5 first and land 1b as a follow-up branch (BAL2-A needs commit 3, and commit 5 for A6).
 
 ## Schema contract (logic lane)
 
@@ -105,19 +106,40 @@ Acceptance (commit 4), rule-derived:
 3. Ordering holds for HP: minion < standard < hero < elite < boss; for power: minion < standard < hero < elite <= boss (elite and boss power are equal by choice).
 4. Existing tier checks in `class_rules_test_suite.gd` still pass.
 
+### Rule 5: trained fists (commit 5)
+
+User 2026-10-17 (DECISIONS "BAL2 role answers" (5)): option A of BAL2_A.md section 6.
+
+- New constants in `DamageCalculator`: `UNARMED_BASE_POWER: int = 15`, `TRAINED_FIST_MIN_LEVEL: int = 2`.
+- "Trained fists" applies when ALL hold: the attack is a main-hand attack (`use_offhand == false`), the attacker has no main weapon (`weapon_for(attacker, false) == null`), no authored `power_override`, and `attacker.stats.proficiency.level_of("fist") >= TRAINED_FIST_MIN_LEVEL`.
+- In `attack_power`, when it applies: `base_w_power = UNARMED_BASE_POWER`, `training_pwr = proficiency.get_weapon_power_bonus("fist")` (level x `Proficiency.LEVEL_POWER`), `total_w_power = base + training`, `weapon_power = total_w_power` (no wield penalty, no threshold tiers), `stat_name` stays `"STR+DEX"`, `unit_power = STR + DEX` (scaling 1.0, unchanged); `attack_power = maxi(1, roundi((weapon_power + unit_power) x power_scale))`. Add result key `"trained_fists": true` (false otherwise) so the forecast/breakdown can show it.
+- `crit_chance`: when it applies, add `proficiency.crit_bonus("fist")` (brawler fist 3: +2).
+- Not changed: off-hand bare-hand attacks (2H main or empty off hand), units with fist level 0-1 (rogue has 1), authored power units. The `is_ranged` flag does not matter (the unarmed branch ignores it today; after commit 2 a bare-handed unit always has range 1).
+- `GearBudget.UNARMED_VALUE` becomes `float(DamageCalculator.UNARMED_BASE_POWER)` (15.0; one source of truth). Its comment states the link.
+- Test update: `engine_pieces_test_suite.gd` `_test_unarmed` checks become rule-derived for both cases: a fist-level-3 unit (brawler fixture, main hand unequipped): `attack_power == maxi(1, roundi((15 + 3 + STR + DEX) x power_scale))`; a unit with fist level < 2 (e.g. a mage with its wand unequipped): `attack_power == maxi(1, roundi((STR + DEX) x power_scale))`.
+
+Acceptance (commit 5), rule-derived, in `bal2_rules_test_suite.gd`:
+
+1. Brawler hero, empty spend, main hand empty, levels 1/3/5/7: attack power 44/52/59/66 (= 15 + 3 + STR + DEX with STR/DEX 16/10, 21/13, 26/15, 30/18 on BAL2 data; derive from the unit, do not hard-code).
+2. Same brawler with `wpn_flanged_mace`: `trained_fists` false, power unchanged from today (weapon path).
+3. Rogue (fist 1) bare-handed: `trained_fists` false, power `STR + DEX`.
+4. Off-hand bare-hand attack of a fist-3 unit: `trained_fists` false.
+5. Crit: fist-3 bare-handed crit = DEX crit + 2; armed crit unchanged.
+6. `GearBudget.UNARMED_VALUE == float(DamageCalculator.UNARMED_BASE_POWER) == 15.0`; a class loadout with an empty main hand and leather counts 15 + 4 = 19.0.
+
 ## Assets (asset lane)
 
-None in this task. BAL2-A (`docs/specs/BAL2_A.md`) needs commit 3 merged.
+None in this task. BAL2-A (`docs/specs/BAL2_A.md`) needs commit 3 merged, and commit 5 for its brawler commit A6.
 
 ## Out of scope
 
 - Any data edit (growth, gear, paths, loadouts, shaman): BAL2-A.
-- Brawler unarmed compensation: options in BAL2_A.md section 6, awaiting the user; if option A is picked it becomes a follow-up logic commit (its contract is written there).
+- Brawler crowd identity (option D of BAL2_A.md section 6): re-measured after BAL2 with the `aoe_swarm` limit test.
+- Gear budget formula changes: only if the user picks the formula option of BAL2_A.md section 7 (then a separate small logic commit).
 - Default loadout rule change ("newest five" in the engine): DECISIONS keeps the (level, order) rule; the sim emulates "newest" by writing explicit unit loadouts in the sandbox.
 - Melee "reach" weapons (BAL2 proposal 7 B), AI behaviour changes, terrain, Forge UI for `none` (the unit form shows the raw value; a picker entry is a FORGE1 follow-up).
 - XP curve and kill XP tier multipliers.
 
 ## Open questions
 
-1. Forge unit form: should the slot picker offer "none" as an explicit choice now (small UI change in `scripts/ui/forge/*`), or wait for the FORGE1 unit tab? Recommendation: wait; the seed writes the value.
-2. Should world characters (`data/worlds/*`) also accept `none`? Recommendation: not now (no world unit needs it).
+None open. Answered 2026-10-17 (DECISIONS "BAL2 role answers" (7)): no `none` in the Forge unit picker and none for world characters yet; brawler option A with base 15 (Rule 5).
