@@ -91,3 +91,12 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 ## Skill unlock rule (SK2)
 
 - A class path step `{level, skill}` owns a family. Tier t is castable at `unlock + unlock_offset` (offset default 0/2/4 for tiers 1/2/3). AP is only the per-round budget (no skill cap). Advanced families (`advanced`) need path level >= 5; KNOW lowers an advanced family by `(KNOW-12)/4` and the passive `unlock` effect lowers any path family; the larger of the two applies, max 2 levels, advanced floor 3. Constants in `StatRules` (TIER_UNLOCK_STEP, ADVANCED_MIN_LEVEL, MAX_UNLOCK_REDUCTION, ADVANCED_UNLOCK_FLOOR, KNOW_UNLOCK_BASE/STEP, MAX_UNLOCK_OFFSET). Unlock levels freeze while the loadout is locked (battle). Read: `Combatant.family_unlock_level`, `tier_unlocked`.
+
+## Ranked skills and asset origin (SKILL1)
+
+- `skills.json` version 2 stores one entry per family (base + up to 2 rank modifiers); in memory rows stay flat (`head`, `head_2`, `head_3`). Edit skills with `ContentCatalog.upsert_skill(entry)` (ranked) or `upsert`/`upsert_many` (flat rows); read `skill_entry(head)` / `skill_entries()`. Ranks: `scripts/content/skill_ranks.gd`; kind sections: `skill_kinds.gd`; description tokens: `skill_text.gd`.
+- `grade` (novice/advanced/expert) and `requires` (lower-grade families a unit must own) replace `advanced` / `evolves_from`. `weapon_hand` (main/off; `both` off while `SkillDef.BOTH_ENABLED` is false) replaces `offhand`.
+- Basics (strike, guard, move, rest, switch_target, offhand_jab) are owned by every unit from level 1 and are rejected in class paths.
+- `origin` system/user on every kind: system assets lock key fields (seeds edit them inside `begin_system_edit`/`end_system_edit`) and cannot be deleted; `promote`/`demote` switch origin. Safe delete: `AssetScan` + `tools/safe_delete.gd`.
+- Saving never drops data: a kind whose file loaded with errors is save-blocked (`ContentCatalog.save_blocked(kind)`); `validate_all` reports unfoldable skill families under `skills:fold`. `warnings_all` checks skills once per family, keyed `skills:<head id>`. `ContentSchema.fields()` always returns copies.
+- Forge skill logic: `scripts/ui/forge/skill_form_model.gd`, `skill_filter.gd`, `skill_ranks_panel.gd`.

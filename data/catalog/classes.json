@@ -54,14 +54,6 @@
 			"skill_path": [
 				{
 					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
-				{
-					"level": 1,
 					"skill": "taunt_shout"
 				},
 				{
@@ -141,18 +133,6 @@
 				}
 			},
 			"skill_path": [
-				{
-					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "offhand_jab"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
 				{
 					"level": 3,
 					"skill": "aimed_shot"
@@ -248,18 +228,6 @@
 			},
 			"skill_path": [
 				{
-					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
-				{
-					"level": 1,
-					"skill": "offhand_jab"
-				},
-				{
 					"level": 3,
 					"skill": "lunge"
 				},
@@ -347,14 +315,6 @@
 				}
 			},
 			"skill_path": [
-				{
-					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
 				{
 					"level": 1,
 					"skill": "smite"
@@ -446,14 +406,6 @@
 			"skill_path": [
 				{
 					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
-				{
-					"level": 1,
 					"skill": "quick_stab"
 				},
 				{
@@ -535,14 +487,6 @@
 				}
 			},
 			"skill_path": [
-				{
-					"level": 1,
-					"skill": "strike"
-				},
-				{
-					"level": 1,
-					"skill": "guard"
-				},
 				{
 					"level": 1,
 					"skill": "arcane_bolt"

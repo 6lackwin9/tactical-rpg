@@ -21,12 +21,14 @@ static func texture_for(kind: String, entry: Dictionary) -> Texture2D:
 			return UnitArt.portrait(ContentFactory.art_of(entry), team)
 	return null
 
-static func describe(kind: String, entry: Dictionary) -> String:
+# `ranked`: for skills, `entry` is a ranked entry (a family template plus rank modifiers, what the Forge edits) and the
+# preview lists every rank; otherwise it is one flat row.
+static func describe(kind: String, entry: Dictionary, ranked: bool = false) -> String:
 	var e: Dictionary = ContentSchema.normalize(kind, entry)
 	var text: String = ""
 	match kind:
 		"skills":
-			text = _skill(e)
+			text = _skill_ranked(entry) if ranked else _skill(e)
 		"items":
 			text = _item(e)
 		"passives":
@@ -48,17 +50,48 @@ static func describe(kind: String, entry: Dictionary) -> String:
 static func _line(label: String, value: String) -> String:
 	return "[color=#8ba3b8]%s:[/color] %s\n" % [label, value]
 
-static func _skill(e: Dictionary) -> String:
+# A ranked skill entry: rank 1 in full, then one line per higher rank, with grade, requirements and origin.
+static func _skill_ranked(entry: Dictionary) -> String:
+	var rows: Array[Dictionary] = SkillRanks.expand(entry)
+	var t: String = _skill(rows[0], true)
+	var base: Dictionary = rows[0]
+	t += _line("Grade", str(base["grade"]))
+	var requires: Array[String] = ContentFactory._strings(base["requires"])
+	if not requires.is_empty():
+		var names: Array[String] = []
+		for r: String in requires:
+			names.append(str(ContentCatalog.get_entry("skills", r).get("name", r)))
+		t += _line("Requires", ", ".join(names))
+	t += _line("Origin", str(base["origin"]) + (" (key fields locked, delete locked)" if str(base["origin"]) == ContentSchema.ORIGIN_SYSTEM else ""))
+	if rows.size() > 1:
+		t += "\n[b]Ranks[/b]\n"
+		for row: Dictionary in rows:
+			var s: SkillDef = ContentFactory.skill(row)
+			t += _line(str(row["name"]), "%d AP, %d block%s, unlocks +%d levels after the family. %s" % [s.ap_cost(), s.blocks, "" if s.blocks == 1 else "s", s.tier_offset(), str(row["description"])])
+	return t
+
+static func _skill(e: Dictionary, ranked: bool = false) -> String:
 	var s: SkillDef = ContentFactory.skill(e)
 	var t: String = "[b]%s[/b]  %s\n" % [s.label(), "[color=#fbbf24](system)[/color]" if s.system else ""]
 	t += _line("Cost", "%d AP%s, %d block%s" % [s.ap_cost(), " per tile" if s.kind == SkillDef.Kind.MOVE else "", s.blocks, "" if s.blocks == 1 else "s"])
 	t += _line("Stance", CombatTypes.stance_to_string(s.stance()) if s.kind != SkillDef.Kind.MOVE else "keeps the current stance")
-	var siblings: Array[String] = []
-	for sib: Dictionary in ContentCatalog.entries("skills"):
-		var sib_family: String = str(sib.get("family", "")) if not str(sib.get("family", "")).is_empty() else str(sib.get("id", ""))
-		if sib_family == s.family_id() and str(sib.get("id", "")) != s.id:
-			siblings.append("%s (tier %d)" % [str(sib.get("name", "")), DictUtil.to_int(sib.get("tier", 1), 1)])
-	t += _line("Family", "%s, tier %d%s%s" % [s.family_id(), s.tier, " (basic)" if s.basic else "", (", with " + ", ".join(siblings)) if not siblings.is_empty() else ""])
+	if not ranked:
+		var siblings: Array[String] = []
+		for sib: Dictionary in ContentCatalog.entries("skills"):
+			var sib_family: String = str(sib.get("family", "")) if not str(sib.get("family", "")).is_empty() else str(sib.get("id", ""))
+			if sib_family == s.family_id() and str(sib.get("id", "")) != s.id:
+				siblings.append("%s (tier %d)" % [str(sib.get("name", "")), DictUtil.to_int(sib.get("tier", 1), 1)])
+		t += _line("Family", "%s, tier %d%s%s" % [s.family_id(), s.tier, " (basic)" if s.basic else "", (", with " + ", ".join(siblings)) if not siblings.is_empty() else ""])
+	if SkillKinds.gate_kinds().has(s.kind_name()) and (not s.weapon_types.is_empty() or s.min_proficiency > 0):
+		var wanted: String = "/".join(s.weapon_types) if not s.weapon_types.is_empty() else "any weapon"
+		var hand_note: String = ""
+		match s.weapon_hand:
+			SkillDef.WeaponHand.OFF:
+				hand_note = " in the off hand"
+			SkillDef.WeaponHand.BOTH:
+				hand_note = " in both hands"
+		var unarmed_note: String = " (unarmed = no weapon in that hand, trained by the class's fist level)" if s.weapon_types.has(SkillDef.UNARMED_TOKEN) else ""
+		t += _line("Needs", "%s%s%s, training %d+" % [wanted, hand_note, unarmed_note, s.min_proficiency])
 	match s.kind:
 		SkillDef.Kind.ATTACK:
 			var melee := Combatant.new("melee", 50, 12, 1)
@@ -67,10 +100,6 @@ static func _skill(e: Dictionary) -> String:
 			var rb: Vector2i = s.reach_for(ranged)
 			t += _line("Reach", "melee unit %d-%d, ranged unit %d-%d" % [mb.x, mb.y, rb.x, rb.y])
 			t += _line("Damage", "attack power x %.2f  (~%d at power 20, ~%d at power 40; then stance, crit, guard, armor)" % [s.power_mult, roundi(20.0 * s.power_mult), roundi(40.0 * s.power_mult)])
-			if not s.weapon_types.is_empty() or s.min_proficiency > 0:
-				var wanted: String = "/".join(s.weapon_types) if not s.weapon_types.is_empty() else "any weapon"
-				var unarmed_note: String = " (unarmed = no main-hand weapon, trained by the class's fist level)" if s.weapon_types.has(SkillDef.UNARMED_TOKEN) else ""
-				t += _line("Needs", "%s%s, training %d+" % [wanted, unarmed_note, s.min_proficiency])
 			if s.is_area():
 				var aim: Vector2i = Vector2i(5, 5) if s.area == SkillDef.Area.SWEEP else Vector2i(4, 5)
 				t += _line("Area", "%s: %d tiles, hits allies too" % [SkillDef.Area.keys()[s.area], s.area_cells(Vector2i(4, 6), aim).size()])
@@ -78,8 +107,10 @@ static func _skill(e: Dictionary) -> String:
 				t += _line("Status", "%s on hit (potency %d%%), next round" % [StatusEffects.display_name(s.status_effect), s.status_potency])
 			if s.dash_tiles > 0:
 				t += _line("Gap-close", "dashes up to %d tiles into reach when the target is out of reach (the unit's move; one per round)" % s.dash_tiles)
-			if s.offhand:
-				t += _line("Off-hand", "melee jab for ranged units (only offered when the unit's range is 2+)")
+			if s.weapon_hand == SkillDef.WeaponHand.OFF:
+				t += _line("Off-hand", "melee strike with the off-hand weapon, or bare hands when it holds a shield, orb, tome or nothing (only offered when the unit's range is 2+)")
+			elif s.weapon_hand == SkillDef.WeaponHand.BOTH:
+				t += _line("Both hands", "dual strike with both weapons (engine pending)")
 		SkillDef.Kind.DEFEND:
 			t += _line("Guard", "-%d%% damage from its first block" % roundi(s.mitigation * 100.0))
 		SkillDef.Kind.FOCUS:

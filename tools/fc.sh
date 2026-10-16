@@ -5,6 +5,7 @@
 #   tools/fc.sh arena [pattern]  run the arena suite; print totals, FAIL/SCRIPT ERROR lines, and lines matching [pattern]
 #   tools/fc.sh dojo [pattern]   run the dojo suite the same way
 #   tools/fc.sh run <script.gd>  run a SceneTree script (scratch debugging), noise filtered
+#   tools/fc.sh safe_delete <kind> <id> [--apply]   scan, then delete a SYSTEM asset (refuses while referenced)
 #   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
 #   tools/fc.sh sim <duel|tier|levels> [level]   balance simulation table (see tools/balance_sim.gd)
@@ -60,7 +61,8 @@ case "$1" in
   run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;
   sim) timeout 900 "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //" ;;
   docs) docs_check ;;
+  safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
-  *) sed -n 2,9p "$0" ;;
+  *) sed -n '2,/^# Exit code/p' "$0" ;;   # the whole usage block, however many lines it grows to
 esac
 exit $status

@@ -368,20 +368,20 @@ static func _test_round_trip_and_validation() -> bool:
 	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
 	checks["sandbox fork"] = forked
 	if forked:
-		var tier1: Dictionary = {"id": "t_fam_a", "name": "Fam A", "kind": "ATTACK", "family": "t_fam", "tier": 1}
+		var tier1: Dictionary = {"id": "t_fam", "name": "Fam A", "kind": "ATTACK", "tier": 1}
 		checks["a family's first tier is accepted"] = ContentCatalog.upsert("skills", tier1).is_empty()
 		checks["a second skill in the same tier is refused"] = not ContentCatalog.upsert("skills", {"id": "t_fam_b", "name": "Fam B", "kind": "ATTACK", "family": "t_fam", "tier": 1}).is_empty()
-		checks["tier 2 is accepted"] = ContentCatalog.upsert("skills", {"id": "t_fam_b", "name": "Fam B", "kind": "ATTACK", "family": "t_fam", "tier": 2, "level": 2}).is_empty()
+		checks["tier 2 is accepted"] = ContentCatalog.upsert("skills", {"id": "t_fam_2", "name": "Fam A II", "kind": "ATTACK", "family": "t_fam", "tier": 2, "level": 2}).is_empty()
 		checks["class skills stop at tier 3"] = not ContentCatalog.upsert("skills", {"id": "t_fam_c", "name": "Fam C", "kind": "ATTACK", "family": "t_fam", "tier": 4}).is_empty()
-		checks["a basic skill may reach tier 5"] = ContentCatalog.upsert("skills", {"id": "t_basic5", "name": "B5", "kind": "ATTACK", "family": "t_basic", "tier": 5, "basic": true}).is_empty()
+		checks["a basic skill has exactly one rank"] = not ContentCatalog.upsert("skills", {"id": "t_basic5", "name": "B5", "kind": "ATTACK", "family": "t_basic", "tier": 5, "basic": true}).is_empty()
 		checks["a family can't mix kinds"] = not ContentCatalog.upsert("skills", {"id": "t_fam_d", "name": "Fam D", "kind": "DEFEND", "family": "t_fam", "tier": 3}).is_empty()
 		checks["a family can't mix basic and class tiers"] = not ContentCatalog.upsert("skills", {"id": "t_fam_e", "name": "Fam E", "kind": "ATTACK", "family": "t_fam", "tier": 3, "basic": true}).is_empty()
 		checks["a bad family id is refused"] = not ContentCatalog.upsert("skills", {"id": "t_fam_f", "name": "Fam F", "kind": "ATTACK", "family": "Bad Family"}).is_empty()
-		checks["new tiers show up in the family"] = _ids(SkillCatalog.family_tiers("t_fam")) == ["t_fam_a", "t_fam_b"]
-		var tier2: SkillDef = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_fam_b"))
+		checks["new tiers show up in the family"] = _ids(SkillCatalog.family_tiers("t_fam")) == ["t_fam", "t_fam_2"]
+		var tier2: SkillDef = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_fam_2"))
 		checks["factory reads a tier 2 class skill"] = tier2.family == "t_fam" and tier2.tier == 2 and not tier2.basic
-		var tier2_stored: Dictionary = ContentSchema.to_storage("skills", ContentCatalog.get_entry("skills", "t_fam_b"))
-		checks["storage keeps family, tier and basic"] = tier2_stored.has("family") and tier2_stored.has("tier") and tier2_stored.has("basic") and str(tier2_stored["family"]) == "t_fam"
+		var ranked: Dictionary = ContentCatalog.skill_entry("t_fam")
+		checks["ranked storage folds the two ranks and derives family and tier"] = DictUtil.array_of(ranked.get("ranks", [])).size() == 1 and not ranked.has("family") and not ranked.has("tier")
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	return _report("Catalog / schema round trip and validation", checks)
 
@@ -394,12 +394,12 @@ static func _test_family_rename() -> bool:
 	if checks["sandbox fork"]:
 		# A fixture family (root + one sibling tier), so no shipped tier can collide; then rename the root.
 		checks["fixture root accepted"] = ContentCatalog.upsert("skills", {"id": "t_ren", "name": "Ren", "kind": "FOCUS", "level": 2, "tier": 1}).is_empty()
-		checks["fixture sibling accepted"] = ContentCatalog.upsert("skills", {"id": "t_ren_deep", "name": "Ren Deep", "kind": "FOCUS", "level": 3, "family": "t_ren", "tier": 2}).is_empty()
-		var root: Dictionary = ContentCatalog.get_entry("skills", "t_ren")
+		checks["fixture sibling accepted"] = ContentCatalog.upsert("skills", {"id": "t_ren_2", "name": "Ren II", "kind": "FOCUS", "level": 3, "family": "t_ren", "tier": 2}).is_empty()
+		var root: Dictionary = ContentCatalog.skill_entry("t_ren")
 		root["id"] = "t_ren_new"
-		var errors: Array[String] = ContentCatalog.upsert("skills", root, "t_ren")
+		var errors: Array[String] = ContentCatalog.upsert_skill(root, "t_ren")
 		checks["rename accepted"] = errors.is_empty()
-		var sibling: Dictionary = ContentCatalog.get_entry("skills", "t_ren_deep")
+		var sibling: Dictionary = ContentCatalog.get_entry("skills", "t_ren_new_2")
 		checks["sibling tier follows the family"] = str(sibling.get("family", "")) == "t_ren_new"
 		checks["family still groups both tiers"] = SkillCatalog.family_tiers("t_ren_new").size() == 2
 		checks["no orphan family left"] = SkillCatalog.family_tiers("t_ren").is_empty()

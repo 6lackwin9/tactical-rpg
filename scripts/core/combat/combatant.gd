@@ -202,22 +202,47 @@ func rebuild_gear_effects() -> void:
 		Passives.apply_effects(self, eq.effects, "gear:" + eq.id, true)
 
 # The weapon type that counts for skill gating: the main-hand weapon's type, or UNARMED_TOKEN with an empty main hand.
-func wielded_type() -> String:
-	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
+func wielded_type(hand: SkillDef.WeaponHand = SkillDef.WeaponHand.MAIN) -> String:
+	if inventory == null:
+		return SkillDef.UNARMED_TOKEN
+	var main_weapon: Equipment = inventory.get_main_weapon()
+	var weapon: Equipment = main_weapon
+	if hand == SkillDef.WeaponHand.OFF:
+		# The off hand: its weapon, or bare hands (also when a two-handed main weapon occupies both hands).
+		weapon = null if main_weapon != null and main_weapon.is_two_handed else inventory.get_offhand_weapon()
 	return weapon.weapon_type if weapon != null else SkillDef.UNARMED_TOKEN
 
 # Known AND trained for: skills with min_proficiency need the right gear type at that
 # proficiency level (class-derived units only; hand-built units are unrestricted).
-# Unarmed (no main-hand weapon) is the token `unarmed`; its proficiency is the class's `fist` level.
+# The checked weapon is the one the skill uses (SkillDef.weapon_hand): main = main hand, off = off hand or bare hands,
+# both = both weapons must pass. Unarmed (no weapon in that hand) is the token `unarmed`; its proficiency is the class's `fist` level.
 func can_use(skill: SkillDef) -> bool:
 	if not knows_skill(skill.id) or not tier_unlocked(skill):
 		return false
 	if known_skills.is_empty() or skill.min_proficiency <= 0 or stats == null or stats.proficiency == null:
 		return true
-	var type: String = wielded_type()
-	if not skill.weapon_types.is_empty() and not skill.weapon_types.has(type):
-		return false
-	return stats.proficiency.level_of(SkillDef.UNARMED_PROFICIENCY if type == SkillDef.UNARMED_TOKEN else type) >= skill.min_proficiency
+	var hands: Array[SkillDef.WeaponHand] = [SkillDef.WeaponHand.MAIN]
+	if skill.weapon_hand == SkillDef.WeaponHand.OFF:
+		hands = [SkillDef.WeaponHand.OFF]
+	elif skill.weapon_hand == SkillDef.WeaponHand.BOTH:
+		hands = [SkillDef.WeaponHand.MAIN, SkillDef.WeaponHand.OFF]
+	for hand: SkillDef.WeaponHand in hands:
+		var type: String = wielded_type(hand)
+		if not skill.weapon_types.is_empty() and not skill.weapon_types.has(type):
+			return false
+		if stats.proficiency.level_of(SkillDef.UNARMED_PROFICIENCY if type == SkillDef.UNARMED_TOKEN else type) < skill.min_proficiency:
+			return false
+	return true
+
+# True when every family in the skill's `requires` is owned (an empty list = no requirement). FORGE1 11.3.
+func can_own_family(family_id: String) -> bool:
+	var head: SkillDef = SkillCatalog.tier_one(family_id)
+	if head == null:
+		return true
+	for required: String in head.requires:
+		if not owns_skill(required):
+			return false
+	return true
 
 # ------------------------------------------------------------------------------
 # Skill unlocks (SK2): class path levels decide ownership, tiers open at fixed steps after it.
@@ -314,7 +339,10 @@ func _warm_unlock_cache() -> void:
 		family_unlock_level(str(fam))
 
 # Learns a skill beyond the class path (an in-game event); persists on the unit.
-func learn_skill(skill_id: String) -> void:
+func learn_skill(skill_id: String, check_requires: bool = true) -> void:
+	if check_requires and not can_own_family(SkillCatalog.family_of(skill_id)):
+		push_warning("learn_skill: '%s' needs %s first." % [skill_id, ", ".join(SkillCatalog.tier_one(SkillCatalog.family_of(skill_id)).requires)])
+		return
 	if not granted_skills.has(skill_id):
 		granted_skills.append(skill_id)
 		# With an active loadout, a newly learned non-basic family takes a free extra slot (else it stays owned but inactive).

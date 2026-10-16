@@ -16,6 +16,11 @@ extends Control
 #
 # Edits live in a draft; Apply (or switching entry) stores it in the catalog in
 # memory; Save writes the JSON files. The Forge never edits engine code.
+#
+# Skills (FORGE1): the list shows skill FAMILIES (the template plus up to two rank modifiers); the form edits the ranked
+# entry (SkillFormModel decides sections, limits and locks, SkillRanksPanel is the ranks section); Apply stays disabled
+# while ContentCatalog.validate_skill_entry returns problems, listed with their field and rank. System assets (origin
+# system) have locked key fields and cannot be deleted here (SAFE DELETE); user assets can be promoted and demoted.
 # ==============================================================================
 
 signal playtest_requested(encounter: CatalogEncounter)
@@ -24,11 +29,14 @@ var kind: String = "skills"
 var selected_id: String = ""     # id of the stored entry being edited ("" for a new draft)
 var draft_dirty: bool = false
 var form: ForgeForm = null
+var skill_filters: Dictionary = SkillFilter.default_filters()
+var skill_sort: String = "name"
 
 var _list: ItemList = null
 var _list_ids: Array[String] = []
 var _search: LineEdit = null
 var _side_filter: OptionButton = null
+var _skill_bar: VBoxContainer = null
 var _kind_buttons: Dictionary = {}
 var _title: Label = null
 var _status: Label = null
@@ -38,7 +46,11 @@ var _preview: RichTextLabel = null
 var _problems: RichTextLabel = null
 var _playtest_btn: Button = null
 var _delete_btn: Button = null
+var _apply_btn: Button = null
+var _origin_btn: Button = null
 var _pending_delete: String = ""
+var _pending_origin: String = ""
+var _switching_kind: bool = false
 
 func _init() -> void:
 	name = "ContentForge"
@@ -102,6 +114,7 @@ func _build() -> void:
 		_side_filter.add_item(side)
 	_side_filter.item_selected.connect(func(_i: int) -> void: refresh_list())
 	left.add_child(_side_filter)
+	_build_skill_bar(left)
 	_list = ItemList.new()
 	_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_list.item_selected.connect(func(i: int) -> void:
@@ -112,9 +125,11 @@ func _build() -> void:
 	var list_btns := HBoxContainer.new()
 	left.add_child(list_btns)
 	list_btns.add_child(UiTheme.button("+ New", "Start a new entry from defaults", func() -> void: new_entry()))
-	list_btns.add_child(UiTheme.button("⧉ Duplicate", "Copy the selected entry as a template", func() -> void: duplicate_selected()))
+	list_btns.add_child(UiTheme.button("⧉ Duplicate", "Copy the selected entry as a template (a user copy)", func() -> void: duplicate_selected()))
 	_delete_btn = UiTheme.button("🗑 Delete", "Delete the selected entry (click twice)", func() -> void: delete_selected())
 	list_btns.add_child(_delete_btn)
+	_origin_btn = UiTheme.button("Promote to system", "", func() -> void: toggle_origin())
+	left.add_child(_origin_btn)
 
 	# Centre: form
 	var centre: VBoxContainer = _column(body, 0)
@@ -124,7 +139,8 @@ func _build() -> void:
 	_title = UiTheme.label("", UiTheme.FONT_LG, UiTheme.COL_HEADER)
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(_title)
-	head.add_child(UiTheme.button("✔ Apply", "Store the edits in the catalog (Save writes them to disk)", func() -> void: apply(), UiTheme.FONT_MD))
+	_apply_btn = UiTheme.button("✔ Apply", "Store the edits in the catalog (Save writes them to disk)", func() -> void: apply(), UiTheme.FONT_MD)
+	head.add_child(_apply_btn)
 	head.add_child(UiTheme.button("↺ Revert", "Discard the edits to this entry", func() -> void: revert(), UiTheme.FONT_MD))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -159,6 +175,68 @@ func _build() -> void:
 	_status = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
 	root.add_child(_status)
 
+# Filter and sort controls of the skill list (hidden for the other kinds).
+func _build_skill_bar(parent: VBoxContainer) -> void:
+	_skill_bar = VBoxContainer.new()
+	_skill_bar.name = "SkillBar"
+	_skill_bar.add_theme_constant_override("separation", 2)
+	parent.add_child(_skill_bar)
+	var row1 := HBoxContainer.new()
+	_skill_bar.add_child(row1)
+	var kind_opt := OptionButton.new()
+	kind_opt.name = "KindFilter"
+	kind_opt.add_item("All kinds")
+	for k: String in SkillKinds.authorable():
+		kind_opt.add_item(SkillKinds.label_of(k))
+		kind_opt.set_item_metadata(kind_opt.item_count - 1, k)
+	kind_opt.item_selected.connect(func(i: int) -> void:
+		set_skill_filter("kinds", [] if i == 0 else [str(kind_opt.get_item_metadata(i))]))
+	kind_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row1.add_child(kind_opt)
+	var grade_opt := OptionButton.new()
+	grade_opt.name = "GradeFilter"
+	for g: String in ["any grade", "novice", "advanced", "expert"]:
+		grade_opt.add_item(g)
+	grade_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("grade", "any" if i == 0 else grade_opt.get_item_text(i)))
+	grade_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row1.add_child(grade_opt)
+	var row2 := HBoxContainer.new()
+	_skill_bar.add_child(row2)
+	var sort_opt := OptionButton.new()
+	sort_opt.name = "SortBy"
+	for s: String in SkillFilter.SORTS:
+		sort_opt.add_item("sort: " + s)
+	sort_opt.item_selected.connect(func(i: int) -> void:
+		skill_sort = SkillFilter.SORTS[i]
+		refresh_list())
+	sort_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row2.add_child(sort_opt)
+	var ranks_opt := OptionButton.new()
+	ranks_opt.name = "RankFilter"
+	for r: String in ["any ranks", "1 rank", "2 ranks", "3 ranks"]:
+		ranks_opt.add_item(r)
+	ranks_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("rank_count", i))
+	ranks_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row2.add_child(ranks_opt)
+	var row3 := HFlowContainer.new()
+	_skill_bar.add_child(row3)
+	for spec: Array in [["Problems", "has_problems", "Only skills that have problems"], ["Engine rows", "show_system", "Show the engine skills (Move, Rest, ...)"]]:
+		var check := CheckBox.new()
+		check.text = str(spec[0])
+		check.tooltip_text = str(spec[2])
+		check.name = "Check_" + str(spec[1])
+		var key: String = str(spec[1])
+		check.toggled.connect(func(on: bool) -> void: set_skill_filter(key, on))
+		row3.add_child(check)
+	for spec: Array in [["Basic", "basic"], ["Learn only", "learned_only"]]:
+		var tri := OptionButton.new()
+		tri.name = "Tri_" + str(spec[1])
+		for t: String in ["%s: any" % str(spec[0]), "%s: yes" % str(spec[0]), "%s: no" % str(spec[0])]:
+			tri.add_item(t)
+		var tri_key: String = str(spec[1])
+		tri.item_selected.connect(func(i: int) -> void: set_skill_filter(tri_key, ["any", "yes", "no"][i]))
+		row3.add_child(tri)
+
 func _column(parent: Control, width: int) -> VBoxContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, UiTheme.COL_BORDER, 6, 8, 8))
@@ -178,6 +256,41 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 # ------------------------------------------------------------------------------
+# Skill hooks (the skill tab edits ranked entries through SkillFormModel)
+# ------------------------------------------------------------------------------
+
+func _skills() -> bool:
+	return kind == "skills"
+
+# Wires the form hooks for the skill tab, clears them for every other kind.
+func _configure_form() -> void:
+	if _skills():
+		form.state_fn = func(key: String) -> Dictionary: return SkillFormModel.state(form.draft, key, selected_id)
+		form.layout_fn = func() -> Array[Dictionary]: return SkillFormModel.layout(form.draft)
+		form.footer_fn = func() -> Control:
+			var panel := SkillRanksPanel.new()
+			panel.changed.connect(_on_ranks_changed)
+			panel.show_entry(form.draft, selected_id)
+			return panel
+		form.problems_fn = func() -> Array[Dictionary]: return draft_problem_list()
+	else:
+		form.state_fn = Callable()
+		form.layout_fn = Callable()
+		form.footer_fn = Callable()
+		form.problems_fn = Callable()
+
+func _on_ranks_changed(entry: Dictionary) -> void:
+	form.replace_draft(entry)
+
+func set_skill_filter(key: String, value: Variant) -> void:
+	skill_filters[key] = value
+	refresh_list()
+
+# The stored entry as the form edits it: a ranked entry for skills, the flat entry otherwise.
+func _stored(id: String) -> Dictionary:
+	return ContentCatalog.skill_entry(id) if _skills() else ContentCatalog.get_entry(kind, id)
+
+# ------------------------------------------------------------------------------
 # Navigation
 # ------------------------------------------------------------------------------
 
@@ -188,7 +301,9 @@ func show_kind(p_kind: String) -> void:
 	kind = p_kind
 	_sync_kind_buttons()
 	_side_filter.visible = kind == "units"
+	_skill_bar.visible = _skills()
 	_playtest_btn.visible = kind == "units" or kind == "encounters"
+	_configure_form()
 	selected_id = ""
 	refresh_list()
 	if not _list_ids.is_empty():
@@ -204,6 +319,10 @@ func _sync_kind_buttons() -> void:
 func refresh_list() -> void:
 	_list.clear()
 	_list_ids.clear()
+	if _skills():
+		_refresh_skill_list()
+		_update_dirty_label()
+		return
 	var needle: String = _search.text.strip_edges().to_lower()
 	var side: String = _side_filter.get_item_text(_side_filter.selected) if _side_filter.selected > 0 else ""
 	var name_count: Dictionary = {}
@@ -219,14 +338,12 @@ func refresh_list() -> void:
 			continue
 		if kind == "units" and not side.is_empty() and str(e.get("side", "")) != side:
 			continue
-		var mark: String = "🔒 " if DictUtil.to_bool(e.get("system", false)) else ""
+		var mark: String = "🔒 " if DictUtil.to_bool(e.get("system", false)) or ContentCatalog.is_system_origin(e) else ""
 		if not ContentCatalog.validate_entry(kind, e, id).is_empty():
 			mark = "⚠ " + mark
 		var extra: String = ""
 		if kind == "units":
 			extra = "  · %s" % str(e.get("side", ""))
-		elif kind == "skills":
-			extra = "  · %s L%d" % [str(e.get("kind", "")).to_lower(), DictUtil.to_int(e.get("level", 1))]
 		elif kind == "items":
 			extra = "  · %s" % str(e.get("item_type", "")).to_lower()
 		_list.add_item("%s%s%s" % [mark, label, extra])
@@ -235,6 +352,28 @@ func refresh_list() -> void:
 		if id == selected_id:
 			_list.select(_list.item_count - 1)
 	_update_dirty_label()
+
+# The skill families that pass the search text and the filter bar, in the chosen order.
+func skill_list_entries() -> Array[Dictionary]:
+	var filters: Dictionary = skill_filters.duplicate()
+	filters["text"] = _search.text if _search != null else ""
+	return SkillFilter.apply(ContentCatalog.skill_entries(), filters, skill_sort)
+
+func _refresh_skill_list() -> void:
+	for entry: Dictionary in skill_list_entries():
+		var id: String = str(entry["id"])
+		var base: Dictionary = SkillRanks.effective(entry, 1)
+		var mark: String = ""
+		if ContentCatalog.family_has_problems(id):
+			mark += "⚠ "
+		if ContentCatalog.is_system_origin(base):
+			mark += "🔒 "
+		var ranks: int = SkillRanks.rank_count(entry)
+		_list.add_item("%s%s  · %s L%d%s" % [mark, str(base["name"]), str(base["kind"]).to_lower(), DictUtil.to_int(base["level"]), ("  · %d ranks" % ranks) if ranks > 1 else ""])
+		_list.set_item_tooltip(_list.item_count - 1, id)
+		_list_ids.append(id)
+		if id == selected_id:
+			_list.select(_list.item_count - 1)
 
 # Opens stored entry `id` in the form (committing the current draft first).
 func select(id: String) -> void:
@@ -245,7 +384,8 @@ func select(id: String) -> void:
 		return
 	selected_id = id
 	_pending_delete = ""
-	form.edit(kind, ContentCatalog.get_entry(kind, id))
+	_pending_origin = ""
+	form.edit(kind, _stored(id))
 	draft_dirty = false
 	refresh_list()
 	_refresh_side_panels()
@@ -255,6 +395,8 @@ func new_entry() -> void:
 		return
 	var d: Dictionary = ContentSchema.defaults(kind)
 	d["id"] = ContentCatalog.unique_id(kind, "new_" + kind.trim_suffix("es").trim_suffix("s"))
+	if _skills():
+		d = SkillFormModel.new_entry(str(d["id"]))
 	if kind == "units" and _side_filter.selected > 0:
 		d["side"] = _side_filter.get_item_text(_side_filter.selected)
 	selected_id = ""
@@ -278,12 +420,15 @@ func delete_selected() -> void:
 	if selected_id.is_empty():
 		new_entry()   # discard an unapplied new draft
 		return
+	if _is_system(selected_id):
+		_set_status("%s is a system asset: delete is locked. Use SAFE DELETE (tools/fc.sh safe_delete %s %s) or make your own copy." % [selected_id, kind, selected_id], true)
+		return
 	if _pending_delete != selected_id:
 		_pending_delete = selected_id
 		_delete_btn.text = "Confirm delete?"
 		_set_status("Click Delete again to remove %s." % selected_id)
 		return
-	var problem: String = ContentCatalog.remove(kind, selected_id)
+	var problem: String = ContentCatalog.remove_skill(selected_id) if _skills() else ContentCatalog.remove(kind, selected_id)
 	_delete_btn.text = "🗑 Delete"
 	_pending_delete = ""
 	if not problem.is_empty():
@@ -298,28 +443,76 @@ func delete_selected() -> void:
 	else:
 		new_entry()
 
+# True when the stored asset `id` is origin system (its delete and key fields are locked).
+func _is_system(id: String) -> bool:
+	if id.is_empty():
+		return false
+	if _skills():
+		var rows: Array[Dictionary] = ContentCatalog.family_rows(id)
+		return not rows.is_empty() and ContentCatalog.is_system_origin(rows[0])
+	return ContentCatalog.is_system_origin(ContentCatalog.get_entry(kind, id))
+
+# Promote a user asset to system / demote a system asset to user (asks twice; the text names the consequences).
+func toggle_origin() -> void:
+	if selected_id.is_empty() or not commit_draft():
+		return
+	var system: bool = _is_system(selected_id)
+	if _pending_origin != selected_id:
+		_pending_origin = selected_id
+		if system:
+			_set_status("Demote %s to a user asset? Delete becomes possible and key fields unlock. Click again to confirm." % selected_id)
+		else:
+			_set_status("Promote %s to a system asset? Its key fields lock and delete is locked (undo with Demote). Click again to confirm." % selected_id)
+		return
+	_pending_origin = ""
+	var problem: String = ContentCatalog.demote(kind, selected_id) if system else ContentCatalog.promote(kind, selected_id)
+	if not problem.is_empty():
+		_set_status(problem, true)
+		return
+	_set_status("%s is now a %s asset." % [selected_id, "user" if system else "system"])
+	var keep: String = selected_id
+	selected_id = ""
+	select(keep)
+
 # ------------------------------------------------------------------------------
 # Editing
 # ------------------------------------------------------------------------------
 
-func _on_form_edited(_key: String) -> void:
+func _on_form_edited(key: String) -> void:
+	if _skills() and key == "kind" and not _switching_kind:
+		_switching_kind = true
+		form.replace_draft(SkillFormModel.switch_kind(form.draft, str(form.draft.get("kind", "ATTACK"))))
+		_switching_kind = false
 	draft_dirty = true
 	_refresh_side_panels()
 	_update_dirty_label()
 
-# Problems with the current draft (schema, references, JSON fields).
+# Problems with the current draft as {"field", "rank", "message"} (skills only: the validator's own list).
+func draft_problem_list() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for key: Variant in form.json_errors:
+		out.append({"field": str(key), "rank": 0, "message": str(form.json_errors[key])})
+	if _skills():
+		out.append_array(ContentCatalog.validate_skill_entry(form.draft, selected_id))
+	else:
+		for message: String in ContentCatalog.validate_entry(kind, form.draft, selected_id):
+			out.append({"field": "", "rank": 0, "message": message})
+	return out
+
+# Problems with the current draft (schema, references, JSON fields), as plain texts.
 func draft_problems() -> Array[String]:
 	var errors: Array[String] = []
-	for key: Variant in form.json_errors:
-		errors.append(str(form.json_errors[key]))
-	errors.append_array(ContentCatalog.validate_entry(kind, form.draft, selected_id))
+	for p: Dictionary in draft_problem_list():
+		var rank: int = DictUtil.to_int(p["rank"])
+		var prefix: String = "[rank %d] " % rank if rank > 0 and not str(p["message"]).begins_with("Rank") else ""
+		errors.append(prefix + str(p["message"]))
 	return errors
 
 # Stores the draft in the catalog; false (with the problems shown) if invalid.
 func apply() -> bool:
 	var errors: Array[String] = draft_problems()
 	if errors.is_empty():
-		errors = ContentCatalog.upsert(kind, form.draft, selected_id)
+		errors = ContentCatalog.upsert_skill(form.draft, selected_id) if _skills() else ContentCatalog.upsert(kind, form.draft, selected_id)
 	if not errors.is_empty():
 		_show_problems(errors)
 		_set_status("Not applied: fix the problems listed on the right.", true)
@@ -344,7 +537,7 @@ func revert() -> void:
 	if selected_id.is_empty():
 		new_entry()
 		return
-	form.edit(kind, ContentCatalog.get_entry(kind, selected_id))
+	form.edit(kind, _stored(selected_id))
 	_refresh_side_panels()
 	_set_status("Reverted %s." % selected_id)
 
@@ -435,16 +628,31 @@ func _refresh_side_panels() -> void:
 		_title.text += "  (renaming %s)" % selected_id
 	_preview_icon.texture = ForgePreview.texture_for(kind, form.draft)
 	_preview_icon.visible = _preview_icon.texture != null
-	_preview.text = ForgePreview.describe(kind, form.draft)
-	_show_problems(draft_problems())
+	_preview.text = ForgePreview.describe(kind, form.draft, _skills())
+	var errors: Array[String] = draft_problems()
+	_show_problems(errors)
+	# Apply is blocked while a skill draft has problems; Delete and the origin button follow the selected asset.
+	_apply_btn.disabled = _skills() and not errors.is_empty()
+	_apply_btn.tooltip_text = ("Cannot apply: %d problem%s (listed on the right)" % [errors.size(), "" if errors.size() == 1 else "s"]) if _apply_btn.disabled else "Store the edits in the catalog (Save writes them to disk)"
+	var system: bool = _is_system(selected_id)
+	_delete_btn.disabled = system
+	_delete_btn.tooltip_text = "System asset: delete is locked. Use SAFE DELETE (tools/fc.sh safe_delete) or make your own copy." if system else "Delete the selected entry (click twice)"
+	_origin_btn.visible = not selected_id.is_empty()
+	_origin_btn.text = "Demote to user" if system else "Promote to system"
+	_origin_btn.tooltip_text = "Delete becomes possible and key fields unlock." if system else "Lock key fields and delete (use for assets that tests or tuning rely on)."
 
 func _show_problems(errors: Array[String]) -> void:
 	if errors.is_empty():
 		_problems.text = "[color=#4ade80]✔ No problems.[/color]"
 		return
 	var lines: Array[String] = []
+	if _skills():
+		lines.append("[color=#f87171]Cannot save: %d problem%s[/color]" % [errors.size(), "" if errors.size() == 1 else "s"])
 	for err: String in errors:
 		lines.append("[color=#f87171]•[/color] " + err)
+	if _skills():
+		for w: String in ContentCatalog.warnings_for("skills", form.draft):
+			lines.append("[color=#fbbf24]•[/color] " + w)
 	_problems.text = "\n".join(lines)
 
 func _update_dirty_label() -> void:

@@ -71,7 +71,7 @@ static func _step(level: int, skill: String) -> Dictionary:
 	return {"level": level, "skill": skill}
 
 static func _fixture_path() -> Array[Dictionary]:
-	return [_step(1, "strike"), _step(1, "guard"), _step(LVL_A, "t_sk_a"), _step(LVL_C, "t_sk_c"), _step(LVL_H, "t_sk_h"), _step(LVL_B, "t_sk_b"), _step(LVL_O, "t_sk_o"), _step(LVL_D, "t_sk_d")]
+	return [_step(LVL_A, "t_sk_a"), _step(LVL_C, "t_sk_c"), _step(LVL_H, "t_sk_h"), _step(LVL_B, "t_sk_b"), _step(LVL_O, "t_sk_o"), _step(LVL_D, "t_sk_d")]
 
 static func _build_fixture() -> bool:
 	for kind: String in ContentSchema.KINDS:
@@ -81,8 +81,8 @@ static func _build_fixture() -> bool:
 	var ok: bool = true
 	ok = _family("t_sk_a", [1, 2, 3]) and ok
 	ok = _family("t_sk_c", [3, 4, 5]) and ok
-	ok = _family("t_sk_b", [3, 4, 5], {"advanced": true}) and ok
-	ok = _family("t_sk_d", [3, 4, 5], {"advanced": true}) and ok
+	ok = _family("t_sk_b", [3, 4, 5], {"grade": "advanced"}) and ok
+	ok = _family("t_sk_d", [3, 4, 5], {"grade": "advanced"}) and ok
 	ok = _family("t_sk_o", [2, 3]) and ok
 	ok = ContentCatalog.upsert("skills", {"id": "t_sk_o_2", "name": "O2", "kind": "ATTACK", "level": 3, "blocks": 2, "tier": 2, "family": "t_sk_o", "unlock_offset": 0}).is_empty() and ok
 	ok = ContentCatalog.upsert("skills", {"id": "t_sk_h", "name": "Heal", "kind": "SUPPORT", "level": 2, "blocks": 2, "heal_base": 5, "tier": 1}).is_empty() and ok
@@ -129,7 +129,7 @@ static func _test_constants() -> bool:
 		checks["tier offsets step by TIER_UNLOCK_STEP"] = checks["tier offsets step by TIER_UNLOCK_STEP"] and s.tier_offset() == StatRules.TIER_UNLOCK_STEP * (t - 1)
 		s.unlock_offset = 0
 		checks["tier offsets step by TIER_UNLOCK_STEP"] = checks["tier offsets step by TIER_UNLOCK_STEP"] and s.tier_offset() == 0
-	checks["schema carries advanced and unlock_offset with defaults"] = not ContentSchema.field("skills", "advanced").is_empty() and DictUtil.to_int(ContentSchema.field("skills", "unlock_offset")["default"]) == -1
+	checks["schema carries grade and unlock_offset with defaults"] = str(ContentSchema.field("skills", "grade").get("default", "")) == "novice" and DictUtil.to_int(ContentSchema.field("skills", "unlock_offset")["default"]) == -1
 	checks["unlock passive describes itself"] = Passives.describe({"effects": [{"type": "unlock", "family": "riposte", "levels": 2}]}).contains("riposte")
 	return _report("Unlock constants and helpers", checks)
 
@@ -153,10 +153,10 @@ static func _test_fixture_rules() -> bool:
 	tier_path[2] = _step(LVL_A, "t_sk_a_2")
 	checks["a tier row on a path is refused"] = ContentCatalog.validate_entry("classes", _class_entry(tier_path)).any(func(m: String) -> bool: return m.contains("higher tier"))
 	var mixed: Dictionary = ContentCatalog.get_entry("skills", "t_sk_b_2").duplicate(true)
-	mixed["advanced"] = false
-	checks["mixed advanced flags in a family are refused"] = not ContentCatalog.validate_entry("skills", mixed).is_empty()
+	mixed["grade"] = "novice"
+	checks["mixed grades in a family are refused"] = not ContentCatalog.validate_entry("skills", mixed).is_empty()
 	checks["tier 1 with an offset is refused"] = not ContentCatalog.validate_entry("skills", {"id": "t_sk_x", "name": "X", "kind": "ATTACK", "unlock_offset": 2}).is_empty()
-	checks["a skill AP level does not gate a path step"] = _probe_errors([_step(1, "strike"), _step(1, "t_sk_c")]).is_empty()
+	checks["a skill AP level does not gate a path step"] = _probe_errors([_step(1, "t_sk_a"), _step(1, "t_sk_c")]).is_empty()
 
 	# --- Tier steps (derived offsets) and ownership --------------------------------
 	var before: Combatant = _unit(LVL_A - 1)
@@ -347,18 +347,25 @@ static func _test_upsert_many() -> bool:
 		DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
 	checks["sandbox fork"] = ContentCatalog.fork_to(sandbox) == OK
 	if checks["sandbox fork"]:
+		# A test-only 3-rank user family (no shipped id: shipped grades and requires may change with content).
+		var fam: String = "t_um"
+		var mods: Array[Dictionary] = [{"level": 3}, {"level": 4}]
+		checks["fixture family stored"] = ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack(fam), mods)).is_empty()
 		var before: Array[Dictionary] = ContentCatalog.entries("skills")
-		var head: Dictionary = ContentCatalog.get_entry("skills", "mend")
-		var r2: Dictionary = ContentCatalog.get_entry("skills", "mend_2")
-		var r3: Dictionary = ContentCatalog.get_entry("skills", "mend_3")
-		var one_alone: Array[String] = ContentCatalog.upsert("skills", head.merged({"advanced": true}, true))
-		checks["a single rank alone is refused (advanced must match)"] = not one_alone.is_empty() and not DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend").get("advanced", false))
-		var bad: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"advanced": true}, true), r2.merged({"advanced": true}, true)])
+		var head: Dictionary = ContentCatalog.get_entry("skills", fam)
+		var r2: Dictionary = ContentCatalog.get_entry("skills", SkillRanks.rank_id(fam, 2))
+		var r3: Dictionary = ContentCatalog.get_entry("skills", SkillRanks.rank_id(fam, 3))
+		var one_alone: Array[String] = ContentCatalog.upsert("skills", head.merged({"grade": "advanced"}, true))
+		checks["a single rank alone is refused (grade must match)"] = not one_alone.is_empty() and _grade(fam) != "advanced"
+		var bad: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"grade": "advanced"}, true), r2.merged({"grade": "advanced"}, true)])
 		checks["a partial family is refused as a set"] = not bad.is_empty()
-		checks["a refused set changes nothing"] = ContentCatalog.entries("skills").size() == before.size() and not DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend_2").get("advanced", false)) and not DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend").get("advanced", false))
-		var good: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"advanced": true}, true), r2.merged({"advanced": true}, true), r3.merged({"advanced": true}, true)])
-		checks["the whole family changes together"] = good.is_empty() and DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend").get("advanced", false)) and DictUtil.to_bool(ContentCatalog.get_entry("skills", "mend_3").get("advanced", false))
+		checks["a refused set changes nothing"] = ContentCatalog.entries("skills").size() == before.size() and _grade(SkillRanks.rank_id(fam, 2)) != "advanced" and _grade(fam) != "advanced"
+		var good: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"grade": "advanced"}, true), r2.merged({"grade": "advanced"}, true), r3.merged({"grade": "advanced"}, true)])
+		checks["the whole family changes together"] = good.is_empty() and _grade(fam) == "advanced" and _grade(SkillRanks.rank_id(fam, 3)) == "advanced"
 		for kind: String in ContentSchema.KINDS:
 			DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	return _report("upsert_many applies a rank family atomically (all or none)", checks)
+
+static func _grade(id: String) -> String:
+	return str(ContentCatalog.get_entry("skills", id).get("grade", "novice"))

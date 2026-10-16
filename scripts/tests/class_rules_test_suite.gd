@@ -48,7 +48,7 @@ static func _test_six_classes() -> bool:
 		budget_ok = budget_ok and StatRules.total_of(arch.base_stats) == StatRules.CLASS_BUDGET
 		growth_ok = growth_ok and StatRules.total_of(arch.growth_per_level) == StatRules.GROWTH_TOTAL
 		art_ok = art_ok and UnitArt.CLASS_KEYS.has(arch.art)
-		starts_ok = starts_ok and not arch.skills_at(1).is_empty() and not arch.loadout.is_empty()
+		starts_ok = starts_ok and not ContentFactory.unit({"id": "t_start", "name": "T", "class_id": id, "level": 1}).known_skills.is_empty() and not arch.loadout.is_empty()
 		var level_one := CharacterStats.new(arch, 1)
 		var level_five := CharacterStats.new(arch, 5)
 		growth_ok = growth_ok and StatRules.total_of(level_five._core_stats) - StatRules.total_of(level_one._core_stats) == StatRules.GROWTH_TOTAL * 4

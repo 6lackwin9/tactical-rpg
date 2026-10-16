@@ -393,7 +393,7 @@ static func _test_riposte_data_models() -> bool:
 			var prefix: String = str(pair[0])
 			for row: Variant in (pair[1] as Array):
 				var r: Array = row
-				var entry: Dictionary = {"id": "%s_%d" % [prefix, int(r[0])], "name": "%s %d" % [prefix, int(r[0])], "kind": "DEFEND", "family": prefix, "tier": int(r[0]), "level": int(r[1]), "mitigation": float(r[2]), "grant_status": "riposte", "status_rounds": int(r[3]), "blocks": 2, "learned_only": true}
+				var entry: Dictionary = {"id": prefix if int(r[0]) == 1 else "%s_%d" % [prefix, int(r[0])], "name": "%s %d" % [prefix, int(r[0])], "kind": "DEFEND", "family": prefix, "tier": int(r[0]), "level": int(r[1]), "mitigation": float(r[2]), "grant_status": "riposte", "status_rounds": int(r[3]), "blocks": 2, "learned_only": true}
 				accepted = accepted and ContentCatalog.upsert("skills", entry).is_empty()
 		checks["both models are accepted as data (AP in any order, mitigation 0.0)"] = accepted
 		var back: SkillDef = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_rev_3"))

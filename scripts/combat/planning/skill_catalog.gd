@@ -52,6 +52,14 @@ static func tier_one(family: String) -> SkillDef:
 	var s: SkillDef = _tier_one[family]
 	return s
 
+# Ids of the basic skills a unit owns from level 1 (engine skills are always known anyway), in catalog order.
+static func basic_ids() -> Array[String]:
+	var out: Array[String] = []
+	for s: SkillDef in all():
+		if s.basic and not s.system and not out.has(s.id):
+			out.append(s.id)
+	return out
+
 static func is_system(skill_id: String) -> bool:
 	var s: SkillDef = find(skill_id)
 	return s != null and s.system

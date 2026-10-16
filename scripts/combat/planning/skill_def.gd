@@ -24,6 +24,13 @@ extends RefCounted
 # skill's level (not per tile), leaps over units but not walls, and keeps the stance like Move.
 enum Kind { ATTACK, DEFEND, FOCUS, MOVE, REST, TARGET, STATUS, SUPPORT, DISENGAGE }
 
+# Which hand's weapon an ATTACK uses: the main weapon, the off-hand weapon (or bare hands), or both (dual strike, engine pending).
+enum WeaponHand { MAIN, OFF, BOTH }
+const BOTH_ENABLED: bool = false   # `both` is rejected by validation while the engine cannot play it
+
+# Skill hierarchy (FORGE1 11): a family of a higher grade can require families of a lower grade. `expert` is reserved.
+enum Grade { NOVICE, ADVANCED, EXPERT }
+
 # `weapon_types` token for "no main-hand weapon equipped" (bare hands). Its proficiency is the
 # class's UNARMED_PROFICIENCY gear level (`fist`), so min_proficiency applies to it as well.
 const UNARMED_TOKEN: String = "unarmed"
@@ -61,7 +68,13 @@ var boost: float = 1.5         # FOCUS: attack multiplier
 var boost_rounds: int = 2      # FOCUS: duration
 var recover_ap: int = 2        # REST: AP regained
 var area: Area = Area.NONE     # ATTACK: area shape (tile-targeted)
-var offhand: bool = false      # ATTACK: melee off-hand jab (range 1) for ranged units
+var weapon_hand: WeaponHand = WeaponHand.MAIN   # ATTACK: which hand's weapon the strike uses (FORGE1 4.1)
+# Derived from weapon_hand (the engine readers keep asking "is it the off-hand jab"): true for OFF.
+var offhand: bool:
+	get:
+		return weapon_hand == WeaponHand.OFF
+	set(value):
+		weapon_hand = WeaponHand.OFF if value else WeaponHand.MAIN
 var stance_override: int = -1  # ATTACK in another stance pool (e.g. Shield Bash is Defensive)
 var status_effect: String = "" # status rolled on hit (StatusEffects), active next round
 var status_potency: int = 0
@@ -83,9 +96,18 @@ var learned_only: bool = false  # unrestricted (hand-built) units don't know it 
 var family: String = ""         # skill family (tiers of one skill); empty = its own id (see family_id())
 var tier: int = 1               # position in the family (1..5); each tier is its own skill with its own AP, blocks and power
 var basic: bool = false         # available to every class (counted outside the loadout slots)
-var advanced: bool = false      # family-level flag: class-path steps need StatRules.ADVANCED_MIN_LEVEL, KNOW can open it earlier
+var grade: Grade = Grade.NOVICE   # family-level: class-path steps of advanced+ need StatRules.ADVANCED_MIN_LEVEL, KNOW can open them earlier
+var requires: Array[String] = []  # family ids that must ALL be owned to own / learn this skill (each of a lower grade)
+# True for grade advanced or expert (SK2 read this as a bool).
+var advanced: bool:
+	get:
+		return grade != Grade.NOVICE
+	set(value):
+		grade = Grade.ADVANCED if value else Grade.NOVICE
 var unlock_offset: int = -1     # levels after the family's unlock level this row opens (-1 = derive from the tier, see tier_offset)
 var description: String = ""
+var template: String = ""        # the description template this rank's text was rendered from (SkillText); "" = a literal description
+var origin: String = "system"    # "system" (shipped) or "user" (ContentSchema.ORIGIN_*); informational for the engine
 var system: bool = false       # engine skill (Move, Rest, Switch Target, status blocks): always known, not deletable
 
 static func create(p_id: String, p_name: String, p_kind: Kind, p_level: int, p_blocks: int, p_description: String) -> SkillDef:
@@ -122,29 +144,33 @@ func deals_damage() -> bool:
 # Base AP = level; effects on the unit shift it (never below 1 or above 5).
 # Move: the cost PER TILE (1 + shift). Rest: always free.
 func ap_cost(actor: Combatant = null) -> int:
-	if kind == Kind.REST or kind == Kind.TARGET or kind == Kind.STATUS:
+	var ap_rule: String = str(SkillKinds.info(kind_name()).get("ap", "LEVEL"))
+	if ap_rule == "FREE":
 		return 0
 	var shift: int = actor.ap_cost_modifier if actor != null else 0
-	var base: int = 1 if kind == Kind.MOVE else level
+	var base: int = 1 if ap_rule == "PER_TILE" else level
 	return clampi(base + shift, MIN_LEVEL, MAX_LEVEL)
+
+# The kind as the SkillKinds table key ("ATTACK").
+func kind_name() -> String:
+	return str(Kind.keys()[kind])
 
 # The stance this skill puts the unit in (Move keeps the current one; see stance_after).
 func stance() -> CombatTypes.StanceType:
 	if stance_override >= 0:
 		return stance_override as CombatTypes.StanceType
-	match kind:
-		Kind.ATTACK:
+	match str(SkillKinds.info(kind_name()).get("stance", "NEUTRAL")):
+		"OFFENSIVE":
 			return CombatTypes.StanceType.OFFENSIVE
-		Kind.DEFEND:
+		"DEFENSIVE":
 			return CombatTypes.StanceType.DEFENSIVE
-		Kind.FOCUS:
-			return CombatTypes.StanceType.TACTICAL
-		Kind.REST:
+		"TACTICAL":
 			return CombatTypes.StanceType.TACTICAL
 	return CombatTypes.StanceType.NEUTRAL
 
 func keeps_stance() -> bool:
-	return kind == Kind.MOVE or kind == Kind.TARGET or kind == Kind.STATUS or kind == Kind.DISENGAGE or (kind == Kind.SUPPORT and stance_override < 0)
+	var rule: String = str(SkillKinds.info(kind_name()).get("stance", ""))
+	return rule == "KEEP" or (rule == "KEEP_UNLESS_SET" and stance_override < 0)
 
 func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
 	return current if keeps_stance() else stance()
@@ -194,24 +220,7 @@ func support_reach(c: Combatant) -> Vector2i:
 	return Vector2i(0, maxi(SUPPORT_REACH, c.attack_range))
 
 func icon() -> String:
-	if kind == Kind.SUPPORT:
-		return "+"
-	match kind:
-		Kind.DISENGAGE:
-			return "⤴"
-		Kind.ATTACK:
-			return "⚔"
-		Kind.DEFEND:
-			return "🛡"
-		Kind.FOCUS:
-			return "✦"
-		Kind.MOVE:
-			return "➜"
-		Kind.TARGET:
-			return "🎯"
-		Kind.STATUS:
-			return "✖"
-	return "💤"
+	return SkillKinds.icon_of(kind_name())
 
 # Distance band (min, max) at which `c` can use this attack: skill-specific if set;
 # off-hand jabs and line areas 1; ranged units 2..3 (or their longer range); melee 1..range.

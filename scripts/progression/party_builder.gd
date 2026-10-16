@@ -23,7 +23,7 @@ static func build_report(state: UnitState) -> Dictionary:
 	c.lore_ref = work.lore_ref
 	ContentFactory.apply_passives(c, work.passives)
 	for sk: String in work.learned_skills:
-		c.learn_skill(sk)
+		c.learn_skill(sk, false)   # a saved unit keeps what it already learned (FORGE1 11.3: the requires check is for new learning)
 	for key: Variant in work.equipment:
 		var slot_name: String = str(key)
 		var slot: int = Equipment.EquipSlot.keys().find(slot_name.to_upper())

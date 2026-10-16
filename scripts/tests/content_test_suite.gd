@@ -108,9 +108,9 @@ static func _test_validation() -> bool:
 	checks["class budget"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fat", "name": "Fat", "base_stats": {"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}}), "must total")
 	checks["class growth"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fast", "name": "Fast", "growth": {"STR": 3, "DEX": 3, "INT": 3}}), "gains exactly")
 	checks["class proficiency gear"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"banjo": {"level": 1}}}), "unknown gear type")
-	checks["class path: AP level no longer gates a step"] = not _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "strike"}, {"level": 1, "skill": "riposte"}]}), "too advanced")
-	checks["class path: a higher tier row is refused"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "strike"}, {"level": 3, "skill": "riposte_2"}]}), "higher tier")
-	checks["class path: a family is listed once"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "strike"}, {"level": 3, "skill": "strike"}]}), "more than once")
+	checks["class path: AP level no longer gates a step"] = not _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 1, "skill": "riposte"}]}), "too advanced")
+	checks["class path: a higher tier row is refused"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 3, "skill": "riposte_2"}]}), "higher tier")
+	checks["class path: a family is listed once"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 3, "skill": "hamstring"}]}), "more than once")
 	checks["skills: tier 1 can't carry an unlock offset"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "odd_t1", "name": "Odd", "kind": "ATTACK", "unlock_offset": 2}), "tier 1")
 	checks["skills: basic skills can't be advanced"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "odd_basic", "name": "Odd", "kind": "ATTACK", "basic": true, "advanced": true}), "advanced")
 	checks["passives: unlock effect validates"] = Passives.validate_effects([{"type": "unlock", "family": "riposte", "levels": 2}, {"type": "unlock", "group": "heal", "levels": 1}], func(id: String) -> bool: return ContentCatalog.has("skills", id)).is_empty() and not Passives.validate_effects([{"type": "unlock", "family": "riposte", "levels": 3}], func(_id: String) -> bool: return true).is_empty() and not Passives.validate_effects([{"type": "unlock", "family": "riposte", "group": "heal", "levels": 1}], func(_id: String) -> bool: return true).is_empty() and not Passives.validate_effects([{"type": "unlock", "family": "nope", "levels": 1}], func(id: String) -> bool: return ContentCatalog.has("skills", id)).is_empty() and not Passives.validate_effects([{"type": "unlock", "group": "melee", "levels": 1}], func(_id: String) -> bool: return true).is_empty()
@@ -120,7 +120,10 @@ static func _test_validation() -> bool:
 	checks["passive effects"] = _has_error(ContentCatalog.validate_entry("passives", {"id": "bad_pass", "name": "Bad", "effects": [{"type": "stat", "stat": "LUCK", "value": 2}]}), "unknown stat")
 	checks["empty encounter"] = _has_error(ContentCatalog.validate_entry("encounters", {"id": "void", "name": "Void"}), "at least one enemy")
 	checks["side filter"] = _has_error(ContentCatalog.validate_entry("encounters", {"id": "mix", "name": "Mix", "party": ["goblin_archer"], "enemies": ["warrior"]}), "can't be used here")
+	checks["system delete refused (origin system)"] = ContentCatalog.remove("items", "wpn_shortbow").contains("system asset")
+	ContentCatalog.begin_system_edit(true)
 	checks["in-use delete refused"] = ContentCatalog.remove("items", "wpn_shortbow").contains("still used")
+	ContentCatalog.end_system_edit()
 	checks["system delete refused"] = ContentCatalog.remove("skills", "move").contains("system")
 	var failed: Array[String] = []
 	for key: Variant in checks:
@@ -140,7 +143,7 @@ static func _test_authoring() -> bool:
 		"weapon_type": "sword", "base_power": 30, "two_handed": true, "scaling_stat": "STR", "required_stats": {"STR": 10}, "rarity": "RARE", "weight": 5.0}))
 	errors.append_array(ContentCatalog.upsert("classes", {"id": "test_paladin", "name": "Test Paladin", "art": "warrior",
 		"base_stats": {"STR": 14, "DEX": 8, "INT": 8, "CONS": 15, "PERC": 9, "KNOW": 8}, "growth": {"STR": 2, "CONS": 2, "PERC": 1},
-		"proficiency": {"sword": {"level": 2, "scaling": 1.5}, "plate": {"level": 2, "scaling": 1.5}}, "skill_path": [{"level": 1, "skill": "guard"}]}))
+		"proficiency": {"sword": {"level": 2, "scaling": 1.5}, "plate": {"level": 2, "scaling": 1.5}}, "skill_path": [{"level": 1, "skill": "hamstring"}]}))
 	errors.append_array(ContentCatalog.upsert("units", {"id": "test_knight", "name": "Test Knight", "side": "party", "art": "warrior",
 		"class_id": "test_paladin", "level": 3, "stat_mode": "derived", "skill_cap": 2, "extra_skills": ["test_cleave"], "ai_role": "AGGRESSOR",
 		"flee_ratio": 0.0, "main_hand": "test_glaive", "body": "arm_plate"}))
@@ -187,7 +190,7 @@ static func _test_authored_units_in_planning() -> bool:
 	var self_names: Array[String] = []
 	for opt: PlanOption in session.plan.target_options(knight, knight):
 		self_names.append(opt.step.skill.id)
-	var skills_ok: bool = attack_names.has("test_cleave") and not attack_names.has("strike") and self_names.has("rest") and self_names.has("guard") and not self_names.has("focus")
+	var skills_ok: bool = attack_names.has("test_cleave") and attack_names.has("strike") and not attack_names.has("quick_stab") and self_names.has("rest") and self_names.has("guard") and not self_names.has("focus")
 	session.dispose()
 	return _report("Authored units: class-derived vitals, gear, numbered duplicates, whitelisted skills, resistances", built_ok and skills_ok,
 		"built %s, attacks %s, self %s" % [built_ok, str(attack_names), str(self_names)])
@@ -247,6 +250,19 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	var forge: ContentForge = host.get("forge")
 	var checks: Dictionary = {}
 	checks["opens on skills"] = forge.kind == "skills" and not forge.selected_id.is_empty()
+
+	# Skill tab: the form edits a ranked draft, a new skill is a user asset, an invalid template blocks Apply.
+	var ranked_head: String = ""
+	for ranked: Dictionary in ContentCatalog.skill_entries():
+		if SkillRanks.rank_count(ranked) > 1 and ranked_head.is_empty():
+			ranked_head = str(ranked["id"])
+	forge.select(ranked_head)
+	checks["skills: the draft is the ranked entry"] = not ranked_head.is_empty() and SkillRanks.rank_count(forge.form.draft) == SkillRanks.rank_count(ContentCatalog.skill_entry(ranked_head))
+	forge.new_entry()
+	checks["skills: a new draft is a user asset"] = str(forge.form.draft.get("origin", "")) == ContentSchema.ORIGIN_USER
+	forge.form.set_value("description", "{nope}")
+	checks["skills: an unknown token blocks Apply"] = not forge.apply() and not forge.draft_problems().is_empty()
+	forge.revert()
 
 	# Template: duplicate an item, edit it through the form, apply.
 	forge.show_kind("items")

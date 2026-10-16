@@ -41,7 +41,7 @@ static func skill(entry: Dictionary) -> SkillDef:
 	var s: SkillDef = SkillDef.create(str(e["id"]), str(e["name"]), kind as SkillDef.Kind, DictUtil.to_int(e["level"]), DictUtil.to_int(e["blocks"]), str(e["description"]))
 	s.power_mult = DictUtil.to_float(e["power_mult"])
 	s.area = _enum(SkillDef.Area.keys(), str(e["area"]), SkillDef.Area.NONE) as SkillDef.Area
-	s.offhand = DictUtil.to_bool(e["offhand"])
+	s.weapon_hand = _enum(SkillDef.WeaponHand.keys(), str(e["weapon_hand"]).to_upper(), SkillDef.WeaponHand.MAIN) as SkillDef.WeaponHand
 	s.stance_override = -1 if str(e["stance"]) == "AUTO" else _enum(CombatTypes.StanceType.keys(), str(e["stance"]), -1)
 	s.status_effect = str(e["status_effect"])
 	s.status_potency = DictUtil.to_int(e["status_potency"])
@@ -67,16 +67,19 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.family = "" if str(e["family"]) == s.id else str(e["family"])
 	s.tier = DictUtil.to_int(e["tier"], 1)
 	s.basic = DictUtil.to_bool(e["basic"])
-	s.advanced = DictUtil.to_bool(e["advanced"])
+	s.grade = _enum(SkillDef.Grade.keys(), str(e["grade"]).to_upper(), SkillDef.Grade.NOVICE) as SkillDef.Grade
+	s.requires = _strings(e["requires"])
 	s.unlock_offset = DictUtil.to_int(e["unlock_offset"], -1)
 	s.system = DictUtil.to_bool(e["system"])
+	s.template = str(e["template"])
+	s.origin = str(e["origin"])
 	return s
 
 static func skill_to_entry(s: SkillDef) -> Dictionary:
 	return ContentSchema.normalize("skills", {
 		"id": s.id, "name": s.display_name, "kind": _name(SkillDef.Kind.keys(), s.kind),
 		"level": s.level, "blocks": s.blocks, "description": s.description, "system": s.system,
-		"power_mult": s.power_mult, "area": _name(SkillDef.Area.keys(), s.area), "offhand": s.offhand,
+		"power_mult": s.power_mult, "area": _name(SkillDef.Area.keys(), s.area), "weapon_hand": _name(SkillDef.WeaponHand.keys(), s.weapon_hand).to_lower(),
 		"stance": "AUTO" if s.stance_override < 0 else _name(CombatTypes.StanceType.keys(), s.stance_override),
 		"status_effect": s.status_effect, "status_potency": s.status_potency, "status_magnitude": s.status_magnitude,
 		"reach_min": s.reach_min, "reach_max": s.reach_max, "weapon_types": s.weapon_types, "min_proficiency": s.min_proficiency, "mitigation": s.mitigation,
@@ -84,7 +87,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
 		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
 		"cleanse_statuses": s.cleanse_statuses, "jump_tiles": s.jump_tiles,
-		"family": s.family, "tier": s.tier, "basic": s.basic, "advanced": s.advanced, "unlock_offset": s.unlock_offset,
+		"family": s.family, "tier": s.tier, "template": s.template, "origin": s.origin, "basic": s.basic, "grade": _name(SkillDef.Grade.keys(), s.grade).to_lower(), "requires": s.requires, "unlock_offset": s.unlock_offset,
 	})
 
 # ------------------------------------------------------------------------------
@@ -271,6 +274,9 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 				extras.append(extra)
 		c.known_skills = extras
 		c.set_class_path(arch.skill_path)   # owned path skills by level, KNOW and passives (Combatant.refresh_path_skills)
+		for basic_id: String in SkillCatalog.basic_ids():   # every unit owns every basic skill from level 1 (FORGE1 11.2)
+			if not c.known_skills.has(basic_id):
+				c.known_skills.append(basic_id)
 		var slots: Dictionary = loadout_of(e, arch, level, c.known_skills)
 		c.set_loadout(_strings(slots["class"]), _strings(slots["extra"]))
 	var ap: int = DictUtil.to_int(e["ap"]) if DictUtil.to_int(e["ap"]) > 0 else default_ap

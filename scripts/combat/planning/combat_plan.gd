@@ -834,14 +834,15 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 		return out
 	var cap: int = context.skill_cap_of(c)
 	if target == c:
-		for kind: SkillDef.Kind in [SkillDef.Kind.DEFEND, SkillDef.Kind.FOCUS, SkillDef.Kind.REST]:
+		# One loop over the kinds the SkillKinds table casts on the caster (DEFEND, FOCUS, REST, DISENGAGE; SUPPORT when it may
+		# target itself), in kind order. A DISENGAGE self step lands on an auto tile, away from the nearest foe.
+		for kind: SkillDef.Kind in SkillDef.Kind.values():
+			if not SkillKinds.plans_on_self(str(SkillDef.Kind.keys()[kind])):
+				continue
 			for skill: SkillDef in SkillCatalog.available(kind, cap, c):
+				if kind == SkillDef.Kind.SUPPORT and skill.target_mode == SkillDef.TargetMode.ALLY:
+					continue
 				out.append(_probe(c, PlanStep.self_skill(skill), base))
-		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, c):
-			if skill.target_mode != SkillDef.TargetMode.ALLY:
-				out.append(_probe(c, PlanStep.self_skill(skill), base))
-		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.DISENGAGE, cap, c):
-			out.append(_probe(c, PlanStep.self_skill(skill), base))   # auto landing tile, away from the nearest foe
 	elif context.friends_of(c).has(target) and target.is_active() and context.grid.has_combatant(target):
 		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, c):
 			if skill.targets_ally():

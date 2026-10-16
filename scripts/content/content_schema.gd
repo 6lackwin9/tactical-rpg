@@ -20,6 +20,8 @@ extends RefCounted
 # ==============================================================================
 
 const KINDS: Array[String] = ["skills", "items", "passives", "classes", "units", "encounters"]
+const ORIGIN_SYSTEM: String = "system"
+const ORIGIN_USER: String = "user"
 
 const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]   # = StatRules.STATS
 const EQUIP_TYPES: Array[String] = ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"]
@@ -42,23 +44,37 @@ static func kind_label(kind: String) -> String:
 	return kind.capitalize()
 
 static func fields(kind: String) -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
 	match kind:
 		"skills":
 			return _skill_fields()
 		"items":
-			return _item_fields()
+			list = _item_fields()
 		"passives":
-			return _passive_fields()
+			list = _passive_fields()
 		"classes":
-			return _class_fields()
+			list = _class_fields()
 		"units":
-			return _unit_fields()
+			list = _unit_fields()
 		"encounters":
-			return _encounter_fields()
-	var none: Array[Dictionary] = []
-	return none
+			list = _encounter_fields()
+		_:
+			return list
+	list.append(origin_field())
+	return list
+
+# The common field of every Forge kind (FORGE1 section 12): who owns the asset. Default system; only user assets store it.
+static func origin_field() -> Dictionary:
+	return _f("origin", "Origin", "enum", ORIGIN_SYSTEM, {"options": [ORIGIN_SYSTEM, ORIGIN_USER], "readonly": true, "key_field": true, "help": "system: shipped (key fields locked, delete only through SAFE DELETE). user: your own asset. Set by the Forge, never typed."})
 
 static func field(kind: String, key: String) -> Dictionary:
+	if kind == "skills":   # look up in the cache and copy only the one field (fields() deep-copies the whole list)
+		if _skill_cache.is_empty():
+			_skill_cache = _build_skill_fields()
+		for f: Dictionary in _skill_cache:
+			if str(f.get("key", "")) == key:
+				return f.duplicate(true)
+		return {}
 	for f: Dictionary in fields(kind):
 		if str(f.get("key", "")) == key:
 			return f
@@ -73,50 +89,74 @@ static func _f(key: String, label: String, type: String, default: Variant, extra
 	f.merge(extra, true)
 	return f
 
+static var _skill_cache: Array[Dictionary] = []
+
+# The skill field list (cached: it is generated from SkillKinds, so it is built once). Callers get a deep copy, like
+# every other kind's freshly built list, so editing a returned field can never change the schema.
 static func _skill_fields() -> Array[Dictionary]:
-	var attack: Dictionary = {"key": "kind", "in": ["ATTACK"]}
-	var support: Dictionary = {"key": "kind", "in": ["SUPPORT"]}
-	var reaching: Dictionary = {"key": "kind", "in": ["ATTACK", "SUPPORT"]}
-	var buffing: Dictionary = {"key": "kind", "in": ["SUPPORT", "DEFEND"]}
-	return [
-		_f("id", "ID", "id", "", {"help": "Unique snake_case id used by units and tests."}),
-		_f("name", "Name", "string", "New Skill"),
-		_f("kind", "Kind", "enum", "ATTACK", {"options": ["ATTACK", "DEFEND", "FOCUS", "REST", "MOVE", "TARGET", "STATUS", "SUPPORT", "DISENGAGE"], "help": "MOVE / TARGET / STATUS are engine skills; author ATTACK, DEFEND, FOCUS, REST, SUPPORT (heal / cleanse / buff a friendly unit or yourself) or DISENGAGE (jump away from an enemy)."}),
+	if _skill_cache.is_empty():
+		_skill_cache = _build_skill_fields()
+	var out: Array[Dictionary] = []
+	out.assign(_skill_cache.duplicate(true))
+	return out
+
+static func _build_skill_fields() -> Array[Dictionary]:
+	var list: Array[Dictionary] = [
+		_f("id", "ID", "id", "", {"key_field": true, "help": "Unique snake_case id used by units and tests. Ranks are <id>, <id>_2, <id>_3."}),
+		_f("name", "Name", "string", "New Skill", {"max_len": 32, "help": "Rank names are derived: Mend, Mend II, Mend III (all must fit 32 characters)."}),
+		_f("kind", "Kind", "enum", "ATTACK", {"options": SkillKinds.names(), "key_field": true, "help": "MOVE / TARGET / STATUS / REST are engine skills; author ATTACK, DEFEND, FOCUS, SUPPORT (heal / cleanse / buff a friendly unit or yourself) or DISENGAGE (jump away from an enemy)."}),
 		_f("level", "Level (= AP cost)", "int", 1, {"min": 1, "max": 5}),
 		_f("blocks", "Blocks", "int", 1, {"min": 1, "max": 6, "help": "Timeline length; the effect lands at the end of the last block."}),
-		_f("description", "Description", "text", ""),
-		_f("system", "System skill", "bool", false, {"readonly": true, "help": "Engine skills the planner inserts itself (Move, Rest, Switch Target, status blocks)."}),
-		_f("power_mult", "Power x", "float", 1.0, {"min": 0.0, "max": 6.0, "step": 0.05, "when": attack, "help": "Multiplier on the unit's strike power. 0 = no damage (a debuff-only attack; needs an Inflicts status)."}),
-		_f("area", "Area", "enum", "NONE", {"options": ["NONE", "PLUS", "BURST", "LINE", "SWEEP"], "when": attack, "help": "NONE = single target. PLUS: tile + 4 neighbours, BURST: 3x3, LINE: 3 tiles from an adjacent tile, SWEEP: an L of 3 tiles around you (aim at a diagonal neighbour)."}),
-		_f("offhand", "Off-hand jab", "bool", false, {"when": attack, "help": "Melee off-hand strike at distance 1 for ranged units."}),
-		_f("stance", "Stance", "enum", "AUTO", {"options": ["AUTO", "OFFENSIVE", "TACTICAL", "DEFENSIVE", "NEUTRAL"], "when": attack, "help": "AUTO: attacks use Offensive."}),
-		_f("status_effect", "Inflicts", "enum", "", {"options_from": "status", "when": attack}),
+		_f("description", "Description", "template", "", {"max_len": 240, "help": "A template: {name} {ap} {blocks} {power} {dash} {reach} {weapons} {proficiency} {status} {potency} {magnitude} {rounds} {heal} {cleanse} {mitigation} {boost} {jump} {recover} {unlock}. {{ and }} are literal braces. Each rank renders it with its own numbers."}),
+		_f("template", "Description template (internal)", "string", "", {"internal": true, "help": "Flat rows carry the template their description was rendered from."}),
+		_f("system", "System skill", "bool", false, {"readonly": true, "key_field": true, "help": "Engine skills the planner inserts itself (Move, Rest, Switch Target, status blocks)."}),
+		_f("basic", "Basic skill", "bool", false, {"key_field": true, "help": "Owned by every unit from level 1; not counted against the active loadout slots; exactly one rank; not valid in a class path."}),
+		_f("learned_only", "Learn only", "bool", false, {"help": "Unrestricted hand-built units (tests, sandbox) don't know it unless they learn it; class-derived units get it from skill paths / extra skills as usual."}),
+		_f("grade", "Grade", "enum", "novice", {"options": ["novice", "advanced", "expert"], "key_field": true, "help": "novice, advanced or expert (reserved: no expert skill ships). Advanced and expert class-path steps need unit level 5+ and KNOW can open them earlier (never below level 3)."}),
+		_f("requires", "Requires", "refs", [], {"ref": "skills", "ref_filter": {"system": false, "basic": false}, "key_field": true, "help": "Skill families that must ALL be owned to own or learn this skill; each of a strictly lower grade."}),
+		origin_field(),
+		_f("stance", "Stance", "enum", "AUTO", {"options": ["AUTO", "OFFENSIVE", "TACTICAL", "DEFENSIVE", "NEUTRAL"], "help": "AUTO: attacks use Offensive."}),
+		_f("unlock_offset", "Unlock offset", "int", -1, {"min": -1, "max": 8, "help": "Levels after the family's unlock level (its class path level) at which THIS rank opens. -1 = derive: 0 / 2 / 4 for ranks 1 / 2 / 3. Rank 1 is always 0."}),
+		_f("weapon_types", "Needs weapon type", "multi_pick", [], {"options_from": "weapon_types", "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types, or the token 'unarmed' (no weapon in that hand; its proficiency is the class's fist level). Needs a proficiency of 1+. Class-derived units only."}),
+		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),
+		_f("reach_min", "Reach min", "int", 0, {"min": 0, "max": 8, "help": "0 = the unit's default band (attacks: melee 1, ranged 2-3; support: 0-3)."}),
+		_f("reach_max", "Reach max", "int", 0, {"min": 0, "max": 8}),
+		_f("area", "Area", "enum", "NONE", {"options": ["NONE", "PLUS", "BURST", "LINE", "SWEEP"], "help": "NONE = single target. PLUS: tile + 4 neighbours, BURST: 3x3, LINE: 3 tiles from an adjacent tile, SWEEP: an L of 3 tiles around you (aim at a diagonal neighbour)."}),
+		_f("power_mult", "Power x", "float", 1.0, {"min": 0.0, "max": 6.0, "step": 0.05, "help": "Multiplier on the unit's strike power. 0 = no damage (a debuff-only attack; needs an Inflicts status)."}),
+		_f("weapon_hand", "Weapon hand", "enum", "main", {"options": ["main", "off", "both"], "help": "main: the main weapon. off: the off-hand weapon, or bare hands (melee, distance 1). both: dual-wield strike (engine pending)."}),
+		_f("dash_tiles", "Gap-close tiles", "int", 0, {"min": 0, "max": 6, "help": "Lunge: move up to this many tiles to get into reach, then strike. Only offered while the target is out of reach; it is the unit's move for the round (one per round, blocked by root, terrain and units). AP is the skill's level alone."}),
+		_f("status_effect", "Inflicts", "enum", "", {"options_from": "status"}),
 		_f("status_potency", "Status potency %", "int", 0, {"min": 0, "max": 200, "when": {"key": "status_effect", "not_in": [""]}, "help": "Chance = potency - target debuff resistance - passive resistance."}),
 		_f("status_magnitude", "Status magnitude %", "int", 0, {"min": 0, "max": 95, "when": {"key": "status_effect", "in": ["weaken"]}, "help": "Weaken: percent of outgoing skill power the afflicted unit loses (1-25). Not rolled; carried by the applied instance. 0 for every other status."}),
-		_f("dash_tiles", "Gap-close tiles", "int", 0, {"min": 0, "max": 6, "when": attack, "help": "Lunge: move up to this many tiles to get into reach, then strike. Only offered while the target is out of reach; it is the unit's move for the round (one per round, blocked by root, terrain and units). AP is the skill's level alone."}),
-		_f("status_rounds", "Status rounds", "int", 1, {"min": 1, "max": 5, "when": {"key": "kind", "in": ["ATTACK", "SUPPORT", "DEFEND"]}, "help": "How many rounds an inflicted / granted status lasts once active (it starts next round; a DEFEND skill's riposte is active at once and counts the current round)."}),
-		_f("reach_min", "Reach min", "int", 0, {"min": 0, "max": 8, "when": reaching, "help": "0 = the unit's default band (attacks: melee 1, ranged 2-3; support: 0-3)."}),
-		_f("reach_max", "Reach max", "int", 0, {"min": 0, "max": 8, "when": reaching}),
-		_f("target_mode", "Targets", "enum", "ALLY_OR_SELF", {"options": ["SELF", "ALLY", "ALLY_OR_SELF"], "when": support, "help": "SELF: the caster only. ALLY: a friendly unit other than the caster. ALLY_OR_SELF: either."}),
-		_f("heal_stat", "Heal scales with", "enum", "", {"options": ["", "INT", "KNOW"], "when": support, "help": "Heal = heal base + stat x heal per point (SupportRules.heal_amount), never DamageCalculator."}),
-		_f("heal_base", "Heal base", "int", 0, {"min": 0, "max": 500, "when": support}),
-		_f("heal_mult", "Heal per stat point", "float", 0.0, {"min": 0.0, "max": 10.0, "step": 0.05, "when": support}),
-		_f("grant_status", "Grants", "enum", "", {"options_from": "status_buff", "when": buffing, "help": "SUPPORT: haste (+1 tile per move block) or taunt (enemy AI must target it while reachable), queued for next round. DEFEND: riposte (counters adjacent melee attackers for 50% power), active at once, lost on a stance change; or any support buff (taunt, haste), queued for next round like a support grant."}),
-		_f("cleanse_statuses", "Cleanses", "strings", [], {"when": support, "help": "Debuffs removed from the target (active and pending, never buffs): stagger, stun, root, bleed, or the keyword 'all' for every debuff. Empty = none. Combine freely with heal and grants."}),
-		_f("jump_tiles", "Jump tiles", "int", 0, {"min": 0, "max": 6, "when": {"key": "kind", "in": ["DISENGAGE"]}, "help": "Disengage: jump up to this many tiles away from the nearest (or a chosen) enemy. It is the unit's move for the round (first in the sequence, refused when rooted); AP is the skill's level; units can be leapt over, walls cannot."}),
-		_f("family", "Skill family", "string", "", {"help": "Groups tiers of one skill (e.g. a class skill 'mend' / 'mend_2' / 'mend_3' share family 'mend'). Basics are single-tier. Empty = its own id."}),
-		_f("tier", "Tier in family", "int", 1, {"min": 1, "max": 5, "help": "1-5 for basics, 1-3 for class skills. Chosen at planning time; the AP cost is the skill's Level."}),
-		_f("basic", "Basic skill", "bool", false, {"help": "Available to every class; not counted against the active loadout slots."}),
-		_f("advanced", "Advanced family", "bool", false, {"help": "Family-level flag (every tier must match). Advanced families sit at class path level 5+ and KNOW can open them up to 2 levels earlier (never below level 3)."}),
-		_f("unlock_offset", "Unlock offset", "int", -1, {"min": -1, "max": 8, "help": "Levels after the family's unlock level (its class path level) at which THIS tier opens. -1 = derive: 0 / 2 / 4 for tiers 1 / 2 / 3. Tier 1 is always 0."}),
-		_f("learned_only", "Learn only", "bool", false, {"help": "Unrestricted hand-built units (tests, sandbox) don't know it unless they learn it; class-derived units get it from skill paths / extra skills as usual."}),
-		_f("weapon_types", "Needs weapon type", "strings", [], {"when": attack, "help": "Empty = any. Otherwise the wielded weapon must be one of these gear types, or the token 'unarmed' (no main-hand weapon; its proficiency is the class's fist level). Class-derived units only."}),
-		_f("min_proficiency", "Needs proficiency", "int", 0, {"min": 0, "max": 3, "when": attack, "help": "Training level in the wielded weapon type required to use the skill (0 = none)."}),
-		_f("mitigation", "Mitigation", "float", 0.5, {"min": 0.0, "max": 0.95, "step": 0.05, "when": {"key": "kind", "in": ["DEFEND"]}}),
-		_f("boost", "Attack boost x", "float", 1.5, {"min": 1.0, "max": 5.0, "step": 0.05, "when": {"key": "kind", "in": ["FOCUS"]}}),
-		_f("boost_rounds", "Boost rounds", "int", 2, {"min": 1, "max": 10, "when": {"key": "kind", "in": ["FOCUS"]}}),
-		_f("recover_ap", "AP recovered", "int", 2, {"min": 0, "max": 12, "when": {"key": "kind", "in": ["REST"]}}),
+		_f("status_rounds", "Status rounds", "int", 1, {"min": 1, "max": 5, "help": "How many rounds an inflicted / granted status lasts once active (it starts next round; a DEFEND skill's riposte is active at once and counts the current round)."}),
+		_f("target_mode", "Targets", "enum", "ALLY_OR_SELF", {"options": ["SELF", "ALLY", "ALLY_OR_SELF"], "help": "SELF: the caster only. ALLY: a friendly unit other than the caster. ALLY_OR_SELF: either."}),
+		_f("heal_stat", "Heal scales with", "enum", "", {"options": ["", "INT", "KNOW"], "help": "Heal = heal base + stat x heal per point (SupportRules.heal_amount), never DamageCalculator."}),
+		_f("heal_base", "Heal base", "int", 0, {"min": 0, "max": 500}),
+		_f("heal_mult", "Heal per stat point", "float", 0.0, {"min": 0.0, "max": 10.0, "step": 0.05}),
+		_f("grant_status", "Grants", "enum", "", {"options_from": "status_buff", "help": "SUPPORT: haste (+1 tile per move block) or taunt (enemy AI must target it while reachable), queued for next round. DEFEND: riposte (counters adjacent melee attackers for 50% power), active at once, lost on a stance change; or any support buff (taunt, haste), queued for next round like a support grant."}),
+		_f("cleanse_statuses", "Cleanses", "multi_pick", [], {"options_from": "debuffs_or_all", "help": "Debuffs removed from the target (active and pending, never buffs): stagger, stun, root, bleed, or the keyword 'all' for every debuff. Empty = none. Combine freely with heal and grants."}),
+		_f("mitigation", "Mitigation", "float", 0.5, {"min": 0.0, "max": 0.95, "step": 0.05}),
+		_f("boost", "Attack boost x", "float", 1.5, {"min": 1.0, "max": 5.0, "step": 0.05}),
+		_f("boost_rounds", "Boost rounds", "int", 2, {"min": 1, "max": 10}),
+		_f("jump_tiles", "Jump tiles", "int", 0, {"min": 0, "max": 6, "help": "Disengage: jump up to this many tiles away from the nearest (or a chosen) enemy. It is the unit's move for the round (first in the sequence, refused when rooted); AP is the skill's level; units can be leapt over, walls cannot."}),
+		_f("recover_ap", "AP recovered", "int", 2, {"min": 0, "max": 12}),
+		_f("family", "Skill family", "string", "", {"readonly": true, "help": "Derived: the head skill id of a higher rank (empty on rank 1)."}),
+		_f("tier", "Rank", "int", 1, {"min": 1, "max": 5, "readonly": true, "help": "Derived: 1 for the head skill, 2 / 3 for <id>_2 / <id>_3."}),
 	]
+	# Generated from SkillKinds: the kind lists (`when`), Forge sections and the rank flag.
+	for f: Dictionary in list:
+		var key: String = str(f["key"])
+		var kinds: Array[String] = SkillKinds.kinds_with(key)
+		if not f.has("when") and kinds.size() < SkillKinds.names().size():
+			f["when"] = {"key": "kind", "in": kinds}
+		var sections: Array[String] = []
+		for section: Variant in SkillKinds.SECTION_FIELDS:
+			if SkillKinds.section_fields(str(section)).has(key):
+				sections.append(str(section))
+		if not sections.is_empty():
+			f["section"] = sections
+		f["rank"] = SkillRanks.RANK_KEYS.has(key)
+	return list
 
 static func _item_fields() -> Array[Dictionary]:
 	var equip: Dictionary = {"key": "item_type", "in": EQUIP_TYPES}
@@ -268,6 +308,12 @@ static func options_of(f: Dictionary) -> Array[String]:
 			out.append("")
 			out.append_array(StatusEffects.buffs())
 			return out
+		"weapon_types":
+			return SkillDef.weapon_type_tokens()
+		"debuffs_or_all":
+			out.append_array(StatusEffects.debuffs())
+			out.append(SkillDef.CLEANSE_ALL)
+			return out
 	var raw: Variant = f.get("options", [])
 	if raw is Array:
 		var arr: Array = raw
@@ -320,24 +366,42 @@ static func defaults(kind: String) -> Dictionary:
 # A clean copy of `entry`: every schema field present and typed, unknown keys kept
 # at the end (so hand-added data survives a round trip through the Forge).
 static func normalize(kind: String, entry: Dictionary) -> Dictionary:
+	var src: Dictionary = _legacy_skill(entry) if kind == "skills" else entry
 	var out: Dictionary = {}
 	for f: Dictionary in fields(kind):
 		var key: String = str(f["key"])
-		out[key] = coerce(f, entry.get(key, f["default"]))
-	for key: Variant in entry:
+		out[key] = coerce(f, src.get(key, f["default"]))
+	for key: Variant in src:
 		if not out.has(key):
-			out[key] = _copy(entry[key])
+			out[key] = _copy(src[key])
 	return out
 
-# The entry as written to disk: fields hidden by "when" (and default "system") are left out.
+# Pre-FORGE1 skill keys, accepted for one release: advanced: true -> grade advanced, offhand: true -> weapon_hand off.
+static func _legacy_skill(entry: Dictionary) -> Dictionary:
+	if not entry.has("advanced") and not entry.has("offhand"):
+		return entry
+	var out: Dictionary = entry.duplicate()
+	if out.has("advanced"):
+		if DictUtil.to_bool(out["advanced"]) and not out.has("grade"):
+			out["grade"] = "advanced"
+		out.erase("advanced")
+	if out.has("offhand"):
+		if DictUtil.to_bool(out["offhand"]) and not out.has("weapon_hand"):
+			out["weapon_hand"] = "off"
+		out.erase("offhand")
+	return out
+
+# The entry as written to disk: fields hidden by "when" (and default "system" / "origin") are left out.
 static func to_storage(kind: String, entry: Dictionary) -> Dictionary:
 	var full: Dictionary = normalize(kind, entry)
 	var out: Dictionary = {}
 	for f: Dictionary in fields(kind):
 		var key: String = str(f["key"])
-		if not is_visible(f, full):
+		if not is_visible(f, full) or DictUtil.to_bool(f.get("internal", false)):
 			continue
 		if key == "system" and not DictUtil.to_bool(full[key]):
+			continue
+		if key == "origin" and str(full[key]) == ORIGIN_SYSTEM:
 			continue
 		out[key] = full[key]
 	for key: Variant in full:
@@ -364,7 +428,7 @@ static func coerce(f: Dictionary, value: Variant) -> Variant:
 			return snappedf(x, 0.0001)
 		"bool":
 			return DictUtil.to_bool(value, DictUtil.to_bool(fallback))
-		"refs", "strings":
+		"refs", "strings", "multi_pick":
 			var list: Array[String] = []
 			if value is Array:
 				var arr: Array = value
@@ -428,6 +492,8 @@ static func field_errors(kind: String, entry: Dictionary) -> Array[String]:
 			var value: String = str(entry.get(str(f["key"]), ""))
 			if not options_of(f).has(value):
 				errors.append("%s: '%s' is not one of %s." % [str(f["label"]), value, ", ".join(options_of(f))])
+		if f.has("max_len") and str(entry.get(str(f["key"]), "")).length() > DictUtil.to_int(f["max_len"]):
+			errors.append("%s is %d characters (max %d)." % [str(f["label"]), str(entry.get(str(f["key"]), "")).length(), DictUtil.to_int(f["max_len"])])
 	return errors
 
 static func is_valid_id(id: String) -> bool:
