@@ -110,7 +110,7 @@ Every Forge kind (skills, classes, items, passives, units, and so on) gets one c
 
 ### 12.2 Key fields (locked on system assets)
 
-Shipped assets are system. Their KEY fields are read-only in the Forge; non-key fields (numbers, text) stay editable. The schema marks them `key: true`. Skill key fields (table in appendix M): `id`, `kind`, rank structure (number of ranks), hierarchy (`grade`, `requires`), plus the identity flags `basic`, `system`, `origin`. Classes and items define their lists in their own specs. Purpose of the lock: system assets are used by tests and are balance-tuning targets, so the lock marks what must not drift; to change a key field, clone the asset (12.3) or edit inside the system-edit scope.
+Shipped assets are system. Their KEY fields are read-only in the Forge; non-key fields (numbers, text) stay editable. The schema marks them `key_field: true` (checked by `ContentCatalog.key_field_errors`). Skill key fields (table in appendix M): `id`, `kind`, rank structure (number of ranks), hierarchy (`grade`, `requires`), plus the identity flags `basic`, `system`, `origin`. Classes and items define their lists in their own specs. Purpose of the lock: system assets are used by tests and are balance-tuning targets, so the lock marks what must not drift; to change a key field, clone the asset (12.3) or edit inside the system-edit scope.
 
 UI: a locked control is shown disabled with the reason ("System asset: key field locked. Create your own copy to change it") as tooltip and a lock icon; the ranks section hides add and remove rank for system skills. Enforcement is not UI-only: `upsert_skill` and `upsert` compare the key fields of an existing system asset with the stored one and return an error naming the field (nothing changes).
 
