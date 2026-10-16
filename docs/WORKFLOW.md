@@ -4,7 +4,7 @@
 
 | Bottleneck | Fix |
 | --- | --- |
-| Re-reading the codebase for context | `docs/GAME_BRIEF.md`, `ROADMAP.md`, `DECISIONS.md` (indexed from CLAUDE.md) |
+| Re-reading the codebase for context | `docs/GAME_BRIEF.md`, `ROADMAP.md`, `DECISIONS.md` (indexed from CLAUDE.md; index plus `docs/decisions/<system>.md`, read only the targeted system's file) |
 | Full check takes minutes and floods output | `tools/fc.sh`: `parse` (changed files only), `arena`/`dojo` (failures first), `run <script>` (scratch debug) |
 | Failures re-debugged from scratch | `godot-debug-checklist` skill known-issues table; add every new cause |
 | Ad-hoc patch scripts truncating files / data edits by hand | `patch-and-seed` skill: Edit tool for text, `ContentCatalog.upsert` scripts for data |

@@ -1,6 +1,8 @@
 # FORGE1: Content Forge structure and schema overhaul (skills, items, classes; units follow)
 
-Status: proposed (design only: structure and schema first, no implementation approved)
+Archived 2026-10-17 (CLN-5), superseded: skills part by docs/archive/FORGE1_DESIGN_SKILLS.md and FORGE1_SKILLS (built in SKILL1), items by docs/specs/FORGE1_ITEMS.md, classes and units by docs/specs/FORGE1_CLASSES.md (units: its section 8). Do not build from this file.
+
+Status: superseded (header was "proposed (design only: structure and schema first, no implementation approved)")
 Depends on: SK2 (its `advanced` / `unlock_offset` fields become part of the rank and core groups below; both touch the same hub files)
 Lane: design now; later logic (schema first) then asset
 Touches (when approved): `scripts/content/content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `scripts/ui/forge/*` (form, forge, preview, source), `scripts/core/specs/passives.gd` (effect grammar exposed as data), `scripts/core/inventory/equipment.gd` (threshold effects, FG2 only), `scripts/core/specs/gear_budget.gd` (FG2), new `data/catalog/item_families.json` (FG2), tests listed in section 7

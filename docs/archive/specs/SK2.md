@@ -1,6 +1,8 @@
 # SK2: Level-based skill unlock (replaces the AP-cost cap)
 
-Status: proposed
+Archived 2026-10-17 (CLN-5), task done: kept for history; current rules live in docs/GAME_BRIEF.md and docs/decisions/. Do not build from this file.
+
+Status: done (header was "proposed")
 Depends on: M2C2B (merged; supplies the families, paths and advanced rows this task re-gates)
 Lane: both (SK2-L logic and schema first, then SK2-A small asset seed)
 Touches: `scripts/core/combat/combatant.gd`, `scripts/core/specs/stat_rules.gd`, `scripts/core/specs/passives.gd`, `scripts/combat/planning/skill_def.gd`, `scripts/content/content_schema.gd`, `scripts/content/content_catalog.gd`, `scripts/content/content_factory.gd`, `scripts/combat/ai/ai_profile.gd` (comment only), `scripts/combat/planning/combat_plan.gd` (one message), `scripts/ui/forge/forge_preview.gd`, `scripts/progression/unit_state.gd`, `data/catalog/skills.json`, `data/catalog/classes.json`, `data/catalog/passives.json`, new seed `data/seeds/sk2.gd`, suites listed in "Tests". Overlap note: AI1 (in progress) edits `tactical_ai.gd`, `plan_presets.gd`, `skill_catalog.gd`; SK2 does not edit those three (the gate lives in `Combatant.can_use`, the single choke point), so the two can run in parallel.

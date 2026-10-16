@@ -1,6 +1,8 @@
 # M2C2B: Class skill content for all six classes (final model)
 
-Status: proposed
+Archived 2026-10-17 (CLN-5), task done: kept for history; current rules live in docs/GAME_BRIEF.md and docs/decisions/. Do not build from this file.
+
+Status: done (header was "proposed")
 Depends on: B1, C1, D1 (per asset, see the dependency column); engine gaps X1 and X2 (section "Engine gaps") for four advanced skills
 Lane: asset (plus the small logic prerequisite M2C2B-L and the test updates, logic lane)
 

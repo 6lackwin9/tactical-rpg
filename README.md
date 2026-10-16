@@ -76,7 +76,7 @@ tactical-rpg/
 │   │   ├── specs/                # Character specs, 6-stat framework & progression models
 │   │   │   ├── character_stats.gd        # 6 stats (STR, DEX, INT | CONS, PERC, KNOW), leveling (1-10), derived stats
 │   │   │   ├── class_archetype.gd        # Base stats, growths & proficiencies; presets come from the catalog (create(id))
-│   │   │   ├── stat_rules.gd             # Enforced rules: class budget & growth, spend pool, tiers, skill cap by level
+│   │   │   ├── stat_rules.gd             # Enforced rules: class budget & growth, spend pool, tiers, SK2 unlock constants
 │   │   │   ├── proficiency.gd            # Gear proficiency dict {type: {level, scaling}} and what training does
 │   │   │   ├── passives.gd               # Passive effects granted by sources (stat, proficiency, resist, AP regen, skill)
 │   │   │   └── stat_modifier.gd          # Composable flat/percent modifiers with contextual gating
@@ -291,7 +291,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
   - Exactly **six base classes**: Warrior (tank), Ranger, Priest (support), Brawler, Rogue, Mage.
   - Every class has the **same level-1 stat budget (62)** (6-18 per stat) and the **same growth (5 points per level, max 3 per stat)**: classes differ only in distribution.
   - **Units of one class differ by their spend pool**: `4 + (level - 1)` free points, spent exactly (authored for NPCs / enemies; the player chooses for party members; empty = follow the class weights).
-  - **Levels 1-10**; the skill-level cap follows the level (`ceil(level / 2)`).
+  - **Levels 1-10**; skill tiers unlock by level (SK2 unlock rule; AP is only the per-round budget).
 - **Classes vs units**: a *class* is stats + gear + skills (stat distribution, growth, gear proficiency, skill path, default loadout, art, AI role), lore-free. A *unit* is a class + level + side (party / enemy / neutral) + **tier** (hero, minion, standard, elite, boss: scale HP and power) + spend + optional gear / extra-skill overrides. Enemies use the same class curve at a tier, so a goblin is *lore* on top of a minion Brawler; worlds set levels and explicit tuning deltas. Fixed-stat units (e.g. the training dummy) remain possible.
 - **Gear proficiency** (`Proficiency`): an editable dictionary `{gear type: {level 1-3, scaling 1.0-2.0}}` per class. Unlisted gear can't be equipped. Levels give +1 Weapon Power each, a 2-point stat-requirement discount each, +1% crit per level above 1, -1 armor burden per level above 1, level 3 weapons cost one block less, and gate skills that need training (`SkillDef.weapon_types` / `min_proficiency`). `scaling` is how easy the gear is to wield: the multiplier on the scaling stat in Unit Power.
 - **Skills**: each class has a **skill path** (`[{level, skill}]`); a unit knows the path up to its level plus `extra_skills` and skills learned in play (`Combatant.learn_skill`, passives of type `skill`). The planner and AI only offer skills the unit can use (`Combatant.can_use`).
@@ -378,7 +378,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 All features are tested headlessly without requiring a graphical window or GPU.
 
-The test suite in [arena_test_suite.gd](scripts/tests/arena_test_suite.gd) executes **20 test suites** covering **171 individual assertions** (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
+The suites registered in [suite_registry.gd](scripts/tests/suite_registry.gd) (32 suites, about 300 assertions with the dojo; `check_project.ps1 -Fast -Quiet` prints the current count) run headlessly (each suite prints one line per assertion; the old hand-scripted 10-block battles were retired in favour of the Core Combat Rules suite):
 
 1. **Combat UI Framework & Behaviour Test** (8 assertions): all 8 panels mounted in their dock regions, tokens & roster bound to the simulated combatants, selection → inspector, tactical forecast, log & timeline modal lifecycle, timeline block inspection, undock/dock + layout presets + action FX dispatch.
 2. **Core Combat Rules Test** (7 assertions, [core_rules_test_suite.gd](scripts/tests/core_rules_test_suite.gd)): planned exactly like the game and resolved by the real resolver: the one damage formula (weapon + unit power, unarmed STR + DEX, unsuited weapons, authored power, armor curve and gear rating, x1.5 crits with their chance, seeded crits repeating, the planner's estimate = the formula), Brace mitigation with the Defensive-vs-Offensive matchup (exact damage, reading the seeded crit roll), stances persisting after resolving and into the next round (Shield Bash stays Defensive), Focus lasting its rounds then expiring, a defeated unit losing the rest of its round, Withdraw leaving the grid and ending the battle, and the full Goblin Ambush feed (moves, attacks with target HP, buffs/guards, the R1-B04 wave, withdrawal, defeats).
@@ -602,7 +602,7 @@ The following modular systems and capabilities are planned according to the mast
 
 - [x] 6-stat architecture (STR, DEX, INT | CONS, PERC, KNOW) and derived formulas.
 - [x] 10-level cap with guaranteed class growths and free attribute point allocation.
-- [x] Enforced class rules (`StatRules`): equal budget and growth, authored spend pool, tiers, skill cap by level; editable gear Proficiency dict; Passives replace mastery (granted by world sources, never by classes).
+- [x] Enforced class rules (`StatRules`): equal budget and growth, authored spend pool, tiers, level-based skill unlocks (SK2); editable gear Proficiency dict; Passives replace mastery (granted by world sources, never by classes).
 - [x] Class skill paths by level plus event-learned extra skills (`Combatant.learn_skill`).
 - [x] Integration with `Combatant` model.
 - [x] UI Character Sheet & gear equip modal (`CharacterEquipmentModal`) and the modular Gear Dojo workspace (`gear_dojo.tscn`).
@@ -610,7 +610,7 @@ The following modular systems and capabilities are planned according to the mast
 
 ### 7. Region Map & Exploration Engine (`System 2`)
 
-*Status: Specification defined in `.context/GAME_DESIGN.md`.*
+*Status: placeholder; starting rules in `docs/ROADMAP.md` "Inputs for placeholder systems".*
 
 - [ ] 2D top-down grid exploration with tile types (`SAFE` vs `DANGER`).
 - [ ] Danger step counter triggering mob encounter rolls.
@@ -619,7 +619,7 @@ The following modular systems and capabilities are planned according to the mast
 
 ### 8. World Map & Travel Engine (`System 1`)
 
-*Status: Specification defined in `.context/GAME_DESIGN.md`.*
+*Status: placeholder; starting rules in `docs/ROADMAP.md` "Inputs for placeholder systems".*
 
 - [ ] Regional node/route graph linking world biomes.
 - [ ] Travel time consumption and road danger rolls.
@@ -627,7 +627,7 @@ The following modular systems and capabilities are planned according to the mast
 
 ### 9. NPC, Dialogue & World Story Engine (`System 9`)
 
-*Status: Specification defined in `.context/GAME_DESIGN.md`.*
+*Status: placeholder; starting rules in `docs/ROADMAP.md` "Inputs for placeholder systems".*
 
 - [ ] Branching dialogue trees with choices and skill checks.
 - [ ] Global quest flag registry and world state persistence.

@@ -15,11 +15,6 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10 | Enemy tier defined per world | not adopted | One base curve (class + tier + AI); worlds set level and tuning | A goblin must behave the same across worlds; lore is a layer |
 | 2026-10 | Ally "vacated tile" resolved in planning order | deprecated | Evaluated fastest-first | Speed gap between classes made planning order wrong |
 | 2026-10 | Tier power scaling applied to authored `power` | deprecated | Authored power is absolute | Double scaling broke world tuning deltas |
-
-## Lessons (avoid repeating)
-
-- Hand-edited JSON and ad-hoc string patch scripts corrupted files; use `ContentCatalog.upsert` and the Edit tool (skill `patch-and-seed`).
-- Test expectations hard-coded to old numbers broke on every data change; derive them from rules.
 | 2026-10-15 | Milestone order starting with a balance pass (M1) on S1-S4 | deprecated | Build balance-relevant systems first, freeze, then balance | Only S1/S2 are balance-ready; tuning before gear, AI, combat extensions and progression are built would be redone |
 | 2026-10-15 | Class roster warrior/ranger/shaman/brawler/scout/berserker | deprecated | warrior(tank)/ranger/priest/brawler/rogue/mage | No support/heal role, no gap-closers, melee-heavy (4 of 6 melee); baseline sim showed shaman 0% and berserker/warrior dominant. Shaman -> Priest (support), Scout -> Rogue (gap closer), Berserker -> Mage (second ranged damage dealer); warrior retuned as tank |
 | 2026-10-16 | Riposte AP, mitigation and duration as code constants (GUARD_MITIGATION) | deprecated | Skill rows (data) | Tier tuning must be a data change; the ascending and reverse tier models are both expressible |
@@ -30,3 +25,16 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-17 | Legacy AI path `AiProfile.smart_skills = false` (pre-AI1 behaviour, kept for the BAL1 A/B) | deprecated (removal after the BAL2 rerun, CLN-16) | `smart_skills` behaviour only | The A/B served BAL1; a second AI path doubles tests and sim variants (user, DECISIONS "Cleanup pass 1 answers") |
 | 2026-10-17 | Skills file version 1 (flat rows on disk) and the pre-SKILL1 keys `advanced` / `offhand` accepted by the loader | deprecated (warn on use in CLN-3, drop once unused, CLN-3b) | Version 2 ranked entries with `grade` and `weapon_hand` | Shipped data is version 2 with no old keys; the normaliser was meant for one release |
 | 2026-10-17 | `.context/` design notes (10-block timeline, early game design, coding standards) | deprecated (quick integration pass, then dropped, CLN-4) | docs/GAME_BRIEF.md, DECISIONS, ROADMAP, CLAUDE.md | Describes the 10-block layer deprecated above; the coding rules repeat CLAUDE.md and .agents/rules |
+| 2026-10-17 (logged in CLN-10; replaced 2026-10-16) | AP-cost skill unlock and the skill cap `ceil(level/2)` (a tier was usable only when its AP cost fit the unit's cap; the validator tied unlock level to AP as 2 x AP - 1) | deprecated | Level unlock: family unlock level + per-rank `unlock_offset`; AP is only the per-round budget (docs/decisions/skills.md "SK2 picks", "SK2-L built") | The AP tie forced odd unlock levels (riposte at warrior level 5) and mixed cost with progression; the user asked for a simple level check |
+| 2026-10-17 (logged in CLN-10; replaced 2026-10-16) | Active skill loadout (5 class + 3 extra) defined on the CLASS | deprecated | The loadout is set on the UNIT (`loadout` field); the class carries only the unlockable skill path (docs/decisions/items-gear.md "Strict hand typing and no class skill loadout" (2)) | Units of one class need different active kits; the class path is only a default |
+| 2026-10-17 (logged in CLN-10; replaced 2026-10-15) | Advanced versions as levels 4-5 of a class skill (skills at 3 levels, advanced impact at levels 4-5) | deprecated | Advanced skills are separate families with their own tiers 1-3 and extra effects (docs/decisions/skills.md "Skill model v2") | A higher level only scaled numbers; the user wanted advanced skills to add effects (Greater Mend = Mend + cleanse/buff) and free a slot |
+| 2026-10-17 (logged in CLN-10; replaced 2026-10-15/16) | Basic skills with tier variants across levels 1-5 (power_strike, heavy_blow, brace, fortress, deep_focus) | deprecated | Six single-tier basics (strike, guard, move, rest, switch_target, offhand_jab); late scaling via gear/passive potency (`skill_potency` hook) (docs/decisions/skills.md "Basics v3", "Slice A foundation") | Variants duplicated class skills and cluttered the planner; potency hooks scale basics without new rows |
+| 2026-10-17 (logged in CLN-10; replaced 2026-10-16) | Riposte tiers AP 1/2/3 with mitigation 0.15/0.20/0.25 (option A) | replaced | Reverse model shipped: AP 3/2/1, mitigation 0.15/0.05/0.00, rounds 2/3/3, all skill data (docs/decisions/skills.md "M2C2B content (2026-10-16)") | The user kept both models expressible as data; the content pass picked the reverse model (cheaper but riskier higher tiers); final tuning is a balance question |
+| 2026-10-17 (logged in CLN-10) | Commit trailer hard-coded in DECISIONS ("Claude Sonnet 5.5") | deprecated | The trailer comes from the session's attribution (EFFICIENCY "Downtime pass"); commit gate in CLAUDE.md | The model changes between sessions, so a fixed trailer goes stale |
+
+New rows go at the end of the table above (append-only); this section stays below it.
+
+## Lessons (avoid repeating)
+
+- Hand-edited JSON and ad-hoc string patch scripts corrupted files; use `ContentCatalog.upsert` and the Edit tool (skill `patch-and-seed`).
+- Test expectations hard-coded to old numbers broke on every data change; derive them from rules.

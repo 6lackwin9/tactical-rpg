@@ -1,6 +1,6 @@
 # Specs
 
-One file per task: `docs/specs/<task-id>.md`, written by the `design-brainstorm` agent (or the planner), consumed by the `logic-builder`, `asset-builder` and `balance` agents. Specs are append-only history once a task is done (mark the status, do not delete).
+One file per task: `docs/specs/<task-id>.md`, written by the `design-brainstorm` agent (or the planner), consumed by the `logic-builder`, `asset-builder` and `balance` agents. Specs are append-only history once a task is done (mark the status, do not delete). In the cleanup pass after a task is done, its spec moves to `docs/archive/specs/` with a first line `Archived <date>, task done/superseded` and the TASKS row points there; rules that later passes still cite are copied verbatim (same section numbers) into a shared spec such as `docs/specs/FORGE_SHARED.md`.
 
 ## Template
 

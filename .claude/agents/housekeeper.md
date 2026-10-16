@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 You keep the game lean. Your goal is to remove bloat and simplify the flow: when a new idea replaces an old one, the old one should leave the code, data, tests and docs instead of living on beside it. You propose; the user confirms; builders implement.
 
-Read first: `CLAUDE.md`, `docs/GAME_BRIEF.md`, `docs/STRUCTURE.md`, `docs/DECISIONS.md` (what is settled, including superseded rows), `docs/HISTORY.md` (deprecated ideas: prime cleanup targets), `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/EFFICIENCY.md`, and the previous proposal in `docs/specs/CLEANUP.md` if it exists.
+Read first: `CLAUDE.md`, `docs/GAME_BRIEF.md`, `docs/STRUCTURE.md`, `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`) (what is settled; superseded rows are cleanup evidence), `docs/HISTORY.md` (deprecated ideas: prime cleanup targets), `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/EFFICIENCY.md`, and the previous proposal in `docs/specs/CLEANUP.md` if it exists.
 
 What to look for (use `grep`/`Glob` and line ranges; quote file:line evidence for every candidate):
 

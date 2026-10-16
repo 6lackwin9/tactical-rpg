@@ -1,0 +1,145 @@
+# ROADMAP archive (2026-10): decided options, answered questions, done plans
+
+Archived 2026-10-17 (CLN-11), decided/done: sections moved verbatim from `docs/ROADMAP.md` (main at b0cfa41). The decisions they led to are in `docs/decisions/`; the live roadmap is `docs/ROADMAP.md`. Do not build from this file.
+
+## Decisions taken from the user's answers (2026-10-15; also in DECISIONS.md)
+
+S12 stays additive (stat inputs or a wrapper; S1 keeps balance-ready). Level-up: automatic in sims (test variants), player-allocated in game, choices flavour only. Gear budget may be broken by special items that add a playstyle or offset a con. Encounters: step counter for mobs with rare elites; elites/bosses/scripted fights placed or roaming. Lone-hero: mob-group losses acceptable when under-levelled and improving with level; bosses ~10-20% solo win at equal level, party encouraged. Passives permanent, scripted fights may grant temporary ones. One small campaign first.
+
+## Open questions for the user
+
+- Gear budget: exact rule (what counts, how special items are tagged and tested). Context sent 2026-10-15.
+- Travel supplies: wanted, or reduced resource version? Context sent 2026-10-15.
+- Support identity: replace Shaman with Priest/Paladin, keep Shaman with a support kit, or make a hybrid? Skill-coverage review sent 2026-10-15.
+- Enemies in worlds: own tier tables or the one base curve? (current decision: one base curve)
+
+## Proposed designs (brainstorm pass 2026-10-15; all `proposed`, nothing approved)
+
+Input: the user wants remaining systems designed and built BEFORE any balance pass; only S1/S2 are balance-ready. No sims were run. The BALANCE_REPORT baseline (warrior 100%, berserker 80%, ranger 20%, shaman 0%, boss/1v3 losses) is used only to flag which systems touch balance. HISTORY.md checked: nothing below re-proposes a deprecated idea (mastery, free point allocation, per-world tiers and hard-coded content are all avoided; passives still come only from sources).
+
+### Balance impact map (what must be frozen before the balance pass)
+
+| System | Moves balance? | Why (baseline link) | Freeze before balance? |
+| --- | --- | --- | --- |
+| S3 gear budget | Yes, strongly | Warrior armor 25 / HP 314 comes from plate + kite shield; shaman has no body armor item | Yes: gear sets per class |
+| S4 AI | Yes | Ranger/shaman waste turns; skews duel and 1v3 numbers | Yes: presets and kiting rules |
+| S12 combat additions | Yes, strongly | New statuses, ally heals, terrain, skill upgrades change every class's power | Yes: ship the rules engine; content stays tunable |
+| S7 progression | Yes | Spend pool, skill acquisition and XP curve set power at each level; duels are tested per level | Yes: curve and skill-unlock levels |
+| S8 rewards | Indirect | Passives/items granted as rewards add power outside class budget | Freeze reward budget rules, not content |
+| S10 supplies, S11 shops | Indirect | Gear access and consumables change real-play power | Freeze rules only; tune prices later |
+| S9, S13 | No (S9 only via encounter frequency) | Plumbing / flow | No |
+
+Conflict to resolve: S1 is `balance-ready` yet S12 extends S1. Recommendation: S12 is additive (new command/status types, no change to the `DamageCalculator` formula); if the formula must change, S1 loses `balance-ready` until re-frozen (Q1).
+
+### P-S3 Gear budget as a design lever
+
+- Option A, per-class gear budget (soft): define a target gear value per level (armor + power points) and validate each class's starter and best-in-slot loadout stays inside it. Cheap (validation in `ContentCatalog`); the proficiency dict stays the access gate. Risk: the budget number must be invented.
+- Option B, fix by content: add missing items (shaman light robes, ranger leather) and gate plate/kite shield by proficiency level. Cheapest, no new rule; but balance stays fragile as items are added.
+- Option C, armor burden tax: raise burden of plate so the warrior trades speed for armor (existing rule `Speed = 8 + DEX - burden`). Risk: warrior speed may swing too far.
+- Recommend A+B (budget validation as a guard, B fills gaps now); C only if the balance pass still shows warrior dominance. Needed before balance: yes.
+
+### P-S4 Enemy AI
+
+- Option A, fix turn waste only: skip a turn only when no reachable target, kite to max range then attack instead of oscillating, shaman casts before moving. Small; targets the ranger/shaman baseline.
+- Option B, A plus role/difficulty profiles per encounter (cautious / standard / ruthless: flee threshold, focus fire, target choice). Medium; delivers the README "difficulty profiles" item as a non-stat difficulty dial.
+- Option C, perception-reactive AI (reads telegraphed plans). Big; risks unreadable outcomes for the sim.
+- Recommend A now, B after S12 (support AI needs ally-target commands), C deferred. Needed before balance: A.
+
+### P-S7 Party and progression
+
+- Option A, XP + automatic spend: levels from XP; spend follows class weights, skills follow `skill_path`. Smallest; no player agency; fits StatRules (spend exactly 4+level-1).
+- Option B, player-allocated spend at level-up inside the enforced pool, with undo until confirm. The pool stays exact and enforced, so the HISTORY row on free allocation is not revived. Medium; needs persistent member state (level, xp, spend, learned skills, passives, loadout).
+- Option C, B plus skill/passive slot choice (talent-tree-lite). Large; overlaps S12 skill upgrades.
+- Recommend B, built as a pure data model first (`scripts/progression/`, XP curve in `data/progression/`), UI after S13 so it persists.
+
+### P-S8 Quests and lore runtime
+
+- Option A, linear quest state machine: accept, steps, turn-in. Step kinds: defeat encounter, reach location, talk to NPC, have item. Rewards: XP, items, passive, skill, flag.
+- Option B, A plus a global flags registry and conditions (any step, dialogue or encounter can set/test flags). Small extra; S9/S11 reuse it.
+- Option C, event-bus reactive quests. Over-engineered for now.
+- Recommend B. Reward rule to freeze: reward passives/items carry a cost class tied to the S3 gear budget so rewards cannot exceed class budget by much (Q4). Passives stay source-granted only (DECISIONS).
+
+### P-S9 Exploration
+
+- Option A, README spec as written: SAFE/DANGER tiles, danger step counter rolls encounters, roaming visible elites, exit tiles.
+- Option B, no random rolls: all encounters placed/visible (authored in `encounters` data). Removes RNG from real-play balance, simpler tests.
+- Option C, hybrid: placed encounters plus a step counter only in designated DANGER zones.
+- Recommend C (data already marks where fights trigger). No balance impact except encounter frequency; build after S8 (flags/triggers).
+
+### P-S10 Travel
+
+- Option A, node graph with fixed travel cost, no events. Minimal.
+- Option B, A plus road-danger roll and supplies. Adds an economy that touches balance indirectly.
+- Option C, free travel between visited nodes, supplies as flavor only.
+- Recommend A first, supplies (B) as a later slice if wanted (Q6).
+
+### P-S11 NPCs and dialogue
+
+- Option A, dialogue trees as data (speaker, line, choices, flag conditions, effects that set flags/start quests); shops as a dialogue effect with fixed stock per NPC.
+- Option B, A plus faction reputation meters (relations already authored) gating dialogue, prices and quests.
+- Option C, skill-check choices (stat tests). Adds randomness; defer.
+- Recommend A, then B once S8 flags exist. Prices tuned after balance.
+
+### P-S12 Advanced combat
+
+- Option A, content-first within the current engine: ally-target commands (heal/buff), status set (bleed, poison, stun, haste, Staggered) through the existing status system, skill upgrades as per-skill levels. Support AI (S4) rides on ally targeting.
+- Option B, A plus terrain rules (cover, movement cost, hazard tiles; `Terrain` metadata exists) and AoE patterns.
+- Option C, A+B plus combo/flow engine (chained stance transitions, Dual Strike, weapon switch).
+- Recommend A, then B as a second slice, C last and optional. Each slice keeps `DamageCalculator` as the only formula. Give the shaman a support/heal identity here (baseline 0%) rather than inflating Hex/Arcane Bolt numbers (Q7).
+
+### P-S13 Save/load and game state
+
+- Option A, single JSON save slot: party state (S7), flags (S8), inventory/stash, location, world id; versioned schema with a migration hook.
+- Option B, multiple slots plus autosave on location change and after combat.
+- Option C, A with dojo/forge sandbox saves kept separate.
+- Recommend A as first slice, growing to B; build right after the S7 data model so the schema is not retrofitted; new-game flow picks world and starting party.
+
+### Open questions raised by this pass
+
+Q1 May S1 lose `balance-ready` if S12 needs a formula change? Q2 Gear budget: soft validation (A) or content-only (B)? Q3 Player-allocated level-up (S7-B) or automatic? Q4 May quest rewards exceed class budget, and by how much? Q5 Exploration encounters: placed only, step-counter only, or hybrid? Q6 Are travel supplies wanted? Q7 Should the shaman get a support/heal identity? Q8 Are lone-hero 1v3 and boss losses intended (party fights expected)? Q9 Passives permanent or temporary (existing question)? Q10 Playable loop scope: one campaign or a world sandbox?
+
+## Refactor backlog: done rows (moved from the live table)
+
+| Id | Item | When | Rules |
+| --- | --- | --- | --- |
+| R1 | Split oversized test files: `arena_test_suite.gd` (~1400 lines, older groups: combat UI, character specs, gear/dummy, session flow, art/terrain, planning/AI) into one file per group with a small runner; later `combat_extensions_test_suite.gd` (~800) by feature and `dojo_assertions.gd` (~770) | after M2c merges | Pure refactor on its own branch and review; no behaviour or number changes; total assertion count before = after |
+
+## Milestone plan v2 (coarse) - status: proposed (design-brainstorm 2026-10-16; the user approves each milestone)
+
+Principle (user 2026-10-16): few, coarse milestones. Each is ONE logic task (one branch) plus at most ONE asset task (one branch); the schema is the first commit of the logic task and only when the asset task needs it; no a/b/c sub-slices. Builder time uses the run log in `docs/WORKFLOW.md` (4-23 min). Supersedes the sub-slice plans for D1-A, C1-A2 and AI1 (they are folded in below). Nothing here is `approved`.
+
+| Milestone | Goal | Lane split (branches) | Depends on | Size (rough builder min) | Balance-ready afterwards |
+| --- | --- | --- | --- | --- | --- |
+| R1 (optional, first) | Split `arena_test_suite.gd` (1464 lines) into per-group suites with one suite registry; rule from then on: new tests go in new suite files, never in arena_test_suite | 1 logic branch (tests only) | C1-A1 and D1-L merged | 10-15, mechanical | none (pure refactor, assertion count equal) |
+| SK = M2C2B-L + M2C2B | Finish skill content: engine gaps X1 (status on area attacks) and X2 (DEFEND may grant taunt), then all class skill content | logic `M2C2B-L` (schema commit first, 8-10 min); asset `M2C2B` (one branch: C1-A2, D1-A, families, paths, units, test updates; 20-25 min; the four X skills are its last commits) | C1-A1, D1-L, M2C2B-L schema commit | 30-35 total, two builders | S2 classes and skills (but only after BAL1 confirms) |
+| AI1 | AI uses disengage, area attacks, cleanse-only, buffs, taunt, riposte, intimidate; `smart_skills` switch for A/B | 1 logic branch | D1-L (tests use shipped skills, content not needed) | 12-18 | S4 AI presets |
+| M3 | S7 data model + S13 save schema + XP curve + new-game constructor, merged | 1 logic branch, no asset task | none (parallel-safe) | 18-23; the upper end of one builder: if the first run is cut, the minimum split is two parts (progression state/curve; save/IO), do NOT pre-split | S7 curve (rules), S13 none |
+| M4 | S8 quests and flags runtime; structured quest steps and rewards on top of the existing world quest schema; sample campaign quests | logic `M4-L` (schema commit first; 12-16 min) + asset `M4-A` (sample quests in one world, 5-8 min) | M3 (flags and state container) | 20-24 total | S8 reward budget rules |
+| BAL1 | Balance rerun: duel bracket 40-60% for all six classes, tiers, levels, 1v3, boss, `smart_skills` on/off | 1 balance run on clean main | SK, AI1, M3 merged (M4 may still be building: it does not touch combat numbers) | n/a | S1, S2, S4 and S7 curve become `balance-ready` |
+
+Why M3 merges S7 and S13: the save file IS the party snapshot (level via XP, spend, learned skills, passives, loadout, gear, flags). Building them apart forces a schema retrofit and a second migration. UI (level-up screen, menus, new-game screen) is NOT in M3 and is the next milestone after M4 (S7 UI + S13 menus), then S9/S11/S10 as in the suggested build order.
+
+Order and parallelism (builder cap 3): R1 (optional) -> start SK-L, AI1 and M3 together (disjoint Touches) -> M2C2B asset when SK-L's schema commit and C1-A1/D1-L are merged -> M4 after M3 -> BAL1 after SK/AI1/M3. The critical path is C1-A1/D1-L -> SK-L -> M2C2B -> BAL1.
+
+### Hub-file overlap matrix (E = edits, a = additive one-function only, t = registration line only)
+
+| Hub file | R1 | SK-L | M2C2B | AI1 | M3 | M4 |
+| --- | --- | --- | --- | --- | --- | --- |
+| content_schema.gd | - | E (skill part) | - | - | - | - |
+| content_catalog.gd | - | E (DEFEND grant validation) | upsert only | - | - | E (quests kind validation, if base) |
+| content_factory.gd | - | - | - | - | a | - |
+| skill_def.gd | - | E | - | a (read helper, only if D1-L lacks it) | - | - |
+| combatant.gd | - | - | - | - | - (state is applied through the public API) | - |
+| arena_test_suite.gd | E (split) | - | E (loadout-driven kits) | t | t | t |
+| other test suites | - | new suite | E (about 10 suites) | new suite | new suites | new suite |
+| world_schema.gd / world_catalog.gd | - | - | - | - | - | E |
+
+Findings: (1) `arena_test_suite.gd` and the older suites are the real conflict magnet: M2C2B edits about 10 suites. Do NOT run R1 in parallel with M2C2B; run R1 before it (or skip R1 and accept M2C2B owning those edits, with AI1/M3 using only new suite files plus one registration line each). (2) The content hubs (`content_schema/catalog/factory`, `skill_def`) are touched by only one milestone at a time in this plan (SK-L), so no split is needed now; a split of `content_catalog.gd` (717 lines) and `content_schema.gd` (433) by kind (skill/item/class/unit validators) is only worth a separate refactor R2 if M4 and a later item or skill schema change collide; schedule it after M3 if wanted, not before. (3) `combatant.gd` is deliberately not edited by any milestone here: M3 builds a combatant from a state through existing setters. (4) Registration lines in `run_all_tests` conflict textually but trivially; R1 should turn the list into a registry file so each milestone appends one line. (5) Rule for builders: new tests go in a new `*_test_suite.gd`, never into arena_test_suite.
+
+Recommendation on R1: schedule it BEFORE starting the parallel work if it can run now while C1-A1/D1-L finish (it only moves test code); otherwise start SK-L, AI1 and M3 immediately (their Touches are disjoint) and run R1 between SK-L and M2C2B asset only if the M2C2B asset branch has not started. It is not a blocker for anything.
+
+## Open engine items: resolved bullets (moved from the live list)
+
+- Plan v2 covers the items below: AI hooks -> AI1; the skill-tier picker UI and "once per round" disengage remain unscheduled (UI pass / later logic).
+
+- AI hooks: TacticalAI ignores DISENGAGE, SWEEP (area) and cleanse-only skills (needed if enemies should use them) - schedule with the AI follow-ups or M2c-2b.

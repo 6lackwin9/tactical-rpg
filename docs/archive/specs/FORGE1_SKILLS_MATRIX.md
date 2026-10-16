@@ -1,6 +1,8 @@
 # FORGE1_SKILLS_MATRIX: appendix tables for FORGE1_SKILLS
 
-Status: proposed (appendix of `docs/specs/FORGE1_SKILLS.md`; the main spec holds the decisions, this file holds the field matrices and reference tables)
+Archived 2026-10-17 (CLN-5), task done (SKILL1): appendices G and M are copied verbatim into docs/specs/FORGE_SHARED.md, which is the live source. Do not build from this file.
+
+Status: done (header was "proposed (appendix of `docs/specs/FORGE1_SKILLS.md`; the main spec holds the decisions, this file holds the field matrices and reference tables)")
 
 Legend for matrices: C = common (authored for every kind that uses it), K = kind-specific, D = derived from the kind, `-` = unused (hidden by the schema, rejected by the validator if non-default), E = engine fixed value. Engine kinds are REST, MOVE, TARGET, STATUS.
 

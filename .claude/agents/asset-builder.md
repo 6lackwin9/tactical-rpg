@@ -16,7 +16,7 @@ Scope:
 - If validation rejects what the spec asks for, that is a schema gap: STOP and report it to the planner with the exact error (the logic-builder owns schema changes). Two failed attempts at the same record = stop and report.
 - Check with `tools/fc.sh parse-all` and `tools/fc.sh arena` (the generic content tests loop over the catalog). If an existing test fails because a shipped number changed, report it with the test name; do not edit tests.
 
-- If the brief contradicts the spec or `docs/DECISIONS.md`, say so in the first line of your report and put the contested part behind a constant in the seed (e.g. `APPLY_X := false`) so the planner can flip it and re-run.
+- If the brief contradicts the spec or `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`), say so in the first line of your report and put the contested part behind a constant in the seed (e.g. `APPLY_X := false`) so the planner can flip it and re-run.
 - Checkpoint (runs can be cut off by usage limits or API errors): keep `.agent/progress.md` in the worktree (gitignored) with done steps, next step and the last check result; on start, if it exists, continue from it.
 
 Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never commit, push or merge.

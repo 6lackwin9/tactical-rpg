@@ -1,6 +1,8 @@
 # AI1: AI use of disengage, sweep, cleanse-only, buff and debuff skills
 
-Status: proposed
+Archived 2026-10-17 (CLN-5), task done: kept for history; current rules live in docs/GAME_BRIEF.md and docs/decisions/. Do not build from this file.
+
+Status: done (header was "proposed")
 Depends on: D1-L (weaken status and zero-power attacks merged). Does NOT need M2C2B content: tests use shipped skills plus in-memory skill defs. Real kits arrive with M2C2B; the sim check belongs to BAL1.
 Lane: logic only (no asset task, no new catalog data)
 Touches: `scripts/combat/ai/tactical_ai.gd`, `scripts/combat/ai/ai_profile.gd`, `scripts/combat/ai/plan_presets.gd` (only if a preset needs the switch), `scripts/combat/planning/skill_catalog.gd` (list helpers only), new `scripts/tests/ai_skills_test_suite.gd`; one registration line in `arena_test_suite.gd`. No hub file (`content_*`, `skill_def.gd`, `combatant.gd`) is edited; if a read-only helper on `SkillDef` is unavoidable (for example `deals_damage()`), D1-L may already provide it, otherwise add it as a pure additive function and report it.

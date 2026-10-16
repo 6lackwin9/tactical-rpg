@@ -1,0 +1,8 @@
+# Decisions: progression and saves
+
+Settled; do not re-litigate without asking the user. Scope: S7 party and progression, S13 save and game state. Rows moved unchanged from `docs/DECISIONS.md` on 2026-10-17 (CLN-10), in their original order; append new rows at the end of the table. Index and global rules: `docs/DECISIONS.md`; superseded rows: `docs/decisions/archive.md`.
+
+| Decision | Choice | Why |
+| --- | --- | --- |
+| Level-up spend | Automatic in test/sim (try variants to see if choices matter); player-allocated in game. Balance target: performance stays in range whatever the player picks; choices are flavour/variance with minor benefits that discourage min-maxing | User 2026-10-15 |
+| M3 progression and save (2026-10-16) | Party state IS the save model (one schema for progression and saving); level is derived from `total_xp` (cumulative XP to levels 2-10: 40, 110, 220, 380, 600, 890, 1260, 1720, 2280 in data/progression/xp_curve.json, starting values for BAL1); kill XP = round((10 + 5 x enemy_level) x tier_mult x clamp(1 + 0.15 x (enemy_level - member_level), 0.25, 2.0)), min 1; PARTY_MAX 4 active, unbounded roster (empty active_ids = first four); every active member gets full encounter XP; permanent spend, auto-spend on a copy for unspent points; full heal after battle; saves at `user://saves/slot_<n>.json`, envelope version 1 with migrations, write = validate, tmp file, rename (previous save kept on failure); at_level leaves spend empty (auto); no per-stat spend ceiling (StatRules has none); a downed member still receives XP (battle-result hookup decides later). Gap: no rogue or mage party unit exists yet, so the builder-equivalence test covers only warrior, ranger, brawler, priest - add party units in the M2C2B asset branch | M3 review |

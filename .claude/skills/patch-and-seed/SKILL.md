@@ -14,7 +14,7 @@ description: Safe editing recipe for this Godot project. Use when changing code 
 ## Data edits (catalog or worlds)
 
 - Write a seed script in the scratchpad that calls `ContentCatalog.reload_from_disk()`, `ContentCatalog.upsert(kind, entry)` per entry in dependency order (items, skills, passives, classes, units, encounters), prints any returned errors, then `validate_all()` (must print `{}`) and `save_all()` (0).
-- Upsert is idempotent (replaces same id). Class/unit rules (`StatRules`, proficiency, skill cap) are enforced: read the error, fix the data, do not loosen the rule.
+- Upsert is idempotent (replaces same id). Class/unit rules (`StatRules`, proficiency, SK2 unlock levels) are enforced: read the error, fix the data, do not loosen the rule.
 - World data: use `WorldCatalog` APIs the same way; JSON hand edits only for trivial text and re-run the world suite.
 
 ## Tests after data changes

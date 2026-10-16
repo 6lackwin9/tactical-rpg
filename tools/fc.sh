@@ -57,7 +57,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
   local md=() out
-  for f in CLAUDE.md README.md docs/*.md docs/specs/*.md .claude/agents/*.md .claude/skills/*/SKILL.md; do [ -f "$f" ] && md+=("$f"); done
+  for f in CLAUDE.md README.md docs/*.md docs/specs/*.md docs/decisions/*.md data/seeds/*.md .claude/agents/*.md .claude/skills/*/SKILL.md; do [ -f "$f" ] && md+=("$f"); done
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }
 

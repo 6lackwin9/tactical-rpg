@@ -19,7 +19,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Stats: STR DEX INT CONS PERC KNOW. Max HP = 60 + CONS*8 + STR*2 (x tier HP). Speed = max(1, 8 + DEX - armor burden). Crit = 5% + 1%/DEX above 10 + 1%/weapon training level above 1, x1.5.
 - Damage: `DamageCalculator.compute` is the ONLY formula. Attack Power = (weapon power + training) + scaling stat x proficiency scaling (1.0-2.0, default 1.5), x tier power. Authored unit `power` is absolute. Hit = Attack x Focus x Skill x Stance matchup (1.25/0.75/1) x Crit x (1-Guard) x (1-Armor), armor = rating/(rating+50).
 - Combat: 6 blocks per round, simultaneous resolution, AP pool with regen, skill AP = skill level, stances Offensive > Tactical > Defensive > Offensive, +1 AP stance switch, AP debt allowed.
-- Classes (exactly six): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill cap = ceil(level/2), tiers hero/minion/standard/elite/boss scale HP and power.
+- Classes (exactly six): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill tiers unlock by level (no skill cap; see "Skill unlock rule (SK2)" below), tiers hero/minion/standard/elite/boss scale HP and power.
 - Proficiency: `{gear type: {level 1-3, scaling 1.0-2.0}}` per class; unlisted gear unequippable; training gives +1 power, -2 requirement, crit, burden, block cost (lvl 3), skill gating (`SkillDef.weapon_types/min_proficiency`).
 - Passives: catalog templates (stat w/ context, proficiency, resist, ap_regen, skill). Granted only by SOURCES (world character, faction `grants`, discipline `passives`, named item `grants`; later quests/lore). Never by classes/base units.
 - Skills: class `skill_path` by level + `extra_skills` + `Combatant.learn_skill`. `Combatant.can_use` gates planner/AI.
@@ -40,7 +40,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.
 - Test expectations for a system: its suite in `scripts/tests/` (class rules: `class_rules_test_suite.gd`).
 
-See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things are the way they are.
+See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `docs/decisions/<system>.md` for why things are the way they are.
 
 ## Combat extensions (M1, S12-A)
 
@@ -49,12 +49,12 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 - Stance: Rest -> Tactical (free entry); a stance change costs `CombatTypes.STANCE_SWITCH_COST` = 1 AP (single constant).
 - Statuses (eight in `StatusRegistry`): weaken lowers outgoing skill power by x(1 - magnitude/100) via `SkillDef.power_for` and the riposte counter (cap 25, magnitude from `status_magnitude`, stored per unit); a zero-power ATTACK needs a status and deals no damage. haste (+1 tile per move block), bleed (6% max HP at round end, ignores armor/guard), taunt (forces TacticalAI target, not the player planner); all start next round for `status_rounds`. Resistable keys: stagger, stun, root, bleed.
 - AI: kites to max range, no idle turns, SUPPORT heals the most wounded ally (<=70%, max 2/round), `reckless` profile never flees. `learned_only` skills reach a unit only via extra_skills / learn_skill.
-- Riposte (M2a): DEFEND skill `riposte` (L2, learned_only, guard 0.15) grants status `riposte` immediately for 2 rounds (`StatusEffects.grant_now`); `RiposteRules.counter` (called by Attack/AreaAttack commands) counters adjacent melee hits it survives for 50% power via `DamageCalculator.compute`, once per attacker per round; `Combatant.set_stance` removes it. Results go in `BattleCommand.reactions`.
+- Riposte (M2a): DEFEND skill `riposte` (warrior path family; AP, mitigation and rounds per rank are skill data in `skills.json`, not code constants) grants status `riposte` immediately for the rank's `status_rounds` (`StatusEffects.grant_now`); `RiposteRules.counter` (called by Attack/AreaAttack commands) counters adjacent melee hits it survives for 50% power via `DamageCalculator.compute`, once per attacker per round; `Combatant.set_stance` removes it. Results go in `BattleCommand.reactions`.
 - Gear budget (M2d): `GearBudget` (`scripts/core/specs/gear_budget.gd`) gives each equipment item one weighted value (power 1.0, mitigation 1.5, stat bonus 2.0/pt, burden -2.0, extra block cost -3.0) and sums a class's default loadout (pouch ignored) against TARGET_BUDGET 23 +-20%. Soft only: `ContentCatalog.warnings_for(kind, entry)` / `warnings_all()` (separate from `validate_all()`, which stays `{}`). Items with `special` + `special_note` may push a loadout over the band; special items are listed separately in the Forge class preview.
 
 ## Skill families and loadouts (M2c-2a1)
 
-- Skills carry `family` + `tier`; the planner offers each affordable tier (AP = tier's level, within the unit's skill cap) grouped by family ("Mend I / II / III", `PlanOption.group_by_family`). Basics are exactly strike, guard, move, rest, switch_target and offhand_jab: single tier, always active, no variants (their late-game scaling will come from gear affixes and passives through the `skill_potency` hook).
+- Skills carry `family` + `tier`; the planner offers each affordable tier (AP = tier's level, offered once the tier is unlocked by level, see "Skill unlock rule (SK2)") grouped by family ("Mend I / II / III", `PlanOption.group_by_family`). Basics are exactly strike, guard, move, rest, switch_target and offhand_jab: single tier, always active, no variants (their late-game scaling will come from gear affixes and passives through the `skill_potency` hook).
 - Active loadout: max 5 class families + 3 extra (`StatRules.MAX_CLASS_SLOTS/MAX_EXTRA_SLOTS`); `Combatant.set_loadout` only outside battle (locked by `CombatSession.start`). Empty loadout = unrestricted (hand-built units).
 
 ## Engine pieces (M2c-2a2)
@@ -90,7 +90,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 
 ## Skill unlock rule (SK2)
 
-- A class path step `{level, skill}` owns a family. Tier t is castable at `unlock + unlock_offset` (offset default 0/2/4 for tiers 1/2/3). AP is only the per-round budget (no skill cap). Advanced families (`advanced`) need path level >= 5; KNOW lowers an advanced family by `(KNOW-12)/4` and the passive `unlock` effect lowers any path family; the larger of the two applies, max 2 levels, advanced floor 3. Constants in `StatRules` (TIER_UNLOCK_STEP, ADVANCED_MIN_LEVEL, MAX_UNLOCK_REDUCTION, ADVANCED_UNLOCK_FLOOR, KNOW_UNLOCK_BASE/STEP, MAX_UNLOCK_OFFSET). Unlock levels freeze while the loadout is locked (battle). Read: `Combatant.family_unlock_level`, `tier_unlocked`.
+- A class path step `{level, skill}` owns a family. Tier t is castable at `unlock + unlock_offset` (offset default 0/2/4 for tiers 1/2/3). AP is only the per-round budget (no skill cap). Families of `grade` advanced or higher need path level >= 5; KNOW lowers an advanced family by `(KNOW-12)/4` and the passive `unlock` effect lowers any path family; the larger of the two applies, max 2 levels, advanced floor 3. Constants in `StatRules` (TIER_UNLOCK_STEP, ADVANCED_MIN_LEVEL, MAX_UNLOCK_REDUCTION, ADVANCED_UNLOCK_FLOOR, KNOW_UNLOCK_BASE/STEP, MAX_UNLOCK_OFFSET). Unlock levels freeze while the loadout is locked (battle). Read: `Combatant.family_unlock_level`, `tier_unlocked`.
 
 ## Ranked skills and asset origin (SKILL1)
 
@@ -100,3 +100,11 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` for why things ar
 - `origin` system/user on every kind: system assets lock key fields (seeds edit them inside `begin_system_edit`/`end_system_edit`) and cannot be deleted; `promote`/`demote` switch origin. Safe delete: `AssetScan` + `tools/safe_delete.gd`.
 - Saving never drops data: a kind whose file loaded with errors is save-blocked (`ContentCatalog.save_blocked(kind)`); `validate_all` reports unfoldable skill families under `skills:fold`. `warnings_all` checks skills once per family, keyed `skills:<head id>`. `ContentSchema.fields()` always returns copies.
 - Forge skill logic: `scripts/ui/forge/skill_form_model.gd`, `skill_filter.gd`, `skill_ranks_panel.gd`.
+
+## Balance rules and sim v2 (BAL2-L)
+
+- Attack range +1 at PERC >= `CharacterStats.RANGE_PERC_THRESHOLD` (18) only for ranged weapons (base range > 1); melee units stay at range 1.
+- Unit gear slot `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) = no item; a blank slot = class default. Units only (classes and world characters reject it).
+- Tiers: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
+- Trained fists: empty main hand + fist proficiency >= `DamageCalculator.TRAINED_FIST_MIN_LEVEL` (2): weapon power `UNARMED_BASE_POWER` (15) + fist training, fist crit bonus; `GearBudget.UNARMED_VALUE` reads the same constant. Inputs only, the formula is unchanged.
+- Sim: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value]` (`tools/balance_sim.gd` + `tools/sim/`); cells `binary/hp-margin`; duel = diagnostic band 30-70 (party and role targets: `docs/decisions/balance.md`). Tests: `bal2_rules_test_suite.gd`.

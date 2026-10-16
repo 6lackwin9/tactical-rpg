@@ -1,6 +1,8 @@
 # FORGE1_SKILLS: Skill tab of the Content Forge (family as template, ranks from modifiers, dynamic descriptions)
 
-Status: proposed (revised with DECISIONS "FORGE1 skill answers 2" and "FORGE1 class answers"; ready for approval; supersedes the skills part of `FORGE1_DESIGN.md`, now archived in `docs/archive/FORGE1_DESIGN_SKILLS.md`)
+Archived 2026-10-17 (CLN-5), task done (SKILL1-L / SKILL1-A built it): the shared rules (sections 4.1, 7 field keys/types, 11, 12) are copied verbatim into docs/specs/FORGE_SHARED.md, which is the live source. Do not build from this file.
+
+Status: done (header was "proposed (revised with DECISIONS "FORGE1 skill answers 2" and "FORGE1 class answers"; ready for approval; supersedes the skills part of `FORGE1_DESIGN.md`, now archived in `docs/archive/FORGE1_DESIGN_SKILLS.md`)")
 Depends on: SK2 (done; the bool `advanced`, `unlock_offset`, `upsert_many` exist; SKILL1 replaces the bool by `grade`)
 Lane: logic (SKILL1-L, schema commit first), then one small asset task (SKILL1-A, migration seed)
 Appendix: `docs/specs/FORGE1_SKILLS_MATRIX.md` (field by kind matrix, per-field guard rails, typed controls, form sections, filters, tests K, tokens L, origin key fields M). Section letters A-M below refer to it.
