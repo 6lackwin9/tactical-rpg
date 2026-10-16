@@ -4,8 +4,8 @@ Companion of `docs/specs/FORGE1_ITEMS.md` (read that first). Numbers below are D
 
 ## 1. Derivation rules (mechanical, so the asset task needs no judgement)
 
-1. `base[hand].<field>` of a family = the LOWER median of that field over its shipped items OF THAT HAND (one item = that item, so its modifiers shrink to none). A hand with no shipped item (NEW hands) copies the family's default hand. Section 2 below lists the default-hand numbers; per-hand values are recomputed by the seed. Worked examples: sword `main_1h` 18 (broadsword), `main_2h` 24 (claymore), `off` 14 (shortsword); dagger `main_1h` 15, `off` 16; fist `off` 12.
-2. `bands[hand].<field>` = [floor(0.75 x shipped min), ceil(1.25 x shipped max)] over that hand's items, clamped to the schema range; zero-only fields get [0, 10] (power) or [0, 0] (others); `bonus_value` = [0, 4] for main hands, [0, 6] for `off` (seed defaults). Known finding to report, not fix: dagger `off` (16) exceeds dagger `main_1h` (15), so the per-hand relation warning fires on `dagger`. Bands are SOFT (warning) until after the balance pass (user answer); every family and item row below is seeded `origin: system`.
+1. `base[hand].<field>` of a family = the LOWER median of that field over its shipped items OF THAT HAND (one item = that item, so its modifiers shrink to none). A hand with no shipped item (NEW hands) copies the family's default hand. Section 2 below lists the default-hand numbers; per-hand values are recomputed by the seed. Worked examples after round 4 (one hand category per family; shortsword, knuckles and wpn_dagger are main_1h): sword `main_1h` 14 (lower median of broadsword 18 and shortsword 14), `main_2h` 24 (claymore); dagger `main_1h` 15 (lower median of stiletto 15 and wpn_dagger 16); fist `main_1h` 12. Per-hand bases exist only for sword, axe and staff (families with both main hands); every other family has one base.
+2. `bands[hand].<field>` = [floor(0.75 x shipped min), ceil(1.25 x shipped max)] over that hand's items, clamped to the schema range; zero-only fields get [0, 10] (power) or [0, 0] (others); `bonus_value` = [0, 4] for main families, [0, 6] for off families (shield, orb, tome; they are support items with little or no power, so their power band is low and their bonus band high; seed defaults). The old dagger 16-vs-15 finding no longer exists (both daggers are main_1h; 16 sits inside the band 11-20). Bands are SOFT (warning) until after the balance pass (user answer); every family and item row below is seeded `origin: system`.
 3. `hands` = hands present among shipped items, plus hands the spec lists as `NEW`. `scaling_stats` likewise, default = the most common.
 4. A modifier `adjust` is written for every numeric field where the item differs from the family base (delta may be negative); `stat_bonus`, `requirement`, `effect` modifiers are copied one per stat / effect.
 5. Round trip is the acceptance: `ItemModifiers.resolve(entry, family)` must equal the pre-migration flat row on every key the engine reads (`item_type, slot, weapon_type, base_power, base_range, two_handed, off_hand_category, scaling_stat, block_cost, burden, mitigation, required_stats, stat_bonuses, effects, threshold_tiers`), and `GearBudget.item_value` must be identical for all 31.
@@ -16,12 +16,12 @@ Columns: hands (default first) | scaling (default first) | base power/range/bloc
 
 | Family | item_type | Hands | Scaling | Base p/r/b/bd/m | Bands | Engine rules | Items |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| sword | WEAPON | main_1h, main_2h, off (cat `shortsword`) | STR | 18/1/1/0/- | p 10-30 | - | 3 |
+| sword | WEAPON | main_1h, main_2h | STR | 14 (1h) / 24 (2h) /1/1/0/- | p 10-23 (1h), 18-30 (2h) | - | 3 |
 | axe | WEAPON | main_1h, main_2h | STR | 16/1/1/0/- | p 12-34 | - | 2 |
 | mace | WEAPON | main_1h | STR, INT | 13/1/1/0/- | p 9-22 | - | 2 |
 | hammer | WEAPON | main_2h | STR | 34/1/1/3/- | p 25-43 | - | 1 |
-| fist | WEAPON | main_1h, off (cat `knuckles`) | STR | 12/1/1/0/- | p 9-15 | - | 1 |
-| dagger | WEAPON | main_1h, off (cat `dagger`) | DEX | 15/1/1/0/- | p 11-20 | - | 2 |
+| fist | WEAPON | main_1h | STR | 12/1/1/0/- | p 9-15 | - | 1 |
+| dagger | WEAPON | main_1h | DEX | 15/1/1/0/- | p 11-20 | - | 2 |
 | bow | WEAPON | main_2h | DEX | 20/3/1/0/- | p 15-25, r 2-6 | always_ranged | 1 |
 | crossbow (NEW) | WEAPON | main_2h | DEX | 20/3/1/0/- (copy of bow) | p 15-25, r 2-6 | always_ranged | 0 |
 | staff | WEAPON | main_2h, main_1h | INT | 22/2/1/0/- | p 16-32, r 1-3 | spell_source | 2 |
@@ -39,24 +39,24 @@ Columns: hands (default first) | scaling (default first) | base power/range/bloc
 
 Common to all weapon families: `block_cost` band 1-3 (glass wand 3), `burden` band 0-4, `adjustable` = power, range, block_cost, burden. Armor and shield: `adjustable` = mitigation, burden, block_cost. Accessory: burden. Modifier kinds: weapons and armor `adjust, stat_bonus, requirement, effect`; accessory `stat_bonus, effect, requirement`; consumable, material, quest none. `max_modifiers`: weapons 8, armor 6, shield 6, accessory 4 (schema cap 12). `max_tiers`: weapons 3, armor and shield 2, accessory 0. Orb and tome carry power 0: their value is in `effect` modifiers.
 
-Strict hand typing (main spec 8.1): `main_1h` and `main_2h` fit MAIN_HAND only; `off` items (shortsword, knuckles, dagger, orb, tome, shields) fit OFF_HAND only. The code flag `allow_plain_dual_wield` (default false) alone could let a `main_1h` item into OFF_HAND. Migration does not change which hand any shipped item has.
+One hand category per family (main spec 8.1): `main_1h` and `main_2h` fit MAIN_HAND only; `off` items (orb, tome, shields) fit OFF_HAND only. The legacy code flag `allow_plain_dual_wield` (default false; set by the dojo) alone lets a `main_1h` item into OFF_HAND. Migration retypes three items: wpn_shortsword, wpn_knuckles and wpn_dagger go from hand `off` to `main_1h` (their stored slot MAIN_HAND was already main-hand); no other item changes hand.
 
 ## 3. Migration of the 31 items (what `collapse` must produce)
 
-`family` = the item's `weapon_type` (non-empty), else accessory / consumable by `item_type`. D = deltas vs the family base of the DEFAULT hand (section 2); with per-hand bases the seed recomputes them against `base[item.hand]` (e.g. claymore power +6 becomes 0, shortsword -4 becomes 0), the resolved rows stay identical. Req = `requirement`, Bon = `stat_bonus`. Stored `slot` is derived from the hand; the 3 off-category items change from MAIN_HAND to OFF_HAND (finding F1, main spec section 0).
+`family` = the item's `weapon_type` (non-empty), else accessory / consumable by `item_type`. D = deltas vs the family base of the DEFAULT hand (section 2); with per-hand bases the seed recomputes them against `base[item.hand]` (e.g. claymore power +6 becomes 0; with sword main_1h base 14, broadsword becomes power +4 and shortsword 0), the resolved rows stay identical. Req = `requirement`, Bon = `stat_bonus`. Stored `slot` is derived from the hand; the 3 retyped items keep slot MAIN_HAND (finding F1 disappears, main spec section 0), and `off_hand_category` becomes "" for them (icons via `icon_id`, main spec 1.1 `art`).
 
 | Item | Family | Hand | Scaling | Modifiers (adjust deltas, Req, Bon, effect) | Tiers |
 | --- | --- | --- | --- | --- | --- |
 | wpn_claymore | sword | main_2h | STR | power +6, burden +1, Req STR 14 | STR>=18 power +4 "Sunder Guard" |
-| wpn_broadsword | sword | main_1h | STR | Req STR 10 | - |
-| wpn_shortsword | sword | off | STR | power -4, Req STR 10 | - |
+| wpn_broadsword | sword | main_1h | STR | power +4 (vs base 14), Req STR 10 | - |
+| wpn_shortsword | sword | main_1h (was off) | STR | power -4, Req STR 10 | - |
 | wpn_hand_axe | axe | main_1h | STR | Req STR 10 | - |
 | wpn_battle_axe | axe | main_2h | STR | power +11, burden +2, Req STR 15 | - |
 | wpn_flanged_mace | mace | main_1h | STR | power +4, burden +1, Req STR 11 | - |
 | wpn_cleric_mace | mace | main_1h | INT | Req INT 10, Bon KNOW +1 | - |
 | wpn_warhammer | hammer | main_2h | STR | Req STR 22 | STR>=26 power +6 "Crushing Impact" |
-| wpn_knuckles | fist | off | STR | Req STR 10 | - |
-| wpn_dagger | dagger | off | DEX | power +1, Req DEX 12 | DEX>=15 power +4 "Puncture" |
+| wpn_knuckles | fist | main_1h (was off) | STR | Req STR 10 | - |
+| wpn_dagger | dagger | main_1h (was off) | DEX | power +1, Req DEX 12 | DEX>=15 power +4 "Puncture" |
 | wpn_stiletto | dagger | main_1h | DEX | Req DEX 11 | - |
 | wpn_shortbow | bow | main_2h | DEX | Req DEX 13 | DEX>=16 power +3 "True Flight" |
 | wpn_staff | staff | main_2h | INT | Req INT 14 | INT>=18 power +5 "Arcane Surge" |
@@ -77,7 +77,7 @@ Strict hand typing (main spec 8.1): `main_1h` and `main_2h` fit MAIN_HAND only; 
 | acc_swift_amulet | accessory | - (ACCESSORY_2) | - | Bon DEX +3 | - |
 | con_heal_potion, con_focus_elixir, con_fire_bomb | consumable | - | - | none (payload fields unchanged) | - |
 
-Check against the file: wpn_staff deltas are 0 because the lower median of 22 and 25 is 22; wpn_mage_staff burden 2 and power 25. Shield base mitigation 8 is the lower median of 4, 8, 16. Tier `label` = text before ":" in the legacy `desc`; auto desc = "<label>: +<n> Power" reproduces all 5 legacy strings exactly (acceptance).
+Check against the file: wpn_staff deltas are 0 because the lower median of 22 and 25 is 22; wpn_mage_staff burden 2 and power 25. Shield base mitigation 8 is the lower median of 4, 8, 16. Tier `label` = text before ":" in the legacy `desc`; auto desc = `<label>: +<n> Power` reproduces all 5 legacy strings exactly (acceptance).
 
 ## 4. Tests to update (rule-derived; detail of main spec section 8)
 
@@ -87,8 +87,9 @@ Check against the file: wpn_staff deltas are 0 because the lower median of 22 an
 | `foundation_test_suite.gd` | 15 (hand table line ~234, conflict test line ~294 sets `off_hand_category = "dagger"` on a 2H item) | Hand table derived from `family.hands` + item `hand`; the conflict case becomes `hand = main_2h` on a family without it (error "hand not allowed by family") and the legacy-row case (flat row with 2H and a category) |
 | `gear_budget_test_suite.gd` | 5 | Numbers unchanged (acceptance); add: modifier breakdown sums to `item_value`; `tier_potential` = 0.5 x tier value and never inside `item_value` |
 | `character_specs_test_suite.gd` | 4 (greatsword tiers) | Fixture uses a flat row; add extended tiers (stat_bonuses, effects, criteria); no dual-wield reference |
-| `scenes/dojo/dojo_assertions.gd` Dojo-28 (and re-run Dojo-21c, ~423) | broadsword in OFF_HAND expected true | Per main spec 8.1: default flag expects false, second pass with the flag true expects true; 21c unchanged (shortsword is hand `off`) |
-| `foundation_test_suite.gd` hand table | see above | Add flag-both-ways case for a plain `main_1h` item |
+| `scenes/dojo/dojo_assertions.gd` Dojo-13, 13b, 21, 21c (~423), 28; `scripts/dojo/dojo_loadouts.gd` presets `dual_wield`, `claymore_backup`, `duelist`, `archer`; dojo session | shortsword / dagger / broadsword in OFF_HAND | Per main spec 8.1 table: the dojo sets the legacy flag so these keep running; strict-rule passes (flag false) added; Dojo-28 reversed for the retyped items |
+| `foundation_test_suite.gd` `HAND_TABLE` (line 234), hand-conflict test (294), `_test_two_handed_offhand` (324) | shortsword / knuckles / dagger as `off` | Three table entries become `main_1h`; conflict case uses category `tome`; dagger fixture sets the flag; add flag-both-ways case for a plain `main_1h` item |
+| `art_terrain_test_suite.gd` ~122 | shortsword icon | Unchanged, icon via `icon_id` |
 | Origin (inside the new suites) | - | system item key-field edit refused, user item deletable, system item delete refused, promote then delete refused, v1 rows load as system |
 | `content_test_suite.gd` (claymore, line ~64), `gear_equip`, `ai_skills`, `combat_extensions`, `progression`, `save` | 1-4 each | Flat fixtures with `weapon_type` keep working (family derived); fixtures that put an impossible combination (e.g. a `fist` with INT scaling, a sword with range 3) now fail family validation: update the fixture to a legal combination, never loosen the rule |
 | `world_test_suite.gd` | named item | Unchanged (named items resolve through `get_entry`); add one case per tuning key on a base with modifiers |

@@ -26,7 +26,7 @@ Legend for matrices: C = common (authored for every kind that uses it), K = kind
 | level (AP) | C | C | C | C | C | - | - | - | - | MOVE costs 1 per tile, REST/TARGET/STATUS cost 0 |
 | blocks | C | C | C | C | C | C | C | C | C | TARGET fixed at 2; STATUS ignores it |
 | learned_only, basic | C | C | C | C | C | C | C | C | C | |
-| advanced, evolves_from, unlock_offset | C | C | C | C | C | - | - | - | - | engine rows are single-tier; `advanced` invalid on basic/system |
+| grade, requires, unlock_offset | C | C | C | C | C | - | - | - | - | engine rows are single-tier; non-novice `grade` and `requires` invalid on basic/system |
 | stance | K | D | D | D | D | D | D | D | D | ATTACK may override (6 rows DEFENSIVE) |
 | weapon_types, min_proficiency | K | K | - | K | - | - | - | - | - | DEFEND and SUPPORT opened by this spec (engine already enforces) |
 | reach_min, reach_max | K | - | - | K | - | - | - | - | - | |
@@ -80,7 +80,7 @@ Result: keep all nine kinds, split into authorable (ATTACK, DEFEND, FOCUS, SUPPO
 
 ## E. Every use of `family` today
 
-R = rank grouping, S = slot / ownership identity (needs only the head id), A = advanced linkage.
+R = rank grouping, S = slot / ownership identity (needs only the head id), A = grade / requirements linkage.
 
 | Use | File / function | Cat. |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ R = rank grouping, S = slot / ownership identity (needs only the head id), A = a
 | Skill potency passives and gear effects key on the family id | `Combatant.potency_for`, `Passives` `skill_potency` | S |
 | Ownership and loadout slots | `Combatant.owned_families`, `set_loadout`, `knows_skill`, `learn_skill`; `ContentFactory.families_of`, `loadout_of`; `UnitState`; unit `loadout` | S |
 | Class `skill_path` names the head id | `_class_errors` | S |
-| SK2 `advanced` (family-level), unlock level plus `unlock_offset`, `unlock` passive | `_family_errors`, `Combatant.tier_unlocked`, `Passives` | A, S |
+| SK2 `advanced` bool (becomes `grade`, family-level), unlock level plus `unlock_offset`, `unlock` passive | `_family_errors`, `Combatant.tier_unlocked`, `Passives` | A, S |
 | Test fixtures `t_fix`, `t_fix_2`, `t_fix_3` | `skill_family_test_suite` | R |
 
 Conclusion: basic and advanced skills are separate families (DECISIONS "Skill model v2"). `family` exists only to group ranks, so it becomes derived (head id) and `tier` the rank index.
@@ -109,8 +109,8 @@ Conclusion: basic and advanced skills are separate families (DECISIONS "Skill mo
 | system | bool | read-only | false | label | never | no |
 | basic | bool | locked after create; implies exactly 1 rank (NEW); owned by every unit from level 1; NOT valid in a class path; the Forge cannot create new basics (main spec question 1) | false | checkbox | locked on existing | no |
 | learned_only | bool | | false | checkbox | always | no |
-| advanced | bool | not with basic or system; KEY field (locked with `evolves_from` on system assets) | false | checkbox | not basic | no |
-| evolves_from | ref | head skill, not system, not basic, not advanced, not self, no cycle; non-empty only with `advanced`; KEY field (main spec section 11) | "" | filtered ref picker | advanced is ticked | no |
+| grade | enum | `novice`, `advanced`, `expert` (reserved, no expert skill ships); novice only on basic or system; KEY field | novice | dropdown | not basic | no |
+| requires | list of ref | head skills, each not system, not basic, not self, no duplicate, grade STRICTLY LOWER than this skill's; ALL required to own/learn; empty for novice; KEY field (main spec section 11) | [] | `multi_pick` filtered to lower grades | grade is not novice | no |
 | origin | enum | `system`, `user`; KEY field; set by the Forge (create = user, Promote = system), never typed | system | read-only label + Promote button | always | no |
 | level (AP) | int | 1-5 | 1 | spinbox | kinds with AP | yes |
 | blocks | int | 1-6 | 1 | spinbox | always | yes |
@@ -165,7 +165,7 @@ No free JSON or dict editor remains for skills. The effect-list editor belongs t
 | Class | Examples | Mechanism |
 | --- | --- | --- |
 | Prevented by the control | wrong type, out-of-range number, enum outside its set, duplicate list entries, non-existent ref, invalid id characters, hidden-section field, buff on the wrong kind, `min_proficiency` 0 while a weapon type is ticked, dash with an area, reach_min above reach_max, taunt with a non-SELF target, a rank modifier on a base-only field | typed controls, `when`/section visibility, option filtering; `coerce` stays only as a safety net for scripts |
-| Detected by the validator | id used, support skill with no payload, heal_stat set while heal_mult 0, power 0 without a status, weaken magnitude missing, rank count over cap, basic with ranks, `advanced` on a basic, `evolves_from` cycle, `unlock_offset` rules, required engine skill missing, rename collisions, rank id collision, unknown or kind-invalid description token, resolved name/description over cap | `ContentCatalog.validate_skill_entry(entry) -> Array[Dictionary]` returning `{"field", "rank", "message"}`; `validate_entry` maps `message` to plain strings so existing callers and tests are unchanged |
+| Detected by the validator | id used, support skill with no payload, heal_stat set while heal_mult 0, power 0 without a status, weaken magnitude missing, rank count over cap, basic with ranks, non-novice `grade` or `requires` on a basic, a required skill of equal or higher grade, `unlock_offset` rules, required engine skill missing, rename collisions, rank id collision, unknown or kind-invalid description token, resolved name/description over cap | `ContentCatalog.validate_skill_entry(entry) -> Array[Dictionary]` returning `{"field", "rank", "message"}`; `validate_entry` maps `message` to plain strings so existing callers and tests are unchanged |
 | Soft warnings | modifier equal to the base, literal digits in a description, literal per-rank description override | `warnings_for("skills", entry)`; never blocks |
 
 Presentation: while `validate_skill_entry` is non-empty, Save and Apply are disabled, a red "Cannot save: N problems" header lists each reason, the offending field (and rank cell) is outlined red with the same text as tooltip, and the list row gets the warning mark. Keyboard Apply is ignored while blocked. Warnings show in yellow and do not block.
@@ -177,7 +177,7 @@ The Forge edits the SKILL FAMILY (the template) as the primary object.
 | Order | Section | Kind | Fields |
 | --- | --- | --- | --- |
 | 1 | Identity | core | id, name, description template |
-| 2 | Classification | core | kind, basic, learned_only, advanced, evolves_from, system (read-only) |
+| 2 | Classification | core | kind, basic, learned_only, grade, requires, system (read-only) |
 | 3 | Cost and timing | core | level (AP), blocks, stance (rank 1 values; ranks may modify level and blocks) |
 | 4 | Targeting | core when the kind has a cast target | target_mode (SUPPORT), reach_min, reach_max, area (ATTACK) |
 | 5 | Gating | core for ATTACK, DEFEND, SUPPORT | weapon_types, min_proficiency |
@@ -192,8 +192,8 @@ Sections 1-5 and 7 are authored once; section 6 is the only kind-specific one an
 | Control | Behaviour |
 | --- | --- |
 | Text search | substring over id, name, description template (case-insensitive) |
-| Filter chips | kind (multi), rank count, basic, learned_only, advanced, system (hidden by default), weapon type, inflicts status, grants status, "has problems" |
-| Class usage | on a class path (pick a class), unit extra skill, referenced by a passive, `evolves_from` target, unused |
+| Filter chips | kind (multi), rank count, basic, learned_only, grade, system (hidden by default), weapon type, inflicts status, grants status, "has problems" |
+| Class usage | on a class path (pick a class), unit extra skill, referenced by a passive, `requires` target, unused |
 | Sort | name, kind, AP (rank 1), rank count, problems first |
 
 `SkillFilter` is a pure `RefCounted` predicate over entries and `ContentCatalog.references_to`, tested headless; filters are declared per kind in the schema (`"filters"`).
@@ -205,9 +205,9 @@ Basic protection: `remove_skill` and legacy `remove` refuse `basic` and `system`
 | Suite | Checks |
 | --- | --- |
 | `weapon_hand` (in the skill model suite) | legacy `offhand: true` normalizes to `off` and the derived `offhand` getter is true; `both` is rejected while `BOTH_ENABLED` is false; `off`/`both` with dash_tiles > 0 error; non-ATTACK with non-default errors; `wielded_type(OFF)` is the off weapon type or `unarmed`; gate on an `off` fixture checks the off weapon; shipped `offhand_jab` is `off` and behaves as before (arena, planning suites unchanged) |
-| new `skill_ranks_test_suite.gd` | round trip: for every shipped row `collapse` then `expand` reproduces it field by field; entry count equals distinct families and rank counts sum to the row count; ids `<head>`, `<head>_<n>`; `family_tiers(head).size() == ranks.size() + 1`; editing a base field changes every rank row, editing a modifier changes only that rank (no cascade: changing rank 2 leaves rank 3 equal to its own resolved value); a base-only key in a modifier row is rejected; a modifier equal to the base is dropped on save; derived rank names for ranks 1-3 (roman) and the 32-char cap on them; head rename renames rank ids and class/passive/unit/`evolves_from` references; `remove_skill` removes all ranks and refuses a referenced head; basics with ranks rejected; version-1 and version-2 files both load; a version-2 file with `family`, `tier` or a `name` modifier is a load error; legacy flat `upsert` (the `t_fix` pattern) still works and saves as one entry |
+| new `skill_ranks_test_suite.gd` | round trip: for every shipped row `collapse` then `expand` reproduces it field by field; entry count equals distinct families and rank counts sum to the row count; ids `<head>`, `<head>_<n>`; `family_tiers(head).size() == ranks.size() + 1`; editing a base field changes every rank row, editing a modifier changes only that rank (no cascade: changing rank 2 leaves rank 3 equal to its own resolved value); a base-only key in a modifier row is rejected; a modifier equal to the base is dropped on save; derived rank names for ranks 1-3 (roman) and the 32-char cap on them; head rename renames rank ids and class/passive/unit/`requires` references; `remove_skill` removes all ranks and refuses a referenced head; basics with ranks rejected; version-1 and version-2 files both load; a version-2 file with `family`, `tier` or a `name` modifier is a load error; legacy flat `upsert` (the `t_fix` pattern) still works and saves as one entry |
 | new `skill_text_test_suite.gd` | token resolution for every token against a fixture per kind (formats from main spec section 5); plural handling; `:n` suffix; unknown token error; token invalid for the kind error; token empty for some rank error; `{{`/`}}` escapes; unbalanced brace error; digit-literal warning; resolved length cap; migration generator: for every shipped family, the generated template renders to the stored text of every rank exactly, or the family is reported as literal-fallback (count printed, expected small) |
-| `content_test_suite.gd` | non-rank field mismatch across flat ranks, id convention, non-contiguous tiers, `weapon_types` without `min_proficiency`, gate on DEFEND/SUPPORT accepted and enforced by `can_use` (a shield-gated DEFEND fixture is unusable without the weapon), gate on FOCUS/DISENGAGE rejected, `evolves_from` rules, required-skills invariant, section rule replaces the old per-field messages (texts that existing tests match are kept) |
+| `content_test_suite.gd` | non-rank field mismatch across flat ranks, id convention, non-contiguous tiers, `weapon_types` without `min_proficiency`, gate on DEFEND/SUPPORT accepted and enforced by `can_use` (a shield-gated DEFEND fixture is unusable without the weapon), gate on FOCUS/DISENGAGE rejected, `grade` / `requires` rules (equal or higher grade required skill rejected, novice with `requires` rejected, grade change breaking a dependent refused, expert accepted by validation), required-skills invariant, section rule replaces the old per-field messages (texts that existing tests match are kept) |
 | new `origin_test_suite.gd` | see section M |
 | `skill_family_test_suite.gd` | family validation unchanged; add a ranked-fixture variant using `SkillRanks.entry` |
 | new `skill_form_model_test_suite.gd` | headless `SkillFormModel`: visible fields per kind equal `SkillKinds` sections, dynamic limits, kind-switch resets, disabled-Save reasons, `SkillFilter` predicates, ranks panel resolved values and highlighted modifiers, live description preview per rank; one `results.append` line in `suite_registry.gd` |
@@ -249,7 +249,7 @@ Key fields of a skill (read-only on `origin = system`, with the reason shown):
 | `kind` | engine dispatch (command class, planner) |
 | `basic`, `system`, `origin` | identity and ownership rules |
 | rank structure: the number of ranks (no add or remove rank) | rank ids `<head>_<n>` are referenced by saves and the planner |
-| family link: `evolves_from` and `advanced` | ownership gate (main spec section 11) |
+| hierarchy: `grade` and `requires` | ownership gate (main spec section 11) |
 
 Everything else (name, description template, level, blocks, numbers, modifier values, weapon gate, status, learned_only, stance) stays editable on system assets.
 
@@ -259,9 +259,10 @@ Everything else (name, description template, level, blocks, numbers, modifier va
 | delete | `remove` / `remove_skill` refuse system with the reason; succeed for user |
 | key lock | `upsert_skill` on a system entry changing a key field returns the locked-field error naming it; changing a number succeeds |
 | create | an unknown id created through `upsert_skill` stores origin user; `origin: system` for a new id is refused outside the system-edit scope |
-| promote | `promote` flips user to system, persists, then delete is refused; promoting a system asset is an error |
+| promote / demote | `promote` flips user to system, persists, then delete is refused; promoting a system asset is an error; `demote` flips back and delete works again; `demote` of a basic, engine row or an asset referenced by a test/seed fixture is refused with the references listed |
+| safe delete | `tools/safe_delete.gd`: scan lists test, seed, class path, unit loadout, passive and `requires` references; refuses while any exist (nothing changes); removes an unreferenced system fixture only with `--apply` |
 | scope | `begin_system_edit` / `end_system_edit` allow key edits for seeds and tests only; the Forge never calls them; the scope is off after `reload_from_disk` |
 | basics | all basics and `REQUIRED_IDS` are origin system (`validate_all` invariant) |
-| ownership | `Combatant.can_own_family`, `learn_skill` and passive grants refuse an advanced family without its base, allow it with the base, allow families with empty `evolves_from` |
-| class path | a basic in a path is an error; an advanced step without its base at a level <= its own is an error; base at equal level is accepted |
+| ownership | `Combatant.can_own_family`, `learn_skill` and passive grants refuse a skill when ANY `requires` entry is unowned, allow it when ALL are owned (two-entry fixture), allow skills with empty `requires` |
+| class path | a basic in a path is an error; a step whose `requires` are not ALL on the path at a level <= its own is an error; a requirement at equal level is accepted; grade >= advanced below level 5 is an error; the KNOW reduction applies to grade >= advanced |
 | basics grant | `ContentFactory.unit` of any class owns every basic from level 1 with no path row; no duplicate if also in `extra_skills` |

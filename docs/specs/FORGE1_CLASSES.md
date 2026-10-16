@@ -16,7 +16,7 @@ Make a class authorable without typing JSON and without being able to save an in
 | Fact | Consequence |
 | --- | --- |
 | `_class_fields` is a flat list: identity, `base_stats`, `growth` (typed), `proficiency` and `skill_path` (type `json`, raw text), 6 gear refs + `pouch` | Two fields need new widgets |
-| `_class_errors` validates stats, art, proficiency, path (order, level 1-10, skill exists, not system, tier 1, one step per family, advanced >= 5, a level-1 step), loadout fit | Most rules exist; path rules change in section 3.5 |
+| `_class_errors` validates stats, art, proficiency, path (order, level 1-10, skill exists, not system, tier 1, one step per family, grade >= advanced needs level >= 5, a level-1 step), loadout fit | Most rules exist; path rules change in section 3.5 |
 | `ClassArchetype.skill_path` is `Array[Dictionary]` `[{level, skill}]`; consumers: `skills_at` (class_archetype, unit_state:57, factory 273/319, catalog 726, tests), `content_factory` 199-214 and 303 (`loadout_of`), `content_catalog` 305/333/641, `forge_preview` 153, `class_rules_test_suite` 35/169/183, `content_test_suite` 111-143, `skill_family_test_suite` 288/345, `skill_unlock_test_suite` 61/257/303-328, `combat_extensions_test_suite` 730, seeds `sk2.gd`, `m2c2b_lib.gd` | One accessor change covers most; see 3.5 |
 | Shipped paths today list strike, guard (all six) and offhand_jab (ranger, brawler) at level 1 beside real skills; unlock levels used: 1, 3, 4, 5, 7 | Basics leave the path (3.3); standard levels come from this set |
 | Default loadout = first 5 non-basic families by path order (`ContentFactory.loadout_of`); a 6th is inactive | New deterministic rule in 3.5 |
@@ -26,10 +26,10 @@ Make a class authorable without typing JSON and without being able to save an in
 
 ### 2.0 Origin, locks and class count
 
-`origin` follows the shared rules in `FORGE1_SKILLS.md` (enum `system` / `user`, one field on every catalog kind; shipped rows are `system`; rows created in the Forge are `user`; DELETE only for `user`; "Promote to system" is a one-way action offered on a `user` row that a game test references, which also locks its delete). This spec only adds what is class specific. If that spec words a rule differently, it wins.
+`origin` follows the shared rules in `FORGE1_SKILLS.md` (enum `system` / `user`, one field on every catalog kind; shipped rows are `system`; rows created in the Forge are `user`; DELETE only for `user`; "Promote to system" is offered on a `user` row that a game test references and locks its delete; it is undoable by "Demote to user" unless a test or seed references the row; deleting a system class goes through SAFE DELETE; the lock marks balance-tuning targets). This spec only adds what is class specific. If that spec words a rule differently, it wins.
 
 - Class count is not enforced: the old "six classes" check and the Q1 warning are gone. "New class" is available; a new class starts valid (stats 6 each then adjusted, one sword row, empty path, empty loadout).
-- Key fields (locked when `origin` = system; editable when `user`): `id`, `base_stats`, `growth`, `proficiency`, `skill_path`, `ai_role`, the six gear slots and `pouch`. Why: balance sims, `StatRules`/`GearBudget` tests, dojo and world fixtures read exactly these. Editable on system classes: `name`, `description`, `art` (presentation only). Locked controls are shown disabled with the reason "system class: key field". The catalog enforces the same lock in `upsert` (the form is not the only guard): a changed key field on a system row is an error.
+- Key fields (locked when `origin` = system; editable when `user`): `id`, `base_stats`, `growth`, `proficiency`, `ai_role`. Why: balance sims and the `StatRules` / proficiency tests read exactly these (sims also read `ai_role` as the default AI role). NOT locked (round 4): the six gear slots, `pouch` and `skill_path` are only defaults (units carry the real loadout and need not follow the class path), so they stay editable on system classes, as do `name`, `description`, `art`. Locked controls are shown disabled with the reason "system class: key field". The catalog enforces the same lock in `upsert` (the form is not the only guard): a changed key field on a system row is an error; gear, pouch and path edits apply but still run all fit, budget and path validation.
 - `remove` is refused for `system` rows and for any class a unit references (existing rule). Rename of a `user` class rewrites unit `class_id` (existing rename-refs). System ids cannot be renamed.
 
 ### 2.1 Identity
@@ -68,7 +68,7 @@ The class carries NO skill loadout: only the unlockable `skill_path` (2.4). The 
 | Key | Type | Allowed | Default | Control |
 | --- | --- | --- | --- | --- |
 | `main_hand` | ref items | fits MAIN_HAND, weapon type trained (or empty = unarmed) | "" | slot picker; untrained items greyed with "no training in X" |
-| `off_hand` | ref items | fits OFF_HAND, trained | "" | disabled while main hand is 2H; only hand `off` items (strict hand typing, FORGE1 items 8.1) |
+| `off_hand` | ref items | fits OFF_HAND, trained | "" | disabled while main hand is 2H; only support items: shield, orb, tome (one hand category per family, FORGE1 items 8.1) |
 | `head`, `body` | ref items | fits slot, armor type trained | "" | slot picker |
 | `accessory_1`, `accessory_2` | ref items | fits slot; NOT the same item in both (3.6) | "" | slot picker; the item picked in one slot is greyed in the other while the flag is on |
 | `pouch` | refs items | `CONSUMABLE` | `[]` | multi_pick, count limited by battle-pouch size |
@@ -106,7 +106,7 @@ Per slot value, total vs `GearBudget.TARGET_BUDGET` (23), band, unarmed 14, spec
 
 Constant `ClassArchetype.STANDARD_PATH_LEVELS` (named list, from the shipped paths): `[1, 3, 4, 5, 7]` (every level used by a shipped path; 4 is used by intimidate, hamstring, focus and backflip; one constant, easy to prune). Advanced families offer only values >= `StatRules.ADVANCED_MIN_LEVEL` (5).
 
-UI: a row per entry = family picker (heads only, non-basic, used families greyed, shows kind and advanced badge, `evolves_from` base shown) + level selector dropdown listing the standard levels and a last entry "Custom level..." that reveals a spinner 1..`MAX_LEVEL`. A level not in the standard list is shown with a "custom" tag. No row limit; a counter shows "N families, first 5 active by default".
+UI: a row per entry = family picker (heads only, non-basic, used families greyed, shows kind and grade badge, `requires` shown; a family whose `requires` are not on the path is flagged) + level selector dropdown listing the standard levels and a last entry "Custom level..." that reveals a spinner 1..`MAX_LEVEL`. A level not in the standard list is shown with a "custom" tag. No row limit; a counter shows "N families, first 5 active by default".
 
 Schema contract: `skill_path` is `{String family id: int level}`. Stored in `classes.json` as a JSON object. Old list shape `[{level, skill}]` is accepted by `normalize` for one release (converted, basics dropped, then saved in the new shape) so old branches and tests do not break; after CLASS1-M a list is a validation error.
 
@@ -114,7 +114,7 @@ Skill loadout lives ONLY on the unit (the existing unit `loadout` field: owned n
 
 `ClassArchetype`: `var skill_path: Dictionary` (family -> level, insertion order); `skills_at(level)` = families with value <= level in `path_steps()` order. `class_to_entry` writes the dict back in the same order (round-trip test).
 
-Validation changes: remove "ascending level order" and "one step per family" (impossible by shape; duplicates in raw JSON are caught by the JSON parser keeping the last, so also reject duplicate keys at load if cheaply detectable, else rely on the picker); keep key exists / not system / tier 1 / level integer 1..10; advanced floor (level >= 5) stays; NEW `evolves_from` rule (FORGE1 skill answers 2): a path that lists an advanced family must also list its base family (`evolves_from`) at an equal or lower level (error, so a class never owns an advanced skill without the base). The same ownership rule applies to unit `extra_skills`/`loadout` (owned base required); this spec only states the class side and defers the unit side to the skills spec. Warnings (never errors): more than 5 non-basic families ("only the first 5 are active by default"), a tier unlocking beyond level 10 (capped), no level-1 entry.
+Validation changes: remove "ascending level order" and "one step per family" (impossible by shape; duplicates in raw JSON are caught by the JSON parser keeping the last, so also reject duplicate keys at load if cheaply detectable, else rely on the picker); keep key exists / not system / tier 1 / level integer 1..10; the grade floor (grade >= advanced needs level >= 5) stays; NEW `requires` rule (FORGE1_SKILLS 11.3): a path that lists a skill must also list EVERY family in its `requires` at an equal or lower level (error, so a class never owns a skill without its requirements). The same ownership rule applies to unit `extra_skills`/`loadout` (owned base required); this spec only states the class side and defers the unit side to the skills spec. Warnings (never errors): more than 5 non-basic families ("only the first 5 are active by default"), a tier unlocking beyond level 10 (capped), no level-1 entry.
 
 Tier ladder per entry stays "T1 Lv L / T2 Lv L+off2 / T3 Lv L+off3" from `unlock_offset`, capped at 10.
 
@@ -157,7 +157,8 @@ Cross-field AI warnings (soft, shown on the class for `ai_role`, on the unit for
 9. Accessory flag: same item in both slots errors when `ALLOW_DUPLICATE_ACCESSORY` is false and validates when true.
 10. `heal_below`: units default 0.7; `ContentFactory.ai_profile(unit).heal_below` equals the entry value; shipped units unchanged.
 11. A class with 8 path families validates; 5 are active; the warning names 8 and 5.
-12. A path with an advanced family and no base family (`evolves_from`) is an error; with the base at a lower or equal level it validates.
+12. A path with a skill whose `requires` are not ALL on the path at a level <= its own is an error; with all of them at a lower or equal level it validates (two-entry fixture).
+13. Round 4 lock scope: `upsert` of a system class changing `main_hand`, `pouch` or `skill_path` succeeds (and is still validated); changing `base_stats`, `growth`, `proficiency` or `ai_role` is an error.
 
 ## 6. Validation matrix
 
@@ -170,7 +171,7 @@ Cross-field AI warnings (soft, shown on the class for `ai_role`, on the unit for
 | `ai_role` enum; unit `heal_below` 0.1-1.0 | NEW | error | schema |
 | `skill_path` is a dict, level int 1-10, skill exists / not system / tier 1 | changed | error | `_class_errors` |
 | path contains a basic skill | NEW | error | `_class_errors` |
-| advanced family level >= 5; advanced family needs its `evolves_from` base on the path at <= level | changed / NEW | error | `_class_errors` |
+| grade >= advanced level >= 5; every `requires` family on the path at <= level | changed / NEW | error | `_class_errors` |
 | ascending order, one step per family, level-1 step required | removed / removed / downgraded | warning (level-1) | |
 | duplicate accessory (flag off) | NEW | error | `_loadout_errors` |
 | key field edited on a system class; delete of a system class | NEW | error | `upsert` / `remove` |
@@ -191,7 +192,7 @@ C1: keep flat class JSON, add `group` to fields; the only shape change is `skill
 | Identity | `art` (empty = class art) | own name/description/side |
 | Build | stats, growth, proficiency | `level`, `tier`, `spend` (exactly 4 + (level-1) or empty = class weights) |
 | Gear | six slots + pouch | empty slot = class item; a set slot replaces; duplicate-accessory flag and strict hand typing apply |
-| Skills | path up to level + all basics | `extra_skills`, `loadout` (owned non-basic families, max 5 + 3; basics never listed; advanced needs owned base) |
+| Skills | path up to level + all basics | `extra_skills`, `loadout` (owned non-basic families, max 5 + 3; basics never listed; every `requires` family must be owned) |
 | AI | `ai_role` only (empty = class role) | `target_pref`, `flee_ratio`, `defend_below`, `reckless`, `heal_below` are plain unit values with the defaults above; no inherit sentinels |
 | Overrides | none | `ap`, `power`, `armor`, `skill_cap`, `status_resist` |
 
@@ -201,7 +202,7 @@ Unit `origin` follows the shared rules. A unit preview shows effective stats, ge
 
 | Suite | Change |
 | --- | --- |
-| `content_test_suite.gd` (lines ~111-143 path cases use list shape) | convert to dict shape; add basic-in-path error, advanced-without-base error, duplicate accessory flag, system-lock and promote cases, 8-family warning, id/name/description caps; keep list-shape acceptance case for the one-release converter |
+| `content_test_suite.gd` (lines ~111-143 path cases use list shape) | convert to dict shape; add basic-in-path error, requires-not-met error, duplicate accessory flag, system-lock (key fields only) and promote / demote cases, 8-family warning, id/name/description caps; keep list-shape acceptance case for the one-release converter |
 | `class_rules_test_suite.gd` (35, 51, 153-183) | iterate `path_steps()`; migration equality; no basic on shipped paths; `skills_at(1)` still non-empty for shipped classes |
 | `skill_unlock_test_suite.gd` (61, 257, 303-328) | build paths as dicts; ladder equals `Combatant.tier_unlocked`; (level, position) default-loadout check |
 | `skill_family_test_suite.gd` (288, 345) | basics owned by a class-less unit; expected sets via `path_steps()` |
@@ -227,9 +228,9 @@ Changing stat budget, growth, proficiency semantics or gear budget numbers; stac
 
 ## 12. Decided (all earlier questions resolved, user 2026-10-16)
 
-1. Gear slots and `pouch` are key fields: locked on system classes.
+1. (Round 4) Gear slots, `pouch` and `skill_path` are NOT locked on system classes (defaults only); key fields are `id`, `base_stats`, `growth`, `proficiency`, `ai_role`.
 2. Standard path levels `[1, 3, 4, 5, 7]` (4 kept).
 3. A class with no level-1 path skill is a warning, not an error.
 4. `origin` wording matches FORGE1_SKILLS 12 (the skills spec wins on any difference).
 5. No class-level skill loadout: the unit `loadout` field is the only place; default by the (level, order) rule (3.5).
-6. Dual-wield flag is a code constant; strict hand typing applies to class and unit gear (`off` hand takes only `off` items).
+6. Dual-wield flag is a code constant; strict hand typing applies to class and unit gear (the off hand takes only off-category items: shield, orb, tome).
