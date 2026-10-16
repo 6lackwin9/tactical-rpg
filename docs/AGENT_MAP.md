@@ -4,9 +4,18 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-No agents running. SKILL1-L is paused (user usage limit, 2026-10-16): uncommitted partial work in worktree `../ngp-skill1` (branch `feat/skill1`, stopped mid-rename rewrite to the ranked API); resume with the same spec after the reset.
+design-brainstorm: BAL2 proposal from the BAL1 report (docs/specs/BAL2_PROPOSAL.md).
 
 ## Finished, by milestone (newest first)
+
+### SKILL1 Forge skill tab (2026-10-17)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | SKILL1-L (first run stopped at usage limit; resumed run 105k / 2) | n/a + 105k / 2 | merged `611b667` |
+| asset-builder | SKILL1-A migration seed | 111k / 11 | merged (planner enabled the 7 accepted pairings) |
+| change-reviewer | Review | 83k / 3.5 | 1 high (fixture), 2 medium (warnings_all, lossy save) |
+| logic-builder | Review fixes | 140k / 14 | merged |
 
 ### BAL1 balance rerun (2026-10-16)
 

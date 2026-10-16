@@ -90,3 +90,4 @@ Throughput note (2026-10-16): R1, M2C2B-L, M3, AI1 and M2C2B ran as 3 parallel l
 
 | BAL1 balance rerun | balance 66k / 22 | none (docs only) | report committed `80eeaf0` |
 | SKILL1-L | logic-builder stopped by user (usage limit) mid-run | - | paused, partial work in ../ngp-skill1 |
+| SKILL1 Forge skill tab | logic 105k / 2 (resume) + fixes 140k / 14, asset 111k / 11 | 83k / 3.5 | merged `611b667` |
