@@ -4,7 +4,12 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-design-brainstorm: BAL2 proposal from the BAL1 report (docs/specs/BAL2_PROPOSAL.md).
+| Agent | Task | Worktree |
+| --- | --- | --- |
+| logic-builder | BAL2-L commit 1b (metrics, party mode, role tests, sweep) | ../ngp-bal2l1b |
+| logic-builder | Cleanup batch part 1 (CLN-6, 7, 3, 9) | ../ngp-cln |
+| balance (sonnet) | BAL2 baseline duel/tier on new data | ../ngp-bal2base |
+| design-brainstorm | M4 quest runtime spec | main checkout, docs/ only |
 
 ## Finished, by milestone (newest first)
 
