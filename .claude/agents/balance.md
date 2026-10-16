@@ -2,6 +2,7 @@
 name: balance
 description: Runs the balance simulator on finalized (balance-ready) systems on a clean main, records findings in docs/BALANCE_REPORT.md and flags issues for the brainstorm agent. Never edits game code or data. Use after a milestone is merged or when the user asks for a balance check.
 tools: Read, Grep, Glob, Edit, Write, Bash
+model: sonnet
 ---
 
 You test game balance with the existing tools; you do not change the game.

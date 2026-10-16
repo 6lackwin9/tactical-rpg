@@ -1,0 +1,21 @@
+# Remove a finished git worktree on Windows/OneDrive (git's own `worktree remove` fails there).
+# OneDrive sets the read-only attribute on folders; Git for Windows deletes the files but cannot remove the
+# read-only folders, leaving half-deleted worktree entries that clog the git UI. This clears the attribute first.
+# Usage (from the main repo): powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> [feat/<branch>]
+param([Parameter(Mandatory = $true)][string]$Path, [string]$Branch = "")
+$ErrorActionPreference = "Stop"
+$repo = Split-Path -Parent $PSScriptRoot
+$wt = (Resolve-Path (Join-Path $repo $Path)).Path
+if ((git -C $wt status --porcelain) -ne $null) { Write-Error "Worktree $wt has uncommitted changes; commit or discard them first." }
+$name = Split-Path -Leaf $wt
+$meta = Join-Path $repo ".git\worktrees\$name"
+foreach ($p in @($wt, $meta)) {
+	if (Test-Path $p) {
+		attrib -R $p /S /D | Out-Null
+		Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
+		if (Test-Path $p) { [System.IO.Directory]::Delete($p, $true) }
+	}
+}
+git -C $repo worktree prune
+if ($Branch -ne "") { git -C $repo branch -d $Branch }
+git -C $repo worktree list

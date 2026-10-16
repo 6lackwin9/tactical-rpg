@@ -17,7 +17,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/skill_unlock_test_suite.gd`, `data/seeds/sk2_schema.gd` | SK2 unlock rule suite; schema default seed | S2, S12 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd, overlap.sh | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd, parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1 | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |
