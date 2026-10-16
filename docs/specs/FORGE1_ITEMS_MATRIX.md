@@ -4,8 +4,8 @@ Companion of `docs/specs/FORGE1_ITEMS.md` (read that first). Numbers below are D
 
 ## 1. Derivation rules (mechanical, so the asset task needs no judgement)
 
-1. `base.<field>` of a family = the LOWER median of that field over its shipped items (one item = that item, so its modifiers shrink to none).
-2. `band.<field>` = [floor(0.75 x shipped min), ceil(1.25 x shipped max)], clamped to the schema range; zero-only fields get [0, 10] (power) or [0, 0] (others). Bands are SOFT (warning) until after the balance pass (user answer); every family and item row below is seeded `origin: system`.
+1. `base[hand].<field>` of a family = the LOWER median of that field over its shipped items OF THAT HAND (one item = that item, so its modifiers shrink to none). A hand with no shipped item (NEW hands) copies the family's default hand. Section 2 below lists the default-hand numbers; per-hand values are recomputed by the seed. Worked examples: sword `main_1h` 18 (broadsword), `main_2h` 24 (claymore), `off` 14 (shortsword); dagger `main_1h` 15, `off` 16; fist `off` 12.
+2. `bands[hand].<field>` = [floor(0.75 x shipped min), ceil(1.25 x shipped max)] over that hand's items, clamped to the schema range; zero-only fields get [0, 10] (power) or [0, 0] (others); `bonus_value` = [0, 4] for main hands, [0, 6] for `off` (seed defaults). Known finding to report, not fix: dagger `off` (16) exceeds dagger `main_1h` (15), so the per-hand relation warning fires on `dagger`. Bands are SOFT (warning) until after the balance pass (user answer); every family and item row below is seeded `origin: system`.
 3. `hands` = hands present among shipped items, plus hands the spec lists as `NEW`. `scaling_stats` likewise, default = the most common.
 4. A modifier `adjust` is written for every numeric field where the item differs from the family base (delta may be negative); `stat_bonus`, `requirement`, `effect` modifiers are copied one per stat / effect.
 5. Round trip is the acceptance: `ItemModifiers.resolve(entry, family)` must equal the pre-migration flat row on every key the engine reads (`item_type, slot, weapon_type, base_power, base_range, two_handed, off_hand_category, scaling_stat, block_cost, burden, mitigation, required_stats, stat_bonuses, effects, threshold_tiers`), and `GearBudget.item_value` must be identical for all 31.
@@ -39,11 +39,11 @@ Columns: hands (default first) | scaling (default first) | base power/range/bloc
 
 Common to all weapon families: `block_cost` band 1-3 (glass wand 3), `burden` band 0-4, `adjustable` = power, range, block_cost, burden. Armor and shield: `adjustable` = mitigation, burden, block_cost. Accessory: burden. Modifier kinds: weapons and armor `adjust, stat_bonus, requirement, effect`; accessory `stat_bonus, effect, requirement`; consumable, material, quest none. `max_modifiers`: weapons 8, armor 6, shield 6, accessory 4 (schema cap 12). `max_tiers`: weapons 3, armor and shield 2, accessory 0. Orb and tome carry power 0: their value is in `effect` modifiers.
 
-A `main_1h` item fits MAIN_HAND only while `Equipment.allow_plain_dual_wield` is false (default, main spec 8.1); with the flag true it also fits OFF_HAND (the old dual wield). A hand `off` item (shortsword, knuckles, dagger, orb, tome, shields) fits OFF_HAND only, always allowed. Migration does not change which hand any shipped item has.
+Strict hand typing (main spec 8.1): `main_1h` and `main_2h` fit MAIN_HAND only; `off` items (shortsword, knuckles, dagger, orb, tome, shields) fit OFF_HAND only. The code flag `allow_plain_dual_wield` (default false) alone could let a `main_1h` item into OFF_HAND. Migration does not change which hand any shipped item has.
 
 ## 3. Migration of the 31 items (what `collapse` must produce)
 
-`family` = the item's `weapon_type` (non-empty), else accessory / consumable by `item_type`. D = deltas vs the family base (section 2). Req = `requirement`, Bon = `stat_bonus`. Stored `slot` is derived from the hand; the 3 off-category items change from MAIN_HAND to OFF_HAND (finding F1, main spec section 0).
+`family` = the item's `weapon_type` (non-empty), else accessory / consumable by `item_type`. D = deltas vs the family base of the DEFAULT hand (section 2); with per-hand bases the seed recomputes them against `base[item.hand]` (e.g. claymore power +6 becomes 0, shortsword -4 becomes 0), the resolved rows stay identical. Req = `requirement`, Bon = `stat_bonus`. Stored `slot` is derived from the hand; the 3 off-category items change from MAIN_HAND to OFF_HAND (finding F1, main spec section 0).
 
 | Item | Family | Hand | Scaling | Modifiers (adjust deltas, Req, Bon, effect) | Tiers |
 | --- | --- | --- | --- | --- | --- |

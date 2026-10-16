@@ -105,7 +105,7 @@ Modifier table. A rank modifier is an ABSOLUTE replacement value for one field, 
 | jump_tiles | yes | absolute int | 1-6 | 1 |
 | recover_ap | yes | absolute int | 0-12 | 0 (engine row only) |
 | name, description | no | derived (name) / template (description) | n/a | n/a |
-| everything else (`kind`, `basic`, `learned_only`, `advanced`, `evolves_from`, `origin`, `system`, `stance`, `weapon_types`, `min_proficiency`, `area`, `offhand`, `status_effect`, `target_mode`, `heal_stat`) | no (base-only) | n/a | n/a | identical across ranks in every shipped family |
+| everything else (`kind`, `basic`, `learned_only`, `advanced`, `evolves_from`, `origin`, `system`, `stance`, `weapon_types`, `min_proficiency`, `area`, `weapon_hand`, `status_effect`, `target_mode`, `heal_stat`) | no (base-only) | n/a | n/a | identical across ranks in every shipped family |
 
 Why absolute values and not multiplier or offset:
 
@@ -127,9 +127,21 @@ Rules:
 
 `SkillKinds` (new, `RefCounted`, static) is one table keyed by `SkillDef.Kind`: `label`, `authorable` (ATTACK, DEFEND, FOCUS, SUPPORT, DISENGAGE; REST/MOVE/TARGET/STATUS are engine-only), `sections`, `stance` (OFFENSIVE, DEFENSIVE, TACTICAL, KEEP), `ap` (LEVEL, PER_TILE, FREE), `cast` (FOE, SELF, ALLY, TILE), `icon`. `SkillDef.stance`, `keeps_stance`, `switch_cost`, `ap_cost`, `icon` and the self-kind loop in `combat_plan.target_options` read it; behaviour is identical (stance, AP and planner tests pass unchanged). `SkillDef` stays flat: about 166 reads in 17 non-test files make nesting costly for no behaviour change.
 
-Schema fields get `section` (list; `status_rounds` is in two) and `group` (Forge section). Sections: `damage` (power_mult, offhand, dash_tiles), `inflict` (status_effect, status_potency, status_magnitude, status_rounds), `reach` (reach_min, reach_max), `area`, `support` (target_mode, heal_stat, heal_base, heal_mult, cleanse_statuses), `grant` (grant_status, status_rounds), `guard` (mitigation), `focus` (boost, boost_rounds), `jump` (jump_tiles), `rest` (recover_ap), `gate` (weapon_types, min_proficiency). Kind map: ATTACK = damage, inflict, reach, area, gate; SUPPORT = reach, support, grant, gate; DEFEND = grant, guard, gate; FOCUS = focus; DISENGAGE = jump; REST = rest. The `when` lists are generated from it, and one loop ("field set but kind has no section for it") replaces about 10 hand-written "belongs to" errors.
+Schema fields get `section` (list; `status_rounds` is in two) and `group` (Forge section). Sections: `damage` (power_mult, weapon_hand, dash_tiles), `inflict` (status_effect, status_potency, status_magnitude, status_rounds), `reach` (reach_min, reach_max), `area`, `support` (target_mode, heal_stat, heal_base, heal_mult, cleanse_statuses), `grant` (grant_status, status_rounds), `guard` (mitigation), `focus` (boost, boost_rounds), `jump` (jump_tiles), `rest` (recover_ap), `gate` (weapon_types, min_proficiency). Kind map: ATTACK = damage, inflict, reach, area, gate; SUPPORT = reach, support, grant, gate; DEFEND = grant, guard, gate; FOCUS = focus; DISENGAGE = jump; REST = rest. The `when` lists are generated from it, and one loop ("field set but kind has no section for it") replaces about 10 hand-written "belongs to" errors.
 
 Gate change: `gate` joins DEFEND and SUPPORT. No engine change (`Combatant.can_use` is kind-blind). No shipped DEFEND or SUPPORT row sets a gate, so no data changes. Planner, AI and preview already go through `can_use` / the "Needs ..." text; the test in appendix K proves a gated DEFEND fixture is unusable without the weapon. `forge_preview` renders common lines (cost, stance via `stance_after`, rank list, gate) once and one function per section.
+
+### 4.1 `weapon_hand` (replaces the bool `offhand`; user answer 2026-10-16, strict hand typing)
+
+| Item | Contract |
+| --- | --- |
+| Field | `weapon_hand`, enum `main` (default; the active main weapon), `off` (the off-hand weapon, or bare hands when the main weapon is two-handed; STR+DEX unarmed scaling as today), `both` (dual-wield skill using both weapons). Section `damage`, ATTACK only, base-only (identical across ranks); a non-default value on another kind is an error |
+| Validation | `off` and `both` need `dash_tiles` = 0 (the old offhand rule). `both` is rejected while `SkillDef.BOTH_ENABLED` is false (SKILL1 ships false; the Forge lists it disabled, tooltip "engine pending"). Warning: `weapon_types` names a type whose family has no `off` hand (`off`) or lacks `off` or a main hand (`both`) |
+| Engine surface in SKILL1 | `SkillDef.weapon_hand` (MAIN, OFF, BOTH); `SkillDef.offhand` stays a derived getter (`weapon_hand == OFF`) and the flat row keeps a derived `offhand` key, so the ~12 engine readers (planner, AI, `DamageCalculator.expected`, dojo, preview) are untouched; `Combatant.wielded_type(hand := MAIN)` returns that hand's weapon type (`unarmed` for bare hands) |
+| Gate (`weapon_types`, `min_proficiency`) | the checked weapon is the one the skill uses: `main` = main-hand weapon (today), `off` = off-hand weapon type or `unarmed` (proficiency `fist`), `both` = BOTH weapons must satisfy the type list and the proficiency minimum. `offhand_jab` has no gate, so nothing shipped changes |
+| Migration | stored `offhand: true` -> `weapon_hand: off`; false/absent -> omitted. Shipped: one row, `offhand_jab` (grep of `data/`). `normalize` accepts the legacy bool for one release; SKILL1-A step 1 rewrites the file |
+| `both` offer rule | `can_use` false ("Needs two weapons") unless the unit holds a main and an off WEAPON (a shield does not count) at cast time. Engine follow-up, NOT SKILL1 |
+| `both` damage (recommended; engine follow-up) | TWO hits through the existing paths: main hit = `compute(offhand=false)`, off hit = `compute(offhand=true)` (own weapon, scaling, crit and guard roll), each at `power_mult` x `DUAL_HIT_FACTOR` (engine constant, start 0.6, tuned by the balance lane). `DamageCalculator.compute` unchanged; the dual-strike combo (`DojoSession` ~250) is the template. Rejected: main hit plus a fraction of the off weapon (loses the off weapon's scaling and type, needs a new compute parameter) |
 
 ## 5. Dynamic descriptions
 
@@ -196,6 +208,7 @@ Typed controls only (appendix G): no free text except id, name and description t
 | New / changed skill fields | `evolves_from` (ref `skills`, default "", section 11); `origin` (enum system / user, default system, section 12; every kind); `description` becomes a template; `weapon_types` / `min_proficiency` visible for ATTACK, DEFEND, SUPPORT; `name` max 32, `description` max 240 |
 | Stored keys removed | `family`, `tier` for ranked entries (legacy flat rows still carry them) |
 | `ContentCatalog` | `VERSIONS` (skills 2); ranked API (section 2); `validate_skill_entry`; `_family_errors` gains non-rank fields identical, id convention, contiguous tiers, rank cap (basic 1, class 3) |
+| `weapon_hand` | section 4.1 (replaces `offhand`) |
 | `SkillKinds` | section 4; `REQUIRED_IDS` invariant in `validate_all` |
 | `SkillRanks` | pure static: `expand(entry) -> Array[Dictionary]`, `collapse(rows) -> Dictionary` (entries or error list), `resolve(entry, rank) -> Dictionary`, `entry(base, modifiers)`, `rank_fields(kind) -> Array[String]` |
 | `SkillText` | pure static: `render`, `validate`, `tokens_for(kind) -> Array[String]`, `format_*` helpers (section 5) |
@@ -209,7 +222,7 @@ Typed controls only (appendix G): no free text except id, name and description t
 | 2 | Set `evolves_from` for the seven pairings of section 11.1 through `upsert_skill` inside `begin_system_edit` / `end_system_edit` (key field of a system asset) |
 | 3 | Remove every basic skill row (`strike`, `guard`, and any other basic) from all class `skill_path`s (section 11.2); print each removal |
 | 4 | Audit every class path and unit `extra_skills` for an advanced family without its base (section 11.3); print violators and stop, the user decides the fix |
-| 5 | No numbers, names or ids change; `origin` is absent everywhere (= system) |
+| 5 | `offhand_jab`: `offhand: true` -> `weapon_hand: off` (4.1). No numbers, names or ids change; `origin` is absent everywhere (= system) |
 
 ## 9. Milestones (coarse)
 
@@ -300,7 +313,9 @@ UI: a locked control is shown disabled with the reason ("System asset: key field
 
 Tests: appendix M (`origin_test_suite.gd`).
 
-## 13. Questions for the user
+## 13. Decided (all earlier questions resolved, user 2026-10-16)
 
-1. Can the Forge create NEW basic skills (they would be granted to every unit)? Proposal: no for now; the `basic` box is disabled on new skills with a tooltip; revisit with a balance pass.
-2. Should Promote be allowed to be undone in the Forge (demote), or file-edit only? Proposal: file-edit only.
+1. The Forge cannot create new basic skills: the `basic` box is disabled on new skills (tooltip); revisit after the balance pass.
+2. Promote to system is NOT undoable in the Forge (file edit or system-edit scope only).
+3. `evolves_from` base must be non-advanced (11); `advanced` is a key field (12.2).
+4. Strict hand typing: `offhand` becomes `weapon_hand` (4.1); `both` is an engine-lane follow-up outside SKILL1 and ITEM1.

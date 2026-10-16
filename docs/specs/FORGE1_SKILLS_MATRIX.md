@@ -9,7 +9,7 @@ Legend for matrices: C = common (authored for every kind that uses it), K = kind
 | Fact | Where |
 | --- | --- |
 | 127 flat rows, 49 families: 39 with exactly 3 ranks, 10 single rows (strike, offhand_jab, guard, move, switch_target, rest, staggered, stunned, shockwave, reckless_swing). Kinds by row: ATTACK 88, SUPPORT 18, DEFEND 7, DISENGAGE 6, FOCUS 3, STATUS 2, MOVE 1, TARGET 1, REST 1. `skills.json` is already `{"kind", "version", "entries"}` (version 1) | data audit |
-| Every row id is `<head>` for tier 1 and `<head>_<tier>` otherwise; every rank name is `<name> II` / `III`. `learned_only`, `basic`, `kind`, `area`, `stance`, `offhand`, `status_effect`, `target_mode`, `heal_stat`, `weapon_types`, `min_proficiency` never differ between ranks | data audit |
+| Every row id is `<head>` for tier 1 and `<head>_<tier>` otherwise; every rank name is `<name> II` / `III`. `learned_only`, `basic`, `kind`, `area`, `stance`, `offhand` (now `weapon_hand`), `status_effect`, `target_mode`, `heal_stat`, `weapon_types`, `min_proficiency` never differ between ranks | data audit |
 | Fields that differ between ranks (39 families): level 39, description 39, power_mult 27, status_potency 17, status_rounds 8, heal_base 3, heal_mult 3, mitigation 2, cleanse_statuses 2, dash_tiles 2, then reach_min, reach_max, blocks, boost_rounds, grant_status, jump_tiles, status_magnitude 1 each. 289 override cells in total (78 are descriptions); 7 non-description cells repeat rank 2 in rank 3 | data audit |
 | No data row references a rank id outside `skills.json`: class `skill_path`, unit `extra_skills` / `loadout`, passives all name the head id. Rank ids are used by the planner (`SkillCatalog.family_tiers`) and tests | grep of `data/` |
 | `ContentCatalog.upsert` is the single write path; `entries("skills")` returns flat rows; `references_to` / `_rename_refs` treat `family` as a skill id field; `to_storage` omits fields hidden by `when`; `upsert_many` exists (atomic set edits) | `content_catalog.gd`, `content_schema.gd` |
@@ -30,7 +30,7 @@ Legend for matrices: C = common (authored for every kind that uses it), K = kind
 | stance | K | D | D | D | D | D | D | D | D | ATTACK may override (6 rows DEFENSIVE) |
 | weapon_types, min_proficiency | K | K | - | K | - | - | - | - | - | DEFEND and SUPPORT opened by this spec (engine already enforces) |
 | reach_min, reach_max | K | - | - | K | - | - | - | - | - | |
-| area, power_mult, offhand, dash_tiles | K | - | - | - | - | - | - | - | - | |
+| area, power_mult, weapon_hand, dash_tiles | K | - | - | - | - | - | - | - | - | |
 | status_effect, status_potency, status_magnitude | K | - | - | - | - | - | - | - | - | magnitude only weaken |
 | status_rounds | K | K | - | K | - | - | - | - | - | inflicted status (ATTACK) or granted buff (SUPPORT, DEFEND) |
 | grant_status | - | K | - | K | - | - | - | - | - | |
@@ -119,8 +119,8 @@ Conclusion: basic and advanced skills are separate families (DECISIONS "Skill mo
 | min_proficiency | int | 0-3 (`Proficiency.MAX_LEVEL`) | 0 | spinbox; minimum 1 once a type is ticked | ATTACK, DEFEND, SUPPORT (NEW) | no |
 | power_mult | float | 0.0-6.0 step 0.05; 0 only with a status and no area | 1.0 | spinbox | ATTACK | yes |
 | area | enum | NONE, PLUS, BURST, LINE, SWEEP; not with power 0 | NONE | dropdown, invalid options disabled | ATTACK | no |
-| offhand | bool | not with dash_tiles > 0 | false | checkbox | ATTACK | no |
-| dash_tiles | int | 0-6; 0 with an area or offhand | 0 | spinbox, max 0 while area/offhand | ATTACK | yes |
+| weapon_hand | enum | main, off, both; off/both not with dash_tiles > 0; both rejected while `SkillDef.BOTH_ENABLED` is false (main spec 4.1); replaces bool `offhand` (true -> off) | main | dropdown, `both` disabled "engine pending" | ATTACK | no |
+| dash_tiles | int | 0-6; 0 with an area or weapon_hand off/both | 0 | spinbox, max 0 while area or off/both hand | ATTACK | yes |
 | reach_min | int | 0-8, at most reach_max; 0 when reach_max is 0 | 0 | spinbox, max = reach_max | ATTACK, SUPPORT | yes |
 | reach_max | int | 0-8; at most 1 for LINE/SWEEP | 0 | spinbox | ATTACK, SUPPORT | yes |
 | status_effect | enum | "" or `StatusEffects.debuffs()` | "" | registry dropdown | ATTACK | no |
@@ -181,7 +181,7 @@ The Forge edits the SKILL FAMILY (the template) as the primary object.
 | 3 | Cost and timing | core | level (AP), blocks, stance (rank 1 values; ranks may modify level and blocks) |
 | 4 | Targeting | core when the kind has a cast target | target_mode (SUPPORT), reach_min, reach_max, area (ATTACK) |
 | 5 | Gating | core for ATTACK, DEFEND, SUPPORT | weapon_types, min_proficiency |
-| 6 | Kind block | per kind | ATTACK: damage (power_mult, offhand, dash_tiles) and inflict (status_effect, status_potency, status_magnitude, status_rounds); SUPPORT: heal and cleanse, grant; DEFEND: guard (mitigation), grant; FOCUS: boost, boost_rounds; DISENGAGE: jump_tiles; REST: recover_ap |
+| 6 | Kind block | per kind | ATTACK: damage (power_mult, weapon_hand, dash_tiles) and inflict (status_effect, status_potency, status_magnitude, status_rounds); SUPPORT: heal and cleanse, grant; DEFEND: guard (mitigation), grant; FOCUS: boost, boost_rounds; DISENGAGE: jump_tiles; REST: recover_ap |
 | 7 | Ranks | core | the ranks section (rank table of modifiers, per-rank resolved panel, read-only); basics and system show "single rank" |
 | 8 | Preview and problems | derived | resolved per-rank summary (cost, stance, numbers, rendered description), "Used by", problems and warnings |
 
@@ -204,6 +204,7 @@ Basic protection: `remove_skill` and legacy `remove` refuse `basic` and `system`
 
 | Suite | Checks |
 | --- | --- |
+| `weapon_hand` (in the skill model suite) | legacy `offhand: true` normalizes to `off` and the derived `offhand` getter is true; `both` is rejected while `BOTH_ENABLED` is false; `off`/`both` with dash_tiles > 0 error; non-ATTACK with non-default errors; `wielded_type(OFF)` is the off weapon type or `unarmed`; gate on an `off` fixture checks the off weapon; shipped `offhand_jab` is `off` and behaves as before (arena, planning suites unchanged) |
 | new `skill_ranks_test_suite.gd` | round trip: for every shipped row `collapse` then `expand` reproduces it field by field; entry count equals distinct families and rank counts sum to the row count; ids `<head>`, `<head>_<n>`; `family_tiers(head).size() == ranks.size() + 1`; editing a base field changes every rank row, editing a modifier changes only that rank (no cascade: changing rank 2 leaves rank 3 equal to its own resolved value); a base-only key in a modifier row is rejected; a modifier equal to the base is dropped on save; derived rank names for ranks 1-3 (roman) and the 32-char cap on them; head rename renames rank ids and class/passive/unit/`evolves_from` references; `remove_skill` removes all ranks and refuses a referenced head; basics with ranks rejected; version-1 and version-2 files both load; a version-2 file with `family`, `tier` or a `name` modifier is a load error; legacy flat `upsert` (the `t_fix` pattern) still works and saves as one entry |
 | new `skill_text_test_suite.gd` | token resolution for every token against a fixture per kind (formats from main spec section 5); plural handling; `:n` suffix; unknown token error; token invalid for the kind error; token empty for some rank error; `{{`/`}}` escapes; unbalanced brace error; digit-literal warning; resolved length cap; migration generator: for every shipped family, the generated template renders to the stored text of every rank exactly, or the family is reported as literal-fallback (count printed, expected small) |
 | `content_test_suite.gd` | non-rank field mismatch across flat ranks, id convention, non-contiguous tiers, `weapon_types` without `min_proficiency`, gate on DEFEND/SUPPORT accepted and enforced by `can_use` (a shield-gated DEFEND fixture is unusable without the weapon), gate on FOCUS/DISENGAGE rejected, `evolves_from` rules, required-skills invariant, section rule replaces the old per-field messages (texts that existing tests match are kept) |

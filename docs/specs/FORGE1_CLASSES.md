@@ -1,6 +1,6 @@
 # FORGE1_CLASSES: Class tab of the Content Forge (five modular sections, typed editors, live derived panels)
 
-Status: proposed (design only; nothing here is approved). Revised 2026-10-16 with DECISIONS "FORGE1 class answers", "FORGE1 skill answers 2" and "FORGE1 item answers".
+Status: proposed (design only; nothing here is approved). Revised 2026-10-16 with DECISIONS "FORGE1 class answers", "FORGE1 skill answers 2", "FORGE1 item answers" and "Strict hand typing / no class skill loadout".
 Depends on: FORGE1 skills (`docs/specs/FORGE1_SKILLS.md`, SKILL1-L): generic field types (`table`, `multi_pick`, `dict_pick`), the `group` schema key, the live problems bar / disabled Save, and the shared `origin` (system / user) rules (referenced below, defined only there)
 Lane: logic (CLASS1-L schema first, CLASS1-M migration), small asset task (CLASS1-A)
 Touches (when approved): `scripts/content/content_schema.gd` (`_class_fields`, `_unit_fields`), `content_catalog.gd` (`_class_errors`, `_loadout_errors`, `warnings_for`), `content_factory.gd` (`class_archetype`, `class_to_entry`, `loadout_of`, `ai_profile`), `scripts/core/specs/class_archetype.gd` (`skill_path`, `skills_at`), `scripts/progression/unit_state.gd`, new `scripts/content/class_forge_model.gd` (pure view model), `scripts/ui/forge/{forge_form,content_forge,forge_preview}.gd`, `data/catalog/classes.json` and `units.json` (migration), tests in section 9
@@ -9,7 +9,7 @@ HISTORY.md check: nothing here re-proposes a deprecated idea. Related rows kept:
 
 ## Goal
 
-Make a class authorable without typing JSON and without being able to save an invalid class. Five Forge sections with typed controls whose ranges are the rule constants, live derived panels (stat totals, gear budget, proficiency coverage, unlock ladder, default loadout), and cross-field rules that name the reason and disable Save. System classes are protected; user classes are fully editable and deletable.
+Make a class authorable without typing JSON and without being able to save an invalid class. Five Forge sections with typed controls whose ranges are the rule constants, live derived panels (stat totals, gear budget, proficiency coverage, unlock ladder, read-only preview of the default active skills), and cross-field rules that name the reason and disable Save. System classes are protected; user classes are fully editable and deletable.
 
 ## 1. Findings (checked in code and data)
 
@@ -61,12 +61,14 @@ Make a class authorable without typing JSON and without being able to save an in
 | --- | --- | --- | --- | --- |
 | `skill_path` | dict `{family id: unlock level}` | key = a FAMILY HEAD (tier 1, not `system`, not `basic`), each once by definition; value integer 1..`MAX_LEVEL`; NO limit on entries | `{}` | `table` (section 3.5): family picker + level selector; shipped data is migrated (3.5) |
 
-### 2.5 Default loadout
+### 2.5 Starting gear (the class's gear loadout; unchanged)
+
+The class carries NO skill loadout: only the unlockable `skill_path` (2.4). The 5 + 3 active-skill loadout is set at the UNIT level (the unit `loadout` field, section 3.5); the class has no loadout-selection field, default-loadout field or picker.
 
 | Key | Type | Allowed | Default | Control |
 | --- | --- | --- | --- | --- |
 | `main_hand` | ref items | fits MAIN_HAND, weapon type trained (or empty = unarmed) | "" | slot picker; untrained items greyed with "no training in X" |
-| `off_hand` | ref items | fits OFF_HAND, trained | "" | disabled while main hand is 2H; dual-wield GUARD per FORGE1 items (flag, default blocking) |
+| `off_hand` | ref items | fits OFF_HAND, trained | "" | disabled while main hand is 2H; only hand `off` items (strict hand typing, FORGE1 items 8.1) |
 | `head`, `body` | ref items | fits slot, armor type trained | "" | slot picker |
 | `accessory_1`, `accessory_2` | ref items | fits slot; NOT the same item in both (3.6) | "" | slot picker; the item picked in one slot is greyed in the other while the flag is on |
 | `pouch` | refs items | `CONSUMABLE` | `[]` | multi_pick, count limited by battle-pouch size |
@@ -108,7 +110,7 @@ UI: a row per entry = family picker (heads only, non-basic, used families greyed
 
 Schema contract: `skill_path` is `{String family id: int level}`. Stored in `classes.json` as a JSON object. Old list shape `[{level, skill}]` is accepted by `normalize` for one release (converted, basics dropped, then saved in the new shape) so old branches and tests do not break; after CLASS1-M a list is a validation error.
 
-Deterministic default loadout (replaces "path order"): the unit's active class families = owned path families sorted by (unlock level ascending, then entry position in the dict ascending), first `MAX_CLASS_SLOTS` (5). Entry position = JSON object order. Order preservation: Godot `Dictionary` keeps insertion order and the catalog saves with `JSON.stringify(doc, "\t", false)` (sort_keys off, `content_catalog.gd:131`), so file order round-trips; the Forge edits a row's level in place (key position unchanged), adds new families at the end, and removal keeps the others' order. A model helper `ClassForgeModel.ordered_path(dict) -> Array[Dictionary]` and `ClassArchetype.path_steps()` (sorted `[{level, skill}]`) are the only places that sort; consumers that today iterate `skill_path` as a list switch to `path_steps()`. Rename of a family (skills spec `upsert_skill`) rewrites the key in place.
+Skill loadout lives ONLY on the unit (the existing unit `loadout` field: owned non-basic families, max 5 class + 3). When a unit sets none, the default is derived by this (level, order) rule; the class form shows it as a read-only preview. Deterministic default (replaces "path order"): the unit's active class families = owned path families sorted by (unlock level ascending, then entry position in the dict ascending), first `MAX_CLASS_SLOTS` (5). Entry position = JSON object order. Order preservation: Godot `Dictionary` keeps insertion order and the catalog saves with `JSON.stringify(doc, "\t", false)` (sort_keys off, `content_catalog.gd:131`), so file order round-trips; the Forge edits a row's level in place (key position unchanged), adds new families at the end, and removal keeps the others' order. A model helper `ClassForgeModel.ordered_path(dict) -> Array[Dictionary]` and `ClassArchetype.path_steps()` (sorted `[{level, skill}]`) are the only places that sort; consumers that today iterate `skill_path` as a list switch to `path_steps()`. Rename of a family (skills spec `upsert_skill`) rewrites the key in place.
 
 `ClassArchetype`: `var skill_path: Dictionary` (family -> level, insertion order); `skills_at(level)` = families with value <= level in `path_steps()` order. `class_to_entry` writes the dict back in the same order (round-trip test).
 
@@ -118,7 +120,7 @@ Tier ladder per entry stays "T1 Lv L / T2 Lv L+off2 / T3 Lv L+off3" from `unlock
 
 ### 3.6 Rule flag: no duplicate accessory
 
-A rule flag `rules.allow_duplicate_accessory` (bool, default `false` = forbidden) lives with the other rule constants in `StatRules` (code constant `ALLOW_DUPLICATE_ACCESSORY: bool = false`, next to the dual-wield guard flag from the items answer; the logic-builder keeps both flags in one place, a `RuleFlags`-style section of `stat_rules.gd`). When false: `_loadout_errors` errors "The same accessory cannot fill both accessory slots." for classes and units; pickers grey the duplicate. Revisit when stacking is designed; flipping the flag needs no data change. Test: with the flag on the same entry validates.
+A rule flag `rules.allow_duplicate_accessory` (bool, default `false` = forbidden) lives with the other rule constants in `StatRules` (code constant `ALLOW_DUPLICATE_ACCESSORY: bool = false`, next to the dual-wield flag (a code constant, items 8.1); the logic-builder keeps both flags in one place, a `RuleFlags`-style section of `stat_rules.gd`). When false: `_loadout_errors` errors "The same accessory cannot fill both accessory slots." for classes and units; pickers grey the duplicate. Revisit when stacking is designed; flipping the flag needs no data change. Test: with the flag on the same entry validates.
 
 ## 4. AI: role on the class, behaviour on the unit
 
@@ -188,7 +190,7 @@ C1: keep flat class JSON, add `group` to fields; the only shape change is `skill
 | --- | --- | --- |
 | Identity | `art` (empty = class art) | own name/description/side |
 | Build | stats, growth, proficiency | `level`, `tier`, `spend` (exactly 4 + (level-1) or empty = class weights) |
-| Gear | six slots + pouch | empty slot = class item; a set slot replaces; duplicate-accessory flag and dual-wield guard apply |
+| Gear | six slots + pouch | empty slot = class item; a set slot replaces; duplicate-accessory flag and strict hand typing apply |
 | Skills | path up to level + all basics | `extra_skills`, `loadout` (owned non-basic families, max 5 + 3; basics never listed; advanced needs owned base) |
 | AI | `ai_role` only (empty = class role) | `target_pref`, `flee_ratio`, `defend_below`, `reckless`, `heal_below` are plain unit values with the defaults above; no inherit sentinels |
 | Overrides | none | `ap`, `power`, `armor`, `skill_cap`, `status_resist` |
@@ -221,11 +223,13 @@ Hub files shared with the skills pass: `content_schema.gd`, `content_catalog.gd`
 
 ## 11. Out of scope
 
-Changing stat budget, growth, proficiency semantics or gear budget numbers; stacking accessories (flag only); dual-wield enabling; world layer; skill editor internals (SKILL1); AI behaviour changes; class-level AI defaults; art.
+Changing stat budget, growth, proficiency semantics or gear budget numbers; stacking accessories (flag only); dual-wield enabling; world layer; skill editor internals (SKILL1); AI behaviour changes; class-level AI defaults; any class-level skill loadout or default-loadout selection; art.
 
-## 12. Open questions
+## 12. Decided (all earlier questions resolved, user 2026-10-16)
 
-1. Key vs editable split (2.0): are gear slots and `pouch` key (locked on system classes) or editable? Proposed locked because balance sims and gear tests read them.
-2. Standard levels `[1, 3, 4, 5, 7]` (all values used by shipped paths): keep 4, or reduce to `[1, 3, 5, 7]`?
-3. Downgrade "needs a level-1 path skill" to a warning (proposed) or keep an error?
-4. The skills spec had not yet defined `origin` when this was revised; confirm the wording above matches it after its revision.
+1. Gear slots and `pouch` are key fields: locked on system classes.
+2. Standard path levels `[1, 3, 4, 5, 7]` (4 kept).
+3. A class with no level-1 path skill is a warning, not an error.
+4. `origin` wording matches FORGE1_SKILLS 12 (the skills spec wins on any difference).
+5. No class-level skill loadout: the unit `loadout` field is the only place; default by the (level, order) rule (3.5).
+6. Dual-wield flag is a code constant; strict hand typing applies to class and unit gear (`off` hand takes only `off` items).
