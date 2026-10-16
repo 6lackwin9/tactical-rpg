@@ -6,12 +6,13 @@ param([Parameter(Mandatory = $true)][string]$Path, [string]$Branch = "")
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $wt = (Resolve-Path (Join-Path $repo $Path)).Path
-if ((git -C $wt status --porcelain) -ne $null) { Write-Error "Worktree $wt has uncommitted changes; commit or discard them first." }
+if ($null -ne (git -C $wt status --porcelain)) { Write-Error "Worktree $wt has uncommitted changes; commit or discard them first." }
 $name = Split-Path -Leaf $wt
 $meta = Join-Path $repo ".git\worktrees\$name"
 foreach ($p in @($wt, $meta)) {
 	if (Test-Path $p) {
 		attrib -R $p /S /D | Out-Null
+		Get-ChildItem $p -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Attributes = 'Normal' }
 		Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
 		if (Test-Path $p) { [System.IO.Directory]::Delete($p, $true) }
 	}
