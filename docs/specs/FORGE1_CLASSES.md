@@ -3,7 +3,7 @@
 Status: approved (user 2026-10-16: plans and order SKILL1 -> ITEM1 -> CLASS1). Revised 2026-10-16 with DECISIONS "FORGE1 class answers", "FORGE1 skill answers 2", "FORGE1 item answers" and "Strict hand typing / no class skill loadout"; slimmed and refreshed 2026-10-17 against SKILL1, BAL2-A and CLN-9 (decided content unchanged).
 Depends on: SKILL1-L (done: field types `table`, `multi_pick`, `dict_pick`, the `group` key, problems bar, `origin`; rules in `docs/specs/FORGE_SHARED.md`); CLN-9 (validator split); ITEM1-L commit 1 + ITEM1-A (pickers grouped by family; order in `FORGE1_ITEMS.md` 9)
 Lane: logic (CLASS1-L schema first, CLASS1-M migration), small asset task (CLASS1-A)
-Touches (when approved): `scripts/content/content_schema.gd` (`_class_fields`, `_unit_fields`; or their per-kind file if CLN-9's optional schema step lands); validators per CLN-9 split in `scripts/content/rules/class_unit_rules.gd` (planned name, not final: `_class_errors`, `_loadout_errors`, class warnings); `content_catalog.gd` only for `warnings_for` dispatch; `content_factory.gd` (`class_archetype`, `class_to_entry`, `loadout_of`, `ai_profile`), `scripts/core/specs/class_archetype.gd` (`skill_path`, `skills_at`, `path_steps`), `scripts/core/specs/stat_rules.gd` (rule flag, 3.6), `scripts/progression/unit_state.gd`, new `scripts/content/class_forge_model.gd` (pure view model), `scripts/ui/forge/{forge_form,content_forge,forge_preview}.gd`, `data/catalog/classes.json` and `units.json` (migration), tests in section 9
+Touches (when approved): `scripts/content/content_schema.gd` (`_class_fields`, `_unit_fields`; or their per-kind file if CLN-9's optional schema step lands); validators per CLN-9 split in `scripts/content/rules/class_unit_rules.gd` (planned name, not final: `ClassUnitValidator.class_errors`, `ClassUnitValidator._loadout_errors`, class warnings); `content_catalog.gd` only for `warnings_for` dispatch; `content_factory.gd` (`class_archetype`, `class_to_entry`, `loadout_of`, `ai_profile`), `scripts/core/specs/class_archetype.gd` (`skill_path`, `skills_at`, `path_steps`), `scripts/core/specs/stat_rules.gd` (rule flag, 3.6), `scripts/progression/unit_state.gd`, new `scripts/content/class_forge_model.gd` (pure view model), `scripts/ui/forge/{forge_form,content_forge,forge_preview}.gd`, `data/catalog/classes.json` and `units.json` (migration), tests in section 9
 Companion: `docs/specs/FORGE1_CLASSES_NOTES.md` (findings incl. what SKILL1 and BAL2-A already built, storage rationale, HISTORY check: nothing here re-proposes a deprecated idea, units extension).
 
 ## Goal
@@ -79,7 +79,7 @@ Per slot value, total vs `GearBudget.TARGET_BUDGET` (23), band (18.4-27.6), unar
 
 ### 3.3 Basics are not path content
 
-Built by SKILL1 (keep it; NOTES 1): `_class_errors` rejects a path entry whose skill has `basic` = true; the factory grants every basic (`SkillCatalog.basic_ids()`) to every unit from level 1, always active, outside `MAX_CLASS_SLOTS`; shipped paths hold no basic. CLASS1: the picker never lists basics; the rule moves to the dict shape (3.5); `skills_at` returns path skills only and callers that need basics (`unit_state.gd`, the catalog) keep seeing them (`ClassArchetype.owned_skills_at(level)` or the factory grant; builder's choice while acceptance 5 holds). Regression test: every shipped unit at every level owns the same basics before and after CLASS1 (`owns_skill` per basic).
+Built by SKILL1 (keep it; NOTES 1): `ClassUnitValidator.class_errors` rejects a path entry whose skill has `basic` = true; the factory grants every basic (`SkillCatalog.basic_ids()`) to every unit from level 1, always active, outside `MAX_CLASS_SLOTS`; shipped paths hold no basic. CLASS1: the picker never lists basics; the rule moves to the dict shape (3.5); `skills_at` returns path skills only and callers that need basics (`unit_state.gd`, the catalog) keep seeing them (`ClassArchetype.owned_skills_at(level)` or the factory grant; builder's choice while acceptance 5 holds). Regression test: every shipped unit at every level owns the same basics before and after CLASS1 (`owns_skill` per basic).
 
 "Path needs a level-1 skill" is no longer an error (SKILL1); CLASS1 adds it as a warning (3.5): such a class has an empty class loadout at level 1.
 
@@ -111,7 +111,7 @@ Tier ladder per entry stays "T1 Lv L / T2 Lv L+off2 / T3 Lv L+off3" from `unlock
 
 ### 3.6 Rule flag: no duplicate accessory
 
-A rule flag `rules.allow_duplicate_accessory` (bool, default `false` = forbidden) lives with the other rule constants in `StatRules` (code constant `ALLOW_DUPLICATE_ACCESSORY: bool = false`, next to the dual-wield flag (a code constant, items 8.1); the logic-builder keeps both flags in one place, a `RuleFlags`-style section of `stat_rules.gd`; see `FORGE1_ITEMS.md` open question 2 on where that flag lives). When false: `_loadout_errors` errors "The same accessory cannot fill both accessory slots." for classes and units; pickers grey the duplicate. Empty slots ("") and `none` (`ContentSchema.NO_ITEM`, BAL2-L 3.1) are not items and never count as a duplicate. Revisit when stacking is designed; flipping the flag needs no data change. Test: with the flag on the same entry validates.
+A rule flag `rules.allow_duplicate_accessory` (bool, default `false` = forbidden) lives with the other rule constants in `StatRules` (code constant `ALLOW_DUPLICATE_ACCESSORY: bool = false`, next to the dual-wield flag (a code constant, items 8.1); the logic-builder keeps both flags in one place, a `RuleFlags`-style section of `stat_rules.gd`; see `FORGE1_ITEMS.md` open question 2 on where that flag lives). When false: `ClassUnitValidator._loadout_errors` errors "The same accessory cannot fill both accessory slots." for classes and units; pickers grey the duplicate. Empty slots ("") and `none` (`ContentSchema.NO_ITEM`, BAL2-L 3.1) are not items and never count as a duplicate. Revisit when stacking is designed; flipping the flag needs no data change. Test: with the flag on the same entry validates.
 
 ## 4. AI: role on the class, behaviour on the unit
 
@@ -158,22 +158,22 @@ Status as of main 2026-10-17 (after SKILL1); "exists" rules keep working after t
 | Rule | Status | Level | Where |
 | --- | --- | --- | --- |
 | stats 6-18 total 62; growth 5, 0-3 | exists | error | `StatRules.validate_class` |
-| art known; proficiency shape and ranges, >= 1 weapon | exists | error | `_class_errors` |
-| loadout slot fit, training, 2H + off-hand | exists | error | `_loadout_errors` |
+| art known; proficiency shape and ranges, >= 1 weapon | exists | error | `ClassUnitValidator.class_errors` |
+| loadout slot fit, training, 2H + off-hand | exists | error | `ClassUnitValidator._loadout_errors` |
 | id format, unique; name 1-32; description <= 240 | NEW | error | schema caps |
 | `ai_role` enum; unit `heal_below` 0.1-1.0 | NEW | error | schema |
-| `skill_path` is a dict, level int 1-10, skill exists / not system / tier 1 | changed | error | `_class_errors` |
-| path contains a basic skill | exists (SKILL1), ported to dict | error | `_class_errors` |
-| grade >= advanced level >= 5; every `requires` family on the path at <= level | exists (SKILL1), ported to dict | error | `_class_errors` |
+| `skill_path` is a dict, level int 1-10, skill exists / not system / tier 1 | changed | error | `ClassUnitValidator.class_errors` |
+| path contains a basic skill | exists (SKILL1), ported to dict | error | `ClassUnitValidator.class_errors` |
+| grade >= advanced level >= 5; every `requires` family on the path at <= level | exists (SKILL1), ported to dict | error | `ClassUnitValidator.class_errors` |
 | ascending order, one step per family | removed by CLASS1 | | |
 | level-1 step required | error already removed (SKILL1); NEW warning | warning | `warnings_for` |
-| duplicate accessory (flag off) | NEW | error | `_loadout_errors` |
+| duplicate accessory (flag off) | NEW | error | `ClassUnitValidator._loadout_errors` |
 | key field edited on a system class; delete of a system class | mechanism exists (`key_field_errors`, `remove`); NEW: class `key_field` marks | error | `upsert` / `remove` |
 | more than 5 non-basic families; tier beyond level 10; weapon-gate unreachable; role mismatch | NEW | warning | `warnings_for` |
 | gear budget band, special without note | exists | warning | `GearBudget` |
 | class count != 6 | removed | | |
 
-`_class_errors` and `_loadout_errors` live in the class/unit rules file after CLN-9. Warnings come back as typed records `{section, text}`; the string-list API stays.
+`ClassUnitValidator.class_errors` and `ClassUnitValidator._loadout_errors` live in the class/unit rules file after CLN-9. Warnings come back as typed records `{section, text}`; the string-list API stays.
 
 ## 7. Storage recommendation
 

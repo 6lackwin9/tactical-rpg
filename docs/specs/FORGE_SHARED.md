@@ -80,7 +80,7 @@ Complexity judgement: NOT too convoluted for SKILL1. It is already the minimal f
 Basics are NOT valid in a class path and exist only in the skills tab. Every unit owns all basic skills (`SkillDef.basic`) from level 1 automatically.
 
 1. `ContentFactory.unit` grants every basic via `SkillCatalog` (the basics list) instead of relying on class path rows; ids are de-duplicated against `extra_skills`. Basics need no unlock level and cannot be removed from a unit.
-2. `_class_errors` rejects a basic skill in `skill_path` (message names class and skill).
+2. `ClassUnitValidator.class_errors` rejects a basic skill in `skill_path` (message names class and skill).
 3. The shipped class paths contain `strike` / `guard` rows; SKILL1-A step 3 removes them. The default loadout and AI read owned families, so behaviour is unchanged (acceptance: class, arena, planning and progression suites pass).
 4. Basics are origin system (section 12).
 
