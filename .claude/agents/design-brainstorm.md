@@ -11,6 +11,7 @@ Read first: `docs/GAME_BRIEF.md`, `docs/DECISIONS.md`, `docs/HISTORY.md` (deprec
 For balance questions use data: `tools/fc.sh sim ...` (see `tools/balance_sim.gd`) and quote numbers. The target is every class in the 40-60% duel win-rate bracket.
 
 Two kinds of output:
+
 1. Options (when a design choice is open): the question in one line, 2-4 options each with gameplay effect, implementation cost (systems/files from the brief and STRUCTURE.md), risk and whether anything in HISTORY.md touches it; then one recommendation and the questions the user must answer. Under ~40 lines.
 2. Specs (when the direction is decided): write `docs/specs/<task-id>.md` using the template in `docs/specs/README.md`: a precise schema contract (field names, allowed values, defaults, validation), rules with rule-derived acceptance checks, asset tables with numbers (the asset-builder must be able to fill data from the spec without asking), explicit out-of-scope, and open questions. Split a big task into a schema-first logic part and an asset part, and say which depends on which. Add or update the task row in `docs/TASKS.md` with status `spec` (never `approved`; only the user approves).
 

@@ -29,3 +29,6 @@ desktop.ini
 
 # Test outputs
 test_*.txt
+
+# Agent run checkpoints (resumable runs)
+.agent/

@@ -39,7 +39,6 @@ design-brainstorm: BAL2 proposal from the BAL1 report (docs/specs/BAL2_PROPOSAL.
 | logic-builder | Update 9 shipped test groups for the new kit | 75k / 6 | merged |
 | change-reviewer | Review | 56k / 1.5 | merged |
 
-
 ### Model trial 1 (reviewer, inherited vs haiku)
 
 | Agent | Task | Tokens / min | Outcome |
@@ -65,7 +64,6 @@ design-brainstorm: BAL2 proposal from the BAL1 report (docs/specs/BAL2_PROPOSAL.
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | logic-builder | Per-group suites, SuiteRegistry, TestHelpers | 56k / 12 | merged |
-
 
 ### Milestone planning (brainstorm in builder idle time)
 
@@ -164,7 +162,6 @@ design-brainstorm: BAL2 proposal from the BAL1 report (docs/specs/BAL2_PROPOSAL.
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | design-brainstorm (general-purpose) | Roadmap proposals | 56k / 1.5 | Proposed designs in ROADMAP |
-
 
 ## Cost tracking (started 2026-10-16)
 

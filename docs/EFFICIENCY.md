@@ -38,11 +38,13 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 - After 2 failed fixes, ask the user instead of brute-forcing (token sink).
 
 ## Ideas not done yet
+
 - `fc.sh suite <name>`: run a single test suite (arena takes 20 s, so low value now; revisit if it grows past ~60 s).
 - Cache catalog loads in sims (minor).
 - Cut `balance_sim` time by lowering tick/step overhead or fighting fewer seeds on obvious matchups (revisit when tuning).
 
 ## Agent reuse (2026-10-15)
+
 Agent types are reused; instances are fresh per call. Fresh instance for reviews (independence), balance runs and new milestones; resume the same instance (SendMessage) for follow-ups to its own work; do tiny fixes in the main session. A long-lived builder's context grows and every follow-up re-reads it.
 
 ## Parallel lanes (2026-10-16)
@@ -53,3 +55,9 @@ Idle time while a single builder ran (4-23 min) was the largest remaining cost. 
 
 - Done: superseded drafts go to `docs/archive/`; `tools/fc.sh docs` (also in `fc.sh all`) warns when an agent-facing doc passes 300 lines or 25 KB.
 - Parked for the next heavy edit (user: pick up then, not now): (3) split `docs/DECISIONS.md` by domain behind a short index once it passes ~25 KB (18 KB at the time of writing; rows are long single lines); (4) turn the 640-line README into an overview plus per-system files in `docs/features/` when it next needs a large update. Agents do not read the README, so the benefit is safer edits for the planner.
+
+## Downtime pass (2026-10-17, after SKILL1)
+
+Measured on SKILL1: the asset lane waited for the whole logic run (schema + UI) instead of the schema slice; a usage-limit stop and an API error each forced a fresh builder to re-derive context; a brief narrower than a recorded user decision cost a seed re-run; the review fix went to a fresh builder (140k) instead of the resumable one; markdown lint issues were found only in the IDE panel (it lints open files only), so 38 old issues had piled up; 12 finished worktrees made every git command print "Permission denied" noise.
+
+Fixes: schema slice is its own logic-builder run that ends with the report; builders keep `.agent/progress.md` (gitignored) and resume from it; builders flag brief-vs-spec/DECISIONS contradictions in the first report line; the planner checks briefs against DECISIONS, sends review fixes to the same builder via SendMessage, re-runs the gate after its own edits, auto-dispatches the reviewer on a finished builder and the brainstorm agent on a new balance report; `tools/md_lint.awk` (MD012/MD022/MD032/MD033 subset, no node) runs inside `tools/fc.sh docs` and fails it; the commit trailer comes from the session's attribution reminder instead of a hard-coded model; worktrees are removed right after their merge.
