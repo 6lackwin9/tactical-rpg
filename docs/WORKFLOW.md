@@ -75,7 +75,7 @@ Pattern: builders cost 65-300k tokens and 4-23 minutes (slices that touch many t
 
 ## Parallel safety (2026-10-16)
 
-- Every task row in `docs/TASKS.md` and every spec lists its `Touches`; parallel only when they do not overlap. Cap: 3 builders at once.
+- Every task row in `docs/TASKS.md` and every spec lists its `Touches`; parallel only when they do not overlap. No hard builder cap (user 2026-10-17); above 3 at once the planner warns the user and asks whether to prioritise or slow down.
 - `tools/overlap.sh` lists files edited in more than one active worktree (exit 1 when any). First run (C1-L vs D1-L): 8 shared scripts (`skill_def.gd`, `combatant.gd`, `content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `plan_entry.gd`, `status_effects.gd`, `dojo_session.gd`) plus `items.json` for C1-A1 vs C1-L: the "independent" judgement was optimistic, so expect small merge conflicts there. Lesson: shared hub files make most logic tasks overlap; sequence tasks that both change schema/validation, or merge the schema slices first.
 
 | C1 orb/tome (parallel: C1-L, D1-L, C1-A1) | logic 155k / 14, asset 23k / 2 | 42k / 3 | merged |
