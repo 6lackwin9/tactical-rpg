@@ -1,25 +1,21 @@
 # M4-L: Quest and flag runtime (S8), structured quest schema
 
-Status: proposed (the 8 base answers are in, DECISIONS world-campaign "M4 quest answers (user 2026-10-17)"; the metadata/variant questions V1-V5 below are open; approval by the user)
+Status: proposed (design answered: DECISIONS world-campaign "M4 quest answers" and "M4 variant answers + world loot rewards" (user 2026-10-17); one open question L1 below; approval by the user)
 Depends on: M3 (done: `GameState.flags`, opaque `GameState.quests`, `SaveGame` v1, `SaveMigrations`)
 Lane: logic (one branch; commit 1 is the schema slice that releases M4-A)
-Touches: new `scripts/quests/{quest_catalog,quest_rules,quest_runner,reward_grant}.gd` (+ its `README.md`), new `data/quests/quests.json` (empty envelope only), `scripts/world/world_schema.gd` (`_quest_fields`), `scripts/world/world_catalog.gd` (`_quest_errors`, `_json_refs_to` quest part), `scripts/game_state/{game_state,save_game,save_migrations}.gd`, new `scripts/tests/quest_test_suite.gd` + one line in `suite_registry.gd`, `scripts/tests/save_test_suite.gd` (the opaque-blob fixture). Reads `ContentCatalog`, `PartyState`, `UnitState`, `LevelUp` (no edits). No overlap with the cleanup batch (CLN-9 edits `content_catalog.gd`, which M4 does not touch).
+Touches: new `scripts/quests/{quest_catalog,quest_rules,quest_runner,reward_grant}.gd` (+ its `README.md`), new `data/quests/quests.json` (empty envelope only), `scripts/world/world_schema.gd` (`_quest_fields`, new kind `loot` in `KINDS` + `_loot_fields`), `scripts/world/world_catalog.gd` (`_quest_errors`, new `_loot_errors`, `_json_refs_to` quest part), `scripts/tests/world_test_suite.gd` (its fixed kind list gains `loot`), `scripts/game_state/{game_state,save_game,save_migrations}.gd`, new `scripts/tests/quest_test_suite.gd` + one line in `suite_registry.gd`, `scripts/tests/save_test_suite.gd` (the opaque-blob fixture). Reads `ContentCatalog`, `PartyState`, `UnitState`, `LevelUp` (no edits). No overlap with the cleanup batch (CLN-9 edits `content_catalog.gd`, which M4 does not touch).
 
 ## Answered (user 2026-10-17)
 
-All eight recommendations accepted: (1) lore-free templates in `data/quests/` + world binding; (2) one flat flag registry per save; (3) xp to every active member, items to the stash, passive/skill to one chosen recipient, soft reward caps (1 passive, 1 skill, xp 300, 6 items); (4) no failure, no in-quest branching, campaign linkage through flags; (5) explicit game-loop objective calls, no retroactive credit; (6) `ready` + explicit `complete` (turn-in); (7) save v2 with a 1 -> 2 migration; (8) a separate `QuestCatalog`. Clarification: quests carry linking METADATA that FLAGS can alter (an NPC dies: other giver, other target, other reward, or the quest is gone). HISTORY check: nothing revives a deprecated idea; the event-bus quest option (archived P-S8 C) stays not adopted; passives stay source-granted.
+All recommendations of the two question rounds are accepted (DECISIONS rows cited in Status); the loot table is the user's addition. Ordered merge was chosen because independent consequences compose (two flags = two variants, not a combined third) and every overridable field validates alone, so any subset of variants is valid. HISTORY check: nothing revives a deprecated idea; passives stay source-granted (a loot entry is a source).
 
-## Open questions for the user (metadata and variants; the spec follows R)
+## Open question for the user
 
-- V1 Variant resolution. R: ORDERED MERGE: every matching variant applies in list order, a later one replaces the same field. Independent consequences compose (Mara dead AND keep burned = two variants, not a third combined one), and since every overridable field validates on its own, any subset of variants is valid without enumerating combinations. First-match needs one variant per flag combination (2^n authoring) and silently hides later ones.
-- V2 Active quest when its variant flips. R: bindings, giver, turn-in, description and rewards re-resolve on every read (objective index and completed objectives stay); `available: false` makes an active/ready quest `blocked` (computed, not saved: events do not advance it, `complete` refuses, `abandon` works) and it un-blocks if the flags flip back. Simpler alternative: `available` only affects not-started quests (an active quest always finishes). Auto-abandon is rejected (loses progress on a flag the player may not see).
-- V3 Reward change. R: a variant names another TEMPLATE (`rewards_from`) whose rewards replace the quest's; numbers stay in the base layer. Alternative: an inline `rewards` dict in world data (gameplay numbers in the lore layer, against the layer rule).
-- V4 Enforce giver/turn-in in M4? R: no, metadata only (S11 dialogue reads the resolved `giver`/`turn_in`); `complete` stays a plain call.
-- V5 NPC death as a character field (`gone_when` on characters that auto-blocks every quest naming them)? R: not now; authors write the variant per quest (explicit, testable); revisit with S11.
+- L1 May the player take FEWER picks than offered (keep a unique for a later quest)? R: yes, `complete` accepts 0..`loot_picks` picks; untaken entries stay in other pools, and the generic rewards are granted either way. This supports "pick quests by what they offer". Alternative: exactly `min(loot_picks, offers)` picks (no deferring).
 
 ## Goal
 
-Give quests a runtime: lore-free quest templates (ordered objectives + rewards), world quests that bind them to world targets and carry linking metadata, flag-driven variants resolved at read time, a state machine over `GameState` (start, advance on events and flags, ready, complete with rewards, abandon), reward granting as a passive/skill/item SOURCE, and a structured, validated, migrated quest blob in the save.
+Give quests a runtime: lore-free quest templates (ordered objectives + rewards), world quests that bind them to world targets and carry linking metadata, flag-driven variants resolved at read time, a shared per-world loot table that quests offer as a pick-n choice on top of their generic rewards (claim-once per save), a state machine over `GameState` (start, advance on events and flags, ready, complete with rewards, abandon), reward granting as a passive/skill/item SOURCE, and a structured, validated, migrated quest blob in the save.
 
 ## Schema contract (logic lane, schema-first: yes)
 
@@ -57,6 +53,8 @@ Existing fields stay (`id`, `name`, `description`, `giver`, `faction`, `region`,
 | auto_start | `bool` | false | true needs a non-empty `template` |
 | links | `json` | {} | metadata block below |
 | variants | `json` | [] | flag-driven overrides below; needs a non-empty `template` when non-empty |
+| loot_pool | `json` | [] | Array of world loot refs (section "World loot table"), each resolves, no duplicates, max `QuestRules.MAX_POOL` 8; needs a template |
+| loot_picks | `int` | 1 | 0..`QuestRules.MAX_PICKS` (3); must be <= `loot_pool.size()` when the pool is non-empty; ignored when empty |
 
 Step bindings (the existing `steps` json, one step per template objective when `template` is set):
 
@@ -70,16 +68,7 @@ Every step keeps the required `text`. With a template: `steps.size()` must equal
 
 ### Links (metadata; no gameplay effect, gating stays in `requires` / `requires_flags`)
 
-| Key | Type | Default | Validation |
-| --- | --- | --- | --- |
-| follows | Array[String] quest refs | [] | each resolves; not the quest itself |
-| leads_to | Array[String] quest refs | [] | each resolves; not the quest itself |
-| related_quests | Array[String] quest refs | [] | each resolves |
-| related_characters | Array[String] character refs | [] | each resolves |
-| related_locations | Array[String] location refs | [] | each resolves |
-| related_factions | Array[String] faction refs | [] | each resolves |
-
-Unknown keys = error. Soft warning (`WorldCatalog`-side helper `QuestRules.link_warnings(world_id)`, used by tests and the Forge later): A `leads_to` B without B `follows` A (or the reverse). `_json_refs_to` lists every ref in `links` and in variant `set` (giver, turn_in, step location/encounter, links) so rename and delete scans stay correct.
+Keys (each an Array[String] of refs, default [], every ref must resolve): `follows`, `leads_to`, `related_quests` (quest refs; `follows`/`leads_to` may not name the quest itself), `related_characters`, `related_locations`, `related_factions`. Unknown keys = error. Soft warning (`WorldCatalog`-side helper `QuestRules.link_warnings(world_id)`, used by tests and the Forge later): A `leads_to` B without B `follows` A (or the reverse). `_json_refs_to` lists every ref in `links` and in variant `set` (giver, turn_in, step location/encounter, links) so rename and delete scans stay correct.
 
 ### Variants (flag-driven overrides, ordered merge, V1)
 
@@ -106,8 +95,28 @@ Whitelist of `set` keys (`QuestRules.VARIANT_FIELDS`); every value validates exa
 | steps | Dictionary `"<index>"` -> partial step | per step: replaces only the given keys among `text` and the binding keys of THAT step's objective kind (`location`/`encounter`/`flag`/`value`); index 0..count-1; a required binding may be replaced, never emptied |
 | links | links block | replaces the whole block |
 | available | bool | false = the quest is unavailable (V2) |
+| loot_pool | loot refs | replaces the pool (same validation) |
+| loot_picks | int 0..3 | replaces the pick count (no cross-check with the pool: the runtime caps picks at the number of offers) |
 
 Not overridable (so no override can branch a quest or change its shape): `id`, `name`, `template`, objective kinds and count, `requires`, `requires_flags`, `complete_flags`, `auto_start`, `faction`, `region`, `variants`. Any other `set` key = error.
+
+### World loot table: world kind `loot` (`data/worlds/<id>/loot.json`)
+
+A new world kind in `WorldSchema.KINDS`, inherited and overridable like every world kind (`merged_entries`, `override`, qualified refs). A missing `loot.json` loads as an empty kind (current `_read_kind` behaviour). Every entry is claim-once per save.
+
+| Field | Type (schema) | Default | Validation (`world_catalog._loot_errors`) |
+| --- | --- | --- | --- |
+| id | `id` | required | unique in the world |
+| name | `string` | "New Loot" | non-empty (lore name shown in the offer) |
+| description | `text` | "" | free text |
+| reward_kind | `enum` item, passive, skill | item | |
+| ref | `string` | required | item: existing `ContentCatalog` item; passive: existing passive; skill: existing family head, not a basic (same rules as template rewards, so every pooled entry can be granted) |
+| count | `int` | 1 | 1..99 for item; must be 1 for passive/skill |
+| rarity | `enum` common, rare, unique | rare | display and sorting only |
+| requires_flags | `json` | [] | conditions; an entry whose conditions fail is not offered (it stays in the pool) |
+| tags | `tags` | [] | strings |
+
+Soft reward budget (`QuestRules.reward_warnings(world_id) -> Array[String]`, warnings only): per quest, with all variants applied (worst case), warn when the generic rewards plus ONE pooled special of a kind exceed that kind's cap (passives, skills, item counts), and when `loot_picks > SOFT_MAX_PICKS` (1).
 
 ### Quest state blob: `GameState.quests`
 
@@ -118,14 +127,16 @@ Key = the resolved quest entry's qualified id `_qid` (`ashlands:hold_the_courtya
 | state | String | `active`, `ready`, `completed` | `QuestRules.STORED_STATES` |
 | objective | int | 0..`MAX_OBJECTIVES` | index of the current objective; equals the objective count when `ready` or `completed` |
 
-No other keys: variants are NOT saved (they re-resolve from flags on every read). `QuestRules.validate_blob(blob) -> Array[String]` checks: key contains exactly one `:` and both parts pass `id_ok`; value is a Dictionary with exactly these two keys and allowed values. `GameState.validate` calls it (replacing the opaque `JsonUtil.check_safe(quests, ...)`), so `SaveGame.write` refuses a bad blob. Catalog facts (unknown quest, index above the template's count) are NOT save errors: `QuestRunner.check(gs)` reports them as warnings and changes nothing.
+Claimed loot: new `GameState` key `loot_claimed` (added to `GameState.KEYS`, so the migration's unknown-key drop keeps it): Array[String] of qualified loot ids (`ashlands:ember_charm`), unique, each passing the qid format; saved sorted ascending for byte-stable saves. `GameState.validate` checks the shape; unknown ids are a `QuestRunner.check` warning.
+
+No other keys: variants and offers are NOT saved (they re-resolve from flags on every read). `QuestRules.validate_blob(blob) -> Array[String]` checks: key contains exactly one `:` and both parts pass `id_ok`; value is a Dictionary with exactly these two keys and allowed values. `GameState.validate` calls it (replacing the opaque `JsonUtil.check_safe(quests, ...)`), so `SaveGame.write` refuses a bad blob. Catalog facts (unknown quest, index above the template's count) are NOT save errors: `QuestRunner.check(gs)` reports them as warnings and changes nothing.
 
 ### Save version 2
 
 - `SaveGame.VERSION` = 2.
 - `SaveMigrations` gets a built-in step 1 -> 2: keep each `quests` entry that passes `validate_blob` for that single entry, drop the others; `migrate` appends one warning `dropped invalid quest entry '<key>'` per dropped key (diff of the `quests` keys before/after the step). `flags` unchanged.
 - `SaveMigrations.reset()` restores the built-in table (tests that register extra steps still clear only their own); `register` may still override a step in tests.
-- A v1 envelope with no `quests` key migrates to `quests: {}`.
+- A v1 envelope with no `quests` key migrates to `quests: {}`; every v1 envelope gains `loot_claimed: []`.
 
 ## Rules (logic lane)
 
@@ -159,8 +170,12 @@ Runtime API (`QuestRunner`, static; every mutator returns problems or results an
 | `on_encounter_won(gs, encounter_ref) -> Array[String]` | same for `win_encounter` and the encounter qid; a loss is simply not reported |
 | `set_flag(gs, key, value) -> String` | `gs.set_flag` then `refresh`; error text as `GameState.set_flag` |
 | `refresh(gs) -> Array[String]` | repeat until nothing changes: advance every `active` quest whose current objective is a met `flag` condition; mark a quest whose index reached the objective count `ready`; start every `auto_start` quest that is `available`. Returns qids that changed. Bounded: at most `quest count x (MAX_OBJECTIVES + 1)` passes (variants change no stored data, so they cannot loop) |
-| `complete(gs, ref, recipient_id := "") -> Dictionary` | only from `ready` (a `blocked` quest refuses): `RewardGrant.apply` with the RESOLVED rewards, then `complete_flags` in order, then state `completed`, then `refresh`. Returns `{ok, errors, granted, notes}` |
-| `check(gs) -> Array[String]` | warnings for unknown qids and indexes beyond the template; no changes |
+| `offers(gs, ref) -> Array[String]` | loot qids the quest offers now: resolved `loot_pool` minus `gs.loot_claimed` minus entries whose `requires_flags` fail, in pool order; same rule in any status (UI preview), only `complete` claims |
+| `picks_allowed(gs, ref) -> int` | `mini(loot_picks, offers.size())` |
+| `complete(gs, ref, recipient_id := "", picks: Array[String] = []) -> Dictionary` | only from `ready` (a `blocked` quest refuses). `picks`: unique, each in `offers`, size 0..`picks_allowed` (L1). Grants the RESOLVED generic rewards (always, even with an empty pool or 0 picks) plus each picked loot entry via `RewardGrant.apply`, appends the picks to `loot_claimed`, sets `complete_flags` in order, stores `completed`, then `refresh`. All-or-nothing: any error changes nothing. Returns `{ok, errors, granted, notes}` |
+| `check(gs) -> Array[String]` | warnings for unknown quest qids, indexes beyond the template, unknown claimed loot ids; no changes |
+
+Claim rule: a claimed loot id leaves every pool of every quest at once (offers subtract `loot_claimed`); unclaimed entries stay offered by every quest that pools them. Offers are computed on every read from flags + `loot_claimed`, so they are deterministic and never saved.
 
 Advancing: one event advances at most one objective per quest; flag objectives chain inside `refresh`. No retroactive credit for location/encounter events. A variant that rebinds the CURRENT objective changes the target the next event must match; completed objectives stay completed (V2).
 
@@ -169,13 +184,14 @@ Advancing: one event advances at most one objective per quest; flag objectives c
 - `xp`: `LevelUp.award(member, xp)` for every active member; level-ups follow the M3 rules.
 - `items`: `party.add_to_stash(id, count)` per entry.
 - `passives`, `skills`: one recipient; `recipient_id` empty = first active member; a non-empty id must be a roster member, else error and nothing is granted. Passive: appended to `UnitState.passives` if absent, else note `already owned`. Skill: appended to `UnitState.learned_skills` unless the family is in `owned_families()`, else note `already owned`.
-- `granted` echoes `{xp, items, passives, skills, recipient}`.
+- Loot entries are folded into the same lists before validation (item -> `items` with its count; passive -> `passives`; skill -> `skills`), so the recipient and "already owned" rules apply to them too; an already owned special is still claimed (the player chose it).
+- `granted` echoes `{xp, items, passives, skills, loot, recipient}`.
 
 Rewards are granted once: a second `complete` returns `ok: false` (`quest is not ready`).
 
 ### Acceptance checks (rule-derived, `quest_test_suite.gd`; fixtures via a test path for `QuestCatalog` and a temp world root, never shipped data)
 
-Checks 1-4 ship with commit 1 (schema), checks 5-15 with commit 2 (runtime).
+Checks 1-4 and 16 ship with commit 1 (schema), checks 5-15 and 17 with commit 2 (runtime).
 
 1. Template validation: each bad case yields an error (empty objectives, 9 objectives, unknown kind, extra objective key, unknown reward key, xp 2001, xp 1.5, item count 0 and 100, 9 item keys, unknown item/passive/skill, basic `strike`, duplicate passive); a valid template has none. Soft warnings: 2 passives, 2 skills, xp 301, 7 items each warn; `validate_all()` stays `{}`.
 2. World quest: step count mismatch, `win_encounter` step without `encounter`, flag key `Bad Key`, `auto_start` without template, a `requires` cycle, `turn_in` to an unknown character: each an error; a lore-only quest (old shape) stays valid.
@@ -191,15 +207,17 @@ Checks 1-4 ship with commit 1 (schema), checks 5-15 with commit 2 (runtime).
 12. `available: false`: not started -> `unavailable` (cannot start); active -> `blocked` (events ignored, `complete` refuses, `abandon` works); clearing the flag -> active again with the same objective index; the saved blob is byte-equal before and after the flips.
 13. `rewards_from`: `complete` under the variant grants the other template's rewards.
 14. Inheritance: from a child world, an inherited quest's key is the parent `_qid`; an override in the child gets the child's qid.
-15. Save: every stored status round-trips; a blob entry with `state: "done"` or an extra key fails `validate` and `write`; a v1 envelope with one good and one bad entry migrates keeping the good one with one warning; `reset()` keeps the built-in step; `check` warns for an unknown qid and leaves the state equal.
+15. Save: every stored status round-trips; a blob entry with `state: "done"` or an extra key fails `validate` and `write`; a v1 envelope with one good and one bad entry migrates keeping the good one with one warning; `reset()` keeps the built-in step; `check` warns for an unknown qid and leaves the state equal; `loot_claimed` round-trips sorted, a duplicate or malformed id fails `validate`, a v1 envelope gains `loot_claimed: []`.
+16. Loot schema: unknown `ref` per reward kind, basic skill, count 2 on a passive, count 0 on an item, bad rarity: errors; a child world inherits and can override a parent loot entry; `loot_pool` with an unknown or duplicate ref, 9 refs, `loot_picks` 4 or above a non-empty pool size, a pool without template: errors; variant `set` with `loot_pool` / `loot_picks` validates like the base field; `reward_warnings`: generic 1 passive + a passive entry in the pool warns, generic 0 passives + one passive entry does not, `loot_picks` 2 warns.
+17. Loot runtime: two quests pooling entry E both offer it; completing the first with pick E grants generic + E and the second no longer offers E (other entries stay); 0 picks grants only the generic rewards and claims nothing; a pick not in `offers`, a duplicate pick or more than `picks_allowed` = error with nothing changed; an entry with failing `requires_flags` is not offered and appears once the flag is set; a variant replacing `loot_pool` changes the offers; empty pool = generic rewards only; same state twice = equal offers.
 
 Update `save_test_suite.gd`: its opaque `quests` fixture becomes a valid structured blob; its JSON-safety case becomes the shape case of check 15.
 
 ## Slices (one branch)
 
-- Commit 1 (schema, releases M4-A): `QuestRules` (constants incl. `VARIANT_FIELDS`, `MAX_VARIANTS`, `validate_blob`, `condition_met`, variant and links validation helpers), `QuestCatalog` (load, `get_entry`, `ids`, `upsert(entry, replace_id := "")`, `remove`, `validate_entry`, `validate_all`, `warnings_for`, `warnings_all`, `save`, `use_path`; save-blocked when the file loaded with errors), empty `data/quests/quests.json`, world quest fields (incl. `turn_in`, `links`, `variants`) with validation and ref scans, checks 1-4.
-- Commit 2 (runtime): `QuestRules.resolve`, `QuestRunner`, `RewardGrant`, `GameState.validate` hook, `SaveGame.VERSION` 2 and the migration, `save_test_suite` update, checks 5-15, `scripts/quests/README.md` and `data/quests/README.md` updated.
+- Commit 1 (schema, releases M4-A): `QuestRules` (constants incl. `VARIANT_FIELDS`, `MAX_VARIANTS`, `validate_blob`, `condition_met`, variant and links validation helpers), `QuestCatalog` (load, `get_entry`, `ids`, `upsert(entry, replace_id := "")`, `remove`, `validate_entry`, `validate_all`, `warnings_for`, `warnings_all`, `save`, `use_path`; save-blocked when the file loaded with errors), empty `data/quests/quests.json`, world quest fields (incl. `turn_in`, `links`, `variants`, `loot_pool`, `loot_picks`) with validation and ref scans (loot refs included), world kind `loot` with `_loot_errors`, `reward_warnings`, checks 1-4 and 16.
+- Commit 2 (runtime): `QuestRules.resolve`, `QuestRunner` (incl. `offers`, `picks_allowed`), `RewardGrant`, `GameState.loot_claimed` + `validate` hook, `SaveGame.VERSION` 2 and the migration, `save_test_suite` update, checks 5-15 and 17, `scripts/quests/README.md` and `data/quests/README.md` updated.
 
 ## Out of scope
 
-Quest UI and a Forge tab for templates (seeds only); dialogue/NPC turn-in enforcement (S11, V4); character-level death flags (V5); exploration or travel calling the runtime (S9/S10); `have_item`, kill-count and timed objectives; failure states and in-quest branches; gold; world named items as rewards; `origin` on templates; AssetScan/safe-delete counting quest template references (until then `QuestCatalog.validate_all` reports a deleted reference); temporary passives for scripted events; balance tuning of reward numbers.
+Quest UI and a Forge tab for templates (seeds only); dialogue/NPC turn-in enforcement (S11, V4); character-level death flags (V5); exploration or travel calling the runtime (S9/S10); `have_item`, kill-count and timed objectives; failure states and in-quest branches; gold; world named items as loot payloads (the stash holds base item ids only; a later slice); loot from sources other than quests (shops, chests: they would reuse `loot_claimed`); `origin` on templates; AssetScan/safe-delete counting quest and loot references (validation reports a deleted ref); temporary passives for scripted events; balance tuning of reward numbers.
