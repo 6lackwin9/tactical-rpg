@@ -207,10 +207,6 @@ static func _test_cleanse_validation() -> bool:
 
 # ------------------------------------------------------------------------------
 
-static func _backflip_steps() -> Array[PlanStep]:
-	var steps: Array[PlanStep] = [PlanStep.self_skill(SkillCatalog.find("backflip"))]
-	return steps
-
 static func _test_disengage_planning() -> bool:
 	var checks: Dictionary = {}
 	var backflip: SkillDef = SkillCatalog.find("backflip")

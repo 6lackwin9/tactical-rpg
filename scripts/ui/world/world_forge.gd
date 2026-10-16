@@ -620,9 +620,6 @@ func playtest() -> void:
 # Side panels
 # ------------------------------------------------------------------------------
 
-func _current_entry() -> Dictionary:
-	return form.draft
-
 func _refresh_side_panels() -> void:
 	if world_id.is_empty():
 		return

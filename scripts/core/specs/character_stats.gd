@@ -3,7 +3,7 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Character Stats & Spec Model
-# 6-Stat Framework (STR, DEX, INT | CONS, PERC, KNOW), 1-10 Leveling & Masteries
+# 6-Stat Framework (STR, DEX, INT | CONS, PERC, KNOW), 1-10 Leveling
 # ==============================================================================
 
 signal leveled_up(new_level: int)
@@ -17,7 +17,6 @@ var archetype: ClassArchetype:
 	get:
 		return class_archetype
 var level: int = 1
-var experience: int = 0
 var unallocated_attribute_points: int = 0
 var unspent_attribute_points: int:
 	get:
@@ -146,18 +145,6 @@ func get_initiative_speed(armor_burden: int = 0, context: Dictionary = {}) -> in
 	var effective_dex: int = get_effective_stat("DEX", context)
 	return maxi(1, 8 + effective_dex - armor_burden)
 
-func get_melee_power(weapon_power: int = 0, context: Dictionary = {}) -> int:
-	var effective_str: int = get_effective_stat("STR", context)
-	return weapon_power + int(roundf(float(effective_str) * 1.5))
-
-func get_ranged_power(weapon_power: int = 0, context: Dictionary = {}) -> int:
-	var effective_dex: int = get_effective_stat("DEX", context)
-	return weapon_power + int(roundf(float(effective_dex) * 1.5))
-
-func get_tactical_power(skill_power: int = 0, context: Dictionary = {}) -> int:
-	var effective_int: int = get_effective_stat("INT", context)
-	return skill_power + int(roundf(float(effective_int) * 1.5))
-
 func get_mitigation_rating(shield_mitigation: int = 0, context: Dictionary = {}) -> int:
 	var effective_str: int = get_effective_stat("STR", context)
 	return shield_mitigation + int(roundf(float(effective_str) * 0.25))
@@ -168,14 +155,6 @@ func get_effective_range(base_range: int = 1, context: Dictionary = {}) -> int:
 	var effective_perc: int = get_effective_stat("PERC", context)
 	var bonus: int = 1 if effective_perc >= RANGE_PERC_THRESHOLD and base_range > 1 else 0
 	return maxi(1, base_range + bonus)
-
-func get_intent_unmask_blocks(context: Dictionary = {}) -> int:
-	var effective_perc: int = get_effective_stat("PERC", context)
-	if effective_perc >= 22:
-		return 3
-	elif effective_perc >= 14:
-		return 2
-	return 1
 
 # What this unit adds to the PARTY-WIDE carry capacity (see PartyCarry). Burden, by contrast,
 # is per-unit: it only affects the wearer.
@@ -206,14 +185,3 @@ func add_modifier(mod: StatModifier) -> void:
 
 func remove_modifier(source_id: String) -> void:
 	modifiers = modifiers.filter(func(m: StatModifier) -> bool: return m.source_id != source_id)
-
-func remove_modifiers_from_source(source_id: String) -> void:
-	remove_modifier(source_id)
-
-func tick_modifiers() -> void:
-	var expired: Array[StatModifier] = []
-	for mod: StatModifier in modifiers:
-		if mod.tick_round():
-			expired.append(mod)
-	for exp_mod: StatModifier in expired:
-		modifiers.erase(exp_mod)

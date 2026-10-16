@@ -34,7 +34,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 
 ## Where to look for X
 
-- Add/edit content data: `ContentCatalog.upsert` (never hand-edit JSON). Fields: `content_schema.gd`. Validation: `content_catalog.gd` (`_class_errors`, `_unit_errors`, ...).
+- Add/edit content data: `ContentCatalog.upsert` (never hand-edit JSON). Fields: `content_schema.gd`. Validation: dispatch in `content_catalog.gd` (`validate_entry`, `warnings_for`); rules per kind in `scripts/content/validators/` (`ClassUnitValidator.class_errors`/`unit_errors`, `ItemValidator.item_errors`, `SkillValidator.entry_errors`). Attack power has one source: `DamageCalculator.attack_power`. Skill hand/grade: `SkillDef.is_off_hand()`, `SkillDef.grade`.
 - Change damage: `damage_calculator.gd` only. Planner estimate and dojo already share it.
 - Change a class: `data/catalog/classes.json` via upsert; rules in `stat_rules.gd`.
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.

@@ -165,10 +165,10 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 	# The off-hand jab is a last resort for ranged units (only when nothing else reaches).
 	var ordered: Array[SkillDef] = []
 	for skill: SkillDef in skills:
-		if not skill.offhand:
+		if not skill.is_off_hand():
 			ordered.append(skill)
 	for skill: SkillDef in skills:
-		if skill.offhand:
+		if skill.is_off_hand():
 			ordered.append(skill)
 	for skill: SkillDef in ordered:
 		if filter.is_valid() and not DictUtil.to_bool(filter.call(skill)):

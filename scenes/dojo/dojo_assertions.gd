@@ -110,8 +110,12 @@ static func run(session: DojoSession, host: Node) -> bool:
 	w.inventory.equip(bow)
 	w.sync_from_stats_and_gear()
 	var bow_melee: int = w.get_effective_power(false)
-	var expected_unarmed_melee: int = w.stats.get_melee_power(0, {"weapon": "bow"})
-	if bow_melee != expected_unarmed_melee:
+	# Expected from DamageCalculator's rule: an unfit weapon adds no weapon power, only the
+	# unit power of the fallback stat (STR for melee) at the bow's proficiency scaling.
+	var bow_parts: Dictionary = DamageCalculator.attack_power(w, false)
+	var bow_unit: float = float(w.stats.get_effective_stat("STR", {"weapon": bow.weapon_type})) * DamageCalculator.unit_power_scaling(w, bow)
+	var expected_unarmed_melee: int = maxi(1, roundi(bow_unit * w.power_scale))
+	if bow_melee != expected_unarmed_melee or DictUtil.to_float(bow_parts["weapon_power"]) != 0.0:
 		print("  [Dojo-10] Ranged weapon power excluded from melee attack: FAIL (%d != %d)" % [bow_melee, expected_unarmed_melee])
 		passed = false
 	else:

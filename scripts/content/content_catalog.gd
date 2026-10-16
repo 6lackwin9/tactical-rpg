@@ -142,6 +142,8 @@ static func _read_kind(kind: String) -> Array:
 	var list: Array = raw
 	if kind == "skills" and file_version >= 2:
 		return _read_ranked_skills(list, path)
+	if kind == "skills":
+		push_warning("ContentCatalog: %s is a version %d skills file (flat rows); version 1 is deprecated, saving writes version 2 (CLN-3b removes v1 loading)" % [path, file_version])
 	for item: Variant in list:
 		if item is Dictionary:
 			var dict: Dictionary = item
@@ -274,7 +276,7 @@ static func _index_of(kind: String, id: String) -> int:
 # ------------------------------------------------------------------------------
 
 static func _problem(field: String, rank: int, message: String) -> Dictionary:
-	return {"field": field, "rank": rank, "message": message}
+	return SkillValidator.problem(field, rank, message)
 
 # ------------------------------------------------------------------------------
 # Origin (FORGE1 section 12): system assets have locked key fields and are never deleted from the Forge;
@@ -844,15 +846,15 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 				errors.append("%s: '%s' can't be used here." % [str(f["label"]), t])
 	match kind:
 		"skills":
-			errors.append_array(_skill_errors(e))
+			errors.append_array(SkillValidator.entry_errors(e))
 		"items":
-			errors.append_array(_item_errors(e))
+			errors.append_array(ItemValidator.item_errors(e))
 		"passives":
 			errors.append_array(_passive_errors(e))
 		"classes":
-			errors.append_array(_class_errors(e))
+			errors.append_array(ClassUnitValidator.class_errors(e))
 		"units":
-			errors.append_array(_unit_errors(e))
+			errors.append_array(ClassUnitValidator.unit_errors(e))
 		"encounters":
 			errors.append_array(_encounter_errors(e))
 	errors.append_array(_no_item_errors(kind, e))
@@ -933,29 +935,9 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 		"classes":
 			return GearBudget.check_class(e)
 		"skills":
-			return _skill_warnings(entry, e)
+			return SkillValidator.warnings(entry, e)
 	var none: Array[String] = []
 	return none
-
-# `raw` is a ranked entry (no tier / family keys) or a flat row; `e` its normalized form.
-static func _skill_warnings(raw: Dictionary, e: Dictionary) -> Array[String]:
-	var out: Array[String] = []
-	var ranked: bool = not raw.has("tier") and not raw.has("family")
-	if ranked:
-		out.append_array(SkillText.warnings(str(e["description"]), raw))
-		var base: Dictionary = SkillRanks.effective(raw, 1)
-		var mods: Array[Dictionary] = SkillRanks.modifiers_of(raw)
-		for i: int in range(mods.size()):
-			for key: Variant in mods[i]:
-				if SkillRanks.RANK_KEYS.has(str(key)) and base.get(str(key), null) == mods[i][key]:
-					out.append("Rank %d: %s equals the base value; the modifier is dropped on save." % [i + 2, str(key)])
-	elif not str(e.get("template", "")).is_empty():
-		out.append_array(SkillText.warnings(str(e["template"]), e))
-	if str(e["weapon_hand"]) != "main":
-		for gear: String in ContentFactory._strings(e["weapon_types"]):
-			if gear != SkillDef.UNARMED_TOKEN:
-				out.append("Weapon hand '%s' with weapon type '%s': off-hand slots hold shields, orbs and tomes, so only 'unarmed' can satisfy this gate." % [str(e["weapon_hand"]), gear])
-	return out
 
 # Every warning in the catalog: {"kind:id": [warnings]}. Separate from validate_all(). Skills are checked once per
 # family as ranked entries (keyed by the head id), so rank warnings (literal rank descriptions) fire and the template
@@ -973,414 +955,11 @@ static func warnings_all() -> Dictionary:
 			out["skills:%s" % str(ranked.get("id", ""))] = skill_found
 	return out
 
-# Skill family rules (FORGE1 sections 2-3): a valid family id, ids <head> / <head>_<n>, ranks 1..n without gaps (basic 1,
-# class 3), one kind per family, and every base-only field (not rank-modifiable, not derived) identical across the ranks.
-static func _family_errors(e: Dictionary) -> Array[String]:
-	var errors: Array[String] = []
-	var id: String = str(e.get("id", ""))
-	var family: String = str(e.get("family", ""))
-	var head: String = id if family.is_empty() else family
-	if not family.is_empty() and not ContentSchema.is_valid_id(family):
-		errors.append("Family '%s' must be lowercase snake_case (a-z, 0-9, _)." % family)
-	var tier: int = DictUtil.to_int(e.get("tier", 1), 1)
-	var basic: bool = DictUtil.to_bool(e.get("basic", false))
-	var system: bool = DictUtil.to_bool(e.get("system", false))
-	var kind: String = str(e.get("kind", ""))
-	if basic and tier > 1:
-		errors.append("Basic skills have exactly one rank (tier %d is above the 1-tier limit for basic skills)." % tier)
-	elif not basic and not system and tier > StatRules.MAX_CLASS_TIER:
-		errors.append("Tier %d is above the %d-tier limit for class skills." % [tier, StatRules.MAX_CLASS_TIER])
-	if tier <= 1:
-		if not family.is_empty() and family != id:
-			errors.append("A tier 1 skill is the family head: its id '%s' must equal the family '%s'." % [id, family])
-	elif id != SkillRanks.rank_id(head, tier):
-		errors.append("Tier %d of family '%s' must have the id '%s' (found '%s')." % [tier, head, SkillRanks.rank_id(head, tier), id])
-	var tiers: Array[int] = [tier]
-	for other: Dictionary in entries("skills"):
-		var other_id: String = str(other.get("id", ""))
-		if other_id == id or SkillRanks.head_of(other) != head:
-			continue
-		var other_tier: int = DictUtil.to_int(other.get("tier", 1), 1)
-		if other_tier == tier:
-			errors.append("Family '%s' already has a tier %d skill (%s)." % [head, tier, other_id])
-		tiers.append(other_tier)
-		if str(other.get("kind", "")) != kind:
-			errors.append("Family '%s' mixes kinds (%s is %s)." % [head, other_id, str(other.get("kind", ""))])
-		if DictUtil.to_bool(other.get("basic", false)) != basic:
-			errors.append("Family '%s': basic must match across all tiers (%s differs)." % [head, other_id])
-		for f: Dictionary in ContentSchema.fields("skills"):
-			var key: String = str(f["key"])
-			if SkillRanks.DERIVED_KEYS.has(key) or SkillRanks.RANK_KEYS.has(key) or key == "basic" or key == "kind" or not SkillKinds.has_field(kind, key):
-				continue
-			if other.get(key, null) != e.get(key, null):
-				errors.append("Family '%s': %s must match across all tiers (%s differs)." % [head, str(f.get("label", key)).to_lower(), other_id])
-	tiers.sort()
-	for i: int in range(tiers.size()):
-		if tiers[i] != i + 1:
-			errors.append("Family '%s': tiers must run 1..n without gaps (it needs a tier %d skill)." % [head, i + 1])
-			break
-	return errors
-
 static func grade_rank(grade: String) -> int:
 	return maxi(0, ["novice", "advanced", "expert"].find(grade))
 
-static func _skill_errors(e: Dictionary) -> Array[String]:
-	var errors: Array[String] = _family_errors(e)
-	for p: Dictionary in _skill_problems(e):
-		errors.append(str(p["message"]))
-	# The description template of a family is validated once, from its first rank, against all the family's ranks.
-	var template: String = str(e.get("template", ""))
-	if not template.is_empty() and DictUtil.to_int(e.get("tier", 1), 1) <= 1:
-		var rows: Array[Dictionary] = [e]
-		for other: Dictionary in family_rows(str(e.get("id", ""))):
-			if str(other.get("id", "")) != str(e.get("id", "")):
-				rows.append(other)
-		var folded: Dictionary = SkillRanks.fold(str(e.get("id", "")), rows)
-		var fold_errors: Array = folded["errors"]
-		if fold_errors.is_empty():
-			for p: Dictionary in SkillText.validate(template, DictUtil.dict_of(folded["entry"])):
-				errors.append(str(p["message"]))
-	return errors
-
-# Row-level rules of one flat skill row: [{"field", "rank", "message"}].
-static func _skill_problems(e: Dictionary) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var kind: String = str(e["kind"])
-	var id: String = str(e["id"])
-	var tier: int = DictUtil.to_int(e.get("tier", 1), 1)
-	var basic: bool = DictUtil.to_bool(e.get("basic", false))
-	var system: bool = DictUtil.to_bool(e.get("system", false))
-	var grade: String = str(e["grade"])
-	var unlock_offset: int = DictUtil.to_int(e.get("unlock_offset", -1), -1)
-	if unlock_offset < -1 or unlock_offset > StatRules.MAX_UNLOCK_OFFSET:
-		out.append(_problem("unlock_offset", tier, "Unlock offset must be -1 (derived) or 0-%d." % StatRules.MAX_UNLOCK_OFFSET))
-	elif unlock_offset > 0 and tier == 1:
-		out.append(_problem("unlock_offset", tier, "A tier 1 skill opens at its family's unlock level: leave the unlock offset at -1 or 0."))
-	var requires: Array[String] = ContentFactory._strings(e.get("requires", []))
-	if (basic or system) and grade != "novice":
-		out.append(_problem("grade", tier, "Only class skills can be advanced (not basic or engine skills)."))
-	if (basic or system) and not requires.is_empty():
-		out.append(_problem("requires", tier, "Basic and engine skills cannot require other skills."))
-	var head: String = SkillRanks.head_of(e)
-	for required: String in requires:
-		var target: Dictionary = get_entry("skills", required)
-		if target.is_empty():
-			continue
-		if required == head:
-			out.append(_problem("requires", tier, "A skill cannot require itself."))
-		elif not str(target.get("family", "")).is_empty() or DictUtil.to_int(target.get("tier", 1), 1) != 1:
-			out.append(_problem("requires", tier, "Requires: '%s' is a higher rank; name the family head." % required))
-		elif grade_rank(str(target.get("grade", "novice"))) >= grade_rank(grade):
-			out.append(_problem("requires", tier, "Requires: '%s' (%s) must be a lower grade than this skill (%s)." % [required, str(target.get("grade", "novice")), grade]))
-	if tier == 1:
-		for other: Dictionary in entries("skills"):
-			if SkillRanks.head_of(other) == head or not ContentFactory._strings(other.get("requires", [])).has(head):
-				continue
-			if DictUtil.to_int(other.get("tier", 1), 1) == 1 and grade_rank(str(other.get("grade", "novice"))) <= grade_rank(grade):
-				out.append(_problem("grade", tier, "Grade: '%s' requires this skill and must stay a higher grade (a grade change would break it)." % str(other.get("id", ""))))
-	if not system and not SkillKinds.is_authorable(kind):
-		out.append(_problem("kind", tier, "%s skills are engine-only; author an %s skill." % [kind, " / ".join(SkillKinds.authorable())]))
-	# One rule replaces the old per-field "belongs to" messages: a field is set but the kind has no section for it.
-	var guarded: Array[String] = SkillKinds.sectioned_fields()
-	guarded.append("stance")
-	for key: String in guarded:
-		if SkillKinds.has_field(kind, key):
-			continue
-		var f: Dictionary = ContentSchema.field("skills", key)
-		if e.get(key, null) != f["default"]:
-			out.append(_problem(key, tier, "%s belongs to %s skills, not %s." % [str(f["label"]), "/".join(SkillKinds.kinds_with(key)), kind]))
-	var status_id: String = str(e["status_effect"])
-	var magnitude: int = DictUtil.to_int(e["status_magnitude"])
-	if status_id == StatusEffects.WEAKEN:
-		if magnitude < 1 or magnitude > StatusRegistry.cap_of(StatusEffects.WEAKEN):
-			out.append(_problem("status_magnitude", tier, "weaken needs a magnitude 1-%d" % StatusRegistry.cap_of(StatusEffects.WEAKEN)))
-	elif magnitude != 0:
-		out.append(_problem("status_magnitude", tier, "magnitude only applies to weaken"))
-	var grant: String = str(e["grant_status"])
-	var reach_min: int = DictUtil.to_int(e["reach_min"])
-	var reach_max: int = DictUtil.to_int(e["reach_max"])
-	if kind == "SUPPORT":
-		var heal_stat: String = str(e["heal_stat"])
-		var heal_mult: float = DictUtil.to_float(e["heal_mult"])
-		var heal_base: int = DictUtil.to_int(e["heal_base"])
-		var cleanse: Array[String] = ContentFactory._strings(e["cleanse_statuses"])
-		if heal_base <= 0 and heal_mult <= 0.0 and grant.is_empty() and cleanse.is_empty():
-			out.append(_problem("heal_base", tier, "A support skill needs a heal (base or per-stat), a cleanse or a granted status."))
-		if cleanse.has(SkillDef.CLEANSE_ALL) and cleanse.size() > 1:
-			out.append(_problem("cleanse_statuses", tier, "Cleanses: '%s' stands alone (it already clears every debuff)." % SkillDef.CLEANSE_ALL))
-		for status: String in cleanse:
-			if status != SkillDef.CLEANSE_ALL and not StatusEffects.debuffs().has(status):
-				out.append(_problem("cleanse_statuses", tier, "Cleanses: '%s' is not a debuff status (%s, or '%s')." % [status, ", ".join(StatusEffects.debuffs()), SkillDef.CLEANSE_ALL]))
-		if heal_mult > 0.0 and not SupportRules.HEAL_STATS.has(heal_stat):
-			out.append(_problem("heal_stat", tier, "Heal per stat point needs a heal stat (INT or KNOW)."))
-		if heal_mult <= 0.0 and not heal_stat.is_empty():
-			out.append(_problem("heal_stat", tier, "Heal stat is set but heal per stat point is 0."))
-		if not grant.is_empty() and not StatusEffects.support_buffs().has(grant):
-			out.append(_problem("grant_status", tier, "Grants: '%s' is not a support buff status (%s)." % [grant, ", ".join(StatusEffects.support_buffs())]))
-		if reach_max > 0 and reach_min > reach_max:
-			out.append(_problem("reach_min", tier, "Reach min is above reach max."))
-		if grant == StatusEffects.TAUNT and str(e["target_mode"]) != "SELF":
-			out.append(_problem("target_mode", tier, "Taunt is cast on the taunter itself: set Targets to SELF."))
-	elif kind == "DEFEND":
-		var defend_options: Array[String] = StatusEffects.defend_buffs()
-		defend_options.append_array(StatusEffects.support_buffs())
-		if not grant.is_empty() and not defend_options.has(grant):
-			out.append(_problem("grant_status", tier, "Grants: '%s' is not a defend or support buff status (%s)." % [grant, ", ".join(defend_options)]))
-	if kind == "DISENGAGE" and DictUtil.to_int(e["jump_tiles"]) < 1:
-		out.append(_problem("jump_tiles", tier, "A disengage skill needs jump tiles of at least 1."))
-	if kind == "ATTACK":
-		var area: String = str(e["area"])
-		var dash: int = DictUtil.to_int(e["dash_tiles"])
-		var hand: String = str(e["weapon_hand"])
-		if DictUtil.to_float(e["power_mult"]) <= 0.0:
-			if status_id.is_empty():
-				out.append(_problem("power_mult", tier, "A skill with no damage needs a status"))
-			if area != "NONE":
-				out.append(_problem("area", tier, "A skill with no damage can't be an area attack."))
-		if area == "SWEEP" and (dash > 0 or reach_max > 1):
-			out.append(_problem("area", tier, "SWEEP hits the L of tiles around you; leave reach at 0 or 1 and no gap-close."))
-		if dash > 0:
-			if area != "NONE":
-				out.append(_problem("dash_tiles", tier, "An area attack can't be a gap-close."))
-			if hand != "main":
-				out.append(_problem("dash_tiles", tier, "An off-hand or dual-wield strike can't be a gap-close."))
-		if hand == "both" and not SkillDef.BOTH_ENABLED:
-			out.append(_problem("weapon_hand", tier, "Weapon hand 'both' is not playable yet (engine pending)."))
-		if not status_id.is_empty() and not StatusEffects.debuffs().has(status_id):
-			out.append(_problem("status_effect", tier, "Inflicts: '%s' is not a debuff status (%s)." % [status_id, ", ".join(StatusEffects.debuffs())]))
-		if reach_max > 0 and reach_min > reach_max:
-			out.append(_problem("reach_min", tier, "Reach min is above reach max."))
-		if reach_max == 0 and reach_min > 0:
-			out.append(_problem("reach_max", tier, "Set reach max too (or leave both at 0 for the unit's default band)."))
-		if area == "LINE" and reach_max > 1:
-			out.append(_problem("reach_max", tier, "LINE areas start from an adjacent tile; leave the reach at 0 or 1."))
-		if not status_id.is_empty() and DictUtil.to_int(e["status_potency"]) <= 0:
-			out.append(_problem("status_potency", tier, "Give the status a potency above 0."))
-	# The weapon gate (ATTACK, DEFEND, SUPPORT): known gear types, and a type needs a proficiency to mean anything.
-	var types: Array[String] = ContentFactory._strings(e["weapon_types"])
-	for gear: String in types:
-		if not SkillDef.weapon_type_tokens().has(gear):
-			out.append(_problem("weapon_types", tier, "Needs weapon type: unknown gear type '%s' (gear types or '%s')." % [gear, SkillDef.UNARMED_TOKEN]))
-	if not types.is_empty() and DictUtil.to_int(e["min_proficiency"]) < 1:
-		out.append(_problem("min_proficiency", tier, "Needs proficiency: a weapon type is listed, so give a proficiency of at least 1 (otherwise the types do nothing)."))
-	return out
-
-static func _item_errors(e: Dictionary) -> Array[String]:
-	var errors: Array[String] = []
-	var type: String = str(e["item_type"])
-	var slot: String = str(e["slot"])
-	if type != "WEAPON" and Equipment.FOCUS_TYPES.has(str(e["weapon_type"])) and ContentSchema.EQUIP_TYPES.has(type):
-		errors.append("Orb and tome are weapon types (item type WEAPON).")
-	if Equipment.FOCUS_TYPES.has(str(e["off_hand_category"])) and str(e["weapon_type"]) != str(e["off_hand_category"]):
-		errors.append("Off-hand category '%s' needs the matching gear type '%s'." % [str(e["off_hand_category"]), str(e["off_hand_category"])])
-	if ContentSchema.EQUIP_TYPES.has(type):
-		errors.append_array(Passives.validate_effects(e["effects"], func(skill_id: String) -> bool: return has("skills", skill_id), true, true))
-	match type:
-		"WEAPON":
-			if slot != "MAIN_HAND" and slot != "OFF_HAND":
-				errors.append("Weapons go in MAIN_HAND or OFF_HAND.")
-			if DictUtil.to_bool(e["two_handed"]) and slot != "MAIN_HAND":
-				errors.append("Two-handed weapons use the MAIN_HAND slot.")
-			if DictUtil.to_bool(e["two_handed"]) and not str(e["off_hand_category"]).is_empty():
-				errors.append("Hand conflict: a two-handed weapon (main_2h) can't also be an off-hand category weapon (off).")
-			if Equipment.FOCUS_TYPES.has(str(e["weapon_type"])):
-				if slot != "OFF_HAND":
-					errors.append("Orb and tome weapons are off-hand only (use the OFF_HAND slot).")
-				if str(e["off_hand_category"]) != str(e["weapon_type"]):
-					errors.append("An orb or tome needs off-hand category '%s' (matching its gear type)." % str(e["weapon_type"]))
-				if DictUtil.to_bool(e["two_handed"]):
-					errors.append("Orb and tome weapons are never two-handed.")
-			var tiers: Variant = e["threshold_tiers"]
-			if not (tiers is Array):
-				errors.append("Threshold tiers must be a list.")
-			else:
-				var tier_list: Array = tiers
-				for t: Variant in tier_list:
-					var tier: Dictionary = t if t is Dictionary else {}
-					if not tier.has("stat") or not tier.has("threshold"):
-						errors.append("Each threshold tier needs \"stat\" and \"threshold\".")
-						break
-		"SHIELD":
-			if slot != "OFF_HAND":
-				errors.append("Shields go in the OFF_HAND slot.")
-		"ARMOR":
-			if slot != "HEAD" and slot != "BODY":
-				errors.append("Armor goes in HEAD or BODY.")
-		"ACCESSORY":
-			if slot != "ACCESSORY_1" and slot != "ACCESSORY_2":
-				errors.append("Accessories go in ACCESSORY_1 or ACCESSORY_2.")
-		"CONSUMABLE":
-			if DictUtil.to_int(e["heal"]) == 0 and DictUtil.to_int(e["damage"]) == 0 and DictUtil.to_float(e["buff_pct"]) == 0.0:
-				errors.append("A consumable should heal, damage or buff.")
-	return errors
-
 static func _passive_errors(e: Dictionary) -> Array[String]:
 	return Passives.validate_effects(e["effects"], func(skill_id: String) -> bool: return has("skills", skill_id))
-
-# Class rules: equal stat budget and growth (StatRules), valid proficiency, a skill path whose
-# skills fit the level cap, and default gear the class can wield.
-static func _class_errors(e: Dictionary) -> Array[String]:
-	var errors: Array[String] = StatRules.validate_class(ContentFactory._ints(e["base_stats"]), ContentFactory._ints(e["growth"]))
-	if not UnitArt.CLASS_KEYS.has(str(e["art"])):
-		errors.append("Art '%s' isn't a known token/portrait key." % str(e["art"]))
-	var prof_raw: Variant = e["proficiency"]
-	var weapons: int = 0
-	if not (prof_raw is Dictionary) or (prof_raw as Dictionary).is_empty():
-		errors.append("A class needs a gear proficiency dictionary.")
-	else:
-		var prof: Dictionary = prof_raw
-		for key: Variant in prof:
-			var gear: String = str(key)
-			var entry: Dictionary = DictUtil.dict_of(prof[key])
-			if not Proficiency.gear_types().has(gear):
-				errors.append("Proficiency: unknown gear type '%s'." % gear)
-			if not entry.has("level") or DictUtil.to_int(entry.get("level", 0)) < 1 or DictUtil.to_int(entry.get("level", 0)) > Proficiency.MAX_LEVEL:
-				errors.append("Proficiency %s: level must be 1-%d." % [gear, Proficiency.MAX_LEVEL])
-			var scaling: float = DictUtil.to_float(entry.get("scaling", Proficiency.DEFAULT_SCALING), -1.0)
-			if scaling < Proficiency.MIN_SCALING or scaling > Proficiency.MAX_SCALING:
-				errors.append("Proficiency %s: scaling must be %.1f-%.1f." % [gear, Proficiency.MIN_SCALING, Proficiency.MAX_SCALING])
-			if Proficiency.WEAPON_TYPES.has(gear):
-				weapons += 1
-		if weapons == 0:
-			errors.append("Proficiency needs at least one weapon type.")
-	var path: Variant = e["skill_path"]
-	if not (path is Array):
-		errors.append("The skill path must be a list of {level, skill}.")
-	else:
-		var last_level: int = 0
-		var seen_families: Array[String] = []
-		var family_levels: Dictionary = {}   # family head -> lowest path level (for the `requires` rule)
-		for step_raw: Variant in (path as Array):
-			var raw_step: Dictionary = DictUtil.dict_of(step_raw)
-			var raw_skill: String = str(raw_step.get("skill", ""))
-			var raw_fam: String = SkillRanks.head_of(get_entry("skills", raw_skill)) if has("skills", raw_skill) else raw_skill
-			var raw_level: int = DictUtil.to_int(raw_step.get("level", 0))
-			if not family_levels.has(raw_fam) or raw_level < DictUtil.int_of(family_levels, raw_fam):
-				family_levels[raw_fam] = raw_level
-		for step_raw: Variant in (path as Array):
-			var step: Dictionary = DictUtil.dict_of(step_raw)
-			var skill_id: String = str(step.get("skill", ""))
-			var level: int = DictUtil.to_int(step.get("level", 0))
-			var skill: Dictionary = get_entry("skills", skill_id)
-			if level < 1 or level > StatRules.MAX_LEVEL:
-				errors.append("Skill path: level %d is outside 1-%d." % [level, StatRules.MAX_LEVEL])
-			if level < last_level:
-				errors.append("Skill path must be listed in ascending level order.")
-			last_level = maxi(last_level, level)
-			if skill.is_empty():
-				errors.append("Skill path: unknown skill '%s'." % skill_id)
-			elif DictUtil.to_bool(skill.get("system", false)):
-				errors.append("Skill path: '%s' is an engine skill (always known)." % skill_id)
-			elif DictUtil.to_bool(skill.get("basic", false)):
-				errors.append("Skill path: '%s' is a basic skill; every unit owns the basics from level 1, so they are not valid in a class path." % skill_id)
-			else:
-				var fam: String = str(skill.get("family", ""))
-				if fam.is_empty():
-					fam = skill_id
-				if DictUtil.to_int(skill.get("tier", 1), 1) != 1:
-					errors.append("Skill path: '%s' is a higher tier; list the tier 1 skill of the family (tiers open with it)." % skill_id)
-				if seen_families.has(fam):
-					errors.append("Skill path: family '%s' is listed more than once." % fam)
-				seen_families.append(fam)
-				if str(skill.get("grade", "novice")) != "novice" and level < StatRules.ADVANCED_MIN_LEVEL:
-					errors.append("Skill path: %s is an advanced skill and needs unit level %d or higher (listed at %d)." % [skill_id, StatRules.ADVANCED_MIN_LEVEL, level])
-				for required: String in ContentFactory._strings(skill.get("requires", [])):
-					if not family_levels.has(required):
-						errors.append("Skill path: %s needs %s on the same path." % [skill_id, required])
-					elif DictUtil.int_of(family_levels, required) > level:
-						errors.append("Skill path: %s (level %d) needs %s first, but %s is only listed at level %d." % [skill_id, level, required, required, DictUtil.int_of(family_levels, required)])
-	errors.append_array(_loadout_errors(e, ContentFactory.class_archetype(e).make_proficiency(), true))
-	return errors
-
-# Gear problems of a class or unit entry: every item fits its slot, is trained for by
-# `prof` (when `check_training`), and a two-handed weapon isn't paired with a shield.
-static func _loadout_errors(e: Dictionary, prof: Proficiency, check_training: bool) -> Array[String]:
-	var errors: Array[String] = []
-	for slot: String in ContentSchema.LOADOUT_SLOTS:
-		var item_id: String = str(e.get(slot, ""))
-		if item_id.is_empty():
-			continue
-		var item: Dictionary = get_entry("items", item_id)
-		if item.is_empty():
-			continue
-		if not ContentFactory.item_fits_slot(item, slot.to_upper()):
-			errors.append("%s can't be equipped in %s." % [str(item.get("name", item_id)), slot.capitalize()])
-		elif check_training and not str(item.get("weapon_type", "")).is_empty() and not prof.can_use(str(item["weapon_type"])):
-			errors.append("This class has no training in '%s' (%s)." % [str(item["weapon_type"]), str(item.get("name", item_id))])
-	var main: Dictionary = get_entry("items", str(e.get("main_hand", "")))
-	var off: Dictionary = get_entry("items", str(e.get("off_hand", "")))
-	if DictUtil.to_bool(main.get("two_handed", false)) and not off.is_empty():
-		errors.append("A two-handed weapon can't be paired with an off-hand item.")
-	return errors
-
-static func _unit_errors(e: Dictionary) -> Array[String]:
-	var errors: Array[String] = []
-	var fixed: bool = str(e["stat_mode"]) == "fixed"
-	var arch: ClassArchetype = ContentFactory.class_of(e)
-	if not fixed and arch == null:
-		errors.append("Class-derived units need a class (or set the stat model to fixed).")
-	if not fixed:
-		errors.append_array(StatRules.validate_spend(ContentFactory._ints(e["spend"]), DictUtil.to_int(e["level"], 1)))
-	elif not (e["spend"] as Dictionary).is_empty():
-		errors.append("Fixed units don't spend points.")
-	var prof: Proficiency = arch.make_proficiency() if arch != null else Proficiency.new()
-	errors.append_array(_loadout_errors(e, prof, arch != null))
-	if arch != null and not fixed:
-		errors.append_array(_skill_loadout_errors(e, arch))
-	errors.append_array(_unit_requires_errors(e, arch))
-	return errors
-
-# A skill in `extra_skills` or `loadout` needs every family of its `requires` on the class path (any level) or in extra_skills.
-static func _unit_requires_errors(e: Dictionary, arch: ClassArchetype) -> Array[String]:
-	var errors: Array[String] = []
-	var owned: Array[String] = []
-	if arch != null:
-		for step: Dictionary in arch.skill_path:
-			owned.append(SkillRanks.head_of(get_entry("skills", str(step.get("skill", "")))))
-	var extras: Array[String] = ContentFactory._strings(e.get("extra_skills", []))
-	for extra: String in extras:
-		owned.append(SkillRanks.head_of(get_entry("skills", extra)))
-	var checked: Array[String] = []
-	checked.append_array(extras)
-	checked.append_array(ContentFactory._strings(e.get("loadout", [])))
-	for skill_id: String in checked:
-		var skill: Dictionary = get_entry("skills", skill_id)
-		for required: String in ContentFactory._strings(skill.get("requires", [])):
-			if not owned.has(required):
-				errors.append("Unit skill '%s' needs '%s' (on the class path or in the extra skills)." % [skill_id, required])
-	return errors
-
-# Active skill loadout of a unit: listed families must be owned (class path up to its level or extra skills),
-# non-basic, unique, and fit MAX_CLASS_SLOTS class + MAX_EXTRA_SLOTS extra slots. The DEFAULT loadout
-# (no `loadout` list) is trimmed to the limits, so only an explicit list can break them.
-static func _skill_loadout_errors(e: Dictionary, arch: ClassArchetype) -> Array[String]:
-	var errors: Array[String] = []
-	var listed: Array[String] = ContentFactory._strings(e.get("loadout", []))
-	if listed.is_empty():
-		return errors
-	var level: int = DictUtil.to_int(e.get("level", 1), 1)
-	var owned_ids: Array[String] = arch.skills_at(level)
-	owned_ids.append_array(ContentFactory._strings(e.get("extra_skills", [])))
-	var owned: Array[String] = ContentFactory.families_of(owned_ids)
-	var seen: Array[String] = []
-	for fam: String in listed:
-		if seen.has(fam):
-			errors.append("Loadout: family '%s' is listed twice." % fam)
-		seen.append(fam)
-		if SkillCatalog.family_tiers(fam).is_empty():
-			errors.append("Loadout: unknown skill family '%s'." % fam)
-		elif SkillCatalog.is_basic_family(fam):
-			errors.append("Loadout: '%s' is a basic family (always active, no slot)." % fam)
-		elif not owned.has(fam):
-			errors.append("Loadout: the unit does not own the skill family '%s'." % fam)
-	var slots: Dictionary = ContentFactory.loadout_of(e, arch, level)
-	var class_count: int = ContentFactory._strings(slots["class"]).size()
-	var extra_count: int = ContentFactory._strings(slots["extra"]).size()
-	if class_count > StatRules.MAX_CLASS_SLOTS:
-		errors.append("Loadout: %d class families (max %d)." % [class_count, StatRules.MAX_CLASS_SLOTS])
-	if extra_count > StatRules.MAX_EXTRA_SLOTS:
-		errors.append("Loadout: %d extra families (max %d)." % [extra_count, StatRules.MAX_EXTRA_SLOTS])
-	return errors
 
 static func _encounter_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []

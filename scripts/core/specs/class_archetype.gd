@@ -77,15 +77,3 @@ static func create_warrior() -> ClassArchetype:
 
 static func create_ranger() -> ClassArchetype:
 	return create("ranger")
-
-static func create_shaman() -> ClassArchetype:
-	return create("shaman")
-
-static func create_brawler() -> ClassArchetype:
-	return create("brawler")
-
-static func create_scout() -> ClassArchetype:
-	return create("scout")
-
-static func create_berserker() -> ClassArchetype:
-	return create("berserker")

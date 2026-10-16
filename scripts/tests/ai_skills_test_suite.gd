@@ -170,12 +170,6 @@ static func _index_of(steps: Array[PlanStep], skill_id: String) -> int:
 			return i
 	return -1
 
-static func _uses_any(steps: Array[PlanStep], prefix: String) -> bool:
-	for s: PlanStep in steps:
-		if s.skill != null and s.skill.id.begins_with(prefix):
-			return true
-	return false
-
 # The plan passes the planner's own validation (no step was swallowed) and does not overspend AP.
 static func _valid(scene: Dictionary, steps: Array[PlanStep]) -> bool:
 	var actor: Combatant = scene["actor"]

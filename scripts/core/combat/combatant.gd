@@ -281,7 +281,7 @@ func unlock_reduction(family: String) -> int:
 	for group: String in Passives.GROUPS:
 		if t1.in_group(group):
 			passive_r = maxi(passive_r, DictUtil.int_of(unlock_bonus_group, group))
-	var know_r: int = StatRules.know_unlock_reduction(unlock_know()) if t1.advanced else 0
+	var know_r: int = StatRules.know_unlock_reduction(unlock_know()) if t1.grade != SkillDef.Grade.NOVICE else 0
 	return mini(StatRules.MAX_UNLOCK_REDUCTION, maxi(passive_r, know_r))
 
 # E(f): the unit level at which `family` is owned. Class-path families: the path level minus the reduction, never below
@@ -296,7 +296,7 @@ func family_unlock_level(family: String) -> int:
 		result = StatRules.default_unlock(t1.level if t1 != null else 1)
 	else:
 		var base: int = DictUtil.int_of(_path_unlock, family)
-		var floor_level: int = StatRules.ADVANCED_UNLOCK_FLOOR if t1 != null and t1.advanced else 1
+		var floor_level: int = StatRules.ADVANCED_UNLOCK_FLOOR if t1 != null and t1.grade != SkillDef.Grade.NOVICE else 1
 		result = mini(base, maxi(floor_level, base - unlock_reduction(family)))
 	_unlock_cache[family] = result
 	return result

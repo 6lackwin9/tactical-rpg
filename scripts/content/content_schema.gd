@@ -380,10 +380,12 @@ static func normalize(kind: String, entry: Dictionary) -> Dictionary:
 			out[key] = _copy(src[key])
 	return out
 
-# Pre-FORGE1 skill keys, accepted for one release: advanced: true -> grade advanced, offhand: true -> weapon_hand off.
+# Pre-FORGE1 skill keys, deprecated (warn on use; CLN-3b drops this normaliser once logs show no hit):
+# advanced: true -> grade advanced, offhand: true -> weapon_hand off.
 static func _legacy_skill(entry: Dictionary) -> Dictionary:
 	if not entry.has("advanced") and not entry.has("offhand"):
 		return entry
+	push_warning("ContentSchema: skill '%s' uses the deprecated key(s) advanced / offhand; write grade / weapon_hand instead (CLN-3b removes them)" % str(entry.get("id", "")))
 	var out: Dictionary = entry.duplicate()
 	if out.has("advanced"):
 		if DictUtil.to_bool(out["advanced"]) and not out.has("grade"):

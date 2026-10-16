@@ -486,6 +486,10 @@ Seed `data/seeds/bal2.gd`: CONS growth 1 for ranger, rogue and mage (warrior CON
 
 Placeholder art (CLN-15, seed `data/seeds/cln15_art.gd`): goblin units now set their `art` key (archer, shaman, skirmisher, berserker, scout; goblin_brawler reuses berserker) instead of falling back to their class art.
 
+### Cleanup batch 1 (CLN-3, 6, 7, 9)
+
+Refactor only, no behaviour change: per-kind validation moved out of `content_catalog.gd` (1416 -> 993 lines) into `scripts/content/validators/` (`SkillValidator`, `ItemValidator`, `ClassUnitValidator`); the legacy `SkillDef.offhand` / `advanced` shims are gone (`is_off_hand()`, `grade`), and old skill keys or a version 1 skills file still load but print a deprecation warning; the second power formula `CharacterStats.get_melee_power` and other dead helpers were removed, so attack power comes only from `DamageCalculator`.
+
 ### Agent workflow tools
 
 `CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `safe_delete`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md), `tools/fc.sh docs` includes a markdown lint subset (`tools/md_lint.awk`), `tools/wt_remove.ps1` removes a finished worktree on OneDrive (clears the read-only folder flag git trips on) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `logic-builder`, `asset-builder`, `balance`, `change-reviewer`, `housekeeper` for cleanup proposals) live in `.claude/`.

@@ -144,11 +144,8 @@ static func _class_with(gear: String) -> String:
 static func _test_weapon_hand() -> bool:
 	var checks: Dictionary = {}
 	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
-	var legacy: Dictionary = ContentSchema.normalize("skills", {"id": "t_md_leg", "name": "L", "kind": "ATTACK", "offhand": true})
-	checks["legacy offhand: true normalises to weapon_hand off"] = str(legacy["weapon_hand"]) == "off" and not legacy.has("offhand")
-	checks["...and the derived SkillDef.offhand is true"] = ContentFactory.skill(legacy).offhand and ContentFactory.skill(legacy).weapon_hand == SkillDef.WeaponHand.OFF
-	checks["legacy offhand: false changes nothing"] = str(ContentSchema.normalize("skills", {"id": "t_md_leg2", "name": "L", "kind": "ATTACK", "offhand": false})["weapon_hand"]) == "main"
-	checks["weapon_hand round-trips through the factory"] = str(ContentFactory.skill_to_entry(ContentFactory.skill(legacy))["weapon_hand"]) == "off"
+	var off_entry: Dictionary = ContentSchema.normalize("skills", {"id": "t_md_hand", "name": "H", "kind": "ATTACK", "weapon_hand": "off"})
+	checks["weapon_hand round-trips through the factory"] = str(ContentFactory.skill_to_entry(ContentFactory.skill(off_entry))["weapon_hand"]) == "off"
 	var both_errors: Array[String] = _errors({"id": "t_md_both", "name": "B", "kind": "ATTACK", "weapon_hand": "both"})
 	checks["'both' is rejected exactly while BOTH_ENABLED is false"] = both_errors.is_empty() == SkillDef.BOTH_ENABLED
 	checks["an off-hand strike can't be a gap-close"] = not _errors({"id": "t_md_od", "name": "O", "kind": "ATTACK", "weapon_hand": "off", "dash_tiles": 2}).is_empty()
@@ -157,7 +154,7 @@ static func _test_weapon_hand() -> bool:
 	checks["weapon_hand on another kind is refused"] = not _errors({"id": "t_md_dh", "name": "D", "kind": "DEFEND", "weapon_hand": "off"}).is_empty()
 	checks["an unknown weapon_hand value is refused"] = not _errors({"id": "t_md_xh", "name": "X", "kind": "ATTACK", "weapon_hand": "left"}).is_empty()
 	var jab: SkillDef = SkillCatalog.find("offhand_jab")
-	checks["the shipped offhand_jab is an off-hand skill"] = jab != null and jab.weapon_hand == SkillDef.WeaponHand.OFF and jab.offhand
+	checks["the shipped offhand_jab is an off-hand skill"] = jab != null and jab.weapon_hand == SkillDef.WeaponHand.OFF and jab.is_off_hand()
 	checks["an off-hand skill with a real weapon type warns"] = SkillTestKit.any_contains(ContentCatalog.warnings_for("skills", {"id": "t_md_w", "name": "W", "kind": "ATTACK", "weapon_hand": "off", "weapon_types": ["dagger"], "min_proficiency": 1}), "only 'unarmed'")
 	checks["an off-hand skill gated on unarmed does not warn"] = ContentCatalog.warnings_for("skills", {"id": "t_md_w2", "name": "W", "kind": "ATTACK", "weapon_hand": "off", "weapon_types": ["unarmed"], "min_proficiency": 1}).is_empty()
 	# wielded_type(hand)
@@ -250,8 +247,7 @@ static func _test_grade_and_requires() -> bool:
 	checks["an advanced family with ranks stores grade and requires once"] = ContentCatalog.upsert_skill(adv_ranked).is_empty() and ContentFactory._strings(ContentCatalog.get_entry("skills", "t_gr_advr_2")["requires"]) == ["t_gr_nov"] and str(ContentCatalog.get_entry("skills", "t_gr_advr_2")["grade"]) == "advanced"
 	var stored: Dictionary = ContentCatalog.skill_entry("t_gr_advr")
 	checks["...in the ranked entry (not in the rank modifiers)"] = stored.has("grade") and stored.has("requires") and not DictUtil.dict_of(DictUtil.array_of(stored["ranks"])[0]).has("grade")
-	checks["SkillDef reads grade and requires"] = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).grade == SkillDef.Grade.EXPERT and ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).advanced and ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).requires.size() == 2
-	checks["legacy advanced: true normalises to grade advanced"] = str(ContentSchema.normalize("skills", {"id": "t_gr_leg", "name": "L", "kind": "ATTACK", "advanced": true})["grade"]) == "advanced"
+	checks["SkillDef reads grade and requires"] = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).grade == SkillDef.Grade.EXPERT and ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).requires.size() == 2
 	return SkillTestKit.report(TAG, "grade and requires: validation", checks)
 
 static func _test_ownership() -> bool:

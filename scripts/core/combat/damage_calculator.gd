@@ -219,7 +219,7 @@ static func compute(
 
 # The planner's expected hit for `skill`: no crit, no guard (unknown ahead), armor included.
 static func expected(attacker: Combatant, target: Combatant, skill: SkillDef, attacker_stance: int = -1) -> int:
-	var res: Dictionary = compute(attacker, target, attacker.attack_range > 1 and not skill.offhand, skill.offhand, skill.power_for(attacker), false, null, attacker_stance, false)
+	var res: Dictionary = compute(attacker, target, attacker.attack_range > 1 and not skill.is_off_hand(), skill.is_off_hand(), skill.power_for(attacker), false, null, attacker_stance, false)
 	return DictUtil.to_int(res["final_dmg"])
 
 # One-line explanation of a result (log hover, forecast tooltips).

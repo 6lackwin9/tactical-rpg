@@ -455,8 +455,8 @@ func use_skill(skill_id: String = "") -> void:
 	match skill.kind:
 		SkillDef.Kind.ATTACK:
 			var main_w: Equipment = active_hero.inventory.get_main_weapon() if active_hero.inventory != null else null
-			var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
-			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.offhand, skill.power_for(active_hero)) if skill.deals_damage() else {"detail": "No damage", "outcome": "STATUS"}
+			var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.is_off_hand()
+			var hit: Dictionary = _apply_hit(skill.display_name, is_ranged, skill.is_off_hand(), skill.power_for(active_hero)) if skill.deals_damage() else {"detail": "No damage", "outcome": "STATUS"}
 			var detail: String = "%s • %s" % [str(hit.get("detail", "")), ap_note]
 			if skill.is_area():
 				detail += " • area: the dummy is the only target here"
@@ -510,7 +510,7 @@ func dummy_attack() -> void:
 	# Attacking: the dummy drops its guard and enters the skill's stance.
 	test_dummy.defense_mitigation_ratio = 0.0
 	test_dummy.set_stance(skill.stance())
-	var res: Dictionary = DamageCalculator.compute(test_dummy, active_hero, test_dummy.attack_range > 1 and not skill.offhand, skill.offhand, skill.power_mult, false, rng)
+	var res: Dictionary = DamageCalculator.compute(test_dummy, active_hero, test_dummy.attack_range > 1 and not skill.is_off_hand(), skill.is_off_hand(), skill.power_mult, false, rng)
 	var dealt: int = active_hero.take_damage(UiTheme.dict_int(res, "final_dmg"), true)
 	var is_crit: bool = UiTheme.dict_bool(res, "is_crit")
 	var outcome: String = "DEFEATED" if not active_hero.is_alive() else ("CRIT" if is_crit else ("MITIGATED" if UiTheme.dict_float(res, "mit_ratio") > 0.0 else "HIT"))
@@ -615,10 +615,10 @@ func run_benchmark(count: int) -> void:
 		return
 	var skill: SkillDef = benchmark_skill()
 	var main_w: Equipment = active_hero.inventory.get_main_weapon()
-	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.offhand
+	var is_ranged: bool = main_w != null and main_w.is_ranged_weapon() and not skill.is_off_hand()
 	var title: String = "Benchmark ×%d %s (%s)" % [count, skill.display_name, "Ranged" if is_ranged else "Melee"]
 
-	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_for(active_hero), false, null)
+	var base_res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.is_off_hand(), skill.power_for(active_hero), false, null)
 	var base_hit: int = UiTheme.dict_int(base_res, "final_dmg")
 	var crit_rate: float = clampf(UiTheme.dict_float(base_res, "crit_rate"), 0.0, 100.0)
 
@@ -627,7 +627,7 @@ func run_benchmark(count: int) -> void:
 	var max_hit: int = 0
 	var crits: int = 0
 	for i: int in range(count):
-		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.offhand, skill.power_for(active_hero), false, rng)
+		var res: Dictionary = DamageCalculator.compute(active_hero, test_dummy, is_ranged, skill.is_off_hand(), skill.power_for(active_hero), false, rng)
 		var dmg: int = UiTheme.dict_int(res, "final_dmg")
 		total += dmg
 		min_hit = dmg if i == 0 else mini(min_hit, dmg)

@@ -221,7 +221,7 @@ static func _unit(e: Dictionary) -> String:
 	t += _line("AI", "%s, targets %s, flees at %d%% HP" % [AiProfile.role_name(profile.role), str(AiProfile.TargetPref.keys()[profile.target_pref]).to_lower(), roundi(profile.flee_ratio * 100.0)])
 	var known: Array[String] = []
 	for s: SkillDef in SkillCatalog.all():
-		if not s.system and s.level <= profile.skill_cap and c.can_use(s) and not (s.offhand and c.attack_range <= 1):
+		if not s.system and s.level <= profile.skill_cap and c.can_use(s) and not (s.is_off_hand() and c.attack_range <= 1):
 			known.append(s.display_name if s.basic or c.path_levels.is_empty() else "%s (from Lv%d)" % [s.display_name, c.skill_unlock_level(s)])
 	t += _line("Skills", ", ".join(known) if not known.is_empty() else "none")
 	if not c.active_families.is_empty():

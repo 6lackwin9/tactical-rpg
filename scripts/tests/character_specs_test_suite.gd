@@ -27,11 +27,17 @@ static func run(_tree_parent: Node = null) -> bool:
 	)
 
 	# 2. Derived Max HP & Speed
-	# Max HP = 60 + CONS * 8 + STR * 2; Speed = 8 + DEX; melee = round(STR * 1.5)
+	# Max HP = 60 + CONS * 8 + STR * 2; Speed = 8 + DEX; bare-hand power is DamageCalculator's
+	# (unit power STR + DEX plus any trained-fist weapon power, times the tier scale)
+	var bare := Combatant.new("Bare", 100, 10, 1, stats)
+	var bare_parts: Dictionary = DamageCalculator.attack_power(bare, false)
+	var bare_unit: float = DictUtil.to_float(bare_parts["unit_power"])
+	var bare_expected: int = maxi(1, roundi((DictUtil.to_float(bare_parts["weapon_power"]) + bare_unit) * bare.power_scale))
 	var derived_stats_ok: bool = (
 		stats.get_max_hp() == 60 + stats.cons_stat * 8 + stats.str_stat * 2 and
 		stats.get_initiative_speed() == 8 + stats.dex_stat and
-		stats.get_melee_power() == roundi(stats.str_stat * 1.5)
+		bare_unit == float(stats.str_stat + stats.dex_stat) and
+		bare.get_effective_power(false) == bare_expected
 	)
 	var before_str: int = stats.str_stat
 	var before_cons: int = stats.cons_stat

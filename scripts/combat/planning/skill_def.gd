@@ -68,13 +68,7 @@ var boost: float = 1.5         # FOCUS: attack multiplier
 var boost_rounds: int = 2      # FOCUS: duration
 var recover_ap: int = 2        # REST: AP regained
 var area: Area = Area.NONE     # ATTACK: area shape (tile-targeted)
-var weapon_hand: WeaponHand = WeaponHand.MAIN   # ATTACK: which hand's weapon the strike uses (FORGE1 4.1)
-# Derived from weapon_hand (the engine readers keep asking "is it the off-hand jab"): true for OFF.
-var offhand: bool:
-	get:
-		return weapon_hand == WeaponHand.OFF
-	set(value):
-		weapon_hand = WeaponHand.OFF if value else WeaponHand.MAIN
+var weapon_hand: WeaponHand = WeaponHand.MAIN   # ATTACK: which hand's weapon the strike uses (FORGE1 4.1; see is_off_hand)
 var stance_override: int = -1  # ATTACK in another stance pool (e.g. Shield Bash is Defensive)
 var status_effect: String = "" # status rolled on hit (StatusEffects), active next round
 var status_potency: int = 0
@@ -98,12 +92,6 @@ var tier: int = 1               # position in the family (1..5); each tier is it
 var basic: bool = false         # available to every class (counted outside the loadout slots)
 var grade: Grade = Grade.NOVICE   # family-level: class-path steps of advanced+ need StatRules.ADVANCED_MIN_LEVEL, KNOW can open them earlier
 var requires: Array[String] = []  # family ids that must ALL be owned to own / learn this skill (each of a lower grade)
-# True for grade advanced or expert (SK2 read this as a bool).
-var advanced: bool:
-	get:
-		return grade != Grade.NOVICE
-	set(value):
-		grade = Grade.ADVANCED if value else Grade.NOVICE
 var unlock_offset: int = -1     # levels after the family's unlock level this row opens (-1 = derive from the tier, see tier_offset)
 var description: String = ""
 var template: String = ""        # the description template this rank's text was rendered from (SkillText); "" = a literal description
@@ -228,7 +216,7 @@ func reach_for(c: Combatant) -> Vector2i:
 	var extra: int = c.spell_reach_bonus() if in_group("spell") and area != Area.LINE and area != Area.SWEEP else 0   # spell_reach effects (not LINE / SWEEP)
 	if reach_max > 0:
 		return Vector2i(reach_min, reach_max + extra)
-	if offhand or area == Area.LINE or area == Area.SWEEP:
+	if is_off_hand() or area == Area.LINE or area == Area.SWEEP:
 		return Vector2i(1, 1)
 	if c.attack_range > 1:
 		return Vector2i(2, maxi(3, c.attack_range) + extra)
@@ -236,6 +224,10 @@ func reach_for(c: Combatant) -> Vector2i:
 
 func is_area() -> bool:
 	return area != Area.NONE
+
+# True when the strike swings the off-hand weapon (weapon_hand OFF, e.g. the off-hand jab).
+func is_off_hand() -> bool:
+	return weapon_hand == WeaponHand.OFF
 
 # Tiles an area attack aimed at `cell` hits, cast from `from`.
 func area_cells(from: Vector2i, cell: Vector2i) -> Array[Vector2i]:

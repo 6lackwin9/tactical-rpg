@@ -175,7 +175,7 @@ static func _test_skill_paths() -> bool:
 				legal = false
 				continue
 			legal = legal and skill.tier == 1 and not seen.has(skill.family_id())
-			legal = legal and (not skill.advanced or DictUtil.to_int(step["level"]) >= StatRules.ADVANCED_MIN_LEVEL)
+			legal = legal and (skill.grade == SkillDef.Grade.NOVICE or DictUtil.to_int(step["level"]) >= StatRules.ADVANCED_MIN_LEVEL)
 			seen.append(skill.family_id())
 	checks["paths: advanced steps >= ADVANCED_MIN_LEVEL, one step per family, tier-1 rows only"] = legal
 	# A unit owns exactly the path skills whose family unlock level (path level minus any reduction) it has reached.

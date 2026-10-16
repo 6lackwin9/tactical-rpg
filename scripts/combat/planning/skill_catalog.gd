@@ -87,7 +87,7 @@ static func available(kind: SkillDef.Kind, skill_cap: int, c: Combatant = null) 
 static func single_attacks(c: Combatant, skill_cap: int) -> Array[SkillDef]:
 	var result: Array[SkillDef] = []
 	for s: SkillDef in available(SkillDef.Kind.ATTACK, skill_cap, c):
-		if s.is_area() or (s.offhand and c.attack_range <= 1):
+		if s.is_area() or (s.is_off_hand() and c.attack_range <= 1):
 			continue
 		result.append(s)
 	return result
