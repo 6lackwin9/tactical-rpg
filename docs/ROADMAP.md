@@ -60,60 +60,70 @@ Input: the user wants remaining systems designed and built BEFORE any balance pa
 Conflict to resolve: S1 is `balance-ready` yet S12 extends S1. Recommendation: S12 is additive (new command/status types, no change to the `DamageCalculator` formula); if the formula must change, S1 loses `balance-ready` until re-frozen (Q1).
 
 ### P-S3 Gear budget as a design lever
+
 - Option A, per-class gear budget (soft): define a target gear value per level (armor + power points) and validate each class's starter and best-in-slot loadout stays inside it. Cheap (validation in `ContentCatalog`); the proficiency dict stays the access gate. Risk: the budget number must be invented.
 - Option B, fix by content: add missing items (shaman light robes, ranger leather) and gate plate/kite shield by proficiency level. Cheapest, no new rule; but balance stays fragile as items are added.
 - Option C, armor burden tax: raise burden of plate so the warrior trades speed for armor (existing rule `Speed = 8 + DEX - burden`). Risk: warrior speed may swing too far.
 - Recommend A+B (budget validation as a guard, B fills gaps now); C only if the balance pass still shows warrior dominance. Needed before balance: yes.
 
 ### P-S4 Enemy AI
+
 - Option A, fix turn waste only: skip a turn only when no reachable target, kite to max range then attack instead of oscillating, shaman casts before moving. Small; targets the ranger/shaman baseline.
 - Option B, A plus role/difficulty profiles per encounter (cautious / standard / ruthless: flee threshold, focus fire, target choice). Medium; delivers the README "difficulty profiles" item as a non-stat difficulty dial.
 - Option C, perception-reactive AI (reads telegraphed plans). Big; risks unreadable outcomes for the sim.
 - Recommend A now, B after S12 (support AI needs ally-target commands), C deferred. Needed before balance: A.
 
 ### P-S7 Party and progression
+
 - Option A, XP + automatic spend: levels from XP; spend follows class weights, skills follow `skill_path`. Smallest; no player agency; fits StatRules (spend exactly 4+level-1).
 - Option B, player-allocated spend at level-up inside the enforced pool, with undo until confirm. The pool stays exact and enforced, so the HISTORY row on free allocation is not revived. Medium; needs persistent member state (level, xp, spend, learned skills, passives, loadout).
 - Option C, B plus skill/passive slot choice (talent-tree-lite). Large; overlaps S12 skill upgrades.
 - Recommend B, built as a pure data model first (`scripts/progression/`, XP curve in `data/progression/`), UI after S13 so it persists.
 
 ### P-S8 Quests and lore runtime
+
 - Option A, linear quest state machine: accept, steps, turn-in. Step kinds: defeat encounter, reach location, talk to NPC, have item. Rewards: XP, items, passive, skill, flag.
 - Option B, A plus a global flags registry and conditions (any step, dialogue or encounter can set/test flags). Small extra; S9/S11 reuse it.
 - Option C, event-bus reactive quests. Over-engineered for now.
 - Recommend B. Reward rule to freeze: reward passives/items carry a cost class tied to the S3 gear budget so rewards cannot exceed class budget by much (Q4). Passives stay source-granted only (DECISIONS).
 
 ### P-S9 Exploration
+
 - Option A, README spec as written: SAFE/DANGER tiles, danger step counter rolls encounters, roaming visible elites, exit tiles.
 - Option B, no random rolls: all encounters placed/visible (authored in `encounters` data). Removes RNG from real-play balance, simpler tests.
 - Option C, hybrid: placed encounters plus a step counter only in designated DANGER zones.
 - Recommend C (data already marks where fights trigger). No balance impact except encounter frequency; build after S8 (flags/triggers).
 
 ### P-S10 Travel
+
 - Option A, node graph with fixed travel cost, no events. Minimal.
 - Option B, A plus road-danger roll and supplies. Adds an economy that touches balance indirectly.
 - Option C, free travel between visited nodes, supplies as flavor only.
 - Recommend A first, supplies (B) as a later slice if wanted (Q6).
 
 ### P-S11 NPCs and dialogue
+
 - Option A, dialogue trees as data (speaker, line, choices, flag conditions, effects that set flags/start quests); shops as a dialogue effect with fixed stock per NPC.
 - Option B, A plus faction reputation meters (relations already authored) gating dialogue, prices and quests.
 - Option C, skill-check choices (stat tests). Adds randomness; defer.
 - Recommend A, then B once S8 flags exist. Prices tuned after balance.
 
 ### P-S12 Advanced combat
+
 - Option A, content-first within the current engine: ally-target commands (heal/buff), status set (bleed, poison, stun, haste, Staggered) through the existing status system, skill upgrades as per-skill levels. Support AI (S4) rides on ally targeting.
 - Option B, A plus terrain rules (cover, movement cost, hazard tiles; `Terrain` metadata exists) and AoE patterns.
 - Option C, A+B plus combo/flow engine (chained stance transitions, Dual Strike, weapon switch).
 - Recommend A, then B as a second slice, C last and optional. Each slice keeps `DamageCalculator` as the only formula. Give the shaman a support/heal identity here (baseline 0%) rather than inflating Hex/Arcane Bolt numbers (Q7).
 
 ### P-S13 Save/load and game state
+
 - Option A, single JSON save slot: party state (S7), flags (S8), inventory/stash, location, world id; versioned schema with a migration hook.
 - Option B, multiple slots plus autosave on location change and after combat.
 - Option C, A with dojo/forge sandbox saves kept separate.
 - Recommend A as first slice, growing to B; build right after the S7 data model so the schema is not retrofitted; new-game flow picks world and starting party.
 
 ### Suggested build order (each step needs user approval; balance only after step 7)
+
 1. S7 data model (state, XP curve) + S13 save schema (together they define the party snapshot).
 2. S12-A (ally targeting, statuses, skill upgrades) with S4-A (turn-waste fixes, support AI); S3 gear budget validation + missing class items.
 3. S8-B quest/flag runtime (rewards via budget rules).
@@ -124,6 +134,7 @@ Conflict to resolve: S1 is `balance-ready` yet S12 extends S1. Recommendation: S
 Until step 7, only S1/S2 stay balance-ready and no balance work is done.
 
 ### Open questions raised by this pass
+
 Q1 May S1 lose `balance-ready` if S12 needs a formula change? Q2 Gear budget: soft validation (A) or content-only (B)? Q3 Player-allocated level-up (S7-B) or automatic? Q4 May quest rewards exceed class budget, and by how much? Q5 Exploration encounters: placed only, step-counter only, or hybrid? Q6 Are travel supplies wanted? Q7 Should the shaman get a support/heal identity? Q8 Are lone-hero 1v3 and boss losses intended (party fights expected)? Q9 Passives permanent or temporary (existing question)? Q10 Playable loop scope: one campaign or a world sandbox?
 
 ## Refactor backlog (separate from feature milestones; never part of a builder's feature task)
@@ -165,6 +176,16 @@ Order and parallelism (builder cap 3): R1 (optional) -> start SK-L, AI1 and M3 t
 Findings: (1) `arena_test_suite.gd` and the older suites are the real conflict magnet: M2C2B edits about 10 suites. Do NOT run R1 in parallel with M2C2B; run R1 before it (or skip R1 and accept M2C2B owning those edits, with AI1/M3 using only new suite files plus one registration line each). (2) The content hubs (`content_schema/catalog/factory`, `skill_def`) are touched by only one milestone at a time in this plan (SK-L), so no split is needed now; a split of `content_catalog.gd` (717 lines) and `content_schema.gd` (433) by kind (skill/item/class/unit validators) is only worth a separate refactor R2 if M4 and a later item or skill schema change collide; schedule it after M3 if wanted, not before. (3) `combatant.gd` is deliberately not edited by any milestone here: M3 builds a combatant from a state through existing setters. (4) Registration lines in `run_all_tests` conflict textually but trivially; R1 should turn the list into a registry file so each milestone appends one line. (5) Rule for builders: new tests go in a new `*_test_suite.gd`, never into arena_test_suite.
 
 Recommendation on R1: schedule it BEFORE starting the parallel work if it can run now while C1-A1/D1-L finish (it only moves test code); otherwise start SK-L, AI1 and M3 immediately (their Touches are disjoint) and run R1 between SK-L and M2C2B asset only if the M2C2B asset branch has not started. It is not a blocker for anything.
+
+## BAL2 plan (proposed, design-brainstorm 2026-10-17; details and options in `docs/specs/BAL2_PROPOSAL.md`)
+
+Answers the BAL1 open issues. Root causes found by probe: a PERC >= 18 range bonus turns melee units into "ranged" ones (priest L7, rogue L7, warrior L9 lose their melee power), a 4x durability spread (L5 EHP warrior 597 vs mage 146), zero CONS growth for mage/ranger/rogue, kits frozen at L5 by the default loadout rule, no L1 class skill for ranger/brawler, and a near-deterministic sim. Riposte is not the warrior lever (L5 warrior wins 100% with or without it).
+
+| Milestone | Status | Goal | Lane split | Depends on | Balance-ready afterwards |
+| --- | --- | --- | --- | --- | --- |
+| BAL2-L | proposed | Sim reliability (continuous score, cap 10, smart_skills/loadout args, spend/distance/preset variants, stats and group modes), PERC range fix, unit gear sentinel `none`, elite/boss tier values | 1 logic branch, sim commit first | SKILL1-L merged (content hub files) | none |
+| BAL2-A | proposed | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
+| BAL2 | proposed | Rerun duel L1/3/5/7 on the continuous score, tiers, levels, group; one more small data round if a class is outside 40-60 | balance run on clean main | BAL2-L, BAL2-A | S2 and S4 (when every class is in bracket) |
 
 ## Open engine items (tracked)
 
