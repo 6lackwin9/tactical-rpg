@@ -495,7 +495,7 @@ Refactor only, no behaviour change: shared test helpers live in `TestHelpers` (`
 
 ### Quest schema (M4-L slice 1)
 
-Quest templates live in `data/quests/quests.json` (`QuestCatalog`); world quests bind them to world locations, encounters and flags and add metadata `links`, flag-conditioned `variants` (only whitelisted fields, so no branching inside a quest), a `turn_in` NPC and a `loot_pool` drawn from the new per-world loot table (`loot.json`). Validation and reference scans (incl. renames through links, variants and pools) are in `QuestRules` and `WorldCatalog`. The quest runtime and save v2 follow in slice 2. Tested in `quest_test_suite.gd`.
+Quest templates live in `data/quests/quests.json` (`QuestCatalog`); world quests bind them to world locations, encounters and flags and add metadata `links`, flag-conditioned `variants` (only whitelisted fields, so no branching inside a quest), a `turn_in` NPC and a `loot_pool` drawn from the new per-world loot table (`loot.json`). Validation and reference scans (incl. renames through links, variants and pools) are in `QuestRules` and `WorldCatalog`. The runtime (slice 2) adds `QuestRunner` and `RewardGrant` (turn-in is all-or-nothing; claimed loot leaves every pool) and save version 2 with a built-in migration that refuses damaged quest data instead of silently dropping it. Tested in `quest_test_suite.gd`.
 
 Sample quests (M4-A, seed `data/seeds/m4a.gd`): four lore-free templates (reach_and_clear, two_stop_delivery, clear_site, signal_and_return), an Ashlands loot table (wardens_drill, rallying_cry, keep_ring, keep_stores) shared by three quest pools, the new Ashlands quests cinder_gate_watch and warden_oath (variants for a fallen Mara or Tev) and the existing quests bound to templates.
 

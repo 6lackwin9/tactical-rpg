@@ -16,6 +16,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/ai_skills_test_suite.gd` | AI use of the new skill kinds (AI1) | S4 | done |
 | `scripts/tests/bal2_rules_test_suite.gd` | BAL2-L rules: PERC range, unit gear `none`, tiers, trained fists | S2, S3 | done |
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
+| `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/skill_unlock_test_suite.gd` | SK2 unlock rule suite (its schema default seed `sk2_schema.gd` is archived, CLN-2) | S2, S12 | done |
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
@@ -35,11 +36,11 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel}.gd` | Forge skill tab logic and ranks panel (SKILL1) | S5 | done |
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
-| `scripts/quests/` | quest_rules.gd (constants, validation of templates, world quest bindings, variants, links, loot), quest_catalog.gd (templates, ContentCatalog-style contract); runner and reward grant in M4-L slice 2 | S8 | in progress |
+| `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
 | `scripts/exploration/` | region maps, location interactions, encounter triggers | S9 | placeholder |
 | `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
 | `scripts/dialogue/` | dialogue trees, speakers, shops, reputation | S11 | placeholder |
-| `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3) | S13 | done |
+| `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |

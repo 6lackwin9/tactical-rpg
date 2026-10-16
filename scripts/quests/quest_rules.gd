@@ -400,7 +400,8 @@ static func links_errors(world_id: String, e: Dictionary, raw: Variant, label: S
 			seen[ref] = true
 			var ref_kind: String = str(LINK_KINDS[k])
 			errors.append_array(WorldCatalog.ref_errors(world_id, "%s %s" % [label, k], ref_kind, ref))
-			if (k == "follows" or k == "leads_to") and (ref == str(e.get("id", "")) or str(WorldCatalog.resolve(world_id, "quests", ref).get("_qid", "")) == own_qid):
+			# No quest link may name the quest itself (follows, leads_to and related_quests).
+			if ref_kind == "quests" and (ref == str(e.get("id", "")) or ref == own_qid or str(WorldCatalog.resolve(world_id, "quests", ref).get("_qid", "")) == own_qid):
 				errors.append("%s %s: a quest can't name itself." % [label, k])
 	return errors
 
@@ -501,6 +502,8 @@ static func variant_steps_errors(world_id: String, kinds: Array[String], raw: Va
 		errors.append("%s: steps must be an object {\"<index>\": {partial step}}." % label)
 		return errors
 	var steps: Dictionary = raw
+	if kinds.is_empty():
+		return errors   # unknown template: reported once already; per-step index errors would only add noise
 	for key: Variant in steps:
 		var s: String = str(key)
 		if not s.is_valid_int() or s.to_int() < 0 or s.to_int() >= kinds.size():
@@ -604,4 +607,63 @@ static func reward_warnings(world_id: String) -> Array[String]:
 				out.append("%s: %d items with a pooled item (soft cap %d)." % [qid, items, SOFT_MAX_ITEMS])
 		if picks > SOFT_MAX_PICKS:
 			out.append("%s: %d loot picks (soft cap %d)." % [qid, picks, SOFT_MAX_PICKS])
+	return out
+
+# ------------------------------------------------------------------------------
+# Resolution (pure: the world entry + gs.flags; no RNG, no clock)
+# ------------------------------------------------------------------------------
+
+# True when every `when_flags` condition holds and no `unless_flags` condition does.
+static func variant_applies(gs: GameState, variant: Dictionary) -> bool:
+	for c: Variant in DictUtil.array_of(variant.get("when_flags", [])):
+		if not condition_met(gs, DictUtil.dict_of(c)):
+			return false
+	for c: Variant in DictUtil.array_of(variant.get("unless_flags", [])):
+		if condition_met(gs, DictUtil.dict_of(c)):
+			return false
+	return true
+
+# The quest as the flags make it now: a copy of `entry` (json numbers normalised) with the template's `objectives` and
+# `rewards` attached, then every applying variant's `set` merged in list order (field replace; `steps` per index and
+# key; `rewards_from` swaps the rewards). Adds `available` (default true), `applied_variants` (ids in order) and
+# `turn_in` falls back to the giver when empty.
+# Every schema field is present with its WorldSchema default (loot_picks, loot_pool...), so readers never re-state defaults.
+static func resolve(gs: GameState, entry: Dictionary) -> Dictionary:
+	var out: Dictionary = DictUtil.dict_of(JsonUtil.normalize(WorldSchema.normalize("quests", entry)))
+	for key: String in ["_world", "_qid"]:   # normalize drops "_" keys; keep the merge-view ones
+		if entry.has(key):
+			out[key] = entry[key]
+	var template: Dictionary = QuestCatalog.get_entry(str(out.get("template", "")))
+	out["objectives"] = DictUtil.array_of(template.get("objectives", [])).duplicate(true)
+	out["rewards"] = DictUtil.dict_of(template.get("rewards", {})).duplicate(true)
+	out["available"] = true
+	var applied: Array[String] = []
+	for raw: Variant in DictUtil.array_of(out.get("variants", [])):
+		var v: Dictionary = DictUtil.dict_of(raw)
+		if not variant_applies(gs, v):
+			continue
+		applied.append(str(v.get("id", "")))
+		var set_d: Dictionary = DictUtil.dict_of(v.get("set", {}))
+		for key: Variant in set_d:
+			var k: String = str(key)
+			if not VARIANT_FIELDS.has(k):
+				continue
+			match k:
+				"steps":
+					var steps: Array = DictUtil.array_of(out.get("steps", []))
+					var partials: Dictionary = DictUtil.dict_of(set_d[key])
+					for idx: Variant in partials:
+						var i: int = str(idx).to_int()
+						if str(idx).is_valid_int() and i >= 0 and i < steps.size():
+							var step: Dictionary = DictUtil.dict_of(steps[i]).duplicate(true)
+							step.merge(DictUtil.dict_of(partials[idx]).duplicate(true), true)
+							steps[i] = step
+					out["steps"] = steps
+				"rewards_from":
+					out["rewards"] = DictUtil.dict_of(QuestCatalog.get_entry(str(set_d[key])).get("rewards", {})).duplicate(true)
+				_:
+					out[k] = JsonUtil.normalize(set_d[key])   # a deep copy
+	if str(out.get("turn_in", "")).is_empty():
+		out["turn_in"] = str(out.get("giver", ""))
+	out["applied_variants"] = applied
 	return out

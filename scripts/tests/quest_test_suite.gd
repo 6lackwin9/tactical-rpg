@@ -171,6 +171,14 @@ static func _test_templates(fx: Dictionary) -> bool:
 	f.close()
 	QuestCatalog.use_path(broken)
 	checks["broken file blocks save"] = QuestCatalog.save_blocked() and not QuestCatalog.load_errors().is_empty() and QuestCatalog.save() != OK and not QuestCatalog.validate_all().is_empty()
+	# A template with a key outside the stored fields loads but blocks saving (saving would drop the key).
+	var extra: String = SANDBOX + "/extra_quests.json"
+	var f2 := FileAccess.open(extra, FileAccess.WRITE)
+	f2.store_string(JSON.stringify({"kind": "quest_templates", "version": 1, "entries": [{"id": "t_extra", "name": "Extra", "objectives": [{"kind": "flag"}], "origin": "user"}]}))
+	f2.close()
+	QuestCatalog.use_path(extra)
+	var extra_text: String = FileAccess.get_file_as_string(extra)
+	checks["unknown stored field blocks save"] = QuestCatalog.has("t_extra") and QuestCatalog.save_blocked() and QuestCatalog.save() != OK and FileAccess.get_file_as_string(extra) == extra_text
 	QuestCatalog.use_path(SANDBOX + "/quests.json")
 	# Fixture templates for the world checks.
 	checks["fixture templates"] = (QuestCatalog.upsert(_template("t_two", ["reach_location", "win_encounter"], {"xp": 10})).is_empty()
@@ -257,6 +265,8 @@ static func _test_links() -> bool:
 	checks["follows itself"] = _has(_errs(_quest("q_base", {"links": {"follows": ["q_base"]}})), "itself")
 	checks["leads_to itself"] = _has(_errs(_quest("q_base", {"links": {"leads_to": ["q_base"]}})), "itself")
 	checks["lore-only quest may carry links"] = _errs({"id": "q_x", "name": "Lore", "links": full}).is_empty()
+	checks["related_quests itself"] = _has(_errs(_quest("q_base", {"links": {"related_quests": ["q_base"]}})), "itself")
+	checks["related_quests itself (qualified)"] = _has(_errs(_quest("q_base", {"links": {"related_quests": ["%s:q_base" % PARENT]}})), "itself")
 	# One-sided leads_to: a warning only, both quests stay valid.
 	var stored: bool = WorldCatalog.upsert(PARENT, "quests", _quest("q_next", {"links": {}})).is_empty() and WorldCatalog.upsert(PARENT, "quests", _quest("q_base", {"links": {"leads_to": ["q_next"]}})).is_empty()
 	var one_sided: Array[String] = QuestRules.link_warnings(PARENT)
@@ -289,6 +299,9 @@ static func _test_variants() -> bool:
 		"set template": [_variant("v", {"template": "t_flag"})],
 		"set requires": [_variant("v", {"requires": []})],
 		"set complete_flags": [_variant("v", {"complete_flags": []})],
+		"set auto_start": [_variant("v", {"auto_start": true})],
+		"set requires_flags": [_variant("v", {"requires_flags": []})],
+		"set variants": [_variant("v", {"variants": []})],
 		"set objectives": [_variant("v", {"objectives": []})],
 		"step index out of range": [_variant("v", {"steps": {"2": {"text": "x"}}})],
 		"step index not a number": [_variant("v", {"steps": {"first": {"text": "x"}}})],
@@ -315,6 +328,9 @@ static func _test_variants() -> bool:
 	checks["9 variants"] = not _errs(_quest("q_x", {"variants": nine})).is_empty()
 	checks["8 variants ok"] = _errs(_quest("q_x", {"variants": nine.slice(0, QuestRules.MAX_VARIANTS)})).is_empty()
 	checks["variants without template"] = not _errs({"id": "q_x", "name": "Lore", "variants": [_variant("v", {"reward": "x"})]}).is_empty()
+	# Unknown template: one template error, no per-step index noise from variant steps.
+	var unknown: Array[String] = _errs(_quest("q_x", {"template": "no_such_template", "variants": [_variant("v", {"steps": {"1": {"text": "x"}}})]}))
+	checks["unknown template: no step index noise"] = _has(unknown, "unknown quest template") and not _has(unknown, "out of range")
 	return _report("Variants: whitelist, conditions, ids, per-step partials, rewards_from, count; a valid set has no errors", checks)
 
 # ------------------------------------------------------------------------------
@@ -420,6 +436,12 @@ static func _test_ref_scans() -> bool:
 	checks["variant links rewritten"] = JsonUtil.strings(DictUtil.dict_of(v_set["links"])["related_locations"]) == ["loc_b2"]
 	checks["pool rewritten"] = JsonUtil.strings(after["loot_pool"]) == ["loot_skill2"] and JsonUtil.strings(v_set["loot_pool"]) == ["loot_skill2"]
 	checks["still valid"] = _errs(after).is_empty()
+	# A stale path match never overwrites another ref: only the value the scan found is replaced.
+	var probe: Dictionary = {"links": {"related_locations": ["loc_a"]}}
+	WorldCatalog._set_at_path(probe, ["links", "related_locations", 0], "loc_old", "loc_new")
+	var kept: bool = JsonUtil.strings(DictUtil.dict_of(probe["links"])["related_locations"]) == ["loc_a"]
+	WorldCatalog._set_at_path(probe, ["links", "related_locations", 0], "loc_a", "loc_new")
+	checks["path rewrite guarded"] = kept and JsonUtil.strings(DictUtil.dict_of(probe["links"])["related_locations"]) == ["loc_new"]
 	# Save and reload keep the new fields (byte-stable second save).
 	checks["save"] = WorldCatalog.save_all() == OK
 	var path: String = WorldCatalog.path_for(PARENT, "quests")

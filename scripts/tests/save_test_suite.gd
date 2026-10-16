@@ -66,7 +66,8 @@ static func _rich_state() -> GameState:
 	g.set_flag("intro.done", true)
 	g.set_flag("count", 7)
 	g.set_flag("name", "x")
-	g.quests = {"q1": {"stage": 2, "log": ["a", "b"], "ratio": 0.5}}
+	g.quests = {"qa:q1": {"state": "active", "objective": 2}, "qa:q2": {"state": "completed", "objective": 1}}
+	g.loot_claimed = ["qa:zeta", "qa:alpha"] as Array[String]
 	return g
 
 static func _test_game_state() -> bool:
@@ -81,15 +82,16 @@ static func _test_game_state() -> bool:
 	bad_flags.flags["BAD"] = true
 	checks["validate_bad_flag_key"] = not bad_flags.validate().is_empty()
 	var bad_quest: GameState = _rich_state()
-	bad_quest.quests = {"q": Vector2(1, 2)}
-	checks["validate_unsafe_quests"] = not bad_quest.validate().is_empty()
+	bad_quest.quests = {"qa:q": {"state": "done", "objective": 0}}
+	checks["validate_bad_quest_shape"] = not bad_quest.validate().is_empty()
 	var no_world: GameState = _rich_state()
 	no_world.world_id = ""
 	checks["validate_world_required"] = not no_world.validate().is_empty()
 	var text: String = JSON.stringify(g.to_dict())
 	var back: GameState = GameState.from_dict(DictUtil.dict_of(JSON.parse_string(text)))
 	checks["json_roundtrip_equal"] = back.equals(g)
-	checks["ints_preserved"] = back.party.members[0].total_xp is int and back.flags["intro.done"] == true and back.quests["q1"]["stage"] is int
+	checks["ints_preserved"] = back.party.members[0].total_xp is int and back.flags["intro.done"] == true and back.quests["qa:q1"]["objective"] is int
+	checks["loot_claimed_saved_sorted"] = JsonUtil.strings(g.to_dict()["loot_claimed"]) == ["qa:alpha", "qa:zeta"]
 	var changed: GameState = GameState.from_dict(g.to_dict())
 	changed.party.members[0].total_xp += 1
 	checks["equals_detects_difference"] = not changed.equals(g)
@@ -198,7 +200,7 @@ static func _test_bad_files() -> bool:
 static func _test_migrations() -> bool:
 	SaveMigrations.reset()
 	var base: Dictionary = {"format": SaveGame.FORMAT, "version": 1, "saved_at": 0, "game_state": {"world_id": "w", "location_id": "old"}}
-	var no_step: Dictionary = SaveMigrations.migrate(base, 2)
+	var no_step: Dictionary = SaveMigrations.migrate(base, 3)   # the built-in table stops at 2
 	SaveMigrations.register(1, func(state: Dictionary) -> Dictionary:
 		var out: Dictionary = state.duplicate(true)
 		out["location_id"] = "migrated_" + str(state.get("location_id", ""))

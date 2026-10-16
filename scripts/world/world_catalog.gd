@@ -583,7 +583,7 @@ static func _quest_json_refs(w: String, e: Dictionary, kind: String, target: Str
 		var at: Array = ["variants", vi, "set"]
 		for key: String in ["giver", "turn_in"]:
 			if kind == "characters" and set_d.get(key, null) is String and _points_at(w, kind, str(set_d[key]), target):
-				out.append(base.merged({"key": "variants", "index": vi, "path": at + [key]}))
+				out.append(base.merged({"key": "variants", "index": vi, "path": at + [key], "value": str(set_d[key])}))
 		_links_refs(w, DictUtil.dict_of(set_d.get("links", null)), at + ["links"], kind, target, base, out)
 		if kind == "loot":
 			_list_refs(w, set_d.get("loot_pool", null), at + ["loot_pool"], "loot", target, base, out)
@@ -594,7 +594,7 @@ static func _quest_json_refs(w: String, e: Dictionary, kind: String, target: Str
 		for idx: Variant in steps:
 			var partial: Dictionary = DictUtil.dict_of(steps[idx])
 			if partial.get(sub, null) is String and _points_at(w, kind, str(partial[sub]), target):
-				out.append(base.merged({"key": "variants", "index": vi, "path": at + ["steps", idx, sub]}))
+				out.append(base.merged({"key": "variants", "index": vi, "path": at + ["steps", idx, sub], "value": str(partial[sub])}))
 	return out
 
 static func _links_refs(w: String, links: Dictionary, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
@@ -606,7 +606,7 @@ static func _list_refs(w: String, raw: Variant, at: Array, kind: String, target:
 	var list: Array = DictUtil.array_of(raw)
 	for i: int in range(list.size()):
 		if list[i] is String and _points_at(w, kind, str(list[i]), target):
-			out.append(base.merged({"key": str(at[0]), "index": i, "path": at + [i]}))
+			out.append(base.merged({"key": str(at[0]), "index": i, "path": at + [i], "value": str(list[i])}))
 
 static func _points_at(world_id: String, kind: String, ref: String, target_qid: String) -> bool:
 	if ref.is_empty():
@@ -630,7 +630,7 @@ static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid
 		var idx: int = DictUtil.to_int(match_info["index"], -1)
 		var sub: String = str(match_info.get("sub", ""))
 		if match_info.has("path"):
-			_set_at_path(e, DictUtil.array_of(match_info["path"]), replacement)
+			_set_at_path(e, DictUtil.array_of(match_info["path"]), str(match_info.get("value", "")), replacement)
 		elif key == "relations":
 			var rel: Dictionary = e[key]
 			var stance: Variant = rel.get(sub, "neutral")
@@ -647,8 +647,9 @@ static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid
 			e[key] = replacement
 		_touch(w, str(match_info["kind"]))
 
-# Walks `path` (Dictionary keys / Array indexes) from `root` and sets its last step to `value`.
-static func _set_at_path(root: Dictionary, path: Array, value: String) -> void:
+# Walks `path` (Dictionary keys / Array indexes) from `root` and sets its last step to `value`, only while it still
+# holds `expected` (the ref the scan found), so a stale match never overwrites another ref.
+static func _set_at_path(root: Dictionary, path: Array, expected: String, value: String) -> void:
 	var node: Variant = root
 	for i: int in range(path.size()):
 		var step: Variant = path[i]
@@ -656,7 +657,8 @@ static func _set_at_path(root: Dictionary, path: Array, value: String) -> void:
 		if node is Dictionary:
 			var d: Dictionary = node
 			if last:
-				d[step] = value
+				if d.get(step, null) is String and str(d[step]) == expected:
+					d[step] = value
 			else:
 				node = d.get(step, null)
 		elif node is Array:
@@ -665,7 +667,8 @@ static func _set_at_path(root: Dictionary, path: Array, value: String) -> void:
 			if idx < 0 or idx >= a.size():
 				return
 			if last:
-				a[idx] = value
+				if a[idx] is String and str(a[idx]) == expected:
+					a[idx] = value
 			else:
 				node = a[idx]
 		else:

@@ -73,7 +73,13 @@ static func reload_from_disk() -> void:
 			_error_list().append("%s: an entry is not an object; it is skipped." % path)
 			_state()["blocked"] = true
 			continue
-		_list().append(normalize(DictUtil.dict_of(item)))
+		var dict: Dictionary = item
+		for key: Variant in dict:
+			if not FIELDS.has(str(key)):
+				# to_storage keeps FIELDS only: saving now would silently drop the key
+				_error_list().append("%s: template '%s' has unknown field '%s'; fix the file before saving." % [path, str(dict.get("id", "")), str(key)])
+				_state()["blocked"] = true
+		_list().append(normalize(dict))
 
 static func load_errors() -> Array[String]:
 	_ensure_loaded()

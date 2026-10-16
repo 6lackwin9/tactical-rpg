@@ -3,13 +3,13 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Save game (S13): one versioned JSON file per slot.
-#   {"format": "fc_save", "version": 1, "saved_at": <unix>, "game_state": {...}}
+#   {"format": "fc_save", "version": 2, "saved_at": <unix>, "game_state": {...}}
 # Files live in base_dir() (default user://saves, static override for tests / sandboxes) as
 # slot_<n>.json. write() validates first and writes <file>.tmp then renames, so a crash never
 # leaves a half file. read() never returns a partially loaded state.
 # ==============================================================================
 
-const VERSION: int = 1
+const VERSION: int = 2   # 2: structured quests blob + loot_claimed (SaveMigrations built-in step 1 -> 2)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 

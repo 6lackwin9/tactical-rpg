@@ -47,7 +47,7 @@ static func _test_shipped_worlds() -> bool:
 	checks["lineage"] = WorldCatalog.lineage("tidewrack") == ["ashlands", "tidewrack"] and WorldCatalog.lineage("ashlands") == ["ashlands"]
 	checks["descendants"] = WorldCatalog.descendants("ashlands") == ["tidewrack"]
 	var kinds_filled: bool = true
-	for kind: String in ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters"]:
+	for kind: String in ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot"]:
 		kinds_filled = kinds_filled and not WorldCatalog.own_entries("ashlands", kind).is_empty()
 	checks["every kind used by ashlands"] = kinds_filled
 	return TestHelpers.report_ok(TAG, "Shipped worlds load and validate (every element kind, lineage, descendants)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not problems.is_empty() else str(ids))
