@@ -39,7 +39,8 @@ static func run(_tree_parent: Node = null) -> bool:
 		sides_ok = sides_ok and enc.team_of(c) == UnitArt.Team.FRIENDLY and enc.get_token_texture(c) != null and enc.get_sprite_texture(c) != null
 	for c: Combatant in enc.enemies:
 		sides_ok = sides_ok and enc.team_of(c) == UnitArt.Team.HOSTILE and enc.get_token_texture(c) != null
-	sides_ok = sides_ok and enc.class_of(enc.unit("goblin_shaman")) == "priest"
+	# Art key comes from the unit's catalog `art` field (CLN-15), not a class fallback.
+	sides_ok = sides_ok and enc.class_of(enc.unit("goblin_shaman")) == str(ContentCatalog.get_entry("units", "goblin_shaman").get("art", ""))
 
 	# 4. Terrain glyph round-trip and walkability rules
 	var terrain_ok: bool = true
