@@ -4,9 +4,15 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-No agents running.
+No agents running. SKILL1-L is paused (user usage limit, 2026-10-16): uncommitted partial work in worktree `../ngp-skill1` (branch `feat/skill1`, stopped mid-rename rewrite to the ranked API); resume with the same spec after the reset.
 
 ## Finished, by milestone (newest first)
+
+### BAL1 balance rerun (2026-10-16)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| balance | duel L1/3/5/7, tier, levels, smart_skills A/B | 66k / 22 | report committed `80eeaf0`; open issues await user decisions |
 
 ### AI1 AI skill use
 

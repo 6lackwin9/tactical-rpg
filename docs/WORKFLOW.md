@@ -87,3 +87,6 @@ Note (2026-10-16): the first three-way parallel run merged cleanly except for `i
 | AI1 (logic 205k / 20 incl. one resumed fix) | logic-builder | 36k / 1 | merged |
 
 Throughput note (2026-10-16): R1, M2C2B-L, M3, AI1 and M2C2B ran as 3 parallel lanes; the planner's own merge work (rebase, registry conflicts, docs delta, cross-checks) is now the main serial cost. Parallel full-suite runs collide on fixed `user://` sandbox names (content tests): run the final suites one branch at a time, or make the sandbox names unique per process (follow-up task).
+
+| BAL1 balance rerun | balance 66k / 22 | none (docs only) | report committed `80eeaf0` |
+| SKILL1-L | logic-builder stopped by user (usage limit) mid-run | - | paused, partial work in ../ngp-skill1 |
