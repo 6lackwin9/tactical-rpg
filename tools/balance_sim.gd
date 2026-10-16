@@ -2,8 +2,9 @@ extends SceneTree
 
 # Balance simulator: headless AI-vs-AI battles on a sandbox copy of the catalog (BAL2_SIM.md).
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]     (tools/fc.sh sim help: the usage)
-#   modes duel | tier | levels | group | stats; keys cap, smart_skills, loadout, spend, preset,
-#   distance, score, quick, metrics (tools/sim/sim_args.gd).
+#   modes duel | tier | levels | group | stats | party | role | sweep; keys in tools/sim/sim_args.gd.
+#   party / sweep: tools/sim/sim_party.gd; role: tools/sim/sim_role_mode.gd; per-unit metrics and
+#   conservation checks: tools/sim/sim_metrics.gd; targets (section 8, X marks): tools/sim/sim_targets.gd.
 # Scores per fight (left side): binary (KO, else the HP lead with a 0.02 band) and HP margin
 # (KO 1 / 0, else 0.5 + (l - r) / 2); cells print "bin/hp" in percent. Duel, tier, levels and group
 # run every matchup with sides swapped over every seed, so side/position bias cancels out.
@@ -12,13 +13,16 @@ extends SceneTree
 const SimArgs = preload("res://tools/sim/sim_args.gd")
 const SimRunner = preload("res://tools/sim/sim_runner.gd")
 const SimVariants = preload("res://tools/sim/sim_variants.gd")
+const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
+const SimParty = preload("res://tools/sim/sim_party.gd")
+const SimRoleMode = preload("res://tools/sim/sim_role_mode.gd")
 
-const CLASSES: Array[String] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]
+const CLASSES: Array[String] = SimArgs.CLASSES
 const TIER_ORDER: Array[String] = ["minion", "standard", "elite", "boss"]
 const LEVEL_STEPS: Array[int] = [1, 3, 5, 7]
 const STATS_LEVELS: Array[int] = [1, 3, 5, 7]
 
-var sandbox: String = ""   # per process, so sims can run in parallel
+var sandbox: String = ""   # per process, so sims (e.g. one sweep per level) can run in parallel
 var args: SimArgs = SimArgs.new()
 var runner: SimRunner = null
 
@@ -33,6 +37,9 @@ func _initialize() -> void:
 	_clear_sandbox()
 	ContentCatalog.fork_to(sandbox)
 	runner = SimRunner.new(args)
+	var metrics := SimMetrics.new()
+	runner.observer = metrics   # conservation checks run in every fight of every mode
+	metrics.keep_totals = args.metrics and not SimArgs.METRIC_MODES.has(args.mode)
 	_out(args.header())
 	match args.mode:
 		"duel":
@@ -45,9 +52,20 @@ func _initialize() -> void:
 			_group(args.level)
 		"stats":
 			_stats()
+		"party":
+			SimParty.new(args, runner, metrics).party_mode()
+		"sweep":
+			SimParty.new(args, runner, metrics).sweep_mode()
+		"role":
+			SimRoleMode.new(args, runner, metrics).role_mode()
 	runner.distance_note()
-	if args.metrics:
-		_out("metrics: the per-unit collector arrives with BAL2-L commit 1b (nothing collected)")
+	if metrics.keep_totals and not metrics.totals.is_empty():
+		_out("METRICS per unit over every fight of this table (the left/party unit and its foes):")
+		_out(SimMetrics.kpi_header())
+		for n: Variant in metrics.totals:
+			_out(SimMetrics.kpi_line(str(n), DictUtil.dict_of(metrics.totals[n])))
+	if runner.fights > 0:
+		_out("metric checks: %d over %d fights, %d METRIC FAIL" % [metrics.checks, runner.fights, metrics.fail_lines.size()])
 	_clear_sandbox()
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	quit()
@@ -97,7 +115,7 @@ func _duel(level: int) -> void:
 			line += "%-10s" % runner.cell(res)
 		_out(line + "%-10s" % _avg(row) + _band_flag(row))
 
-# Duel diagnostic band on the row's mean hp score (key band=lo-hi): "LOW" / "HIGH" / "" (not a gate).
+# Duel diagnostic band on the row's mean hp score (key band=lo-hi or target=duel:lo-hi): "X LOW" / "X HIGH" / "" (a diagnostic, not a gate).
 func _band_flag(results: Array[Dictionary]) -> String:
 	var h: float = 0.0
 	var n: int = 0
@@ -109,9 +127,9 @@ func _band_flag(results: Array[Dictionary]) -> String:
 		return ""
 	var pct: int = roundi(h / float(n) * 100.0)
 	if pct < args.band_lo:
-		return "LOW (band %d-%d)" % [args.band_lo, args.band_hi]
+		return "X LOW (band %d-%d)" % [args.band_lo, args.band_hi]
 	if pct > args.band_hi:
-		return "HIGH (band %d-%d)" % [args.band_lo, args.band_hi]
+		return "X HIGH (band %d-%d)" % [args.band_lo, args.band_hi]
 	return ""
 
 func _tier(level: int) -> void:

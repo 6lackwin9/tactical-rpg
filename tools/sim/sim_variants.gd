@@ -11,9 +11,7 @@ static func newest_loadout(class_id: String, level: int) -> Array[String]:
 	var entry: Dictionary = ContentCatalog.get_entry("classes", class_id)
 	var first_level: Dictionary = {}   # family -> lowest path level
 	var order: Array[String] = []      # families in path order
-	var raw_path: Variant = entry.get("skill_path", [])
-	var path: Array = raw_path if raw_path is Array else []
-	for raw_step: Variant in path:
+	for raw_step: Variant in DictUtil.array_of(entry.get("skill_path", [])):
 		var step: Dictionary = DictUtil.dict_of(raw_step)
 		var skill_id: String = str(step.get("skill", ""))
 		var step_level: int = DictUtil.to_int(step.get("level", 1), 1)

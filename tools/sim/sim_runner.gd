@@ -7,8 +7,9 @@ extends RefCounted
 const SimArgs = preload("res://tools/sim/sim_args.gd")
 const SimVariants = preload("res://tools/sim/sim_variants.gd")
 const SimObserver = preload("res://tools/sim/sim_observer.gd")
+const SimRoles = preload("res://tools/sim/sim_roles.gd")
 
-const MAX_STEPS_PER_ROUND: int = 600
+const MAX_STEPS_PER_ROUND: int = 600   # safety stop for one round's step loop
 
 var args: SimArgs
 var defs: Dictionary = {}           # unit id -> {"class_id", "level", "tier", "side", "party"}
@@ -23,31 +24,52 @@ var fights: int = 0
 func _init(p_args: SimArgs) -> void:
 	args = p_args
 
-# Declares sandbox unit `id`. `party` = the variant side (loadout and spend variants apply).
-func define(id: String, class_id: String, level: int, tier: String, party: bool) -> void:
-	defs[id] = {"class_id": class_id, "level": level, "tier": tier, "side": "party" if party else "enemy", "party": party}
+# Declares sandbox unit `id`. `party` = the party side (the `loadout` argument and the spend
+# variants apply). Options: "loadout" (explicit family list, wins over the argument), "plain" (true:
+# a party reference unit with class spend and default loadout), "copy_of" (catalog unit id copied
+# with `level`; class_id and tier come from it).
+func define(id: String, class_id: String, level: int, tier: String, party: bool, opts: Dictionary = {}) -> void:
+	var d: Dictionary = {"class_id": class_id, "level": level, "tier": tier, "side": "party" if party else "enemy", "party": party,
+		"loadout": DictUtil.array_of(opts.get("loadout", [])), "plain": DictUtil.to_bool(opts.get("plain", false)), "copy_of": str(opts.get("copy_of", ""))}
+	if DictUtil.dict_of(defs.get(id, {})) == d:
+		return   # unchanged: the sandbox entry already written stays valid
+	defs[id] = d
 	_written.erase(id)
 
 # Upserts unit `id` for the current spend variant (only when it changed). False = refused (printed).
+# Ids that are not declared but exist in the catalog (catalog encounter rosters) are used as they are.
 func _write(id: String) -> bool:
 	var d: Dictionary = DictUtil.dict_of(defs.get(id, {}))
 	if d.is_empty():
+		if ContentCatalog.has("units", id):
+			return true
 		out("SIM unknown unit %s" % id)
 		return false
 	var party: bool = DictUtil.to_bool(d["party"])
-	var variant: String = spend_variant if party else "class"
+	var plain: bool = DictUtil.to_bool(d["plain"])
+	var variant: String = spend_variant if party and not plain else "class"
 	if str(_written.get(id, "")) == variant:
 		return true
 	var class_id: String = str(d["class_id"])
 	var level: int = DictUtil.to_int(d["level"], 1)
 	var entry: Dictionary = {"id": id, "name": id, "side": str(d["side"]), "class_id": class_id, "level": level, "tier": str(d["tier"]), "flee_ratio": 0.0}
-	if party:
+	var copy_of: String = str(d["copy_of"])
+	if not copy_of.is_empty():
+		entry = ContentCatalog.get_entry("units", copy_of).duplicate(true)
+		entry["id"] = id
+		entry["level"] = level
+	var explicit: Array = DictUtil.array_of(d["loadout"])
+	if not explicit.is_empty():
+		entry["loadout"] = explicit
+	if party and not plain:
 		entry["spend"] = SimVariants.spend_for(variant, class_id, level)
-		if args.loadout == "newest":
+		if explicit.is_empty() and args.loadout == "newest":
 			entry["loadout"] = SimVariants.newest_loadout(class_id, level)
+		elif explicit.is_empty() and args.loadout == "role":
+			entry["loadout"] = SimRoles.role_loadout(class_id, SimRoles.primary_role(class_id), level)
 	var errors: Array[String] = ContentCatalog.upsert("units", entry)
 	if not errors.is_empty():
-		out("SIM unit error %s (spend %s, loadout %s): %s" % [id, variant, args.loadout, str(errors)])
+		out("SIM unit error %s (spend %s, loadout %s): %s" % [id, variant, str(entry.get("loadout", args.loadout)), str(errors)])
 		_written.erase(id)
 		return false
 	_written[id] = variant
@@ -59,13 +81,22 @@ func build(id: String) -> Combatant:
 		return null
 	return ContentFactory.unit(ContentCatalog.get_entry("units", id))
 
-# One battle of `left` (party) vs `right` (enemies). Record keys: l, r (HP fractions), bin, hp
-# (scores of the left side), rounds, cleared (every enemy down), ok (false = a unit was refused).
-func fight(left: Array[String], right: Array[String], seed_value: int) -> Dictionary:
-	for id: String in left + right:
+# One battle of `left` (party) vs `right` (enemies). `base`: encounter fields that replace the
+# generated defaults (zone, arena, exits, blocks, AP, wave_units / wave_round / wave_block); party,
+# enemies, max_rounds (= cap) and rng_seed are always the sim's. Record keys: l, r (HP fractions),
+# bin, hp (scores of the left side), rounds, cleared (every enemy down, waves included),
+# survivors, party_size, ok (false = a unit was refused).
+func fight(left: Array[String], right: Array[String], seed_value: int, base: Dictionary = {}) -> Dictionary:
+	var waves: Array[String] = []
+	for raw: Variant in DictUtil.array_of(base.get("wave_units", [])):
+		waves.append(str(raw))
+	for id: String in left + right + waves:
 		if not _write(id):
 			return {"ok": false}
-	var entry: Dictionary = {"id": "sim_fight", "name": "Sim", "zone": "stone_arena", "party": left, "enemies": right, "max_rounds": args.cap, "total_blocks": 6, "unit_ap": 12, "ap_regen": 4, "rng_seed": seed_value}
+	var entry: Dictionary = {"id": "sim_fight", "name": "Sim", "zone": "stone_arena", "arena": "CLOSED", "total_blocks": 6, "unit_ap": 12, "ap_regen": 4}
+	for key: Variant in base:
+		entry[key] = base[key]
+	entry.merge({"party": left, "enemies": right, "max_rounds": args.cap, "rng_seed": seed_value}, true)
 	var session := CombatSession.new(CatalogEncounter.from_entry(entry))
 	session.start()
 	_prepare(session)
@@ -86,9 +117,16 @@ func fight(left: Array[String], right: Array[String], seed_value: int) -> Dictio
 		if session.combat_over or not session.can_advance_round():
 			break
 		session.advance_round()
+		if observer != null:
+			observer.on_round(session)
 	var l: float = side_hp_frac(session.allies)
 	var r: float = side_hp_frac(session.enemies)
-	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": binary_score(l, r), "hp": hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0}
+	var survivors: int = 0
+	for c: Combatant in session.allies:
+		if c.is_active():
+			survivors += 1
+	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": binary_score(l, r), "hp": hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0,
+		"survivors": survivors, "party_size": session.allies.size()}
 	if observer != null:
 		observer.on_end(session, result)
 	session.dispose()
