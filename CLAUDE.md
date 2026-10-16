@@ -22,6 +22,7 @@ Read these instead of crawling the code:
 - `asset-builder` agent (asset lane): fills `data/` through `ContentCatalog.upsert` against a merged schema; no code, no tests.
 - `balance` agent (balance lane): sims in its own clean `main` worktree on `balance-ready` systems; writes `docs/BALANCE_REPORT.md`.
 - `change-reviewer` agent: read-only pre-commit review.
+- `housekeeper` agent (cleanup lane): finds legacy/redundant code, dead paths and bloat; proposes trims in `docs/specs/CLEANUP.md`; after user confirmation adds cleanup tasks to `docs/TASKS.md`/`docs/ROADMAP.md`; never implements (builders do, as separate tasks).
 
 ## Standing rules
 

@@ -183,7 +183,7 @@ Answers the BAL1 open issues. Root causes found by probe: a PERC >= 18 range bon
 
 | Milestone | Status | Goal | Lane split | Depends on | Balance-ready afterwards |
 | --- | --- | --- | --- | --- | --- |
-| BAL2-L | proposed | Sim reliability (continuous score, cap 10, smart_skills/loadout args, spend/distance/preset variants, stats and group modes), PERC range fix, unit gear sentinel `none`, elite/boss tier values | 1 logic branch, sim commit first | SKILL1-L merged (content hub files) | none |
+| BAL2-L | proposed | Sim reliability (continuous score, cap 10, smart_skills/loadout args, spend/distance/preset variants, stats and group modes; per-unit metrics, party-vs-encounter mode, role limit tests, composition sweep: docs/specs/BAL2_SIM.md), PERC range fix, unit gear sentinel `none`, elite/boss tier values | 1 logic branch, sim commit first | SKILL1-L merged (content hub files) | none |
 | BAL2-A | proposed | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
 | BAL2 | proposed | Rerun duel L1/3/5/7 on the continuous score, tiers, levels, group; one more small data round if a class is outside 40-60 | balance run on clean main | BAL2-L, BAL2-A | S2 and S4 (when every class is in bracket) |
 

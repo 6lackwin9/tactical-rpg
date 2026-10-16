@@ -16,6 +16,7 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 | asset | `asset-builder` | `data/catalog/**`, `data/worlds/**` via `ContentCatalog.upsert` | scripts, tests, docs |
 | balance | `balance` | `docs/BALANCE_REPORT.md`, sims on a clean `main` worktree | everything else |
 | review | `change-reviewer` | read-only | - |
+| cleanup | `housekeeper` | `docs/specs/CLEANUP.md`; after user confirmation `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/HISTORY.md` rows | code, data, tests, tools (builders implement confirmed cleanup tasks) |
 
 If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent.
 
@@ -41,6 +42,10 @@ If the custom agent types are not yet callable (agent files added this session),
 3. Record cost: note the model passed to each dispatch (Agent `model` parameter or "inherited") and the main-session token counter delta in the "Cost tracking" table of `docs/AGENT_MAP.md`. Append a row to the "Agent run log" in `docs/WORKFLOW.md` and update `docs/AGENT_MAP.md` (move the finished agent from Active into its milestone section, creating the section at the TOP of the finished list: newest first; add new dispatches to Active when you launch them).
 4. Run `check_project.ps1 -Fast -Quiet` and `tools/fc.sh docs` (markdown lint; the IDE panel only lints open files). If clean: commit with the attribution trailer from the session's system reminder (it follows the current model), merge to `main` (fast-forward), push, remove the worktree and branch with `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>` (plain `git worktree remove` fails on OneDrive).
 5. If the system is now stable, ask the user whether to mark it `balance-ready`.
+
+## Cleanup loop
+
+`housekeeper` (after a milestone that replaced an older idea, when `fc.sh docs` warns, or on request) -> `docs/specs/CLEANUP.md` candidates -> planner shows the user -> user confirms/rejects -> planner resumes the housekeeper to add confirmed rows to `docs/TASKS.md` (and ROADMAP for large ones) -> builders pick them up as separate tasks (never folded into feature work).
 
 ## Balance loop
 
