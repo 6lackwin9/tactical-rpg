@@ -72,19 +72,19 @@ Answers the BAL1 open issues. Root causes found by probe: a PERC >= 18 range bon
 | BAL2-A | proposed | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
 | BAL2 | proposed | Rerun duel L1/3/5/7 on the continuous score, tiers, levels, group; one more small data round if a class is outside 40-60 | balance run on clean main | BAL2-L, BAL2-A | S2 and S4 (when every class is in bracket) |
 
-## World systems baseline (proposed, design-brainstorm 2026-10-17; awaiting user answers)
+## World systems baseline (approved: user accepted every recommendation, DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")
 
-Rules and open questions: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRAV1 + TRAV2 supplies idea), `S11_RULES.md` (dialogue, shops, reputation: DLG1, REP1). Progress is flags only; one shared battle bridge for exploration, road and dialogue fights; one seeded random stream per save.
+Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRAV1 + TRAV2 supplies idea), `S11_RULES.md` (dialogue, shops, reputation: DLG1, REP1). Build specs (status `spec` in `docs/TASKS.md`, awaiting approval): `docs/specs/EXP1_L.md` + `EXP1_A.md`, `DLG1_L.md` + `DLG1_A.md`, `TRAV1_L.md` + `TRAV1_A.md`, `REP1_L.md` + `REP1_A.md`. Progress is flags only; one shared battle bridge for exploration, road and dialogue fights; one seeded random stream per save.
 
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
-| EXP1 | proposed | M4-L | region maps, step-counter encounters, patrols, location entry hooks |
-| DLG1 | proposed | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags` |
-| TRAV1 | proposed | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files) |
-| REP1 | proposed | DLG1-L | reputation int flags, condition operators, price multipliers |
+| EXP1 | approved | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
+| DLG1 | approved | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
+| TRAV1 | approved | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files); save v5 |
+| REP1 | approved | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |
 
-EXP1, DLG1 and TRAV1 all edit `world_schema`, `world_catalog`, `game_state` and the save files: run them in sequence (one save version bump each, or bundle).
+EXP1, DLG1, TRAV1 and REP1 all edit `world_schema` and `world_catalog` (EXP1, DLG1 and TRAV1 also `game_state` and the save files): run the logic parts in sequence EXP1-L, DLG1-L, TRAV1-L, REP1-L, one save version bump each (v3, v4, v5; REP1 none). Each asset part may run beside the next logic part (data only).
 
 ## Core and presentation baseline (proposed, design-brainstorm 2026-10-17; awaiting user answers)
 
