@@ -15,11 +15,12 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
 | `scripts/tests/ai_skills_test_suite.gd` | AI use of the new skill kinds (AI1) | S4 | done |
 | `scripts/tests/bal2_rules_test_suite.gd` | BAL2-L rules: PERC range, unit gear `none`, tiers, trained fists | S2, S3 | done |
+| `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/skill_unlock_test_suite.gd` | SK2 unlock rule suite (its schema default seed `sk2_schema.gd` is archived, CLN-2) | S2, S12 | done |
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1 | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1 | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |
