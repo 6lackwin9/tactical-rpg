@@ -50,8 +50,8 @@ const TIERS: Dictionary = {
 	"hero": {"hp": 1.0, "power": 1.0, "label": "Hero"},
 	"minion": {"hp": 0.4, "power": 0.6, "label": "Minion"},
 	"standard": {"hp": 0.7, "power": 0.8, "label": "Standard"},
-	"elite": {"hp": 1.0, "power": 1.0, "label": "Elite"},
-	"boss": {"hp": 1.7, "power": 1.2, "label": "Boss"},
+	"elite": {"hp": 1.25, "power": 1.1, "label": "Elite"},   # BAL2 answers (user 2026-10-17)
+	"boss": {"hp": 1.5, "power": 1.1, "label": "Boss"},
 }
 
 static func tier_names() -> Array[String]:

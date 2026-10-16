@@ -97,7 +97,10 @@ static func _test_variance_and_tiers() -> bool:
 	checks["tier keeps class stats"] = hero.stats.get_base_stat("STR") == minion.stats.get_base_stat("STR") and hero.stats.get_base_stat("CONS") == boss.stats.get_base_stat("CONS")
 	checks["tier scales hp"] = minion.max_hp < hero.max_hp and hero.max_hp < boss.max_hp
 	checks["tier scales power"] = DamageCalculator.power_of(minion) < DamageCalculator.power_of(hero) and DamageCalculator.power_of(hero) < DamageCalculator.power_of(boss)
-	checks["same class, same gear and skills"] = minion.known_skills == hero.known_skills and minion.inventory.get_main_weapon().id == hero.inventory.get_main_weapon().id
+	var minion_weapon: Equipment = minion.inventory.get_main_weapon()
+	var hero_weapon: Equipment = hero.inventory.get_main_weapon()
+	var same_weapon: bool = (minion_weapon == null and hero_weapon == null) or (minion_weapon != null and hero_weapon != null and minion_weapon.id == hero_weapon.id)
+	checks["same class, same gear and skills"] = minion.known_skills == hero.known_skills and same_weapon
 	return _report("Unit variance (spend pool) and tiers: one base curve, scaled HP and power", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
 
 static func _test_proficiency() -> bool:

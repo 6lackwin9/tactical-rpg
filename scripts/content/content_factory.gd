@@ -335,10 +335,14 @@ static func loadout_of(e: Dictionary, arch: ClassArchetype, level: int, owned_id
 			extra_out.append(fam)
 	return {"class": class_out, "extra": extra_out}
 
-# Equips the class's default gear, with per-slot overrides from the unit entry.
+# Equips the class's default gear, with per-slot overrides from the unit entry:
+# "" = the class's item, ContentSchema.NO_ITEM = the slot stays empty (no class fallback);
+# pouch [] = the class pouch, [NO_ITEM] = no consumables.
 static func _equip(c: Combatant, e: Dictionary, arch: ClassArchetype) -> void:
 	for slot: String in ContentSchema.LOADOUT_SLOTS:
 		var item_id: String = str(e[slot])
+		if item_id == ContentSchema.NO_ITEM:
+			continue
 		if item_id.is_empty() and arch != null:
 			item_id = str(arch.loadout.get(slot, ""))
 		if item_id.is_empty() or not ContentCatalog.has("items", item_id):
@@ -348,6 +352,8 @@ static func _equip(c: Combatant, e: Dictionary, arch: ClassArchetype) -> void:
 			var eq: Equipment = built
 			c.inventory.equip(eq, _enum(Equipment.EquipSlot.keys(), slot.to_upper(), 0))
 	var pouch: Array[String] = _strings(e["pouch"])
+	if pouch.has(ContentSchema.NO_ITEM):
+		return
 	if pouch.is_empty() and arch != null:
 		pouch = _strings(arch.loadout.get("pouch", []))
 	for item_id: String in pouch:

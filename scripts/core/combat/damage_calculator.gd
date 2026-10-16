@@ -10,8 +10,11 @@ extends RefCounted
 #     Weapon Power = (Base + Tier bonus + Training bonus) x (1 - Deficit)
 #     Unit Power   = Stat x Scaling       (the weapon's scaling stat; Scaling = the
 #                                          class's Proficiency scaling for that gear)
-#     x tier power scale (Combatant.power_scale: minion 0.6 ... boss 1.2)
+#     x tier power scale (Combatant.power_scale: StatRules.TIERS, minion 0.6 ... boss 1.1)
 #     Unarmed      = Weapon 0, Unit Power = STR + DEX
+#     Trained fists (main-hand attack, no main weapon, fist proficiency >= 2):
+#                    Weapon = UNARMED_BASE_POWER + fist training, Unit Power = STR + DEX,
+#                    plus the fist crit bonus (BAL2-L Rule 5)
 #     A weapon that doesn't suit the attack (a sword for a ranged shot) adds
 #     nothing: Unit Power = DEX (ranged) or STR (melee) x Scaling.
 #     Authored strike power (Combatant.power_override > 0) replaces all of it.
@@ -31,6 +34,8 @@ const CRIT_BASE: float = 5.0         # % chance with DEX <= 10
 const CRIT_PER_DEX: float = 1.0      # % per DEX point above 10
 const CRIT_DEX_FLOOR: int = 10
 const CRIT_MULT: float = 1.5
+const UNARMED_BASE_POWER: int = 15     # trained fists: bare-hand weapon power (GearBudget.UNARMED_VALUE follows it)
+const TRAINED_FIST_MIN_LEVEL: int = 2  # fist proficiency level that trains the fists (brawler 3; rogue 1 stays plain)
 
 # ------------------------------------------------------------------------------
 # Attack power
@@ -50,18 +55,29 @@ static func weapon_for(attacker: Combatant, use_offhand: bool) -> Equipment:
 		return null
 	return attacker.inventory.get_offhand_weapon() if use_offhand else attacker.inventory.get_main_weapon()
 
+const FIST: String = "fist"
+
+# True when `attacker` fights with trained fists: no main weapon, no authored power, and fist
+# proficiency >= TRAINED_FIST_MIN_LEVEL (main-hand attacks only; the caller checks the hand).
+static func trained_fists(attacker: Combatant) -> bool:
+	if attacker.power_override > 0 or weapon_for(attacker, false) != null:
+		return false
+	if attacker.stats == null or attacker.stats.proficiency == null:
+		return false
+	return attacker.stats.proficiency.level_of(FIST) >= TRAINED_FIST_MIN_LEVEL
+
 static func _stat(attacker: Combatant, stat_name: String, ctx: Dictionary) -> int:
 	return attacker.stats.get_effective_stat(stat_name, ctx) if attacker.stats != null else 10
 
 # Attack power and its parts. Keys: authored, weapon, weapon_fits, base_w_power,
 # tier_boost, training_pwr, total_w_power, pen_ratio, def_amount, weapon_power,
-# stat_name, stat_val, unit_scaling, unit_power, attack_power.
+# stat_name, stat_val, unit_scaling, unit_power, attack_power, trained_fists.
 static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offhand: bool = false) -> Dictionary:
 	var w: Equipment = weapon_for(attacker, use_offhand)
 	var res: Dictionary = {
 		"authored": false, "weapon": w, "weapon_fits": false, "base_w_power": 0, "tier_boost": 0, "training_pwr": 0,
 		"total_w_power": 0, "pen_ratio": 0.0, "def_amount": 0, "weapon_power": 0.0,
-		"stat_name": "", "stat_val": 0, "unit_scaling": 1.0, "unit_power": 0.0, "attack_power": 0,
+		"stat_name": "", "stat_val": 0, "unit_scaling": 1.0, "unit_power": 0.0, "attack_power": 0, "trained_fists": false,
 	}
 	if attacker.power_override > 0:
 		res["authored"] = true
@@ -77,6 +93,14 @@ static func attack_power(attacker: Combatant, is_ranged: bool = false, use_offha
 		res["stat_name"] = "STR+DEX"
 		res["stat_val"] = str_val + dex_val
 		res["unit_power"] = float(str_val + dex_val)
+		if not use_offhand and trained_fists(attacker):
+			# Trained fists: a weapon-equivalent base plus fist training (no wield penalty, no tiers).
+			var training: int = attacker.stats.proficiency.get_weapon_power_bonus(FIST)
+			res["trained_fists"] = true
+			res["base_w_power"] = UNARMED_BASE_POWER
+			res["training_pwr"] = training
+			res["total_w_power"] = UNARMED_BASE_POWER + training
+			res["weapon_power"] = float(UNARMED_BASE_POWER + training)
 	else:
 		var fits: bool = (is_ranged and w.is_ranged_weapon()) or (not is_ranged and w.is_melee_weapon())
 		res["weapon_fits"] = fits
@@ -135,6 +159,8 @@ static func crit_chance(attacker: Combatant) -> float:
 	var chance: float = attacker.stats.get_crit_rate(ctx)
 	if attacker.stats.proficiency != null and ctx.has("weapon"):
 		chance += attacker.stats.proficiency.crit_bonus(str(ctx["weapon"]))
+	elif trained_fists(attacker):
+		chance += attacker.stats.proficiency.crit_bonus(FIST)
 	return chance
 
 # ------------------------------------------------------------------------------
@@ -203,7 +229,9 @@ static func describe(res: Dictionary) -> String:
 		parts.append("Strike power %d (authored)" % DictUtil.to_int(res["attack_power"]))
 	else:
 		var weapon_txt: String = "Weapon %.0f" % DictUtil.to_float(res["weapon_power"])
-		if DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["training_pwr"]) > 0:
+		if DictUtil.to_bool(res.get("trained_fists", false)):
+			weapon_txt = "Trained fists %.0f (base %d +%d training)" % [DictUtil.to_float(res["weapon_power"]), DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["training_pwr"])]
+		elif DictUtil.to_int(res["tier_boost"]) > 0 or DictUtil.to_int(res["training_pwr"]) > 0:
 			weapon_txt += " (base %d +%d tier +%d training)" % [DictUtil.to_int(res["base_w_power"]), DictUtil.to_int(res["tier_boost"]), DictUtil.to_int(res["training_pwr"])]
 		if DictUtil.to_float(res["pen_ratio"]) > 0.0:
 			weapon_txt += " -%d%% deficit" % roundi(DictUtil.to_float(res["pen_ratio"]) * 100.0)

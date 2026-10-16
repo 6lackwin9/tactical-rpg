@@ -8,7 +8,11 @@
 #   tools/fc.sh safe_delete <kind> <id> [--apply]   scan, then delete a SYSTEM asset (refuses while referenced)
 #   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
-#   tools/fc.sh sim <duel|tier|levels> [level]   balance simulation table (see tools/balance_sim.gd)
+#   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   balance simulation (tools/balance_sim.gd, BAL2_SIM.md;
+#        timeout ${SIM_TIMEOUT:-900} s; script errors are shown)
+#     modes: duel [level] | tier [level] | levels | group [level] | stats [level|all]
+#     keys:  cap=1..30 (10)  smart_skills=on|off  loadout=default|newest  spend=class|cons|primary|mixed|all
+#            preset=<PlanPresets id>|both  distance=default|2..6  score=both|hp|binary  quick  metrics=on|off
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 GODOT="${GODOT:-/c/Program Files/Godot/godot.exe}"
@@ -19,12 +23,12 @@ status=0
 noise='^ERROR: .*leaked|^ERROR: Pages in use|^   at: (~|unref)|WARNING: A Thread|Please call wait_to_finish|^Godot Engine v|^$'
 
 parse() {
-  if [ -n "$(git status --short | grep -E '^\?\? .*\.gd$|^A .*\.gd$')" ]; then
+  if [ -n "$(git status --short -uall | grep -E '^\?\? .*\.gd$|^A .*\.gd$')" ]; then
     echo "[parse] new .gd files: refreshing class cache"
     timeout 150 "$GODOT" --headless --editor --quit-after 50 >/dev/null 2>&1
   fi
   local bad=0
-  for f in $(git status --short | grep -E '\.gd$' | grep -v '^ *D' | awk '{print $NF}'); do
+  for f in $(git status --short -uall | grep -E '\.gd$' | grep -v '^ *D' | awk '{print $NF}'); do
     res=$(timeout 60 "$GODOT" --headless --path . --check-only -s "res://$f" 2>&1 | grep -E "SCRIPT ERROR|Parse Error|Compile Error" -A1 | head -6)
     if [ -n "$res" ]; then echo "== $f"; echo "$res"; bad=1; fi
   done
@@ -63,7 +67,7 @@ case "$1" in
   arena) suite res://scenes/test_arena.tscn arena "$2" ;;
   dojo) suite res://scenes/gear_dojo.tscn dojo "$2" ;;
   run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;
-  sim) timeout 900 "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //" ;;
+  sim) timeout "${SIM_TIMEOUT:-900}" "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //" ;;
   docs) docs_check ;;
   safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;

@@ -55,10 +55,12 @@ static func run() -> bool:
 # One damage formula (DamageCalculator) for battles, the planner and the dojo.
 static func _test_unified_formula() -> bool:
 	var checks: Dictionary = {}
-	# Unarmed: weapon power 0, unit power STR + DEX.
+	# Unarmed: unit power STR + DEX; weapon power 0, or the trained-fists base + fist training at fist level >= 2.
 	var brawler := Combatant.new("Fists", 50, 10, 1, CharacterStats.new(ClassArchetype.create("brawler"), 1))
 	var fists: Dictionary = DamageCalculator.attack_power(brawler)
-	checks["unarmed STR+DEX"] = DictUtil.to_int(fists["attack_power"]) == brawler.stats.get_effective_stat("STR") + brawler.stats.get_effective_stat("DEX") and DictUtil.to_float(fists["weapon_power"]) == 0.0
+	var fist_level: int = brawler.stats.proficiency.level_of("fist")
+	var fist_weapon: int = (DamageCalculator.UNARMED_BASE_POWER + brawler.stats.proficiency.get_weapon_power_bonus("fist")) if fist_level >= DamageCalculator.TRAINED_FIST_MIN_LEVEL else 0
+	checks["unarmed STR+DEX"] = DictUtil.to_int(fists["attack_power"]) == brawler.stats.get_effective_stat("STR") + brawler.stats.get_effective_stat("DEX") + fist_weapon and DictUtil.to_float(fists["weapon_power"]) == float(fist_weapon)
 	# Weapon: (base + tier + training) + scaling stat x the class's scaling for the gear (the dojo warrior's
 	# broadsword: 18 + 3 sword training + STR x 1.5).
 	var warrior: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "dojo_warrior"))

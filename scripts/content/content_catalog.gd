@@ -835,6 +835,8 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 		elif not str(value).is_empty():
 			targets.append(str(value))
 		for t: String in targets:
+			if t == ContentSchema.NO_ITEM and _is_gear_field(kind, key):
+				continue   # the sentinel: units accept it, classes get a specific error (_no_item_errors)
 			var target: Dictionary = get_entry(ref_kind, t)
 			if target.is_empty():
 				errors.append("%s: unknown %s '%s'." % [str(f["label"]), ref_kind.trim_suffix("s"), t])
@@ -853,6 +855,34 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 			errors.append_array(_unit_errors(e))
 		"encounters":
 			errors.append_array(_encounter_errors(e))
+	errors.append_array(_no_item_errors(kind, e))
+	return errors
+
+# A gear slot or the pouch of a class / unit (the fields that may carry ContentSchema.NO_ITEM).
+static func _is_gear_field(kind: String, key: String) -> bool:
+	return (kind == "units" or kind == "classes") and (ContentSchema.LOADOUT_SLOTS.has(key) or key == "pouch")
+
+# The NO_ITEM sentinel rules (BAL2-L 3.2): units only, alone in the pouch; no item may take the id.
+static func _no_item_errors(kind: String, e: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	match kind:
+		"items":
+			if str(e.get("id", "")) == ContentSchema.NO_ITEM:
+				errors.append("The item id '%s' is reserved." % ContentSchema.NO_ITEM)
+		"units":
+			var pouch: Array[String] = ContentFactory._strings(e.get("pouch", []))
+			if pouch.has(ContentSchema.NO_ITEM) and pouch.size() > 1:
+				errors.append("Battle pouch: '%s' must be the only entry." % ContentSchema.NO_ITEM)
+		"classes":
+			for f: Dictionary in ContentSchema.fields(kind):
+				var key: String = str(f["key"])
+				if not _is_gear_field(kind, key):
+					continue
+				var hit: bool = str(e.get(key, "")) == ContentSchema.NO_ITEM
+				if key == "pouch":
+					hit = ContentFactory._strings(e.get(key, [])).has(ContentSchema.NO_ITEM)
+				if hit:
+					errors.append("%s: '%s' is only for units; leave the class slot empty." % [str(f["label"]), ContentSchema.NO_ITEM])
 	return errors
 
 # Every problem in the catalog: {"kind:id": [errors]} (empty = all valid).

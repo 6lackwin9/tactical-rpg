@@ -10,6 +10,7 @@ signal leveled_up(new_level: int)
 signal attribute_point_allocated(stat_name: String, new_val: int)
 
 const MAX_LEVEL: int = 10
+const RANGE_PERC_THRESHOLD: int = 18   # effective PERC that adds +1 range to a ranged weapon
 
 var class_archetype: ClassArchetype
 var archetype: ClassArchetype:
@@ -161,9 +162,11 @@ func get_mitigation_rating(shield_mitigation: int = 0, context: Dictionary = {})
 	var effective_str: int = get_effective_stat("STR", context)
 	return shield_mitigation + int(roundf(float(effective_str) * 0.25))
 
+# Attack range: the weapon's base range, +1 at PERC >= RANGE_PERC_THRESHOLD for ranged weapons only
+# (base range > 1, the same set as Equipment.is_ranged_weapon for shipped gear; BAL2-L Rule 2).
 func get_effective_range(base_range: int = 1, context: Dictionary = {}) -> int:
 	var effective_perc: int = get_effective_stat("PERC", context)
-	var bonus: int = 1 if effective_perc >= 18 else 0
+	var bonus: int = 1 if effective_perc >= RANGE_PERC_THRESHOLD and base_range > 1 else 0
 	return maxi(1, base_range + bonus)
 
 func get_intent_unmask_blocks(context: Dictionary = {}) -> int:

@@ -26,6 +26,7 @@ const ORIGIN_USER: String = "user"
 const STAT_KEYS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]   # = StatRules.STATS
 const EQUIP_TYPES: Array[String] = ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"]
 const LOADOUT_SLOTS: Array[String] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"]
+const NO_ITEM: String = "none"   # unit gear slot / pouch ["none"]: deliberately empty, no class fallback (BAL2-L 3.1)
 
 static func kind_label(kind: String) -> String:
 	match kind:
@@ -211,8 +212,11 @@ static func _passive_fields() -> Array[Dictionary]:
 static func _loadout_fields(inherit: bool) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for slot: String in LOADOUT_SLOTS:
-		out.append(_f(slot, slot.capitalize().replace("_", " "), "ref", "", {"ref": "items", "optional": true, "ref_filter": {"item_type": EQUIP_TYPES}, "help": "Empty = the class's gear." if inherit else "Default gear of the class."}))
-	out.append(_f("pouch", "Battle pouch", "refs", [], {"ref": "items", "ref_filter": {"item_type": ["CONSUMABLE"]}}))
+		out.append(_f(slot, slot.capitalize().replace("_", " "), "ref", "", {"ref": "items", "optional": true, "ref_filter": {"item_type": EQUIP_TYPES}, "help": "Empty = the class's gear; 'none' = no item." if inherit else "Default gear of the class."}))
+	var pouch_opts: Dictionary = {"ref": "items", "ref_filter": {"item_type": ["CONSUMABLE"]}}
+	if inherit:
+		pouch_opts["help"] = "Empty = the class's pouch; ['none'] = no consumables."
+	out.append(_f("pouch", "Battle pouch", "refs", [], pouch_opts))
 	return out
 
 static func _class_fields() -> Array[Dictionary]:

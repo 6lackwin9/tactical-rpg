@@ -26,8 +26,9 @@ const W_SPELL_REACH: float = 3.0
 const TARGET_BUDGET: float = 23.0
 const TOLERANCE: float = 0.20
 
-# Value of an empty main hand (bare hands): about a typical one-handed weapon (shortsword 14, tome 14, stiletto 15, knuckles 12).
-const UNARMED_VALUE: float = 14.0
+# Value of an empty main hand (bare hands) = the trained-fists base power (DamageCalculator.UNARMED_BASE_POWER,
+# one source of truth; BAL2-L Rule 5): about a typical one-handed weapon (shortsword 14, stiletto 15, knuckles 12).
+const UNARMED_VALUE: float = DamageCalculator.UNARMED_BASE_POWER
 
 static func band_low() -> float:
 	return TARGET_BUDGET * (1.0 - TOLERANCE)
