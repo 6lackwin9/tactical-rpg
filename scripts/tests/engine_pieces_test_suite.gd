@@ -9,14 +9,7 @@ extends RefCounted
 # rules (StatusEffects, SupportRules, DamageCalculator, GearBudget constants), not magic numbers.
 # ==============================================================================
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [EnginePieces] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "EnginePieces"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -129,7 +122,7 @@ static func _test_cleanse_rules() -> bool:
 	SupportRules.apply(caster, t3, purify, 1)
 	StatusEffects.roll_over(t3, 0)
 	checks["a cleansed pending debuff never becomes active"] = not t3.has_status(StatusEffects.ROOT)
-	return _report("Cleanse rules", checks)
+	return TestHelpers.report(TAG, "Cleanse rules", checks)
 
 static func _test_cleanse_combined() -> bool:
 	var checks: Dictionary = {}
@@ -156,7 +149,7 @@ static func _test_cleanse_combined() -> bool:
 	for m: String in messages:
 		logged = logged or (m.begins_with("[Support]") and "cleansed" in m)
 	checks["resolver round cleanses the ally and logs it"] = logged and not StatusEffects.has_any(allies[1], StatusEffects.BLEED)
-	return _report("Greater Mend style: heal + cleanse + buff", checks)
+	return TestHelpers.report(TAG, "Greater Mend style: heal + cleanse + buff", checks)
 
 static func _test_cleanse_planner() -> bool:
 	var checks: Dictionary = {}
@@ -186,7 +179,7 @@ static func _test_cleanse_planner() -> bool:
 		if o.step.skill == purify:
 			self_option = o
 	checks["also castable on yourself (ALLY_OR_SELF)"] = self_option != null and self_option.valid
-	return _report("Cleanse planner options", checks)
+	return TestHelpers.report(TAG, "Cleanse planner options", checks)
 
 static func _test_cleanse_validation() -> bool:
 	var checks: Dictionary = {}
@@ -203,7 +196,7 @@ static func _test_cleanse_validation() -> bool:
 	checks["only SUPPORT skills may cleanse"] = not ContentCatalog.validate_entry("skills", ContentSchema.normalize("skills", attack)).is_empty()
 	var entry: Dictionary = ContentFactory.skill_to_entry(SkillCatalog.find("purify"))
 	checks["round-trips through the factory"] = ContentFactory.skill_to_entry(ContentFactory.skill(entry)) == entry
-	return _report("Cleanse schema and validation", checks)
+	return TestHelpers.report(TAG, "Cleanse schema and validation", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -265,7 +258,7 @@ static func _test_disengage_planning() -> bool:
 			option_text = o.cost_text()
 			checks["planner option shows the destination"] = o.valid and o.jump_to == dest and ("jumps to %s" % str(dest)) in option_text
 	checks["self options include the disengage"] = option_text != ""
-	return _report("Disengage planning", checks)
+	return TestHelpers.report(TAG, "Disengage planning", checks)
 
 static func _test_disengage_rules() -> bool:
 	var checks: Dictionary = {}
@@ -325,7 +318,7 @@ static func _test_disengage_rules() -> bool:
 	h6.learn_skill("backflip")
 	var r6: String = s6.plan.add_step(h6, PlanStep.self_skill(backflip))
 	checks["a corner still finds a tile farther away, or says why not"] = r6.is_empty() or "No free tile" in r6
-	return _report("Disengage rules", checks)
+	return TestHelpers.report(TAG, "Disengage rules", checks)
 
 static func _test_disengage_execution() -> bool:
 	var checks: Dictionary = {}
@@ -364,7 +357,7 @@ static func _test_disengage_execution() -> bool:
 	var ok_cmd := DisengageCommand.new(h2, g2, Vector2i(4, 3), backflip.jump_tiles, backflip.blocks)
 	ok_cmd.execute()
 	checks["a clear landing succeeds"] = ok_cmd.landed and ok_cmd.moved_tiles == 1 and g2.get_position(h2) == Vector2i(4, 3)
-	return _report("Disengage execution", checks)
+	return TestHelpers.report(TAG, "Disengage execution", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -389,7 +382,7 @@ static func _test_sweep_pattern() -> bool:
 	checks["reach is melee (aim tile is diagonal)"] = kick.reach_for(Combatant.new("x", 10, 10, 1)) == Vector2i(1, 1)
 	checks["validates"] = ContentCatalog.validate_all().is_empty()
 	checks["other areas unchanged (BURST 9, PLUS 5, LINE 3)"] = _count_area(SkillDef.Area.BURST) == 9 and _count_area(SkillDef.Area.PLUS) == 5 and _count_area(SkillDef.Area.LINE) == 3
-	return _report("Sweep pattern", checks)
+	return TestHelpers.report(TAG, "Sweep pattern", checks)
 
 static func _count_area(area: SkillDef.Area) -> int:
 	var s: SkillDef = SkillDef.create("t_area", "A", SkillDef.Kind.ATTACK, 1, 1, "")
@@ -437,7 +430,7 @@ static func _test_sweep_planning() -> bool:
 	checks["caster and bystander untouched"] = allies[0].hp == int(hp_before[allies[0]]) and foes[2].hp == int(hp_before[foes[2]])
 	var dmg: int = int(hp_before[foes[0]]) - foes[0].hp
 	checks["each victim takes its own DamageCalculator hit (equal here)"] = dmg == int(hp_before[foes[1]]) - foes[1].hp
-	return _report("Sweep planning and resolution", checks)
+	return TestHelpers.report(TAG, "Sweep planning and resolution", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -487,7 +480,7 @@ static func _test_unarmed() -> bool:
 	# Not read as under budget just for lacking a weapon: it counts like a weapon of UNARMED_VALUE, so an
 	# otherwise-equal loadout is only as far from the band as that value implies.
 	checks["a class with no gear at all stays unjudged (no phantom row)"] = GearBudget.loadout_breakdown({"id": "t_empty"}).is_empty() and GearBudget.check_class({"id": "t_empty"}).is_empty()
-	return _report("Unarmed damage and gear budget", checks)
+	return TestHelpers.report(TAG, "Unarmed damage and gear budget", checks)
 
 # Data check, kept apart so _test_unarmed stays independent of the shipped gear (BAL2-L Rule 3).
 static func _test_shipped_gear_warnings() -> bool:
@@ -496,4 +489,4 @@ static func _test_shipped_gear_warnings() -> bool:
 	for entry: Dictionary in ContentCatalog.entries("classes"):
 		all_clear = all_clear and GearBudget.check_class(entry).is_empty()
 	checks["warnings for the shipped classes stay empty"] = all_clear
-	return _report("Shipped classes: no gear budget warnings", checks)
+	return TestHelpers.report(TAG, "Shipped classes: no gear budget warnings", checks)

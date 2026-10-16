@@ -2,7 +2,7 @@ extends Node2D
 
 # ==============================================================================
 # Tactical RPG - Arena Test Harness
-# Runs the headless integration suite (ArenaTestSuite). Headless: exits with the
+# Runs every headless suite (SuiteRegistry.run_all). Headless: exits with the
 # result code (used by check_project.ps1 and the Scene Runner's suite buttons).
 # Windowed: after the tests, opens the Scene Runner.
 # ==============================================================================
@@ -12,7 +12,7 @@ func _ready() -> void:
 	print("=== STARTING TACTICAL RPG ARENA HARNESS             ===")
 	print("=======================================================")
 
-	var all_tests_passed: bool = ArenaTestSuite.run_all_tests(self)
+	var all_tests_passed: bool = SuiteRegistry.run_all(self)
 	ActionLogEntry.show_formulas = true   # test harness: log cells explain their damage on hover
 	var exit_code: int = 0 if all_tests_passed else 1
 

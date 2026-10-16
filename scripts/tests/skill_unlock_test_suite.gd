@@ -9,7 +9,7 @@ extends RefCounted
 # families); expectations are derived from StatRules, never hard-coded.
 # ==============================================================================
 
-const SANDBOX: String = "user://skill_unlock_test"
+static var SANDBOX: String = TestHelpers.sandbox("skill_unlock_test")
 const CLS: String = "t_sk_cls"
 
 # Fixture path: family -> step level.
@@ -20,14 +20,7 @@ const LVL_B: int = 5     # advanced, 3 tiers
 const LVL_O: int = 6     # ordinary, tier 2 carries an explicit offset 0
 const LVL_D: int = 7     # advanced
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [SkillUnlock] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "SkillUnlock"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -74,9 +67,7 @@ static func _fixture_path() -> Array[Dictionary]:
 	return [_step(LVL_A, "t_sk_a"), _step(LVL_C, "t_sk_c"), _step(LVL_H, "t_sk_h"), _step(LVL_B, "t_sk_b"), _step(LVL_O, "t_sk_o"), _step(LVL_D, "t_sk_d")]
 
 static func _build_fixture() -> bool:
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	if ContentCatalog.fork_to(SANDBOX) != OK:
+	if not TestHelpers.fork(SANDBOX):
 		return false
 	var ok: bool = true
 	ok = _family("t_sk_a", [1, 2, 3]) and ok
@@ -131,13 +122,13 @@ static func _test_constants() -> bool:
 		checks["tier offsets step by TIER_UNLOCK_STEP"] = checks["tier offsets step by TIER_UNLOCK_STEP"] and s.tier_offset() == 0
 	checks["schema carries grade and unlock_offset with defaults"] = str(ContentSchema.field("skills", "grade").get("default", "")) == "novice" and DictUtil.to_int(ContentSchema.field("skills", "unlock_offset")["default"]) == -1
 	checks["unlock passive describes itself"] = Passives.describe({"effects": [{"type": "unlock", "family": "riposte", "levels": 2}]}).contains("riposte")
-	return _report("Unlock constants and helpers", checks)
+	return TestHelpers.report(TAG, "Unlock constants and helpers", checks)
 
 static func _test_fixture_rules() -> bool:
 	var checks: Dictionary = {}
 	checks["fixture catalog built"] = _build_fixture()
 	if not checks["fixture catalog built"]:
-		return _report("Unlock rules on a fixture class", checks)
+		return TestHelpers.report(TAG, "Unlock rules on a fixture class", checks)
 	var step: int = StatRules.TIER_UNLOCK_STEP
 
 	# --- Validation -------------------------------------------------------------
@@ -288,8 +279,8 @@ static func _test_fixture_rules() -> bool:
 	var st_locked: CombatPlan.SimState = plan2.compile(hero)
 	checks["planner: a tier below its unlock level names the level"] = st_locked.error_index >= 0 and st_locked.error_text.contains("unlocks at unit level")
 
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("Unlock rules on a fixture class (validation, tiers, passives, KNOW, freeze, loadout, planner)", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Unlock rules on a fixture class (validation, tiers, passives, KNOW, freeze, loadout, planner)", checks)
 
 static func _test_shipped_data() -> bool:
 	var checks: Dictionary = {}
@@ -337,20 +328,18 @@ static func _test_shipped_data() -> bool:
 				var want: bool = base >= mini(StatRules.MAX_LEVEL, e + r.tier_offset())
 				tier_ok = tier_ok and u2.tier_unlocked(r) == want
 	checks["shipped multi-tier families: a tier is unlocked iff the unit level reaches unlock + offset"] = tier_ok
-	return _report("Shipped data under the new rule", checks)
+	return TestHelpers.report(TAG, "Shipped data under the new rule", checks)
 
 # ContentCatalog.upsert_many is atomic: a family whose rows are only valid together changes all at once, or not at all.
 static func _test_upsert_many() -> bool:
 	var checks: Dictionary = {}
-	var sandbox: String = "user://sk2_upsert_many_test"
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
-	checks["sandbox fork"] = ContentCatalog.fork_to(sandbox) == OK
+	var sandbox: String = TestHelpers.sandbox("sk2_upsert_many_test")
+	checks["sandbox fork"] = TestHelpers.fork(sandbox)
 	if checks["sandbox fork"]:
 		# A test-only 3-rank user family (no shipped id: shipped grades and requires may change with content).
 		var fam: String = "t_um"
 		var mods: Array[Dictionary] = [{"level": 3}, {"level": 4}]
-		checks["fixture family stored"] = ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack(fam), mods)).is_empty()
+		checks["fixture family stored"] = ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack(fam), mods)).is_empty()
 		var before: Array[Dictionary] = ContentCatalog.entries("skills")
 		var head: Dictionary = ContentCatalog.get_entry("skills", fam)
 		var r2: Dictionary = ContentCatalog.get_entry("skills", SkillRanks.rank_id(fam, 2))
@@ -362,10 +351,8 @@ static func _test_upsert_many() -> bool:
 		checks["a refused set changes nothing"] = ContentCatalog.entries("skills").size() == before.size() and _grade(SkillRanks.rank_id(fam, 2)) != "advanced" and _grade(fam) != "advanced"
 		var good: Array[String] = ContentCatalog.upsert_many("skills", [head.merged({"grade": "advanced"}, true), r2.merged({"grade": "advanced"}, true), r3.merged({"grade": "advanced"}, true)])
 		checks["the whole family changes together"] = good.is_empty() and _grade(fam) == "advanced" and _grade(SkillRanks.rank_id(fam, 3)) == "advanced"
-		for kind: String in ContentSchema.KINDS:
-			DirAccess.remove_absolute(ContentCatalog.path_for(kind, sandbox))
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("upsert_many applies a rank family atomically (all or none)", checks)
+	TestHelpers.cleanup(sandbox)
+	return TestHelpers.report(TAG, "upsert_many applies a rank family atomically (all or none)", checks)
 
 static func _grade(id: String) -> String:
 	return str(ContentCatalog.get_entry("skills", id).get("grade", "novice"))

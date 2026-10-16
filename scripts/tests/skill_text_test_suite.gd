@@ -10,7 +10,7 @@ extends RefCounted
 # ==============================================================================
 
 const TAG: String = "SkillText"
-const SANDBOX: String = "user://skill_text_test"
+static var SANDBOX: String = TestHelpers.sandbox("skill_text_test")
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -22,7 +22,7 @@ static func run() -> bool:
 	ok = _test_validation() and ok
 	ok = _test_warnings_and_caps() and ok
 	ok = _test_warnings_all() and ok
-	SkillTestKit.cleanup(SANDBOX)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 static func _render(template: String, entry: Dictionary, rank: int = 1) -> String:
@@ -90,7 +90,7 @@ static func _test_tokens_per_kind() -> bool:
 		var valid: Array[String] = SkillText.tokens_for(kind)
 		checks["every kind lists name, ap, blocks and unlock"] = checks["every kind lists name, ap, blocks and unlock"] and valid.has("name") and valid.has("ap") and valid.has("blocks") and valid.has("unlock")
 	checks["kind-specific tokens are limited to their kinds"] = SkillText.tokens_for("ATTACK").has("power") and not SkillText.tokens_for("DEFEND").has("power") and SkillText.tokens_for("SUPPORT").has("heal") and not SkillText.tokens_for("ATTACK").has("heal") and SkillText.tokens_for("FOCUS").has("boost") and SkillText.tokens_for("DISENGAGE").has("jump")
-	return SkillTestKit.report(TAG, "Every token against a fixture per kind", checks)
+	return TestHelpers.report(TAG, "Every token against a fixture per kind", checks)
 
 static func _test_formats() -> bool:
 	var checks: Dictionary = {}
@@ -107,7 +107,7 @@ static func _test_formats() -> bool:
 	var parts: Array = parsed["parts"]
 	checks["parse splits literals and tokens"] = parts.size() == 5 and (parsed["errors"] as Array).is_empty()
 	checks["escape makes a plain sentence a safe template"] = SkillText.render(SkillText.escape("100% {x}"), "ATTACK", {"name": "X"}, 1) == "100% {x}"
-	return SkillTestKit.report(TAG, "Formatting rules", checks)
+	return TestHelpers.report(TAG, "Formatting rules", checks)
 
 static func _first_error(template: String, entry: Dictionary) -> String:
 	var errors: Array[Dictionary] = SkillText.validate(template, entry)
@@ -133,9 +133,9 @@ static func _test_validation() -> bool:
 	checks["an unknown suffix is an error"] = not SkillText.validate("{power:x}", a).is_empty() and not SkillText.validate("{power:n}", a).is_empty() and SkillText.validate("{dash:n}", a).is_empty()
 	checks["{unlock} on a basic skill is an error"] = not SkillText.validate("{unlock}", {"id": "t_b", "kind": "ATTACK", "basic": true}).is_empty()
 	checks["every error carries field description"] = SkillText.validate("{poer}", a).all(func(p: Dictionary) -> bool: return str(p["field"]) == "description")
-	var entry_problems: Array[String] = SkillTestKit.messages(ContentCatalog.validate_skill_entry(SkillRanks.entry(SkillTestKit.attack("t_tx_v", {"description": "{poer}"}), [])))
-	checks["validate_skill_entry reports template errors"] = SkillTestKit.any_contains(entry_problems, "Unknown token")
-	return SkillTestKit.report(TAG, "Validation errors", checks)
+	var entry_problems: Array[String] = TestHelpers.messages(ContentCatalog.validate_skill_entry(SkillRanks.entry(TestHelpers.attack("t_tx_v", {"description": "{poer}"}), [])))
+	checks["validate_skill_entry reports template errors"] = TestHelpers.any_contains(entry_problems, "Unknown token")
+	return TestHelpers.report(TAG, "Validation errors", checks)
 
 static func _test_warnings_and_caps() -> bool:
 	var checks: Dictionary = {}
@@ -145,7 +145,7 @@ static func _test_warnings_and_caps() -> bool:
 	checks["...and suggest the matching token when a rank 1 value equals it"] = SkillText.warnings("hits for 4 tiles", a)[0].contains("{dash}") or SkillText.warnings("hits for 4", a)[0].contains("{dash")
 	checks["no digits, no warning"] = SkillText.warnings("{name}: {power}", a).is_empty()
 	var literal: Dictionary = SkillRanks.entry(a, [{"level": 4, "description": "Literal rank two."}])
-	checks["a literal per-rank description warns"] = SkillTestKit.any_contains(SkillText.warnings("{name}", literal), "literal description")
+	checks["a literal per-rank description warns"] = TestHelpers.any_contains(SkillText.warnings("{name}", literal), "literal description")
 	checks["...and is used as the rank text"] = str(SkillRanks.resolve(literal, 2)["description"]) == "Literal rank two."
 	var long_template: String = "x".repeat(SkillText.MAX_LENGTH + 1)
 	checks["a template over the cap is an error"] = _first_error(long_template, a).contains(str(SkillText.MAX_LENGTH))
@@ -157,25 +157,25 @@ static func _test_warnings_and_caps() -> bool:
 	checks["a rendered rank text over the cap is an error naming the rank"] = not rendered_errors.is_empty() and DictUtil.to_int(rendered_errors[0]["rank"]) == 2 and str(rendered_errors[0]["message"]).contains("rendered")
 	checks["the description cap is a schema max_len"] = DictUtil.to_int(ContentSchema.field("skills", "description")["max_len"]) == SkillText.MAX_LENGTH
 	checks["a flat row over the cap is refused by field validation"] = not ContentCatalog.validate_entry("skills", {"id": "t_cap", "name": "Cap", "kind": "ATTACK", "description": long_template}).is_empty()
-	return SkillTestKit.report(TAG, "Warnings and length caps", checks)
+	return TestHelpers.report(TAG, "Warnings and length caps", checks)
 
 # ContentCatalog.warnings_all checks skills once per family as ranked entries, keyed by the head id (spec 5.3 warning 2).
 static func _test_warnings_all() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var head: String = "t_tx_wa"
 	var digit: String = "7"
-	var base: Dictionary = SkillTestKit.attack(head, {"description": "{name} hits %s times for {power}" % digit})
+	var base: Dictionary = TestHelpers.attack(head, {"description": "{name} hits %s times for {power}" % digit})
 	var mods: Array[Dictionary] = [{"level": 3, "description": "Literal rank two."}, {"level": 4}]
 	checks["fixture family stored"] = ContentCatalog.upsert_skill(SkillRanks.entry(base, mods)).is_empty()
 	var warned: Dictionary = ContentCatalog.warnings_all()
 	var found: Array[String] = ContentFactory._strings(warned.get("skills:%s" % head, []))
 	checks["the family is keyed by its head id"] = not found.is_empty()
 	checks["no key per rank row"] = not warned.has("skills:%s" % SkillRanks.rank_id(head, 2)) and not warned.has("skills:%s" % SkillRanks.rank_id(head, 3))
-	checks["a literal rank description warns through warnings_all"] = SkillTestKit.any_contains(found, "literal description")
+	checks["a literal rank description warns through warnings_all"] = TestHelpers.any_contains(found, "literal description")
 	var digit_hits: int = 0
 	for text: String in found:
 		if text.contains("literal number %s" % digit):
 			digit_hits += 1
 	checks["a literal digit warns once per family, not once per rank"] = digit_hits == 1
-	return SkillTestKit.report(TAG, "warnings_all reads ranked skill entries", checks)
+	return TestHelpers.report(TAG, "warnings_all reads ranked skill entries", checks)

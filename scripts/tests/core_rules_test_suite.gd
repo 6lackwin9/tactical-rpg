@@ -11,9 +11,7 @@ extends RefCounted
 #   and the resolution feed of a full catalog battle (Goblin Ambush).
 # ==============================================================================
 
-static func _report(label: String, ok: bool, detail: String = "") -> bool:
-	print("    [Rules] %s: %s%s" % [label, "PASS" if ok else "FAIL", (" (%s)" % detail) if not detail.is_empty() else ""])
-	return ok
+const TAG: String = "Rules"
 
 static func _grid() -> CombatGrid:
 	return CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
@@ -112,7 +110,7 @@ static func _test_unified_formula() -> bool:
 	for key: Variant in checks:
 		if not DictUtil.to_bool(checks[key]):
 			failed.append(str(key))
-	return _report("One damage formula: weapon + unit power, unarmed STR+DEX, armor curve, seeded x1.5 crits, planner estimate", failed.is_empty(), ", ".join(failed))
+	return TestHelpers.report_ok(TAG, "One damage formula: weapon + unit power, unarmed STR+DEX, armor curve, seeded x1.5 crits, planner estimate", failed.is_empty(), ", ".join(failed))
 
 # A Guard (mitigation from the catalog) taken in Defensive stance against an Offensive strike: matchup 0.75, then the guard.
 static func _test_guard_and_matchup() -> bool:
@@ -148,7 +146,7 @@ static func _test_guard_and_matchup() -> bool:
 	var guarded_taken: int = 100 - guard.hp
 	var open_taken: int = 100 - dummy.hp
 	var ok: bool = guarded_taken == expected_guarded and open_taken == expected_open and guarded_taken < open_taken
-	return _report("Guard mitigation and stance matchup: Guard in Defensive vs an Offensive strike (x0.75)", ok,
+	return TestHelpers.report_ok(TAG, "Guard mitigation and stance matchup: Guard in Defensive vs an Offensive strike (x0.75)", ok,
 		"guarded %d (expected %d), unguarded %d (expected %d), crits %s" % [guarded_taken, expected_guarded, open_taken, expected_open, str(crits.values())])
 
 # Stances set by a skill stay after it resolves and carry into the next round;
@@ -177,7 +175,7 @@ static func _test_stances_persist() -> bool:
 	var next_plan := CombatPlan.new(ctx)
 	var carried: bool = next_plan.compile(basher).stance == CombatTypes.StanceType.DEFENSIVE
 	var ok: bool = projected == CombatTypes.StanceType.DEFENSIVE and after_round and carried
-	return _report("Stances persist after resolving and into the next round (Shield Bash stays Defensive)", ok,
+	return TestHelpers.report_ok(TAG, "Stances persist after resolving and into the next round (Shield Bash stays Defensive)", ok,
 		"projected %s, basher %s, striker %s" % [CombatTypes.stance_to_string(projected), CombatTypes.stance_to_string(basher.current_stance), CombatTypes.stance_to_string(striker.current_stance)])
 
 # Focus (+50% for 2 rounds) boosts the next round's attacks and expires after its second round.
@@ -195,7 +193,7 @@ static func _test_focus_duration() -> bool:
 	resolver.resolve_round()   # round 2: still boosted during it, ticks down at its end
 	var after_r2: float = caster.attack_boost_multiplier
 	var ok: bool = is_equal_approx(after_r1, focus.boost) and is_equal_approx(after_r2, 1.0)
-	return _report("Focus boost lasts its rounds, then expires", ok, "after R1 x%.2f, after R2 x%.2f" % [after_r1, after_r2])
+	return TestHelpers.report_ok(TAG, "Focus boost lasts its rounds, then expires", ok, "after R1 x%.2f, after R2 x%.2f" % [after_r1, after_r2])
 
 # A unit defeated mid-round loses the rest of its planned round.
 static func _test_casualty_cancellation() -> bool:
@@ -226,7 +224,7 @@ static func _test_casualty_cancellation() -> bool:
 			if sa.is_cancelled:
 				victim_cancelled += 1
 	var ok: bool = not victim.is_alive() and killer.hp == 100 and victim_later > 0 and victim_cancelled == victim_later
-	return _report("A unit defeated mid-round loses the rest of its round", ok,
+	return TestHelpers.report_ok(TAG, "A unit defeated mid-round loses the rest of its round", ok,
 		"victim hp %d, killer hp %d, later actions cancelled %d/%d" % [victim.hp, killer.hp, victim_cancelled, victim_later])
 
 # Withdraw walks to the exit; the unit leaves the grid and the battle can end on it.
@@ -242,7 +240,7 @@ static func _test_withdrawal() -> bool:
 	var friends: Array[Combatant] = [holder]
 	resolver.resolve_round()
 	var ok: bool = runner.is_withdrawn and not grid.has_combatant(runner) and grid.withdrawn_combatants.has(runner) and resolver.is_combat_resolved(friends, foes)
-	return _report("Withdraw walks to the exit, leaves the grid and can end the battle", ok, "withdrawn %s" % runner.is_withdrawn)
+	return TestHelpers.report_ok(TAG, "Withdraw walks to the exit, leaves the grid and can end the battle", ok, "withdrawn %s" % runner.is_withdrawn)
 
 # A full catalog battle through CombatSession (AI presets on both sides): the feed
 # carries moves, attacks with damage and target HP, buffs, the wave, withdrawals, defeats.
@@ -278,5 +276,5 @@ static func _test_feed_from_catalog_battle() -> bool:
 	for key: String in ["move", "attack", "wave", "withdrawn", "defeated"]:   # buffs/guards depend on AI choices
 		if not seen.has(key):
 			missing.append(key)
-	return _report("Goblin Ambush feed: moves, attacks with HP, wave at R1-B04, withdrawal, defeats", missing.is_empty() and concluded,
+	return TestHelpers.report_ok(TAG, "Goblin Ambush feed: moves, attacks with HP, wave at R1-B04, withdrawal, defeats", missing.is_empty() and concluded,
 		"missing %s, concluded %s" % [str(missing), concluded])

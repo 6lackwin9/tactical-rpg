@@ -7,16 +7,9 @@ extends RefCounted
 # files, the migration hook, unknown-key warnings, and NewGame. The real user://saves is never touched.
 # ==============================================================================
 
-const SANDBOX: String = "user://m3_save_test"
+static var SANDBOX: String = TestHelpers.sandbox("m3_save_test")
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [Save] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "Save"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -36,7 +29,7 @@ static func run() -> bool:
 	SaveGame.reset_base_dir()
 	SaveMigrations.reset()
 	var real_after: PackedStringArray = DirAccess.get_files_at(SaveGame.DEFAULT_DIR)
-	ok = _report("real saves untouched", {"listing_unchanged": real_before == real_after, "dir_restored": SaveGame.base_dir() == SaveGame.DEFAULT_DIR}) and ok
+	ok = TestHelpers.report(TAG, "real saves untouched", {"listing_unchanged": real_before == real_after, "dir_restored": SaveGame.base_dir() == SaveGame.DEFAULT_DIR}) and ok
 	return ok
 
 static func _joined(v: Variant) -> String:
@@ -46,10 +39,7 @@ static func _joined(v: Variant) -> String:
 	return ", ".join(parts)
 
 static func _wipe() -> void:
-	if DirAccess.dir_exists_absolute(SANDBOX):
-		for f: String in DirAccess.get_files_at(SANDBOX):
-			DirAccess.remove_absolute(SANDBOX + "/" + f)
-		DirAccess.remove_absolute(SANDBOX)
+	TestHelpers.remove_sandbox(SANDBOX)
 
 static func _world() -> String:
 	return WorldCatalog.world_ids()[0]
@@ -103,7 +93,7 @@ static func _test_game_state() -> bool:
 	var changed: GameState = GameState.from_dict(g.to_dict())
 	changed.party.members[0].total_xp += 1
 	checks["equals_detects_difference"] = not changed.equals(g)
-	return _report("game state", checks)
+	return TestHelpers.report(TAG, "game state", checks)
 
 static func _test_new_game() -> bool:
 	var uid: String = _party_unit()
@@ -123,7 +113,7 @@ static func _test_new_game() -> bool:
 	checks["unknown_unit_refused"] = bad_unit["state"] == null and not DictUtil.array_of(bad_unit["errors"]).is_empty()
 	checks["unknown_world_refused"] = bad_world["state"] == null and not DictUtil.array_of(bad_world["errors"]).is_empty()
 	checks["empty_party_refused"] = none["state"] == null
-	return _report("new game", checks)
+	return TestHelpers.report(TAG, "new game", checks)
 
 static func _test_write_read() -> bool:
 	var g: GameState = _rich_state()
@@ -165,7 +155,7 @@ static func _test_write_read() -> bool:
 	checks["slot_zero_refused"] = not SaveGame.write(g, 0).is_empty()
 	checks["delete"] = SaveGame.delete(1) and not SaveGame.exists(1) and not SaveGame.delete(1)
 	checks["read_missing"] = not DictUtil.to_bool(SaveGame.read(1)["ok"])
-	return _report("write and read", checks)
+	return TestHelpers.report(TAG, "write and read", checks)
 
 static func _write_raw(slot: int, text: String) -> void:
 	DirAccess.make_dir_recursive_absolute(SANDBOX)
@@ -203,7 +193,7 @@ static func _test_bad_files() -> bool:
 		"invalid_state_rejected": not DictUtil.to_bool(empty_party["ok"]) and empty_party["state"] == null,
 		"unknown_key_dropped_with_warning": DictUtil.to_bool(extra["ok"]) and not DictUtil.array_of(extra["warnings"]).is_empty() and (extra["state"] as GameState).equals(g),
 	}
-	return _report("corrupt, newer, unknown keys", checks)
+	return TestHelpers.report(TAG, "corrupt, newer, unknown keys", checks)
 
 static func _test_migrations() -> bool:
 	SaveMigrations.reset()
@@ -238,4 +228,4 @@ static func _test_migrations() -> bool:
 		"missing_version_fails": not DictUtil.to_bool(SaveMigrations.migrate({"game_state": {}})["ok"]),
 	}
 	SaveMigrations.reset()
-	return _report("migrations", checks)
+	return TestHelpers.report(TAG, "migrations", checks)

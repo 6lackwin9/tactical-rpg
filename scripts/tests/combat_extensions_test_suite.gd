@@ -11,16 +11,9 @@ extends RefCounted
 # derived from the rules (SupportRules, StatusEffects, SkillDef), not magic numbers.
 # ==============================================================================
 
-const SANDBOX: String = "user://combat_ext_test"
+const TAG: String = "CombatExt"
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [CombatExt] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+static var SANDBOX: String = TestHelpers.sandbox("combat_ext_test")
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -50,13 +43,7 @@ static func _grid(exits: Array[Vector2i] = []) -> CombatGrid:
 	return CombatGrid.new(CombatGrid.ArenaType.CLOSED, exits)
 
 static func _unit(unit_name: String, hp: int, speed: int, attack_range: int, grid: CombatGrid, pos: Vector2i, learn: Array[String] = []) -> Combatant:
-	var c := Combatant.new(unit_name, hp, speed, attack_range)
-	c.power_override = 15   # fixed strike power, no armor: expected numbers stay simple
-	c.armor_override = 0
-	for skill_id: String in learn:
-		c.learn_skill(skill_id)
-	grid.place_combatant(c, pos)
-	return c
+	return TestHelpers.unit(unit_name, grid, pos, hp, speed, attack_range, 15, learn)   # strike power 15, no armor
 
 static func _ctx(grid: CombatGrid, allies: Array[Combatant], enemies: Array[Combatant], profiles: Dictionary = {}) -> PlanContext:
 	var all_profiles: Dictionary = profiles.duplicate()
@@ -188,7 +175,7 @@ static func _test_heal_and_clamp() -> bool:
 	checks["Combatant.heal never revives"] = (func() -> bool:
 		friend.heal(50)
 		return friend.hp == 0).call()
-	return _report("Heal amount, forecast, clamp, log", checks)
+	return TestHelpers.report(TAG, "Heal amount, forecast, clamp, log", checks)
 
 static func _test_ally_validation() -> bool:
 	var checks: Dictionary = {}
@@ -255,7 +242,7 @@ static func _test_ally_validation() -> bool:
 	var cmd := SupportCommand.new(healer, far_friend, mend, grid, mend.blocks)
 	cmd.execute()
 	checks["the command refuses an ally out of reach"] = cmd.failed and far_friend.hp == 50 and cmd.execution_log.begins_with("[Support Failed]")
-	return _report("Ally-target validation and options", checks)
+	return TestHelpers.report(TAG, "Ally-target validation and options", checks)
 
 # ------------------------------------------------------------------------------
 # Buffs: haste and taunt durations
@@ -300,7 +287,7 @@ static func _test_buffs_and_haste() -> bool:
 	var staggered: bool = runner.has_status(StatusEffects.STAGGER)
 	StatusEffects.roll_over(runner, 4)
 	checks["stagger still lasts exactly one round"] = staggered and not runner.has_status(StatusEffects.STAGGER)
-	return _report("Haste and taunt statuses", checks)
+	return TestHelpers.report(TAG, "Haste and taunt statuses", checks)
 
 # ------------------------------------------------------------------------------
 # Gap-close
@@ -404,7 +391,7 @@ static func _test_gap_close() -> bool:
 	var acted_plan := CombatPlan.new(two_ctx)
 	acted_plan.add_step(r7, PlanStep.self_skill(SkillCatalog.find("guard")))
 	checks["can't lunge after acting"] = not acted_plan.add_step(r7, PlanStep.engage(lunge, first_prey)).is_empty()
-	return _report("Gap-close lunge (plan, resolve, refusals)", checks)
+	return TestHelpers.report(TAG, "Gap-close lunge (plan, resolve, refusals)", checks)
 
 # ------------------------------------------------------------------------------
 # Bleed
@@ -474,7 +461,7 @@ static func _test_bleed() -> bool:
 	checks["resolve_round applies the tick and bleeding can defeat"] = not lone.is_alive() and bleed_logged
 	var session_formatted: String = CombatLogBuilder.format_resolver_message("[Bleed] X bleeds for 3 damage")
 	checks["feed formats the bleed line"] = session_formatted.contains("bleeds")
-	return _report("Bleed (inflict, resist, tick, duration)", checks)
+	return TestHelpers.report(TAG, "Bleed (inflict, resist, tick, duration)", checks)
 
 # ------------------------------------------------------------------------------
 # AI: taunt
@@ -526,7 +513,7 @@ static func _test_taunt_ai() -> bool:
 	taunter.statuses[StatusEffects.TAUNT] = true
 	var pctx: PlanContext = _ctx(pgrid, [hero], [taunter, side])
 	checks["the player's plan may ignore a taunter"] = CombatPlan.new(pctx).add_step(hero, PlanStep.engage(SkillCatalog.find("strike"), side)).is_empty()
-	return _report("Taunt steers the enemy AI only", checks)
+	return TestHelpers.report(TAG, "Taunt steers the enemy AI only", checks)
 
 # ------------------------------------------------------------------------------
 # AI: kiting, no idle turns, buff-before-move
@@ -601,7 +588,7 @@ static func _test_kiting_and_idle() -> bool:
 	for e: PlanEntry in walk_state.entries:
 		attacked = attacked or e.skill.kind == SkillDef.Kind.ATTACK
 	checks["target out of reach: no buff before moving, the turn is not wasted"] = not _any_skill_kind(must_walk, SkillDef.Kind.FOCUS) and attacked
-	return _report("Kiting, no idle turns, buff only when free", checks)
+	return TestHelpers.report(TAG, "Kiting, no idle turns, buff only when free", checks)
 
 # ------------------------------------------------------------------------------
 # AI: support
@@ -666,7 +653,7 @@ static func _test_support_ai() -> bool:
 	friend.hp = 10
 	var plain_steps: Array[PlanStep] = TacticalAI.build_steps(plain, _ctx(plain_grid, [plain, friend], [enemy]), _profile(AiProfile.Role.SUPPORT))
 	checks["no heal skill: attacks"] = _any_mode(plain_steps, PlanStep.Mode.ENGAGE) and not _any_mode(plain_steps, PlanStep.Mode.ALLY)
-	return _report("Support AI heals the most wounded ally", checks)
+	return TestHelpers.report(TAG, "Support AI heals the most wounded ally", checks)
 
 # ------------------------------------------------------------------------------
 # AI: reckless profile
@@ -706,7 +693,7 @@ static func _test_reckless() -> bool:
 	var entry_profile: AiProfile = ContentFactory.ai_profile({"class_id": "brawler", "level": 3, "reckless": true, "flee_ratio": 0.0}, berserker)
 	var other_profile: AiProfile = ContentFactory.ai_profile({"class_id": "brawler", "level": 3}, berserker)
 	checks["the unit's AI field sets the profile"] = entry_profile.reckless and not other_profile.reckless
-	return _report("Reckless profile", checks)
+	return TestHelpers.report(TAG, "Reckless profile", checks)
 
 # ------------------------------------------------------------------------------
 # Catalog + schema
@@ -750,9 +737,7 @@ static func _test_catalog_and_schema() -> bool:
 	checks["status option lists: debuffs for attacks, buffs for support"] = ContentSchema.options_of({"options_from": "status"}).has("bleed") and not ContentSchema.options_of({"options_from": "status"}).has("haste") and ContentSchema.options_of({"options_from": "status_buff"}).has("haste") and ContentSchema.options_of({"options_from": "status_buff"}).has("taunt")
 
 	# Validation refuses bad data (sandbox copy; nothing is saved).
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		checks["heal per stat needs a stat"] = not ContentCatalog.upsert("skills", {"id": "bad_heal", "name": "x", "kind": "SUPPORT", "heal_mult": 1.0}).is_empty()
@@ -766,8 +751,8 @@ static func _test_catalog_and_schema() -> bool:
 		checks["a valid heal is accepted"] = ContentCatalog.upsert("skills", {"id": "good_heal", "name": "Good", "kind": "SUPPORT", "heal_stat": "INT", "heal_mult": 2.0, "heal_base": 3}).is_empty()
 		var good: SkillDef = SkillCatalog.find("good_heal")
 		checks["and builds a SkillDef with its heal"] = good != null and good.heals() and good.heal_stat == "INT"
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("Catalog and schema for the new fields", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Catalog and schema for the new fields", checks)
 
 # Undoing a round (round 2+; round 1 restarts the battle) discards statuses and durations queued during it.
 static func _test_reset_round_clears_queued_statuses() -> bool:
@@ -792,4 +777,4 @@ static func _test_reset_round_clears_queued_statuses() -> bool:
 		checks["queued statuses cleared"] = victim.pending_statuses.is_empty()
 		checks["queued durations cleared"] = victim.pending_status_rounds.is_empty()
 	session.dispose()
-	return _report("Round reset discards queued statuses and their durations", checks)
+	return TestHelpers.report(TAG, "Round reset discards queued statuses and their durations", checks)

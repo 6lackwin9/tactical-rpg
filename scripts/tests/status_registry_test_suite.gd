@@ -8,14 +8,7 @@ extends RefCounted
 # row, and each stacking rule's math (with caps) is checked on explicit rules via stack_with.
 # ==============================================================================
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [StatusRegistry] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "StatusRegistry"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -62,7 +55,7 @@ static func _test_registry_complete() -> bool:
 	checks["an unknown status has no row"] = not StatusRegistry.has("mystery") and StatusRegistry.row("mystery").is_empty()
 	# row_errors catches bad rows (checked on a copy of the validation inputs through the public rules).
 	checks["only debuffs are resistable"] = StatusRegistry.ids_where(StatusRegistry.KIND_BUFF, true).is_empty()
-	return _report("Registry covers every status constant and is well formed", checks)
+	return TestHelpers.report(TAG, "Registry covers every status constant and is well formed", checks)
 
 static func _test_derived_lists() -> bool:
 	var checks: Dictionary = {}
@@ -80,7 +73,7 @@ static func _test_derived_lists() -> bool:
 	checks["an unknown status is capitalised"] = StatusEffects.display_name("mystery") == "Mystery"
 	checks["debuffs and buffs partition the registry"] = StatusEffects.debuffs().size() + StatusEffects.buffs().size() == StatusRegistry.ids().size()
 	checks["catalog validation still accepts exactly the debuffs"] = ContentCatalog.validate_entry("skills", {"id": "t_reg_ok", "name": "R", "kind": "ATTACK", "status_effect": "root", "status_potency": 50}).is_empty() and not ContentCatalog.validate_entry("skills", {"id": "t_reg_bad", "name": "R", "kind": "ATTACK", "status_effect": "haste", "status_potency": 50}).is_empty()
-	return _report("Derived lists equal the literals they replaced", checks)
+	return TestHelpers.report(TAG, "Derived lists equal the literals they replaced", checks)
 
 static func _test_stacking_rules() -> bool:
 	var checks: Dictionary = {}
@@ -119,7 +112,7 @@ static func _test_stacking_rules() -> bool:
 	checks["with nothing existing every rule returns the new one (min 1 round)"] = fresh_ok
 	var unknown: Dictionary = StatusRegistry.stack_with("bogus", 0, 2, 10, 1, 20)
 	checks["an unknown rule behaves as refresh_max_duration"] = unknown["rounds"] == 2 and unknown["potency"] == 20
-	return _report("Each stacking rule's math and caps", checks)
+	return TestHelpers.report(TAG, "Each stacking rule's math and caps", checks)
 
 static func _test_stack_in_effects() -> bool:
 	var checks: Dictionary = {}
@@ -138,4 +131,4 @@ static func _test_stack_in_effects() -> bool:
 	StatusEffects.grant_now(c, StatusEffects.RIPOSTE, 3)
 	StatusEffects.grant_now(c, StatusEffects.RIPOSTE, 1)
 	checks["grant_now keeps the longer duration"] = DictUtil.int_of(c.status_rounds_left, StatusEffects.RIPOSTE) == 3 and c.statuses.has(StatusEffects.RIPOSTE)
-	return _report("StatusEffects applies the registry's stacking rule", checks)
+	return TestHelpers.report(TAG, "StatusEffects applies the registry's stacking rule", checks)

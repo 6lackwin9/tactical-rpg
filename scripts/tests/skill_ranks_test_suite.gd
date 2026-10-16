@@ -9,7 +9,7 @@ extends RefCounted
 # from the catalog, never hard-coded.
 # ==============================================================================
 
-const SANDBOX: String = "user://skill_ranks_test"
+static var SANDBOX: String = TestHelpers.sandbox("skill_ranks_test")
 const TAG: String = "SkillRanks"
 
 static func run() -> bool:
@@ -24,12 +24,12 @@ static func run() -> bool:
 	ok = _test_file_versions() and ok
 	ok = _test_lossless_save() and ok
 	ok = _test_legacy_flat() and ok
-	SkillTestKit.cleanup(SANDBOX)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 static func _test_round_trip() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var rows: Array[Dictionary] = ContentCatalog.entries("skills")
 	var folded: Dictionary = SkillRanks.collapse(rows)
 	var fold_errors: Array = folded["errors"]
@@ -70,12 +70,12 @@ static func _test_round_trip() -> bool:
 		rank_major = rank_major and tier >= last_tier
 		last_tier = tier
 	checks["a version 2 file loads rank-major (rank 1 rows first, then rank 2, ...)"] = rank_major or ContentCatalog.version_of("skills") < 2
-	return SkillTestKit.report(TAG, "Round trip over the shipped catalog", checks)
+	return TestHelpers.report(TAG, "Round trip over the shipped catalog", checks)
 
 static func _test_modifiers() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
-	var base: Dictionary = SkillTestKit.attack("t_rk", {"status_effect": "stagger", "status_potency": 50})
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
+	var base: Dictionary = TestHelpers.attack("t_rk", {"status_effect": "stagger", "status_potency": 50})
 	var mods: Array[Dictionary] = [{"level": 3, "power_mult": 1.4}, {"level": 4, "power_mult": 1.8, "status_potency": 70}]
 	var entry: Dictionary = SkillRanks.entry(base, mods)
 	checks["a fixture family is accepted"] = ContentCatalog.upsert_skill(entry).is_empty()
@@ -104,57 +104,57 @@ static func _test_modifiers() -> bool:
 	checks["editing rank 2 leaves rank 3 equal to its own resolved value"] = ContentCatalog.get_entry("skills", "t_rk_3") == third_before
 	# A base-only key in a modifier is rejected.
 	var bad_mods: Array[Dictionary] = [{"kind": "DEFEND"}]
-	checks["a base-only key in a modifier is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack("t_rk_bad"), bad_mods)).is_empty()
+	checks["a base-only key in a modifier is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack("t_rk_bad"), bad_mods)).is_empty()
 	var name_mods: Array[Dictionary] = [{"name": "Other"}]
-	checks["a name modifier is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack("t_rk_bad2"), name_mods)).is_empty()
+	checks["a name modifier is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack("t_rk_bad2"), name_mods)).is_empty()
 	var hidden_mods: Array[Dictionary] = [{"mitigation": 0.3}]
-	checks["a modifier for a field the kind does not show is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack("t_rk_bad3"), hidden_mods)).is_empty()
+	checks["a modifier for a field the kind does not show is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack("t_rk_bad3"), hidden_mods)).is_empty()
 	var range_mods: Array[Dictionary] = [{"level": 99}]
-	checks["a modifier outside the field range is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack("t_rk_bad4"), range_mods)).is_empty()
+	checks["a modifier outside the field range is rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack("t_rk_bad4"), range_mods)).is_empty()
 	var too_many: Array[Dictionary] = [{"level": 3}, {"level": 4}, {"level": 5}]
-	checks["more ranks than the class cap are rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack("t_rk_bad5"), too_many)).is_empty()
+	checks["more ranks than the class cap are rejected"] = not ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack("t_rk_bad5"), too_many)).is_empty()
 	# A modifier equal to the base is dropped on save and warned about.
 	var same_mods: Array[Dictionary] = [{"level": 3, "power_mult": 1.0}]
-	var same_entry: Dictionary = SkillRanks.entry(SkillTestKit.attack("t_rk_same"), same_mods)
-	checks["a modifier equal to the base warns"] = SkillTestKit.any_contains(ContentCatalog.warnings_for("skills", same_entry), "equals the base")
+	var same_entry: Dictionary = SkillRanks.entry(TestHelpers.attack("t_rk_same"), same_mods)
+	checks["a modifier equal to the base warns"] = TestHelpers.any_contains(ContentCatalog.warnings_for("skills", same_entry), "equals the base")
 	checks["...and is accepted"] = ContentCatalog.upsert_skill(same_entry).is_empty()
 	var stored_same: Dictionary = ContentCatalog.skill_entry("t_rk_same")
 	var stored_mod: Dictionary = DictUtil.dict_of(DictUtil.array_of(stored_same["ranks"])[0])
 	checks["...and dropped on save (the folded modifier keeps only what differs)"] = stored_mod.has("level") and not stored_mod.has("power_mult")
 	checks["rank_fields follows the kind"] = SkillRanks.rank_fields("DEFEND").has("mitigation") and not SkillRanks.rank_fields("DEFEND").has("power_mult") and SkillRanks.rank_fields("ATTACK").has("power_mult")
-	return SkillTestKit.report(TAG, "Modifiers resolve against the base, no cascade", checks)
+	return TestHelpers.report(TAG, "Modifiers resolve against the base, no cascade", checks)
 
 static func _test_names_and_validation() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var mods: Array[Dictionary] = [{"level": 3}, {"level": 4}]
-	var entry: Dictionary = SkillRanks.entry(SkillTestKit.attack("t_nm", {"name": "Nm"}), mods)
+	var entry: Dictionary = SkillRanks.entry(TestHelpers.attack("t_nm", {"name": "Nm"}), mods)
 	var rows: Array[Dictionary] = SkillRanks.expand(entry)
 	var derived: bool = true
 	for i: int in range(rows.size()):
 		derived = derived and str(rows[i]["name"]) == ("Nm" if i == 0 else "Nm %s" % SkillCatalog.roman(i + 1))
 	checks["rank names are derived (Name, Name II, Name III)"] = derived
 	var long_name: String = "x".repeat(30)
-	var long_entry: Dictionary = SkillRanks.entry(SkillTestKit.attack("t_nm_long", {"name": long_name}), mods)
-	checks["the derived rank name must fit 32 characters"] = SkillTestKit.any_contains(SkillTestKit.messages(ContentCatalog.validate_skill_entry(long_entry)), "derived rank name")
-	checks["a base name over 32 is refused"] = not ContentCatalog.validate_skill_entry(SkillTestKit.attack("t_nm_long2", {"name": "y".repeat(33)})).is_empty()
-	var basic_ranked: Dictionary = SkillRanks.entry(SkillTestKit.attack("t_nm_basic", {"basic": true}), mods)
-	checks["a basic skill with ranks is rejected"] = SkillTestKit.any_contains(SkillTestKit.messages(ContentCatalog.validate_skill_entry(basic_ranked)), "exactly one rank")
-	checks["a standalone skill named like a future rank id is accepted"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_clash_2")).is_empty()
+	var long_entry: Dictionary = SkillRanks.entry(TestHelpers.attack("t_nm_long", {"name": long_name}), mods)
+	checks["the derived rank name must fit 32 characters"] = TestHelpers.any_contains(TestHelpers.messages(ContentCatalog.validate_skill_entry(long_entry)), "derived rank name")
+	checks["a base name over 32 is refused"] = not ContentCatalog.validate_skill_entry(TestHelpers.attack("t_nm_long2", {"name": "y".repeat(33)})).is_empty()
+	var basic_ranked: Dictionary = SkillRanks.entry(TestHelpers.attack("t_nm_basic", {"basic": true}), mods)
+	checks["a basic skill with ranks is rejected"] = TestHelpers.any_contains(TestHelpers.messages(ContentCatalog.validate_skill_entry(basic_ranked)), "exactly one rank")
+	checks["a standalone skill named like a future rank id is accepted"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_clash_2")).is_empty()
 	var clash_mods: Array[Dictionary] = [{"level": 3}]
-	checks["a rank id used by another family is refused"] = SkillTestKit.any_contains(SkillTestKit.messages(ContentCatalog.validate_skill_entry(SkillRanks.entry(SkillTestKit.attack("t_clash"), clash_mods))), "already used")
+	checks["a rank id used by another family is refused"] = TestHelpers.any_contains(TestHelpers.messages(ContentCatalog.validate_skill_entry(SkillRanks.entry(TestHelpers.attack("t_clash"), clash_mods))), "already used")
 	var unlock_mods: Array[Dictionary] = [{"unlock_offset": 3}]
-	checks["unlock_offset is rank-modifiable (rank 2+)"] = ContentCatalog.validate_skill_entry(SkillRanks.entry(SkillTestKit.attack("t_nm_off"), unlock_mods)).is_empty()
-	var bad_off: Dictionary = SkillTestKit.attack("t_nm_off2", {"unlock_offset": 2})
+	checks["unlock_offset is rank-modifiable (rank 2+)"] = ContentCatalog.validate_skill_entry(SkillRanks.entry(TestHelpers.attack("t_nm_off"), unlock_mods)).is_empty()
+	var bad_off: Dictionary = TestHelpers.attack("t_nm_off2", {"unlock_offset": 2})
 	checks["a rank 1 unlock offset above 0 is refused"] = not ContentCatalog.validate_skill_entry(bad_off).is_empty()
-	return SkillTestKit.report(TAG, "Derived names, caps and entry validation", checks)
+	return TestHelpers.report(TAG, "Derived names, caps and entry validation", checks)
 
 static func _test_rename_and_remove() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var mods: Array[Dictionary] = [{"level": 3}, {"level": 4}]
-	checks["fixture family accepted"] = ContentCatalog.upsert_skill(SkillRanks.entry(SkillTestKit.attack("t_rn", {"grade": "novice"}), mods)).is_empty()
-	var adv: Dictionary = SkillTestKit.attack("t_rn_adv", {"grade": "advanced", "requires": ["t_rn"]})
+	checks["fixture family accepted"] = ContentCatalog.upsert_skill(SkillRanks.entry(TestHelpers.attack("t_rn", {"grade": "novice"}), mods)).is_empty()
+	var adv: Dictionary = TestHelpers.attack("t_rn_adv", {"grade": "advanced", "requires": ["t_rn"]})
 	checks["an advanced skill requiring it is accepted"] = ContentCatalog.upsert_skill(adv).is_empty()
 	checks["a passive naming the head is accepted"] = ContentCatalog.upsert("passives", {"id": "t_rn_pass", "name": "P", "effects": [{"type": "skill", "skill": "t_rn"}]}).is_empty()
 	checks["a unit with the skill as an extra is accepted"] = ContentCatalog.upsert("units", {"id": "t_rn_unit", "name": "U", "side": "party", "class_id": "warrior", "level": 5, "extra_skills": ["t_rn"], "loadout": ["t_rn"]}).is_empty()
@@ -187,11 +187,11 @@ static func _test_rename_and_remove() -> bool:
 	checks["remove_skill removes every rank of an unreferenced family"] = ContentCatalog.remove_skill("t_rn_new").is_empty() and not ContentCatalog.has("skills", "t_rn_new") and not ContentCatalog.has("skills", "t_rn_new_2") and not ContentCatalog.has("skills", "t_rn_new_3")
 	checks["remove_skill refuses a basic skill"] = not ContentCatalog.remove_skill("strike").is_empty()
 	checks["remove_skill refuses an unknown head"] = not ContentCatalog.remove_skill("t_no_such").is_empty()
-	return SkillTestKit.report(TAG, "Head rename carries ranks and references; remove_skill", checks)
+	return TestHelpers.report(TAG, "Head rename carries ranks and references; remove_skill", checks)
 
 static func _test_file_versions() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var path: String = ContentCatalog.path_for("skills", SANDBOX)
 	# Version 1: flat rows, as before.
 	var flat: Dictionary = {"kind": "skills", "version": 1, "entries": [
@@ -220,17 +220,17 @@ static func _test_file_versions() -> bool:
 	ContentCatalog.reload_from_disk()
 	checks["a version 2 file with a name modifier is a load error"] = not ContentCatalog.load_errors().is_empty()
 	# save writes version 2 and the result reloads to the same rows.
-	checks["sandbox fork again"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork again"] = TestHelpers.fork(SANDBOX)
 	var before: Array[Dictionary] = ContentCatalog.entries("skills")
 	checks["save writes version 2"] = ContentCatalog.save("skills") == OK and DictUtil.to_int(JSON.parse_string(FileAccess.get_file_as_string(path))["version"]) == ContentCatalog.version_of("skills")
 	ContentCatalog.reload_from_disk()
 	checks["save then reload reproduces the rows"] = ContentCatalog.entries("skills").size() == before.size()
-	return SkillTestKit.report(TAG, "Version 1 and version 2 files", checks)
+	return TestHelpers.report(TAG, "Version 1 and version 2 files", checks)
 
 # Data the loader or the fold cannot keep is reported, and saving is refused, so a save never deletes it unnoticed.
 static func _test_lossless_save() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var path: String = ContentCatalog.path_for("skills", SANDBOX)
 	var basic: Dictionary = {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 2, "basic": true}
 	# A rejected version 2 entry (stores a derived key) blocks the save: the file keeps it.
@@ -264,7 +264,7 @@ static func _test_lossless_save() -> bool:
 		checks["%s blocks the save and the file keeps it" % label] = ContentCatalog.save("skills") != OK and FileAccess.get_file_as_string(path).contains("t_ls_mod")
 		checks["%s is a validate_skill_entry error" % label] = not ContentCatalog.validate_skill_entry(entry).is_empty()
 	# The fold reports rows it would lose data from (flat rows built in memory, e.g. by a legacy upsert).
-	var rows: Array[Dictionary] = SkillRanks.expand(SkillTestKit.attack("t_ls_fold", {"ranks": [{"level": 3}]}))
+	var rows: Array[Dictionary] = SkillRanks.expand(TestHelpers.attack("t_ls_fold", {"ranks": [{"level": 3}]}))
 	var unknown_rows: Array[Dictionary] = [rows[0], rows[1].merged({"t_ls_note": "x"}, true)]
 	checks["fold reports an unknown key on rank 2 that rank 1 lacks"] = not DictUtil.array_of(SkillRanks.fold("t_ls_fold", unknown_rows)["errors"]).is_empty()
 	var shared_rows: Array[Dictionary] = [rows[0].merged({"t_ls_note": "x"}, true), rows[1].merged({"t_ls_note": "x"}, true)]
@@ -272,8 +272,8 @@ static func _test_lossless_save() -> bool:
 	if not unused.is_empty():
 		var hidden_rows: Array[Dictionary] = [rows[0], rows[1].merged({unused: DictUtil.to_int(ContentSchema.field("skills", unused)["max"])}, true)]
 		checks["fold reports a field the kind does not use"] = not DictUtil.array_of(SkillRanks.fold("t_ls_fold", hidden_rows)["errors"]).is_empty()
-	checks["a clean fork saves again after the reload"] = SkillTestKit.fork(SANDBOX) and not ContentCatalog.save_blocked("skills") and ContentCatalog.save("skills") == OK
-	return SkillTestKit.report(TAG, "Saving never drops data the loader or the fold could not keep", checks)
+	checks["a clean fork saves again after the reload"] = TestHelpers.fork(SANDBOX) and not ContentCatalog.save_blocked("skills") and ContentCatalog.save("skills") == OK
+	return TestHelpers.report(TAG, "Saving never drops data the loader or the fold could not keep", checks)
 
 static func _write(path: String, doc: Dictionary) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
@@ -282,7 +282,7 @@ static func _write(path: String, doc: Dictionary) -> void:
 
 static func _test_legacy_flat() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	checks["tier 1 row accepted"] = ContentCatalog.upsert("skills", {"id": "t_fix", "name": "Fix", "kind": "ATTACK", "level": 1, "tier": 1, "description": "Fix one."}).is_empty()
 	checks["tier 2 row accepted"] = ContentCatalog.upsert("skills", {"id": "t_fix_2", "name": "Fix II", "kind": "ATTACK", "level": 2, "family": "t_fix", "tier": 2, "description": "Fix two."}).is_empty()
 	var ranked: Dictionary = ContentCatalog.skill_entry("t_fix")
@@ -294,4 +294,4 @@ static func _test_legacy_flat() -> bool:
 	checks["a base-only field that differs between flat ranks is refused"] = not ContentCatalog.upsert("skills", {"id": "t_fix_3", "name": "Fix III", "kind": "ATTACK", "level": 3, "family": "t_fix", "tier": 3, "learned_only": true}).is_empty()
 	checks["an id that breaks <head>_<n> is refused"] = not ContentCatalog.upsert("skills", {"id": "t_fix_three", "name": "Fix III", "kind": "ATTACK", "family": "t_fix", "tier": 3}).is_empty()
 	checks["a gap in the tiers is refused"] = not ContentCatalog.upsert("skills", {"id": "t_gap_3", "name": "Gap", "kind": "ATTACK", "family": "t_gap", "tier": 3}).is_empty()
-	return SkillTestKit.report(TAG, "The legacy flat upsert pattern still works", checks)
+	return TestHelpers.report(TAG, "The legacy flat upsert pattern still works", checks)

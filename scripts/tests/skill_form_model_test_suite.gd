@@ -8,7 +8,7 @@ extends RefCounted
 # and the live description preview. Fixtures are built here; expectations come from rules.
 # ==============================================================================
 
-const SANDBOX: String = "user://skill_form_model_test"
+static var SANDBOX: String = TestHelpers.sandbox("skill_form_model_test")
 const TAG: String = "SkillForm"
 
 static func run() -> bool:
@@ -24,12 +24,12 @@ static func run() -> bool:
 	ok = _test_description_editor() and ok
 	ok = _test_filter() and ok
 	ok = _test_locks_and_requires() and ok
-	SkillTestKit.cleanup(SANDBOX)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 static func _test_visible_fields() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var all_ok: bool = true
 	var gate_ok: bool = true
 	for kind: String in SkillKinds.authorable():
@@ -48,24 +48,24 @@ static func _test_visible_fields() -> bool:
 	checks["the weapon gate is shown exactly for kinds with the gate section"] = gate_ok
 	var layout: Array[Dictionary] = SkillFormModel.layout(SkillFormModel.new_entry("t_form_layout"))
 	checks["the core sections come first, identity before classification"] = layout.size() >= 2 and str(layout[0]["id"]) == "identity" and str(layout[1]["id"]) == "classification"
-	return SkillTestKit.report(TAG, "Visible fields per kind", checks)
+	return TestHelpers.report(TAG, "Visible fields per kind", checks)
 
 static func _test_dynamic_limits() -> bool:
 	var checks: Dictionary = {}
-	var entry: Dictionary = SkillTestKit.attack("t_form_lim", {"reach_min": 1, "reach_max": 3})
+	var entry: Dictionary = TestHelpers.attack("t_form_lim", {"reach_min": 1, "reach_max": 3})
 	checks["reach_min is capped by reach_max"] = DictUtil.to_int(SkillFormModel.state(entry, "reach_min")["max"]) == 3
-	var dash: Dictionary = SkillTestKit.attack("t_form_dash", {"area": "BURST"})
+	var dash: Dictionary = TestHelpers.attack("t_form_dash", {"area": "BURST"})
 	checks["no gap-close with an area attack"] = DictUtil.to_int(SkillFormModel.state(dash, "dash_tiles")["max"]) == 0
-	var off: Dictionary = SkillTestKit.attack("t_form_off", {"weapon_hand": "off"})
+	var off: Dictionary = TestHelpers.attack("t_form_off", {"weapon_hand": "off"})
 	checks["no gap-close with an off-hand strike"] = DictUtil.to_int(SkillFormModel.state(off, "dash_tiles")["max"]) == 0
-	var dashing: Dictionary = SkillTestKit.attack("t_form_dash2", {"dash_tiles": 2})
+	var dashing: Dictionary = TestHelpers.attack("t_form_dash2", {"dash_tiles": 2})
 	var hand: Dictionary = DictUtil.dict_of(SkillFormModel.state(dashing, "weapon_hand")["disabled_options"])
 	checks["off and both are disabled while the skill gap-closes"] = hand.has("off") and hand.has("both")
 	var plain: Dictionary = DictUtil.dict_of(SkillFormModel.state(entry, "weapon_hand")["disabled_options"])
 	checks["both is disabled exactly while BOTH_ENABLED is false"] = plain.has("both") == (not SkillDef.BOTH_ENABLED)
-	var gated: Dictionary = SkillTestKit.attack("t_form_gate", {"weapon_types": ["sword"]})
+	var gated: Dictionary = TestHelpers.attack("t_form_gate", {"weapon_types": ["sword"]})
 	checks["a listed weapon type forces a proficiency minimum of at least 1"] = DictUtil.to_int(SkillFormModel.state(gated, "min_proficiency")["min"]) >= 1
-	var line: Dictionary = SkillTestKit.attack("t_form_line", {"area": "LINE"})
+	var line: Dictionary = TestHelpers.attack("t_form_line", {"area": "LINE"})
 	checks["LINE caps reach_max at 1"] = DictUtil.to_int(SkillFormModel.state(line, "reach_max")["max"]) == 1
 	var support: Dictionary = SkillFormModel.switch_kind(SkillFormModel.new_entry("t_form_sup"), "SUPPORT")
 	var no_heal: Dictionary = support.duplicate(true)
@@ -75,11 +75,11 @@ static func _test_dynamic_limits() -> bool:
 	taunt["grant_status"] = StatusEffects.TAUNT
 	var modes: Dictionary = DictUtil.dict_of(SkillFormModel.state(taunt, "target_mode")["disabled_options"])
 	checks["taunt is cast on the taunter (no ally modes)"] = modes.has("ALLY") or not SkillKinds.has_field("DEFEND", "target_mode")
-	return SkillTestKit.report(TAG, "Dynamic limits and disabled options", checks)
+	return TestHelpers.report(TAG, "Dynamic limits and disabled options", checks)
 
 static func _test_kind_switch() -> bool:
 	var checks: Dictionary = {}
-	var entry: Dictionary = SkillTestKit.attack("t_form_sw", {"power_mult": 2.0, "status_effect": "stagger", "status_potency": 30, "ranks": [{"level": 3, "power_mult": 2.5, "status_potency": 40}]})
+	var entry: Dictionary = TestHelpers.attack("t_form_sw", {"power_mult": 2.0, "status_effect": "stagger", "status_potency": 30, "ranks": [{"level": 3, "power_mult": 2.5, "status_potency": 40}]})
 	var support: Dictionary = SkillFormModel.switch_kind(entry, "SUPPORT")
 	var defaults: Dictionary = ContentSchema.defaults("skills")
 	checks["fields the new kind lacks go back to their default"] = is_equal_approx(DictUtil.to_float(support["power_mult"]), DictUtil.to_float(defaults["power_mult"])) and str(support["status_effect"]) == str(defaults["status_effect"])
@@ -97,34 +97,34 @@ static func _test_kind_switch() -> bool:
 		var probe: Dictionary = SkillFormModel.switch_kind(SkillFormModel.new_entry("t_form_gp"), "DEFEND")
 		probe["grant_status"] = status
 		probe["mitigation"] = 0.0
-		var problems: Array[String] = SkillTestKit.messages(ContentCatalog.validate_skill_entry(probe))
-		every_grant_ok = every_grant_ok and not SkillTestKit.any_contains(problems, "can't grant") and not SkillTestKit.any_contains(problems, "cannot grant")
+		var problems: Array[String] = TestHelpers.messages(ContentCatalog.validate_skill_entry(probe))
+		every_grant_ok = every_grant_ok and not TestHelpers.any_contains(problems, "can't grant") and not TestHelpers.any_contains(problems, "cannot grant")
 	checks["no offered DEFEND grant is rejected as a wrong buff"] = every_grant_ok
-	return SkillTestKit.report(TAG, "Kind switching", checks)
+	return TestHelpers.report(TAG, "Kind switching", checks)
 
 static func _test_save_state() -> bool:
 	var checks: Dictionary = {}
-	var good: Dictionary = SkillTestKit.attack("t_form_ok")
+	var good: Dictionary = TestHelpers.attack("t_form_ok")
 	var state: Dictionary = SkillFormModel.save_state(good)
 	checks["a valid draft is not blocked"] = not DictUtil.to_bool(state["blocked"])
-	var bad: Dictionary = SkillTestKit.attack("t_form_bad", {"description": "{poer}"})
+	var bad: Dictionary = TestHelpers.attack("t_form_bad", {"description": "{poer}"})
 	var blocked: Dictionary = SkillFormModel.save_state(bad)
 	checks["a bad token blocks Save with a reason"] = DictUtil.to_bool(blocked["blocked"]) and not Array(blocked["reasons"]).is_empty()
 	checks["the problem is attributed to the description field"] = not SkillFormModel.problems_for(blocked, "description").is_empty()
-	var long_name: Dictionary = SkillTestKit.attack("t_form_long", {"name": "N".repeat(31), "ranks": [{"level": 3}]})
+	var long_name: Dictionary = TestHelpers.attack("t_form_long", {"name": "N".repeat(31), "ranks": [{"level": 3}]})
 	var long_state: Dictionary = SkillFormModel.save_state(long_name)
 	checks["the longest derived rank name counts against the cap"] = DictUtil.to_bool(long_state["blocked"]) and not SkillFormModel.problems_for(long_state, "name").is_empty()
-	var rank_bad: Dictionary = SkillTestKit.attack("t_form_rk", {"ranks": [{"heal_base": 5}]})
+	var rank_bad: Dictionary = TestHelpers.attack("t_form_rk", {"ranks": [{"heal_base": 5}]})
 	var rank_state: Dictionary = SkillFormModel.save_state(rank_bad)
 	checks["a modifier for a field the kind lacks blocks Save at that rank"] = DictUtil.to_bool(rank_state["blocked"]) and not SkillFormModel.problems_for(rank_state, "heal_base", 2).is_empty()
-	var digits: Dictionary = SkillTestKit.attack("t_form_dig", {"description": "Hits for 150 now."})
+	var digits: Dictionary = TestHelpers.attack("t_form_dig", {"description": "Hits for 150 now."})
 	var digit_state: Dictionary = SkillFormModel.save_state(digits)
 	checks["literal digits are a warning and do not block"] = not DictUtil.to_bool(digit_state["blocked"]) and not Array(digit_state["warnings"]).is_empty()
-	return SkillTestKit.report(TAG, "Save state and reasons", checks)
+	return TestHelpers.report(TAG, "Save state and reasons", checks)
 
 static func _test_ranks_view() -> bool:
 	var checks: Dictionary = {}
-	var entry: Dictionary = SkillTestKit.attack("t_form_rv", {"power_mult": 1.0, "ranks": [{"level": 3, "power_mult": 1.4}, {"level": 4, "power_mult": 1.8}]})
+	var entry: Dictionary = TestHelpers.attack("t_form_rv", {"power_mult": 1.0, "ranks": [{"level": 3, "power_mult": 1.4}, {"level": 4, "power_mult": 1.8}]})
 	var view: Dictionary = SkillFormModel.ranks_view(entry)
 	var rows: Array = view["rows"]
 	checks["one row per rank"] = rows.size() == 3
@@ -145,7 +145,7 @@ static func _test_ranks_view() -> bool:
 	checks["reset removes one cell"] = not SkillRanks.modifiers_of(reset)[1].has("level") and SkillRanks.modifiers_of(reset)[1].has("power_mult")
 	var copied: Dictionary = SkillFormModel.copy_previous(SkillFormModel.reset_modifier(entry, 3, "power_mult"), 3)
 	checks["copy previous copies the values, no link remains"] = is_equal_approx(DictUtil.to_float(SkillRanks.modifiers_of(copied)[1].get("power_mult", 0.0)), 1.4)
-	var one: Dictionary = SkillTestKit.attack("t_form_one")
+	var one: Dictionary = TestHelpers.attack("t_form_one")
 	var added: Dictionary = SkillFormModel.add_rank(one)
 	checks["add rank appends an empty modifier set"] = SkillRanks.rank_count(added) == 2
 	var capped: Dictionary = added
@@ -153,13 +153,13 @@ static func _test_ranks_view() -> bool:
 		capped = SkillFormModel.add_rank(capped)
 	checks["add rank stops at the class cap"] = SkillRanks.rank_count(capped) == StatRules.MAX_CLASS_TIER
 	checks["remove top rank returns to a single rank without a ranks key"] = not SkillFormModel.remove_top_rank(added).has("ranks")
-	var basic: Dictionary = SkillTestKit.attack("t_form_basic", {"basic": true})
+	var basic: Dictionary = TestHelpers.attack("t_form_basic", {"basic": true})
 	checks["a basic skill shows 'single rank' and can't add"] = not DictUtil.to_bool(SkillFormModel.ranks_view(basic)["can_add"]) and str(SkillFormModel.ranks_editable(basic)["reason"]) == "single rank"
-	return SkillTestKit.report(TAG, "Ranks view and edits", checks)
+	return TestHelpers.report(TAG, "Ranks view and edits", checks)
 
 static func _test_description_editor() -> bool:
 	var checks: Dictionary = {}
-	var entry: Dictionary = SkillTestKit.attack("t_form_desc", {"power_mult": 1.0, "description": "{name}: {power}", "ranks": [{"level": 3, "power_mult": 1.5}]})
+	var entry: Dictionary = TestHelpers.attack("t_form_desc", {"power_mult": 1.0, "description": "{name}: {power}", "ranks": [{"level": 3, "power_mult": 1.5}]})
 	var preview: Array[Dictionary] = SkillFormModel.description_preview(entry)
 	checks["one preview line per rank"] = preview.size() == 2
 	checks["the preview is the engine-rendered text"] = str(preview[1]["text"]) == str(SkillRanks.expand(entry)[1]["description"]) and int(preview[1]["length"]) == str(preview[1]["text"]).length()
@@ -172,12 +172,12 @@ static func _test_description_editor() -> bool:
 	checks["a token inserts at the caret and moves it"] = str(inserted["text"]) == "Hits for {power}." and int(inserted["caret"]) == 9 + "{power}".length()
 	var clamped: Dictionary = SkillFormModel.insert_token("ab", 99, "name")
 	checks["a caret past the end is clamped"] = str(clamped["text"]) == "ab{name}"
-	return SkillTestKit.report(TAG, "Description editor", checks)
+	return TestHelpers.report(TAG, "Description editor", checks)
 
 static func _test_filter() -> bool:
 	var checks: Dictionary = {}
-	var attack: Dictionary = SkillTestKit.attack("t_form_fa", {"name": "Zed Slash", "ranks": [{"level": 3}]})
-	var heal: Dictionary = SkillFormModel.switch_kind(SkillTestKit.attack("t_form_fh", {"name": "Alpha Mend", "grade": "advanced"}), "SUPPORT")
+	var attack: Dictionary = TestHelpers.attack("t_form_fa", {"name": "Zed Slash", "ranks": [{"level": 3}]})
+	var heal: Dictionary = SkillFormModel.switch_kind(TestHelpers.attack("t_form_fh", {"name": "Alpha Mend", "grade": "advanced"}), "SUPPORT")
 	var list: Array[Dictionary] = [attack, heal]
 	var filters: Dictionary = SkillFilter.default_filters()
 	checks["default filters pass both"] = SkillFilter.apply(list, filters).size() == 2
@@ -199,7 +199,7 @@ static func _test_filter() -> bool:
 	checks["name sort"] = sorted_names == ["Alpha Mend", "Zed Slash"]
 	var by_ranks: Array[Dictionary] = SkillFilter.apply(list, filters, "ranks")
 	checks["rank-count sort puts the larger family first"] = str(by_ranks[0]["id"]) == "t_form_fa"
-	var engine: Dictionary = SkillTestKit.attack("t_form_eng", {"system": true})
+	var engine: Dictionary = TestHelpers.attack("t_form_eng", {"system": true})
 	checks["engine rows are hidden unless show_system"] = SkillFilter.apply([engine], filters).is_empty()
 	filters["show_system"] = true
 	checks["...and shown when asked"] = SkillFilter.apply([engine], filters).size() == 1
@@ -212,7 +212,7 @@ static func _test_filter() -> bool:
 		else:
 			used += 1
 	checks["usage 'unused' agrees with references_to over the catalog"] = unused + used == shipped.size()
-	return SkillTestKit.report(TAG, "SkillFilter predicates", checks)
+	return TestHelpers.report(TAG, "SkillFilter predicates", checks)
 
 static func _test_locks_and_requires() -> bool:
 	var checks: Dictionary = {}
@@ -250,4 +250,4 @@ static func _test_locks_and_requires() -> bool:
 	checks["the expert grade is listed disabled (reserved)"] = grade_state.has("expert")
 	var basic_state: Dictionary = SkillFormModel.state(fresh, "basic")
 	checks["the basic box is disabled with a reason"] = not DictUtil.to_bool(basic_state["enabled"]) and not str(basic_state["reason"]).is_empty()
-	return SkillTestKit.report(TAG, "Locks and requires picker", checks)
+	return TestHelpers.report(TAG, "Locks and requires picker", checks)

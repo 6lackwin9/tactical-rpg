@@ -9,17 +9,10 @@ extends RefCounted
 # every expectation is derived from the rules, not from shipped skill numbers.
 # ==============================================================================
 
-const SANDBOX: String = "user://ai1_skills_test"
+const TAG: String = "AI1"
 const STRIKE: String = "strike"
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [AI1] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+static var SANDBOX: String = TestHelpers.sandbox("ai1_skills_test")
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -60,11 +53,8 @@ static func _rows() -> Array[Dictionary]:
 	]
 
 static func _setup() -> bool:
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
 	var checks: Dictionary = {}
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		var errors: Array[String] = []
@@ -88,7 +78,7 @@ static func _setup() -> bool:
 	checks["area_min_foes is clamped to 1..6 on use"] = profile.area_threshold() == 1
 	profile.area_min_foes = 99
 	checks["(upper bound)"] = profile.area_threshold() == 6
-	return _report("Sandbox fixtures and profile fields", checks)
+	return TestHelpers.report(TAG, "Sandbox fixtures and profile fields", checks)
 
 static func _has(skills: Array[SkillDef], skill_id: String) -> bool:
 	for s: SkillDef in skills:
@@ -97,8 +87,7 @@ static func _has(skills: Array[SkillDef], skill_id: String) -> bool:
 	return false
 
 static func _teardown() -> void:
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	SkillCatalog.clear_cache()
+	TestHelpers.cleanup(SANDBOX)
 
 # ------------------------------------------------------------------------------
 # Scene helpers
@@ -112,13 +101,10 @@ static func _basics() -> Array[String]:
 	return out
 
 static func _unit(unit_name: String, grid: CombatGrid, pos: Vector2i, kit: Array[String], attack_range: int = 1, hp: int = 400, power: int = 20, with_basics: bool = true) -> Combatant:
-	var c := Combatant.new(unit_name, hp, 10, attack_range)
-	c.power_override = power
-	c.armor_override = 0
 	var known: Array[String] = _basics() if with_basics else []
 	known.append_array(kit)
+	var c: Combatant = TestHelpers.unit(unit_name, grid, pos, hp, 10, attack_range, power)
 	c.known_skills = known
-	grid.place_combatant(c, pos)
 	return c
 
 static func _profile(role: AiProfile.Role, smart: bool = true) -> AiProfile:
@@ -229,7 +215,7 @@ static func _test_switch_off() -> bool:
 	var on: Dictionary = _scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_sweep"], [Vector2i(5, 4), Vector2i(4, 5)])
 	var off: Dictionary = _scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_sweep"], [Vector2i(5, 4), Vector2i(4, 5)], [], 1, 1, false)
 	checks["the same kit plans differently with the switch on and off"] = _sig(_plan(on)) != _sig(_plan(off))
-	return _report("smart_skills = false equals the old behaviour", checks)
+	return TestHelpers.report(TAG, "smart_skills = false equals the old behaviour", checks)
 
 static func _test_zero_power_never_the_strike() -> bool:
 	var checks: Dictionary = {}
@@ -258,7 +244,7 @@ static func _test_zero_power_never_the_strike() -> bool:
 	var idle_steps: Array[PlanStep] = _plan(idle)
 	checks["a unit with only the zero-power attack never plans it"] = _count(lone_steps, "ai1_intim") == 0
 	checks["it advances like an unarmed idler (identical plan)"] = not lone_steps.is_empty() and _sig(lone_steps) == _sig(idle_steps)
-	return _report("Rule 1: zero-power attacks are never the strike", checks)
+	return TestHelpers.report(TAG, "Rule 1: zero-power attacks are never the strike", checks)
 
 static func _test_disengage() -> bool:
 	var checks: Dictionary = {}
@@ -298,7 +284,7 @@ static func _test_disengage() -> bool:
 	var reckless_profile: AiProfile = reckless["profile"]
 	reckless_profile.reckless = true
 	checks["a reckless unit never disengages"] = _count(_plan(reckless), "ai1_back") == 0
-	return _report("Rule 2: disengage", checks)
+	return TestHelpers.report(TAG, "Rule 2: disengage", checks)
 
 static func _test_area() -> bool:
 	var checks: Dictionary = {}
@@ -343,7 +329,7 @@ static func _test_area() -> bool:
 		if step.mode == PlanStep.Mode.AREA:
 			hit_ally = hit_ally or step.skill.area_cells(Vector2i(4, 4), step.cell).has(grid.get_position(friend_unit))
 	checks["the AI never aims an area attack that would hit its own side"] = not hit_ally
-	return _report("Rule 3: area attacks", checks)
+	return TestHelpers.report(TAG, "Rule 3: area attacks", checks)
 
 static func _test_cleanse() -> bool:
 	var checks: Dictionary = {}
@@ -394,7 +380,7 @@ static func _test_cleanse() -> bool:
 	_unit_of(off, "allies", 1).statuses[StatusEffects.STUN] = true
 	var off_steps: Array[PlanStep] = _plan(off)
 	checks["switch off: no cleanse step"] = _count(off_steps, "ai1_clean_a") + _count(off_steps, "ai1_clean_b") == 0
-	return _report("Rule 4: cleanse-only skills", checks)
+	return TestHelpers.report(TAG, "Rule 4: cleanse-only skills", checks)
 
 static func _test_taunt() -> bool:
 	var checks: Dictionary = {}
@@ -417,7 +403,7 @@ static func _test_taunt() -> bool:
 	checks["no ally near a foe: no taunt step"] = _count(_plan(safe), "ai1_taunt") == 0
 	var off: Dictionary = _scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_taunt"], foe_cells, ally_cells, 1, 1, false)
 	checks["switch off: no taunt step"] = _count(_plan(off), "ai1_taunt") == 0
-	return _report("Rule 5: taunt", checks)
+	return TestHelpers.report(TAG, "Rule 5: taunt", checks)
 
 static func _test_buff() -> bool:
 	var checks: Dictionary = {}
@@ -445,7 +431,7 @@ static func _test_buff() -> bool:
 	checks["allies already next to the foe: no step"] = _count(_plan(engaged), "ai1_haste") == 0
 	var off: Dictionary = _scene(AiProfile.Role.SNIPER, Vector2i(6, 4), ["ai1_haste"], foe_cells, ally_cells, 3, 1, false)
 	checks["switch off: no step"] = _count(_plan(off), "ai1_haste") == 0
-	return _report("Rule 6: ally buffs", checks)
+	return TestHelpers.report(TAG, "Rule 6: ally buffs", checks)
 
 static func _test_debuff() -> bool:
 	var checks: Dictionary = {}
@@ -484,7 +470,7 @@ static func _test_debuff() -> bool:
 	var both: Dictionary = _scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_intim"], [Vector2i(5, 4)])
 	_unit_of(both, "foes", 0).statuses[StatusEffects.WEAKEN] = true
 	checks["every foe in reach weakened: no cast"] = _count(_plan(both), "ai1_intim") == 0
-	return _report("Rule 7: debuff attacks", checks)
+	return TestHelpers.report(TAG, "Rule 7: debuff attacks", checks)
 
 static func _first_defend(steps: Array[PlanStep]) -> String:
 	for s: PlanStep in steps:
@@ -537,7 +523,7 @@ static func _test_riposte() -> bool:
 	var all_out_profile: AiProfile = all_out["profile"]
 	all_out_profile.defend_below = 0.0
 	checks["defend_below 0 (never guards, the all-out preset): no riposte"] = _count(_plan(all_out), "ai1_rip") == 0
-	return _report("Rule 8: riposte", checks)
+	return TestHelpers.report(TAG, "Rule 8: riposte", checks)
 
 # ------------------------------------------------------------------------------
 # 50 seeded rounds of a 3v3 with mixed kits
@@ -625,4 +611,4 @@ static func _test_simulation() -> bool:
 	checks["50 seeded rounds of a 3v3: every planned step validates (none invalid, none dry)"] = parts[0] == "0"
 	checks["MAX_STEPS is respected"] = parts[1] == "0"
 	checks["the same seed gives the same plans end to end"] = first == second
-	return _report("Seeded 3v3 simulation: valid, bounded and deterministic", checks)
+	return TestHelpers.report(TAG, "Seeded 3v3 simulation: valid, bounded and deterministic", checks)

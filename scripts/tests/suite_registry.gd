@@ -3,7 +3,7 @@ extends RefCounted
 
 # Every headless suite in run order. To add a suite: write scripts/tests/<name>_test_suite.gd
 # (class_name <Name>TestSuite, static func run(...) -> bool) and add ONE results.append line below.
-# Nothing else needs editing; ArenaTestSuite.run_all_tests just calls this.
+# Nothing else needs editing; scenes/test_arena.gd calls run_all directly.
 
 static func run_all(tree_parent: Node = null) -> bool:
 	var results: Array[bool] = []

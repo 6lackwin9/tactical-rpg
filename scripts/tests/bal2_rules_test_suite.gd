@@ -9,17 +9,10 @@ extends RefCounted
 # class gear) or in memory; expectations derive from CharacterStats / DamageCalculator / StatRules.
 # ==============================================================================
 
-const SANDBOX: String = "user://bal2_rules_test"
+const TAG: String = "BAL2"
 const MAX_TEST_LEVEL: int = 9
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [BAL2] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+static var SANDBOX: String = TestHelpers.sandbox("bal2_rules_test")
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -84,7 +77,7 @@ static func _test_range_rule() -> bool:
 			if c.attack_range != _expected_range(c):
 				checks["%s L%d range %d = base %d + PERC bonus (PERC %d)" % [class_id, lvl, c.attack_range, _base_range(c), _perc(c)]] = false
 	checks["CharacterStats: melee base 1 never gains range"] = CharacterStats.new().get_effective_range(1, {}) == 1
-	return _report("Range = base + 1 only when base > 1 and PERC >= threshold (every class, L1-9)", checks)
+	return TestHelpers.report(TAG, "Range = base + 1 only when base > 1 and PERC >= threshold (every class, L1-9)", checks)
 
 static func _test_range_examples() -> bool:
 	var checks: Dictionary = {}
@@ -108,7 +101,7 @@ static func _test_range_examples() -> bool:
 			var l: Combatant = _hero(class_id, low)
 			checks["%s L%d (PERC %d) range = base" % [class_id, low, _perc(l)]] = l.attack_range == _base_range(l)
 		checks["%s reaches the PERC threshold by L%d" % [class_id, MAX_TEST_LEVEL]] = high > 0
-	return _report("Melee classes at high PERC keep range 1; ranger / mage gain +1 at the threshold", checks)
+	return TestHelpers.report(TAG, "Melee classes at high PERC keep range 1; ranger / mage gain +1 at the threshold", checks)
 
 static func _test_unarmed_range() -> bool:
 	var checks: Dictionary = {}
@@ -119,7 +112,7 @@ static func _test_unarmed_range() -> bool:
 	checks["no main weapon"] = c.inventory.get_main_weapon() == null
 	checks["PERC %d >= threshold" % _perc(c)] = _perc(c) >= CharacterStats.RANGE_PERC_THRESHOLD
 	checks["unarmed range 1"] = c.attack_range == 1
-	return _report("An unarmed unit with high PERC keeps range 1", checks)
+	return TestHelpers.report(TAG, "An unarmed unit with high PERC keeps range 1", checks)
 
 static func _test_melee_strike() -> bool:
 	var checks: Dictionary = {}
@@ -140,7 +133,7 @@ static func _test_melee_strike() -> bool:
 	var melee: int = DictUtil.to_int(DamageCalculator.compute(priest, foe, false, false, 1.0, false, rng_b)["final_dmg"])
 	checks["priest L7 range 1"] = priest.attack_range == 1
 	checks["strike damage %d = melee compute %d" % [cmd.last_damage, melee]] = cmd.last_damage == melee and melee > 0
-	return _report("Priest L7 strike on an adjacent foe resolves as a melee hit", checks)
+	return TestHelpers.report(TAG, "Priest L7 strike on an adjacent foe resolves as a melee hit", checks)
 
 # ------------------------------------------------------------------------------
 # Commit 3: unit gear sentinel ContentSchema.NO_ITEM
@@ -184,7 +177,7 @@ static func _test_no_item_slots() -> bool:
 	var inherit_eq: Equipment = inherit_off.inventory.get_equipped(Equipment.EquipSlot.OFF_HAND)
 	checks["off_hand '': the class off_hand (%s)" % class_off] = inherit_eq != null and inherit_eq.id == class_off
 	checks["normalize keeps 'none'"] = str(ContentSchema.normalize("units", _unit_entry("bal2_t_n", "priest", {"off_hand": ContentSchema.NO_ITEM}))["off_hand"]) == ContentSchema.NO_ITEM
-	return _report("Unit gear slot 'none' leaves the slot empty; '' inherits the class item", checks)
+	return TestHelpers.report(TAG, "Unit gear slot 'none' leaves the slot empty; '' inherits the class item", checks)
 
 static func _test_no_item_pouch() -> bool:
 	var checks: Dictionary = {}
@@ -197,7 +190,7 @@ static func _test_no_item_pouch() -> bool:
 			expected.append(id)
 	checks["pouch ['none']: battle pouch empty"] = empty_pouch.inventory.battle_pouch.is_empty()
 	checks["pouch []: the class pouch (%d items)" % expected.size()] = _pouch_ids(inherit_pouch) == expected
-	return _report("Unit pouch ['none'] is empty; [] inherits the class pouch", checks)
+	return TestHelpers.report(TAG, "Unit pouch ['none'] is empty; [] inherits the class pouch", checks)
 
 static func _test_no_item_validation() -> bool:
 	var checks: Dictionary = {}
@@ -249,7 +242,7 @@ static func _test_no_item_validation() -> bool:
 	checks["validate_all() on shipped data stays {}"] = ContentCatalog.validate_all().is_empty()
 	var warned: String = str(ContentCatalog.warnings_all())
 	checks["warnings_all() never mentions the sentinel"] = not warned.contains("'none'")
-	return _report("Sentinel validation: units only, alone in the pouch, reserved item id", checks)
+	return TestHelpers.report(TAG, "Sentinel validation: units only, alone in the pouch, reserved item id", checks)
 
 static func _test_all_none_unarmed() -> bool:
 	var checks: Dictionary = {}
@@ -264,7 +257,7 @@ static func _test_all_none_unarmed() -> bool:
 	checks["no equipment (%d equipped)" % equipped] = equipped == 0
 	checks["empty battle pouch"] = bare.inventory.battle_pouch.is_empty()
 	checks["attack power uses the unarmed path"] = str(DamageCalculator.attack_power(bare)["stat_name"]) == "STR+DEX"
-	return _report("A unit with every slot 'none' builds bare-handed", checks)
+	return TestHelpers.report(TAG, "A unit with every slot 'none' builds bare-handed", checks)
 
 static func _slot_enum(slot: String) -> Equipment.EquipSlot:
 	return Equipment.EquipSlot.keys().find(slot.to_upper()) as Equipment.EquipSlot
@@ -272,9 +265,7 @@ static func _slot_enum(slot: String) -> Equipment.EquipSlot:
 # class_rules / engine_pieces gear checks hold on a sandbox brawler with an empty class main hand.
 static func _test_unarmed_brawler_fixture() -> bool:
 	var checks: Dictionary = {}
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		var bare: Dictionary = ContentCatalog.get_entry("classes", "brawler").duplicate(true)
@@ -283,10 +274,8 @@ static func _test_unarmed_brawler_fixture() -> bool:
 		checks["sandbox brawler with main_hand '' accepted %s" % str(errors)] = errors.is_empty()
 		checks["class_rules tiers (null-safe weapon compare)"] = ClassRulesTestSuite._test_variance_and_tiers()
 		checks["engine_pieces unarmed (fixture weapon)"] = EnginePiecesTestSuite._test_unarmed()
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	return _report("Gear tests independent of the shipped brawler main hand (sandbox, main_hand '')", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Gear tests independent of the shipped brawler main hand (sandbox, main_hand '')", checks)
 
 # ------------------------------------------------------------------------------
 # Commit 4: elite / boss tier values
@@ -319,7 +308,7 @@ static func _test_tier_values() -> bool:
 		pw.append(DamageCalculator.power_of(c))
 	checks["HP minion < standard < hero < elite < boss %s" % str(hp)] = hp[0] < hp[1] and hp[1] < hp[2] and hp[2] < hp[3] and hp[3] < hp[4]
 	checks["power minion < standard < hero < elite <= boss %s" % str(pw)] = pw[0] < pw[1] and pw[1] < pw[2] and pw[2] < pw[3] and pw[3] <= pw[4]
-	return _report("Tier values: elite 1.25 / 1.1, boss 1.5 / 1.1; ordering", checks)
+	return TestHelpers.report(TAG, "Tier values: elite 1.25 / 1.1, boss 1.5 / 1.1; ordering", checks)
 
 # ------------------------------------------------------------------------------
 # Commit 5: trained fists (DamageCalculator.UNARMED_BASE_POWER, fist proficiency >= 2)
@@ -349,7 +338,7 @@ static func _test_trained_fists() -> bool:
 	var r_sum: int = rogue.stats.get_effective_stat("STR", {}) + rogue.stats.get_effective_stat("DEX", {})
 	checks["rogue fist %d < %d" % [rogue.stats.proficiency.level_of("fist"), DamageCalculator.TRAINED_FIST_MIN_LEVEL]] = rogue.stats.proficiency.level_of("fist") < DamageCalculator.TRAINED_FIST_MIN_LEVEL
 	checks["rogue bare: no trained fists, power STR + DEX"] = not DictUtil.to_bool(r_res["trained_fists"]) and DictUtil.to_int(r_res["attack_power"]) == maxi(1, roundi(float(r_sum) * rogue.power_scale))
-	return _report("Trained fists: fist >= 2 bare hands = base + training + STR + DEX; armed and untrained unchanged", checks)
+	return TestHelpers.report(TAG, "Trained fists: fist >= 2 bare hands = base + training + STR + DEX; armed and untrained unchanged", checks)
 
 static func _test_fist_edges() -> bool:
 	var checks: Dictionary = {}
@@ -367,7 +356,7 @@ static func _test_fist_edges() -> bool:
 	if not leather.is_empty():
 		var loadout: Dictionary = {"id": "t_bal2_bare", "main_hand": "", "body": "arm_leather"}
 		checks["empty main hand + leather = UNARMED_VALUE + leather value"] = is_equal_approx(GearBudget.loadout_value(loadout), GearBudget.UNARMED_VALUE + GearBudget.item_value(leather))
-	return _report("Trained fists edges: off hand, authored power, crit, gear budget value", checks)
+	return TestHelpers.report(TAG, "Trained fists edges: off hand, authored power, crit, gear budget value", checks)
 
 static func _authored_bare() -> bool:
 	var c: Combatant = _hero("brawler", 5, {"main_hand": ContentSchema.NO_ITEM})

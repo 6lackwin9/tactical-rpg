@@ -9,21 +9,12 @@ extends RefCounted
 # (except explicit tuning deltas); references follow renames; worlds connect
 # without inheriting; authored worlds save and reload; world encounters play to
 # the end with their lore names; the World Forge UI and the Scene Runner can open
-# a world's battle. Writes go to a sandbox copy (user://world_test).
+# a world's battle. Writes go to a sandbox copy (a TestHelpers sandbox).
 # ==============================================================================
 
-const SANDBOX: String = "user://world_test"
+static var SANDBOX: String = TestHelpers.sandbox("world_test")
 
-static func _report(label: String, ok: bool, detail: String = "") -> bool:
-	print("    [World] %s: %s%s" % [label, "PASS" if ok else "FAIL", (" (%s)" % detail) if not detail.is_empty() else ""])
-	return ok
-
-static func _failed(checks: Dictionary) -> String:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	return ", ".join(failed)
+const TAG: String = "World"
 
 static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
@@ -36,19 +27,13 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_same_base_different_lore() and ok
 	ok = _test_tuning_items_disciplines() and ok
 	ok = _test_encounters_play() and ok
-	for w: String in WorldCatalog.world_ids():
-		DirAccess.remove_absolute(WorldCatalog.path_for(w, "", SANDBOX))
-	for w: String in ["ashlands", "tidewrack", "iron_reaches", "sandbox_isle", "wide_world"]:
-		for kind: String in WorldSchema.KINDS:
-			DirAccess.remove_absolute(WorldCatalog.path_for(w, kind, SANDBOX))
-		DirAccess.remove_absolute(WorldCatalog.path_for(w, "", SANDBOX))
-	var forked: bool = WorldCatalog.fork_to(SANDBOX) == OK and WorldCatalog.get_root() == SANDBOX   # never write to res://
-	ok = _report("Sandbox fork of the shipped worlds", forked and WorldCatalog.world_ids().size() == 3) and ok
+	var forked: bool = TestHelpers.fork_worlds(SANDBOX)
+	ok = TestHelpers.report_ok(TAG, "Sandbox fork of the shipped worlds", forked and WorldCatalog.world_ids().size() == 3) and ok
 	if forked:
 		ok = _test_rules_and_connections() and ok
 		ok = _test_authoring_and_renames() and ok
 		ok = _test_forge_ui_and_runner(tree_parent) and ok
-	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
+	TestHelpers.cleanup_worlds(SANDBOX)
 	return ok
 
 # ------------------------------------------------------------------------------
@@ -65,7 +50,7 @@ static func _test_shipped_worlds() -> bool:
 	for kind: String in ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters"]:
 		kinds_filled = kinds_filled and not WorldCatalog.own_entries("ashlands", kind).is_empty()
 	checks["every kind used by ashlands"] = kinds_filled
-	return _report("Shipped worlds load and validate (every element kind, lineage, descendants)", _failed(checks).is_empty(), _failed(checks) if not problems.is_empty() else str(ids))
+	return TestHelpers.report_ok(TAG, "Shipped worlds load and validate (every element kind, lineage, descendants)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not problems.is_empty() else str(ids))
 
 static func _test_inheritance() -> bool:
 	var checks: Dictionary = {}
@@ -90,7 +75,7 @@ static func _test_inheritance() -> bool:
 	var errs_cycle: Array[String] = WorldCatalog.update_manifest("ashlands", {"extends": ["tidewrack"]})
 	checks["cycle rejected"] = not errs_cycle.is_empty() and WorldCatalog.lineage("ashlands") == ["ashlands"]
 	checks["unknown parent rejected"] = not WorldCatalog.update_manifest("ashlands", {"extends": ["nowhere"]}).is_empty()
-	return _report("Inheritance: namespaced entries, overrides replace for the child only, old ids redirect, cycles rejected", _failed(checks).is_empty(), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Inheritance: namespaced entries, overrides replace for the child only, old ids redirect, cycles rejected", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
 # Same base units in two worlds, different lore: they play the same (tuning deltas aside).
 static func _test_same_base_different_lore() -> bool:
@@ -136,7 +121,7 @@ static func _test_same_base_different_lore() -> bool:
 		pair.append(steps.size())
 	plans_same = (ash.draft_steps(skarn).size() == tide.draft_steps(brannoch).size())
 	checks["same AI plan length"] = plans_same
-	return _report("Same base, different lore: names differ, every stat/class/skill/AI matches (only the tuned boss differs)", _failed(checks).is_empty(), _failed(checks) if not _failed(checks).is_empty() else "")
+	return TestHelpers.report_ok(TAG, "Same base, different lore: names differ, every stat/class/skill/AI matches (only the tuned boss differs)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not TestHelpers.failed(checks).is_empty() else "")
 
 static func _test_tuning_items_disciplines() -> bool:
 	var checks: Dictionary = {}
@@ -166,7 +151,7 @@ static func _test_tuning_items_disciplines() -> bool:
 	# Illegal tuning is rejected.
 	var bad: Array[String] = WorldCatalog.blocking_errors("ashlands", "characters", {"id": "x", "name": "X", "tuning": {"mana": 5}})
 	checks["unknown tuning rejected"] = not bad.is_empty() and bad[0].contains("Unknown")
-	return _report("Tuning deltas, named items and disciplines apply exactly as described (and unknown tuning is refused)", _failed(checks).is_empty(), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Tuning deltas, named items and disciplines apply exactly as described (and unknown tuning is refused)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
 static func _resolve(session: CombatSession) -> void:
 	for i: int in range(600):
@@ -210,7 +195,7 @@ static func _test_encounters_play() -> bool:
 	for opt: Dictionary in EncounterSource.options():
 		opts.append(str(opt["id"]))
 	checks["encounter source lists both layers"] = opts.has("goblin_skirmish") and opts.has("ashlands:pass_ambush") and opts.has("tidewrack:courtyard_skirmish") and opts.has("tidewrack:strand_clash")
-	return _report("World encounters play to the end in the real engine with lore names (wave included, inherited battles re-skinned)", _failed(checks).is_empty(), _failed(checks))
+	return TestHelpers.report_ok(TAG, "World encounters play to the end in the real engine with lore names (wave included, inherited battles re-skinned)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
 # ------------------------------------------------------------------------------
 # Sandbox: rules, connections, authoring
@@ -238,7 +223,7 @@ static func _test_rules_and_connections() -> bool:
 	checks["duplicate ref and slot"] = _has(slot_clash, "twice")
 	# In-use entries can't be deleted.
 	checks["in-use delete refused"] = WorldCatalog.remove("ashlands", "characters", "mara_voss").contains("still used") and WorldCatalog.remove_world("ashlands").contains("still extended")
-	return _report("Connections and rules: connect without inheriting, unconnected worlds refused, role/base/override/slot checks, safe deletes", _failed(checks).is_empty(), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Connections and rules: connect without inheriting, unconnected worlds refused, role/base/override/slot checks, safe deletes", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
 static func _has(errors: Array[String], fragment: String) -> bool:
 	for e: String in errors:
@@ -288,7 +273,7 @@ static func _test_authoring_and_renames() -> bool:
 	var saved: bool = WorldCatalog.save_all() == OK and FileAccess.file_exists(WorldCatalog.path_for("sandbox_isle", "characters"))
 	WorldCatalog.reload_from_disk()
 	checks["save and reload"] = saved and WorldCatalog.has_world("sandbox_isle") and WorldCatalog.lineage("sandbox_isle").size() == 3 and WorldCatalog.validate_all().is_empty() and str(WorldCatalog.resolve("sandbox_isle", "characters", "ilse_marrow").get("name", "")) == "Ilse of the Isle"
-	return _report("Authoring: new world, dangling refs while drafting, overrides, renames rewrite every reference, templates, save & reload", _failed(checks).is_empty(), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Authoring: new world, dangling refs while drafting, overrides, renames rewrite every reference, templates, save & reload", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
 # ------------------------------------------------------------------------------
 # World Forge UI & Scene Runner
@@ -296,7 +281,7 @@ static func _test_authoring_and_renames() -> bool:
 
 static func _test_forge_ui_and_runner(tree_parent: Node) -> bool:
 	if tree_parent == null:
-		return _report("World Forge UI & runner (need a scene tree)", true, "skipped")
+		return TestHelpers.report_ok(TAG, "World Forge UI & runner (need a scene tree)", true, "skipped")
 	var host: Node = (load("res://scenes/world_forge.tscn") as PackedScene).instantiate()
 	tree_parent.add_child(host)
 	var forge: WorldForge = host.get("forge")
@@ -355,4 +340,4 @@ static func _test_forge_ui_and_runner(tree_parent: Node) -> bool:
 	checks["runner launches a world battle"] = launched and run_session != null and run_session.encounter.encounter_name == "Clash at Wreck Strand" and run_session.allies[0].name == "Ilse Marrow"
 	runner.back_to_menu()
 	runner.queue_free()
-	return _report("World Forge UI: create world, inherited read-only, override, drafts with dangling refs, tuning, play in the arena, save, delete; runner launches world battles", _failed(checks).is_empty(), _failed(checks))
+	return TestHelpers.report_ok(TAG, "World Forge UI: create world, inherited read-only, override, drafts with dangling refs, tuning, play in the arena, save, delete; runner launches world battles", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))

@@ -11,14 +11,7 @@ extends RefCounted
 # Expectations come from the rules and catalog data, not magic numbers.
 # ==============================================================================
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [Foundation] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "Foundation"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -53,7 +46,7 @@ static func _test_potency_defaults() -> bool:
 	c.potency_bonus["strike"] = 0.5
 	checks["potency_for = 1.0 + bonus"] = is_equal_approx(c.potency_for("strike"), 1.5) and is_equal_approx(c.potency_for("guard"), 1.0)
 	checks["power_for multiplies the skill's own multiplier"] = is_equal_approx(SkillCatalog.find("offhand_jab").power_for(c), SkillCatalog.find("offhand_jab").power_mult) and is_equal_approx(SkillCatalog.find("strike").power_for(c), SkillCatalog.find("strike").power_mult * 1.5)
-	return _report("Potency defaults: no bonus changes nothing", checks)
+	return TestHelpers.report(TAG, "Potency defaults: no bonus changes nothing", checks)
 
 static func _test_potency_passive() -> bool:
 	var checks: Dictionary = {}
@@ -76,7 +69,7 @@ static func _test_potency_passive() -> bool:
 	checks["the same passive applies once"] = is_equal_approx(c.potency_for("strike"), 1.25)
 	Passives.apply(c, {"id": "t_pot_pass2", "name": "Keener", "effects": [{"type": "skill_potency", "family": "strike", "value": 0.1}]})
 	checks["different passives add up"] = is_equal_approx(c.potency_for("strike"), 1.35)
-	return _report("skill_potency passive: validate, describe, apply", checks)
+	return TestHelpers.report(TAG, "skill_potency passive: validate, describe, apply", checks)
 
 # A strike with +25% potency hits for the formula's result at skill_mult 1.25; DamageCalculator.compute is untouched.
 static func _test_potency_damage() -> bool:
@@ -119,7 +112,7 @@ static func _test_potency_damage() -> bool:
 	checks["the keen strike hits harder"] = (200 - keen_foe.hp) > (200 - plain_foe.hp) or crit_k < crit_p
 	# DamageCalculator.compute is untouched: the estimate feeds it the potency-scaled skill_mult (strike.power_for).
 	checks["the planner estimate uses the same input"] = DamageCalculator.expected(keen, keen_foe, strike) == DictUtil.to_int(DamageCalculator.compute(keen, keen_foe, false, false, strike.power_for(keen), false, null, strike.stance(), false)["final_dmg"])
-	return _report("Passive potency scales strike damage through the skill multiplier only", checks)
+	return TestHelpers.report(TAG, "Passive potency scales strike damage through the skill multiplier only", checks)
 
 static func _test_potency_heal() -> bool:
 	var checks: Dictionary = {}
@@ -138,7 +131,7 @@ static func _test_potency_heal() -> bool:
 	checks["a penalty lowers it"] = SupportRules.heal_amount(priest, mend) == roundi(float(base_heal) * 0.5)
 	priest.potency_bonus.clear()
 	checks["clearing restores the base heal"] = SupportRules.heal_amount(priest, mend) == base_heal
-	return _report("Potency scales heals too", checks)
+	return TestHelpers.report(TAG, "Potency scales heals too", checks)
 
 # ------------------------------------------------------------------------------
 # 2. Unarmed token
@@ -200,7 +193,7 @@ static func _test_unarmed_token() -> bool:
 	checks["a class with no fist training cannot use an unarmed skill"] = priest.stats.proficiency.level_of("fist") < 1 and not priest.can_use(shallow)
 	var hand_built := Combatant.new("Hand", 50, 10, 1)
 	checks["hand-built units stay unrestricted"] = hand_built.can_use(body_blow)
-	return _report("The unarmed token gates skills by the empty main hand and the fist level", checks)
+	return TestHelpers.report(TAG, "The unarmed token gates skills by the empty main hand and the fist level", checks)
 
 static func _test_unarmed_validation() -> bool:
 	var checks: Dictionary = {}
@@ -219,7 +212,7 @@ static func _test_unarmed_validation() -> bool:
 	checks["the token survives the factory round trip"] = back == entry
 	var preview: String = ForgePreview.describe("skills", ContentCatalog.get_entry("skills", "body_blow"))
 	checks["the Forge preview explains unarmed"] = preview.contains("unarmed") and preview.contains("fist")
-	return _report("Unarmed token: validation, round trip, Forge text", checks)
+	return TestHelpers.report(TAG, "Unarmed token: validation, round trip, Forge text", checks)
 
 # ------------------------------------------------------------------------------
 # 3. Weapon hands
@@ -284,7 +277,7 @@ static func _test_hand_table() -> bool:
 	checks["HANDS lists the three hands"] = Equipment.HANDS == ["main_1h", "main_2h", "off"]
 	var potion: Item = ItemCatalog.create("potion_healing") if ContentCatalog.has("items", "potion_healing") else null
 	checks["consumables are not held"] = potion == null or potion.hand().is_empty()
-	return _report("Derived hand for every current item", checks)
+	return TestHelpers.report(TAG, "Derived hand for every current item", checks)
 
 static func _test_hand_validation_and_preview() -> bool:
 	var checks: Dictionary = {}
@@ -303,7 +296,7 @@ static func _test_hand_validation_and_preview() -> bool:
 	checks["the Forge item preview shows the hand"] = text.contains("main_2h") and text.contains("Hand")
 	checks["an off-hand item previews as off"] = ForgePreview.describe("items", ContentCatalog.get_entry("items", "shd_kite")).contains("off hand")
 	checks["the hand is derived, never stored"] = not ContentFactory.item_to_entry(ItemCatalog.create("wpn_claymore")).has("hand")
-	return _report("Hand consistency rule and Forge preview", checks)
+	return TestHelpers.report(TAG, "Hand consistency rule and Forge preview", checks)
 
 # With a two-handed main weapon the off hand is empty, so the off-hand attack scales from bare hands (STR+DEX).
 static func _test_two_handed_offhand() -> bool:
@@ -326,4 +319,4 @@ static func _test_two_handed_offhand() -> bool:
 	rogue.inventory.equip(dagger, Equipment.EquipSlot.OFF_HAND)
 	var off_power: Dictionary = DamageCalculator.attack_power(rogue, false, true)
 	checks["an off-hand dagger is swung with its own scaling"] = off_power["weapon"] == dagger and str(off_power["stat_name"]) != "STR+DEX"
-	return _report("Off-hand attack of a two-handed wielder scales from bare hands", checks)
+	return TestHelpers.report(TAG, "Off-hand attack of a two-handed wielder scales from bare hands", checks)

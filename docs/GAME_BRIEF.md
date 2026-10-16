@@ -34,7 +34,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 
 ## Where to look for X
 
-- Add/edit content data: `ContentCatalog.upsert` (never hand-edit JSON). Fields: `content_schema.gd`. Validation: dispatch in `content_catalog.gd` (`validate_entry`, `warnings_for`); rules per kind in `scripts/content/validators/` (`ClassUnitValidator.class_errors`/`unit_errors`, `ItemValidator.item_errors`, `SkillValidator.entry_errors`). Attack power has one source: `DamageCalculator.attack_power`. Skill hand/grade: `SkillDef.is_off_hand()`, `SkillDef.grade`.
+- Add/edit content data: `ContentCatalog.upsert` (never hand-edit JSON). Fields: `content_schema.gd` (API; tables in `SkillFields`, `ItemFields`, `ClassUnitFields`, `scripts/content/*_fields.gd`). Validation: dispatch in `content_catalog.gd` (`validate_entry`, `warnings_for`); rules per kind in `scripts/content/validators/` (`ClassUnitValidator.class_errors`/`unit_errors`, `ItemValidator.item_errors`, `SkillValidator.entry_errors`). Attack power has one source: `DamageCalculator.attack_power`. Skill hand/grade: `SkillDef.is_off_hand()`, `SkillDef.grade`.
 - Change damage: `damage_calculator.gd` only. Planner estimate and dojo already share it.
 - Change a class: `data/catalog/classes.json` via upsert; rules in `stat_rules.gd`.
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.
@@ -75,7 +75,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 - Items have an `effects` list (passive grammar restricted to item types: `skill_potency` by family or group `spell`/`heal`, `status_potency` 1..25, `spell_reach` 1..2, `resist`). They apply only while equipped and are rebuilt on every `sync_from_stats_and_gear` (`Combatant.rebuild_gear_effects`), kept in separate `gear_*` fields. Spell = ATTACK skill gated on staff or wand; heal = healing SUPPORT skill. Gear spell reach is clamped to 1. Orb and tome are off-hand only; a 2H main weapon refuses them.
 
-- Add a test suite: new `scripts/tests/<name>_test_suite.gd` + one `results.append` line in `scripts/tests/suite_registry.gd`; shared helpers in `TestHelpers`. Never add tests to `arena_test_suite.gd`.
+- Add a test suite: new `scripts/tests/<name>_test_suite.gd` + one `results.append` line in `scripts/tests/suite_registry.gd` (called by `scenes/test_arena.gd`); shared helpers in `TestHelpers` (report / report_ok / failed, unit, sandbox + fork / cleanup / fork_worlds, skill fixtures). Sandboxes: always `TestHelpers.sandbox(tag)`, never a fixed `user://` path. Never add tests to a shared runner file.
 
 - Area attacks roll the skill's status once per unit hit (allies included). A DEFEND skill may grant riposte (immediate) or a support buff (taunt, haste: queued next round).
 

@@ -7,14 +7,12 @@ extends RefCounted
 # engine; entries round-trip through ContentFactory; validation catches bad
 # content; content authored through the API and the Content Forge UI saves,
 # reloads and plays a full battle in the combat engine. Writes go to a sandbox
-# copy (user://content_test) so the shipped catalog is never touched.
+# copy (a TestHelpers sandbox) so the shipped catalog is never touched.
 # ==============================================================================
 
-const SANDBOX: String = "user://content_test"
+static var SANDBOX: String = TestHelpers.sandbox("content_test")
 
-static func _report(label: String, ok: bool, detail: String = "") -> bool:
-	print("    [Content] %s: %s%s" % [label, "PASS" if ok else "FAIL", (" (%s)" % detail) if not detail.is_empty() else ""])
-	return ok
+const TAG: String = "Content"
 
 static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
@@ -28,16 +26,14 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_validation() and ok
 
 	# Everything below writes: work on a sandbox copy of the catalog.
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK and ContentCatalog.get_root() == SANDBOX   # never write to res://
-	ok = _report("Sandbox fork of the shipped catalog", forked and ContentCatalog.ids("skills").size() > 0) and ok
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	ok = TestHelpers.report_ok(TAG, "Sandbox fork of the shipped catalog", forked and ContentCatalog.ids("skills").size() > 0) and ok
 	if forked:
 		ok = _test_authoring() and ok
 		ok = _test_authored_units_in_planning() and ok
 		ok = _test_full_integration() and ok
 		ok = _test_forge_ui(tree_parent) and ok
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 # ------------------------------------------------------------------------------
@@ -50,7 +46,7 @@ static func _test_shipped_catalog() -> bool:
 		counts.append("%s %d" % [kind, n])
 		all_present = all_present and n > 0
 	var problems: Dictionary = ContentCatalog.validate_all()
-	return _report("Shipped catalog loads every kind and every entry validates", all_present and problems.is_empty() and ContentCatalog.load_errors().is_empty(), ", ".join(counts) if problems.is_empty() else str(problems))
+	return TestHelpers.report_ok(TAG, "Shipped catalog loads every kind and every entry validates", all_present and problems.is_empty() and ContentCatalog.load_errors().is_empty(), ", ".join(counts) if problems.is_empty() else str(problems))
 
 # The engine's skills, items, classes and encounters are the catalog's.
 static func _test_engine_parity() -> bool:
@@ -70,7 +66,7 @@ static func _test_engine_parity() -> bool:
 	var units_ok: bool = (enc.unit("warrior").tier == "hero" and enc.unit("goblin_archer").attack_range >= 3 and enc.unit("warrior").max_ap == 12
 		and enc.unit("goblin_archer").hp_scale == 0.4 and enc.unit("warrior").max_hp > enc.unit("goblin_brawler").max_hp * 2 and enc.profile_of(enc.unit("goblin_brawler")).flee_ratio == 0.25 and enc.total_blocks == 6
 		and enc.zone_id == "ruined_courtyard" and enc.class_of(enc.unit("goblin_shaman")) == str(ContentCatalog.get_entry("units", "goblin_shaman").get("art", "")) and enc.unit("warrior").catalog_id == "warrior")
-	return _report("Engine content comes from the catalog (skills, items, stash, classes, Goblin Skirmish)", skills_ok and items_ok and classes_ok and units_ok,
+	return TestHelpers.report_ok(TAG, "Engine content comes from the catalog (skills, items, stash, classes, Goblin Skirmish)", skills_ok and items_ok and classes_ok and units_ok,
 		"skills %s, items %s, classes %s, units %s" % [skills_ok, items_ok, classes_ok, units_ok])
 
 # Every entry rebuilds into the same entry after a trip through the engine objects.
@@ -86,7 +82,7 @@ static func _test_round_trip() -> bool:
 	for e: Dictionary in ContentCatalog.entries("classes"):
 		if JSON.stringify(ContentFactory.class_to_entry(ContentFactory.class_archetype(e))) != JSON.stringify(ContentSchema.normalize("classes", e)):
 			bad.append(str(e["id"]))
-	return _report("Skills, items and classes round-trip through engine objects unchanged", bad.is_empty(), ", ".join(bad))
+	return TestHelpers.report_ok(TAG, "Skills, items and classes round-trip through engine objects unchanged", bad.is_empty(), ", ".join(bad))
 
 static func _has_error(errors: Array[String], fragment: String) -> bool:
 	for err: String in errors:
@@ -129,7 +125,7 @@ static func _test_validation() -> bool:
 	for key: Variant in checks:
 		if not DictUtil.to_bool(checks[key]):
 			failed.append(str(key))
-	return _report("Validation catches bad ids, kinds, reach, slots, refs, rosters; refuses unsafe deletes", failed.is_empty(), ", ".join(failed))
+	return TestHelpers.report_ok(TAG, "Validation catches bad ids, kinds, reach, slots, refs, rosters; refuses unsafe deletes", failed.is_empty(), ", ".join(failed))
 
 # ------------------------------------------------------------------------------
 # Authoring (sandbox)
@@ -169,7 +165,7 @@ static func _test_authoring() -> bool:
 	var templated: bool = copy_id == "goblin_archer_copy" and str(copy["class_id"]) == "ranger" and str(copy["tier"]) == "minion"
 	ContentCatalog.remove("units", copy_id)
 	ContentCatalog.save_all()
-	return _report("Author skill/item/class/units/encounter, save to disk, reload, rename refs, duplicate as template",
+	return TestHelpers.report_ok(TAG, "Author skill/item/class/units/encounter, save to disk, reload, rename refs, duplicate as template",
 		errors.is_empty() and saved and reloaded and renamed and templated, "errors %s, saved %s, reloaded %s, renamed %s, template %s" % [str(errors), saved, reloaded, renamed, templated])
 
 # Authored units bring their class, gear, skill list and resistances into planning.
@@ -192,7 +188,7 @@ static func _test_authored_units_in_planning() -> bool:
 		self_names.append(opt.step.skill.id)
 	var skills_ok: bool = attack_names.has("test_cleave") and attack_names.has("strike") and not attack_names.has("quick_stab") and self_names.has("rest") and self_names.has("guard") and not self_names.has("focus")
 	session.dispose()
-	return _report("Authored units: class-derived vitals, gear, numbered duplicates, whitelisted skills, resistances", built_ok and skills_ok,
+	return TestHelpers.report_ok(TAG, "Authored units: class-derived vitals, gear, numbered duplicates, whitelisted skills, resistances", built_ok and skills_ok,
 		"built %s, attacks %s, self %s" % [built_ok, str(attack_names), str(self_names)])
 
 # A catalog encounter plays to a finish through the full engine (AI on both sides).
@@ -229,7 +225,7 @@ static func _test_full_integration() -> bool:
 	_resolve(drill)
 	drill_ok = drill_ok and drill.phase == CombatSession.Phase.REPLAY and drill.enemies.size() == 3
 	drill.dispose()
-	return _report("Full integration: authored encounter plays to the end in the combat engine with the new skill", ok and drill_ok,
+	return TestHelpers.report_ok(TAG, "Full integration: authored encounter plays to the end in the combat engine with the new skill", ok and drill_ok,
 		"rounds %d, over %s, cleave %s, foes hurt %s, drill %s" % [rounds, session.combat_over, used_cleave, foes_hurt, drill_ok])
 
 static func _resolve(session: CombatSession) -> void:
@@ -244,7 +240,7 @@ static func _resolve(session: CombatSession) -> void:
 
 static func _test_forge_ui(tree_parent: Node) -> bool:
 	if tree_parent == null:
-		return _report("Content Forge UI (needs a scene tree)", true, "skipped")
+		return TestHelpers.report_ok(TAG, "Content Forge UI (needs a scene tree)", true, "skipped")
 	var host: Node = (load("res://scenes/content_forge.tscn") as PackedScene).instantiate()
 	tree_parent.add_child(host)
 	var forge: ContentForge = host.get("forge")
@@ -314,4 +310,4 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	for key: Variant in checks:
 		if not DictUtil.to_bool(checks[key]):
 			failed.append(str(key))
-	return _report("Content Forge UI: browse, template, conditional fields, validation, delete, new unit, playtest, save", failed.is_empty(), ", ".join(failed))
+	return TestHelpers.report_ok(TAG, "Content Forge UI: browse, template, conditional fields, validation, delete, new unit, playtest, save", failed.is_empty(), ", ".join(failed))

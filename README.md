@@ -46,7 +46,7 @@ tactical-rpg/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
 │   ├── scene_runner.tscn         # Main scene: Scene Runner menu (launch scenes, hot-reload scripts, run suites)
-│   ├── test_arena.tscn           # Test harness scene: runs ArenaTestSuite (headless exit code); windowed opens the runner
+│   ├── test_arena.tscn           # Test harness scene: runs SuiteRegistry.run_all (headless exit code); windowed opens the runner
 │   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1 and the runner's suite buttons
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
 │   ├── gear_dojo.gd              # Thin bootstrap: builds DojoSession, mounts the window workspace or runs assertions
@@ -58,7 +58,7 @@ tactical-rpg/
 │       └── dojo_assertions.gd        # 42 headless dojo assertions (rules, session actions, filters, carry, catalog skills, dummy attacks, UI)
 ├── scripts/
 │   ├── content/                  # Content catalog engine (headless)
-│   │   ├── content_schema.gd         # Field lists per kind: types, defaults, ranges, enums, refs, conditional fields; normalising
+│   │   ├── content_schema.gd         # Field lists per kind (tables in skill_fields.gd, item_fields.gd, class_unit_fields.gd): types, defaults, ranges, enums, refs, conditional fields; normalising
 │   │   ├── content_catalog.gd        # Load/save JSON, CRUD, duplicate-as-template, reference tracking & renames, validation, sandbox fork
 │   │   └── content_factory.gd        # Entries <-> engine objects (SkillDef, Item, ClassArchetype, Combatant + AiProfile)
 │   ├── world/                    # World engine (headless): the lore layer over the content catalog
@@ -140,7 +140,6 @@ tactical-rpg/
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
 │   ├── tests/                    # Headless test suites & validation harnesses
-│   │   ├── arena_test_suite.gd       # Combat, planning, AI, art & session suites (runs the content suite last)
 │   │   ├── core_rules_test_suite.gd  # Core combat rules via the planner: guard & matchup, stances, Focus, casualties, withdrawal, feed
 │   │   ├── class_rules_test_suite.gd # Six classes: budget/growth, spend variance, tiers, proficiency, passives, skill paths
 │   │   ├── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
@@ -489,6 +488,10 @@ Placeholder art (CLN-15, seed `data/seeds/cln15_art.gd`): goblin units now set t
 ### Cleanup batch 1 (CLN-3, 6, 7, 9)
 
 Refactor only, no behaviour change: per-kind validation moved out of `content_catalog.gd` (1416 -> 993 lines) into `scripts/content/validators/` (`SkillValidator`, `ItemValidator`, `ClassUnitValidator`); the legacy `SkillDef.offhand` / `advanced` shims are gone (`is_off_hand()`, `grade`), and old skill keys or a version 1 skills file still load but print a deprecation warning; the second power formula `CharacterStats.get_melee_power` and other dead helpers were removed, so attack power comes only from `DamageCalculator`.
+
+### Cleanup batch 2 (CLN-8, 9b, 14)
+
+Refactor only, no behaviour change: shared test helpers live in `TestHelpers` (`report`, `report_ok`, `failed`, `unit`, sandbox `fork` / `cleanup` / `fork_worlds`; `SkillTestKit` folded in) and every test sandbox is unique per process (`TestHelpers.sandbox(tag)` -> `user://test_sandboxes/<pid>_<n>_<tag>`), so parallel suite runs no longer collide; the `ArenaTestSuite` pass-through is gone (`scenes/test_arena.gd` calls `SuiteRegistry.run_all`); `content_schema.gd` keeps its API while the per-kind field tables moved to `scripts/content/{skill,item,class_unit}_fields.gd`.
 
 ### Agent workflow tools
 

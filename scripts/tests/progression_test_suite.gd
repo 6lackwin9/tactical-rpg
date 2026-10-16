@@ -7,14 +7,7 @@ extends RefCounted
 # state validation. Expectations are derived from the rules and the curve file, never literals.
 # ==============================================================================
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [Progression] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "Progression"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -70,7 +63,7 @@ static func _test_curve() -> bool:
 	checks["xp_to_next_matches"] = XpCurve.xp_to_next(0) == XpCurve.xp_for_level(2)
 	var u: UnitState = UnitState.at_level(_first_party_unit(), 4)
 	checks["at_level_threshold"] = u.total_xp == XpCurve.xp_for_level(4) and u.level() == 4
-	return _report("xp curve", checks)
+	return TestHelpers.report(TAG, "xp curve", checks)
 
 static func _test_curve_loader() -> bool:
 	var good: Dictionary = XpCurve.DEFAULTS.duplicate(true)
@@ -92,7 +85,7 @@ static func _test_curve_loader() -> bool:
 		"missing_file_defaults": not DictUtil.array_of(missing["errors"]).is_empty() and XpCurve.validate(DictUtil.dict_of(missing["data"])).is_empty(),
 		"invalid_override_ignored": not XpCurve.set_override(short).is_empty() and XpCurve.xp_for_level(2) == DictUtil.to_int(DictUtil.array_of(XpCurve.data()["xp_to_next"])[0]),
 	}
-	return _report("curve loader", checks)
+	return TestHelpers.report(TAG, "curve loader", checks)
 
 static func _test_kill_xp() -> bool:
 	var kill: Dictionary = DictUtil.dict_of(XpCurve.data()["kill_xp"])
@@ -120,7 +113,7 @@ static func _test_kill_xp() -> bool:
 	DictUtil.dict_of(tiny["kill_xp"])["per_level"] = 0
 	checks["override_applied"] = XpCurve.set_override(tiny).is_empty() and XpCurve.kill_xp(5, "boss", 5) == 1
 	XpCurve.reset()
-	return _report("kill xp", checks)
+	return TestHelpers.report(TAG, "kill xp", checks)
 
 static func _test_spend() -> bool:
 	var checks: Dictionary = {}
@@ -156,7 +149,7 @@ static func _test_spend() -> bool:
 			no_unspent_ok = false
 	checks["auto_spends_all_every_class_level"] = auto_ok
 	checks["auto_keeps_confirmed"] = no_unspent_ok
-	return _report("spend and level up", checks)
+	return TestHelpers.report(TAG, "spend and level up", checks)
 
 static func _test_encounter() -> bool:
 	var party := PartyState.new()
@@ -184,7 +177,7 @@ static func _test_encounter() -> bool:
 	party.active_ids = [ids[0], ids[4]] as Array[String]
 	var res2: Dictionary = LevelUp.award_encounter(party, enemies)
 	checks["explicit_active_ids"] = res2.size() == 2 and res2.has(ids[0]) and res2.has(ids[4])
-	return _report("encounter xp", checks)
+	return TestHelpers.report(TAG, "encounter xp", checks)
 
 static func _stat_line(c: Combatant) -> Array[int]:
 	return [c.stats.str_stat, c.stats.dex_stat, c.stats.int_stat, c.stats.cons_stat, c.stats.perc_stat, c.stats.know_stat]
@@ -237,7 +230,7 @@ static func _test_equivalence() -> bool:
 	var base4: Combatant = PartyBuilder.build(UnitState.at_level(uid, 4))
 	var auto_know: int = DictUtil.int_of(StatRules.auto_spend(custom.archetype().growth_per_level, pool), "KNOW")
 	checks["custom_spend_applied"] = c3 != null and base4 != null and c3.stats.know_stat - base4.stats.know_stat == pool - auto_know
-	return _report("builder equivalence", checks)
+	return TestHelpers.report(TAG, "builder equivalence", checks)
 
 static func _test_passives_skills() -> bool:
 	var checks: Dictionary = {}
@@ -305,7 +298,7 @@ static func _test_passives_skills() -> bool:
 		checks["equipment_override"] = gc != null and gc.inventory.get_main_weapon().id == alt
 		checks["carried_in_bag"] = gc != null and gc.inventory.items.size() == 1 and gc.inventory.items[0].id == alt
 		checks["default_gear_not_in_bag_twice"] = gc != null and not gc.inventory.items.any(func(it: Item) -> bool: return it.id == main_default and main_default != alt)
-	return _report("passives, skills, loadout, gear", checks)
+	return TestHelpers.report(TAG, "passives, skills, loadout, gear", checks)
 
 static func _test_validation() -> bool:
 	var uid: String = _first_party_unit()
@@ -344,7 +337,7 @@ static func _test_validation() -> bool:
 	checks["negative_xp"] = not neg.validate().is_empty()
 	var rt: UnitState = UnitState.from_dict(DictUtil.dict_of(JSON.parse_string(JSON.stringify(good.to_dict()))))
 	checks["json_roundtrip_equal"] = rt.equals(good) and rt.total_xp is int
-	return _report("state validation", checks)
+	return TestHelpers.report(TAG, "state validation", checks)
 
 static func _test_party() -> bool:
 	var uid: String = _first_party_unit()
@@ -372,4 +365,4 @@ static func _test_party() -> bool:
 	party.stash = {real_item: 3}
 	checks["stash_valid"] = party.validate().is_empty()
 	checks["build_active"] = PartyBuilder.build_active(party).size() == PartyState.PARTY_MAX
-	return _report("party state", checks)
+	return TestHelpers.report(TAG, "party state", checks)

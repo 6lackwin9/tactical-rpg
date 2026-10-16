@@ -10,16 +10,9 @@ extends RefCounted
 # expectations come from the rules, not magic numbers.
 # ==============================================================================
 
-const SANDBOX: String = "user://riposte_test"
+static var SANDBOX: String = TestHelpers.sandbox("riposte_test")
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [Riposte] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "Riposte"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -36,13 +29,7 @@ static func run() -> bool:
 	return ok
 
 static func _unit(unit_name: String, hp: int, attack_range: int, grid: CombatGrid, pos: Vector2i, learn: Array[String] = []) -> Combatant:
-	var c := Combatant.new(unit_name, hp, 10, attack_range)
-	c.power_override = 20
-	c.armor_override = 0
-	for skill_id: String in learn:
-		c.learn_skill(skill_id)
-	grid.place_combatant(c, pos)
-	return c
+	return TestHelpers.unit(unit_name, grid, pos, hp, 10, attack_range, 20, learn)
 
 static func _grid() -> CombatGrid:
 	return CombatGrid.new(CombatGrid.ArenaType.CLOSED, [])
@@ -79,7 +66,7 @@ static func _test_counter_rules() -> bool:
 	var other: Combatant = _unit("Other", 300, 1, grid, Vector2i(3, 5))
 	StatusEffects.grant_now(tank, StatusEffects.RIPOSTE, 2)
 	checks["a different attacker is countered separately"] = not RiposteRules.counter(foe, tank, grid, false, _rng(1)).is_empty() and not RiposteRules.counter(other, tank, grid, false, _rng(1)).is_empty()
-	return _report("Counter damage and once-per-attacker-per-round", checks)
+	return TestHelpers.report(TAG, "Counter damage and once-per-attacker-per-round", checks)
 
 static func _test_conditions() -> bool:
 	var checks: Dictionary = {}
@@ -134,7 +121,7 @@ static func _test_conditions() -> bool:
 	kill_cmd.rng = _rng(4)
 	kill_cmd.execute()
 	checks["a defeated riposter does not counter"] = not frail.is_alive() and kill_cmd.reactions.is_empty() and killer.hp == killer.max_hp
-	return _report("Only adjacent melee, only while the unit survives", checks)
+	return TestHelpers.report(TAG, "Only adjacent melee, only while the unit survives", checks)
 
 static func _riposte_steps(tank: Combatant, extra: Array[PlanStep]) -> Array[PlanStep]:
 	var steps: Array[PlanStep] = [PlanStep.self_skill(SkillCatalog.find("riposte"))]
@@ -189,7 +176,7 @@ static func _test_round_flow() -> bool:
 	checks["two strikes, one counter per round"] = _count(messages, "[Riposte] Tank counters") == 1 and _count(messages, "[Attack] Foe struck") == 2
 	checks["the foe lost HP to the counter"] = foe.hp < foe.max_hp
 	checks["the tank holds Defensive stance and keeps riposte after the round"] = tank.current_stance == CombatTypes.StanceType.DEFENSIVE and tank.has_status(StatusEffects.RIPOSTE)
-	return _report("Planner round: skill start -> counter -> log", checks)
+	return TestHelpers.report(TAG, "Planner round: skill start -> counter -> log", checks)
 
 static func _test_stance_and_duration() -> bool:
 	var checks: Dictionary = {}
@@ -239,7 +226,7 @@ static func _test_stance_and_duration() -> bool:
 		lasted += 1
 	checks["riposte lasts exactly the skill's status_rounds"] = rounds >= 1 and lasted == rounds
 	checks["a riposte skill is not resistable (not a debuff)"] = not StatusEffects.resistable().has(StatusEffects.RIPOSTE) and StatusEffects.buffs().has(StatusEffects.RIPOSTE)
-	return _report("Stance change removes it, moving keeps it, 2-round duration", checks)
+	return TestHelpers.report(TAG, "Stance change removes it, moving keeps it, 2-round duration", checks)
 
 static func _test_catalog() -> bool:
 	var checks: Dictionary = {}
@@ -254,17 +241,15 @@ static func _test_catalog() -> bool:
 	checks["whole catalog validates"] = ContentCatalog.validate_all().is_empty()
 	checks["schema offers riposte as a grant"] = ContentSchema.options_of({"options_from": "status_buff"}).has("riposte")
 	# Validation refuses bad data (sandbox copy; nothing is saved).
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		checks["a DEFEND skill may only grant a buff (riposte or a support buff), never a debuff"] = not ContentCatalog.upsert("skills", {"id": "bad_def", "name": "x", "kind": "DEFEND", "grant_status": "stagger"}).is_empty()
 		checks["a SUPPORT skill may not grant riposte"] = not ContentCatalog.upsert("skills", {"id": "bad_sup", "name": "x", "kind": "SUPPORT", "target_mode": "SELF", "grant_status": "riposte"}).is_empty()
 		checks["an attack may not grant riposte"] = not ContentCatalog.upsert("skills", {"id": "bad_atk", "name": "x", "kind": "ATTACK", "grant_status": "riposte"}).is_empty()
 		checks["a valid riposting defend is accepted"] = ContentCatalog.upsert("skills", {"id": "good_def", "name": "Good", "kind": "DEFEND", "mitigation": 0.1, "grant_status": "riposte", "status_rounds": 3}).is_empty()
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("Catalog skill, validation and schema", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Catalog skill, validation and schema", checks)
 
 # Undoing a round rewinds a riposte granted during it (round 2+; round 1 restarts the battle).
 static func _test_undo_round() -> bool:
@@ -288,4 +273,4 @@ static func _test_undo_round() -> bool:
 		checks["riposte rewound"] = not tank.has_status(StatusEffects.RIPOSTE)
 		checks["counter record rewound"] = tank.riposted.is_empty()
 	session.dispose()
-	return _report("Round undo rewinds riposte and its once-per-round record", checks)
+	return TestHelpers.report(TAG, "Round undo rewinds riposte and its once-per-round record", checks)

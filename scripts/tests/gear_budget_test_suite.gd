@@ -9,16 +9,9 @@ extends RefCounted
 # from GearBudget's constants. Works on a sandbox copy of the catalog.
 # ==============================================================================
 
-const SANDBOX: String = "user://gear_budget_test"
+static var SANDBOX: String = TestHelpers.sandbox("gear_budget_test")
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [GearBudget] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "GearBudget"
 
 static func _near(a: float, b: float) -> bool:
 	return absf(a - b) < 0.001
@@ -35,18 +28,16 @@ static func run() -> bool:
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	var ok: bool = true
 	ok = _test_item_weights() and ok
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	if ContentCatalog.fork_to(SANDBOX) != OK or ContentCatalog.get_root() != SANDBOX:
-		ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-		return _report("sandbox fork", {"forked": false})
+	if not TestHelpers.fork(SANDBOX):
+		TestHelpers.cleanup(SANDBOX)
+		return TestHelpers.report(TAG, "sandbox fork", {"forked": false})
 	ok = _test_shipped() and ok
 	ok = _test_m2b_items() and ok
 	ok = _test_loadouts() and ok
 	ok = _test_warnings() and ok
 	ok = _test_schema_round_trip() and ok
 	ok = _test_forge_preview() and ok
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 static func _test_item_weights() -> bool:
@@ -64,7 +55,7 @@ static func _test_item_weights() -> bool:
 	var potion: Dictionary = ContentSchema.normalize("items", {"id": "t_p", "item_type": "CONSUMABLE", "heal": 20})
 	c["consumables are worth 0"] = _near(GearBudget.item_value(potion), 0.0)
 	c["band brackets target"] = GearBudget.band_low() < GearBudget.TARGET_BUDGET and GearBudget.band_high() > GearBudget.TARGET_BUDGET
-	return _report("item weights and penalties", c)
+	return TestHelpers.report(TAG, "item weights and penalties", c)
 
 static func _test_shipped() -> bool:
 	var c: Dictionary = {}
@@ -75,7 +66,7 @@ static func _test_shipped() -> bool:
 			passing += 1
 		print("      class %s loadout %.1f / %.1f%s" % [str(e["id"]), GearBudget.loadout_value(e), GearBudget.TARGET_BUDGET, "" if GearBudget.in_band(GearBudget.loadout_value(e)) else " OUT OF BAND"])
 	c["most shipped classes in band"] = passing * 2 > ContentCatalog.entries("classes").size()
-	return _report("shipped catalog", c)
+	return TestHelpers.report(TAG, "shipped catalog", c)
 
 # M2b items: id -> [min, max] plausible value for the item's slot (documented ranges,
 # compared with the shipped originals: body 4-9, shield 6-8, one-hand weapon 12-18, two-hand 20-28).
@@ -150,7 +141,7 @@ static func _test_m2b_items() -> bool:
 		for team: int in [UnitArt.Team.FRIENDLY, UnitArt.Team.HOSTILE, UnitArt.Team.NEUTRAL]:
 			art_ok = art_ok and UnitArt.token(key, team as UnitArt.Team) != null and UnitArt.portrait(key, team as UnitArt.Team) != null
 	c["priest/mage/rogue art renders"] = art_ok
-	return _report("M2b items and art", c)
+	return TestHelpers.report(TAG, "M2b items and art", c)
 
 static func _seed_items() -> void:
 	ContentCatalog.upsert("items", _gear("t_sword", {"base_power": 14}))
@@ -185,7 +176,7 @@ static func _test_loadouts() -> bool:
 		if DictUtil.to_bool(row["special"]):
 			flagged += 1
 	c["exactly one special row"] = flagged == 1
-	return _report("loadout sums and special reporting", c)
+	return TestHelpers.report(TAG, "loadout sums and special reporting", c)
 
 static func _test_warnings() -> bool:
 	var c: Dictionary = {}
@@ -210,7 +201,7 @@ static func _test_warnings() -> bool:
 	var all_w: Dictionary = ContentCatalog.warnings_all()
 	c["warnings_all lists the bare special"] = all_w.has("items:t_god_bare")
 	c["validate_all still empty"] = ContentCatalog.validate_all().is_empty()
-	return _report("soft warnings", c)
+	return TestHelpers.report(TAG, "soft warnings", c)
 
 static func _test_schema_round_trip() -> bool:
 	var c: Dictionary = {}
@@ -229,7 +220,7 @@ static func _test_schema_round_trip() -> bool:
 			if ContentSchema.is_visible(f, {"item_type": "WEAPON"}):
 				shown_for_weapon += 1
 	c["special fields only for equipment"] = shown_for_consumable == 0 and shown_for_weapon == 2
-	return _report("schema round trip", c)
+	return TestHelpers.report(TAG, "schema round trip", c)
 
 static func _test_forge_preview() -> bool:
 	var c: Dictionary = {}
@@ -243,4 +234,4 @@ static func _test_forge_preview() -> bool:
 	var item_text: String = ForgePreview.describe("items", ContentCatalog.get_entry("items", "t_god"))
 	c["item preview has value"] = item_text.contains("Gear value") and item_text.contains("%.1f" % GearBudget.item_value(ContentCatalog.get_entry("items", "t_god")))
 	c["item preview shows special"] = item_text.contains("SPECIAL")
-	return _report("forge preview", c)
+	return TestHelpers.report(TAG, "forge preview", c)

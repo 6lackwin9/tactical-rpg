@@ -10,18 +10,11 @@ extends RefCounted
 # power and no armor; every expectation is derived from DamageCalculator.compute and the rules.
 # ==============================================================================
 
-const SANDBOX: String = "user://weaken_test"
+static var SANDBOX: String = TestHelpers.sandbox("weaken_test")
 const MAG: int = 20
 const SURE: int = 500   # potency far above any resistance: the chance clamps to 100
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [Weaken] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "Weaken"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -52,13 +45,6 @@ static func _rng(seed_value: int) -> RandomNumberGenerator:
 	r.seed = seed_value
 	return r
 
-static func _unit(unit_name: String, grid: CombatGrid, pos: Vector2i) -> Combatant:
-	var c := Combatant.new(unit_name, 400, 10, 1)
-	c.power_override = 20
-	c.armor_override = 0
-	grid.place_combatant(c, pos)
-	return c
-
 # An active weaken of `magnitude` percent (as it stands after the round roll-over).
 static func _weaken_now(c: Combatant, magnitude: int, rounds: int = 2) -> void:
 	c.statuses[StatusEffects.WEAKEN] = true
@@ -84,7 +70,7 @@ static func _test_registry() -> bool:
 	checks["it joins resistable() and debuffs() from the registry"] = StatusEffects.resistable().has(StatusEffects.WEAKEN) and StatusEffects.debuffs().has(StatusEffects.WEAKEN)
 	checks["the schema offers it as an Inflicts option and a resist key"] = ContentSchema.options_of({"options_from": "status"}).has(StatusEffects.WEAKEN)
 	checks["only weaken carries a magnitude"] = StatusEffects.has_magnitude(StatusEffects.WEAKEN) and not StatusEffects.has_magnitude(StatusEffects.BLEED)
-	return _report("Registry row and derived lists", checks)
+	return TestHelpers.report(TAG, "Registry row and derived lists", checks)
 
 static func _test_stacking() -> bool:
 	var checks: Dictionary = {}
@@ -114,12 +100,12 @@ static func _test_stacking() -> bool:
 	StatusEffects.queue(e, w, 2, cap)
 	StatusEffects.roll_over(e, 4)
 	checks["active 15 meets pending 25: becomes 25"] = DictUtil.int_of(e.status_magnitudes, w) == cap and DictUtil.int_of(e.status_rounds_left, w) == 2
-	return _report("Stronger magnitude wins, capped, never summed", checks)
+	return TestHelpers.report(TAG, "Stronger magnitude wins, capped, never summed", checks)
 
 static func _test_timing() -> bool:
 	var checks: Dictionary = {}
 	var grid: CombatGrid = _grid()
-	var foe: Combatant = _unit("Foe", grid, Vector2i(4, 4))
+	var foe: Combatant = TestHelpers.unit("Foe", grid, Vector2i(4, 4))
 	var rounds: int = 2
 	var landed: bool = StatusEffects.try_inflict(foe, StatusEffects.WEAKEN, SURE, _rng(1), rounds, MAG)
 	checks["applying succeeds with potency far above resistance"] = landed
@@ -137,13 +123,13 @@ static func _test_timing() -> bool:
 	var over := Combatant.new("Over", 100, 10, 1)
 	_weaken_now(over, 90)
 	checks["a stored magnitude above the cap is clamped by weaken_factor"] = is_equal_approx(over.weaken_factor(), 1.0 - float(StatusRegistry.cap_of(StatusEffects.WEAKEN)) / 100.0)
-	return _report("Queued for next round, counts down, clamped", checks)
+	return TestHelpers.report(TAG, "Queued for next round, counts down, clamped", checks)
 
 static func _test_hook() -> bool:
 	var checks: Dictionary = {}
 	var grid: CombatGrid = _grid()
-	var atk: Combatant = _unit("Atk", grid, Vector2i(3, 4))
-	var foe: Combatant = _unit("Foe", grid, Vector2i(4, 4))
+	var atk: Combatant = TestHelpers.unit("Atk", grid, Vector2i(3, 4))
+	var foe: Combatant = TestHelpers.unit("Foe", grid, Vector2i(4, 4))
 	var strike: SkillDef = SkillCatalog.find("strike")
 	var base_power: float = strike.power_for(atk)
 	var reduced: float = base_power * (1.0 - float(MAG) / 100.0)
@@ -179,13 +165,13 @@ static func _test_hook() -> bool:
 	checks["heals ignore weaken"] = SupportRules.heal_amount(healer, mend) == SupportRules.heal_amount(plain, mend)
 	var unweakened := Combatant.new("Fresh", 100, 10, 1)
 	checks["an unweakened unit is unchanged"] = is_equal_approx(strike.power_for(unweakened), strike.power_mult * unweakened.potency_for(strike.family_id()))
-	return _report("Outgoing power: power_for, planner estimate, AttackCommand", checks)
+	return TestHelpers.report(TAG, "Outgoing power: power_for, planner estimate, AttackCommand", checks)
 
 static func _test_riposte_counter() -> bool:
 	var checks: Dictionary = {}
 	var grid: CombatGrid = _grid()
-	var tank: Combatant = _unit("Tank", grid, Vector2i(3, 4))
-	var foe: Combatant = _unit("Foe", grid, Vector2i(4, 4))
+	var tank: Combatant = TestHelpers.unit("Tank", grid, Vector2i(3, 4))
+	var foe: Combatant = TestHelpers.unit("Foe", grid, Vector2i(4, 4))
 	StatusEffects.grant_now(tank, StatusEffects.RIPOSTE, 2)
 	_weaken_now(tank, MAG)
 	var mult: float = RiposteRules.COUNTER_MULT * (1.0 - float(MAG) / 100.0)
@@ -193,12 +179,12 @@ static func _test_riposte_counter() -> bool:
 	var result: Dictionary = RiposteRules.counter(foe, tank, grid, false, _rng(5))
 	checks["a weakened riposter counters at 0.5 x (1 - m/100)"] = not result.is_empty() and DictUtil.to_int(result["damage"]) == DictUtil.to_int(expected["final_dmg"])
 	var g2: CombatGrid = _grid()
-	var tank2: Combatant = _unit("Tank2", g2, Vector2i(3, 4))
-	var foe2: Combatant = _unit("Foe2", g2, Vector2i(4, 4))
+	var tank2: Combatant = TestHelpers.unit("Tank2", g2, Vector2i(3, 4))
+	var foe2: Combatant = TestHelpers.unit("Foe2", g2, Vector2i(4, 4))
 	StatusEffects.grant_now(tank2, StatusEffects.RIPOSTE, 2)
 	var full: Dictionary = RiposteRules.counter(foe2, tank2, g2, false, _rng(5))
 	checks["unweakened it still counters at COUNTER_MULT"] = DictUtil.to_int(full["damage"]) == DictUtil.to_int(DamageCalculator.compute(tank2, foe2, false, false, RiposteRules.COUNTER_MULT, false, _rng(5))["final_dmg"]) and DictUtil.to_int(full["damage"]) >= DictUtil.to_int(result["damage"])
-	return _report("The riposte counter is weakened too", checks)
+	return TestHelpers.report(TAG, "The riposte counter is weakened too", checks)
 
 static func _test_resistance() -> bool:
 	var checks: Dictionary = {}
@@ -214,13 +200,13 @@ static func _test_resistance() -> bool:
 	checks["resist 100 never lands"] = never and not immune.pending_statuses.has(StatusEffects.WEAKEN)
 	checks["no resistance and a sure potency always lands"] = always
 	checks["the chance is potency minus resistance"] = StatusEffects.apply_chance(immune, StatusEffects.WEAKEN, 70) == 0 and StatusEffects.apply_chance(open, StatusEffects.WEAKEN, 70) == roundi(70.0 - open.debuff_resistance())
-	return _report("Resistance (weaken key, 100 = immune)", checks)
+	return TestHelpers.report(TAG, "Resistance (weaken key, 100 = immune)", checks)
 
 static func _test_zero_power() -> bool:
 	var checks: Dictionary = {}
 	var grid: CombatGrid = _grid()
-	var warrior: Combatant = _unit("Warrior", grid, Vector2i(3, 4))
-	var tank: Combatant = _unit("Tank", grid, Vector2i(4, 4))
+	var warrior: Combatant = TestHelpers.unit("Warrior", grid, Vector2i(3, 4))
+	var tank: Combatant = TestHelpers.unit("Tank", grid, Vector2i(4, 4))
 	StatusEffects.grant_now(tank, StatusEffects.RIPOSTE, 2)
 	var roar: SkillDef = _attack_skill("t_roar", 0.0, StatusEffects.WEAKEN, MAG)
 	checks["a zero-power attack deals no damage by definition"] = not roar.deals_damage() and is_equal_approx(roar.power_for(warrior), 0.0)
@@ -243,7 +229,7 @@ static func _test_zero_power() -> bool:
 	hit.rng = _rng(3)
 	hit.execute()
 	checks["a damaging attack on the same riposter is still countered"] = hit.reactions.size() == 1
-	return _report("Zero-power attack: no damage, no counter, status still rolls", checks)
+	return TestHelpers.report(TAG, "Zero-power attack: no damage, no counter, status still rolls", checks)
 
 static func _errors(entry: Dictionary) -> String:
 	return " | ".join(ContentCatalog.validate_entry("skills", entry, str(entry.get("id", ""))))
@@ -276,7 +262,7 @@ static func _test_validation() -> bool:
 	checks["the schema field has the spec range (default 0, 0..95)"] = _field("status_magnitude", "default") == 0 and _field("status_magnitude", "min") == 0 and _field("status_magnitude", "max") == 95
 	checks["power_mult may now be 0 in the schema"] = is_equal_approx(DictUtil.to_float(_field("power_mult", "min")), 0.0)
 	checks["the shipped catalog still validates"] = ContentCatalog.validate_all().is_empty()
-	return _report("Schema and validation", checks)
+	return TestHelpers.report(TAG, "Schema and validation", checks)
 
 static func _field(key: String, prop: String) -> Variant:
 	for f: Dictionary in ContentSchema.fields("skills"):
@@ -307,7 +293,7 @@ static func _test_cleanse() -> bool:
 	StatusEffects.queue(target, StatusEffects.BLEED, 1)
 	SupportRules.apply(caster, target, named, 1)
 	checks["a named list may include weaken and leaves the rest"] = not StatusEffects.has_any(target, StatusEffects.WEAKEN) and target.pending_statuses.has(StatusEffects.BLEED)
-	return _report("Cleanse removes active and pending weaken", checks)
+	return TestHelpers.report(TAG, "Cleanse removes active and pending weaken", checks)
 
 static func _test_undo() -> bool:
 	var checks: Dictionary = {}
@@ -329,7 +315,7 @@ static func _test_undo() -> bool:
 		checks["a weaken inflicted in the undone round is gone (pending and magnitude)"] = unit.pending_status_magnitudes.is_empty() and not unit.pending_statuses.has(StatusEffects.WEAKEN)
 		checks["the round start state is restored (no active weaken or magnitude)"] = not unit.has_status(StatusEffects.WEAKEN) and unit.status_magnitudes.is_empty()
 	session.dispose()
-	return _report("Round undo rewinds weaken", checks)
+	return TestHelpers.report(TAG, "Round undo rewinds weaken", checks)
 
 # ------------------------------------------------------------------------------
 # Riposte is data driven: AP = level, mitigation = mitigation, duration = status_rounds.
@@ -354,7 +340,7 @@ static func _check_model(label: String, skills: Array[SkillDef], checks: Diction
 	var all_ok: bool = true
 	for s: SkillDef in skills:
 		var grid: CombatGrid = _grid()
-		var tank: Combatant = _unit("Tank", grid, Vector2i(3, 4))
+		var tank: Combatant = TestHelpers.unit("Tank", grid, Vector2i(3, 4))
 		var ctx: PlanContext = TestHelpers.hand_ctx(grid, [tank], [], 3)
 		var plan := CombatPlan.new(ctx)
 		var steps: Array[PlanStep] = [PlanStep.self_skill(s)]
@@ -381,9 +367,7 @@ static func _test_riposte_data_models() -> bool:
 	checks["the reverse model has descending AP and a zero-mitigation tier"] = reverse[0].ap_cost() > reverse[1].ap_cost() and reverse[1].ap_cost() > reverse[2].ap_cost() and is_equal_approx(reverse[2].mitigation, 0.0)
 	checks["RiposteRules holds only the counter constant"] = RiposteRules.COUNTER_MULT == 0.5 and not (RiposteRules as GDScript).get_script_constant_map().has("GUARD_MITIGATION")
 	# The same rows pass catalog validation (mitigation 0.0 on DEFEND, any AP order) in a sandbox fork.
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		var accepted: bool = true
@@ -399,5 +383,5 @@ static func _test_riposte_data_models() -> bool:
 		var back: SkillDef = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_rev_3"))
 		checks["the stored zero-mitigation row reads back exactly"] = is_equal_approx(back.mitigation, 0.0) and back.level == 1 and back.status_rounds == 3
 		checks["a sandbox intimidate-style row (power 0, weaken) is accepted"] = ContentCatalog.upsert("skills", {"id": "t_intim", "name": "Intimidate", "kind": "ATTACK", "power_mult": 0.0, "stance": "DEFENSIVE", "status_effect": "weaken", "status_potency": 70, "status_magnitude": 15, "status_rounds": 2, "learned_only": true}).is_empty()
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("Riposte tiers are data only (reverse and ascending models)", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Riposte tiers are data only (reverse and ascending models)", checks)

@@ -11,16 +11,9 @@ extends RefCounted
 # priest proficiency) run once those assets exist in the catalog.
 # ==============================================================================
 
-const SANDBOX: String = "user://focus_gear_test"
+static var SANDBOX: String = TestHelpers.sandbox("focus_gear_test")
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [FocusGear] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "FocusGear"
 
 static func _has_error(errors: Array[String], fragment: String) -> bool:
 	for err: String in errors:
@@ -49,12 +42,9 @@ static func run() -> bool:
 	print("\n=======================================================")
 	print("=== STARTING FOCUS GEAR TEST (C1-L)                  ===")
 	print("=======================================================")
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	if ContentCatalog.fork_to(SANDBOX) != OK or ContentCatalog.get_root() != SANDBOX:
-		ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-		return _report("sandbox fork", {"forked": false})
+	if not TestHelpers.fork(SANDBOX):
+		TestHelpers.cleanup(SANDBOX)
+		return TestHelpers.report(TAG, "sandbox fork", {"forked": false})
 	_seed()
 	var ok: bool = true
 	ok = _test_item_rules() and ok
@@ -65,7 +55,7 @@ static func run() -> bool:
 	ok = _test_spell_reach() and ok
 	ok = _test_gear_budget() and ok
 	ok = _test_shipped_assets() and ok
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 static func _seed() -> void:
@@ -127,7 +117,7 @@ static func _test_item_rules() -> bool:
 		sweep_ok = sweep_ok and (errors.is_empty() == rules_hold)
 	c["catalog sweep: valid exactly when the rules hold"] = sweep_ok
 	c["validate_all stays clean"] = ContentCatalog.validate_all().is_empty()
-	return _report("orb / tome item rules", c)
+	return TestHelpers.report(TAG, "orb / tome item rules", c)
 
 # ------------------------------------------------------------------------------
 # Effects grammar on items and passives
@@ -160,7 +150,7 @@ static func _test_effect_grammar() -> bool:
 	c["catalog accepts an armor with effects"] = ContentCatalog.validate_entry("items", ContentSchema.normalize("items", {"id": "t_arm_fx", "name": "x", "item_type": "ARMOR", "slot": "BODY", "effects": [{"type": "status_potency", "value": 3}]})).is_empty()
 	c["effects round-trip through the factory"] = ContentFactory.item_to_entry(ItemCatalog.create_equipment("t_orb"))["effects"] == ContentCatalog.get_entry("items", "t_orb")["effects"]
 	c["describe covers group, status, reach"] = Passives.describe({"effects": [{"type": "skill_potency", "group": "heal", "value": 0.1}, {"type": "status_potency", "value": 5}, {"type": "spell_reach", "value": 1}]}).contains("heal") and Passives.describe({"effects": [{"type": "spell_reach", "value": 1}]}).contains("reach")
-	return _report("item effects grammar", c)
+	return TestHelpers.report(TAG, "item effects grammar", c)
 
 # ------------------------------------------------------------------------------
 # Hand rules
@@ -188,7 +178,7 @@ static func _test_hands() -> bool:
 			wand = ItemCatalog.create_equipment(str(e["id"]))
 	c["a two-handed staff and a one-handed wand exist"] = staff != null and wand != null
 	if staff == null or wand == null:
-		return _report("hand rules", c)
+		return TestHelpers.report(TAG, "hand rules", c)
 	var stash := Inventory.new()
 	stash.add_item(orb)
 	stash.add_item(tome)
@@ -221,7 +211,7 @@ static func _test_hands() -> bool:
 	var dummy := Combatant.new("Dummy", 500, 5, 1)
 	var jab: Dictionary = DamageCalculator.compute(melee_orb, dummy, false, true, 1.0, false)
 	c["off-hand jab with a power 0 orb resolves"] = jab.has("final_dmg") and melee_orb.get_offhand_power() >= 0
-	return _report("hand rules", c)
+	return TestHelpers.report(TAG, "hand rules", c)
 
 # ------------------------------------------------------------------------------
 # Potency and heal hooks
@@ -238,7 +228,7 @@ static func _test_potency_and_heal() -> bool:
 	var strike: SkillDef = SkillCatalog.find("strike")
 	c["skills resolve"] = bolt != null and mend != null and strike != null
 	if bolt == null or mend == null or strike == null:
-		return _report("potency and heal", c)
+		return TestHelpers.report(TAG, "potency and heal", c)
 	c["groups are derived from the skill"] = bolt.in_group("spell") and not bolt.in_group("heal") and mend.in_group("heal") and not mend.in_group("spell") and not strike.in_group("spell") and not strike.in_group("heal")
 	var wand_id: String = ""
 	for entry: Dictionary in ContentCatalog.entries("items"):
@@ -285,7 +275,7 @@ static func _test_potency_and_heal() -> bool:
 	mage.inventory.unequip(Equipment.EquipSlot.OFF_HAND)
 	mage.sync_from_stats_and_gear()
 	c["unequipping subtracts only the gear part"] = _near(bolt.power_for(mage), bolt_base * 1.05)
-	return _report("potency and heal hooks", c)
+	return TestHelpers.report(TAG, "potency and heal hooks", c)
 
 # ------------------------------------------------------------------------------
 # status_potency reaches the attack command (not apply_chance)
@@ -299,7 +289,7 @@ static func _test_status_potency() -> bool:
 	var strike: SkillDef = SkillCatalog.find("strike")
 	c["hex applies a status"] = hex != null and not hex.status_effect.is_empty()
 	if hex == null or hex.status_effect.is_empty():
-		return _report("status potency", c)
+		return TestHelpers.report(TAG, "status potency", c)
 	var wand_id: String = ""
 	for entry: Dictionary in ContentCatalog.entries("items"):
 		if str(entry.get("weapon_type", "")) == "wand" and not DictUtil.to_bool(entry.get("two_handed", false)) and str(entry.get("slot", "")) == "MAIN_HAND":
@@ -337,7 +327,7 @@ static func _test_status_potency() -> bool:
 	priest.inventory.unequip(Equipment.EquipSlot.ACCESSORY_1)
 	priest.sync_from_stats_and_gear()
 	c["gear resist leaves with the item"] = priest.resist_for("stagger") == before
-	return _report("status potency and gear resist", c)
+	return TestHelpers.report(TAG, "status potency and gear resist", c)
 
 # ------------------------------------------------------------------------------
 # Spell reach
@@ -391,7 +381,7 @@ static func _test_spell_reach() -> bool:
 	var clamped: Combatant = _hero("mage", wand_id, "t_orb", ["t_reach_ring"])
 	c["raw gear reach adds up"] = clamped.gear_spell_reach == 2 * bonus
 	c["total gear reach is clamped"] = clamped.spell_reach_bonus() == mini(2 * bonus, Passives.GEAR_REACH_CAP) and plain.reach_for(clamped) == Vector2i((base["t_plain"] as Vector2i).x, (base["t_plain"] as Vector2i).y + Passives.GEAR_REACH_CAP)
-	return _report("spell reach", c)
+	return TestHelpers.report(TAG, "spell reach", c)
 
 # ------------------------------------------------------------------------------
 # GearBudget
@@ -433,7 +423,7 @@ static func _test_gear_budget() -> bool:
 	for class_id: String in ["mage", "priest"]:
 		loadouts_ok = loadouts_ok and GearBudget.check_class(ContentCatalog.get_entry("classes", class_id)).is_empty()
 	c["mage and priest default loadouts stay inside the band"] = loadouts_ok
-	return _report("GearBudget effect weights", c)
+	return TestHelpers.report(TAG, "GearBudget effect weights", c)
 
 # ------------------------------------------------------------------------------
 # Shipped assets (C1-A1 / C1-A2): checked once they exist in the catalog
@@ -456,4 +446,4 @@ static func _test_shipped_assets() -> bool:
 	for skill_id: String in ["arcane_bolt", "hex"]:
 		var skill: SkillDef = SkillCatalog.find(skill_id)
 		c["%s no longer names orb or tome" % skill_id] = skill != null and not skill.weapon_types.has("orb") and not skill.weapon_types.has("tome")
-	return _report("shipped C1 assets", c)
+	return TestHelpers.report(TAG, "shipped C1 assets", c)

@@ -17,18 +17,11 @@ const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
 const SimParty = preload("res://tools/sim/sim_party.gd")
 
-const SANDBOX: String = "user://bal2_sim_test"
+const TAG: String = "BAL2-SIM"
 const TEST_LEVEL: int = 5
 const LOADOUT_LEVELS: Array[int] = [1, 3, 5, 7]   # the role loadout levels of BAL2_SIM 6.3
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [BAL2-SIM] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+static var SANDBOX: String = TestHelpers.sandbox("bal2_sim_test")
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -92,7 +85,7 @@ static func _test_args() -> bool:
 	var sweep: SimArgs = _parse(["sweep", "dupes=on", "sample=7"])
 	checks["sweep dupes / sample"] = sweep.dupes and sweep.sample == 7
 	checks["header names the party keys"] = party.header().contains("comp ") and party.header().contains("enc ")
-	return _report("Party / role / sweep arguments (PARTY_MAX, enc, elevel, target overrides)", checks)
+	return TestHelpers.report(TAG, "Party / role / sweep arguments (PARTY_MAX, enc, elevel, target overrides)", checks)
 
 # Section 8: decided defaults and the X mark rule.
 static func _test_targets() -> bool:
@@ -115,7 +108,7 @@ static func _test_targets() -> bool:
 	checks["band text 70-90"] = SimTargets.band_text(d, "clear_line") == "70-90"
 	checks["band text >=90"] = SimTargets.band_text(d, "clear_mob") == ">=90"
 	checks["band text +-10"] = SimTargets.band_text(d, "swap_delta") == "+-10"
-	return _report("Section 8 targets: decided defaults, bounds inclusive, X outside", checks)
+	return TestHelpers.report(TAG, "Section 8 targets: decided defaults, bounds inclusive, X outside", checks)
 
 # 6.2: every class has a primary role; the user's rogue / brawler answers.
 static func _test_role_map() -> bool:
@@ -131,7 +124,7 @@ static func _test_role_map() -> bool:
 	for r: String in SimArgs.ROLES:
 		checks["role %s has a scenario" % r] = SimScenarios.SCENARIOS.has(str(SimScenarios.ROLE_SCENARIO.get(r, "")))
 		checks["role %s has KPIs" % r] = not SimRoles.kpis(r).is_empty()
-	return _report("Class -> role map (rogue striker, brawler AoE) and a scenario per role", checks)
+	return TestHelpers.report(TAG, "Class -> role map (rogue striker, brawler AoE) and a scenario per role", checks)
 
 # 6.3: the role list cut to owned families, filled in path order up to MAX_CLASS_SLOTS; it validates.
 static func _test_role_loadouts() -> bool:
@@ -166,8 +159,7 @@ static func _test_role_loadouts() -> bool:
 				prefix = prefix.slice(0, StatRules.MAX_CLASS_SLOTS)
 				checks["%s: owned role families first" % tag] = got.slice(0, prefix.size()) == prefix
 	# The lists validate as unit loadouts (sandbox upsert).
-	_clear_sandbox()
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		for c: String in SimArgs.CLASSES:
@@ -176,9 +168,8 @@ static func _test_role_loadouts() -> bool:
 					"loadout": SimRoles.role_loadout(c, r, TEST_LEVEL)}
 				var errors: Array[String] = ContentCatalog.upsert("units", entry)
 				checks["%s %s L%d loadout validates %s" % [c, r, TEST_LEVEL, str(errors)]] = errors.is_empty()
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	_clear_sandbox()
-	return _report("Role loadouts: cut to owned, filled by path order, valid unit loadouts", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Role loadouts: cut to owned, filled by path order, valid unit loadouts", checks)
 
 # 8.1 ranking: primaries in the top 2, a secondary above every off-role class.
 static func _test_ranking() -> bool:
@@ -193,7 +184,7 @@ static func _test_ranking() -> bool:
 	# striker ranks the lowest priority_down_round first.
 	var s: Dictionary = SimRoles.rank_marks("striker", {"rogue": 3.0, "priest": 4.0, "brawler": 5.0, "warrior": 9.0, "ranger": 8.0, "mage": 7.0})
 	checks["striker: lower is better"] = str(s["rogue"]) == "rank 1" and str(s["priest"]) == "rank 2" and str(s["brawler"]) == "rank 3"
-	return _report("Role ranking marks (top 2 primary, secondary above off-role, striker lowest first)", checks)
+	return TestHelpers.report(TAG, "Role ranking marks (top 2 primary, secondary above off-role, striker lowest first)", checks)
 
 # 7: 15 distinct 4-class compositions, 126 multisets, a deterministic sample.
 static func _test_compositions() -> bool:
@@ -223,7 +214,7 @@ static func _test_compositions() -> bool:
 	var b: Array = SimParty.new(_parse(["sweep", "dupes=on", "sample=%d" % sample_n]), null, null).compositions()
 	checks["sample size"] = a.size() == sample_n
 	checks["sample deterministic (seed %d)" % SimParty.SAMPLE_SEED] = str(a) == str(b)
-	return _report("Sweep compositions (distinct, multisets, seeded sample)", checks)
+	return TestHelpers.report(TAG, "Sweep compositions (distinct, multisets, seeded sample)", checks)
 
 static func _choose(n: int, k: int) -> int:
 	var r: int = 1
@@ -234,8 +225,7 @@ static func _choose(n: int, k: int) -> int:
 # 4: conservation on real fights (a generated wave encounter and a striker scenario) in a sandbox.
 static func _test_collector() -> bool:
 	var checks: Dictionary = {}
-	_clear_sandbox()
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		var args: SimArgs = _parse(["party", str(TEST_LEVEL), "quick"])
@@ -267,16 +257,14 @@ static func _test_collector() -> bool:
 		var test_rec: Dictionary = metrics.units[str(sc["test"])]
 		checks["priority_dmg <= dmg_dealt"] = DictUtil.int_of(test_rec, "priority_dmg") <= DictUtil.int_of(test_rec, "dmg_dealt")
 		checks["no METRIC FAIL %s" % str(metrics.fail_lines)] = metrics.fail_lines.is_empty()
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	_clear_sandbox()
-	return _report("Metrics collector: HP conservation per unit and per side on real fights", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Metrics collector: HP conservation per unit and per side on real fights", checks)
 
 # The checks must catch a mismatch: synthetic HP changes and log entries fed through the public
 # signals (Combatant.health_changed via take_damage / heal, CombatSession.log_appended).
 static func _test_collector_detects() -> bool:
 	var checks: Dictionary = {}
-	_clear_sandbox()
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		var args: SimArgs = _parse(["party", str(TEST_LEVEL), "quick"])
@@ -319,9 +307,8 @@ static func _test_collector_detects() -> bool:
 		checks["unexplained loss fails"] = _has_fail(metrics, "%s other_loss" % e.name)
 		checks["phantom gain fails the per-unit equation"] = _has_fail(metrics, "%s hp (" % a.name) and _has_fail(metrics, "%s other_gain" % a.name)
 		session.dispose()
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	_clear_sandbox()
-	return _report("Metrics collector self-checks catch log/HP mismatches and phantom heals", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Metrics collector self-checks catch log/HP mismatches and phantom heals", checks)
 
 static func _entry(category: String, actor: Combatant, target: Combatant, subtype: String, damage: int, value: int) -> ActionLogEntry:
 	var e := ActionLogEntry.new(1, 1, category, actor.name, target.name if target != null else "")
@@ -361,7 +348,3 @@ static func _conservation(metrics: SimMetrics, party: Array[String], checks: Dic
 	checks["%s: enemy dealt == party taken" % tag] = dealt[1] == taken[0]
 	checks["%s: party kills <= enemies at 0 HP" % tag] = party_kills <= enemies_down
 	checks["%s: min_hp_frac <= hp_end_frac, ranged part <= dealt" % tag] = ok_frac
-
-static func _clear_sandbox() -> void:
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))

@@ -9,16 +9,9 @@ extends RefCounted
 # catalog data, not from magic numbers.
 # ==============================================================================
 
-const SANDBOX: String = "user://skill_family_test"
+static var SANDBOX: String = TestHelpers.sandbox("skill_family_test")
 
-static func _report(label: String, checks: Dictionary) -> bool:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	var ok: bool = failed.is_empty()
-	print("    [SkillFamily] %s: %s%s" % [label, "PASS" if ok else "FAIL", "" if ok else " (%s)" % ", ".join(failed)])
-	return ok
+const TAG: String = "SkillFamily"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -94,7 +87,7 @@ static func _test_migration() -> bool:
 	checks["every family has one kind and respects the tier limit"] = kinds_ok and cap_ok
 	checks["limits are the named constants 5 / 3"] = StatRules.MAX_CLASS_SLOTS == 5 and StatRules.MAX_EXTRA_SLOTS == 3
 	checks["whole catalog validates"] = ContentCatalog.validate_all().is_empty()
-	return _report("Migrated families and unchanged numbers", checks)
+	return TestHelpers.report(TAG, "Migrated families and unchanged numbers", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -103,9 +96,7 @@ static func _test_migration() -> bool:
 const FIXTURE: String = "t_fix"
 
 static func _fork_with_fixture() -> bool:
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	if ContentCatalog.fork_to(SANDBOX) != OK:
+	if not TestHelpers.fork(SANDBOX):
 		return false
 	var ok: bool = true
 	for t: int in [1, 2, 3]:
@@ -157,7 +148,7 @@ static func _test_planner_tiers() -> bool:
 		checks["cap %d: each family appears once, tiers stay inside it" % cap] = one_group
 		if cap == 3:
 			checks["label reads 'Fix Strike I / II / III'"] = str(strike_group.get("label", "")) == "Fix Strike I / II / III"
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+	TestHelpers.cleanup(SANDBOX)
 	# Grouping at the catalog level (priest with Mend learned at level 3 sees one 'Mend' option).
 	var priest: Combatant = ContentFactory.unit({"id": "t_sf_priest", "name": "P", "class_id": "priest", "level": 5})
 	var groups: Array[Dictionary] = SkillCatalog.grouped(SkillDef.Kind.DEFEND, 5, priest)
@@ -173,7 +164,7 @@ static func _test_planner_tiers() -> bool:
 		if priest.can_use(s):
 			expected_guard.append(s.id)
 	checks["grouped(): guard tiers are what the priest can use"] = _ids(tiers) == expected_guard and not expected_guard.is_empty()
-	return _report("Planner offers tiers grouped by family", checks)
+	return TestHelpers.report(TAG, "Planner offers tiers grouped by family", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -227,7 +218,7 @@ static func _test_loadout_filter() -> bool:
 	var plain := Combatant.new("Plain", 50, 10, 1)
 	checks["hand-built unit has no loadout and no restriction"] = plain.active_families.is_empty() and plain.can_use(shown)
 	checks["clear_loadout lifts the restriction"] = mage.clear_loadout().is_empty() and mage.can_use(hidden)
-	return _report("Active loadout hides non-loadout skills, keeps basics and engine skills", checks)
+	return TestHelpers.report(TAG, "Active loadout hides non-loadout skills, keeps basics and engine skills", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -259,7 +250,7 @@ static func _test_set_loadout_limits() -> bool:
 	var fresh: Combatant = _mage()
 	fresh.learn_skill("rally")
 	checks["learning with an active loadout slots the new family"] = fresh.active_extra_families.has("rally") and fresh.can_use(SkillCatalog.find("rally"))
-	return _report("set_loadout enforces 5 class / 3 extra and ownership", checks)
+	return TestHelpers.report(TAG, "set_loadout enforces 5 class / 3 extra and ownership", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -277,7 +268,7 @@ static func _test_locked_in_battle() -> bool:
 	session.dispose()
 	checks["dispose unlocks"] = not hero.loadout_locked
 	checks["loadout can be changed again outside combat"] = hero.set_loadout(hero.active_class_families, hero.active_extra_families).is_empty()
-	return _report("Loadout locked during battle", checks)
+	return TestHelpers.report(TAG, "Loadout locked during battle", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -306,7 +297,7 @@ static func _test_default_loadout() -> bool:
 	var passive_unit: Combatant = ContentFactory.unit({"id": "t_sf_pu", "name": "P", "class_id": "mage", "level": open_level})
 	Passives.apply(passive_unit, {"id": "t_sf_pass", "name": "x", "effects": [{"type": "skill", "skill": "riposte"}]})
 	checks["a passive-granted skill takes a free extra slot"] = passive_unit.can_use(granted) and passive_unit.active_extra_families.has("riposte")
-	return _report("Default loadout from class path and extra skills", checks)
+	return TestHelpers.report(TAG, "Default loadout from class path and extra skills", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -345,7 +336,7 @@ static func _test_unit_override() -> bool:
 	var path_families: Array[String] = ContentFactory.families_of(mage_arch.skills_at(10))
 	many_class["loadout"] = path_families.slice(0, StatRules.MAX_CLASS_SLOTS)
 	checks["5 class families are allowed"] = ContentCatalog.validate_entry("units", many_class).is_empty()
-	return _report("Unit loadout override validation", checks)
+	return TestHelpers.report(TAG, "Unit loadout override validation", checks)
 
 # ------------------------------------------------------------------------------
 
@@ -363,9 +354,7 @@ static func _test_round_trip_and_validation() -> bool:
 	var unit_entry: Dictionary = ContentSchema.normalize("units", {"id": "t_sf_rt", "name": "R", "class_id": "mage", "loadout": ["hex", "", "focus"]})
 	checks["unit loadout normalises to a clean string list"] = unit_entry["loadout"] == ["hex", "focus"]
 	# Validation (sandbox copy; nothing is saved).
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, SANDBOX))
-	var forked: bool = ContentCatalog.fork_to(SANDBOX) == OK
+	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
 	if forked:
 		var tier1: Dictionary = {"id": "t_fam", "name": "Fam A", "kind": "ATTACK", "tier": 1}
@@ -382,15 +371,14 @@ static func _test_round_trip_and_validation() -> bool:
 		checks["factory reads a tier 2 class skill"] = tier2.family == "t_fam" and tier2.tier == 2 and not tier2.basic
 		var ranked: Dictionary = ContentCatalog.skill_entry("t_fam")
 		checks["ranked storage folds the two ranks and derives family and tier"] = DictUtil.array_of(ranked.get("ranks", [])).size() == 1 and not ranked.has("family") and not ranked.has("tier")
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("Catalog / schema round trip and validation", checks)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "Catalog / schema round trip and validation", checks)
 
 # Renaming a family root in the Forge must carry its sibling tiers and unit loadouts with it (sandbox copy).
 static func _test_family_rename() -> bool:
 	var checks: Dictionary = {}
-	for kind: String in ContentSchema.KINDS:
-		DirAccess.remove_absolute(ContentCatalog.path_for(kind, "user://skill_family_sandbox"))
-	checks["sandbox fork"] = ContentCatalog.fork_to("user://skill_family_sandbox") == OK
+	var sandbox: String = TestHelpers.sandbox("skill_family_sandbox")
+	checks["sandbox fork"] = TestHelpers.fork(sandbox)
 	if checks["sandbox fork"]:
 		# A fixture family (root + one sibling tier), so no shipped tier can collide; then rename the root.
 		checks["fixture root accepted"] = ContentCatalog.upsert("skills", {"id": "t_ren", "name": "Ren", "kind": "FOCUS", "level": 2, "tier": 1}).is_empty()
@@ -403,7 +391,5 @@ static func _test_family_rename() -> bool:
 		checks["sibling tier follows the family"] = str(sibling.get("family", "")) == "t_ren_new"
 		checks["family still groups both tiers"] = SkillCatalog.family_tiers("t_ren_new").size() == 2
 		checks["no orphan family left"] = SkillCatalog.family_tiers("t_ren").is_empty()
-		for kind: String in ContentSchema.KINDS:
-			DirAccess.remove_absolute(ContentCatalog.path_for(kind, "user://skill_family_sandbox"))
-	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
-	return _report("Renaming a family root keeps sibling tiers and loadouts attached", checks)
+	TestHelpers.cleanup(sandbox)
+	return TestHelpers.report(TAG, "Renaming a family root keeps sibling tiers and loadouts attached", checks)

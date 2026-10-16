@@ -11,16 +11,7 @@ extends RefCounted
 
 const CLASSES: Array[String] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]
 
-static func _report(label: String, ok: bool, detail: String = "") -> bool:
-	print("    [Classes] %s: %s%s" % [label, "PASS" if ok else "FAIL", (" (%s)" % detail) if not detail.is_empty() else ""])
-	return ok
-
-static func _failed(checks: Dictionary) -> String:
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	return ", ".join(failed)
+const TAG: String = "Classes"
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -75,7 +66,7 @@ static func _test_six_classes() -> bool:
 	# The rules reject drift.
 	checks["off-budget class refused"] = not StatRules.validate_class({"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}, {"STR": 5}).is_empty()
 	checks["growth over cap refused"] = not StatRules.validate_class({"STR": 12, "DEX": 10, "INT": 10, "CONS": 10, "PERC": 10, "KNOW": 10}, {"STR": 5}).is_empty()
-	return _report("Six base classes: equal stat budget and growth, art, starting skills and gear; drift is refused", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Six base classes: equal stat budget and growth, art, starting skills and gear; drift is refused", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), TestHelpers.failed(checks))
 
 static func _test_variance_and_tiers() -> bool:
 	var checks: Dictionary = {}
@@ -101,7 +92,7 @@ static func _test_variance_and_tiers() -> bool:
 	var hero_weapon: Equipment = hero.inventory.get_main_weapon()
 	var same_weapon: bool = (minion_weapon == null and hero_weapon == null) or (minion_weapon != null and hero_weapon != null and minion_weapon.id == hero_weapon.id)
 	checks["same class, same gear and skills"] = minion.known_skills == hero.known_skills and same_weapon
-	return _report("Unit variance (spend pool) and tiers: one base curve, scaled HP and power", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Unit variance (spend pool) and tiers: one base curve, scaled HP and power", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), TestHelpers.failed(checks))
 
 static func _test_proficiency() -> bool:
 	var checks: Dictionary = {}
@@ -130,7 +121,7 @@ static func _test_proficiency() -> bool:
 	checks["trained skill usable"] = archer.can_use(aimed)
 	archer.stats.proficiency.set_entry("bow", 1)
 	checks["under-trained skill gated"] = not archer.can_use(aimed) and archer.can_use(SkillCatalog.find("strike"))
-	return _report("Proficiency dict: levels, scaling, requirement discount, crit, burden, block cost, skill gating", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Proficiency dict: levels, scaling, requirement discount, crit, burden, block cost, skill gating", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), TestHelpers.failed(checks))
 
 static func _test_passives() -> bool:
 	var checks: Dictionary = {}
@@ -151,7 +142,7 @@ static func _test_passives() -> bool:
 	var untrained: Combatant = ContentFactory.unit({"id": "t_pass2", "name": "T", "class_id": "priest", "level": 1})
 	ContentFactory.apply_passives(untrained, ["axe_training"])
 	checks["passive can open new gear"] = untrained.stats.proficiency.can_use("axe") and untrained.stats.proficiency.scaling_of("axe") < Proficiency.DEFAULT_SCALING
-	return _report("Passives: stat (with context), proficiency, resist, AP regen, skill; applied once, never from classes", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Passives: stat (with context), proficiency, resist, AP regen, skill; applied once, never from classes", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), TestHelpers.failed(checks))
 
 static func _test_skill_paths() -> bool:
 	var checks: Dictionary = {}
@@ -189,4 +180,4 @@ static func _test_skill_paths() -> bool:
 				owns_by_level = owns_by_level and eff <= DictUtil.to_int(step["level"]) and (unit.known_skills.has(sid) == (lvl >= eff))
 	checks["path ownership follows the effective unlock level (never later than the path level)"] = owns_by_level
 	checks["planner honours known skills"] = SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "strike") and not SkillCatalog.single_attacks(low, 5).any(func(s: SkillDef) -> bool: return s.id == "shield_bash")
-	return _report("Class skill paths unlock by level; events and authoring add skills; the planner respects them", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), _failed(checks))
+	return TestHelpers.report_ok(TAG, "Class skill paths unlock by level; events and authoring add skills; the planner respects them", checks.values().all(func(v: Variant) -> bool: return DictUtil.to_bool(v)), TestHelpers.failed(checks))

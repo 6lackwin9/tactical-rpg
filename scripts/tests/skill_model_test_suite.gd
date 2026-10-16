@@ -8,7 +8,7 @@ extends RefCounted
 # ownership, class paths, unit loadouts), and the automatic grant of every basic skill. Fixtures are built here.
 # ==============================================================================
 
-const SANDBOX: String = "user://skill_model_test"
+static var SANDBOX: String = TestHelpers.sandbox("skill_model_test")
 const TAG: String = "SkillModel"
 
 static func run() -> bool:
@@ -24,14 +24,14 @@ static func run() -> bool:
 	ok = _test_ownership() and ok
 	ok = _test_class_and_unit_rules() and ok
 	ok = _test_basics_grant() and ok
-	SkillTestKit.cleanup(SANDBOX)
+	TestHelpers.cleanup(SANDBOX)
 	return ok
 
 static func _errors(entry: Dictionary) -> Array[String]:
 	return ContentCatalog.validate_entry("skills", entry)
 
 static func _has(errors: Array[String], needle: String) -> bool:
-	return SkillTestKit.any_contains(errors, needle)
+	return TestHelpers.any_contains(errors, needle)
 
 static func _test_kinds_table() -> bool:
 	var checks: Dictionary = {}
@@ -81,11 +81,11 @@ static func _test_kinds_table() -> bool:
 			s.stance_override = CombatTypes.StanceType.DEFENSIVE
 			rules_ok = rules_ok and not s.keeps_stance() and s.stance() == CombatTypes.StanceType.DEFENSIVE
 	checks["SkillDef.ap_cost, stance, keeps_stance and icon read the table"] = rules_ok
-	return SkillTestKit.report(TAG, "The kind descriptor table", checks)
+	return TestHelpers.report(TAG, "The kind descriptor table", checks)
 
 static func _test_sections_and_gate() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var defend_gate: Dictionary = {"id": "t_md_dg", "name": "DG", "kind": "DEFEND", "weapon_types": ["sword"], "min_proficiency": 1}
 	checks["a weapon gate on DEFEND is accepted"] = _errors(defend_gate).is_empty()
 	var support_gate: Dictionary = {"id": "t_md_sg", "name": "SG", "kind": "SUPPORT", "heal_base": 5, "weapon_types": ["staff"], "min_proficiency": 1}
@@ -108,7 +108,7 @@ static func _test_sections_and_gate() -> bool:
 	checks["a REST skill is engine-only for authors"] = _has(_errors({"id": "t_md_rest", "name": "R", "kind": "REST"}), "engine-only")
 	checks["a MOVE skill is engine-only for authors"] = _has(_errors({"id": "t_md_move", "name": "M", "kind": "MOVE"}), "engine-only")
 	checks["grant_status is limited per kind (taunt is not a defend-only buff but is allowed)"] = _errors({"id": "t_md_gs", "name": "G", "kind": "DEFEND", "grant_status": "riposte", "status_rounds": 2}).is_empty() and not _errors({"id": "t_md_gs2", "name": "G", "kind": "SUPPORT", "grant_status": "riposte", "status_rounds": 2}).is_empty()
-	return SkillTestKit.report(TAG, "Section rule and weapon gate", checks)
+	return TestHelpers.report(TAG, "Section rule and weapon gate", checks)
 
 # Finds a catalog item (the first matching the predicate) and builds it.
 static func _equipment(item_type: String, slot: String, two_handed: bool = false) -> Equipment:
@@ -143,7 +143,7 @@ static func _class_with(gear: String) -> String:
 
 static func _test_weapon_hand() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var off_entry: Dictionary = ContentSchema.normalize("skills", {"id": "t_md_hand", "name": "H", "kind": "ATTACK", "weapon_hand": "off"})
 	checks["weapon_hand round-trips through the factory"] = str(ContentFactory.skill_to_entry(ContentFactory.skill(off_entry))["weapon_hand"]) == "off"
 	var both_errors: Array[String] = _errors({"id": "t_md_both", "name": "B", "kind": "ATTACK", "weapon_hand": "both"})
@@ -155,7 +155,7 @@ static func _test_weapon_hand() -> bool:
 	checks["an unknown weapon_hand value is refused"] = not _errors({"id": "t_md_xh", "name": "X", "kind": "ATTACK", "weapon_hand": "left"}).is_empty()
 	var jab: SkillDef = SkillCatalog.find("offhand_jab")
 	checks["the shipped offhand_jab is an off-hand skill"] = jab != null and jab.weapon_hand == SkillDef.WeaponHand.OFF and jab.is_off_hand()
-	checks["an off-hand skill with a real weapon type warns"] = SkillTestKit.any_contains(ContentCatalog.warnings_for("skills", {"id": "t_md_w", "name": "W", "kind": "ATTACK", "weapon_hand": "off", "weapon_types": ["dagger"], "min_proficiency": 1}), "only 'unarmed'")
+	checks["an off-hand skill with a real weapon type warns"] = TestHelpers.any_contains(ContentCatalog.warnings_for("skills", {"id": "t_md_w", "name": "W", "kind": "ATTACK", "weapon_hand": "off", "weapon_types": ["dagger"], "min_proficiency": 1}), "only 'unarmed'")
 	checks["an off-hand skill gated on unarmed does not warn"] = ContentCatalog.warnings_for("skills", {"id": "t_md_w2", "name": "W", "kind": "ATTACK", "weapon_hand": "off", "weapon_types": ["unarmed"], "min_proficiency": 1}).is_empty()
 	# wielded_type(hand)
 	var class_id: String = _class_with("sword")
@@ -188,16 +188,16 @@ static func _test_weapon_hand() -> bool:
 		user.inventory.unequip(Equipment.EquipSlot.OFF_HAND)
 		var fist_ok: bool = user.stats.proficiency.level_of(SkillDef.UNARMED_PROFICIENCY) >= 1
 		checks["...and follows the fist proficiency with bare off hand"] = user.can_use(skill) == fist_ok
-	return SkillTestKit.report(TAG, "weapon_hand: strict hand typing", checks)
+	return TestHelpers.report(TAG, "weapon_hand: strict hand typing", checks)
 
 static func _test_gate_in_engine() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var class_id: String = _class_with("sword")
 	var sword: Equipment = _equipment_of_type("sword", "MAIN_HAND")
 	checks["a sword-trained class and a sword exist"] = not class_id.is_empty() and sword != null
 	if class_id.is_empty() or sword == null:
-		return SkillTestKit.report(TAG, "The weapon gate is enforced by can_use for DEFEND and SUPPORT", checks)
+		return TestHelpers.report(TAG, "The weapon gate is enforced by can_use for DEFEND and SUPPORT", checks)
 	var defend: Dictionary = {"id": "t_md_gate_d", "name": "GD", "kind": "DEFEND", "level": 2, "blocks": 2, "mitigation": 0.5, "weapon_types": ["sword"], "min_proficiency": 1, "learned_only": true}
 	var support: Dictionary = {"id": "t_md_gate_s", "name": "GS", "kind": "SUPPORT", "level": 2, "blocks": 2, "heal_base": 5, "weapon_types": ["sword"], "min_proficiency": 1, "learned_only": true}
 	checks["fixtures accepted"] = ContentCatalog.upsert("skills", defend).is_empty() and ContentCatalog.upsert("skills", support).is_empty()
@@ -206,54 +206,54 @@ static func _test_gate_in_engine() -> bool:
 	var s: SkillDef = SkillCatalog.find("t_md_gate_s")
 	checks["fixtures resolve to skills"] = d != null and s != null
 	if d == null or s == null:
-		return SkillTestKit.report(TAG, "The weapon gate is enforced by can_use for DEFEND and SUPPORT", checks)
+		return TestHelpers.report(TAG, "The weapon gate is enforced by can_use for DEFEND and SUPPORT", checks)
 	checks["a gated DEFEND is unusable without the weapon"] = not c.can_use(d)
 	checks["a gated SUPPORT is unusable without the weapon"] = not c.can_use(s)
 	c.inventory.equip(sword)
 	var trained: bool = c.stats.proficiency.level_of(sword.weapon_type) >= d.min_proficiency
 	checks["...and usable with the right weapon (when trained)"] = trained and c.can_use(d) and c.can_use(s)
-	return SkillTestKit.report(TAG, "The weapon gate is enforced by can_use for DEFEND and SUPPORT", checks)
+	return TestHelpers.report(TAG, "The weapon gate is enforced by can_use for DEFEND and SUPPORT", checks)
 
 static func _test_grade_and_requires() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
-	var novice_ranked: Dictionary = SkillRanks.entry(SkillTestKit.attack("t_gr_nov"), [{"level": 3}])
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
+	var novice_ranked: Dictionary = SkillRanks.entry(TestHelpers.attack("t_gr_nov"), [{"level": 3}])
 	checks["a novice family with two ranks is accepted"] = ContentCatalog.upsert_skill(novice_ranked).is_empty()
-	checks["a second novice family"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_nov2")).is_empty()
-	checks["an advanced skill may require a novice"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_adv", {"grade": "advanced", "requires": ["t_gr_nov"]})).is_empty()
-	checks["an advanced skill may require several novices (ALL are needed)"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_multi", {"grade": "advanced", "requires": ["t_gr_nov", "t_gr_nov2"]})).is_empty()
-	checks["an expert is accepted by validation and may require lower grades"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_exp", {"grade": "expert", "requires": ["t_gr_adv", "t_gr_nov"]})).is_empty()
-	checks["a required skill of equal grade is refused"] = SkillTestKit.any_contains(ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_eq", {"grade": "advanced", "requires": ["t_gr_adv"]})), "lower grade")
-	checks["a required skill of higher grade is refused"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_hi", {"grade": "advanced", "requires": ["t_gr_exp"]})).is_empty()
-	checks["a novice skill with requires is refused (nothing is lower)"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_nr", {"requires": ["t_gr_nov"]})).is_empty()
-	checks["a skill cannot require itself"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_self", {"grade": "advanced", "requires": ["t_gr_self"]})).is_empty()
-	checks["requiring an unknown skill is refused"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_unk", {"grade": "advanced", "requires": ["t_gr_none"]})).is_empty()
-	checks["requiring a rank row is refused (name the family head)"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_rank", {"grade": "advanced", "requires": ["t_gr_nov_2"]})).is_empty()
-	checks["requiring a basic skill is refused"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_basic", {"grade": "advanced", "requires": ["strike"]})).is_empty()
-	checks["a duplicate requirement is refused"] = not ContentCatalog.upsert_skill(SkillTestKit.attack("t_gr_dup", {"grade": "advanced", "requires": ["t_gr_nov", "t_gr_nov"]})).is_empty()
+	checks["a second novice family"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_nov2")).is_empty()
+	checks["an advanced skill may require a novice"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_adv", {"grade": "advanced", "requires": ["t_gr_nov"]})).is_empty()
+	checks["an advanced skill may require several novices (ALL are needed)"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_multi", {"grade": "advanced", "requires": ["t_gr_nov", "t_gr_nov2"]})).is_empty()
+	checks["an expert is accepted by validation and may require lower grades"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_exp", {"grade": "expert", "requires": ["t_gr_adv", "t_gr_nov"]})).is_empty()
+	checks["a required skill of equal grade is refused"] = TestHelpers.any_contains(ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_eq", {"grade": "advanced", "requires": ["t_gr_adv"]})), "lower grade")
+	checks["a required skill of higher grade is refused"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_hi", {"grade": "advanced", "requires": ["t_gr_exp"]})).is_empty()
+	checks["a novice skill with requires is refused (nothing is lower)"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_nr", {"requires": ["t_gr_nov"]})).is_empty()
+	checks["a skill cannot require itself"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_self", {"grade": "advanced", "requires": ["t_gr_self"]})).is_empty()
+	checks["requiring an unknown skill is refused"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_unk", {"grade": "advanced", "requires": ["t_gr_none"]})).is_empty()
+	checks["requiring a rank row is refused (name the family head)"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_rank", {"grade": "advanced", "requires": ["t_gr_nov_2"]})).is_empty()
+	checks["requiring a basic skill is refused"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_basic", {"grade": "advanced", "requires": ["strike"]})).is_empty()
+	checks["a duplicate requirement is refused"] = not ContentCatalog.upsert_skill(TestHelpers.attack("t_gr_dup", {"grade": "advanced", "requires": ["t_gr_nov", "t_gr_nov"]})).is_empty()
 	checks["a basic skill can't be advanced"] = not _errors({"id": "t_gr_bad", "name": "B", "kind": "ATTACK", "basic": true, "grade": "advanced"}).is_empty()
 	checks["a basic skill can't have requires"] = not _errors({"id": "t_gr_bad2", "name": "B", "kind": "ATTACK", "basic": true, "requires": ["t_gr_nov"]}).is_empty()
 	var raise: Dictionary = ContentCatalog.skill_entry("t_gr_nov")
 	raise["grade"] = "advanced"
 	var raise_errors: Array[String] = ContentCatalog.upsert_skill(raise)
-	checks["a grade change that would break a dependent is refused, naming it"] = SkillTestKit.any_contains(raise_errors, "t_gr_adv") or SkillTestKit.any_contains(raise_errors, "requires")
+	checks["a grade change that would break a dependent is refused, naming it"] = TestHelpers.any_contains(raise_errors, "t_gr_adv") or TestHelpers.any_contains(raise_errors, "requires")
 	checks["...and changed nothing"] = str(ContentCatalog.get_entry("skills", "t_gr_nov")["grade"]) == "novice"
 	var lower: Dictionary = ContentCatalog.skill_entry("t_gr_exp")
 	lower["grade"] = "novice"
 	checks["lowering a grade below its own requirements is refused"] = not ContentCatalog.upsert_skill(lower).is_empty()
 	checks["a required skill with dependents cannot be deleted"] = ContentCatalog.remove_skill("t_gr_nov").contains("still used")
 	checks["requires on a rank-2 row stays consistent across ranks"] = ContentFactory._strings(ContentCatalog.get_entry("skills", "t_gr_nov_2")["requires"]).is_empty()
-	var adv_ranked: Dictionary = SkillRanks.entry(SkillTestKit.attack("t_gr_advr", {"grade": "advanced", "requires": ["t_gr_nov"]}), [{"level": 3}])
+	var adv_ranked: Dictionary = SkillRanks.entry(TestHelpers.attack("t_gr_advr", {"grade": "advanced", "requires": ["t_gr_nov"]}), [{"level": 3}])
 	checks["an advanced family with ranks stores grade and requires once"] = ContentCatalog.upsert_skill(adv_ranked).is_empty() and ContentFactory._strings(ContentCatalog.get_entry("skills", "t_gr_advr_2")["requires"]) == ["t_gr_nov"] and str(ContentCatalog.get_entry("skills", "t_gr_advr_2")["grade"]) == "advanced"
 	var stored: Dictionary = ContentCatalog.skill_entry("t_gr_advr")
 	checks["...in the ranked entry (not in the rank modifiers)"] = stored.has("grade") and stored.has("requires") and not DictUtil.dict_of(DictUtil.array_of(stored["ranks"])[0]).has("grade")
 	checks["SkillDef reads grade and requires"] = ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).grade == SkillDef.Grade.EXPERT and ContentFactory.skill(ContentCatalog.get_entry("skills", "t_gr_exp")).requires.size() == 2
-	return SkillTestKit.report(TAG, "grade and requires: validation", checks)
+	return TestHelpers.report(TAG, "grade and requires: validation", checks)
 
 static func _test_ownership() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
-	checks["fixture families accepted"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_ow_a")).is_empty() and ContentCatalog.upsert_skill(SkillTestKit.attack("t_ow_b")).is_empty() and ContentCatalog.upsert_skill(SkillTestKit.attack("t_ow_adv", {"grade": "advanced", "requires": ["t_ow_a", "t_ow_b"]})).is_empty() and ContentCatalog.upsert_skill(SkillTestKit.attack("t_ow_free")).is_empty()
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
+	checks["fixture families accepted"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_ow_a")).is_empty() and ContentCatalog.upsert_skill(TestHelpers.attack("t_ow_b")).is_empty() and ContentCatalog.upsert_skill(TestHelpers.attack("t_ow_adv", {"grade": "advanced", "requires": ["t_ow_a", "t_ow_b"]})).is_empty() and ContentCatalog.upsert_skill(TestHelpers.attack("t_ow_free")).is_empty()
 	checks["a passive granting the advanced skill is accepted"] = ContentCatalog.upsert("passives", {"id": "t_ow_pass", "name": "P", "effects": [{"type": "skill", "skill": "t_ow_adv"}]}).is_empty()
 	var class_id: String = ContentCatalog.ids("classes")[0]
 	var c: Combatant = ContentFactory.unit({"id": "t_ow_u", "name": "U", "class_id": class_id, "level": 5}, "", 12)
@@ -282,7 +282,7 @@ static func _test_ownership() -> bool:
 	var saved: Combatant = ContentFactory.unit({"id": "t_ow_u4", "name": "U", "class_id": class_id, "level": 5}, "", 12)
 	saved.learn_skill("t_ow_adv", false)
 	checks["a restored save keeps what it learned (no stripping)"] = saved.owns_skill("t_ow_adv")
-	return SkillTestKit.report(TAG, "Ownership requires every required skill", checks)
+	return TestHelpers.report(TAG, "Ownership requires every required skill", checks)
 
 static func _class_with_path(path: Array[Dictionary]) -> Dictionary:
 	var e: Dictionary = ContentCatalog.get_entry("classes", ContentCatalog.ids("classes")[0])
@@ -297,35 +297,35 @@ static func _step(level: int, skill: String) -> Dictionary:
 
 static func _test_class_and_unit_rules() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
-	checks["fixtures accepted"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_cl_nov")).is_empty() and ContentCatalog.upsert_skill(SkillTestKit.attack("t_cl_adv", {"grade": "advanced", "requires": ["t_cl_nov"]})).is_empty()
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
+	checks["fixtures accepted"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_cl_nov")).is_empty() and ContentCatalog.upsert_skill(TestHelpers.attack("t_cl_adv", {"grade": "advanced", "requires": ["t_cl_nov"]})).is_empty()
 	var min_level: int = StatRules.ADVANCED_MIN_LEVEL
 	var basic_path: Array[Dictionary] = [_step(1, "strike")]
-	checks["a basic skill in a class path is an error naming it"] = SkillTestKit.any_contains(ContentCatalog.validate_entry("classes", _class_with_path(basic_path)), "strike")
+	checks["a basic skill in a class path is an error naming it"] = TestHelpers.any_contains(ContentCatalog.validate_entry("classes", _class_with_path(basic_path)), "strike")
 	var ok_path: Array[Dictionary] = [_step(1, "t_cl_nov"), _step(min_level, "t_cl_adv")]
 	checks["an advanced skill after its requirement is accepted"] = ContentCatalog.validate_entry("classes", _class_with_path(ok_path)).is_empty()
 	var same_level: Array[Dictionary] = [_step(min_level, "t_cl_nov"), _step(min_level, "t_cl_adv")]
 	checks["a requirement at an equal level is accepted"] = ContentCatalog.validate_entry("classes", _class_with_path(same_level)).is_empty()
 	var missing: Array[Dictionary] = [_step(min_level, "t_cl_adv")]
-	checks["a step whose requirement is not on the path is an error"] = SkillTestKit.any_contains(ContentCatalog.validate_entry("classes", _class_with_path(missing)), "t_cl_nov")
+	checks["a step whose requirement is not on the path is an error"] = TestHelpers.any_contains(ContentCatalog.validate_entry("classes", _class_with_path(missing)), "t_cl_nov")
 	var too_late: Array[Dictionary] = [_step(min_level, "t_cl_adv"), _step(min_level + 1, "t_cl_nov")]
 	checks["a requirement listed later than the step is an error"] = not ContentCatalog.validate_entry("classes", _class_with_path(too_late)).is_empty()
 	var too_low: Array[Dictionary] = [_step(1, "t_cl_nov"), _step(min_level - 1, "t_cl_adv")]
-	checks["grade advanced below the path floor is an error"] = SkillTestKit.any_contains(ContentCatalog.validate_entry("classes", _class_with_path(too_low)), "advanced")
-	checks["an expert fixture follows the same floor"] = ContentCatalog.upsert_skill(SkillTestKit.attack("t_cl_exp", {"grade": "expert", "requires": ["t_cl_nov"]})).is_empty() and not ContentCatalog.validate_entry("classes", _class_with_path(_exp_path(min_level))).is_empty()
+	checks["grade advanced below the path floor is an error"] = TestHelpers.any_contains(ContentCatalog.validate_entry("classes", _class_with_path(too_low)), "advanced")
+	checks["an expert fixture follows the same floor"] = ContentCatalog.upsert_skill(TestHelpers.attack("t_cl_exp", {"grade": "expert", "requires": ["t_cl_nov"]})).is_empty() and not ContentCatalog.validate_entry("classes", _class_with_path(_exp_path(min_level))).is_empty()
 	# Unit rules.
 	var class_id: String = ContentCatalog.ids("classes")[0]
 	var unit: Dictionary = {"id": "t_cl_unit", "name": "U", "side": "party", "class_id": class_id, "level": 5, "extra_skills": ["t_cl_adv"]}
-	checks["a unit extra skill without its requirement is an error"] = SkillTestKit.any_contains(ContentCatalog.validate_entry("units", unit), "t_cl_nov")
+	checks["a unit extra skill without its requirement is an error"] = TestHelpers.any_contains(ContentCatalog.validate_entry("units", unit), "t_cl_nov")
 	unit["extra_skills"] = ["t_cl_nov", "t_cl_adv"]
 	checks["...accepted with the requirement in extra_skills"] = ContentCatalog.validate_entry("units", unit).is_empty()
 	var loadout_unit: Dictionary = {"id": "t_cl_unit2", "name": "U", "side": "party", "class_id": class_id, "level": 5, "extra_skills": ["t_cl_nov"], "loadout": ["t_cl_adv"]}
 	checks["a loadout skill without its requirement is an error"] = not ContentCatalog.validate_entry("units", loadout_unit).is_empty()
-	return SkillTestKit.report(TAG, "Class path and unit rules for basics, grade and requires", checks)
+	return TestHelpers.report(TAG, "Class path and unit rules for basics, grade and requires", checks)
 
 static func _test_basics_grant() -> bool:
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = SkillTestKit.fork(SANDBOX)
+	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var basics: Array[String] = SkillCatalog.basic_ids()
 	checks["the catalog has basic skills"] = not basics.is_empty()
 	var all_own: bool = true
@@ -346,7 +346,7 @@ static func _test_basics_grant() -> bool:
 	checks["no duplicate when the basic is also an extra skill"] = count == 1
 	checks["a leveled unit keeps its basics after the path refresh"] = _leveled_keeps_basics(basics)
 	checks["basics are not valid loadout families"] = not basics.is_empty() and SkillCatalog.is_basic_family(basics[0])
-	return SkillTestKit.report(TAG, "Every basic skill is granted at level 1", checks)
+	return TestHelpers.report(TAG, "Every basic skill is granted at level 1", checks)
 
 static func _leveled_keeps_basics(basics: Array[String]) -> bool:
 	var c: Combatant = ContentFactory.unit({"id": "t_bg_u3", "name": "U", "class_id": ContentCatalog.ids("classes")[0], "level": 1}, "", 12)
