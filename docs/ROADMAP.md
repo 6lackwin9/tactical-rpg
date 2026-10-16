@@ -142,6 +142,9 @@ Q1 May S1 lose `balance-ready` if S12 needs a formula change? Q2 Gear budget: so
 | Id | Item | When | Rules |
 | --- | --- | --- | --- |
 | R1 | Split oversized test files: `arena_test_suite.gd` (~1400 lines, older groups: combat UI, character specs, gear/dummy, session flow, art/terrain, planning/AI) into one file per group with a small runner; later `combat_extensions_test_suite.gd` (~800) by feature and `dojo_assertions.gd` (~770) | after M2c merges | Pure refactor on its own branch and review; no behaviour or number changes; total assertion count before = after |
+| CLN-9 | approved (user 2026-10-17, DECISIONS "Cleanup pass 1 answers"): split `content_catalog.gd` (1384 lines) validators by kind into `scripts/content/rules/*` so ITEM1 and CLASS1 stop colliding on one hub file (docs/specs/CLEANUP.md#CLN-9) | after BAL2-L merges, last item of the logic cleanup batch, before ITEM1 and CLASS1 | Pure move; assertion count equal |
+| CLN-10 | approved (user 2026-10-17): split `docs/DECISIONS.md` by system behind an index; superseded rows move unchanged to an archive with "superseded by" pointers; brainstorm reads only the targeted system's file (docs/specs/CLEANUP.md#CLN-10) | now (docs only, after CLN-1) | No row text changes; pointers in CLAUDE.md and agent files updated |
+| CLN-13 | approved, parked (user 2026-10-17): README becomes an overview plus per-topic `docs/features/*` (docs/specs/CLEANUP.md#CLN-13) | next large README update | Planner owns README |
 
 ## Milestone plan v2 (coarse) - status: proposed (design-brainstorm 2026-10-16; the user approves each milestone)
 
