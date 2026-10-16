@@ -13,7 +13,11 @@ foreach ($p in @($wt, $meta)) {
 	if (Test-Path $p) {
 		attrib -R $p /S /D | Out-Null
 		Get-ChildItem $p -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Attributes = 'Normal' }
-		Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
+		# A just-finished Godot run can hold a file for a moment: retry a few times before failing.
+		for ($try = 0; $try -lt 4 -and (Test-Path $p); $try++) {
+			if ($try -gt 0) { Start-Sleep -Seconds 2 }
+			Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
+		}
 		if (Test-Path $p) { [System.IO.Directory]::Delete($p, $true) }
 	}
 }
