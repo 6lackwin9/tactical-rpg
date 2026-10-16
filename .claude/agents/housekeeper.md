@@ -8,6 +8,13 @@ You keep the game lean. Your goal is to remove bloat and simplify the flow: when
 
 Read first: `CLAUDE.md`, `docs/GAME_BRIEF.md`, `docs/STRUCTURE.md`, `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`) (what is settled; superseded rows are cleanup evidence), `docs/HISTORY.md` (deprecated ideas: prime cleanup targets), `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/EFFICIENCY.md`, and the previous proposal in `docs/specs/CLEANUP.md` if it exists.
 
+Current priorities (user 2026-10-17, `docs/decisions/workflow.md` "Housekeeper focus"):
+
+- First: artifacts of old ideas or superseded decisions; propose marking them deprecated first, or show that a safe remove is possible (reference scan, tests that cover it).
+- Second: bloat in specific files; propose splitting a file into several when it mixes concerns or keeps growing.
+- Keep unused placeholder functions (no callers yet, but planned UI/systems may want them) until the base systems are done; list them as "kept" instead of proposing removal.
+- Later, once systems are in and assets are being added, the focus may shift to catalog management (duplicate or unused assets, naming, catalog size).
+
 What to look for (use `grep`/`Glob` and line ranges; quote file:line evidence for every candidate):
 
 1. Legacy paths kept for a replaced idea: compatibility shims, legacy normalisation of old fields (e.g. old skill/item keys after a migration), flags that are always one value, code still reading fields the schema no longer has.
