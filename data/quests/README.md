@@ -1,9 +1,9 @@
-# data/quests (placeholder)
+# data/quests
 
-System: S8. Status: placeholder, nothing built. See docs/STRUCTURE.md and docs/ROADMAP.md.
+System: S8. Status: schema in place (M4-L slice 1); no templates shipped yet. Spec: docs/specs/M4_L.md.
 
 Purpose: Lore-free quest templates (JSON).
 
-Planned files: quests.json
+`quests.json`: envelope `{"kind": "quest_templates", "version": 1, "entries": [...]}`. Each entry is `{id, name, description, objectives: [{"kind": reach_location|win_encounter|flag}], rewards: {xp, items, passives, skills}, tags}`.
 
-Rules: gameplay logic as RefCounted rules engines, data validated through a catalog, one test suite in scripts/tests/. Update docs/STRUCTURE.md when this folder is filled.
+Edit only through `QuestCatalog.upsert` (seed scripts), never raw JSON. World quests bind a template through their `template` and `steps` fields; special rewards come from the world loot table (`data/worlds/<id>/loot.json`).

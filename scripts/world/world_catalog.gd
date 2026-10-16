@@ -543,10 +543,14 @@ static func references_to(world_id: String, kind: String, local: String) -> Arra
 				out.append_array(_json_refs_to(w, k2, e, kind, target))
 	return out
 
-# References held inside json fields: location exits, quest steps, faction relations.
+# References held inside json fields: location exits, quest steps, faction relations, and the quest runtime fields
+# (links, loot_pool, variant `set` values). The quest ones carry a "path" (keys/indexes from the entry root) that
+# _rewrite_ref follows.
 static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, target: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var base: Dictionary = {"world": w, "kind": k2, "id": str(e.get("id", ""))}
+	if k2 == "quests":
+		out.append_array(_quest_json_refs(w, e, kind, target, base))
 	if k2 == "locations" and kind == "locations" and e.get("exits", null) is Array:
 		var exits: Array = e["exits"]
 		for i: int in range(exits.size()):
@@ -566,6 +570,43 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 			if _points_at(w, "factions", str(other), target):
 				out.append(base.merged({"key": "relations", "index": -1, "sub": str(other)}))
 	return out
+
+# Quest links, loot pool and variant set refs to `kind`/`target` (path-addressed matches).
+static func _quest_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	_links_refs(w, DictUtil.dict_of(e.get("links", null)), ["links"], kind, target, base, out)
+	if kind == "loot":
+		_list_refs(w, e.get("loot_pool", null), ["loot_pool"], "loot", target, base, out)
+	var variants: Array = DictUtil.array_of(e.get("variants", null))
+	for vi: int in range(variants.size()):
+		var set_d: Dictionary = DictUtil.dict_of(DictUtil.dict_of(variants[vi]).get("set", null))
+		var at: Array = ["variants", vi, "set"]
+		for key: String in ["giver", "turn_in"]:
+			if kind == "characters" and set_d.get(key, null) is String and _points_at(w, kind, str(set_d[key]), target):
+				out.append(base.merged({"key": "variants", "index": vi, "path": at + [key]}))
+		_links_refs(w, DictUtil.dict_of(set_d.get("links", null)), at + ["links"], kind, target, base, out)
+		if kind == "loot":
+			_list_refs(w, set_d.get("loot_pool", null), at + ["loot_pool"], "loot", target, base, out)
+		var steps: Dictionary = DictUtil.dict_of(set_d.get("steps", null))
+		var sub: String = "location" if kind == "locations" else ("encounter" if kind == "encounters" else "")
+		if sub.is_empty():
+			continue
+		for idx: Variant in steps:
+			var partial: Dictionary = DictUtil.dict_of(steps[idx])
+			if partial.get(sub, null) is String and _points_at(w, kind, str(partial[sub]), target):
+				out.append(base.merged({"key": "variants", "index": vi, "path": at + ["steps", idx, sub]}))
+	return out
+
+static func _links_refs(w: String, links: Dictionary, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
+	for key: Variant in links:
+		if str(QuestRules.LINK_KINDS.get(str(key), "")) == kind:
+			_list_refs(w, links[key], at + [key], kind, target, base, out)
+
+static func _list_refs(w: String, raw: Variant, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
+	var list: Array = DictUtil.array_of(raw)
+	for i: int in range(list.size()):
+		if list[i] is String and _points_at(w, kind, str(list[i]), target):
+			out.append(base.merged({"key": str(at[0]), "index": i, "path": at + [i]}))
 
 static func _points_at(world_id: String, kind: String, ref: String, target_qid: String) -> bool:
 	if ref.is_empty():
@@ -588,7 +629,9 @@ static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid
 			replacement = ref_value(w, new_target)
 		var idx: int = DictUtil.to_int(match_info["index"], -1)
 		var sub: String = str(match_info.get("sub", ""))
-		if key == "relations":
+		if match_info.has("path"):
+			_set_at_path(e, DictUtil.array_of(match_info["path"]), replacement)
+		elif key == "relations":
 			var rel: Dictionary = e[key]
 			var stance: Variant = rel.get(sub, "neutral")
 			rel.erase(sub)
@@ -603,6 +646,30 @@ static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid
 		else:
 			e[key] = replacement
 		_touch(w, str(match_info["kind"]))
+
+# Walks `path` (Dictionary keys / Array indexes) from `root` and sets its last step to `value`.
+static func _set_at_path(root: Dictionary, path: Array, value: String) -> void:
+	var node: Variant = root
+	for i: int in range(path.size()):
+		var step: Variant = path[i]
+		var last: bool = i == path.size() - 1
+		if node is Dictionary:
+			var d: Dictionary = node
+			if last:
+				d[step] = value
+			else:
+				node = d.get(step, null)
+		elif node is Array:
+			var a: Array = node
+			var idx: int = DictUtil.to_int(step, -1)
+			if idx < 0 or idx >= a.size():
+				return
+			if last:
+				a[idx] = value
+			else:
+				node = a[idx]
+		else:
+			return
 
 # ------------------------------------------------------------------------------
 # Validation
@@ -653,6 +720,14 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 		"quests":
 			if not (e["steps"] is Array):
 				errors.append("Steps must be a list.")
+			for key: String in ["requires_flags", "complete_flags", "variants", "loot_pool"]:
+				if not (e[key] is Array):
+					errors.append("%s must be a list." % str(WorldSchema.field("quests", key)["label"]))
+			if not (e["links"] is Dictionary):
+				errors.append("Links must be an object.")
+		"loot":
+			if not (e["requires_flags"] is Array):
+				errors.append("Requires flags must be a list.")
 		"encounters":
 			if DictUtil.array_of(e["party"]).size() > 4:
 				errors.append("The party holds at most 4 members.")
@@ -703,6 +778,8 @@ static func validate_entry(world_id: String, kind: String, entry: Dictionary, cu
 			errors.append_array(_quest_errors(world_id, e))
 		"encounters":
 			errors.append_array(_encounter_errors(world_id, e))
+		"loot":
+			errors.append_array(_loot_errors(e))
 	return errors
 
 # Is a qualified ref's world visible from `world_id` (itself, an ancestor, or connected)?
@@ -744,6 +821,10 @@ static func _ref_errors(world_id: String, kind: String, e: Dictionary) -> Array[
 		for v: String in values:
 			errors.append_array(_check_ref(world_id, f, ref_kind, v))
 	return errors
+
+# Problems with `v` as a ref to `ref_kind` written in `world_id` (refs inside json fields: quest links, loot pools...).
+static func ref_errors(world_id: String, label: String, ref_kind: String, v: String) -> Array[String]:
+	return _check_ref(world_id, {"label": label}, ref_kind, v)
 
 static func _check_ref(world_id: String, f: Dictionary, ref_kind: String, v: String) -> Array[String]:
 	var errors: Array[String] = []
@@ -893,17 +974,25 @@ static func _quest_errors(world_id: String, e: Dictionary) -> Array[String]:
 		errors.append("Steps must be a list.")
 		return errors
 	var list: Array = steps
+	var templated: bool = not str(e.get("template", "")).is_empty()
 	for i: int in range(list.size()):
 		var step: Dictionary = list[i] if list[i] is Dictionary else {}
 		if str(step.get("text", "")).strip_edges().is_empty():
 			errors.append("Quest step %d needs a \"text\"." % (i + 1))
+		if templated:
+			continue   # bindings are checked per objective kind (QuestRules); unused keys are ignored
 		var loc: String = str(step.get("location", ""))
 		if not loc.is_empty() and resolve(world_id, "locations", loc).is_empty():
 			errors.append("Quest step %d: unknown location '%s'." % [i + 1, loc])
 		var enc: String = str(step.get("encounter", ""))
 		if not enc.is_empty() and resolve(world_id, "encounters", enc).is_empty():
 			errors.append("Quest step %d: unknown encounter '%s'." % [i + 1, enc])
+	errors.append_array(QuestRules.world_quest_errors(world_id, e))
 	return errors
+
+# A loot entry: grantable ref for its reward kind, count rules, flag conditions (enums are checked generically).
+static func _loot_errors(e: Dictionary) -> Array[String]:
+	return QuestRules.loot_entry_errors(e)
 
 static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []

@@ -4,7 +4,8 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - World Schema (the lore layer on top of the content catalog)
 # A world is a folder of lore entries: regions, locations, factions, characters,
-# named items, disciplines, quests, lore entries and encounters. Entries never
+# named items, disciplines, quests, lore entries, encounters and loot (the world
+# loot table quests offer as special rewards). Entries never
 # carry gameplay of their own: they REFERENCE base assets from the Content Forge
 # catalog (`base:units`, `base:items`...) and add lore (names, backgrounds, art,
 # factions), plus optional explicit tuning deltas.
@@ -19,7 +20,7 @@ extends RefCounted
 # Every kind has `override` (the qualified id of an ancestor entry it replaces) and `tags`.
 # ==============================================================================
 
-const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters"]
+const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot"]
 
 # Deltas a character may apply to its base unit (flat unless _pct).
 const TUNING_KEYS: Array[String] = ["hp_pct", "power", "armor", "speed", "ap"]
@@ -56,6 +57,8 @@ static func kind_icon(kind: String) -> String:
 			return "📖"
 		"encounters":
 			return "⚔"
+		"loot":
+			return "🎁"
 	return "•"
 
 static func _f(key: String, label: String, type: String, default: Variant, extra: Dictionary = {}) -> Dictionary:
@@ -86,6 +89,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = _lore_fields()
 		"encounters":
 			list = _encounter_fields()
+		"loot":
+			list = _loot_fields()
 		_:
 			return list
 	if kind != "world":
@@ -193,6 +198,29 @@ static func _quest_fields() -> Array[Dictionary]:
 		_f("requires", "Requires quests", "refs", [], {"ref": "quests"}),
 		_f("steps", "Steps", "json", [], {"help": "[{\"text\": \"Reach the gate\", \"location\": \"id\", \"encounter\": \"id\"}]"}),
 		_f("reward", "Reward", "text", ""),
+		# Runtime binding (M4-L). Ranges are checked by WorldCatalog validation, not clamped here, so bad values report.
+		_f("template", "Template", "string", "", {"help": "QuestCatalog template id (objectives + generic rewards). Empty = lore-only quest; with a template, steps bind one per objective."}),
+		_f("turn_in", "Turn in to", "ref", "", {"ref": "characters", "optional": true, "help": "Empty = the giver."}),
+		_f("requires_flags", "Requires flags", "json", [], {"help": "[{\"key\": \"flag.key\", \"value\": true}]; all must hold to start."}),
+		_f("complete_flags", "Sets flags on completion", "json", [], {"help": "[{\"key\": \"flag.key\", \"value\": true}], set in order."}),
+		_f("auto_start", "Auto start", "bool", false, {"help": "Starts by itself once available (needs a template)."}),
+		_f("links", "Links", "json", {}, {"help": "Metadata only: {\"follows\": [], \"leads_to\": [], \"related_quests\": [], \"related_characters\": [], \"related_locations\": [], \"related_factions\": []}."}),
+		_f("variants", "Variants", "json", [], {"help": "[{\"id\", \"when_flags\": [...], \"unless_flags\": [...], \"set\": {giver, turn_in, description, reward, rewards_from, steps, links, available, loot_pool, loot_picks}}], applied in order."}),
+		_f("loot_pool", "Loot pool", "json", [], {"help": "World loot refs offered as a pick on completion (on top of the generic rewards)."}),
+		_f("loot_picks", "Loot picks", "int", 1, {"help": "How many pool entries the player may take (0..3)."}),
+	]
+
+# World loot table: special rewards quests offer from their loot_pool; each is claimed once per save.
+static func _loot_fields() -> Array[Dictionary]:
+	return [
+		_f("id", "ID", "id", ""),
+		_f("name", "Name", "string", "New Loot"),
+		_f("description", "Description", "text", ""),
+		_f("reward_kind", "Reward kind", "enum", "item", {"options": ["item", "passive", "skill"]}),
+		_f("ref", "Grants (base id)", "string", "", {"help": "Base item id, passive id or skill family head (not a basic skill)."}),
+		_f("count", "Count", "int", 1, {"help": "Items: 1..99; passives and skills: 1."}),
+		_f("rarity", "Rarity", "enum", "rare", {"options": ["common", "rare", "unique"]}),
+		_f("requires_flags", "Requires flags", "json", [], {"help": "[{\"key\", \"value\"}]; not offered while any fails."}),
 	]
 
 static func _lore_fields() -> Array[Dictionary]:

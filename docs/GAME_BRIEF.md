@@ -108,3 +108,9 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 - Tiers: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
 - Trained fists: empty main hand + fist proficiency >= `DamageCalculator.TRAINED_FIST_MIN_LEVEL` (2): weapon power `UNARMED_BASE_POWER` (15) + fist training, fist crit bonus; `GearBudget.UNARMED_VALUE` reads the same constant. Inputs only, the formula is unchanged.
 - Sim: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value]` (`tools/balance_sim.gd` + `tools/sim/`); cells `binary/hp-margin`; duel = diagnostic band 30-70 (party and role targets: `docs/decisions/balance.md`). Modes party / role / sweep (BAL2_SIM 4-8): role tests start enemies 4 tiles away (`distance=` overrides); off-target values marked X; `METRIC FAIL` lines (`log_damage`, `log_area`, `log_heal`, `log_riposte`, `other_*`) mean the collector found HP it cannot explain; party fight ~3 s, full role run ~28 min. Tests: `bal2_rules_test_suite.gd`.
+
+## Quests and flags (M4)
+
+- Quest templates (lore-free): `QuestCatalog` (`data/quests/quests.json`, same upsert/save/validate contract as `ContentCatalog`). World quests bind a template's objectives to world targets; validation in `QuestRules` + `WorldCatalog` (`_quest_errors`, `_loot_errors`).
+- No branching inside a quest: progress and world state live in flags (`GameState.flags`). Quest `links` are metadata; flag-conditioned `variants` may override only `QuestRules.VARIANT_FIELDS` (giver, turn-in, description, reward text, `rewards_from`, step targets, links, availability, loot pool).
+- Special rewards come from the per-world loot table (world kind `loot`, `data/worlds/<id>/loot.json`); a quest offers `loot_pool` entries, the player picks 0..`loot_picks`, claimed entries leave every other pool; generic template rewards are always granted. Runtime (QuestRunner, rewards, save v2) lands in M4-L slice 2.

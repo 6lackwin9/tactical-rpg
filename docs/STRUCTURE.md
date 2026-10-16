@@ -35,14 +35,14 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel}.gd` | Forge skill tab logic and ranks panel (SKILL1) | S5 | done |
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
-| `scripts/quests/` | quest state machine, flags, rewards (grants passives/skills/items) | S8 | placeholder |
+| `scripts/quests/` | quest_rules.gd (constants, validation of templates, world quest bindings, variants, links, loot), quest_catalog.gd (templates, ContentCatalog-style contract); runner and reward grant in M4-L slice 2 | S8 | in progress |
 | `scripts/exploration/` | region maps, location interactions, encounter triggers | S9 | placeholder |
 | `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
 | `scripts/dialogue/` | dialogue trees, speakers, shops, reputation | S11 | placeholder |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3) | S13 | done |
 | `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
-| `data/quests/` | quest definitions (lore-free templates) | S8 | placeholder |
+| `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |
 | `data/dialogue/` | dialogue trees | S11 | placeholder |
 | `assets/` | audio, fonts, extra art | S14 | placeholder |
 
