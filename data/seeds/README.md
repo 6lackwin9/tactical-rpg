@@ -19,3 +19,9 @@ Restore with `git show <hash>:data/seeds/<file>`.
 | `skill1_ranks.gd` | SKILL1 (ranked skills v2 migration) | `745962a` |
 
 Example: `git show 11ffe67:data/seeds/c1a1.gd`
+
+## Active seeds
+
+| Seed | Task |
+| --- | --- |
+| `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |

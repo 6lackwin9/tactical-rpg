@@ -1,5 +1,83 @@
 {
 	"kind": "quest_templates",
 	"version": 1,
-	"entries": []
+	"entries": [
+		{
+			"id": "reach_and_clear",
+			"name": "Reach and clear",
+			"description": "Go to a place, then win the fight there.",
+			"objectives": [
+				{
+					"kind": "reach_location"
+				},
+				{
+					"kind": "win_encounter"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"items": {
+					"con_heal_potion": 2
+				}
+			},
+			"tags": []
+		},
+		{
+			"id": "two_stop_delivery",
+			"name": "Two-stop delivery",
+			"description": "Pick something up at one place and bring it to another.",
+			"objectives": [
+				{
+					"kind": "reach_location"
+				},
+				{
+					"kind": "reach_location"
+				}
+			],
+			"rewards": {
+				"xp": 40,
+				"items": {
+					"con_focus_elixir": 1
+				}
+			},
+			"tags": []
+		},
+		{
+			"id": "clear_site",
+			"name": "Clear a site",
+			"description": "Win one fight.",
+			"objectives": [
+				{
+					"kind": "win_encounter"
+				}
+			],
+			"rewards": {
+				"xp": 80,
+				"items": {
+					"con_heal_potion": 1
+				}
+			},
+			"tags": []
+		},
+		{
+			"id": "signal_and_return",
+			"name": "Signal and return",
+			"description": "Wait for a signal, then return to a place.",
+			"objectives": [
+				{
+					"kind": "flag"
+				},
+				{
+					"kind": "reach_location"
+				}
+			],
+			"rewards": {
+				"xp": 50,
+				"items": {
+					"con_focus_elixir": 1
+				}
+			},
+			"tags": []
+		}
+	]
 }

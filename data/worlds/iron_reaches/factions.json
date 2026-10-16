@@ -11,6 +11,7 @@
 			"relations": {
 				"ashlands:ember_wardens": "ally"
 			},
+			"grants": [],
 			"tags": []
 		}
 	]

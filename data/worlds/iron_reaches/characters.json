@@ -14,6 +14,7 @@
 			"faction": "forge_guild",
 			"home": "slag_gate",
 			"disciplines": [],
+			"passives": [],
 			"named_items": [],
 			"tuning": {},
 			"tags": []

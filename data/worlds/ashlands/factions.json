@@ -11,6 +11,7 @@
 			"relations": {
 				"ashen_horde": "enemy"
 			},
+			"grants": [],
 			"tags": []
 		},
 		{
@@ -22,6 +23,7 @@
 			"relations": {
 				"ember_wardens": "enemy"
 			},
+			"grants": [],
 			"tags": []
 		}
 	]
