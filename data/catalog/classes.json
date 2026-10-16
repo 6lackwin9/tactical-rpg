@@ -5,7 +5,7 @@
 		{
 			"id": "warrior",
 			"name": "Warrior",
-			"description": "Tank: huge constitution, tower shield and plate; a wall that holds the line and hits lightly.",
+			"description": "Tank: huge constitution, kite shield and plate; a wall that holds the line and hits lightly.",
 			"art": "warrior",
 			"ai_role": "AGGRESSOR",
 			"base_stats": {
@@ -17,8 +17,8 @@
 				"KNOW": 10
 			},
 			"growth": {
-				"CONS": 3,
-				"STR": 1,
+				"CONS": 2,
+				"STR": 2,
 				"PERC": 1
 			},
 			"proficiency": {
@@ -78,7 +78,7 @@
 				}
 			],
 			"main_hand": "wpn_hand_axe",
-			"off_hand": "shd_tower",
+			"off_hand": "shd_kite",
 			"head": "",
 			"body": "arm_plate",
 			"accessory_1": "",
@@ -103,8 +103,9 @@
 			},
 			"growth": {
 				"DEX": 2,
-				"PERC": 2,
-				"STR": 1
+				"PERC": 1,
+				"STR": 1,
+				"CONS": 1
 			},
 			"proficiency": {
 				"bow": {
@@ -134,7 +135,7 @@
 			},
 			"skill_path": [
 				{
-					"level": 3,
+					"level": 1,
 					"skill": "aimed_shot"
 				},
 				{
@@ -176,7 +177,7 @@
 		{
 			"id": "brawler",
 			"name": "Brawler",
-			"description": "Bruiser: fists, maces and a thick hide; closes the gap and hits hard.",
+			"description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
 			"art": "brawler",
 			"ai_role": "AGGRESSOR",
 			"base_stats": {
@@ -228,12 +229,12 @@
 			},
 			"skill_path": [
 				{
-					"level": 3,
-					"skill": "lunge"
+					"level": 1,
+					"skill": "body_blow"
 				},
 				{
 					"level": 3,
-					"skill": "body_blow"
+					"skill": "lunge"
 				},
 				{
 					"level": 3,
@@ -256,7 +257,7 @@
 					"skill": "cyclone_kick"
 				}
 			],
-			"main_hand": "wpn_flanged_mace",
+			"main_hand": "",
 			"off_hand": "",
 			"head": "",
 			"body": "arm_leather",
@@ -373,9 +374,10 @@
 				"KNOW": 8
 			},
 			"growth": {
-				"DEX": 3,
+				"DEX": 2,
 				"PERC": 1,
-				"STR": 1
+				"STR": 1,
+				"CONS": 1
 			},
 			"proficiency": {
 				"dagger": {
@@ -456,7 +458,8 @@
 				"KNOW": 12
 			},
 			"growth": {
-				"INT": 3,
+				"INT": 2,
+				"CONS": 1,
 				"KNOW": 1,
 				"PERC": 1
 			},

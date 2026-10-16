@@ -337,7 +337,7 @@
 			"off_hand_category": "",
 			"block_cost": 1,
 			"burden": 2,
-			"mitigation": 8,
+			"mitigation": 6,
 			"required_stats": {
 				"STR": 12
 			},
@@ -387,7 +387,7 @@
 			"off_hand_category": "",
 			"block_cost": 1,
 			"burden": 3,
-			"mitigation": 10,
+			"mitigation": 8,
 			"required_stats": {
 				"CONS": 12
 			},

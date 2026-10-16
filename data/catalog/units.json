@@ -18,7 +18,13 @@
 			"art": "",
 			"skill_cap": 0,
 			"extra_skills": [],
-			"loadout": [],
+			"loadout": [
+				"taunt_shout",
+				"shield_bash",
+				"riposte",
+				"intimidate",
+				"shield_wall"
+			],
 			"ai_role": "",
 			"target_pref": "ROLE",
 			"flee_ratio": 0.25,
@@ -50,7 +56,13 @@
 			"art": "",
 			"skill_cap": 0,
 			"extra_skills": [],
-			"loadout": [],
+			"loadout": [
+				"aimed_shot",
+				"pinning_shot",
+				"leap_back",
+				"barbed_arrow",
+				"deadeye"
+			],
 			"ai_role": "",
 			"target_pref": "ROLE",
 			"flee_ratio": 0.25,
@@ -239,7 +251,7 @@
 			"id": "goblin_shaman",
 			"name": "Goblin Shaman",
 			"side": "enemy",
-			"description": "Opens with Focus, then fights from range.",
+			"description": "Smites and mends its allies.",
 			"class_id": "priest",
 			"level": 3,
 			"tier": "minion",
@@ -259,13 +271,15 @@
 			"prefer_level": 0,
 			"status_resist": {},
 			"reckless": false,
-			"main_hand": "",
-			"off_hand": "",
+			"main_hand": "wpn_cleric_mace",
+			"off_hand": "none",
 			"head": "",
-			"body": "",
+			"body": "arm_robe",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [
+				"none"
+			]
 		},
 		{
 			"id": "goblin_berserker",
@@ -449,7 +463,13 @@
 			"art": "",
 			"skill_cap": 0,
 			"extra_skills": [],
-			"loadout": [],
+			"loadout": [
+				"quick_stab",
+				"pounce",
+				"lacerate",
+				"backflip",
+				"hamstring"
+			],
 			"ai_role": "",
 			"target_pref": "ROLE",
 			"flee_ratio": 0.25,
@@ -481,7 +501,13 @@
 			"art": "",
 			"skill_cap": 0,
 			"extra_skills": [],
-			"loadout": [],
+			"loadout": [
+				"arcane_bolt",
+				"arc_lance",
+				"firebomb",
+				"glacial_burst",
+				"focus"
+			],
 			"ai_role": "",
 			"target_pref": "ROLE",
 			"flee_ratio": 0.25,
