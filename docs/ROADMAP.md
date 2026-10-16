@@ -86,8 +86,19 @@ Rules and open questions: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RUL
 
 EXP1, DLG1 and TRAV1 all edit `world_schema`, `world_catalog`, `game_state` and the save files: run them in sequence (one save version bump each, or bundle).
 
+## Core and presentation baseline (proposed, design-brainstorm 2026-10-17; awaiting user answers)
+
+Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T terrain, S12C combos; skill upgrades covered by SKILL1 ranks and grades), `S14_RULES.md` (AssetCatalog manifest, presenter animation, SoundBank, asset-load suite), `UI_MENUS_RULES.md` (menus, save slots, new game, party screen with level-up, journal). Mechanics only add inputs to `DamageCalculator.compute`; numbers are data fields, no balance values proposed.
+
+| Milestone | Status | Depends on | Notes |
+| --- | --- | --- | --- |
+| S12S | proposed | ITEM1-L, CLASS1-L | status slice, then S12T terrain and S12C combos in sequence (shared skill and plan files) |
+| S14-1 | proposed | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
+| UI1 | proposed | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
+
 ## Open engine items (tracked)
 
+- `ItemArt.icon_key` still reads the deprecated `shortsword` off-hand category (HISTORY row 23): cleanup candidate.
 The resolved bullets (AI hooks, done in AI1) are archived in `docs/archive/ROADMAP_2026-10.md`.
 
 - Disengage "once per round" and "after a MOVE" are not enforced/modelled (same as plain MOVE).
