@@ -68,13 +68,6 @@ if ($editorResult.ExitCode -ne 0) {
     Write-Host $editorResult.Output -ForegroundColor DarkRed
     exit 1
 }
-# --quit-after 50 can exit before a fresh checkout's PNGs are imported (CI): --import imports everything, then quits
-$importResult = Invoke-GodotProcess -Arguments @("--headless", "--import")
-if ($importResult.ExitCode -ne 0) {
-    Write-Host "[ERROR] Godot asset import failed with exit code: $($importResult.ExitCode)" -ForegroundColor Red
-    Write-Host $importResult.Output -ForegroundColor DarkRed
-    exit 1
-}
 Write-Host "  -> Global class cache and imports up to date." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------

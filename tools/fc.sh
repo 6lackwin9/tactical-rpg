@@ -84,10 +84,6 @@ gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step
   if ! timeout 300 "$GODOT" --headless --import > "$OUT/editor.out" 2>&1; then
     echo "[gate] FAIL class cache / import scan (full log: $OUT/editor.out)"; status=1; return
   fi
-  # --quit-after 50 can exit before a fresh checkout's PNGs are imported (CI): --import imports everything, then quits
-  if ! timeout 300 "$GODOT" --headless --import >> "$OUT/editor.out" 2>&1; then
-    echo "[gate] FAIL asset import (full log: $OUT/editor.out)"; status=1; return
-  fi
   echo "[gate] class cache and imports up to date"
   parse_all; [ $status -ne 0 ] && return
   suite res://scenes/test_arena.tscn arena; [ $status -ne 0 ] && return
