@@ -1,6 +1,6 @@
 # S12T-L: terrain rules (terrain catalog kind, cost-weighted pathing, cover, hazards, three hazard tile types)
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers" and docs/specs/S12_RULES.md 2.3; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers" and docs/specs/S12_RULES.md 2.3)
 Depends on: S12S-L merged (slow, poison, burn rows); not in parallel with S12C-L (both edit `combat_plan.gd`)
 Lane: logic (schema first; commit 1 releases S12T-A)
 Touches: `scripts/combat/arena/{terrain,combat_zones,grid_path,combat_grid}.gd`, new `scripts/combat/arena/cover_rules.gd`, new `scripts/combat/arena/hazard_rules.gd`, `scripts/combat/planning/combat_plan.gd` (path cost, move chunking, reach), `scripts/combat/actions/{walk_command,attack_command,area_attack_command,disengage_command}.gd`, `scripts/core/combat/damage_calculator.gd` (`compute` gains a `cover_ratio` input), `scripts/combat/arena/combat_resolver.gd` (round-end hazards), `scripts/combat/ai/tactical_ai.gd`, `scripts/content/content_schema.gd` (kind list), new `scripts/content/terrain_fields.gd`, new `scripts/content/validators/terrain_validator.gd`, `scripts/content/content_catalog.gd` (dispatch only), `scripts/art/tile_art.gd` (three drawings), new `scripts/tests/terrain_rules_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`

@@ -196,7 +196,7 @@ Legacy AI path. Status: confirmed (user 2026-10-17, new from Q2).
 Q1 and Q2 answered (now CLN-15, CLN-16); Q3 waits for ITEM1.
 
 - Q1 (unused goblin art keys) answered: map them now (CLN-15). Q2 (`smart_skills = false`) answered: remove after the BAL2 rerun (CLN-16).
-- Q3 `ItemCatalog` named shorthands (34 uses in `dojo_loadouts.gd`) map old names to item ids (`create_iron_claymore` returns `wpn_claymore`); review after ITEM1's migration.
+- Q3 `ItemCatalog` named shorthands (34 uses in `dojo_loadouts.gd`) map old names to item ids (`create_iron_claymore` returns `wpn_claymore`); review after ITEM1's migration. Answered (user 2026-10-17): fold the review into the CLN-6 ItemCatalog part (ITEM1 is done).
 
 ### Checked and kept
 

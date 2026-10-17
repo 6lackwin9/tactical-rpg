@@ -1,6 +1,6 @@
 # REP1-A: Sample reputation deltas, a rep-gated choice and a rep-gated quest (S11-B)
 
-Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
+Status: approved (user 2026-10-17) (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")
 Depends on: REP1-L commit 1 merged; DLG1-A merged (Hest's tree and shop); EXP1-A merged (encounter `ash_raiders`)
 Lane: asset (one branch, seed `data/seeds/rep1a.gd`)
 Touches: `data/worlds/ashlands/{quests,dialogues}.json`, `data/worlds/iron_reaches/quests.json` (via `WorldCatalog.upsert` + `save_world`), `data/seeds/rep1a.gd`, `data/seeds/README.md`. No code, no tests.

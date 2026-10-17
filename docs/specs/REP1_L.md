@@ -1,6 +1,6 @@
 # REP1-L: Faction reputation, condition operators and price bands (S11-B)
 
-Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
+Status: approved (user 2026-10-17) (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")
 Depends on: DLG1-L merged (dialogue effects, `ShopRules`); after TRAV1-L in the queue (shared `world_schema.gd` / `world_catalog.gd`)
 Lane: logic (one branch; commit 1 is the schema slice that releases REP1-A)
 Touches: `scripts/quests/quest_rules.gd` (operators in `condition_errors` / `condition_met`, rep value rule, `reputation` validation), `scripts/quests/quest_runner.gd` (`complete` applies `reputation`), `scripts/world/world_schema.gd` (`_quest_fields` `reputation`), `scripts/world/world_catalog.gd` (`_json_refs_to` quest part), new `scripts/dialogue/rep_rules.gd`, `scripts/dialogue/{dialogue_rules,dialogue_runner,shop_rules}.gd` (`add_flag`, multipliers, hostile closes), new `scripts/tests/reputation_test_suite.gd` + one line in `suite_registry.gd`, `scripts/ui/overworld/{dialogue_panel,shop_panel}.gd` (band display). No save version bump: reputation lives in the flat flag registry and no new `GameState` key is added.

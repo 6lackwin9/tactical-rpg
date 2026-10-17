@@ -1,6 +1,6 @@
 # TRAV1-L: World map, routes, road encounters and the world clock (S10)
 
-Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
+Status: approved (user 2026-10-17) (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")
 Depends on: EXP1-L merged (entry rule, `visited` flags, `BattleBridge`, `GameRolls`, `ExploreRunner.wake`), DLG1-L merged (shared hub files, save v4)
 Lane: logic (one branch; commit 1 is the schema slice that releases TRAV1-A)
 Touches: new `scripts/travel/{travel_rules,travel_runner}.gd` + `README.md`, `scripts/world/world_schema.gd` (kind `routes`), `scripts/world/world_catalog.gd` (dispatch, `_shape_errors`, `_json_refs_to` route part), `scripts/tests/world_test_suite.gd` (kind list), `scripts/exploration/{map_rules,explore_runner}.gd` (world-map exit node check, menu entry), `scripts/game_state/{game_state,save_game,save_migrations}.gd`, new `scripts/tests/travel_test_suite.gd` + one line in `suite_registry.gd`, `scripts/tests/save_test_suite.gd` (version 5), new `scenes/overworld/world_map_debug.tscn` + `scripts/ui/overworld/world_map_view.gd`, `scripts/ui/overworld/region_map_view.gd` (opens the world map).
