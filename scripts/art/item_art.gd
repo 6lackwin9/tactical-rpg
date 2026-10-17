@@ -5,8 +5,9 @@ extends RefCounted
 # Tactical RPG - Item Icons
 # Baseline icon per gear type (sword, greatsword, hammer, bow, shield, plate,
 # ring, potion, ...) inside a frame colored by rarity (rare and above glow).
-# Unique items can set `Item.icon_id` to a bespoke icon registered in
-# UNIQUE_ICONS; everything else falls back to the type icon automatically.
+# Items can set `Item.icon_id` to any item art key (a bespoke icon in
+# UNIQUE_ICONS, a type icon or a manifest key); everything else falls back to
+# the type icon automatically.
 # ==============================================================================
 
 const RARITY_COLORS: Array[String] = ["#d4d4d8", "#66e680", "#59bfff", "#bf73ff", "#ffcc33"]
@@ -36,19 +37,16 @@ static func _unique_glyph(icon_id: String) -> String:
 			return _glyph_runed_staff()
 	return _glyph("weapon")
 
+# The item's icon through the registry (S14-L1 rule 4): a manifest row for its key wins, else the generated template.
 static func icon(item: Item) -> Texture2D:
 	if item == null:
 		return null
-	var key: String = icon_key(item)
-	return SvgRaster.texture("item|%s|%d" % [key, item.rarity], icon_svg(key, int(item.rarity)), 2.0)
+	return AssetRegistry.texture("item", icon_key(item), "icon", int(item.rarity))
 
-# Type icons an item may also name in `icon_id` (honoured first): the retyped main-hand shortsword keeps its
-# shortsword icon that way once its legacy off-hand category is gone (FORGE1_ITEMS 1.1 `art`).
-const TYPE_ICON_IDS: Array[String] = ["shortsword"]
-
-# The icon family an item resolves to (bespoke or type id named by icon_id, else its type).
+# The icon key an item resolves to (S14-L1 rule 5): its icon_id when that is a known item art key (bespoke, type or
+# manifest key; wpn_shortsword keeps its icon through icon_id "shortsword"), else the key derived from its gear type.
 static func icon_key(item: Item) -> String:
-	if not item.icon_id.is_empty() and (UNIQUE_ICONS.has(item.icon_id) or TYPE_ICON_IDS.has(item.icon_id)):
+	if AssetRegistry.has_key("item", item.icon_id):
 		return item.icon_id
 	if item is Consumable:
 		var con: Consumable = item
@@ -77,7 +75,7 @@ static func icon_key(item: Item) -> String:
 		"sword":
 			if eq.is_two_handed:
 				return "greatsword"
-			return "shortsword" if eq.off_hand_category == "shortsword" else "sword"
+			return "sword"
 		"hammer", "mace":
 			return "hammer"
 		"axe":

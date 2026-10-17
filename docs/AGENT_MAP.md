@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### S14-L1 commit 3 item art (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) + change-reviewer | ItemArt through AssetRegistry, icon_id validation and Forge picker, shortsword branch removed | n/a / 25 | merged via PR |
+
 ### S14-A1 first manifest rows (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |

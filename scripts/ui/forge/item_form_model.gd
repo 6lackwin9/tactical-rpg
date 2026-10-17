@@ -285,11 +285,7 @@ static func family_choices() -> Array[Dictionary]:
 # Icon ids an item may name: "" (icon by gear type), the bespoke icons and the kept type icons (ItemArt).
 static func icon_options() -> Array[String]:
 	var out: Array[String] = [""]
-	for key: Variant in ItemArt.UNIQUE_ICONS:
-		out.append(str(key))
-	for key: String in ItemArt.TYPE_ICON_IDS:
-		if not out.has(key):
-			out.append(key)
+	out.append_array(AssetRegistry.keys("item"))
 	return out
 
 static func max_tiers(draft: Dictionary) -> int:

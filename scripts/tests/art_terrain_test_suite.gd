@@ -128,6 +128,25 @@ static func run(_tree_parent: Node = null) -> bool:
 		and ItemArt.icon_key(ItemCatalog.create_runed_staff()) == "runed_staff"
 	)
 
+	# 10. Item icons go through the registry (S14-L1 rules 4-5): icon_id must be an item art key; no category branch
+	var plain_sword: Item = ItemCatalog.create_iron_shortsword()
+	plain_sword.icon_id = ""
+	var unknown_icon: Item = ItemCatalog.create_iron_shortsword()
+	unknown_icon.icon_id = "qa_no_such_icon"
+	var staff: Item = ItemCatalog.create_runed_staff()
+	var bad_row: Dictionary = ContentCatalog.get_entry("items", "wpn_shortsword").duplicate(true)
+	bad_row["icon_id"] = "qa_no_such_icon"
+	var type_row: Dictionary = ContentCatalog.get_entry("items", "wpn_shortsword").duplicate(true)
+	type_row["icon_id"] = "dagger"
+	var registry_ok: bool = (
+		ItemArt.icon_key(plain_sword) == "sword"
+		and ItemArt.icon_key(unknown_icon) == "sword"
+		and ItemArt.icon(staff) == AssetRegistry.texture("item", "runed_staff", "icon", int(staff.rarity))
+		and ContentCatalog.validate_entry("items", bad_row, "wpn_shortsword").has("Icon 'qa_no_such_icon' isn't a known item icon key.")
+		and ContentCatalog.validate_entry("items", type_row, "wpn_shortsword").is_empty()
+		and ItemFormModel.icon_options() == [""] + AssetRegistry.keys("item")
+	)
+
 	print("\n=======================================================")
 	print("=== ART, TERRAIN & ZONE ASSERTIONS                  ===")
 	print("=======================================================")
@@ -140,5 +159,6 @@ static func run(_tree_parent: Node = null) -> bool:
 	print("  [Terrain] Goblin Ambush (with its wave) deploys and concludes on every zone: %s" % ("PASS" if all_zones_play else "FAIL"))
 	print("  [Art] Terrain tiles (all variants) & overlays rasterize: %s" % ("PASS" if tiles_ok else "FAIL"))
 	print("  [Art] Item icons by gear type + bespoke rare weapon icons: %s" % ("PASS" if icons_ok else "FAIL"))
+	print("  [Art] Item icons through the registry; icon_id validated against item art keys: %s" % ("PASS" if registry_ok else "FAIL"))
 
-	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok
+	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok and registry_ok
