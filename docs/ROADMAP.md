@@ -80,7 +80,6 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 | --- | --- | --- | --- |
 | EXP1 | approved | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
 | DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
-| BATTLE1 | in-progress | EXP1-L, DLG1-L, UI2-L | battle link: map and dialogue fights open the real combat arena with the saved party; outcomes settle XP, quests, wake and retreat (roadmap review goal G1, ahead of TRAV1) |
 | TRAV1 | approved | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files); save v5 |
 | REP1 | approved | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |
