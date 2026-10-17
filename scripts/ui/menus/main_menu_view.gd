@@ -11,6 +11,7 @@ extends Control
 const GAME_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
 const RUNNER_SCENE: String = "res://scenes/scene_runner.tscn"
 const BASE_FONT: int = 18
+const FOCUS_META: StringName = &"focus_target"
 const COL_BG: Color = Color(0.05, 0.07, 0.10, 1.0)
 
 var router: MenuRouter = null
@@ -104,6 +105,8 @@ func render() -> void:
 			view = GearView.new()
 		MenuRouter.RESULTS:
 			view = BattleResultsView.new()
+		MenuRouter.JOURNAL:
+			view = JournalView.new()
 	if view == null:
 		return
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -160,6 +163,9 @@ static func small(b: Button, width: int = 0) -> Button:
 	return b
 
 static func focus_first(root: Node) -> void:
+	if root.has_meta(FOCUS_META):   # a view may name the control to focus (the journal's selected quest)
+		MainMenuView._focus.call_deferred(root.get_meta(FOCUS_META))
+		return
 	for child: Node in root.find_children("*", "BaseButton", true, false):
 		var b: BaseButton = child as BaseButton
 		if b != null and not b.disabled and b.is_visible_in_tree():

@@ -73,6 +73,8 @@ func make_model(id: String, args: Dictionary = {}) -> RefCounted:
 			return LoadoutModel.new(member) if CurrentGame.has_game() else null
 		GEAR:
 			return GearModel.new(member) if CurrentGame.has_game() else null
+		JOURNAL:
+			return JournalModel.new() if CurrentGame.has_game() else null
 		RESULTS:
 			return BattleResultsModel.new(self, DictUtil.dict_of(args.get("award", {})), JsonUtil.strings(args.get("advanced", []))) if CurrentGame.has_game() else null
 	return null
