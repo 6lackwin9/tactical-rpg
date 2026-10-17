@@ -63,7 +63,7 @@ The thread is the planner (lane table: skill `planner`). It writes the planner d
 
 ## Batched release to `main` (Merge & Release thread)
 
-1. Batch: once a day before the 18:30 UTC routine, and whenever the user asks, if `develop` is ahead of `main`.
+1. Batch: twice a day, at 11:52 and 17:52 UTC (the second before the 18:30 dispatch), and whenever the user asks, if `develop` is ahead of `main` (decision "Twice-daily releases").
 2. Check each task commit in `git log origin/main..origin/develop`: task id in the title, `Review:` and `Gate:` lines in the body, task row `approved` or a decision row. A commit that fails the check is reverted on `develop` (`git revert`, pushed) and sent back to its area thread through the coordinator. A reverted task lands again as a new squash commit of its fixed branch onto the latest `develop` (merging the old branch again would be a no-op for git). Then write the logs in one commit on `develop`, pushed before step 3 so they ship in the batch: the `AgentMap:` lines into `docs/AGENT_MAP.md` (one section per task, newest first), the `Done:` lines into `docs/archive/TASKS_DONE.md`, and the `Timing:` and `Blocked-by:` lines into `docs/metrics/TASK_LOG.md` (one row per task; release wait = landed to this commit) with a refreshed Bottlenecks section (biggest waits, the dependency chains behind them, how to decouple them). This thread is the only writer of those three files, so they never conflict.
 3. Open one PR `develop` -> `main` titled `Release <date>: <task ids>`; body: one line per task with its review verdict, plus anything waiting on the user. CI (`gate.yml`) runs on this PR; `gate` is a required check on `main` (branch protection: PR required, no force push or deletion), so it always runs on the release PR, docs-only batches included.
 4. CI green: merge with a **merge commit** (not squash, so `develop` and `main` keep a shared history and the next batch has no conflicts). The push to `main` runs the gate again; the web build deploys at the next daily run (19:07 UTC) or on request.
@@ -96,7 +96,7 @@ Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.
 ## Scheduled routines
 
 - Daily planner pass (economy mode, 18:30 UTC): pick the next `approved` task whose `Depends on` rows are `done` and whose `Touches` do not overlap another area's unmerged task branch, and hand it to its area thread, which lands it on `develop`. The routine wakes the Platform & Workflow thread (no new thread per run), which only dispatches: it sends the task to the area thread's session as a cross-session message (thread found by title in the project's thread list), or keeps it when the area is Platform & Workflow. If the area has no live thread, it asks the coordinator session to open that area thread (already approved by the user) and pass the task on. The area thread stops at any design question. If the Platform & Workflow thread is closed, recreate the routine bound to the new one. Balance and housekeeper routines are added later on request.
-- Release batch: the Merge & Release thread keeps its own daily routine bound to itself, before the 18:30 dispatch.
+- Release batch: the Merge & Release thread keeps two routines bound to itself, 11:52 UTC ("Midday release batch") and 17:52 UTC ("Daily release batch", before the 18:30 dispatch).
 - Routines follow the same approval rule as threads.
 
 ## Environment
