@@ -1,0 +1,60 @@
+# Deletes remote task branches whose work is already on develop (cloud sessions cannot delete
+# refs through their proxy). A branch is deleted when it is not main/develop, has no open PR,
+# its last commit is older than min_age_hours, and either its head is the head of a merged PR
+# or merging it into develop changes nothing. Everything else is listed in the job summary.
+# Do not turn on the repo setting "Automatically delete head branches": it would delete
+# develop after each release PR merges (docs/workflow/cloud.md "Branch cleanup").
+name: branch-cleanup
+
+on:
+  schedule:
+    - cron: '37 19 * * *'
+  workflow_dispatch:
+    inputs:
+      min_age_hours:
+        description: Skip branches with a commit newer than this many hours
+        default: '6'
+      dry_run:
+        description: List only, delete nothing
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete branches already on develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIN_AGE_HOURS: ${{ inputs.min_age_hours || '6' }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+        run: |
+          git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'
+          dev_tree=$(git rev-parse origin/develop^{tree})
+          open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].head.ref')
+          merged=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100" --jq '.[] | select(.merged_at != null and (.base.ref == "develop" or .base.ref == "main")) | .head.sha')
+          cutoff=$(( $(date +%s) - MIN_AGE_HOURS * 3600 ))
+          { echo "| Branch | Action | Reason |"; echo "| --- | --- | --- |"; } >> "$GITHUB_STEP_SUMMARY"
+          for ref in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin); do
+            case "$ref" in main|develop|HEAD) continue ;; esac
+            sha=$(git rev-parse "origin/$ref")
+            if echo "$open" | grep -qx "$ref"; then why="open PR"; act=keep
+            elif [ "$(git log -1 --format=%ct "origin/$ref")" -gt "$cutoff" ]; then why="commit newer than ${MIN_AGE_HOURS}h"; act=keep
+            elif echo "$merged" | grep -qx "$sha"; then why="head of a merged PR"; act=delete
+            elif [ "$(git merge-tree --write-tree origin/develop "origin/$ref" 2>/dev/null | head -1)" = "$dev_tree" ]; then why="content already on develop"; act=delete
+            else why="has work not on develop"; act=keep
+            fi
+            if [ "$act" = delete ] && [ "$DRY_RUN" != true ]; then
+              git push -q origin --delete "$ref" || { act="delete failed"; }
+            fi
+            echo "| \`$ref\` | $act | $why |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$act $ref ($why)"
+          done

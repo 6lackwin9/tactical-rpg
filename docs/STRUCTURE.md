@@ -38,8 +38,10 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
 | `assets/fonts/`, `scripts/ui/runner/web_fonts.gd` | Web-only fallback fonts for emoji and symbol glyphs (`WebFonts.install`, called by the Scene Runner and the Main Menu, the browser build's entry scene); sources and licenses in `assets/fonts/README.md` | process | done |
-| `export_presets.cfg`, `.github/workflows/web.yml` | Web (HTML5) export preset (single-threaded) and the workflow that builds it on every PR and deploys it to GitHub Pages from `main` (`docs/workflow/web.md`) | process | done |
-| `.github/workflows/gate.yml` | GitHub Actions: fast gate (`tools/fc.sh gate`) and `tools/fc.sh docs` on every PR and push to `main` | process | done |
+| `export_presets.cfg`, `.github/workflows/web.yml` | Web (HTML5) export preset (single-threaded) and the workflow that builds and deploys `main` once a day and on request (`docs/workflow/web.md`) | process | done |
+| `.github/workflows/branch-cleanup.yml` | daily deletion of remote task branches already on `develop` (`docs/workflow/cloud.md` "Branch cleanup") | process | done |
+| `docs/metrics/` | `TASK_LOG.md`: time per task, waits by cause and bottlenecks, compiled by the Merge & Release thread | process | done |
+| `.github/workflows/gate.yml` | GitHub Actions: fast gate (`tools/fc.sh gate`) and `tools/fc.sh docs` on PRs into `main` (a required check) and non-docs pushes to `main` | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd`, `combat_ext_attacks_test_suite.gd`, `combat_ext_ai_test_suite.gd`, `combat_ext_kit.gd` | S12-A/S4-A suites (M1) | S12, S4 | done |
 | `scripts/combat/status/riposte_rules.gd`, `scripts/tests/riposte_test_suite.gd` | riposte counter rules and suite (M2a) | S12 | done |
