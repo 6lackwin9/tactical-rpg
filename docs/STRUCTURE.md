@@ -64,6 +64,10 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |
 | `data/dialogue/` | services.json: lore-free base service lines (dialogue trees are world data in `data/worlds/<id>/dialogues.json`, shops in `shops.json`) | S11 | in progress |
 | `assets/art/{unit,item,tile,skill,status,ui}/`, `assets/audio/{sfx,music}/` | file overrides by folder pattern `<key>_<variant>.png/svg`, `<key>.ogg/wav` (S14) | S14 | in progress |
+| `scripts/playtest/` | recording schema, plan codec, outcome, fingerprint, recorder, replayer, seed sweep, store (PLAYTEST1) | S16 | proposed |
+| `scripts/ui/playtest/` | playtest hub, UI trail, note box, browser, playback banner (PLAYTEST1) | S16 | proposed |
+| `playtests/{inbox,repro,scenarios}/` + `README.md` | shared user recordings, agent repros, one-seed scenarios (PLAYTEST1) | S16 | proposed |
+| `tools/replay.gd`, `scripts/tests/playtest_test_suite.gd` | headless replay, variant and seed-sweep tool; playtest suite (PLAYTEST1) | S16 | proposed |
 
 Rules: gameplay logic in `scripts/**` as `RefCounted` rules engines; scenes only render; data in `data/**` validated through a catalog; one test suite per system in `scripts/tests/` registered with one `results.append` line in `SuiteRegistry.run_all` (`scripts/tests/suite_registry.gd`).
 
