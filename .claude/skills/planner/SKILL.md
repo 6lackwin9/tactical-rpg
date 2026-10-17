@@ -20,6 +20,23 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 
 If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent.
 
+## Dispatch modes (user 2026-10-17)
+
+The user switches mode with "mode standard", "mode economy" or "mode sprint" (typed in the front-desk session `new-game-project-09`, relayed here). Ack with the active mode on read. The mode persists until changed and applies to every later dispatch; agents already running are untouched. Pass `effort` explicitly on every Agent call per the table (this table is the explicit instruction for setting effort) and `model` where the table names one. Current mode: **standard** (record changes in `docs/AGENT_MAP.md` Active section).
+
+| Agent | standard (default, quality baseline) | economy (fewest tokens) | sprint (least wall-clock time) |
+| --- | --- | --- | --- |
+| design-brainstorm | high | medium | medium |
+| logic-builder | high for new systems, medium for fixes | medium; model sonnet for fixes and small tasks, opus only for new engine systems | medium |
+| change-reviewer | medium | low, only at commit gates | medium |
+| balance | medium (sonnet) | low (sonnet) | low (sonnet) |
+| asset-builder | low (sonnet) | low (sonnet) | low (sonnet) |
+| housekeeper | medium | low, only when asked | skip |
+
+- Economy rules: run lanes serially unless tasks are independent and small; resume an existing agent via SendMessage instead of spawning a fresh one; give agents exact file paths and spec sections; no design-ahead work unless the user asks.
+- Sprint rules: maximum parallel lanes in separate worktrees (soft warning above 3 still applies: CPU contention, see EFFICIENCY); design-ahead always on; `check_project.ps1 -Fast -Quiet` per task and the full check only before a milestone merge; batch review fixes into one builder pass; skip balance runs until the user asks.
+- All modes keep the standing gates: user confirmation for design/gameplay decisions, change-reviewer before each commit, `check_project.ps1 -Fast -Quiet` clean, IDE Problems 0, README/docs updated. Modes change only effort, model and parallelism. This session's own model and effort are set by the user (`/model`, `/effort`).
+
 ## 1. Plan (no code changes)
 
 1. Read `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/STRUCTURE.md`, `docs/HISTORY.md` (do not propose deprecated concepts), `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`). Do not crawl code.

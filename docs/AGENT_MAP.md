@@ -4,6 +4,8 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
+Dispatch mode: **standard**.
+
 | Agent | Task | Worktree |
 | --- | --- | --- |
 | logic-builder | EXP1-L commit 2 (exploration runner, battle bridge, save v3) | ../ngp-exp1 |
