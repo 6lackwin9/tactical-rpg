@@ -197,7 +197,8 @@
 				"hamstring": 4,
 				"haymaker": 5,
 				"charge_in": 5,
-				"cyclone_kick": 5
+				"cyclone_kick": 5,
+				"crushing_blow": 6
 			},
 			"main_hand": "",
 			"off_hand": "",
@@ -333,7 +334,9 @@
 				"hamstring": 5,
 				"lacerate": 5,
 				"assassinate": 7,
-				"envenom": 6
+				"envenom": 6,
+				"feint": 6,
+				"opportunist": 7
 			},
 			"main_hand": "wpn_stiletto",
 			"off_hand": "",

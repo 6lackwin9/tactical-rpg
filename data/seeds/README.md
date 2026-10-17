@@ -35,3 +35,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | `s14_a2.gd` | S14-A2 (13 placeholder SFX blips + their manifest rows) |
 | `s12t.gd` | S12T-A (the 17 terrain rows) |
 | `s12s.gd` | S12S-A (crippling_shot, rend_armor, envenom, aegis, rejuvenate on class paths at level 6) |
+| `s12c.gd` | S12C-A (feint, opportunist on the rogue path at levels 6-7; crushing_blow on the brawler path at level 6) |

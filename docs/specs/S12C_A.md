@@ -19,7 +19,7 @@ One shipped carrier per combo field: a rogue flow strike, a brawler stance break
 | `crushing_blow` | Crushing Blow | ATTACK | brawler | 2/3/4 | 2 | unarmed, fist; min proficiency 1 | 1.0/1.25/1.5 | `disrupt: STANCE_BREAK` | none |
 | `opportunist` | Opportunist | ATTACK | rogue | 2/3/4 | 1 | dagger; min proficiency 1 | 0.8/1.0/1.2 | `exploit: [{status: expose, power_mult: 1.3}, {status: slow, power_mult: 1.2}]`, `exploit_consume: false` | none |
 
-AP is the skill `level` field (base 2; ranks 3 and 4). Grade `novice`, no `requires`, not `learned_only`, origin `user`. Combo fields are family level (S12C-L), so they appear once on the family entry.
+AP is the skill `level` field (base 2; ranks 3 and 4). Grade `novice`, no `requires`, ~~not `learned_only`~~ `learned_only: true` (as built, S12C-A review 2026-10-17: keeps hand-built units' skill lists and the sim baseline unchanged; class units still get the family from the path), origin `user`. Combo fields are family level (S12C-L), so they appear once on the family entry.
 
 ### Descriptions
 
