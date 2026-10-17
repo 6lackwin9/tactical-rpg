@@ -1,7 +1,9 @@
 #!/bin/bash
 # SessionStart hook for Claude Code cloud sessions: installs the tools the commit gate needs
 # (Godot 4.7 Linux editor binary and PowerShell 7) so check_project.ps1 and tools/fc.sh run.
-# Local (Windows) sessions skip it. Idempotent: every step is skipped when already done.
+# Local (Windows) sessions skip it. Idempotent: every step is skipped when already done, so
+# when the cloud environment's setup script already installed the tools (preferred: done once
+# and cached), this hook only links godot, exports $GODOT and imports a fresh checkout.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
@@ -36,12 +38,6 @@ if ! command -v xvfb-run >/dev/null 2>&1; then
   $SUDO apt-get update -qq >/dev/null
   $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
     xvfb xauth libgl1-mesa-dri libglx-mesa0 libxcursor1 libxinerama1 libxi6 libxrandr2 >/dev/null
-fi
-
-# --- markdownlint (cloud stand-in for the IDE Problems tab) ------------------
-if ! command -v markdownlint-cli2 >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
-  log "installing markdownlint-cli2"
-  npm install -g --silent markdownlint-cli2 >/dev/null 2>&1 || log "WARNING: markdownlint-cli2 install failed"
 fi
 
 # --- Godot editor (official Linux build) -------------------------------------
