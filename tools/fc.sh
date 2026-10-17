@@ -32,7 +32,7 @@ noise='^ERROR: .*leaked|^ERROR: Pages in use|^   at: (~|unref)|WARNING: A Thread
 parse() {
   if [ -n "$(git status --short -uall | grep -E '^\?\? .*\.gd$|^A .*\.gd$')" ]; then
     echo "[parse] new .gd files: refreshing class cache"
-    timeout 150 "$GODOT" --headless --editor --quit-after 50 >/dev/null 2>&1
+    timeout 150 "$GODOT" --headless --import >/dev/null 2>&1
   fi
   local bad=0
   for f in $(git status --short -uall | grep -E '\.gd$' | grep -v '^ *D' | awk '{print $NF}'); do
@@ -78,7 +78,7 @@ parse_all() {
 
 gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step
   if [ ! -x "$GODOT" ] && ! command -v "$GODOT" >/dev/null; then echo "[gate] FAIL Godot not found: set GODOT or put godot / godot4 on PATH"; status=1; return; fi
-  if ! timeout 300 "$GODOT" --headless --editor --quit-after 50 > "$OUT/editor.out" 2>&1; then
+  if ! timeout 300 "$GODOT" --headless --import > "$OUT/editor.out" 2>&1; then
     echo "[gate] FAIL class cache / import scan (full log: $OUT/editor.out)"; status=1; return
   fi
   echo "[gate] class cache and imports up to date"

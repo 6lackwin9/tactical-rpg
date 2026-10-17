@@ -62,7 +62,7 @@ function Invoke-GodotProcess {
 # STEP 1: Refresh Global Class Cache & Symbols
 # ------------------------------------------------------------------------------
 Write-Host "`n[1/4] Verifying global class cache and asset imports..." -ForegroundColor Yellow
-$editorResult = Invoke-GodotProcess -Arguments @("--headless", "--editor", "--quit-after", "50")
+$editorResult = Invoke-GodotProcess -Arguments @("--headless", "--import")
 if ($editorResult.ExitCode -ne 0) {
     Write-Host "[ERROR] Godot editor scan failed with exit code: $($editorResult.ExitCode)" -ForegroundColor Red
     Write-Host $editorResult.Output -ForegroundColor DarkRed
