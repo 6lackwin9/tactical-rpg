@@ -87,7 +87,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## AI skill use (AI1)
 
-- `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte when `AiProfile.smart_skills` is true (default); false = old behaviour. Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`.
+- `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte (the only AI path; the `smart_skills = false` switch was removed by CLN-16). Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`.
 
 ## Skill unlock rule (SK2)
 
@@ -130,7 +130,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## Menus and save slots (UI1)
 
-- `scenes/main_menu.tscn` (`MainMenuView` over `MenuRouter` and screen models in `scripts/ui/menus/`; models never touch Nodes). World manifest `start_party` (party-side unit ids, max 4, inherited); playable = resolved `start_party` and `start_location`; `NewGame.create_for_world`. `SaveGame` slots: 0 autosave, 1-3 manual (`write` refuses others), `peek` (header without migrating), `newest_slot`, `autosave`. `CurrentGame` = the game in play (dirty check, busy flag refuses saving). `SettingsFile` = `user://settings.cfg` (audio, anim speed / instant, text scale; listeners `FxSettings` / `AudioDirector` get `load_from(cfg)`). No save version change.
+- `scenes/main_menu.tscn` (`MainMenuView` over `MenuRouter` and screen models in `scripts/ui/menus/`; models never touch Nodes). World manifest `start_party` (party-side unit ids, max 4, inherited); playable = resolved `start_party` and `start_location`; `NewGame.create_for_world`. `SaveGame` slots: 0 autosave, 1-3 manual (`write` refuses others), `peek` (header without migrating), `newest_slot`, `autosave`. `CurrentGame` = the game in play (dirty check, busy flag refuses saving). `SettingsFile` = `user://settings.cfg` (audio, anim speed / instant, text scale; Apply pushes to `FxSettings.load_from` and `AudioDirector.active.apply_volumes`). No save version change.
 
 ## Asset pipeline (S14-L1)
 

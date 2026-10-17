@@ -44,11 +44,10 @@ static func setup(with_report: bool) -> bool:
 		checks["the fixtures are visible to SkillCatalog"] = SkillCatalog.find("ai1_back") != null and SkillCatalog.find("ai1_intim") != null and not SkillCatalog.find("ai1_intim").deals_damage()
 		checks["the helper lists find them"] = has_skill(SkillCatalog.cleanse_only(3), "ai1_clean_a") and has_skill(SkillCatalog.cleanse_only(3), "ai1_clean_b") and not has_skill(SkillCatalog.cleanse_only(3), "ai1_heal") and has_skill(SkillCatalog.debuff_attacks(3), "ai1_intim") and has_skill(SkillCatalog.granting(SkillDef.Kind.SUPPORT, StatusEffects.TAUNT, 3), "ai1_taunt") and has_skill(SkillCatalog.ally_buffs(StatusEffects.TAUNT, 3), "ai1_haste") and not has_skill(SkillCatalog.ally_buffs(StatusEffects.TAUNT, 3), "ai1_taunt") and has_skill(SkillCatalog.granting(SkillDef.Kind.DEFEND, StatusEffects.RIPOSTE, 3), "ai1_rip")
 	var profile := AiProfile.create(AiProfile.Role.AGGRESSOR)
-	checks["AiProfile defaults: smart_skills on, area_min_foes 2"] = profile.smart_skills and profile.area_min_foes == 2
-	profile.smart_skills = false
+	checks["AiProfile default: area_min_foes 2"] = profile.area_min_foes == 2
 	profile.area_min_foes = 5
 	var copy: AiProfile = profile.duplicate_profile()
-	checks["duplicate_profile copies both fields"] = not copy.smart_skills and copy.area_min_foes == 5
+	checks["duplicate_profile copies area_min_foes"] = copy.area_min_foes == 5
 	profile.area_min_foes = 0
 	checks["area_min_foes is clamped to 1..6 on use"] = profile.area_threshold() == 1
 	profile.area_min_foes = 99
@@ -80,13 +79,11 @@ static func unit(unit_name: String, grid: CombatGrid, pos: Vector2i, kit: Array[
 	c.known_skills = known
 	return c
 
-static func ai_profile(role: AiProfile.Role, smart: bool = true) -> AiProfile:
-	var p: AiProfile = AiProfile.create(role, 0.1, 3)
-	p.smart_skills = smart
-	return p
+static func ai_profile(role: AiProfile.Role) -> AiProfile:
+	return AiProfile.create(role, 0.1, 3)
 
 # A hand-built scene: the actor at `pos` (kit + the basics), foes and allies at the given cells.
-static func new_scene(role: AiProfile.Role, pos: Vector2i, kit: Array[String], foe_cells: Array[Vector2i], ally_cells: Array[Vector2i] = [], actor_range: int = 1, foe_range: int = 1, smart: bool = true) -> Dictionary:
+static func new_scene(role: AiProfile.Role, pos: Vector2i, kit: Array[String], foe_cells: Array[Vector2i], ally_cells: Array[Vector2i] = [], actor_range: int = 1, foe_range: int = 1) -> Dictionary:
 	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [])
 	var actor: Combatant = unit("Actor", grid, pos, kit, actor_range)
 	var allies: Array[Combatant] = [actor]
@@ -96,7 +93,7 @@ static func new_scene(role: AiProfile.Role, pos: Vector2i, kit: Array[String], f
 	for i: int in range(foe_cells.size()):
 		foes.append(unit("Foe%d" % i, grid, foe_cells[i], [], foe_range))
 	var ctx: PlanContext = TestHelpers.hand_ctx(grid, allies, foes, 3)
-	var profile: AiProfile = ai_profile(role, smart)
+	var profile: AiProfile = ai_profile(role)
 	ctx.profiles[actor] = profile
 	return {"grid": grid, "actor": actor, "allies": allies, "foes": foes, "ctx": ctx, "profile": profile}
 

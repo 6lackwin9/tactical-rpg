@@ -131,6 +131,7 @@ tactical-rpg/
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   ├── audio/                    # Sound by key (S14-L3): SoundEvents keys, SoundBank lookup, AudioDirector voices, PlaceholderSfx blips
 │   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
 │   │   ├── svg_raster.gd             # SVG string -> cached ImageTexture
 │   │   ├── unit_art.gd               # Class-glyph tokens (blue friendly / red hostile / yellow neutral) & portraits
@@ -174,7 +175,10 @@ tactical-rpg/
 │       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
 │       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
 │       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
-│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards & action FX
+│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards; hands action FX to the presenter
+│       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
+│       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
+│       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
 │       │   ├── combat_action_log_panel.gd # Compact resolution log dock
 │       │   ├── combat_inspector_panel.gd # Unit inspector (snapshot-aware)
 │       │   ├── combat_forecast_panel.gd  # Tactical forecast
@@ -192,7 +196,7 @@ tactical-rpg/
 │       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
 │       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
 │       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, tweens & floating text
+│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, FX layer
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -459,7 +463,7 @@ All six classes now have their real kits: three-tier skill families, eight advan
 
 ### AI skill use (AI1)
 
-The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. `AiProfile.smart_skills` switches it off for A/B balance runs. Tested in `ai_skills_test_suite.gd` and `ai_skills_tactics_test_suite.gd` (fixtures in `ai_skills_kit.gd`).
+The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. The old `AiProfile.smart_skills = false` path was removed after the BAL2 rerun (CLN-16). Tested in `ai_skills_test_suite.gd` and `ai_skills_tactics_test_suite.gd` (fixtures in `ai_skills_kit.gd`).
 
 ### Skill unlock rule (SK2)
 
@@ -479,7 +483,7 @@ A skill is one **family template** plus up to two **rank modifiers** (absolute v
 - **Unit gear `none`**: a unit slot set to `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) opts out of the class default loadout; a blank slot still means "use the class default". Units only.
 - **Tiers**: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
 - **Trained fists**: an empty main hand with fist proficiency 2 or more hits with weapon power 15 + fist training and gets the fist crit bonus (`DamageCalculator.UNARMED_BASE_POWER`, `TRAINED_FIST_MIN_LEVEL`); `GearBudget.UNARMED_VALUE` reads the same constant. The damage formula itself is unchanged.
-- **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `smart_skills`, `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Refused plans print `PLAN FAIL <unit> <reason>` (with the step and the unit holding the tile) and every mode ends with `plan checks: N PLAN FAIL over M fights`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
+- **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Refused plans print `PLAN FAIL <unit> <reason>` (with the step and the unit holding the tile) and every mode ends with `plan checks: N PLAN FAIL over M fights`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
 - Tested in `bal2_rules_test_suite.gd`.
 
 ### Balance data pass (BAL2-A)
@@ -539,6 +543,14 @@ The Content Forge edits items and item families with dedicated sections: identit
 ### Asset pipeline (S14-L1)
 
 Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the manifest `data/assets/manifest.json` (managed by `AssetCatalog`, empty for now) points a key and variant at a file under `assets/art/<namespace>/` or at another key (alias); otherwise the generated placeholder template is used, then a fallback, so a texture is never missing. Unit files are composed onto the team-coloured token. Skills and statuses get generated placeholder icons (`SkillArt`, `StatusArt`). A manifest row whose key still has a template can always be removed (the placeholder comes back); a manifest-only key cannot be removed while content uses it. `tools/fc.sh export_placeholder <ns> <key> <variant> [team]` writes a template as a PNG to start real art from. With the manifest empty, all shipped art looks exactly as before. Tested in `asset_pipeline_test_suite.gd`.
+
+### Audio (S14-L3)
+
+Sound plays by key, never by file path. `SoundBank` looks up an `sfx` key through `AssetRegistry` (a manifest row pointing at `assets/audio/sfx/<key>.wav` or `.ogg`); a key with no file is silent and warns once. `SoundEvents` lists the keys (hit, crit, mitigated, heal, buff, debuff, defend, move_step, defeat and four UI keys) and which presenter preset plays which. One `AudioDirector` in the combat arena and one in the Scene Runner hold eight SFX voices and two UI voices, play the presenter's `fx_played` sounds and the playback buttons' click, and set the Master, Music, SFX and UI bus volumes (`default_bus_layout.tres`) from the new `SettingsFile` (`user://settings.cfg`, keys `audio/master|music|sfx|ui`, never part of a save). Headless runs, tests and the sim create no voices. `tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>` writes a placeholder blip. Tested in `audio_test_suite.gd`.
+
+### Combat presenter (S14-L2)
+
+All combat animation now goes through `CombatPresenter` (`scripts/ui/combat/`), which `CombatGridPanel` feeds from `CombatSession.fx_requested` and from its refresh slide. Timings and tween recipes live in one table (`FxPresets`; the durations are the old hard-coded ones) and `FxPresets.for_entry` maps a log entry to its presets: melee bump or ranged pulse, hit or mitigated shake and flash, heal, buff and defend pulses, a status icon pop when the entry names a real status, floating text (the old labels) and a defeat fade. `FxSettings` holds the speed (0.25 to 4, read later from the UI1-L settings file) and instant mode, which applies every end state at once and is always on in headless runs and tests. The presenter owns every tween and temporary node and ends them all (tokens at their end states) when the log resets, the encounter remounts, the timeline steps back or too many pile up; `fx_played` fires once per preset for the coming audio hook (S14-L3). Nothing in resolution, the log or the sim changed. Tested in `animation_lifecycle_test_suite.gd`.
 
 ### Forge class tab (CLASS1-L)
 
@@ -648,7 +660,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Planned.*
 
 - [ ] Dedicated automated test suite verifying SVG asset loads, dimensions, and texture caching.
-- [ ] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification).
+- [x] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification): `animation_lifecycle_test_suite.gd` (S14-L2).
 
 ### 4. Advanced Combat Rules & Combo Engine (`System 6`)
 

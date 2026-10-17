@@ -37,7 +37,6 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 	var fled: bool = false
 	var healed: Array[Combatant] = []   # friends already healed this round (the plan doesn't track their HP)
 	var rests: int = 0
-	var smart: bool = profile.smart_skills
 	var urgent_cleanse_tried: bool = false   # AI1: at most one cleanse per round (each attempt is made once)
 	var late_cleanse_tried: bool = false
 	var disengage_tried: bool = false
@@ -59,7 +58,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 				continue
 
 		# AI1: a cleanse-only skill goes first when an ally is locked down (stun / root).
-		if smart and not urgent_cleanse_tried:
+		if not urgent_cleanse_tried:
 			urgent_cleanse_tried = true
 			if _try_cleanse(plan, actor, cap, true):
 				late_cleanse_tried = true
@@ -71,7 +70,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 				healed.append(patient)
 				continue
 
-		if smart and not late_cleanse_tried:
+		if not late_cleanse_tried:
 			late_cleanse_tried = true
 			if _try_cleanse(plan, actor, cap, false):
 				continue
@@ -85,7 +84,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 
 		# AI1: a disengage must be the unit's first action (it is the round's move), so it is tried
 		# before any buff: ranged / support units break melee contact, a hurt skirmisher falls back.
-		if smart and not disengage_tried and not profile.reckless:
+		if not disengage_tried and not profile.reckless:
 			disengage_tried = true
 			var adjacent: bool = _nearest_foe(grid, st.pos, foes) <= 1
 			var ranged_role: bool = profile.role == AiProfile.Role.SNIPER or profile.role == AiProfile.Role.SUPPORT
@@ -95,7 +94,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 				continue
 
 		# AI1: once per round, taunt / ally buff / debuff attack before the strike (each only if the strike still fits).
-		if smart and not precast_done:
+		if not precast_done:
 			precast_done = true
 			if _precast(plan, actor, ranked, cap, profile):
 				continue
@@ -109,10 +108,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 
 		if low_hp and not guarded and dist <= reach + 1:
 			guarded = true
-			if smart:
-				if _guard_smart(plan, actor, cap, profile, foes, st.pos):
-					continue
-			elif _try_skills(plan, actor, SkillDef.Kind.DEFEND, cap, profile, Callable()):
+			if _guard_smart(plan, actor, cap, profile, foes, st.pos):
 				continue
 
 		if not profile.reckless:
@@ -130,7 +126,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 		# Best target first; if it can't be reached this round (one move only), try the next.
 		if _engage_any(plan, actor, ranked, cap, profile):
 			# AI1: close the round in a riposte stance (a later strike would cancel it, so planning stops there).
-			if smart and not riposte_tried:
+			if not riposte_tried:
 				riposte_tried = true
 				if _riposte_finisher(plan, actor, cap, profile, foes, hp_ratio):
 					break
@@ -156,7 +152,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 # `make_step` builds the step from a skill (default: a self step).
 static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable, filter: Callable = Callable()) -> bool:
 	# Attacks: single-target ones (area attacks go through _try_area; ranged units add the off-hand jab).
-	var skills: Array[SkillDef] = _strikes(actor, cap, profile) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap, actor)
+	var skills: Array[SkillDef] = _strikes(actor, cap) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap, actor)
 	skills.reverse()  # highest level first
 	if profile.prefer_level > 0:
 		skills.sort_custom(func(a: SkillDef, b: SkillDef) -> bool:
@@ -185,7 +181,7 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 
 # Attacks the first target in `ranked` the unit can strike this round.
 static func _engage_any(plan: CombatPlan, actor: Combatant, ranked: Array[Combatant], cap: int, profile: AiProfile) -> bool:
-	if profile.smart_skills and _try_area(plan, actor, cap, profile):
+	if _try_area(plan, actor, cap, profile):
 		return true
 	for candidate: Combatant in ranked:
 		var engage: Callable = func(skill: SkillDef) -> PlanStep: return PlanStep.engage(skill, candidate)
@@ -202,7 +198,7 @@ static func _can_strike_in_place(actor: Combatant, cap: int, dist: int, profile:
 		return true
 	if profile.role != AiProfile.Role.SUPPORT:
 		return false
-	for skill: SkillDef in _strikes(actor, cap, profile):
+	for skill: SkillDef in _strikes(actor, cap):
 		var reach_band: Vector2i = skill.reach_for(actor)
 		if skill.dash_tiles <= 0 and dist >= reach_band.x and dist <= reach_band.y:
 			return true
@@ -237,7 +233,7 @@ static func _try_heal(plan: CombatPlan, actor: Combatant, profile: AiProfile, ca
 	for friend: Combatant in plan.context.friends_of(actor):
 		if already.has(friend) or not friend.is_active() or not plan.context.grid.has_combatant(friend):
 			continue
-		if _needs_heal(friend, profile) or (profile.smart_skills and _locked_down(friend)):
+		if _needs_heal(friend, profile) or _locked_down(friend):
 			wounded.append(friend)
 	wounded.sort_custom(func(a: Combatant, b: Combatant) -> bool:
 		var ra: float = float(a.hp) / float(maxi(1, a.max_hp))
@@ -377,15 +373,13 @@ static func _nearest_foe(grid: CombatGrid, pos: Vector2i, foes: Array[Combatant]
 	return best
 
 # ------------------------------------------------------------------------------
-# AI1: smart skill use (all of it off when profile.smart_skills is false)
+# AI1: smart skill use
 # ------------------------------------------------------------------------------
 
-# Single-target attacks the unit may plan as "the strike"; with smart skills on, zero-power
-# (debuff-only) attacks are left out: they are cast by _precast, never as the damage dealer.
-static func _strikes(actor: Combatant, cap: int, profile: AiProfile) -> Array[SkillDef]:
+# Single-target attacks the unit may plan as "the strike"; zero-power (debuff-only) attacks
+# are left out: they are cast by _precast, never as the damage dealer.
+static func _strikes(actor: Combatant, cap: int) -> Array[SkillDef]:
 	var list: Array[SkillDef] = SkillCatalog.single_attacks(actor, cap)
-	if not profile.smart_skills:
-		return list
 	var out: Array[SkillDef] = []
 	for skill: SkillDef in list:
 		if skill.deals_damage():

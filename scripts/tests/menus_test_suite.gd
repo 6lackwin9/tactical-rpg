@@ -59,7 +59,7 @@ static func run(tree_parent: Node = null) -> bool:
 	else:
 		ok = false
 	CurrentGame.end()
-	SettingsFile.reset_path()
+	SettingsFile.use_path()
 	SaveGame.reset_base_dir()
 	TestHelpers.cleanup_worlds(SANDBOX)
 	return ok
@@ -244,7 +244,8 @@ static func _test_current_game() -> bool:
 static func _test_settings() -> bool:
 	var checks: Dictionary = {}
 	var _gone: Error = DirAccess.remove_absolute(SettingsFile.path())
-	checks["missing file = defaults"] = SettingsFile.load() == ERR_FILE_NOT_FOUND and SettingsFile.get_value("anim/speed") == 1.0
+	SettingsFile.load()
+	checks["missing file = defaults"] = SettingsFile.get_value("anim/speed") == 1.0
 	var cases: Array[Array] = [
 		["audio/master", 1.5, 1.0, 1.0], ["audio/music", -0.5, 0.0, 0.8], ["audio/sfx", 0.25, 0.25, 0.8], ["audio/ui", 2, 1.0, 0.8],
 		["anim/speed", 10.0, 4.0, 1.0], ["anim/instant", true, true, false], ["ui/text_scale", 0.1, 0.8, 1.0],
@@ -256,13 +257,15 @@ static func _test_settings() -> bool:
 		checks["%s clamped" % key] = SettingsFile.get_value(key) == c[2]
 	checks["saved"] = SettingsFile.save() == OK
 	SettingsFile.set_value("anim/speed", 2.0)
-	checks["reload restores the file"] = SettingsFile.load() == OK and SettingsFile.get_value("anim/speed") == 4.0 and SettingsFile.get_value("anim/instant") == true and SettingsFile.warnings().is_empty()
+	SettingsFile.load()
+	checks["reload restores the file"] = SettingsFile.get_value("anim/speed") == 4.0 and SettingsFile.get_value("anim/instant") == true
 	SettingsFile.set_value("anim/instant", "yes")
-	checks["wrong type = default + one warning"] = SettingsFile.get_value("anim/instant") == false and SettingsFile.warnings().size() == 1
+	checks["wrong type = default"] = SettingsFile.get_value("anim/instant") == false and SettingsFile.checked("anim/speed", "fast") == 1.0
 	var cfg := ConfigFile.new()
 	cfg.set_value("ui", "text_scale", "big")
 	checks["file written"] = cfg.save(SettingsFile.path()) == OK
-	checks["wrong type on disk = default"] = SettingsFile.load() == OK and SettingsFile.get_value("ui/text_scale") == 1.0 and SettingsFile.warnings().size() == 1
+	SettingsFile.load()
+	checks["wrong type on disk = default"] = SettingsFile.get_value("ui/text_scale") == 1.0
 	var before: String = FileAccess.get_file_as_string(SettingsFile.path())
 	var gs: GameState = _new_state()
 	var _w: Array[String] = SaveGame.write(gs, 1)
@@ -473,7 +476,9 @@ static func _test_main_menu_and_settings_model() -> bool:
 	checks["unknown key refused"] = sm.set_value("nope", 1) == ["Unknown setting 'nope'."]
 	var _s: Array[String] = sm.set_value("ui/text_scale", 9.0)
 	checks["draft clamped, file untouched"] = sm.value("ui/text_scale") == 1.5 and SettingsFile.get_value("ui/text_scale") != 1.5
-	checks["apply writes"] = sm.apply().is_empty() and not sm.has_draft() and SettingsFile.load() == OK and SettingsFile.get_value("ui/text_scale") == 1.5
+	var applied: bool = sm.apply().is_empty() and not sm.has_draft()
+	SettingsFile.load()
+	checks["apply writes"] = applied and SettingsFile.get_value("ui/text_scale") == 1.5
 	var _t: Array[String] = sm.set_value("ui/text_scale", 1.0)
 	sm.revert()
 	checks["revert"] = sm.value("ui/text_scale") == 1.5 and not sm.has_draft()

@@ -3,15 +3,13 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Settings model (UI1-L): a draft of the SettingsFile keys; apply() writes the file and pushes the
-# values to FxSettings (S14-L2) and AudioDirector (S14-L3) when those classes exist; revert() drops the draft.
+# values to FxSettings (S14-L2 animation) and the active AudioDirector (S14-L3 volumes); revert() drops the draft.
 # ==============================================================================
 
 const LABELS: Dictionary = {
 	"audio/master": "Master volume", "audio/music": "Music volume", "audio/sfx": "Effects volume", "audio/ui": "Interface volume",
 	"anim/speed": "Animation speed", "anim/instant": "Instant animations", "ui/text_scale": "Text size",
 }
-# Classes that read the settings file through a static load_from(ConfigFile), when they exist.
-const LISTENERS: Array[String] = ["FxSettings", "AudioDirector"]
 
 var draft: Dictionary = {}
 
@@ -56,13 +54,10 @@ func revert() -> void:
 	for key: String in SettingsFile.KEYS:
 		draft[key] = SettingsFile.get_value(key)
 
-# Hands the saved file to every listener class present in this build (none is required).
+# Applies the saved values: animation speed and instant mode, then the bus volumes of the running AudioDirector.
 static func push_to_listeners() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(SettingsFile.path()) != OK:
-		return
-	for g: Dictionary in ProjectSettings.get_global_class_list():
-		if LISTENERS.has(str(g["class"])):
-			var script: Script = load(str(g["path"])) as Script
-			if script != null and script.has_method("load_from"):
-				script.call("load_from", cfg)
+	if cfg.load(SettingsFile.path()) == OK:
+		FxSettings.load_from(cfg)
+	if AudioDirector.active != null:
+		AudioDirector.active.apply_volumes()

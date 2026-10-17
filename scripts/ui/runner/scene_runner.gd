@@ -60,6 +60,9 @@ var _pill_hint: Label = null
 func _ready() -> void:
 	name = "SceneRunner"
 	reloader = ScriptReloader.new()
+	var audio := AudioDirector.new()   # S14-L3: one director per main scene
+	add_child(audio)
+	audio.apply_volumes()
 	_build_menu()
 	_build_pill()
 	_load_prefs()
