@@ -152,10 +152,10 @@ ROADMAP trim. Status: done 2026-10-17.
 
 Large suites. Status: done 2026-10-17.
 
-- Result: new suites CombatExtAttacks, CombatExtAi (helpers `CombatExtKit`), AiSkillsTactics (fixtures `AiSkillsKit`), Unarmed, FocusGearBudget; dojo checks split into DojoSessionAssertions and DojoUiAssertions. Same PASS lines. ItemCatalog: `create_spiked_knuckles`, `all_items` deleted; `create_consumable` kept (shorthands call it). Dojo-27 has no caller: CLN-17.
+- Result: suites CombatExtAttacks, CombatExtAi (helpers `CombatExtKit`), AiSkillsTactics (fixtures `AiSkillsKit`), Unarmed, FocusGearBudget; dojo split into DojoSessionAssertions, DojoUiAssertions. Same PASS lines. ItemCatalog: `create_spiked_knuckles`, `all_items` deleted; `create_consumable` kept (in use). Dojo-27 has no caller: CLN-17.
 - What: suites over the 450-line rule (DECISIONS "R1 test split"): combat_extensions 795, dojo_assertions 771, ai_skills 634, engine_pieces 480, focus_gear 459.
 - Change: split by feature group, one registry line each; no behaviour or number change.
-- Touches: those suites, `suite_registry.gd`.
+- Touches: those suites, the registry.
 
 ### CLN-13
 
@@ -184,7 +184,7 @@ Goblin placeholder art. Status: confirmed (user 2026-10-17, new from Q1).
 
 ### CLN-16
 
-Legacy AI path. Status: done 2026-10-17 (the sim key `smart_skills` is now unknown).
+Legacy AI path. Status: done 2026-10-17.
 
 - What and where: `AiProfile.smart_skills` (`ai_profile.gd`, 2 uses) and its off branches in `tactical_ai.gd` (5 uses); `ai_skills_test_suite.gd` (7 uses) covers both paths; BAL2-L adds a sim switch for it (`tools/sim/*`).
 - Change: remove the `false` path, the field, its tests and the sim switch; fix GAME_BRIEF "AI skill use".
