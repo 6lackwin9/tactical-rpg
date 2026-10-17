@@ -12,6 +12,14 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### REVIEW-STEP review step and retroactive reviews (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer (x7) | Retroactive static review of the 13 code PRs merged without review (#4, #6, #8, #9, #11, #13, #14, #16, #17, #19, #20, #21, #23) | 459k / 3 | 1 high (TASKS_DONE wipe, fixed in this PR), 7 medium, lows; follow-ups REVIEW-F1..F5 |
+| design-brainstorm | docs/specs/REVIEW_F.md from the review findings, three design questions | 79k / 5 | spec |
+| planner (cloud thread) | cloud.md review step and lane-agent rule, decision rows, TASKS_DONE restored | n/a | PR #30 |
+
 ### DLG1-F dialogue and shop follow-ups (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
