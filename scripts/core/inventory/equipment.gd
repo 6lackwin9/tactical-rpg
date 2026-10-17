@@ -184,6 +184,11 @@ func get_tier_requirements_display() -> String:
 
 	for tier: Dictionary in threshold_tiers:
 		var t_stat: String = str(tier.get("stat", "")).to_upper()
+		if t_stat.is_empty():
+			# Extended criteria (proficiency, unit level; resolved rows carry stat ""): "sword training 2 (+2 STR)".
+			var label: String = ItemText.bonus_text(tier_bonus(tier))
+			parts.append("%s (%s)" % [tier_criterion_text(tier), label] if not label.is_empty() else tier_criterion_text(tier))
+			continue
 		if not processed_stats.has(t_stat):
 			processed_stats.append(t_stat)
 			var lvl1: int = tier.get("threshold", 0)
@@ -303,24 +308,112 @@ func get_wield_penalty(stats: CharacterStats, prof: Proficiency) -> Dictionary:
 
 	return result
 
-# Returns all unlocked threshold tiers when exceeding base requirements
+# ------------------------------------------------------------------------------
+# Tier engine (FORGE1_ITEMS 4): criteria stat / proficiency / unit level; bonuses power, mitigation, stat bonuses, effects
+# A resolved tier row keeps the legacy keys {stat, threshold, bonus_power, desc}; extended tiers add `when` and `bonus`
+# (ItemModifiers.legacy_tiers). Evaluation order (4.3, single pass, no circularity): static gear stat modifiers ->
+# tiers are evaluated on stats WITHOUT tier modifiers (source TIER_SOURCE) -> tier stat modifiers are added ->
+# gear effects are rebuilt including tier effects (Combatant.sync_from_stats_and_gear). So one tier's stat bonus never
+# opens another tier, on this item or another.
+# ------------------------------------------------------------------------------
+
+const TIER_SOURCE: String = "gear_tier"   # StatModifier source of every tier stat bonus
+
+# The criterion of a resolved tier row: its `when`, else the legacy stat threshold.
+static func tier_when(tier: Dictionary) -> Dictionary:
+	var when: Dictionary = DictUtil.dict_of(tier.get("when", {}))
+	if not when.is_empty():
+		return when
+	return {"type": ItemModifiers.WHEN_STAT, "stat": str(tier.get("stat", "STR")), "value": DictUtil.to_int(tier.get("threshold", 0))}
+
+# The bonus of a resolved tier row: its `bonus`, else the legacy power bonus.
+static func tier_bonus(tier: Dictionary) -> Dictionary:
+	var bonus: Dictionary = DictUtil.dict_of(tier.get("bonus", {}))
+	if not bonus.is_empty():
+		return bonus
+	return {"power": DictUtil.to_int(tier.get("bonus_power", 0))}
+
+# "STR 22", "sword training 2", "unit level 5".
+func tier_criterion_text(tier: Dictionary) -> String:
+	var when: Dictionary = tier_when(tier)
+	match str(when.get("type", "")):
+		ItemModifiers.WHEN_PROFICIENCY:
+			return "%s training %d" % [_tier_gear(when), DictUtil.to_int(when.get("level", 0))]
+		ItemModifiers.WHEN_LEVEL:
+			return "unit level %d" % DictUtil.to_int(when.get("value", 0))
+	return "%s %d" % [str(when.get("stat", "STR")).to_upper(), DictUtil.to_int(when.get("value", 0))]
+
+# The gear token a proficiency criterion reads (default: the item's own family / gear type).
+func _tier_gear(when: Dictionary) -> String:
+	var gear: String = str(when.get("gear", ""))
+	return gear if not gear.is_empty() else weapon_type
+
+# True when `stats` / `prof` meet the tier criterion. stat_at_least: effective stat in this item's weapon context
+# WITHOUT tier stat bonuses + proficiency level x LEVEL_DISCOUNT; proficiency_at_least: Proficiency.level_of(gear);
+# unit_level_at_least: CharacterStats.level.
+func tier_met(tier: Dictionary, stats: CharacterStats, prof: Proficiency) -> bool:
+	if stats == null:
+		return false
+	var when: Dictionary = tier_when(tier)
+	match str(when.get("type", "")):
+		ItemModifiers.WHEN_STAT:
+			var discount: int = 0
+			if prof != null and not weapon_type.is_empty():
+				discount = prof.get_weapon_requirement_discount(weapon_type)
+			var eff_stat: int = stats.get_effective_stat(str(when.get("stat", "STR")), {"weapon": weapon_type}, TIER_SOURCE) + discount
+			return eff_stat >= DictUtil.to_int(when.get("value", 0))
+		ItemModifiers.WHEN_PROFICIENCY:
+			return prof != null and prof.level_of(_tier_gear(when)) >= DictUtil.to_int(when.get("level", 0))
+		ItemModifiers.WHEN_LEVEL:
+			return stats.level >= DictUtil.to_int(when.get("value", 0))
+	return false
+
+# Returns all unlocked threshold tiers (every criterion type; see tier_met)
 func get_active_threshold_tiers(stats: CharacterStats, prof: Proficiency) -> Array[Dictionary]:
 	var active_tiers: Array[Dictionary] = []
 	if stats == null or threshold_tiers.is_empty():
 		return active_tiers
-
-	var discount: int = 0
-	if prof != null and not weapon_type.is_empty():
-		discount = prof.get_weapon_requirement_discount(weapon_type)
-
 	for tier: Dictionary in threshold_tiers:
-		var stat_key: String = tier.get("stat", "STR")
-		var threshold_val: int = tier.get("threshold", 0)
-		var eff_stat: int = stats.get_effective_stat(stat_key, {"weapon": weapon_type}) + discount
-		if eff_stat >= threshold_val:
+		if tier_met(tier, stats, prof):
 			active_tiers.append(tier)
-
 	return active_tiers
+
+# 1-based positions (in threshold_tiers) of the unlocked tiers: the `<n>` of the effect source "gear:<id>:tier<n>".
+func get_active_tier_numbers(stats: CharacterStats, prof: Proficiency) -> Array[int]:
+	var out: Array[int] = []
+	if stats == null:
+		return out
+	for i: int in range(threshold_tiers.size()):
+		if tier_met(threshold_tiers[i], stats, prof):
+			out.append(i + 1)
+	return out
+
+# Sum of the mitigation bonuses of the unlocked tiers (armor, shields).
+func get_tier_mitigation_bonus(stats: CharacterStats, prof: Proficiency) -> int:
+	var total: int = 0
+	for tier: Dictionary in get_active_threshold_tiers(stats, prof):
+		total += DictUtil.to_int(tier_bonus(tier).get("mitigation", 0))
+	return total
+
+# Mitigation this piece adds to the armor rating: base + unlocked tier mitigation (stats null = base only).
+func get_effective_mitigation(stats: CharacterStats, prof: Proficiency) -> int:
+	return mitigation + get_tier_mitigation_bonus(stats, prof)
+
+# Stat -> summed bonus of the unlocked tiers (added as TIER_SOURCE modifiers by Combatant.sync_from_stats_and_gear).
+func get_tier_stat_bonuses(stats: CharacterStats, prof: Proficiency) -> Dictionary:
+	var out: Dictionary = {}
+	for tier: Dictionary in get_active_threshold_tiers(stats, prof):
+		var bonuses: Dictionary = DictUtil.dict_of(tier_bonus(tier).get("stat_bonuses", {}))
+		for stat: Variant in bonuses:
+			var key: String = str(stat).to_upper()
+			out[key] = DictUtil.int_of(out, key) + DictUtil.to_int(bonuses[stat])
+	return out
+
+# The effects list of tier number `n` (1-based; [] when it has none).
+func tier_effects(n: int) -> Array:
+	if n < 1 or n > threshold_tiers.size():
+		return []
+	return DictUtil.array_of(tier_bonus(threshold_tiers[n - 1]).get("effects", []))
 
 # Helper: sum of unlocked bonus power across all active threshold tiers
 func get_unlocked_threshold_power_boost(stats: CharacterStats, prof: Proficiency) -> int:

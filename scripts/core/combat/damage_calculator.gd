@@ -138,11 +138,11 @@ static func power_of(attacker: Combatant, is_ranged: bool = false, use_offhand: 
 # Defence & crits
 # ------------------------------------------------------------------------------
 
-# Armor rating: equipped gear mitigation + STR / 4, unless the unit has authored armor.
+# Armor rating: equipped gear mitigation (incl. unlocked tier mitigation) + STR / 4, unless the unit has authored armor.
 static func armor_rating(target: Combatant) -> int:
 	if target.armor_override >= 0:
 		return target.armor_override
-	var gear: int = target.inventory.get_total_flat_mitigation() if target.inventory != null else 0
+	var gear: int = target.inventory.get_total_flat_mitigation(target.stats) if target.inventory != null else 0
 	if target.stats == null:
 		return gear
 	return target.stats.get_mitigation_rating(gear, target.get_weapon_context())

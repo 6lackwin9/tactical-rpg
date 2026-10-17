@@ -149,7 +149,10 @@ static func _item(e: Dictionary) -> String:
 		if not eq.required_stats.is_empty():
 			t += _line("Requires", str(eq.required_stats))
 		for tier: Dictionary in eq.threshold_tiers:
-			t += _line("Tier", "%s %s+: %s" % [str(tier.get("stat", "?")), str(tier.get("threshold", "?")), str(tier.get("desc", ""))])
+			t += _line("Tier", "%s+: %s" % [eq.tier_criterion_text(tier), str(tier.get("desc", ""))])
+		var potential: float = GearBudget.tier_potential(e)
+		if potential > 0.0:
+			t += _line("Tier potential", "%.1f (informational, not in the gear value)" % potential)
 		var users: Array[String] = []
 		for c: Dictionary in ContentCatalog.entries("classes"):
 			if ContentFactory.class_archetype(c).can_equip_gear(eq):

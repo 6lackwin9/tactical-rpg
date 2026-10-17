@@ -93,6 +93,32 @@ static func effect_value(fx: Dictionary) -> float:
 			return DictUtil.to_int(fx.get("value", 0)) * W_SPELL_REACH
 	return 0.0
 
+# Tier preview weight (FORGE1_ITEMS 4.3): tier bonuses count at half the static weights, because they need a criterion.
+const W_TIER: float = 0.5
+
+# Value of one tier bonus at the static weights (power x1.0, mitigation x1.5, stat points x2.0, effects as effect_value).
+static func tier_bonus_value(bonus: Dictionary) -> float:
+	var v: float = DictUtil.to_int(bonus.get("power", 0)) * W_POWER
+	v += DictUtil.to_int(bonus.get("mitigation", 0)) * W_MITIGATION
+	var stats: Dictionary = DictUtil.dict_of(bonus.get("stat_bonuses", {}))
+	for key: Variant in stats:
+		v += DictUtil.to_int(stats[key]) * W_STAT_POINT
+	for raw: Variant in DictUtil.array_of(bonus.get("effects", [])):
+		v += effect_value(DictUtil.dict_of(raw))
+	return v
+
+# Informational preview of an item's tiers: every tier bonus at the static weights x W_TIER. Never part of item_value,
+# class or loadout totals and never a warning. Reads the stored `tiers` of a row, else its resolved `threshold_tiers`.
+static func tier_potential(item: Dictionary) -> float:
+	var tiers: Array[Dictionary] = ItemModifiers.tiers_of(item)
+	if tiers.is_empty():
+		for raw: Variant in DictUtil.array_of(item.get("threshold_tiers", [])):
+			tiers.append(DictUtil.dict_of(raw))
+	var total: float = 0.0
+	for tier: Dictionary in tiers:
+		total += tier_bonus_value(Equipment.tier_bonus(tier))
+	return total * W_TIER
+
 # Value of a family's base numbers for `hand` (what an item without modifiers is worth).
 static func base_value(family: Dictionary, hand: String) -> float:
 	if not is_gear({"item_type": ItemFamilies.item_type_of(family)}):

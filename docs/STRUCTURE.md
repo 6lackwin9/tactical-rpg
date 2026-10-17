@@ -19,6 +19,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/bal2_rules_test_suite.gd` | BAL2-L rules: PERC range, unit gear `none`, tiers, trained fists | S2, S3 | done |
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
+| `scripts/tests/item_tiers_test_suite.gd` | item tier criteria, bonuses, evaluation order, shipped loadouts unchanged (ITEM1 commit 2) | S3 | done |
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, locks, seed; model and Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |

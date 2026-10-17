@@ -42,6 +42,54 @@ const SPELL_REACH_MIN: int = 1
 const SPELL_REACH_MAX: int = 2
 const GEAR_REACH_CAP: int = 1   # total spell reach from gear, clamped at runtime
 
+# Typed descriptors of the effect grammar, for the Forge widgets (FORGE1_ITEMS 6 `modifier_table`; the same limits as
+# validate_effects). One row per type, in TYPES order: {type, label, item (allowed on items), params}. A param is
+# {key, kind, ...}: kind "int" / "float" with min, max, step (and "nonzero" when 0 is refused); "enum" with options;
+# "skill" (a skill / family id); "context" (an optional single {key: value} pair). Params sharing a `choice` key are
+# exclusive: exactly one of them is set (skill_potency and unlock: family or group). `items_only` keeps ITEM_TYPES.
+static func effect_specs(items_only: bool = false) -> Array[Dictionary]:
+	var all: Array[Dictionary] = [
+		{"type": "stat", "label": "Stat bonus", "params": [
+			{"key": "stat", "kind": "enum", "options": StatRules.STATS.duplicate()},
+			{"key": "value", "kind": "int", "min": -10, "max": 10, "step": 1, "nonzero": true},
+			{"key": "context", "kind": "context", "optional": true}]},
+		{"type": "proficiency", "label": "Gear training", "params": [
+			{"key": "gear", "kind": "enum", "options": Proficiency.gear_types()},
+			{"key": "levels", "kind": "int", "min": 1, "max": Proficiency.MAX_LEVEL, "step": 1}]},
+		{"type": "resist", "label": "Status resistance", "params": [
+			{"key": "status", "kind": "enum", "options": StatusEffects.resistable()},
+			{"key": "value", "kind": "int", "min": 1, "max": 100, "step": 1}]},
+		{"type": "ap_regen", "label": "AP per round", "params": [
+			{"key": "value", "kind": "int", "min": 1, "max": 4, "step": 1}]},
+		{"type": "skill", "label": "Extra skill", "params": [
+			{"key": "skill", "kind": "skill"}]},
+		{"type": "skill_potency", "label": "Skill potency", "params": [
+			{"key": "family", "kind": "skill", "choice": "target"},
+			{"key": "group", "kind": "enum", "options": GROUPS.duplicate(), "choice": "target"},
+			{"key": "value", "kind": "float", "min": POTENCY_MIN, "max": POTENCY_MAX, "step": 0.05, "nonzero": true}]},
+		{"type": "status_potency", "label": "Status hit chance", "params": [
+			{"key": "value", "kind": "int", "min": STATUS_POTENCY_MIN, "max": STATUS_POTENCY_MAX, "step": 1}]},
+		{"type": "spell_reach", "label": "Spell reach", "params": [
+			{"key": "value", "kind": "int", "min": SPELL_REACH_MIN, "max": SPELL_REACH_MAX, "step": 1}]},
+		{"type": "unlock", "label": "Earlier unlock", "params": [
+			{"key": "family", "kind": "skill", "choice": "target"},
+			{"key": "group", "kind": "enum", "options": GROUPS.duplicate(), "choice": "target"},
+			{"key": "levels", "kind": "int", "min": 1, "max": UNLOCK_LEVELS_MAX, "step": 1}]},
+	]
+	var out: Array[Dictionary] = []
+	for spec: Dictionary in all:
+		spec["item"] = ITEM_TYPES.has(str(spec["type"]))
+		if not items_only or DictUtil.to_bool(spec["item"]):
+			out.append(spec)
+	return out
+
+# The descriptor of one effect type ({} when unknown).
+static func effect_spec(type: String) -> Dictionary:
+	for spec: Dictionary in effect_specs():
+		if str(spec["type"]) == type:
+			return spec
+	return {}
+
 # Problems with an effects list (empty = valid). `skill_exists` resolves skill ids.
 # `allow_empty`: items may carry no effects; a passive needs at least one. `items_only`: reject types
 # that only make sense on a passive (stat, proficiency, ap_regen, skill).

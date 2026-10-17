@@ -22,6 +22,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(OriginTestSuite.run())
 	results.append(ItemFamiliesTestSuite.run())
 	results.append(ItemModifiersTestSuite.run())
+	results.append(ItemTiersTestSuite.run())
 	results.append(SkillFormModelTestSuite.run())
 	results.append(ClassPathTestSuite.run())
 	results.append(ClassFormModelTestSuite.run(tree_parent))

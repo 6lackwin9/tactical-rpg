@@ -109,7 +109,7 @@ static func item(entry: Dictionary) -> Item:
 	elif ContentSchema.EQUIP_TYPES.has(type):
 		var tiers: Array[Dictionary] = []
 		var raw_tiers: Variant = e["threshold_tiers"]
-		if raw_tiers is Array and type == "WEAPON":
+		if raw_tiers is Array:   # every gear type (armor and shield mitigation tiers, any-gear stat / effect tiers)
 			var tier_list: Array = raw_tiers
 			for t: Variant in tier_list:
 				if t is Dictionary:

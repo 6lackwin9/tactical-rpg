@@ -143,7 +143,10 @@ static func equipment_summary(eq: Equipment, st: CharacterStats) -> String:
 			parts.append("Pwr %d (-%d%% deficit)" % [maxi(1, int(roundf(float(eq.base_power) * (1.0 - ratio)))), int(roundf(ratio * 100.0))])
 		else:
 			parts.append("Pwr %d" % eq.base_power)
-	if eq.mitigation > 0:
+	var tier_mit: int = eq.get_tier_mitigation_bonus(st, st.proficiency) if st != null else 0
+	if tier_mit > 0:
+		parts.append("Mit +%d (+%d tier)" % [eq.mitigation + tier_mit, tier_mit])
+	elif eq.mitigation > 0:
 		parts.append("Mit +%d" % eq.mitigation)
 	if eq.burden > 0:
 		parts.append("Burden %d" % eq.burden)

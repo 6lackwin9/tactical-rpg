@@ -189,7 +189,8 @@ func spell_reach_bonus() -> int:
 func resist_for(status: String) -> int:
 	return mini(100, DictUtil.int_of(status_resist, status) + DictUtil.int_of(gear_status_resist, status))
 
-# Clears every gear-sourced bonus and re-applies the `effects` of the equipped items (called on equip changes).
+# Clears every gear-sourced bonus and re-applies the `effects` of the equipped items (called on equip changes), then
+# the effects of their unlocked tiers (source "gear:<id>:tier<n>", n = 1-based tier position; FORGE1_ITEMS 4.2).
 func rebuild_gear_effects() -> void:
 	gear_potency_family.clear()
 	gear_potency_group.clear()
@@ -200,6 +201,31 @@ func rebuild_gear_effects() -> void:
 		return
 	for eq: Equipment in inventory._iter_equipped_gear():
 		Passives.apply_effects(self, eq.effects, "gear:" + eq.id, true)
+	if stats == null:
+		return
+	for eq: Equipment in inventory._iter_equipped_gear():
+		for n: int in eq.get_active_tier_numbers(stats, stats.proficiency):
+			var fx: Array = eq.tier_effects(n)
+			if not fx.is_empty():
+				Passives.apply_effects(self, fx, "gear:%s:tier%d" % [eq.id, n], true)
+
+# Adds the stat bonuses of the unlocked gear tiers as Equipment.TIER_SOURCE modifiers (old ones removed first). Tiers are
+# evaluated on stats without tier modifiers, so the result never depends on itself (FORGE1_ITEMS 4.3).
+func rebuild_gear_tier_stats() -> void:
+	if stats == null:
+		return
+	stats.remove_modifier(Equipment.TIER_SOURCE)
+	if inventory == null:
+		return
+	var totals: Dictionary = {}
+	for eq: Equipment in inventory._iter_equipped_gear():
+		var bonuses: Dictionary = eq.get_tier_stat_bonuses(stats, stats.proficiency)
+		for stat: Variant in bonuses:
+			totals[stat] = DictUtil.int_of(totals, str(stat)) + DictUtil.to_int(bonuses[stat])
+	for stat: Variant in totals:
+		var value: int = DictUtil.to_int(totals[stat])
+		if value != 0:
+			stats.add_modifier(StatModifier.new(str(stat), value, 0.0, Equipment.TIER_SOURCE, "always", -1))
 
 # The weapon type that counts for skill gating: the main-hand weapon's type, or UNARMED_TOKEN with an empty main hand.
 func wielded_type(hand: SkillDef.WeaponHand = SkillDef.WeaponHand.MAIN) -> String:
@@ -395,8 +421,9 @@ func get_weapon_context() -> Dictionary:
 	var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
 	return {"weapon": weapon.weapon_type} if weapon != null else {}
 
+# Evaluation order (FORGE1_ITEMS 4.3): static gear stat modifiers -> tier stat modifiers (tiers read stats without them)
+# -> gear effects incl. tier effects -> derived numbers. Items without tiers give the same stats and effects as before.
 func sync_from_stats_and_gear() -> void:
-	rebuild_gear_effects()
 	if stats != null:
 		# Sync equipped gear stat bonuses into character stats modifiers (Requirement 1)
 		stats.remove_modifier("gear")
@@ -407,7 +434,9 @@ func sync_from_stats_and_gear() -> void:
 					var bonus_val: int = val_v if val_v is int else 0
 					if bonus_val != 0:
 						stats.add_modifier(StatModifier.new(st_k.to_upper(), bonus_val, 0.0, "gear", "always", -1))
-
+		rebuild_gear_tier_stats()
+	rebuild_gear_effects()
+	if stats != null:
 		var burden: int = worn_burden()
 		var weapon: Equipment = inventory.get_main_weapon() if inventory != null else null
 		var base_rng: int = weapon.base_range if weapon != null else 1

@@ -279,28 +279,30 @@ const TIER_KEYS: Array[String] = ["label", "when", "bonus", "desc"]
 static func label_of_desc(desc: String) -> String:
 	return desc.get_slice(":", 0).strip_edges() if desc.contains(":") else desc.strip_edges()
 
-# The resolved `threshold_tiers` (legacy shape the engine reads: stat, threshold, bonus_power, desc) of stored tiers.
-# A tier with bonuses beyond power also carries "when" and "bonus" (read by the tier engine, ITEM1-L commit 2).
-# Criteria other than stat_at_least are not resolved yet (commit 2 evaluates them); they stay in `tiers`.
+# The resolved `threshold_tiers` (legacy shape the engine reads: stat, threshold, bonus_power, desc) of stored tiers, in
+# stored order. A tier with bonuses beyond power, or a criterion other than stat_at_least (then `stat` "" and
+# `threshold` 0), also carries "when" and "bonus": the tier engine (Equipment.tier_met / tier_bonus) reads those first.
 static func legacy_tiers(tiers: Array[Dictionary], item_type: String = "WEAPON") -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for tier: Dictionary in tiers:
 		var when: Dictionary = DictUtil.dict_of(tier.get("when", {}))
-		if str(when.get("type", "")) != WHEN_STAT:
-			continue
+		var is_stat: bool = str(when.get("type", "")) == WHEN_STAT
 		var bonus: Dictionary = DictUtil.dict_of(tier.get("bonus", {}))
 		var desc: String = str(tier.get("desc", ""))
 		var row: Dictionary = {
-			"stat": str(when.get("stat", "STR")),
-			"threshold": DictUtil.to_int(when.get("value", 0)),
+			"stat": str(when.get("stat", "STR")) if is_stat else "",
+			"threshold": DictUtil.to_int(when.get("value", 0)) if is_stat else 0,
 			"bonus_power": DictUtil.to_int(bonus.get("power", 0)),
 			"desc": desc if not desc.is_empty() else ItemText.tier_desc(tier, item_type),
 		}
+		var extended: bool = not is_stat
 		for key: Variant in bonus:
 			if str(key) != "power":
-				row["when"] = when.duplicate(true)
-				row["bonus"] = bonus.duplicate(true)
+				extended = true
 				break
+		if extended:
+			row["when"] = when.duplicate(true)
+			row["bonus"] = bonus.duplicate(true)
 		out.append(row)
 	return out
 

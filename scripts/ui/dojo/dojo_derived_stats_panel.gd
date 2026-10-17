@@ -130,9 +130,9 @@ func refresh() -> void:
 	_set_row("hp", "%d" % st.get_max_hp(ctx),
 		_tip("MAXIMUM HEALTH", "60 + CONS × 8 + STR × 2", "60 + %d (CONS × 8) + %d (STR × 2) = [b]%d[/b]" % [eff_cons * 8, eff_str * 2, st.get_max_hp(ctx)]))
 
-	var arm_mit: int = inv.get_total_armor_mitigation() if inv != null else 0
-	var shd_mit: int = inv.get_total_shield_mitigation() if inv != null else 0
-	var gear_mit: int = inv.get_total_flat_mitigation() if inv != null else 0
+	var arm_mit: int = inv.get_total_armor_mitigation(st) if inv != null else 0   # incl. unlocked tier mitigation
+	var shd_mit: int = inv.get_total_shield_mitigation(st) if inv != null else 0
+	var gear_mit: int = inv.get_total_flat_mitigation(st) if inv != null else 0
 	var rating: int = DamageCalculator.armor_rating(hero)
 	var cut: int = roundi(DamageCalculator.armor_reduction(rating) * 100.0)
 	_set_row("mit", "%d rating  →  -%d%% damage" % [rating, cut],

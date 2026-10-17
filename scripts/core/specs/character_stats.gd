@@ -116,7 +116,9 @@ func allocate_attribute_point(stat_name: String) -> bool:
 func get_base_stat(stat_name: String) -> int:
 	return _core_stats.get(stat_name.to_upper(), 10)
 
-func get_effective_stat(stat_name: String, context: Dictionary = {}) -> int:
+# `exclude_source`: leave out the modifiers of that source (gear tiers are evaluated on stats WITHOUT the tier bonuses,
+# Equipment.TIER_SOURCE, FORGE1_ITEMS 4.3); "" = every modifier.
+func get_effective_stat(stat_name: String, context: Dictionary = {}, exclude_source: String = "") -> int:
 	var clean: String = stat_name.to_upper()
 	var base_val: int = get_base_stat(clean)
 
@@ -125,6 +127,8 @@ func get_effective_stat(stat_name: String, context: Dictionary = {}) -> int:
 	var pct_sum: float = 0.0
 
 	for mod: StatModifier in modifiers:
+		if not exclude_source.is_empty() and mod.source_id == exclude_source:
+			continue
 		if mod.stat_name.to_upper() == clean and mod.matches_context(context):
 			flat_sum += mod.flat_bonus
 			pct_sum += mod.percent_bonus

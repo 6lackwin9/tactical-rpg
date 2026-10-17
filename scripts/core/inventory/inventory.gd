@@ -128,19 +128,26 @@ func get_total_armor_burden() -> int:
 		total += eq.burden
 	return total
 
-func get_total_shield_mitigation() -> int:
+# Mitigation totals. `stats` given: each piece counts its unlocked tier mitigation too (Equipment.get_effective_mitigation,
+# FORGE1_ITEMS 4.2); null = the plain item numbers.
+func get_total_shield_mitigation(stats: CharacterStats = null) -> int:
 	var off: Equipment = get_equipped(Equipment.EquipSlot.OFF_HAND)
-	return off.mitigation if off != null else 0
+	return _mitigation_of(off, stats) if off != null else 0
 
-func get_total_armor_mitigation() -> int:
+func get_total_armor_mitigation(stats: CharacterStats = null) -> int:
 	var body: Equipment = get_equipped(Equipment.EquipSlot.BODY)
-	return body.mitigation if body != null else 0
+	return _mitigation_of(body, stats) if body != null else 0
 
-func get_total_flat_mitigation() -> int:
+func get_total_flat_mitigation(stats: CharacterStats = null) -> int:
 	var total: int = 0
 	for eq: Equipment in _iter_equipped_gear():
-		total += eq.mitigation
+		total += _mitigation_of(eq, stats)
 	return total
+
+static func _mitigation_of(eq: Equipment, stats: CharacterStats) -> int:
+	if stats == null:
+		return eq.mitigation
+	return eq.get_effective_mitigation(stats, stats.proficiency)
 
 func get_total_gear_stat_bonus(stat_name: String) -> int:
 	var total: int = 0
