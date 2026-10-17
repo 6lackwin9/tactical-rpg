@@ -73,6 +73,9 @@
 				"keep_ring"
 			],
 			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 10
+			},
 			"tags": []
 		},
 		{
@@ -145,6 +148,10 @@
 				"rallying_cry"
 			],
 			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 10,
+				"ashen_horde": -10
+			},
 			"tags": []
 		},
 		{
@@ -234,6 +241,63 @@
 				"wardens_drill"
 			],
 			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 15
+			},
+			"tags": []
+		},
+		{
+			"id": "ember_patrol",
+			"name": "Sweep the Ruins",
+			"description": "Hest wants the ruins swept of raiders before the next supply run.",
+			"giver": "hest_the_quartermaster",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Break a raiding party in the ruins",
+					"encounter": "ash_raiders"
+				}
+			],
+			"reward": "Hest's gratitude and a pick from the stores.",
+			"template": "clear_site",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "rep.ashlands.ember_wardens",
+					"op": ">=",
+					"value": 30
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "ashlands.ruins_swept",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"related_characters": [
+					"hest_the_quartermaster"
+				],
+				"related_locations": [
+					"ruined_courtyard",
+					"cinder_gate"
+				],
+				"related_factions": [
+					"ember_wardens",
+					"ashen_horde"
+				]
+			},
+			"variants": [],
+			"loot_pool": [
+				"keep_stores"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 5
+			},
 			"tags": []
 		}
 	]

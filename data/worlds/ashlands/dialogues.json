@@ -191,6 +191,37 @@
 						{
 							"text": "What do the stores need?",
 							"to": "needs"
+						},
+						{
+							"text": "Any spare stores for friends of the Wardens?",
+							"to": "spare",
+							"requires": [
+								{
+									"key": "rep.ashlands.ember_wardens",
+									"op": ">=",
+									"value": 10
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.hest_spare_given",
+									"value": true
+								}
+							],
+							"show_locked": true,
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.hest_spare_given",
+									"value": true
+								},
+								{
+									"effect": "give",
+									"items": {
+										"con_heal_potion": 2
+									}
+								}
+							]
 						}
 					]
 				},
@@ -202,6 +233,11 @@
 				{
 					"id": "needs",
 					"text": "\"Everything. Bring the potions back unopened and we will get along.\"",
+					"next": "hello"
+				},
+				{
+					"id": "spare",
+					"text": "\"For you? Two, and don't tell the others.\"",
 					"next": "hello"
 				}
 			],
