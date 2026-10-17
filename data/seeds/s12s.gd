@@ -18,7 +18,9 @@ func _init() -> void:
 	print("save_all: ", ContentCatalog.save_all())
 	quit()
 
+# learned_only keeps them out of unrestricted hand-built units (tests, sandbox); class-derived units own them via the path.
 func _skill(entry: Dictionary) -> void:
+	entry["learned_only"] = true
 	errs.append_array(ContentCatalog.upsert_skill(entry))
 
 func _skills() -> void:

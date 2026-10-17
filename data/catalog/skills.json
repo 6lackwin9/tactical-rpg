@@ -1173,6 +1173,7 @@
 			"level": 2,
 			"blocks": 2,
 			"description": "{name}: {power} power, {potency} to Slow for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
 				"bow",
 				"crossbow"
@@ -1203,6 +1204,7 @@
 			"level": 2,
 			"blocks": 2,
 			"description": "{name}: {power} power, {potency} to Expose (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
 				"sword",
 				"axe",
@@ -1238,6 +1240,7 @@
 			"level": 2,
 			"blocks": 1,
 			"description": "{name}: {power} power, {potency} to Poison ({magnitude} per round, stacks) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
 			"weapon_types": [
 				"dagger"
 			],
@@ -1269,6 +1272,7 @@
 			"level": 2,
 			"blocks": 1,
 			"description": "{name}: grants Fortify (+{magnitude}) for {rounds} starting next round.",
+			"learned_only": true,
 			"status_magnitude": 6,
 			"status_rounds": 2,
 			"grant_status": "fortify",
@@ -1291,6 +1295,7 @@
 			"level": 2,
 			"blocks": 2,
 			"description": "{name}: grants Regen ({magnitude} per round) for {rounds} starting next round.",
+			"learned_only": true,
 			"status_magnitude": 4,
 			"status_rounds": 2,
 			"target_mode": "ALLY",
