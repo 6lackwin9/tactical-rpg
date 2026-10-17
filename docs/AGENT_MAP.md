@@ -8,9 +8,15 @@ Desktop: the planner keeps this section current. Cloud: the project's thread lis
 
 Dispatch mode: **standard**. No agents running (wind-down 2026-10-17 for the move to a cloud instance).
 
-Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-2, CLN-1/2/4/5/10/11/15, AI2 (diagnosis), PLAN1, M4-L + M4-A, QUEST2, EXP1-L (commits 1-3) + EXP1-A, ITEM1-L (commits 1-3) + ITEM1-A, CLASS1-L + CLASS1-M, DLG1-L (commits 1-2) + DLG1-A, S14-L1 (commits 1-2). Open next: DLG1-L commit 3 (panels), DLG1-F, S14-F, S14-L1 commit 3, S14-L2/L3, TRAV1, REP1, UI1-3, S12S/T/C, BAL2 rerun on the fixed planner, CLN-12/13/16, CLN-3b.
+Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-2, CLN-1/2/4/5/10/11/15, AI2 (diagnosis), PLAN1, M4-L + M4-A, QUEST2, EXP1-L (commits 1-3) + EXP1-A, ITEM1-L (commits 1-3) + ITEM1-A, CLASS1-L + CLASS1-M, DLG1-L (commits 1-2) + DLG1-A, S14-L1 (commits 1-2). Open next: DLG1-F, S14-F, S14-L1 commit 3, S14-L2/L3, TRAV1, REP1, UI1-3, S12S/T/C, BAL2 rerun on the fixed planner, CLN-12/13/16, CLN-3b.
 
 ## Finished, by milestone (newest first)
+
+### DLG1-L commit 3 dialogue and shop panels (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | DialoguePanel, ShopPanel in the region map; shop return without node effects (user decision); DialoguePanelChecks | n/a / 25 | merged via PR |
 
 ### S14-F asset pipeline follow-ups (2026-10-17, cloud)
 

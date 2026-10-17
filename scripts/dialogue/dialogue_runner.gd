@@ -4,7 +4,8 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Dialogue Runner (S11, spec DLG1-L 2.2-2.4): one conversation with one world character.
 # One instance per conversation, never saved. open() picks the character's tree (`dialogue`; "" = a generated root
-# with the `greeting` line and the service choices only). Showing a node runs its effects (every time it is shown).
+# with the `greeting` line and the service choices only). Showing a node runs its effects (every time it is shown),
+# except the return to the node a shop was opened from (user decision 2026-10-17, "DLG1 open items").
 # Visible choices: authored ones whose requires hold and unless don't; failing ones with show_locked appear locked;
 # the rest are hidden; then, on the start node with services on, the generated service choices in order: quest offers
 # (resolved giver = this character, status available), turn-ins (effective turn-in = this character, status ready),
@@ -307,11 +308,15 @@ func cancel() -> Dictionary:
 	var no_errors: Array[String] = []
 	return {"ok": true, "errors": no_errors, "node": node_id}
 
-# Leaves the shop: shows the choice's `to` node ("" = the node the shop was opened from).
+# Leaves the shop: shows the choice's `to` node ("" = the node the shop was opened from). Returning to the node the
+# shop was opened from does not run its effects again (user decision 2026-10-17); another `to` node is shown as usual.
 func close_shop() -> Dictionary:
 	if shop_qid.is_empty():
 		return _fail("No shop is open.")
 	shop_qid = ""
+	if _shop_to == node_id:
+		var no_errors: Array[String] = []
+		return {"ok": true, "errors": no_errors, "node": node_id}
 	return _move(_shop_to)
 
 # Moves on from a `next` node (shows the next node) or an end node (closes the conversation).
