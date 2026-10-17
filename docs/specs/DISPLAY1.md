@@ -16,7 +16,7 @@ Schema-first: yes (the keys land before the view). New `SettingsFile.KEYS` rows.
 | Key | Type | Allowed values | Default | Platform |
 | --- | --- | --- | --- | --- |
 | `display/window_mode` | String | `windowed`, `borderless`, `fullscreen` | `windowed` | desktop |
-| `display/resolution` | String | `1280x720`, `1600x900`, `1920x1080`, `2560x1440` | `1280x720` | desktop, windowed only |
+| `display/resolution` | String | `960x540`, `1024x576`, `1152x648`, `1280x720`, `1366x768`, `1600x900`, `1920x1080`, `2560x1440` (logical sizes: on a high-DPI screen the window is size x `screen_get_scale()` physical pixels, and the list filter compares that) | `1280x720` | desktop, windowed only |
 | `display/vsync` | bool | `true`, `false` | `true` | desktop |
 | `display/max_fps` | int | `30`, `60`, `120`, `144`, `0` (0 = unlimited) | `0` | desktop |
 
@@ -38,7 +38,7 @@ Acceptance checks (headless model tests, fake backend):
 
 - Each key round-trips through `settings.cfg`. A value outside the list reads as the default. The four keys are untouched by save, load and delete of any slot.
 - Rule 1: each `window_mode` value produces the matching backend call. Vsync and each cap value produce the matching calls, and no countdown is started.
-- Rule 3: with a fake 1600x900 usable screen, the list is `1280x720`, `1600x900`. A saved `2560x1440` applies `1600x900` and leaves the file at `2560x1440`.
+- Rule 3: with a fake 1600x900 usable screen, the list is every listed size up to `1600x900` (`960x540` ... `1600x900`). A saved `2560x1440` applies `1600x900` and leaves the file at `2560x1440`.
 - Rule 6: changing the mode starts a 10 s countdown. Revert, Esc and the timeout (simulated time) each restore the old mode and leave the file unchanged. Keep writes both keys. Changing only the cap starts no countdown.
 - Rule 8: with the web flag forced on, the four desktop rows are absent, the Fullscreen row is present, and toggling it writes no display key.
 - Layout (extends the SETTINGS-UI checks): at each text-size level, check the Settings screen, the countdown modal and the main menu at logical sizes 1280x720, 1280x800 and 1680x720. Pass: no control clipped or outside the viewport, and the labels and controls line up. Testing each 16:9 size separately would add nothing, because rule 4 makes them identical.

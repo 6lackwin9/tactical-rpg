@@ -35,11 +35,19 @@ class Backend extends RefCounted:
 	var calls: Array[String] = []
 	var centred: int = 0
 
+	var scale: float = 1.0   # physical pixels per logical pixel (a high-DPI screen); the sizes in the list are logical
+
 	func usable_size() -> Vector2i:
 		return usable
 
+	func screen_scale() -> float:
+		return scale
+
 	func current_mode() -> int:
 		return mode
+
+	func current_size() -> Vector2i:
+		return size
 
 	func set_mode(m: int) -> void:
 		mode = m
@@ -66,14 +74,30 @@ class RealBackend extends Backend:
 	func usable_size() -> Vector2i:
 		return DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen()).size
 
+	func screen_scale() -> float:
+		return maxf(1.0, DisplayServer.screen_get_scale(DisplayServer.window_get_current_screen()))
+
 	func current_mode() -> int:
 		return DisplayServer.window_get_mode()
+
+	func current_size() -> Vector2i:
+		return Vector2i((Vector2(DisplayServer.window_get_size()) / screen_scale()).round())
 
 	func set_mode(m: int) -> void:
 		DisplayServer.window_set_mode(m)
 
+	# window_set_size takes physical pixels, so a 1280x720 window on a 200% screen is 2560x1440. A mode change (maximized / fullscreen
+	# back to windowed) can swallow a size set in the same frame, so the size is set again one frame later.
 	func set_size(s: Vector2i) -> void:
-		DisplayServer.window_set_size(s)
+		var physical: Vector2i = Vector2i((Vector2(s) * screen_scale()).round())
+		DisplayServer.window_set_size(physical)
+		var loop: MainLoop = Engine.get_main_loop()
+		var tree: SceneTree = loop as SceneTree
+		if tree != null:
+			tree.process_frame.connect(func() -> void:
+				if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED:
+					DisplayServer.window_set_size(physical)
+					centre(), CONNECT_ONE_SHOT)
 
 	func centre() -> void:
 		var area: Rect2i = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
@@ -110,11 +134,12 @@ static func parse_size(text: String) -> Vector2i:
 # The window sizes that fit the usable screen area (ascending); 1280x720 is always offered.
 static func sizes() -> Array[String]:
 	var usable: Vector2i = backend().usable_size()
+	var b_scale: float = backend().screen_scale()   # list sizes are logical, the screen is physical
 	var out: Array[String] = []
 	for raw: Variant in DictUtil.array_of(DictUtil.dict_of(SettingsFile.KEYS[KEY_SIZE]).get("choices", [])):
 		var s: String = str(raw)
 		var v: Vector2i = parse_size(s)
-		if s == "1280x720" or (v.x <= usable.x and v.y <= usable.y):
+		if s == "1280x720" or (float(v.x) * b_scale <= usable.x and float(v.y) * b_scale <= usable.y):
 			out.append(s)
 	return out
 
@@ -146,3 +171,14 @@ static func apply_saved() -> void:
 
 static func reset_boot() -> void:
 	_booted = false
+
+# What the window really is now, read back from the backend ("Windowed 1600x900", "Fullscreen 2560x1440").
+static func now_text() -> String:
+	var b: Backend = backend()
+	var id: String = MODE_WINDOWED
+	for key: String in MODE_OF:
+		if DictUtil.to_int(MODE_OF[key]) == b.current_mode():
+			id = key
+	var names: Dictionary = DictUtil.dict_of(SettingsModel.CHOICE_NAMES.get(KEY_MODE, {}))
+	var v: Vector2i = b.current_size()
+	return "%s %dx%d" % [str(names.get(id, id)), v.x, v.y]

@@ -49,6 +49,7 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_notes_trail(enc_id) and ok
 	ok = _test_release_guard(enc_id) and ok
 	ok = _test_trail_report() and ok
+	ok = _test_trail_detached() and ok
 	ok = _test_ui_asset_report() and ok
 	PlaytestStore.force_enabled = saved_enabled
 	PlaytestStore.use_root(PlaytestStore.USER_ROOT)
@@ -62,6 +63,22 @@ static func run(tree_parent: Node = null) -> bool:
 
 # The catalog encounter with the fewest units (then the lowest id) that is still running after MIN_ROUNDS
 # preset-played rounds; every recorded battle below stops there, which keeps the suite fast.
+# A button that left the tree (freed by its own press) still describes without asking the engine for its path.
+static func _test_trail_detached() -> bool:
+	var trail := PlaytestUiTrail.new()
+	var b := Button.new()
+	b.name = "Gone"
+	b.text = "Apply"
+	var d: Dictionary = trail.describe(b)
+	var checks: Dictionary = {
+		"a detached button gives a dict": not d.is_empty(),
+		"it keeps the node name and text": str(d.get("path", "")).contains("Gone") and str(d.get("text", "")) == "Apply",
+		"null gives an empty dict": trail.describe(null).is_empty(),
+	}
+	b.free()
+	trail.free()
+	return TestHelpers.report(TAG, "Trail describes a detached node", checks)
+
 static func _pick_encounter() -> String:
 	var sized: Array[Dictionary] = []
 	for id: String in ContentCatalog.ids("encounters"):

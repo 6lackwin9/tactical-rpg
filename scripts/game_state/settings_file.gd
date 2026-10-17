@@ -28,7 +28,7 @@ const KEYS: Dictionary = {
 	"ui/text_scale": {"type": TYPE_FLOAT, "default": 1.0, "levels": TEXT_LEVELS},
 	# DISPLAY1 (desktop only; the web build writes none): "choices" is the list of allowed values, anything else reads as the default.
 	"display/window_mode": {"type": TYPE_STRING, "default": "windowed", "choices": ["windowed", "borderless", "fullscreen"]},
-	"display/resolution": {"type": TYPE_STRING, "default": "1280x720", "choices": ["1280x720", "1600x900", "1920x1080", "2560x1440"]},
+	"display/resolution": {"type": TYPE_STRING, "default": "1280x720", "choices": ["960x540", "1024x576", "1152x648", "1280x720", "1366x768", "1600x900", "1920x1080", "2560x1440"]},
 	"display/vsync": {"type": TYPE_BOOL, "default": true},
 	"display/max_fps": {"type": TYPE_INT, "default": 0, "choices": [30, 60, 120, 144, 0]},
 }

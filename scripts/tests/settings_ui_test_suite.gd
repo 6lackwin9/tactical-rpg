@@ -28,6 +28,10 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_snapping() and ok
 	if tree_parent != null:
 		ok = _test_screens(tree_parent) and ok
+		ok = _test_restore_defaults() and ok
+		ok = _test_skip_row(tree_parent) and ok
+		ok = _test_text_preview(tree_parent) and ok
+		ok = _test_right_click(tree_parent) and ok
 	CurrentGame.end()
 	SettingsFile.use_path()
 	SaveGame.reset_base_dir()
@@ -114,6 +118,114 @@ static func _test_screens(tree_parent: Node) -> bool:
 	host.queue_free()
 	return TestHelpers.report(TAG, "Menu screens at every text-size and speed level (1280x720)", checks)
 
+static func _test_restore_defaults() -> bool:
+	SettingsFile.set_value("audio/master", 0.2)
+	SettingsFile.set_value("anim/speed", 2.0)
+	SettingsFile.set_value("display/vsync", false)
+	var m := SettingsModel.new()
+	m.restore_defaults()
+	var all_default: bool = true
+	for key: String in SettingsFile.KEYS:
+		all_default = all_default and m.value(key) == SettingsFile.default_of(key)
+	var checks: Dictionary = {
+		"every key (display too) is the default": all_default,
+		"it is a draft: the file keeps its values": is_equal_approx(SettingsFile.get_float("audio/master"), 0.2) and m.has_draft(),
+	}
+	m.revert()
+	checks["revert still drops the draft"] = not m.has_draft()
+	SettingsFile.use_path(SANDBOX + "/settings.cfg")   # forget the values set above
+	var _gone: Error = DirAccess.remove_absolute(SettingsFile.path())
+	SettingsFile.load_file()
+	return TestHelpers.report(TAG, "Restore defaults sets the draft to the defaults", checks)
+
+static func _screen(tree_parent: Node, id: String) -> Array:
+	var host := Control.new()
+	host.size = VIEW
+	host.custom_minimum_size = VIEW
+	tree_parent.add_child(host)
+	var view: MainMenuView = (load("res://scenes/main_menu.tscn") as PackedScene).instantiate() as MainMenuView
+	host.add_child(view)
+	_open(view, MenuRouter.MAIN)
+	view.router.push(id)
+	layout(view)
+	return [host, view]
+
+static func _test_skip_row(tree_parent: Node) -> bool:
+	var made: Array = _screen(tree_parent, MenuRouter.SETTINGS)
+	var host: Control = made[0] as Control
+	var view: MainMenuView = made[1] as MainMenuView
+	var slider: HSlider = view.find_child("Levels_anim_speed", true, false) as HSlider
+	var box: CheckBox = view.find_child("Check_anim_instant", true, false) as CheckBox
+	var checks: Dictionary = {"controls exist": slider != null and box != null}
+	if slider != null and box != null:
+		var m: SettingsModel = view.router.model() as SettingsModel
+		checks["speed slider enabled while unticked"] = slider.editable
+		box.button_pressed = true
+		checks["ticking disables the speed slider"] = not slider.editable and DictUtil.to_bool(m.value("anim/instant"))
+		box.button_pressed = false
+		checks["unticking enables it again"] = slider.editable and not DictUtil.to_bool(m.value("anim/instant"))
+		slider.value = 3.0
+		checks["slider writes the level to the draft"] = is_equal_approx(DictUtil.to_float(m.value("anim/speed")), EXPECT_SPEEDS[3])
+		var name_label: Label = view.find_child("LevelName_anim_speed", true, false) as Label
+		checks["value label names the level"] = name_label != null and name_label.text == SettingsModel.level_text("anim/speed", 3)
+	host.queue_free()
+	return TestHelpers.report(TAG, "Skip animations sits on the speed row and locks the speed slider", checks)
+
+static func _test_text_preview(tree_parent: Node) -> bool:
+	SettingsFile.set_value("ui/text_scale", 1.0)
+	var made: Array = _screen(tree_parent, MenuRouter.SETTINGS)
+	var host: Control = made[0] as Control
+	var view: MainMenuView = made[1] as MainMenuView
+	var slider: HSlider = view.find_child("Levels_ui_text_scale", true, false) as HSlider
+	var checks: Dictionary = {"slider exists": slider != null}
+	if slider != null:
+		var base: int = roundi(MainMenuView.BASE_FONT * 1.0)
+		slider.value = 3.0
+		var big: int = roundi(MainMenuView.BASE_FONT * EXPECT_TEXT[3])
+		var sample: Label = view.find_child("TextSample", true, false) as Label
+		checks["the menu rescales at once"] = view.theme.default_font_size == big and big > base
+		checks["the sample follows"] = sample != null and sample.get_theme_font_size("font_size") == big
+		checks["nothing is saved yet"] = is_equal_approx(SettingsFile.get_float("ui/text_scale"), 1.0) and view.router.has_draft()
+		view.cancel_pressed()   # Back asks about the unapplied change
+		checks["Back asks"] = view.is_overlay_open() and view.router.is_asking()
+		view.answer(true)
+		checks["Back without Apply restores the saved size"] = view.router.top() == MenuRouter.MAIN and view.theme.default_font_size == base and is_equal_approx(SettingsFile.get_float("ui/text_scale"), 1.0)
+	host.queue_free()
+	return TestHelpers.report(TAG, "Text size previews live and Back without Apply restores it", checks)
+
+static func _test_right_click(tree_parent: Node) -> bool:
+	var made: Array = _screen(tree_parent, MenuRouter.LOAD)
+	var host: Control = made[0] as Control
+	var view: MainMenuView = made[1] as MainMenuView
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_RIGHT
+	click.pressed = true
+	var left := InputEventMouseButton.new()
+	left.button_index = MOUSE_BUTTON_LEFT
+	left.pressed = true
+	var checks: Dictionary = {}
+	view._unhandled_input(left)
+	checks["left click does nothing"] = view.router.top() == MenuRouter.LOAD
+	view._unhandled_input(click)
+	checks["right click goes back like Esc"] = view.router.top() == MenuRouter.MAIN
+	# A question box: right click answers No, like Esc.
+	view.router.push(MenuRouter.SETTINGS)
+	var m: SettingsModel = view.router.model() as SettingsModel
+	var _e: Array[String] = m.set_value("audio/master", 0.1)
+	view._unhandled_input(click)
+	checks["unapplied draft: right click asks"] = view.is_overlay_open() and view.router.is_asking() and view.router.top() == MenuRouter.SETTINGS
+	view._unhandled_input(click)
+	checks["with the question open it answers No (stays)"] = not view.is_overlay_open() and not view.router.is_asking() and view.router.top() == MenuRouter.SETTINGS
+	# The game view (map / fight) keeps the right button.
+	var fake := Control.new()
+	view.game_view = fake
+	view._unhandled_input(click)
+	checks["nothing happens while the game view shows"] = view.router.top() == MenuRouter.SETTINGS and not view.is_overlay_open()
+	view.game_view = null
+	fake.free()
+	host.queue_free()
+	return TestHelpers.report(TAG, "Right click is Back, like Esc", checks)
+
 static func _open(view: MainMenuView, id: String) -> void:
 	view.router.clear_to(id)   # one render per screen: the whole arena runs in one frame, so the message queue must stay small
 	layout(view)
@@ -168,22 +280,54 @@ static func _under_scroll(c: Control, view: Node) -> bool:
 	return false
 
 static func _settings_controls_ok(view: MainMenuView, speed: float, scale: float) -> bool:
-	var speed_pick: OptionButton = view.find_child("Levels_anim_speed", true, false) as OptionButton
-	var text_pick: OptionButton = view.find_child("Levels_ui_text_scale", true, false) as OptionButton
+	var speed_pick: HSlider = view.find_child("Levels_anim_speed", true, false) as HSlider
+	var text_pick: HSlider = view.find_child("Levels_ui_text_scale", true, false) as HSlider
 	var check: CheckBox = view.find_child("Check_anim_instant", true, false) as CheckBox
 	if speed_pick == null or text_pick == null or check == null:
 		return false
 	var volumes: int = 0
 	for n: Node in view.find_children("Slider_audio_*", "HSlider", true, false):
 		volumes += 1
-	var speed_ok: bool = speed_pick.item_count == 4 and is_equal_approx(EXPECT_SPEEDS[speed_pick.selected], speed)
-	var text_ok: bool = text_pick.item_count == 4 and is_equal_approx(EXPECT_TEXT[text_pick.selected], scale)
-	var check_ok: bool = check.text == "Instant animations" and check.is_visible_in_tree() and check.get_theme_icon("unchecked").get_width() > 0
-	var buttons_ok: bool = _button(view, "Apply") != null and _button(view, "Revert") != null and _button(view, "Back") != null
+	var speed_ok: bool = _notches_ok(speed_pick, EXPECT_SPEEDS) and is_equal_approx(EXPECT_SPEEDS[roundi(speed_pick.value)], speed)
+	var text_ok: bool = _notches_ok(text_pick, EXPECT_TEXT) and is_equal_approx(EXPECT_TEXT[roundi(text_pick.value)], scale)
+	var check_ok: bool = check.text == "Skip animations" and check.is_visible_in_tree() and check.get_theme_icon("unchecked").get_width() > 0
+	var buttons_ok: bool = _button(view, "Apply") != null and _button(view, "Restore defaults") != null and _button(view, "Back") != null and _button(view, "Revert") == null
 	# Centred: the grid's middle sits at the viewport's middle (within a pixel or two).
 	var grid: Control = view.find_child("SettingsScroll", true, false) as Control   # DISPLAY1: the rows scroll; the scroll area is the centred column
 	var centred: bool = grid != null and absf(grid.get_global_rect().get_center().x - VIEW.x / 2.0) <= 2.0
-	return volumes == 4 and speed_ok and text_ok and check_ok and buttons_ok and centred
+	# MENU-POLISH: the Skip box sits to the right of the speed slider on its row; the bottom bar is outside the scroll, below it.
+	var cell: Control = speed_pick.get_parent() as Control
+	var on_row: bool = cell != null and check.get_global_rect().position.x >= cell.get_global_rect().end.x and absf(check.get_global_rect().get_center().y - speed_pick.get_global_rect().get_center().y) <= cell.get_global_rect().size.y
+	var bar: Control = view.find_child("SettingsBar", true, false) as Control
+	var bar_ok: bool = bar != null and grid != null and not _under_scroll(bar, view) and bar.get_global_rect().position.y >= grid.get_global_rect().end.y - 1.0 and bar.is_ancestor_of(_button(view, "Apply")) and bar.is_ancestor_of(_button(view, "Back"))
+	var sample: Label = view.find_child("TextSample", true, false) as Label
+	var sample_ok: bool = sample != null and sample.get_theme_font_size("font_size") == roundi(MainMenuView.BASE_FONT * scale)
+	return volumes == 4 and speed_ok and text_ok and check_ok and buttons_ok and centred and on_row and bar_ok and sample_ok
+
+# A notched slider: one notch per level, whole steps, value = level index.
+static func _notches_ok(s: HSlider, levels: Array[float]) -> bool:
+	return s.tick_count == levels.size() and s.min_value == 0.0 and s.max_value == float(levels.size() - 1) and s.step == 1.0 and not s.scrollable
+
+# Main menu: every button the same width, the column and the title centred on the screen, button text centred.
+static func _main_menu_even(view: MainMenuView) -> bool:
+	var width: float = -1.0
+	var count: int = 0
+	for n: Node in view.find_children("*", "Button", true, false):
+		var b: Button = n as Button
+		if b == null or not b.is_visible_in_tree():
+			continue
+		var r: Rect2 = b.get_global_rect()
+		count += 1
+		if width < 0.0:
+			width = r.size.x
+		if absf(r.size.x - width) > 1.0 or absf(r.get_center().x - VIEW.x / 2.0) > 2.0 or b.alignment != HORIZONTAL_ALIGNMENT_CENTER:
+			return false
+	for n: Node in view.find_children("*", "Label", true, false):
+		var l: Label = n as Label
+		if l != null and l.is_visible_in_tree() and (l.text == "Tactical RPG" or l.text.begins_with("A small campaign")):
+			if l.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER or absf(l.get_global_rect().get_center().x - VIEW.x / 2.0) > 2.0:
+				return false
+	return count >= 3
 
 # Cells of the settings grid, three per row: label | control | value must not overlap and must share a vertical centre line
 # (rows may differ in height, so the centres are compared within the row's tallest cell).

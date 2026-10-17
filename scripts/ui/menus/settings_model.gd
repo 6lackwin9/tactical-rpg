@@ -8,7 +8,7 @@ extends RefCounted
 
 const LABELS: Dictionary = {
 	"audio/master": "Master volume", "audio/music": "Music volume", "audio/sfx": "Effects volume", "audio/ui": "Interface volume",
-	"anim/speed": "Animation speed", "anim/instant": "Instant animations", "ui/text_scale": "Text size",
+	"anim/speed": "Animation speed", "anim/instant": "Skip animations", "ui/text_scale": "Text size",
 	"display/window_mode": "Window mode", "display/resolution": "Window size", "display/vsync": "Vertical sync", "display/max_fps": "Frame rate cap",
 }
 
@@ -142,6 +142,11 @@ func tick(delta: float) -> bool:
 		return false
 	revert_display()
 	return true
+
+# SettingsFile defaults for every key into the draft (Apply saves them; a display change still goes through Keep / Revert).
+func restore_defaults() -> void:
+	for key: String in SettingsFile.KEYS:
+		draft[key] = SettingsFile.default_of(key)
 
 func revert() -> void:
 	draft = {}

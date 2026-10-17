@@ -74,10 +74,11 @@ func _ready() -> void:
 	render()
 
 # The theme's default font size follows the `ui/text_scale` setting.
-func apply_text_scale() -> void:
+func apply_text_scale(preview: float = 0.0) -> void:
+	var text_scale: float = preview if preview > 0.0 else DictUtil.to_float(SettingsFile.get_value("ui/text_scale", 1.0), 1.0)
 	var t := Theme.new()
-	t.default_font_size = roundi(BASE_FONT * DictUtil.to_float(SettingsFile.get_value("ui/text_scale", 1.0), 1.0))
-	theme = t
+	t.default_font_size = roundi(BASE_FONT * text_scale)
+	theme = t   # `preview` > 0 shows an unsaved size (the settings screen); every other render goes back to the saved one
 
 # ------------------------------------------------------------------------------
 # Rendering
@@ -87,6 +88,7 @@ func render() -> void:
 	if _screen == null:
 		return
 	UiTheme.clear_children(_screen)
+	apply_text_scale()   # the saved size (the settings screen previews its draft in its build)
 	var id: String = router.top()
 	var view: Control = null
 	match id:
@@ -346,6 +348,13 @@ func _on_quit() -> void:
 		get_tree().quit()
 
 func _unhandled_input(event: InputEvent) -> void:
+	var mouse: InputEventMouseButton = event as InputEventMouseButton
+	if mouse != null and mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
+		if game_view != null and game_view.visible:
+			return   # the map and the fights own the right button
+		cancel_pressed()   # right click = Back, same path as Esc (the question and countdown boxes treat it as No / Revert)
+		accept_event()
+		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	cancel_pressed()

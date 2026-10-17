@@ -28,6 +28,7 @@ static func run(tree_parent: Node = null) -> bool:
 	var ok: bool = _test_keys()
 	ok = _test_mapping() and ok
 	ok = _test_fit() and ok
+	ok = _test_apply_calls() and ok
 	ok = _test_countdown() and ok
 	ok = _test_web_model() and ok
 	if tree_parent != null:
@@ -149,9 +150,13 @@ static func _test_fit() -> bool:
 	var b: DisplaySettings.Backend = _fresh()
 	var checks: Dictionary = {}
 	b.usable = Vector2i(1600, 900)
-	checks["1600x900 screen offers 1280x720 and 1600x900"] = DisplaySettings.sizes() == (["1280x720", "1600x900"] as Array[String])
+	checks["1600x900 screen offers every listed size up to 1600x900"] = DisplaySettings.sizes() == (["960x540", "1024x576", "1152x648", "1280x720", "1366x768", "1600x900"] as Array[String])
 	b.usable = Vector2i(1000, 600)
-	checks["a tiny screen still offers 1280x720"] = DisplaySettings.sizes() == (["1280x720"] as Array[String])
+	checks["a small screen offers what fits plus 1280x720"] = DisplaySettings.sizes() == (["960x540", "1280x720"] as Array[String])
+	b.usable = Vector2i(2880, 1800)
+	b.scale = 2.0
+	checks["a 200% screen lists logical sizes up to half the physical width"] = DisplaySettings.sizes() == (["960x540", "1024x576", "1152x648", "1280x720", "1366x768"] as Array[String])
+	b.scale = 1.0
 	b.usable = Vector2i(1600, 900)
 	SettingsFile.set_value("display/resolution", "2560x1440")
 	checks["saved file written"] = SettingsFile.save() == OK
@@ -162,8 +167,27 @@ static func _test_fit() -> bool:
 	checks["the file stays at 2560x1440"] = FileAccess.get_file_as_string(SettingsFile.path()) == before and SettingsFile.get_value("display/resolution") == "2560x1440"
 	var m := SettingsModel.new()
 	checks["the draft keeps 2560x1440"] = m.value("display/resolution") == "2560x1440"
-	checks["picker list is the fitting sizes"] = SettingsModel.choices("display/resolution") == ["1280x720", "1600x900"]
+	checks["picker list is the fitting sizes"] = SettingsModel.choices("display/resolution") == DisplaySettings.sizes()
 	return TestHelpers.report(TAG, "Window size list fits the screen", checks)
+
+# Apply reaches the backend (mode, size, vsync, cap), and the "In use" text reads the backend back.
+static func _test_apply_calls() -> bool:
+	var b: DisplaySettings.Backend = _fresh()
+	var checks: Dictionary = {}
+	var m := SettingsModel.new()
+	var _a: Array[String] = m.set_value("display/window_mode", "windowed")
+	var _b: Array[String] = m.set_value("display/resolution", "960x540")
+	var _c: Array[String] = m.set_value("display/vsync", false)
+	var _d: Array[String] = m.set_value("display/max_fps", 60)
+	var _e: Array[String] = m.apply()
+	checks["size goes to the backend"] = b.calls.has("size:960x540") and b.size == Vector2i(960, 540)
+	checks["vsync and cap go to the backend"] = b.calls.has("vsync:false") and b.calls.has("fps:60")
+	checks["a confirm is open"] = m.confirming()
+	checks["In use reads the backend back"] = DisplaySettings.now_text() == "Windowed 960x540"
+	m.revert_display()
+	b.mode = DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	checks["In use shows the mode"] = DisplaySettings.now_text().begins_with("Fullscreen")
+	return TestHelpers.report(TAG, "Apply calls the window backend and the settings show what is in use", checks)
 
 static func _test_countdown() -> bool:
 	var checks: Dictionary = {}
