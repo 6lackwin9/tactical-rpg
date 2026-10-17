@@ -1,0 +1,1264 @@
+{
+	"kind": "item_families",
+	"version": 1,
+	"entries": [
+		{
+			"id": "sword",
+			"name": "Sword",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h",
+				"main_2h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_2h": {
+					"power": 24,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 1,
+					"mitigation": 0
+				},
+				"main_1h": {
+					"power": 14,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 18,
+						"max": 30
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				},
+				"main_1h": {
+					"power": {
+						"min": 10,
+						"max": 23
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "slash",
+			"art": ""
+		},
+		{
+			"id": "axe",
+			"name": "Axe",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h",
+				"main_2h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_1h": {
+					"power": 16,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				},
+				"main_2h": {
+					"power": 27,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 2,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 12,
+						"max": 20
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				},
+				"main_2h": {
+					"power": {
+						"min": 20,
+						"max": 34
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "slash",
+			"art": ""
+		},
+		{
+			"id": "mace",
+			"name": "Mace",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR",
+				"INT"
+			],
+			"base": {
+				"main_1h": {
+					"power": 13,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 9,
+						"max": 22
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "blunt",
+			"art": ""
+		},
+		{
+			"id": "hammer",
+			"name": "Hammer",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_2h": {
+					"power": 34,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 3,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 25,
+						"max": 43
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "blunt",
+			"art": ""
+		},
+		{
+			"id": "fist",
+			"name": "Fist",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_1h": {
+					"power": 12,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 9,
+						"max": 15
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "blunt",
+			"art": ""
+		},
+		{
+			"id": "dagger",
+			"name": "Dagger",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"DEX"
+			],
+			"base": {
+				"main_1h": {
+					"power": 15,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 11,
+						"max": 20
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "pierce",
+			"art": ""
+		},
+		{
+			"id": "bow",
+			"name": "Bow",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"DEX"
+			],
+			"base": {
+				"main_2h": {
+					"power": 20,
+					"range": 3,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 15,
+						"max": 25
+					},
+					"range": {
+						"min": 2,
+						"max": 6
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"always_ranged"
+			],
+			"damage_type": "pierce",
+			"art": ""
+		},
+		{
+			"id": "staff",
+			"name": "Staff",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h",
+				"main_1h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"INT"
+			],
+			"base": {
+				"main_2h": {
+					"power": 22,
+					"range": 2,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				},
+				"main_1h": {
+					"power": 22,
+					"range": 2,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 16,
+						"max": 32
+					},
+					"range": {
+						"min": 1,
+						"max": 3
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				},
+				"main_1h": {
+					"power": {
+						"min": 16,
+						"max": 32
+					},
+					"range": {
+						"min": 1,
+						"max": 3
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"spell_source"
+			],
+			"damage_type": "magic",
+			"art": ""
+		},
+		{
+			"id": "wand",
+			"name": "Wand",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"INT"
+			],
+			"base": {
+				"main_1h": {
+					"power": 15,
+					"range": 3,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 11,
+						"max": 38
+					},
+					"range": {
+						"min": 2,
+						"max": 4
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"spell_source"
+			],
+			"damage_type": "magic",
+			"art": ""
+		},
+		{
+			"id": "orb",
+			"name": "Orb",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"off_hand_category": "orb",
+			"scaling_stats": [
+				"INT"
+			],
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"off": {
+					"power": {
+						"min": 0,
+						"max": 10
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"focus"
+			],
+			"damage_type": "magic",
+			"art": ""
+		},
+		{
+			"id": "tome",
+			"name": "Tome",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"off_hand_category": "tome",
+			"scaling_stats": [
+				"INT"
+			],
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"off": {
+					"power": {
+						"min": 0,
+						"max": 10
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"focus"
+			],
+			"damage_type": "magic",
+			"art": ""
+		},
+		{
+			"id": "shield",
+			"name": "Shield",
+			"description": "",
+			"item_type": "SHIELD",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"off_hand_category": "shield",
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 2,
+					"mitigation": 6
+				}
+			},
+			"bands": {
+				"off": {
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 3,
+						"max": 20
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden",
+				"block_cost"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [
+				"shield"
+			],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "plate",
+			"name": "Plate",
+			"description": "",
+			"item_type": "ARMOR",
+			"off_hand_category": "",
+			"slots": [
+				"HEAD",
+				"BODY"
+			],
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 3,
+					"mitigation": 8
+				}
+			},
+			"bands": {
+				"none": {
+					"block_cost": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 2,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 6,
+						"max": 10
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 0
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden",
+				"block_cost"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "leather",
+			"name": "Leather",
+			"description": "",
+			"item_type": "ARMOR",
+			"off_hand_category": "",
+			"slots": [
+				"HEAD",
+				"BODY"
+			],
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 1,
+					"mitigation": 4
+				}
+			},
+			"bands": {
+				"none": {
+					"block_cost": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 2
+					},
+					"mitigation": {
+						"min": 3,
+						"max": 5
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 0
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden",
+				"block_cost"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "cloth",
+			"name": "Cloth",
+			"description": "",
+			"item_type": "ARMOR",
+			"off_hand_category": "",
+			"slots": [
+				"HEAD",
+				"BODY"
+			],
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 2
+				}
+			},
+			"bands": {
+				"none": {
+					"block_cost": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 0
+					},
+					"mitigation": {
+						"min": 1,
+						"max": 4
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 5
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden",
+				"block_cost"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "crossbow",
+			"name": "Crossbow",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"DEX"
+			],
+			"base": {
+				"main_2h": {
+					"power": 20,
+					"range": 3,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 15,
+						"max": 25
+					},
+					"range": {
+						"min": 2,
+						"max": 6
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"always_ranged"
+			],
+			"damage_type": "pierce",
+			"art": ""
+		},
+		{
+			"id": "accessory",
+			"name": "Accessory",
+			"description": "",
+			"item_type": "ACCESSORY",
+			"off_hand_category": "",
+			"slots": [
+				"ACCESSORY_1",
+				"ACCESSORY_2"
+			],
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"none": {
+					"block_cost": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 0
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 4,
+						"max": 10
+					}
+				}
+			},
+			"adjustable": [
+				"burden"
+			],
+			"modifier_kinds": [
+				"stat_bonus",
+				"effect",
+				"requirement"
+			],
+			"max_modifiers": 4,
+			"max_tiers": 0,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "consumable",
+			"name": "Consumable",
+			"description": "",
+			"item_type": "CONSUMABLE",
+			"off_hand_category": "",
+			"base": {},
+			"bands": {},
+			"adjustable": [],
+			"modifier_kinds": [],
+			"max_modifiers": 0,
+			"max_tiers": 0,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "material",
+			"name": "Material",
+			"description": "",
+			"item_type": "MATERIAL",
+			"off_hand_category": "",
+			"base": {},
+			"bands": {},
+			"adjustable": [],
+			"modifier_kinds": [],
+			"max_modifiers": 0,
+			"max_tiers": 0,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		},
+		{
+			"id": "quest",
+			"name": "Quest",
+			"description": "",
+			"item_type": "QUEST",
+			"off_hand_category": "",
+			"base": {},
+			"bands": {},
+			"adjustable": [],
+			"modifier_kinds": [],
+			"max_modifiers": 0,
+			"max_tiers": 0,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
+		}
+	]
+}

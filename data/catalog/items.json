@@ -1,85 +1,85 @@
 {
 	"kind": "items",
-	"version": 1,
+	"version": 2,
 	"entries": [
 		{
 			"id": "wpn_claymore",
 			"name": "Iron Claymore",
-			"item_type": "WEAPON",
+			"family": "sword",
 			"rarity": "UNCOMMON",
 			"weight": 4.5,
 			"value": 65,
-			"description": "A heavy double-edged greatsword. Gains +4 Power when wielded with 18+ STR.",
+			"description": "A heavy double-edged greatsword. Gains +{tier1.power} Power when wielded with {tier1.value}+ STR.",
 			"damage_type": "slash",
 			"icon_id": "",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "sword",
-			"base_power": 24,
-			"base_range": 1,
-			"two_handed": true,
-			"off_hand_category": "",
+			"hand": "main_2h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 1,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 14
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": [
+			"modifiers": [
 				{
+					"kind": "requirement",
 					"stat": "STR",
-					"threshold": 18,
-					"bonus_power": 4,
-					"desc": "Sunder Guard: +4 Power"
+					"value": 14
+				}
+			],
+			"tiers": [
+				{
+					"label": "Sunder Guard",
+					"when": {
+						"type": "stat_at_least",
+						"stat": "STR",
+						"value": 18
+					},
+					"bonus": {
+						"power": 4
+					},
+					"desc": ""
 				}
 			]
 		},
 		{
 			"id": "wpn_warhammer",
 			"name": "Titan Warhammer",
-			"item_type": "WEAPON",
+			"family": "hammer",
 			"rarity": "RARE",
 			"weight": 7.0,
 			"value": 120,
-			"description": "Colossal warhammer requiring 22 STR. Inflicts severe deficit penalty if under-statted.",
+			"description": "Colossal warhammer requiring {req:STR} STR. Inflicts severe deficit penalty if under-statted.",
 			"damage_type": "blunt",
 			"icon_id": "titan_warhammer",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "hammer",
-			"base_power": 34,
-			"base_range": 1,
-			"two_handed": true,
-			"off_hand_category": "",
+			"hand": "main_2h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 3,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 22
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": [
+			"modifiers": [
 				{
+					"kind": "requirement",
 					"stat": "STR",
-					"threshold": 26,
-					"bonus_power": 6,
-					"desc": "Crushing Impact: +6 Power"
+					"value": 22
+				}
+			],
+			"tiers": [
+				{
+					"label": "Crushing Impact",
+					"when": {
+						"type": "stat_at_least",
+						"stat": "STR",
+						"value": 26
+					},
+					"bonus": {
+						"power": 6
+					},
+					"desc": ""
 				}
 			]
 		},
 		{
 			"id": "wpn_shortbow",
 			"name": "Oak Shortbow",
-			"item_type": "WEAPON",
+			"family": "bow",
 			"rarity": "UNCOMMON",
 			"weight": 2.0,
 			"value": 55,
@@ -89,34 +89,34 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "bow",
-			"base_power": 20,
-			"base_range": 3,
-			"two_handed": true,
-			"off_hand_category": "",
+			"hand": "main_2h",
 			"scaling_stat": "DEX",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"DEX": 13
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": [
+			"modifiers": [
 				{
+					"kind": "requirement",
 					"stat": "DEX",
-					"threshold": 16,
-					"bonus_power": 3,
-					"desc": "True Flight: +3 Power"
+					"value": 13
+				}
+			],
+			"tiers": [
+				{
+					"label": "True Flight",
+					"when": {
+						"type": "stat_at_least",
+						"stat": "DEX",
+						"value": 16
+					},
+					"bonus": {
+						"power": 3
+					},
+					"desc": ""
 				}
 			]
 		},
 		{
 			"id": "wpn_broadsword",
 			"name": "Steel Broadsword",
-			"item_type": "WEAPON",
+			"family": "sword",
 			"rarity": "COMMON",
 			"weight": 2.8,
 			"value": 35,
@@ -126,57 +126,50 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "sword",
-			"base_power": 18,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 10
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 4
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_shortsword",
 			"name": "Iron Shortsword",
-			"item_type": "WEAPON",
+			"family": "sword",
 			"rarity": "COMMON",
 			"weight": 1.8,
 			"value": 25,
 			"description": "Agile 1-handed short blade wieldable in main or off-hand (STR scaling).",
 			"damage_type": "slash",
-			"icon_id": "",
+			"icon_id": "shortsword",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "sword",
-			"base_power": 14,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "shortsword",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 10
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_knuckles",
 			"name": "Spiked Knuckles",
-			"item_type": "WEAPON",
+			"family": "fist",
 			"rarity": "COMMON",
 			"weight": 1.2,
 			"value": 20,
@@ -186,27 +179,21 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "fist",
-			"base_power": 12,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "knuckles",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 10
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_dagger",
 			"name": "Shadow Dagger",
-			"item_type": "WEAPON",
+			"family": "dagger",
 			"rarity": "UNCOMMON",
 			"weight": 1.0,
 			"value": 50,
@@ -216,34 +203,39 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "dagger",
-			"base_power": 16,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "dagger",
+			"hand": "main_1h",
 			"scaling_stat": "DEX",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"DEX": 12
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": [
+			"modifiers": [
 				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 1
+				},
+				{
+					"kind": "requirement",
 					"stat": "DEX",
-					"threshold": 15,
-					"bonus_power": 4,
-					"desc": "Puncture: +4 Power"
+					"value": 12
+				}
+			],
+			"tiers": [
+				{
+					"label": "Puncture",
+					"when": {
+						"type": "stat_at_least",
+						"stat": "DEX",
+						"value": 15
+					},
+					"bonus": {
+						"power": 4
+					},
+					"desc": ""
 				}
 			]
 		},
 		{
 			"id": "wpn_tome",
 			"name": "Mystic Spellbook",
-			"item_type": "WEAPON",
+			"family": "tome",
 			"rarity": "UNCOMMON",
 			"weight": 1.2,
 			"value": 55,
@@ -253,39 +245,41 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "OFF_HAND",
-			"weapon_type": "tome",
-			"base_power": 0,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "tome",
+			"hand": "off",
 			"scaling_stat": "INT",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"KNOW": 11
-			},
-			"stat_bonuses": {
-				"KNOW": 1
-			},
-			"effects": [
+			"modifiers": [
 				{
-					"type": "skill_potency",
-					"group": "heal",
-					"value": 0.1
+					"kind": "requirement",
+					"stat": "KNOW",
+					"value": 11
 				},
 				{
-					"type": "status_potency",
-					"value": 5
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"group": "heal",
+						"value": 0.1
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "status_potency",
+						"value": 5
+					}
 				}
 			],
-			"threshold_tiers": []
+			"tiers": []
 		},
 		{
 			"id": "wpn_staff",
 			"name": "Runed Staff",
-			"item_type": "WEAPON",
+			"family": "staff",
 			"rarity": "RARE",
 			"weight": 2.2,
 			"value": 75,
@@ -295,109 +289,113 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "staff",
-			"base_power": 22,
-			"base_range": 2,
-			"two_handed": true,
-			"off_hand_category": "",
+			"hand": "main_2h",
 			"scaling_stat": "INT",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"INT": 14
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": [
+			"modifiers": [
 				{
+					"kind": "requirement",
 					"stat": "INT",
-					"threshold": 18,
-					"bonus_power": 5,
-					"desc": "Arcane Surge: +5 Power"
+					"value": 14
+				}
+			],
+			"tiers": [
+				{
+					"label": "Arcane Surge",
+					"when": {
+						"type": "stat_at_least",
+						"stat": "INT",
+						"value": 18
+					},
+					"bonus": {
+						"power": 5
+					},
+					"desc": ""
 				}
 			]
 		},
 		{
 			"id": "shd_kite",
 			"name": "Iron Kite Shield",
-			"item_type": "SHIELD",
+			"family": "shield",
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 45,
-			"description": "Sturdy teardrop shield granting +8 flat damage mitigation.",
+			"description": "Sturdy teardrop shield granting +{mitigation} flat damage mitigation.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "OFF_HAND",
-			"weapon_type": "shield",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 2,
-			"mitigation": 6,
-			"required_stats": {
-				"STR": 12
-			},
-			"stat_bonuses": {},
-			"effects": []
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 12
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "shd_buckler",
 			"name": "Duelist Buckler",
-			"item_type": "SHIELD",
+			"family": "shield",
 			"rarity": "COMMON",
 			"weight": 1.5,
 			"value": 30,
-			"description": "Light metal fist-shield providing 4 mitigation without slowing down.",
+			"description": "Light metal fist-shield providing {mitigation} mitigation without slowing down.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "OFF_HAND",
-			"weapon_type": "shield",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 4,
-			"required_stats": {
-				"DEX": 10
-			},
-			"stat_bonuses": {},
-			"effects": []
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "burden",
+					"delta": -2
+				},
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": -2
+				},
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 10
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "arm_plate",
 			"name": "Steel Plate Cuirass",
-			"item_type": "ARMOR",
+			"family": "plate",
 			"rarity": "UNCOMMON",
 			"weight": 8.5,
 			"value": 80,
-			"description": "Interlocking steel plates providing 10 mitigation with 3 burden.",
+			"description": "Interlocking steel plates providing {mitigation} mitigation with {burden} burden.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
 			"slot": "BODY",
-			"weapon_type": "plate",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 3,
-			"mitigation": 8,
-			"required_stats": {
-				"CONS": 12
-			},
-			"stat_bonuses": {},
-			"effects": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "CONS",
+					"value": 12
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "arm_leather",
 			"name": "Leather Brigandine",
-			"item_type": "ARMOR",
+			"family": "leather",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 40,
@@ -408,21 +406,19 @@
 			"special": false,
 			"special_note": "",
 			"slot": "BODY",
-			"weapon_type": "leather",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 1,
-			"mitigation": 4,
-			"required_stats": {
-				"DEX": 10
-			},
-			"stat_bonuses": {},
-			"effects": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 10
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "acc_bear_ring",
 			"name": "Ring of the Bear",
-			"item_type": "ACCESSORY",
+			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
 			"value": 70,
@@ -433,22 +429,24 @@
 			"special": false,
 			"special_note": "",
 			"slot": "ACCESSORY_1",
-			"weapon_type": "",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {},
-			"stat_bonuses": {
-				"STR": 2,
-				"CONS": 2
-			},
-			"effects": []
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "STR",
+					"value": 2
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "CONS",
+					"value": 2
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "acc_swift_amulet",
 			"name": "Amulet of Swiftness",
-			"item_type": "ACCESSORY",
+			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
 			"value": 65,
@@ -459,21 +457,19 @@
 			"special": false,
 			"special_note": "",
 			"slot": "ACCESSORY_2",
-			"weapon_type": "",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {},
-			"stat_bonuses": {
-				"DEX": 3
-			},
-			"effects": []
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "DEX",
+					"value": 3
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "con_heal_potion",
 			"name": "Healing Draught",
-			"item_type": "CONSUMABLE",
+			"family": "consumable",
 			"rarity": "COMMON",
 			"weight": 0.5,
 			"value": 15,
@@ -493,7 +489,7 @@
 		{
 			"id": "con_focus_elixir",
 			"name": "Elixir of Focus",
-			"item_type": "CONSUMABLE",
+			"family": "consumable",
 			"rarity": "UNCOMMON",
 			"weight": 0.4,
 			"value": 25,
@@ -513,7 +509,7 @@
 		{
 			"id": "con_fire_bomb",
 			"name": "Throwing Fire Bomb",
-			"item_type": "CONSUMABLE",
+			"family": "consumable",
 			"rarity": "UNCOMMON",
 			"weight": 1.0,
 			"value": 30,
@@ -533,7 +529,7 @@
 		{
 			"id": "wpn_hand_axe",
 			"name": "Hatchet",
-			"item_type": "WEAPON",
+			"family": "axe",
 			"rarity": "COMMON",
 			"weight": 2.0,
 			"value": 46,
@@ -543,27 +539,21 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "axe",
-			"base_power": 16,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 10
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_battle_axe",
 			"name": "Battle Axe",
-			"item_type": "WEAPON",
+			"family": "axe",
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 57,
@@ -573,27 +563,21 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "axe",
-			"base_power": 27,
-			"base_range": 1,
-			"two_handed": true,
-			"off_hand_category": "",
+			"hand": "main_2h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 2,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 15
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 15
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_flanged_mace",
 			"name": "Flanged Mace",
-			"item_type": "WEAPON",
+			"family": "mace",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 47,
@@ -603,27 +587,31 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "mace",
-			"base_power": 17,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
-			"block_cost": 1,
-			"burden": 1,
-			"mitigation": 0,
-			"required_stats": {
-				"STR": 11
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 4
+				},
+				{
+					"kind": "adjust",
+					"field": "burden",
+					"delta": 1
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 11
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_stiletto",
 			"name": "Stiletto",
-			"item_type": "WEAPON",
+			"family": "dagger",
 			"rarity": "COMMON",
 			"weight": 2.0,
 			"value": 45,
@@ -633,27 +621,21 @@
 			"starter_stash": true,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "dagger",
-			"base_power": 15,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "DEX",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"DEX": 11
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 11
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "arm_robe",
 			"name": "Plain Robe",
-			"item_type": "ARMOR",
+			"family": "cloth",
 			"rarity": "COMMON",
 			"weight": 1.0,
 			"value": 20,
@@ -664,19 +646,13 @@
 			"special": false,
 			"special_note": "",
 			"slot": "BODY",
-			"weapon_type": "cloth",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 2,
-			"required_stats": {},
-			"stat_bonuses": {},
-			"effects": []
+			"modifiers": [],
+			"tiers": []
 		},
 		{
 			"id": "arm_cleric_vestment",
 			"name": "Cleric Vestment",
-			"item_type": "ARMOR",
+			"family": "cloth",
 			"rarity": "UNCOMMON",
 			"weight": 1.5,
 			"value": 55,
@@ -687,21 +663,24 @@
 			"special": false,
 			"special_note": "",
 			"slot": "BODY",
-			"weapon_type": "cloth",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 3,
-			"required_stats": {},
-			"stat_bonuses": {
-				"KNOW": 1
-			},
-			"effects": []
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 1
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "arm_mage_robe",
 			"name": "Mage Robe",
-			"item_type": "ARMOR",
+			"family": "cloth",
 			"rarity": "UNCOMMON",
 			"weight": 1.5,
 			"value": 60,
@@ -712,21 +691,19 @@
 			"special": false,
 			"special_note": "",
 			"slot": "BODY",
-			"weapon_type": "cloth",
-			"off_hand_category": "",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 2,
-			"required_stats": {},
-			"stat_bonuses": {
-				"INT": 2
-			},
-			"effects": []
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "INT",
+					"value": 2
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "shd_tower",
 			"name": "Tower Shield",
-			"item_type": "SHIELD",
+			"family": "shield",
 			"rarity": "UNCOMMON",
 			"weight": 8.0,
 			"value": 90,
@@ -736,22 +713,35 @@
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Tank wall: the best armor in the game, but heavy, slow to raise (2 blocks) and paired with the weakest sword; the warrior gives up offense and mobility for it.",
-			"slot": "OFF_HAND",
-			"weapon_type": "shield",
-			"off_hand_category": "shield",
-			"block_cost": 2,
-			"burden": 3,
-			"mitigation": 16,
-			"required_stats": {
-				"STR": 15
-			},
-			"stat_bonuses": {},
-			"effects": []
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "block_cost",
+					"delta": 1
+				},
+				{
+					"kind": "adjust",
+					"field": "burden",
+					"delta": 1
+				},
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 10
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 15
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_wand",
 			"name": "Ash Wand",
-			"item_type": "WEAPON",
+			"family": "wand",
 			"rarity": "COMMON",
 			"weight": 0.5,
 			"value": 45,
@@ -761,27 +751,21 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "wand",
-			"base_power": 15,
-			"base_range": 3,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "INT",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"INT": 11
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 11
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_mage_staff",
 			"name": "Mage Staff",
-			"item_type": "WEAPON",
+			"family": "staff",
 			"rarity": "UNCOMMON",
 			"weight": 3.0,
 			"value": 85,
@@ -791,27 +775,31 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "staff",
-			"base_power": 25,
-			"base_range": 2,
-			"two_handed": true,
-			"off_hand_category": "",
+			"hand": "main_2h",
 			"scaling_stat": "INT",
-			"block_cost": 1,
-			"burden": 2,
-			"mitigation": 0,
-			"required_stats": {
-				"INT": 15
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 3
+				},
+				{
+					"kind": "adjust",
+					"field": "burden",
+					"delta": 2
+				},
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 15
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_cleric_mace",
 			"name": "Cleric Mace",
-			"item_type": "WEAPON",
+			"family": "mace",
 			"rarity": "COMMON",
 			"weight": 2.5,
 			"value": 50,
@@ -821,29 +809,26 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"slot": "MAIN_HAND",
-			"weapon_type": "mace",
-			"base_power": 13,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "INT",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"INT": 10
-			},
-			"stat_bonuses": {
-				"KNOW": 1
-			},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 10
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_glass_wand",
 			"name": "Glass Wand",
-			"item_type": "WEAPON",
+			"family": "wand",
 			"rarity": "RARE",
 			"weight": 0.3,
 			"value": 140,
@@ -853,27 +838,31 @@
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Glass cannon: very high ranged power, but every block spent defending costs 3 AP-blocks; best for a mage kept behind a tank.",
-			"slot": "MAIN_HAND",
-			"weapon_type": "wand",
-			"base_power": 30,
-			"base_range": 3,
-			"two_handed": false,
-			"off_hand_category": "",
+			"hand": "main_1h",
 			"scaling_stat": "INT",
-			"block_cost": 3,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"INT": 14
-			},
-			"stat_bonuses": {},
-			"effects": [],
-			"threshold_tiers": []
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 15
+				},
+				{
+					"kind": "adjust",
+					"field": "block_cost",
+					"delta": 2
+				},
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 14
+				}
+			],
+			"tiers": []
 		},
 		{
 			"id": "wpn_orb",
 			"name": "Focus Orb",
-			"item_type": "WEAPON",
+			"family": "orb",
 			"rarity": "UNCOMMON",
 			"weight": 0.8,
 			"value": 60,
@@ -883,32 +872,31 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"slot": "OFF_HAND",
-			"weapon_type": "orb",
-			"base_power": 0,
-			"base_range": 1,
-			"two_handed": false,
-			"off_hand_category": "orb",
+			"hand": "off",
 			"scaling_stat": "INT",
-			"block_cost": 1,
-			"burden": 0,
-			"mitigation": 0,
-			"required_stats": {
-				"INT": 12
-			},
-			"stat_bonuses": {},
-			"effects": [
+			"modifiers": [
 				{
-					"type": "skill_potency",
-					"group": "spell",
-					"value": 0.1
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 12
 				},
 				{
-					"type": "spell_reach",
-					"value": 1
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"group": "spell",
+						"value": 0.1
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "spell_reach",
+						"value": 1
+					}
 				}
 			],
-			"threshold_tiers": []
+			"tiers": []
 		}
 	]
 }

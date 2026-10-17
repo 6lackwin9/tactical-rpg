@@ -84,6 +84,8 @@ static func _test_round_trip() -> bool:
 		for key: String in ["family", "hand", "modifiers", "tiers"]:
 			have.erase(key)
 			want.erase(key)
+		# The catalog keeps the description template; the engine item carries the rendered text (ItemText tokens).
+		want["description"] = ItemText.render(str(want.get("description", "")), e)
 		if JSON.stringify(have) != JSON.stringify(want):
 			bad.append(str(e["id"]))
 	for e: Dictionary in ContentCatalog.entries("classes"):
