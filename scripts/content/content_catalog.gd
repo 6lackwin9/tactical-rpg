@@ -97,6 +97,7 @@ static func reload_from_disk() -> void:
 		if kind != "item_families":
 			_data_map()[kind] = _read_kind(kind)
 	SkillCatalog.clear_cache()
+	AssetRegistry.clear_family_cache()   # skill family ids are art keys; a reload with the same root and row count must rebuild them
 
 static func _ensure_loaded() -> void:
 	if _data_map().is_empty():
