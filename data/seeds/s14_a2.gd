@@ -26,7 +26,7 @@ func _init() -> void:
 	for key: String in SFX:
 		var a: Array = SFX[key]
 		var path: String = "%s/%s.wav" % [AssetRegistry.folder_of("sfx"), key]
-		var err: String = PlaceholderSfx.write(path, str(a[0]), float(a[1]), float(a[2]), int(a[3]), str(a[4]), float(a[5]))
+		var err: String = PlaceholderSfx.write(path, str(a[0]), DictUtil.to_float(a[1]), DictUtil.to_float(a[2]), DictUtil.to_int(a[3]), str(a[4]), DictUtil.to_float(a[5]))
 		if not err.is_empty():
 			print("ERROR ", key, ": ", err)
 			continue
@@ -39,8 +39,9 @@ func _init() -> void:
 			print("ERROR ", entry["id"], ": ", errs)
 	print("assets validate_all: ", AssetCatalog.validate_all())
 	print("assets save: ", AssetCatalog.save())
+	# Checks the files as written (the imported copies refresh at the next `godot --headless --import`).
 	for key: String in SoundEvents.keys():
-		var s: AudioStreamWAV = SoundBank.stream(key) as AudioStreamWAV
-		var want: float = float(int((SFX.get(key, [0, 0, 0, 0]) as Array)[3])) / 1000.0
+		var s: AudioStreamWAV = AudioStreamWAV.load_from_file(AssetCatalog.file_of("%s/%s.wav" % [AssetRegistry.folder_of("sfx"), key]))
+		var want: float = DictUtil.to_float(DictUtil.array_of(SFX.get(key, [])).get(3)) / 1000.0
 		print("check %s: %s" % [key, "ok" if s != null and absf(s.get_length() - want) <= 0.005 else "BAD"])
 	quit()
