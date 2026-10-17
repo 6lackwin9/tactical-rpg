@@ -7,7 +7,7 @@ extends RefCounted
 # Files live in base_dir() (default user://saves, static override for tests / sandboxes) as
 # slot_<n>.json. write() validates first and writes <file>.tmp then renames, so a crash never
 # leaves a half file. read() never returns a partially loaded state.
-# Slots (UI1-L): 0 is the autosave, 1..3 the manual slots; peek() reads a slot header without migrating or loading.
+# Slots (UI1-L): 0 is the autosave, 1..5 the manual slots (one list shared by all worlds); peek() reads a slot header without migrating or loading.
 # ==============================================================================
 
 const VERSION: int = 4   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L)
@@ -142,7 +142,7 @@ static func peek(slot: int) -> Dictionary:
 	out["ok"] = true
 	return out
 
-# The slot (0..3) with the largest saved_at among readable slots; -1 when none.
+# The slot (0..5) with the largest saved_at among readable slots; -1 when none.
 static func newest_slot() -> int:
 	var best: int = -1
 	var best_at: int = -1
