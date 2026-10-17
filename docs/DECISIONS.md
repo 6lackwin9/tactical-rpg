@@ -11,7 +11,7 @@ Index since 2026-10-17 (CLN-10): the decision rows live in one file per system u
 | README | Updated with every change | User standing rule |
 | Uncertainty | Check known-issues table; max 2 failed fixes; then ask the user with findings and options. Always ask on design/gameplay choices | User request |
 
-Commits: only when `check_project.ps1 -Fast -Quiet` is clean and the IDE Problems tab is empty (`CLAUDE.md` standing rules); the trailer comes from the session's attribution (the hard-coded trailer row is archived).
+Commits: only when `check_project.ps1 -Fast -Quiet` and `tools/fc.sh docs` are clean, plus an empty IDE Problems tab on desktop (`CLAUDE.md` standing rules; cloud: decision "Cloud workflow"); the trailer comes from the session's attribution (the hard-coded trailer row is archived).
 
 ## Per-system files
 
@@ -25,5 +25,5 @@ Commits: only when `check_project.ps1 -Fast -Quiet` is clean and the IDE Problem
 | `decisions/world-campaign.md` | S6 worlds, S8-S11 placeholder systems (exploration, travel, dialogue), campaign scope | "Exploration encounters", "Playable scope", "Travel supplies" |
 | `decisions/content-forge.md` | S5 catalog API, Content Forge rules, origin, ranked skill storage | "upsert_many (2026-10-16)", "FORGE1 skills answers (user 2026-10-16)", "FORGE1 class answers (user 2026-10-16)", "FORGE1 round 4 answers (user 2026-10-16)", "SKILL1 build choices (planner 2026-10-17)" |
 | `decisions/balance.md` | balance targets, sim method, BAL1/BAL2 answers | "Solo difficulty", "BAL2 answers (user 2026-10-17)", "Role-based balance (user 2026-10-17)", "BAL2 role answers (user 2026-10-17)", "Small answers (user 2026-10-17)" |
-| `decisions/workflow.md` | milestone planning, agents, tests, cleanup | "M2 slice order", "Milestone split", "Milestone plan v2 picks (2026-10-16)", "R1 test split (2026-10-16)", "Reviewer model (2026-10-16)", "Test convention (2026-10-16)", "Agent models (user 2026-10-17)", "Cleanup pass 1 answers (user 2026-10-17)" |
+| `decisions/workflow.md` | milestone planning, agents, tests, cleanup | "M2 slice order", "Milestone split", "Milestone plan v2 picks (2026-10-16)", "R1 test split (2026-10-16)", "Reviewer model (2026-10-16)", "Test convention (2026-10-16)", "Agent models (user 2026-10-17)", "Cleanup pass 1 answers (user 2026-10-17)", "Cloud workflow (user 2026-10-17)", "Environment split (user 2026-10-17)" |
 | `decisions/archive.md` | superseded rows with pointers | "Commits", "Gear budget breaking", "Support identity", "Build order", "Enemy scaling", "Milestone order", "Skill tiers (user 2026-10-15)", "Skill slots (user 2026-10-15)", "Advanced skills (user 2026-10-15)", "Rest and stance (user 2026-10-15)", "Riposte tuning (user 2026-10-15)", "FORGE1 skill answers 2 (user 2026-10-16)" |

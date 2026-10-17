@@ -18,7 +18,7 @@
 1. Read the brief; look up the relevant system in "Where to look for X".
 2. Edit (Edit tool; data via `ContentCatalog.upsert` seed script run with `tools/fc.sh run`).
 3. `tools/fc.sh parse`, then `tools/fc.sh arena` (or `dojo`); fix from the compact failure list.
-4. Before commit: `check_project.ps1` clean, README + docs updated, IDE Problems tab 0 errors/warnings (markdownlint compliant).
+4. Before commit: `check_project.ps1 -Fast -Quiet` and `tools/fc.sh docs` clean, README + docs updated; on desktop also IDE Problems tab 0 errors/warnings (markdownlint compliant). Desktop vs cloud steps: `docs/workflow/`.
 
 ## Agents and tools (built)
 

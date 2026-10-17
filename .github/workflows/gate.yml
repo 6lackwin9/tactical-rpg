@@ -1,0 +1,49 @@
+# Fast commit gate (same steps as check_project.ps1 -Fast -Quiet) plus the docs lint, on every PR.
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: 4.7.2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}
+
+      - name: Install Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          name="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          curl -fsSL --retry 3 -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${name}.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          mkdir -p "$HOME/godot/${GODOT_VERSION}"
+          install -m 0755 "/tmp/godot/${name}" "$HOME/godot/${GODOT_VERSION}/godot"
+
+      - name: Put Godot on PATH
+        run: |
+          sudo ln -sf "$HOME/godot/${GODOT_VERSION}/godot" /usr/local/bin/godot
+          echo "GODOT=$HOME/godot/${GODOT_VERSION}/godot" >> "$GITHUB_ENV"
+          godot --version
+
+      - name: Docs lint
+        run: bash tools/fc.sh docs
+
+      - name: Fast gate
+        run: bash tools/fc.sh gate
