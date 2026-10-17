@@ -1,6 +1,6 @@
 # Tactical RPG (Godot 4)
 
-A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Every unit plans a **6-block round** (AP-costed skills, one move, AI-planned enemies) that resolves simultaneously on a **9x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
+A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Every unit plans a **6-block round** (AP-costed skills, one move, AI-planned enemies) that resolves simultaneously on a **12x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
 
 ---
 
@@ -20,7 +20,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 - **Decoupled Rules Engines**: All core game mechanics inherit from `RefCounted` rather than scenes or rendering nodes, allowing 100% headless simulation and rapid automated testing.
 - **Simultaneous 6-Block Rounds**: Combat does not use traditional turn-based initiative. Every unit plans its round as a sequence of skills on a 6-block timeline (AP pool of 12, +4 per round); all plans then resolve together, block by block, with multi-block durations and stance interactions.
 - **Dynamic Stance Matchups**: three stances in a rock-paper-scissors loop (`Offensive` > `Tactical` > `Defensive` > `Offensive`) plus `Neutral` govern damage dealt and received through asymmetric multipliers.
-- **Spatial Positioning & Withdrawal**: 9x9 grid maneuvering with center-ring deployment, reach bands, and safe boundary withdrawal.
+- **Spatial Positioning & Withdrawal**: 12x9 grid maneuvering with party-left / enemies-right deployment, reach bands, and safe boundary withdrawal.
 - **Content as data**: skills, items, classes, units and encounters live in a JSON catalog edited with the Content Forge; the engine, the scenes and the tests all load from it.
 
 ---
@@ -125,9 +125,9 @@ tactical-rpg/
 │   │   │   ├── plan_presets.gd           # One-click AI draft presets (balanced, all-out, focus weakest, guard, kite, economy, fall back)
 │   │   │   └── tactical_ai.gd            # Drafts a validated step sequence for a unit
 │   │   └── arena/                # Arena spatial rules & resolution
-│   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability
+│   │       ├── combat_grid.gd            # 12x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability, standard deployment
 │   │       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
-│   │       ├── combat_zones.gd           # 8 preset 9x9 combat zones (forest, river, lava cavern, ...)
+│   │       ├── combat_zones.gd           # 8 preset 12x9 combat zones (forest, river, lava cavern, ...)
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
@@ -175,7 +175,7 @@ tactical-rpg/
 │       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
 │       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
 │       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
-│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards; hands action FX to the presenter
+│       │   ├── combat_grid_panel.gd      # 12x9 grid tokens, hover cards; hands action FX to the presenter
 │       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
 │       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
 │       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
@@ -196,7 +196,7 @@ tactical-rpg/
 │       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
 │       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
 │       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, FX layer
+│       ├── combat_grid_view.gd       # 12x9 grid rendering (54px tiles), tokens, tile input, FX layer
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -248,13 +248,13 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Estimates** (`DamageCalculator.expected`): the same formula with no crit and no guard (unknown ahead), armor included. Log cells show the hit actually dealt and, in debug builds, the full breakdown on hover (`DamageCalculator.describe`).
 - **Future**: weapon-focused skills may scale only Weapon Power; class / weapon preferences may change the 1.5 scaling.
 
-### 3. 9x9 Spatial Grid & Spatial Rules
+### 3. 12x9 Spatial Grid & Spatial Rules
 
-- **Arena Geometry**: Fixed 9x9 grid (`0..8` on both axes) with landmark center at `(4, 4)`.
-- **Center-Ring Deployment**: Initial spawn radius around `(4, 4)` offset by attack range so units can engage center on Block 1.
+- **Arena Geometry**: Fixed 12x9 grid (`x 0..11`, `y 0..8`); no tile is marked as the centre. Tie-breaks that prefer central tiles measure to the true middle (between columns 5 and 6 on row 4). Was 9x9 with a centre ring until GRID12 (2026-10-17).
+- **Standard Deployment**: the party lines up on the left, enemies on the right. Melee units take the front column (party x 5, enemies x 7), ranged units the back column (x 4 / x 8), rows filled from row 4 outward; a full column spills backwards. Front ranks start 2 tiles apart, as on the old centre ring.
 - **Reach Bands**: attacks check the target's distance against the skill's reach band (melee 1, ranged 2-3, off-hand jab 1, area skills their own); a targeted attack adjusts one tile when it starts, otherwise an out-of-reach attack fails cleanly.
-- **Perimeter Escape & Partial Withdrawal**: Stepping onto designated exit tiles (e.g. `(8, 4)`) triggers safe partial withdrawal, removing the unit from active combat without penalty.
-- **Reinforcement Ingress**: an encounter's reinforcement wave enters before a given block of a given round (e.g. the Goblin Ambush at Round 1 Block 4), deploying on free tiles of the enemy side; the AI plans it from the next round.
+- **Perimeter Escape & Partial Withdrawal**: Stepping onto designated exit tiles (e.g. `(11, 4)`, the east edge) triggers safe partial withdrawal, removing the unit from active combat without penalty.
+- **Reinforcement Ingress**: an encounter's reinforcement wave enters before a given block of a given round (e.g. the Goblin Ambush at Round 1 Block 4), deploying on the free tiles nearest the arena middle on the enemy (right) half; the AI plans it from the next round.
 
 ### 4. Deterministic Scrubbing & Replay System
 
@@ -352,7 +352,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Schema-driven** (`ContentSchema`): each kind is a field list (type, default, range, enum options, references, conditional fields such as attack-only or consumable-only fields, help text). It normalises JSON (types, defaults, key order), drives validation and builds the editor form. Enums are stored by name (`"ATTACK"`, `"MAIN_HAND"`), so the files read and diff well.
 - **Validation** (`ContentCatalog.validate_entry / validate_all`): snake_case unique ids, enum values, references that resolve and fit (a party roster only takes party units, an off-hand slot only off-hand gear), skill rules (engine-only kinds, reach bands, LINE areas, status potency), item slot rules, two-handed weapon + shield, derived units needing a class, encounter rosters and exit tiles. In-use and engine (`system`) entries can't be deleted; renaming an id rewrites every reference to it.
 - **Units**: `fixed` vitals (HP / speed / range, like the goblins) or `derived` from class + level + gear (like the dojo heroes); loadout per slot plus battle pouch; AP pool; strike power (0 = weapon + unit power) and armor rating (-1 = gear + STR / 4); skill cap and an optional **known-skills list** (only those leveled skills are offered to the planner and the AI; Move, Rest and other engine skills are always known); AI role, targeting, flee / guard thresholds; per-status resistances.
-- **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the centre-ring deployment can't fit go to the nearest free tile on their side. One **reinforcement wave** per encounter (`wave_units`, `wave_round`, `wave_block`, `wave_label`) enters mid-round. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
+- **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the standard deployment can't fit go to the free tile nearest the arena middle on their half. One **reinforcement wave** per encounter (`wave_units`, `wave_round`, `wave_block`, `wave_label`) enters mid-round. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
 - **Content Forge** (Scene Runner > Content Forge): kind tabs; searchable entry list (side filter for units, ⚠ marks invalid entries, 🔒 engine skills); a form generated from the schema with dropdowns for enums and references, add/remove/reorder lists, stat grids and JSON fields; an **engine preview** of what the entry becomes (skill cost / reach / damage, item stats and which classes can use it, class stats at levels 1/5/10, unit vitals / power / skills / gear, encounter deployment) with its icon or portrait and "used by" references; live problem list. **New**, **Duplicate** (use any existing entry as a template), **Delete** (click twice), **Apply** / **Revert**, **Save** (`Ctrl+S`, writes the JSON), **Reload**, **Validate All**. **▶ Playtest** runs the selected encounter (or a unit in a sandbox fight on its side) in the real combat arena, with *Back to Forge* to return.
 - **Reuse in tests**: tests build units and encounters straight from the catalog (`ContentFactory.unit(ContentCatalog.get_entry("units", id))`, `CatalogEncounter.new(id)`). Tests that write call `ContentCatalog.fork_to("user://...")`, so the shipped catalog is never modified.
 
@@ -526,7 +526,7 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
-Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; point-of-interest (`point`) markers show the cyan ring icon (asset key `overlay_poi`, the old combat centre-ring marker, GRID12); it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
@@ -691,7 +691,7 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] **Chained Flow Moves**: Skills that automatically transition into compatible follow-up stances.
 - [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the round timeline.
 - [ ] **Stance Disruption & Stagger**: Guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
-- [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 9x9 grid.
+- [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 12x9 grid.
 - [ ] **Environmental Hazards**: Fire, ice, and poison terrain tiles that apply effects on entry/end of round.
 - [ ] **Status Conditions**: Bleed, Poison, Blind, Stun, and Haste.
 

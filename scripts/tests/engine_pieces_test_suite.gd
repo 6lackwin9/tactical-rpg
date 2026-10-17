@@ -219,8 +219,8 @@ static func _test_disengage_planning() -> bool:
 	# Rule-derived expectation: nobody can end farther from the foe than the best free tile within the jump.
 	var foe_pos: Vector2i = grid.get_position(foe)
 	var best: int = 0
-	for x: int in range(CombatGrid.GRID_SIZE):
-		for y: int in range(CombatGrid.GRID_SIZE):
+	for x: int in range(CombatGrid.GRID_W):
+		for y: int in range(CombatGrid.GRID_H):
 			var cell := Vector2i(x, y)
 			if grid.get_distance(from, cell) <= backflip.jump_tiles and not grid.is_occupied(cell):
 				best = maxi(best, grid.get_distance(cell, foe_pos))

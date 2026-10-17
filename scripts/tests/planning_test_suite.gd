@@ -5,14 +5,22 @@ extends RefCounted
 # TEST 7: PLANNING SEQUENCES, SKILL AP, STANCES, RUNTIME AP & ENEMY AI
 # ==============================================================================
 
-# The roster rework moved the Goblin Shaman (now a melee Priest) and Berserker (now a Brawler); real deployment positions are therefore NOT exercised by
-# the planning checks below, which were written against the original layout and pin those two tiles.
+# Real deployment positions are NOT exercised by the planning checks below: they were written against the original
+# 9x9 centre-ring layout (and the pre-rework Shaman/Berserker tiles), so every unit is pinned to it, one column
+# right so it sits mid-board on the 12x9 grid (GRID12); deployment itself is covered by the terrain and session suites.
+const SKIRMISH_LAYOUT: Dictionary = {
+	"warrior": Vector2i(5, 5), "ranger": Vector2i(5, 6), "goblin_brawler": Vector2i(5, 3), "goblin_skirmisher": Vector2i(6, 4),
+	"goblin_archer": Vector2i(5, 2), "goblin_shaman": Vector2i(7, 4), "goblin_berserker": Vector2i(4, 4),
+}
+
 static func _pin_skirmish_layout(s: CombatSession) -> void:
 	var enc: CatalogEncounter = s.encounter as CatalogEncounter
 	if enc == null:
 		return
-	s.grid.combatant_positions[enc.unit("goblin_shaman")] = Vector2i(6, 4)
-	s.grid.combatant_positions[enc.unit("goblin_berserker")] = Vector2i(3, 4)
+	for id: String in SKIRMISH_LAYOUT:
+		var c: Combatant = enc.unit(id)
+		if c != null:
+			s.grid.combatant_positions[c] = SKIRMISH_LAYOUT[id]
 
 static func run(_tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
@@ -198,13 +206,14 @@ static func run(_tree_parent: Node = null) -> bool:
 	# 5c. On-grid input model: options per clicked target / tile, hover previews, status line
 	var gsession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	gsession.start()
+	_pin_skirmish_layout(gsession)
 	var gh: Combatant = gsession.allies[0]
 	var gfoe: Combatant = gsession.enemies[0]
 	var foe_opts: Array[PlanOption] = gsession.plan_target_options(gfoe)
 	var self_opts: Array[PlanOption] = gsession.plan_target_options(gh)
 	var ally_opts: Array[PlanOption] = gsession.plan_target_options(gsession.allies[1])
-	var tile_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(2, 6))
-	var exit_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(8, 4))
+	var tile_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(3, 6))
+	var exit_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(11, 4))
 	var occupied_opts: Array[PlanOption] = gsession.plan_cell_options(gsession.grid.get_position(gfoe))
 	var engage_count: int = 0
 	var area_count: int = 0
@@ -228,11 +237,11 @@ static func run(_tree_parent: Node = null) -> bool:
 	gsession.plan_preview_changed.connect(func() -> void: previews[0] += 1)
 	gsession.set_plan_preview(tile_opts[0].step)
 	var pst: CombatPlan.SimState = gsession.plan_preview_state()
-	var grid_preview_ok: bool = previews[0] == 1 and pst != null and pst.pos == Vector2i(2, 6) and gsession.plan.steps_of(gh).is_empty()
+	var grid_preview_ok: bool = previews[0] == 1 and pst != null and pst.pos == Vector2i(3, 6) and gsession.plan.steps_of(gh).is_empty()
 	gsession.set_plan_preview(null)
 	var added: String = gsession.plan_add_step(gh, tile_opts[0].step)
 	var moved_state: CombatPlan.SimState = gsession.plan.compile(gh)
-	var trail_ok: bool = added.is_empty() and moved_state.pos == Vector2i(2, 6) and not moved_state.entries.is_empty() and moved_state.entries[0].pos_before == Vector2i(4, 5) and moved_state.entries[moved_state.entries.size() - 1].pos_after == Vector2i(2, 6)
+	var trail_ok: bool = added.is_empty() and moved_state.pos == Vector2i(3, 6) and not moved_state.entries.is_empty() and moved_state.entries[0].pos_before == Vector2i(5, 5) and moved_state.entries[moved_state.entries.size() - 1].pos_after == Vector2i(3, 6)
 	var info: Dictionary = gsession.plan_info()
 	var info_ok: bool = DictUtil.to_bool(info.get("planning", false)) and "Warrior" in str(info.get("text", "")) and DictUtil.to_bool(info.get("can_confirm", false)) and gsession.plan_step_index_at(1) == 0 and gsession.plan_step_index_at(10) == -1
 	gsession.set_hovered(gfoe)
@@ -247,13 +256,13 @@ static func run(_tree_parent: Node = null) -> bool:
 	_pin_skirmish_layout(rsession)
 	var rhero: Combatant = rsession.allies[0]
 	var rules_ok: bool = rsession.total_blocks == 6 and rsession.resolver.total_blocks == 6 and rsession.encounter.plan_context().total_blocks == 6 and rhero.max_ap == 12 and rhero.ap == 12
-	# centre tie-break: the Warrior (4,5) closing on the Skirmisher (5,4) steps to the centre (4,4), not (5,5)
+	# centre tie-break: the Warrior (5,5) closing on the Skirmisher (6,4) steps toward the arena middle (5,4), not (6,5)
 	var skirm: Combatant = rsession.enemies[1]
 	rsession.plan_add_step(rhero, PlanStep.engage(strike, skirm))
 	var approach_entry: PlanEntry = rsession.plan.compile(rhero).entries[0]
-	rules_ok = rules_ok and rsession.grid.get_position(skirm) == Vector2i(5, 4) and approach_entry.skill.kind == SkillDef.Kind.MOVE and approach_entry.pos_after == Vector2i(4, 4)
+	rules_ok = rules_ok and rsession.grid.get_position(skirm) == Vector2i(6, 4) and approach_entry.skill.kind == SkillDef.Kind.MOVE and approach_entry.pos_after == Vector2i(5, 4)
 	# the move is spent: a second move or a far second engage is refused, an in-range attack is fine
-	var second_move: String = rsession.plan_add_step(rhero, PlanStep.go_to(mover, Vector2i(2, 6)))
+	var second_move: String = rsession.plan_add_step(rhero, PlanStep.go_to(mover, Vector2i(3, 6)))
 	var far_engage: String = rsession.plan_add_step(rhero, PlanStep.engage(strike, rsession.enemies[2]))
 	rules_ok = rules_ok and "Moving must come first" in second_move and not far_engage.is_empty()
 	# insurance: a target already expected to fall can still be attacked (it may dodge or guard)
@@ -267,7 +276,7 @@ static func run(_tree_parent: Node = null) -> bool:
 	# a round's move is 2 blocks at most, so farther tiles are refused
 	rsession.plan_clear(rhero)
 	rhero.speed = 8   # 2 tiles per block: 4 tiles in a round
-	var far_tile_fresh: Array[PlanOption] = rsession.plan_cell_options(Vector2i(1, 3))
+	var far_tile_fresh: Array[PlanOption] = rsession.plan_cell_options(Vector2i(2, 3))
 	rules_ok = rules_ok and not far_tile_fresh.is_empty() and not far_tile_fresh[0].valid and "Too far" in far_tile_fresh[0].reason
 	rhero.speed = 15
 	# AP carries over: +4 each round up to the pool

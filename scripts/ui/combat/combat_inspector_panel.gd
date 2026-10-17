@@ -15,7 +15,7 @@ func _init() -> void:
 	panel_id = "inspector"
 	panel_title = "Unit Inspector"
 	panel_icon = "🧍"
-	default_min_size = Vector2(340, 468)
+	default_min_size = Vector2(270, 468)
 	inspector = UnitInspectorUI.new()
 	add_child(inspector)
 

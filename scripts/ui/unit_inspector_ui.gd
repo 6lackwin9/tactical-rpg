@@ -34,7 +34,7 @@ var current_inspected_combatant: Combatant = null
 func _init() -> void:
 	name = "UnitInspectorUI"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(340, 468)
+	custom_minimum_size = Vector2(270, 468)
 
 	var left_style := StyleBoxFlat.new()
 	left_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
@@ -96,7 +96,7 @@ func _build_ui() -> void:
 
 	# Left Block: Avatar Sprite + Vitals
 	var left_block := VBoxContainer.new()
-	left_block.custom_minimum_size = Vector2(115, 0)
+	left_block.custom_minimum_size = Vector2(92, 0)
 	left_block.add_theme_constant_override("separation", 4)
 	prof_hbox.add_child(left_block)
 
@@ -114,7 +114,7 @@ func _build_ui() -> void:
 	left_block.add_child(sprite_frame)
 
 	inspector_avatar = TextureRect.new()
-	inspector_avatar.custom_minimum_size = Vector2(110, 110)
+	inspector_avatar.custom_minimum_size = Vector2(88, 88)
 	inspector_avatar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	inspector_avatar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	sprite_frame.add_child(inspector_avatar)
@@ -139,7 +139,7 @@ func _build_ui() -> void:
 	hp_hdr_row.add_child(inspector_hp_lbl)
 
 	inspector_hp_bar = ProgressBar.new()
-	inspector_hp_bar.custom_minimum_size = Vector2(110, 8)
+	inspector_hp_bar.custom_minimum_size = Vector2(88, 8)
 	inspector_hp_bar.show_percentage = false
 	var hp_bg := StyleBoxFlat.new()
 	hp_bg.bg_color = Color(0.18, 0.08, 0.08, 0.9)
@@ -171,7 +171,7 @@ func _build_ui() -> void:
 	ap_hdr_row.add_child(inspector_ap_lbl)
 
 	inspector_ap_bar = ProgressBar.new()
-	inspector_ap_bar.custom_minimum_size = Vector2(110, 8)
+	inspector_ap_bar.custom_minimum_size = Vector2(88, 8)
 	inspector_ap_bar.show_percentage = false
 	inspector_ap_bar.max_value = 12
 	inspector_ap_bar.value = 12

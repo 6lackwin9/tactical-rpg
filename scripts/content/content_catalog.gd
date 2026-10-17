@@ -1186,8 +1186,8 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 				errors.append("Exit tiles are [x, y] pairs.")
 				break
 			var cell := Vector2i(DictUtil.to_int(pair[0]), DictUtil.to_int(pair[1]))
-			if cell.x < 0 or cell.y < 0 or cell.x >= CombatGrid.GRID_SIZE or cell.y >= CombatGrid.GRID_SIZE:
-				errors.append("Exit %s is off the 9x9 grid." % str(cell))
+			if cell.x < 0 or cell.y < 0 or cell.x >= CombatGrid.GRID_W or cell.y >= CombatGrid.GRID_H:
+				errors.append("Exit %s is off the 12x9 grid." % str(cell))
 	else:
 		errors.append("Exit tiles must be a list of [x, y] pairs.")
 	return errors

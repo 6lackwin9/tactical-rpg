@@ -3,7 +3,7 @@ extends CombatPanel
 
 # ==============================================================================
 # Tactical RPG - Combat Grid Panel
-# 9x9 battlefield. Tokens are created for the session's own combatants (one
+# 12x9 battlefield. Tokens are created for the session's own combatants (one
 # source of truth), placed from the displayed state (live or snapshot), and
 # animated by CombatPresenter from session.fx_requested. Hover cards follow session.hover_changed so
 # hovering a roster card also highlights the unit here.
@@ -24,7 +24,7 @@ func _init() -> void:
 	panel_id = "grid"
 	panel_title = "Combat Grid"
 	panel_icon = "🗺"
-	default_min_size = Vector2(496, 480)
+	default_min_size = Vector2(660, 480)
 	grid_view = CombatGridView.new()
 	add_child(grid_view)
 	popup = PlanActionPopup.new()
@@ -71,8 +71,8 @@ func _mount() -> void:
 	var textures: Dictionary = {}
 	var overlays: Dictionary = {}
 	var tooltips: Dictionary = {}
-	for y: int in range(CombatGrid.GRID_SIZE):
-		for x: int in range(CombatGrid.GRID_SIZE):
+	for y: int in range(CombatGrid.GRID_H):
+		for x: int in range(CombatGrid.GRID_W):
 			var coord := Vector2i(x, y)
 			var terrain_type: Terrain.Type = grid.get_terrain(coord)
 			textures[coord] = TileArt.tile_at(terrain_type, coord)
@@ -80,9 +80,6 @@ func _mount() -> void:
 			if grid.is_exit_tile(coord):
 				overlays[coord] = TileArt.overlay("exit")
 				tip += " • EXIT (withdraw here)"
-			elif coord == CombatGrid.CENTER:
-				overlays[coord] = TileArt.overlay("center")
-				tip += " • Center ring"
 			tooltips[coord] = tip
 	grid_view.setup_tile_textures(textures, overlays, tooltips)
 	for c: Combatant in session.allies:
