@@ -23,7 +23,8 @@ extends RefCounted
 #         x (1 - Guard) x (1 - Armor)                        (minimum 1)
 #     Stance Matchup  CombatTypes.get_matchup_multiplier: 1.25 / 0.75 / 1.0
 #     Crit            seeded roll: 5% + 1% per DEX above 10, x1.5
-#     Guard           Defend skills (Guard -30%, Brace -50%, Fortress -70%)
+#     Guard           Defend skills (Guard -30%, Brace -50%, Fortress -70%) plus terrain cover
+#                     (ranged hits, CoverRules; S12T-L), capped at GUARD_CAP
 #     Armor           rating / (rating + 50); rating = gear mitigation + STR / 4
 #                     (or the unit's authored armor, Combatant.armor_override)
 #                     + active fortify - active expose magnitude (floor 0)
@@ -37,6 +38,7 @@ const CRIT_DEX_FLOOR: int = 10
 const CRIT_MULT: float = 1.5
 const UNARMED_BASE_POWER: int = 15     # trained fists: bare-hand weapon power (GearBudget.UNARMED_VALUE follows it)
 const TRAINED_FIST_MIN_LEVEL: int = 2  # fist proficiency level that trains the fists (brawler 3; rogue 1 stays plain)
+const GUARD_CAP: float = 0.9           # PLACEHOLDER (S12T-L): guard + cover never fully negate a hit
 
 # ------------------------------------------------------------------------------
 # Attack power
@@ -179,7 +181,8 @@ static func crit_chance(attacker: Combatant) -> float:
 # battles pass the resolver's seeded RNG so replays match). `attacker_stance`
 # (-1 = current) lets the planner estimate with the stance a skill will use.
 # The result's final_dmg already includes guard and armor: apply it with
-# Combatant.take_damage(final_dmg, true).
+# Combatant.take_damage(final_dmg, true). `cover_ratio` (S12T-L) is the terrain cover of a ranged hit
+# (CoverRules.cover_for); it adds to the guard term: minf(GUARD_CAP, guard + cover).
 static func compute(
 	attacker: Combatant,
 	target: Combatant,
@@ -189,7 +192,8 @@ static func compute(
 	force_crit: bool = false,
 	rng: RandomNumberGenerator = null,
 	attacker_stance: int = -1,
-	include_guard: bool = true
+	include_guard: bool = true,
+	cover_ratio: float = 0.0
 ) -> Dictionary:
 	var res: Dictionary = attack_power(attacker, is_ranged, use_offhand)
 	var power: int = DictUtil.to_int(res["attack_power"])
@@ -204,10 +208,12 @@ static func compute(
 	var crit_mult: float = attacker.stats.get_crit_damage_multiplier() if (is_crit and attacker.stats != null) else (CRIT_MULT if is_crit else 1.0)
 
 	var guard: float = target.defense_mitigation_ratio if (target != null and include_guard) else 0.0
+	var cover: float = maxf(0.0, cover_ratio)
+	var guard_term: float = minf(GUARD_CAP, guard + cover)
 	var rating: int = armor_rating(target) if target != null else 0
 	var armor: float = armor_reduction(rating)
 
-	var gross: float = float(power) * buff_mult * skill_mult * stance_factor * crit_mult * (1.0 - guard) * (1.0 - armor)
+	var gross: float = float(power) * buff_mult * skill_mult * stance_factor * crit_mult * (1.0 - guard_term) * (1.0 - armor)
 	res.merge({
 		"buff_mult": buff_mult,
 		"final_attack_power": maxi(1, roundi(float(power) * buff_mult)),
@@ -218,17 +224,23 @@ static func compute(
 		"is_crit": is_crit,
 		"crit_dmg_mult": crit_mult,
 		"mit_ratio": guard,
-		"mit_mult": 1.0 - guard,
+		"mit_mult": 1.0 - guard_term,
+		"cover_ratio": cover,
 		"armor_rating": rating,
 		"armor_ratio": armor,
 		"final_dmg": maxi(1, roundi(gross)),
 	}, true)
 	return res
 
-# The planner's expected hit for `skill`: no crit, no guard (unknown ahead), armor included.
-static func expected(attacker: Combatant, target: Combatant, skill: SkillDef, attacker_stance: int = -1) -> int:
-	var res: Dictionary = compute(attacker, target, attacker.attack_range > 1 and not skill.is_off_hand(), skill.is_off_hand(), skill.power_for(attacker), false, null, attacker_stance, false)
+# The planner's expected hit for `skill`: no crit, no guard (unknown ahead), armor and terrain cover included
+# (`cover_ratio`: CoverRules.cover_for from where the attack is made; cover is known ahead).
+static func expected(attacker: Combatant, target: Combatant, skill: SkillDef, attacker_stance: int = -1, cover_ratio: float = 0.0) -> int:
+	var res: Dictionary = compute(attacker, target, expected_is_ranged(attacker, skill), skill.is_off_hand(), skill.power_for(attacker), false, null, attacker_stance, false, cover_ratio)
 	return DictUtil.to_int(res["final_dmg"])
+
+# True when `expected` treats `skill` as a ranged hit (cover applies): a ranged unit's main-hand attack.
+static func expected_is_ranged(attacker: Combatant, skill: SkillDef) -> bool:
+	return attacker.attack_range > 1 and not skill.is_off_hand()
 
 # One-line explanation of a result (log hover, forecast tooltips).
 static func describe(res: Dictionary) -> String:
@@ -259,6 +271,8 @@ static func describe(res: Dictionary) -> String:
 		mults.append("CRIT x%.1f" % DictUtil.to_float(res["crit_dmg_mult"]))
 	if DictUtil.to_float(res.get("mit_ratio", 0.0)) > 0.0:
 		mults.append("guard -%d%%" % roundi(DictUtil.to_float(res["mit_ratio"]) * 100.0))
+	if DictUtil.to_float(res.get("cover_ratio", 0.0)) > 0.0:
+		mults.append("cover -%d%%" % roundi(DictUtil.to_float(res["cover_ratio"]) * 100.0))
 	if DictUtil.to_int(res.get("armor_rating", 0)) > 0:
 		mults.append("armor %d -%d%%" % [DictUtil.to_int(res["armor_rating"]), roundi(DictUtil.to_float(res["armor_ratio"]) * 100.0)])
 	return "%s x %s = %d" % [parts[0], " x ".join(mults), DictUtil.to_int(res.get("final_dmg", 0))]

@@ -14,6 +14,9 @@ extends RefCounted
 #      maximum range (ranged) / Engage (auto-moves + strike).
 #   5. No idle turns: when no target can be struck this round the unit still
 #      advances along its route; it only rests when AP is the problem.
+# Terrain (S12T-L rule 8): AI routes pay AI_HAZARD_PENALTY extra per hazard tile entered, and ranged
+# units prefer, among equally ranked firing / kiting cells, the one with the most cover against the
+# nearest ranged foe. Covered targets rank lower through the planner's estimate (it includes cover).
 # Targets may move, so plans can fizzle: that is the planning-phase gamble.
 # Used for enemies each round and for the player's AI presets (the player's own
 # planner is never forced: taunt only steers TacticalAI).
@@ -21,6 +24,7 @@ extends RefCounted
 
 const MAX_STEPS: int = 16
 const MAX_HEALS: int = 2
+const AI_HAZARD_PENALTY: int = 3   # PLACEHOLDER (S12T-L): extra route cost per hazard tile an AI move enters
 
 # With shared, the draft is written into that plan (replacing the actor's steps), so it
 # sees - and avoids - the moves its friends have already planned there.
@@ -31,6 +35,11 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 	var foes: Array[Combatant] = ctx.foes_of(actor)
 	if actor == null or not actor.is_active() or not grid.has_combatant(actor):
 		return plan.steps_of(actor)
+	plan.path_penalties[actor] = hazard_penalty(grid)
+	if actor.attack_range > 1:
+		var prefer: Callable = cover_preference(grid, foes)
+		if prefer.is_valid():
+			plan.goal_preferences[actor] = prefer
 	var cap: int = ctx.skill_cap_of(actor)
 	var guarded: bool = false
 	var focused: bool = false
@@ -282,7 +291,7 @@ static func _kite_then_engage(plan: CombatPlan, actor: Combatant, st: CombatPlan
 				goals[cell] = true
 		if goals.is_empty():
 			continue
-		var path: Array[Vector2i] = GridPath.find_path(grid, st.pos, goals, blocked, false)
+		var path: Array[Vector2i] = GridPath.find_path(grid, st.pos, goals, blocked, false, hazard_penalty(grid), cover_preference(grid, foes))
 		if path.is_empty() or path.size() > limit:
 			continue
 		var dest: Vector2i = st.pos
@@ -301,6 +310,30 @@ static func _kite_then_engage(plan: CombatPlan, actor: Combatant, st: CombatPlan
 		plan.remove_step(actor, mark)
 	return false
 
+# AI route penalty (rule 8a): AI_HAZARD_PENALTY extra cost per hazard tile entered.
+static func hazard_penalty(grid: CombatGrid) -> Callable:
+	return func(cell: Vector2i) -> int: return AI_HAZARD_PENALTY if grid.has_hazard(cell) else 0
+
+# AI destination preference (rule 8b): the cover a cell gives against the ranged foe nearest to it (CoverRules).
+# Foes at equal distance from the cell: the first one in `foes` order wins (strict < below), so the choice is
+# deterministic. Invalid Callable when no active foe on the grid fights at range.
+static func cover_preference(grid: CombatGrid, foes: Array[Combatant]) -> Callable:
+	var shooters: Array[Combatant] = []
+	for f: Combatant in foes:
+		if f.is_active() and grid.has_combatant(f) and f.attack_range > 1:
+			shooters.append(f)
+	if shooters.is_empty():
+		return Callable()
+	return func(cell: Vector2i) -> float:
+		var nearest: Combatant = null
+		var best: int = 1 << 20
+		for f: Combatant in shooters:
+			var d: int = grid.get_distance(cell, grid.get_position(f))
+			if d < best:
+				best = d
+				nearest = f
+		return CoverRules.cover_for(grid, grid.get_position(nearest), cell, true)
+
 # Walks as far as the AP and the move allow along the route to the nearest reachable target.
 static func _advance_toward(plan: CombatPlan, actor: Combatant, st: CombatPlan.SimState, ranked: Array[Combatant]) -> bool:
 	var tiles: int = mini(plan.max_move_tiles(actor), maxi(0, st.ap_left))
@@ -310,9 +343,10 @@ static func _advance_toward(plan: CombatPlan, actor: Combatant, st: CombatPlan.S
 		var route: Array[Vector2i] = plan.approach_path(actor, st.pos, candidate)
 		if route.is_empty():
 			continue
+		var reachable: Array[Vector2i] = GridPath.fit_blocks(plan.context.grid, st.pos, route, actor.move_per_block(), CombatPlan.MAX_MOVE_BLOCKS)   # cost-chunked (S12T-L)
 		var dest: Vector2i = st.pos
-		for i: int in range(mini(route.size(), tiles)):
-			dest += route[i]
+		for i: int in range(mini(reachable.size(), tiles)):
+			dest += reachable[i]
 		if plan.add_step(actor, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), dest), false).is_empty():
 			return true
 	return false

@@ -21,6 +21,8 @@ var heal: int = 0           # expected HP restored (support options)
 var grants: String = ""     # buff status the option grants (support options)
 var cleanses: Array[String] = []   # debuffs the option would remove right now (support options)
 var jump_to: Vector2i = Vector2i(-1, -1)   # disengage options: the landing tile the planner chose
+var hazard: String = ""     # "Hazard: <terrain name> (<status>)" chips of hazard tiles the step's route enters (S12T-L)
+var cover: float = 0.0      # attack options: the terrain cover in the expected hit (S12T-L)
 
 # The skill family of the option's step ("" for steps without a skill, e.g. withdraw) and its tier.
 func family() -> String:
@@ -71,6 +73,8 @@ func cost_text() -> String:
 		text += " (incl. Switch Target)"
 	if damage > 0:
 		text += " • ~%d dmg" % damage
+		if cover > 0.0:
+			text += " (cover -%d%%)" % roundi(cover * 100.0)
 	if heal > 0:
 		text += " • ~+%d HP" % heal
 	if not cleanses.is_empty():
@@ -84,4 +88,6 @@ func cost_text() -> String:
 		text += " • jumps to %s" % str(jump_to)
 	if not warning.is_empty():
 		text += "\n⚠ " + warning
+	if not hazard.is_empty():
+		text += "\n⚠ " + hazard
 	return text

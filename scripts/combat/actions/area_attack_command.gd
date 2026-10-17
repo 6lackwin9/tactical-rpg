@@ -39,7 +39,8 @@ func execute() -> void:
 			continue
 		if skill_mult <= 0.0:
 			continue   # a zero-power area attack never damages or provokes (schema rejects it; D1 rule kept)
-		var res: Dictionary = DamageCalculator.compute(source, victim, source.attack_range > 1, false, skill_mult, false, rng)
+		var cover: float = CoverRules.cover_for(grid, grid.get_position(source), cell, source.attack_range > 1)   # each hit unit's tile vs the caster (S12T-L)
+		var res: Dictionary = DamageCalculator.compute(source, victim, source.attack_range > 1, false, skill_mult, false, rng, -1, true, cover)
 		var taken: int = victim.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage += taken
 		last_hits += 1

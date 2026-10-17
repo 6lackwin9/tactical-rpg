@@ -63,6 +63,21 @@ func get_terrain(coord: Vector2i) -> Terrain.Type:
 func is_walkable(coord: Vector2i) -> bool:
 	return is_valid_coord(coord) and Terrain.is_walkable(get_terrain(coord))
 
+# Cost of entering `coord` (Terrain.move_cost of its type; S12T-L).
+func move_cost(coord: Vector2i) -> int:
+	return Terrain.move_cost(get_terrain(coord))
+
+# Guard share a ranged hit loses on `coord` (or behind it when it blocks movement).
+func cover_guard(coord: Vector2i) -> float:
+	return Terrain.cover_guard(get_terrain(coord)) if is_valid_coord(coord) else 0.0
+
+func has_hazard(coord: Vector2i) -> bool:
+	return is_valid_coord(coord) and Terrain.has_hazard(get_terrain(coord))
+
+# The hazard of the tile at `coord` (Terrain.hazard: {} when none).
+func hazard_at(coord: Vector2i) -> Dictionary:
+	return Terrain.hazard(get_terrain(coord)) if is_valid_coord(coord) else {}
+
 func apply_zone(zone_id: String) -> void:
 	terrain = CombatZones.terrain_map(zone_id)
 

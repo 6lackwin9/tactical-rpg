@@ -26,7 +26,8 @@ extends RefCounted
 # ==============================================================================
 
 # item_families (FORGE1_ITEMS 1) is the item template kind; ContentCatalog loads it before items (items resolve against it).
-const KINDS: Array[String] = ["skills", "items", "item_families", "passives", "classes", "units", "encounters"]
+# terrain (S12T-L): the numbers of each Terrain.Type (move cost, cover, hazard); TerrainFields / TerrainValidator.
+const KINDS: Array[String] = ["skills", "items", "item_families", "passives", "classes", "units", "encounters", "terrain"]
 const ORIGIN_SYSTEM: String = "system"
 const ORIGIN_USER: String = "user"
 
@@ -51,6 +52,8 @@ static func kind_label(kind: String) -> String:
 			return "Units"
 		"encounters":
 			return "Encounters"
+		"terrain":
+			return "Terrain"
 	return kind.capitalize()
 
 static func fields(kind: String) -> Array[Dictionary]:
@@ -70,6 +73,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = ClassUnitFields.unit_fields()
 		"encounters":
 			list = _encounter_fields()
+		"terrain":
+			list = TerrainFields.build()
 		_:
 			return list
 	var origin: Dictionary = origin_field()

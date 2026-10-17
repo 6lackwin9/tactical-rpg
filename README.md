@@ -61,7 +61,7 @@ tactical-rpg/
 │       └── dojo_ui_assertions.gd     # workspace panels, slot rules, stash filters, party viewer, carry, overlays
 ├── scripts/
 │   ├── content/                  # Content catalog engine (headless)
-│   │   ├── content_schema.gd         # Field lists per kind (tables in skill_fields.gd, item_fields.gd, class_unit_fields.gd): types, defaults, ranges, enums, refs, conditional fields; normalising
+│   │   ├── content_schema.gd         # Field lists per kind (tables in skill_fields.gd, item_fields.gd, class_unit_fields.gd, terrain_fields.gd; per-kind checks in validators/, TerrainValidator for terrain): types, defaults, ranges, enums, refs, conditional fields; normalising
 │   │   ├── content_catalog.gd        # Load/save JSON, CRUD, duplicate-as-template, reference tracking & renames, validation, sandbox fork
 │   │   └── content_factory.gd        # Entries <-> engine objects (SkillDef, Item, ClassArchetype, Combatant + AiProfile)
 │   ├── world/                    # World engine (headless): the lore layer over the content catalog
@@ -126,9 +126,11 @@ tactical-rpg/
 │   │   │   └── tactical_ai.gd            # Drafts a validated step sequence for a unit
 │   │   └── arena/                # Arena spatial rules & resolution
 │   │       ├── combat_grid.gd            # 12x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability, standard deployment
-│   │       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
+│   │       ├── terrain.gd                # Terrain types (17: ids, glyphs, walkability in code); move cost, cover and hazard from catalog kind `terrain` (code defaults until S12T-A)
 │   │       ├── combat_zones.gd           # 8 preset 12x9 combat zones (forest, river, lava cavern, ...)
-│   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
+│   │       ├── grid_path.gd              # Cheapest-cost routes (ties: fewer steps, centre, DIRS), move-block chunking with minimum progress; shared by planner, AI and commands
+│   │       ├── cover_rules.gd            # Ranged cover: target tile or the blocking neighbour toward the attacker (S12T-L)
+│   │       ├── hazard_rules.gd           # Hazard tiles roll their status on enter and/or at round end (S12T-L)
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
 │   ├── audio/                    # Sound by key (S14-L3): SoundEvents keys, SoundBank lookup, AudioDirector voices, PlaceholderSfx blips
@@ -703,7 +705,7 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the round timeline.
 - [ ] **Stance Disruption & Stagger**: Guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
 - [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 12x9 grid.
-- [ ] **Environmental Hazards**: Fire, ice, and poison terrain tiles that apply effects on entry/end of round.
+- [x] **Terrain rules (S12T-L)**: entering a tile costs its terrain `move_cost` (an exit tile costs 1, since stepping on it leaves the arena; cheapest route; a move block holds `move_per_block()` cost units and always takes its first tile, a move fits the round in at most 2 blocks; a dash is a `dash_tiles` cost budget; disengage ignores cost). Ranged hits get cover: the larger of the target tile's `cover_guard` and a blocking neighbour's toward the attacker, added to guard under `GUARD_CAP` 0.9 (`CoverRules`); melee and riposte never do. Hazard tiles (burning ground `f`, toxic bog `p`, ice `i` in lava_cavern, swamp_bog and frozen_pass) roll their status once per status per walk, dash or disengage landing and/or at round end after the status ticks (`HazardRules`, source `terrain`). Plan options show `(cover -N%)` and `⚠ Hazard: <terrain> (<status>)`. AI drafts add `AI_HAZARD_PENALTY` (3, placeholder) route cost per hazard tile and ranged AI prefers covered cells among equal ones; player plans use true costs. Numbers come from catalog kind `terrain` (one system row per type: `move_cost`, `cover_guard`, `hazard_status` / `potency` / `magnitude` / `rounds` / `on`); until S12T-A writes `data/catalog/terrain.json` the code defaults carry the old move costs and no cover or hazards. Tested in `terrain_rules_test_suite.gd`.
 - [ ] **Status Conditions**: Bleed, Poison, Blind, Stun, and Haste.
 
 ### 5. Items & Consumable Inventory Engine (`System 7`)

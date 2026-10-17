@@ -21,7 +21,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | done (EXP1-L, EXP1-A; map fights still end in debug outcome buttons until BATTLE1, goal G1) | S6, S8 | README System 2; inputs below |
 | S10 | World map and travel: routes, travel events, supplies | approved (TRAV1, after BATTLE1; TRAV2 supplies idea) | S9 | README System 1; inputs below |
 | S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | in-progress (DLG1 dialogue and shops done; DLG1-F open; REP1 reputation approved) | S8 | README System 9; inputs below |
-| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; riposte done in M2a; S12S status slice building; S12T terrain and S12C combos wait for goal G1) | S1, S2 | README System 6 |
+| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; riposte done in M2a; S12S status slice done; S12T-L terrain rules on develop, S12T-A terrain rows next; S12C combos after) | S1, S2 | README System 6 |
 | S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; UI1-L menus, 5 shared slots + autosave, SAVE-IO export / import) | S7 | |
 | S14 | Audio, animation and asset pipeline, asset-load tests | in-progress (S14-L1, S14-L2 presenter, S14-L3 audio, S14-A1, S14-A2 done) | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |

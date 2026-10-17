@@ -48,7 +48,8 @@ static func _test_shipped_catalog() -> bool:
 		var n: int = ContentCatalog.entries(kind).size()
 		counts.append("%s %d" % [kind, n])
 		# item_families stay empty until ITEM1-A migrates items.json (legacy flat items, ContentCatalog.items_inherit()).
-		all_present = all_present and (n > 0 or kind == "item_families")
+		# terrain stays empty until S12T-A writes terrain.json (Terrain code defaults apply; warnings_all lists the rows).
+		all_present = all_present and (n > 0 or kind == "item_families" or (kind == "terrain" and not ContentCatalog.terrain_file_exists()))
 	var problems: Dictionary = ContentCatalog.validate_all()
 	return TestHelpers.report_ok(TAG, "Shipped catalog loads every kind and every entry validates", all_present and problems.is_empty() and ContentCatalog.load_errors().is_empty(), ", ".join(counts) if problems.is_empty() else str(problems))
 
