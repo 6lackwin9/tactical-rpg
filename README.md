@@ -55,7 +55,9 @@ tactical-rpg/
 │   ├── world_forge.tscn          # World Forge: author lore worlds; play their battles
 │   ├── world_forge.gd            # Mounts WorldForge; swaps in combat_arena for "Play this encounter"
 │   └── dojo/
-│       └── dojo_assertions.gd        # 42 headless dojo assertions (rules, session actions, filters, carry, catalog skills, dummy attacks, UI)
+│       ├── dojo_assertions.gd        # 42 headless dojo assertions: Dojo-1..18 here, then the two files below (CLN-12 split)
+│       ├── dojo_session_assertions.gd # session actions, gear integrity, logging, benchmark, catalog skills, dummy attacks
+│       └── dojo_ui_assertions.gd     # workspace panels, slot rules, stash filters, party viewer, carry, overlays
 ├── scripts/
 │   ├── content/                  # Content catalog engine (headless)
 │   │   ├── content_schema.gd         # Field lists per kind (tables in skill_fields.gd, item_fields.gd, class_unit_fields.gd): types, defaults, ranges, enums, refs, conditional fields; normalising
@@ -394,7 +396,7 @@ The suites registered in [suite_registry.gd](scripts/tests/suite_registry.gd) (3
 9. **Scene Runner Test** (5 assertions, [runner_test_suite.gd](scripts/tests/runner_test_suite.gd)): every runnable scene listed (runner and test harness hidden), suite output parsing, launching the arena with a chosen catalog encounter plus restart and back to the menu, the unsaved-Forge-work guard (second press discards), and hot-reloading a script in place.
 10. **World Engine & World Forge Test** (9 assertions, [world_test_suite.gd](scripts/tests/world_test_suite.gd)): the shipped worlds load and validate (every element kind, lineage, descendants); inheritance (namespaced ids, overrides replace for the child only and old ids redirect, nearest-wins resolution, cycles and unknown parents rejected); same base / different lore (names differ, every stat, class, skill, AI plan and damage matches between `ashlands` and `tidewrack`, except the deliberately tuned boss); tuning deltas, named items (armor + mitigation, fixed vitals untouched) and disciplines apply exactly; world encounters (wave ambush, own battle, an inherited battle re-skinned) play to the end in the real engine with lore names, and `EncounterSource` lists both layers; on a sandbox copy: connections without inheriting, unconnected worlds refused, role / base / override / slot checks and safe deletes; authoring (new world, dangling references while drafting, overrides, renames rewriting plain / json / cross-world / override references, templates, save & reload); and the World Forge UI (create world, inherited read-only, override, dangling refs, tuning, play in the arena, save, delete) plus the Scene Runner launching a world battle.
 
-Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
+Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd), which calls [dojo_session_assertions.gd](scenes/dojo/dojo_session_assertions.gd) and [dojo_ui_assertions.gd](scenes/dojo/dojo_ui_assertions.gd)) when launched with `--headless`:
 
 - **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword training, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
 - **Session behavior (Dojo-19 to 25)**: strict-hand assertions Dojo-13d, 21d and 21e (dual wield only with the dojo flag); Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
@@ -404,7 +406,7 @@ Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** 
 
 ### Combat extensions (M1)
 
-Support skills (heal/buff on allies, `SupportRules`), gap-close attacks (`dash_tiles`), haste/bleed/taunt statuses, `learned_only` skills, a `reckless` AI profile and AI fixes (kiting, no idle turns, support healing); tested in `combat_extensions_test_suite.gd`. Example skills `mend`, `rally`, `taunt_shout`, `lunge`, `bleeding_cut` are in the catalog but in no class path yet (M2).
+Support skills (heal/buff on allies, `SupportRules`), gap-close attacks (`dash_tiles`), haste/bleed/taunt statuses, `learned_only` skills, a `reckless` AI profile and AI fixes (kiting, no idle turns, support healing); tested in `combat_extensions_test_suite.gd`, `combat_ext_attacks_test_suite.gd` and `combat_ext_ai_test_suite.gd` (helpers in `combat_ext_kit.gd`). Example skills `mend`, `rally`, `taunt_shout`, `lunge`, `bleeding_cut` are in the catalog but in no class path yet (M2).
 
 ### Riposte (M2a)
 
@@ -428,7 +430,7 @@ Skills are grouped into families with tiers chosen at planning time (higher tier
 
 ### Engine pieces (M2c-2a2)
 
-`cleanse` (support skills can remove debuffs from an ally, combinable with heal and buff), the `DISENGAGE` jump (move away from the nearest foe), the L-shaped `SWEEP` area for the Brawler, and a gear-budget value for unarmed loadouts. Example skills `purify`, `backflip`, `sweep_kick` are in the catalog (learned_only). Tested in `engine_pieces_test_suite.gd`.
+`cleanse` (support skills can remove debuffs from an ally, combinable with heal and buff), the `DISENGAGE` jump (move away from the nearest foe), the L-shaped `SWEEP` area for the Brawler, and a gear-budget value for unarmed loadouts. Example skills `purify`, `backflip`, `sweep_kick` are in the catalog (learned_only). Tested in `engine_pieces_test_suite.gd` (unarmed and gear budget in `unarmed_test_suite.gd`).
 
 ### Foundation cleanup (slice A)
 
@@ -440,7 +442,7 @@ Rest now puts the unit in Tactical stance (free entry). The skill after Rest pay
 
 ### Orb and tome, item effects (C1-L)
 
-Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spell/heal potency, status potency, spell reach, resist) that applies only while equipped; a two-handed main weapon cannot be paired with them. The Dojo Arcanist preset is now wand plus tome. Tested in `focus_gear_test_suite.gd`.
+Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spell/heal potency, status potency, spell reach, resist) that applies only while equipped; a two-handed main weapon cannot be paired with them. The Dojo Arcanist preset is now wand plus tome. Tested in `focus_gear_test_suite.gd` and `focus_gear_budget_test_suite.gd`.
 
 ### Weaken and data-driven riposte (D1-L)
 
@@ -460,7 +462,7 @@ All six classes now have their real kits: three-tier skill families, eight advan
 
 ### AI skill use (AI1)
 
-The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. `AiProfile.smart_skills` switches it off for A/B balance runs. Tested in `ai_skills_test_suite.gd`.
+The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. `AiProfile.smart_skills` switches it off for A/B balance runs. Tested in `ai_skills_test_suite.gd` and `ai_skills_tactics_test_suite.gd` (fixtures in `ai_skills_kit.gd`).
 
 ### Skill unlock rule (SK2)
 

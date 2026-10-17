@@ -1,6 +1,6 @@
 # S12C-L: combos (flow moves `ends_in_stance`, stance-break `disrupt`, status payoff `exploit`)
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers" and docs/specs/S12_RULES.md 2.4; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers" and docs/specs/S12_RULES.md 2.4)
 Depends on: S12S-L merged (exploit reads the new debuffs); S12T-L merged (both edit `combat_plan.gd`; run in sequence)
 Lane: logic (schema first; commit 1 releases S12C-A)
 Touches: `scripts/content/skill_fields.gd`, `scripts/content/skill_kinds.gd` (sections), `scripts/content/skill_ranks.gd` (family-level keys), `scripts/content/validators/skill_validator.gd`, `scripts/content/skill_text.gd` (tokens), `scripts/content/content_factory.gd` (SkillDef build), `scripts/combat/planning/{skill_def,combat_plan,plan_entry}.gd`, `scripts/combat/actions/{battle_command,attack_command,area_attack_command}.gd`, `scripts/combat/arena/combat_resolver.gd`, `scripts/combat/status/riposte_rules.gd` (order only), `scripts/combat/ai/tactical_ai.gd`, new `scripts/tests/combo_rules_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`

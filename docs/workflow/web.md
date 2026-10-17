@@ -21,6 +21,13 @@ cd build/web && python3 -m http.server 8000   # then open http://localhost:8000
 
 On Windows the editor's Export dialog uses the same preset once its export templates are installed. `build/` is git-ignored. To run a downloaded `web-build` artifact, unzip it and serve the folder the same way (opening `index.html` as a file does not work).
 
+## Playing it on the Windows PC (current hosting, user 2026-10-17)
+
+- From the editor: install the export templates once (**Editor > Manage Export Templates > Download and Install**), open the project, then click the **Run in Browser** button (the browser icon, top right). The editor exports the `Web` preset and opens it at `http://localhost:8060`.
+- From a CI build: on the PR or `main` run in the Actions tab, download `web-build`, unzip it, and in that folder run `python -m http.server 8000`, then open `http://localhost:8000`.
+- Other devices on the same Wi-Fi: run the server with `python -m http.server 8000 --bind 0.0.0.0` and open `http://<PC's IPv4 address>:8000` on the phone or tablet (Windows may ask to allow Python through the firewall: allow it on private networks).
+- Cloud drives (Google Drive, OneDrive, Dropbox) do not serve web pages: they download or preview files and do not run the game. For access from anywhere while staying private, a free option is an itch.io page set to restricted with a password (a CI upload step needs an itch API key as a repo secret).
+
 ## Turning on GitHub Pages (once, by the repo owner)
 
 1. Pages on a private repository needs a paid plan (GitHub Pro or higher), and the published site is public to anyone with the URL.
