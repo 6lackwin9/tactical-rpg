@@ -1,6 +1,6 @@
 # PLAYTEST1-L: playtest recordings, notes, in-game playback and headless replay
 
-Status: spec (design-brainstorm 2026-10-17; approach agreed with the user: recording + headless replay; awaiting approval)
+Status: approved (user 2026-10-17, all open-question defaults accepted; design-brainstorm 2026-10-17)
 Depends on: none (uses the merged `CombatSession`, `CombatPlan`, `EncounterSource`, Scene Runner)
 Lane: logic only (no asset part). Commit 1 (core, tool, suite) first; commit 2 (UI) depends on commit 1.
 Touches: new `scripts/playtest/*`, new `scripts/ui/playtest/*`, `scripts/combat/session/combat_session.gd` (signals only), `scenes/combat_arena.gd` (playback, seed, take-over fields), `scripts/ui/runner/scene_runner.gd` (hub child, Playtests panel), new `tools/replay.gd`, `tools/fc.sh` (`replay` command), new `scripts/tests/playtest_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`, new `playtests/README.md`; STRUCTURE rows and README delta via the planner
@@ -132,6 +132,8 @@ All JSON is written with `JSON.stringify(data, "  ", true)` through `JsonUtil` (
 - Any change to live combat behaviour (redo RNG, AI, FX timing); FX instant mode belongs to S14-L2.
 
 ## Open questions (recommended default first)
+
+Answered 2026-10-17: the user approved the spec with every default below.
 
 1. Recording on by default in debug runs? Default: yes, with a Scene Runner toggle (`record_playtests`).
 2. Screenshot format: JPG quality 0.85 at viewport size (about 100-200 KB) or PNG (lossless, 3-5x bigger in the repo)? Default: JPG.

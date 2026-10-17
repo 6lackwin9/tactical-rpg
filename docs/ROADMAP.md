@@ -25,7 +25,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; menus still open) | S7 | Needed before any playable loop |
 | S14 | Audio, animation and asset pipeline, asset-load tests | placeholder | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |
-| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | proposed | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2 |
+| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2 |
 
 ## Proposed milestone order (planner refines; user approves each)
 
@@ -95,7 +95,7 @@ Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T
 | --- | --- | --- | --- |
 | S12S | proposed | ITEM1-L, CLASS1-L | status slice, then S12T terrain and S12C combos in sequence (shared skill and plan files) |
 | S14-1 | proposed | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
-| PLAYTEST1 | proposed | - | playtest recordings, notes, in-game playback and take-over, headless replay and seed sweeps (`docs/specs/PLAYTEST1_L.md`) |
+| PLAYTEST1 | approved | - | playtest recordings, notes, in-game playback and take-over, headless replay and seed sweeps (`docs/specs/PLAYTEST1_L.md`) |
 | PLAYTEST2 | idea | PLAYTEST1, UI1-L | overworld and dialogue exact replay |
 | UI1 | proposed | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
 
