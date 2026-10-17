@@ -18,6 +18,7 @@ static func _table() -> Dictionary:
 		_steps[1] = _v1_to_v2
 		_steps[2] = _v2_to_v3
 		_steps[3] = _v3_to_v4
+		_steps[4] = _v4_to_v5
 	return _steps
 
 static func register(from_version: int, step: Callable) -> void:
@@ -42,7 +43,7 @@ static func _v1_to_v2(state: Dictionary) -> Dictionary:
 
 # v2 -> v3: exploration defaults; rng_seed from the v2 state (same file = same seed); location_id qualified with
 # world_id when it resolves (a qualified id is kept when it resolves), else "". 3 -> 4 (DLG1-L) adds party.gold 0 and
-# shops {}.
+# shops {}. 4 -> 5 (TRAV1-L) adds time 0.
 static func _v2_to_v3(state: Dictionary) -> Dictionary:
 	var out: Dictionary = state.duplicate(true)
 	out["rng_seed"] = String(JSON.stringify(state, "", true)).hash() & 0x7FFFFFFF
@@ -62,6 +63,12 @@ static func _v3_to_v4(state: Dictionary) -> Dictionary:
 		var party: Dictionary = out["party"]
 		party["gold"] = 0
 	out["shops"] = {}
+	return out
+
+# v4 -> v5 (TRAV1-L): the world clock starts at 0; nothing else changes.
+static func _v4_to_v5(state: Dictionary) -> Dictionary:
+	var out: Dictionary = state.duplicate(true)
+	out["time"] = 0
 	return out
 
 # Brings a save envelope to `target_version`. Returns

@@ -1130,7 +1130,7 @@ static func _test_save_v4() -> bool:
 	checks["v3 migrates to gold 0 and shops {}"] = DictUtil.to_bool(read["ok"]) and st != null and st.party.gold == 0 and st.shops.is_empty() and JsonUtil.strings(read["warnings"]).is_empty()
 	var written: bool = SaveGame.write(gs, 2).is_empty()
 	var back: GameState = GameState.of(SaveGame.read(2)["state"])
-	checks["v4 round trip"] = written and back != null and back.equals(gs) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(2))))["version"]) == SaveGame.VERSION and SaveGame.VERSION == 4
+	checks["v4 round trip"] = written and back != null and back.equals(gs) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(2))))["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 4   # 5 since TRAV1-L
 	var negative: GameState = GameState.from_dict(gs.to_dict())
 	negative.party.gold = -1
 	var zero: GameState = GameState.from_dict(gs.to_dict())

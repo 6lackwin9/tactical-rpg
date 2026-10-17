@@ -551,7 +551,7 @@ static func references_to(world_id: String, kind: String, local: String) -> Arra
 				out.append_array(_json_refs_to(w, k2, e, kind, target))
 	return out
 
-# References held inside json fields: location exits, quest steps, faction relations, and the quest runtime fields
+# References held inside json fields: location exits, quest steps, faction relations, route encounters, and the quest runtime fields
 # (links, loot_pool, variant `set` values). The quest ones carry a "path" (keys/indexes from the entry root) that
 # _rewrite_ref follows.
 static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, target: String) -> Array[Dictionary]:
@@ -573,6 +573,8 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 		var for_sale: Array = DictUtil.array_of(e.get("loot", null))
 		for i: int in range(for_sale.size()):
 			_ref_at(w, DictUtil.dict_of(for_sale[i]), "loot", ["loot", i], kind, target, base, out)
+	if k2 == "routes" and kind == "encounters":
+		out.append_array(_route_json_refs(w, e, kind, target, base))
 	if k2 == "quests" and e.get("steps", null) is Array and (kind == "locations" or kind == "encounters"):
 		var steps: Array = e["steps"]
 		var sub: String = "location" if kind == "locations" else "encounter"
@@ -638,6 +640,20 @@ static func _map_json_refs(w: String, e: Dictionary, kind: String, target: Strin
 				continue
 			if _points_at(w, kind, ref, target):
 				out.append(base.merged({"key": "markers", "index": i, "path": ["markers", i, key], "value": ref}))
+	return out
+
+# Route encounter refs (TRAV1-L): [ref, weight] pairs in `encounters` / `elites` and each `scripted` entry's encounter.
+static func _route_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for list_key: String in ["encounters", "elites"]:
+		var pairs: Array = DictUtil.array_of(e.get(list_key, null))
+		for i: int in range(pairs.size()):
+			var pair: Array = DictUtil.array_of(pairs[i])
+			if not pair.is_empty() and pair[0] is String and _points_at(w, kind, str(pair[0]), target):
+				out.append(base.merged({"key": list_key, "index": i, "path": [list_key, i, 0], "value": str(pair[0])}))
+	var scripted: Array = DictUtil.array_of(e.get("scripted", null))
+	for i: int in range(scripted.size()):
+		_ref_at(w, DictUtil.dict_of(scripted[i]), "encounter", ["scripted", i], kind, target, base, out)
 	return out
 
 # Dialogue tree refs (DLG1-L): node speakers, quest refs of choice conditions, and the quest / shop / encounter refs of
@@ -810,6 +826,8 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 		"locations":
 			if not (e["exits"] is Array):
 				errors.append("Exits must be a list of {\"to\", \"label\"} objects.")
+		"routes":
+			errors.append_array(TravelRules.shape_errors(e))
 		"factions":
 			if not (e["relations"] is Dictionary):
 				errors.append("Relations must be an object {faction: stance}.")
@@ -884,6 +902,8 @@ static func validate_entry(world_id: String, kind: String, entry: Dictionary, cu
 			errors.append_array(DialogueRules.tree_errors(world_id, e))
 		"shops":
 			errors.append_array(ShopRules.shop_errors(world_id, e))
+		"routes":
+			errors.append_array(TravelRules.route_errors(world_id, e))
 	return errors
 
 # Is a qualified ref's world visible from `world_id` (itself, an ancestor, or connected)?

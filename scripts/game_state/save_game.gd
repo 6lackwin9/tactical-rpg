@@ -10,7 +10,7 @@ extends RefCounted
 # Slots (UI1-L): 0 is the autosave, 1..5 the manual slots (one list shared by all worlds); peek() reads a slot header without migrating or loading.
 # ==============================================================================
 
-const VERSION: int = 4   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L)
+const VERSION: int = 5   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L); 5: world clock time (step 4 -> 5, TRAV1-L)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 const AUTOSAVE_SLOT: int = 0

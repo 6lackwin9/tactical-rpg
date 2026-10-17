@@ -13,6 +13,8 @@ extends Control
 # Moving and interacting are ignored while a conversation, shop or fight is open.
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) only for the main menu's game (CurrentGame.state()); the standalone debug game writes nothing
 # (refused while a fight is pending). A world picker starts a new game. busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
+# A world_map exit (marker or menu entry, TRAV1-L commit 3) opens the WorldMapView over the map; it hands back on
+# arrival (or after a lost road fight) and on Back; its road fights count as busy() and re-emit `fight_settled`.
 # ==============================================================================
 
 signal fight_settled(res: Dictionary)   # UI2-L: the main menu host shows battle results on it
@@ -42,12 +44,15 @@ var _dev_box: VBoxContainer = null
 var _log: Label = null
 var dialogue_panel: DialoguePanel = null
 var shop_panel: ShopPanel = null
+var world_map: WorldMapView = null   # open while the party is on the world map (TRAV1-L)
+var _root: VBoxContainer = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
+	_root = root
 	var bar := HBoxContainer.new()
 	root.add_child(bar)
 	_world_pick = OptionButton.new()
@@ -101,13 +106,17 @@ func _on_new_game() -> void:
 	if _world_pick != null and _world_pick.item_count > 0:
 		start_game(_world_pick.get_item_text(_world_pick.selected))
 
-# A new game in `world_id` with the first party units of the catalog, entered at the world's start location.
-func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
+# NewGame.create in `world_id` with the first two party units of the catalog: {state, errors} (also WorldMapView).
+static func new_state(world_id: String, p_seed: int = DEBUG_SEED) -> Dictionary:
 	var units: Array[String] = []
 	for e: Dictionary in ContentCatalog.entries("units"):
 		if str(e.get("side", "")) == "party" and ContentFactory.class_of(e) != null and units.size() < 2:
 			units.append(str(e["id"]))
-	var res: Dictionary = NewGame.create(world_id, units, p_seed)
+	return NewGame.create(world_id, units, p_seed)
+
+# A new game in `world_id` with the first party units of the catalog, entered at the world's start location.
+func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
+	var res: Dictionary = new_state(world_id, p_seed)
 	var errors: Array[String] = []
 	errors.assign(DictUtil.array_of(res["errors"]))
 	if res["state"] == null:
@@ -121,6 +130,7 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 	pending_fight = {}
 	_close_battle()
 	_close_panels()
+	close_world_map()
 	_handle(ExploreRunner.begin(gs))
 	return errors
 
@@ -131,6 +141,7 @@ func play_state(state: GameState) -> void:
 	pending_fight = {}
 	_close_battle()
 	_close_panels()
+	close_world_map()
 	_handle(ExploreRunner.begin(gs) if gs.location_id.is_empty() else ExploreRunner.resume(gs))
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -146,18 +157,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		do_interact()
 		accept_event()
 
-# True while a fight, conversation or shop waits for the player (map input is ignored).
+# True while a fight (map, dialogue or road), conversation or shop waits for the player (saving is refused).
 func busy() -> bool:
-	return not pending_fight.is_empty() or (dialogue_panel != null and dialogue_panel.is_open()) or (shop_panel != null and shop_panel.is_open())
+	return not pending_fight.is_empty() or (dialogue_panel != null and dialogue_panel.is_open()) or (shop_panel != null and shop_panel.is_open()) or (world_map != null and world_map.busy())
+
+# Map input is ignored while busy or while the world map is open.
+func _input_blocked() -> bool:
+	return gs == null or busy() or world_map != null
 
 func do_step(dir: Vector2i) -> void:
-	if gs == null or busy():
+	if _input_blocked():
 		return
 	facing = dir
 	_handle(ExploreRunner.step(gs, dir))
 
 func do_interact() -> void:
-	if gs == null or busy():
+	if _input_blocked():
 		return
 	var res: Dictionary = ExploreRunner.interact(gs, facing)
 	match str(res.get("kind", "")):
@@ -211,8 +226,38 @@ func _close_panels() -> void:
 		shop_panel.gs = null
 
 func take_exit(to: String) -> void:
-	if gs != null and not busy():
+	if not _input_blocked():
 		_handle(ExploreRunner.take_exit(gs, to))
+
+# Opens the world map over the region map (TRAV1-L): a world_map exit marker or menu entry.
+func open_world_map() -> void:
+	if gs == null or world_map != null:
+		return
+	world_map = WorldMapView.new()
+	world_map.embedded = true
+	add_child(world_map)
+	world_map.show_state(gs)
+	world_map.arrived.connect(_on_world_map_arrived)
+	world_map.closed.connect(close_world_map)
+	world_map.fight_settled.connect(_on_world_map_fight)
+	_note("The road leads to the world map.")
+	_refresh()
+
+func close_world_map() -> void:
+	if world_map == null:
+		return
+	var view: WorldMapView = world_map
+	world_map = null
+	remove_child(view)
+	view.queue_free()
+	_refresh()
+
+func _on_world_map_arrived(location_qid: String) -> void:
+	_note("Arrived at %s." % location_qid)
+	close_world_map()
+
+func _on_world_map_fight(res: Dictionary) -> void:
+	fight_settled.emit(res)
 
 # Opens the pending fight in the combat arena (BattleScreen); the map hides until the battle is settled. A refused
 # start keeps the fight panel with its reasons, Start battle and the debug outcomes.
@@ -272,7 +317,7 @@ func _event(e: Dictionary) -> void:
 			_note("Flags set: %s" % str(e["flags"]))
 		"exit":
 			if str(e["to"]) == MapRules.WORLD_MAP:
-				_note("The road leads to the world map (TRAV1).")
+				open_world_map()
 			for inner: Variant in DictUtil.array_of(e.get("events", [])):
 				_event(DictUtil.dict_of(inner))
 		"fight":
@@ -318,7 +363,7 @@ func _refresh() -> void:
 		_status.text = "%s  %s  steps %d / %d  rolls %s" % [gs.location_id, str(gs.position), DictUtil.to_int(gs.explore["steps"]), DictUtil.to_int(gs.explore["next_at"]), str(gs.rolls)]
 	for c: Node in _menu_box.get_children():
 		c.queue_free()
-	if gs != null and not busy():
+	if not _input_blocked():
 		for item: Dictionary in ExploreRunner.menu(gs):
 			_menu_box.add_child(UiTheme.button(str(item["label"]), "ExploreRunner.take_exit", take_exit.bind(str(item["to"]))))
 	_fight_panel.visible = not pending_fight.is_empty() and battle == null
@@ -327,6 +372,8 @@ func _refresh() -> void:
 		_fight_label.text += "\nBattle refused: %s" % "; ".join(PackedStringArray(launch_errors))
 	_dev_box.visible = dev_outcomes or not launch_errors.is_empty()
 	_canvas.visible = battle == null
+	if _root != null:
+		_root.visible = world_map == null
 	_log.text = "\n".join(PackedStringArray(log_lines))
 	_canvas.queue_redraw()
 

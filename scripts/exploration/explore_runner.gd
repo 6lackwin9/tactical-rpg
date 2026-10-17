@@ -183,7 +183,8 @@ static func take_exit(gs: GameState, to: String, anchor: String = MapRules.SPAWN
 		return _result(true, errors, events)
 	return enter(gs, to, anchor)
 
-# {to, label} of the exits of a map-less location ([] with a map).
+# {to, label} of the exits of a map-less location ([] with a map), plus {to: "world_map"} when the location is a world
+# map node (TRAV1-L 2.6).
 static func menu(gs: GameState) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var loc: Dictionary = location(gs)
@@ -192,6 +193,8 @@ static func menu(gs: GameState) -> Array[Dictionary]:
 	for x: Variant in DictUtil.array_of(loc.get("exits", [])):
 		var ex: Dictionary = DictUtil.dict_of(x)
 		out.append({"to": str(ex.get("to", "")), "label": str(ex.get("label", ex.get("to", "")))})
+	if TravelRules.nodes(gs.world_id).has(str(loc["_qid"])):
+		out.append({"to": MapRules.WORLD_MAP, "label": "World map"})
 	return out
 
 # The defeat rule (also TRAV1, DLG1): wake at `at` (or the current location) when it has no map or a SAFE spawn,
@@ -237,9 +240,12 @@ static func step(gs: GameState, dir: Vector2i) -> Dictionary:
 			else:
 				events.append({"kind": "blocked", "at": _pos_array(target), "marker": str(m["id"])})
 			return _result(true, errors, events)
-	# A world_map exit hands over to the world map (TRAV1) without moving or changing anything.
+	# A world_map exit hands over to the world map (TRAV1) without moving; only its sets_flags apply (TRAV1-L commit 3).
 	for m: Dictionary in markers:
 		if str(m["kind"]) == "exit" and str(m.get("to", "")) == MapRules.WORLD_MAP and presence(gs, loc_qid, m) == "present" and marker_pos(t, m, loc_steps) == target:
+			var wm_keys: Array[String] = _apply_sets(gs, m)
+			if not wm_keys.is_empty():
+				events.append({"kind": "flags_set", "marker": str(m["id"]), "flags": wm_keys})
 			events.append({"kind": "exit", "to": MapRules.WORLD_MAP, "marker": str(m["id"])})
 			return _result(true, errors, events)
 	# An exit on the tile whose target can't be entered refuses the step before anything changes (dry run on a copy).

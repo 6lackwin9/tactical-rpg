@@ -29,11 +29,11 @@ var _banner_layer: CanvasLayer = null
 var _banner: PanelContainer = null
 var _banner_label: Label = null
 
-# {ok, errors, screen: BattleScreen or null}: the battle for `p_fight` ({encounter, ...} from a fight event) added
+# {ok, errors, screen: BattleScreen or null}: the battle for `p_fight` ({encounter, zone?, ...} from a fight event) added
 # under `parent` and started.
 static func open(parent: Node, gs: GameState, p_fight: Dictionary) -> Dictionary:
 	var errors: Array[String] = []
-	var built: Dictionary = BattleBridge.encounter_for(gs, str(p_fight.get("encounter", "")))
+	var built: Dictionary = BattleBridge.encounter_for(gs, str(p_fight.get("encounter", "")), str(p_fight.get("zone", "")))   # road fights carry the route zone (TRAV1)
 	if not DictUtil.to_bool(built["ok"]):
 		errors.assign(DictUtil.array_of(built["errors"]))
 		return {"ok": false, "errors": errors, "screen": null}

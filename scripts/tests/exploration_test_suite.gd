@@ -322,7 +322,11 @@ static func _test_markers(fx: Dictionary) -> bool:
 	checks["exit to not in exits"] = _one(_loc_errs(_with_marker(loc, "to_town", {"to": "hut"})), "Exit 'hut' is not in this location's exits.")
 	checks["to_anchor unknown on the target map"] = _one(_loc_errs(_with_marker(loc, "to_keep", {"to_anchor": "nope"})), "to_anchor 'nope'")
 	checks["to_anchor on a map-less target must be spawn"] = _one(_loc_errs(_with_marker(loc, "to_town", {"to_anchor": "gate"})), "to_anchor must be 'spawn'")
-	checks["world_map exit needs no exits entry"] = _loc_errs(_with_marker(loc, "to_town", {"to": MapRules.WORLD_MAP})).is_empty()
+	# TRAV1-L: a world_map exit needs the location to be a route node; a temporary route makes `field` one.
+	var route_errs: Array[String] = WorldCatalog.upsert(PARENT, "routes", {"id": "r_wm", "name": "Road", "from": "field", "to": "town"})
+	checks["world_map exit needs no exits entry"] = route_errs.is_empty() and _loc_errs(_with_marker(loc, "to_town", {"to": MapRules.WORLD_MAP})).is_empty()
+	checks["world_map exit arrives at spawn"] = _one(_loc_errs(_with_marker(loc, "to_town", {"to": MapRules.WORLD_MAP, "to_anchor": "gate"})), "a world_map exit always arrives at 'spawn'")
+	checks["temporary route removed"] = WorldCatalog.remove(PARENT, "routes", "r_wm").is_empty()
 	checks["chest with nothing"] = _one(_loc_errs(_with_marker(loc, "box", {"items": {}, "loot": ""})), "Chest 'box' holds nothing.")
 	checks["chest with passive loot"] = _one(_loc_errs(_with_marker(loc, "box", {"loot": "loot_passive"})), "Chest loot must be an item entry.")
 	checks["radius 4"] = _one(_loc_errs(_with_marker(loc, "ambush", {"radius": MapRules.MAX_RADIUS + 1})), "radius must be 0..3")
@@ -338,7 +342,6 @@ static func _test_markers(fx: Dictionary) -> bool:
 	var typed_errs: Array[String] = _loc_errs(typed)
 	checks["map '' with wrong-typed fields: type errors"] = typed_errs.size() == 2 and TestHelpers.any_contains(typed_errs, "Zone bindings must be an object") and TestHelpers.any_contains(typed_errs, "Markers must be a list.")
 	checks["wrong-typed markers with a map"] = _one(_loc_errs(loc.merged({"markers": {}}, true)), "Markers must be a list.")
-	checks["world_map exit arrives at spawn"] = _one(_loc_errs(_with_marker(loc, "to_town", {"to": MapRules.WORLD_MAP, "to_anchor": "gate"})), "a world_map exit always arrives at 'spawn'")
 	checks["unknown map template"] = _one(_loc_errs(loc.merged({"map": "m_none"}, true)), "Unknown map template 'm_none'.")
 	var no_marker: Dictionary = loc.duplicate(true)
 	DictUtil.array_of(no_marker["markers"]).remove_at(_marker_index(no_marker, "to_town"))
@@ -525,6 +528,9 @@ static func _build_runtime() -> bool:
 	errors.append_array(WorldCatalog.upsert(RUN, "loot", {"id": "lt_box", "name": "Box Loot", "reward_kind": "item", "ref": str(_rx["item1"]), "count": 1}))
 	errors.append_array(WorldCatalog.upsert(RUN, "locations", {"id": "town", "name": "Town", "exits": [{"to": "field", "label": "to the field"}]}))
 	errors.append_array(WorldCatalog.upsert(RUN, "locations", {"id": "keep", "name": "Keep", "map": "m_danger", "exits": [{"to": "field"}], "zone_bindings": _default_bindings()}))
+	# TRAV1-L: the field's world_map exit marker (check 16) needs the field to be a route node (keep, not the map-less
+	# town, so the town's menu lists no world map entry).
+	errors.append_array(WorldCatalog.upsert(RUN, "routes", {"id": "r_field_keep", "name": "Field road", "from": "field", "to": "keep", "encounter_pct": 0}))
 	var quests: Array[Dictionary] = [
 		{"id": "q_reach", "name": "Reach", "template": "t_reach", "auto_start": true, "steps": [{"text": "Go", "location": "field"}]},
 		{"id": "q_reach2", "name": "Reach twice", "template": "t_reach2", "auto_start": true, "steps": [{"text": "Go", "location": "field"}, {"text": "Again", "location": "field"}]},
@@ -890,7 +896,14 @@ static func _test_exits() -> bool:
 	var flagged: Dictionary = WorldCatalog.get_own(RUN, "locations", "field")
 	var to_map: Dictionary = DictUtil.dict_of(DictUtil.array_of(flagged["markers"])[2])
 	to_map["sets_flags"] = [{"key": "xr.mapped"}]
-	checks["world_map exit with sets_flags: soft warning"] = TestHelpers.any_contains(MapRules.location_warnings(flagged), "ignored until the world map")
+	# TRAV1-L commit 3: a world_map exit's sets_flags apply when the party steps onto it (no warning any more).
+	var plain: Dictionary = WorldCatalog.get_own(RUN, "locations", "field")
+	checks["world_map exit with sets_flags: no warning"] = not TestHelpers.any_contains(MapRules.location_warnings(flagged), "world map")
+	var stored: bool = WorldCatalog.upsert(RUN, "locations", flagged).is_empty()
+	var wm_flag: GameState = _in_field(3, 7)
+	var flag_events: Array[Dictionary] = _events(ExploreRunner.step(wm_flag, D))
+	checks["world_map exit with sets_flags: flags set, token stays"] = stored and wm_flag.get_flag("xr.mapped", false) == true and wm_flag.position == Vector2i(3, 7) and str(_find(flag_events, "exit").get("to", "")) == MapRules.WORLD_MAP and not _find(flag_events, "flags_set").is_empty()
+	checks["field restored"] = WorldCatalog.upsert(RUN, "locations", plain).is_empty()
 	# An exit whose target can't be entered refuses the step and changes nothing (no move, no sets_flags).
 	var gateless: Dictionary = _run_map("m_danger", true)
 	var anchors: Array = gateless["anchors"]

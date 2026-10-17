@@ -5,7 +5,7 @@ extends RefCounted
 # Tactical RPG - World Schema (the lore layer on top of the content catalog)
 # A world is a folder of lore entries: regions, locations, factions, characters,
 # named items, disciplines, quests, lore entries, encounters, loot (the world
-# loot table quests offer as special rewards), dialogue trees and shops. Entries never
+# loot table quests offer as special rewards), dialogue trees, shops and routes (the world map). Entries never
 # carry gameplay of their own: they REFERENCE base assets from the Content Forge
 # catalog (`base:units`, `base:items`...) and add lore (names, backgrounds, art,
 # factions), plus optional explicit tuning deltas.
@@ -20,7 +20,7 @@ extends RefCounted
 # Every kind has `override` (the qualified id of an ancestor entry it replaces) and `tags`.
 # ==============================================================================
 
-const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops"]
+const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"]
 
 # Deltas a character may apply to its base unit (flat unless _pct).
 const TUNING_KEYS: Array[String] = ["hp_pct", "power", "armor", "speed", "ap"]
@@ -63,6 +63,8 @@ static func kind_icon(kind: String) -> String:
 			return "💬"
 		"shops":
 			return "🛒"
+		"routes":
+			return "🛤"
 	return "•"
 
 static func _f(key: String, label: String, type: String, default: Variant, extra: Dictionary = {}) -> Dictionary:
@@ -99,6 +101,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = _dialogue_fields()
 		"shops":
 			list = _shop_fields()
+		"routes":
+			list = _route_fields()
 		_:
 			return list
 	if kind != "world":
@@ -267,6 +271,26 @@ static func _shop_fields() -> Array[Dictionary]:
 		_f("sell_mult", "Sell multiplier", "float", 0.5, {"help": "0.0..1.0: sell price = floor(value x mult); 0 = buys nothing."}),
 		_f("buys", "Buys types", "json", ShopRules.buy_types(), {"help": "Item types the shop buys (every item type but QUEST by default; never QUEST)."}),
 		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; the shop is closed while any fails."}),
+	]
+
+# World map routes (TRAV1-L, S10); TravelRules.route_errors validates them. Ranges are checked there, not clamped here.
+static func _route_fields() -> Array[Dictionary]:
+	return [
+		_f("id", "ID", "id", ""),
+		_f("name", "Name", "string", "New Route"),
+		_f("from", "From", "ref", "", {"ref": "locations", "help": "Where the route starts (a world map node)."}),
+		_f("to", "To", "ref", "", {"ref": "locations", "help": "Where it leads; may be world:id into a connected world."}),
+		_f("two_way", "Two way", "bool", true, {"help": "Off = travel only from -> to."}),
+		_f("time", "Travel time", "int", 3, {"help": "1..20 world clock units per leg."}),
+		_f("zone", "Fight zone", "string", "", {"help": "Combat zone of road fights (empty = each encounter's own)."}),
+		_f("encounter_pct", "Encounter chance %", "int", 20, {"help": "0..100 per leg on the first traversal."}),
+		_f("repeat_pct", "Repeat chance %", "int", -1, {"help": "-1 = half the encounter chance (rounded down); else 0..100 per leg once traversed."}),
+		_f("encounters", "Encounters", "json", [], {"help": "[[\"encounter\", weight 1..100]...], at most 8."}),
+		_f("elites", "Elites", "json", [], {"help": "Same shape; the elite chance picks from these."}),
+		_f("elite_pct", "Elite chance %", "int", 5, {"help": "0..100."}),
+		_f("scripted", "Scripted fights", "json", [], {"help": "[{\"id\", \"encounter\", \"requires_flags\", \"unless_flags\", \"sets_flags\"}], at most 4; one-shot, before the roll."}),
+		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; any failing = the route is closed."}),
+		_f("unless_flags", "Closed when", "json", [], {"help": "[{\"key\", \"value\"}]; any holding = the route is closed."}),
 	]
 
 static func _lore_fields() -> Array[Dictionary]:

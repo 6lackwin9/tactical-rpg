@@ -39,6 +39,8 @@ const SCENES: Array[Dictionary] = [
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
 	{"path": "res://scenes/overworld/region_map_debug.tscn", "name": "Region Map (debug)", "icon": "🗺",
 		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (a game started from the main menu autosaves to slot 0; the standalone debug game writes nothing)."},
+	{"path": "res://scenes/overworld/world_map_debug.tscn", "name": "World Map (debug)", "icon": "🧭",
+		"desc": "Travel a world's route graph: known locations as pins, click one to auto-path there, road fights in the arena (or debug outcomes), the world clock. The region map opens it on a world map exit."},
 ]
 const HIDDEN_SCENES: Array[String] = ["res://scenes/scene_runner.tscn", "res://scenes/test_arena.tscn"]
 

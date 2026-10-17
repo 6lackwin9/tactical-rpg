@@ -226,8 +226,13 @@ static func _test_migrations() -> bool:
 	SaveMigrations.reset()
 	var v3: Dictionary = SaveMigrations.migrate({"version": 3, "game_state": {"world_id": "w", "party": {"members": []}}}, 4)
 	var v3_state: Dictionary = DictUtil.dict_of(DictUtil.dict_of(v3["data"]).get("game_state", {}))
+	var v4_in: Dictionary = {"world_id": "w", "party": {"members": [], "gold": 7}, "shops": {}}
+	var v4: Dictionary = SaveMigrations.migrate({"version": 4, "game_state": v4_in}, 5)
+	var v4_expect: Dictionary = v4_in.duplicate(true)
+	v4_expect["time"] = 0
 	var checks: Dictionary = {
-		"v3_to_v4_adds_gold_and_shops": DictUtil.to_bool(v3["ok"]) and DictUtil.dict_of(v3_state.get("party", {})).get("gold", -1) == 0 and JsonUtil.deep_equal(v3_state.get("shops", null), {}) and SaveGame.VERSION == 4,
+		"v4_to_v5_adds_time_only": DictUtil.to_bool(v4["ok"]) and JsonUtil.deep_equal(DictUtil.dict_of(v4["data"]).get("game_state", {}), v4_expect) and SaveGame.VERSION == 5,
+		"v3_to_v4_adds_gold_and_shops": DictUtil.to_bool(v3["ok"]) and DictUtil.dict_of(v3_state.get("party", {})).get("gold", -1) == 0 and JsonUtil.deep_equal(v3_state.get("shops", null), {}) and SaveGame.VERSION >= 4,   # 5 since TRAV1-L
 		"missing_step_fails": not DictUtil.to_bool(no_step["ok"]),
 		"step_applied": DictUtil.to_bool(up["ok"]) and DictUtil.dict_of(data["game_state"])["location_id"] == "migrated_old" and DictUtil.to_int(data["version"]) == 2,
 		"input_not_mutated": DictUtil.dict_of(base["game_state"])["location_id"] == "old" and DictUtil.to_int(base["version"]) == 1,

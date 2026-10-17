@@ -392,6 +392,19 @@ static func location_errors(world_id: String, e: Dictionary) -> Array[String]:
 		errors.append_array(binding_errors(world_id, t, map_id, str(zone), bindings[zone]))
 	var markers: Array = markers_raw
 	errors.append_array(markers_errors(world_id, e, t, markers))
+	errors.append_array(world_map_exit_errors(world_id, e))
+	return errors
+
+# TRAV1-L: a location with a world_map exit marker must be a node of its world's route graph (TravelRules.nodes).
+static func world_map_exit_errors(world_id: String, e: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var id: String = str(e.get("id", ""))
+	for x: Variant in DictUtil.array_of(e.get("markers", [])):
+		var m: Dictionary = DictUtil.dict_of(x)
+		if str(m.get("kind", "")) == "exit" and str(m.get("to", "")) == WORLD_MAP:
+			if not TravelRules.nodes(world_id).has(WorldCatalog.qid(world_id, id)):
+				errors.append("'%s' has a world map exit but no route." % id)
+			break
 	return errors
 
 static func binding_errors(world_id: String, t: Dictionary, map_id: String, zone: String, raw: Variant) -> Array[String]:
@@ -424,26 +437,31 @@ static func binding_errors(world_id: String, t: Dictionary, map_id: String, zone
 	return errors
 
 static func _pairs_errors(world_id: String, zone: String, key: String, raw: Variant) -> Array[String]:
+	return pair_list_errors(world_id, "Zone binding '%s'" % zone, key, raw)
+
+# An [[encounter ref, weight 1..100]...] list (max MAX_BIND_LIST, no duplicate ref): zone bindings (EXP1) and routes
+# (TRAV1). `label` prefixes every message ("Zone binding 'wilds'", "Route").
+static func pair_list_errors(world_id: String, label: String, key: String, raw: Variant) -> Array[String]:
 	var errors: Array[String] = []
 	if not (raw is Array):
-		errors.append("Zone binding '%s': %s must be a list of [encounter, weight] pairs." % [zone, key])
+		errors.append("%s: %s must be a list of [encounter, weight] pairs." % [label, key])
 		return errors
 	var list: Array = raw
 	if list.size() > MAX_BIND_LIST:
-		errors.append("Zone binding '%s': at most %d %s." % [zone, MAX_BIND_LIST, key])
+		errors.append("%s: at most %d %s." % [label, MAX_BIND_LIST, key])
 	var seen: Dictionary = {}
 	for x: Variant in list:
 		var pair: Array = DictUtil.array_of(x)
 		if pair.size() != 2 or not (pair[0] is String):
-			errors.append("Zone binding '%s': %s entries are [encounter, weight] pairs." % [zone, key])
+			errors.append("%s: %s entries are [encounter, weight] pairs." % [label, key])
 			continue
 		var ref: String = str(pair[0])
 		if seen.has(ref):
-			errors.append("Zone binding '%s': %s lists '%s' twice." % [zone, key, ref])
+			errors.append("%s: %s lists '%s' twice." % [label, key, ref])
 		seen[ref] = true
-		errors.append_array(WorldCatalog.ref_errors(world_id, "Zone binding '%s' %s" % [zone, key], "encounters", ref))
+		errors.append_array(WorldCatalog.ref_errors(world_id, "%s %s" % [label, key], "encounters", ref))
 		if not (pair[1] is int) or DictUtil.to_int(pair[1]) < WEIGHT_MIN or DictUtil.to_int(pair[1]) > WEIGHT_MAX:
-			errors.append("Zone binding '%s': %s weight of '%s' must be %d..%d." % [zone, key, ref, WEIGHT_MIN, WEIGHT_MAX])
+			errors.append("%s: %s weight of '%s' must be %d..%d." % [label, key, ref, WEIGHT_MIN, WEIGHT_MAX])
 	return errors
 
 # The `to` strings of the location's exits list.
@@ -606,8 +624,6 @@ static func location_warnings(e: Dictionary) -> Array[String]:
 		var m: Dictionary = DictUtil.dict_of(x)
 		if str(m.get("kind", "")) == "exit":
 			marked[str(m.get("to", ""))] = true
-			if str(m.get("to", "")) == WORLD_MAP and not DictUtil.array_of(m.get("sets_flags", [])).is_empty():
-				out.append("Exit '%s' to the world map: its sets_flags are ignored until the world map (TRAV1) exists." % str(m.get("id", "")))
 	for to: String in exit_targets(e):
 		if not marked.has(to):
 			out.append("Exit to '%s' has no marker on the map." % to)

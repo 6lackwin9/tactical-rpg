@@ -60,7 +60,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
 | `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter) | S9 | done |
-| `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
+| `scripts/travel/` | TravelRules (route validation, graph, fog, path, view), TravelRunner (trips, road fights) | S10 | done (TRAV1-L) |
 | `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog); dialogue_runner.gd (DialogueRunner); panels in DLG1-L commit 3 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/audio/` | SoundEvents (sfx keys, preset map), SoundBank (key lookup through AssetRegistry, warn once), AudioDirector (voices on the SFX/UI buses, presenter hook, bus volumes), PlaceholderSfx (generated blips for `tools/gen_placeholder_sfx.gd`) (S14-L3) | S14 | done |
