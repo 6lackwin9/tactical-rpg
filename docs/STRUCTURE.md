@@ -18,6 +18,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
+| `scripts/tests/plan_claims_test_suite.gd` | preset plans always confirmable: approach tile claims, tie order, party redraft (PLAN1) | S1, S4 | done |
 | `scripts/tests/skill_unlock_test_suite.gd` | SK2 unlock rule suite (its schema default seed `sk2_schema.gd` is archived, CLN-2) | S2, S12 | done |
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |

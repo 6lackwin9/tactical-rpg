@@ -476,7 +476,7 @@ A skill is one **family template** plus up to two **rank modifiers** (absolute v
 - **Unit gear `none`**: a unit slot set to `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) opts out of the class default loadout; a blank slot still means "use the class default". Units only.
 - **Tiers**: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
 - **Trained fists**: an empty main hand with fist proficiency 2 or more hits with weapon power 15 + fist training and gets the fist crit bonus (`DamageCalculator.UNARMED_BASE_POWER`, `TRAINED_FIST_MIN_LEVEL`); `GearBudget.UNARMED_VALUE` reads the same constant. The damage formula itself is unchanged.
-- **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `smart_skills`, `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
+- **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `smart_skills`, `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Refused plans print `PLAN FAIL <unit> <reason>` (with the step and the unit holding the tile) and every mode ends with `plan checks: N PLAN FAIL over M fights`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
 - Tested in `bal2_rules_test_suite.gd`.
 
 ### Balance data pass (BAL2-A)
@@ -502,6 +502,10 @@ Sample quests (M4-A, seed `data/seeds/m4a.gd`): four lore-free templates (reach_
 ### Region map schema (EXP1-L commit 1)
 
 Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rules in `MapRules`); world locations bind a template with `map`, `zone_bindings` and `markers` (encounters, patrolling roamers, chests, lore, exits), and a world manifest names its `start_location`. Reference scans rewrite markers and bindings on rename. Tested in `exploration_test_suite.gd`.
+
+### Plan claims (PLAN1)
+
+Preset auto-plans are always confirmable: an ally's approach, go-to or landing tile (support approaches included) is fixed once planned and later drafts keep off it (`CombatPlan.pinned_cell`), speed ties keep planning order, and the party preset re-drafts any ally a later draft made invalid. Enemy packs share the same planner, so they no longer plan onto a packmate's tile. Tested in `plan_claims_test_suite.gd`.
 
 ### Agent workflow tools
 

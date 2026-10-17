@@ -20,6 +20,7 @@ var observer: SimObserver = null    # commit 1b: the metrics collector
 var smart_noted: int = -1           # last profile count printed for smart_skills off
 var not_moved_total: int = 0        # distance: units left in place, summed over fights
 var fights: int = 0
+var plan_fails: int = 0             # fights stopped because confirm_plan() refused the preset plan
 
 func _init(p_args: SimArgs) -> void:
 	args = p_args
@@ -103,10 +104,13 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 	if observer != null:
 		observer.on_start(session)
 	var rounds: int = 0
+	var plan_failed: bool = false
 	for round_num: int in range(args.cap):
 		rounds = round_num + 1
 		session.plan_apply_preset_all(preset)
 		if not session.confirm_plan():
+			_report_plan_fail(session, round_num + 1)
+			plan_failed = true
 			break
 		for i: int in range(MAX_STEPS_PER_ROUND):
 			if session.phase == CombatSession.Phase.REPLAY:
@@ -126,12 +130,35 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 		if c.is_active():
 			survivors += 1
 	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": binary_score(l, r), "hp": hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0,
-		"survivors": survivors, "party_size": session.allies.size()}
+		"survivors": survivors, "party_size": session.allies.size(), "plan_fail": plan_failed}
 	if observer != null:
 		observer.on_end(session, result)
 	session.dispose()
 	fights += 1
 	return result
+
+# A refused confirm_plan() ends the fight early; it is counted and printed (never silent):
+# one `PLAN FAIL <unit> <reason>` line per invalid ally, with its position and steps.
+func _report_plan_fail(session: CombatSession, round_num: int) -> void:
+	plan_fails += 1
+	for a: Combatant in session.allies:
+		if not a.is_active():
+			continue
+		var st: CombatPlan.SimState = session.plan.compile(a)
+		if st.error_index < 0:
+			continue
+		var steps: Array[String] = []
+		var holders: Array[String] = []
+		var all_steps: Array[PlanStep] = session.plan.steps_of(a)
+		for s: PlanStep in all_steps:
+			steps.append("%s%s" % [s.title(), (" @" + str(s.cell)) if s.cell != CombatPlan.NO_CELL else ""])
+		var bad_cell: Vector2i = all_steps[st.error_index].cell
+		for other: Combatant in session.allies + session.enemies:
+			if other != a and other.is_active() and session.grid.has_combatant(other) and bad_cell != CombatPlan.NO_CELL:
+				if session.grid.get_position(other) == bad_cell or session.plan.planned_position(other) == bad_cell:
+					holders.append("%s %s->%s" % [other.name, str(session.grid.get_position(other)), str(session.plan.planned_position(other))])
+		out("PLAN FAIL %s %s (round %d, preset %s, at %s, step %d of [%s]; tile held by [%s])" % [a.name, st.error_text, round_num, preset,
+			str(session.grid.get_position(a)), st.error_index + 1, ", ".join(steps), ", ".join(holders)])
 
 # After start(): enemy presets, smart_skills off and the start distance; then the round-1 enemy
 # plan is redrafted (start() already scheduled it with the original profiles and positions).

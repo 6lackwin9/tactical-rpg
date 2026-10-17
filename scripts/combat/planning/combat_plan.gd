@@ -568,7 +568,22 @@ func _apply_ally(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 		var move_problem: String = _move_problem(c, st)
 		if not move_problem.is_empty():
 			return "%s is out of reach for %s: %s" % [ally.name, skill.display_name, move_problem]
-		var path: Array[Vector2i] = approach_path(c, st.pos, ally, near, band.y)
+		# Like an Engage approach, the destination is fixed once planned (step.cell).
+		var path: Array[Vector2i] = []
+		if step.cell != NO_CELL:
+			var stored_dist: int = grid.get_distance(step.cell, ally_pos)
+			if stored_dist < near or stored_dist > band.y:
+				return "The planned approach to %s no longer reaches it." % ally.name
+			if blocked_cells(c).has(step.cell):
+				return "The planned approach tile %s is taken; re-plan this skill." % str(step.cell)
+			path = GridPath.find_path(grid, st.pos, {step.cell: true}, blocked_cells(c), false)
+		else:
+			path = approach_path(c, st.pos, ally, near, band.y)
+			if not path.is_empty():
+				var dest: Vector2i = st.pos
+				for d: Vector2i in path:
+					dest += d
+				step.cell = dest
 		if path.is_empty():
 			return "No path to get %s within reach of %s." % [c.name, ally.name]
 		if path.size() > max_move_tiles(c):
@@ -761,19 +776,51 @@ func _blocked_for(c: Combatant, moves: Dictionary) -> Dictionary:
 # first (ties in planning order); each sees the tiles claimed by the units before
 # it, so two units never claim the same tile. A unit
 # can step into a tile an earlier, faster friend vacates in block 1.
+# A unit whose opening move has no fixed destination yet (an approach still to be
+# picked) also keeps off every friend's fixed destination (pinned_cell), so a newly
+# drafted faster unit never takes the tile a slower friend's plan already holds.
 func _ally_moves() -> Dictionary:
 	var moves: Dictionary = {}
 	var units: Array[Combatant] = []
+	var order: Dictionary = {}   # unit -> planning order (sort_custom is not stable)
+	var pinned: Dictionary = {}  # unit -> fixed destination of its opening move
 	for key: Variant in sequences:
 		if key is Combatant:
 			var member: Combatant = key
+			order[member] = units.size()
 			units.append(member)
-	units.sort_custom(func(a: Combatant, b: Combatant) -> bool: return a.speed > b.speed)   # stable: ties keep planning order
+			var cell: Vector2i = pinned_cell(member)
+			if cell != NO_CELL:
+				pinned[member] = cell
+	units.sort_custom(func(a: Combatant, b: Combatant) -> bool:
+		return a.speed > b.speed or (a.speed == b.speed and DictUtil.int_of(order, a) < DictUtil.int_of(order, b)))
 	for unit: Combatant in units:
-		var move: Dictionary = _first_move(unit, _blocked_for(unit, moves))
+		var blocked: Dictionary = _blocked_for(unit, moves)
+		if not pinned.has(unit):
+			var friends: Array[Combatant] = context.friends_of(unit)
+			for other: Variant in pinned:
+				if other != unit and friends.has(other):
+					blocked[pinned[other]] = true
+		var move: Dictionary = _first_move(unit, blocked)
 		if not move.is_empty():
 			moves[unit] = move
 	return moves
+
+# The tile `c`'s opening move is fixed to (NO_CELL = none fixed yet, or no move): a go-to,
+# a stored approach / landing tile (step.cell) or a manual move.
+func pinned_cell(c: Combatant) -> Vector2i:
+	var steps: Array[PlanStep] = steps_of(c)
+	if steps.is_empty() or not context.grid.has_combatant(c):
+		return NO_CELL
+	var first: PlanStep = steps[0]
+	if first.skill != null and first.skill.kind == SkillDef.Kind.DISENGAGE:
+		return first.cell   # landing tile (stored once chosen)
+	match first.mode:
+		PlanStep.Mode.MOVE:
+			return context.grid.get_position(c) + first.direction * first.tiles
+		PlanStep.Mode.GOTO, PlanStep.Mode.ENGAGE, PlanStep.Mode.ALLY:
+			return first.cell
+	return NO_CELL
 # Destination and end block of `c`'s opening move, evaluated against `blocked`.
 func _first_move(c: Combatant, blocked: Dictionary) -> Dictionary:
 	var steps: Array[PlanStep] = steps_of(c)

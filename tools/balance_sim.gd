@@ -66,6 +66,7 @@ func _initialize() -> void:
 			_out(SimMetrics.kpi_line(str(n), DictUtil.dict_of(metrics.totals[n])))
 	if runner.fights > 0:
 		_out("metric checks: %d over %d fights, %d METRIC FAIL" % [metrics.checks, runner.fights, metrics.fail_lines.size()])
+		_out("plan checks: %d PLAN FAIL over %d fights" % [runner.plan_fails, runner.fights])
 	_clear_sandbox()
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	quit()

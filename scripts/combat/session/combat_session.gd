@@ -545,6 +545,17 @@ func plan_apply_preset_all(preset_id: String) -> void:
 	for a: Combatant in allies:
 		if a.is_active():
 			encounter.draft_steps(a, preset_id, plan)
+	# A later ally's draft can still break an earlier one (its move lands on the earlier
+	# ally's route, so the approach detours and later steps no longer fit): re-draft those
+	# against the claims now on the board, in planning order (bounded, one pass per ally).
+	for _pass: int in range(allies.size()):
+		var redrafted: bool = false
+		for a: Combatant in allies:
+			if a.is_active() and not plan.is_valid(a):
+				encounter.draft_steps(a, preset_id, plan)
+				redrafted = true
+		if not redrafted:
+			break
 	status_text = "Party: %s drafted. Review the sequences, then confirm." % PlanPresets.label(preset_id)
 	_after_plan_edit()
 
