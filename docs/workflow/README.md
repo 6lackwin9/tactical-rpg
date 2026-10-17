@@ -21,7 +21,7 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 | Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit; `change-reviewer` reviews the whole task branch before it lands on `develop` and its verdict goes in the squash commit (`Review:` line) |
 | Merge to `main` | planner fast-forwards locally and pushes | area threads squash tasks into `develop` (no PR); the Merge & Release thread merges one batched `develop` -> `main` PR (merge commit) after CI |
 | Writer of `docs/TASKS.md`, ROADMAP, decisions, HISTORY | planner only | each area thread for its tasks' rows and the decisions you gave in that thread, inside the task's commit |
-| `docs/AGENT_MAP.md` "Active now" | kept current by the planner | not used (the project's thread list is live); finished-run log still updated per landed task |
+| `docs/AGENT_MAP.md` "Active now" | kept current by the planner | not used (the project's thread list is live); the finished-run log and `docs/archive/TASKS_DONE.md` are written only by the Merge & Release thread at release time, from each task commit's `AgentMap:` and `Done:` lines |
 | Gate | `check_project.ps1 -Fast -Quiet` (~32 s) and IDE Problems tab 0 | `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (~3-4 min) and `tools/fc.sh docs`; no IDE rule; CI runs the same gate once per batched release PR (a required check on `main`) |
 | Godot | `C:/Program Files/Godot/godot.exe` | `/opt/godot/4.7.2/godot` on PATH (environment setup script, repo hook as fallback) |
 | Playing the game | `run.bat` Scene Runner | not possible; headless or Xvfb screenshots only |

@@ -11,7 +11,7 @@ Read these instead of crawling the code:
 - `docs/HISTORY.md`: deprecated/tried ideas with reasons (append-only; never re-propose without new reasons)
 - `docs/BALANCE_REPORT.md`: latest balance runs and open issues
 - `docs/TASKS.md`: task queue (lanes, dependencies, status); specs in `docs/specs/`
-- `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained)
+- `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained; cloud: written by the Merge & Release thread)
 - `docs/WORKFLOW.md`: tools and how to iterate; `docs/workflow/`: desktop vs cloud
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
 - Skills `godot-debug-checklist` (short edit checklist), `godot-known-issues` (consult BEFORE debugging), `gdscript-typing` (typing patterns)
