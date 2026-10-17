@@ -4,7 +4,7 @@ extends PanelContainer
 # ==============================================================================
 # Tactical RPG - Shop debug panel (S11, spec DLG1-L commit 3)
 # Thin view over ShopRules for one open shop: party gold, the buy list (ShopRules.offers; sold-out or unaffordable
-# rows disabled), the sell list (ShopRules.sell_list) and Close. Buys and sells one at a time; every change goes
+# rows disabled), the sell list (ShopRules.sell_list), the keeper faction's reputation band (REP1-L) and Close. Buys and sells one at a time; every change goes
 # through ShopRules and the panel re-renders. Close emits `closed`; the owner hands it back to the dialogue.
 # ==============================================================================
 
@@ -16,6 +16,7 @@ var shop_qid: String = ""
 
 var _title: Label = null
 var _gold: Label = null
+var _standing: Label = null   # REP1-L: the keeper faction's band ("" without a faction)
 var _buy: VBoxContainer = null
 var _sell: VBoxContainer = null
 
@@ -27,6 +28,8 @@ func _init() -> void:
 	root.add_child(_title)
 	_gold = UiTheme.label("")
 	root.add_child(_gold)
+	_standing = UiTheme.label("")
+	root.add_child(_standing)
 	root.add_child(UiTheme.header("Buy"))
 	_buy = VBoxContainer.new()
 	root.add_child(_buy)
@@ -74,6 +77,10 @@ func close() -> void:
 func _item_name(id: String) -> String:
 	return str(ContentCatalog.get_entry("items", id).get("name", id))
 
+# The keeper faction's band line as shown ("" without a faction); for tests.
+func standing_text() -> String:
+	return _standing.text
+
 func refresh() -> void:
 	UiTheme.clear_children(_buy)
 	UiTheme.clear_children(_sell)
@@ -81,6 +88,10 @@ func refresh() -> void:
 		return
 	_title.text = str(ShopRules.shop_of(gs, shop_qid).get("name", shop_qid))
 	_gold.text = "Gold: %d" % gs.party.gold
+	var shop: Dictionary = ShopRules.shop_of(gs, shop_qid)
+	var fq: String = ShopRules.keeper_faction(gs, shop)
+	_standing.text = RepRules.standing_text(str(WorldCatalog.resolve(gs.world_id, "factions", fq).get("name", fq)), ShopRules.keeper_band(gs, shop)) if not fq.is_empty() else ""
+	_standing.visible = not fq.is_empty()
 	for o: Dictionary in ShopRules.offers(gs, shop_qid):
 		var left: int = DictUtil.to_int(o["left"])
 		var price: int = DictUtil.to_int(o["price"])

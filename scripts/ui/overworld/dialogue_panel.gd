@@ -133,6 +133,10 @@ func _close() -> void:
 	pending = {}
 	visible = false
 
+# The speaker line as shown (name plus the faction band, REP1-L); for tests.
+func speaker_text() -> String:
+	return _speaker.text
+
 func refresh() -> void:
 	UiTheme.clear_children(_choices)
 	UiTheme.clear_children(_turn_in)
@@ -140,6 +144,8 @@ func refresh() -> void:
 		return
 	var v: Dictionary = runner.view()
 	_speaker.text = str(v.get("speaker_name", ""))
+	if not str(v.get("band", "")).is_empty():   # REP1-L 2.4: the talked-to character's faction band
+		_speaker.text += "  (%s)" % RepRules.standing_text(str(v.get("faction_name", "")), str(v["band"]))
 	_text.text = str(v.get("text", ""))
 	if not pending.is_empty():
 		_build_turn_in()

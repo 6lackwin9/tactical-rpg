@@ -1239,6 +1239,28 @@ static func validate_world(world_id: String) -> Dictionary:
 				problems["%s/%s:%s" % [world_id, kind, id]] = errs
 	return problems
 
+# Soft warnings of one world (never blocking): map, route, dialogue, gone-NPC, quest link / reward budget and
+# reputation key lints, each line prefixed with the entry qid. Lints over merged entries also report inherited ones.
+static func world_warnings(world_id: String) -> Array[String]:
+	var out: Array[String] = []
+	out.append_array(MapRules.warnings(world_id))
+	out.append_array(TravelRules.warnings(world_id))
+	out.append_array(DialogueRules.dialogue_warnings(world_id))
+	out.append_array(DialogueRules.quest_warnings(world_id))
+	out.append_array(QuestRules.link_warnings(world_id))
+	out.append_array(QuestRules.reward_warnings(world_id))
+	out.append_array(RepRules.key_warnings(world_id))
+	return out
+
+# {world id: [warnings]} for every world with at least one warning.
+static func warnings_all() -> Dictionary:
+	var out: Dictionary = {}
+	for w: String in world_ids():
+		var warns: Array[String] = world_warnings(w)
+		if not warns.is_empty():
+			out[w] = warns
+	return out
+
 static func validate_all() -> Dictionary:
 	var problems: Dictionary = {}
 	for w: String in world_ids():

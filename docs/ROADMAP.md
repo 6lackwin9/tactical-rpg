@@ -80,7 +80,7 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 | EXP1 | done | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
 | DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
 | TRAV1 | TRAV1-L and TRAV1-A done (2026-10-17, develop) | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files) and BATTLE1 (road fights use the battle link, goal G4); save v5 |
-| REP1 | in-progress (REP1-L commit 1 schema on develop, unblocks REP1-A) | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
+| REP1 | REP1-L and REP1-A done (2026-10-17, develop) | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |
 
 EXP1, DLG1, TRAV1 and REP1 all edit `world_schema` and `world_catalog` (EXP1, DLG1 and TRAV1 also `game_state` and the save files): run the logic parts in sequence EXP1-L, DLG1-L, TRAV1-L, REP1-L, one save version bump each (v3, v4, v5; REP1 none). Each asset part may run beside the next logic part (data only).

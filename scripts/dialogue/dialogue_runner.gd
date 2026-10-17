@@ -13,6 +13,8 @@ extends RefCounted
 # cap is an authoring limit). choose(index) pre-checks every effect first (all-or-nothing); a turn_in waits for
 # confirm_turn_in / cancel; open_shop waits for close_shop; fight closes the conversation and hands the fight back.
 # Nodes with `next` (and end nodes) move on through advance().
+# REP1-L: add_flag adds to an int flag (a non-int flag refuses the choice; on a node it is skipped); view() carries the
+# character's faction and its reputation band, and choices gated on a rep bound get the "[Faction band] " prefix.
 # ==============================================================================
 
 const ROOT: String = "$root"          # the generated root node of a character without a tree
@@ -138,22 +140,26 @@ func _tokens(extra: Dictionary) -> Dictionary:
 		values["shop"] = str(ShopRules.shop_of(gs, sqid).get("name", sqid))
 	return values
 
-# {speaker (qid), speaker_name, node, text, choices: [{text, locked}], end, next, shop, pending}. `end`: the
+# {speaker (qid), speaker_name, node, text, choices: [{text, locked}], end, next, shop, pending, faction (the talked-to
+# character's faction qid, "" = none), faction_name, band (its reputation band, "" without a faction)}. `end`: the
 # conversation is over or the node is an end node; `next`: the node moves on through advance().
 func view() -> Dictionary:
 	var node: Dictionary = _node(node_id)
 	var speaker: String = DialogueRules.character_qid(gs, str(node.get("speaker", "")))
 	if speaker.is_empty():
 		speaker = _tree_speaker if not _tree_speaker.is_empty() else character_qid
+	var fq: String = DialogueRules.faction_qid(gs, character_qid)
 	var choices: Array[Dictionary] = []
 	if not closed:
 		for c: Dictionary in _visible():
-			choices.append({"text": DialogueRules.stat_prefix(c) + DialogueRules.fill(str(c.get("text", "")), _tokens(c)), "locked": DictUtil.to_bool(c["_locked"])})
+			choices.append({"text": DialogueRules.rep_prefix(gs, c) + DialogueRules.stat_prefix(c) + DialogueRules.fill(str(c.get("text", "")), _tokens(c)), "locked": DictUtil.to_bool(c["_locked"])})
 	return {
 		"speaker": speaker, "speaker_name": str(WorldCatalog.resolve(gs.world_id, "characters", speaker).get("name", "")),
 		"node": node_id, "text": DialogueRules.fill(str(node.get("text", "")), _tokens(node)), "choices": choices,
 		"end": closed or DictUtil.to_bool(node.get("end", false)), "next": not closed and not str(node.get("next", "")).is_empty(),
 		"shop": shop_qid, "pending": not _pending.is_empty(),
+		"faction": fq, "faction_name": str(WorldCatalog.resolve(gs.world_id, "factions", fq).get("name", "")) if not fq.is_empty() else "",
+		"band": RepRules.band(RepRules.standing(gs, fq)) if not fq.is_empty() else "",
 	}
 
 # ------------------------------------------------------------------------------
@@ -237,6 +243,12 @@ func _precheck(effects: Array) -> Array[String]:
 			"set_flag":
 				if not GameState.flag_key_ok(str(fx.get("key", ""))) or not GameState.flag_value_ok(fx.get("value", true)):
 					out.append("Flag '%s' can't be set." % str(fx.get("key", "")))
+			"add_flag":
+				var fkey: String = str(fx.get("key", ""))
+				if not GameState.flag_key_ok(fkey) or not (fx.get("delta", null) is int):
+					out.append("Flag '%s' can't be changed." % fkey)
+				elif not (gs.get_flag(fkey, 0) is int):
+					out.append("Flag '%s' is not a number." % fkey)
 			"start_quest":
 				var ref: String = str(fx.get("quest", ""))
 				var st: String = QuestRunner.status(gs, ref)
@@ -280,13 +292,15 @@ func _precheck(effects: Array) -> Array[String]:
 func _name_of(qid: String) -> String:
 	return str(WorldCatalog.resolve(gs.world_id, "characters", qid).get("name", qid))
 
-# Applies effects in order (pre-checked): set_flag, start_quest, give, take. open_shop / fight move, they change nothing.
+# Applies effects in order (pre-checked): set_flag, add_flag, start_quest, give, take. open_shop / fight move, they change nothing.
 func _apply(effects: Array) -> void:
 	for raw: Variant in effects:
 		var fx: Dictionary = DictUtil.dict_of(raw)
 		match str(fx.get("effect", "")):
 			"set_flag":
 				var _err: String = QuestRunner.set_flag(gs, str(fx.get("key", "")), fx.get("value", true))
+			"add_flag":
+				var _add_err: String = QuestRunner.add_flag(gs, str(fx.get("key", "")), DictUtil.to_int(fx.get("delta", 0)), fx.get("min", null), fx.get("max", null))
 			"start_quest":
 				var _started: Array[String] = QuestRunner.start(gs, str(fx.get("quest", "")))
 			"give":

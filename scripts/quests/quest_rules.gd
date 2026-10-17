@@ -275,6 +275,14 @@ static func op_errors(cond: Dictionary, cl: String) -> Array[String]:
 		errors.append("%s: %s" % [cl, why])
 	return errors
 
+# Lists keyed by these names SET flags (the rep value rule applies); every other flag list is a condition list.
+const SET_FLAG_LISTS: Array[String] = ["complete_flags", "sets_flags"]
+
+# The one entry point for a flag list stored under `list_key` (requires_flags, unless_flags, sets_flags...): set lists
+# get set_flags_errors, condition lists condition_errors, so no caller can forget the rep value rule.
+static func flag_list_errors(raw: Variant, label: String, list_key: String) -> Array[String]:
+	return set_flags_errors(raw, label) if SET_FLAG_LISTS.has(list_key) else condition_errors(raw, label)
+
 # A list that SETS flags (quest complete_flags, marker / scripted sets_flags): the condition shape plus the rep value
 # rule (a `rep.` key stores a whole number in RepRules.MIN..MAX; the value defaults to true, so it must be given).
 static func set_flags_errors(raw: Variant, label: String) -> Array[String]:
@@ -289,11 +297,48 @@ static func set_flags_errors(raw: Variant, label: String) -> Array[String]:
 			errors.append("%s %d: %s" % [label, i + 1, why])
 	return errors
 
-# Strict type equality: 1 does not match true; a missing flag reads as false.
+# `==` (default): strict type equality, 1 does not match true, a missing flag reads as false; `!=` is its negation.
+# Ordering ops (REP1-L 2.1): the flag must be an int (a missing flag reads 0) and the value a whole number; anything
+# else makes the condition false (never an error at runtime). The ONE evaluation path of every flag condition.
 static func condition_met(gs: GameState, cond: Dictionary) -> bool:
 	var want: Variant = JsonUtil.normalize(cond.get("value", true))
-	var have: Variant = gs.get_flag(str(cond.get("key", "")), false)
-	return typeof(have) == typeof(want) and have == want
+	var flag_key: String = str(cond.get("key", ""))
+	var op: String = str(cond.get("op", "=="))
+	match op:
+		"==", "!=":
+			var have: Variant = gs.get_flag(flag_key, false)
+			var same: bool = typeof(have) == typeof(want) and have == want
+			return same if op == "==" else not same
+		">=", "<=", ">", "<":
+			var raw: Variant = gs.get_flag(flag_key, 0)
+			if not (raw is int) or not (want is int):
+				return false
+			var a: int = DictUtil.to_int(raw)
+			var b: int = DictUtil.to_int(want)
+			match op:
+				">=":
+					return a >= b
+				"<=":
+					return a <= b
+				">":
+					return a > b
+			return a < b
+	return false
+
+# add_flag (REP1-L 2.2): {"value": the new int, "error": ""} or {"error": why}. The current flag (missing = 0) must be
+# an int; new = current + delta, clamped to `lo` / `hi` when they are ints, and to RepRules.MIN..MAX for `rep.` keys.
+static func added_flag(gs: GameState, flag_key: String, delta: int, lo: Variant = null, hi: Variant = null) -> Dictionary:
+	var cur: Variant = gs.get_flag(flag_key, 0)
+	if not (cur is int):
+		return {"error": "Flag '%s' is not a number." % flag_key}
+	var v: int = DictUtil.to_int(cur) + delta
+	if lo is int:
+		v = maxi(v, DictUtil.to_int(lo))
+	if hi is int:
+		v = mini(v, DictUtil.to_int(hi))
+	if RepRules.is_rep_key(flag_key):
+		v = clampi(v, RepRules.MIN, RepRules.MAX)
+	return {"value": v, "error": ""}
 
 # ------------------------------------------------------------------------------
 # Stored quest blob (GameState.quests)
@@ -347,7 +392,7 @@ static func world_quest_errors(world_id: String, e: Dictionary) -> Array[String]
 			errors.append("Template: unknown quest template '%s'." % template_id)
 	var has_template: bool = not template_id.is_empty()
 	errors.append_array(condition_errors(e.get("requires_flags", []), "Requires flags"))
-	errors.append_array(set_flags_errors(e.get("complete_flags", []), "Complete flags"))
+	errors.append_array(flag_list_errors(e.get("complete_flags", []), "Complete flags", "complete_flags"))
 	errors.append_array(reputation_errors(world_id, e.get("reputation", {}), has_template))
 	if DictUtil.to_bool(e.get("auto_start", false)) and not has_template:
 		errors.append("Auto start needs a template (a lore-only quest never runs).")

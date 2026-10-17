@@ -18,7 +18,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/status_expansion_ai_test_suite.gd` | AI use of the new statuses and sim metrics regen_received / dot_dealt on a fixture fight (S12S-L commit 3) | S12, S4, S15 | done |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
-| `scripts/tests/reputation_test_suite.gd` | reputation: condition operators, rep values, add_flag, quest reputation, then runtime (REP1-L) | S11 | in progress |
+| `scripts/tests/reputation_test_suite.gd` | reputation: condition operators, rep values, add_flag, quest reputation, runtime, shop bands, panels, world warnings (REP1-L) | S11 | done |
 | `scripts/tests/save_compat_test_suite.gd`, `scripts/tests/fixtures/saves/` | save compatibility suite and one sample save per save version (SAVE-COMPAT) | S13 | done |
 | `tools/gen_save_fixtures.gd` | regenerates the save fixtures from a played state (SAVE-COMPAT) | S13 | done |
 | `scripts/tests/ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`, `ai_skills_kit.gd` | AI use of the new skill kinds (AI1) | S4 | done |

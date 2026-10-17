@@ -6,8 +6,10 @@ extends RefCounted
 # Pure validation of world shops (WorldCatalog kind `shops`): keeper, stock of base items (count -1 = unlimited,
 # price -1 = derived from the item value), item loot sold once, buy / sell multipliers, the item types the shop
 # buys and its open flags; and the runtime over GameState: open / closed, integer prices, offers, buy, sell.
-# Prices (DLG1-L 2.5): bm = roundi(buy_mult x 100), sm = roundi(sell_mult x 100), rb = rs = 100 (REP1 replaces them);
+# Prices (DLG1-L 2.5, REP1-L 2.3): bm = roundi(buy_mult x 100), sm = roundi(sell_mult x 100), rb / rs = the buy / sell
+# factor of the keeper faction's reputation band (RepRules; a keeper without a faction is neutral, 100);
 # buy = the fixed price when > 0, else maxi(1, ceil(value x bm x rb / 10000)); sell = floor(value x sm x rs / 10000).
+# Loot prices are fixed. A hostile keeper's shop is closed (no offers, no buying, no selling, no service choice).
 # Limited stock sold is kept in gs.shops; loot sold is claimed (RewardGrant.claim_loot). No restock in DLG1.
 # ==============================================================================
 
@@ -24,7 +26,7 @@ const SELL_MULT_MAX: float = 1.0
 const UNLIMITED: int = -1
 const DERIVED: int = -1
 const BUY_MAX: int = 99   # most of one offer per buy (stock counts are 1..99); keeps price x count far from int overflow
-const REP_NEUTRAL: int = 100   # rb = rs until REP1
+const REP_NEUTRAL: int = 100   # rb = rs of the neutral band (and of a keeper without a faction)
 
 # Item types a shop may buy: every ItemFamilies type but QUEST (also the schema default of `buys`).
 static func buy_types() -> Array[String]:
@@ -164,25 +166,35 @@ static func _holds(gs: GameState, raw: Variant) -> bool:
 			return false
 	return true
 
-# Open: the shop resolves, its requires_flags hold and its keeper is not gone.
+# Open: the shop resolves, its requires_flags hold, its keeper is not gone and the keeper's faction is not hostile.
 static func is_open(gs: GameState, shop_ref: String) -> bool:
 	var shop: Dictionary = shop_of(gs, shop_ref)
-	return not shop.is_empty() and _holds(gs, shop.get("requires_flags", [])) and not DialogueRules.is_gone(gs, str(shop.get("keeper", "")))
+	return not shop.is_empty() and _holds(gs, shop.get("requires_flags", [])) and not DialogueRules.is_gone(gs, str(shop.get("keeper", ""))) and keeper_band(gs, shop) != RepRules.HOSTILE
+
+# The resolved faction qid of the shop keeper ("" = no keeper, unknown keeper or a keeper without a faction).
+static func keeper_faction(gs: GameState, shop: Dictionary) -> String:
+	return DialogueRules.faction_qid(gs, str(shop.get("keeper", "")))
+
+# The reputation band of the keeper's faction (neutral without a faction).
+static func keeper_band(gs: GameState, shop: Dictionary) -> String:
+	var fq: String = keeper_faction(gs, shop)
+	return RepRules.band(RepRules.standing(gs, fq)) if not fq.is_empty() else RepRules.NEUTRAL
 
 static func _mult(shop: Dictionary, key: String, fallback: float) -> int:
 	return roundi(DictUtil.to_float(shop.get(key, fallback), fallback) * 100.0)
 
 # Integer prices (no floats in the money path): `fixed` > 0 wins; else ceil(value x bm x rb / 10000), at least 1.
-static func buy_price(shop: Dictionary, value: int, fixed: int = DERIVED) -> int:
+# `rb` / `rs`: the band factor (RepRules.buy_pct / sell_pct of keeper_band); the default is neutral.
+static func buy_price(shop: Dictionary, value: int, fixed: int = DERIVED, rb: int = REP_NEUTRAL) -> int:
 	if fixed > 0:
 		return fixed
-	var num: int = maxi(value, 0) * _mult(shop, "buy_mult", 1.0) * REP_NEUTRAL
+	var num: int = maxi(value, 0) * _mult(shop, "buy_mult", 1.0) * rb
 	@warning_ignore("integer_division")
 	var up: int = (num + 9999) / 10000   # integer ceil (num >= 0)
 	return maxi(1, up)
 
-static func sell_price(shop: Dictionary, value: int) -> int:
-	var num: int = maxi(value, 0) * _mult(shop, "sell_mult", 0.5) * REP_NEUTRAL
+static func sell_price(shop: Dictionary, value: int, rs: int = REP_NEUTRAL) -> int:
+	var num: int = maxi(value, 0) * _mult(shop, "sell_mult", 0.5) * rs
 	@warning_ignore("integer_division")
 	var down: int = num / 10000   # integer floor (num >= 0)
 	return down
@@ -202,6 +214,7 @@ static func offers(gs: GameState, shop_ref: String) -> Array[Dictionary]:
 		return out
 	var shop: Dictionary = shop_of(gs, shop_ref)
 	var sqid: String = str(shop["_qid"])
+	var rb: int = RepRules.buy_pct(keeper_band(gs, shop))
 	for raw: Variant in DictUtil.array_of(JsonUtil.normalize(shop.get("stock", []))):
 		var s: Dictionary = DictUtil.dict_of(raw)
 		if not _holds(gs, s.get("requires_flags", [])):
@@ -209,7 +222,7 @@ static func offers(gs: GameState, shop_ref: String) -> Array[Dictionary]:
 		var item: String = str(s.get("item", ""))
 		var count: int = DictUtil.to_int(s.get("count", UNLIMITED), UNLIMITED)
 		var left: int = UNLIMITED if count == UNLIMITED else maxi(count - _sold(gs, sqid, item), 0)
-		out.append({"kind": "item", "id": item, "item": item, "count": count, "price": buy_price(shop, _value_of(item), DictUtil.to_int(s.get("price", DERIVED), DERIVED)), "left": left})
+		out.append({"kind": "item", "id": item, "item": item, "count": count, "price": buy_price(shop, _value_of(item), DictUtil.to_int(s.get("price", DERIVED), DERIVED), rb), "left": left})
 	for raw: Variant in DictUtil.array_of(JsonUtil.normalize(shop.get("loot", []))):
 		var l: Dictionary = DictUtil.dict_of(raw)
 		var loot: Dictionary = WorldCatalog.resolve(gs.world_id, "loot", str(l.get("loot", "")))
@@ -269,13 +282,14 @@ static func sell_list(gs: GameState, shop_ref: String) -> Array[Dictionary]:
 		return out
 	var shop: Dictionary = shop_of(gs, shop_ref)
 	var buys: Array[String] = JsonUtil.strings(shop.get("buys", []))
+	var rs: int = RepRules.sell_pct(keeper_band(gs, shop))
 	for key: Variant in gs.party.stash:
 		var id: String = str(key)
 		var entry: Dictionary = ContentCatalog.get_entry("items", id)
 		var type: String = str(entry.get("item_type", ""))
 		if entry.is_empty() or type == "QUEST" or not buys.has(type):
 			continue
-		var price: int = sell_price(shop, DictUtil.to_int(entry.get("value", 0)))
+		var price: int = sell_price(shop, DictUtil.to_int(entry.get("value", 0)), rs)
 		if price >= 1:
 			out.append({"item": id, "count": DictUtil.to_int(gs.party.stash[key]), "price": price})
 	return out

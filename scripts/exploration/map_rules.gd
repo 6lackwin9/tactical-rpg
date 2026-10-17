@@ -514,8 +514,7 @@ static func markers_errors(world_id: String, e: Dictionary, t: Dictionary, list:
 			else:
 				anchors_taken[anchor] = mid
 		for fk: String in FLAG_KEYS:
-			var fl: String = "Marker '%s' %s" % [mid, fk]
-			errors.append_array(QuestRules.set_flags_errors(m[fk], fl) if fk == "sets_flags" else QuestRules.condition_errors(m[fk], fl))
+			errors.append_array(QuestRules.flag_list_errors(m[fk], "Marker '%s' %s" % [mid, fk], fk))
 		errors.append_array(_marker_kind_errors(world_id, e, t, mid, kind, m))
 	return errors
 

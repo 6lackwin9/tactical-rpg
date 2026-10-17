@@ -185,6 +185,14 @@ static func set_flag(gs: GameState, key: String, value: Variant) -> String:
 		refresh(gs)
 	return err
 
+# add_flag (REP1-L 2.2): adds `delta` to an int flag (missing = 0), clamped to `lo` / `hi` when ints and to
+# RepRules.MIN..MAX for `rep.` keys, then refresh. "" = done; a non-int flag changes nothing ("Flag '%s' is not a number.").
+static func add_flag(gs: GameState, key: String, delta: int, lo: Variant = null, hi: Variant = null) -> String:
+	var res: Dictionary = QuestRules.added_flag(gs, key, delta, lo, hi)
+	if not str(res["error"]).is_empty():
+		return str(res["error"])
+	return set_flag(gs, key, res["value"])
+
 # Repeats until nothing changes: met flag objectives advance, quests at their objective count become ready, available
 # auto_start quests start. Returns the qids that changed. Bounded (variants change no stored data, so no loop).
 static func refresh(gs: GameState) -> Array[String]:
@@ -223,8 +231,10 @@ static func refresh(gs: GameState) -> Array[String]:
 	return changed
 
 # Only from ready. `picks`: unique, each in offers(), 0..picks_allowed(). Grants the resolved generic rewards plus the
-# picked loot (RewardGrant), claims the picks, sets complete_flags in order, stores completed, then refresh.
-# All-or-nothing. Returns {ok, errors, granted, notes}.
+# picked loot (RewardGrant), claims the picks, sets complete_flags in order, applies `reputation` (REP1-L 2.2: per key
+# in order, an add_flag on RepRules.key(faction qid) with the rep clamp), stores completed, then ONE refresh.
+# All-or-nothing (a rep flag that is not a number refuses). Returns {ok, errors, granted, notes}; granted.reputation =
+# {faction qid: the change actually applied after the clamp}.
 static func complete(gs: GameState, ref: String, recipient_id: String = "", picks: Array[String] = []) -> Dictionary:
 	var errors: Array[String] = []
 	var fail: Dictionary = {"ok": false, "errors": errors, "granted": {}, "notes": [] as Array[String]}
@@ -256,6 +266,20 @@ static func complete(gs: GameState, ref: String, recipient_id: String = "", pick
 		if not GameState.flag_key_ok(key) or not GameState.flag_value_ok(value):
 			errors.append("Complete flag '%s' is invalid." % key)
 		flags_to_set.append({"key": key, "value": value})
+	var rep_keys: Array[Dictionary] = []   # [{faction, key, delta}]
+	var rep: Dictionary = DictUtil.dict_of(JsonUtil.normalize(entry.get("reputation", {})))
+	for fref: Variant in rep:
+		var faction: Dictionary = WorldCatalog.resolve(str(entry.get("_world", gs.world_id)), "factions", str(fref))
+		if faction.is_empty() or not (rep[fref] is int):
+			continue   # validation reports it; an unknown faction never blocks the turn-in
+		var rkey: String = RepRules.key(str(faction["_qid"]))
+		var after: Variant = gs.get_flag(rkey, 0)
+		for f: Dictionary in flags_to_set:
+			if str(f["key"]) == rkey:
+				after = f["value"]
+		if not (after is int):
+			errors.append("Flag '%s' is not a number." % rkey)
+		rep_keys.append({"faction": str(faction["_qid"]), "key": rkey, "delta": DictUtil.to_int(rep[fref])})
 	if not errors.is_empty():
 		return fail
 	var result: Dictionary = RewardGrant.apply(gs, DictUtil.dict_of(q.get("rewards", {})), recipient_id, loot)
@@ -266,6 +290,16 @@ static func complete(gs: GameState, ref: String, recipient_id: String = "", pick
 		gs.loot_claimed.append(p)
 	for f: Dictionary in flags_to_set:
 		gs.set_flag(str(f["key"]), f["value"])
+	var applied: Dictionary = {}
+	for r: Dictionary in rep_keys:
+		var rkey: String = str(r["key"])
+		var before: int = DictUtil.to_int(gs.get_flag(rkey, 0))
+		var added: Dictionary = QuestRules.added_flag(gs, rkey, DictUtil.to_int(r["delta"]))
+		if str(added["error"]).is_empty():
+			gs.set_flag(rkey, added["value"])
+			applied[str(r["faction"])] = DictUtil.to_int(applied.get(str(r["faction"]), 0)) + DictUtil.to_int(added["value"]) - before
 	gs.quests[qid] = {"state": "completed", "objective": _count(q)}
 	refresh(gs)
-	return {"ok": true, "errors": errors, "granted": result["granted"], "notes": result["notes"]}
+	var granted: Dictionary = DictUtil.dict_of(result["granted"])
+	granted["reputation"] = applied
+	return {"ok": true, "errors": errors, "granted": granted, "notes": result["notes"]}

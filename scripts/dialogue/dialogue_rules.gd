@@ -599,6 +599,16 @@ static func is_gone(gs: GameState, character_ref: String) -> bool:
 static func character_qid(gs: GameState, ref: String) -> String:
 	return str(WorldCatalog.resolve(gs.world_id, "characters", ref).get("_qid", "")) if not ref.is_empty() else ""
 
+# The resolved faction qid of a character ("" when the ref is empty or unknown, or it has no faction that resolves).
+static func faction_qid(gs: GameState, character_ref: String) -> String:
+	if character_ref.is_empty():
+		return ""
+	var c: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", character_ref)
+	var fref: String = str(c.get("faction", ""))
+	if c.is_empty() or fref.is_empty():
+		return ""
+	return str(WorldCatalog.resolve(str(c.get("_world", gs.world_id)), "factions", fref).get("_qid", ""))
+
 # The resolved quest's giver / effective turn-in (QuestRules.resolve already falls back to the giver) as qids.
 static func giver_qid(gs: GameState, resolved_quest: Dictionary) -> String:
 	return character_qid(gs, str(resolved_quest.get("giver", "")))
@@ -676,6 +686,20 @@ static func stat_prefix(choice: Dictionary) -> String:
 		var cond: Dictionary = DictUtil.dict_of(c)
 		if str(cond.get("kind", "flag")) == "stat":
 			out += "[%s %d] " % [str(cond.get("stat", "")), DictUtil.to_int(cond.get("min", 0))]
+	return out
+
+# The generated "[<Faction name> <band>] " prefix of a choice (REP1-L 2.4): one tag per `requires` flag condition on a
+# `rep.` key with an ordering op, the band being the band of the bound. A key naming no faction shows the key.
+static func rep_prefix(gs: GameState, choice: Dictionary) -> String:
+	var out: String = ""
+	for c: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("requires", []))):
+		var cond: Dictionary = DictUtil.dict_of(c)
+		var k: String = str(cond.get("key", ""))
+		if str(cond.get("kind", "flag")) != "flag" or not RepRules.is_rep_key(k) or not QuestRules.ORDER_OPS.has(str(cond.get("op", "=="))):
+			continue
+		var faction: Dictionary = WorldCatalog.resolve(gs.world_id, "factions", RepRules.faction_qid_of(k))
+		var label: String = str(faction.get("name", k)) if not faction.is_empty() else k
+		out += "[%s %s] " % [label, RepRules.band(DictUtil.to_int(cond.get("value", 0)))]
 	return out
 
 # Completes a ready quest from the journal (no NPC): only when its giver and effective turn-in both resolve to no

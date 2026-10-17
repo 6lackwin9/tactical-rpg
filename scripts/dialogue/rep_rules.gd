@@ -108,6 +108,10 @@ static func buy_pct(band_name: String) -> int:
 static func sell_pct(band_name: String) -> int:
 	return DictUtil.to_int(DictUtil.dict_of(BANDS.get(band_name, BANDS[NEUTRAL])).get("sell", 100))
 
+# The display line of a standing: "Ember Wardens: friendly".
+static func standing_text(faction_name: String, band_name: String) -> String:
+	return "%s: %s" % [faction_name, band_name]
+
 # The party's standing with a faction (ref resolved from gs.world_id): the int flag, 0 when missing, non-int or the
 # faction is unknown.
 static func standing(gs: GameState, faction_ref: String) -> int:
