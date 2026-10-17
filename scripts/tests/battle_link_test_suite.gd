@@ -35,6 +35,7 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _test_fled(view) and ok
 		ok = _test_dialogue(view) and ok
 		ok = _test_refused(view) and ok
+		ok = _test_results(view.gs) and ok
 	tree_parent.remove_child(view)
 	view.free()
 	SaveGame.reset_base_dir()
@@ -130,6 +131,20 @@ static func _test_dialogue(view: RegionMapView) -> bool:
 	b.finish()
 	checks["won settles through DialogueRunner.after_fight"] = view.pending_fight.is_empty() and view.battle == null and _xp(view.gs) > xp0
 	return TestHelpers.report("BATTLE1", "Dialogue fight (same arena, settles with XP)", checks)
+
+# The results screen gets the outcome through MenuRouter (BattleResultsModel headline and note).
+static func _test_results(gs: GameState) -> bool:
+	var checks: Dictionary = {}
+	CurrentGame.start(gs)
+	var router := MenuRouter.new(MenuRouter.HUB)
+	router.push(MenuRouter.RESULTS, {"award": {}, "advanced": [], "outcome": "lost"})
+	var lost: BattleResultsModel = router.model() as BattleResultsModel
+	checks["the router passes the outcome"] = lost != null and lost.outcome == "lost"
+	checks["lost: Defeat headline and a wake note"] = lost != null and lost.headline().contains("Defeat") and not lost.outcome_note().is_empty()
+	var won := BattleResultsModel.new(router, {})
+	checks["won by default, with no note"] = won.outcome == "won" and won.headline().contains("Victory") and won.outcome_note().is_empty()
+	CurrentGame.end()
+	return TestHelpers.report("BATTLE1", "Results screen outcome (router args, headline, note)", checks)
 
 static func _test_refused(view: RegionMapView) -> bool:
 	var checks: Dictionary = {}
