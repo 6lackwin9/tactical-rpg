@@ -86,8 +86,8 @@ static func apply_distance(grid: CombatGrid, left: Array[Combatant], right: Arra
 		var here: Vector2i = grid.get_position(c)
 		var best: Vector2i = Vector2i(-1, -1)
 		var best_d: int = 1 << 30
-		for y: int in range(CombatGrid.GRID_SIZE):
-			for x: int in range(CombatGrid.GRID_SIZE):
+		for y: int in range(CombatGrid.GRID_H):
+			for x: int in range(CombatGrid.GRID_W):
 				var tile := Vector2i(x, y)
 				if not grid.is_walkable(tile) or grid.is_exit_tile(tile):
 					continue

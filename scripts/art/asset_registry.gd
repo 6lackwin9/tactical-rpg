@@ -30,7 +30,7 @@ const DEFAULT_SIZES: Dictionary = {
 }
 const TOKEN_SIZE: Vector2i = Vector2i(128, 128)
 const TOKEN_INNER: Rect2i = Rect2i(12, 12, 104, 104)
-const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_center"]
+const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_poi"]
 
 # Ids that already logged their "failed to load" warning this session, and how many warnings were logged.
 static var _warned: Dictionary = {}

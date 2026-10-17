@@ -60,6 +60,7 @@ static func _test_taunt_ai() -> bool:
 	var b2: Combatant = CombatExtKit.unit("Brute2", 100, 10, 1, walled, Vector2i(6, 4))
 	walled.set_terrain(Vector2i(7, 8), Terrain.Type.WALL)
 	walled.set_terrain(Vector2i(8, 7), Terrain.Type.WALL)
+	walled.set_terrain(Vector2i(9, 8), Terrain.Type.WALL)
 	t2.statuses[StatusEffects.TAUNT] = true
 	var ctx2: PlanContext = CombatExtKit.new_ctx(walled, [n2, t2], [b2])
 	checks["an unreachable taunter does not force the AI"] = _first_engage_target(TacticalAI.build_steps(b2, ctx2, CombatExtKit.profile(AiProfile.Role.AGGRESSOR))) == n2

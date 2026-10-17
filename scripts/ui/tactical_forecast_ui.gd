@@ -12,14 +12,13 @@ var forecast_dist_lbl: Label
 var forecast_range_badge: Label
 var forecast_stance_lbl: Label
 var forecast_dmg_lbl: Label
-var intel_center_lbl: Label
 var intel_exit_lbl: Label
 var intel_turn_lbl: Label
 
 func _init() -> void:
 	name = "TacticalForecastUI"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(340, 468)
+	custom_minimum_size = Vector2(270, 468)
 
 	var right_style := StyleBoxFlat.new()
 	right_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
@@ -117,14 +116,8 @@ func _build_ui() -> void:
 	ar_vbox.add_theme_constant_override("separation", 3)
 	arena_card.add_child(ar_vbox)
 
-	intel_center_lbl = Label.new()
-	intel_center_lbl.text = "🚩 Center Ring (4, 4): Core arena landmark"
-	intel_center_lbl.add_theme_font_size_override("font_size", 9)
-	intel_center_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	ar_vbox.add_child(intel_center_lbl)
-
 	intel_exit_lbl = Label.new()
-	intel_exit_lbl.text = "🚪 Exit Tile (8, 4): Allows safe withdrawal"
+	intel_exit_lbl.text = "🚪 Exit tile: allows safe withdrawal"
 	intel_exit_lbl.add_theme_font_size_override("font_size", 9)
 	intel_exit_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
 	ar_vbox.add_child(intel_exit_lbl)

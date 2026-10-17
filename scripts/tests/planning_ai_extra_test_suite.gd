@@ -213,6 +213,7 @@ static func compute() -> Dictionary:
 	# 6. Presets: every preset drafts a valid, affordable sequence; each shows its focus
 	var psession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
 	psession.start()
+	PlanningTestSuite._pin_skirmish_layout(psession)   # the original layout: the weakest goblin stands within reach
 	var hero: Combatant = psession.allies[0]
 	var weakest: Combatant = psession.enemies[4]
 	weakest.hp = 5

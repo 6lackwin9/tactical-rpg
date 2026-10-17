@@ -1,8 +1,15 @@
 class_name CombatGrid
 extends RefCounted
 
-const GRID_SIZE: int = 9
-const CENTER: Vector2i = Vector2i(4, 4)
+const GRID_W: int = 12
+const GRID_H: int = 9
+# Standard deployment columns (user 2026-10-17: party on the left, enemies on the right). Front ranks
+# sit 2 tiles apart and back ranks 3 tiles from the opposing front, the same gaps as the old 9x9 ring.
+const PARTY_FRONT_X: int = 5
+const PARTY_BACK_X: int = 4
+const ENEMY_FRONT_X: int = 7
+const ENEMY_BACK_X: int = 8
+const DEPLOY_ROWS: Array[int] = [4, 3, 5, 2, 6, 1, 7]
 
 enum ArenaType {
 	OPEN,
@@ -23,11 +30,20 @@ func _init(p_arena_type: ArenaType = ArenaType.OPEN, p_exits: Array[Vector2i] = 
 	designated_exits = p_exits
 
 func is_valid_coord(coord: Vector2i) -> bool:
-	return coord.x >= 0 and coord.x < GRID_SIZE and coord.y >= 0 and coord.y < GRID_SIZE
+	return coord.x >= 0 and coord.x < GRID_W and coord.y >= 0 and coord.y < GRID_H
+
+# Distance to the arena middle in half tiles (the middle lies between columns 5 and 6 on row 4, so
+# no single tile is the centre). Only compared, never shown: tie-breaks that prefer central tiles.
+static func centre_distance(coord: Vector2i) -> int:
+	return absi(2 * coord.x - (GRID_W - 1)) + absi(2 * coord.y - (GRID_H - 1))
+
+# True for the party's (left) half of the arena, false for the enemies' (right) half.
+static func is_party_half(coord: Vector2i) -> bool:
+	return coord.x * 2 < GRID_W
 
 func is_exit_tile(coord: Vector2i) -> bool:
 	if arena_type == ArenaType.OPEN:
-		return coord.x == 0 or coord.x == GRID_SIZE - 1 or coord.y == 0 or coord.y == GRID_SIZE - 1
+		return coord.x == 0 or coord.x == GRID_W - 1 or coord.y == 0 or coord.y == GRID_H - 1
 	return designated_exits.has(coord)
 
 # ------------------------------------------------------------------------------
@@ -148,77 +164,30 @@ func jump_combatant(combatant: Combatant, coord: Vector2i) -> bool:
 	print("[%s] jumped from %s to %s." % [combatant.name, str(from_pos), str(coord)])
 	return true
 
-## Deploys combatants in a radial pattern centered around CENTER (4, 4).
-## Ensures every combatant is positioned so that its distance to CENTER <= combatant.attack_range.
+## Standard deployment: the party lines up on the left, enemies on the right. Melee units
+## (attack_range 1) take the front column, ranged units the back column, rows filled from
+## the middle out (DEPLOY_ROWS); a full or blocked column spills into the other one, then
+## further back. Units that still don't fit stay off the grid (CatalogEncounter places them).
 func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> void:
-	# Candidate candidate offsets by quadrant and distance:
-	# Allies deploy South/West (y >= 4 or x <= 4)
-	# Enemies deploy North/East (y <= 4 or x >= 4)
-	
-	# Ally slots by distance from CENTER:
-	var ally_slots_d1: Array[Vector2i] = [
-		CENTER + Vector2i(0, 1),   # (4, 5) - South
-		CENTER + Vector2i(-1, 0),  # (3, 4) - West
-		CENTER + Vector2i(-1, 1),  # (3, 5) - South-West (dist 2)
-	]
-	var ally_slots_d2: Array[Vector2i] = [
-		CENTER + Vector2i(0, 2),   # (4, 6) - South
-		CENTER + Vector2i(-2, 0),  # (2, 4) - West
-		CENTER + Vector2i(-1, 1),  # (3, 5) - South-West
-		CENTER + Vector2i(-2, 1),  # (2, 5) - West-South (dist 3)
-	]
+	_deploy_side(allies, PARTY_FRONT_X, PARTY_BACK_X, -1)
+	_deploy_side(enemies, ENEMY_FRONT_X, ENEMY_BACK_X, 1)
 
-	# Enemy slots by distance from CENTER:
-	var enemy_slots_d1: Array[Vector2i] = [
-		CENTER + Vector2i(0, -1),  # (4, 3) - North
-		CENTER + Vector2i(1, 0),   # (5, 4) - East
-		CENTER + Vector2i(1, -1),  # (5, 3) - North-East (dist 2)
-	]
-	var enemy_slots_d2: Array[Vector2i] = [
-		CENTER + Vector2i(0, -2),  # (4, 2) - North
-		CENTER + Vector2i(2, 0),   # (6, 4) - East
-		CENTER + Vector2i(1, -1),  # (5, 3) - North-East
-		CENTER + Vector2i(1, -2),  # (5, 2) - North-East (dist 3)
-	]
-
-	# Deploy allies
-	for ally: Combatant in allies:
-		var placed: bool = false
-		var preferred_slots: Array[Vector2i] = ally_slots_d2 if ally.attack_range > 1 else ally_slots_d1
-		for slot: Vector2i in preferred_slots:
-			if not is_occupied(slot) and is_walkable(slot) and get_distance(slot, CENTER) <= ally.attack_range:
-				place_combatant(ally, slot)
-				placed = true
+func _deploy_side(units: Array[Combatant], front_x: int, back_x: int, back_dir: int) -> void:
+	for c: Combatant in units:
+		var columns: Array[int] = [front_x, back_x]
+		if c.attack_range > 1:
+			columns = [back_x, front_x]
+		var x: int = back_x + back_dir
+		while is_valid_coord(Vector2i(x, 0)) and is_party_half(Vector2i(x, 0)) == is_party_half(Vector2i(front_x, 0)):
+			columns.append(x)
+			x += back_dir
+		for col: int in columns:
+			if _place_in_column(c, col):
 				break
-		if not placed:
-			# Fallback to any valid unoccupied slot within range
-			for dx: int in range(-ally.attack_range, ally.attack_range + 1):
-				for dy: int in range(-ally.attack_range, ally.attack_range + 1):
-					var cand: Vector2i = CENTER + Vector2i(dx, dy)
-					if is_walkable(cand) and not is_occupied(cand) and get_distance(cand, CENTER) <= ally.attack_range:
-						place_combatant(ally, cand)
-						placed = true
-						break
-				if placed:
-					break
 
-	# Deploy enemies
-	for enemy: Combatant in enemies:
-		var placed: bool = false
-		var preferred_slots: Array[Vector2i] = enemy_slots_d2 if enemy.attack_range > 1 else enemy_slots_d1
-		for slot: Vector2i in preferred_slots:
-			if not is_occupied(slot) and is_walkable(slot) and get_distance(slot, CENTER) <= enemy.attack_range:
-				place_combatant(enemy, slot)
-				placed = true
-				break
-		if not placed:
-			# Fallback to any valid unoccupied slot within range
-			for dx: int in range(-enemy.attack_range, enemy.attack_range + 1):
-				for dy: int in range(-enemy.attack_range, enemy.attack_range + 1):
-					var cand: Vector2i = CENTER + Vector2i(dx, dy)
-					if is_walkable(cand) and not is_occupied(cand) and get_distance(cand, CENTER) <= enemy.attack_range:
-						place_combatant(enemy, cand)
-						placed = true
-						break
-				if placed:
-					break
+func _place_in_column(c: Combatant, x: int) -> bool:
+	for y: int in DEPLOY_ROWS:
+		var cell := Vector2i(x, y)
+		if is_walkable(cell) and not is_exit_tile(cell) and not is_occupied(cell):
+			return place_combatant(c, cell)
+	return false

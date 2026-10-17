@@ -50,31 +50,31 @@ static func run(_tree_parent: Node = null) -> bool:
 			terrain_ok = false
 	terrain_ok = terrain_ok and not Terrain.is_walkable(Terrain.Type.WALL) and not Terrain.is_walkable(Terrain.Type.DEEP_WATER) and Terrain.is_walkable(Terrain.Type.BRIDGE) and Terrain.is_walkable(Terrain.Type.MUD)
 
-	# 5. Every zone is a valid 9x9 map with a walkable core and exit lane
+	# 5. Every zone is a valid 12x9 map with a walkable core and exit lane
 	var zones_ok: bool = CombatZones.zone_ids().size() >= 8
 	for zone_id: String in CombatZones.zone_ids():
 		var map: Dictionary = CombatZones.terrain_map(zone_id)
-		if map.size() != 81:
+		if map.size() != CombatGrid.GRID_W * CombatGrid.GRID_H:
 			zones_ok = false
-		for x: int in range(2, 7):
+		for x: int in range(3, 9):
 			for y: int in range(2, 7):
 				var core_raw: Variant = map.get(Vector2i(x, y), Terrain.Type.FLOOR)
 				if core_raw is Terrain.Type and not Terrain.is_walkable(DictUtil.to_int(core_raw) as Terrain.Type):
 					zones_ok = false
-		for x: int in range(4, 9):
+		for x: int in range(5, CombatGrid.GRID_W):
 			var lane_raw: Variant = map.get(Vector2i(x, 4), Terrain.Type.FLOOR)
 			if lane_raw is Terrain.Type and not Terrain.is_walkable(DictUtil.to_int(lane_raw) as Terrain.Type):
 				zones_ok = false
 
 	# 6. Grid enforces terrain: no placing/moving onto blocked tiles; deployment skips them
-	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(8, 4)])
-	grid.set_terrain(Vector2i(4, 5), Terrain.Type.WALL)
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(11, 4)])
+	grid.set_terrain(Vector2i(CombatGrid.PARTY_FRONT_X, 4), Terrain.Type.WALL)
 	grid.set_terrain(Vector2i(2, 3), Terrain.Type.LAVA)
 	var hero := Combatant.new("Tester", 50, 10, 1)
 	var allies_g: Array[Combatant] = [hero]
 	var none: Array[Combatant] = []
 	grid.deploy_combatants(allies_g, none)
-	var deployed_off_wall: bool = grid.get_position(hero) != Vector2i(4, 5) and grid.is_walkable(grid.get_position(hero))
+	var deployed_off_wall: bool = grid.get_position(hero) != Vector2i(CombatGrid.PARTY_FRONT_X, 4) and grid.is_walkable(grid.get_position(hero))
 	var walker := Combatant.new("Walker", 50, 10, 1)
 	var placed_lava: bool = grid.place_combatant(walker, Vector2i(2, 3))
 	grid.place_combatant(walker, Vector2i(2, 4))
@@ -105,7 +105,7 @@ static func run(_tree_parent: Node = null) -> bool:
 			print("    zone failed to conclude: %s" % zone_id)
 
 	# 8. Tiles & overlays rasterize for every terrain variant
-	var tiles_ok: bool = TileArt.overlay("exit") != null and TileArt.overlay("center") != null
+	var tiles_ok: bool = TileArt.overlay("exit") != null and TileArt.overlay("poi") != null
 	for t: int in Terrain.INFO:
 		for v: int in range(TileArt.VARIANTS):
 			if TileArt.tile(t as Terrain.Type, v) == null:
@@ -135,7 +135,7 @@ static func run(_tree_parent: Node = null) -> bool:
 	print("  [Art] Class portraits for every class and team: %s" % ("PASS" if portraits_ok else "FAIL"))
 	print("  [Art] Encounter art follows sides (allies friendly, enemies hostile): %s" % ("PASS" if sides_ok else "FAIL"))
 	print("  [Terrain] Glyph round-trip & walkability rules: %s" % ("PASS" if terrain_ok else "FAIL"))
-	print("  [Terrain] All zones valid 9x9 with walkable core & exit lane: %s" % ("PASS" if zones_ok else "FAIL"))
+	print("  [Terrain] All zones valid 12x9 with walkable core & exit lane: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [Terrain] Grid blocks placement/movement on blocked tiles; deploy skips them: %s" % ("PASS" if grid_ok else "FAIL"))
 	print("  [Terrain] Goblin Ambush (with its wave) deploys and concludes on every zone: %s" % ("PASS" if all_zones_play else "FAIL"))
 	print("  [Art] Terrain tiles (all variants) & overlays rasterize: %s" % ("PASS" if tiles_ok else "FAIL"))

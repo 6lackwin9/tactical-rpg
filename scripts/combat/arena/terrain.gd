@@ -3,7 +3,7 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Terrain Types
-# Per-tile terrain for the 9x9 combat grid. Phase 1 rules: walkability (walls,
+# Per-tile terrain for the 12x9 combat grid. Phase 1 rules: walkability (walls,
 # trees, deep water and lava block movement and deployment). Cover, movement
 # cost and hazards are recorded as data for the upcoming terrain rules
 # (System 6 "Environmental Hazards"); they do not affect resolution yet.

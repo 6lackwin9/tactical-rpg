@@ -298,6 +298,9 @@ func _draw_map() -> void:
 		var p: Vector2i = ExploreRunner.marker_pos(t, m, loc_steps)
 		var glyph: String = str(MARKER_GLYPHS.get(str(m["kind"]), "?"))
 		var col: Color = Color.ORANGE if state == "locked" else Color.WHITE
+		if str(m["kind"]) == "point":   # points of interest use the ring icon (the old combat centre marker)
+			_canvas.draw_texture_rect(TileArt.overlay("poi"), Rect2(Vector2(p.x * TILE, p.y * TILE), Vector2(TILE, TILE)), false, col)
+			continue
 		_canvas.draw_string(font, Vector2(p.x * TILE + 6, p.y * TILE + 16), glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
 	var c: Vector2 = Vector2(gs.position.x * TILE + TILE / 2.0, gs.position.y * TILE + TILE / 2.0)
 	_canvas.draw_circle(c, TILE * 0.35, Color(0.95, 0.85, 0.30))

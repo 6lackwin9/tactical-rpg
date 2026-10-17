@@ -44,7 +44,7 @@ static func find_path(grid: CombatGrid, start: Vector2i, goals: Dictionary, bloc
 			depth[nxt] = cur_depth + 1
 			if is_goal:
 				found_depth = cur_depth + 1
-				if found == NONE or grid.get_distance(nxt, CombatGrid.CENTER) < grid.get_distance(found, CombatGrid.CENTER):
+				if found == NONE or CombatGrid.centre_distance(nxt) < CombatGrid.centre_distance(found):
 					found = nxt
 				continue
 			queue.append(nxt)

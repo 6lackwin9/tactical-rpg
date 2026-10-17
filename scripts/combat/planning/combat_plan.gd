@@ -504,8 +504,8 @@ func _better_jump(grid: CombatGrid, a: Vector2i, a_dist: int, a_steps: int, b: V
 		return a_dist > b_dist
 	if a_steps != b_steps:
 		return a_steps < b_steps
-	var a_centre: int = grid.get_distance(a, CombatGrid.CENTER)
-	var b_centre: int = grid.get_distance(b, CombatGrid.CENTER)
+	var a_centre: int = CombatGrid.centre_distance(a)
+	var b_centre: int = CombatGrid.centre_distance(b)
 	if a_centre != b_centre:
 		return a_centre < b_centre
 	if a.x != b.x:
