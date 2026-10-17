@@ -1,5 +1,226 @@
 {
 	"kind": "map_templates",
 	"version": 1,
-	"entries": []
+	"entries": [
+		{
+			"id": "walled_town",
+			"name": "Walled town, south gate",
+			"rows": [
+				"################",
+				"#..............#",
+				"#.###......###.#",
+				"#.###......###.#",
+				"#..............#",
+				"#..............#",
+				"#.###......###.#",
+				"#.###......###.#",
+				"#..............#",
+				"#######..#######"
+			],
+			"zones": [
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss",
+				"ssssssssssssssss"
+			],
+			"zone_legend": {
+				"s": {
+					"id": "town",
+					"kind": "safe"
+				}
+			},
+			"anchors": [
+				{
+					"id": "spawn",
+					"x": 7,
+					"y": 8
+				},
+				{
+					"id": "gate",
+					"x": 7,
+					"y": 9
+				},
+				{
+					"id": "road",
+					"x": 1,
+					"y": 8
+				},
+				{
+					"id": "npc_a",
+					"x": 4,
+					"y": 4
+				},
+				{
+					"id": "npc_b",
+					"x": 11,
+					"y": 4
+				},
+				{
+					"id": "npc_c",
+					"x": 7,
+					"y": 1
+				},
+				{
+					"id": "npc_d",
+					"x": 14,
+					"y": 1
+				},
+				{
+					"id": "chest_a",
+					"x": 1,
+					"y": 1
+				},
+				{
+					"id": "lore_a",
+					"x": 8,
+					"y": 5
+				}
+			],
+			"paths": {},
+			"tags": []
+		},
+		{
+			"id": "gorge_ruins",
+			"name": "Gorge: camp west, ruins east, two openings",
+			"rows": [
+				"####################",
+				"#....#........~~~..#",
+				"#....#..##....~~~..#",
+				"#.........#........#",
+				"#....#....#...##...#",
+				".....#..............",
+				"#....#...##........#",
+				"#.........#...~~...#",
+				"#....#....#...~~...#",
+				"#....#..........##.#",
+				"#....#.............#",
+				"####################"
+			],
+			"zones": [
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd",
+				"sssssddddddddddddddd"
+			],
+			"zone_legend": {
+				"s": {
+					"id": "camp",
+					"kind": "safe"
+				},
+				"d": {
+					"id": "ruins",
+					"kind": "danger"
+				}
+			},
+			"anchors": [
+				{
+					"id": "spawn",
+					"x": 2,
+					"y": 5
+				},
+				{
+					"id": "west",
+					"x": 0,
+					"y": 5
+				},
+				{
+					"id": "west_in",
+					"x": 1,
+					"y": 5
+				},
+				{
+					"id": "east",
+					"x": 19,
+					"y": 5
+				},
+				{
+					"id": "east_in",
+					"x": 18,
+					"y": 5
+				},
+				{
+					"id": "camp_npc",
+					"x": 2,
+					"y": 2
+				},
+				{
+					"id": "camp_chest",
+					"x": 1,
+					"y": 10
+				},
+				{
+					"id": "site_a",
+					"x": 12,
+					"y": 5
+				},
+				{
+					"id": "site_b",
+					"x": 16,
+					"y": 5
+				},
+				{
+					"id": "altar",
+					"x": 17,
+					"y": 1
+				},
+				{
+					"id": "ruin_chest",
+					"x": 18,
+					"y": 10
+				},
+				{
+					"id": "ruin_lore",
+					"x": 7,
+					"y": 9
+				}
+			],
+			"paths": {
+				"patrol": [
+					[
+						8,
+						10
+					],
+					[
+						9,
+						10
+					],
+					[
+						10,
+						10
+					],
+					[
+						11,
+						10
+					],
+					[
+						12,
+						10
+					],
+					[
+						13,
+						10
+					],
+					[
+						14,
+						10
+					]
+				]
+			},
+			"tags": []
+		}
+	]
 }

@@ -15,6 +15,72 @@
 				}
 			],
 			"encounters": [],
+			"map": "walled_town",
+			"zone_bindings": {},
+			"markers": [
+				{
+					"id": "gate",
+					"kind": "exit",
+					"anchor": "gate",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "ruined_courtyard",
+					"to_anchor": "west_in"
+				},
+				{
+					"id": "mara",
+					"kind": "npc",
+					"anchor": "npc_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "mara_voss"
+				},
+				{
+					"id": "tev",
+					"kind": "npc",
+					"anchor": "npc_b",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "tev_quill"
+				},
+				{
+					"id": "hest",
+					"kind": "npc",
+					"anchor": "npc_c",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "hest_the_quartermaster"
+				},
+				{
+					"id": "stores",
+					"kind": "chest",
+					"anchor": "chest_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"items": {
+						"con_heal_potion": 1
+					}
+				},
+				{
+					"id": "hearth",
+					"kind": "lore",
+					"anchor": "lore_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [
+						{
+							"key": "ashlands.hearth_read",
+							"value": true
+						}
+					],
+					"lore": "one_fire_lit"
+				}
+			],
 			"tags": []
 		},
 		{
@@ -27,11 +93,215 @@
 				{
 					"to": "warden_keep",
 					"label": "back to the keep"
+				},
+				{
+					"to": "cinder_gate",
+					"label": "the gate road"
 				}
 			],
 			"encounters": [
 				"courtyard_skirmish",
-				"pass_ambush"
+				"ash_scouts",
+				"ash_raiders",
+				"ash_patrol"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {
+				"ruins": {
+					"encounters": [
+						[
+							"ash_scouts",
+							3
+						],
+						[
+							"ash_raiders",
+							2
+						]
+					],
+					"elites": [
+						[
+							"ash_patrol",
+							1
+						]
+					],
+					"elite_pct": 10,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
+			"markers": [
+				{
+					"id": "to_keep",
+					"kind": "exit",
+					"anchor": "west",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "warden_keep",
+					"to_anchor": "spawn"
+				},
+				{
+					"id": "gate_road",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [
+						{
+							"key": "ashlands.courtyard_held",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "cinder_gate",
+					"to_anchor": "west_in",
+					"locked_text": "Warden barricades close the gate road until the Courtyard is held."
+				},
+				{
+					"id": "warband",
+					"kind": "encounter",
+					"anchor": "site_a",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "ashlands.courtyard_held",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "courtyard_skirmish",
+					"trigger": "proximity",
+					"radius": 1,
+					"once": false
+				},
+				{
+					"id": "patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "ash_patrol",
+					"path": "patrol",
+					"radius": 1,
+					"once": true
+				},
+				{
+					"id": "ruin_cache",
+					"kind": "chest",
+					"anchor": "ruin_chest",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"items": {
+						"con_focus_elixir": 1
+					},
+					"loot": "keep_stores"
+				},
+				{
+					"id": "old_stones",
+					"kind": "lore",
+					"anchor": "ruin_lore",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"lore": "the_long_dry"
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "cinder_gate",
+			"name": "The Cinder Gate",
+			"description": "A collapsed toll arch at the top of the gorge, where the pass opens onto the wastes.",
+			"kind": "gate",
+			"region": "cinder_pass",
+			"exits": [
+				{
+					"to": "ruined_courtyard",
+					"label": "back down the gorge"
+				}
+			],
+			"encounters": [
+				"pass_ambush",
+				"ash_scouts",
+				"ash_raiders",
+				"ash_patrol"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {
+				"ruins": {
+					"encounters": [
+						[
+							"ash_scouts",
+							2
+						],
+						[
+							"ash_raiders",
+							3
+						]
+					],
+					"elites": [
+						[
+							"ash_patrol",
+							1
+						]
+					],
+					"elite_pct": 15,
+					"steps_min": 10,
+					"steps_max": 16
+				}
+			},
+			"markers": [
+				{
+					"id": "to_gorge",
+					"kind": "exit",
+					"anchor": "west",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "ruined_courtyard",
+					"to_anchor": "east_in"
+				},
+				{
+					"id": "ambush",
+					"kind": "encounter",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "ashlands.pass_cleared",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "pass_ambush",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "beacon",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [
+						{
+							"key": "ashlands.gate_beacon_lit",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "camp_cache",
+					"kind": "chest",
+					"anchor": "camp_chest",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"items": {
+						"con_heal_potion": 1
+					}
+				}
 			],
 			"tags": []
 		}

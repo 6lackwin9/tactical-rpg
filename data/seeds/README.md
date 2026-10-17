@@ -27,3 +27,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | Seed | Task |
 | --- | --- |
 | `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |
+| `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
