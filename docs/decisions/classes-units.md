@@ -22,6 +22,7 @@ Settled; do not re-litigate without asking the user. Scope: class budget and ros
 | Brawler | Jump into a hostile area and fight several melee enemies with L-shaped sweeps (hits (1,0), (1,1), (0,1) from origin (0,0), rotating with aim); power from STR+DEX hybrid because it fights bare-handed/knuckles | User 2026-10-15 |
 | Mage | Volley removed for the mage; elemental damage vs the ranger's physical is parked on the backburner; AoE cross-pattern may be shared later via different skills | User 2026-10-15 |
 | Brawler unarmed (user 2026-10-15) | Brawler stays unarmed (no knuckles item for now); unarmed combat mechanics are explored through the class (STR+DEX hybrid) | User 2026-10-15 |
+| CLASS1 answers (user via front desk 2026-10-17) | (a) The new soft warnings on shipped classes (more than 5 families; a tier 3 capped past level 10) stay as warnings for the balance pass. (b) The unit duplicate-accessory check counts only the unit's own slots. (c) The legacy list-path converter (`ClassUnitFields.LIST_PATH_CONVERTER`) is switched off in the same merge as the CLASS1-M data migration | User 2026-10-17 |
 
 ## Partly superseded rows (text unchanged; the newer row wins on the named part)
 
