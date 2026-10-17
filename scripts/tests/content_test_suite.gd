@@ -324,6 +324,71 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	checks["skills: the ranks panel shows one resolved panel per rank"] = ranks_panel != null and ranks_panel.find_children("Resolved_*", "", true, false).size() == SkillRanks.rank_count(forge.form.draft)
 	var live: Array[String] = TestHelpers.live_controls(forge.form)
 	checks["skills: no control of the form can edit or act (%s)" % ", ".join(live)] = live.is_empty()
+	var inputs: Array[Node] = []
+	for cls: String in ["LineEdit", "TextEdit", "SpinBox", "OptionButton", "CheckBox"]:
+		inputs.append_array(forge.form.find_children("*", cls, true, false))
+	checks["skills: the form is a display, no input widgets (%d)" % inputs.size()] = inputs.is_empty()
+	var name_field: Label = forge.form.field_control("name") as Label
+	checks["skills: field values show as labels"] = name_field != null and name_field.text == str(forge.form.draft["name"])
+
+	# Skill list (FORGE-VIEW): names only, engine rows always listed, basic grade grouping, stance filter, no problem / rank UI.
+	var texts: Array[String] = forge.list_texts()
+	var listed: Array[String] = forge.list_ids()
+	var names_only: bool = texts.size() == listed.size() and not listed.is_empty()
+	for i: int in range(mini(texts.size(), listed.size())):
+		names_only = names_only and texts[i] == str(SkillRanks.effective(ContentCatalog.skill_entry(listed[i]), 1)["name"])
+	checks["skills: list rows show only the skill name"] = names_only
+	var engine_heads: Array[String] = []
+	var basic_heads: Array[String] = []
+	for ranked: Dictionary in ContentCatalog.skill_entries():
+		var base: Dictionary = SkillRanks.effective(ranked, 1)
+		if DictUtil.to_bool(base.get("system", false)):
+			engine_heads.append(str(ranked["id"]))
+		if DictUtil.to_bool(base.get("system", false)) or DictUtil.to_bool(base.get("basic", false)):
+			basic_heads.append(str(ranked["id"]))
+	checks["skills: engine rows are always listed"] = not engine_heads.is_empty() and engine_heads.all(func(h: String) -> bool: return listed.has(h)) and listed.size() == ContentCatalog.skill_entries().size()
+	forge.set_skill_filter("grade", SkillFilter.BASIC_GRADE)
+	var basic_listed: Array[String] = forge.list_ids()
+	basic_listed.sort()
+	basic_heads.sort()
+	checks["skills: the basic grade lists the basic and engine skills"] = basic_listed == basic_heads
+	forge.set_skill_filter("grade", "any")
+	var bar: Node = forge.find_child("SkillBar", true, false)
+	var gone: Array[String] = []
+	for old_name: String in ["Check_has_problems", "Check_show_system", "RankFilter", "Tri_basic"]:
+		if bar != null and bar.find_child(old_name, true, false) != null:
+			gone.append(old_name)
+	var stance_opt: OptionButton = bar.find_child("StanceFilter", true, false) as OptionButton if bar != null else null
+	var sort_opt: OptionButton = bar.find_child("SortBy", true, false) as OptionButton if bar != null else null
+	checks["skills: no problems, engine-rows, rank or basic controls (%s)" % ", ".join(gone)] = bar != null and gone.is_empty()
+	checks["skills: the stance filter offers any stance + each catalog stance"] = stance_opt != null and stance_opt.item_count == 1 + SkillFilter.stance_options(ContentCatalog.skill_entries()).size()
+	checks["skills: the sorts are name, kind and AP"] = sort_opt != null and sort_opt.item_count == SkillFilter.SORTS.size()
+	checks["skills: no problems box"] = not forge.has_method("problems_text")
+
+	# Skill preview (FORGE-VIEW): the in-game elements per rank, cycled by the rank bar.
+	forge.select(ranked_head)
+	var show: SkillShowcase = forge.showcase()
+	var ranked_entry: Dictionary = ContentCatalog.skill_entry(ranked_head)
+	var rank_buttons: Array[Node] = show.find_children("Rank_*", "Button", true, false)
+	checks["preview: one rank button per rank"] = rank_buttons.size() == SkillRanks.rank_count(ranked_entry)
+	var rank_ok: bool = true
+	for r: int in range(1, SkillRanks.rank_count(ranked_entry) + 1):
+		forge.set_preview_rank(r)
+		var rank_name: String = str(SkillRanks.resolve(ranked_entry, r)["name"])
+		var shown: Array[String] = show.shown_texts()
+		var menu: Node = show.find_child("ActionMenu", true, false)
+		var in_menu: bool = menu != null and menu.find_children("*", "Button", true, false).any(func(b: Node) -> bool: return (b as Button).text.contains(rank_name))
+		rank_ok = rank_ok and show.rank == r and in_menu and shown.has(rank_name) and show.find_child("LogDock", true, false) != null and show.find_child("LoadoutLine", true, false) != null
+	checks["preview: each rank shows its name in the action menu, log and loadout elements"] = rank_ok
+	show.cycle(1)
+	checks["preview: cycling wraps from the top rank to rank 1"] = show.rank == 1
+	var sims_ok: bool = true
+	for ranked: Dictionary in ContentCatalog.skill_entries():
+		for r: int in range(1, SkillRanks.rank_count(ranked) + 1):
+			var sim: Dictionary = SkillShowcase.simulate(SkillRanks.resolve(ranked, r))
+			var option: PlanOption = sim["option"]
+			sims_ok = sims_ok and (option.valid or not option.reason.is_empty()) and (not option.valid or sim["log"] is ActionLogEntry)
+	checks["preview: every catalog rank plans (or says why not) and a valid plan resolves to a log cell"] = sims_ok
 
 	# No edit or maintenance action anywhere in the Forge (only browsing, filters, Reload, Validate All and Playtest).
 	var actions: Array[String] = []
@@ -366,7 +431,7 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	forge.show_kind("encounters")
 	forge.select("test_trial")
 	checks["encounter preview deploys"] = forge.selected_id == "test_trial" and ForgePreview.describe("encounters", ContentCatalog.get_entry("encounters", "test_trial")).contains("Test Marauder 2")
-	checks["Validate All shows ContentCatalog.validate_all()"] = JSON.stringify(forge.validate_all()) == JSON.stringify(ContentCatalog.validate_all()) and not forge.problems_text().is_empty()
+	checks["Validate All reports ContentCatalog.validate_all() on the status line"] = JSON.stringify(forge.validate_all()) == JSON.stringify(ContentCatalog.validate_all()) and not forge.status_text().is_empty()
 	checks["browsing never dirties or changes the catalog"] = ContentCatalog.is_dirty() == dirty_before and DictUtil.to_bool(host.call("has_unsaved_changes")) == dirty_before and JSON.stringify(ContentCatalog.skill_entries()) == before
 	host.queue_free()
-	return TestHelpers.report(TAG, "Content Forge viewer: browse, ranked skills, conditional item sections, no edit actions, playtest, validate", checks)
+	return TestHelpers.report(TAG, "Content Forge viewer: browse, ranked skills, skill list and preview, conditional item sections, no edit actions, playtest, validate", checks)

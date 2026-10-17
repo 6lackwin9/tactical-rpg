@@ -14,6 +14,7 @@ signal option_chosen(step: PlanStep)
 signal option_hovered(step: PlanStep)   # null when the pointer leaves a row
 signal closed()
 
+var embedded: bool = false            # shown inside another panel (the Forge skill preview): no placement, keys or picks
 var _options: Array[PlanOption] = []   # the valid ones, in row order
 var _target_rect: Rect2 = Rect2()       # the clicked target: pressing it again is handled by the opener
 var _title_lbl: Label
@@ -67,7 +68,14 @@ func open_for(title: String, options: Array[PlanOption], anchor: Vector2, target
 		_list.add_child(extra_btn)
 	visible = true
 	reset_size()
-	_place.call_deferred(anchor)
+	if not embedded:
+		_place.call_deferred(anchor)
+
+# Shows the popup as a plain child of a panel (a preview): it keeps its look but never moves, closes or reads keys.
+func embed() -> void:
+	embedded = true
+	top_level = false
+	z_index = 0
 
 func default_step() -> PlanStep:
 	return _options[0].step if not _options.is_empty() else null
@@ -125,6 +133,8 @@ static func _row_text(option: PlanOption) -> String:
 	return text
 
 func _choose(step: PlanStep) -> void:
+	if embedded:
+		return
 	if step == null:
 		close()
 		return
@@ -134,7 +144,7 @@ func _choose(step: PlanStep) -> void:
 	closed.emit()
 
 func _input(event: InputEvent) -> void:
-	if not visible:
+	if not visible or embedded:
 		return
 	var key := event as InputEventKey
 	if key != null and key.pressed and not key.echo:

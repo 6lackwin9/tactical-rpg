@@ -448,15 +448,17 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	var table: Control = forge.form.field_control("modifiers")
 	var rows: Node = table.find_child("Rows", true, false) if table != null else null
 	checks["the modifier table shows one row per modifier"] = rows != null and rows.get_child_count() == ItemModifiers.modifiers_of(shipped).size()
-	var kind_opt: OptionButton = rows.get_child(0).find_child("Kind", true, false) as OptionButton if rows != null and rows.get_child_count() > 0 else null
+	var first_row: Label = rows.get_child(0) as Label if rows != null and rows.get_child_count() > 0 else null
+	var first_mod: Dictionary = ItemFormModel.modifier_rows(forge.form.draft, [])[0] if not ItemModifiers.modifiers_of(shipped).is_empty() else {}
 	var add_row: Control = table.find_child("AddRow", true, false) as Control if table != null else null
-	checks["the table is read-only and has no add row"] = kind_opt != null and kind_opt.disabled and add_row != null and not add_row.visible
-	var family_opt: OptionButton = forge.form.field_control("family") as OptionButton
-	checks["the family picker and the name are read-only"] = family_opt != null and family_opt.disabled and not (forge.form.field_control("name") as LineEdit).editable
+	checks["each modifier row shows its summary text and the table has no add row"] = first_row != null and first_row.text.begins_with(str(first_mod.get("text", "?"))) and add_row != null and not add_row.visible
+	var family_lbl: Label = forge.form.field_control("family") as Label
+	var name_lbl: Label = forge.form.field_control("name") as Label
+	checks["the family and the name show as plain labels"] = family_lbl != null and family_lbl.text.contains(str(shipped["family"])) and name_lbl != null and name_lbl.text == str(shipped["name"])
 	var base_panel: RichTextLabel = forge.form.panel_control("base") as RichTextLabel
 	checks["the base values panel shows base + adjustments = result"] = base_panel != null and base_panel.text.contains(" = ")
 	checks["the preview panel shows the gear value"] = forge.form.panel_control("preview") != null and (forge.form.panel_control("preview") as RichTextLabel).text.contains("Gear value")
-	checks["a shipped item shows no problems"] = forge.entry_problems().is_empty() and forge.problems_text().contains("No problems")
+	checks["a shipped item has no problems"] = forge.entry_problems().is_empty()
 	var live: Array[String] = TestHelpers.live_controls(forge.form)
 	checks["no control of the item form can edit or act (%s)" % ", ".join(live)] = live.is_empty()
 	# Filter chip: has tiers.

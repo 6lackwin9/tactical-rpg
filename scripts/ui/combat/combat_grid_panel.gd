@@ -116,7 +116,11 @@ func _on_tile_clicked(coord: Vector2i) -> void:
 	_open_popup(coord, title, session.plan_cell_options(coord), _tile_rect(coord))
 
 func _title_for(c: Combatant) -> String:
-	if c == session.focused_hero:
+	return popup_title(c, c == session.focused_hero)
+
+# The action popup title of a clicked unit (the Forge skill preview uses it too).
+static func popup_title(c: Combatant, is_self: bool) -> String:
+	if is_self:
 		return "%s - yourself" % c.name
 	return "%s  HP %d/%d" % [c.name, c.hp, c.max_hp]
 

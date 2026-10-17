@@ -1000,6 +1000,10 @@ func preview(c: Combatant, step: PlanStep) -> SimState:
 	sequences[c] = steps
 	return st
 
+# The option `step` would be as the next input of `c` (what the action popup lists; the Forge skill preview uses it).
+func probe(c: Combatant, step: PlanStep) -> PlanOption:
+	return _probe(c, step, compile(c))
+
 func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 	var option := PlanOption.new()
 	option.step = step

@@ -3,9 +3,11 @@ extends VBoxContainer
 
 # ==============================================================================
 # Tactical RPG - Forge Form (schema-driven READ-ONLY view of one catalog entry; TOOLS-RO)
-# Builds one row per visible ContentSchema field of `kind` from the entry it shows. Every control is disabled / not
-# editable and the action buttons of the tables (add, remove, move, token palette) are not shown: the Forge tools are
-# asset viewers, content is edited through ContentCatalog.upsert / WorldCatalog seed scripts.
+# Builds one "label: value" row per visible ContentSchema field of `kind` from the entry it shows. FORGE-VIEW: the form is a
+# display, not a disabled editor: every value widget (LineEdit, TextEdit, SpinBox, OptionButton, CheckBox, ItemTables cells)
+# is replaced by a plain Label showing its value (display_of), and the action buttons of the tables (add, remove, move,
+# token palette) are not shown: the Forge tools are asset viewers, content is edited through ContentCatalog.upsert /
+# WorldCatalog seed scripts.
 #
 # Typed controls (FORGE1 appendix G): enum dropdowns show an unknown stored value as "(invalid: x)", spin boxes carry the
 # dynamic limits, checklists show `multi_pick` values, and the description (`template`) shows its token problems and a
@@ -24,7 +26,7 @@ extends VBoxContainer
 
 signal edited(key: String)
 
-const LABEL_W: int = 150
+const LABEL_W: int = 130
 
 var source: ForgeSource = ContentForgeSource.new()   # where fields and reference choices come from
 var kind: String = ""
@@ -160,16 +162,7 @@ func _add_row(f: Dictionary, grid: GridContainer) -> void:
 	lbl.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	grid.add_child(lbl)
 	_labels[key] = lbl
-	if f.has("max_len") and _hooked() and ["id", "string", "text"].has(str(f["type"])):
-		var base_text: String = label_text
-		var cap: int = DictUtil.to_int(f["max_len"])
-		_live.append(func() -> void:
-			if is_instance_valid(lbl):
-				var n: int = str(draft.get(key, "")).length()
-				lbl.text = "%s (%d/%d)" % [base_text, n, cap]
-				lbl.add_theme_color_override("font_color", UiTheme.COL_BAD if n > cap else UiTheme.COL_MUTED)
-		)
-	var widget: Control = _widget(f)
+	var widget: Control = display_of(_widget(f))
 	widget.name = "Field_" + key
 	widget.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if not help.is_empty() and widget.tooltip_text.is_empty():
@@ -413,88 +406,44 @@ func _enum_widget(key: String, options: Array[String], value: String, readonly: 
 		opt.modulate = Color(1.0, 0.5, 0.5)
 	return opt
 
-# A checklist (multi_pick): one disabled checkbox per option, the stored values checked.
-func _checklist_widget(f: Dictionary, value: Variant, info: Dictionary, _readonly: bool) -> Control:
-	var options: Array[String] = source.options_of(f)
-	var allowed: Array = DictUtil.array_of(info.get("options", []))
-	if not allowed.is_empty():
-		options = []
-		for a: Variant in allowed:
-			options.append(str(a))
+# A checklist (multi_pick): the stored values as one line ("(none)" when empty).
+func _checklist_widget(_f: Dictionary, value: Variant, _info: Dictionary, _readonly: bool) -> Control:
 	var current: Array[String] = ContentFactory._strings(value)
-	var box := HFlowContainer.new()
-	box.add_theme_constant_override("h_separation", 10)
-	box.add_theme_constant_override("v_separation", 2)
-	for option: String in options:
-		var check := CheckBox.new()
-		check.text = option
-		check.name = "Option_" + option
-		check.set_meta("value", option)
-		check.tooltip_text = str(DictUtil.dict_of(info.get("option_help", {})).get(option, ""))
-		check.button_pressed = current.has(option)
-		check.disabled = true
-		box.add_child(check)
-	return box
+	return _value_label(", ".join(current) if not current.is_empty() else "(none)", UiTheme.COL_TEXT if not current.is_empty() else UiTheme.COL_MUTED)
 
-# The description template: the text (read-only) with its length, token problems and warnings, and one preview line per rank.
-func _template_widget(f: Dictionary, value: String, _readonly: bool) -> Control:
-	var key: String = str(f["key"])
+# The description template: the raw text (tokens visible) and its token problems / warnings when there are any. The
+# rendered text per rank is in the ranks panel.
+func _template_widget(_f: Dictionary, value: String, _readonly: bool) -> Control:
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	var editor := TextEdit.new()
-	editor.name = "Editor"
-	editor.text = value
-	editor.editable = false
-	editor.custom_minimum_size.y = 64
-	editor.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	box.add_child(editor)
-	var counter: Label = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
-	counter.name = "Counter"
-	box.add_child(counter)
-	var issues: RichTextLabel = RichTextLabel.new()
-	issues.name = "Issues"
-	issues.bbcode_enabled = true
-	issues.fit_content = true
-	issues.scroll_active = false
-	box.add_child(issues)
-	var previews := VBoxContainer.new()
-	previews.name = "Previews"
-	box.add_child(previews)
-	var refresh: Callable = func() -> void:
-		if not is_instance_valid(box):
-			return
-		var template: String = str(draft.get(key, ""))
-		counter.text = "%d / %d characters" % [template.length(), SkillText.MAX_LENGTH]
-		var lines: Array[String] = []
-		for p: Dictionary in SkillText.validate(template, draft):
-			lines.append("[color=#f87171]%s[/color]" % str(p["message"]))
-		for w: String in SkillText.warnings(template, draft):
-			lines.append("[color=#fbbf24]%s[/color]" % w)
+	box.add_theme_constant_override("separation", 2)
+	var text: Label = _value_label(value if not value.is_empty() else "(empty)", UiTheme.COL_TEXT if not value.is_empty() else UiTheme.COL_MUTED)
+	text.name = "Template"
+	box.add_child(text)
+	var lines: Array[String] = []
+	for p: Dictionary in SkillText.validate(value, draft):
+		lines.append("[color=#f87171]%s[/color]" % str(p["message"]))
+	for w: String in SkillText.warnings(value, draft):
+		lines.append("[color=#fbbf24]%s[/color]" % w)
+	if not lines.is_empty():
+		var issues: RichTextLabel = RichTextLabel.new()
+		issues.name = "Issues"
+		issues.bbcode_enabled = true
+		issues.fit_content = true
+		issues.scroll_active = false
+		issues.add_theme_font_size_override("normal_font_size", UiTheme.FONT_SM)
 		issues.text = "\n".join(lines)
-		issues.visible = not lines.is_empty()
-		UiTheme.clear_children(previews)
-		for line: Dictionary in SkillFormModel.description_preview(draft):
-			var over: bool = DictUtil.to_bool(line["over"])
-			var row: Label = UiTheme.label("%s: %s  (%d)" % [str(line["name"]), str(line["text"]), DictUtil.to_int(line["length"])], UiTheme.FONT_SM, UiTheme.COL_BAD if over else UiTheme.COL_MUTED)
-			row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			row.custom_minimum_size.x = 60
-			previews.add_child(row)
-	_live.append(refresh)
-	refresh.call()
+		box.add_child(issues)
 	return box
 
 # A reference list: one line per referenced entry (its label), or the field help when empty.
-func _refs_widget(f: Dictionary, value: Variant, info: Dictionary = {}, _readonly: bool = true) -> Control:
+func _refs_widget(f: Dictionary, value: Variant, _info: Dictionary = {}, _readonly: bool = true) -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 	var current: Array[String] = ContentFactory._strings(value)
 	for id: String in current:
-		box.add_child(UiTheme.label("• " + source.ref_label(f, id), UiTheme.FONT_MD))
+		box.add_child(_value_label("• " + source.ref_label(f, id)))
 	if current.is_empty():
-		var hint: Label = UiTheme.label(str(info.get("reason", "")) if not str(info.get("reason", "")).is_empty() else str(f.get("help", "(empty)")), UiTheme.FONT_SM, UiTheme.COL_MUTED)
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # a long hint must never widen the form
-		hint.custom_minimum_size.x = 60
-		box.add_child(hint)
+		box.add_child(_value_label("(none)", UiTheme.COL_MUTED))
 	return box
 
 # Stat spinners (not editable). With schema min / max (class base stats and growth) the spinners use those ranges, an unset
@@ -656,3 +605,110 @@ func _proficiency_widget(f: Dictionary, _readonly: bool) -> Control:
 		line.add_child(sc)
 		box.add_child(line)
 	return box
+
+
+# ------------------------------------------------------------------------------
+# Display (FORGE-VIEW): value widgets become plain labels
+# ------------------------------------------------------------------------------
+
+# A value label (FONT_MD); long values wrap instead of widening the form, short ones never break.
+static func _value_label(text: String, color: Color = UiTheme.COL_TEXT) -> Label:
+	var lbl: Label = UiTheme.label(text, UiTheme.FONT_MD, color)
+	if text.length() > 24 or text.contains("\n"):
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.custom_minimum_size.x = 40
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return lbl
+
+# `control` as display: a value widget is replaced by a Label with its value (name, tooltip and tint kept); a container
+# keeps its layout with every value widget inside replaced the same way.
+static func display_of(control: Control) -> Control:
+	var shown: Control = _display_value(control)
+	if shown == null:
+		_flatten_children(control)
+		return control
+	_adopt(control, shown)
+	control.free()
+	return shown
+
+static func _flatten_children(node: Node) -> void:
+	for child: Node in node.get_children():
+		var control: Control = child as Control
+		if control == null:
+			continue
+		var plain: Label = control as Label
+		if plain != null and plain.autowrap_mode == TextServer.AUTOWRAP_OFF and not plain.clip_text and plain.text.length() > 32:
+			plain.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # long counters and notes wrap instead of widening the form
+			plain.custom_minimum_size.x = maxf(plain.custom_minimum_size.x, 40.0)
+			plain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			continue
+		var shown: Control = _display_value(control)
+		if shown == null:
+			_flatten_children(control)
+			continue
+		var at: int = control.get_index()
+		node.remove_child(control)   # first, so the label can take over the widget's name
+		_adopt(control, shown)
+		node.add_child(shown)
+		node.move_child(shown, at)
+		control.queue_free()
+
+static func _adopt(from: Control, to: Control) -> void:
+	if not str(from.name).is_empty():
+		to.name = from.name
+	to.tooltip_text = from.tooltip_text
+	if not to.tooltip_text.is_empty():
+		to.mouse_filter = Control.MOUSE_FILTER_STOP
+	to.modulate = from.modulate
+	to.visible = from.visible
+	to.size_flags_horizontal = from.size_flags_horizontal
+
+# The display label of a value widget (null for anything else).
+static func _display_value(control: Control) -> Control:
+	var info: Label = control.get_node_or_null("Info") as Label
+	if str(control.name).begins_with("Mod_") and info != null:
+		return _value_label(info.text)   # the modifier row's own summary ("Req STR 14  (value +0.0)")
+	var summary: Label = control.find_child("Summary", true, false) as Label
+	if str(control.name).begins_with("Tier_") and summary != null:
+		var label_edit: LineEdit = control.find_child("Label", true, false) as LineEdit
+		var desc: LineEdit = control.find_child("Desc", true, false) as LineEdit
+		var head: String = str(control.name).trim_prefix("Tier_")
+		var title: String = "T%s %s" % [head, label_edit.text if label_edit != null else ""]
+		var text: String = desc.text if desc != null and not desc.text.is_empty() else (desc.placeholder_text.trim_prefix("auto: ") if desc != null else "")
+		return _value_label("%s: %s\n%s" % [title.strip_edges(), summary.text, text])
+	if str(control.name).begins_with("Band_") and control.get_node_or_null("Set") is CheckBox:
+		var on: bool = (control.get_node("Set") as CheckBox).button_pressed
+		var spins: Array[String] = []
+		for bound: String in ["Min", "Max"]:
+			var spin: SpinBox = control.get_node_or_null(bound) as SpinBox
+			if spin != null:
+				spins.append(_number(spin))
+		return _value_label(" to ".join(spins) if on else "-", UiTheme.COL_TEXT if on else UiTheme.COL_MUTED)
+	if control is LineEdit:
+		var line: LineEdit = control
+		if not line.text.is_empty():
+			return _value_label(line.text)
+		return _value_label(line.placeholder_text if not line.placeholder_text.is_empty() else "(empty)", UiTheme.COL_MUTED)
+	if control is TextEdit:
+		var text: TextEdit = control
+		return _value_label(text.text if not text.text.is_empty() else "(empty)", UiTheme.COL_TEXT if not text.text.is_empty() else UiTheme.COL_MUTED)
+	if control is SpinBox:
+		var lbl: Label = _value_label(_number(control as SpinBox))
+		lbl.size_flags_horizontal = Control.SIZE_FILL
+		return lbl
+	if control is OptionButton:
+		var opt: OptionButton = control
+		var picked: String = opt.get_item_text(opt.selected) if opt.selected >= 0 else ""
+		return _value_label(picked if not picked.is_empty() else "(none)", UiTheme.COL_TEXT if not picked.is_empty() else UiTheme.COL_MUTED)
+	if control is CheckBox:
+		var check: CheckBox = control
+		if check.text.is_empty():
+			return _value_label("Yes" if check.button_pressed else "No", UiTheme.COL_TEXT if check.button_pressed else UiTheme.COL_MUTED)
+		return _value_label(("✔ " if check.button_pressed else "✘ ") + check.text, UiTheme.COL_TEXT if check.button_pressed else UiTheme.COL_MUTED)
+	return null
+
+# A spin box value as text (whole numbers without decimals; prefix / suffix kept).
+static func _number(spin: SpinBox) -> String:
+	var v: float = spin.value
+	var shown: String = str(roundi(v)) if is_equal_approx(v, roundf(v)) else str(snappedf(v, 0.01))
+	return "%s%s%s" % [spin.prefix + " " if not spin.prefix.is_empty() else "", shown, " " + spin.suffix if not spin.suffix.is_empty() else ""]

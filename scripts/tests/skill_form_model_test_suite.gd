@@ -187,8 +187,10 @@ static func _test_filter() -> bool:
 	filters["kinds"] = ["SUPPORT"]
 	checks["kind chip"] = SkillFilter.apply(list, filters).size() == 1 and str(SkillFilter.apply(list, filters)[0]["id"]) == "t_form_fh"
 	filters = SkillFilter.default_filters()
-	filters["rank_count"] = 2
-	checks["rank count chip"] = SkillFilter.apply(list, filters).size() == 1 and str(SkillFilter.apply(list, filters)[0]["id"]) == "t_form_fa"
+	filters["stance"] = SkillFilter.stance_of(attack)
+	var stance_hits: Array[Dictionary] = SkillFilter.apply(list, filters)
+	checks["stance chip (the engine stance of each family)"] = SkillFilter.stance_of(attack) != SkillFilter.stance_of(heal) and stance_hits.size() == 1 and str(stance_hits[0]["id"]) == "t_form_fa"
+	checks["stance choices list each stance once"] = SkillFilter.stance_options(list).size() == 2 and SkillFilter.stance_options([attack, attack]).size() == 1
 	filters = SkillFilter.default_filters()
 	filters["grade"] = "advanced"
 	checks["grade chip"] = SkillFilter.apply(list, filters).size() == 1 and str(SkillFilter.apply(list, filters)[0]["id"]) == "t_form_fh"
@@ -197,12 +199,18 @@ static func _test_filter() -> bool:
 	for e: Dictionary in SkillFilter.apply(list, filters, "name"):
 		sorted_names.append(str(e["name"]))
 	checks["name sort"] = sorted_names == ["Alpha Mend", "Zed Slash"]
-	var by_ranks: Array[Dictionary] = SkillFilter.apply(list, filters, "ranks")
-	checks["rank-count sort puts the larger family first"] = str(by_ranks[0]["id"]) == "t_form_fa"
+	checks["the sorts are name, kind and AP (no rank or problem sort)"] = SkillFilter.SORTS == ["name", "kind", "ap"]
 	var engine: Dictionary = TestHelpers.attack("t_form_eng", {"system": true})
-	checks["engine rows are hidden unless show_system"] = SkillFilter.apply([engine], filters).is_empty()
-	filters["show_system"] = true
-	checks["...and shown when asked"] = SkillFilter.apply([engine], filters).size() == 1
+	var basic: Dictionary = TestHelpers.attack("t_form_bas", {"basic": true})
+	var grouped: Array[Dictionary] = [attack, engine, basic]
+	checks["engine rows are always listed"] = SkillFilter.apply(grouped, filters).size() == 3
+	filters["grade"] = SkillFilter.BASIC_GRADE
+	var basics: Array[Dictionary] = SkillFilter.apply(grouped, filters)
+	checks["the basic grade lists basic skills and engine rows"] = basics.size() == 2 and not basics.has(attack)
+	filters["grade"] = "novice"
+	var novices: Array[Dictionary] = SkillFilter.apply(grouped, filters)
+	checks["...and the novice grade leaves them out"] = novices.size() == 1 and str(novices[0]["id"]) == "t_form_fa"
+	checks["basic is a view grouping: the data grade stays"] = str(SkillRanks.effective(basic, 1)["grade"]) == "novice" and SkillFilter.view_grade(basic) == SkillFilter.BASIC_GRADE
 	var shipped: Array[Dictionary] = ContentCatalog.skill_entries()
 	var unused: int = 0
 	var used: int = 0
