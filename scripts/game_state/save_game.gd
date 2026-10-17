@@ -7,11 +7,15 @@ extends RefCounted
 # Files live in base_dir() (default user://saves, static override for tests / sandboxes) as
 # slot_<n>.json. write() validates first and writes <file>.tmp then renames, so a crash never
 # leaves a half file. read() never returns a partially loaded state.
+# Slots (UI1-L): 0 is the autosave, 1..5 the manual slots (one list shared by all worlds); peek() reads a slot header without migrating or loading.
 # ==============================================================================
 
 const VERSION: int = 4   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
+const AUTOSAVE_SLOT: int = 0
+const MANUAL_SLOTS: Array[int] = [1, 2, 3, 4, 5]
+const LAST_SLOT: int = 5
 
 static var _dir: String = DEFAULT_DIR
 
@@ -35,11 +39,11 @@ static func delete(slot: int) -> bool:
 		return false
 	return DirAccess.remove_absolute(path_for(slot)) == OK
 
-# Problem strings; empty = written.
-static func write(state: GameState, slot: int = 1) -> Array[String]:
+# Problem strings; empty = written. `saved_at` > 0 keeps a given save time (import); else now.
+static func write(state: GameState, slot: int = 1, saved_at: int = 0) -> Array[String]:
 	var errors: Array[String] = []
-	if slot < 1:
-		errors.append("Save slot must be >= 1.")
+	if slot < AUTOSAVE_SLOT or slot > LAST_SLOT:
+		errors.append("Save slot must be 0-5.")
 		return errors
 	if state == null:
 		errors.append("No game state to save.")
@@ -48,7 +52,7 @@ static func write(state: GameState, slot: int = 1) -> Array[String]:
 	if not errors.is_empty():
 		return errors
 	var envelope: Dictionary = {
-		"format": FORMAT, "version": VERSION, "saved_at": int(Time.get_unix_time_from_system()),
+		"format": FORMAT, "version": VERSION, "saved_at": saved_at if saved_at > 0 else int(Time.get_unix_time_from_system()),
 		"game_state": state.to_dict(),
 	}
 	if DirAccess.make_dir_recursive_absolute(_dir) != OK and not DirAccess.dir_exists_absolute(_dir):
@@ -70,14 +74,17 @@ static func write(state: GameState, slot: int = 1) -> Array[String]:
 
 # {"ok": bool, "errors": Array[String], "warnings": Array[String], "state": GameState or null}
 static func read(slot: int = 1) -> Dictionary:
-	var fail: Dictionary = {"ok": false, "errors": [] as Array[String], "warnings": [] as Array[String], "state": null}
-	var errors: Array[String] = []
 	if not exists(slot):
-		errors.append("No save in slot %d." % slot)
-		fail["errors"] = errors
-		return fail
+		var errors: Array[String] = ["No save in slot %d." % slot]
+		return {"ok": false, "errors": errors, "warnings": [] as Array[String], "state": null}
+	return decode(FileAccess.get_file_as_string(path_for(slot)))
+
+# A save file's text -> the read() result (+ "saved_at"): parse, format check, migrate, validate.
+static func decode(text: String) -> Dictionary:
+	var fail: Dictionary = {"ok": false, "errors": [] as Array[String], "warnings": [] as Array[String], "state": null, "saved_at": 0}
+	var errors: Array[String] = []
 	var json := JSON.new()
-	if json.parse(FileAccess.get_file_as_string(path_for(slot))) != OK or not (json.data is Dictionary):
+	if json.parse(text) != OK or not (json.data is Dictionary):
 		errors.append("Save file is corrupt or truncated.")
 		fail["errors"] = errors
 		return fail
@@ -101,4 +108,100 @@ static func read(slot: int = 1) -> Dictionary:
 		fail["errors"] = errors
 		fail["warnings"] = warnings
 		return fail
-	return {"ok": true, "errors": errors, "warnings": warnings, "state": state}
+	return {"ok": true, "errors": errors, "warnings": warnings, "state": state, "saved_at": DictUtil.to_int(envelope.get("saved_at", 0))}
+
+# ------------------------------------------------------------------------------
+# Export / import (SAVE-IO): a save as a file anywhere, so players can keep more than the slots hold.
+# ------------------------------------------------------------------------------
+
+# Copies the readable save in `slot` to `path` (tmp file then rename). Problem strings; empty = written.
+static func export_to(slot: int, path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var res: Dictionary = read(slot)
+	if not DictUtil.to_bool(res["ok"]):
+		errors.assign(DictUtil.array_of(res["errors"]))
+		return errors
+	if path.strip_edges().is_empty():
+		errors.append("Pick a file to export to.")
+		return errors
+	var tmp_path: String = path + ".tmp"
+	var file: FileAccess = FileAccess.open(tmp_path, FileAccess.WRITE)
+	if file == null:
+		errors.append("Can't open '%s' for writing." % path)
+		return errors
+	file.store_string(FileAccess.get_file_as_string(path_for(slot)))
+	file.close()
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	if DirAccess.rename_absolute(tmp_path, path) != OK:
+		DirAccess.remove_absolute(tmp_path)
+		errors.append("Can't move the export into place at '%s'." % path)
+	return errors
+
+# Reads the save file at `path` (any world; migrated and validated like read) into manual `slot`, keeping its
+# original save time. {ok, errors, warnings}; a refused file leaves the slot untouched.
+static func import_from(path: String, slot: int) -> Dictionary:
+	var errors: Array[String] = []
+	var out: Dictionary = {"ok": false, "errors": errors, "warnings": [] as Array[String]}
+	if not MANUAL_SLOTS.has(slot):
+		errors.append("Import into a manual slot (1-%d)." % LAST_SLOT)
+		return out
+	if not FileAccess.file_exists(path):
+		errors.append("No file at '%s'." % path)
+		return out
+	var res: Dictionary = decode(FileAccess.get_file_as_string(path))
+	out["warnings"] = res["warnings"]
+	if not DictUtil.to_bool(res["ok"]):
+		errors.assign(DictUtil.array_of(res["errors"]))
+		out["errors"] = errors
+		return out
+	errors = write(res["state"] as GameState, slot, DictUtil.to_int(res["saved_at"]))
+	out["errors"] = errors
+	out["ok"] = errors.is_empty()
+	return out
+
+# Writes the autosave slot (after a new game, a won or fled battle, an exploration `autosave` event).
+static func autosave(state: GameState) -> Array[String]:
+	return write(state, AUTOSAVE_SLOT)
+
+# The header of `slot` without loading or migrating it (UI1-L rule 3); never throws.
+# {exists, ok, slot, saved_at, version, world_id, location_id, party: [{id, base_unit, level}], error}; `error` is
+# "unreadable" (bad JSON or format) or "newer version" (listed but not loadable). Missing pieces stay empty.
+static func peek(slot: int) -> Dictionary:
+	var party: Array[Dictionary] = []
+	var out: Dictionary = {"exists": exists(slot), "ok": false, "slot": slot, "saved_at": 0, "version": 0, "world_id": "", "location_id": "", "party": party, "error": ""}
+	if not DictUtil.to_bool(out["exists"]):
+		return out
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(path_for(slot))) != OK or not (json.data is Dictionary):
+		out["error"] = "unreadable"
+		return out
+	var envelope: Dictionary = json.data
+	if str(envelope.get("format", "")) != FORMAT:
+		out["error"] = "unreadable"
+		return out
+	out["saved_at"] = DictUtil.to_int(envelope.get("saved_at", 0))
+	out["version"] = DictUtil.to_int(envelope.get("version", 0))
+	var gs: Dictionary = DictUtil.dict_of(envelope.get("game_state", {}))
+	out["world_id"] = str(gs.get("world_id", ""))
+	out["location_id"] = str(gs.get("location_id", ""))
+	for raw: Variant in DictUtil.array_of(DictUtil.dict_of(gs.get("party", {})).get("members", [])):
+		var m: Dictionary = DictUtil.dict_of(raw)
+		var level: int = XpCurve.level_for(DictUtil.to_int(m["total_xp"])) if m.has("total_xp") else 0
+		party.append({"id": str(m.get("id", "")), "base_unit": str(m.get("base_unit", "")), "level": level})
+	if DictUtil.to_int(out["version"]) > VERSION:
+		out["error"] = "newer version"
+		return out
+	out["ok"] = true
+	return out
+
+# The slot (0..5) with the largest saved_at among readable slots; -1 when none.
+static func newest_slot() -> int:
+	var best: int = -1
+	var best_at: int = -1
+	for slot: int in range(AUTOSAVE_SLOT, LAST_SLOT + 1):
+		var head: Dictionary = peek(slot)
+		if DictUtil.to_bool(head["ok"]) and DictUtil.to_int(head["saved_at"]) > best_at:
+			best = slot
+			best_at = DictUtil.to_int(head["saved_at"])
+	return best

@@ -216,6 +216,7 @@ func reset_round() -> void:
 		c.pending_statuses.clear()   # statuses inflicted in the undone round never happened
 		c.pending_status_rounds.clear()
 		c.pending_status_magnitudes.clear()
+		c.pending_status_sources.clear()
 	_begin_round(current_round, false)
 
 func reset_battle() -> void:
@@ -467,7 +468,7 @@ func plan_info() -> Dictionary:
 	var st: CombatPlan.SimState = plan.compile(focused_hero)
 	var text: String = "%s  •  AP %d/%d  •  next block %d  •  %s" % [focused_hero.name, st.ap_left, focused_hero.max_ap, mini(st.next_block, total_blocks), CombatTypes.stance_to_string(st.stance)]
 	for status: Variant in focused_hero.statuses:
-		text += "  •  %s" % StatusEffects.display_name(str(status))
+		text += "  •  %s" % StatusEffects.chip_text(focused_hero, str(status))
 	if st.error_index >= 0:
 		text += "  •  ⚠ step %d invalid: %s" % [st.error_index + 1, st.error_text]
 		info["warn"] = true
@@ -629,6 +630,9 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		c.statuses = _dict_of(snap.statuses, c)
 		c.status_rounds_left = _dict_of(snap.status_rounds, c)
 		c.status_magnitudes = _dict_of(snap.status_magnitudes, c)
+		c.pending_status_magnitudes = _dict_of(snap.pending_status_magnitudes, c)
+		c.status_sources = _dict_of(snap.status_sources, c)
+		c.pending_status_sources = _dict_of(snap.pending_status_sources, c)
 		c.riposted.clear()
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
@@ -713,6 +717,9 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 		snap.statuses[c] = c.statuses.duplicate()
 		snap.status_rounds[c] = c.status_rounds_left.duplicate()
 		snap.status_magnitudes[c] = c.status_magnitudes.duplicate()
+		snap.pending_status_magnitudes[c] = c.pending_status_magnitudes.duplicate()
+		snap.status_sources[c] = c.status_sources.duplicate()
+		snap.pending_status_sources[c] = c.pending_status_sources.duplicate()
 	return snap
 
 # A copy of the per-unit dictionary stored in a snapshot (empty when missing).

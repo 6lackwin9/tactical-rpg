@@ -6,6 +6,12 @@
 	"extends": [],
 	"connects": [],
 	"start_location": "warden_keep",
+	"start_party": [
+		"warrior",
+		"ranger",
+		"rogue",
+		"mage"
+	],
 	"start_gold": 50,
 	"service_lines": {},
 	"version": 1

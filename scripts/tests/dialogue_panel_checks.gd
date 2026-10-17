@@ -1,0 +1,134 @@
+class_name DialoguePanelChecks
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - DLG1-L commit 3 checks, run by DialogueTestSuite on its runtime fixture world (dg_run):
+# the shop return rule (user decision 2026-10-17: closing a shop back to its node does not re-run the node's effects)
+# and the debug panels in the region map scene (talk, locked choice, shop buy and close, turn-in step, dialogue fight).
+# DLG1-F: buy count cap, selling at the gold cap, the turn-in pre-check on confirm, gold-cap notes from dialogue give.
+# ==============================================================================
+
+const DEBUG_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
+const R: String = DialogueTestSuite.R
+
+static func run(tree_parent: Node) -> bool:
+	var ok: bool = _test_shop_return()
+	ok = _test_followups() and ok
+	ok = _test_panels(tree_parent) and ok
+	return ok
+
+static func _q(local: String) -> String:
+	return WorldCatalog.qid(R, local)
+
+static func _report(label: String, checks: Dictionary) -> bool:
+	return DialogueTestSuite._report(label, checks)
+
+# Kit: a start node that gives 1 gold, a choice opening the shop and staying ("" to), one opening it then moving to a
+# node that gives 2 gold, and the shop service.
+static func _build_kit() -> bool:
+	var errors: Array[String] = []
+	errors.append_array(WorldCatalog.upsert(R, "characters", {"id": "kit", "name": "Kit", "base_unit": str(DialogueTestSuite._rx["lo"]), "dialogue": "d_kit"}))
+	errors.append_array(WorldCatalog.upsert(R, "shops", {"id": "s_kit", "name": "Kit's cart", "keeper": "kit", "stock": [{"item": DialogueTestSuite.I25, "count": -1, "price": -1, "requires_flags": []}]}))
+	errors.append_array(WorldCatalog.upsert(R, "dialogues", {"id": "d_kit", "name": "Kit", "start": "hi", "nodes": [
+		{"id": "hi", "text": "Coin for you.", "effects": [{"effect": "give", "gold": 1}], "choices": [
+			{"text": "Browse", "to": "", "effects": [{"effect": "open_shop", "shop": "s_kit"}]},
+			{"text": "Browse and go", "to": "after", "effects": [{"effect": "open_shop", "shop": "s_kit"}]},
+		]},
+		{"id": "after", "text": "Two more.", "effects": [{"effect": "give", "gold": 2}], "end": true},
+	]}))
+	return errors.is_empty() and WorldCatalog.validate_world(R).is_empty()
+
+static func _test_shop_return() -> bool:
+	var checks: Dictionary = {"kit fixture": _build_kit()}
+	var gs: GameState = DialogueTestSuite._gs()
+	var gold0: int = gs.party.gold
+	var r: DialogueRunner = DialogueRunner.open(gs, "kit")
+	checks["opening runs the node effects"] = r.errors.is_empty() and gs.party.gold == gold0 + 1
+	var opened: Dictionary = r.choose(DialogueTestSuite._find(r.view(), "Browse"))
+	var back: Dictionary = r.close_shop()
+	checks["closing back to the node does not re-run its effects"] = str(opened.get("shop", "")) == _q("s_kit") and DictUtil.to_bool(back["ok"]) and r.node_id == "hi" and gs.party.gold == gold0 + 1
+	var service: Dictionary = r.choose(DialogueTestSuite._find(r.view(), DialogueTestSuite._line("shop")))
+	var _s: Dictionary = r.close_shop()
+	checks["the shop service returns the same way"] = str(service.get("shop", "")) == _q("s_kit") and r.node_id == "hi" and gs.party.gold == gold0 + 1 and r.shop_qid.is_empty()
+	var _o: Dictionary = r.choose(DialogueTestSuite._find(r.view(), "Browse and go"))
+	var moved: Dictionary = r.close_shop()
+	checks["a different to node is shown with its effects"] = str(moved.get("node", "")) == "after" and gs.party.gold == gold0 + 3
+	return _report("Shop return (user 2026-10-17): back to the opening node without its effects; another to node runs them", checks)
+
+static func _test_followups() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = DialogueTestSuite._gs()
+	gs.party.gold = 1000
+	var before: Dictionary = gs.to_dict()
+	var big: Dictionary = ShopRules.buy(gs, "s_hest", "item", DialogueTestSuite.I25, ShopRules.BUY_MAX + 1)
+	var huge: Dictionary = ShopRules.buy(gs, "s_hest", "item", DialogueTestSuite.I25, 1 << 50)
+	checks["buy count above BUY_MAX refused, nothing changes"] = not DictUtil.to_bool(big["ok"]) and not DictUtil.to_bool(huge["ok"]) and str(huge["errors"]).contains("at most") and JsonUtil.deep_equal(gs.to_dict(), before)
+	gs.party.add_to_stash(DialogueTestSuite.I25, 1)
+	gs.party.gold = PartyState.GOLD_MAX - 1
+	var sold: Dictionary = ShopRules.sell(gs, "s_hest", DialogueTestSuite.I25, 1)
+	checks["selling at the gold cap reports the added amount"] = DictUtil.to_bool(sold["ok"]) and gs.party.gold == PartyState.GOLD_MAX and DictUtil.to_int(sold["gold"]) == 1 and DictUtil.to_int(sold["price"]) > 1 and str(sold["notes"]).contains("capped")
+	var r: DialogueRunner = DialogueRunner.open(gs, "kit")
+	var _o: Dictionary = r.choose(DialogueTestSuite._find(r.view(), "Browse and go"))
+	var moved: Dictionary = r.close_shop()
+	checks["a dialogue give at the cap surfaces the note"] = str(moved.get("node", "")) == "after" and str(moved.get("notes", [])).contains("capped") and gs.party.gold == PartyState.GOLD_MAX
+	var gs2: GameState = DialogueTestSuite._gs()
+	var _st: Array[String] = QuestRunner.start(gs2, _q("q_hest"))
+	var _f: String = QuestRunner.set_flag(gs2, "dr.hest", true)
+	var hest: DialogueRunner = DialogueRunner.open(gs2, "hest")
+	var pend: Dictionary = hest.choose(DialogueTestSuite._find(hest.view(), "Hand it over"))
+	var _done: Dictionary = QuestRunner.complete(gs2, _q("q_hest"))
+	var late: Dictionary = hest.confirm_turn_in()
+	checks["confirm re-runs the pre-check"] = str(pend.get("pending", "")) == "turn_in" and not DictUtil.to_bool(late["ok"]) and " ".join(PackedStringArray(DictUtil.array_of(late["errors"]))).contains("be turned in (it is completed)") and not gs2.has_flag("dr.thanked")
+	return _report("DLG1-F: buy count cap, sell and give at the gold cap report, confirm_turn_in pre-check", checks)
+
+static func _test_panels(tree_parent: Node) -> bool:
+	var checks: Dictionary = {}
+	var packed: PackedScene = load(DEBUG_SCENE) as PackedScene
+	checks["scene loads"] = packed != null
+	if packed == null or tree_parent == null:
+		return _report("Dialogue and shop panels (headless without a tree: load only)", checks)
+	var view: RegionMapView = packed.instantiate() as RegionMapView
+	tree_parent.add_child(view)
+	checks["new game"] = view.start_game(R).is_empty() and view.gs != null
+	if view.gs == null:
+		tree_parent.remove_child(view)
+		view.free()
+		return _report("Dialogue and shop panels", checks)
+	var gs: GameState = view.gs
+	var dp: DialoguePanel = view.dialogue_panel
+	var sp: ShopPanel = view.shop_panel
+	# locked choice greyed: Mara's KNOW-gated Ask with only the low-KNOW member active
+	gs.party.active_ids = [str(DialogueTestSuite._rx["lo"])] as Array[String]
+	view.talk("mara")
+	var ask: int = DialogueTestSuite._find(dp.runner.view(), "Ask") if dp.runner != null else -1
+	var ask_btn: Button = dp._choices.get_child(ask) as Button if ask >= 0 and ask < dp._choices.get_child_count() else null
+	checks["talk opens the dialogue panel and blocks the map"] = dp.is_open() and view.busy()
+	checks["a locked choice is a disabled button"] = ask_btn != null and ask_btn.disabled
+	var _bye: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), DialogueTestSuite._line("farewell")))
+	checks["farewell closes the panel"] = not dp.is_open() and not view.busy()
+	# shop: open from Hest, buy one, close back to the dialogue
+	view.talk("hest")
+	var _shop: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), DialogueTestSuite._line("shop")))
+	checks["the shop service swaps in the shop panel"] = sp.is_open() and not dp.visible and sp.shop_qid == _q("s_hest") and view.busy()
+	var gold0: int = gs.party.gold
+	var bought: Dictionary = sp.buy_one("item", DialogueTestSuite.I25)
+	checks["buy goes through ShopRules"] = DictUtil.to_bool(bought["ok"]) and gs.party.gold < gold0 and DictUtil.to_int(gs.party.stash.get(DialogueTestSuite.I25, 0)) >= 1
+	sp.close()
+	checks["close returns to the dialogue"] = not sp.is_open() and dp.is_open() and dp.runner.node_id == dp.runner.start
+	# turn-in step: recipient and loot pick
+	var _st: Array[String] = QuestRunner.start(gs, _q("q_hest"))
+	var _f: String = QuestRunner.set_flag(gs, "dr.hest", true)
+	dp.refresh()
+	var _hand: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), "Hand it over"))
+	checks["turn-in shows the recipient and loot step"] = not dp.pending.is_empty() and dp._turn_in.get_child_count() > 0 and not dp.recipient_id.is_empty()
+	dp.toggle_pick(_q("l_gem"), true)
+	var done: Dictionary = dp.confirm_turn_in()
+	checks["confirm completes the quest with the pick"] = DictUtil.to_bool(done.get("ok", false)) and QuestRunner.status(gs, _q("q_hest")) == "completed" and gs.loot_claimed.has(_q("l_gem")) and gs.has_flag("dr.thanked") and dp.pending.is_empty()
+	# dialogue fight settles through the outcome buttons
+	var _fight: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), "Fight"))
+	checks["a dialogue fight opens the outcome panel"] = str(view.pending_fight.get("source", "")) == "dialogue" and not dp.is_open() and view.busy()
+	view.settle("won")
+	checks["won settles through DialogueRunner.after_fight"] = view.pending_fight.is_empty() and not view.busy()
+	tree_parent.remove_child(view)
+	view.free()
+	return _report("Dialogue and shop panels (talk, locked choice, shop buy and close, turn-in step, dialogue fight)", checks)

@@ -5,6 +5,7 @@ extends CombatPanel
 # Tactical RPG - Playback & Round Control Panel
 # Step / auto-play / reset buttons, phase badge, status line and the round
 # advance button. ⛶ and 🎒 ask the host for the timeline / gear screens.
+# Every button plays the UI click (AudioDirector.ui_event).
 # ==============================================================================
 
 var controls: PlaybackControlsUI
@@ -19,14 +20,19 @@ func _init() -> void:
 	add_child(controls)
 
 func _on_bound() -> void:
-	controls.step_prev_pressed.connect(func() -> void: session.step_prev())
-	controls.play_pressed.connect(func() -> void: session.toggle_auto_play())
-	controls.step_next_pressed.connect(func() -> void: session.step_next())
-	controls.reset_round_pressed.connect(func() -> void: session.reset_round())
-	controls.reset_game_pressed.connect(func() -> void: session.reset_battle())
-	controls.next_round_pressed.connect(func() -> void: session.advance_round())
-	controls.popout_pressed.connect(func() -> void: modal_requested.emit("timeline"))
-	controls.gear_pressed.connect(func() -> void: modal_requested.emit("gear"))
+	controls.step_prev_pressed.connect(_clicked.bind(func() -> void: session.step_prev()))
+	controls.play_pressed.connect(_clicked.bind(func() -> void: session.toggle_auto_play()))
+	controls.step_next_pressed.connect(_clicked.bind(func() -> void: session.step_next()))
+	controls.reset_round_pressed.connect(_clicked.bind(func() -> void: session.reset_round()))
+	controls.reset_game_pressed.connect(_clicked.bind(func() -> void: session.reset_battle()))
+	controls.next_round_pressed.connect(_clicked.bind(func() -> void: session.advance_round()))
+	controls.popout_pressed.connect(_clicked.bind(func() -> void: modal_requested.emit("timeline")))
+	controls.gear_pressed.connect(_clicked.bind(func() -> void: modal_requested.emit("gear")))
+
+# A button press: the UI click sound (S14-L3; silent without a director or sound), then the action.
+func _clicked(action: Callable) -> void:
+	AudioDirector.ui_event("click")
+	action.call()
 
 func refresh() -> void:
 	if session == null:

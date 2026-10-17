@@ -17,6 +17,15 @@ extends RefCounted
 #   RIPOSTE  (buff, DEFEND skill) counters adjacent melee attackers (RiposteRules). Unlike the
 #            queued statuses it is active IMMEDIATELY (from the block the skill starts, see
 #            grant_now) and is removed by any stance change (Combatant.set_stance)
+#   SLOW     (debuff) -SLOW_TILES tiles per move block (floor 1; cancels haste), Combatant.move_per_block
+#   EXPOSE   (debuff) -magnitude armor rating (floor 0), DamageCalculator.armor_rating
+#   FORTIFY  (buff, support/DEFEND grant) +magnitude armor rating
+#   POISON   (debuff, stack_potency: magnitudes add up to the cap) loses the magnitude in HP at round end
+#   BURN     (debuff) loses magnitude % of max HP at round end (minimum 1)
+#   REGEN    (buff) regains magnitude % of max HP at round end (minimum 1, capped at missing HP)
+#   Round end order per unit (CombatResolver.apply_round_end_effects): bleed -> poison -> burn -> regen.
+# Magnitudes: a status carries one when its registry row has magnitude_max > 0 (has_magnitude).
+# Sources: Combatant.status_sources / pending_status_sources hold the unit name of the last applier.
 # Debuffs come from attack skills (rolled against resistance) and AP debt
 # (overspending: 3+ debt staggers, 5+ stuns; no resist roll, it's self-inflicted).
 # Buffs come from SUPPORT skills (SupportCommand) and skip resistance.
@@ -33,9 +42,16 @@ const HASTE: String = "haste"
 const TAUNT: String = "taunt"
 const RIPOSTE: String = "riposte"
 const WEAKEN: String = "weaken"
+const SLOW: String = "slow"
+const EXPOSE: String = "expose"
+const FORTIFY: String = "fortify"
+const REGEN: String = "regen"
+const POISON: String = "poison"
+const BURN: String = "burn"
 
 const BLEED_PCT: float = 0.06    # of max HP per round while bleeding (minimum 1)
 const HASTE_TILES: int = 1       # extra tiles per move block while hasted
+const SLOW_TILES: int = 1        # fewer tiles per move block while slowed (structural mirror of HASTE_TILES)
 
 const DEBT_STAGGER: int = 3
 const DEBT_STUN: int = 5
@@ -69,9 +85,31 @@ static func stack(existing_rounds: int, existing_potency: int, new_rounds: int, 
 static func bleed_damage(c: Combatant) -> int:
 	return maxi(1, roundi(float(c.max_hp) * BLEED_PCT))
 
+# Round-end poison damage: the active stacked magnitude (0 when not poisoned).
+static func poison_damage(c: Combatant) -> int:
+	return c.active_magnitude(POISON)
+
+# Round-end burn damage: magnitude % of max HP, minimum 1.
+static func burn_damage(c: Combatant) -> int:
+	return maxi(1, roundi(float(c.max_hp) * float(c.active_magnitude(BURN)) / 100.0))
+
+# Round-end regen heal before the missing-HP cap: magnitude % of max HP, minimum 1.
+static func regen_amount(c: Combatant) -> int:
+	return maxi(1, roundi(float(c.max_hp) * float(c.active_magnitude(REGEN)) / 100.0))
+
 static func display_name(status: String) -> String:
 	var shown: String = str(StatusRegistry.row(status).get("display", ""))
 	return shown if not shown.is_empty() else status.capitalize()
+
+# Status chip text: the display name plus the magnitude with its unit ("Poisoned 12 HP", "Fortified 8 armor");
+# just the name for statuses without a magnitude.
+static func label_with_magnitude(status: String, magnitude: int) -> String:
+	var shown: String = SkillText.format_magnitude(status, magnitude)
+	return display_name(status) if shown.is_empty() else "%s %s" % [display_name(status), shown]
+
+# Chip text of an ACTIVE status on `c` (label_with_magnitude with the instance's magnitude).
+static func chip_text(c: Combatant, status: String) -> String:
+	return label_with_magnitude(status, DictUtil.int_of(c.status_magnitudes, status))
 
 # Blocks the status takes away from a round.
 static func blocked_blocks(status: String) -> Array[int]:
@@ -90,35 +128,53 @@ static func apply_chance(target: Combatant, status: String, potency: int) -> int
 	return clampi(roundi(float(potency) - resist), 0, 100)
 
 # Rolls a skill-inflicted status. On success it is queued for the target's next round.
-static func try_inflict(target: Combatant, status: String, potency: int, rng: RandomNumberGenerator, rounds: int = 1, magnitude: int = 0) -> bool:
+# `source` is the unit name of the applier (kept in Combatant.pending_status_sources).
+static func try_inflict(target: Combatant, status: String, potency: int, rng: RandomNumberGenerator, rounds: int = 1, magnitude: int = 0, source: String = "") -> bool:
 	if target == null or not target.is_alive():
 		return false
 	var chance: int = apply_chance(target, status, potency)
 	var roll: int = rng.randi_range(1, 100) if rng != null else 100
 	if roll > chance:
 		return false
-	queue(target, status, rounds, magnitude)
+	queue(target, status, rounds, magnitude, source)
 	return true
 
-# True for statuses whose instance carries a magnitude (percent) next to its rounds.
+# True for statuses whose instance carries a magnitude next to its rounds (registry magnitude_max > 0).
 static func has_magnitude(status: String) -> bool:
-	return status == WEAKEN
+	return StatusRegistry.magnitude_max(status) > 0
+
+# A magnitude of 0 (or less) on a status with a registry range becomes the range minimum, so an instance
+# never carries magnitude 0; statuses without a range keep what they were given (it is not stored).
+static func magnitude_or_min(status: String, magnitude: int) -> int:
+	if magnitude <= 0 and has_magnitude(status):
+		return StatusRegistry.magnitude_min(status)
+	return magnitude
 
 # Queues a status for the target's next round, lasting `rounds` rounds (the longer wins).
-# `magnitude` is stored only for statuses that carry one; a repeat keeps the stronger (registry stack rule and cap).
-static func queue(target: Combatant, status: String, rounds: int = 1, magnitude: int = 0) -> void:
+# `magnitude` is stored only for statuses that carry one; a repeat follows the registry stack rule and cap.
+# `source` (unit name; "" = unknown) replaces the queued instance's source when given (the newer applier wins).
+static func queue(target: Combatant, status: String, rounds: int = 1, magnitude: int = 0, source: String = "") -> void:
+	magnitude = magnitude_or_min(status, magnitude)
 	target.pending_statuses[status] = true
 	var existing_rounds: int = DictUtil.int_of(target.pending_status_rounds, status)
 	var combined: Dictionary = stack(existing_rounds, DictUtil.int_of(target.pending_status_magnitudes, status), rounds, magnitude, status)
 	target.pending_status_rounds[status] = DictUtil.to_int(combined["rounds"])
 	if has_magnitude(status):
 		target.pending_status_magnitudes[status] = DictUtil.to_int(combined["potency"])
+	if not source.is_empty():
+		target.pending_status_sources[status] = source
 
 # Makes a buff active right now (self-buffs from DEFEND skills), lasting `rounds` rounds
-# counting the current one (the longer wins).
-static func grant_now(target: Combatant, status: String, rounds: int = 1) -> void:
+# counting the current one (the longer wins). `magnitude` and `source` as in queue().
+static func grant_now(target: Combatant, status: String, rounds: int = 1, magnitude: int = 0, source: String = "") -> void:
+	magnitude = magnitude_or_min(status, magnitude)
+	var combined: Dictionary = stack(DictUtil.int_of(target.status_rounds_left, status), DictUtil.int_of(target.status_magnitudes, status), rounds, magnitude, status)
 	target.statuses[status] = true
-	target.status_rounds_left[status] = DictUtil.to_int(stack(DictUtil.int_of(target.status_rounds_left, status), 0, rounds, 0, status)["rounds"])
+	target.status_rounds_left[status] = DictUtil.to_int(combined["rounds"])
+	if has_magnitude(status):
+		target.status_magnitudes[status] = DictUtil.to_int(combined["potency"])
+	if not source.is_empty():
+		target.status_sources[status] = source
 
 # True when `status` is active now or queued for next round.
 static func has_any(target: Combatant, status: String) -> bool:
@@ -133,6 +189,8 @@ static func remove(target: Combatant, status: String) -> bool:
 	target.pending_status_rounds.erase(status)
 	target.status_magnitudes.erase(status)
 	target.pending_status_magnitudes.erase(status)
+	target.status_sources.erase(status)
+	target.pending_status_sources.erase(status)
 	return found
 
 # Next-round penalty for overspending: "" or the status it causes.
@@ -153,14 +211,18 @@ static func roll_over(c: Combatant, ap_regen: int) -> Array[String]:
 		if left > 0:
 			carried[str(status)] = left
 	var old_magnitudes: Dictionary = c.status_magnitudes.duplicate()
+	var old_sources: Dictionary = c.status_sources.duplicate()
 	c.statuses.clear()
 	c.status_rounds_left.clear()
 	c.status_magnitudes.clear()
+	c.status_sources.clear()
 	for status: Variant in carried:
 		c.statuses[str(status)] = true
 		c.status_rounds_left[str(status)] = carried[status]
 		if old_magnitudes.has(status):
 			c.status_magnitudes[str(status)] = old_magnitudes[status]
+		if old_sources.has(status):
+			c.status_sources[str(status)] = old_sources[status]
 	for status: Variant in c.pending_statuses:
 		var queued_rounds: int = DictUtil.int_of(c.pending_status_rounds, status, 1)
 		if has_magnitude(str(status)):
@@ -168,9 +230,12 @@ static func roll_over(c: Combatant, ap_regen: int) -> Array[String]:
 			c.status_magnitudes[str(status)] = DictUtil.to_int(merged["potency"])
 		c.statuses[str(status)] = true
 		c.status_rounds_left[str(status)] = maxi(DictUtil.int_of(c.status_rounds_left, status), queued_rounds)
+		if c.pending_status_sources.has(status):
+			c.status_sources[str(status)] = c.pending_status_sources[status]   # the newer source wins
 	c.pending_statuses.clear()
 	c.pending_status_rounds.clear()
 	c.pending_status_magnitudes.clear()
+	c.pending_status_sources.clear()
 	c.riposted.clear()
 	var debt_penalty: String = debt_status(maxi(0, -c.ap))
 	if not debt_penalty.is_empty():

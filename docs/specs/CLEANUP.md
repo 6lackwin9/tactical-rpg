@@ -150,12 +150,12 @@ ROADMAP trim. Status: done 2026-10-17.
 
 ### CLN-12
 
-Large suites. Status: confirmed (user 2026-10-17).
+Large suites. Status: done 2026-10-17.
 
-- What and where: over the 450-line rule of DECISIONS "R1 test split": `combat_extensions_test_suite.gd` 795 (R1 named helpers 16-118 plus three groups), `scenes/dojo/dojo_assertions.gd` 771 (one function per `_run_*`), `ai_skills_test_suite.gd` 634, `engine_pieces_test_suite.gd` 480, `focus_gear_test_suite.gd` 459.
+- Result: suites CombatExtAttacks, CombatExtAi (helpers `CombatExtKit`), AiSkillsTactics (fixtures `AiSkillsKit`), Unarmed, FocusGearBudget; dojo split into DojoSessionAssertions, DojoUiAssertions. Same PASS lines. ItemCatalog: `create_spiked_knuckles`, `all_items` deleted; `create_consumable` kept (in use). Dojo-27 has no caller: CLN-17.
+- What: suites over the 450-line rule (DECISIONS "R1 test split"): combat_extensions 795, dojo_assertions 771, ai_skills 634, engine_pieces 480, focus_gear 459.
 - Change: split by feature group, one registry line each; no behaviour or number change.
-- When: after ITEM1 (dojo dual-wield assertions 21, 21b, 28 and focus_gear change there) and after CLN-8 (shared helpers first, so the split moves less code).
-- Risk: low-medium; assertion count equal. Touches: those suites, `suite_registry.gd`.
+- Touches: those suites, the registry.
 
 ### CLN-13
 
@@ -184,7 +184,7 @@ Goblin placeholder art. Status: confirmed (user 2026-10-17, new from Q1).
 
 ### CLN-16
 
-Legacy AI path. Status: confirmed (user 2026-10-17, new from Q2).
+Legacy AI path. Status: done 2026-10-17.
 
 - What and where: `AiProfile.smart_skills` (`ai_profile.gd`, 2 uses) and its off branches in `tactical_ai.gd` (5 uses); `ai_skills_test_suite.gd` (7 uses) covers both paths; BAL2-L adds a sim switch for it (`tools/sim/*`).
 - Change: remove the `false` path, the field, its tests and the sim switch; fix GAME_BRIEF "AI skill use".
@@ -196,7 +196,7 @@ Legacy AI path. Status: confirmed (user 2026-10-17, new from Q2).
 Q1 and Q2 answered (now CLN-15, CLN-16); Q3 waits for ITEM1.
 
 - Q1 (unused goblin art keys) answered: map them now (CLN-15). Q2 (`smart_skills = false`) answered: remove after the BAL2 rerun (CLN-16).
-- Q3 `ItemCatalog` named shorthands (34 uses in `dojo_loadouts.gd`) map old names to item ids (`create_iron_claymore` returns `wpn_claymore`); review after ITEM1's migration.
+- Q3 `ItemCatalog` named shorthands (34 uses in `dojo_loadouts.gd`) map old names to item ids (`create_iron_claymore` returns `wpn_claymore`); review after ITEM1's migration. Answered (user 2026-10-17): fold the review into the CLN-6 ItemCatalog part (ITEM1 is done).
 
 ### Checked and kept
 

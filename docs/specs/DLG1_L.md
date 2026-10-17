@@ -92,7 +92,7 @@ Ref scans: dialogue `speaker`, node speakers, condition `quest` refs, effect `qu
 
 ### 2.2 Opening and showing (`DialogueRunner`, one instance per conversation, never saved)
 
-`DialogueRunner.open(gs, character_ref) -> DialogueRunner` (`errors` non-empty = not opened). The tree is the character's `dialogue`; "" = a generated root node with the `greeting` line and the service choices only. `view() -> Dictionary`: `{speaker, speaker_name, node, text, choices: [{text, locked}], end}`; tokens replaced (`{npc}` talked-to name, `{quest}` resolved quest name, `{shop}` shop name, `{gold}` party gold). Showing a node runs its `effects` (every time it is shown).
+`DialogueRunner.open(gs, character_ref) -> DialogueRunner` (`errors` non-empty = not opened). The tree is the character's `dialogue`; "" = a generated root node with the `greeting` line and the service choices only. `view() -> Dictionary`: `{speaker, speaker_name, node, text, choices: [{text, locked}], end}`; tokens replaced (`{npc}` talked-to name, `{quest}` resolved quest name, `{shop}` shop name, `{gold}` party gold). Showing a node runs its `effects` (every time it is shown), except returning to the node a shop was opened from (2.4 step 5).
 
 Visible choices, in order: authored choices whose `requires` all hold and `unless` none hold; failing ones with `show_locked` appear `locked` (not choosable); the rest are hidden. Each `stat` condition in `requires` prefixes the text with `[STAT min]` (example `[KNOW 14] `), generated, never authored. Indexes passed to `choose` refer to the visible list.
 
@@ -113,7 +113,7 @@ Enforcement (also for authored effects): `start_quest` is refused unless the res
 2. Pre-check every effect against the current state: `start_quest` needs `available` plus enforcement; `turn_in` needs `ready` plus enforcement; all `take` effects together need the summed items and gold; `open_shop` needs an open shop; `fight` needs a resolving encounter. Any failure = `{ok: false, errors}` and nothing changes (all-or-nothing).
 3. With `turn_in`: nothing is applied yet; returns `{pending: "turn_in", quest, offers, picks_allowed}`. `confirm_turn_in(recipient_id, picks)` calls `QuestRunner.complete` (all-or-nothing itself), then the remaining effects, then moves on; `cancel()` keeps the node and changes nothing.
 4. Otherwise apply in order: `set_flag` via `QuestRunner.set_flag`; `start_quest` via `QuestRunner.start`; `give` via `RewardGrant.apply(gs, {items, gold}, "")`; `take` via `RewardGrant.take`.
-5. Move: `fight` closes the dialogue and returns `{fight: {source: "dialogue", encounter, character}}` (after the battle `DialogueRunner.after_fight(gs, fight, outcome)` = `BattleBridge.apply`, plus `ExploreRunner.wake(gs)` on `lost`); `open_shop` returns `{shop: qid}` and `close_shop()` shows the choice's `to` node (`to` "" = the current node again); else the `to` node, "" = end.
+5. Move: `fight` closes the dialogue and returns `{fight: {source: "dialogue", encounter, character}}` (after the battle `DialogueRunner.after_fight(gs, fight, outcome)` = `BattleBridge.apply`, plus `ExploreRunner.wake(gs)` on `lost`); `open_shop` returns `{shop: qid}` and `close_shop()` shows the choice's `to` node (`to` "" = the current node again, WITHOUT re-running its effects: user 2026-10-17, decision "DLG1 shop return"; a different `to` node runs its effects as usual); else the `to` node, "" = end.
 
 `RewardGrant.take(gs, items, gold) -> Array[String]`: validates holdings first ("Not enough %s."), then removes. `RewardGrant.apply` adds `gold` and echoes it in `granted`.
 
@@ -122,8 +122,8 @@ Enforcement (also for authored effects): `start_quest` is refused unless the res
 - Open: shop `requires_flags` hold and the keeper is not gone.
 - Integer prices: `bm = roundi(buy_mult x 100)`, `sm = roundi(sell_mult x 100)`, `rb = rs = 100` (REP1 replaces them). Buy = `price` when > 0, else `maxi(1, ceil(value x bm x rb / 10000))`; sell = `floor(value x sm x rs / 10000)`. `value` = the base item's `value`. Loot sells at its fixed `price`.
 - `offers(gs, shop_ref) -> Array[Dictionary]` `{kind: "item" | "loot", id, item, count, price, left}`: stock entries whose `requires_flags` hold (`left` -1 = unlimited, else `count - sold`), then loot entries that are unclaimed and whose loot `requires_flags` hold.
-- `buy(gs, shop_ref, kind, id, count := 1) -> Dictionary`: refused when closed, `left < count` ("Sold out."), gold < price x count ("Not enough gold."), or loot with count != 1; then gold falls, the stash gains the items, limited stock adds to `gs.shops`, loot adds its qid through `RewardGrant.claim_loot` (it leaves every quest pool).
-- `sell_list(gs, shop_ref)`: stash items whose type is in `buys`, not `QUEST`, sell price >= 1. `sell(gs, shop_ref, item, count := 1)`: refused otherwise; stash falls, gold rises. Sold items never restock the shop; no restock at all in DLG1.
+- `buy(gs, shop_ref, kind, id, count := 1) -> Dictionary`: refused when closed, `count` above `BUY_MAX` 99 ("Buy at most 99 at a time.", DLG1-F), `left < count` ("Sold out."), gold < price x count ("Not enough gold."), or loot with count != 1; then gold falls, the stash gains the items, limited stock adds to `gs.shops`, loot adds its qid through `RewardGrant.claim_loot` (it leaves every quest pool).
+- `sell_list(gs, shop_ref)`: stash items whose type is in `buys`, not `QUEST`, sell price >= 1. `sell(gs, shop_ref, item, count := 1)`: refused otherwise; stash falls, gold rises (above `GOLD_MAX` the rest is dropped and reported: result `gold` = added, plus a note; DLG1-F). Sold items never restock the shop; no restock at all in DLG1.
 
 ### 2.6 Authoring lint (`DialogueRules.quest_warnings(world_id)`, warnings only)
 

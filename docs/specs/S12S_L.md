@@ -1,6 +1,6 @@
 # S12S-L: status expansion (slow, expose, fortify, regen, poison, burn), registry magnitude ranges, round-end order, sim channels, AI use
 
-Status: spec (design-brainstorm 2026-10-17; direction in DECISIONS combat "S12 baseline answers" and docs/specs/S12_RULES.md 2.0-2.2; awaiting approval)
+Status: done 2026-10-17 (PR #15, PR #26); approved (user 2026-10-17, decisions/workflow.md "S12S-L approval"; direction in DECISIONS combat "S12 baseline answers" and docs/specs/S12_RULES.md 2.0-2.2)
 Depends on: ITEM1-L and CLASS1-L merged (shared hubs: `combatant.gd`, `content_schema.gd`, validators); first of the S12 slices (S12S, then S12T, then S12C)
 Lane: logic (schema first; commit 1 releases S12S-A)
 Touches: `scripts/combat/status/{status_registry,status_effects,support_rules}.gd`, `scripts/combat/actions/defend_command.gd`, `scripts/core/combat/combatant.gd` (`move_per_block`, status source dicts), `scripts/core/combat/damage_calculator.gd` (`armor_rating` only), `scripts/combat/arena/combat_resolver.gd` (`apply_round_end_effects`), `scripts/combat/session/combat_session.gd` (snapshot fields), `scripts/content/skill_fields.gd`, `scripts/content/skill_kinds.gd` (sections), `scripts/content/validators/skill_validator.gd`, `scripts/content/skill_text.gd` (token), `scripts/combat/ai/tactical_ai.gd` (AI1 section), `tools/sim/sim_metrics.gd`, new `scripts/tests/status_expansion_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`; `scripts/art/status_art.gd` glyph rows if S14-L1 has merged

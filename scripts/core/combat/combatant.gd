@@ -31,8 +31,10 @@ var statuses: Dictionary = {}           # active this round: status name -> true
 var pending_statuses: Dictionary = {}   # inflicted this round, active next round
 var status_rounds_left: Dictionary = {} # active status -> rounds left, this one included (multi-round buffs / bleed)
 var pending_status_rounds: Dictionary = {}   # queued status -> rounds it will last once active
-var status_magnitudes: Dictionary = {}  # active status -> magnitude percent (weaken only; see StatusEffects.has_magnitude)
-var pending_status_magnitudes: Dictionary = {}   # queued status -> magnitude percent once active
+var status_magnitudes: Dictionary = {}  # active status -> magnitude (unit from the registry row; see StatusEffects.has_magnitude)
+var pending_status_magnitudes: Dictionary = {}   # queued status -> magnitude once active
+var status_sources: Dictionary = {}     # active status -> name of the unit that last applied it (S12S-L)
+var pending_status_sources: Dictionary = {}   # queued status -> name of the unit that last applied it
 var riposted: Dictionary = {}         # attackers this unit already countered this round (RiposteRules)
 var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
@@ -397,6 +399,8 @@ func remove_status(status: String) -> void:
 	pending_status_rounds.erase(status)
 	status_magnitudes.erase(status)
 	pending_status_magnitudes.erase(status)
+	status_sources.erase(status)
+	pending_status_sources.erase(status)
 
 # Outgoing skill power factor from an active weaken: 1 - magnitude/100 (1.0 when not weakened; magnitude capped by the registry).
 func weaken_factor() -> float:
@@ -411,10 +415,17 @@ func debuff_resistance() -> float:
 	return stats.get_debuff_resistance(get_weapon_context()) if stats != null else 0.0
 
 # Tiles one Move command can cover (one block): faster units cover more ground.
-# Haste adds StatusEffects.HASTE_TILES on top of the 1-4 base.
+# Haste adds StatusEffects.HASTE_TILES on top of the 1-4 base, slow takes StatusEffects.SLOW_TILES off
+# (floor 1); haste and slow on one unit cancel.
 func move_per_block() -> int:
 	var base: int = clampi(floori(float(speed + 2) / 5.0), 1, 4)
-	return base + (StatusEffects.HASTE_TILES if has_status(StatusEffects.HASTE) else 0)
+	var hasted: int = StatusEffects.HASTE_TILES if has_status(StatusEffects.HASTE) else 0
+	var slowed: int = StatusEffects.SLOW_TILES if has_status(StatusEffects.SLOW) else 0
+	return maxi(1, base + hasted - slowed)
+
+# Magnitude of an ACTIVE status instance (0 when the status is not active or carries none).
+func active_magnitude(status: String) -> int:
+	return DictUtil.int_of(status_magnitudes, status) if has_status(status) else 0
 
 # Stat-context dictionary used for weapon-conditional bonuses (passives etc.).
 func get_weapon_context() -> Dictionary:

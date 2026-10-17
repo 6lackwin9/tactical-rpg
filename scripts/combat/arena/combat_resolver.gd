@@ -70,18 +70,61 @@ func execute_block(block: int) -> void:
 	_resolve_block(block)
 	block_completed.emit(block)
 
-# End-of-round effects, applied once after the last block: bleeding units lose a share of
-# max HP (StatusEffects.bleed_damage), ignoring guard and armor. Returns the damage dealt per unit.
+# Filled by apply_round_end_effects (S12S-L): Combatant -> HP regained from regen this round end.
+var last_round_end_heals: Dictionary = {}
+# Filled by apply_round_end_effects: one row per step that changed HP, in resolution order:
+# {"unit": Combatant, "status": String, "amount": int (HP actually lost, or regained for regen), "source": String (applier name)}.
+var last_round_end_steps: Array[Dictionary] = []
+
+# End-of-round effects, applied once after the last block, per unit in registered order (S12S-L rule 3):
+#   1. bleed  loses StatusEffects.bleed_damage (6% max HP, min 1)
+#   2. poison loses the stacked magnitude
+#   3. burn   loses magnitude % of max HP (min 1)
+#   4. regen  regains magnitude % of max HP (min 1, capped at missing HP; Combatant.heal like SupportRules)
+# Damage steps ignore guard and armor. Each step is skipped once the unit is no longer active, so a unit
+# defeated by steps 1-3 does not regenerate. Returns Combatant -> damage dealt (bleed + poison + burn).
 func apply_round_end_effects() -> Dictionary:
 	var dealt: Dictionary = {}
+	last_round_end_heals = {}
+	last_round_end_steps = []
 	for c: Combatant in registered_combatants:
 		if c.is_active() and c.has_status(StatusEffects.BLEED):
+			var hp_before: int = c.hp
 			var amount: int = c.take_damage(StatusEffects.bleed_damage(c), true)
-			dealt[c] = amount
-			var msg: String = "[Bleed] %s bleeds for %d damage (HP %d/%d)%s" % [c.name, amount, c.hp, c.max_hp, "" if c.is_alive() else " -> %s DEFEATED!" % c.name]
-			print(msg)
-			log_emitted.emit(msg)
+			_record_round_end(c, StatusEffects.BLEED, amount, hp_before - c.hp, dealt)
+			_emit_round_end("[Bleed] %s bleeds for %d damage (HP %d/%d)%s" % [c.name, amount, c.hp, c.max_hp, _defeat_suffix(c)])
+		if c.is_active() and c.has_status(StatusEffects.POISON) and StatusEffects.poison_damage(c) > 0:
+			var hp_before: int = c.hp
+			var amount: int = c.take_damage(StatusEffects.poison_damage(c), true)
+			_record_round_end(c, StatusEffects.POISON, amount, hp_before - c.hp, dealt)
+			_emit_round_end("[Poison] %s takes %d poison damage (HP %d/%d)%s" % [c.name, amount, c.hp, c.max_hp, _defeat_suffix(c)])
+		if c.is_active() and c.has_status(StatusEffects.BURN):
+			var hp_before: int = c.hp
+			var amount: int = c.take_damage(StatusEffects.burn_damage(c), true)
+			_record_round_end(c, StatusEffects.BURN, amount, hp_before - c.hp, dealt)
+			_emit_round_end("[Burn] %s burns for %d damage (HP %d/%d)%s" % [c.name, amount, c.hp, c.max_hp, _defeat_suffix(c)])
+		if c.is_active() and c.has_status(StatusEffects.REGEN):
+			var before: int = c.hp
+			c.heal(mini(StatusEffects.regen_amount(c), c.max_hp - c.hp))
+			var healed: int = c.hp - before
+			if healed > 0:
+				last_round_end_heals[c] = healed
+				last_round_end_steps.append({"unit": c, "status": StatusEffects.REGEN, "amount": healed, "source": str(c.status_sources.get(StatusEffects.REGEN, ""))})
+				_emit_round_end("[Regen] %s regenerates %d HP (HP %d/%d)" % [c.name, healed, c.hp, c.max_hp])
 	return dealt
+
+# `amount` is the step's damage (as logged and returned, like bleed always was); the step row records `lost`,
+# the HP actually lost (no overkill), so per-source sums match the HP the units lost.
+func _record_round_end(c: Combatant, status: String, amount: int, lost: int, dealt: Dictionary) -> void:
+	dealt[c] = DictUtil.int_of(dealt, c) + amount
+	last_round_end_steps.append({"unit": c, "status": status, "amount": lost, "source": str(c.status_sources.get(status, ""))})
+
+static func _defeat_suffix(c: Combatant) -> String:
+	return "" if c.is_alive() else " -> %s DEFEATED!" % c.name
+
+func _emit_round_end(msg: String) -> void:
+	print(msg)
+	log_emitted.emit(msg)
 
 func finish_round() -> void:
 	print("\n--- ROUND %d CONCLUDED (ROUND ROLLOVER) ---" % current_round)

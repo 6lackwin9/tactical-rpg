@@ -7,7 +7,7 @@ extends Node2D
 #   Panels & layout     -> scripts/ui/combat/      (CombatPanel subclasses, CombatDockHost)
 # Callers (game flow, test harness) may assign `encounter` before the scene
 # enters the tree (the Scene Runner does), or pass `-- --encounter=<catalog id>`;
-# it defaults to the Goblin Skirmish.
+# it defaults to the Goblin Skirmish. An AudioDirector plays the presenter's sounds (S14-L3).
 # Playtests (PLAYTEST1): set `playtest` (a recording path) and `battle` before the scene enters the tree
 # to play a recorded battle back (fast-forwarded by PlaytestReplayer before the UI mounts, so no FX
 # flood), plus `take_over` = N to replay rounds 1..N-1 and plan round N live as a branch recording.
@@ -19,6 +19,7 @@ extends Node2D
 var encounter: CombatEncounter = null
 var session: CombatSession = null
 var host: CombatDockHost = null
+var audio: AudioDirector = null
 
 var playtest: String = ""          # recording to play back ("" = a live battle)
 var battle: int = 0                # battle index in the recording
@@ -49,6 +50,12 @@ func _ready() -> void:
 	host = CombatDockHost.new()
 	_canvas.add_child(host)
 	host.setup(session)
+	audio = AudioDirector.new()
+	add_child(audio)
+	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+	if grid != null:
+		audio.connect_presenter(grid.presenter)
+	audio.apply_volumes()
 	if unplayable:
 		banner = PlaybackBanner.new()
 		_canvas.add_child(banner)

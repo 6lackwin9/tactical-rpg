@@ -79,7 +79,7 @@ func cost_text() -> String:
 			names.append(StatusEffects.display_name(status))
 		text += " • cleanses %s" % ", ".join(names)
 	if not grants.is_empty():
-		text += " • %s" % StatusEffects.display_name(grants)
+		text += " • %s" % StatusEffects.label_with_magnitude(grants, StatusEffects.magnitude_or_min(grants, step.skill.status_magnitude if step != null and step.skill != null else 0))
 	if jump_to != Vector2i(-1, -1):
 		text += " • jumps to %s" % str(jump_to)
 	if not warning.is_empty():

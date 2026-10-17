@@ -9,6 +9,8 @@ extends RefCounted
 # ==============================================================================
 
 const TAG: String = "StatusRegistry"
+const ORIGINALS: Array[String] = ["stagger", "stun", "root", "bleed", "weaken", "haste", "taunt", "riposte"]
+const S12S: Array[String] = ["slow", "expose", "fortify", "regen", "poison", "burn"]
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -39,19 +41,22 @@ static func _test_registry_complete() -> bool:
 	var ids: Array[String] = StatusRegistry.ids()
 	var sorted_ids: Array[String] = ids.duplicate()
 	sorted_ids.sort()
-	checks["there are eight statuses"] = consts.size() == 8 and ids.size() == consts.size()
+	checks["there are fourteen statuses (eight originals + six S12S-L)"] = consts.size() == ORIGINALS.size() + S12S.size() and ids.size() == consts.size()
 	var covered: bool = true
 	for id: String in consts:
 		covered = covered and StatusRegistry.has(id)
 	checks["every StatusEffects id constant has a registry row"] = covered
 	checks["every row is a StatusEffects id constant"] = sorted_ids == consts
 	checks["the rows are well formed (kinds, rules, grants, names)"] = StatusRegistry.row_errors().is_empty()
-	checks["covers stagger, stun, root, bleed, weaken, haste, taunt, riposte"] = ids == ["stagger", "stun", "root", "bleed", "weaken", "haste", "taunt", "riposte"]
+	var expected_ids: Array[String] = ORIGINALS.duplicate()
+	expected_ids.append_array(S12S)
+	checks["covers the eight originals, then slow, expose, fortify, regen, poison, burn"] = ids == expected_ids
 	var all_known_rules: bool = true
 	for id: String in ids:
 		all_known_rules = all_known_rules and StatusRegistry.RULES.has(StatusRegistry.stacking_of(id)) and StatusRegistry.default_rounds(id) >= 1
 	checks["every status has a known stacking rule and default rounds"] = all_known_rules
-	checks["every status refreshes to the max duration; only weaken is capped (25)"] = ids.all(func(id: String) -> bool: return StatusRegistry.stacking_of(id) == StatusRegistry.REFRESH_MAX_DURATION and StatusRegistry.cap_of(id) == (25 if id == StatusEffects.WEAKEN else 0))
+	checks["the originals refresh to the max duration; only weaken is capped (25)"] = ORIGINALS.all(func(id: String) -> bool: return StatusRegistry.stacking_of(id) == StatusRegistry.REFRESH_MAX_DURATION and StatusRegistry.cap_of(id) == (25 if id == StatusEffects.WEAKEN else 0))
+	checks["poison is the only stack_potency status"] = ids.filter(func(id: String) -> bool: return StatusRegistry.stacking_of(id) == StatusRegistry.STACK_POTENCY) == [StatusEffects.POISON]
 	checks["an unknown status has no row"] = not StatusRegistry.has("mystery") and StatusRegistry.row("mystery").is_empty()
 	# row_errors catches bad rows (checked on a copy of the validation inputs through the public rules).
 	checks["only debuffs are resistable"] = StatusRegistry.ids_where(StatusRegistry.KIND_BUFF, true).is_empty()
@@ -60,11 +65,14 @@ static func _test_registry_complete() -> bool:
 static func _test_derived_lists() -> bool:
 	var checks: Dictionary = {}
 	# The literals the registry replaced (previous behaviour must be identical).
-	checks["debuffs() = the old four plus weaken"] = StatusEffects.debuffs() == [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT, StatusEffects.BLEED, StatusEffects.WEAKEN]
-	checks["buffs() unchanged"] = StatusEffects.buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.RIPOSTE]
-	checks["support_buffs() unchanged"] = StatusEffects.support_buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT]
+	var old_debuffs: Array[String] = [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT, StatusEffects.BLEED, StatusEffects.WEAKEN]
+	var new_debuffs: Array[String] = [StatusEffects.SLOW, StatusEffects.EXPOSE, StatusEffects.POISON, StatusEffects.BURN]
+	old_debuffs.append_array(new_debuffs)
+	checks["debuffs() = the old four plus weaken, then the S12S-L debuffs"] = StatusEffects.debuffs() == old_debuffs
+	checks["buffs() = the old three, then fortify and regen"] = StatusEffects.buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.RIPOSTE, StatusEffects.FORTIFY, StatusEffects.REGEN]
+	checks["support_buffs() gains fortify and regen (registry grant)"] = StatusEffects.support_buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.FORTIFY, StatusEffects.REGEN]
 	checks["defend_buffs() unchanged"] = StatusEffects.defend_buffs() == [StatusEffects.RIPOSTE]
-	checks["resistable() unchanged (= debuffs)"] = StatusEffects.resistable() == [StatusEffects.STAGGER, StatusEffects.STUN, StatusEffects.ROOT, StatusEffects.BLEED, StatusEffects.WEAKEN] and StatusEffects.resistable() == StatusEffects.debuffs()
+	checks["resistable() = debuffs"] = StatusEffects.resistable() == StatusEffects.debuffs()
 	var names: Dictionary = {StatusEffects.STAGGER: "Staggered", StatusEffects.STUN: "Stunned", StatusEffects.ROOT: "Rooted", StatusEffects.BLEED: "Bleeding", StatusEffects.WEAKEN: "Weakened", StatusEffects.HASTE: "Hasted", StatusEffects.TAUNT: "Taunting", StatusEffects.RIPOSTE: "Riposte"}
 	var names_ok: bool = true
 	for id: Variant in names:

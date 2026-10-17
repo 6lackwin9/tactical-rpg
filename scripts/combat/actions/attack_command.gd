@@ -200,7 +200,7 @@ func execute() -> void:
 
 	if not status_effect.is_empty() and effective_target.is_alive():
 		var chance: int = StatusEffects.apply_chance(effective_target, status_effect, status_potency)
-		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng, status_rounds, status_magnitude):
+		if StatusEffects.try_inflict(effective_target, status_effect, status_potency, rng, status_rounds, status_magnitude, source.name):
 			details.append("%s next round (%d%%)" % [StatusEffects.display_name(status_effect), chance])
 		else:
 			details.append("resisted %s (%d%%)" % [StatusEffects.display_name(status_effect).to_lower(), chance])

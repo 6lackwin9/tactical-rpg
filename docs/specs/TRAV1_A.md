@@ -1,6 +1,6 @@
 # TRAV1-A: Ashlands routes, world-map exits and the road to Iron Reaches (S10)
 
-Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
+Status: approved (user 2026-10-17) (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")
 Depends on: TRAV1-L commit 1 merged; EXP1-A merged (templates, anchors `road` and `east`, the Cinder Gate)
 Lane: asset (one branch, seed `data/seeds/trav1a.gd`)
 Touches: new `data/worlds/ashlands/routes.json`, new `data/worlds/iron_reaches/routes.json`, `data/worlds/ashlands/locations.json` (two exit markers), via `WorldCatalog.upsert` + `save_world`; `data/seeds/trav1a.gd`, `data/seeds/README.md`. No code, no tests.
