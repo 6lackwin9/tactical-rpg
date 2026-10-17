@@ -21,6 +21,8 @@ const PREFS_PATH: String = "user://scene_runner.cfg"
 # Known scenes: shown first, with descriptions. Anything else under res://scenes
 # that isn't hidden is listed under "Other scenes".
 const SCENES: Array[Dictionary] = [
+	{"path": "res://scenes/main_menu.tscn", "name": "Main Menu", "icon": "▶",
+		"desc": "The player's front door: continue, new game in a playable world, load and save slots (autosave + 3), settings and the in-game hub."},
 	{"path": "res://scenes/combat_arena.tscn", "name": "Combat Arena", "icon": "⚔",
 		"desc": "Plan and fight a battle. Pick a catalog encounter or any world's battle (played with that world's characters).", "encounters": true},
 	{"path": "res://scenes/content_forge.tscn", "name": "Content Forge", "icon": "⚒",

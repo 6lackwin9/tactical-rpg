@@ -24,7 +24,6 @@ Statuses: `idea` (brainstorm only), `spec` (spec written, awaiting approval), `a
 | S12T-A | 17 terrain rows | asset | S12T-L c1 | approved (user 2026-10-17) | docs/specs/S12T_A.md | data/catalog/terrain.json |
 | S12C-L | ends_in_stance, disrupt STANCE_BREAK, exploit | logic | S12S-L, S12T-L | approved (user 2026-10-17) | docs/specs/S12C_L.md | skill fields/ranks/validator, skill_def, combat_plan, commands, resolver, tactical_ai |
 | S12C-A | 3 combo families (feint, crushing_blow, opportunist) | asset | S12C-L c1, S12S-A | approved (user 2026-10-17) | docs/specs/S12C_A.md | skills.json, classes.json |
-| UI1-L | MenuRouter, main menu, new game (world start_party), 3 slots + autosave, peek, CurrentGame, SettingsFile, hub; no save bump | logic | EXP1-L; not parallel with DLG1-L; before TRAV1-L (user order 2026-10-17) | in-progress (branch claude/project-thread-ynqrnt; approved user 2026-10-17) | docs/specs/UI1_L.md | world_schema/catalog, new_game, save_game, scripts/ui/menus, scenes/main_menu |
 | UI1-A | ashlands start_party | asset | UI1-L c1, EXP1-A | approved (user 2026-10-17) | docs/specs/UI1_A.md | data/worlds/ashlands/world.json |
 | UI2-L | Party screen, level-up draft and preview, loadout, gear bridge, battle results | logic | UI1-L | approved (user 2026-10-17) | docs/specs/UI2_L.md | scripts/ui/menus, character_equipment_modal (if needed) |
 | UI3-L | Journal (quests only) over QuestRunner | logic | UI1-L | approved (user 2026-10-17) | docs/specs/UI3_L.md | scripts/ui/menus |

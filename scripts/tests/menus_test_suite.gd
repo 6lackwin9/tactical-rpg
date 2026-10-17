@@ -273,13 +273,51 @@ static func _test_settings() -> bool:
 # Part B: router and screen models
 # ------------------------------------------------------------------------------
 
-static func _test_part_b(_tree_parent: Node) -> bool:
+static func _test_part_b(tree_parent: Node) -> bool:
 	var ok: bool = _test_router()
 	ok = _test_new_game_model() and ok
 	ok = _test_save_slots_model() and ok
 	ok = _test_hub_model() and ok
 	ok = _test_main_menu_and_settings_model() and ok
+	ok = _test_scene(tree_parent) and ok
 	return ok
+
+# Commit 3: scenes/main_menu.tscn renders every screen and drives the models (thin view).
+static func _test_scene(tree_parent: Node) -> bool:
+	var packed: PackedScene = load("res://scenes/main_menu.tscn") as PackedScene
+	var checks: Dictionary = {"scene loads": packed != null}
+	if packed == null or tree_parent == null:
+		return _report("Main menu scene (headless without a tree: load only)", checks)
+	_wipe_saves()
+	CurrentGame.end()
+	var view: MainMenuView = packed.instantiate() as MainMenuView
+	tree_parent.add_child(view)
+	var r: MenuRouter = view.router
+	checks["main screen"] = r.top() == MenuRouter.MAIN and _has_button(view, "New game") and not _has_button(view, "Continue")
+	for id: String in [MenuRouter.LOAD, MenuRouter.SETTINGS, MenuRouter.NEW_GAME]:
+		r.push(id)
+		checks["%s renders" % id] = view.get_child_count() > 0 and _has_button(view, "Back")
+	checks["new game lists the world"] = _has_button(view, "Start in MN Base")
+	view.act((r.model() as NewGameModel).choose.bind(BASE, 4))
+	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.top() == MenuRouter.HUB
+	checks["back to the hub"] = view.leave_game() and view.game_view == null and _has_button(view, "Quit to main menu") and _has_button(view, "Explore")
+	CurrentGame.state().party.gold += 2
+	view.act((r.model() as HubModel).quit_to_menu)
+	checks["dirty quit shows the question"] = view.is_overlay_open() and r.is_asking()
+	view.answer(true)
+	checks["confirmed: main menu with Continue"] = not CurrentGame.has_game() and r.top() == MenuRouter.MAIN and _has_button(view, "Continue")
+	tree_parent.remove_child(view)
+	view.free()
+	CurrentGame.end()
+	_wipe_saves()
+	return _report("Commit 3: main menu scene (screens, new game into the game scene, hub, quit question)", checks)
+
+static func _has_button(root: Node, label: String) -> bool:
+	for n: Node in root.find_children("*", "Button", true, false):
+		var b: Button = n as Button
+		if b != null and b.text == label and b.is_inside_tree():
+			return true
+	return false
 
 # Records what the router emits.
 class Probe:

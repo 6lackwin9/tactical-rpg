@@ -128,6 +128,10 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 - World kinds `dialogues` and `shops` (validated by `DialogueRules`, `ShopRules` in `scripts/dialogue/`); base service lines in `ServiceCatalog` (`data/dialogue/services.json`). Character `dialogue` and `gone_flags`; manifest `start_gold`, `service_lines`. Quest rewards: xp, items, passives, skills, gold (cap 5000, soft 200); chest gold 0..9999. Node effects are only `set_flag` and `give`; a turn-in effect comes first in its choice. Runtime: `DialogueRunner` (open, view, choose all-or-nothing, confirm_turn_in, close_shop, advance, after_fight); `ShopRules` prices are integers (buy ceil, sell floor) with stock counted in `GameState.shops`; party gold `PartyState.gold` (cap 9999999). Save version 4 (party gold, shops).
 
+## Menus and save slots (UI1)
+
+- `scenes/main_menu.tscn` (`MainMenuView` over `MenuRouter` and screen models in `scripts/ui/menus/`; models never touch Nodes). World manifest `start_party` (party-side unit ids, max 4, inherited); playable = resolved `start_party` and `start_location`; `NewGame.create_for_world`. `SaveGame` slots: 0 autosave, 1-3 manual (`write` refuses others), `peek` (header without migrating), `newest_slot`, `autosave`. `CurrentGame` = the game in play (dirty check, busy flag refuses saving). `SettingsFile` = `user://settings.cfg` (audio, anim speed / instant, text scale; listeners `FxSettings` / `AudioDirector` get `load_from(cfg)`). No save version change.
+
 ## Asset pipeline (S14-L1)
 
 - Art keys: `AssetRegistry.resolve` / `texture` (`scripts/art/asset_registry.gd`): manifest row, then tile variant 0, then one alias hop, then template, then fallback; never null. File overrides go in `data/assets/manifest.json` via `AssetCatalog.upsert` (system rows only inside the system-edit scope; origin via promote/demote). Removal: allowed when the key has a template; refused for manifest-only keys still referenced per variant or aliased. Placeholder PNG: `tools/fc.sh export_placeholder`.

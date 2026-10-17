@@ -19,8 +19,8 @@ func worlds() -> Array[Dictionary]:
 		var party: Array[Dictionary] = []
 		for unit_id: String in WorldCatalog.start_party(w):
 			var e: Dictionary = ContentCatalog.get_entry("units", unit_id)
-			var cls: Dictionary = ContentCatalog.get_entry("classes", str(e.get("class", "")))
-			party.append({"unit": unit_id, "name": str(e.get("name", unit_id)), "class": str(cls.get("name", e.get("class", ""))), "level": DictUtil.to_int(e.get("level", 1), 1)})
+			var cls: Dictionary = ContentCatalog.get_entry("classes", str(e.get("class_id", "")))
+			party.append({"unit": unit_id, "name": str(e.get("name", unit_id)), "class": str(cls.get("name", e.get("class_id", ""))), "level": DictUtil.to_int(e.get("level", 1), 1)})
 		out.append({"id": w, "name": str(m.get("name", w)), "tagline": str(m.get("tagline", "")), "party": party})
 	return out
 

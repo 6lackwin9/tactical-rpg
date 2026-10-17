@@ -112,6 +112,14 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 	_handle(ExploreRunner.begin(gs))
 	return errors
 
+# Plays an existing game (the main menu's new or loaded game, UI1-L): resumes at its location, or enters the start
+# location when it has none yet.
+func play_state(state: GameState) -> void:
+	gs = state
+	pending_fight = {}
+	_close_panels()
+	_handle(ExploreRunner.begin(gs) if gs.location_id.is_empty() else ExploreRunner.resume(gs))
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.is_pressed() or event.is_echo():
 		return
@@ -233,6 +241,8 @@ func _autosave() -> void:
 	if gs == null or not pending_fight.is_empty():
 		return
 	var errors: Array[String] = SaveGame.write(gs, DEBUG_SLOT)
+	if errors.is_empty() and CurrentGame.state() == gs:
+		CurrentGame.mark_saved(DEBUG_SLOT)
 	if not errors.is_empty():
 		_note("Autosave refused: %s" % "; ".join(PackedStringArray(errors)))
 
