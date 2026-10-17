@@ -32,3 +32,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | `dlg1a.gd` | DLG1-A (service lines, Ashlands dialogues, keep shop, gold) |
 | `s14_a1.gd` | S14-A1 (first manifest rows: goblin_brawler alias, four sample file overrides; goblin_brawler art key) |
 | `ui1_start_party.gd` | UI1-A (Ashlands start party: warrior, ranger, rogue, mage; tidewrack inherits it) |
+| `s14_a2.gd` | S14-A2 (13 placeholder SFX blips + their manifest rows) |
