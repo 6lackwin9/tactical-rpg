@@ -28,7 +28,8 @@ var defend_below: float = 0.4   # guard once when at or below this HP fraction
 var target_pref: TargetPref = TargetPref.NEAREST
 var prefer_level: int = 0       # skill level to favour (0 = highest affordable)
 var reckless: bool = false      # never flees or guards, always charges the nearest foe (berserker behaviour)
-var heal_below: float = 0.7     # SUPPORT role: heal the most wounded ally at or below this HP fraction
+const DEFAULT_HEAL_BELOW: float = 0.7   # also the unit schema default of `heal_below` (CLASS1)
+var heal_below: float = DEFAULT_HEAL_BELOW   # SUPPORT role: heal the most wounded ally at or below this HP fraction
 var smart_skills: bool = true   # AI1: use disengage, area, cleanse, taunt/haste, debuff and riposte skills (false = the pre-AI1 behaviour, for A/B runs)
 var area_min_foes: int = 2      # AI1: an area attack is chosen only if it hits at least this many foes (clamped to 1..6 on use)
 

@@ -204,9 +204,9 @@ static func class_archetype(entry: Dictionary) -> ClassArchetype:
 	c.base_stats = _ints(e["base_stats"])
 	c.growth_per_level = _ints(e["growth"])
 	c.proficiency = DictUtil.dict_of(e["proficiency"]).duplicate(true)
-	for step: Variant in DictUtil.array_of(e["skill_path"]):
-		var s: Dictionary = DictUtil.dict_of(step)
-		c.skill_path.append({"level": DictUtil.to_int(s.get("level", 1), 1), "skill": str(s.get("skill", ""))})
+	var path: Dictionary = DictUtil.dict_of(e["skill_path"])   # {family: level} in entry order (a list only when the converter is off: invalid)
+	for fam: Variant in path:
+		c.skill_path[str(fam)] = DictUtil.to_int(path[fam], 1)
 	c.art = str(e["art"])
 	c.ai_role = str(e["ai_role"])
 	for slot: String in ContentSchema.LOADOUT_SLOTS:
@@ -219,7 +219,7 @@ static func class_archetype(entry: Dictionary) -> ClassArchetype:
 static func class_to_entry(c: ClassArchetype) -> Dictionary:
 	var e: Dictionary = {
 		"id": c.id, "name": c.display_name, "description": c.description, "art": c.art, "ai_role": c.ai_role,
-		"base_stats": c.base_stats, "growth": c.growth_per_level, "proficiency": c.proficiency, "skill_path": c.skill_path,
+		"base_stats": c.base_stats, "growth": c.growth_per_level, "proficiency": c.proficiency, "skill_path": c.skill_path.duplicate(),
 	}
 	for slot: String in ContentSchema.LOADOUT_SLOTS:
 		e[slot] = str(c.loadout.get(slot, ""))
@@ -278,7 +278,7 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 			if not extras.has(extra):
 				extras.append(extra)
 		c.known_skills = extras
-		c.set_class_path(arch.skill_path)   # owned path skills by level, KNOW and passives (Combatant.refresh_path_skills)
+		c.set_class_path(arch.path_steps())   # owned path skills by level, KNOW and passives (Combatant.refresh_path_skills)
 		for basic_id: String in SkillCatalog.basic_ids():   # every unit owns every basic skill from level 1 (FORGE1 11.2)
 			if not c.known_skills.has(basic_id):
 				c.known_skills.append(basic_id)
@@ -306,12 +306,12 @@ static func families_of(skill_ids: Array[String]) -> Array[String]:
 	return out
 
 # The active loadout of unit entry `e`: {"class": [families], "extra": [families]}.
-# Default: the first MAX_CLASS_SLOTS class-path families reached by `level` (path order), then the
-# extra skills' families (MAX_EXTRA_SLOTS). A `loadout` list overrides it (families on the class path
-# are class slots, others extra slots); it is validated by ContentCatalog, not trimmed here.
+# Default: the first MAX_CLASS_SLOTS class-path families reached by `level`, ordered by (unlock level, entry position)
+# (ClassArchetype.path_steps, FORGE1_CLASSES 3.5), then the extra skills' families (MAX_EXTRA_SLOTS). A `loadout` list
+# overrides it (families on the class path are class slots, others extra slots); it is validated by ContentCatalog, not trimmed here.
 static func loadout_of(e: Dictionary, arch: ClassArchetype, level: int, owned_ids: Array[String] = []) -> Dictionary:
 	var path_all: Array[String] = []
-	for step: Dictionary in arch.skill_path:
+	for step: Dictionary in arch.path_steps():
 		path_all.append(str(step.get("skill", "")))
 	var path_families: Array[String] = families_of(path_all)
 	var listed: Array[String] = _strings(e.get("loadout", []))
@@ -381,6 +381,7 @@ static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])
 	profile.reckless = DictUtil.to_bool(e["reckless"])
+	profile.heal_below = DictUtil.to_float(e["heal_below"], AiProfile.DEFAULT_HEAL_BELOW)
 	if str(e["target_pref"]) != "ROLE":
 		profile.target_pref = _enum(AiProfile.TargetPref.keys(), str(e["target_pref"]), 0) as AiProfile.TargetPref
 	return profile

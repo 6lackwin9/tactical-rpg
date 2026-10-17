@@ -73,8 +73,7 @@ static func role_loadout(class_id: String, role: String, level: int) -> Array[St
 # Class-path families reached by `level` (unreduced path levels), path order, always-active skipped.
 static func owned_families(class_id: String, level: int) -> Array[String]:
 	var out: Array[String] = []
-	for raw: Variant in DictUtil.array_of(ContentCatalog.get_entry("classes", class_id).get("skill_path", [])):
-		var step: Dictionary = DictUtil.dict_of(raw)
+	for step: Dictionary in ContentFactory.class_archetype(ContentCatalog.get_entry("classes", class_id)).path_steps():
 		var skill_id: String = str(step.get("skill", ""))
 		if skill_id.is_empty() or SkillCatalog.is_always_active(skill_id) or DictUtil.to_int(step.get("level", 1), 1) > level:
 			continue

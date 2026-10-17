@@ -28,3 +28,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | --- | --- |
 | `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |
 | `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
+| `class1_migrate.gd` | CLASS1-M (class skill_path list to dict, units heal_below default) |

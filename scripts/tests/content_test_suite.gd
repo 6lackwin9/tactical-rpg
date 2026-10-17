@@ -121,9 +121,11 @@ static func _test_validation() -> bool:
 	checks["class budget"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fat", "name": "Fat", "base_stats": {"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}}), "must total")
 	checks["class growth"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "fast", "name": "Fast", "growth": {"STR": 3, "DEX": 3, "INT": 3}}), "gains exactly")
 	checks["class proficiency gear"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"banjo": {"level": 1}}}), "unknown gear type")
-	checks["class path: AP level no longer gates a step"] = not _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 1, "skill": "riposte"}]}), "too advanced")
-	checks["class path: a higher tier row is refused"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 3, "skill": "riposte_2"}]}), "higher tier")
-	checks["class path: a family is listed once"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 3, "skill": "hamstring"}]}), "more than once")
+	checks["class path: AP level no longer gates a step"] = not _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": {"hamstring": 1, "riposte": 1}}), "too advanced")
+	checks["class path: a higher tier row is refused"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": {"hamstring": 1, "riposte_2": 3}}), "higher tier")
+	# One-release converter (CLASS1): the old list shape still loads; a repeated family collapses to one key at its lowest level.
+	var listed: Dictionary = ContentSchema.normalize("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 3, "skill": "hamstring"}]})
+	checks["class path: the old list shape converts to one key per family"] = DictUtil.dict_of(listed["skill_path"]) == {"hamstring": 1}
 	checks["skills: tier 1 can't carry an unlock offset"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "odd_t1", "name": "Odd", "kind": "ATTACK", "unlock_offset": 2}), "tier 1")
 	checks["skills: basic skills can't be advanced"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "odd_basic", "name": "Odd", "kind": "ATTACK", "basic": true, "grade": "advanced"}), "advanced")
 	checks["passives: unlock effect validates"] = Passives.validate_effects([{"type": "unlock", "family": "riposte", "levels": 2}, {"type": "unlock", "group": "heal", "levels": 1}], func(id: String) -> bool: return ContentCatalog.has("skills", id)).is_empty() and not Passives.validate_effects([{"type": "unlock", "family": "riposte", "levels": 3}], func(_id: String) -> bool: return true).is_empty() and not Passives.validate_effects([{"type": "unlock", "family": "riposte", "group": "heal", "levels": 1}], func(_id: String) -> bool: return true).is_empty() and not Passives.validate_effects([{"type": "unlock", "family": "nope", "levels": 1}], func(id: String) -> bool: return ContentCatalog.has("skills", id)).is_empty() and not Passives.validate_effects([{"type": "unlock", "group": "melee", "levels": 1}], func(_id: String) -> bool: return true).is_empty()
@@ -156,7 +158,7 @@ static func _test_authoring() -> bool:
 		"weapon_type": "sword", "base_power": 30, "two_handed": true, "scaling_stat": "STR", "required_stats": {"STR": 10}, "rarity": "RARE", "weight": 5.0}))
 	errors.append_array(ContentCatalog.upsert("classes", {"id": "test_paladin", "name": "Test Paladin", "art": "warrior",
 		"base_stats": {"STR": 14, "DEX": 8, "INT": 8, "CONS": 15, "PERC": 9, "KNOW": 8}, "growth": {"STR": 2, "CONS": 2, "PERC": 1},
-		"proficiency": {"sword": {"level": 2, "scaling": 1.5}, "plate": {"level": 2, "scaling": 1.5}}, "skill_path": [{"level": 1, "skill": "hamstring"}]}))
+		"proficiency": {"sword": {"level": 2, "scaling": 1.5}, "plate": {"level": 2, "scaling": 1.5}}, "skill_path": {"hamstring": 1}}))
 	errors.append_array(ContentCatalog.upsert("units", {"id": "test_knight", "name": "Test Knight", "side": "party", "art": "warrior",
 		"class_id": "test_paladin", "level": 3, "stat_mode": "derived", "skill_cap": 2, "extra_skills": ["test_cleave"], "ai_role": "AGGRESSOR",
 		"flee_ratio": 0.0, "main_hand": "test_glaive", "body": "arm_plate"}))

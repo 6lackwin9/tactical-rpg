@@ -714,8 +714,8 @@ static func _test_catalog_and_schema() -> bool:
 	checks["whole catalog validates"] = ContentCatalog.validate_all().is_empty()
 	var in_a_path: bool = false
 	for cls: Dictionary in ContentCatalog.entries("classes"):
-		for step: Variant in DictUtil.array_of(cls.get("skill_path", [])):
-			in_a_path = in_a_path or ids.has(str(DictUtil.dict_of(step).get("skill", "")))
+		for fam: Variant in DictUtil.dict_of(cls.get("skill_path", {})):
+			in_a_path = in_a_path or ids.has(str(fam))
 	checks["example skills sit in class paths (M2c-1), still learned-only"] = in_a_path
 	checks["learned_only: hand-built units don't know them until they learn them"] = (func() -> bool:
 		var c := Combatant.new("U", 10, 10, 1)

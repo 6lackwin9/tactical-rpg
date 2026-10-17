@@ -159,6 +159,10 @@ static func _class_with(slots: Dictionary) -> Dictionary:
 	e.merge(slots, true)
 	return e
 
+# Class warnings outside the allowed CLASS1 path categories (TestHelpers.KNOWN_SHIPPED_CLASS_WARNINGS): what these checks count.
+static func _class_warnings(e: Dictionary) -> Array[String]:
+	return TestHelpers.unexpected_warnings(ContentCatalog.warnings_for("classes", e))
+
 static func _test_loadouts() -> bool:
 	_seed_items()
 	var c: Dictionary = {}
@@ -185,19 +189,19 @@ static func _test_warnings() -> bool:
 	var mid: Dictionary = _class_with({"main_hand": "t_sword", "body": "t_plate", "accessory_1": "t_ring"})
 	# Make a clearly over-budget loadout by pairing the bare special (no documented note).
 	var over: Dictionary = _class_with({"main_hand": "t_god_bare", "body": "t_plate"})
-	var over_warn: Array[String] = ContentCatalog.warnings_for("classes", over)
+	var over_warn: Array[String] = _class_warnings(over)
 	c["over band warns"] = over_warn.size() == 1
 	c["warning names value and budget"] = over_warn.size() == 1 and over_warn[0].contains("%.1f" % GearBudget.loadout_value(over)) and over_warn[0].contains("%.1f" % GearBudget.TARGET_BUDGET)
 	c["warning names top item"] = over_warn.size() == 1 and over_warn[0].contains("t_god_bare")
 	c["over band is not an error"] = ContentCatalog.validate_entry("classes", over, "warrior").filter(func(m: String) -> bool: return m.contains("Gear budget")).is_empty()
-	var under_warn: Array[String] = ContentCatalog.warnings_for("classes", cheap)
+	var under_warn: Array[String] = _class_warnings(cheap)
 	c["under band warns"] = under_warn.size() == 1 and under_warn[0].contains("below")
 	var documented: Dictionary = _class_with({"main_hand": "t_god", "body": "t_plate"})
-	c["documented special may exceed band"] = ContentCatalog.warnings_for("classes", documented).is_empty()
+	c["documented special may exceed band"] = _class_warnings(documented).is_empty()
 	c["special without note warns"] = ContentCatalog.warnings_for("items", ContentCatalog.get_entry("items", "t_god_bare")).size() == 1
 	c["special with note is clean"] = ContentCatalog.warnings_for("items", ContentCatalog.get_entry("items", "t_god")).is_empty()
 	c["normal item is clean"] = ContentCatalog.warnings_for("items", ContentCatalog.get_entry("items", "t_sword")).is_empty()
-	c["in-band class is clean"] = GearBudget.in_band(GearBudget.loadout_value(mid)) and ContentCatalog.warnings_for("classes", mid).is_empty()
+	c["in-band class is clean"] = GearBudget.in_band(GearBudget.loadout_value(mid)) and _class_warnings(mid).is_empty()
 	var all_w: Dictionary = ContentCatalog.warnings_all()
 	c["warnings_all lists the bare special"] = all_w.has("items:t_god_bare")
 	c["validate_all still empty"] = ContentCatalog.validate_all().is_empty()

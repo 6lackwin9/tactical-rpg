@@ -13,6 +13,9 @@ extends VBoxContainer
 # A hook set decides the rest: `state_fn(key) -> Dictionary` (SkillFormModel.state), `layout_fn() -> [{id, title, fields}]`
 # (sections instead of one flat grid), `footer_fn() -> Control` (e.g. the ranks panel) and `problems_fn() -> [{field, rank,
 # message}]` (red outline + tooltip). Without hooks the form is the flat grid every other kind uses.
+# Class tab (CLASS1): `table` is the skill path table (family picker, standard / custom level, ladder, default-loadout preview),
+# `dict_pick` the proficiency rows (type, level, scaling, guarded Remove), class stats show a "Remaining" chip, gear refs with
+# `choices` records are grouped by item family, and length-capped text fields show a live counter in their label.
 # ==============================================================================
 
 signal edited(key: String)
@@ -30,6 +33,7 @@ var problems_fn: Callable = Callable()
 var _controllers: Dictionary = {}  # keys other fields depend on
 var _grid: GridContainer = null
 var _widgets: Dictionary = {}      # key -> control (hooked forms refresh these in place)
+var _labels: Dictionary = {}       # key -> row label (live counters of length-capped fields)
 var _live: Array[Callable] = []    # refreshers of live widgets (the description preview)
 var _signature: String = ""        # visible field keys at the last rebuild (hooked forms)
 
@@ -55,6 +59,7 @@ func _hooked() -> bool:
 func rebuild() -> void:
 	UiTheme.clear_children(self)
 	_widgets.clear()
+	_labels.clear()
 	_live.clear()
 	_grid = null
 	if _hooked():
@@ -109,6 +114,16 @@ func _add_row(f: Dictionary, grid: GridContainer) -> void:
 	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
 	lbl.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	grid.add_child(lbl)
+	_labels[key] = lbl
+	if f.has("max_len") and _hooked() and ["id", "string", "text"].has(str(f["type"])):
+		var base_text: String = label_text
+		var cap: int = DictUtil.to_int(f["max_len"])
+		_live.append(func() -> void:
+			if is_instance_valid(lbl):
+				var n: int = str(draft.get(key, "")).length()
+				lbl.text = "%s (%d/%d)" % [base_text, n, cap]
+				lbl.add_theme_color_override("font_color", UiTheme.COL_BAD if n > cap else UiTheme.COL_MUTED)
+		)
 	var widget: Control = _widget(f)
 	widget.name = "Field_" + key
 	widget.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -299,6 +314,8 @@ func _widget(f: Dictionary) -> Control:
 					options.append(str(a))
 			return _enum_widget(key, options, str(value), readonly, {}, state_fn.is_valid())
 		"ref":
+			if info.get("choices", null) is Array:
+				return _grouped_ref_widget(key, DictUtil.array_of(info["choices"]), str(value), readonly)
 			var ids: Array[String] = [""]
 			for choice: Dictionary in source.ref_choices(f):
 				ids.append(str(choice["value"]))
@@ -306,7 +323,11 @@ func _widget(f: Dictionary) -> Control:
 		"refs":
 			return _refs_widget(f, value, info, readonly)
 		"stats":
-			return _stats_widget(f, value)
+			return _stats_widget(f, value, readonly)
+		"table":
+			return _path_widget(f, readonly)
+		"dict_pick":
+			return _proficiency_widget(f, readonly)
 		"multi_pick":
 			return _checklist_widget(f, value, info, readonly)
 		"strings":
@@ -355,8 +376,9 @@ func _enum_widget(key: String, options: Array[String], value: String, readonly: 
 	var invalid: bool = not list.has(value)
 	if invalid:
 		list.append(value)   # keep an unknown value visible (validation reports it)
+	var empty_label: String = str(_state(key).get("empty_label", "(none)")) if state_fn.is_valid() else "(none)"
 	for i: int in range(list.size()):
-		var shown: String = source.ref_label(ref_field, list[i]) if not ref_field.is_empty() else (list[i] if not list[i].is_empty() else "(none)")
+		var shown: String = source.ref_label(ref_field, list[i]) if not ref_field.is_empty() else (list[i] if not list[i].is_empty() else empty_label)
 		if strict and invalid and i == list.size() - 1:
 			shown = "(invalid: %s)" % list[i]
 		opt.add_item(shown, i)
@@ -518,6 +540,7 @@ func _refs_widget(f: Dictionary, value: Variant, info: Dictionary = {}, readonly
 	picker.clip_text = true
 	picker.custom_minimum_size.x = 60
 	var dupes: bool = DictUtil.to_bool(f.get("dupes", false))
+	var full: bool = info.get("max", null) != null and current.size() >= DictUtil.to_int(info["max"])
 	for choice: Dictionary in source.ref_choices(f):
 		var id: String = str(choice["value"])
 		if choices is Array and not (choices as Array).has(id):
@@ -534,8 +557,10 @@ func _refs_widget(f: Dictionary, value: Variant, info: Dictionary = {}, readonly
 		_put(key, grown)
 		rebuild()
 	)
-	add_btn.disabled = picker.item_count == 0 or readonly
-	picker.disabled = readonly
+	add_btn.disabled = picker.item_count == 0 or readonly or full
+	if full:
+		add_btn.tooltip_text = "Full: %d of %d" % [current.size(), DictUtil.to_int(info["max"])]
+	picker.disabled = readonly or full
 	add_row.add_child(add_btn)
 	box.add_child(add_row)
 	if current.is_empty():
@@ -545,12 +570,15 @@ func _refs_widget(f: Dictionary, value: Variant, info: Dictionary = {}, readonly
 		box.add_child(hint)
 	return box
 
-func _stats_widget(f: Dictionary, value: Variant) -> Control:
+# Stat spinners. With schema min / max (class base stats and growth) the spinners use those ranges, an unset base stat shows
+# its floor, and a "Remaining: N" chip (budget minus total, ClassForgeModel.remaining) follows every edit.
+func _stats_widget(f: Dictionary, value: Variant, readonly: bool = false) -> Control:
 	var key: String = str(f["key"])
 	var stats: Dictionary = {}
 	if value is Dictionary:
 		var given: Dictionary = value
 		stats = given.duplicate()
+	var ranged: bool = f.has("min") and f.has("max")
 	var grid := GridContainer.new()
 	grid.columns = 6
 	grid.add_theme_constant_override("h_separation", 6)
@@ -559,11 +587,13 @@ func _stats_widget(f: Dictionary, value: Variant) -> Control:
 		var stat: String = str(k)
 		grid.add_child(UiTheme.label(stat.to_upper(), UiTheme.FONT_SM, UiTheme.COL_MUTED))
 		var spin := SpinBox.new()
-		spin.min_value = -99
-		spin.max_value = 999
-		spin.value = DictUtil.int_of(stats, stat)
+		spin.name = "Stat_" + stat
+		spin.min_value = DictUtil.to_float(f["min"]) if ranged else -99.0
+		spin.max_value = DictUtil.to_float(f["max"]) if ranged else 999.0
+		spin.value = DictUtil.int_of(stats, stat, DictUtil.to_int(f["min"]) if ranged and key == "base_stats" else 0)
 		spin.custom_minimum_size.x = 64
-		spin.tooltip_text = "0 = not set"
+		spin.tooltip_text = "%d-%d" % [DictUtil.to_int(f["min"]), DictUtil.to_int(f["max"])] if ranged else "0 = not set"
+		spin.editable = not readonly
 		spin.value_changed.connect(func(v: float) -> void:
 			if roundi(v) == 0:
 				stats.erase(stat)
@@ -572,4 +602,275 @@ func _stats_widget(f: Dictionary, value: Variant) -> Control:
 			_put(key, stats.duplicate())
 		)
 		grid.add_child(spin)
-	return grid
+	if not (ranged and kind == "classes"):
+		return grid
+	var box := VBoxContainer.new()
+	box.add_child(grid)
+	var chip: Label = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
+	chip.name = "Remaining"
+	box.add_child(chip)
+	var refresh: Callable = func() -> void:
+		if is_instance_valid(chip):
+			var left: int = ClassForgeModel.remaining(draft, key)
+			chip.text = "Remaining: %d" % left
+			chip.add_theme_color_override("font_color", UiTheme.COL_GOOD if left == 0 else UiTheme.COL_BAD)
+	_live.append(refresh)
+	refresh.call()
+	return box
+
+# A gear slot dropdown from ClassForgeModel.slot_choices records: one separator per item family, disabled entries keep their
+# reason as tooltip; "" (empty slot) first; an unknown stored value stays visible as "(invalid: x)".
+func _grouped_ref_widget(key: String, choices: Array, value: String, readonly: bool) -> OptionButton:
+	var opt := OptionButton.new()
+	opt.fit_to_longest_item = false
+	opt.clip_text = true
+	opt.custom_minimum_size.x = 60
+	opt.add_item("(empty)")
+	opt.set_item_metadata(0, "")
+	var found: bool = value.is_empty()
+	var last_group: String = "\u0000"
+	for raw: Variant in choices:
+		var c: Dictionary = DictUtil.dict_of(raw)
+		var group: String = str(c.get("group", ""))
+		if group != last_group and not group.is_empty():
+			opt.add_separator(group)
+		last_group = group
+		opt.add_item(str(c.get("label", c.get("id", ""))))
+		var i: int = opt.item_count - 1
+		opt.set_item_metadata(i, str(c.get("id", "")))
+		if not DictUtil.to_bool(c.get("enabled", true)):
+			opt.set_item_disabled(i, true)
+			opt.set_item_tooltip(i, str(c.get("reason", "")))
+		if str(c.get("id", "")) == value:
+			opt.select(i)
+			found = true
+	if not found:
+		opt.add_item("(invalid: %s)" % value)
+		opt.set_item_metadata(opt.item_count - 1, value)
+		opt.select(opt.item_count - 1)
+		opt.modulate = Color(1.0, 0.5, 0.5)
+	elif value.is_empty():
+		opt.select(0)
+	opt.disabled = readonly
+	opt.item_selected.connect(func(i: int) -> void: _put(key, str(opt.get_item_metadata(i))))
+	return opt
+
+# The class skill path table (FORGE1_CLASSES 3.5): one row per entry in ENTRY order (edits keep the key position):
+# family picker (heads only, used families greyed, requires flagged), level selector (standard levels, "Custom level..."
+# reveals a spinner 1..MAX_LEVEL), tier ladder, Remove; an add row; the counter and the read-only default-loadout preview.
+func _path_widget(f: Dictionary, readonly: bool) -> Control:
+	var key: String = str(f["key"])
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 3)
+	var counter: Label = UiTheme.label(ClassForgeModel.path_counter(draft), UiTheme.FONT_SM, UiTheme.COL_MUTED)
+	counter.name = "Counter"
+	box.add_child(counter)
+	var rows_box := VBoxContainer.new()
+	rows_box.name = "Rows"
+	box.add_child(rows_box)
+	for row: Dictionary in ClassForgeModel.path_rows(draft):
+		rows_box.add_child(_path_row(key, row, readonly))
+	var add_row := HBoxContainer.new()
+	add_row.name = "AddRow"
+	var picker := OptionButton.new()
+	picker.name = "AddFamily"
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker.clip_text = true
+	picker.custom_minimum_size.x = 60
+	for choice: Dictionary in ClassForgeModel.family_choices(draft):
+		if DictUtil.to_bool(choice["used"]):
+			continue
+		picker.add_item(_family_label(choice))
+		picker.set_item_metadata(picker.item_count - 1, str(choice["id"]))
+		var missing: Array = DictUtil.array_of(choice["requires_missing"])
+		if not missing.is_empty():
+			picker.set_item_tooltip(picker.item_count - 1, "Needs on the path first: %s" % ", ".join(PackedStringArray(missing)))
+	add_row.add_child(picker)
+	var add_btn: Button = UiTheme.button("+ Add family", "Add the selected family at the end of the path", func() -> void:
+		if picker.item_count == 0 or picker.selected < 0:
+			return
+		var fam: String = str(picker.get_item_metadata(picker.selected))
+		_put(key, DictUtil.dict_of(ClassForgeModel.add_path_family(draft, fam)[key]))
+		rebuild()
+	)
+	add_btn.name = "AddButton"
+	add_btn.disabled = readonly or picker.item_count == 0
+	picker.disabled = readonly
+	add_row.add_child(add_btn)
+	box.add_child(add_row)
+	var preview: Label = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
+	preview.name = "DefaultLoadout"
+	preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	preview.custom_minimum_size.x = 60
+	var families: Array[String] = ClassForgeModel.default_loadout(draft, StatRules.MAX_LEVEL)
+	var names: Array[String] = []
+	for fam: String in families:
+		names.append(SkillCatalog.family_name(fam))
+	preview.text = "Default active class skills at level %d (units without a loadout): %s" % [StatRules.MAX_LEVEL, ", ".join(names) if not names.is_empty() else "none"]
+	box.add_child(preview)
+	return box
+
+static func _family_label(choice: Dictionary) -> String:
+	var grade: String = str(choice.get("grade", "novice"))
+	var requires: Array = DictUtil.array_of(choice.get("requires", []))
+	return "%s  [%s%s]%s" % [str(choice["name"]), str(choice.get("kind", "")).to_lower(), "" if grade == "novice" else ", " + grade, ("  needs " + ", ".join(PackedStringArray(requires))) if not requires.is_empty() else ""]
+
+func _path_row(key: String, row: Dictionary, readonly: bool) -> Control:
+	var fam: String = str(row["family"])
+	var level: int = DictUtil.to_int(row["level"])
+	var line := HBoxContainer.new()
+	line.name = "Row_" + fam
+	line.add_theme_constant_override("separation", 4)
+	var fam_opt := OptionButton.new()
+	fam_opt.name = "Family"
+	fam_opt.clip_text = true
+	fam_opt.custom_minimum_size.x = 150
+	fam_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for choice: Dictionary in ClassForgeModel.family_choices(draft, fam):
+		fam_opt.add_item(_family_label(choice))
+		var i: int = fam_opt.item_count - 1
+		fam_opt.set_item_metadata(i, str(choice["id"]))
+		if DictUtil.to_bool(choice["used"]):
+			fam_opt.set_item_disabled(i, true)
+			fam_opt.set_item_tooltip(i, str(choice["reason"]))
+		if str(choice["id"]) == fam:
+			fam_opt.select(i)
+	if fam_opt.selected < 0:
+		fam_opt.add_item("(invalid: %s)" % fam)
+		fam_opt.set_item_metadata(fam_opt.item_count - 1, fam)
+		fam_opt.select(fam_opt.item_count - 1)
+		fam_opt.modulate = Color(1.0, 0.5, 0.5)
+	fam_opt.disabled = readonly
+	fam_opt.item_selected.connect(func(i: int) -> void:
+		_put(key, DictUtil.dict_of(ClassForgeModel.replace_path_family(draft, fam, str(fam_opt.get_item_metadata(i)))[key]))
+		rebuild()
+	)
+	line.add_child(fam_opt)
+	var lvl_opt := OptionButton.new()
+	lvl_opt.name = "Level"
+	var custom_spin := SpinBox.new()
+	custom_spin.name = "CustomLevel"
+	custom_spin.min_value = 1
+	custom_spin.max_value = StatRules.MAX_LEVEL
+	custom_spin.value = level
+	custom_spin.editable = not readonly
+	var options: Array[int] = ClassForgeModel.level_options(fam)
+	var selected: bool = false
+	for opt_level: int in options:
+		if opt_level == ClassForgeModel.CUSTOM_LEVEL:
+			lvl_opt.add_item("Custom level...")
+		else:
+			lvl_opt.add_item("Lv %d" % opt_level)
+		lvl_opt.set_item_metadata(lvl_opt.item_count - 1, opt_level)
+		if opt_level == level:
+			lvl_opt.select(lvl_opt.item_count - 1)
+			selected = true
+	if not selected:
+		lvl_opt.select(lvl_opt.item_count - 1)   # "Custom level..." with the spinner showing the stored level
+	custom_spin.visible = not selected
+	lvl_opt.disabled = readonly
+	lvl_opt.item_selected.connect(func(i: int) -> void:
+		var picked: int = DictUtil.to_int(lvl_opt.get_item_metadata(i))
+		if picked == ClassForgeModel.CUSTOM_LEVEL:
+			custom_spin.visible = true
+			return
+		_put(key, DictUtil.dict_of(ClassForgeModel.set_path_level(draft, fam, picked)[key]))
+		rebuild()
+	)
+	custom_spin.value_changed.connect(func(v: float) -> void:
+		_put(key, DictUtil.dict_of(ClassForgeModel.set_path_level(draft, fam, roundi(v))[key]))
+	)
+	line.add_child(lvl_opt)
+	line.add_child(custom_spin)
+	var tag: String = "  custom" if DictUtil.to_bool(row["custom"]) else ""
+	var ladder: Label = UiTheme.label("%s%s%s" % [str(row["ladder"]), tag, "  ★ active" if DictUtil.to_bool(row["active_by_default"]) else ""], UiTheme.FONT_SM, UiTheme.COL_MUTED if DictUtil.to_bool(row["requires_ok"]) else UiTheme.COL_BAD)
+	ladder.name = "Ladder"
+	if not DictUtil.to_bool(row["requires_ok"]):
+		ladder.tooltip_text = "Needs %s on the path at level %d or lower." % [", ".join(PackedStringArray(DictUtil.array_of(row["requires"]))), level]
+	line.add_child(ladder)
+	var remove: Button = UiTheme.button("✕", "Remove this family (the others keep their order)", func() -> void:
+		_put(key, DictUtil.dict_of(ClassForgeModel.remove_path_family(draft, fam)[key]))
+		rebuild()
+	)
+	remove.name = "Remove"
+	remove.disabled = readonly
+	line.add_child(remove)
+	return line
+
+# The proficiency rows (dict_pick, FORGE1_CLASSES 2.3): gear type, level 1..MAX_LEVEL, scaling MIN..MAX step 0.05, Remove
+# (disabled for the last weapon type or a type the default gear uses, reason as tooltip); an add row of unused types.
+func _proficiency_widget(f: Dictionary, readonly: bool) -> Control:
+	var key: String = str(f["key"])
+	var ranges: Dictionary = ClassForgeModel.ranges()
+	var lvl_r: Dictionary = ranges["proficiency_level"]
+	var sc_r: Dictionary = ranges["proficiency_scaling"]
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	var prof: Dictionary = DictUtil.dict_of(draft.get(key, {}))
+	for gear_key: Variant in prof:
+		var gear: String = str(gear_key)
+		var entry: Dictionary = DictUtil.dict_of(prof[gear_key])
+		var line := HBoxContainer.new()
+		line.name = "Prof_" + gear
+		var lbl: Label = UiTheme.label(gear, UiTheme.FONT_MD)
+		lbl.custom_minimum_size.x = 70
+		line.add_child(lbl)
+		var lvl := SpinBox.new()
+		lvl.name = "Level"
+		lvl.min_value = DictUtil.to_float(lvl_r["min"])
+		lvl.max_value = DictUtil.to_float(lvl_r["max"])
+		lvl.value = DictUtil.to_int(entry.get("level", 1), 1)
+		lvl.prefix = "Lv"
+		lvl.editable = not readonly
+		lvl.value_changed.connect(func(v: float) -> void: _put(key, _prof_with(gear, "level", roundi(v))))
+		line.add_child(lvl)
+		var sc := SpinBox.new()
+		sc.name = "Scaling"
+		sc.min_value = DictUtil.to_float(sc_r["min"])
+		sc.max_value = DictUtil.to_float(sc_r["max"])
+		sc.step = DictUtil.to_float(sc_r["step"])
+		sc.value = DictUtil.to_float(entry.get("scaling", sc_r["default"]))
+		sc.prefix = "x"
+		sc.editable = not readonly
+		sc.value_changed.connect(func(v: float) -> void: _put(key, _prof_with(gear, "scaling", snappedf(v, 0.01))))
+		line.add_child(sc)
+		var can: Dictionary = ClassForgeModel.can_remove_proficiency(draft, gear)
+		var remove: Button = UiTheme.button("✕", str(can["reason"]) if not DictUtil.to_bool(can["allowed"]) else "Remove %s" % gear, func() -> void:
+			var next: Dictionary = DictUtil.dict_of(draft.get(key, {})).duplicate(true)
+			next.erase(gear)
+			_put(key, next)
+			rebuild()
+		)
+		remove.name = "Remove"
+		remove.disabled = readonly or not DictUtil.to_bool(can["allowed"])
+		line.add_child(remove)
+		box.add_child(line)
+	var add_row := HBoxContainer.new()
+	add_row.name = "AddRow"
+	var picker := OptionButton.new()
+	picker.name = "AddType"
+	for gear: String in ClassForgeModel.proficiency_type_choices(draft):
+		picker.add_item(gear)
+	add_row.add_child(picker)
+	var add_btn: Button = UiTheme.button("+ Add type", "Train a new gear type (level 1, default scaling)", func() -> void:
+		if picker.item_count == 0 or picker.selected < 0:
+			return
+		var next: Dictionary = DictUtil.dict_of(draft.get(key, {})).duplicate(true)
+		next[picker.get_item_text(picker.selected)] = {"level": DictUtil.to_int(lvl_r["min"]), "scaling": DictUtil.to_float(sc_r["default"])}
+		_put(key, next)
+		rebuild()
+	)
+	add_btn.name = "AddButton"
+	add_btn.disabled = readonly or picker.item_count == 0
+	picker.disabled = readonly
+	add_row.add_child(add_btn)
+	box.add_child(add_row)
+	return box
+
+# A copy of the draft proficiency with `field` of `gear` set (row order kept).
+func _prof_with(gear: String, field: String, value: Variant) -> Dictionary:
+	var next: Dictionary = DictUtil.dict_of(draft.get("proficiency", {})).duplicate(true)
+	var row: Dictionary = DictUtil.dict_of(next.get(gear, {})).duplicate()
+	row[field] = value
+	next[gear] = row
+	return next

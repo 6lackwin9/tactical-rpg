@@ -7,7 +7,7 @@ extends RefCounted
 #   base_stats / growth_per_level   follow StatRules (equal budget, equal growth)
 #   proficiency                     {gear type: {"level": 1-3, "scaling": 1.0-2.0}}
 #                                   what the class can wield and how well (Proficiency)
-#   skill_path                      [{"level": n, "skill": id}]: skills learned by level
+#   skill_path                      {family id: unlock level} (insertion order = entry position; FORGE1_CLASSES 3.5)
 #   loadout                         default gear per slot (item ids); units may override
 #   art / ai_role                   token & portrait key, default AI role
 # Units (class + level + side + tier + spend) are built from it by ContentFactory;
@@ -23,7 +23,7 @@ var archetype_name: String:
 var base_stats: Dictionary = {}         # stat (String) -> level-1 base value (int)
 var growth_per_level: Dictionary = {}   # stat (String) -> guaranteed gain per level (int)
 var proficiency: Dictionary = {}        # gear type -> {"level": int, "scaling": float}
-var skill_path: Array[Dictionary] = []  # [{"level": int, "skill": String}]
+var skill_path: Dictionary = {}         # family head id (String) -> unlock level (int), in entry order
 var loadout: Dictionary = {}            # slot key (main_hand ...) -> item id
 var art: String = "warrior"
 var ai_role: String = "AGGRESSOR"
@@ -42,10 +42,63 @@ func get_growth_for_stat(stat_name: String) -> int:
 func make_proficiency() -> Proficiency:
 	return Proficiency.from_dict(proficiency)
 
-# Skills the class has learned by `level`, in path order.
+# Standard unlock levels the Forge offers first (every level a shipped path uses; FORGE1_CLASSES 3.5). Any 1..MAX_LEVEL is valid.
+const STANDARD_PATH_LEVELS: Array[int] = [1, 3, 4, 5, 7]
+
+# The path as ordered steps [{"level", "skill"}]: unlock level ascending, then entry position (dict order) ascending.
+# With ClassForgeModel.ordered_path (which calls this) the only place that sorts a path.
+func path_steps() -> Array[Dictionary]:
+	return ordered_steps(skill_path)
+
+static func ordered_steps(path: Dictionary) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	var position: int = 0
+	for key: Variant in path:
+		rows.append({"level": DictUtil.to_int(path[key], 1), "skill": str(key), "pos": position})
+		position += 1
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var la: int = DictUtil.to_int(a["level"])
+		var lb: int = DictUtil.to_int(b["level"])
+		if la != lb:
+			return la < lb
+		return DictUtil.to_int(a["pos"]) < DictUtil.to_int(b["pos"])
+	)
+	var out: Array[Dictionary] = []
+	for row: Dictionary in rows:
+		out.append({"level": row["level"], "skill": row["skill"]})
+	return out
+
+# Pre-CLASS1 list shape [{level, skill}] -> {skill: level}: first position wins, the lowest level of a repeated family wins,
+# basics are dropped when `drop_basics` (they are owned by every unit, FORGE1 11.2). Used by the one-release converter.
+static func path_from_list(steps: Array, drop_basics: bool = true) -> Dictionary:
+	var out: Dictionary = {}
+	for raw: Variant in steps:
+		var step: Dictionary = DictUtil.dict_of(raw)
+		var skill_id: String = str(step.get("skill", ""))
+		if skill_id.is_empty():
+			continue
+		if drop_basics and DictUtil.to_bool(ContentCatalog.get_entry("skills", skill_id).get("basic", false)):
+			continue
+		var level: Variant = whole_level(step.get("level", 1))
+		if not out.has(skill_id):
+			out[skill_id] = level
+		elif level is int and out[skill_id] is int and DictUtil.to_int(level) < DictUtil.to_int(out[skill_id]):
+			out[skill_id] = level
+	return out
+
+# A path level as stored: whole numbers (JSON parses them as float) become int; anything else is kept for the validator.
+static func whole_level(raw: Variant) -> Variant:
+	if raw is float:
+		var x: float = raw
+		if x == floorf(x):
+			return roundi(x)
+	return raw
+
+# Path skills (family heads) the class owns by `level` (unreduced path levels), in path_steps() order. Basics are not path
+# content: every unit owns them from level 1 through the factory grant (ContentFactory.unit, SkillCatalog.basic_ids()).
 func skills_at(level: int) -> Array[String]:
 	var out: Array[String] = []
-	for step: Dictionary in skill_path:
+	for step: Dictionary in path_steps():
 		if DictUtil.to_int(step.get("level", 1), 1) <= level:
 			out.append(str(step.get("skill", "")))
 	return out

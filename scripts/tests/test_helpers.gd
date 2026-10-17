@@ -160,6 +160,18 @@ static func messages(problems: Array[Dictionary]) -> Array[String]:
 		out.append(str(p["message"]))
 	return out
 
+# The two soft class warning categories the shipped classes may carry since CLASS1 (path longer than the active slots, a tier
+# opening past MAX_LEVEL): the allow-list of tests that require "no other warning".
+const KNOWN_SHIPPED_CLASS_WARNINGS: Array[String] = ["families; only the first", "beyond the level cap"]
+
+# The warnings of `texts` outside KNOWN_SHIPPED_CLASS_WARNINGS (empty = only allowed categories).
+static func unexpected_warnings(texts: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	for text: String in texts:
+		if not KNOWN_SHIPPED_CLASS_WARNINGS.any(func(mark: String) -> bool: return text.contains(mark)):
+			out.append(text)
+	return out
+
 static func any_contains(list: Array[String], needle: String) -> bool:
 	for text: String in list:
 		if text.contains(needle):

@@ -181,7 +181,7 @@ static func _class(e: Dictionary) -> String:
 		trained.append("%s %d (x%.2f)" % [str(key), prof.level_of(str(key)), prof.scaling_of(str(key))])
 	t += _line("Proficiency", ", ".join(trained) if not trained.is_empty() else "none")
 	var path_parts: Array[String] = []
-	for step: Dictionary in arch.skill_path:
+	for step: Dictionary in arch.path_steps():
 		path_parts.append("Lv%d %s" % [DictUtil.to_int(step.get("level", 1)), str(ContentCatalog.get_entry("skills", str(step.get("skill", ""))).get("name", step.get("skill", "")))])
 	t += _line("Skill path", ", ".join(path_parts) if not path_parts.is_empty() else "none")
 	var kit: Array[String] = []
@@ -203,6 +203,59 @@ static func _class(e: Dictionary) -> String:
 		if not specials.is_empty():
 			t += _line("Special items", ", ".join(specials))
 	t += "\n%s\n" % str(e.get("description", ""))
+	return t
+
+# The live derived panels of the class form (FORGE1_CLASSES 3.1-3.5), BBCode from ClassForgeModel: stats, gear budget,
+# proficiency coverage, default loadout preview, and the soft warnings by section (warnings never block Save).
+static func class_panels(entry: Dictionary) -> String:
+	var e: Dictionary = ContentSchema.normalize("classes", entry)
+	var t: String = "[b]Stats[/b]\n"
+	var stats: Dictionary = ClassForgeModel.stat_panel(e)
+	var base_ok: bool = DictUtil.to_int(stats["base_total"]) == DictUtil.to_int(stats["budget"])
+	var growth_ok: bool = DictUtil.to_int(stats["growth_total"]) == DictUtil.to_int(stats["growth_budget"])
+	t += _line("Totals", "base [color=%s]%d / %d[/color], growth [color=%s]%d / %d[/color] per level" % ["#4ade80" if base_ok else "#f87171", DictUtil.to_int(stats["base_total"]), DictUtil.to_int(stats["budget"]), "#4ade80" if growth_ok else "#f87171", DictUtil.to_int(stats["growth_total"]), DictUtil.to_int(stats["growth_budget"])])
+	var parts: Array[String] = []
+	for raw: Variant in DictUtil.array_of(stats["rows"]):
+		var row: Dictionary = DictUtil.dict_of(raw)
+		var bad: String = str(row["bad"])
+		parts.append("%s%s %d +%d (Lv5 %d, Lv10 %d)%s" % ["[color=#f87171]" if not bad.is_empty() else "", str(row["stat"]), DictUtil.to_int(row["base"]), DictUtil.to_int(row["growth"]), DictUtil.to_int(row["lv5"]), DictUtil.to_int(row["lv10"]), " " + bad + "[/color]" if not bad.is_empty() else ""])
+	t += _line("Per stat", ", ".join(parts))
+	var vitals: Array[String] = []
+	for raw: Variant in DictUtil.array_of(stats["vitals"]):
+		var v: Dictionary = DictUtil.dict_of(raw)
+		vitals.append("Lv%d HP %d speed %d" % [DictUtil.to_int(v["level"]), DictUtil.to_int(v["hp"]), DictUtil.to_int(v["speed"])])
+	t += _line("Vitals", ", ".join(vitals))
+	t += "[color=#8ba3b8]%s[/color]\n" % str(stats["note"])
+	var budget: Dictionary = ClassForgeModel.budget_panel(e)
+	t += "\n[b]Gear budget[/b] (soft)\n"
+	var slot_parts: Array[String] = []
+	for raw: Variant in DictUtil.array_of(budget["rows"]):
+		var row: Dictionary = DictUtil.dict_of(raw)
+		slot_parts.append("%s %s %.1f" % [str(row["slot"]), str(row["name"]), DictUtil.to_float(row["value"])])
+	t += _line("Slots", ", ".join(slot_parts) if not slot_parts.is_empty() else "no gear (unjudged)")
+	var band: String = "in band" if DictUtil.to_bool(budget["in_band"]) else ("over the band, excused by a documented special item" if DictUtil.to_bool(budget["excused"]) else "out of band")
+	t += _line("Total", "%.1f / %.1f (band %.1f-%.1f): %s; bare hands count %.1f" % [DictUtil.to_float(budget["total"]), DictUtil.to_float(budget["target"]), DictUtil.to_float(budget["low"]), DictUtil.to_float(budget["high"]), band, DictUtil.to_float(budget["unarmed_value"])])
+	var specials: Array = DictUtil.array_of(budget["specials"])
+	if not specials.is_empty():
+		t += _line("Special items", ", ".join(PackedStringArray(specials)))
+	t += "\n[b]Proficiency coverage[/b]\n"
+	var cov: Array[Dictionary] = ClassForgeModel.coverage(e)
+	if cov.is_empty():
+		t += "[color=#4ade80]Every trained type is used; nothing to report.[/color]\n"
+	for row: Dictionary in cov:
+		var col: String = {"error": "#f87171", "warning": "#fbbf24"}.get(str(row["severity"]), "#8ba3b8")
+		t += "[color=%s]• %s[/color]\n" % [col, str(row["text"])]
+	t += "\n[b]Skill path[/b]  %s\n" % ClassForgeModel.path_counter(e)
+	for lvl: int in [1, 5, StatRules.MAX_LEVEL]:
+		var names: Array[String] = []
+		for fam: String in ClassForgeModel.default_loadout(e, lvl):
+			names.append(SkillCatalog.family_name(fam))
+		t += _line("Default loadout Lv%d" % lvl, ", ".join(names) if not names.is_empty() else "none")
+	var warnings: Array[Dictionary] = ClassUnitValidator.class_warnings(e)
+	if not warnings.is_empty():
+		t += "\n[b]Warnings[/b] (never block Save)\n"
+		for w: Dictionary in warnings:
+			t += "[color=#fbbf24]• %s: %s[/color]\n" % [str(ClassForgeModel.SECTION_TITLES.get(str(w["section"]), str(w["section"]))), str(w["text"])]
 	return t
 
 static func _unit(e: Dictionary) -> String:

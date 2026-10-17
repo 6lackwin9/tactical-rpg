@@ -51,8 +51,15 @@ static func _class_entry(path: Array[Dictionary]) -> Dictionary:
 	var e: Dictionary = ContentCatalog.get_entry("classes", "warrior").duplicate(true)
 	e["id"] = CLS
 	e["name"] = "Fixture"
-	e["skill_path"] = path
+	e["skill_path"] = _path_dict(path)
 	return e
+
+# Steps [{level, skill}] as the path dict {skill: level} in step order (CLASS1 shape; no basic is dropped here).
+static func _path_dict(path: Array[Dictionary]) -> Dictionary:
+	var out: Dictionary = {}
+	for step: Dictionary in path:
+		out[str(step["skill"])] = DictUtil.to_int(step["level"])
+	return out
 
 # Validation errors of the fixture class with `path` under a fresh id (the real fixture class is already stored).
 static func _probe_errors(path: Array[Dictionary]) -> Array[String]:
@@ -139,7 +146,7 @@ static func _test_fixture_rules() -> bool:
 	checks["advanced family below ADVANCED_MIN_LEVEL is refused"] = low_errors.any(func(m: String) -> bool: return m.contains("advanced"))
 	var dup_path: Array[Dictionary] = _fixture_path()
 	dup_path.append(_step(LVL_D, "t_sk_a"))
-	checks["a family listed twice is refused"] = ContentCatalog.validate_entry("classes", _class_entry(dup_path)).any(func(m: String) -> bool: return m.contains("more than once"))
+	checks["a family is listed once by shape (CLASS1: a dict key)"] = _path_dict(dup_path).size() == _fixture_path().size()
 	var tier_path: Array[Dictionary] = _fixture_path()
 	tier_path[2] = _step(LVL_A, "t_sk_a_2")
 	checks["a tier row on a path is refused"] = ContentCatalog.validate_entry("classes", _class_entry(tier_path)).any(func(m: String) -> bool: return m.contains("higher tier"))
@@ -245,7 +252,7 @@ static func _test_fixture_rules() -> bool:
 		var u: Combatant = _unit(lvl)
 		var arch: ClassArchetype = ContentFactory.class_of({"class_id": CLS})
 		var owned_path: Array[String] = []
-		for st: Dictionary in arch.skill_path:
+		for st: Dictionary in arch.path_steps():
 			if lvl >= u.family_unlock_level(SkillCatalog.family_of(str(st["skill"]))):
 				owned_path.append(str(st["skill"]))
 		var expected: Array[String] = ContentFactory.families_of(owned_path).slice(0, StatRules.MAX_CLASS_SLOTS)
@@ -291,7 +298,7 @@ static func _test_shipped_data() -> bool:
 	var loadout_ok: bool = true
 	for class_id: String in ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]:
 		var arch: ClassArchetype = ClassArchetype.create(class_id)
-		for step: Dictionary in arch.skill_path:
+		for step: Dictionary in arch.path_steps():
 			var lvl: int = DictUtil.to_int(step["level"])
 			var unit: Combatant = ContentFactory.unit({"id": "t_su_%s" % class_id, "name": "T", "class_id": class_id, "level": lvl})
 			var t1: SkillDef = SkillCatalog.find(str(step["skill"]))
@@ -299,7 +306,7 @@ static func _test_shipped_data() -> bool:
 		for lvl: int in range(1, StatRules.MAX_LEVEL + 1):
 			var u: Combatant = ContentFactory.unit({"id": "t_su_%s" % class_id, "name": "T", "class_id": class_id, "level": lvl})
 			var owned_path: Array[String] = []
-			for step: Dictionary in arch.skill_path:
+			for step: Dictionary in arch.path_steps():
 				if u.known_skills.has(str(step["skill"])):
 					owned_path.append(str(step["skill"]))
 			loadout_ok = loadout_ok and u.active_class_families == ContentFactory.families_of(owned_path).slice(0, StatRules.MAX_CLASS_SLOTS)
@@ -316,7 +323,7 @@ static func _test_shipped_data() -> bool:
 	var tier_ok: bool = true
 	for class_id: String in ["warrior", "priest", "mage"]:
 		var arch2: ClassArchetype = ClassArchetype.create(class_id)
-		for step: Dictionary in arch2.skill_path:
+		for step: Dictionary in arch2.path_steps():
 			var fam: String = SkillCatalog.family_of(str(step["skill"]))
 			var rows: Array[SkillDef] = SkillCatalog.family_tiers(fam)
 			if rows.size() < 2 or rows[0].basic:

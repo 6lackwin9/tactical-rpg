@@ -19,10 +19,10 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Stats: STR DEX INT CONS PERC KNOW. Max HP = 60 + CONS*8 + STR*2 (x tier HP). Speed = max(1, 8 + DEX - armor burden). Crit = 5% + 1%/DEX above 10 + 1%/weapon training level above 1, x1.5.
 - Damage: `DamageCalculator.compute` is the ONLY formula. Attack Power = (weapon power + training) + scaling stat x proficiency scaling (1.0-2.0, default 1.5), x tier power. Authored unit `power` is absolute. Hit = Attack x Focus x Skill x Stance matchup (1.25/0.75/1) x Crit x (1-Guard) x (1-Armor), armor = rating/(rating+50).
 - Combat: 6 blocks per round, simultaneous resolution, AP pool with regen, skill AP = skill level, stances Offensive > Tactical > Defensive > Offensive, +1 AP stance switch, AP debt allowed.
-- Classes (exactly six): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill tiers unlock by level (no skill cap; see "Skill unlock rule (SK2)" below), tiers hero/minion/standard/elite/boss scale HP and power.
+- Classes (six shipped; the Forge may add user classes): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill tiers unlock by level (no skill cap; see "Skill unlock rule (SK2)" below), tiers hero/minion/standard/elite/boss scale HP and power.
 - Proficiency: `{gear type: {level 1-3, scaling 1.0-2.0}}` per class; unlisted gear unequippable; training gives +1 power, -2 requirement, crit, burden, block cost (lvl 3), skill gating (`SkillDef.weapon_types/min_proficiency`).
 - Passives: catalog templates (stat w/ context, proficiency, resist, ap_regen, skill). Granted only by SOURCES (world character, faction `grants`, discipline `passives`, named item `grants`; later quests/lore). Never by classes/base units.
-- Skills: class `skill_path` by level + `extra_skills` + `Combatant.learn_skill`. `Combatant.can_use` gates planner/AI.
+- Skills: class `skill_path` `{family: unlock level}` (order = entry position; `ClassArchetype.path_steps()` sorts by (level, position)) + `extra_skills` + `Combatant.learn_skill`. `Combatant.can_use` gates planner/AI.
 - Units: class + level + side (party/enemy/neutral) + tier + spend + gear overrides; `stat_mode: fixed` only for special units (training dummy). A goblin is lore on top of a minion class; worlds set level + explicit tuning deltas (`hp_pct, power, armor, speed, ap`).
 - Worlds: base asset decides gameplay; two characters on one base unit behave identically except explicit tuning/items/passives.
 
@@ -92,6 +92,10 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 ## Skill unlock rule (SK2)
 
 - A class path step `{level, skill}` owns a family. Tier t is castable at `unlock + unlock_offset` (offset default 0/2/4 for tiers 1/2/3). AP is only the per-round budget (no skill cap). Families of `grade` advanced or higher need path level >= 5; KNOW lowers an advanced family by `(KNOW-12)/4` and the passive `unlock` effect lowers any path family; the larger of the two applies, max 2 levels, advanced floor 3. Constants in `StatRules` (TIER_UNLOCK_STEP, ADVANCED_MIN_LEVEL, MAX_UNLOCK_REDUCTION, ADVANCED_UNLOCK_FLOOR, KNOW_UNLOCK_BASE/STEP, MAX_UNLOCK_OFFSET). Unlock levels freeze while the loadout is locked (battle). Read: `Combatant.family_unlock_level`, `tier_unlocked`.
+
+## Class tab (CLASS1)
+
+- Old list-shaped paths convert on load while `ClassUnitFields.LIST_PATH_CONVERTER` is on (switched off with the CLASS1-M migration). Class key fields: id, ai_role, base_stats, growth, proficiency. `StatRules.ALLOW_DUPLICATE_ACCESSORY` (false; empty and `none` slots never count). Unit `heal_below` (AI group, 0.1-1.0, default 0.7). Class and unit warnings are `{section, text}` records; shipped classes may only carry the two known ones (more than 5 families; tier capped past level 10), see `TestHelpers.KNOWN_SHIPPED_CLASS_WARNINGS`. Forge logic: `ClassForgeModel`, `ForgePreview.class_panels`.
 
 ## Item families (ITEM1)
 

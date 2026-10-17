@@ -47,12 +47,19 @@ static func _test_six_classes() -> bool:
 	checks["equal growth per level"] = growth_ok
 	checks["every class has art"] = art_ok
 	checks["every class has a starting skill set and gear"] = starts_ok
-	# Loadouts sit inside the gear budget band (a documented special item may push it over); no class warnings.
+	# Loadouts sit inside the gear budget band (a documented special item may push it over). Warnings: only the two
+	# allowed CLASS1 categories (TestHelpers.KNOWN_SHIPPED_CLASS_WARNINGS); any other class or unit warning fails.
 	var band_ok: bool = true
+	var unexpected: Array[String] = []
 	for entry: Dictionary in ContentCatalog.entries("classes"):
 		band_ok = band_ok and (GearBudget.in_band(GearBudget.loadout_value(entry)) or GearBudget.has_documented_special(entry))
-		band_ok = band_ok and ContentCatalog.warnings_for("classes", entry).is_empty()
+		for w: String in TestHelpers.unexpected_warnings(ContentCatalog.warnings_for("classes", entry)):
+			unexpected.append("%s: %s" % [str(entry["id"]), w])
+	for unit_entry: Dictionary in ContentCatalog.entries("units"):
+		for w: String in ContentCatalog.warnings_for("units", unit_entry):
+			unexpected.append("%s: %s" % [str(unit_entry["id"]), w])
 	checks["loadouts inside the gear budget (or documented special)"] = band_ok
+	checks["shipped class / unit warnings are only the allowed categories%s" % ("" if unexpected.is_empty() else " (" + "; ".join(unexpected) + ")")] = unexpected.is_empty()
 	# Role identity: the warrior is the tank (best armor rating and HP), the mage the INT caster, the priest supports.
 	var tank_ok: bool = true
 	var warrior_unit: Combatant = ContentFactory.unit({"id": "t_tank", "name": "T", "class_id": "warrior", "level": 5})
@@ -160,7 +167,7 @@ static func _test_skill_paths() -> bool:
 	var legal: bool = true
 	for id: String in CLASSES:
 		var seen: Array[String] = []
-		for step: Dictionary in ClassArchetype.create(id).skill_path:
+		for step: Dictionary in ClassArchetype.create(id).path_steps():
 			var skill: SkillDef = SkillCatalog.find(str(step["skill"]))
 			if skill == null:
 				legal = false
@@ -174,7 +181,7 @@ static func _test_skill_paths() -> bool:
 	for id: String in CLASSES:
 		for lvl: int in [1, 3, 5, 7, 10]:
 			var unit: Combatant = ContentFactory.unit({"id": "t_sp_%s" % id, "name": "T", "class_id": id, "level": lvl})
-			for step: Dictionary in ClassArchetype.create(id).skill_path:
+			for step: Dictionary in ClassArchetype.create(id).path_steps():
 				var sid: String = str(step["skill"])
 				var eff: int = unit.family_unlock_level(SkillCatalog.family_of(sid))
 				owns_by_level = owns_by_level and eff <= DictUtil.to_int(step["level"]) and (unit.known_skills.has(sid) == (lvl >= eff))

@@ -21,6 +21,11 @@ extends Control
 # entry (SkillFormModel decides sections, limits and locks, SkillRanksPanel is the ranks section); Apply stays disabled
 # while ContentCatalog.validate_skill_entry returns problems, listed with their field and rank. System assets (origin
 # system) have locked key fields and cannot be deleted here (SAFE DELETE); user assets can be promoted and demoted.
+#
+# Classes (CLASS1): five sections (ClassForgeModel.layout), typed controls (stat spinners with Remaining, proficiency rows,
+# the skill path table, gear pickers grouped by item family), locked key fields on system classes, the live derived panels
+# (ForgePreview.class_panels) under the form, and Apply disabled while the draft has errors (warnings never block). Units use
+# the same hooks for their groups (the AI group shows heal_below only for a SUPPORT role, hides thresholds when reckless).
 # ==============================================================================
 
 signal playtest_requested(encounter: CatalogEncounter)
@@ -51,6 +56,7 @@ var _origin_btn: Button = null
 var _pending_delete: String = ""
 var _pending_origin: String = ""
 var _switching_kind: bool = false
+var _class_panels: RichTextLabel = null   # the live derived panels under the class form (footer)
 
 func _init() -> void:
 	name = "ContentForge"
@@ -273,6 +279,25 @@ func _configure_form() -> void:
 			panel.show_entry(form.draft, selected_id)
 			return panel
 		form.problems_fn = func() -> Array[Dictionary]: return draft_problem_list()
+	elif kind == "classes":
+		form.state_fn = func(key: String) -> Dictionary: return ClassForgeModel.state(form.draft, key, selected_id)
+		form.layout_fn = func() -> Array[Dictionary]: return ClassForgeModel.layout("classes")
+		form.footer_fn = func() -> Control:
+			_class_panels = RichTextLabel.new()
+			_class_panels.name = "ClassPanels"
+			_class_panels.bbcode_enabled = true
+			_class_panels.fit_content = true
+			_class_panels.scroll_active = false
+			_class_panels.add_theme_font_size_override("normal_font_size", UiTheme.FONT_SM)
+			_class_panels.add_theme_font_size_override("bold_font_size", UiTheme.FONT_MD)
+			_class_panels.text = ForgePreview.class_panels(form.draft)
+			return _class_panels
+		form.problems_fn = func() -> Array[Dictionary]: return draft_problem_list()
+	elif kind == "units":
+		form.state_fn = func(key: String) -> Dictionary: return ClassForgeModel.unit_state(form.draft, key)
+		form.layout_fn = func() -> Array[Dictionary]: return ClassForgeModel.layout("units", form.draft)
+		form.footer_fn = Callable()
+		form.problems_fn = Callable()
 	else:
 		form.state_fn = Callable()
 		form.layout_fn = Callable()
@@ -397,6 +422,8 @@ func new_entry() -> void:
 	d["id"] = ContentCatalog.unique_id(kind, "new_" + kind.trim_suffix("es").trim_suffix("s"))
 	if _skills():
 		d = SkillFormModel.new_entry(str(d["id"]))
+	elif kind == "classes":
+		d = ClassForgeModel.new_entry(str(d["id"]))   # a class that validates as it starts (FORGE1_CLASSES 2.0)
 	if kind == "units" and _side_filter.selected > 0:
 		d["side"] = _side_filter.get_item_text(_side_filter.selected)
 	selected_id = ""
@@ -494,6 +521,9 @@ func draft_problem_list() -> Array[Dictionary]:
 		out.append({"field": str(key), "rank": 0, "message": str(form.json_errors[key])})
 	if _skills():
 		out.append_array(ContentCatalog.validate_skill_entry(form.draft, selected_id))
+	elif kind == "classes":
+		for p: Dictionary in ClassForgeModel.draft_problems(form.draft, selected_id):
+			out.append({"field": str(p["field"]), "rank": 0, "message": str(p["message"])})
 	else:
 		for message: String in ContentCatalog.validate_entry(kind, form.draft, selected_id):
 			out.append({"field": "", "rank": 0, "message": message})
@@ -631,8 +661,10 @@ func _refresh_side_panels() -> void:
 	_preview.text = ForgePreview.describe(kind, form.draft, _skills())
 	var errors: Array[String] = draft_problems()
 	_show_problems(errors)
-	# Apply is blocked while a skill draft has problems; Delete and the origin button follow the selected asset.
-	_apply_btn.disabled = _skills() and not errors.is_empty()
+	# Apply is blocked while a skill or class draft has problems; Delete and the origin button follow the selected asset.
+	if kind == "classes" and _class_panels != null and is_instance_valid(_class_panels):
+		_class_panels.text = ForgePreview.class_panels(form.draft)
+	_apply_btn.disabled = (_skills() or kind == "classes") and not errors.is_empty()
 	_apply_btn.tooltip_text = ("Cannot apply: %d problem%s (listed on the right)" % [errors.size(), "" if errors.size() == 1 else "s"]) if _apply_btn.disabled else "Store the edits in the catalog (Save writes them to disk)"
 	var system: bool = _is_system(selected_id)
 	_delete_btn.disabled = system
@@ -646,12 +678,13 @@ func _show_problems(errors: Array[String]) -> void:
 		_problems.text = "[color=#4ade80]✔ No problems.[/color]"
 		return
 	var lines: Array[String] = []
-	if _skills():
+	var gated: bool = _skills() or kind == "classes"
+	if gated:
 		lines.append("[color=#f87171]Cannot save: %d problem%s[/color]" % [errors.size(), "" if errors.size() == 1 else "s"])
 	for err: String in errors:
 		lines.append("[color=#f87171]•[/color] " + err)
-	if _skills():
-		for w: String in ContentCatalog.warnings_for("skills", form.draft):
+	if gated:
+		for w: String in ContentCatalog.warnings_for(kind, form.draft):
 			lines.append("[color=#fbbf24]•[/color] " + w)
 	_problems.text = "\n".join(lines)
 
@@ -665,3 +698,11 @@ func _set_status(text: String, bad: bool = false) -> void:
 # Status line text (tests read it).
 func status_text() -> String:
 	return _status.text
+
+# True while Apply is disabled (a skill or class draft with errors; tests read it).
+func apply_blocked() -> bool:
+	return _apply_btn.disabled
+
+# The live derived panels text of the class form ("" for other kinds; tests read it).
+func class_panels_text() -> String:
+	return _class_panels.text if kind == "classes" and _class_panels != null and is_instance_valid(_class_panels) else ""

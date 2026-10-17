@@ -484,6 +484,8 @@ static func upsert(kind: String, entry: Dictionary, replace_id: String = "") -> 
 	new_id = str(clean.get("id", ""))
 	var errors: Array[String] = validate_entry(kind, clean, old_id)
 	errors.append_array(key_field_errors(kind, old, clean))
+	if kind == "skills" and old_id != new_id and not old.is_empty():
+		errors.append_array(path_rename_conflicts(old_id, new_id))
 	if not errors.is_empty():
 		return errors
 	var list: Array = _data_map()[kind]
@@ -771,6 +773,10 @@ static func upsert_skill(entry: Dictionary, replace_id: String = "") -> Array[St
 		for p: Dictionary in problems:
 			messages.append(str(p["message"]))
 		return messages
+	if old_head != head and not old_rows.is_empty():
+		var conflicts: Array[String] = path_rename_conflicts(old_head, head)
+		if not conflicts.is_empty():
+			return conflicts
 	var rows: Array[Dictionary] = SkillRanks.expand(raw)
 	var list: Array = _data_map()["skills"]
 	var slots: Array[int] = []
@@ -920,9 +926,8 @@ static func references_to(kind: String, id: String) -> Array[String]:
 					users.append(label)
 	if kind == "skills":
 		for c: Dictionary in entries("classes"):
-			for step: Variant in DictUtil.array_of(c.get("skill_path", [])):
-				if str(DictUtil.dict_of(step).get("skill", "")) == id and not users.has("classes:%s" % str(c.get("id", ""))):
-					users.append("classes:%s" % str(c.get("id", "")))
+			if DictUtil.dict_of(c.get("skill_path", {})).has(id) and not users.has("classes:%s" % str(c.get("id", ""))):
+				users.append("classes:%s" % str(c.get("id", "")))
 		for p: Dictionary in entries("passives"):
 			for fx: Variant in DictUtil.array_of(p.get("effects", [])):
 				if str(DictUtil.dict_of(fx).get("skill", "")) == id and not users.has("passives:%s" % str(p.get("id", ""))):
@@ -948,11 +953,10 @@ static func _rename_refs(kind: String, old_id: String, new_id: String) -> void:
 					_dirty_map()[other_kind] = true
 	if kind == "skills":
 		for c: Dictionary in entries("classes"):
-			for step: Variant in DictUtil.array_of(c.get("skill_path", [])):
-				var s: Dictionary = DictUtil.dict_of(step)
-				if str(s.get("skill", "")) == old_id:
-					s["skill"] = new_id
-					_dirty_map()["classes"] = true
+			var path: Dictionary = DictUtil.dict_of(c.get("skill_path", {}))
+			if path.has(old_id) and not path.has(new_id):
+				c["skill_path"] = _renamed_key(path, old_id, new_id)   # same position (FORGE1_CLASSES 3.5)
+				_dirty_map()["classes"] = true
 		for p: Dictionary in entries("passives"):
 			for fx: Variant in DictUtil.array_of(p.get("effects", [])):
 				var d: Dictionary = DictUtil.dict_of(fx)
@@ -971,6 +975,23 @@ static func _rename_refs(kind: String, old_id: String, new_id: String) -> void:
 					if str(fams[i]) == old_id:
 						fams[i] = new_id
 						_dirty_map()["units"] = true
+
+# Renaming skill family `old_id` to `new_id` is refused while a class path lists BOTH (a dict key cannot be renamed onto an
+# existing key without losing an entry): one message per class, empty = the rename may proceed (_rename_refs rewrites keys).
+static func path_rename_conflicts(old_id: String, new_id: String) -> Array[String]:
+	var errors: Array[String] = []
+	for c: Dictionary in entries("classes"):
+		var path: Dictionary = DictUtil.dict_of(c.get("skill_path", {}))
+		if path.has(old_id) and path.has(new_id):
+			errors.append("Class '%s' lists both '%s' and '%s' in its skill path: remove one before renaming." % [str(c.get("id", "")), old_id, new_id])
+	return errors
+
+# A copy of ordered dict `d` with key `old_key` renamed to `new_key` at the same position.
+static func _renamed_key(d: Dictionary, old_key: String, new_key: String) -> Dictionary:
+	var out: Dictionary = {}
+	for key: Variant in d:
+		out[new_key if str(key) == old_key else key] = d[key]
+	return out
 
 # ------------------------------------------------------------------------------
 # Validation
@@ -1109,7 +1130,9 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 		"item_families":
 			return ItemValidator.family_warnings(ItemFamilies.derive(e))
 		"classes":
-			return GearBudget.check_class(e)
+			return ClassUnitValidator.warning_texts(ClassUnitValidator.class_warnings(e))
+		"units":
+			return ClassUnitValidator.warning_texts(ClassUnitValidator.unit_warnings(e))
 		"skills":
 			return SkillValidator.warnings(entry, e)
 	var none: Array[String] = []
@@ -1120,7 +1143,7 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 # warnings are not repeated for every rank row.
 static func warnings_all() -> Dictionary:
 	var out: Dictionary = {}
-	for kind: String in ["items", "item_families", "classes"]:
+	for kind: String in ["items", "item_families", "classes", "units"]:
 		for e: Dictionary in entries(kind):
 			var found: Array[String] = warnings_for(kind, e)
 			if not found.is_empty():

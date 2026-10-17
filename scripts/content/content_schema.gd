@@ -8,8 +8,12 @@ extends RefCounted
 # Content Forge form (labels, widgets, ranges, help, conditional visibility).
 #
 # Field: {"key", "label", "type", "default", ...}
-#   type: id | string | text | int | float | bool | enum | ref | refs | stats | strings | json
-#   min / max / step     numeric range
+#   type: id | string | text | int | float | bool | enum | ref | refs | stats | strings | json | multi_pick | template
+#         | table (ordered {key: int}, e.g. the class skill path) | dict_pick ({key: {..}} rows, e.g. class proficiency)
+#   min / max / step     numeric range (table: the value range)
+#   min_len / max_len    string length caps (field_errors)
+#   group                Forge section of a class / unit field (identity, stats, proficiency, skills, loadout; units: ai)
+#   key_field            locked on system assets (ContentCatalog.key_field_errors)
 #   options              enum choices (Array[String]); "options_from": "zones" | "art" | "status"
 #   ref                  catalog kind a ref/refs field points at; "ref_filter": {key: value}
 #   when                 {"key": k, "in": [...]} or {"key": k, "not_in": [...]}: shown/saved only then
@@ -66,7 +70,10 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = _encounter_fields()
 		_:
 			return list
-	list.append(origin_field())
+	var origin: Dictionary = origin_field()
+	if kind == "classes":
+		origin["group"] = "identity"
+	list.append(origin)
 	return list
 
 # The common field of every Forge kind (FORGE1 section 12): who owns the asset. Default system; only user assets store it.
@@ -218,7 +225,11 @@ static func defaults(kind: String) -> Dictionary:
 # A clean copy of `entry`: every schema field present and typed, unknown keys kept
 # at the end (so hand-added data survives a round trip through the Forge).
 static func normalize(kind: String, entry: Dictionary) -> Dictionary:
-	var src: Dictionary = _legacy_skill(entry) if kind == "skills" else entry
+	var src: Dictionary = entry
+	if kind == "skills":
+		src = _legacy_skill(entry)
+	elif kind == "classes":
+		src = _legacy_class(entry)
 	var out: Dictionary = {}
 	for f: Dictionary in fields(kind):
 		var key: String = str(f["key"])
@@ -243,6 +254,18 @@ static func _legacy_skill(entry: Dictionary) -> Dictionary:
 		if DictUtil.to_bool(out["offhand"]) and not out.has("weapon_hand"):
 			out["weapon_hand"] = "off"
 		out.erase("offhand")
+	return out
+
+# Pre-CLASS1 class path, accepted for one release (FORGE1_CLASSES 3.5): a list [{level, skill}] becomes the dict
+# {skill: level} in list order, basics dropped (ClassArchetype.path_from_list); saving then writes the dict. CLASS1-M converts
+# the shipped data; with ClassUnitFields.list_path_converter off a list stays a list and the validator reports it.
+static func _legacy_class(entry: Dictionary) -> Dictionary:
+	var raw: Variant = entry.get("skill_path", null)
+	if not (raw is Array) or not ClassUnitFields.list_path_converter:
+		return entry
+	var steps: Array = raw
+	var out: Dictionary = entry.duplicate()
+	out["skill_path"] = ClassArchetype.path_from_list(steps)
 	return out
 
 # The entry as written to disk: fields hidden by "when" (and default "system" / "origin") are left out.
@@ -303,6 +326,18 @@ static func coerce(f: Dictionary, value: Variant) -> Variant:
 			return stats
 		"json":
 			return _copy(value) if (value is Array or value is Dictionary) else _copy(fallback)
+		"table":
+			# Ordered {String key: level}; insertion order is kept. Values stay unclamped (the validator names a bad level);
+			# a non-dictionary value is kept as is so the validator reports it and saving never drops it.
+			if value is Dictionary:
+				var src_table: Dictionary = value
+				var table: Dictionary = {}
+				for key: Variant in src_table:
+					table[str(key)] = ClassArchetype.whole_level(src_table[key])
+				return table
+			return _copy(value) if value is Array else _copy(fallback)
+		"dict_pick":
+			return _copy(value) if value is Dictionary else _copy(fallback)
 	return str(value) if value != null else str(fallback)
 
 static func _copy(v: Variant) -> Variant:
@@ -348,6 +383,8 @@ static func field_errors(kind: String, entry: Dictionary) -> Array[String]:
 				errors.append("%s: '%s' is not one of %s." % [str(f["label"]), value, ", ".join(options_of(f))])
 		if f.has("max_len") and str(entry.get(str(f["key"]), "")).length() > DictUtil.to_int(f["max_len"]):
 			errors.append("%s is %d characters (max %d)." % [str(f["label"]), str(entry.get(str(f["key"]), "")).length(), DictUtil.to_int(f["max_len"])])
+		if f.has("min_len") and not str(entry.get(str(f["key"]), "")).is_empty() and str(entry.get(str(f["key"]), "")).length() < DictUtil.to_int(f["min_len"]):
+			errors.append("%s is %d characters (min %d)." % [str(f["label"]), str(entry.get(str(f["key"]), "")).length(), DictUtil.to_int(f["min_len"])])
 	return errors
 
 static func is_valid_id(id: String) -> bool:

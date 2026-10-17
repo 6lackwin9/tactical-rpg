@@ -6,6 +6,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | --- | --- | --- | --- |
 | `scripts/core/specs/` | StatRules, ClassArchetype, Proficiency, Passives, CharacterStats | S2 | done |
 | `scripts/core/specs/{item_families,item_modifiers,item_text}.gd` | item family templates, modifier resolve/collapse, description tokens (ITEM1) | S3, S5 | done |
+| `scripts/content/class_forge_model.gd` | ClassForgeModel: class tab view model (layout, locks, path helpers, panels, grouped pickers, unit AI visibility) (CLASS1) | S5 | done |
 | `scripts/core/combat/`, `scripts/core/inventory/` | Combatant, DamageCalculator, equipment, inventory | S1, S3 | done |
 | `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses | S1, S4 | done |
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
@@ -18,6 +19,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/bal2_rules_test_suite.gd` | BAL2-L rules: PERC range, unit gear `none`, tiers, trained fists | S2, S3 | done |
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
+| `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, locks, seed; model and Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
 | `scripts/tests/plan_claims_test_suite.gd` | preset plans always confirmable: approach tile claims, tie order, party redraft (PLAN1) | S1, S4 | done |

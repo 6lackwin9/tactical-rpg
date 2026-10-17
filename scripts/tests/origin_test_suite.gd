@@ -178,8 +178,8 @@ static func _test_safe_delete() -> bool:
 	checks["SAFE DELETE refuses a required engine skill"] = not DictUtil.to_bool(AssetScan.safe_delete("skills", "move", true)["ok"]) and ContentCatalog.has("skills", "move")
 	var used: String = ""
 	for entry: Dictionary in ContentCatalog.entries("classes"):
-		for step: Variant in DictUtil.array_of(entry["skill_path"]):
-			used = str(DictUtil.dict_of(step).get("skill", ""))
+		for fam: Variant in DictUtil.dict_of(entry["skill_path"]):
+			used = str(fam)
 			break
 		if not used.is_empty():
 			break

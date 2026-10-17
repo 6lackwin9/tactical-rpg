@@ -20,8 +20,18 @@ extends RefCounted
 #
 # validate_class / validate_spend return problem strings (empty = valid): the
 # catalog refuses classes and units that break these rules.
-# Gear flags: the legacy dual-wield switch is Equipment.allow_plain_dual_wield (equipment.gd, user answer 2026-10-17).
+# Gear flags: the legacy dual-wield switch is Equipment.allow_plain_dual_wield (equipment.gd, user answer 2026-10-17);
+# the accessory flag is ALLOW_DUPLICATE_ACCESSORY below (rule flags section).
 # ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Rule flags (code constants; the static var is the runtime switch tests flip and restore)
+# ------------------------------------------------------------------------------
+
+# rules.allow_duplicate_accessory (FORGE1_CLASSES 3.6): false = the same item may not fill both accessory slots of a class or
+# unit (ClassUnitValidator._loadout_errors). Revisit when stacking is designed; flipping it needs no data change.
+const ALLOW_DUPLICATE_ACCESSORY: bool = false
+static var allow_duplicate_accessory: bool = ALLOW_DUPLICATE_ACCESSORY
 
 const STATS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]
 const CLASS_BUDGET: int = 62          # a class's level-1 stat total

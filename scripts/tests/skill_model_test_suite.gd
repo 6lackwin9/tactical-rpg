@@ -288,7 +288,10 @@ static func _class_with_path(path: Array[Dictionary]) -> Dictionary:
 	var e: Dictionary = ContentCatalog.get_entry("classes", ContentCatalog.ids("classes")[0])
 	e["id"] = "t_md_cls"
 	e["name"] = "Fixture"
-	e["skill_path"] = path
+	var as_dict: Dictionary = {}   # the CLASS1 path shape {skill: level}, step order, nothing dropped
+	for step: Dictionary in path:
+		as_dict[str(step["skill"])] = DictUtil.to_int(step["level"])
+	e["skill_path"] = as_dict
 	e.erase("origin")
 	return e
 
@@ -335,7 +338,7 @@ static func _test_basics_grant() -> bool:
 		for basic_id: String in basics:
 			all_own = all_own and c.owns_skill(basic_id)
 		var arch: ClassArchetype = ClassArchetype.create(class_id)
-		for step: Dictionary in arch.skill_path:
+		for step: Dictionary in arch.path_steps():
 			no_path_rows = no_path_rows and not basics.has(str(step.get("skill", "")))
 	checks["every class-derived unit owns every basic from level 1"] = all_own
 	var dup: Combatant = ContentFactory.unit({"id": "t_bg_u2", "name": "U", "class_id": ContentCatalog.ids("classes")[0], "level": 1, "extra_skills": [basics[0]]}, "", 12)

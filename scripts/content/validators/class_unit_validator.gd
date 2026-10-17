@@ -29,53 +29,45 @@ static func class_errors(e: Dictionary) -> Array[String]:
 				weapons += 1
 		if weapons == 0:
 			errors.append("Proficiency needs at least one weapon type.")
-	var path: Variant = e["skill_path"]
-	if not (path is Array):
-		errors.append("The skill path must be a list of {level, skill}.")
-	else:
-		var last_level: int = 0
-		var seen_families: Array[String] = []
-		var family_levels: Dictionary = {}   # family head -> lowest path level (for the `requires` rule)
-		for step_raw: Variant in (path as Array):
-			var raw_step: Dictionary = DictUtil.dict_of(step_raw)
-			var raw_skill: String = str(raw_step.get("skill", ""))
-			var raw_fam: String = SkillRanks.head_of(ContentCatalog.get_entry("skills", raw_skill)) if ContentCatalog.has("skills", raw_skill) else raw_skill
-			var raw_level: int = DictUtil.to_int(raw_step.get("level", 0))
-			if not family_levels.has(raw_fam) or raw_level < DictUtil.int_of(family_levels, raw_fam):
-				family_levels[raw_fam] = raw_level
-		for step_raw: Variant in (path as Array):
-			var step: Dictionary = DictUtil.dict_of(step_raw)
-			var skill_id: String = str(step.get("skill", ""))
-			var level: int = DictUtil.to_int(step.get("level", 0))
-			var skill: Dictionary = ContentCatalog.get_entry("skills", skill_id)
-			if level < 1 or level > StatRules.MAX_LEVEL:
-				errors.append("Skill path: level %d is outside 1-%d." % [level, StatRules.MAX_LEVEL])
-			if level < last_level:
-				errors.append("Skill path must be listed in ascending level order.")
-			last_level = maxi(last_level, level)
-			if skill.is_empty():
-				errors.append("Skill path: unknown skill '%s'." % skill_id)
-			elif DictUtil.to_bool(skill.get("system", false)):
-				errors.append("Skill path: '%s' is an engine skill (always known)." % skill_id)
-			elif DictUtil.to_bool(skill.get("basic", false)):
-				errors.append("Skill path: '%s' is a basic skill; every unit owns the basics from level 1, so they are not valid in a class path." % skill_id)
-			else:
-				var fam: String = str(skill.get("family", ""))
-				if fam.is_empty():
-					fam = skill_id
-				if DictUtil.to_int(skill.get("tier", 1), 1) != 1:
-					errors.append("Skill path: '%s' is a higher tier; list the tier 1 skill of the family (tiers open with it)." % skill_id)
-				if seen_families.has(fam):
-					errors.append("Skill path: family '%s' is listed more than once." % fam)
-				seen_families.append(fam)
-				if str(skill.get("grade", "novice")) != "novice" and level < StatRules.ADVANCED_MIN_LEVEL:
-					errors.append("Skill path: %s is an advanced skill and needs unit level %d or higher (listed at %d)." % [skill_id, StatRules.ADVANCED_MIN_LEVEL, level])
-				for required: String in ContentFactory._strings(skill.get("requires", [])):
-					if not family_levels.has(required):
-						errors.append("Skill path: %s needs %s on the same path." % [skill_id, required])
-					elif DictUtil.int_of(family_levels, required) > level:
-						errors.append("Skill path: %s (level %d) needs %s first, but %s is only listed at level %d." % [skill_id, level, required, required, DictUtil.int_of(family_levels, required)])
+	errors.append_array(path_errors(e["skill_path"]))
 	errors.append_array(_loadout_errors(e, ContentFactory.class_archetype(e).make_proficiency(), true))
+	return errors
+
+# The class skill path {family head: unlock level} (FORGE1_CLASSES 3.5): each key a tier-1, non-engine, non-basic skill;
+# each level a whole number 1..MAX_LEVEL; grade >= advanced at ADVANCED_MIN_LEVEL+; every `requires` family on the path at
+# an equal or lower level. Order and "one step per family" need no rule (a dict key is unique).
+static func path_errors(path_raw: Variant) -> Array[String]:
+	var errors: Array[String] = []
+	if not (path_raw is Dictionary):
+		errors.append("The skill path must be a dictionary {skill family: unlock level} (a list [{level, skill}] is the old shape).")
+		return errors
+	var path: Dictionary = path_raw
+	for key: Variant in path:
+		var skill_id: String = str(key)
+		var raw_level: Variant = path[key]
+		if not (raw_level is int):
+			errors.append("Skill path: the level of '%s' must be a whole number 1-%d." % [skill_id, StatRules.MAX_LEVEL])
+			continue
+		var level: int = raw_level
+		var skill: Dictionary = ContentCatalog.get_entry("skills", skill_id)
+		if level < 1 or level > StatRules.MAX_LEVEL:
+			errors.append("Skill path: level %d of '%s' is outside 1-%d." % [level, skill_id, StatRules.MAX_LEVEL])
+		if skill.is_empty():
+			errors.append("Skill path: unknown skill '%s'." % skill_id)
+		elif DictUtil.to_bool(skill.get("system", false)):
+			errors.append("Skill path: '%s' is an engine skill (always known)." % skill_id)
+		elif DictUtil.to_bool(skill.get("basic", false)):
+			errors.append("Skill path: '%s' is a basic skill; every unit owns the basics from level 1, so they are not valid in a class path." % skill_id)
+		else:
+			if DictUtil.to_int(skill.get("tier", 1), 1) != 1:
+				errors.append("Skill path: '%s' is a higher tier; list the tier 1 skill of the family (tiers open with it)." % skill_id)
+			if str(skill.get("grade", "novice")) != "novice" and level < StatRules.ADVANCED_MIN_LEVEL:
+				errors.append("Skill path: %s is an advanced skill and needs unit level %d or higher (listed at %d)." % [skill_id, StatRules.ADVANCED_MIN_LEVEL, level])
+			for required: String in ContentFactory._strings(skill.get("requires", [])):
+				if not path.has(required):
+					errors.append("Skill path: %s needs %s on the same path." % [skill_id, required])
+				elif DictUtil.to_int(path[required]) > level:
+					errors.append("Skill path: %s (level %d) needs %s first, but %s is only listed at level %d." % [skill_id, level, required, required, DictUtil.to_int(path[required])])
 	return errors
 
 # Gear problems of a class or unit entry: every item fits its slot, is trained for by
@@ -97,7 +89,109 @@ static func _loadout_errors(e: Dictionary, prof: Proficiency, check_training: bo
 	var off: Dictionary = ContentCatalog.get_entry("items", str(e.get("off_hand", "")))
 	if DictUtil.to_bool(main.get("two_handed", false)) and not off.is_empty():
 		errors.append("A two-handed weapon can't be paired with an off-hand item.")
+	if is_duplicate_accessory(str(e.get("accessory_1", "")), str(e.get("accessory_2", ""))):
+		errors.append(DUPLICATE_ACCESSORY_ERROR)
 	return errors
+
+const DUPLICATE_ACCESSORY_ERROR: String = "The same accessory cannot fill both accessory slots."
+
+# True when both accessory slots hold the same item and StatRules.allow_duplicate_accessory is off (FORGE1_CLASSES 3.6).
+# Empty slots and ContentSchema.NO_ITEM are not items, so they never count as a duplicate.
+static func is_duplicate_accessory(first: String, second: String) -> bool:
+	if StatRules.allow_duplicate_accessory or first.is_empty() or first == ContentSchema.NO_ITEM:
+		return false
+	return first == second
+
+# ------------------------------------------------------------------------------
+# Warnings (soft, never block Save): typed records {section, text}; ContentCatalog.warnings_for returns the texts.
+# Sections are the class Forge groups (ClassUnitFields.CLASS_GROUPS); unit AI warnings use the unit "ai" group.
+# ------------------------------------------------------------------------------
+
+static func _warn(section: String, text: String) -> Dictionary:
+	return {"section": section, "text": text}
+
+static func warning_texts(records: Array[Dictionary]) -> Array[String]:
+	var out: Array[String] = []
+	for r: Dictionary in records:
+		out.append(str(r["text"]))
+	return out
+
+# Class warnings: gear budget (GearBudget.check_class), path size / tier cap / level-1 entry / weapon gates (3.5, 3.4) and the
+# role mismatches of section 4 (SUPPORT without a SUPPORT path skill, SNIPER with a melee main hand).
+static func class_warnings(e: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for text: String in GearBudget.check_class(e):
+		out.append(_warn("loadout", text))
+	var path: Dictionary = DictUtil.dict_of(e.get("skill_path", {}))
+	var families: Array[String] = []
+	for key: Variant in path:
+		if not SkillCatalog.is_basic_family(str(key)):
+			families.append(str(key))
+	if families.size() > StatRules.MAX_CLASS_SLOTS:
+		out.append(_warn("skills", "The path lists %d families; only the first %d (by unlock level, then position) are active by default." % [families.size(), StatRules.MAX_CLASS_SLOTS]))
+	if not path.is_empty() and not path.values().any(func(v: Variant) -> bool: return v is int and DictUtil.to_int(v) == 1):
+		out.append(_warn("skills", "No path family unlocks at level 1: a level 1 unit of this class has no class skill in its loadout."))
+	var prof: Proficiency = Proficiency.from_dict(DictUtil.dict_of(e.get("proficiency", {})))
+	for fam: String in families:
+		var base_level: int = DictUtil.to_int(path[fam], 1)
+		for row: SkillDef in SkillCatalog.family_tiers(fam):
+			var opens: int = base_level + row.tier_offset()
+			if row.tier > 1 and opens > StatRules.MAX_LEVEL:
+				out.append(_warn("skills", "%s unlocks at level %d, beyond the level cap %d (capped)." % [row.display_name, opens, StatRules.MAX_LEVEL]))
+		var head: SkillDef = SkillCatalog.tier_one(fam)
+		if head != null and not head.weapon_types.is_empty() and not _gate_reachable(head.weapon_types, prof):
+			out.append(_warn("proficiency", "%s needs %s, but the class trains none of them%s." % [head.display_name, "/".join(head.weapon_types), " ('unarmed' needs fist)" if head.weapon_types.has(SkillDef.UNARMED_TOKEN) else ""]))
+	out.append_array(role_warnings(str(e.get("ai_role", "")), _path_has_support(families), str(e.get("main_hand", "")), false, "identity"))
+	return out
+
+# Unit warnings: the role mismatches for the unit's effective role (own or class), with reckless + SUPPORT (section 4).
+static func unit_warnings(e: Dictionary) -> Array[Dictionary]:
+	var arch: ClassArchetype = ContentFactory.class_of(e)
+	if arch == null or str(e.get("stat_mode", "derived")) == "fixed":
+		var none: Array[Dictionary] = []
+		return none
+	var role: String = str(e.get("ai_role", ""))
+	if role.is_empty():
+		role = arch.ai_role
+	var families: Array[String] = []
+	for step: Dictionary in arch.path_steps():
+		families.append(str(step["skill"]))
+	for extra: String in ContentFactory._strings(e.get("extra_skills", [])):
+		families.append(SkillCatalog.family_of(extra))
+	var main: String = str(e.get("main_hand", ""))
+	if main.is_empty():
+		main = str(arch.loadout.get("main_hand", ""))
+	elif main == ContentSchema.NO_ITEM:
+		main = ""
+	return role_warnings(role, _path_has_support(families), main, DictUtil.to_bool(e.get("reckless", false)), ClassUnitFields.UNIT_AI_GROUP)
+
+static func role_warnings(role: String, has_support_skill: bool, main_hand: String, reckless: bool, section: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if role == "SUPPORT" and not has_support_skill:
+		out.append(_warn(section, "Role SUPPORT without a SUPPORT skill: the unit has nothing to heal or buff with."))
+	if role == "SNIPER":
+		var item: Dictionary = ContentCatalog.get_entry("items", main_hand)
+		var reach: int = DictUtil.to_int(item.get("base_range", 1), 1) if not item.is_empty() else 1
+		if reach < 2:
+			out.append(_warn(section, "Role SNIPER with a melee main hand (range %d): a sniper keeps its distance and needs range 2+." % reach))
+	if role == "SUPPORT" and reckless:
+		out.append(_warn(section, "A reckless SUPPORT never holds back to heal: reckless charges the nearest foe."))
+	return out
+
+static func _path_has_support(families: Array[String]) -> bool:
+	for fam: String in families:
+		var head: SkillDef = SkillCatalog.tier_one(fam)
+		if head != null and head.kind == SkillDef.Kind.SUPPORT:
+			return true
+	return false
+
+# A weapon gate is reachable when the class trains one of its gear types (`unarmed` = the fist proficiency).
+static func _gate_reachable(tokens: Array[String], prof: Proficiency) -> bool:
+	for token: String in tokens:
+		var gear: String = SkillDef.UNARMED_PROFICIENCY if token == SkillDef.UNARMED_TOKEN else token
+		if prof.can_use(gear):
+			return true
+	return false
 
 static func unit_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
@@ -121,7 +215,7 @@ static func _unit_requires_errors(e: Dictionary, arch: ClassArchetype) -> Array[
 	var errors: Array[String] = []
 	var owned: Array[String] = []
 	if arch != null:
-		for step: Dictionary in arch.skill_path:
+		for step: Dictionary in arch.path_steps():
 			owned.append(SkillRanks.head_of(ContentCatalog.get_entry("skills", str(step.get("skill", "")))))
 	var extras: Array[String] = ContentFactory._strings(e.get("extra_skills", []))
 	for extra: String in extras:
