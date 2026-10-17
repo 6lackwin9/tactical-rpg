@@ -20,6 +20,12 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 
 If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent.
 
+## Front desk and alerts (user 2026-10-17)
+
+The front-desk session (`Tactical RPG Dashboard`, formerly `new-game-project-09`) is the user's interactive desk. Send it decision requests (question, recommendation and options in one message), a one-line ack on reading each relayed message plus a short done note when finished, and short summaries when a task finishes or a review has findings. Keep `docs/AGENT_MAP.md` and `docs/TASKS.md` current: the desk reads them for status. Anything needing a permission prompt or hard to reverse is still confirmed in this terminal.
+
+Hard failures get an immediate one-line alert, without waiting for a done note: `ALERT <task>: <what failed>, <what you are doing about it>`. Triggers: an agent error, crash or usage limit; `check_project` failing twice on the same task; a merge conflict; a blocked task or stalled agent; anything that would otherwise only be logged. Routine fixes a builder resolves on its own stay in the done notes.
+
 ## Dispatch modes (user 2026-10-17)
 
 The user switches mode with "mode standard", "mode economy" or "mode sprint" (typed in the front-desk session `new-game-project-09`, relayed here). Ack with the active mode on read. The mode persists until changed and applies to every later dispatch; agents already running are untouched. Pass `effort` explicitly on every Agent call per the table (this table is the explicit instruction for setting effort) and `model` where the table names one. Current mode: **standard** (record changes in `docs/AGENT_MAP.md` Active section).
