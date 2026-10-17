@@ -1,5 +1,90 @@
 {
 	"kind": "asset_manifest",
 	"version": 1,
-	"entries": []
+	"entries": [
+		{
+			"id": "unit/goblin_brawler/token",
+			"namespace": "unit",
+			"key": "goblin_brawler",
+			"variant": "token",
+			"path": "",
+			"alias_of": "berserker",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "CLN-15 reuse: goblin brawler has no own art yet"
+		},
+		{
+			"id": "unit/goblin_brawler/portrait",
+			"namespace": "unit",
+			"key": "goblin_brawler",
+			"variant": "portrait",
+			"path": "",
+			"alias_of": "berserker",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "CLN-15 reuse"
+		},
+		{
+			"id": "unit/warrior/token",
+			"namespace": "unit",
+			"key": "warrior",
+			"variant": "token",
+			"path": "res://assets/art/unit/warrior_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override: PNG export of the placeholder glyph layer"
+		},
+		{
+			"id": "unit/warrior/portrait",
+			"namespace": "unit",
+			"key": "warrior",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/warrior_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override: PNG export of the placeholder"
+		},
+		{
+			"id": "item/runed_staff/icon",
+			"namespace": "item",
+			"key": "runed_staff",
+			"variant": "icon",
+			"path": "res://assets/art/item/runed_staff_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override of a unique icon"
+		},
+		{
+			"id": "tile/rubble/v0",
+			"namespace": "tile",
+			"key": "rubble",
+			"variant": "v0",
+			"path": "res://assets/art/tile/rubble_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override; serves all four variants"
+		}
+	]
 }

@@ -18,6 +18,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | --- | --- | --- | --- |
 | cloud thread (no subagent) | docs/specs/BAL3.md: sim, AI and data levers for I2-I14 with triggers, sequenced after the 12x9 grid and S12S-L | n/a / 25 | approved by the user (all recs) and merged via PR #29 |
 
+### S14-A1 first manifest rows (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | Alias and four sample overrides exported and seeded (data/seeds/s14_a1.gd); commit 2 already done by ITEM1-A | n/a / 25 | merged via PR |
+
 ### DLG1-F dialogue and shop follow-ups (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
@@ -65,6 +71,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | --- | --- | --- | --- |
 | logic-builder | Commit 1 schema: registry magnitude ranges, six status rows, magnitude validation, sources, StatusExpansion suite | 135k / 16 | PR #15 |
 | change-reviewer | Commit 1 review | 63k / 2 | no blockers; popup unit and comment fixed by the thread |
+| logic-builder | Commits 2-3: slow, expose/fortify armor, round-end order, granted magnitudes, chips, AI rule 8, sim regen/dot metrics, two new suites | 212k / 28 | arena 472/0, dojo 45/0 |
 
 ### DLG1-L commit 3 dialogue and shop panels (2026-10-17, cloud)
 

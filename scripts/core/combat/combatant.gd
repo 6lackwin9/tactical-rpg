@@ -415,10 +415,17 @@ func debuff_resistance() -> float:
 	return stats.get_debuff_resistance(get_weapon_context()) if stats != null else 0.0
 
 # Tiles one Move command can cover (one block): faster units cover more ground.
-# Haste adds StatusEffects.HASTE_TILES on top of the 1-4 base.
+# Haste adds StatusEffects.HASTE_TILES on top of the 1-4 base, slow takes StatusEffects.SLOW_TILES off
+# (floor 1); haste and slow on one unit cancel.
 func move_per_block() -> int:
 	var base: int = clampi(floori(float(speed + 2) / 5.0), 1, 4)
-	return base + (StatusEffects.HASTE_TILES if has_status(StatusEffects.HASTE) else 0)
+	var hasted: int = StatusEffects.HASTE_TILES if has_status(StatusEffects.HASTE) else 0
+	var slowed: int = StatusEffects.SLOW_TILES if has_status(StatusEffects.SLOW) else 0
+	return maxi(1, base + hasted - slowed)
+
+# Magnitude of an ACTIVE status instance (0 when the status is not active or carries none).
+func active_magnitude(status: String) -> int:
+	return DictUtil.int_of(status_magnitudes, status) if has_status(status) else 0
 
 # Stat-context dictionary used for weapon-conditional bonuses (passives etc.).
 func get_weapon_context() -> Dictionary:
