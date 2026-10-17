@@ -8,20 +8,29 @@ Desktop: the planner keeps this section current. Cloud: the project's thread lis
 
 Dispatch mode: **standard**. No agents running (wind-down 2026-10-17 for the move to a cloud instance).
 
-Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-2, CLN-1/2/4/5/10/11/15, AI2 (diagnosis), PLAN1, M4-L + M4-A, QUEST2, EXP1-L (commits 1-3) + EXP1-A, ITEM1-L (commits 1-3) + ITEM1-A, CLASS1-L + CLASS1-M, DLG1-L (commits 1-2) + DLG1-A, S14-L1 (commits 1-2). Open next: DLG1-F, S14-F, S14-L1 commit 3, S14-L2/L3, TRAV1, REP1, UI1-3, S12S/T/C, BAL2 rerun on the fixed planner, CLN-12/13/16, CLN-3b.
+Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-2, CLN-1/2/4/5/10/11/15, AI2 (diagnosis), PLAN1, M4-L + M4-A, QUEST2, EXP1-L (commits 1-3) + EXP1-A, ITEM1-L (commits 1-3) + ITEM1-A, CLASS1-L + CLASS1-M, DLG1-L (commits 1-2) + DLG1-A, S14-L1 (commits 1-2). Open next: DLG1-F, S14-F, S14-L1 commit 3, S14-L2/L3, TRAV1, REP1, UI1-3, S12S/T/C, BAL3 spec (from BAL2-R), CLN-12/13/16, CLN-3b.
 
 ## Finished, by milestone (newest first)
 
+<<<<<<< HEAD
 ### BATTLE1-L battle link (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | planner (cloud thread, no subagent) | BATTLE1-L: map and dialogue fights open the combat arena (BattleScreen), outcomes settle through after_fight, results headline, battle_link suite | n/a / 60 | PR open |
+=======
+### BAL2-R clean balance rerun (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| cloud thread (no subagent) | party, sweep, role, duel, tier at L3/L5 on main d6f716c; BALANCE_REPORT rewritten, old rerun archived as superseded | n/a / 30 | PR squash-merged; 0 PLAN FAIL, 0 METRIC FAIL |
+>>>>>>> origin/main
 
 ### UI1-L menus and save slots (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | UI3-L: read-only quest journal, journal suite; screenshots 17-19 in project files ui1/ | n/a / 20 | merged via PR |
 | planner (cloud thread, no subagent) | SAVE-IO: save export / import through a file dialog, save_io suite | n/a / 15 | merged via PR |
 | planner (cloud thread, no subagent) | UI2-L: party, level-up, skills, gear, battle results screens; 5 shared save slots; screenshots 10-16 in project files ui1/ | n/a / 70 | merged via PR |
 | planner (cloud thread, no subagent) | UI1-A: ashlands start_party seed (warrior, ranger, rogue, mage) | n/a / 5 | merged via PR |
