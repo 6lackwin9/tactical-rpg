@@ -9,7 +9,7 @@ extends RefCounted
 
 const BUSY: String = "You can't save during a battle or a conversation."
 const NO_GAME: String = "There is no game to save."
-const MANUAL_ONLY: String = "Manual saves use slots 1-3 (slot 0 is the autosave)."
+const MANUAL_ONLY: String = "Manual saves use slots 1-5 (slot 0 is the autosave)."
 
 var router: MenuRouter = null
 var saving: bool = false            # true = the hub's Save screen, false = Load

@@ -5,20 +5,24 @@ extends RefCounted
 # Tactical RPG - Party builder (S7): UnitState -> Combatant.
 # Goes through the same ContentFactory.unit path as a catalog unit (class, tier, gear), with the
 # level from XP and the spend from the state; then passives, learned skills, loadout, equipment.
-# Unspent points are auto-spent on a COPY (the state is never changed here).
+# Unspent points are auto-spent on a COPY (the state is never changed here); `auto_spend` false leaves them unspent
+# (the party screen's preview shows only confirmed and drafted points, UI2-L).
 # ==============================================================================
 
 # {"combatant": Combatant or null, "warnings": Array[String], "errors": Array[String]}
-static func build_report(state: UnitState) -> Dictionary:
+static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionary:
 	var warnings: Array[String] = []
 	var errors: Array[String] = state.validate()
 	if not errors.is_empty():
 		return {"combatant": null, "warnings": warnings, "errors": errors}
 	var work: UnitState = state.duplicate_state()
-	LevelUp.auto_for(work)   # unspent must be 0 to build
+	if auto_spend:
+		LevelUp.auto_for(work)
 	var entry: Dictionary = ContentCatalog.get_entry("units", work.base_unit).duplicate(true)
 	entry["level"] = work.level()
 	entry["spend"] = work.spend.duplicate()
+	if not auto_spend:
+		entry[ContentFactory.NO_AUTO_SPEND] = true   # an all-unspent state must not be auto-spent by the factory either
 	var c: Combatant = ContentFactory.unit(entry)
 	c.lore_ref = work.lore_ref
 	ContentFactory.apply_passives(c, work.passives)
@@ -47,8 +51,8 @@ static func build_report(state: UnitState) -> Dictionary:
 	return {"combatant": c, "warnings": warnings, "errors": errors}
 
 # The Combatant of `state`, or null when the state is invalid.
-static func build(state: UnitState) -> Combatant:
-	var res: Dictionary = build_report(state)
+static func build(state: UnitState, auto_spend: bool = true) -> Combatant:
+	var res: Dictionary = build_report(state, auto_spend)
 	return res["combatant"] as Combatant
 
 # Combatants of the active members, in roster order.

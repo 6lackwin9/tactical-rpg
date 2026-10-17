@@ -14,8 +14,8 @@ const VERSION: int = 4   # 2: structured quests blob + loot_claimed (step 1 -> 2
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 const AUTOSAVE_SLOT: int = 0
-const MANUAL_SLOTS: Array[int] = [1, 2, 3]
-const LAST_SLOT: int = 3
+const MANUAL_SLOTS: Array[int] = [1, 2, 3, 4, 5]
+const LAST_SLOT: int = 5
 
 static var _dir: String = DEFAULT_DIR
 
@@ -43,7 +43,7 @@ static func delete(slot: int) -> bool:
 static func write(state: GameState, slot: int = 1) -> Array[String]:
 	var errors: Array[String] = []
 	if slot < AUTOSAVE_SLOT or slot > LAST_SLOT:
-		errors.append("Save slot must be 0-3.")
+		errors.append("Save slot must be 0-5.")
 		return errors
 	if state == null:
 		errors.append("No game state to save.")

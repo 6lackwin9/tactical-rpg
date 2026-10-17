@@ -2,7 +2,7 @@ class_name SaveSlotsView
 extends VBoxContainer
 
 # ==============================================================================
-# Tactical RPG - Save / load slots view (UI1-L): one row per slot (autosave, 1-3) with its header from peek; Load or
+# Tactical RPG - Save / load slots view (UI1-L): one row per slot (autosave, 1-5) with its header from peek; Load or
 # Save plus Delete per row.
 # ==============================================================================
 
