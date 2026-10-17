@@ -104,6 +104,8 @@ static func _test_key_lists() -> bool:
 	for fam: String in AssetRegistry.skill_family_ids():
 		family_ok = family_ok and AssetRegistry.has_key("skill", fam)
 	c["every skill family is a skill key"] = family_ok
+	ContentCatalog.reload_from_disk()
+	c["content reload drops the skill family cache"] = AssetRegistry._family_stamp.is_empty() and AssetRegistry.skill_family_ids() == AssetRegistry._family_list
 	var items_ok: bool = true
 	for key: String in ItemArt.UNIQUE_ICONS.keys():
 		items_ok = items_ok and AssetRegistry.has_key("item", key)
@@ -151,7 +153,7 @@ static func _test_contract() -> bool:
 	c["upsert ok"] = errs.is_empty()
 	c["id derived, variant defaults to the first"] = AssetCatalog.has(id) and str(AssetCatalog.get_entry(id)["variant"]) == AssetRegistry.variants("unit")[0]
 	var stored: Dictionary = AssetCatalog.get_entry(id)
-	c["defaults filled"] = DictUtil.array_of(stored["size"]).is_empty() and DictUtil.to_int(stored["frames"]) == 1 and str(stored["origin"]) == AssetCatalog.ORIGIN_USER and str(stored["note"]).is_empty()
+	c["defaults filled"] = DictUtil.array_of(stored["size"]).is_empty() and DictUtil.to_int(stored["frames"]) == 1 and str(stored.get("origin", "")) == AssetCatalog.ORIGIN_USER and str(stored.get("note", "")).is_empty()
 	var before: int = AssetCatalog.entries().size()
 	var bad: Array[String] = AssetCatalog.upsert(_row("unit", "Bad Key", "token", path))
 	c["bad row refused, nothing changes"] = not bad.is_empty() and AssetCatalog.entries().size() == before
@@ -166,7 +168,7 @@ static func _test_contract() -> bool:
 	var sys_id: String = AssetCatalog.id_for("unit", "qa_sys", "portrait")
 	c["new row stored"] = AssetCatalog.upsert(sys_row).is_empty()
 	c["new row outside the scope is user"] = str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_USER
-	c["explicit origin change outside the scope refused"] = TestHelpers.any_contains(AssetCatalog.upsert(sys_row), "promote / demote") and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_USER
+	c["explicit origin change outside the scope refused"] = TestHelpers.any_contains(AssetCatalog.upsert(sys_row), "promote / demote") and str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_USER
 	AssetCatalog.begin_system_edit()
 	var scoped: Array[String] = AssetCatalog.upsert(sys_row)
 	AssetCatalog.end_system_edit()
@@ -174,14 +176,14 @@ static func _test_contract() -> bool:
 	var edit: Dictionary = sys_row.duplicate()
 	edit.erase("origin")
 	edit["note"] = "edited"
-	c["system row edit outside the scope refused"] = TestHelpers.any_contains(AssetCatalog.upsert(edit), "system-edit scope") and str(AssetCatalog.get_entry(sys_id)["note"]).is_empty()
+	c["system row edit outside the scope refused"] = TestHelpers.any_contains(AssetCatalog.upsert(edit), "system-edit scope") and str(AssetCatalog.get_entry(sys_id).get("note", "")).is_empty()
 	var demoting: Dictionary = sys_row.duplicate()
 	demoting["origin"] = AssetCatalog.ORIGIN_USER
-	c["origin 'user' on a system row refused"] = not AssetCatalog.upsert(demoting).is_empty() and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_SYSTEM
+	c["origin 'user' on a system row refused"] = not AssetCatalog.upsert(demoting).is_empty() and str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_SYSTEM
 	var moved: Dictionary = _row("unit", "qa_sys", "token", "", UnitArt.CLASS_KEYS[0])
 	c["replace_id over a system row refused"] = not AssetCatalog.upsert(moved, sys_id).is_empty() and AssetCatalog.has(sys_id) and not AssetCatalog.has(AssetCatalog.id_for("unit", "qa_sys", "token"))
 	c["system row refuses remove"] = not AssetCatalog.remove(sys_id).is_empty() and AssetCatalog.has(sys_id)
-	c["demote / promote change the origin"] = AssetCatalog.demote(sys_id).is_empty() and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_USER and AssetCatalog.promote(sys_id).is_empty() and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_SYSTEM and not AssetCatalog.promote(sys_id).is_empty()
+	c["demote / promote change the origin"] = AssetCatalog.demote(sys_id).is_empty() and str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_USER and AssetCatalog.promote(sys_id).is_empty() and str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_SYSTEM and not AssetCatalog.promote(sys_id).is_empty()
 	AssetCatalog.begin_system_edit()
 	var why: String = AssetCatalog.remove(sys_id)
 	AssetCatalog.end_system_edit()
@@ -497,7 +499,7 @@ static func _test_safe_remove() -> bool:
 	if not families.is_empty():
 		var icon_path: String = str(AssetRegistry.export_placeholder("item", "sword", "icon")["path"])
 		var only_path: String = AssetRegistry.pattern_paths("item", "qa_family_icon", "icon")[0]
-		DirAccess.copy_absolute(AssetCatalog.file_of(icon_path), AssetCatalog.file_of(only_path))
+		c["family icon file copied"] = DirAccess.copy_absolute(AssetCatalog.file_of(icon_path), AssetCatalog.file_of(only_path)) == OK
 		c["family icon row stored"] = AssetCatalog.upsert(_row("item", "qa_family_icon", "icon", only_path)).is_empty()
 		var fam: Dictionary = families[0].duplicate(true)
 		fam["art"] = "qa_family_icon"
