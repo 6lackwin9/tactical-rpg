@@ -11,6 +11,12 @@ const LABELS: Dictionary = {
 	"anim/speed": "Animation speed", "anim/instant": "Instant animations", "ui/text_scale": "Text size",
 }
 
+# SETTINGS-UI: the names of the fixed levels (same order as SettingsFile.SPEED_LEVELS / TEXT_LEVELS).
+const LEVEL_NAMES: Dictionary = {
+	"anim/speed": ["Slow", "Normal", "Fast", "Very fast"],
+	"ui/text_scale": ["Small", "Normal", "Large", "Extra large"],
+}
+
 var draft: Dictionary = {}
 
 func _init() -> void:
@@ -21,6 +27,18 @@ func keys() -> Array[String]:
 	for key: String in SettingsFile.KEYS:
 		out.append(key)
 	return out
+
+# The level values of a stepped key (empty for sliders and checkboxes).
+static func levels(key: String) -> Array[float]:
+	var out: Array[float] = []
+	out.assign(DictUtil.array_of(DictUtil.dict_of(SettingsFile.KEYS.get(key, {})).get("levels", [])))
+	return out
+
+# "Normal (1.00x)" for the level at `index`.
+static func level_text(key: String, index: int) -> String:
+	var lv: Array[float] = levels(key)
+	var names: Array = DictUtil.array_of(LEVEL_NAMES.get(key, []))
+	return "%s (%.2fx)" % [str(names[index]), lv[index]]
 
 func value(key: String) -> Variant:
 	return draft.get(key, null)

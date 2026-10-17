@@ -269,7 +269,7 @@ static func _test_settings() -> bool:
 	checks["missing file = defaults"] = SettingsFile.get_value("anim/speed") == 1.0
 	var cases: Array[Array] = [
 		["audio/master", 1.5, 1.0, 1.0], ["audio/music", -0.5, 0.0, 0.8], ["audio/sfx", 0.25, 0.25, 0.8], ["audio/ui", 2, 1.0, 0.8],
-		["anim/speed", 10.0, 4.0, 1.0], ["anim/instant", true, true, false], ["ui/text_scale", 0.1, 0.8, 1.0],
+		["anim/speed", 10.0, 2.0, 1.0], ["anim/instant", true, true, false], ["ui/text_scale", 0.1, 0.85, 1.0],
 	]
 	for c: Array in cases:
 		var key: String = str(c[0])
@@ -277,9 +277,9 @@ static func _test_settings() -> bool:
 		SettingsFile.set_value(key, c[1])
 		checks["%s clamped" % key] = SettingsFile.get_value(key) == c[2]
 	checks["saved"] = SettingsFile.save() == OK
-	SettingsFile.set_value("anim/speed", 2.0)
+	SettingsFile.set_value("anim/speed", 0.5)
 	SettingsFile.load_file()
-	checks["reload restores the file"] = SettingsFile.get_value("anim/speed") == 4.0 and SettingsFile.get_value("anim/instant") == true
+	checks["reload restores the file"] = SettingsFile.get_value("anim/speed") == 2.0 and SettingsFile.get_value("anim/instant") == true
 	SettingsFile.set_value("anim/instant", "yes")
 	checks["wrong type = default"] = SettingsFile.get_value("anim/instant") == false and SettingsFile.checked("anim/speed", "fast") == 1.0
 	var cfg := ConfigFile.new()
@@ -539,13 +539,13 @@ static func _test_main_menu_and_settings_model() -> bool:
 	var sm := SettingsModel.new()
 	checks["unknown key refused"] = sm.set_value("nope", 1) == ["Unknown setting 'nope'."]
 	var _s: Array[String] = sm.set_value("ui/text_scale", 9.0)
-	checks["draft clamped, file untouched"] = sm.value("ui/text_scale") == 1.5 and SettingsFile.get_value("ui/text_scale") != 1.5
+	checks["draft clamped, file untouched"] = sm.value("ui/text_scale") == 1.3 and SettingsFile.get_value("ui/text_scale") != 1.3
 	var applied: bool = sm.apply().is_empty() and not sm.has_draft()
 	SettingsFile.load_file()
-	checks["apply writes"] = applied and SettingsFile.get_value("ui/text_scale") == 1.5
+	checks["apply writes"] = applied and SettingsFile.get_value("ui/text_scale") == 1.3
 	var _t: Array[String] = sm.set_value("ui/text_scale", 1.0)
 	sm.revert()
-	checks["revert"] = sm.value("ui/text_scale") == 1.5 and not sm.has_draft()
+	checks["revert"] = sm.value("ui/text_scale") == 1.3 and not sm.has_draft()
 	CurrentGame.end()
 	_wipe_saves()
 	return _report("Main menu continue / quit, SettingsModel draft / apply / revert", checks)

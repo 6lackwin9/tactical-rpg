@@ -223,7 +223,7 @@ static func _test_speed(presenter: CombatPresenter, holder: Control) -> bool:
 		tweens[0].custom_step(0.01)
 		checks["done by 0.13 s"] = presenter.live_count() == 0 and token.position == to_px
 	FxSettings.set_speed(0.1)
-	checks["speed clamps to 0.25"] = is_equal_approx(FxSettings.speed, FxSettings.SPEED_MIN)
+	checks["speed snaps to the lowest level"] = is_equal_approx(FxSettings.speed, FxSettings.SPEED_MIN)
 	FxSettings.set_speed(1.0)
 	presenter.kill_all()
 	return _report("Speed scales every duration", checks)
@@ -303,12 +303,12 @@ static func _test_settings(presenter: CombatPresenter, holder: Control) -> bool:
 	var dir: String = TestHelpers.sandbox("anim_settings")
 	DirAccess.make_dir_recursive_absolute(dir)
 	var saved := ConfigFile.new()
-	saved.set_value("anim", "speed", 3.0)
+	saved.set_value("anim", "speed", 1.5)
 	saved.save(dir + "/settings.cfg")
 	SettingsFile.use_path(dir + "/settings.cfg")
 	FxSettings.set_speed(1.0)
 	SettingsModel.push_to_listeners()
-	checks["startup load applies saved speed"] = is_equal_approx(FxSettings.speed, 3.0)
+	checks["startup load applies saved speed"] = is_equal_approx(FxSettings.speed, 1.5)
 	SettingsFile.use_path()
 	TestHelpers.remove_sandbox(dir)
 	FxSettings.instant = false

@@ -11,16 +11,21 @@ extends RefCounted
 
 const DEFAULT_PATH: String = "user://settings.cfg"
 
-# key -> {"type": Variant.Type, "default": value, "min"/"max": clamp for floats}. UI1-L appends its rows.
+# SETTINGS-UI: the fixed levels of the two stepped settings. Any stored or set value snaps to the nearest level
+# (a tie goes to the lower one), so old files with free values (0.8, 1.37 ...) load as a valid level; no file version change.
+const SPEED_LEVELS: Array[float] = [0.5, 1.0, 1.5, 2.0]
+const TEXT_LEVELS: Array[float] = [0.85, 1.0, 1.15, 1.3]
+
+# key -> {"type": Variant.Type, "default": value, "min"/"max": clamp for floats, or "levels": snap list}. UI1-L appends its rows.
 const KEYS: Dictionary = {
 	"audio/master": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0},
 	"audio/music": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	"audio/sfx": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	"audio/ui": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	# UI1-L: animation (read by FxSettings.load_from) and text size (the menu theme's default font size).
-	"anim/speed": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.25, "max": 4.0},
+	"anim/speed": {"type": TYPE_FLOAT, "default": 1.0, "levels": SPEED_LEVELS},
 	"anim/instant": {"type": TYPE_BOOL, "default": false},
-	"ui/text_scale": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.8, "max": 1.5},
+	"ui/text_scale": {"type": TYPE_FLOAT, "default": 1.0, "levels": TEXT_LEVELS},
 }
 
 static var _path: String = DEFAULT_PATH
@@ -75,6 +80,18 @@ static func checked(key: String, value: Variant) -> Variant:
 	var clean: Variant = _clean(key, value)
 	return clean if clean != null else default_of(key)
 
+# The level of `key` nearest to `value` (a tie goes to the lower level); `value` unchanged for keys without levels.
+static func snap(key: String, value: float) -> float:
+	var levels: Array = DictUtil.array_of(_row(key).get("levels", []))
+	if levels.is_empty():
+		return value
+	var best: float = DictUtil.to_float(levels[0])
+	for raw: Variant in levels:
+		var lv: float = DictUtil.to_float(raw)
+		if absf(lv - value) < absf(best - value):
+			best = lv
+	return best
+
 static func get_float(key: String) -> float:
 	return DictUtil.to_float(get_value(key))
 
@@ -100,5 +117,7 @@ static func _clean(key: String, value: Variant) -> Variant:
 	if kind == TYPE_FLOAT:
 		if not (value is float or value is int):
 			return null
+		if row.has("levels"):
+			return snap(key, DictUtil.to_float(value))
 		return clampf(DictUtil.to_float(value), DictUtil.to_float(row.get("min", -INF)), DictUtil.to_float(row.get("max", INF)))
 	return value if typeof(value) == kind else null

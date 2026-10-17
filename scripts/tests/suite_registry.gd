@@ -63,6 +63,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(DialogueTestSuite.run(tree_parent))
 	results.append(TravelTestSuite.run(tree_parent))
 	results.append(MenusTestSuite.run(tree_parent))
+	results.append(SettingsUiTestSuite.run(tree_parent))
 	results.append(BattleLinkTestSuite.run(tree_parent))
 	results.append(PartyScreenTestSuite.run())
 	results.append(SaveIoTestSuite.run())

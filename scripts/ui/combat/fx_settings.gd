@@ -8,14 +8,14 @@ extends RefCounted
 # always start in it. load_from reads the UI1-L settings file once it exists.
 # ==============================================================================
 
-const SPEED_MIN: float = 0.25
-const SPEED_MAX: float = 4.0
+const SPEED_MIN: float = 0.5   # the first and last of SettingsFile.SPEED_LEVELS (a test checks it)
+const SPEED_MAX: float = 2.0
 
 static var speed: float = 1.0
 static var instant: bool = DisplayServer.get_name() == "headless"
 
 static func set_speed(value: float) -> void:
-	speed = clampf(value, SPEED_MIN, SPEED_MAX)
+	speed = SettingsFile.snap("anim/speed", value)   # only the fixed levels (SETTINGS-UI)
 
 # A preset duration at the current speed.
 static func scaled(duration: float) -> float:

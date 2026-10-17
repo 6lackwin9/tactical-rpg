@@ -41,6 +41,7 @@ func _ready() -> void:
 		margin.add_theme_constant_override("margin_" + side, 48)
 	add_child(margin)
 	_menu = margin
+	_menu.theme = MenuStyle.theme()   # bordered buttons for the menu screens only (SETTINGS-UI)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 12)
 	margin.add_child(col)
@@ -190,6 +191,7 @@ func _build_overlay() -> void:
 	_overlay.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, UiTheme.COL_TITLE, 6, 24, 18, 2))
 	_overlay.set_anchors_preset(Control.PRESET_CENTER)
 	_overlay.visible = false
+	_overlay.theme = MenuStyle.theme()
 	add_child(_overlay)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
