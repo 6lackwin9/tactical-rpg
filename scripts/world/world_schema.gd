@@ -233,6 +233,8 @@ static func _quest_fields() -> Array[Dictionary]:
 		_f("variants", "Variants", "json", [], {"help": "[{\"id\", \"when_flags\": [...], \"unless_flags\": [...], \"set\": {giver, turn_in, description, reward, rewards_from, steps, links, available, loot_pool, loot_picks}}], applied in order."}),
 		_f("loot_pool", "Loot pool", "json", [], {"help": "World loot refs offered as a pick on completion (on top of the generic rewards)."}),
 		_f("loot_picks", "Loot picks", "int", 1, {"help": "How many pool entries the player may take (0..3)."}),
+		# Reputation (REP1-L, S11): applied once on completion; not a variant field.
+		_f("reputation", "Reputation", "json", {}, {"help": "{\"faction\": 10}: reputation deltas (-50..50, not 0, at most 4 factions) applied when the quest completes (needs a template)."}),
 	]
 
 # World loot table: special rewards quests offer from their loot_pool; each is claimed once per save.

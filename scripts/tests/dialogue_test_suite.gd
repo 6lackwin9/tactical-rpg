@@ -259,7 +259,7 @@ static func _test_trees(fx: Dictionary) -> bool:
 	checks["text too long"] = _one(_errs("dialogues", t), "longer than")
 	t = _tree(fx)
 	DictUtil.array_of(_node(t, "info")["effects"]).append({"effect": "take", "gold": 1})
-	checks["node effect take"] = _one(_errs("dialogues", t), "Node effects may only be set_flag or give.")
+	checks["node effect take"] = _one(_errs("dialogues", t), "Node effects may only be set_flag, add_flag or give.")
 	t = _tree(fx)
 	t["start"] = "bye"
 	checks["services on, end start node"] = _one(_errs("dialogues", t), "With services on, the start node needs choices.")
@@ -329,7 +329,7 @@ static func _test_effects(fx: Dictionary) -> bool:
 		"open_shop not last": [[shop, flag], "open_shop must be the last effect"],
 		"fight + turn_in": [[turn, fight], "fight can't share a choice with turn_in or open_shop"],
 		"fight + open_shop": [[shop, fight], "fight can't share a choice"],
-		"turn_in second": [[flag, turn], "turn_in must come first; only set_flag or give may follow."],
+		"turn_in second": [[flag, turn], "turn_in must come first; only set_flag, add_flag or give may follow."],
 		"take after turn_in": [[turn, {"effect": "take", "gold": 1}], "turn_in must come first"],
 		"give with nothing": [[{"effect": "give"}], "needs items or gold"],
 		"count 100": [[{"effect": "give", "items": {item0: QuestRules.ITEM_COUNT_MAX + 1}}], "count of '%s'" % item0],
@@ -350,7 +350,7 @@ static func _test_effects(fx: Dictionary) -> bool:
 	checks["9 effects"] = _one(DialogueRules.effects_errors(W, nine, "Choice", false), "at most %d effects" % DialogueRules.MAX_EFFECTS)
 	checks["turn_in then set_flag and give ok"] = DialogueRules.effects_errors(W, [turn, flag, {"effect": "give", "gold": 3}], "Choice", false).is_empty()
 	checks["flag then shop ok"] = DialogueRules.effects_errors(W, [flag, shop], "Choice", false).is_empty()
-	checks["node level refuses start_quest"] = _one(DialogueRules.effects_errors(W, [{"effect": "start_quest", "quest": "q_main"}], "Node 'x'", true), "Node effects may only be set_flag or give.")
+	checks["node level refuses start_quest"] = _one(DialogueRules.effects_errors(W, [{"effect": "start_quest", "quest": "q_main"}], "Node 'x'", true), "Node effects may only be set_flag, add_flag or give.")
 	return _report("Check 3: effects (unknown, order rules, give/take bounds, refs: errors)", checks)
 
 # ------------------------------------------------------------------------------

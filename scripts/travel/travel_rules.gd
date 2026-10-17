@@ -96,7 +96,8 @@ static func _scripted_errors(world_id: String, raw: Variant) -> Array[String]:
 		else:
 			errors.append_array(WorldCatalog.ref_errors(world_id, "Scripted fight '%s' encounter" % sid, "encounters", str(enc)))
 		for fk: String in SCRIPTED_FLAG_KEYS:
-			errors.append_array(QuestRules.condition_errors(s.get(fk, []), "Scripted fight '%s' %s" % [sid, fk]))
+			var fl: String = "Scripted fight '%s' %s" % [sid, fk]
+			errors.append_array(QuestRules.set_flags_errors(s.get(fk, []), fl) if fk == "sets_flags" else QuestRules.condition_errors(s.get(fk, []), fl))
 	return errors
 
 # Soft warnings over the world's OWN routes, each prefixed with the route qid: a chance with nothing to fight, and a

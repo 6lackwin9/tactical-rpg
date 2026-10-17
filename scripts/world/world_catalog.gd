@@ -589,10 +589,16 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 				out.append(base.merged({"key": "relations", "index": -1, "sub": str(other)}))
 	return out
 
-# Quest links, loot pool and variant set refs to `kind`/`target` (path-addressed matches).
+# Quest links, loot pool and variant set refs to `kind`/`target` (path-addressed matches), and the faction keys of
+# `reputation` (REP1-L; keyed matches renamed like relation keys).
 static func _quest_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	_links_refs(w, DictUtil.dict_of(e.get("links", null)), ["links"], kind, target, base, out)
+	if kind == "factions":   # REP1-L: reputation keys are faction refs (renamed like relation keys)
+		var rep: Dictionary = DictUtil.dict_of(e.get("reputation", null))
+		for ref: Variant in rep:
+			if _points_at(w, "factions", str(ref), target):
+				out.append(base.merged({"key": "reputation", "index": -1, "sub": str(ref)}))
 	if kind == "loot":
 		_list_refs(w, e.get("loot_pool", null), ["loot_pool"], "loot", target, base, out)
 	var variants: Array = DictUtil.array_of(e.get("variants", null))
@@ -735,11 +741,12 @@ static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid
 		var sub: String = str(match_info.get("sub", ""))
 		if match_info.has("path"):
 			_set_at_path(e, DictUtil.array_of(match_info["path"]), str(match_info.get("value", "")), replacement)
-		elif key == "relations":
+		elif key == "relations" or key == "reputation":   # a dictionary keyed by faction refs
 			var rel: Dictionary = e[key]
-			var stance: Variant = rel.get(sub, "neutral")
-			rel.erase(sub)
-			rel[replacement] = stance
+			if rel.has(sub):
+				var held: Variant = rel[sub]
+				rel.erase(sub)
+				rel[replacement] = held
 		elif not sub.is_empty():
 			var items: Array = e[key]
 			var item: Dictionary = items[idx]
@@ -843,6 +850,8 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 					errors.append("%s must be a list." % str(WorldSchema.field("quests", key)["label"]))
 			if not (e["links"] is Dictionary):
 				errors.append("Links must be an object.")
+			if not (e["reputation"] is Dictionary):
+				errors.append("Reputation must be an object {faction: delta}.")
 		"loot":
 			if not (e["requires_flags"] is Array):
 				errors.append("Requires flags must be a list.")

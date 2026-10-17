@@ -41,6 +41,15 @@ const MAX_PICKS: int = 3
 const LOOT_KINDS: Array[String] = ["item", "passive", "skill"]
 const RARITIES: Array[String] = ["common", "rare", "unique"]
 
+# Condition operators (REP1-L, S11): `op` defaults to "=="; the ordering ops compare whole numbers.
+const OPS: Array[String] = ["==", "!=", ">=", "<=", ">", "<"]
+const ORDER_OPS: Array[String] = [">=", "<=", ">", "<"]
+const CONDITION_KEYS: Array[String] = ["key", "value", "op"]
+
+# World quest `reputation` (REP1-L): {faction ref: delta}, applied on completion.
+const REP_DELTA_MAX: int = 50
+const MAX_REP_KEYS: int = 4
+
 const STORED_STATES: Array[String] = ["active", "ready", "completed"]
 const BLOB_KEYS: Array[String] = ["state", "objective"]
 
@@ -221,7 +230,7 @@ static func template_objective_kinds(template: Dictionary) -> Array[String]:
 # Flag conditions
 # ------------------------------------------------------------------------------
 
-# `raw`: Array of {"key": K, "value": V} (value defaults to true).
+# `raw`: Array of {"key": K, "value": V, "op": O} (value defaults to true, op to "==").
 static func condition_errors(raw: Variant, label: String) -> Array[String]:
 	var errors: Array[String] = []
 	if not (raw is Array):
@@ -238,9 +247,46 @@ static func condition_errors(raw: Variant, label: String) -> Array[String]:
 			errors.append("%s %d: flag key '%s' must be non-empty [a-z0-9_.]." % [label, i + 1, str(key)])
 		if cond.has("value") and not flag_value_ok(cond["value"]):
 			errors.append("%s %d: value must be a bool, a whole number or a String." % [label, i + 1])
+		errors.append_array(op_errors(cond, "%s %d" % [label, i + 1]))
 		for k: Variant in cond:
-			if not ["key", "value"].has(str(k)):
+			if not CONDITION_KEYS.has(str(k)):
 				errors.append("%s %d: unknown key '%s'." % [label, i + 1, str(k)])
+	return errors
+
+# The `op` of one flag condition (`cl`: "<label> <n>"): a known op; an ordering op needs a whole-number value, which
+# for a rep key must lie in RepRules.MIN..MAX (a bound outside could never be decided otherwise).
+static func op_errors(cond: Dictionary, cl: String) -> Array[String]:
+	var errors: Array[String] = []
+	if not cond.has("op"):
+		return errors
+	var op_raw: Variant = cond["op"]
+	var op: String = str(op_raw)
+	if not (op_raw is String) or not OPS.has(op):
+		errors.append("%s: op '%s' must be one of == != >= <= > <." % [cl, op])
+		return errors
+	if not ORDER_OPS.has(op):
+		return errors
+	var value: Variant = JsonUtil.normalize(cond.get("value", true))
+	if not (value is int):
+		errors.append("%s: op '%s' needs a whole-number value." % [cl, op])
+		return errors
+	var why: String = RepRules.value_error(str(cond.get("key", "")), value)
+	if not why.is_empty():
+		errors.append("%s: %s" % [cl, why])
+	return errors
+
+# A list that SETS flags (quest complete_flags, marker / scripted sets_flags): the condition shape plus the rep value
+# rule (a `rep.` key stores a whole number in RepRules.MIN..MAX; the value defaults to true, so it must be given).
+static func set_flags_errors(raw: Variant, label: String) -> Array[String]:
+	var errors: Array[String] = condition_errors(raw, label)
+	if not (raw is Array):
+		return errors
+	var list: Array = JsonUtil.normalize(raw)
+	for i: int in range(list.size()):
+		var cond: Dictionary = DictUtil.dict_of(list[i])
+		var why: String = RepRules.value_error(str(cond.get("key", "")), cond.get("value", true))
+		if not why.is_empty():
+			errors.append("%s %d: %s" % [label, i + 1, why])
 	return errors
 
 # Strict type equality: 1 does not match true; a missing flag reads as false.
@@ -301,7 +347,8 @@ static func world_quest_errors(world_id: String, e: Dictionary) -> Array[String]
 			errors.append("Template: unknown quest template '%s'." % template_id)
 	var has_template: bool = not template_id.is_empty()
 	errors.append_array(condition_errors(e.get("requires_flags", []), "Requires flags"))
-	errors.append_array(condition_errors(e.get("complete_flags", []), "Complete flags"))
+	errors.append_array(set_flags_errors(e.get("complete_flags", []), "Complete flags"))
+	errors.append_array(reputation_errors(world_id, e.get("reputation", {}), has_template))
 	if DictUtil.to_bool(e.get("auto_start", false)) and not has_template:
 		errors.append("Auto start needs a template (a lore-only quest never runs).")
 	var steps: Array = DictUtil.array_of(JsonUtil.normalize(e.get("steps", [])))
@@ -328,6 +375,29 @@ static func world_quest_errors(world_id: String, e: Dictionary) -> Array[String]
 		if not has_template:
 			errors.append("Variants need a template (a lore-only quest never runs).")
 		errors.append_array(variants_errors(world_id, e, kinds))
+	return errors
+
+# World quest `reputation` (REP1-L): {faction ref: delta}; delta a whole number in -REP_DELTA_MAX..REP_DELTA_MAX, not 0;
+# at most MAX_REP_KEYS keys; every ref resolves from the quest's world; non-empty needs a template.
+static func reputation_errors(world_id: String, raw: Variant, has_template: bool) -> Array[String]:
+	var errors: Array[String] = []
+	if not (raw is Dictionary):
+		errors.append("Reputation must be an object {faction: delta}.")
+		return errors
+	var rep: Dictionary = JsonUtil.normalize(raw)
+	if rep.is_empty():
+		return errors
+	if not has_template:
+		errors.append("Reputation needs a template.")
+	if rep.size() > MAX_REP_KEYS:
+		errors.append("Reputation lists at most %d factions (has %d)." % [MAX_REP_KEYS, rep.size()])
+	for ref: Variant in rep:
+		var r: String = str(ref)
+		if r.is_empty() or WorldCatalog.resolve(world_id, "factions", r).is_empty() or not WorldCatalog.ref_errors(world_id, "Reputation", "factions", r).is_empty():
+			errors.append("Reputation: unknown faction '%s'." % r)
+		var d: Variant = rep[ref]
+		if not (d is int) or DictUtil.to_int(d) == 0 or absi(DictUtil.to_int(d)) > REP_DELTA_MAX:
+			errors.append("Reputation '%s': delta must be a whole number from -%d to %d, not 0." % [r, REP_DELTA_MAX, REP_DELTA_MAX])
 	return errors
 
 # One templated step: required binding present and valid; text required. `full`: every key must be present

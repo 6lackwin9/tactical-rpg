@@ -168,7 +168,7 @@ static func _test_route_validation() -> bool:
 	for i: int in range(TravelRules.MAX_SCRIPTED + 1):
 		five.append({"id": "s%d" % i, "encounter": "enc_a"})
 	checks["too many scripted"] = _one(_errs("routes", _route({"scripted": five})), "At most %d scripted fights." % TravelRules.MAX_SCRIPTED)
-	checks["bad route condition"] = _one(_errs("routes", _route({"unless_flags": [{"key": "tv.x", "op": "gt"}]})), "unknown key 'op'")
+	checks["bad route condition"] = _one(_errs("routes", _route({"unless_flags": [{"key": "tv.x", "cmp": "gt"}]})), "unknown key 'cmp'")   # REP1-L made op a condition key
 	checks["wrong-typed list: blocking"] = not WorldCatalog.blocking_errors(W, "routes", _route({"scripted": {}})).is_empty() and WorldCatalog.blocking_errors(W, "routes", _route()).is_empty()
 	return _report("Check 1: route validation (one error per fault; a valid route has none)", checks)
 
