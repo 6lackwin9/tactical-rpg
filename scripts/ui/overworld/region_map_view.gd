@@ -4,10 +4,12 @@ extends Control
 # ==============================================================================
 # Tactical RPG - Region map debug view (S9, spec EXP1-L commit 3)
 # Thin: renders the GameState's location map (tiles, zone tint, markers, roamers, token) and forwards input to
-# ExploreRunner / BattleBridge. Arrow keys = step, E = interact in the facing direction. A fight shows a panel with
-# three debug outcomes (won / fled / lost -> ExploreRunner.after_fight); launching the real battle is out of scope.
+# ExploreRunner / BattleBridge. Arrow keys = step, E = interact in the facing direction. A fight opens the real combat
+# arena with the saved party (BattleScreen, BATTLE1-L); its outcome (won / fled / lost) settles through
+# ExploreRunner.after_fight. If the battle cannot start, the fight panel offers Start battle again and the debug
+# outcomes; `dev_outcomes` (off by default) always shows the debug outcome buttons.
 # E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
-# its Close returns to the dialogue; a dialogue fight uses the same outcome buttons (DialogueRunner.after_fight).
+# its Close returns to the dialogue; a dialogue fight uses the same battle (DialogueRunner.after_fight).
 # Moving and interacting are ignored while a conversation, shop or fight is open.
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) (refused while a fight is pending). A world picker starts a new game.
 # ==============================================================================
@@ -24,6 +26,9 @@ const MARKER_GLYPHS: Dictionary = {"exit": "⇨", "encounter": "!", "roamer": "R
 
 var gs: GameState = null
 var pending_fight: Dictionary = {}
+var battle: BattleScreen = null
+var dev_outcomes: bool = false
+var launch_errors: Array[String] = []
 var facing: Vector2i = Vector2i(0, 1)
 var log_lines: Array[String] = []
 
@@ -33,6 +38,7 @@ var _canvas: Control = null
 var _menu_box: VBoxContainer = null
 var _fight_panel: PanelContainer = null
 var _fight_label: Label = null
+var _dev_box: VBoxContainer = null
 var _log: Label = null
 var dialogue_panel: DialoguePanel = null
 var shop_panel: ShopPanel = null
@@ -68,8 +74,11 @@ func _ready() -> void:
 	_fight_panel.add_child(fight_box)
 	_fight_label = UiTheme.label("")
 	fight_box.add_child(_fight_label)
+	fight_box.add_child(UiTheme.button("Start battle", "Open the combat arena with the active party (BattleScreen)", launch_battle))
+	_dev_box = VBoxContainer.new()
+	fight_box.add_child(_dev_box)
 	for result: String in BattleBridge.OUTCOMES:
-		fight_box.add_child(UiTheme.button(result.capitalize(), "Settle the fight as %s (ExploreRunner.after_fight)" % result, settle.bind(result)))
+		_dev_box.add_child(UiTheme.button("Dev: " + result, "Settle the fight as %s without a battle (ExploreRunner.after_fight)" % result, settle.bind(result)))
 	_fight_panel.visible = false
 	side.add_child(_fight_panel)
 	dialogue_panel = DialoguePanel.new()
@@ -110,6 +119,7 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 		return errors
 	gs = state
 	pending_fight = {}
+	_close_battle()
 	_close_panels()
 	_handle(ExploreRunner.begin(gs))
 	return errors
@@ -119,6 +129,7 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 func play_state(state: GameState) -> void:
 	gs = state
 	pending_fight = {}
+	_close_battle()
 	_close_panels()
 	_handle(ExploreRunner.begin(gs) if gs.location_id.is_empty() else ExploreRunner.resume(gs))
 
@@ -184,7 +195,7 @@ func _on_shop_closed() -> void:
 func _on_dialogue_fight(fight: Dictionary) -> void:
 	pending_fight = fight
 	_note("Fight! %s (dialogue with %s)" % [str(fight.get("encounter", "")), str(fight.get("character", ""))])
-	_refresh()
+	launch_battle.call_deferred()
 
 func _on_noted(text: String) -> void:
 	_note(text)
@@ -202,17 +213,43 @@ func take_exit(to: String) -> void:
 	if gs != null and not busy():
 		_handle(ExploreRunner.take_exit(gs, to))
 
-# Debug outcome button: settles the pending fight (no real battle is launched). A dialogue fight settles through
-# DialogueRunner.after_fight, an exploration fight through ExploreRunner.after_fight.
+# Opens the pending fight in the combat arena (BattleScreen); the map hides until the battle is settled. A refused
+# start keeps the fight panel with its reasons, Start battle and the debug outcomes.
+func launch_battle() -> void:
+	launch_errors.clear()
+	if gs == null or pending_fight.is_empty() or battle != null:
+		_refresh()
+		return
+	var res: Dictionary = BattleScreen.open(self, gs, pending_fight)
+	launch_errors.assign(DictUtil.array_of(res["errors"]))
+	var screen: BattleScreen = res["screen"] as BattleScreen
+	if screen == null:
+		_note("Battle refused: %s" % "; ".join(PackedStringArray(launch_errors)))
+	else:
+		battle = screen
+		battle.finished.connect(settle)
+	_refresh()
+
+func _close_battle() -> void:
+	if battle != null:
+		battle.close()
+		battle = null
+	launch_errors.clear()
+
+# Settles the pending fight with `result` (the battle's outcome, or a debug outcome button) and closes the battle.
+# A dialogue fight settles through DialogueRunner.after_fight, an exploration fight through ExploreRunner.after_fight.
+# `fight_settled` carries the result plus {outcome}.
 func settle(result: String) -> void:
 	if gs == null or pending_fight.is_empty():
 		return
 	var fight: Dictionary = pending_fight
 	pending_fight = {}
+	_close_battle()
 	var res: Dictionary = DialogueRunner.after_fight(gs, fight, result) if str(fight.get("source", "")) == "dialogue" else ExploreRunner.after_fight(gs, fight, result)
 	_note("Fight %s: %s (quests advanced: %s)" % [str(fight["encounter"]), result, str(res.get("advanced", []))])
 	_handle(res)
 	if DictUtil.to_bool(res.get("ok", false)):
+		res["outcome"] = result
 		fight_settled.emit(res)
 
 func _handle(res: Dictionary) -> void:
@@ -240,6 +277,7 @@ func _event(e: Dictionary) -> void:
 		"fight":
 			pending_fight = e
 			_note("Fight! %s (%s%s)" % [str(e["encounter"]), str(e["source"]), ", elite" if DictUtil.to_bool(e["elite"]) else ""])
+			launch_battle.call_deferred()
 
 func _autosave() -> void:
 	if gs == null or not pending_fight.is_empty():
@@ -267,8 +305,12 @@ func _refresh() -> void:
 	if gs != null and not busy():
 		for item: Dictionary in ExploreRunner.menu(gs):
 			_menu_box.add_child(UiTheme.button(str(item["label"]), "ExploreRunner.take_exit", take_exit.bind(str(item["to"]))))
-	_fight_panel.visible = not pending_fight.is_empty()
+	_fight_panel.visible = not pending_fight.is_empty() and battle == null
 	_fight_label.text = "Fight: %s" % str(pending_fight.get("encounter", ""))
+	if not launch_errors.is_empty():
+		_fight_label.text += "\nBattle refused: %s" % "; ".join(PackedStringArray(launch_errors))
+	_dev_box.visible = dev_outcomes or not launch_errors.is_empty()
+	_canvas.visible = battle == null
 	_log.text = "\n".join(PackedStringArray(log_lines))
 	_canvas.queue_redraw()
 

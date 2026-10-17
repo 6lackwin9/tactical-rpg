@@ -285,7 +285,7 @@ func _on_fight_settled(res: Dictionary) -> void:
 	game_view.visible = false
 	_menu.visible = true
 	_game_hint.visible = false
-	router.push(MenuRouter.RESULTS, {"award": DictUtil.dict_of(res.get("xp", {})), "advanced": res.get("advanced", [])})
+	router.push(MenuRouter.RESULTS, {"award": DictUtil.dict_of(res.get("xp", {})), "advanced": res.get("advanced", []), "outcome": str(res.get("outcome", "won"))})
 
 func _on_results_done() -> void:
 	if game_view == null:
@@ -313,6 +313,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if is_overlay_open():
 		answer(false)
+	elif game_view != null and game_view.visible and game_view.get("battle") != null:
+		return   # BATTLE1-L: a battle covers the map; Esc stays with the arena (no hidden "finish the fight" overlay)
 	elif game_view != null and game_view.visible:
 		var _left: bool = leave_game()
 	else:

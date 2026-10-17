@@ -9,7 +9,9 @@ extends VBoxContainer
 func build(host: MainMenuView, model: RefCounted) -> void:
 	var m: BattleResultsModel = model as BattleResultsModel
 	add_theme_constant_override("separation", 10)
-	add_child(MainMenuView.title("Battle results"))
+	add_child(MainMenuView.title(m.headline()))
+	if not m.outcome_note().is_empty():
+		add_child(MainMenuView.text(m.outcome_note(), UiTheme.COL_MUTED))
 	var card: VBoxContainer = UiTheme.card(self)
 	for r: Dictionary in m.rows():
 		var id: String = str(r["id"])
