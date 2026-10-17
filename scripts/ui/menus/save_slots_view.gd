@@ -11,8 +11,20 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	var m: SaveSlotsModel = model as SaveSlotsModel
 	add_theme_constant_override("separation", 10)
 	add_child(MainMenuView.title("Save game" if m.saving else "Load game"))
+	# The rows scroll (they fill the height left between the title and Back); Back stays on screen below the list.
+	var scroll := ScrollContainer.new()
+	scroll.name = "SlotScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(scroll)
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
 	for row: Dictionary in m.rows():
-		var card: VBoxContainer = UiTheme.card(self)
+		var card: VBoxContainer = UiTheme.card(list)
 		var status: String = str(row["status"])
 		var head: String = str(row["label"])
 		match status:
@@ -41,7 +53,9 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 				buttons.add_child(MainMenuView.small(MainMenuView.button("Export", _pick.bind(host, FileDialog.FILE_MODE_SAVE_FILE, str(row["export_name"]), func(path: String) -> void: host.act(m.export_slot.bind(slot, path)))), 140))
 			if DictUtil.to_bool(row["can_import"]):
 				buttons.add_child(MainMenuView.small(MainMenuView.button("Import", _pick.bind(host, FileDialog.FILE_MODE_OPEN_FILE, "", func(path: String) -> void: host.act(m.import_file.bind(path, slot)))), 140))
-	add_child(MainMenuView.button("Back", host.router.pop))
+	var back: Button = MainMenuView.button("Back", host.router.pop)
+	back.name = "BackButton"
+	add_child(back)
 
 static func files_available() -> bool:
 	return not OS.has_feature("web")

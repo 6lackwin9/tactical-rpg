@@ -321,6 +321,23 @@ static func _test_scene(tree_parent: Node) -> bool:
 	for id: String in [MenuRouter.LOAD, MenuRouter.SETTINGS, MenuRouter.NEW_GAME]:
 		r.push(id)
 		checks["%s renders" % id] = view.get_child_count() > 0 and _has_button(view, "Back")
+	# LOAD-SLOTS-UI: the slot list scrolls (every slot reachable at any size) and Back stays outside it and pops.
+	for id: String in [MenuRouter.LOAD, MenuRouter.SAVE]:
+		while r.top() != MenuRouter.MAIN:
+			r.pop()
+		r.push(id)
+		var scroll: ScrollContainer = view.find_child("SlotScroll", true, false) as ScrollContainer
+		var back: Button = view.find_child("BackButton", true, false) as Button
+		var last_label: Label = null
+		for n: Node in view.find_children("*", "Label", true, false):
+			if (n as Label).text.begins_with("Slot 5"):
+				last_label = n as Label
+		checks["%s: last slot inside the scroll" % id] = scroll != null and last_label != null and scroll.is_ancestor_of(last_label) and scroll.size_flags_vertical == Control.SIZE_EXPAND_FILL and scroll.follow_focus
+		checks["%s: Back outside the scroll" % id] = back != null and scroll != null and not scroll.is_ancestor_of(back)
+		if back != null:
+			back.pressed.emit()
+		checks["%s: Back pops" % id] = r.top() == MenuRouter.MAIN
+	r.push(MenuRouter.NEW_GAME)
 	checks["new game lists the world"] = _has_button(view, "Start in MN Base")
 	view.act((r.model() as NewGameModel).choose.bind(BASE, 4))
 	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.top() == MenuRouter.HUB

@@ -9,7 +9,7 @@ Every screen is a headless `RefCounted` model plus a thin view (spec `docs/specs
 | (stack) | `menu_router.gd` (`MenuRouter`: push / pop / replace / clear_to, `ask` + `confirm` / `decline`, signals `changed`, `confirm_needed`, `notice`, `game_started`, `quit_requested`) | `main_menu_view.gd` (`MainMenuView`, host of `scenes/main_menu.tscn`: renders the top screen, the question overlay, the game scene) |
 | `main` | `main_menu_model.gd` | `main_screen_view.gd` |
 | `new_game` | `new_game_model.gd` | `new_game_view.gd` |
-| `load`, `save` | `save_slots_model.gd` | `save_slots_view.gd` |
+| `load`, `save` | `save_slots_model.gd` | `save_slots_view.gd` (rows in a `SlotScroll` ScrollContainer; `BackButton` fixed below it) |
 | `settings` | `settings_model.gd` | `settings_view.gd` |
 | `hub` | `hub_model.gd` | `hub_view.gd` |
 | `party` | `party_model.gd` (+ `stats_model.gd`, `party_preview.gd`) | `party_view.gd` |
