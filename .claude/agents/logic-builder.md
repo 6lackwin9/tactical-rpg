@@ -13,7 +13,7 @@ Scope and lanes:
 - You own `scripts/**`, `tools/**`, schema/validation in `scripts/content` and `scripts/world`, and the tests in `scripts/tests` and `scenes/dojo`. You do NOT edit shipped data under `data/catalog` or `data/worlds` (the asset-builder does). Tests build their own fixtures in a sandbox catalog fork; they must not depend on specific shipped content numbers (derive expectations from rules).
 - If the spec says SCHEMA FIRST (or the brief says "slice 1 only"), deliver the schema/validation/default-field change as a small self-contained slice and END THE RUN with the report (do not continue to UI/behaviour work; the planner merges it so the asset-builder can start, then continues you with the next slice); the shipped catalog may be normalised by `save_all` only in that slice, via a seed script, and `validate_all` must stay `{}`.
 - Tests never change key fields (grade, requires, family, tier) of shipped assets: pick fixture assets by rule (e.g. no dependants) or build test-only assets in the sandbox; never hard-code shipped ids for writes.
-- Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never touch `main`; never commit, push or merge (the planner does; in the cloud, the task thread).
+- Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never touch `main`; never commit, push or merge (the planner does; in the cloud, the area thread).
 
 Rules:
 
