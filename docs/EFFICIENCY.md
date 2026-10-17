@@ -15,7 +15,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | `tools/fc.sh gate` / `check_project.ps1 -Fast -Quiet` on a Linux cloud container (2026-10-17) | ~3.5 min on a fresh clone, ~3 min with the class cache; parse steps take ~17 s, so the arena suite (inferred) dominates | slow but usable; worth measuring the arena suite there if cloud checks become routine |
 | `check_project.ps1` (per-file parse) on a Linux cloud container | ~8 min | avoid; use `-Fast` |
 | `tools/fc.sh sim duel 5` (3 seeds) | ~90 s; `tier` ~2 min; 10 seeds ~5 min | acceptable; run in background / in parallel (own sandboxes) |
-| `tools/fc.sh sim` on a fresh cloud checkout (2026-10-17, BAL3-R0) | hung silently with empty output for ~40 min (stale class cache after a new `class_name`, e.g. `AssetRegistry`); cloud role runs: L3 19 min, L5 35 min, L7 40 min with 4 runs in parallel | run `godot --headless --path . --import` once before the first sim on a fresh checkout |
+| `tools/fc.sh sim` on a fresh cloud checkout (2026-10-17, BAL3-R0) | hung silently with empty output for ~40 min (stale class cache after a new `class_name`, e.g. `AssetRegistry`); cloud role runs: L3 19 min, L5 35 min, L7 40 min with 4 runs in parallel | fc.sh imports automatically when the class cache is stale (one import under flock for parallel runs); timeouts print TIMEOUT; sim has a 120 s startup watchdog |
 | Builder agent for M1 | ~23 min, ~300k tokens, 159 tool calls | the dominant cost; see below |
 | Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
 | Brainstorm agent | ~1.5 min, ~56k tokens | cheap, keep |
