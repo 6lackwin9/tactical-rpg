@@ -130,6 +130,7 @@ tactical-rpg/
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   ├── audio/                    # Sound by key (S14-L3): SoundEvents keys, SoundBank lookup, AudioDirector voices, PlaceholderSfx blips
 │   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
 │   │   ├── svg_raster.gd             # SVG string -> cached ImageTexture
 │   │   ├── unit_art.gd               # Class-glyph tokens (blue friendly / red hostile / yellow neutral) & portraits
@@ -541,6 +542,10 @@ The Content Forge edits items and item families with dedicated sections: identit
 ### Asset pipeline (S14-L1)
 
 Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the manifest `data/assets/manifest.json` (managed by `AssetCatalog`, empty for now) points a key and variant at a file under `assets/art/<namespace>/` or at another key (alias); otherwise the generated placeholder template is used, then a fallback, so a texture is never missing. Unit files are composed onto the team-coloured token. Skills and statuses get generated placeholder icons (`SkillArt`, `StatusArt`). A manifest row whose key still has a template can always be removed (the placeholder comes back); a manifest-only key cannot be removed while content uses it. `tools/fc.sh export_placeholder <ns> <key> <variant> [team]` writes a template as a PNG to start real art from. With the manifest empty, all shipped art looks exactly as before. Tested in `asset_pipeline_test_suite.gd`.
+
+### Audio (S14-L3)
+
+Sound plays by key, never by file path. `SoundBank` looks up an `sfx` key through `AssetRegistry` (a manifest row pointing at `assets/audio/sfx/<key>.wav` or `.ogg`); a key with no file is silent and warns once. `SoundEvents` lists the keys (hit, crit, mitigated, heal, buff, debuff, defend, move_step, defeat and four UI keys) and which presenter preset plays which. One `AudioDirector` in the combat arena and one in the Scene Runner hold eight SFX voices and two UI voices, play the presenter's `fx_played` sounds and the playback buttons' click, and set the Master, Music, SFX and UI bus volumes (`default_bus_layout.tres`) from the new `SettingsFile` (`user://settings.cfg`, keys `audio/master|music|sfx|ui`, never part of a save). Headless runs, tests and the sim create no voices. `tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>` writes a placeholder blip. Tested in `audio_test_suite.gd`.
 
 ### Combat presenter (S14-L2)
 
