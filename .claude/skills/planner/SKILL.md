@@ -21,7 +21,7 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 | review | `change-reviewer` | read-only | - |
 | cleanup | `housekeeper` | `docs/specs/CLEANUP.md` | TASKS, ROADMAP, HISTORY, code, data, tests, tools |
 
-Docs written in the main checkout by a design or cleanup agent are committed by the planner right after that run (before any merge), so `main` never carries another lane's half-finished edits. If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent.
+Docs written in the main checkout by a design or cleanup agent are committed by the planner right after that run (before any merge), so `main` never carries another lane's half-finished edits. If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent; this is the only exception to the cloud rule that lane work uses the six repo agents (`docs/workflow/cloud.md` "Lanes inside a task thread").
 
 ## 1. Plan (no code changes)
 

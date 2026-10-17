@@ -18,13 +18,31 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 3. The thread updates only its own rows in `docs/TASKS.md` (status, branch name), its line in the `docs/AGENT_MAP.md` finished-runs log, and the decision rows for answers the user gave in that thread, all inside its own PR. Git merges replace the desktop "single writer" rule.
 4. Overlap: before starting, compare the task's `Touches` with the open PRs (GitHub reports merge conflicts); sequence tasks whose `Touches` overlap, as on desktop.
 
+## Lanes inside a task thread
+
+The thread is the planner (lane table: skill `planner`). It writes the planner docs itself (TASKS rows, decisions given in the thread, AGENT_MAP line, README and docs deltas) and hands every other lane to that lane's agent, as on desktop:
+
+| Work in the task | Agent the thread runs |
+| --- | --- |
+| engine code, schema, validation, tools, tests, and fixes to them (review fixes included) | `logic-builder` |
+| catalog or world data and its seed | `asset-builder` |
+| a new or changed spec, design options | `design-brainstorm` |
+| simulator runs and `docs/BALANCE_REPORT.md` | `balance` |
+| review of the whole branch before the PR is marked ready | `change-reviewer` |
+| a cleanup pass (after a goal or milestone finishes, or on request) | `housekeeper` |
+
+1. Only these six agents (`.claude/agents/`) are dispatched; generic agent types are not used for lane work. Effort and model come from the dispatch-mode table (skill `planner-ops`).
+2. Work none of them covers goes to the user as a proposal: extend an existing agent or add a new agent type. Any new or changed agent or skill needs the user's approval before it merges.
+3. A thread that does a lane's work itself has broken the lane rule; "no subagent" is valid only for a planner-docs-only task (decision records, TASKS or ROADMAP edits). The AGENT_MAP line names each agent the thread ran.
+
 ## Pull request, approval and merge
 
 1. Push, then open a draft PR whose title starts with the task id; body: what changed and what to check.
-2. Gate before marking it ready: `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (both work; ~3-4 min on a cloud container, not 32 s) and `tools/fc.sh docs`. There is no IDE Problems rule in the cloud. The GitHub Actions workflow `.github/workflows/gate.yml` runs the same gate on every PR.
-3. Approved means: the task row in `docs/TASKS.md` has status `approved` (set from the user's word) or the change is recorded as approved in `docs/decisions/*`. Approved work with a green gate and green CI is squash merged by the thread without asking.
-4. Not approved: a small change waits on its own branch as a PR for the user's approval before merge; a large one waits for the user's feedback before work starts. Rows in `spec` or `idea` status and any design question that comes up mid-task go to the user.
-5. Never push to `main` directly; delete the branch after merge.
+2. Review before marking it ready: run the `change-reviewer` agent on the whole branch (`git diff origin/main...HEAD` plus any uncommitted change). Fix its blockers (re-run it if the fix is more than a few lines), then add a `Review:` line to the PR body with the verdict, for example `Review: change-reviewer clean` or `Review: change-reviewer 1 high (fixed in <sha>), 2 nits accepted`. A docs-only diff still gets the docs profile of the review. No PR merges without a `Review:` line, including threads that ran no other subagent.
+3. Gate before marking it ready: `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (both work; ~3-4 min on a cloud container, not 32 s) and `tools/fc.sh docs`. There is no IDE Problems rule in the cloud. The GitHub Actions workflow `.github/workflows/gate.yml` runs the same gate on every PR.
+4. Approved means: the task row in `docs/TASKS.md` has status `approved` (set from the user's word) or the change is recorded as approved in `docs/decisions/*`. Approved work with a `Review:` line, a green gate and green CI is squash merged by the thread without asking.
+5. Not approved: a small change waits on its own branch as a PR for the user's approval before merge; a large one waits for the user's feedback before work starts. Rows in `spec` or `idea` status and any design question that comes up mid-task go to the user.
+6. Never push to `main` directly; delete the branch after merge.
 
 ## Scheduled routines
 
