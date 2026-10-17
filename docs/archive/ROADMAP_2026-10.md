@@ -143,3 +143,24 @@ Recommendation on R1: schedule it BEFORE starting the parallel work if it can ru
 - Plan v2 covers the items below: AI hooks -> AI1; the skill-tier picker UI and "once per round" disengage remain unscheduled (UI pass / later logic).
 
 - AI hooks: TacticalAI ignores DISENGAGE, SWEEP (area) and cleanse-only skills (needed if enemies should use them) - schedule with the AI follow-ups or M2c-2b.
+
+## Suggested build order (moved 2026-10-17, replaced by the goals G1-G6 in `docs/ROADMAP.md`)
+
+Moved verbatim from `docs/ROADMAP.md` (main at 7e1fdb6); heading levels lowered by one.
+
+### Proposed milestone order (planner refines; user approves each)
+
+Superseded: the M1-first "balance pass" order (see HISTORY.md). Current order is the "Suggested build order" below; the balance pass comes after the balance-relevant rules are frozen. Nothing below is `approved` until the user says so.
+
+#### Suggested build order (each step needs user approval; balance only after step 7)
+
+1. S7 data model (state, XP curve) + S13 save schema (together they define the party snapshot).
+2. S12-A (ally targeting, statuses, skill upgrades) with S4-A (turn-waste fixes, support AI); S3 gear budget validation + missing class items.
+3. S8-B quest/flag runtime (rewards via budget rules).
+4. S7 level-up UI + S13 menus/new-game flow.
+5. S9 exploration, S11-A dialogue/shops, S10-A travel.
+6. S12-B terrain/AoE, S11-B reputation, S4-B profiles.
+7. Freeze S3 gear sets, S4 presets, S12 rules, S7 curve, S8 reward budget; mark balance-ready; then the balance pass (supersedes the M1-first ordering above).
+Until step 7, only S1/S2 stay balance-ready and no balance work is done.
+
+State 2026-10-17 (CLN-11 note): steps 1 and 2 are done (M1, M2, M3, AI1, SK2, SKILL1); the user approved the BAL1 and BAL2 runs ahead of step 7 (DECISIONS "Milestone plan v2 picks", "BAL2 answers"). Queue: `docs/TASKS.md`.

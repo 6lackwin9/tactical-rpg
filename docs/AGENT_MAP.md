@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### Roadmap review (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | Roadmap review (project file roadmap/ROADMAP_REVIEW_2026-10-17.md); ROADMAP statuses refreshed, goals G1-G6 replace the build order, CAMP1 idea row | n/a / 20 | merged via PR |
+
 ### UI1-L menus and save slots (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |

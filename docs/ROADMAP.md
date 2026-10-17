@@ -11,37 +11,35 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | # | Area | Status | Depends on | Notes |
 | --- | --- | --- | --- | --- |
 | S1 | Combat core: block resolver, planner, stances, AP, damage formula, statuses | balance-ready | - | `DamageCalculator` is the only formula |
-| S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | in-progress (M2c-1 roster, M2c-2a1 families/loadout, M2c-2a2 engine pieces, M2C2B content, SK2 level unlock and SKILL1 ranked skills done; BAL2 data pass and rerun next) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
+| S2 | Classes, units, tiers, proficiency, passives, skill paths (six classes) | in-progress (M2c-1 roster, M2c-2a1 families/loadout, M2c-2a2 engine pieces, M2C2B content, SK2 level unlock, SKILL1 ranked skills, BAL2-L and BAL2-A done; BAL2-R rerun and BAL3 next, goal G3) | S1, S12 | Loses balance-ready until the rework is built and re-frozen |
 | S3 | Gear and inventory: requirements, tiers, burden, carry, stash | done (gear budget guard added in M2d) | S1 | Gear budget per class is an open balance lever |
 | S4 | Enemy AI (roles, presets, targeting) | done (M1: kiting, no idle turns, support heals, reckless profile) | S1 | Shaman/ranger AI wastes turns: candidate fix |
 | S5 | Content catalog + Content Forge | done | - | Data pipeline for S2/S3/S6 |
 | S6 | World engine + World Forge (lore layer, inheritance) | done | S5 | Characters, factions, items, quests as data |
-| S7 | Party and progression: persistent unit state (spend, learned skills, passives), level-up UI, XP | done (M3 data model; level-up UI still open) | S2 | First gameplay-facing gap |
-| S8 | Quests and lore runtime: quest state, rewards granting passives/skills/items, flags | proposed | S6, S7 | Sources of passives |
-| S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | placeholder | S6, S8 | README System 2; inputs below |
-| S10 | World map and travel: routes, travel events, supplies | placeholder | S9 | README System 1; inputs below |
-| S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | placeholder | S8 | README System 9; inputs below |
-| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; terrain and combos remain; riposte done in M2a) | S1, S2 | README System 6 |
-| S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; menus still open) | S7 | Needed before any playable loop |
-| S14 | Audio, animation and asset pipeline, asset-load tests | placeholder | - | README Test Suite 2 |
+| S7 | Party and progression: persistent unit state (spend, learned skills, passives), level-up UI, XP | done (M3 data model; level-up, party, loadout and gear screens in UI2-L) | S2 | |
+| S8 | Quests and lore runtime: quest state, rewards granting passives/skills/items, flags | done (M4-L, M4-A, QUEST2: quest runtime, flag registry, world loot table, ready flag) | S6, S7 | Sources of passives |
+| S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | done (EXP1-L, EXP1-A; map fights still end in debug outcome buttons until BATTLE1, goal G1) | S6, S8 | README System 2; inputs below |
+| S10 | World map and travel: routes, travel events, supplies | approved (TRAV1, after BATTLE1; TRAV2 supplies idea) | S9 | README System 1; inputs below |
+| S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | in-progress (DLG1 dialogue and shops done; DLG1-F open; REP1 reputation approved) | S8 | README System 9; inputs below |
+| S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; riposte done in M2a; S12S status slice building; S12T terrain and S12C combos wait for goal G1) | S1, S2 | README System 6 |
+| S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; UI1-L menus, 5 shared slots + autosave, SAVE-IO export / import) | S7 | |
+| S14 | Audio, animation and asset pipeline, asset-load tests | in-progress (S14-L1 commits 1-2, S14-L2 presenter, S14-L3 audio done; S14-L1 commit 3, S14-A1, S14-A2 open) | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |
 
-## Proposed milestone order (planner refines; user approves each)
+## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 
-Superseded: the M1-first "balance pass" order (see HISTORY.md). Current order is the "Suggested build order" below; the balance pass comes after the balance-relevant rules are frozen. Nothing below is `approved` until the user says so.
+Each goal is done when every check passes on `main`. Goals run in this order; G6 runs beside the others. The old 7-step build order is archived in `docs/archive/ROADMAP_2026-10.md` (HISTORY row "Suggested build order"). Review that led here: project file `roadmap/ROADMAP_REVIEW_2026-10-17.md`.
 
-### Suggested build order (each step needs user approval; balance only after step 7)
+| Goal | Status | Finish line (all must pass) | Tasks |
+| --- | --- | --- | --- |
+| G1 Playable Ashlands loop (first test version) | in-progress | From New Game, a mob on the region map opens the combat arena with the four starting party members at their real levels and gear; a win returns to the same tile and the battle results screen shows real XP; a loss wakes the party at the last safe location; the Cinder Gate dialogue fight uses the same link; all three Ashlands quests can be finished and turned in without debug buttons; the browser build runs this loop; a playtest recording of one full run replays headless with no errors | BATTLE1 (thread "Link map fights to real battles"; its own TASKS row), 12x9 grid, PLAYTEST1-L, DLG1-F |
+| G2 Feels right to play | approved | 12x9 grid merged with a before / after balance sim recorded; S12S statuses usable in battle and shown in the arena; every combat action plays a sound and an effect (S14-A1, S14-A2 merged; no placeholder warnings in the recorder's asset report); the user plays G1 once and the UI/UX notes are logged as tasks | S12S-L, S12S-A, S14-A1, S14-A2, S14-L1 commit 3, UI3-L |
+| G3 A fair difficulty curve | approved | BAL2-R merged; BAL3 spec approved and built; party targets met: mob >= 90, line 70-90, wave 55-80, elite 50-75, boss 30-50 at L3 and L5; no class below 40% or above 60% in the L5 duel; no caster dies in round 1 in more than a quarter of party fights | BAL2-R, BAL3 |
+| G4 A small campaign | approved | An Ashlands story spec approved; the Ashlands has a start, a middle and an ending quest; TRAV1 merged (travel between the Ashlands and the Iron Reaches on the world map); REP1 merged (one quest choice changes a shop price or opens a gated quest); a full New Game to ending playthrough is recorded and replays clean | CAMP1 (story spec, idea), TRAV1-L, TRAV1-A, REP1-L, REP1-A |
+| G5 Deeper tactics | approved (after G1) | S12T terrain and S12C combos merged; a balance rerun after them still meets the G3 targets | S12T-L, S12T-A, S12C-L, S12C-A |
+| G6 Clean house | approved (beside the others) | CLN-9, CLN-17, CLN-3b done; no test suite over 450 lines; `docs/ROADMAP.md` statuses match `docs/TASKS.md` | CLN-9, CLN-17, CLN-3b, CLN-13 (parked) |
 
-1. S7 data model (state, XP curve) + S13 save schema (together they define the party snapshot).
-2. S12-A (ally targeting, statuses, skill upgrades) with S4-A (turn-waste fixes, support AI); S3 gear budget validation + missing class items.
-3. S8-B quest/flag runtime (rewards via budget rules).
-4. S7 level-up UI + S13 menus/new-game flow.
-5. S9 exploration, S11-A dialogue/shops, S10-A travel.
-6. S12-B terrain/AoE, S11-B reputation, S4-B profiles.
-7. Freeze S3 gear sets, S4 presets, S12 rules, S7 curve, S8 reward budget; mark balance-ready; then the balance pass (supersedes the M1-first ordering above).
-Until step 7, only S1/S2 stay balance-ready and no balance work is done.
-
-State 2026-10-17 (CLN-11 note): steps 1 and 2 are done (M1, M2, M3, AI1, SK2, SKILL1); the user approved the BAL1 and BAL2 runs ahead of step 7 (DECISIONS "Milestone plan v2 picks", "BAL2 answers"). Queue: `docs/TASKS.md`.
+Balance rule: until G2 is done (grid and statuses in), balance work finds defects only; the tuning pass is G3. Until G5, only S1 is balance-ready.
 
 ## Inputs for placeholder systems (S8-S11; nothing approved)
 
@@ -62,15 +60,15 @@ Done rows (R1) are archived in `docs/archive/ROADMAP_2026-10.md`.
 | CLN-10 | done 2026-10-17: `docs/DECISIONS.md` is an index; per-system files in `docs/decisions/`; superseded rows in `docs/decisions/archive.md` with "superseded by" pointers (docs/specs/CLEANUP.md#CLN-10) | done (docs only) | No row text changes; pointers in CLAUDE.md and agent files updated by the planner |
 | CLN-13 | approved, parked (user 2026-10-17): README becomes an overview plus per-topic `docs/features/*` (docs/specs/CLEANUP.md#CLN-13) | next large README update | Planner owns README |
 
-## BAL2 plan (proposed, design-brainstorm 2026-10-17; details and options in `docs/specs/BAL2_PROPOSAL.md`)
+## BAL2 plan (done 2026-10-17; design-brainstorm 2026-10-17; details and options in `docs/specs/BAL2_PROPOSAL.md`)
 
 Answers the BAL1 open issues. Root causes found by probe: a PERC >= 18 range bonus turns melee units into "ranged" ones (priest L7, rogue L7, warrior L9 lose their melee power), a 4x durability spread (L5 EHP warrior 597 vs mage 146), zero CONS growth for mage/ranger/rogue, kits frozen at L5 by the default loadout rule, no L1 class skill for ranger/brawler, and a near-deterministic sim. Riposte is not the warrior lever (L5 warrior wins 100% with or without it).
 
 | Milestone | Status | Goal | Lane split | Depends on | Balance-ready afterwards |
 | --- | --- | --- | --- | --- | --- |
-| BAL2-L | proposed | Sim reliability (continuous score, cap 10, smart_skills/loadout args, spend/distance/preset variants, stats and group modes; per-unit metrics, party-vs-encounter mode, role limit tests, composition sweep: docs/specs/BAL2_SIM.md), PERC range fix, unit gear sentinel `none`, elite/boss tier values | 1 logic branch, sim commit first | SKILL1-L merged (content hub files) | none |
-| BAL2-A | proposed | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
-| BAL2 | proposed | Rerun duel L1/3/5/7 on the continuous score, tiers, levels, group; one more small data round if a class is outside 40-60 | balance run on clean main | BAL2-L, BAL2-A | S2 and S4 (when every class is in bracket) |
+| BAL2-L | done | Sim reliability (continuous score, cap 10, smart_skills/loadout args, spend/distance/preset variants, stats and group modes; per-unit metrics, party-vs-encounter mode, role limit tests, composition sweep: docs/specs/BAL2_SIM.md), PERC range fix, unit gear sentinel `none`, elite/boss tier values | 1 logic branch, sim commit first | SKILL1-L merged (content hub files) | none |
+| BAL2-A | done | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
+| BAL2 | done (rerun 2026-10-17; clean rerun BAL2-R open, then BAL3, goal G3) | Rerun duel L1/3/5/7 on the continuous score, tiers, levels, group; one more small data round if a class is outside 40-60 | balance run on clean main | BAL2-L, BAL2-A | S2 and S4 (when every class is in bracket) |
 
 ## World systems baseline (approved: user accepted every recommendation, DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")
 
@@ -78,23 +76,32 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
-| EXP1 | approved | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
+| EXP1 | done | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
 | DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
-| TRAV1 | approved | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files); save v5 |
+| TRAV1 | approved | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files) and BATTLE1 (road fights use the battle link, goal G4); save v5 |
 | REP1 | approved | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |
 
 EXP1, DLG1, TRAV1 and REP1 all edit `world_schema` and `world_catalog` (EXP1, DLG1 and TRAV1 also `game_state` and the save files): run the logic parts in sequence EXP1-L, DLG1-L, TRAV1-L, REP1-L, one save version bump each (v3, v4, v5; REP1 none). Each asset part may run beside the next logic part (data only).
 
-## Core and presentation baseline (proposed, design-brainstorm 2026-10-17; awaiting user answers)
+## Core and presentation baseline (approved, design-brainstorm 2026-10-17; user answers in DECISIONS "Decision batch (user 2026-10-17)")
 
 Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T terrain, S12C combos; skill upgrades covered by SKILL1 ranks and grades), `S14_RULES.md` (AssetCatalog manifest, presenter animation, SoundBank, asset-load suite), `UI_MENUS_RULES.md` (menus, save slots, new game, party screen with level-up, journal). Mechanics only add inputs to `DamageCalculator.compute`; numbers are data fields, no balance values proposed.
 
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
-| S12S | approved | ITEM1-L, CLASS1-L | status slice, then S12T terrain and S12C combos in sequence (shared skill and plan files) |
-| S14-1 | proposed | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
-| UI1 | in-progress (UI1-L, UI2-L done 2026-10-17) | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
+| S12S | in-progress (commit 1 merged, PR #15) | ITEM1-L, CLASS1-L | status slice (goal G2), then S12T terrain and S12C combos in sequence (shared skill and plan files; goal G5, after G1) |
+| S14-1 | in-progress (S14-L1 commits 1-2, S14-L2, S14-L3 done; S14-L1 commit 3, S14-A1, S14-A2 open) | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
+| UI1 | in-progress (UI1-L, UI1-A, UI2-L, SAVE-IO done 2026-10-17; UI3-L journal next) | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
+
+## Playtest and delivery (2026-10-17, cloud threads)
+
+| Milestone | Status | Notes |
+| --- | --- | --- |
+| WEB1 | done | Web (HTML5) build on every PR, GitHub Pages and private itch.io option (`docs/workflow/web.md`) |
+| PLAYTEST1 | in-progress (PR #7) | Playtest recordings, notes, playback and headless replay; recorder logs clicks, hovers, UI open / close and asset loads (goal G1) |
+| GRID1 (12x9 grid) | in-progress (thread "12x9 combat grid layout") | 12x9 arena instead of a square grid, slimmer side panels, party left and enemies right; its thread records the decision and task row (goal G1) |
+| BATTLE1 | in-progress (thread "Link map fights to real battles") | Map, dialogue and (with TRAV1) road fights open the real combat arena instead of the debug outcome buttons (goal G1); its thread owns the TASKS row |
 
 ## Open engine items (tracked)
 
