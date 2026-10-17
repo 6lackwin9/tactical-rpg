@@ -23,8 +23,9 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | in-progress (DLG1 dialogue and shops done; DLG1-F open; REP1 reputation approved) | S8 | README System 9; inputs below |
 | S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; riposte done in M2a; S12S status slice building; S12T terrain and S12C combos wait for goal G1) | S1, S2 | README System 6 |
 | S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; UI1-L menus, 5 shared slots + autosave, SAVE-IO export / import) | S7 | |
-| S14 | Audio, animation and asset pipeline, asset-load tests | in-progress (S14-L1, S14-L2 presenter, S14-L3 audio, S14-A1 done; S14-A2 open) | - | README Test Suite 2 |
+| S14 | Audio, animation and asset pipeline, asset-load tests | in-progress (S14-L1, S14-L2 presenter, S14-L3 audio, S14-A1, S14-A2 done) | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `docs/BALANCE_REPORT.md` |
+| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2 |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 
@@ -90,8 +91,9 @@ Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T
 
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
-| S12S | S12S-L done (2026-10-17), S12S-A approved | ITEM1-L, CLASS1-L | status slice (goal G2), then S12T terrain and S12C combos in sequence (shared skill and plan files; goal G5, after G1) |
-| S14-1 | in-progress (S14-L1, S14-L2, S14-L3, S14-A1 done; S14-A2 open) | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
+| S12S | S12S-L and S12S-A done (2026-10-17) | ITEM1-L, CLASS1-L | status slice (goal G2), then S12T terrain and S12C combos in sequence (shared skill and plan files; goal G5, after G1) |
+| S14-1 | done (S14-L1, S14-L2, S14-L3, S14-A1, S14-A2 done 2026-10-17) | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
+| PLAYTEST2 | idea | PLAYTEST1, UI1-L | overworld and dialogue exact replay |
 | UI1 | done (UI1-L, UI1-A, UI2-L, UI3-L and SAVE-IO done 2026-10-17) | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
 
 ## Playtest and delivery (2026-10-17, cloud threads)
@@ -99,9 +101,9 @@ Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T
 | Milestone | Status | Notes |
 | --- | --- | --- |
 | WEB1 | done | Web (HTML5) build on every PR, GitHub Pages and private itch.io option (`docs/workflow/web.md`) |
-| PLAYTEST1 | in-progress (PR #7) | Playtest recordings, notes, playback and headless replay; recorder logs clicks, hovers, UI open / close and asset loads (goal G1) |
-| GRID1 (12x9 grid) | in-progress (thread "12x9 combat grid layout") | 12x9 arena instead of a square grid, slimmer side panels, party left and enemies right; its thread records the decision and task row (goal G1) |
-| BATTLE1 | in-progress (BATTLE1-L, PR #24, thread "Link map fights to real battles") | Map, dialogue and (with TRAV1) road fights open the real combat arena instead of the debug outcome buttons (goal G1); its thread owns the TASKS row |
+| PLAYTEST1 | done (PLAYTEST1-L, release batch 2026-10-17) | Playtest recordings, notes, playback and headless replay; recorder logs clicks, hovers, UI open / close and asset loads (goal G1) |
+| GRID1 (12x9 grid) | done (GRID12, release batch 2026-10-17) | 12x9 arena instead of a square grid, slimmer side panels, party left and enemies right; its thread records the decision and task row (goal G1) |
+| BATTLE1 | done (BATTLE1-L, release batch 2026-10-17) | Map, dialogue and (with TRAV1) road fights open the real combat arena instead of the debug outcome buttons (goal G1); its thread owns the TASKS row |
 
 ## Open engine items (tracked)
 

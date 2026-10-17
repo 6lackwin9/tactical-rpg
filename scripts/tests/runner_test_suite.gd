@@ -51,8 +51,11 @@ static func run(tree_parent: Node = null) -> bool:
 
 	if tree_parent == null:
 		return TestHelpers.report_ok(TAG, "Launch / menu / reload (needs a scene tree)", true, "skipped") and ok
+	var saved_enabled: int = PlaytestStore.force_enabled
+	PlaytestStore.force_enabled = 0   # no recordings into user://playtests from the tests (PLAYTEST1)
 	var runner: SceneRunner = (load("res://scenes/scene_runner.tscn") as PackedScene).instantiate() as SceneRunner
 	tree_parent.add_child(runner)
+	ok = TestHelpers.report_ok(TAG, "With playtests off the runner has no PlaytestHub and no Playtests panel (zero hooks)", runner.hub == null and runner.browser == null) and ok
 
 	# Launch the arena with a chosen catalog encounter; restart keeps it; menu frees it.
 	var launched: bool = runner.launch("res://scenes/combat_arena.tscn", "veterans_drill")
@@ -89,5 +92,7 @@ static func run(tree_parent: Node = null) -> bool:
 	var pending_ok: bool = still_changed.is_empty()
 	ok = TestHelpers.report_ok(TAG, "Hot reload recompiles a script in place; nothing left pending", reload_ok and pending_ok, "reloaded %d, failed %s" % [reloaded.size(), str(failed)]) and ok
 
+	tree_parent.remove_child(runner)   # leaves the tree now: its PlaytestHub stops being PlaytestHub.instance
 	runner.queue_free()
+	PlaytestStore.force_enabled = saved_enabled
 	return ok

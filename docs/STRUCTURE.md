@@ -11,7 +11,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses | S1, S4 | done |
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
-| `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
+| `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools | all | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | done |
 | `scripts/tests/status_expansion_effects_test_suite.gd` | slow tiles, expose/fortify armor rating, round-end order and logs, poison stacking, granted magnitudes and sources, Forge magnitude range (S12S-L commit 2) | S12 | done |
@@ -34,7 +34,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd`, `focus_gear_budget_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, replay.gd (PLAYTEST1), overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
 | `assets/fonts/`, `scripts/ui/runner/web_fonts.gd` | Web-only fallback fonts for emoji and symbol glyphs (`WebFonts.install`, called by the Scene Runner); sources and licenses in `assets/fonts/README.md` | process | done |
@@ -71,6 +71,10 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |
 | `data/dialogue/` | services.json: lore-free base service lines (dialogue trees are world data in `data/worlds/<id>/dialogues.json`, shops in `shops.json`) | S11 | in progress |
 | `assets/art/{unit,item,tile,skill,status,ui}/`, `assets/audio/{sfx,music}/` | file overrides by folder pattern `<key>_<variant>.png/svg`, `<key>.ogg/wav` (S14) | S14 | in progress |
+| `scripts/playtest/` | PlaytestRecord (schema, validation, scenarios), PlanCodec, RoundOutcome, ContentFingerprint, PlaytestRecorder (session signals, trail, notes, hooks), PlaytestReplayer (replay, take-over, variant, tool logic), PlaytestSweep, PlaytestStore (ids, paths, atomic save, debug guard), TrailReport, PlaytestLogger (PLAYTEST1) | S16 | done |
+| `scripts/ui/playtest/` | PlaytestHub (Scene Runner child: run recording, F8 notes, take-over branches), UiTrail (button, panel, modal, click, key, hover, leak trail), NoteBox, PlaytestBrowser (Scene Runner Playtests panel), PlaybackBanner (PLAYTEST1) | S16 | done |
+| `playtests/{inbox,repro,scenarios}/` + `README.md` | shared user recordings, agent repros, one-seed scenarios; `.gdignore` keeps note images out of the import (PLAYTEST1) | S16 | done |
+| `tools/replay.gd`, `scripts/tests/playtest_test_suite.gd` | headless replay, variant and seed-sweep tool; playtest suite (PLAYTEST1; `tools/fc.sh replay`) | S16 | done |
 
 Rules: gameplay logic in `scripts/**` as `RefCounted` rules engines; scenes only render; data in `data/**` validated through a catalog; one test suite per system in `scripts/tests/` registered with one `results.append` line in `SuiteRegistry.run_all` (`scripts/tests/suite_registry.gd`).
 

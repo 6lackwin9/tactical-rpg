@@ -38,6 +38,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Change damage: `damage_calculator.gd` only. Planner estimate and dojo already share it.
 - Change a class: `data/catalog/classes.json` via upsert; rules in `stat_rules.gd`.
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.
+- Playtest recordings and replay: `scripts/playtest/` (PlaytestRecorder, PlaytestReplayer.run_file, TrailReport), tool `tools/fc.sh replay`; UI (hub, trail, F8 notes, browser, playback banner): `scripts/ui/playtest/`; arena playback fields (`playtest`, `battle`, `take_over`, `battle_seed`): `scenes/combat_arena.gd`.
 - Test expectations for a system: its suite in `scripts/tests/` (class rules: `class_rules_test_suite.gd`).
 
 See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `docs/decisions/<system>.md` for why things are the way they are.

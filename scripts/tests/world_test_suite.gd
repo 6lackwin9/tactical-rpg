@@ -385,5 +385,6 @@ static func _test_forge_ui_and_runner(tree_parent: Node) -> bool:
 	var run_session: CombatSession = runner.active_scene.get("session") if runner.active_scene != null else null
 	checks["runner launches a world battle"] = launched and run_session != null and run_session.encounter.encounter_name == "Clash at Wreck Strand" and run_session.allies[0].name == "Ilse Marrow"
 	runner.back_to_menu()
+	tree_parent.remove_child(runner)   # leaves the tree now (its PlaytestHub, if any, unregisters)
 	runner.queue_free()
 	return TestHelpers.report_ok(TAG, "World Forge UI: create world, inherited read-only, override, drafts with dangling refs, tuning, play in the arena, save, delete; runner launches world battles", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
