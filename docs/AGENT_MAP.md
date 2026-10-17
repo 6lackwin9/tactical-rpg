@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### S14-A2 placeholder sounds (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | 13 generated SFX blips and manifest rows (seed s14_a2.gd) | n/a / 10 | merged via PR |
+
 ### S14-L3 audio (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |

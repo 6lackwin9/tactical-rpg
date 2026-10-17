@@ -1,3 +1,4 @@
+| S14-A2 | 13 generated placeholder SFX + manifest rows (seed data/seeds/s14_a2.gd) | asset | S14-L3 c1 | done | docs/specs/S14_A2.md | assets/audio/sfx, data/assets |
 | S14-L3 | Audio buses, SoundBank, AudioDirector, SettingsFile audio keys, placeholder SFX tool (build notes in the spec) | logic | S14-L1 c2, S14-L2 | done | docs/specs/S14_L3.md | new scripts/audio, settings_file, bus layout |
 | S14-L2 | CombatPresenter, FxPresets, FxSettings instant mode, lifecycle suite (PR #9; build notes in the spec) | logic | S14-L1 c2 | done | docs/specs/S14_L2.md | scripts/ui/combat/*, combat_grid_view |
 
