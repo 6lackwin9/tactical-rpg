@@ -26,14 +26,14 @@ const KINDS: Dictionary = {
 	"STATUS": {"label": "Status block", "authorable": false, "sections": [], "stance": "KEEP", "ap": "FREE", "cast": "SELF", "icon": "✖"},
 }
 
-# Forge section id -> the skill fields it holds (a field may sit in two sections: status_rounds).
+# Forge section id -> the skill fields it holds (a field may sit in two sections: status_magnitude, status_rounds).
 const SECTION_FIELDS: Dictionary = {
 	"damage": ["power_mult", "weapon_hand", "dash_tiles"],
 	"inflict": ["status_effect", "status_potency", "status_magnitude", "status_rounds"],
 	"reach": ["reach_min", "reach_max"],
 	"area": ["area"],
 	"support": ["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"],
-	"grant": ["grant_status", "status_rounds"],
+	"grant": ["grant_status", "status_magnitude", "status_rounds"],
 	"guard": ["mitigation"],
 	"focus": ["boost", "boost_rounds"],
 	"jump": ["jump_tiles"],

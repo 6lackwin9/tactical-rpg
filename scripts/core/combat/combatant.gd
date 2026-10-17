@@ -31,8 +31,10 @@ var statuses: Dictionary = {}           # active this round: status name -> true
 var pending_statuses: Dictionary = {}   # inflicted this round, active next round
 var status_rounds_left: Dictionary = {} # active status -> rounds left, this one included (multi-round buffs / bleed)
 var pending_status_rounds: Dictionary = {}   # queued status -> rounds it will last once active
-var status_magnitudes: Dictionary = {}  # active status -> magnitude percent (weaken only; see StatusEffects.has_magnitude)
-var pending_status_magnitudes: Dictionary = {}   # queued status -> magnitude percent once active
+var status_magnitudes: Dictionary = {}  # active status -> magnitude (unit from the registry row; see StatusEffects.has_magnitude)
+var pending_status_magnitudes: Dictionary = {}   # queued status -> magnitude once active
+var status_sources: Dictionary = {}     # active status -> name of the unit that last applied it (S12S-L)
+var pending_status_sources: Dictionary = {}   # queued status -> name of the unit that last applied it
 var riposted: Dictionary = {}         # attackers this unit already countered this round (RiposteRules)
 var status_resist: Dictionary = {}      # passive resistance per status (+%; 100 = immune)
 var ap_cost_modifier: int = 0       # Effects shifting every skill's AP cost (base cost = skill level)
@@ -397,6 +399,8 @@ func remove_status(status: String) -> void:
 	pending_status_rounds.erase(status)
 	status_magnitudes.erase(status)
 	pending_status_magnitudes.erase(status)
+	status_sources.erase(status)
+	pending_status_sources.erase(status)
 
 # Outgoing skill power factor from an active weaken: 1 - magnitude/100 (1.0 when not weakened; magnitude capped by the registry).
 func weaken_factor() -> float:

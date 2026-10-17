@@ -34,4 +34,5 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 ## Environment
 
 - Godot 4.7.2 and PowerShell 7 come from the environment setup script (copy: `/mnt/project-files/cloud-setup/environment-setup-script.sh` in the project files); `.claude/hooks/session-start.sh` installs them if the script did not and no-ops otherwise. `github.com` must stay allowed in the environment's network policy.
+- Web build: `.github/workflows/web.yml` exports the `Web` preset on every PR (artifact `web-build`) and deploys `main` to GitHub Pages; setup and limits in [web.md](web.md).
 - No interactive play. For UI work, render frames under Xvfb and attach them to the PR: `xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 --path . <scene> --write-movie out.png --fixed-fps 10 --quit-after 30`. Playtesting feel, input and audio stays on desktop.

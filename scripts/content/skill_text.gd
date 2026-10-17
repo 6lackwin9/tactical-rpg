@@ -23,7 +23,7 @@ const TOKEN_KINDS: Dictionary = {
 	"proficiency": ["ATTACK", "DEFEND", "SUPPORT"],
 	"status": ["ATTACK", "SUPPORT", "DEFEND"],
 	"potency": ["ATTACK"],
-	"magnitude": ["ATTACK"],
+	"magnitude": ["ATTACK", "SUPPORT", "DEFEND"],
 	"rounds": ["ATTACK", "SUPPORT", "DEFEND", "FOCUS"],
 	"heal": ["SUPPORT"],
 	"cleanse": ["SUPPORT"],
@@ -197,9 +197,7 @@ static func token_value(token: String, suffix: String, row: Dictionary, rank: in
 				return ""
 			return format_percent(DictUtil.to_float(row.get("status_potency", 0)) / 100.0)
 		"magnitude":
-			if str(row.get("status_effect", "")) != StatusEffects.WEAKEN:
-				return ""
-			return format_percent(DictUtil.to_float(row.get("status_magnitude", 0)) / 100.0)
+			return format_magnitude(magnitude_status(row), DictUtil.to_int(row.get("status_magnitude", 0)))
 		"rounds":
 			var rounds: int = DictUtil.to_int(row.get("boost_rounds", 1), 1) if str(row.get("kind", "")) == "FOCUS" else DictUtil.to_int(row.get("status_rounds", 1), 1)
 			return str(rounds) if bare else plural(rounds, "round")
@@ -222,6 +220,23 @@ static func token_value(token: String, suffix: String, row: Dictionary, rank: in
 			var offset: int = DictUtil.to_int(row.get("unlock_offset", -1), -1)
 			return "+%d" % (offset if offset >= 0 else StatRules.TIER_UNLOCK_STEP * maxi(0, rank - 1))
 	return ""
+
+# The status a skill row's magnitude belongs to: status_effect if set, else grant_status (S12S-L).
+static func magnitude_status(row: Dictionary) -> String:
+	var inflicted: String = str(row.get("status_effect", ""))
+	return inflicted if not inflicted.is_empty() else str(row.get("grant_status", ""))
+
+# A magnitude with its registry unit: "15%", "8 armor", "4 HP", "5% max HP"; "" when the status has no range or it is 0.
+# Flat magnitudes are armor points, except poison (HP per round).
+static func format_magnitude(status: String, magnitude: int) -> String:
+	if magnitude <= 0 or not StatusEffects.has_magnitude(status):
+		return ""
+	match StatusRegistry.magnitude_unit(status):
+		StatusRegistry.UNIT_FLAT:
+			return "%d HP" % magnitude if status == StatusEffects.POISON else "%d armor" % magnitude
+		StatusRegistry.UNIT_PCT_MAX_HP:
+			return "%d%% max HP" % magnitude
+	return "%d%%" % magnitude
 
 static func _status_of(row: Dictionary) -> String:
 	if str(row.get("kind", "")) == "ATTACK":

@@ -380,6 +380,10 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ---
 
+### Web build (browser)
+
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
@@ -448,6 +452,10 @@ Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spe
 ### Weaken and data-driven riposte (D1-L)
 
 New `weaken` status (outgoing skill power -15 to -25%, cap 25%, refresh to the longest duration) with a `status_magnitude` skill field; zero-power attacks apply a status without dealing damage; riposte AP, mitigation and duration now come entirely from skill data. Tested in `weaken_test_suite.gd`.
+
+### Status expansion schema (S12S-L commit 1)
+
+The status registry gives every status a magnitude range and unit, and adds six rows with placeholder numbers: slow, expose, fortify, regen, poison and burn. They have no effect in combat yet (S12S-L commit 2). `status_magnitude` is validated per status on attack, support and defend skills, the `{magnitude}` text token shows its unit, and each status records which unit applied it (undo restores it). Tested in `status_expansion_test_suite.gd`.
 
 ### Area statuses and taunt from defend skills (M2C2B-L)
 
