@@ -25,6 +25,8 @@ extends RefCounted
 const DEFAULT_ROOT: String = "res://data/worlds"
 const VERSION: int = 1
 const STATE_KEY: StringName = &"world_catalog_state"
+# Marker key -> the world kind it references (location map markers, EXP1-L).
+const MARKER_REF_KEYS: Dictionary = {"encounter": "encounters", "character": "characters", "lore": "lore", "loot": "loot", "to": "locations"}
 
 # ------------------------------------------------------------------------------
 # State & loading
@@ -557,6 +559,8 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 			var ex: Dictionary = exits[i] if exits[i] is Dictionary else {}
 			if _points_at(w, "locations", str(ex.get("to", "")), target):
 				out.append(base.merged({"key": "exits", "index": i, "sub": "to"}))
+	if k2 == "locations":
+		out.append_array(_map_json_refs(w, e, kind, target, base))
 	if k2 == "quests" and e.get("steps", null) is Array and (kind == "locations" or kind == "encounters"):
 		var steps: Array = e["steps"]
 		var sub: String = "location" if kind == "locations" else "encounter"
@@ -595,6 +599,33 @@ static func _quest_json_refs(w: String, e: Dictionary, kind: String, target: Str
 			var partial: Dictionary = DictUtil.dict_of(steps[idx])
 			if partial.get(sub, null) is String and _points_at(w, kind, str(partial[sub]), target):
 				out.append(base.merged({"key": "variants", "index": vi, "path": at + ["steps", idx, sub], "value": str(partial[sub])}))
+	return out
+
+# Location map refs (EXP1-L): encounter refs in zone bindings ([ref, weight] pairs) and markers, marker character,
+# lore and loot, and exit marker `to` (except world_map). Path-addressed like the quest json refs.
+static func _map_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if kind == "encounters":
+		var bindings: Dictionary = DictUtil.dict_of(e.get("zone_bindings", null))
+		for zone: Variant in bindings:
+			var b: Dictionary = DictUtil.dict_of(bindings[zone])
+			for list_key: String in ["encounters", "elites"]:
+				var pairs: Array = DictUtil.array_of(b.get(list_key, null))
+				for i: int in range(pairs.size()):
+					var pair: Array = DictUtil.array_of(pairs[i])
+					if not pair.is_empty() and pair[0] is String and _points_at(w, kind, str(pair[0]), target):
+						out.append(base.merged({"key": "zone_bindings", "index": -1, "path": ["zone_bindings", zone, list_key, i, 0], "value": str(pair[0])}))
+	var markers: Array = DictUtil.array_of(e.get("markers", null))
+	for i: int in range(markers.size()):
+		var m: Dictionary = DictUtil.dict_of(markers[i])
+		for key: Variant in MARKER_REF_KEYS:
+			if str(MARKER_REF_KEYS[key]) != kind or not (m.get(key, null) is String):
+				continue
+			var ref: String = str(m[key])
+			if key == "to" and ref == MapRules.WORLD_MAP:
+				continue
+			if _points_at(w, kind, ref, target):
+				out.append(base.merged({"key": "markers", "index": i, "path": ["markers", i, key], "value": ref}))
 	return out
 
 static func _links_refs(w: String, links: Dictionary, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
@@ -911,6 +942,7 @@ static func _location_errors(world_id: String, e: Dictionary) -> Array[String]:
 				continue
 		if resolve(world_id, "locations", to).is_empty():
 			errors.append("Exit leads to unknown location '%s'." % to)
+	errors.append_array(MapRules.location_errors(world_id, e))
 	return errors
 
 static func _faction_errors(world_id: String, e: Dictionary) -> Array[String]:
@@ -1042,6 +1074,9 @@ static func manifest_errors(world_id: String) -> Array[String]:
 				errors.append("%s itself." % ("Extends" if key == "extends" else "Connects to"))
 			elif not _worlds().has(other):
 				errors.append("%s unknown world '%s'." % ["Extends" if key == "extends" else "Connects to", other])
+	var start: String = str(m.get("start_location", ""))
+	if not start.is_empty() and resolve(world_id, "locations", start).is_empty():
+		errors.append("Start location '%s' is unknown." % start)
 	return errors
 
 # Every problem in one world's OWN entries: {"world/kind:id": [errors]}.

@@ -112,6 +112,7 @@ static func _world_fields() -> Array[Dictionary]:
 		_f("description", "Description", "text", ""),
 		_f("extends", "Extends", "refs", [], {"ref": "worlds", "help": "Parent worlds: this world inherits all their entries (later parents override earlier ones). Order matters."}),
 		_f("connects", "Connects to", "refs", [], {"ref": "worlds", "help": "Worlds this one links to without inheriting (locations may exit into them)."}),
+		_f("start_location", "Start location", "ref", "", {"ref": "locations", "optional": true, "help": "Where a new game enters this world. Empty = the nearest parent world's."}),
 	]
 
 static func _region_fields() -> Array[Dictionary]:
@@ -133,6 +134,10 @@ static func _location_fields() -> Array[Dictionary]:
 		_f("region", "Region", "ref", "", {"ref": "regions", "optional": true}),
 		_f("exits", "Exits", "json", [], {"help": "[{\"to\": \"location\", \"label\": \"north road\"}]; `to` may be world:id to cross into a connected world."}),
 		_f("encounters", "Encounters here", "refs", [], {"ref": "encounters"}),
+		# Region map binding (EXP1-L, S9); MapRules.location_errors validates them.
+		_f("map", "Map template", "string", "", {"help": "MapCatalog template id (data/maps). Empty = a menu location with no walkable map."}),
+		_f("zone_bindings", "Zone bindings", "json", {}, {"help": "{\"zone_id\": {\"encounters\": [[\"enc\", 3]], \"elites\": [], \"elite_pct\": 10, \"steps_min\": 12, \"steps_max\": 20}} for DANGER zones of the map."}),
+		_f("markers", "Markers", "json", [], {"help": "[{\"id\", \"kind\": exit|encounter|roamer|npc|chest|lore|point, \"anchor\", ...}] placed on the map's anchors (a roamer walks a path instead)."}),
 	]
 
 static func _faction_fields() -> Array[Dictionary]:

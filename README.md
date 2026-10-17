@@ -499,6 +499,10 @@ Quest templates live in `data/quests/quests.json` (`QuestCatalog`); world quests
 
 Sample quests (M4-A, seed `data/seeds/m4a.gd`): four lore-free templates (reach_and_clear, two_stop_delivery, clear_site, signal_and_return), an Ashlands loot table (wardens_drill, rallying_cry, keep_ring, keep_stores) shared by three quest pools, the new Ashlands quests cinder_gate_watch and warden_oath (variants for a fallen Mara or Tev) and the existing quests bound to templates.
 
+### Region map schema (EXP1-L commit 1)
+
+Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rules in `MapRules`); world locations bind a template with `map`, `zone_bindings` and `markers` (encounters, patrolling roamers, chests, lore, exits), and a world manifest names its `start_location`. Reference scans rewrite markers and bindings on rename. Tested in `exploration_test_suite.gd`.
+
 ### Agent workflow tools
 
 `CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `safe_delete`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md), `tools/fc.sh docs` includes a markdown lint subset (`tools/md_lint.awk`), `tools/wt_remove.ps1` removes a finished worktree on OneDrive (clears the read-only folder flag git trips on) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `logic-builder`, `asset-builder`, `balance`, `change-reviewer`, `housekeeper` for cleanup proposals) live in `.claude/`.
