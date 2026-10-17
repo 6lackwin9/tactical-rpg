@@ -36,7 +36,7 @@ static func path() -> String:
 	return _path
 
 # (Re)reads the file; a missing or unreadable file leaves every key at its default.
-static func load() -> void:
+static func load_file() -> void:
 	_cfg = ConfigFile.new()
 	if FileAccess.file_exists(_path):
 		var err: Error = _cfg.load(_path)
@@ -80,7 +80,7 @@ static func get_float(key: String) -> float:
 
 static func _file() -> ConfigFile:
 	if _cfg == null:
-		SettingsFile.load()
+		SettingsFile.load_file()
 	return _cfg
 
 static func _row(key: String) -> Dictionary:

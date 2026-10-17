@@ -84,7 +84,7 @@ static func _rows() -> Array[Dictionary]:
 		{"name": "withdraw", "entry": withdraw, "distance": -1, "presets": ["move", "float_text"]},
 		{"name": "melee hit", "entry": _entry("ATTACK", "HIT", 20, 20), "distance": 1, "presets": ["attack_melee", "hit", "float_text"]},
 		{"name": "ranged mitigated", "entry": _entry("ATTACK", "MITIGATED", 8, 8), "distance": 3, "presets": ["attack_ranged", "mitigated", "float_text"]},
-		{"name": "ranged miss", "entry": _entry("ATTACK", "MISS"), "distance": 3, "presets": ["attack_ranged", "hit"]},
+		{"name": "ranged miss", "entry": _entry("ATTACK", "MISS"), "distance": 3, "presets": ["attack_ranged", "miss", "float_text"]},
 		{"name": "status attack", "entry": _entry("ATTACK", _status_name("stun")), "distance": 1, "presets": ["attack_melee", "status"]},
 		{"name": "defend", "entry": _entry("DEFEND", "50% MITIGATION", 0, 50), "distance": 0, "presets": ["defend", "float_text"]},
 		{"name": "heal", "entry": heal, "distance": 1, "presets": ["heal", "float_text"]},
@@ -259,7 +259,28 @@ static func _test_signal(presenter: CombatPresenter, holder: Control) -> bool:
 	presenter.fx_played.connect(record)
 	presenter.play(entry, actor, null, Vector2(TILE * 8, TILE * 8))
 	presenter.fx_played.disconnect(record)
-	checks["null target uses log coordinates"] = played == FxPresets.for_entry(entry, -1)
+	var logged: Array[String] = FxPresets.for_entry(entry, -1)   # melee by log coordinates; target-side presets skipped with no target
+	logged.erase("mitigated")
+	checks["null target uses log coordinates"] = played == logged
+	# A null target: target-side presets do not run, so they are not reported (float_text needs no node).
+	played.clear()
+	presenter.fx_played.connect(record)
+	presenter.play(entry, actor, null, actor.position)
+	presenter.fx_played.disconnect(record)
+	var ran: Array[String] = ["attack_melee", "float_text"]
+	checks["null target reports only presets that ran"] = played == ran and not played.has("mitigated")
+	# MISS resolves to the miss preset (not hit), with "Miss" text and a silent sound until an asset exists.
+	var miss: ActionLogEntry = _entry("ATTACK", "MISS")
+	var miss_presets: Array[String] = FxPresets.for_entry(miss, 3)
+	checks["miss entry plays miss, not hit"] = miss_presets.has("miss") and not miss_presets.has("hit") and not miss_presets.has("mitigated")
+	checks["miss text"] = FxPresets.float_text(miss) == "Miss"
+	checks["miss preset in sound map"] = SoundEvents.FOR_PRESET.get("miss", "") == "miss" and SoundEvents.KEYS.has("miss")
+	played.clear()
+	presenter.fx_played.connect(record)
+	presenter.play(miss, actor, null, actor.position)
+	presenter.fx_played.disconnect(record)
+	var miss_ran: Array[String] = ["attack_melee", "float_text"]
+	checks["miss with null target: only presets that ran"] = played == miss_ran
 	return _report("fx_played fires once per preset in order", checks)
 
 # Settings: headless keeps instant on, speed is read, a freed node's run is pruned.

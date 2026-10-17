@@ -263,7 +263,7 @@ static func _test_current_game() -> bool:
 static func _test_settings() -> bool:
 	var checks: Dictionary = {}
 	var _gone: Error = DirAccess.remove_absolute(SettingsFile.path())
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["missing file = defaults"] = SettingsFile.get_value("anim/speed") == 1.0
 	var cases: Array[Array] = [
 		["audio/master", 1.5, 1.0, 1.0], ["audio/music", -0.5, 0.0, 0.8], ["audio/sfx", 0.25, 0.25, 0.8], ["audio/ui", 2, 1.0, 0.8],
@@ -276,14 +276,14 @@ static func _test_settings() -> bool:
 		checks["%s clamped" % key] = SettingsFile.get_value(key) == c[2]
 	checks["saved"] = SettingsFile.save() == OK
 	SettingsFile.set_value("anim/speed", 2.0)
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["reload restores the file"] = SettingsFile.get_value("anim/speed") == 4.0 and SettingsFile.get_value("anim/instant") == true
 	SettingsFile.set_value("anim/instant", "yes")
 	checks["wrong type = default"] = SettingsFile.get_value("anim/instant") == false and SettingsFile.checked("anim/speed", "fast") == 1.0
 	var cfg := ConfigFile.new()
 	cfg.set_value("ui", "text_scale", "big")
 	checks["file written"] = cfg.save(SettingsFile.path()) == OK
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["wrong type on disk = default"] = SettingsFile.get_value("ui/text_scale") == 1.0
 	var before: String = FileAccess.get_file_as_string(SettingsFile.path())
 	var gs: GameState = _new_state()
@@ -522,7 +522,7 @@ static func _test_main_menu_and_settings_model() -> bool:
 	var _s: Array[String] = sm.set_value("ui/text_scale", 9.0)
 	checks["draft clamped, file untouched"] = sm.value("ui/text_scale") == 1.5 and SettingsFile.get_value("ui/text_scale") != 1.5
 	var applied: bool = sm.apply().is_empty() and not sm.has_draft()
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["apply writes"] = applied and SettingsFile.get_value("ui/text_scale") == 1.5
 	var _t: Array[String] = sm.set_value("ui/text_scale", 1.0)
 	sm.revert()

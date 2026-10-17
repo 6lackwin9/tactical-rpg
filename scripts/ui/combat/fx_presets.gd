@@ -14,6 +14,7 @@ const SHAKE_OFFSETS: Array[Vector2] = [Vector2(4, 0), Vector2(-4, 0), Vector2(2,
 const STATUS_ICON_PX: int = 24
 const STATUS_RISE_PX: float = 16.0
 const FLOAT_RISE: Vector2 = Vector2(8, -28)
+const MISS_SIDESTEP: Vector2 = Vector2(0, -6)   # miss: the target dodges this far, then returns
 const AMBUSH_TEXT_PX: Vector2 = Vector2(281, 180)   # board-centred banner (no token; 12x9 board, 648 px wide)
 
 # id -> {"durations": [...], "tweens": tweens one play creates, "color": modulate (pulses/flashes)}
@@ -23,6 +24,7 @@ const PRESETS: Dictionary = {
 	"attack_ranged": {"durations": [0.25], "tweens": 1},
 	"hit": {"durations": [0.03, 0.03, 0.03, 0.04, 0.25], "tweens": 2, "color": Color(2.0, 2.0, 2.0)},
 	"mitigated": {"durations": [0.03, 0.03, 0.03, 0.04, 0.25], "tweens": 2, "color": Color("#94a3b8")},
+	"miss": {"durations": [0.08, 0.14], "tweens": 1},   # target sidesteps and returns; no shake, no flash
 	"heal": {"durations": [0.3], "tweens": 1, "color": Color("#22c55e")},
 	"buff": {"durations": [0.3], "tweens": 1, "color": Color("#eab308")},
 	"defend": {"durations": [0.3], "tweens": 1, "color": Color("#94a3b8")},
@@ -76,6 +78,8 @@ static func for_entry(entry: ActionLogEntry, distance: int = -1) -> Array[String
 			out.append("attack_melee" if _distance(entry, distance) <= 1 else "attack_ranged")
 			if entry.damage == 0 and not status_id_of(entry).is_empty():
 				out.append("status")
+			elif entry.outcome_tag == "MISS":
+				out.append_array(["miss", "float_text"])
 			else:
 				out.append("mitigated" if "MITIGAT" in entry.outcome_tag else "hit")
 				if entry.damage > 0:
@@ -121,6 +125,8 @@ static func status_id_of(entry: ActionLogEntry) -> String:
 static func float_text(entry: ActionLogEntry) -> String:
 	match entry.category:
 		"ATTACK":
+			if entry.outcome_tag == "MISS":
+				return "Miss"
 			var txt: String = "-%d%s" % [entry.damage, " [MIT]" if "MITIGAT" in entry.outcome_tag else ""]
 			return txt + ("  💀 DEFEATED!" if entry.outcome_tag == "DEFEATED" else "")
 		"DEFEND":
@@ -138,6 +144,8 @@ static func float_text(entry: ActionLogEntry) -> String:
 static func float_color(entry: ActionLogEntry) -> Color:
 	match entry.category:
 		"ATTACK":
+			if entry.outcome_tag == "MISS":
+				return Color(0.8, 0.8, 0.8)
 			if entry.outcome_tag == "DEFEATED":
 				return Color(1.0, 0.25, 0.25)
 			return Color(0.4, 0.85, 1.0) if "MITIGAT" in entry.outcome_tag else Color(1.0, 0.35, 0.35)

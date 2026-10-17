@@ -117,7 +117,7 @@ static func _test_settings() -> bool:
 	SettingsFile.set_value("audio/ui", 0.35)
 	checks["saved"] = SettingsFile.save() == OK and FileAccess.file_exists(cfg_path)
 	SettingsFile.use_path(cfg_path)   # drops the in-memory file
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["round trip"] = is_equal_approx(SettingsFile.get_float("audio/ui"), 0.35) and is_equal_approx(SettingsFile.get_float("audio/sfx"), 1.0)
 	var bad := ConfigFile.new()
 	bad.set_value("audio", "master", "loud")
