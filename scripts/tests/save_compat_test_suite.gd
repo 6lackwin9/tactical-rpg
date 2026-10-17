@@ -66,6 +66,12 @@ static func _check_version(version: int) -> bool:
 			checks["world clock"] = g.time == 240
 		else:
 			checks["clock defaulted"] = g.time == 0
+		if version >= 6:
+			checks["supplies"] = g.party.supplies == 7
+			var again: Dictionary = SaveGame.decode(JSON.stringify({"format": SaveGame.FORMAT, "version": SaveGame.VERSION, "saved_at": 1, "game_state": g.to_dict()}))
+			checks["round-trips"] = DictUtil.to_bool(again["ok"]) and g.equals(GameState.of(again["state"]))
+		else:
+			checks["supplies migrated"] = g.party.supplies == PartyState.SUPPLIES_START   # TRAV2-L: v5 -> v6
 	var migrated: Dictionary = SaveMigrations.migrate(envelope)
 	checks["migrated to current"] = DictUtil.dict_of(migrated["data"]).get("version", 0) == SaveGame.VERSION
 	return TestHelpers.report(TAG, "save_v%d" % version, checks)

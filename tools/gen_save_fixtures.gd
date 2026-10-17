@@ -34,12 +34,15 @@ func _init() -> void:
 	g.explore = {"steps": 9, "next_at": 20, "loc_steps": 4, "last_safe": "ashlands:warden_keep"}
 	g.position = Vector2i(2, 3)
 	g.time = 240
+	g.party.supplies = 7
 	var errors: Array[String] = g.validate()
 	if not errors.is_empty():
 		push_error("gen_save_fixtures: played state invalid: %s" % str(errors))
 		quit(1)
 		return
-	var v5: Dictionary = g.to_dict()
+	var v6: Dictionary = g.to_dict()
+	var v5: Dictionary = v6.duplicate(true)
+	DictUtil.dict_of(v5["party"]).erase("supplies")
 	var v4: Dictionary = v5.duplicate(true)
 	v4.erase("time")
 	var v3: Dictionary = v4.duplicate(true)
@@ -51,7 +54,7 @@ func _init() -> void:
 	v2["location_id"] = "warden_keep"   # v2 saves had an unqualified location id
 	var v1: Dictionary = v2.duplicate(true)
 	v1.erase("loot_claimed")
-	var by_version: Dictionary = {1: v1, 2: v2, 3: v3, 4: v4, 5: v5}
+	var by_version: Dictionary = {1: v1, 2: v2, 3: v3, 4: v4, 5: v5, 6: v6}
 	for version: int in range(1, SaveGame.VERSION + 1):
 		if not by_version.has(version):
 			push_error("gen_save_fixtures: no derivation for save version %d; add one to by_version first (nothing written)." % version)

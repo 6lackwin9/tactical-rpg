@@ -1190,6 +1190,9 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	var gold: Variant = m.get("start_gold", -1)
 	if not (gold is int) or DictUtil.to_int(gold) < -1 or DictUtil.to_int(gold) > 99999:
 		errors.append("Start gold must be -1 (inherited) or 0..99999.")
+	var supplies: Variant = m.get("start_supplies", -1)
+	if not (supplies is int) or DictUtil.to_int(supplies) < -1 or DictUtil.to_int(supplies) > PartyState.SUPPLIES_MAX:
+		errors.append("Start supplies must be -1 (inherited) or 0..99.")
 	errors.append_array(DialogueRules.service_lines_errors(m.get("service_lines", {}), "Service lines"))
 	return errors
 

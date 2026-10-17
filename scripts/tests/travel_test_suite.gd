@@ -7,6 +7,8 @@ extends RefCounted
 # the world_map exit node rule in MapRules, reference scans and inheritance of the world kind `routes`.
 # Runtime (checks 5-17, TravelRuntimeChecks): graph, fog, path, trips, chances, scripted fights, determinism, outcomes,
 # cross-world, menu, save v5. Scenes (WorldMapChecks): the debug world map and the region map hand-over.
+# TRAV2-L (supplies, schema slice; checks T1-T5): PartyState.supplies, save v6, manifest start_supplies, shop
+# supply_price, chest supplies. The save_v6.json fixture load and round trip live in SaveCompatTestSuite.
 # Fixtures: hand-built worlds in an EMPTY sandbox world root and a sandbox map file; the shipped catalog is only read
 # (a combat zone picked by rule), shipped data is never written.
 # ==============================================================================
@@ -90,6 +92,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_refs_and_inheritance() and ok
 			QuestCatalog.use_path(SANDBOX + "/quests.json")
 			SaveGame.set_base_dir(SANDBOX + "/saves")
+			ok = _test_supplies_schema() and ok   # TRAV2-L checks 1-5
 			ok = TravelRuntimeChecks.run() and ok   # commit 2: checks 5-17
 			ok = WorldMapChecks.run(tree_parent) and ok   # commit 3: debug world map scene, region map hand-over
 			SaveGame.reset_base_dir()
@@ -285,3 +288,126 @@ static func _graph_has_world(world_id: String, other: String) -> bool:
 static func _reload_equal(before: Dictionary) -> bool:
 	WorldCatalog.reload_from_disk()
 	return JsonUtil.deep_equal(WorldCatalog.get_own(W, "routes", "r_scan"), before)
+
+# ------------------------------------------------------------------------------
+# TRAV2-L checks 1-5: supplies schema (party counter, save v6, manifest, shop, chest)
+# ------------------------------------------------------------------------------
+
+static func _supplies_errors(p: PartyState) -> Array[String]:
+	var out: Array[String] = []
+	for e: String in p.validate():
+		if e.contains("supplies"):
+			out.append(e)
+	return out
+
+static func _party_at(n: int) -> PartyState:
+	var p := PartyState.new()
+	p.supplies = n
+	return p
+
+static func _test_supplies_schema() -> bool:
+	var ok: bool = true
+	var unit: String = TravelRuntimeChecks._pick_unit("party")
+	ok = _report("TRAV2 fixture: a party unit picked by rule", {"picked": not unit.is_empty()}) and ok
+	if unit.is_empty():
+		return false
+	ok = _test_supplies_party() and ok
+	ok = _test_supplies_save(unit) and ok
+	ok = _test_supplies_manifest(unit) and ok
+	ok = _test_supplies_shop(unit) and ok
+	ok = _test_supplies_chest() and ok
+	return ok
+
+static func _test_supplies_party() -> bool:
+	var checks: Dictionary = {}
+	checks["-1 fails"] = _one(_supplies_errors(_party_at(-1)), "supplies must be 0..%d." % PartyState.SUPPLIES_MAX)
+	checks["100 fails"] = _one(_supplies_errors(_party_at(PartyState.SUPPLIES_MAX + 1)), "supplies must be 0..")
+	checks["0 and 99 pass"] = _supplies_errors(_party_at(0)).is_empty() and _supplies_errors(_party_at(PartyState.SUPPLIES_MAX)).is_empty()
+	var loaded: PartyState = PartyState.from_dict({"members": [], "supplies": "ten"})
+	checks["a String loads as -1 and fails"] = loaded.supplies == -1 and _supplies_errors(loaded).size() == 1
+	checks["missing loads as 0"] = PartyState.from_dict({"members": []}).supplies == 0
+	checks["to_dict key"] = DictUtil.to_int(_party_at(12).to_dict().get("supplies", -1)) == 12 and PartyState.from_dict(_party_at(12).to_dict()).supplies == 12
+	var p: PartyState = _party_at(60)
+	var added: int = p.add_supplies(50)
+	checks["add 50 from 60: returns 39, leaves 99"] = added == PartyState.SUPPLIES_MAX - 60 and p.supplies == PartyState.SUPPLIES_MAX
+	var q: PartyState = _party_at(3)
+	var spent: int = q.spend_supplies(5)
+	checks["spend 5 from 3: returns 3, leaves 0"] = spent == 3 and q.supplies == 0
+	var r: PartyState = _party_at(20)
+	checks["negative arguments change nothing"] = r.add_supplies(-5) == 0 and r.spend_supplies(-5) == 0 and r.supplies == 20
+	return _report("TRAV2 check 1: party supplies range, load rule, add / spend clamps", checks)
+
+static func _test_supplies_save(unit: String) -> bool:
+	var checks: Dictionary = {}
+	checks["version 6"] = SaveGame.VERSION >= 6
+	var v5_in: Dictionary = {"world_id": "w", "party": {"members": [], "gold": 7}, "shops": {}, "time": 3}
+	var v5: Dictionary = SaveMigrations.migrate({"version": 5, "game_state": v5_in}, 6)
+	var expect: Dictionary = v5_in.duplicate(true)
+	DictUtil.dict_of(expect["party"])["supplies"] = PartyState.SUPPLIES_START
+	checks["v5 -> v6 adds party.supplies only"] = DictUtil.to_bool(v5["ok"]) and JsonUtil.deep_equal(DictUtil.dict_of(v5["data"]).get("game_state", {}), expect)
+	var no_party: Dictionary = SaveMigrations.migrate({"version": 5, "game_state": {"world_id": "w", "party": 3}}, 6)
+	checks["a non-object party is left alone"] = DictUtil.to_bool(no_party["ok"]) and DictUtil.dict_of(DictUtil.dict_of(no_party["data"])["game_state"]).get("party", null) == 3
+	var gs: GameState = GameState.of(NewGame.create(W, [unit] as Array[String], 77)["state"])
+	checks["state built"] = gs != null
+	if gs != null:
+		gs.party.supplies = PartyState.SUPPLIES_MAX + 1
+		checks["write refuses supplies 100"] = TestHelpers.any_contains(SaveGame.write(gs, 4), "supplies must be 0..")
+		gs.party.supplies = 6
+		var wrote: bool = SaveGame.write(gs, 4).is_empty()
+		var back: GameState = GameState.of(SaveGame.read(4)["state"]) if wrote else null
+		checks["supplies round-trip through a slot"] = back != null and back.party.supplies == 6 and DictUtil.to_int(SaveGame.peek(4).get("version", 0)) == SaveGame.VERSION
+		var _gone: bool = SaveGame.delete(4)
+	return _report("TRAV2 check 2: save v6 (v5 migrates to supplies %d, write refuses 100)" % PartyState.SUPPLIES_START, checks)
+
+static func _test_supplies_manifest(unit: String) -> bool:
+	var checks: Dictionary = {}
+	checks["manifest default -1"] = DictUtil.to_int(WorldCatalog.manifest(W).get("start_supplies", 0)) == -1
+	checks["fixture manifest valid"] = WorldCatalog.manifest_errors(W).is_empty()
+	var msg: String = "Start supplies must be -1 (inherited) or 0..99."
+	for bad: int in [-2, PartyState.SUPPLIES_MAX + 1]:
+		WorldCatalog.update_manifest(W, {"start_supplies": bad})
+		checks["start_supplies %d: one error" % bad] = _one(WorldCatalog.manifest_errors(W), msg)
+	# A non-whole value never reaches the stored manifest: the int field coerces it (WorldSchema.normalize), so the
+	# validator's type guard covers raw callers only; the stored value is a whole number again.
+	WorldCatalog.update_manifest(W, {"start_supplies": "ten"})
+	checks["start_supplies 'ten' is coerced to a whole number"] = WorldCatalog.manifest(W).get("start_supplies", null) is int
+	checks["0 valid"] = WorldCatalog.update_manifest(W, {"start_supplies": 0}).is_empty() and WorldCatalog.manifest_errors(W).is_empty()
+	checks["99 valid"] = WorldCatalog.update_manifest(W, {"start_supplies": PartyState.SUPPLIES_MAX}).is_empty() and WorldCatalog.manifest_errors(W).is_empty()
+	checks["parent 4 stored"] = WorldCatalog.update_manifest(W, {"start_supplies": 4}).is_empty()
+	checks["child -1 inherits the parent's 4"] = DictUtil.to_int(WorldCatalog.manifest(KID).get("start_supplies", 0)) == -1 and TravelRules.start_supplies(KID) == 4 and TravelRules.start_supplies(W) == 4
+	checks["no value anywhere: SUPPLIES_START"] = TravelRules.start_supplies(LONE) == PartyState.SUPPLIES_START and PartyState.SUPPLIES_START == 10
+	var kid: GameState = GameState.of(NewGame.create(KID, [unit] as Array[String], 77)["state"])
+	var lone: GameState = GameState.of(NewGame.create(LONE, [unit] as Array[String], 77)["state"])
+	checks["NewGame.create uses the resolved value"] = kid != null and kid.party.supplies == 4 and lone != null and lone.party.supplies == PartyState.SUPPLIES_START
+	checks["reset"] = WorldCatalog.update_manifest(W, {"start_supplies": -1}).is_empty() and TravelRules.start_supplies(KID) == PartyState.SUPPLIES_START
+	return _report("TRAV2 check 3: manifest start_supplies validation, lineage resolver, NewGame", checks)
+
+static func _test_supplies_shop(unit: String) -> bool:
+	var checks: Dictionary = {}
+	checks["keeper stored"] = WorldCatalog.upsert(W, "characters", {"id": "tv_keeper", "name": "Keeper", "base_unit": unit}).is_empty()
+	checks["schema default 0"] = DictUtil.to_int(WorldSchema.defaults("shops").get("supply_price", -1)) == 0
+	var shop: Dictionary = {"id": "s_sup", "name": "Supply shop", "keeper": "tv_keeper"}
+	var plain: Array[String] = _errs("shops", shop)
+	if not plain.is_empty():
+		print("      plain shop errors: %s" % str(plain))
+	checks["a shop without the field validates"] = plain.is_empty()
+	var msg: String = "Supply price must be 0 (not sold) or 1..%d." % ShopRules.SUPPLY_PRICE_MAX
+	for bad: int in [-1, ShopRules.SUPPLY_PRICE_MAX + 1]:
+		checks["supply_price %d: one error" % bad] = _one(_errs("shops", shop.merged({"supply_price": bad})), msg)
+	# 2.5: the catalog path coerces the int field (2, valid); the raw rule refuses it.
+	checks["supply_price 2.5 (raw): one error"] = _one(ShopRules.shop_errors(W, shop.merged({"supply_price": 2.5})), msg)
+	checks["0 and 999 valid"] = _errs("shops", shop.merged({"supply_price": 0})).is_empty() and _errs("shops", shop.merged({"supply_price": ShopRules.SUPPLY_PRICE_MAX})).is_empty()
+	checks["SUPPLY_PRICE_MAX 999"] = ShopRules.SUPPLY_PRICE_MAX == 999
+	return _report("TRAV2 check 4: shop supply_price validation (0 = not sold)", checks)
+
+static func _test_supplies_chest() -> bool:
+	var checks: Dictionary = {}
+	var tmpl: Dictionary = {"anchors": [{"id": MapRules.SPAWN, "x": 1, "y": 1}, {"id": "a_chest", "x": 2, "y": 2}], "paths": {}}
+	var chest: Dictionary = {"id": "box", "kind": "chest", "anchor": "a_chest"}
+	var msg: String = "Marker 'box': supplies must be a whole number 0..%d." % MapRules.CHEST_SUPPLIES_MAX
+	checks["marker default 0"] = DictUtil.to_int(DictUtil.dict_of(MapRules.MARKER_KINDS["chest"]).get("supplies", -1)) == 0
+	checks["supplies -1 errors"] = TestHelpers.any_contains(MapRules.markers_errors(W, {}, tmpl, [chest.merged({"supplies": -1})]), msg)
+	checks["supplies 100 errors"] = _one(MapRules.markers_errors(W, {}, tmpl, [chest.merged({"supplies": MapRules.CHEST_SUPPLIES_MAX + 1})]), msg)
+	checks["supplies-only chest valid"] = MapRules.markers_errors(W, {}, tmpl, [chest.merged({"supplies": 3})]).is_empty()
+	checks["empty chest (supplies 0) still errors"] = _one(MapRules.markers_errors(W, {}, tmpl, [chest.merged({"supplies": 0})]), "Chest 'box' holds nothing.")
+	return _report("TRAV2 check 5: chest supplies validation and the holds-nothing rule", checks)

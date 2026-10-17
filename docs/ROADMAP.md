@@ -19,7 +19,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S7 | Party and progression: persistent unit state (spend, learned skills, passives), level-up UI, XP | done (M3 data model; level-up, party, loadout and gear screens in UI2-L) | S2 | |
 | S8 | Quests and lore runtime: quest state, rewards granting passives/skills/items, flags | done (M4-L, M4-A, QUEST2: quest runtime, flag registry, world loot table, ready flag) | S6, S7 | Sources of passives |
 | S9 | Region map and exploration: tiles, locations, encounters triggers, interactions | done (EXP1-L, EXP1-A; map fights still end in debug outcome buttons until BATTLE1, goal G1) | S6, S8 | README System 2; inputs below |
-| S10 | World map and travel: routes, travel events, supplies | approved (TRAV1, after BATTLE1; TRAV2 supplies idea) | S9 | README System 1; inputs below |
+| S10 | World map and travel: routes, travel events, supplies | TRAV1 done; TRAV2 supplies approved (TRAV2-L, TRAV2-A) | S9 | README System 1; inputs below |
 | S11 | NPCs and dialogue: dialogue trees, shops, factions reputation | in-progress (DLG1 dialogue and shops done; DLG1-F open; REP1 reputation approved) | S8 | README System 9; inputs below |
 | S12 | Advanced combat: combos, terrain effects, status expansion, skill upgrades | in-progress (S12-A engine done in M1: ally-target support skills, gap-close, haste/bleed/taunt; riposte done in M2a; S12S status slice done; S12T-L terrain rules, S12T-A terrain rows, S12C-L combo engine and S12C-A combo data on develop) | S1, S2 | README System 6 |
 | S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; UI1-L menus, 5 shared slots + autosave, SAVE-IO export / import) | S7 | |
@@ -81,7 +81,7 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 | DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
 | TRAV1 | TRAV1-L and TRAV1-A done (2026-10-17, develop) | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files) and BATTLE1 (road fights use the battle link, goal G4); save v5 |
 | REP1 | REP1-L and REP1-A done (2026-10-17, develop) | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
-| TRAV2 | idea | TRAV1, DLG1 | supplies |
+| TRAV2 | approved (user 2026-10-17 23:25, card 'Both'; TRAV2-L, TRAV2-A) | TRAV1, DLG1 | supplies: one counter 0..99, a leg costs its route time, shops and chests refill, road chance x1.5 at 0, no fail state; save v6 |
 
 EXP1, DLG1, TRAV1 and REP1 all edit `world_schema` and `world_catalog` (EXP1, DLG1 and TRAV1 also `game_state` and the save files): run the logic parts in sequence EXP1-L, DLG1-L, TRAV1-L, REP1-L, one save version bump each (v3, v4, v5; REP1 none). Each asset part may run beside the next logic part (data only).
 

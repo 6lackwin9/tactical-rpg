@@ -129,6 +129,8 @@ static func _world_fields() -> Array[Dictionary]:
 		_f("start_party", "Start party", "refs", [], {"ref": "base:units", "ref_filter": {"side": "party"}, "help": "Party-side units a new game starts with (at most 4). Empty = the nearest parent world's."}),
 		# Dialogue and gold (DLG1-L, S11); ranges are checked by WorldCatalog.manifest_errors, not clamped here.
 		_f("start_gold", "Start gold", "int", -1, {"help": "Party gold of a new game (-1 = the nearest parent world's, else 0)."}),
+		# Travel supplies (TRAV2-L, S10); the range is checked by WorldCatalog.manifest_errors.
+		_f("start_supplies", "Start supplies", "int", -1, {"help": "Party supplies of a new game (-1 = the nearest parent world's, else 10); 0..99."}),
 		_f("service_lines", "Service lines", "json", {}, {"help": "{\"greeting\": \"{npc} nods.\"}: overrides of the base service lines (data/dialogue/services.json), merged along the lineage (nearest wins)."}),
 	]
 
@@ -270,6 +272,7 @@ static func _shop_fields() -> Array[Dictionary]:
 		_f("stock", "Stock", "json", [], {"help": "[{\"item\": \"base item id\", \"count\": -1, \"price\": -1, \"requires_flags\": []}]; count -1 = unlimited, price -1 = derived from the item value."}),
 		_f("loot", "Loot for sale", "json", [], {"help": "[{\"loot\": \"world loot ref\", \"price\": 150}]; item loot only, sold once (claimed)."}),
 		_f("buy_mult", "Buy multiplier", "float", 1.0, {"help": "0.5..3.0: derived buy price = ceil(value x mult)."}),
+		_f("supply_price", "Supply price", "int", 0, {"help": "Gold per travel supply (fixed, unlimited, ignores multipliers and reputation); 0 = sells no supplies; 1..999."}),
 		_f("sell_mult", "Sell multiplier", "float", 0.5, {"help": "0.0..1.0: sell price = floor(value x mult); 0 = buys nothing."}),
 		_f("buys", "Buys types", "json", ShopRules.buy_types(), {"help": "Item types the shop buys (every item type but QUEST by default; never QUEST)."}),
 		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; the shop is closed while any fails."}),

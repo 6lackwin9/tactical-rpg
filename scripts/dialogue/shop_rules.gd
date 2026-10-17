@@ -26,6 +26,7 @@ const SELL_MULT_MAX: float = 1.0
 const UNLIMITED: int = -1
 const DERIVED: int = -1
 const BUY_MAX: int = 99   # most of one offer per buy (stock counts are 1..99); keeps price x count far from int overflow
+const SUPPLY_PRICE_MAX: int = 999   # TRAV2-L: gold per travel supply (0 = sells none)
 const REP_NEUTRAL: int = 100   # rb = rs of the neutral band (and of a keeper without a faction)
 
 # Item types a shop may buy: every ItemFamilies type but QUEST (also the schema default of `buys`).
@@ -48,6 +49,9 @@ static func shop_errors(world_id: String, e: Dictionary) -> Array[String]:
 	errors.append_array(_loot_errors(world_id, e.get("loot", [])))
 	errors.append_array(_mult_errors(e.get("buy_mult", 1.0), "Buy multiplier", BUY_MULT_MIN, BUY_MULT_MAX))
 	errors.append_array(_mult_errors(e.get("sell_mult", 0.5), "Sell multiplier", SELL_MULT_MIN, SELL_MULT_MAX))
+	var supply_price: Variant = e.get("supply_price", 0)
+	if not (supply_price is int) or DictUtil.to_int(supply_price) < 0 or DictUtil.to_int(supply_price) > SUPPLY_PRICE_MAX:
+		errors.append("Supply price must be 0 (not sold) or 1..%d." % SUPPLY_PRICE_MAX)
 	errors.append_array(_buys_errors(e.get("buys", [])))
 	errors.append_array(QuestRules.condition_errors(e.get("requires_flags", []), "Open when"))
 	return errors

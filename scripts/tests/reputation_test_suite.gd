@@ -116,7 +116,7 @@ static func _test_shipped() -> bool:
 	checks["rep key"] = RepRules.key("ashlands:ember_wardens") == "rep.ashlands.ember_wardens" and GameState.flag_key_ok(RepRules.key("ashlands:ember_wardens"))
 	checks["rep key round trip"] = RepRules.faction_qid_of(RepRules.key("a_b:c_d")) == "a_b:c_d" and RepRules.faction_qid_of("rep.x").is_empty()
 	# Check 13 (part): no save version bump; the newest committed fixture still decodes against the shipped worlds.
-	checks["save version unchanged"] = SaveGame.VERSION == 5
+	checks["save version unchanged"] = SaveGame.VERSION >= 5   # REP1 added no step; 6 since TRAV2-L
 	var v5: Dictionary = SaveGame.decode(FileAccess.get_file_as_string(SaveCompatTestSuite.fixture_path(SaveGame.VERSION)))
 	checks["v5 save loads unchanged"] = DictUtil.to_bool(v5["ok"]) and GameState.of(v5["state"]) != null
 	return _report("Shipped data validates with the reputation field; constants", checks)
@@ -502,7 +502,7 @@ static func _test_saves() -> bool:
 	var back: GameState = GameState.of(read["state"])
 	checks["round trip"] = written and DictUtil.to_bool(read["ok"]) and back != null and back.get_flag(_rep_key(FA), null) is int and DictUtil.to_int(back.get_flag(_rep_key(FA), 0)) == -37 and DictUtil.to_int(back.get_flag(_rep_key(FB), 0)) == 100
 	checks["standing after load"] = back != null and RepRules.standing(back, FA) == -37 and RepRules.band(RepRules.standing(back, FA)) == "unfriendly"
-	checks["written at the current version"] = SaveGame.VERSION == 5 and DictUtil.to_int(SaveGame.peek(1).get("version", 0)) == SaveGame.VERSION
+	checks["written at the current version"] = SaveGame.VERSION >= 5 and DictUtil.to_int(SaveGame.peek(1).get("version", 0)) == SaveGame.VERSION
 	return _report("Saves: rep flags round-trip, no version bump (check 13)", checks)
 
 # Display (REP1-L 2.4): the dialogue and shop panels show the band; rep-gated choices get the generated prefix.

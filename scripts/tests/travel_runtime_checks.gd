@@ -418,7 +418,7 @@ static func _test_save_v5() -> bool:
 	var st: GameState = GameState.of(read["state"])
 	checks["v4 migrates to time 0 and nothing else changes"] = DictUtil.to_bool(read["ok"]) and st != null and st.time == 0 and st.equals(gs) and JsonUtil.strings(read["warnings"]).is_empty()
 	gs.time = 7
-	checks["time round-trips"] = SaveGame.write(gs, 3).is_empty() and GameState.of(SaveGame.read(3)["state"]).time == 7 and SaveGame.VERSION == 5
+	checks["time round-trips"] = SaveGame.write(gs, 3).is_empty() and GameState.of(SaveGame.read(3)["state"]).time == 7 and SaveGame.VERSION >= 5
 	var neg: GameState = GameState.from_dict(gs.to_dict())
 	neg.time = -1
 	checks["negative time fails validate and write"] = TestHelpers.any_contains(neg.validate(), "time must be a whole number >= 0.") and not SaveGame.write(neg, 3).is_empty()

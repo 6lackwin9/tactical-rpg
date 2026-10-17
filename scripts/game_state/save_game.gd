@@ -12,7 +12,7 @@ extends RefCounted
 
 # A VERSION bump needs a new scripts/tests/fixtures/saves/save_v<N>.json in the same task (tools/gen_save_fixtures.gd);
 # a format-breaking change updates the fixtures too. SaveCompatTestSuite fails otherwise.
-const VERSION: int = 5   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L); 5: world clock time (step 4 -> 5, TRAV1-L)
+const VERSION: int = 6   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L); 5: world clock time (step 4 -> 5, TRAV1-L); 6: party supplies (step 5 -> 6, TRAV2-L)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 const AUTOSAVE_SLOT: int = 0

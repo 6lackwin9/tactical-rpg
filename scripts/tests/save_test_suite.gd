@@ -231,7 +231,7 @@ static func _test_migrations() -> bool:
 	var v4_expect: Dictionary = v4_in.duplicate(true)
 	v4_expect["time"] = 0
 	var checks: Dictionary = {
-		"v4_to_v5_adds_time_only": DictUtil.to_bool(v4["ok"]) and JsonUtil.deep_equal(DictUtil.dict_of(v4["data"]).get("game_state", {}), v4_expect) and SaveGame.VERSION == 5,
+		"v4_to_v5_adds_time_only": DictUtil.to_bool(v4["ok"]) and JsonUtil.deep_equal(DictUtil.dict_of(v4["data"]).get("game_state", {}), v4_expect) and SaveGame.VERSION >= 5,   # 6 since TRAV2-L
 		"v3_to_v4_adds_gold_and_shops": DictUtil.to_bool(v3["ok"]) and DictUtil.dict_of(v3_state.get("party", {})).get("gold", -1) == 0 and JsonUtil.deep_equal(v3_state.get("shops", null), {}) and SaveGame.VERSION >= 4,   # 5 since TRAV1-L
 		"missing_step_fails": not DictUtil.to_bool(no_step["ok"]),
 		"step_applied": DictUtil.to_bool(up["ok"]) and DictUtil.dict_of(data["game_state"])["location_id"] == "migrated_old" and DictUtil.to_int(data["version"]) == 2,

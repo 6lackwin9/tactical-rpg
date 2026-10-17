@@ -34,6 +34,7 @@ const DEFAULT_STEPS_MAX: int = 20
 const MAX_CHEST_KEYS: int = 8
 const CHEST_COUNT_MAX: int = 99
 const CHEST_GOLD_MAX: int = 9999   # DLG1-L (S11)
+const CHEST_SUPPLIES_MAX: int = 99   # TRAV2-L (S10)
 
 const TEMPLATE_FIELDS: Array[String] = ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "tags"]
 const BINDING_KEYS: Array[String] = ["encounters", "elites", "elite_pct", "steps_min", "steps_max"]
@@ -46,7 +47,7 @@ const MARKER_KINDS: Dictionary = {
 	"encounter": {"encounter": "", "trigger": "touch", "radius": 1, "once": true},
 	"roamer": {"encounter": "", "path": "", "radius": 0, "once": true},
 	"npc": {"character": ""},
-	"chest": {"items": {}, "loot": "", "gold": 0},
+	"chest": {"items": {}, "loot": "", "gold": 0, "supplies": 0},
 	"lore": {"lore": ""},
 	"point": {},
 }
@@ -602,7 +603,10 @@ static func _chest_errors(world_id: String, mid: String, m: Dictionary) -> Array
 	var gold: Variant = m["gold"]
 	if not (gold is int) or DictUtil.to_int(gold) < 0 or DictUtil.to_int(gold) > CHEST_GOLD_MAX:
 		errors.append("Marker '%s': gold must be a whole number 0..%d." % [mid, CHEST_GOLD_MAX])
-	if items.is_empty() and loot.is_empty() and DictUtil.to_int(gold) <= 0:
+	var supplies: Variant = m.get("supplies", 0)
+	if not (supplies is int) or DictUtil.to_int(supplies) < 0 or DictUtil.to_int(supplies) > CHEST_SUPPLIES_MAX:
+		errors.append("Marker '%s': supplies must be a whole number 0..%d." % [mid, CHEST_SUPPLIES_MAX])
+	if items.is_empty() and loot.is_empty() and DictUtil.to_int(gold) <= 0 and DictUtil.to_int(supplies) <= 0:
 		errors.append("Chest '%s' holds nothing." % mid)
 	return errors
 

@@ -233,6 +233,17 @@ static func leg_chance(gs: GameState, route: Dictionary) -> int:
 		return repeat_chance(route)
 	return DictUtil.to_int(route.get("encounter_pct", 0))
 
+# The party supplies of a new game in `world_id` (TRAV2-L): the nearest manifest (the world, then up the lineage) with
+# start_supplies >= 0, else PartyState.SUPPLIES_START.
+static func start_supplies(world_id: String) -> int:
+	var chain: Array[String] = WorldCatalog.lineage(world_id)
+	chain.reverse()
+	for w: String in chain:
+		var v: int = DictUtil.to_int(WorldCatalog.manifest(w).get("start_supplies", -1), -1)
+		if v >= 0:
+			return v
+	return PartyState.SUPPLIES_START
+
 static func is_visited(gs: GameState, location_qid: String) -> bool:
 	return gs.get_flag(MapRules.visited_flag(location_qid), false) == true
 
