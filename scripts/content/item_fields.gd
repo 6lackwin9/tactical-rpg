@@ -50,7 +50,7 @@ static func build() -> Array[Dictionary]:
 		_f("value", "Value (gold)", "int", 10, {"min": 0, "max": 99999}),
 		_f("description", "Description", "text", ""),
 		_f("damage_type", "Damage type", "enum", "", {"options": ["", "slash", "pierce", "blunt", "magic", "fire"]}),
-		_f("icon_id", "Icon id", "string", "", {"help": "Optional bespoke icon (ItemArt.UNIQUE_ICONS); empty = icon by gear type."}),
+		_f("icon_id", "Icon id", "string", "", {"help": "Optional icon key (any item art key: bespoke, type or manifest); empty = icon by gear type."}),
 		_f("starter_stash", "In starter stash", "bool", false, {"help": "Added to the party stash of every encounter and the Gear Dojo."}),
 		_f("special", "Special item", "bool", false, {"when": equip, "help": "May exceed the class gear budget; needs a special note."}),
 		_f("special_note", "Special note", "text", "", {"when": equip, "help": "The trade-off or playstyle that justifies a special item."}),

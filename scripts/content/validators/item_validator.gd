@@ -28,6 +28,9 @@ static func item_errors(e: Dictionary, family: Dictionary = {}, inherit: bool = 
 
 static func item_problems(e: Dictionary, family: Dictionary = {}, inherit: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	var icon: String = str(e.get("icon_id", ""))
+	if not icon.is_empty() and not AssetRegistry.has_key("item", icon):
+		out.append(problem("icon_id", 0, "Icon '%s' isn't a known item icon key." % icon))
 	if not inherit:
 		for message: String in _legacy_errors(e):
 			out.append(problem("", 0, message))
