@@ -1,7 +1,7 @@
 # Web (HTML5) build: exported with the "Web" preset (single-threaded, so no
-# SharedArrayBuffer / cross-origin isolation headers are needed). It builds and deploys once
-# a day (19:07 UTC, skipped when main has not changed since the last deploy) and on demand
-# (workflow_dispatch, always deploys). Each run uploads the "web-build" artifact, pushes to
+# SharedArrayBuffer / cross-origin isolation headers are needed). The Merge & Release thread
+# starts it (workflow_dispatch, always deploys) right after each release PR merges, and on
+# demand; a 19:07 UTC fallback run skips when main has not changed since the last deploy. Each run uploads the "web-build" artifact, pushes to
 # itch.io and to GitHub Pages when those are configured (see docs/workflow/web.md). PRs into
 # main build it only when they touch the web export itself (preset or this workflow).
 name: web
