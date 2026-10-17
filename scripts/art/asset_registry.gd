@@ -30,12 +30,16 @@ const DEFAULT_SIZES: Dictionary = {
 }
 const TOKEN_SIZE: Vector2i = Vector2i(128, 128)
 const TOKEN_INNER: Rect2i = Rect2i(12, 12, 104, 104)
-const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_center"]
+const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_poi"]
 
 # Ids that already logged their "failed to load" warning this session, and how many warnings were logged.
 static var _warned: Dictionary = {}
 static var _warn_count: int = 0
 static var _quiet: bool = false
+# Playtest hook (PLAYTEST1): when valid, called as (ns, key, variant, source) for every resolution that is not a file
+# (source template, fallback, missing_file) and every row file that does not load (load_failed). Empty = off; only the
+# playtest recorder sets it, and resolution behaves the same either way.
+static var resolve_observer: Callable = Callable()
 # Skill family ids (template keys of the skill namespace), cached; see skill_family_ids.
 static var _family_list: Array[String] = []
 static var _family_set: Dictionary = {}
@@ -191,13 +195,22 @@ static func resolve(ns: String, key: String, variant: String) -> Dictionary:
 		if not str(row.get("alias_of", "")).is_empty():
 			row = {}   # one hop only (validation refuses chains; a hand-edited file falls back to the template)
 	var path: String = str(row.get("path", ""))
+	var missing: bool = false
 	if not path.is_empty():
 		if file_exists(path):
 			return {"source": "file", "key": k, "path": path, "id": str(row.get("id", ""))}
 		warn_once(str(row.get("id", "")))
+		missing = true
 	if _has_template(ns, k):
+		_observe(ns, key, variant, "missing_file" if missing else "template")
 		return {"source": "template", "key": k, "path": "", "id": ""}
+	_observe(ns, key, variant, "missing_file" if missing else "fallback")
 	return {"source": "fallback", "key": str(FALLBACK_KEYS.get(ns, "")), "path": "", "id": ""}
+
+# Reports one resolution to the playtest observer (no-op while it is empty).
+static func _observe(ns: String, key: String, variant: String, source: String) -> void:
+	if resolve_observer.is_valid():
+		resolve_observer.call(ns, key, variant, source)
 
 # The texture of ns/key/variant (rule 1); never null for texture namespaces (null for sfx / music). `team` is the
 # UnitArt.Team for units and the rarity for items (0 when negative); other namespaces ignore it. A row file that fails
@@ -214,6 +227,7 @@ static func texture(ns: String, key: String, variant: String, team: int = -1) ->
 		if tex != null:
 			return tex
 		warn_once(str(r["id"]))
+		_observe(ns, key, v, "load_failed")
 		if not _has_template(ns, k):
 			k = str(FALLBACK_KEYS.get(ns, ""))
 	return _template_texture(ns, k, v, team)
@@ -229,6 +243,7 @@ static func stream(ns: String, key: String) -> AudioStream:
 	if res is AudioStream:
 		return res
 	warn_once(str(r["id"]))
+	_observe(ns, key, "stream", "load_failed")
 	return null
 
 static func _file_texture(ns: String, variant: String, team: int, id: String, path: String) -> Texture2D:

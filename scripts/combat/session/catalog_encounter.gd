@@ -142,21 +142,20 @@ func _spawn(unit_id: String, display_name: String) -> Combatant:
 	ai_profiles[c] = ContentFactory.ai_profile(entry, c)
 	return c
 
-# Units the centre-ring deployment couldn't fit go to the nearest free tile on
-# their side's half (party south/west, enemies north/east).
+# Units the standard deployment couldn't fit (and reinforcement waves) go to the
+# free tile nearest the arena middle on their side's half (party left, enemies right).
 func _place_leftovers(units: Array[Combatant], party_side: bool) -> void:
 	for c: Combatant in units:
 		if grid.has_combatant(c):
 			continue
 		var best: Vector2i = Vector2i(-1, -1)
 		var best_score: int = 1 << 30
-		for y: int in range(CombatGrid.GRID_SIZE):
-			for x: int in range(CombatGrid.GRID_SIZE):
+		for y: int in range(CombatGrid.GRID_H):
+			for x: int in range(CombatGrid.GRID_W):
 				var cell := Vector2i(x, y)
-				var own_half: bool = (y >= CombatGrid.CENTER.y or x < CombatGrid.CENTER.x) if party_side else (y <= CombatGrid.CENTER.y or x > CombatGrid.CENTER.x)
-				if not own_half or not grid.is_walkable(cell) or grid.is_exit_tile(cell) or grid.is_occupied(cell):
+				if CombatGrid.is_party_half(cell) != party_side or not grid.is_walkable(cell) or grid.is_exit_tile(cell) or grid.is_occupied(cell):
 					continue
-				var score: int = grid.get_distance(cell, CombatGrid.CENTER) * 100 + y * 10 + x
+				var score: int = CombatGrid.centre_distance(cell) * 1000 + y * 20 + x
 				if score < best_score:
 					best_score = score
 					best = cell

@@ -62,17 +62,10 @@ function Invoke-GodotProcess {
 # STEP 1: Refresh Global Class Cache & Symbols
 # ------------------------------------------------------------------------------
 Write-Host "`n[1/4] Verifying global class cache and asset imports..." -ForegroundColor Yellow
-$editorResult = Invoke-GodotProcess -Arguments @("--headless", "--editor", "--quit-after", "50")
+$editorResult = Invoke-GodotProcess -Arguments @("--headless", "--import")
 if ($editorResult.ExitCode -ne 0) {
     Write-Host "[ERROR] Godot editor scan failed with exit code: $($editorResult.ExitCode)" -ForegroundColor Red
     Write-Host $editorResult.Output -ForegroundColor DarkRed
-    exit 1
-}
-# --quit-after 50 can exit before a fresh checkout's PNGs are imported (CI): --import imports everything, then quits
-$importResult = Invoke-GodotProcess -Arguments @("--headless", "--import")
-if ($importResult.ExitCode -ne 0) {
-    Write-Host "[ERROR] Godot asset import failed with exit code: $($importResult.ExitCode)" -ForegroundColor Red
-    Write-Host $importResult.Output -ForegroundColor DarkRed
     exit 1
 }
 Write-Host "  -> Global class cache and imports up to date." -ForegroundColor Green

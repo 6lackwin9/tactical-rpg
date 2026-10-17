@@ -95,7 +95,7 @@ static func _test_key_lists() -> bool:
 	var tiles_ok: bool = true
 	for name: String in Terrain.Type.keys():
 		tiles_ok = tiles_ok and AssetRegistry.has_key("tile", name.to_lower())
-	c["every terrain type is a tile key"] = tiles_ok and AssetRegistry.has_key("tile", "overlay_exit") and AssetRegistry.has_key("tile", "overlay_center")
+	c["every terrain type is a tile key"] = tiles_ok and AssetRegistry.has_key("tile", "overlay_exit") and AssetRegistry.has_key("tile", "overlay_poi")
 	var status_ok: bool = true
 	for id: String in StatusRegistry.ids():
 		status_ok = status_ok and AssetRegistry.has_key("status", id)
@@ -347,7 +347,7 @@ static func _test_delegation() -> bool:
 	c["normalize_class unknown -> unit"] = UnitArt.normalize_class("no_such_key") == "unit"
 	c["normalize_class keeps every class key"] = UnitArt.CLASS_KEYS.all(func(k: String) -> bool: return UnitArt.normalize_class(k) == k)
 	c["tile == template"] = TileArt.tile(Terrain.Type.GRASS, 1) == TileArt.template_tile(Terrain.Type.GRASS, 1) or AssetCatalog.keys_of("tile").has("grass")
-	c["overlays == templates"] = TileArt.overlay("exit") == TileArt.template_overlay("exit") and TileArt.overlay("center") == TileArt.template_overlay("center")
+	c["overlays == templates"] = TileArt.overlay("exit") == TileArt.template_overlay("exit") and TileArt.overlay("poi") == TileArt.template_overlay("poi")
 	var t1: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
 	var t2: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
 	SvgRaster.clear_cache()

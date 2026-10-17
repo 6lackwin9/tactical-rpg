@@ -836,8 +836,8 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 			else:
 				for x: Variant in DictUtil.array_of(e["exits"]):
 					var pair: Array = x if x is Array else []
-					if pair.size() != 2 or DictUtil.to_int(pair[0]) < 0 or DictUtil.to_int(pair[1]) < 0 or DictUtil.to_int(pair[0]) >= CombatGrid.GRID_SIZE or DictUtil.to_int(pair[1]) >= CombatGrid.GRID_SIZE:
-						errors.append("Exit tiles are [x, y] pairs on the 9x9 grid.")
+					if pair.size() != 2 or DictUtil.to_int(pair[0]) < 0 or DictUtil.to_int(pair[1]) < 0 or DictUtil.to_int(pair[0]) >= CombatGrid.GRID_W or DictUtil.to_int(pair[1]) >= CombatGrid.GRID_H:
+						errors.append("Exit tiles are [x, y] pairs on the 12x9 grid.")
 						break
 	return errors
 
@@ -1131,8 +1131,8 @@ static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]
 			if pair.size() != 2:
 				errors.append("Exit tiles are [x, y] pairs.")
 				break
-			if DictUtil.to_int(pair[0]) < 0 or DictUtil.to_int(pair[1]) < 0 or DictUtil.to_int(pair[0]) >= CombatGrid.GRID_SIZE or DictUtil.to_int(pair[1]) >= CombatGrid.GRID_SIZE:
-				errors.append("Exit %s is off the 9x9 grid." % str(pair))
+			if DictUtil.to_int(pair[0]) < 0 or DictUtil.to_int(pair[1]) < 0 or DictUtil.to_int(pair[0]) >= CombatGrid.GRID_W or DictUtil.to_int(pair[1]) >= CombatGrid.GRID_H:
+				errors.append("Exit %s is off the 12x9 grid." % str(pair))
 	else:
 		errors.append("Exit tiles must be a list of [x, y] pairs.")
 	return errors

@@ -4,7 +4,7 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Terrain Tile Art
 # Procedural SVG tiles (54x54) per Terrain.Type with 4 seeded variants each, so
-# zones look natural instead of tiled, plus exit / center overlays that sit on
+# zones look natural instead of tiled, plus the exit overlay that sits on
 # top of any terrain. Variants are chosen deterministically from the coordinate.
 # ==============================================================================
 
@@ -19,9 +19,10 @@ static func tile_at(terrain_type: Terrain.Type, coord: Vector2i) -> Texture2D:
 static func tile(terrain_type: Terrain.Type, variant: int = 0) -> Texture2D:
 	return AssetRegistry.texture("tile", AssetRegistry.tile_key(terrain_type), "v%d" % variant)
 
-# Overlay keys are "overlay_exit" and "overlay_center" (any kind other than exit draws the center ring).
+# Overlay keys are "overlay_exit" (combat exit tiles) and "overlay_poi" (any other kind: the point-of-interest
+# ring, drawn on region map point markers; it was the 9x9 centre-ring landmark until the 12x9 grid).
 static func overlay(kind: String) -> Texture2D:
-	return AssetRegistry.texture("tile", "overlay_exit" if kind == "exit" else "overlay_center", "v0")
+	return AssetRegistry.texture("tile", "overlay_exit" if kind == "exit" else "overlay_poi", "v0")
 
 # The generated tile / overlay (cached "tile|<type>|<variant>" / "overlay|<kind>"); used by AssetRegistry.
 static func template_tile(terrain_type: Terrain.Type, variant: int) -> Texture2D:
@@ -129,7 +130,7 @@ static func overlay_svg(kind: String) -> String:
 		return ('<svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" viewBox="0 0 54 54">' +
 			'<rect x="2" y="2" width="50" height="50" rx="4" fill="#f59e0b" fill-opacity="0.18" stroke="#f59e0b" stroke-width="2.5"/>' +
 			'<path d="M17 32 L27 22 L37 32 M17 40 L27 30 L37 40" fill="none" stroke="#fbbf24" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
-	# center ring landmark
+	# point-of-interest ring
 	return ('<svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" viewBox="0 0 54 54">' +
 		'<circle cx="27" cy="27" r="18" fill="#22d3ee" fill-opacity="0.08" stroke="#22d3ee" stroke-width="2" stroke-opacity="0.8"/>' +
 		'<path d="M27 15 L39 27 L27 39 L15 27 Z" fill="none" stroke="#67e8f9" stroke-width="1.8" stroke-opacity="0.9"/>' +

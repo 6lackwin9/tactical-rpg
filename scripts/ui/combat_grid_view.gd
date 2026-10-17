@@ -3,7 +3,7 @@ extends VBoxContainer
 
 # ==============================================================================
 # Tactical RPG - Combat Grid View Component
-# Manages the 9x9 tactical combat grid, spatial tile rendering, unit token nodes,
+# Manages the 12x9 tactical combat grid, spatial tile rendering, unit token nodes,
 # token selection highlights and hover tooltip cards. Combat animation and floating text
 # live in CombatPresenter (S14-L2), which draws its temporary nodes on fx_layer.
 # ==============================================================================
@@ -18,7 +18,8 @@ signal grid_right_clicked()      # anywhere on the board (planning: undo the las
 signal ghost_clicked(combatant: Combatant)   # a planned-move shadow
 
 const TILE_SIZE: int = 54
-const GRID_SIZE: int = 9
+const GRID_W: int = CombatGrid.GRID_W
+const GRID_H: int = CombatGrid.GRID_H
 
 var grid_frame: PanelContainer
 var grid_anchor: Control
@@ -38,7 +39,7 @@ var hover_status_lbl: Label
 
 func _init() -> void:
 	name = "CombatGridView"
-	custom_minimum_size = Vector2(496, 480)
+	custom_minimum_size = Vector2(TILE_SIZE * GRID_W + 6, 480)
 	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	alignment = BoxContainer.ALIGNMENT_CENTER
 	add_theme_constant_override("separation", 4)
@@ -46,14 +47,14 @@ func _init() -> void:
 
 func _build_ui() -> void:
 	var grid_header := Label.new()
-	grid_header.text = "9x9 COMBAT GRID"
+	grid_header.text = "%dx%d COMBAT GRID" % [GRID_W, GRID_H]
 	grid_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	grid_header.add_theme_font_size_override("font_size", 11)
 	grid_header.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
 	add_child(grid_header)
 
 	grid_frame = PanelContainer.new()
-	grid_frame.custom_minimum_size = Vector2(490, 490)
+	grid_frame.custom_minimum_size = Vector2(TILE_SIZE * GRID_W + 4, TILE_SIZE * GRID_H + 4)
 	var frame_style := StyleBoxFlat.new()
 	frame_style.bg_color = Color(0.05, 0.07, 0.1, 1.0)
 	frame_style.border_color = Color(0.22, 0.32, 0.46, 1.0)
@@ -67,11 +68,11 @@ func _build_ui() -> void:
 	add_child(grid_frame)
 
 	grid_anchor = Control.new()
-	grid_anchor.custom_minimum_size = Vector2(TILE_SIZE * GRID_SIZE, TILE_SIZE * GRID_SIZE)
+	grid_anchor.custom_minimum_size = Vector2(TILE_SIZE * GRID_W, TILE_SIZE * GRID_H)
 	grid_frame.add_child(grid_anchor)
 
 	grid_container = GridContainer.new()
-	grid_container.columns = GRID_SIZE
+	grid_container.columns = GRID_W
 	grid_container.add_theme_constant_override("h_separation", 0)
 	grid_container.add_theme_constant_override("v_separation", 0)
 	grid_anchor.add_child(grid_container)
@@ -135,7 +136,7 @@ func _build_ui() -> void:
 	hover_status_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.85))
 	hov_vbox.add_child(hover_status_lbl)
 
-# Builds the 9x9 board from per-tile textures (Vector2i -> Texture2D), optional
+# Builds the 12x9 board from per-tile textures (Vector2i -> Texture2D), optional
 # overlays drawn on top (exits, landmarks) and hover tooltips (terrain info).
 func setup_tile_textures(textures: Dictionary, overlays: Dictionary = {}, tooltips: Dictionary = {}) -> void:
 	for child: Node in grid_container.get_children():
@@ -143,8 +144,8 @@ func setup_tile_textures(textures: Dictionary, overlays: Dictionary = {}, toolti
 		child.queue_free()
 	grid_tile_nodes.clear()
 
-	for y: int in range(GRID_SIZE):
-		for x: int in range(GRID_SIZE):
+	for y: int in range(GRID_H):
+		for x: int in range(GRID_W):
 			var coord := Vector2i(x, y)
 			var tile_rect := TextureRect.new()
 			tile_rect.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
@@ -355,9 +356,9 @@ func show_hover_card(
 	else:
 		target_pos = Vector2(8, 8)
 
-	if target_pos.x + 140 > GRID_SIZE * TILE_SIZE:
+	if target_pos.x + 140 > GRID_W * TILE_SIZE:
 		target_pos.x = maxf(0.0, target_pos.x - 146)
-	if target_pos.y + 55 > GRID_SIZE * TILE_SIZE:
+	if target_pos.y + 55 > GRID_H * TILE_SIZE:
 		target_pos.y = maxf(0.0, target_pos.y - 45)
 	grid_hover_tooltip.position = target_pos
 	grid_hover_tooltip.z_index = 50

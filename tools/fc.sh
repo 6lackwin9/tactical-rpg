@@ -7,6 +7,9 @@
 #   tools/fc.sh run <script.gd>  run a SceneTree script (scratch debugging), noise filtered
 #   tools/fc.sh safe_delete <kind> <id> [--apply]   scan, then delete a SYSTEM asset (refuses while referenced)
 #   tools/fc.sh export_placeholder <ns> <key> <variant> [team]   write a generated placeholder as PNG to its assets/ path (S14)
+#   tools/fc.sh replay <file|id> [--battle=K] [--json] [--variant=<patch> --then=stop|recorded --write=<out>]
+#        [--seeds=<a,b|a..b> --fallback=stop|<preset>] [--trail-report]   replay a playtest recording (tools/replay.gd, PLAYTEST1;
+#        exit 0 match, 1 divergence or broken plan, 2 load or validation error)
 #   tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>   write a placeholder blip to assets/audio/sfx/<key>.wav (S14-L3)
 #   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
@@ -32,7 +35,7 @@ noise='^ERROR: .*leaked|^ERROR: Pages in use|^   at: (~|unref)|WARNING: A Thread
 parse() {
   if [ -n "$(git status --short -uall | grep -E '^\?\? .*\.gd$|^A .*\.gd$')" ]; then
     echo "[parse] new .gd files: refreshing class cache"
-    timeout 150 "$GODOT" --headless --editor --quit-after 50 >/dev/null 2>&1
+    timeout 150 "$GODOT" --headless --import >/dev/null 2>&1
   fi
   local bad=0
   for f in $(git status --short -uall | grep -E '\.gd$' | grep -v '^ *D' | awk '{print $NF}'); do
@@ -78,12 +81,8 @@ parse_all() {
 
 gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step
   if [ ! -x "$GODOT" ] && ! command -v "$GODOT" >/dev/null; then echo "[gate] FAIL Godot not found: set GODOT or put godot / godot4 on PATH"; status=1; return; fi
-  if ! timeout 300 "$GODOT" --headless --editor --quit-after 50 > "$OUT/editor.out" 2>&1; then
+  if ! timeout 300 "$GODOT" --headless --import > "$OUT/editor.out" 2>&1; then
     echo "[gate] FAIL class cache / import scan (full log: $OUT/editor.out)"; status=1; return
-  fi
-  # --quit-after 50 can exit before a fresh checkout's PNGs are imported (CI): --import imports everything, then quits
-  if ! timeout 300 "$GODOT" --headless --import >> "$OUT/editor.out" 2>&1; then
-    echo "[gate] FAIL asset import (full log: $OUT/editor.out)"; status=1; return
   fi
   echo "[gate] class cache and imports up to date"
   parse_all; [ $status -ne 0 ] && return
@@ -102,6 +101,7 @@ case "$1" in
   docs) docs_check ;;
   safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   gate) gate ;;
+  replay) timeout "${REPLAY_TIMEOUT:-600}" "$GODOT" --headless --path . -s tools/replay.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   export_placeholder) timeout 120 "$GODOT" --headless --path . -s tools/export_placeholder.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   gen_sfx) timeout 120 "$GODOT" --headless --path . -s tools/gen_placeholder_sfx.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;

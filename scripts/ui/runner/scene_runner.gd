@@ -13,10 +13,16 @@ extends Node
 # Developer tools: hot-reload scripts edited on disk (ScriptReloader), restart
 # the whole runner process (for new files / class_names), and run the headless
 # test suites in a background process with their PASS / FAIL output shown here.
+# Playtests (PLAYTEST1, debug builds): the PlaytestHub child records the run while the
+# `record_playtests` pref is on; the PLAYTESTS column lists recordings (Open, Notes, Take over,
+# Copy to repo) and scenarios (each launched with its seed).
 # ==============================================================================
 
 const SELF_SCENE: String = "res://scenes/scene_runner.tscn"
 const PREFS_PATH: String = "user://scene_runner.cfg"
+const ARENA_SCENE: String = "res://scenes/combat_arena.tscn"
+const RIGHT_WIDTH: int = 470
+const PLAYTESTS_STRETCH: float = 1.6   # share of the right column's height (DEVELOPER = 1)
 
 # Known scenes: shown first, with descriptions. Anything else under res://scenes
 # that isn't hidden is listed under "Other scenes".
@@ -48,6 +54,10 @@ var pill_layer: CanvasLayer = null
 var active_scene: Node = null
 var active_path: String = ""
 var active_encounter: String = ""   # catalog encounter id for the arena ("" = its default)
+var active_opts: Dictionary = {}    # fields set on the scene before it enters the tree (playtests)
+var hub: PlaytestHub = null         # null when playtests are off (release builds, test runs)
+var browser: PlaytestBrowser = null  # null when playtests are off (release builds)
+var record_playtests: bool = true   # pref `record_playtests`
 
 var _encounter_pick: OptionButton = null
 var _status: Label = null
@@ -59,10 +69,16 @@ var _pill_hint: Label = null
 
 func _ready() -> void:
 	name = "SceneRunner"
+	WebFonts.install()
 	reloader = ScriptReloader.new()
 	var audio := AudioDirector.new()   # S14-L3: one director per main scene
 	add_child(audio)
 	audio.apply_volumes()
+	if PlaytestStore.enabled():   # release builds (and test runs) get no hub at all
+		hub = PlaytestHub.new()
+		add_child(hub)
+		hub.take_over_requested.connect(func(path: String, battle: int, round_num: int) -> void:
+			launch_playtest({"playtest": path, "battle": battle, "take_over": round_num}))
 	_build_menu()
 	_build_pill()
 	_load_prefs()
@@ -100,7 +116,8 @@ static func runnable_scenes() -> Array[Dictionary]:
 # ------------------------------------------------------------------------------
 
 # Runs `path` inside the runner (replacing any running scene). Returns false if it can't load.
-func launch(path: String, encounter_id: String = "") -> bool:
+# `opts` = properties set on the scene before it enters the tree (the arena's playtest fields).
+func launch(path: String, encounter_id: String = "", opts: Dictionary = {}) -> bool:
 	_close_active()
 	var packed: PackedScene = ResourceLoader.load(path, "PackedScene", ResourceLoader.CACHE_MODE_REPLACE) as PackedScene
 	if packed == null:
@@ -109,9 +126,15 @@ func launch(path: String, encounter_id: String = "") -> bool:
 	var scene: Node = packed.instantiate()
 	if not encounter_id.is_empty() and EncounterSource.exists(encounter_id) and "encounter" in scene:
 		scene.set("encounter", EncounterSource.create(encounter_id))
+	for key: Variant in opts:
+		if str(key) in scene:
+			scene.set(str(key), opts[key])
 	active_scene = scene
 	active_path = path
 	active_encounter = encounter_id
+	active_opts = opts.duplicate()
+	if hub != null:
+		hub.scene_changed(path, scene)   # before the scene enters the tree: its battle is followed from start()
 	add_child(scene)
 	menu_layer.visible = false
 	pill_layer.visible = true
@@ -122,17 +145,28 @@ func launch(path: String, encounter_id: String = "") -> bool:
 func restart_scene() -> bool:
 	if active_path.is_empty():
 		return false
-	return launch(active_path, active_encounter)
+	return launch(active_path, active_encounter, active_opts)
+
+# The arena with playtest fields: {playtest, battle, take_over} (playback / take-over) or
+# {battle_seed, seed_source, scenario} (a scenario, see launch_scenario).
+func launch_playtest(opts: Dictionary, encounter_id: String = "") -> bool:
+	return launch(ARENA_SCENE, encounter_id, opts)
+
+# A scenario (PLAYTEST1 H): its encounter with its seed, recorded with seed_source "scenario".
+func launch_scenario(scenario: Dictionary) -> bool:
+	return launch_playtest({"battle_seed": DictUtil.to_int(scenario.get("seed", 0)), "seed_source": "scenario", "scenario": str(scenario.get("id", ""))},
+		str(scenario.get("encounter", "")))
 
 # Recompiles scripts edited on disk; restarts the running scene so it uses them.
 func reload_and_restart() -> Dictionary:
 	var path: String = active_path
 	var encounter_id: String = active_encounter
+	var opts: Dictionary = active_opts
 	if not path.is_empty():
 		_close_active()
 	var result: Dictionary = reload_scripts()
 	if not path.is_empty():
-		launch(path, encounter_id)
+		launch(path, encounter_id, opts)
 	return result
 
 func reload_scripts(only: Array[String] = []) -> Dictionary:
@@ -176,6 +210,8 @@ func back_to_menu() -> bool:
 		_flash_pill("Unsaved changes: press again to leave")
 		return false
 	_close_active()
+	if hub != null:
+		hub.scene_changed(SELF_SCENE, null)
 	_show_menu()
 	return true
 
@@ -192,6 +228,8 @@ func _show_menu() -> void:
 	menu_layer.visible = true
 	pill_layer.visible = false
 	_refresh_pending()
+	if browser != null:
+		browser.refresh()
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key: InputEventKey = event as InputEventKey
@@ -292,7 +330,12 @@ func _build_menu() -> void:
 	for s: Dictionary in runnable_scenes():
 		_scene_card(scenes_col, s)
 
-	var dev_col: VBoxContainer = _panel(body, "DEVELOPER", 470)
+	var right := VBoxContainer.new()   # DEVELOPER on top, PLAYTESTS below (debug builds)
+	right.custom_minimum_size.x = RIGHT_WIDTH
+	right.add_theme_constant_override("separation", 10)
+	body.add_child(right)
+	var dev_col: VBoxContainer = _panel(right, "DEVELOPER", 0)
+	_expand_panel(dev_col, 1.0)
 	var reload_row := HBoxContainer.new()
 	dev_col.add_child(reload_row)
 	reload_row.add_child(UiTheme.button("⟳ Reload scripts", "Recompile scripts edited on disk (F5 also restarts the running scene)", func() -> void: reload_scripts(), UiTheme.FONT_MD))
@@ -315,6 +358,17 @@ func _build_menu() -> void:
 	_output.text = "[color=#94a3b8]Suite output and reload results appear here.[/color]"
 	dev_col.add_child(_output)
 
+	if PlaytestStore.enabled():
+		var play_col: VBoxContainer = _panel(right, "PLAYTESTS", 0)
+		_expand_panel(play_col, PLAYTESTS_STRETCH)
+		browser = PlaytestBrowser.new()
+		play_col.add_child(browser)
+		browser.record_toggled.connect(set_record_playtests)
+		browser.open_requested.connect(func(path: String, battle: int) -> void: launch_playtest({"playtest": path, "battle": battle}))
+		browser.take_over_requested.connect(func(path: String, battle: int, round_num: int) -> void:
+			launch_playtest({"playtest": path, "battle": battle, "take_over": round_num}))
+		browser.scenario_requested.connect(func(sc: Dictionary) -> void: launch_scenario(sc))
+
 	_status = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
 	root.add_child(_status)
 
@@ -331,6 +385,12 @@ func _panel(parent: Control, title: String, width: int) -> VBoxContainer:
 	panel.add_child(col)
 	col.add_child(UiTheme.header(title))
 	return col
+
+# Lets the panel around `col` (from _panel) grow vertically with weight `ratio`.
+static func _expand_panel(col: VBoxContainer, ratio: float) -> void:
+	var panel: Control = col.get_parent() as Control
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.size_flags_stretch_ratio = ratio
 
 func _scene_card(parent: Control, s: Dictionary) -> void:
 	var card: VBoxContainer = UiTheme.card(parent)
@@ -423,17 +483,31 @@ func _scene_name(path: String) -> String:
 	return path.get_file()
 
 # ------------------------------------------------------------------------------
-# Preferences (last encounter picked)
+# Preferences (last encounter picked, record_playtests)
 # ------------------------------------------------------------------------------
 
 func _load_prefs() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(PREFS_PATH) == OK:
 		select_encounter(str(cfg.get_value("runner", "encounter", "")))
+		record_playtests = DictUtil.to_bool(cfg.get_value("runner", "record_playtests", true), true)
+	if hub != null:
+		hub.set_record_enabled(record_playtests)
+	if browser != null:
+		browser.set_record_enabled(record_playtests)
+
+func set_record_playtests(on: bool) -> void:
+	record_playtests = on
+	if hub != null:
+		hub.set_record_enabled(on)
+	if browser != null:
+		browser.set_record_enabled(on)
+	_save_prefs()
 
 func _save_prefs() -> void:
-	if active_encounter.is_empty():
-		return
 	var cfg := ConfigFile.new()
-	cfg.set_value("runner", "encounter", active_encounter)
+	cfg.load(PREFS_PATH)   # keep the other keys (a missing file is fine)
+	if not active_encounter.is_empty():
+		cfg.set_value("runner", "encounter", active_encounter)
+	cfg.set_value("runner", "record_playtests", record_playtests)
 	cfg.save(PREFS_PATH)

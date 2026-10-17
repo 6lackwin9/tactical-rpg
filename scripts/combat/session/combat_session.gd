@@ -21,6 +21,13 @@ signal fx_requested(entry: ActionLogEntry)    # animate an action (attack lunge,
 signal hover_changed(combatant: Combatant)    # null = hover cleared
 signal text_logged(bbcode: String)
 signal plan_preview_changed()                 # hover preview of a planned step (grid ghosts)
+# Round-flow marks for observers such as the playtest recorder (PLAYTEST1); emitting them changes no behaviour.
+signal round_started(round_num: int)          # end of _begin_round (new round or a redo of it)
+signal round_confirmed(round_num: int)        # after a successful confirm_plan (the spec's `plan_confirmed`; that name is the bool below)
+signal round_concluded(round_num: int, over: bool)
+signal round_reset(round_num: int)            # start of reset_round, before the round is rewound
+signal plan_refused(round_num: int, reason: String)   # confirm_plan refused an invalid plan (reason = status_text)
+signal plan_edited(kind: String, actor: Combatant)   # add, remove, move, undo, clear, preset, preset_all (actor null)
 
 enum Phase { PLANNING, RESOLVING, REPLAY }
 
@@ -169,6 +176,7 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	focused_hero = first_active
 	selected_combatant = first_active
 	_notify()
+	round_started.emit(round_num)
 
 # The active skill loadout can only change outside combat: locked from start() until dispose().
 func _set_loadouts_locked(locked: bool) -> void:
@@ -194,6 +202,7 @@ func dispose() -> void:
 		plan.clear_all()
 
 func reset_round() -> void:
+	round_reset.emit(current_round)
 	if current_round == 1:
 		start()
 		return
@@ -292,6 +301,7 @@ func _conclude_round(over: bool) -> void:
 	export_log()
 	next_round_label = encounter.advance_label(current_round) if can_advance_round() else ""
 	_notify()
+	round_concluded.emit(current_round, over)
 
 func toggle_auto_play() -> void:
 	if is_auto_playing:
@@ -497,6 +507,8 @@ func plan_add_step(actor: Combatant, step: PlanStep) -> String:
 	var problem: String = plan.add_step(actor, step)
 	status_text = "%s: %s (AP left %d)." % [actor.name, step.title(), plan.ap_left(actor)] if problem.is_empty() else problem
 	_after_plan_edit()
+	if problem.is_empty():
+		plan_edited.emit("add", actor)
 	return problem
 
 func plan_remove_step(actor: Combatant, index: int) -> void:
@@ -504,6 +516,7 @@ func plan_remove_step(actor: Combatant, index: int) -> void:
 		plan.remove_step(actor, index)
 		status_text = "%s: step removed." % actor.name
 		_after_plan_edit()
+		plan_edited.emit("remove", actor)
 
 func plan_move_step(actor: Combatant, from_index: int, to_index: int) -> void:
 	if is_planning():
@@ -511,6 +524,7 @@ func plan_move_step(actor: Combatant, from_index: int, to_index: int) -> void:
 		var st: CombatPlan.SimState = plan.compile(actor)
 		status_text = "%s: sequence reordered." % actor.name if st.error_index < 0 else "%s: that order is invalid - %s" % [actor.name, st.error_text]
 		_after_plan_edit()
+		plan_edited.emit("move", actor)
 
 # Removes the focused hero's last planned step (right-click on the grid / Backspace).
 func plan_undo_last() -> void:
@@ -525,12 +539,14 @@ func plan_undo_last() -> void:
 	plan.remove_step(focused_hero, steps.size() - 1)
 	status_text = "%s: removed %s." % [focused_hero.name, removed.title()]
 	_after_plan_edit()
+	plan_edited.emit("undo", focused_hero)
 
 func plan_clear(actor: Combatant) -> void:
 	if is_planning():
 		plan.clear(actor)
 		status_text = "%s: sequence cleared." % actor.name
 		_after_plan_edit()
+		plan_edited.emit("clear", actor)
 
 # Replaces `actor`'s sequence with an AI draft (see PlanPresets); still editable.
 func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
@@ -539,6 +555,7 @@ func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
 	encounter.draft_steps(actor, preset_id, plan)
 	status_text = "%s: %s drafted %d step(s)." % [actor.name, PlanPresets.label(preset_id), plan.steps_of(actor).size()]
 	_after_plan_edit()
+	plan_edited.emit("preset", actor)
 
 func plan_apply_preset_all(preset_id: String) -> void:
 	if not is_planning():
@@ -559,6 +576,7 @@ func plan_apply_preset_all(preset_id: String) -> void:
 			break
 	status_text = "Party: %s drafted. Review the sequences, then confirm." % PlanPresets.label(preset_id)
 	_after_plan_edit()
+	plan_edited.emit("preset_all", null)
 
 # True when every active ally's sequence is valid (an empty sequence is valid: the unit idles).
 func plan_is_valid() -> bool:
@@ -575,6 +593,7 @@ func confirm_plan(auto_play: bool = true) -> bool:
 	if not plan_is_valid():
 		status_text = "Fix the highlighted steps before confirming."
 		_notify()
+		plan_refused.emit(current_round, status_text)
 		return false
 	plan.commit(resolver)
 	plan_confirmed = true
@@ -583,6 +602,7 @@ func confirm_plan(auto_play: bool = true) -> bool:
 	if auto_play:
 		is_auto_playing = true   # confirming starts the round (Play while planning keeps playing); Play afterwards replays it
 	_notify()
+	round_confirmed.emit(current_round)
 	return true
 
 func _after_plan_edit() -> void:

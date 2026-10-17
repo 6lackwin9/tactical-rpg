@@ -1,6 +1,6 @@
 # Tactical RPG (Godot 4)
 
-A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Every unit plans a **6-block round** (AP-costed skills, one move, AI-planned enemies) that resolves simultaneously on a **9x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
+A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Every unit plans a **6-block round** (AP-costed skills, one move, AI-planned enemies) that resolves simultaneously on a **12x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
 
 ---
 
@@ -20,7 +20,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 - **Decoupled Rules Engines**: All core game mechanics inherit from `RefCounted` rather than scenes or rendering nodes, allowing 100% headless simulation and rapid automated testing.
 - **Simultaneous 6-Block Rounds**: Combat does not use traditional turn-based initiative. Every unit plans its round as a sequence of skills on a 6-block timeline (AP pool of 12, +4 per round); all plans then resolve together, block by block, with multi-block durations and stance interactions.
 - **Dynamic Stance Matchups**: three stances in a rock-paper-scissors loop (`Offensive` > `Tactical` > `Defensive` > `Offensive`) plus `Neutral` govern damage dealt and received through asymmetric multipliers.
-- **Spatial Positioning & Withdrawal**: 9x9 grid maneuvering with center-ring deployment, reach bands, and safe boundary withdrawal.
+- **Spatial Positioning & Withdrawal**: 12x9 grid maneuvering with party-left / enemies-right deployment, reach bands, and safe boundary withdrawal.
 - **Content as data**: skills, items, classes, units and encounters live in a JSON catalog edited with the Content Forge; the engine, the scenes and the tests all load from it.
 
 ---
@@ -125,9 +125,9 @@ tactical-rpg/
 │   │   │   ├── plan_presets.gd           # One-click AI draft presets (balanced, all-out, focus weakest, guard, kite, economy, fall back)
 │   │   │   └── tactical_ai.gd            # Drafts a validated step sequence for a unit
 │   │   └── arena/                # Arena spatial rules & resolution
-│   │       ├── combat_grid.gd            # 9x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability
+│   │       ├── combat_grid.gd            # 12x9 grid, Manhattan distance, open/closed arenas, escape tiles, terrain walkability, standard deployment
 │   │       ├── terrain.gd                # Terrain types (14) with walkability, cover, move cost & hazard metadata
-│   │       ├── combat_zones.gd           # 8 preset 9x9 combat zones (forest, river, lava cavern, ...)
+│   │       ├── combat_zones.gd           # 8 preset 12x9 combat zones (forest, river, lava cavern, ...)
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
@@ -143,10 +143,12 @@ tactical-rpg/
 │   │   ├── dojo_breakdown.gd         # DamageCalculator result -> step-by-step BBCode explanation
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
+│   ├── playtest/                 # Playtest recordings (debug): record schema, plan codec, outcome, fingerprint, recorder, replayer, sweep, store, trail report, logger hook
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   ├── core_rules_test_suite.gd  # Core combat rules via the planner: guard & matchup, stances, Focus, casualties, withdrawal, feed
 │   │   ├── class_rules_test_suite.gd # Six classes: budget/growth, spend variance, tiers, proficiency, passives, skill paths
 │   │   ├── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
+│   │   ├── playtest_test_suite.gd    # Playtest recordings: codec, round trip, redo, divergence, staleness, take-over, variant, sweep, trail report
 │   │   ├── runner_test_suite.gd      # Scene Runner: scene list, launch/restart/menu, unsaved-work guard, hot reload
 │   │   └── world_test_suite.gd       # Worlds: shipped data, inheritance, same-base/different-lore parity, tuning, renames, connections, Forge UI, runner
 │   └── ui/                       # View layer, docks, components & full-screen modals
@@ -175,7 +177,7 @@ tactical-rpg/
 │       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
 │       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
 │       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
-│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards; hands action FX to the presenter
+│       │   ├── combat_grid_panel.gd      # 12x9 grid tokens, hover cards; hands action FX to the presenter
 │       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
 │       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
 │       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
@@ -196,7 +198,7 @@ tactical-rpg/
 │       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
 │       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
 │       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, FX layer
+│       ├── combat_grid_view.gd       # 12x9 grid rendering (54px tiles), tokens, tile input, FX layer
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -208,6 +210,7 @@ tactical-rpg/
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       ├── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
 │       └── character_equipment_modal.gd # Party & Stash screen: 3 columns (party viewer, gear loadout, party stash) sharing one DojoSession
+├── playtests/                    # Shared playtest files: inbox/ (user recordings), repro/ (agent repros), scenarios/ (one seed each); see README.md
 ├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
 └── run.bat                       # Opens the Scene Runner (every scene, hot reload, test suites)
@@ -248,13 +251,13 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Estimates** (`DamageCalculator.expected`): the same formula with no crit and no guard (unknown ahead), armor included. Log cells show the hit actually dealt and, in debug builds, the full breakdown on hover (`DamageCalculator.describe`).
 - **Future**: weapon-focused skills may scale only Weapon Power; class / weapon preferences may change the 1.5 scaling.
 
-### 3. 9x9 Spatial Grid & Spatial Rules
+### 3. 12x9 Spatial Grid & Spatial Rules
 
-- **Arena Geometry**: Fixed 9x9 grid (`0..8` on both axes) with landmark center at `(4, 4)`.
-- **Center-Ring Deployment**: Initial spawn radius around `(4, 4)` offset by attack range so units can engage center on Block 1.
+- **Arena Geometry**: Fixed 12x9 grid (`x 0..11`, `y 0..8`); no tile is marked as the centre. Tie-breaks that prefer central tiles measure to the true middle (between columns 5 and 6 on row 4). Was 9x9 with a centre ring until GRID12 (2026-10-17).
+- **Standard Deployment**: the party lines up on the left, enemies on the right. Melee units take the front column (party x 5, enemies x 7), ranged units the back column (x 4 / x 8), rows filled from row 4 outward; a full column spills backwards. Front ranks start 2 tiles apart, as on the old centre ring.
 - **Reach Bands**: attacks check the target's distance against the skill's reach band (melee 1, ranged 2-3, off-hand jab 1, area skills their own); a targeted attack adjusts one tile when it starts, otherwise an out-of-reach attack fails cleanly.
-- **Perimeter Escape & Partial Withdrawal**: Stepping onto designated exit tiles (e.g. `(8, 4)`) triggers safe partial withdrawal, removing the unit from active combat without penalty.
-- **Reinforcement Ingress**: an encounter's reinforcement wave enters before a given block of a given round (e.g. the Goblin Ambush at Round 1 Block 4), deploying on free tiles of the enemy side; the AI plans it from the next round.
+- **Perimeter Escape & Partial Withdrawal**: Stepping onto designated exit tiles (e.g. `(11, 4)`, the east edge) triggers safe partial withdrawal, removing the unit from active combat without penalty.
+- **Reinforcement Ingress**: an encounter's reinforcement wave enters before a given block of a given round (e.g. the Goblin Ambush at Round 1 Block 4), deploying on the free tiles nearest the arena middle on the enemy (right) half; the AI plans it from the next round.
 
 ### 4. Deterministic Scrubbing & Replay System
 
@@ -352,12 +355,13 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Schema-driven** (`ContentSchema`): each kind is a field list (type, default, range, enum options, references, conditional fields such as attack-only or consumable-only fields, help text). It normalises JSON (types, defaults, key order), drives validation and builds the editor form. Enums are stored by name (`"ATTACK"`, `"MAIN_HAND"`), so the files read and diff well.
 - **Validation** (`ContentCatalog.validate_entry / validate_all`): snake_case unique ids, enum values, references that resolve and fit (a party roster only takes party units, an off-hand slot only off-hand gear), skill rules (engine-only kinds, reach bands, LINE areas, status potency), item slot rules, two-handed weapon + shield, derived units needing a class, encounter rosters and exit tiles. In-use and engine (`system`) entries can't be deleted; renaming an id rewrites every reference to it.
 - **Units**: `fixed` vitals (HP / speed / range, like the goblins) or `derived` from class + level + gear (like the dojo heroes); loadout per slot plus battle pouch; AP pool; strike power (0 = weapon + unit power) and armor rating (-1 = gear + STR / 4); skill cap and an optional **known-skills list** (only those leveled skills are offered to the planner and the AI; Move, Rest and other engine skills are always known); AI role, targeting, flee / guard thresholds; per-status resistances.
-- **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the centre-ring deployment can't fit go to the nearest free tile on their side. One **reinforcement wave** per encounter (`wave_units`, `wave_round`, `wave_block`, `wave_label`) enters mid-round. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
+- **Encounters in the real engine** (`CatalogEncounter`): any encounter entry runs through the full combat stack (planning, AI, resolver, replay, UI). Repeated enemies are numbered (`Goblin Archer 2`); units the standard deployment can't fit go to the free tile nearest the arena middle on their half. One **reinforcement wave** per encounter (`wave_units`, `wave_round`, `wave_block`, `wave_label`) enters mid-round. `combat_arena` loads one from the command line: `godot --path . res://scenes/combat_arena.tscn -- --encounter=veterans_drill`.
 - **Content Forge** (Scene Runner > Content Forge): kind tabs; searchable entry list (side filter for units, ⚠ marks invalid entries, 🔒 engine skills); a form generated from the schema with dropdowns for enums and references, add/remove/reorder lists, stat grids and JSON fields; an **engine preview** of what the entry becomes (skill cost / reach / damage, item stats and which classes can use it, class stats at levels 1/5/10, unit vitals / power / skills / gear, encounter deployment) with its icon or portrait and "used by" references; live problem list. **New**, **Duplicate** (use any existing entry as a template), **Delete** (click twice), **Apply** / **Revert**, **Save** (`Ctrl+S`, writes the JSON), **Reload**, **Validate All**. **▶ Playtest** runs the selected encounter (or a unit in a sandbox fight on its side) in the real combat arena, with *Back to Forge* to return.
 - **Reuse in tests**: tests build units and encounters straight from the catalog (`ContentFactory.unit(ContentCatalog.get_entry("units", id))`, `CatalogEncounter.new(id)`). Tests that write call `ContentCatalog.fork_to("user://...")`, so the shipped catalog is never modified.
 
 ### 10. Scene Runner (`scene_runner.tscn`, main scene)
 
+- **Playtests** (debug builds, PLAYTEST1): every battle is recorded (toggle **Record playtests** in the PLAYTESTS panel, pref `record_playtests`, default on). **F8** in any scene saves a feedback note (text, tags mechanic / ui / ux / bug) with a screenshot. The panel lists recordings (**Open** = playback with a banner and note jumps, **Notes**, **Take over** from a round, **Copy to repo** into `playtests/inbox/<id>/`) and scenarios (**Launch** with the scenario's seed). A recording that cannot be played back opens a live battle with the reason in the banner; that battle is not recorded. Nothing is hooked while no recording is open. Agents render noted moments with `xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 --path . -s tools/replay.gd -- <file> --render=notes|rounds --out=<dir>`.
 - **One launcher** (`run.bat`, or Play in the editor): a menu listing every runnable scene: Combat Arena (with an encounter picker over the content catalog, remembered between runs), Content Forge, Gear & Skill Dojo, and any other `.tscn` dropped into `scenes/` (shown under its file name). Scenes run inside the runner, so returning to the menu is instant.
 - **In-scene controls**: a small **☰ Menu / ↻ / ⟳** pill (bottom-right) and keys **F10** (menu), **F6** (restart the scene), **F5** (reload edited scripts, then restart). Leaving the Content Forge with unsaved catalog edits asks for a second press and then discards them.
 - **Hot reload** (`ScriptReloader`): remembers each script's modification time and recompiles the edited ones in place (`GDScript.reload`), clearing static caches built by the old code and re-reading the catalog JSON. New files or new `class_name`s can't join a running game's class registry: the menu lists them and **⏻ Restart runner** starts a fresh process.
@@ -382,7 +386,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ### Web build (browser)
 
-The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR into `main` (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds and deploys `main` once a day and on request (artifact `web-build`, itch.io, GitHub Pages). Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
 
 ## Headless Testing & Automated Quality Assurance
 
@@ -457,6 +461,8 @@ New `weaken` status (outgoing skill power -15 to -25%, cap 25%, refresh to the l
 
 The status registry gives every status a magnitude range and unit, and adds six rows with placeholder numbers: slow, expose, fortify, regen, poison and burn. They have no effect in combat yet (S12S-L commit 2). `status_magnitude` is validated per status on attack, support and defend skills, the `{magnitude}` text token shows its unit, and each status records which unit applied it (undo restores it). Tested in `status_expansion_test_suite.gd`.
 
+First carriers (S12S-A, placeholder numbers): five new families unlock at level 6, after every level-5 family, so no default loadout changes: Crippling Shot (ranger, slow), Rend Armor (warrior, expose), Envenom (rogue, poison), and for the priest Aegis (fortify) and Rejuvenate (regen). Seed `data/seeds/s12s.gd`.
+
 ### Status expansion effects, AI and sim (S12S-L commits 2-3)
 
 The six new statuses now act in combat. Slow takes one tile off each move block (never below 1; haste and slow cancel). Expose lowers and fortify raises the armor rating by their magnitude (never below 0), and the attack, the planner's damage estimate and the forecast all use that rating. At round end each unit takes bleed, then poison (its stacked magnitude), then burn (a % of max HP), then regenerates (a % of max HP). Each step has its own log line, and a unit defeated earlier in the round end does not regenerate. Poison applications add up to a cap of 30. Support and defend grants carry the skill's magnitude and the caster's name, and status chips show the magnitude with its unit (for example "Poisoned 12 HP"). A magnitude of 0 on a status that has a range becomes the range minimum. The AI keeps poisoning a foe until the cap. It aims expose at its main target, then at a foe next to an ally, and slow at the nearest foe that can reach the frailest ally. It puts fortify on the ally with the most adjacent foes and regen on the most wounded ally when no heal fits. The balance sim counts regen as healing done by the regen caster (`regen_received`) and credits damage over time to the unit that applied it (`dot_dealt`). Tested in `status_expansion_effects_test_suite.gd` and `status_expansion_ai_test_suite.gd`.
@@ -524,7 +530,9 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
-Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and fight in the real combat arena (BATTLE1-L, below); point-of-interest (`point`) markers show the cyan ring icon (asset key `overlay_poi`, the old combat centre-ring marker, GRID12); it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
+
+Real battles from the map (BATTLE1-L): a fight on the region map (step counter, marker or roamer) or from a dialogue opens the combat arena with the saved party at its real levels, gear and loadouts (`BattleScreen` in `scripts/ui/overworld/`, built on `BattleBridge.encounter_for`). When the battle has an outcome a banner shows Victory, Defeat or Withdrew over the arena (review the replay, then Continue). Won awards XP and advances quests, lost wakes the party at the last safe place fully healed, fled steps back to the tile before the fight; then the battle results screen shows the outcome and XP, and Continue autosaves. HP is never carried between fights (full heal after battle, decision M3). If the arena cannot start, the fight panel shows why with Start battle and Dev: won / fled / lost buttons; `RegionMapView.dev_outcomes` shows those buttons always. Tested in `battle_link_test_suite.gd`.
 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
@@ -546,7 +554,7 @@ An item tier can now require a stat (training lowers the threshold), a proficien
 
 Worlds gain two kinds: `dialogues` (node trees with choices, conditions and effects; generated service choices for quest givers) and `shops` (stock, loot-table sales, buy and sell multipliers). Characters get a `dialogue` and `gone_flags` (flag conditions that remove them), the world manifest gets `start_gold` and custom `service_lines`, quests can reward `gold` and chests can hold gold. A lint warns when a quest giver can disappear without a quest variant that re-routes the quest. Base service lines live in `data/dialogue/services.json` (`ServiceCatalog`); rules in `DialogueRules` and `ShopRules`. Commit 2 adds the runtime: `DialogueRunner` (open a conversation, view it, pick choices that apply all their effects or none, confirm quest turn-ins, leave shops), shops with whole-number prices (buy rounds up, sell rounds down), limited stock and loot-table sales, party gold (from quests, chests, selling and dialogue; start gold per world) and save version 4 (party gold, shop stock) with a migration from version 3. Gone NPCs disappear from maps and conversations. Tested in `dialogue_test_suite.gd`.
 
-Dialogue and shop panels (DLG1-L commit 3): in the debug region map, press E next to an NPC to talk. The dialogue panel shows the speaker, the text and the choices (locked ones greyed out), a Continue button, and a turn-in step where you pick who receives the reward and which loot to take. A shop choice swaps in the shop panel (gold, buy list with stock left, sell list); Close returns to the conversation without repeating the node's effects. A dialogue fight is settled with the same Won / Fled / Lost buttons. Tested in `dialogue_panel_checks.gd` (run by the dialogue suite). Follow-ups (DLG1-F): one purchase buys at most 99, gold that would pass the 9,999,999 cap from selling or a dialogue gift is reported in a note, and confirming a quest turn-in re-checks it first.
+Dialogue and shop panels (DLG1-L commit 3): in the debug region map, press E next to an NPC to talk. The dialogue panel shows the speaker, the text and the choices (locked ones greyed out), a Continue button, and a turn-in step where you pick who receives the reward and which loot to take. A shop choice swaps in the shop panel (gold, buy list with stock left, sell list); Close returns to the conversation without repeating the node's effects. A dialogue fight opens the same combat arena (BATTLE1-L). Tested in `dialogue_panel_checks.gd` (run by the dialogue suite). Follow-ups (DLG1-F): one purchase buys at most 99, gold that would pass the 9,999,999 cap from selling or a dialogue gift is reported in a note, and confirming a quest turn-in re-checks it first.
 
 ### Forge item tab (ITEM1-L commit 3)
 
@@ -558,7 +566,7 @@ Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the mani
 
 ### Audio (S14-L3)
 
-Sound plays by key, never by file path. `SoundBank` looks up an `sfx` key through `AssetRegistry` (a manifest row pointing at `assets/audio/sfx/<key>.wav` or `.ogg`); a key with no file is silent and warns once. `SoundEvents` lists the keys (hit, crit, mitigated, heal, buff, debuff, defend, move_step, defeat and four UI keys) and which presenter preset plays which. One `AudioDirector` in the combat arena and one in the Scene Runner hold eight SFX voices and two UI voices, play the presenter's `fx_played` sounds and the playback buttons' click, and set the Master, Music, SFX and UI bus volumes (`default_bus_layout.tres`) from the new `SettingsFile` (`user://settings.cfg`, keys `audio/master|music|sfx|ui`, never part of a save). Headless runs, tests and the sim create no voices. `tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>` writes a placeholder blip. Tested in `audio_test_suite.gd`.
+Sound plays by key, never by file path. `SoundBank` looks up an `sfx` key through `AssetRegistry` (a manifest row pointing at `assets/audio/sfx/<key>.wav` or `.ogg`); a key with no file is silent and warns once. `SoundEvents` lists the keys (hit, crit, mitigated, heal, buff, debuff, defend, move_step, defeat and four UI keys) and which presenter preset plays which. One `AudioDirector` in the combat arena and one in the Scene Runner hold eight SFX voices and two UI voices, play the presenter's `fx_played` sounds and the playback buttons' click, and set the Master, Music, SFX and UI bus volumes (`default_bus_layout.tres`) from the new `SettingsFile` (`user://settings.cfg`, keys `audio/master|music|sfx|ui`, never part of a save). Headless runs, tests and the sim create no voices. `tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>` writes a placeholder blip; S14-A2 ships one generated blip per key (`assets/audio/sfx/*.wav`, seed `data/seeds/s14_a2.gd`), so real sounds later replace a file under the same key. Tested in `audio_test_suite.gd`.
 
 ### Combat presenter (S14-L2)
 
@@ -588,12 +596,16 @@ The hub's **Journal** lists the current world's quests the party knows about, gr
 
 Runs in 4 phases:
 
-- `[1/4]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
+- `[1/4]` Verifies global class cache and asset imports (`--headless --import`).
 - `[2/4]` Validates GDScript syntax & static typing across every project script (`--headless --check-only`); a crash only while Godot shuts down after a clean parse is reported as a warning.
 - `[3/4]` Executes the headless arena test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0. (The Scene Runner's suite buttons run the same scenes.)
 - `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
 
 Godot is found through the `GODOT` environment variable, then `godot` or `godot4` on PATH, then `C:\Program Files\Godot\godot.exe`. The script runs on Windows PowerShell 5.1 and on PowerShell 7 (`pwsh`) on Linux or macOS. `tools/fc.sh gate` runs the same steps as `-Fast -Quiet` in bash, so a Linux machine or cloud container only needs a Godot 4.7 binary.
+
+### Playtest recordings and replay (PLAYTEST1-L)
+
+In debug builds, battles can be recorded as versioned JSON in `user://playtests/<id>.json`. A recording holds the encounter, the seed, a content fingerprint, the confirmed plans and RNG state per round, the outcome per round, a UI trail (scenes, panels, modals, buttons, keys, clicks, hovers, plan edits, engine errors, asset fallbacks) and F8 notes. `tools/fc.sh replay <file|id>` replays a recording headlessly (exit 0 match, 1 divergence or broken plan, 2 invalid) and supports `--variant`/`--then`/`--write`, `--seeds`/`--fallback` and `--trail-report` (dead clicks, repeat clicks, long hovers, refused confirms, errors, undo churn, UI open/close problems, leaks, asset fallbacks). `CombatSession` emits `round_started`, `round_confirmed`, `plan_refused`, `round_concluded`, `round_reset` and `plan_edited`; `AssetRegistry.resolve_observer` is a playtest-only hook. The folder layout and the one-scenario rule are in `playtests/README.md`. Tested in `playtest_test_suite.gd`.
 
 ---
 
@@ -689,7 +701,7 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] **Chained Flow Moves**: Skills that automatically transition into compatible follow-up stances.
 - [ ] **Arena weapon commands**: `SwitchWeaponCommand` (1 block, toggles `Inventory.active_weapon_slot`) and a `DualStrikeCommand` combo for 1H pairs, so the dojo weapon rules apply on the round timeline.
 - [ ] **Stance Disruption & Stagger**: Guard breaks that inflict the `Staggered` condition (unable to defend/dodge for $N$ blocks).
-- [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 9x9 grid.
+- [ ] **Area of Effect (AoE)**: Line, cone, and radial blast patterns on the 12x9 grid.
 - [ ] **Environmental Hazards**: Fire, ice, and poison terrain tiles that apply effects on entry/end of round.
 - [ ] **Status Conditions**: Bleed, Poison, Blind, Stun, and Haste.
 

@@ -1165,6 +1165,153 @@
 					"mitigation": 0.55
 				}
 			]
+		},
+		{
+			"id": "crippling_shot",
+			"name": "Crippling Shot",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {potency} to Slow for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"bow",
+				"crossbow"
+			],
+			"min_proficiency": 1,
+			"power_mult": 0.7,
+			"status_effect": "slow",
+			"status_potency": 75,
+			"status_rounds": 2,
+			"ranks": [
+				{
+					"level": 3,
+					"power_mult": 0.9,
+					"status_potency": 80
+				},
+				{
+					"level": 4,
+					"power_mult": 1.05,
+					"status_potency": 85,
+					"status_rounds": 3
+				}
+			]
+		},
+		{
+			"id": "rend_armor",
+			"name": "Rend Armor",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {potency} to Expose (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"sword",
+				"axe",
+				"mace",
+				"hammer"
+			],
+			"min_proficiency": 1,
+			"power_mult": 0.8,
+			"status_effect": "expose",
+			"status_potency": 70,
+			"status_magnitude": 6,
+			"status_rounds": 2,
+			"ranks": [
+				{
+					"level": 3,
+					"power_mult": 1.0,
+					"status_potency": 75,
+					"status_magnitude": 8
+				},
+				{
+					"level": 4,
+					"power_mult": 1.2,
+					"status_potency": 80,
+					"status_magnitude": 10,
+					"status_rounds": 3
+				}
+			]
+		},
+		{
+			"id": "envenom",
+			"name": "Envenom",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {potency} to Poison ({magnitude} per round, stacks) for {rounds}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"dagger"
+			],
+			"min_proficiency": 1,
+			"power_mult": 0.6,
+			"status_effect": "poison",
+			"status_potency": 80,
+			"status_magnitude": 4,
+			"status_rounds": 3,
+			"ranks": [
+				{
+					"level": 3,
+					"power_mult": 0.75,
+					"status_potency": 85,
+					"status_magnitude": 5
+				},
+				{
+					"level": 4,
+					"power_mult": 0.9,
+					"status_potency": 90,
+					"status_magnitude": 6
+				}
+			]
+		},
+		{
+			"id": "aegis",
+			"name": "Aegis",
+			"kind": "SUPPORT",
+			"level": 2,
+			"blocks": 1,
+			"description": "{name}: grants Fortify (+{magnitude}) for {rounds} starting next round.",
+			"learned_only": true,
+			"status_magnitude": 6,
+			"status_rounds": 2,
+			"grant_status": "fortify",
+			"ranks": [
+				{
+					"level": 3,
+					"status_magnitude": 8
+				},
+				{
+					"level": 4,
+					"status_magnitude": 10,
+					"status_rounds": 3
+				}
+			]
+		},
+		{
+			"id": "rejuvenate",
+			"name": "Rejuvenate",
+			"kind": "SUPPORT",
+			"level": 2,
+			"blocks": 2,
+			"description": "{name}: grants Regen ({magnitude} per round) for {rounds} starting next round.",
+			"learned_only": true,
+			"status_magnitude": 4,
+			"status_rounds": 2,
+			"target_mode": "ALLY",
+			"grant_status": "regen",
+			"ranks": [
+				{
+					"level": 3,
+					"status_magnitude": 5,
+					"status_rounds": 3
+				},
+				{
+					"level": 4,
+					"status_magnitude": 6,
+					"status_rounds": 3
+				}
+			]
 		}
 	]
 }

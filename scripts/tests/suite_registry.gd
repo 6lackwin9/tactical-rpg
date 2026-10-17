@@ -6,6 +6,7 @@ extends RefCounted
 # Nothing else needs editing; scenes/test_arena.gd calls run_all directly.
 
 static func run_all(tree_parent: Node = null) -> bool:
+	PlaytestStore.force_enabled = 0   # suites that launch scenes through the Scene Runner never record playtests
 	var results: Array[bool] = []
 	results.append(CombatUiFrameworkTestSuite.run(tree_parent))
 	results.append(CoreRulesTestSuite.run())
@@ -59,10 +60,13 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(ExplorationTestSuite.run(tree_parent))
 	results.append(DialogueTestSuite.run(tree_parent))
 	results.append(MenusTestSuite.run(tree_parent))
+	results.append(BattleLinkTestSuite.run(tree_parent))
 	results.append(PartyScreenTestSuite.run())
 	results.append(SaveIoTestSuite.run())
 	results.append(JournalTestSuite.run())
 	results.append(AssetPipelineTestSuite.run())
 	results.append(AnimationLifecycleTestSuite.run(tree_parent))
 	results.append(AudioTestSuite.run(tree_parent))
+	results.append(PlaytestTestSuite.run(tree_parent))
+	PlaytestStore.force_enabled = -1
 	return not results.has(false)

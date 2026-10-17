@@ -81,7 +81,7 @@ To prevent IDE warnings from ever appearing, adhere strictly to these patterns:
 - **Root Cause**: When new methods or properties are added to existing `class_name` scripts (`CharacterStats`, `Equipment`, `Inventory`, etc.), the running background Godot Language Server process retains old parsed ASTs in memory. Callers of the newly added methods report false `UNSAFE_METHOD_ACCESS` or `UNSAFE_PROPERTY_ACCESS` warnings.
 - **Remediation Protocol**:
   1. Only when no agent is running suites or sims, stop the editor LSP process by its PID (never `Stop-Process -Name godot`: it kills other agents' runs).
-  2. Regenerate the project class cache: `godot --headless --editor --quit-after 50` (desktop: `& "C:\Program Files\Godot\godot.exe" ...`).
+  2. Regenerate the project class cache: `godot --headless --import` (desktop: `& "C:\Program Files\Godot\godot.exe" ...`).
   3. The IDE extension will automatically restart the LSP with the fresh symbol registry, clearing all false method/property warnings.
 
 ### F. Preventing `UNUSED_VARIABLE` & `UNUSED_PARAMETER`

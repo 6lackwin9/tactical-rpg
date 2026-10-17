@@ -131,7 +131,7 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("description", "Description", "text", ""),
 		_f("zone", "Zone", "enum", "stone_arena", {"options_from": "zones"}),
 		_f("arena", "Arena", "enum", "CLOSED", {"options": ["CLOSED", "OPEN"], "help": "OPEN: every edge is an exit."}),
-		_f("exits", "Exit tiles", "json", [[8, 4]], {"help": "[[x, y], ...] on the 9x9 grid (CLOSED arenas)."}),
+		_f("exits", "Exit tiles", "json", [[11, 4]], {"help": "[[x, y], ...] on the 12x9 grid (CLOSED arenas)."}),
 		_f("max_rounds", "Max rounds", "int", 6, {"min": 1, "max": 30}),
 		_f("total_blocks", "Blocks / round", "int", 6, {"min": 3, "max": 10}),
 		_f("ap_regen", "AP regen / round", "int", 4, {"min": -1, "max": 20, "help": "-1 = refill to max each round."}),

@@ -14,7 +14,7 @@ const SHAKE_OFFSETS: Array[Vector2] = [Vector2(4, 0), Vector2(-4, 0), Vector2(2,
 const STATUS_ICON_PX: int = 24
 const STATUS_RISE_PX: float = 16.0
 const FLOAT_RISE: Vector2 = Vector2(8, -28)
-const AMBUSH_TEXT_PX: Vector2 = Vector2(200, 180)   # board-centred banner (no token)
+const AMBUSH_TEXT_PX: Vector2 = Vector2(281, 180)   # board-centred banner (no token; 12x9 board, 648 px wide)
 
 # id -> {"durations": [...], "tweens": tweens one play creates, "color": modulate (pulses/flashes)}
 const PRESETS: Dictionary = {

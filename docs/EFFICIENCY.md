@@ -18,6 +18,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | Builder agent for M1 | ~23 min, ~300k tokens, 159 tool calls | the dominant cost; see below |
 | Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
 | Brainstorm agent | ~1.5 min, ~56k tokens | cheap, keep |
+| gate `godot --headless --import` step (S14-A1/A2) | ~2 s when nothing new, longer on a fresh checkout with new assets | fine; needed so CI loads committed PNG/WAV files |
 
 ## Bottlenecks found and fixes
 

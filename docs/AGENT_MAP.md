@@ -12,12 +12,42 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### BATTLE1-L battle link (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | BATTLE1-L: map and dialogue fights open the combat arena (BattleScreen), outcomes settle through after_fight, results headline, battle_link suite | n/a / 60 | PR open |
+
+### GRID12 combat grid 12x9 (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | 12x9 grid, left/right deployment, side panels 270 px, centre marker to map POI icon, exits (11, 4); before/after screenshots in project files combat-grid/ | n/a / 60 | PR #31 |
+
+### S12S-A status carriers (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | Five status families on class paths at level 6 (seed s12s.gd); loadouts, tier gates and duel/role sims unchanged | n/a / 30 | merged via PR |
+
+### S14-A2 placeholder sounds (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | 13 generated SFX blips and manifest rows (seed s14_a2.gd) | n/a / 10 | merged via PR |
+
+### Roadmap review (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | Roadmap review (project file roadmap/ROADMAP_REVIEW_2026-10-17.md); ROADMAP statuses refreshed, goals G1-G6 replace the build order, CAMP1 idea row | n/a / 20 | merged via PR |
+
 ### AREA-THREADS and BATCH-MERGE: area threads, develop branch, batched releases (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | planner (Platform & Workflow thread) | cloud.md "Area threads", CLAUDE.md, planner and planner-ops skills, README table, decision row; daily routine now dispatches to area threads | n/a | PR #33 squash-merged |
-| planner (Platform & Workflow thread) + change-reviewer | cloud.md landing and release sections, CI only on PRs into main (docs-only skipped), planner skills, README table, decision row, `develop` branch | n/a | see PR |
+| planner (Platform & Workflow thread) + change-reviewer | cloud.md landing and release sections, CI only on PRs into main (docs-only skipped), planner skills, README table, decision row, `develop` branch | n/a | PR #34 squash-merged; WEB-DAILY (web.yml daily at 19:07 UTC and on demand, PR build only for web export changes) landed on develop |
 
 ### S14-L1 commit 3 item art (2026-10-17, cloud)
 

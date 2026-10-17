@@ -76,7 +76,7 @@ fi
 # and suite runs need. Only on a fresh checkout.
 if [ ! -d "${CLAUDE_PROJECT_DIR:-.}/.godot" ]; then
   log "importing project (first run)"
-  (cd "${CLAUDE_PROJECT_DIR:-.}" && timeout 300 "$GODOT_BIN" --headless --editor --quit-after 50 >/dev/null 2>&1) || \
+  (cd "${CLAUDE_PROJECT_DIR:-.}" && timeout 300 "$GODOT_BIN" --headless --import >/dev/null 2>&1) || \
     log "WARNING: initial import exited non-zero; run check_project.ps1 -Fast to see why"
 fi
 

@@ -74,7 +74,7 @@ static func _test_gap_close() -> bool:
 	var wall_grid: CombatGrid = CombatExtKit.new_grid()
 	var r4: Combatant = CombatExtKit.unit("R4", 100, 3, 1, wall_grid, Vector2i(1, 4), ["lunge"])
 	var behind: Combatant = CombatExtKit.unit("Behind", 100, 10, 1, wall_grid, Vector2i(5, 4))
-	for y: int in range(CombatGrid.GRID_SIZE):
+	for y: int in range(CombatGrid.GRID_H):
 		wall_grid.set_terrain(Vector2i(3, y), Terrain.Type.WALL)
 	var wall_ctx: PlanContext = CombatExtKit.new_ctx(wall_grid, [r4], [behind])
 	checks["refused when terrain blocks every route"] = CombatPlan.new(wall_ctx).add_step(r4, PlanStep.engage(lunge, behind)).contains("No route")
