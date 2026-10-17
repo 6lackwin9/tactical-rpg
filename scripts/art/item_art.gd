@@ -22,6 +22,12 @@ const UNIQUE_ICONS: Dictionary = {
 	"runed_staff": "Twisted staff with a glowing crystal",
 }
 
+# Every key with a generated icon (AssetRegistry "item" templates): the _glyph keys, the fallbacks and UNIQUE_ICONS.
+const TEMPLATE_KEYS: Array[String] = [
+	"sword", "greatsword", "shortsword", "dagger", "hammer", "axe", "bow", "staff", "wand", "tome", "knuckles", "shield",
+	"plate", "leather", "robe", "ring", "amulet", "potion", "elixir", "bomb", "weapon", "misc", "titan_warhammer", "runed_staff",
+]
+
 static func _unique_glyph(icon_id: String) -> String:
 	match icon_id:
 		"titan_warhammer":

@@ -45,7 +45,8 @@ static func token(class_key: String, team: Team) -> Texture2D:
 	var key: String = normalize_class(class_key)
 	return SvgRaster.texture("token|%s|%d" % [key, team], token_svg(key, team), 2.0)
 
-static func token_svg(class_key: String, team: Team) -> String:
+# The token template; with_glyph false leaves the inner disc empty (the backdrop a unit token FILE is composed on).
+static func token_svg(class_key: String, team: Team, with_glyph: bool = true) -> String:
 	var pal: Dictionary = _palette(team)
 	var rim_extra: String = ""
 	match team:
@@ -63,8 +64,12 @@ static func token_svg(class_key: String, team: Team) -> String:
 </svg>"""
 	return svg.format({
 		"light": pal["light"], "dark": pal["dark"], "rim": pal["rim"], "ink": INK,
-		"rim_extra": rim_extra, "glyph": _glyph(class_key, pal),
+		"rim_extra": rim_extra, "glyph": _glyph(class_key, pal) if with_glyph else "",
 	})
+
+# The class glyph alone on a transparent 64x64 canvas (the part a unit token file replaces; tools/export_placeholder.gd).
+static func glyph_svg(class_key: String, team: Team) -> String:
+	return '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">%s</svg>' % _glyph(class_key, _palette(team))
 
 static func _spikes(color: String) -> String:
 	var parts: Array[String] = []

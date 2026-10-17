@@ -305,7 +305,7 @@ static func _encounter_fields() -> Array[Dictionary]:
 static func options_of(f: Dictionary) -> Array[String]:
 	if str(f.get("options_from", "")) == "art_inherit":
 		var out: Array[String] = [""]
-		out.append_array(UnitArt.CLASS_KEYS)
+		out.append_array(AssetRegistry.keys("unit"))
 		return out
 	return ContentSchema.options_of(f)
 

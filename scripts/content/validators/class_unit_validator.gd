@@ -7,7 +7,7 @@ extends RefCounted
 # skills fit the level cap, and default gear the class can wield.
 static func class_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = StatRules.validate_class(ContentFactory._ints(e["base_stats"]), ContentFactory._ints(e["growth"]))
-	if not UnitArt.CLASS_KEYS.has(str(e["art"])):
+	if not AssetRegistry.has_key("unit", str(e["art"])):
 		errors.append("Art '%s' isn't a known token/portrait key." % str(e["art"]))
 	var prof_raw: Variant = e["proficiency"]
 	var weapons: int = 0

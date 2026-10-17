@@ -155,11 +155,10 @@ static func options_of(f: Dictionary) -> Array[String]:
 		"zones":
 			return CombatZones.zone_ids()
 		"art":
-			out.assign(UnitArt.CLASS_KEYS)
-			return out
+			return AssetRegistry.keys("unit")
 		"art_inherit":
 			out.append("")
-			out.append_array(UnitArt.CLASS_KEYS)
+			out.append_array(AssetRegistry.keys("unit"))
 			return out
 		"status":
 			out.append("")
