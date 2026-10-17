@@ -21,10 +21,11 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 ## Pull request, approval and merge
 
 1. Push, then open a draft PR whose title starts with the task id; body: what changed and what to check.
-2. Gate before marking it ready: `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (both work; ~3-4 min on a cloud container, not 32 s) and `tools/fc.sh docs`. There is no IDE Problems rule in the cloud. The GitHub Actions workflow `.github/workflows/gate.yml` runs the same gate on every PR.
-3. Approved means: the task row in `docs/TASKS.md` has status `approved` (set from the user's word) or the change is recorded as approved in `docs/decisions/*`. Approved work with a green gate and green CI is squash merged by the thread without asking.
-4. Not approved: a small change waits on its own branch as a PR for the user's approval before merge; a large one waits for the user's feedback before work starts. Rows in `spec` or `idea` status and any design question that comes up mid-task go to the user.
-5. Never push to `main` directly; delete the branch after merge.
+2. Review before marking it ready: run the `change-reviewer` agent on the whole branch (`git diff origin/main...HEAD` plus any uncommitted change). Fix its blockers (re-run it if the fix is more than a few lines), then add a `Review:` line to the PR body with the verdict, for example `Review: change-reviewer clean` or `Review: change-reviewer 1 high (fixed in <sha>), 2 nits accepted`. A docs-only diff still gets the docs profile of the review. No PR merges without a `Review:` line, including threads that ran no other subagent.
+3. Gate before marking it ready: `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (both work; ~3-4 min on a cloud container, not 32 s) and `tools/fc.sh docs`. There is no IDE Problems rule in the cloud. The GitHub Actions workflow `.github/workflows/gate.yml` runs the same gate on every PR.
+4. Approved means: the task row in `docs/TASKS.md` has status `approved` (set from the user's word) or the change is recorded as approved in `docs/decisions/*`. Approved work with a `Review:` line, a green gate and green CI is squash merged by the thread without asking.
+5. Not approved: a small change waits on its own branch as a PR for the user's approval before merge; a large one waits for the user's feedback before work starts. Rows in `spec` or `idea` status and any design question that comes up mid-task go to the user.
+6. Never push to `main` directly; delete the branch after merge.
 
 ## Scheduled routines
 

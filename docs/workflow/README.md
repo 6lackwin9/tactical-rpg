@@ -18,7 +18,7 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 | Front desk | a second local session, found with `ListAgents` | the project chat |
 | Parallel builders | subagents in sibling worktrees (`../ngp-<id>`) | one thread per task, each in its own container; subagents run one after another in that thread's checkout |
 | Branch | `feat/<id>-<slug>`, created by the planner | the branch the thread is given (`claude/...`); the PR title starts with the task id |
-| Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit |
+| Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit; `change-reviewer` reviews the whole branch before the PR is marked ready and its verdict goes in the PR body |
 | Merge to `main` | planner fast-forwards locally and pushes | squash merge of the PR on GitHub |
 | Writer of `docs/TASKS.md`, ROADMAP, decisions, HISTORY | planner only | each thread for its own task's rows and the decisions you gave in that thread, inside its PR |
 | `docs/AGENT_MAP.md` "Active now" | kept current by the planner | not used (the project's thread list is live); finished-run log still updated per merged PR |
