@@ -14,7 +14,7 @@ User direction (2026-10-17): duels are rare in RPGs; balance is benchmarked most
 | Key | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `cap` | 1..30 | 10 | Round cap (encounter `max_rounds` and the loop) |
-| `smart_skills` | `on`, `off` | `on` | `off` sets `AiProfile.smart_skills = false` on every profile in `session.encounter.ai_profiles` after `session.start()`; prints `smart_skills off: <n> profiles` |
+| `smart_skills` (removed by CLN-16, 2026-10-17: now an unknown key) | `on`, `off` | `on` | `off` set `AiProfile.smart_skills = false` on every profile in `session.encounter.ai_profiles` after `session.start()`; prints `smart_skills off: <n> profiles` |
 | `loadout` | `default`, `newest`, `role` | `default` | Party/left-side units only. `newest`: section 3.1; `role`: the class's primary role loadout (section 6.3) |
 | `spend` | `class`, `cons`, `primary`, `mixed`, `all` | `class` | Section 3.2; `all` runs class, cons and primary and averages |
 | `preset` | any `PlanPresets.IDS`, or `both` | `balanced` | Preset for every unit; `both` averages balanced and aggressive |
@@ -200,11 +200,11 @@ Duels are a diagnostic, no longer the gate (replaces the 40-60 bracket of decisi
 
 ## 9. Acceptance checks (rule-derived)
 
-1. `tools/fc.sh sim duel 5` without keys prints a header with cap 10, smart_skills on, loadout default, spend class, preset balanced, distance default, 3 seeds, and `bin/hp` cells.
+1. `tools/fc.sh sim duel 5` without keys prints a header with cap 10, smart_skills on (dropped from the header by CLN-16), loadout default, spend class, preset balanced, distance default, 3 seeds, and `bin/hp` cells.
 2. Regression: on the same commit, `duel 5 cap=6 score=binary` equals the old sim's table (run the old script first; report both).
 3. Determinism: the same command twice gives identical output (every mode).
 4. HP score: a KO win prints 100, a KO loss 0; a timeout with `l` 0.8 and `r` 0.4 scores 70.
-5. `smart_skills=off` prints `smart_skills off: <n> profiles` with n = units in the fight.
+5. `smart_skills=off` prints `smart_skills off: <n> profiles` with n = units in the fight (key removed by CLN-16).
 6. `loadout=newest` and `spend=*` produce the lists and stats of sections 3.1 and 3.2 (`stats` shows them).
 7. Conservation checks of section 4 hold in every fight of `party 5` and `role 5 quick` (no `METRIC FAIL` line).
 8. `party 5 comp=warrior,ranger,priest,mage,rogue` prints the PARTY_MAX error and runs no fight.

@@ -4,7 +4,7 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - AI Skills Test Suite (slice AI1)
 # TacticalAI uses disengage, area attacks, cleanse-only, taunt, ally buffs, debuff attacks and
-# riposte, and AiProfile.smart_skills = false restores the pre-AI1 behaviour. Every skill used
+# riposte (the only AI path since CLN-16 removed the smart_skills switch). Every skill used
 # here is an "ai1_*" row of a sandbox catalog fork (the shipped catalog is never touched) and
 # every expectation is derived from the rules, not from shipped skill numbers. Taunt, buffs, debuffs,
 # riposte and the seeded simulation: AiSkillsTacticsTestSuite; fixtures and helpers: AiSkillsKit (CLN-12).
@@ -18,7 +18,6 @@ static func run() -> bool:
 	print("=======================================================")
 	var ok: bool = AiSkillsKit.setup(true)
 	if ok:
-		ok = _test_switch_off() and ok
 		ok = _test_zero_power_never_the_strike() and ok
 		ok = _test_disengage() and ok
 		ok = _test_area() and ok
@@ -29,54 +28,6 @@ static func run() -> bool:
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
-
-static func _inert_kit() -> Array[String]:
-	return ["ai1_heal", "ai1_guard"]
-
-static func _rich_kit() -> Array[String]:
-	return ["ai1_heal", "ai1_guard", "ai1_back", "ai1_sweep", "ai1_burst", "ai1_clean_a", "ai1_clean_b", "ai1_taunt", "ai1_haste"]
-
-# Six seeded scenarios, one per role pattern; returns the plan signature.
-static func _scenario_sig(index: int, kit: Array[String], smart: bool) -> String:
-	var scene: Dictionary
-	match index:
-		0:
-			scene = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), kit, [Vector2i(5, 4), Vector2i(4, 5)], [Vector2i(1, 1)], 1, 1, smart)
-		1:
-			scene = AiSkillsKit.new_scene(AiProfile.Role.SKIRMISHER, Vector2i(4, 4), kit, [Vector2i(5, 4)], [Vector2i(3, 4)], 1, 1, smart)
-			var hurt: Combatant = scene["actor"]
-			hurt.hp = 120
-		2:
-			scene = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(4, 4), kit, [Vector2i(5, 4), Vector2i(7, 7)], [], 3, 1, smart)
-		3:
-			scene = AiSkillsKit.new_scene(AiProfile.Role.SUPPORT, Vector2i(4, 4), kit, [Vector2i(6, 4)], [Vector2i(3, 4), Vector2i(4, 3)], 3, 1, smart)
-			var patient: Combatant = AiSkillsKit.unit_of(scene, "allies", 1)
-			patient.hp = 100
-			var stunned: Combatant = AiSkillsKit.unit_of(scene, "allies", 2)
-			stunned.statuses[StatusEffects.STUN] = true   # inert without a cleanse skill the old code uses
-		4:
-			scene = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), kit, [Vector2i(7, 4)], [], 1, 1, smart)
-			var rash: AiProfile = scene["profile"]
-			rash.reckless = true
-			var rash_unit: Combatant = scene["actor"]
-			rash_unit.hp = 80
-		_:
-			scene = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(2, 2), kit, [Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)], [Vector2i(0, 1)], 1, 1, smart)
-	return AiSkillsKit.sig(AiSkillsKit.plan_steps(scene))
-
-static func _test_switch_off() -> bool:
-	var checks: Dictionary = {}
-	for i: int in range(6):
-		var bare_old: String = _scenario_sig(i, _inert_kit(), false)
-		var bare_new: String = _scenario_sig(i, _inert_kit(), true)
-		var rich_old: String = _scenario_sig(i, _rich_kit(), false)
-		checks["scenario %d: a unit without the new skills plans the same under both switch values" % i] = bare_old == bare_new and not bare_old.is_empty()
-		checks["scenario %d: smart_skills = false ignores the new skills (equals the plain kit)" % i] = rich_old == bare_old and not rich_old.contains("ai1_back") and not rich_old.contains("ai1_sweep") and not rich_old.contains("ai1_burst")
-	# The switch really changes something when the kit has a use for it.
-	var on: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_sweep"], [Vector2i(5, 4), Vector2i(4, 5)])
-	var off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_sweep"], [Vector2i(5, 4), Vector2i(4, 5)], [], 1, 1, false)
-	checks["the same kit plans differently with the switch on and off"] = AiSkillsKit.sig(AiSkillsKit.plan_steps(on)) != AiSkillsKit.sig(AiSkillsKit.plan_steps(off))
-	return TestHelpers.report(TAG, "smart_skills = false equals the old behaviour", checks)
 
 static func _test_zero_power_never_the_strike() -> bool:
 	var checks: Dictionary = {}
@@ -91,9 +42,6 @@ static func _test_zero_power_never_the_strike() -> bool:
 	checks["with intimidate (highest level) and a normal strike, the damage dealer is the normal strike"] = damage_steps >= 1 and strike_ok
 	checks["the zero-power attack is only ever a debuff cast, never counted as damage"] = AiSkillsKit.count_of(steps, "ai1_intim") <= 1
 	checks["the plan is valid"] = AiSkillsKit.valid(both, steps)
-	var old: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_intim"], [Vector2i(5, 4)], [], 1, 1, false)
-	var old_steps: Array[PlanStep] = AiSkillsKit.plan_steps(old)
-	checks["pre-AI1 (switch off) still picks it as the main attack (documents the old behaviour)"] = not old_steps.is_empty() and old_steps[0].skill.id == "ai1_intim"
 	# A unit that knows only the zero-power attack behaves like an unarmed idler.
 	var lone: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(0, 4), [], [Vector2i(8, 4)])
 	var lone_actor: Combatant = lone["actor"]
@@ -126,10 +74,6 @@ static func _test_disengage() -> bool:
 	var rooted_actor: Combatant = rooted["actor"]
 	rooted_actor.statuses[StatusEffects.ROOT] = true
 	checks["rooted: no disengage step"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(rooted), "ai1_back") == 0
-	# No skill: the plan equals the pre-AI1 plan.
-	var bare_on: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(4, 4), [], [Vector2i(5, 4)], [], 3)
-	var bare_off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(4, 4), [], [Vector2i(5, 4)], [], 3, 1, false)
-	checks["without the skill the plan is the old one"] = AiSkillsKit.sig(AiSkillsKit.plan_steps(bare_on)) == AiSkillsKit.sig(AiSkillsKit.plan_steps(bare_off))
 	# No foe next to the unit: no disengage.
 	var far: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(4, 4), ["ai1_back"], [Vector2i(7, 4)], [], 3)
 	checks["no adjacent foe: no disengage"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(far), "ai1_back") == 0
@@ -175,8 +119,6 @@ static func _test_area() -> bool:
 	var picky_profile: AiProfile = picky["profile"]
 	picky_profile.area_min_foes = 99
 	checks["an out-of-range area_min_foes is clamped (6): two foes are not enough"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(picky), "ai1_sweep") == 0
-	var off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_sweep"], foes_both, [], 1, 1, false)
-	checks["switch off: no area step"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(off), "ai1_sweep") == 0
 	# A tile-aimed burst for a ranged unit.
 	var burst: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(4, 4), ["ai1_burst"], [Vector2i(7, 4), Vector2i(7, 5)], [], 3)
 	var burst_steps: Array[PlanStep] = AiSkillsKit.plan_steps(burst)
@@ -237,8 +179,4 @@ static func _test_cleanse() -> bool:
 	var fighter: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_clean_a"], far_foe, cells, 1)
 	AiSkillsKit.unit_of(fighter, "allies", 1).statuses[StatusEffects.STUN] = true
 	checks["an aggressor that owns a cleanse uses it on a stunned ally"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(fighter), "ai1_clean_a") == 1
-	var off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SUPPORT, Vector2i(4, 4), kit, far_foe, cells, 1, 1, false)
-	AiSkillsKit.unit_of(off, "allies", 1).statuses[StatusEffects.STUN] = true
-	var off_steps: Array[PlanStep] = AiSkillsKit.plan_steps(off)
-	checks["switch off: no cleanse step"] = AiSkillsKit.count_of(off_steps, "ai1_clean_a") + AiSkillsKit.count_of(off_steps, "ai1_clean_b") == 0
 	return TestHelpers.report(TAG, "Rule 4: cleanse-only skills", checks)

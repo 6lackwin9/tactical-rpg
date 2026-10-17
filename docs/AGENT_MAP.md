@@ -16,7 +16,8 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
-| cloud thread (no subagent) | CLN-12 suite split + CLN-6 ItemCatalog part | n/a | PR squash-merged; PASS lines unchanged (arena 414, dojo 45) |
+| cloud thread (no subagent) | CLN-12 suite split + CLN-6 ItemCatalog part | n/a | PR #8 squash-merged; PASS lines unchanged |
+| cloud thread (no subagent) | CLN-16 remove the `smart_skills = false` AI path, its tests and the sim key | n/a | PR squash-merged |
 
 ### DLG1-L commit 3 dialogue and shop panels (2026-10-17, cloud)
 
