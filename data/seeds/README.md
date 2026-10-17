@@ -19,6 +19,7 @@ Restore with `git show <hash>:data/seeds/<file>`.
 | `skill1_ranks.gd` | SKILL1 (ranked skills v2 migration) | `745962a` |
 | `item1_migrate.gd` | ITEM1-A (item families, items v2 migration) | pending merge |
 | `item1_tokens.gd` | ITEM1-A (number-quoting item descriptions to tokens) | pending merge |
+| `class1_migrate.gd` | CLASS1-M (class skill_path list to dict, units heal_below default) | pending merge |
 
 Example: `git show 11ffe67:data/seeds/c1a1.gd`
 
@@ -28,4 +29,3 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | --- | --- |
 | `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |
 | `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
-| `class1_migrate.gd` | CLASS1-M (class skill_path list to dict, units heal_below default) |

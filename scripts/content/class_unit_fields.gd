@@ -19,9 +19,10 @@ const DESCRIPTION_MAX_LEN: int = 240
 const HEAL_BELOW_MIN: float = 0.1
 const HEAL_BELOW_MAX: float = 1.0
 
-# One-release converter (FORGE1_CLASSES 3.5): a list-shaped skill_path is converted on normalize while this is on. The
-# cleanup after CLASS1-M turns it off (then a list is a validation error); tests flip the static var to check both modes.
-const LIST_PATH_CONVERTER: bool = true
+# One-release converter (FORGE1_CLASSES 3.5): a list-shaped skill_path is converted on normalize while this is on.
+# Off since CLASS1-M migrated the shipped data (a list is now kept as-is and is a validation error); tests flip the
+# static var to check both modes. The converter code is removed in a later cleanup pass.
+const LIST_PATH_CONVERTER: bool = false
 static var list_path_converter: bool = LIST_PATH_CONVERTER
 
 # Default gear of a class (and per-slot overrides on units): one item id per slot.

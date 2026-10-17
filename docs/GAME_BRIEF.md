@@ -95,7 +95,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## Class tab (CLASS1)
 
-- Old list-shaped paths convert on load while `ClassUnitFields.LIST_PATH_CONVERTER` is on (switched off with the CLASS1-M migration). Class key fields: id, ai_role, base_stats, growth, proficiency. `StatRules.ALLOW_DUPLICATE_ACCESSORY` (false; empty and `none` slots never count). Unit `heal_below` (AI group, 0.1-1.0, default 0.7). Class and unit warnings are `{section, text}` records; shipped classes may only carry the two known ones (more than 5 families; tier capped past level 10), see `TestHelpers.KNOWN_SHIPPED_CLASS_WARNINGS`. Forge logic: `ClassForgeModel`, `ForgePreview.class_panels`.
+- Shipped class paths are maps since CLASS1-M; `ClassUnitFields.LIST_PATH_CONVERTER` is false (a list path is a validation error; tests switch the static var on to exercise the old converter). Class key fields: id, ai_role, base_stats, growth, proficiency. `StatRules.ALLOW_DUPLICATE_ACCESSORY` (false; empty and `none` slots never count). Unit `heal_below` (AI group, 0.1-1.0, default 0.7). Class and unit warnings are `{section, text}` records; shipped classes may only carry the two known ones (more than 5 families; tier capped past level 10), see `TestHelpers.KNOWN_SHIPPED_CLASS_WARNINGS`. Forge logic: `ClassForgeModel`, `ForgePreview.class_panels`.
 
 ## Item families (ITEM1)
 

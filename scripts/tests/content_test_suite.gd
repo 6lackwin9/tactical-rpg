@@ -123,8 +123,11 @@ static func _test_validation() -> bool:
 	checks["class proficiency gear"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "proficiency": {"banjo": {"level": 1}}}), "unknown gear type")
 	checks["class path: AP level no longer gates a step"] = not _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": {"hamstring": 1, "riposte": 1}}), "too advanced")
 	checks["class path: a higher tier row is refused"] = _has_error(ContentCatalog.validate_entry("classes", {"id": "odd", "name": "Odd", "skill_path": {"hamstring": 1, "riposte_2": 3}}), "higher tier")
-	# One-release converter (CLASS1): the old list shape still loads; a repeated family collapses to one key at its lowest level.
+	# One-release converter (CLASS1, off since CLASS1-M): when switched on, a repeated family collapses to one key at its lowest level.
+	var conv_saved: bool = ClassUnitFields.list_path_converter
+	ClassUnitFields.list_path_converter = true
 	var listed: Dictionary = ContentSchema.normalize("classes", {"id": "odd", "name": "Odd", "skill_path": [{"level": 1, "skill": "hamstring"}, {"level": 3, "skill": "hamstring"}]})
+	ClassUnitFields.list_path_converter = conv_saved
 	checks["class path: the old list shape converts to one key per family"] = DictUtil.dict_of(listed["skill_path"]) == {"hamstring": 1}
 	checks["skills: tier 1 can't carry an unlock offset"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "odd_t1", "name": "Odd", "kind": "ATTACK", "unlock_offset": 2}), "tier 1")
 	checks["skills: basic skills can't be advanced"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "odd_basic", "name": "Odd", "kind": "ATTACK", "basic": true, "grade": "advanced"}), "advanced")

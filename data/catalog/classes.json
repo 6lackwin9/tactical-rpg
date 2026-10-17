@@ -51,32 +51,14 @@
 					"scaling": 1.25
 				}
 			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "taunt_shout"
-				},
-				{
-					"level": 3,
-					"skill": "shield_bash"
-				},
-				{
-					"level": 3,
-					"skill": "riposte"
-				},
-				{
-					"level": 4,
-					"skill": "intimidate"
-				},
-				{
-					"level": 5,
-					"skill": "sunder"
-				},
-				{
-					"level": 5,
-					"skill": "shield_wall"
-				}
-			],
+			"skill_path": {
+				"taunt_shout": 1,
+				"shield_bash": 3,
+				"riposte": 3,
+				"intimidate": 4,
+				"sunder": 5,
+				"shield_wall": 5
+			},
 			"main_hand": "wpn_hand_axe",
 			"off_hand": "shd_kite",
 			"head": "",
@@ -133,36 +115,15 @@
 					"scaling": 1.25
 				}
 			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "aimed_shot"
-				},
-				{
-					"level": 3,
-					"skill": "pinning_shot"
-				},
-				{
-					"level": 3,
-					"skill": "leap_back"
-				},
-				{
-					"level": 5,
-					"skill": "barbed_arrow"
-				},
-				{
-					"level": 5,
-					"skill": "volley"
-				},
-				{
-					"level": 5,
-					"skill": "deadeye"
-				},
-				{
-					"level": 5,
-					"skill": "focus"
-				}
-			],
+			"skill_path": {
+				"aimed_shot": 1,
+				"pinning_shot": 3,
+				"leap_back": 3,
+				"barbed_arrow": 5,
+				"volley": 5,
+				"deadeye": 5,
+				"focus": 5
+			},
 			"main_hand": "wpn_shortbow",
 			"off_hand": "",
 			"head": "",
@@ -227,36 +188,15 @@
 					"scaling": 1.25
 				}
 			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "body_blow"
-				},
-				{
-					"level": 3,
-					"skill": "lunge"
-				},
-				{
-					"level": 3,
-					"skill": "sweep_kick"
-				},
-				{
-					"level": 4,
-					"skill": "hamstring"
-				},
-				{
-					"level": 5,
-					"skill": "haymaker"
-				},
-				{
-					"level": 5,
-					"skill": "charge_in"
-				},
-				{
-					"level": 5,
-					"skill": "cyclone_kick"
-				}
-			],
+			"skill_path": {
+				"body_blow": 1,
+				"lunge": 3,
+				"sweep_kick": 3,
+				"hamstring": 4,
+				"haymaker": 5,
+				"charge_in": 5,
+				"cyclone_kick": 5
+			},
 			"main_hand": "",
 			"off_hand": "",
 			"head": "",
@@ -315,40 +255,16 @@
 					"scaling": 1.25
 				}
 			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "smite"
-				},
-				{
-					"level": 1,
-					"skill": "rally"
-				},
-				{
-					"level": 3,
-					"skill": "mend"
-				},
-				{
-					"level": 3,
-					"skill": "purify"
-				},
-				{
-					"level": 5,
-					"skill": "hex"
-				},
-				{
-					"level": 5,
-					"skill": "greater_mend"
-				},
-				{
-					"level": 5,
-					"skill": "renewal"
-				},
-				{
-					"level": 7,
-					"skill": "judgement"
-				}
-			],
+			"skill_path": {
+				"smite": 1,
+				"rally": 1,
+				"mend": 3,
+				"purify": 3,
+				"hex": 5,
+				"greater_mend": 5,
+				"renewal": 5,
+				"judgement": 7
+			},
 			"main_hand": "wpn_cleric_mace",
 			"off_hand": "wpn_tome",
 			"head": "",
@@ -405,36 +321,15 @@
 					"scaling": 1.25
 				}
 			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "quick_stab"
-				},
-				{
-					"level": 3,
-					"skill": "pounce"
-				},
-				{
-					"level": 3,
-					"skill": "bleeding_cut"
-				},
-				{
-					"level": 4,
-					"skill": "backflip"
-				},
-				{
-					"level": 5,
-					"skill": "hamstring"
-				},
-				{
-					"level": 5,
-					"skill": "lacerate"
-				},
-				{
-					"level": 7,
-					"skill": "assassinate"
-				}
-			],
+			"skill_path": {
+				"quick_stab": 1,
+				"pounce": 3,
+				"bleeding_cut": 3,
+				"backflip": 4,
+				"hamstring": 5,
+				"lacerate": 5,
+				"assassinate": 7
+			},
 			"main_hand": "wpn_stiletto",
 			"off_hand": "",
 			"head": "",
@@ -489,36 +384,15 @@
 					"scaling": 1.5
 				}
 			},
-			"skill_path": [
-				{
-					"level": 1,
-					"skill": "arcane_bolt"
-				},
-				{
-					"level": 3,
-					"skill": "arc_lance"
-				},
-				{
-					"level": 3,
-					"skill": "hex"
-				},
-				{
-					"level": 4,
-					"skill": "focus"
-				},
-				{
-					"level": 5,
-					"skill": "firebomb"
-				},
-				{
-					"level": 5,
-					"skill": "glacial_burst"
-				},
-				{
-					"level": 7,
-					"skill": "inferno"
-				}
-			],
+			"skill_path": {
+				"arcane_bolt": 1,
+				"arc_lance": 3,
+				"hex": 3,
+				"focus": 4,
+				"firebomb": 5,
+				"glacial_burst": 5,
+				"inferno": 7
+			},
 			"main_hand": "wpn_wand",
 			"off_hand": "wpn_orb",
 			"head": "",

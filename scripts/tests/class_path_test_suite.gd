@@ -128,6 +128,8 @@ static func _test_converter() -> bool:
 	if heads.size() < 2 or basics.is_empty():
 		return TestHelpers.report(TAG, "List converter", checks)
 	var listed: Array = [{"level": 1, "skill": basics[0]}, {"level": 3, "skill": heads[1]}, {"level": 1, "skill": heads[0]}, {"level": 5, "skill": heads[1]}]
+	var saved: bool = ClassUnitFields.list_path_converter
+	ClassUnitFields.list_path_converter = true
 	var e: Dictionary = ContentSchema.normalize("classes", {"id": "t_cp_list", "name": "L", "skill_path": listed})
 	var path: Dictionary = DictUtil.dict_of(e["skill_path"])
 	checks["a list converts to a dict"] = e["skill_path"] is Dictionary
@@ -135,13 +137,12 @@ static func _test_converter() -> bool:
 	checks["...list order kept (first position wins)"] = path.keys() == [heads[1], heads[0]]
 	checks["...a repeated family keeps its lowest level"] = DictUtil.to_int(path.get(heads[1], 0)) == 3 and DictUtil.to_int(path.get(heads[0], 0)) == 1
 	checks["JSON floats become whole levels"] = DictUtil.dict_of(ContentSchema.normalize("classes", {"skill_path": {heads[0]: 3.0}})["skill_path"])[heads[0]] is int
-	var saved: bool = ClassUnitFields.list_path_converter
 	ClassUnitFields.list_path_converter = false
 	var raw: Dictionary = ContentSchema.normalize("classes", {"id": "t_cp_list", "name": "L", "skill_path": listed})
 	checks["converter off: the list is kept (never dropped)"] = raw["skill_path"] is Array
 	checks["converter off: a list is a validation error"] = TestHelpers.any_contains(_errors({"id": "t_cp_list", "name": "L", "skill_path": listed}), "must be a dictionary")
 	ClassUnitFields.list_path_converter = saved
-	checks["the converter is on for this release"] = ClassUnitFields.LIST_PATH_CONVERTER and ClassUnitFields.list_path_converter
+	checks["the converter is off since CLASS1-M migrated the shipped data"] = not ClassUnitFields.LIST_PATH_CONVERTER and not ClassUnitFields.list_path_converter
 	return TestHelpers.report(TAG, "One-release list converter (FORGE1_CLASSES 3.5)", checks)
 
 # `n` shipped novice tier-1 heads with no `requires`, not basic, not engine (picked by rule).
@@ -449,6 +450,9 @@ static func _test_migration() -> bool:
 	var checks: Dictionary = {}
 	if not ResourceLoader.exists(SEED):
 		return TestHelpers.report_ok(TAG, "CLASS1-M seed archived (migration already merged)", true)
+	# The seed reads list-shaped data through the converter, which is off since CLASS1-M; switch it on for this test only.
+	var conv_saved: bool = ClassUnitFields.list_path_converter
+	ClassUnitFields.list_path_converter = true
 	checks["sandbox fork"] = TestHelpers.fork(MIGRATE_SANDBOX)
 	var basic: String = SkillCatalog.basic_ids()[0]
 	checks["a list-shaped classes.json is written to the fork"] = _write_list_shaped(basic)
@@ -472,6 +476,7 @@ static func _test_migration() -> bool:
 	checks["units.json carries heal_below"] = FileAccess.get_file_as_string(ContentCatalog.path_for("units")).contains("\"heal_below\"")
 	var again: Dictionary = DictUtil.dict_of(seed_script.call("migrate"))
 	checks["the seed is idempotent"] = DictUtil.to_bool(again.get("ok", false)) and str(again.get("file_shape_before", "")) == "dict"
+	ClassUnitFields.list_path_converter = conv_saved
 	return TestHelpers.report(TAG, "CLASS1-M seed on a list-shaped fork", checks)
 
 # Rewrites the fork's classes.json with the old list shape (dict order = list order) and a basic step prepended to the first class.
