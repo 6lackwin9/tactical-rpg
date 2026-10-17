@@ -1,6 +1,6 @@
 # BAL3: data and AI levers for the BAL2-R issues I2-I14
 
-Status: spec (written 2026-10-17 by the BAL3 cloud thread; awaiting the user's approval; nothing here is tuned yet)
+Status: approved (user 2026-10-17, "all recs": Q1-Q3 yes; decisions/balance.md "BAL3 answers"). Written 2026-10-17 by the BAL3 cloud thread; nothing is tuned yet
 Input: `docs/BALANCE_REPORT.md` "BAL2-R clean rerun 2026-10-17" (issues I2-I14; I1 resolved by PLAN1). Its rechecks already include S12S-L commit 1 (registry schema and six status rows, no behaviour).
 Decisions this spec builds on (not re-opened): `docs/decisions/balance.md` rows "Solo difficulty", "BAL2 answers" (6) and (7) tier values, "BAL2 role answers" (1)-(7), "BAL2 sim follow-ups", "AI2 diagnosis" options A-E, "BAL3 plan".
 
@@ -19,7 +19,7 @@ Run cost (cloud, 4 parallel): role L5 grid ~15 min, role L3 ~8 min, sweep L5 ~6 
 
 | Id | Lane | Depends on | Scope | Touches |
 | --- | --- | --- | --- | --- |
-| BAL3-R0 | balance | 12x9 grid task, S12S-L (commits 2-3) | Baseline rerun on that main, same method as BAL2-R plus L7 party/role; marks which triggers below fire | docs/BALANCE_REPORT.md |
+| BAL3-R0 | balance | 12x9 combat grid (its own thread; the task row lands with that PR), S12S-L (commits 2-3) | Baseline rerun on that main, same method as BAL2-R plus L7 party/role; marks which triggers below fire | docs/BALANCE_REPORT.md |
 | BAL3-S | logic | BAL3-R0 | Sim only: seeded jitter, scenario scale, encounter archetypes (sections 3.1-3.3) | tools/sim/*, bal2_rules_test_suite |
 | BAL3-AI | logic | BAL3-S | AI levers (section 4) | scripts/combat/ai/tactical_ai.gd, ai_profile.gd, ai_skills(_tactics)_test_suite |
 | BAL3-A | asset | BAL3-AI | Data levers (section 5) through `ContentCatalog.upsert`, seed `data/seeds/bal3.gd` | classes.json, skills.json, items.json, units.json, data/seeds/* |
@@ -41,9 +41,9 @@ Constants in `tools/sim/sim_scenarios.gd` `SCENARIOS`. Starting values; the buil
 
 | Scenario | Today | Trigger (R0) | Starting change |
 | --- | --- | --- | --- |
-| aoe_swarm | 6 minions in a line; every class 0% at L5 | primary clear < 50 | enemies start clumped (2x3 block, 1 tile apart) and the minion ranger is replaced by a second minion brawler (no Aimed Shot one-shot on the caster) |
+| aoe_swarm | 6 minions in a line; every class 0% at L5 | primary clear < 50 | enemies start clumped (2x3 block, 1 tile apart) and the minion ranger is replaced by a third minion brawler (no Aimed Shot one-shot on the caster) |
 | striker_priority | L3: nobody downs the priority mage (elite) | primary clear < 50 at L3 | priority target tier elite -> standard at L3 only (L5 already meets its KPIs) |
-| ranged_dive | ranger and warrior clear 100 | primary clear > 85 | add a third standard rogue (divers now outnumber the party) |
+| ranged_dive | ranger and warrior clear 100 | primary clear > 85 | add a third standard rogue (four divers against the ranger and its warrior reference) |
 | tank_hold, support_attrition | unchanged | - | scale left alone; their gaps are AI and data (sections 4, 5) |
 
 ### 3.3 Encounter archetypes (I2; party targets mob >= 90, line 70-90, wave 55-80, elite 50-75, boss 30-50)
@@ -82,12 +82,12 @@ Changes go through `ContentCatalog.upsert` in `data/seeds/bal3.gd`. One lever pe
 | Lever | Issue | Trigger | Starting value |
 | --- | --- | --- | --- |
 | Caster HP | I3 | mage still takes its full HP before acting in an L5 party fight | mage base CONS 8 -> 10 (from INT 17 -> 15, budget 62 kept); priest base CONS 12 -> 13 (from INT 11 -> 10) |
-| Caster armor | I3 | still failing after caster HP | mitigation +3 on the mage and priest default body armor rows |
-| Minion skill ceiling | I3, I4 | a minion's tier III hit takes over 50% of a caster's HP | minion units use AP ceiling 2 (tier I-II only) through `AiProfile.skill_cap` for the minion tier |
-| Tank tools | I5 | allies hp_end < 40 after lever D | warrior role loadout gets `shield_wall` (taunt + mitigation) in place of `riposte`; fortify (S12S) magnitude on shield_wall set from its placeholder |
-| Brawler AoE | I6 | brawler foes/cast < 1.5 in aoe_swarm | `sweep_kick` power_mult 0.7/0.9/1.05 -> 0.8/1.0/1.15 and `cyclone_kick` in the AoE role loadout |
+| Caster armor | I3 | still failing after caster HP | add a `mitigation` +3 field to the mage and priest default body armor rows (robe, vestment; today they inherit the family base) |
+| Minion skill ceiling | I3, I4 | a minion's tier III hit takes over 50% of a caster's HP | minion-tier units use AP ceiling 2 (tier I-II only). Today `skill_cap` is a units.json field only and sim units are built from class + tier, so the per-tier default is a small logic change carried in BAL3-AI; BAL3-A only sets the value |
+| Tank tools | I5 | allies hp_end < 40 after lever D | drop `riposte` from the warrior tank loadout (`tools/sim/sim_roles.gd` already lists `shield_wall`), so shield_wall is drafted; then add a fortify (S12S) grant to shield_wall with a magnitude inside its registry range |
+| Brawler AoE | I6 | brawler foes/cast < 1.5 in aoe_swarm | `sweep_kick` power_mult 0.7/0.9/1.05 -> 0.8/1.0/1.15 (`cyclone_kick` is already in the AoE role loadout) |
 | Mage AoE | I6 | mage foes/cast < 2.0 after 3.2 | `firebomb` reach_max 2 -> 3 (it can open from the back row) |
-| Support | I7 | priest heal 0 after the heal reservation | `mend` heal_base 8/10/12 -> 10/12/14; `renewal` regen (S12S) magnitude set from its placeholder |
+| Support | I7 | priest heal 0 after the heal reservation | `mend` heal_base 8/10/12 -> 10/12/14; `renewal` grant haste -> regen (the S12S-A out-of-scope candidate), magnitude inside the regen registry range |
 | Duel: warrior | I9 | warrior duel L5 > 70 | per the "BAL2 role answers" (6) rule: find the GearBudget component (kite shield mitigation) and lower it first; no formula change |
 | Duel: priest | I9 | priest duel L5 < 30 and party support KPIs met | smite power_mult +0.1 per tier; nothing else (duels are a diagnostic) |
 | Composition swap | sweep +-10 | L3 rogue or brawler outside +-10 | brawler first: `body_blow` power_mult +0.1 per tier; rogue: no change unless still above +10 after the other rows |
