@@ -93,7 +93,7 @@ func _init() -> void:
 		"zone_bindings": {"ruins": {"encounters": [["ash_scouts", 2], ["ash_raiders", 3]], "elites": [["ash_patrol", 1]], "elite_pct": 15, "steps_min": 10, "steps_max": 16}},
 		"markers": [
 			_m("to_gorge", "exit", "west", {"to": "ruined_courtyard", "to_anchor": "east_in"}),
-			_m("ambush", "encounter", "site_b", {"encounter": "pass_ambush", "trigger": "proximity", "radius": 2, "once": false, "unless_flags": _flag("ashlands.pass_cleared")}),
+			_m("ambush", "encounter", "site_b", {"encounter": "pass_ambush", "trigger": "proximity", "radius": 2, "once": false, "unless_flags": _flag("ashlands.pass_cleared") + _flag(QuestRunner.ready_flag("ashlands:cinder_gate_watch"))}),
 			_m("beacon", "point", "altar", {"sets_flags": _flag("ashlands.gate_beacon_lit")}),
 			_m("camp_cache", "chest", "camp_chest", {"items": {"con_heal_potion": 1}}),
 		]}))
@@ -107,7 +107,7 @@ func _init() -> void:
 		"markers": [
 			_m("to_keep", "exit", "west", {"to": "warden_keep", "to_anchor": "spawn"}),
 			_m("gate_road", "exit", "east", {"to": "cinder_gate", "to_anchor": "west_in", "requires_flags": _flag("ashlands.courtyard_held"), "locked_text": "Warden barricades close the gate road until the Courtyard is held."}),
-			_m("warband", "encounter", "site_a", {"encounter": "courtyard_skirmish", "trigger": "proximity", "radius": 1, "once": false, "unless_flags": _flag("ashlands.courtyard_held")}),
+			_m("warband", "encounter", "site_a", {"encounter": "courtyard_skirmish", "trigger": "proximity", "radius": 1, "once": false, "unless_flags": _flag("ashlands.courtyard_held") + _flag(QuestRunner.ready_flag("ashlands:hold_the_courtyard"))}),
 			{"id": "patrol", "kind": "roamer", "requires_flags": [], "unless_flags": [], "sets_flags": [], "encounter": "ash_patrol", "path": "patrol", "radius": 1, "once": true},
 			_m("ruin_cache", "chest", "ruin_chest", {"items": {"con_focus_elixir": 1}, "loot": "keep_stores"}),
 			_m("old_stones", "lore", "ruin_lore", {"lore": "the_long_dry"}),

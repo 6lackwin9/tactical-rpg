@@ -165,6 +165,10 @@
 						{
 							"key": "ashlands.courtyard_held",
 							"value": true
+						},
+						{
+							"key": "quest.ashlands.hold_the_courtyard.ready",
+							"value": true
 						}
 					],
 					"sets_flags": [],
@@ -269,6 +273,10 @@
 					"unless_flags": [
 						{
 							"key": "ashlands.pass_cleared",
+							"value": true
+						},
+						{
+							"key": "quest.ashlands.cinder_gate_watch.ready",
 							"value": true
 						}
 					],

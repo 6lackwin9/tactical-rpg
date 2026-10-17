@@ -507,6 +507,8 @@ The exploration runtime (EXP1-L commit 2) walks a region map step by step: a see
 
 Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to debug slot 9. EXP1 is complete.
 
+Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
+
 Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `gorge_ruins`; Ashlands starts at Warden Keep; the new Cinder Gate location; generic Horde characters and mob encounters; markers for patrols, chests, lore, a beacon and the gate that opens once the courtyard is held. World-map exits arrive with TRAV1.
 
 ### Plan claims (PLAN1)

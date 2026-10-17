@@ -19,6 +19,11 @@ static func _runnable(entry: Dictionary) -> bool:
 static func _stored(gs: GameState, qid: String) -> Dictionary:
 	return DictUtil.dict_of(gs.quests.get(qid, {}))
 
+# QUEST2: flag set when the quest turns ready (all objectives done), kept through turn-in, cleared by abandon (the
+# quest resets). Same qid-to-key convention as the exploration done flags. Map markers hide on it.
+static func ready_flag(qid: String) -> String:
+	return "quest.%s.ready" % MapRules.dotted(qid)
+
 static func _count(resolved_quest: Dictionary) -> int:
 	return DictUtil.array_of(resolved_quest.get("objectives", [])).size()
 
@@ -145,7 +150,9 @@ static func abandon(gs: GameState, ref: String) -> Array[String]:
 	if not ["active", "ready", "blocked"].has(st):
 		errors.append("Quest '%s' can't be abandoned (it is %s)." % [ref, st])
 		return errors
-	gs.quests.erase(str(_entry(gs, ref)["_qid"]))
+	var qid: String = str(_entry(gs, ref)["_qid"])
+	gs.quests.erase(qid)
+	gs.clear_flag(ready_flag(qid))
 	return errors
 
 static func on_location_reached(gs: GameState, location_ref: String) -> Array[String]:
@@ -200,6 +207,7 @@ static func refresh(gs: GameState) -> Array[String]:
 			var index: int = DictUtil.to_int(_stored(gs, qid).get("objective", 0))
 			if index >= _count(QuestRules.resolve(gs, e)):
 				gs.quests[qid] = {"state": "ready", "objective": index}
+				gs.set_flag(ready_flag(qid), true)
 				any = true
 				if not changed.has(qid):
 					changed.append(qid)

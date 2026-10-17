@@ -40,6 +40,7 @@ static func run() -> bool:
 		ok = _test_variants_resolve() and ok
 		ok = _test_rebinding() and ok
 		ok = _test_available_false() and ok
+		ok = _test_ready_flag() and ok
 		ok = _test_rewards_from() and ok
 		ok = _test_inheritance() and ok
 		ok = _test_save() and ok
@@ -423,6 +424,43 @@ static func _test_available_false() -> bool:
 	checks["blocked: abandon works"] = QuestRunner.abandon(gs, "q_block").is_empty() and not gs.quests.has(_q("q_block"))
 	checks["quests_with blocked/unavailable"] = QuestRunner.quests_with(gs, "unavailable").has(_q("q_block"))
 	return _report("available false: unavailable (no start), blocked (events ignored, complete refuses, abandon works), blob stable", checks)
+
+# ------------------------------------------------------------------------------
+# Check 12b (QUEST2): ready flag quest.<qid dotted>.ready
+# ------------------------------------------------------------------------------
+
+static func _test_ready_flag() -> bool:
+	var checks: Dictionary = {}
+	var key: String = QuestRunner.ready_flag(_q("q_flow"))
+	checks["key format: quest. + dotted qid + .ready"] = key == "quest.%s.ready" % MapRules.dotted(_q("q_flow")) and key == "quest.%s.q_flow.ready" % RUN and GameState.flag_key_ok(key)
+	var gs: GameState = _fresh()
+	QuestRunner.start(gs, "q_flow")
+	checks["not set while active"] = not gs.has_flag(key)
+	QuestRunner.on_location_reached(gs, "l1")
+	checks["not set after a partial objective"] = not gs.has_flag(key)
+	QuestRunner.on_encounter_won(gs, "e1")
+	checks["set on ready"] = QuestRunner.status(gs, "q_flow") == "ready" and gs.get_flag(key) == true
+	checks["kept after complete"] = DictUtil.to_bool(QuestRunner.complete(gs, "q_flow")["ok"]) and gs.get_flag(key) == true
+	var gs2: GameState = _fresh()
+	checks["flag objective ready sets it"] = _ready_flag_quest(gs2, "q_strict", "rt.strict") and gs2.get_flag(QuestRunner.ready_flag(_q("q_strict"))) == true
+	checks["abandon from ready clears it"] = QuestRunner.abandon(gs2, "q_strict").is_empty() and not gs2.has_flag(QuestRunner.ready_flag(_q("q_strict")))
+	checks["restart does not set it back"] = QuestRunner.start(gs2, "q_flow").is_empty() and not gs2.has_flag(QuestRunner.ready_flag(_q("q_flow")))
+	var gs3: GameState = _fresh()
+	var bkey: String = QuestRunner.ready_flag(_q("q_block"))
+	_ready_two(gs3, "q_block", "l1", "e1")
+	QuestRunner.set_flag(gs3, "rt.gone", true)
+	checks["blocked (variant) keeps it"] = QuestRunner.status(gs3, "q_block") == "blocked" and gs3.get_flag(bkey) == true
+	QuestRunner.set_flag(gs3, "rt.gone", false)
+	checks["unblocked keeps it"] = QuestRunner.status(gs3, "q_block") == "ready" and gs3.get_flag(bkey) == true
+	QuestRunner.set_flag(gs3, "rt.gone", true)
+	checks["abandon from blocked clears it"] = QuestRunner.abandon(gs3, "q_block").is_empty() and not gs3.has_flag(bkey)
+	var gs4: GameState = _fresh()
+	QuestRunner.start(gs4, "q_block")
+	QuestRunner.on_location_reached(gs4, "l1")
+	QuestRunner.set_flag(gs4, "rt.gone", true)
+	QuestRunner.set_flag(gs4, "rt.gone", false)
+	checks["blocked/unblocked while active: not set"] = QuestRunner.status(gs4, "q_block") == "active" and not gs4.has_flag(bkey)
+	return _report("Ready flag: set on ready, kept through complete and blocked flips, cleared by abandon, key = quest.<dotted qid>.ready", checks)
 
 # ------------------------------------------------------------------------------
 # Check 13: rewards_from
