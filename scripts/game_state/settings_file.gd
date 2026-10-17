@@ -50,9 +50,9 @@ static func default_of(key: String) -> Variant:
 static func get_value(key: String, fallback: Variant = null) -> Variant:
 	var dflt: Variant = fallback if fallback != null else default_of(key)
 	var parts: PackedStringArray = _split(key)
-	var raw: Variant = _file().get_value(parts[0], parts[1], null)
-	if raw == null:
+	if not _file().has_section_key(parts[0], parts[1]):
 		return dflt
+	var raw: Variant = _file().get_value(parts[0], parts[1])
 	var clean: Variant = _clean(key, raw)
 	if clean == null:
 		if not _warned.has(key):

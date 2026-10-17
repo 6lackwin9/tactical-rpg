@@ -14,6 +14,7 @@ Settled; do not re-litigate without asking the user. Scope: S5 catalog API, Cont
 | S14 manifest remove rule (user via front desk 2026-10-17) | Option A: removing a manifest row is allowed when its key still falls back to a generated template; refused only for manifest-only keys that content still references (per variant) or another row aliases. Updates S14_L1 rule 7 and acceptance check 9 | User 2026-10-17 |
 | CLASS1 build choices (planner 2026-10-17) | The list-path converter is a const flag until CLASS1-M; unit AI field visibility is UI-only (storage unchanged); `heal_below` is clamped like other float fields; the duplicate-accessory check is per entry (own slots only); `ClassForgeModel` lives in `scripts/content`; renaming a skill onto a key a path already holds is refused | Planner 2026-10-17 |
 | S14-L2 spec approved (user 2026-10-17) | `docs/specs/S14_L2.md` approved as written ("Approve all" on the project decision card covering S12S-L, S14-L2 and S14-A1, 13:36 UTC); built in a cloud thread on its own branch and PR | User 2026-10-17 |
+| S14-L2 status pop (user 2026-10-17) | The combat status icon pops only when a log entry names a real status (outcome tag or status text equals a StatusRegistry display name); free status text pops nothing ("Real statuses only" on the build thread's decision card; as shipped in PR #9) | User 2026-10-17 |
 
 ## Partly superseded rows (text unchanged; the newer row wins on the named part)
 
