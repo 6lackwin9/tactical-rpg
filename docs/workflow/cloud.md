@@ -80,6 +80,15 @@ Cost grows with the thread's context size times its turns (user dashboard 2026-1
 - Batch related commands into one tool call, and read files by section instead of whole.
 - Docs-only tasks skip the local Godot gate ("Landing a task on `develop`" step 2).
 
+### Fresh sessions (user 2026-10-17, "Restart often")
+
+After about 3 landed tasks, or sooner when its context gets long, an area thread stops at a task boundary (nothing uncommitted, no builder running) and hands over:
+
+1. Write `docs/handover/<area>.md` (for example `platform.md`), replacing the previous one: queue position (next task ids), any in-flight branch and its state, open questions, cards still waiting on the user (question and options), and routines or watches it owns. Keep it short; everything else is in the repo docs.
+2. Commit it straight to `develop` (`<AREA>-HANDOVER: ...`, docs-only, `Review: none (handover)` and `Gate: fc.sh docs passed (docs-only)`; no AgentMap or Done lines; the release check accepts it under decision "Fresh area sessions").
+3. Send the coordinator a cross-session message: the area, the handover path and the commit.
+4. The coordinator starts a fresh session for that area under a new project post, pointed at the handover, and resolves the old thread. The new thread reads the handover first and carries on.
+
 ## Task timing
 
 Goal (user 2026-10-17): see where time goes, mainly idle time and dependence between steps; tokens are secondary. Each area thread notes timestamps as it works (`date -u +%H:%M` at each step) and puts two lines in the task's squash commit body:
