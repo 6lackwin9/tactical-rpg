@@ -215,7 +215,8 @@ tactical-rpg/
 ├── playtests/                    # Shared playtest files: inbox/ (user recordings), repro/ (agent repros), scenarios/ (one seed each); see README.md
 ├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
-└── run.bat                       # Opens the Scene Runner (every scene, hot reload, test suites)
+├── run.bat                       # Pulls the latest main, then opens the Scene Runner (every scene, hot reload, test suites)
+└── run_dev.bat                   # Same on the latest develop (finished work not yet released), from the sibling folder <checkout>-dev
 ```
 
 ---
@@ -640,7 +641,10 @@ One launcher for everything:
 
 ```cmd
 run.bat
+run_dev.bat
 ```
+
+`run.bat` fetches and fast-forwards `main` first (about 1-2 s when nothing changed), rebuilds the script cache only when the code changed (about a minute), shows the branch and commit, and launches; `run_dev.bat` (or `run.bat dev`) does the same on `develop`, where finished tasks land before each release, from a sibling folder `<checkout>-dev` (a git worktree created on first use, about 15 MB), so switching between the two never waits for a cache rebuild. Both use the same Godot `user://` folder, so a save made on dev may not load on main after a save-format change. Offline, a failed pull, local changes or a folder on another branch: it launches the copy on disk and changes nothing.
 
 Or open the project in **Godot 4.7+** and press Play: the main scene is the Scene Runner. From its menu:
 
