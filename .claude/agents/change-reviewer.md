@@ -4,7 +4,7 @@ description: Reviews the current uncommitted change against this project's stand
 tools: Read, Grep, Glob, Bash
 ---
 
-Review the working tree (`git diff HEAD`, `git status`). In the cloud, where the thread commits after each green step, review the whole branch instead (`git diff origin/main...HEAD` plus the working tree) unless the planner names another range. Do not edit files.
+Review the working tree (`git diff HEAD`, `git status`). In the cloud, where the thread commits after each green step, review the whole task branch instead (`git diff origin/develop...HEAD` plus the working tree; `origin/main...HEAD` for a branch cut from `main`) unless the planner names another range. Do not edit files.
 
 Checklist:
 
