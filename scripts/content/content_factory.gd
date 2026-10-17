@@ -134,7 +134,7 @@ static func item(entry: Dictionary) -> Item:
 	else:
 		result = Item.new(str(e["id"]), str(e["name"]), _enum(Item.ItemType.keys(), type, Item.ItemType.MATERIAL) as Item.ItemType,
 			DictUtil.to_float(e["weight"]), DictUtil.to_int(e["value"]), rarity, "", DictUtil.to_int(e["max_stack"]))
-	result.description = str(e["description"])
+	result.description = ItemText.render(str(e["description"]), e)   # a {token} template renders with the resolved values
 	result.damage_type = str(e["damage_type"])
 	result.icon_id = str(e["icon_id"])
 	result.special = DictUtil.to_bool(e["special"])
@@ -168,13 +168,18 @@ static func item_to_entry(it: Item, starter_stash: bool = false) -> Dictionary:
 		})
 	return ContentSchema.normalize("items", e)
 
-# True when catalog item `entry` may sit in engine slot `slot_name` ("OFF_HAND", ...).
-static func item_fits_slot(entry: Dictionary, slot_name: String) -> bool:
+# True when catalog item `entry` may sit in engine slot `slot_name` ("OFF_HAND", ...): the equip gate
+# (Equipment.can_equip_in_slot). `keep_worn` accepts a plain main_1h weapon already worn in the off hand (saved gear
+# is kept under strict hand typing; only NEW equips are gated, FORGE1_ITEMS 8.1).
+static func item_fits_slot(entry: Dictionary, slot_name: String, keep_worn: bool = false) -> bool:
 	var built: Item = item(entry)
 	if not (built is Equipment):
 		return false
 	var eq: Equipment = built
-	return eq.can_equip_in_slot(_enum(Equipment.EquipSlot.keys(), slot_name, 0) as Equipment.EquipSlot)
+	var slot: Equipment.EquipSlot = _enum(Equipment.EquipSlot.keys(), slot_name, 0) as Equipment.EquipSlot
+	if keep_worn and slot == Equipment.EquipSlot.OFF_HAND and eq.hand() == Equipment.HAND_MAIN_1H:
+		return true
+	return eq.can_equip_in_slot(slot)
 
 # ------------------------------------------------------------------------------
 # Passives

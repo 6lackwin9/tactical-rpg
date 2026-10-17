@@ -44,7 +44,8 @@ static func _test_shipped_catalog() -> bool:
 	for kind: String in ContentSchema.KINDS:
 		var n: int = ContentCatalog.entries(kind).size()
 		counts.append("%s %d" % [kind, n])
-		all_present = all_present and n > 0
+		# item_families stay empty until ITEM1-A migrates items.json (legacy flat items, ContentCatalog.items_inherit()).
+		all_present = all_present and (n > 0 or kind == "item_families")
 	var problems: Dictionary = ContentCatalog.validate_all()
 	return TestHelpers.report_ok(TAG, "Shipped catalog loads every kind and every entry validates", all_present and problems.is_empty() and ContentCatalog.load_errors().is_empty(), ", ".join(counts) if problems.is_empty() else str(problems))
 
@@ -77,7 +78,13 @@ static func _test_round_trip() -> bool:
 			bad.append(str(e["id"]))
 	for e: Dictionary in ContentCatalog.entries("items"):
 		var back: Dictionary = ContentFactory.item_to_entry(ContentFactory.item(e), DictUtil.to_bool(e["starter_stash"]))
-		if JSON.stringify(ContentSchema.to_storage("items", back)) != JSON.stringify(ContentSchema.to_storage("items", e)):
+		# The engine item carries the resolved numbers only: the family template keys (FORGE1_ITEMS 2.1) are catalog-side.
+		var have: Dictionary = ContentSchema.to_storage("items", back)
+		var want: Dictionary = ContentSchema.to_storage("items", e)
+		for key: String in ["family", "hand", "modifiers", "tiers"]:
+			have.erase(key)
+			want.erase(key)
+		if JSON.stringify(have) != JSON.stringify(want):
 			bad.append(str(e["id"]))
 	for e: Dictionary in ContentCatalog.entries("classes"):
 		if JSON.stringify(ContentFactory.class_to_entry(ContentFactory.class_archetype(e))) != JSON.stringify(ContentSchema.normalize("classes", e)):
@@ -96,7 +103,15 @@ static func _test_validation() -> bool:
 	checks["duplicate id"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "strike", "name": "Strike 2"}), "already used")
 	checks["engine-only kind"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "warp", "name": "Warp", "kind": "MOVE"}), "engine-only")
 	checks["reach band"] = _has_error(ContentCatalog.validate_entry("skills", {"id": "lob", "name": "Lob", "reach_min": 3, "reach_max": 2}), "Reach min")
-	checks["shield slot"] = _has_error(ContentCatalog.validate_entry("items", {"id": "odd_shield", "name": "Odd", "item_type": "SHIELD", "slot": "MAIN_HAND"}), "OFF_HAND")
+	if ContentCatalog.items_inherit():
+		# Families: a shield's slot follows its hand, and a shield family has only the off hand.
+		var shield_family: String = ""
+		for f: Dictionary in ContentCatalog.entries("item_families"):
+			if ItemFamilies.item_type_of(f) == "SHIELD":
+				shield_family = str(f["id"])
+		checks["shield slot"] = _has_error(ContentCatalog.validate_entry("items", {"id": "odd_shield", "name": "Odd", "family": shield_family, "hand": ItemFamilies.HAND_MAIN_1H, "modifiers": [], "tiers": []}), "not allowed by family")
+	else:
+		checks["shield slot"] = _has_error(ContentCatalog.validate_entry("items", {"id": "odd_shield", "name": "Odd", "item_type": "SHIELD", "slot": "MAIN_HAND"}), "OFF_HAND")
 	checks["unknown ref"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "main_hand": "nope"}), "unknown item")
 	checks["wrong slot"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "main_hand": "shd_kite"}), "can't be")
 	checks["2H + shield"] = _has_error(ContentCatalog.validate_entry("units", {"id": "ghost", "name": "Ghost", "main_hand": "wpn_claymore", "off_hand": "shd_kite"}), "two-handed")

@@ -173,12 +173,20 @@ func switch_cost(current: CombatTypes.StanceType) -> int:
 func heals() -> bool:
 	return kind == Kind.SUPPORT and (heal_base > 0 or heal_mult > 0.0)
 
+# Main-hand gear types that open spell skills (the item family engine rule `spell_source`).
+const SPELL_SOURCE_TYPES: Array[String] = ["staff", "wand"]
+
 # Skill groups (DERIVED, nothing stored; see Passives.GROUPS): "spell" = an ATTACK skill gated on a staff or wand,
 # "heal" = a SUPPORT skill that heals. Item / passive group bonuses apply to every skill in the group.
 func in_group(group: String) -> bool:
 	match group:
 		"spell":
-			return kind == Kind.ATTACK and (weapon_types.has("staff") or weapon_types.has("wand"))
+			if kind != Kind.ATTACK:
+				return false
+			for source: String in SPELL_SOURCE_TYPES:
+				if weapon_types.has(source):
+					return true
+			return false
 		"heal":
 			return heals()
 	return false

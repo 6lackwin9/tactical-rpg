@@ -25,6 +25,7 @@ func _ready() -> void:
 		print("Running headlessly. Executing Dojo verification assertions...")
 		var ok: bool = DojoAssertions.run(session, self)
 		var code: int = 0 if ok else 1
+		session.close()
 		print("Dojo headless test complete. Exiting with code: %d\n" % code)
 		SvgRaster.clear_cache()
 		SkillCatalog.clear_cache()
@@ -60,6 +61,10 @@ func _build_dojo_ui() -> void:
 	gear_panel.stash_requested.connect(_open_stash)
 	workspace.stash_requested.connect(_open_stash)
 	workspace.reset_requested.connect(session.reset)
+
+func _exit_tree() -> void:
+	if session != null:
+		session.close()   # the legacy dual-wield flag is a dojo-only setting
 
 func _open_stash() -> void:
 	if gear_modal != null:

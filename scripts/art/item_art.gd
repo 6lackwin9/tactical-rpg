@@ -36,9 +36,13 @@ static func icon(item: Item) -> Texture2D:
 	var key: String = icon_key(item)
 	return SvgRaster.texture("item|%s|%d" % [key, item.rarity], icon_svg(key, int(item.rarity)), 2.0)
 
-# The icon family an item resolves to (bespoke id if registered, else its type).
+# Type icons an item may also name in `icon_id` (honoured first): the retyped main-hand shortsword keeps its
+# shortsword icon that way once its legacy off-hand category is gone (FORGE1_ITEMS 1.1 `art`).
+const TYPE_ICON_IDS: Array[String] = ["shortsword"]
+
+# The icon family an item resolves to (bespoke or type id named by icon_id, else its type).
 static func icon_key(item: Item) -> String:
-	if not item.icon_id.is_empty() and UNIQUE_ICONS.has(item.icon_id):
+	if not item.icon_id.is_empty() and (UNIQUE_ICONS.has(item.icon_id) or TYPE_ICON_IDS.has(item.icon_id)):
 		return item.icon_id
 	if item is Consumable:
 		var con: Consumable = item

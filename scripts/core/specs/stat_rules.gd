@@ -20,6 +20,7 @@ extends RefCounted
 #
 # validate_class / validate_spend return problem strings (empty = valid): the
 # catalog refuses classes and units that break these rules.
+# Gear flags: the legacy dual-wield switch is Equipment.allow_plain_dual_wield (equipment.gd, user answer 2026-10-17).
 # ==============================================================================
 
 const STATS: Array[String] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"]

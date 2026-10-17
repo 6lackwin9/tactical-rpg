@@ -76,8 +76,14 @@ func is_shield() -> bool:
 func is_off_hand_weapon() -> bool:
 	return is_weapon() and not off_hand_category.is_empty() and off_hand_category != "shield" and not is_two_handed
 
-# Slot compatibility: 2H weapons -> main hand only; off-hand weapons and shields -> off-hand
-# only; plain 1H weapons -> main hand or off-hand (dual wield); armor/accessories -> own slot.
+# Legacy dual-wield switch (FORGE1_ITEMS 8.1; code only, never data, never saved): while true a plain main_1h weapon
+# may ALSO go into the off hand (Dual Strike, off-hand attacks, Switch Weapon as before strict hand typing). Default
+# false; the Gear Dojo sets it for its session (DojoSession) and tests flip and restore it. (StatRules points here.)
+static var allow_plain_dual_wield: bool = false
+
+# Slot compatibility, the single equip gate (stash filters, the dojo equip path, class/unit loadout validation):
+# 2H weapons -> main hand only; off-hand weapons and shields -> off-hand only; plain 1H weapons -> main hand only,
+# unless allow_plain_dual_wield (then main or off hand); armor/accessories -> own slot. Worn gear is never re-gated.
 func can_equip_in_slot(target: EquipSlot) -> bool:
 	if is_shield():
 		return target == EquipSlot.OFF_HAND
@@ -86,7 +92,7 @@ func can_equip_in_slot(target: EquipSlot) -> bool:
 			return target == EquipSlot.MAIN_HAND
 		if is_off_hand_weapon():
 			return target == EquipSlot.OFF_HAND
-		return target == EquipSlot.MAIN_HAND or target == EquipSlot.OFF_HAND
+		return target == EquipSlot.MAIN_HAND or (target == EquipSlot.OFF_HAND and allow_plain_dual_wield)
 	if slot == EquipSlot.ACCESSORY_1 or slot == EquipSlot.ACCESSORY_2:
 		return target == EquipSlot.ACCESSORY_1 or target == EquipSlot.ACCESSORY_2
 	return target == slot
@@ -128,10 +134,13 @@ static func hand_display_name(h: String) -> String:
 		HAND_OFF: return "off hand"
 	return "-"
 
+# Gear types that are ranged even at range 1 (the item family engine rule `always_ranged`; `sling` is no gear type yet).
+const ALWAYS_RANGED_TYPES: Array[String] = ["bow", "crossbow", "sling"]
+
 func is_ranged_weapon() -> bool:
 	if item_type != ItemType.WEAPON:
 		return false
-	return weapon_type.to_lower() in ["bow", "crossbow", "sling"] or base_range > 1
+	return ALWAYS_RANGED_TYPES.has(weapon_type.to_lower()) or base_range > 1
 
 func is_melee_weapon() -> bool:
 	if item_type != ItemType.WEAPON:

@@ -997,8 +997,14 @@ static func _character_errors(world_id: String, e: Dictionary) -> Array[String]:
 
 static func _item_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
-	if str(e.get("base_item", "")).is_empty():
+	var base_id: String = str(e.get("base_item", ""))
+	if base_id.is_empty():
 		errors.append("Choose the base item this is a named version of.")
+	elif ContentCatalog.items_inherit():
+		# FORGE1_ITEMS 5: the base must resolve (its item family exists), else the named item has no numbers.
+		var base: Dictionary = ContentCatalog.get_entry("items", base_id)
+		if not base.is_empty() and ContentCatalog.family_of(base).is_empty():
+			errors.append("Base item '%s' does not resolve: its item family '%s' is unknown." % [base_id, str(base.get("family", ""))])
 	errors.append_array(_tuning_errors(e["tuning"], WorldSchema.ITEM_TUNING_KEYS, "Item"))
 	return errors
 

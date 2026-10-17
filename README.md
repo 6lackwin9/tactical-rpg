@@ -300,7 +300,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 ### 7. Equipment, Requirements & Inventory Engine (System 7)
 
 - **Item Taxonomy & Wield Rules**:
-  - **Main-Hand Weapons**: Swords, Greatswords, Hammers, Bows, Staves. Plain 1H main-hand weapons may also be dual wielded in the off-hand.
+  - **Main-Hand Weapons**: Swords, Greatswords, Hammers, Bows, Staves. Every weapon has exactly one hand type (strict hand typing); plain 1H main-hand weapons go in the off-hand only in the Gear Dojo (`Equipment.allow_plain_dual_wield`).
   - **Off-Hand Weapons & Auxiliaries** (off-hand slot **only**, enforced by `Equipment.can_equip_in_slot`):
     - *Shield*: Pure damage mitigation (`mitigation_value`), non-offensive.
     - *Shortsword / Knuckles*: STR-based off-hand offensive strike.
@@ -393,7 +393,7 @@ The suites registered in [suite_registry.gd](scripts/tests/suite_registry.gd) (3
 Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
 
 - **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword training, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
-- **Session behavior (Dojo-19 to 25)**: Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
+- **Session behavior (Dojo-19 to 25)**: strict-hand assertions Dojo-13d, 21d and 21e (dual wield only with the dojo flag); Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
 - **UI smoke tests (Dojo-26, 27)**: all six panels mount in the workspace and the Test Log mirrors the session log; the Party & Stash screen shares the session (party list, selection, stash equip).
 - **Slots, filters & carry (Dojo-28 to 32)**: off-hand-only weapons and shields, per-slot stash filters (shield under Off Hand) plus stat/rarity/damage/hand/usable/search/sort custom filters, a party viewer that always shows 4 slots, per-unit burden vs party-wide carry overload, and overlay windows opening/closing on request.
 - **Catalog skills & the dummy fighting back (Dojo-33 to 38)**: the console's skills are the catalog's; a catalog attack skill (Hamstring) follows the battle rules (2 AP + 1 switch, Offensive, the exact seeded hit); Brace guards and the dummy's attack goes through the same formula (its power and stance vs the hero's guard and armor) and is logged as the dummy's; Counterattack answers every hero skill; a stunned dummy loses its action and Next Round ticks Focus, drops the guard and regains +4 AP (debt included); Rest recovers AP and a downed hero is refused until healed.
@@ -506,6 +506,10 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 ### Plan claims (PLAN1)
 
 Preset auto-plans are always confirmable: an ally's approach, go-to or landing tile (support approaches included) is fixed once planned and later drafts keep off it (`CombatPlan.pinned_cell`), speed ties keep planning order, and the party preset re-drafts any ally a later draft made invalid. Enemy packs share the same planner, so they no longer plan onto a packmate's tile. Tested in `plan_claims_test_suite.gd`.
+
+### Item families and items v2 (ITEM1-L commit 1)
+
+Items are now built from item families (`data/catalog/item_families.json`, 20 families such as sword, shield, plate, orb): a family holds the hands, slots, scaling, base numbers and bands; an item stores its family plus a list of modifiers and tier thresholds (`items.json` version 2), and memory keeps flat resolved rows (`ItemFamilies`, `ItemModifiers`, `ItemText`). Strict hand typing applies everywhere except the Gear Dojo. A system item's modifiers and tiers are locked as whole lists, and one edit may change either the modifiers or the flat numbers, never both. The migration seed `data/seeds/item1_migrate.gd` (run in ITEM1-A) keeps every item value and class total identical. Tested in `item_families` and `item_modifiers` suites.
 
 ### Agent workflow tools
 

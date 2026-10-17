@@ -57,14 +57,51 @@ static func item_value(entry: Dictionary) -> float:
 	v += DictUtil.to_int(e["burden"]) * W_BURDEN
 	v += maxi(0, DictUtil.to_int(e["block_cost"]) - 1) * W_EXTRA_BLOCK
 	for raw: Variant in DictUtil.array_of(e["effects"]):
-		var fx: Dictionary = DictUtil.dict_of(raw)
-		match str(fx.get("type", "")):
-			"skill_potency":
-				v += DictUtil.to_float(fx.get("value", 0.0)) * W_SKILL_POTENCY
-			"status_potency":
-				v += DictUtil.to_int(fx.get("value", 0)) * W_STATUS_POTENCY
-			"spell_reach":
-				v += DictUtil.to_int(fx.get("value", 0)) * W_SPELL_REACH
+		v += effect_value(DictUtil.dict_of(raw))
+	return v
+
+# Value of one item modifier (FORGE1_ITEMS 2.3; pure). For an item resolved from its family:
+# item_value(resolved row) == base_value(family, hand) + the sum of modifier_value over its modifiers.
+static func modifier_value(mod: Dictionary) -> float:
+	match str(mod.get("kind", "")):
+		ItemModifiers.ADJUST:
+			var delta: int = DictUtil.to_int(mod.get("delta", 0))
+			match str(mod.get("field", "")):
+				"power":
+					return delta * W_POWER
+				"mitigation":
+					return delta * W_MITIGATION
+				"burden":
+					return delta * W_BURDEN
+				"block_cost":
+					return delta * W_EXTRA_BLOCK
+			return 0.0
+		ItemModifiers.STAT_BONUS:
+			return DictUtil.to_int(mod.get("value", 0)) * W_STAT_POINT
+		ItemModifiers.EFFECT:
+			return effect_value(DictUtil.dict_of(mod.get("effect", {})))
+	return 0.0
+
+# Value of one item effect (skill_potency x20 per 1.0, status_potency x0.2, spell_reach x3; resist 0).
+static func effect_value(fx: Dictionary) -> float:
+	match str(fx.get("type", "")):
+		"skill_potency":
+			return DictUtil.to_float(fx.get("value", 0.0)) * W_SKILL_POTENCY
+		"status_potency":
+			return DictUtil.to_int(fx.get("value", 0)) * W_STATUS_POTENCY
+		"spell_reach":
+			return DictUtil.to_int(fx.get("value", 0)) * W_SPELL_REACH
+	return 0.0
+
+# Value of a family's base numbers for `hand` (what an item without modifiers is worth).
+static func base_value(family: Dictionary, hand: String) -> float:
+	if not is_gear({"item_type": ItemFamilies.item_type_of(family)}):
+		return 0.0
+	var base: Dictionary = ItemFamilies.base_of(family, hand)
+	var v: float = DictUtil.to_int(base["power"]) * W_POWER   # as item_value: the resolved base_power counts for every gear row
+	v += DictUtil.to_int(base["mitigation"]) * W_MITIGATION
+	v += DictUtil.to_int(base["burden"]) * W_BURDEN
+	v += maxi(0, DictUtil.to_int(base["block_cost"]) - 1) * W_EXTRA_BLOCK
 	return v
 
 # Per-slot breakdown: [{slot, id, name, value, special, note}] for filled gear slots.

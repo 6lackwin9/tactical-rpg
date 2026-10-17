@@ -171,7 +171,7 @@ func _gear_errors(at: String, arch: ClassArchetype) -> Array[String]:
 			errors.append("%s: unknown item '%s' in %s." % [at, item_id, slot])
 			continue
 		var item: Dictionary = ContentCatalog.get_entry("items", item_id)
-		if not ContentFactory.item_fits_slot(item, slot.to_upper()):
+		if not ContentFactory.item_fits_slot(item, slot.to_upper(), true):   # saved (worn) gear is kept, not re-gated
 			errors.append("%s: '%s' can't be equipped in %s." % [at, item_id, slot])
 		elif not str(item.get("weapon_type", "")).is_empty() and not prof.can_use(str(item["weapon_type"])):
 			errors.append("%s: class has no training in '%s' (%s)." % [at, str(item["weapon_type"]), item_id])

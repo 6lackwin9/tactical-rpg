@@ -18,7 +18,10 @@ const DEFAULT_ROOT: String = "res://data/catalog"
 const VERSION: int = 1
 # File format version per kind (default VERSION). skills.json is version 2: ranked entries on disk, flat rows in memory
 # (SkillRanks). The loader decides by the file's own version, so a version 1 skills file still loads.
-const VERSIONS: Dictionary = {"skills": 2}
+# items.json is version 2 (FORGE1_ITEMS 8): stored entries are family + modifiers (ItemModifiers), flat resolved rows in
+# memory. Until ITEM1-A migrates the shipped data, a catalog without item families keeps the version 1 flat file (legacy
+# mode: items_inherit() is false, saving writes version 1); a version 1 file loaded next to families collapses on load.
+const VERSIONS: Dictionary = {"skills": 2, "items": 2, "item_families": 1}
 
 static func version_of(kind: String) -> int:
 	return DictUtil.to_int(VERSIONS.get(kind, VERSION), VERSION)
@@ -89,8 +92,10 @@ static func reload_from_disk() -> void:
 	_state()["allow_remove"] = false
 	_state()["save_errors"] = []
 	_blocked_map().clear()
+	_data_map()["item_families"] = _read_kind("item_families")   # first: items resolve against their family
 	for kind: String in ContentSchema.KINDS:
-		_data_map()[kind] = _read_kind(kind)
+		if kind != "item_families":
+			_data_map()[kind] = _read_kind(kind)
 	SkillCatalog.clear_cache()
 
 static func _ensure_loaded() -> void:
@@ -144,11 +149,67 @@ static func _read_kind(kind: String) -> Array:
 		return _read_ranked_skills(list, path)
 	if kind == "skills":
 		push_warning("ContentCatalog: %s is a version %d skills file (flat rows); version 1 is deprecated, saving writes version 2 (CLN-3b removes v1 loading)" % [path, file_version])
+	if kind == "items":
+		return _read_items(list, path, file_version)
 	for item: Variant in list:
 		if item is Dictionary:
 			var dict: Dictionary = item
-			found.append(ContentSchema.normalize(kind, dict))
+			var row: Dictionary = ContentSchema.normalize(kind, dict)
+			found.append(ItemFamilies.derive(row) if kind == "item_families" else row)
 	return found
+
+# items.json: version 2 entries resolve against their family; a version 1 (flat) file collapses on load when families
+# exist, else stays flat (legacy mode until ITEM1-A). An entry whose family is unknown is kept as stored and blocks saving.
+static func _read_items(list: Array, path: String, file_version: int) -> Array:
+	var found: Array = []
+	var families: Array = DictUtil.array_of(_data_map().get("item_families", []))
+	for item: Variant in list:
+		if not (item is Dictionary):
+			_error_list().append("%s: an entry is not an object; it is skipped." % path)
+			_block_save("items")
+			continue
+		var dict: Dictionary = item
+		if file_version >= 2:
+			var family: Dictionary = _family_in(families, str(dict.get("family", "")))
+			if family.is_empty():
+				_error_list().append("%s: item '%s' names the unknown family '%s'; it is kept as stored." % [path, str(dict.get("id", "")), str(dict.get("family", ""))])
+				_block_save("items")
+				found.append(ContentSchema.normalize("items", dict))
+				continue
+			found.append(ContentSchema.normalize("items", ItemModifiers.resolve(dict, family)))
+			continue
+		var flat: Dictionary = ContentSchema.normalize("items", dict)
+		var legacy_family: Dictionary = _family_in(families, ItemFamilies.family_id_for_row(flat))
+		if legacy_family.is_empty():
+			found.append(flat)
+		else:
+			found.append(ContentSchema.normalize("items", ItemModifiers.resolve(ItemModifiers.collapse(flat, legacy_family), legacy_family)))
+	return found
+
+static func _family_in(families: Array, id: String) -> Dictionary:
+	if id.is_empty():
+		return {}
+	for raw: Variant in families:
+		var f: Dictionary = DictUtil.dict_of(raw)
+		if str(f.get("id", "")) == id:
+			return f
+	return {}
+
+# True once the catalog has item families (version 2 items: family + modifiers). False = legacy flat items (until ITEM1-A).
+static func items_inherit() -> bool:
+	return not entries("item_families").is_empty()
+
+# The family row of an item row (empty when the item names none or an unknown one).
+static func family_of(item: Dictionary) -> Dictionary:
+	return _family_in(entries("item_families"), str(item.get("family", "")))
+
+# The items that use family `family_id`.
+static func items_of_family(family_id: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for row: Dictionary in entries("items"):
+		if str(row.get("family", "")) == family_id:
+			out.append(row)
+	return out
 
 # Version 2 skills file: ranked entries expand to flat rows, rank-major (all rank 1 rows in entry order, then rank 2, ...).
 static func _read_ranked_skills(list: Array, path: String) -> Array:
@@ -209,10 +270,27 @@ static func save(kind: String) -> Error:
 			return ERR_INVALID_DATA
 		var ranked_list: Array = folded["entries"]
 		stored.append_array(ranked_list)
+	elif kind == "items" and items_inherit():
+		var item_errors: Array[String] = []
+		for entry: Dictionary in entries(kind):
+			if family_of(entry).is_empty():
+				item_errors.append("item '%s' has no known family ('%s'); a version 2 file stores family + modifiers only" % [str(entry.get("id", "")), str(entry.get("family", ""))])
+				continue
+			stored.append(ItemModifiers.stored(ContentSchema.to_storage(kind, entry)))
+		_state()["save_errors"] = item_errors.duplicate()
+		if not item_errors.is_empty():
+			push_error("ContentCatalog.save(items) refused: " + "; ".join(PackedStringArray(item_errors)))
+			return ERR_INVALID_DATA
+	elif kind == "item_families" and entries(kind).is_empty() and not FileAccess.file_exists(path_for(kind)):
+		_dirty_map().erase(kind)   # legacy catalog (no families yet): never create an empty families file
+		return OK
 	else:
 		for entry: Dictionary in entries(kind):
 			stored.append(ContentSchema.to_storage(kind, entry))
-	var doc: Dictionary = {"kind": kind, "version": version_of(kind), "entries": stored}
+	var version: int = version_of(kind)
+	if kind == "items" and not items_inherit():
+		version = VERSION   # legacy flat items (no families yet)
+	var doc: Dictionary = {"kind": kind, "version": version, "entries": stored}
 	var file := FileAccess.open(path_for(kind), FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
@@ -326,6 +404,69 @@ static func key_field_errors(kind: String, old: Dictionary, new_entry: Dictionar
 			errors.append("'%s' is a system asset: key field '%s' is locked. Create your own copy to change it." % [str(old.get("id", "")), str(f.get("label", key))])
 	return errors
 
+# The normalised row `raw` is stored as. Families get their derived fields; items (once families exist) become the
+# resolved row of their stored form (FORGE1_ITEMS 2.2: upsert accepts either shape).
+static func _prepare(kind: String, raw: Dictionary, old: Dictionary) -> Dictionary:
+	match kind:
+		"item_families":
+			return ItemFamilies.derive(ContentSchema.normalize(kind, raw))
+		"items":
+			return _prepare_item(raw, old)
+	return ContentSchema.normalize(kind, raw)
+
+# Item shapes: a STORED entry (family, no flat numbers) resolves as is. A FLAT row (legacy fixture, get_entry copy) whose
+# engine keys differ from the stored row (or that is new) collapses, so the flat numbers win; a flat copy whose engine keys
+# are unchanged keeps its own family / hand / modifiers / tiers (the Forge edits those on a get_entry copy).
+static func _prepare_item(raw: Dictionary, old: Dictionary) -> Dictionary:
+	if not items_inherit():
+		return ContentSchema.normalize("items", raw)
+	var source: Dictionary = raw
+	var family_id: String = str(raw.get("family", ""))
+	if not ItemModifiers.is_stored_shape(raw):
+		var flat: Dictionary = ContentSchema.normalize("items", raw)
+		# A legacy row (no family yet) always collapses; a resolved copy keeps its own lists while its engine keys hold.
+		if old.is_empty() or str(old.get("family", "")).is_empty() or not ItemModifiers.engine_equal(flat, old):
+			var own: Dictionary = get_entry("item_families", family_id)
+			if own.is_empty() or not _family_matches(own, flat):
+				family_id = ItemFamilies.family_id_for_row(flat)
+			var target: Dictionary = get_entry("item_families", family_id)
+			source = ItemModifiers.collapse(flat, target) if not target.is_empty() else flat
+			if not old.is_empty() and source.has("modifiers"):   # keep the stored modifier order (no re-sorting)
+				source["modifiers"] = ItemModifiers.stable_order(ItemModifiers.modifiers_of(source), ItemModifiers.modifiers_of(old))
+		else:
+			if family_id.is_empty():
+				family_id = str(old.get("family", ""))
+			source = ItemModifiers.stored(flat)
+	var family: Dictionary = get_entry("item_families", family_id)
+	if family.is_empty():
+		var unresolved: Dictionary = ContentSchema.normalize("items", source)
+		unresolved["family"] = family_id
+		return unresolved
+	return ContentSchema.normalize("items", ItemModifiers.resolve(source, family))
+
+# A flat item copy that changes BOTH an engine key / number AND its modifiers or tiers is ambiguous (collapsing would
+# silently drop the list edit): refused. Stored-shape entries, new rows and legacy rows (no family yet) never hit this.
+static func item_shape_errors(raw: Dictionary, old: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	if not items_inherit() or old.is_empty() or str(old.get("family", "")).is_empty() or ItemModifiers.is_stored_shape(raw):
+		return errors
+	var flat: Dictionary = ContentSchema.normalize("items", raw)
+	if ItemModifiers.engine_equal(flat, old):
+		return errors
+	var lists_changed: bool = (raw.has("modifiers") and not ItemModifiers.same_value(raw["modifiers"], old.get("modifiers", []))) \
+		or (raw.has("tiers") and not ItemModifiers.same_value(raw["tiers"], old.get("tiers", [])))
+	if lists_changed:
+		errors.append("Item '%s': change the modifiers / tiers or the flat numbers in one upsert, not both (changed: %s)." % [str(old.get("id", "")), ", ".join(ItemModifiers.engine_diff(flat, old))])
+	return errors
+
+# True when flat row `flat` already has the type and gear token `family` derives.
+static func _family_matches(family: Dictionary, flat: Dictionary) -> bool:
+	var type: String = ItemFamilies.item_type_of(family)
+	if str(flat.get("item_type", "")) != type:
+		return false
+	var token: String = str(family.get("id", "")) if ItemFamilies.is_gear_type(type) else ""
+	return str(flat.get("weapon_type", "")) == token
+
 # Validates and stores `entry` (replacing `replace_id`, or the entry with the same
 # id, in place; otherwise appended). Returns the problems; nothing changes if any.
 # Renaming an id rewrites references to it in other entries. A new id becomes a user asset; key fields of an
@@ -335,7 +476,11 @@ static func upsert(kind: String, entry: Dictionary, replace_id: String = "") -> 
 	var new_id: String = str(entry.get("id", ""))
 	var old_id: String = replace_id if not replace_id.is_empty() else new_id
 	var old: Dictionary = get_entry(kind, old_id)
-	var clean: Dictionary = ContentSchema.normalize(kind, _with_origin(entry, old))
+	if kind == "items":
+		var shape: Array[String] = item_shape_errors(entry, old)
+		if not shape.is_empty():
+			return shape
+	var clean: Dictionary = _prepare(kind, _with_origin(entry, old), old)
 	new_id = str(clean.get("id", ""))
 	var errors: Array[String] = validate_entry(kind, clean, old_id)
 	errors.append_array(key_field_errors(kind, old, clean))
@@ -366,7 +511,10 @@ static func upsert_many(kind: String, new_entries: Array) -> Array[String]:
 		var src: Dictionary = DictUtil.dict_of(raw)
 		var id: String = str(src.get("id", ""))
 		var old: Dictionary = get_entry(kind, id)
-		var clean: Dictionary = ContentSchema.normalize(kind, _with_origin(src, old))
+		if kind == "items":
+			for problem: String in item_shape_errors(src, old):
+				errors.append("%s: %s" % [id, problem])
+		var clean: Dictionary = _prepare(kind, _with_origin(src, old), old)
 		for problem: String in key_field_errors(kind, old, clean):
 			errors.append("%s: %s" % [id, problem])
 		applied.append(clean)
@@ -730,6 +878,24 @@ static func _touched(kind: String) -> void:
 	_dirty_map()[kind] = true
 	if kind == "skills":
 		SkillCatalog.clear_cache()
+	if kind == "item_families":
+		_reresolve_items()
+
+# After a family change every item of a family resolves again (no cascade: one family, its own modifiers).
+static func _reresolve_items() -> void:
+	var list: Array = _data_map()["items"]
+	var changed: bool = false
+	for i: int in range(list.size()):
+		var row: Dictionary = DictUtil.dict_of(list[i])
+		var family: Dictionary = family_of(row)
+		if family.is_empty():
+			continue
+		var fresh: Dictionary = ContentSchema.normalize("items", ItemModifiers.resolve(ItemModifiers.stored(row), family))
+		if not ItemModifiers.same_value(fresh, row):
+			list[i] = fresh
+			changed = true
+	if changed:
+		_dirty_map()["items"] = true
 
 # ------------------------------------------------------------------------------
 # References
@@ -813,6 +979,8 @@ static func _rename_refs(kind: String, old_id: String, new_id: String) -> void:
 # Problems with `entry` as a `kind` entry (current_id: the id it replaces, if editing).
 static func validate_entry(kind: String, entry: Dictionary, current_id: String = "") -> Array[String]:
 	var e: Dictionary = ContentSchema.normalize(kind, entry)
+	if kind == "items" or kind == "item_families":
+		e = _prepare(kind, entry, get_entry(kind, current_id if not current_id.is_empty() else str(entry.get("id", ""))))
 	var errors: Array[String] = ContentSchema.field_errors(kind, e)
 	var id: String = str(e.get("id", ""))
 	if id != current_id and has(kind, id):
@@ -848,7 +1016,9 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 		"skills":
 			errors.append_array(SkillValidator.entry_errors(e))
 		"items":
-			errors.append_array(ItemValidator.item_errors(e))
+			errors.append_array(ItemValidator.item_errors(e, family_of(e), items_inherit()))
+		"item_families":
+			errors.append_array(ItemValidator.family_errors(e, current_id))
 		"passives":
 			errors.append_array(_passive_errors(e))
 		"classes":
@@ -898,6 +1068,8 @@ static func validate_all() -> Dictionary:
 				problems["%s:%s" % [kind, id]] = errors
 	for message: String in _required_skill_errors():
 		problems["skills:required"] = _append_problem(problems.get("skills:required", []), message)
+	for message: String in ItemValidator.family_set_errors(entries("item_families")):
+		problems["item_families:required"] = _append_problem(problems.get("item_families:required", []), message)
 	# Families save() could not fold into ranked entries (or would fold with data loss): saving skills is refused.
 	var folded: Dictionary = SkillRanks.collapse(entries("skills"))
 	var fold_errors: Array[String] = ContentFactory._strings(folded["errors"])
@@ -931,7 +1103,11 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 	var e: Dictionary = ContentSchema.normalize(kind, entry)
 	match kind:
 		"items":
-			return GearBudget.check_item(e)
+			var item_found: Array[String] = GearBudget.check_item(e)
+			item_found.append_array(ItemValidator.item_warnings(e, family_of(e)))
+			return item_found
+		"item_families":
+			return ItemValidator.family_warnings(ItemFamilies.derive(e))
 		"classes":
 			return GearBudget.check_class(e)
 		"skills":
@@ -944,7 +1120,7 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 # warnings are not repeated for every rank row.
 static func warnings_all() -> Dictionary:
 	var out: Dictionary = {}
-	for kind: String in ["items", "classes"]:
+	for kind: String in ["items", "item_families", "classes"]:
 		for e: Dictionary in entries(kind):
 			var found: Array[String] = warnings_for(kind, e)
 			if not found.is_empty():

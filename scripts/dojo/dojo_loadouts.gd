@@ -6,6 +6,8 @@ extends RefCounted
 # Declarative gear presets. Pieces are taken from the shared stash when present
 # and spawned from ItemCatalog otherwise, so any preset can always be applied.
 # Class proficiency rules still apply: ineligible pieces are skipped and reported.
+# Presets with a main-hand weapon in the off hand (claymore_backup, dual_wield, archer, duelist) are legacy dual
+# wield: they need Equipment.allow_plain_dual_wield, which the dojo session sets (FORGE1_ITEMS 8.1).
 # ==============================================================================
 
 static func get_presets() -> Array[Dictionary]:
@@ -36,7 +38,7 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "claymore_backup",
 			"name": "Claymore + Backup Blade",
-			"desc": "2H Iron Claymore with an Iron Shortsword off-hand: Switch Weapon (1 block) to use either",
+			"desc": "2H Iron Claymore with an Iron Shortsword off-hand: Switch Weapon (1 block) to use either (legacy dual wield, dojo)",
 			"gear": [
 				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_iron_claymore},
 				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_iron_shortsword},
@@ -58,7 +60,7 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "dual_wield",
 			"name": "Dual Wield",
-			"desc": "Broadsword + Iron Shortsword off-hand, Brigandine, Ring of the Bear",
+			"desc": "Broadsword + Iron Shortsword off-hand, Brigandine, Ring of the Bear (legacy dual wield, dojo)",
 			"gear": [
 				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_steel_broadsword},
 				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_iron_shortsword},
@@ -70,7 +72,7 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "archer",
 			"name": "Archer",
-			"desc": "2H Oak Shortbow with a Shadow Dagger backup (Switch Weapon to go melee), Brigandine, Swiftness Amulet",
+			"desc": "2H Oak Shortbow with a Shadow Dagger backup (Switch Weapon to go melee), Brigandine, Swiftness Amulet (legacy dual wield, dojo)",
 			"gear": [
 				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_oak_shortbow},
 				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_shadow_dagger},
@@ -82,7 +84,7 @@ static func get_presets() -> Array[Dictionary]:
 		{
 			"id": "duelist",
 			"name": "Blade & Dagger",
-			"desc": "1H Broadsword + Shadow Dagger off-hand (Dual Strike), Brigandine, Swiftness Amulet",
+			"desc": "1H Broadsword + Shadow Dagger off-hand (Dual Strike), Brigandine, Swiftness Amulet (legacy dual wield, dojo)",
 			"gear": [
 				{"slot": Equipment.EquipSlot.MAIN_HAND, "make": ItemCatalog.create_steel_broadsword},
 				{"slot": Equipment.EquipSlot.OFF_HAND, "make": ItemCatalog.create_shadow_dagger},

@@ -224,11 +224,19 @@ const HAND_TABLE: Dictionary = {
 	"wpn_battle_axe": "main_2h", "wpn_mage_staff": "main_2h",
 	"wpn_broadsword": "main_1h", "wpn_hand_axe": "main_1h", "wpn_flanged_mace": "main_1h", "wpn_stiletto": "main_1h",
 	"wpn_wand": "main_1h", "wpn_cleric_mace": "main_1h", "wpn_glass_wand": "main_1h",
-	"wpn_shortsword": "off", "wpn_knuckles": "off", "wpn_dagger": "off", "wpn_tome": "off", "wpn_orb": "off",
+	"wpn_shortsword": "main_1h", "wpn_knuckles": "main_1h", "wpn_dagger": "main_1h", "wpn_tome": "off", "wpn_orb": "off",
 	"shd_kite": "off", "shd_buckler": "off", "shd_tower": "off",
 	"arm_plate": "", "arm_leather": "", "arm_robe": "", "arm_cleric_vestment": "", "arm_mage_robe": "",
 	"acc_bear_ring": "", "acc_swift_amulet": "",
 }
+# Strict hand typing (FORGE1_ITEMS 8.1) retypes these three to main_1h; until ITEM1-A migrates items.json (no item
+# families yet) they still carry their legacy off-hand category, so their expected hand is "off" in that state.
+const RETYPED: Array[String] = ["wpn_shortsword", "wpn_knuckles", "wpn_dagger"]
+
+static func _expected_hand(id: String) -> String:
+	if RETYPED.has(id) and not ContentCatalog.items_inherit():
+		return Equipment.HAND_OFF
+	return str(HAND_TABLE[id])
 
 static func _test_hand_table() -> bool:
 	var checks: Dictionary = {}
@@ -239,7 +247,7 @@ static func _test_hand_table() -> bool:
 		if item == null:
 			missing.append(str(id))
 			continue
-		table_ok = table_ok and item.hand() == str(HAND_TABLE[id])
+		table_ok = table_ok and item.hand() == _expected_hand(str(id))
 	checks["the table covers existing items"] = missing.is_empty()
 	checks["every tabled item has the expected hand"] = table_ok
 	var rule_ok: bool = true
@@ -270,9 +278,18 @@ static func _test_hand_table() -> bool:
 			Equipment.HAND_OFF:
 				slot_ok = slot_ok and in_off and not in_main
 			Equipment.HAND_MAIN_1H:
-				slot_ok = slot_ok and in_main
+				slot_ok = slot_ok and in_main and in_off == Equipment.allow_plain_dual_wield
 	checks["the hand follows shield / off-hand category / two-handed flags"] = rule_ok
 	checks["the hand agrees with can_equip_in_slot"] = slot_ok
+	var broadsword: Equipment = ItemCatalog.create("wpn_broadsword") as Equipment
+	var saved: bool = Equipment.allow_plain_dual_wield
+	Equipment.allow_plain_dual_wield = false
+	var strict_off: bool = broadsword.can_equip_in_slot(Equipment.EquipSlot.OFF_HAND)
+	Equipment.allow_plain_dual_wield = true
+	var legacy_off: bool = broadsword.can_equip_in_slot(Equipment.EquipSlot.OFF_HAND)
+	Equipment.allow_plain_dual_wield = saved
+	checks["flag false: a plain main_1h weapon is refused in the off hand"] = not strict_off and broadsword.hand() == Equipment.HAND_MAIN_1H
+	checks["flag true (legacy dual wield): it fits the off hand again"] = legacy_off
 	checks["every catalog item is in the table (add new ones)"] = covered
 	checks["HANDS lists the three hands"] = Equipment.HANDS == ["main_1h", "main_2h", "off"]
 	var potion: Item = ItemCatalog.create("potion_healing") if ContentCatalog.has("items", "potion_healing") else null
@@ -282,20 +299,35 @@ static func _test_hand_table() -> bool:
 static func _test_hand_validation_and_preview() -> bool:
 	var checks: Dictionary = {}
 	var claymore: Dictionary = ContentCatalog.get_entry("items", "wpn_claymore")
-	var conflict: Dictionary = claymore.duplicate(true)
-	conflict["id"] = "t_fd_conflict"
-	conflict["off_hand_category"] = "dagger"
-	var errors: Array[String] = ContentCatalog.validate_entry("items", conflict)
-	checks["main_2h + off-hand category is a hand conflict"] = not errors.is_empty() and ", ".join(errors).contains("Hand conflict")
 	var off_slot: Dictionary = claymore.duplicate(true)
 	off_slot["id"] = "t_fd_offslot"
 	off_slot["slot"] = "OFF_HAND"
-	checks["a two-handed weapon outside the main hand is still refused"] = not ContentCatalog.validate_entry("items", off_slot).is_empty()
+	if ContentCatalog.items_inherit():
+		# Families: the hand is one of the family's hands (a stored main_2h on a family without it is the error);
+		# a weapon's slot follows its hand, so an OFF_HAND slot on a two-handed row resolves back to MAIN_HAND.
+		var no_2h: String = ""
+		for f: Dictionary in ContentCatalog.entries("item_families"):
+			var hands: Array[String] = ItemFamilies.hands_of(f)
+			if ItemFamilies.item_type_of(f) == "WEAPON" and ItemFamilies.category(f) == "main" and not hands.has(ItemFamilies.HAND_MAIN_2H):
+				no_2h = str(f["id"])
+				break
+		var wrong: Dictionary = {"id": "t_fd_conflict", "name": "Conflict", "family": no_2h, "hand": ItemFamilies.HAND_MAIN_2H, "modifiers": [], "tiers": []}
+		var errors: Array[String] = ContentCatalog.validate_entry("items", wrong)
+		checks["main_2h on a family without it is refused (hand not allowed by family)"] = not no_2h.is_empty() and TestHelpers.any_contains(errors, "not allowed by family")
+		var family: Dictionary = ContentCatalog.family_of(claymore)
+		checks["a two-handed weapon's slot follows its hand (MAIN_HAND)"] = str(ItemModifiers.resolve(ItemModifiers.collapse(ContentSchema.normalize("items", off_slot), family), family)["slot"]) == "MAIN_HAND"
+	else:
+		var conflict: Dictionary = claymore.duplicate(true)
+		conflict["id"] = "t_fd_conflict"
+		conflict["off_hand_category"] = "tome"
+		var errors: Array[String] = ContentCatalog.validate_entry("items", conflict)
+		checks["legacy row: main_2h + an off-hand category is a hand conflict"] = not errors.is_empty() and ", ".join(errors).contains("Hand conflict")
+		checks["a two-handed weapon outside the main hand is still refused"] = not ContentCatalog.validate_entry("items", off_slot).is_empty()
 	checks["the shipped items validate"] = ContentCatalog.validate_entry("items", claymore, "wpn_claymore").is_empty()
 	var text: String = ForgePreview.describe("items", claymore)
 	checks["the Forge item preview shows the hand"] = text.contains("main_2h") and text.contains("Hand")
 	checks["an off-hand item previews as off"] = ForgePreview.describe("items", ContentCatalog.get_entry("items", "shd_kite")).contains("off hand")
-	checks["the hand is derived, never stored"] = not ContentFactory.item_to_entry(ItemCatalog.create("wpn_claymore")).has("hand")
+	checks["an engine item exported to an entry leaves the hand to the family (derived from its flags on upsert)"] = str(ContentFactory.item_to_entry(ItemCatalog.create("wpn_claymore")).get("hand", "")).is_empty()
 	return TestHelpers.report(TAG, "Hand consistency rule and Forge preview", checks)
 
 # With a two-handed main weapon the off hand is empty, so the off-hand attack scales from bare hands (STR+DEX).
@@ -314,9 +346,13 @@ static func _test_two_handed_offhand() -> bool:
 	var main_power: Dictionary = DamageCalculator.attack_power(warrior, false, false)
 	checks["the main-hand attack still uses the claymore"] = main_power["weapon"] == claymore and str(main_power["stat_name"]) != "STR+DEX"
 	# Contrast: a one-handed main with an off-hand weapon swings that weapon instead.
+	# The dagger is a main_1h weapon under strict hand typing: holding it off-hand is the legacy dual-wield case (flag).
+	var saved: bool = Equipment.allow_plain_dual_wield
+	Equipment.allow_plain_dual_wield = true
 	var dagger: Equipment = ItemCatalog.create("wpn_dagger") as Equipment
 	var rogue: Combatant = ContentFactory.unit({"id": "t_fd_rogue2", "name": "R", "class_id": "rogue", "level": 5})
 	rogue.inventory.equip(dagger, Equipment.EquipSlot.OFF_HAND)
 	var off_power: Dictionary = DamageCalculator.attack_power(rogue, false, true)
 	checks["an off-hand dagger is swung with its own scaling"] = off_power["weapon"] == dagger and str(off_power["stat_name"]) != "STR+DEX"
+	Equipment.allow_plain_dual_wield = saved
 	return TestHelpers.report(TAG, "Off-hand attack of a two-handed wielder scales from bare hands", checks)

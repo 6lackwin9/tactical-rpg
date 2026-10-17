@@ -93,6 +93,10 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 - A class path step `{level, skill}` owns a family. Tier t is castable at `unlock + unlock_offset` (offset default 0/2/4 for tiers 1/2/3). AP is only the per-round budget (no skill cap). Families of `grade` advanced or higher need path level >= 5; KNOW lowers an advanced family by `(KNOW-12)/4` and the passive `unlock` effect lowers any path family; the larger of the two applies, max 2 levels, advanced floor 3. Constants in `StatRules` (TIER_UNLOCK_STEP, ADVANCED_MIN_LEVEL, MAX_UNLOCK_REDUCTION, ADVANCED_UNLOCK_FLOOR, KNOW_UNLOCK_BASE/STEP, MAX_UNLOCK_OFFSET). Unlock levels freeze while the loadout is locked (battle). Read: `Combatant.family_unlock_level`, `tier_unlocked`.
 
+## Item families (ITEM1)
+
+- `item_families.json` (v1, `ItemFamilies`) holds hands, slots, scaling, base and bands per family; `items.json` v2 = family + `modifiers` + `tiers` (`ItemModifiers.resolve/collapse`), flat rows in memory. Legacy flat mode while no families exist (`ContentCatalog.items_inherit()`). Strict hand typing; plain dual wield only with `Equipment.allow_plain_dual_wield` (dojo). One upsert may change modifiers/tiers or the flat numbers, not both (`ContentCatalog.item_shape_errors`). World named items must resolve to a family.
+
 ## Ranked skills and asset origin (SKILL1)
 
 - `skills.json` version 2 stores one entry per family (base + up to 2 rank modifiers); in memory rows stay flat (`head`, `head_2`, `head_3`). Edit skills with `ContentCatalog.upsert_skill(entry)` (ranked) or `upsert`/`upsert_many` (flat rows); read `skill_entry(head)` / `skill_entries()`. Ranks: `scripts/content/skill_ranks.gd`; kind sections: `skill_kinds.gd`; description tokens: `skill_text.gd`.

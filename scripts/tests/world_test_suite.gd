@@ -34,7 +34,48 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _test_authoring_and_renames() and ok
 		ok = _test_forge_ui_and_runner(tree_parent) and ok
 	TestHelpers.cleanup_worlds(SANDBOX)
+	ok = _test_named_item_family() and ok
 	return ok
+
+static var CONTENT_SANDBOX: String = TestHelpers.sandbox("world_item_family")
+
+# FORGE1_ITEMS 5: with item families, a named item's base must resolve (its family exists). Runs on a migrated content
+# fork; the unresolvable base is made by editing the fork's version 2 file (the loader keeps such an entry as stored).
+static func _test_named_item_family() -> bool:
+	var checks: Dictionary = {}
+	var world_id: String = WorldCatalog.world_ids()[0]
+	var legacy_ok: bool = ContentCatalog.items_inherit() or WorldCatalog.validate_entry(world_id, "items", {"id": "t_wn_a", "name": "A", "base_item": "arm_leather"}).filter(func(m: String) -> bool: return m.contains("does not resolve")).is_empty()
+	checks["legacy flat items: no family check"] = legacy_ok
+	TestHelpers.fork_migrated(CONTENT_SANDBOX)
+	checks["the content fork uses item families"] = ContentCatalog.items_inherit()
+	var base_id: String = ""
+	for row: Dictionary in ContentCatalog.entries("items"):
+		if GearBudget.is_gear(row):
+			base_id = str(row["id"])
+			break
+	var good: Array[String] = WorldCatalog.validate_entry(world_id, "items", {"id": "t_wn_good", "name": "Good", "base_item": base_id})
+	checks["a named item on a resolving base has no family error"] = not base_id.is_empty() and not TestHelpers.any_contains(good, "does not resolve")
+	var accessory: String = ""
+	for f: Dictionary in ContentCatalog.entries("item_families"):
+		if ItemFamilies.item_type_of(f) == "ACCESSORY":
+			accessory = str(f["id"])
+	checks["a user base item is stored"] = ContentCatalog.upsert("items", {"id": "t_wn_orphan", "name": "Orphan", "family": accessory, "slot": "ACCESSORY_1", "modifiers": [], "tiers": []}).is_empty()
+	checks["the fork saves"] = ContentCatalog.save_all() == OK
+	var path: String = ContentCatalog.path_for("items", CONTENT_SANDBOX)
+	var doc: Dictionary = DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(path)))
+	for raw: Variant in DictUtil.array_of(doc.get("entries", [])):
+		var stored: Dictionary = DictUtil.dict_of(raw)
+		if str(stored.get("id", "")) == "t_wn_orphan":
+			stored["family"] = "t_wn_gone"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(doc, "\t"))
+	file.close()
+	ContentCatalog.reload_from_disk()
+	checks["the loader reports the unknown family"] = TestHelpers.any_contains(ContentCatalog.load_errors(), "t_wn_gone")
+	var bad: Array[String] = WorldCatalog.validate_entry(world_id, "items", {"id": "t_wn_bad", "name": "Bad", "base_item": "t_wn_orphan"})
+	checks["a named item on an unresolvable base is refused"] = TestHelpers.any_contains(bad, "does not resolve")
+	TestHelpers.cleanup(CONTENT_SANDBOX)
+	return TestHelpers.report(TAG, "Named item base resolves to an item family", checks)
 
 # ------------------------------------------------------------------------------
 

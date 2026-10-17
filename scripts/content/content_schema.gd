@@ -19,7 +19,8 @@ extends RefCounted
 # Enum values are stored by name ("ATTACK", "MAIN_HAND") so the JSON stays readable.
 # ==============================================================================
 
-const KINDS: Array[String] = ["skills", "items", "passives", "classes", "units", "encounters"]
+# item_families (FORGE1_ITEMS 1) is the item template kind; ContentCatalog loads it before items (items resolve against it).
+const KINDS: Array[String] = ["skills", "items", "item_families", "passives", "classes", "units", "encounters"]
 const ORIGIN_SYSTEM: String = "system"
 const ORIGIN_USER: String = "user"
 
@@ -34,6 +35,8 @@ static func kind_label(kind: String) -> String:
 			return "Skills"
 		"items":
 			return "Items"
+		"item_families":
+			return "Item families"
 		"passives":
 			return "Passives"
 		"classes":
@@ -51,6 +54,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			return _skill_fields()
 		"items":
 			list = ItemFields.build()
+		"item_families":
+			list = ItemFields.family_build()
 		"passives":
 			list = _passive_fields()
 		"classes":

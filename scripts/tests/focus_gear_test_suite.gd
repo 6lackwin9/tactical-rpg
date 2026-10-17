@@ -99,6 +99,9 @@ static func _test_item_rules() -> bool:
 	for kind: String in Equipment.FOCUS_TYPES:
 		var good: Dictionary = _focus("t_new_" + kind, kind)
 		c["valid %s accepted" % kind] = ContentCatalog.validate_entry("items", good).is_empty()
+		if ContentCatalog.items_inherit():
+			_family_rules(c, kind)
+			continue
 		c["%s must be off hand" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_x_" + kind, kind, {"slot": "MAIN_HAND"})), "off-hand only")
 		var other: String = "tome" if kind == "orb" else "orb"
 		c["%s category must match" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_y_" + kind, kind, {"off_hand_category": other})), "needs off-hand category")
@@ -118,6 +121,27 @@ static func _test_item_rules() -> bool:
 	c["catalog sweep: valid exactly when the rules hold"] = sweep_ok
 	c["validate_all stays clean"] = ContentCatalog.validate_all().is_empty()
 	return TestHelpers.report(TAG, "orb / tome item rules", c)
+
+# With item families (FORGE1_ITEMS, after ITEM1-A) a stored category / slot mismatch can no longer be expressed: the
+# orb / tome rules are family rules (the `focus` engine rule forces hands = off on a WEAPON family) and item hands.
+static func _family_rules(c: Dictionary, kind: String) -> void:
+	var family: Dictionary = ContentCatalog.get_entry("item_families", kind)
+	var stored: Dictionary = {"id": "t_fam_" + kind, "name": kind, "family": kind, "modifiers": [], "tiers": []}
+	for hand: String in ItemFamilies.MAIN_HANDS:
+		var wrong: Dictionary = stored.duplicate(true)
+		wrong["hand"] = hand
+		c["%s refuses hand %s (off-hand only, never two-handed)" % [kind, hand]] = _has_error(ContentCatalog.validate_entry("items", wrong), "not allowed by family")
+	var flat_main: Dictionary = _focus("t_x_" + kind, kind, {"slot": "MAIN_HAND", "off_hand_category": ""})
+	c["a flat %s without its category (a main-hand weapon) is still refused" % kind] = _has_error(ContentCatalog.validate_entry("items", flat_main), "not allowed by family")
+	var resolved: Dictionary = ItemModifiers.resolve(ItemModifiers.collapse(_focus("t_y_" + kind, kind), family), family)
+	c["%s resolves to the off hand and its own category" % kind] = str(resolved["slot"]) == "OFF_HAND" and str(resolved["off_hand_category"]) == kind and not DictUtil.to_bool(resolved["two_handed"])
+	var main_focus: Dictionary = family.duplicate(true)
+	main_focus["hands"] = [ItemFamilies.HAND_MAIN_1H]
+	c["%s family: focus needs hands = off" % kind] = _has_error(ContentCatalog.validate_entry("item_families", main_focus, kind), "focus needs")
+	var shield_focus: Dictionary = family.duplicate(true)
+	shield_focus["item_type"] = "SHIELD"
+	c["%s family: focus is a WEAPON rule" % kind] = _has_error(ContentCatalog.validate_entry("item_families", shield_focus, kind), "focus needs")
+	c["%s family carries the focus rule" % kind] = ItemFamilies.has_rule(family, ItemFamilies.RULE_FOCUS)
 
 # ------------------------------------------------------------------------------
 # Effects grammar on items and passives
@@ -147,7 +171,7 @@ static func _test_effect_grammar() -> bool:
 	c["spell_reach bounds"] = (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MIN}]) as Array[String]).is_empty() and (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MAX}]) as Array[String]).is_empty() and not (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MIN - 1}]) as Array[String]).is_empty() and not (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MAX + 1}]) as Array[String]).is_empty()
 	c["resist allowed on items"] = (item_errs.call([{"type": "resist", "status": "stagger", "value": 10}]) as Array[String]).is_empty()
 	c["catalog refuses a bad item effect"] = _has_error(ContentCatalog.validate_entry("items", _focus("t_bad_fx", "orb", {"effects": [{"type": "ap_regen", "value": 1}]})), "not allowed on items")
-	c["catalog accepts an armor with effects"] = ContentCatalog.validate_entry("items", ContentSchema.normalize("items", {"id": "t_arm_fx", "name": "x", "item_type": "ARMOR", "slot": "BODY", "effects": [{"type": "status_potency", "value": 3}]})).is_empty()
+	c["catalog accepts an armor with effects"] = ContentCatalog.validate_entry("items", ContentSchema.normalize("items", {"id": "t_arm_fx", "name": "x", "item_type": "ARMOR", "slot": "BODY", "weapon_type": Proficiency.ARMOR_TYPES[0], "effects": [{"type": "status_potency", "value": 3}]})).is_empty()
 	c["effects round-trip through the factory"] = ContentFactory.item_to_entry(ItemCatalog.create_equipment("t_orb"))["effects"] == ContentCatalog.get_entry("items", "t_orb")["effects"]
 	c["describe covers group, status, reach"] = Passives.describe({"effects": [{"type": "skill_potency", "group": "heal", "value": 0.1}, {"type": "status_potency", "value": 5}, {"type": "spell_reach", "value": 1}]}).contains("heal") and Passives.describe({"effects": [{"type": "spell_reach", "value": 1}]}).contains("reach")
 	return TestHelpers.report(TAG, "item effects grammar", c)

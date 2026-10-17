@@ -7,6 +7,23 @@ extends RefCounted
 # panel/window UI. `host` must be inside the scene tree (used for UI smoke test).
 # ==============================================================================
 
+# With the legacy dual-wield flag off (restored after): every item fits OFF_HAND exactly when its hand is `off`,
+# and the given focus items (tome, orb) are off-hand items.
+static func _strict_off_hand_ok(items: Array) -> bool:
+	var saved: bool = Equipment.allow_plain_dual_wield
+	Equipment.allow_plain_dual_wield = false
+	var ok: bool = true
+	for raw: Variant in items:
+		if not (raw is Equipment):
+			ok = false
+			continue
+		var eq: Equipment = raw
+		ok = ok and eq.can_equip_in_slot(Equipment.EquipSlot.OFF_HAND) == (eq.hand() == Equipment.HAND_OFF)
+		if eq.is_focus():
+			ok = ok and eq.hand() == Equipment.HAND_OFF
+	Equipment.allow_plain_dual_wield = saved
+	return ok
+
 static func run(session: DojoSession, host: Node) -> bool:
 	var passed: bool = true
 
@@ -161,10 +178,10 @@ static func run(session: DojoSession, host: Node) -> bool:
 	var off_str_pwr: int = w.get_offhand_power()
 	var expected_shortsword_pwr: int = shortsword.get_effective_equipment_power(w.stats, w.stats.proficiency) + int(roundf(float(w.stats.get_effective_stat("STR")) * w.stats.proficiency.scaling_of("sword")))
 	if off_str_pwr != expected_shortsword_pwr:
-		print("  [Dojo-13] Off-hand Shortsword STR scaling: FAIL (%d != %d)" % [off_str_pwr, expected_shortsword_pwr])
+		print("  [Dojo-13] Legacy dual wield (flag): off-hand Shortsword STR scaling: FAIL (%d != %d)" % [off_str_pwr, expected_shortsword_pwr])
 		passed = false
 	else:
-		print("  [Dojo-13] Off-hand Shortsword STR scaling: PASS (%d ATK Power)" % off_str_pwr)
+		print("  [Dojo-13] Legacy dual wield (flag): off-hand Shortsword STR scaling: PASS (%d ATK Power)" % off_str_pwr)
 
 	var knife := ItemCatalog.create_shadow_dagger()
 	w.inventory.equip(knife, Equipment.EquipSlot.OFF_HAND)
@@ -172,10 +189,10 @@ static func run(session: DojoSession, host: Node) -> bool:
 	var off_dex_pwr: int = w.get_offhand_power()
 	var expected_knife_pwr: int = knife.get_effective_equipment_power(w.stats, w.stats.proficiency) + int(roundf(float(w.stats.get_effective_stat("DEX")) * w.stats.proficiency.scaling_of("dagger")))
 	if absi(off_dex_pwr - expected_knife_pwr) > 1:   # penalised weapon power and unit power round separately
-		print("  [Dojo-13b] Off-hand Knife DEX scaling: FAIL (%d != %d)" % [off_dex_pwr, expected_knife_pwr])
+		print("  [Dojo-13b] Legacy dual wield (flag): off-hand Dagger DEX scaling: FAIL (%d != %d)" % [off_dex_pwr, expected_knife_pwr])
 		passed = false
 	else:
-		print("  [Dojo-13b] Off-hand Knife DEX scaling: PASS (%d ATK Power)" % off_dex_pwr)
+		print("  [Dojo-13b] Legacy dual wield (flag): off-hand Dagger DEX scaling: PASS (%d ATK Power)" % off_dex_pwr)
 
 	var shield_eq := ItemCatalog.create_iron_kite_shield()
 	w.inventory.equip(shield_eq, Equipment.EquipSlot.OFF_HAND)
@@ -185,6 +202,16 @@ static func run(session: DojoSession, host: Node) -> bool:
 		passed = false
 	else:
 		print("  [Dojo-13c] Shield is mitigation only (0 offensive power, +%d mitigation): PASS" % shield_eq.mitigation)
+
+	# Assert 13d: strict hand typing (flag false): main-hand weapons are refused in OFF_HAND, off-hand items accepted.
+	# Rule-derived per item: OFF_HAND fits iff the derived hand is `off` (true for the tome and orb; the shortsword and
+	# dagger are main_1h once ITEM1-A migrates them, off-category items before).
+	var strict_ok: bool = _strict_off_hand_ok([ItemCatalog.create_iron_shortsword(), ItemCatalog.create_shadow_dagger(), ItemCatalog.create_mystic_tome(), ItemCatalog.create_equipment("wpn_orb"), ItemCatalog.create_steel_broadsword()])
+	if not strict_ok:
+		print("  [Dojo-13d] Strict hands (flag off): main-hand weapons refused in OFF_HAND, tome and orb accepted: FAIL")
+		passed = false
+	else:
+		print("  [Dojo-13d] Strict hands (flag off): main-hand weapons refused in OFF_HAND, tome and orb accepted: PASS")
 
 	# Assert 14: 2-Handed Weapon blocks off-hand strike
 	w.inventory.equip(claymore, Equipment.EquipSlot.MAIN_HAND)
@@ -324,6 +351,20 @@ static func _run_session_assertions(session: DojoSession) -> bool:
 	else:
 		print("  [Dojo-21b] Active-weapon switching with 2H + off-hand weapon: PASS (1-block switch gates each weapon)")
 
+	# Assert 21d: strict hand typing (flag off): a 2H main refuses a shield, a focus item and a plain 1H weapon
+	session.apply_loadout("claymore_tank")
+	var saved_flag: bool = Equipment.allow_plain_dual_wield
+	Equipment.allow_plain_dual_wield = false
+	var strict_shield: bool = not session.equip_item(ItemCatalog.create_buckler(), Equipment.EquipSlot.OFF_HAND)
+	var strict_focus: bool = not session.equip_item(ItemCatalog.create_mystic_tome(), Equipment.EquipSlot.OFF_HAND)
+	var strict_plain: bool = not session.equip_item(ItemCatalog.create_steel_broadsword(), Equipment.EquipSlot.OFF_HAND)
+	Equipment.allow_plain_dual_wield = saved_flag
+	if not (strict_shield and strict_focus and strict_plain and inv.get_equipped(Equipment.EquipSlot.OFF_HAND) == null):
+		print("  [Dojo-21d] Strict hands (flag off): 2H main refuses shield, focus and plain 1H in the off hand: FAIL (%s %s %s)" % [strict_shield, strict_focus, strict_plain])
+		passed = false
+	else:
+		print("  [Dojo-21d] Strict hands (flag off): 2H main refuses shield, focus and plain 1H in the off hand: PASS")
+
 	# Assert 21c: 1H pair needs no switch; Dual Strike hits with both weapons in one action
 	session.apply_loadout("dual_wield")
 	var dual_hp_before: int = dummy.hp
@@ -346,6 +387,24 @@ static func _run_session_assertions(session: DojoSession) -> bool:
 	else:
 		print("  [Dojo-21c] 1H pair uses both hands freely and Dual Strike combo: PASS (%d total damage)" % dual_entry.value_num)
 	session.heal_dummy()
+
+	# Assert 21e: flag off, Quick Setup "dual_wield" skips the off-hand shortsword and reports it (the Dojo-20 mechanism)
+	# when the shortsword is a main_1h weapon (after ITEM1-A); an off-category shortsword (before) still fits.
+	var strict_saved: bool = Equipment.allow_plain_dual_wield
+	Equipment.allow_plain_dual_wield = false
+	session.apply_loadout("dual_wield")
+	var setup_entry: DojoLogEntry = session.log_entries[session.log_entries.size() - 1]
+	var blade: Equipment = ItemCatalog.create_iron_shortsword()
+	var must_skip: bool = blade.hand() == Equipment.HAND_MAIN_1H
+	var reported: bool = "skipped" in setup_entry.detail_text and blade.name in setup_entry.detail_text
+	var held_off: Equipment = inv.get_equipped(Equipment.EquipSlot.OFF_HAND)
+	Equipment.allow_plain_dual_wield = strict_saved
+	if reported != must_skip or (held_off == null) != must_skip:
+		print("  [Dojo-21e] Strict hands (flag off): Quick Setup skips a main-hand off-hand blade and reports it: FAIL (%s)" % setup_entry.detail_text)
+		passed = false
+	else:
+		print("  [Dojo-21e] Strict hands (flag off): Quick Setup skips a main-hand off-hand blade and reports it: PASS (%s)" % ("skipped" if must_skip else "off-category blade fits"))
+	session.apply_loadout("dual_wield")
 
 	# Assert 22: Stash integrity - no item exists both equipped and in the stash, or twice
 	session.clear_all_gear()
@@ -496,29 +555,40 @@ static func _run_slot_filter_and_carry_assertions(session: DojoSession, host: No
 	var hero: Combatant = session.active_hero
 	var stash: Array[Item] = session.shared_stash.items
 
-	# Assert 28: Equipment slot rules (off-hand weapons ONLY in off-hand; shields off-hand; 1H main may dual wield)
+	# Assert 28: Equipment slot rules (off-hand items ONLY in the off hand; main-hand weapons main hand only unless the
+	# legacy flag). Rule-derived per item hand, so it holds before and after ITEM1-A retypes the shortsword to main_1h.
 	var claymore: Equipment = ItemCatalog.create_iron_claymore()
 	var broadsword: Equipment = ItemCatalog.create_steel_broadsword()
 	var shortsword: Equipment = ItemCatalog.create_iron_shortsword()
 	var buckler: Equipment = ItemCatalog.create_buckler()
+	var tome: Equipment = ItemCatalog.create_mystic_tome()
 	var main: Equipment.EquipSlot = Equipment.EquipSlot.MAIN_HAND
 	var off: Equipment.EquipSlot = Equipment.EquipSlot.OFF_HAND
-	var rules_ok: bool = (
-		claymore.can_equip_in_slot(main) and not claymore.can_equip_in_slot(off)
-		and broadsword.can_equip_in_slot(main) and broadsword.can_equip_in_slot(off)
-		and shortsword.can_equip_in_slot(off) and not shortsword.can_equip_in_slot(main)
-		and buckler.can_equip_in_slot(off) and not buckler.can_equip_in_slot(main)
-	)
-	var stash_shortsword: Equipment = null
+	var flag_saved: bool = Equipment.allow_plain_dual_wield
+	var rules_ok: bool = true
+	for flag: bool in [false, true]:
+		Equipment.allow_plain_dual_wield = flag
+		rules_ok = rules_ok and claymore.can_equip_in_slot(main) and not claymore.can_equip_in_slot(off)
+		rules_ok = rules_ok and broadsword.can_equip_in_slot(main) and broadsword.can_equip_in_slot(off) == flag
+		if shortsword.hand() == Equipment.HAND_MAIN_1H:
+			rules_ok = rules_ok and shortsword.can_equip_in_slot(main) and shortsword.can_equip_in_slot(off) == flag
+		else:
+			rules_ok = rules_ok and shortsword.can_equip_in_slot(off) and not shortsword.can_equip_in_slot(main)
+		rules_ok = rules_ok and buckler.can_equip_in_slot(off) and not buckler.can_equip_in_slot(main)
+		rules_ok = rules_ok and tome.can_equip_in_slot(off) and not tome.can_equip_in_slot(main)
+	Equipment.allow_plain_dual_wield = flag_saved
+	var stash_tome: Equipment = null
 	for item: Item in stash:
-		if item.id == shortsword.id and item is Equipment:
-			stash_shortsword = item
-	var refused_main: bool = stash_shortsword != null and not session.equip_item(stash_shortsword, main)
+		if item.id == tome.id and item is Equipment:
+			stash_tome = item
+	if stash_tome == null:
+		stash_tome = tome
+	var refused_main: bool = not session.equip_item(stash_tome, main)
 	if not rules_ok or not refused_main:
-		print("  [Dojo-28] Slot rules: off-hand weapons/shields off-hand only, 1H may dual wield: FAIL (%s %s)" % [rules_ok, refused_main])
+		print("  [Dojo-28] Slot rules: off-hand items (shield, orb, tome) off-hand only; main-hand weapons main-hand only unless the legacy flag: FAIL (%s %s)" % [rules_ok, refused_main])
 		passed = false
 	else:
-		print("  [Dojo-28] Slot rules: off-hand weapons/shields off-hand only, 1H may dual wield: PASS")
+		print("  [Dojo-28] Slot rules: off-hand items (shield, orb, tome) off-hand only; main-hand weapons main-hand only unless the legacy flag: PASS")
 
 	# Assert 29: Stash filters - per-slot standard filter + custom dimensions
 	var f := StashFilter.new()
@@ -530,10 +600,18 @@ static func _run_slot_filter_and_carry_assertions(session: DojoSession, host: No
 	var body_names: Array[String] = _names(f.apply(stash, hero))
 	f.slot_filter = "CONSUMABLE"
 	var con_names: Array[String] = _names(f.apply(stash, hero))
+	# The three light blades are off-category weapons before ITEM1-A and main_1h weapons after (strict hand typing);
+	# a main_1h blade shows in the off-hand list only under the dojo's legacy dual-wield flag. Rule-derived per hand.
+	var off_items: Array[String] = ["Mystic Spellbook", "Iron Kite Shield", "Duelist Buckler"]
+	var blades: Array[String] = ["Iron Shortsword", "Spiked Knuckles", "Shadow Dagger"]
+	var blades_main: bool = ItemCatalog.create_iron_shortsword().hand() == Equipment.HAND_MAIN_1H
+	var blades_off: bool = not blades_main or Equipment.allow_plain_dual_wield
 	var slots_ok: bool = (
 		_has_all(main_names, ["Iron Claymore", "Titan Warhammer", "Oak Shortbow", "Runed Staff"])
-		and _has_none(main_names, ["Iron Shortsword", "Spiked Knuckles", "Shadow Dagger", "Mystic Spellbook", "Iron Kite Shield", "Duelist Buckler"])
-		and _has_all(off_names, ["Iron Shortsword", "Spiked Knuckles", "Shadow Dagger", "Mystic Spellbook", "Iron Kite Shield", "Duelist Buckler"])
+		and _has_none(main_names, off_items)
+		and (_has_all(main_names, blades) if blades_main else _has_none(main_names, blades))
+		and _has_all(off_names, off_items)
+		and (_has_all(off_names, blades) if blades_off else _has_none(off_names, blades))
 		and _has_none(off_names, ["Iron Claymore", "Oak Shortbow", "Titan Warhammer", "Runed Staff"])
 		and _has_all(body_names, ["Steel Plate Cuirass", "Leather Brigandine"]) and _has_none(body_names, ["Iron Kite Shield", "Duelist Buckler"])
 		and con_names.size() == 3

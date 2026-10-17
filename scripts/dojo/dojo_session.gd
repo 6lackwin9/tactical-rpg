@@ -47,11 +47,30 @@ var pending_free_points: int = 0
 var log_entries: Array[DojoLogEntry] = []
 var _action_counter: int = 0
 
+# The Gear Dojo is the legacy dual-wield sandbox (FORGE1_ITEMS 8.1): a populated session turns
+# Equipment.allow_plain_dual_wield on for its lifetime and close() (or freeing the session) restores it.
+var _owns_dual_wield: bool = false
+var _saved_dual_wield: bool = false
+
 func _init(populate: bool = true) -> void:
 	if populate:
+		_saved_dual_wield = Equipment.allow_plain_dual_wield
+		Equipment.allow_plain_dual_wield = true
+		_owns_dual_wield = true
 		init_data()
 	else:
 		_clear_allocation_state()
+
+# Restores the dual-wield flag this session set (idempotent; the dojo scene calls it on exit).
+func close() -> void:
+	if _owns_dual_wield:
+		Equipment.allow_plain_dual_wield = _saved_dual_wield
+		_owns_dual_wield = false
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and _owns_dual_wield:   # inline: methods cannot be called while freeing
+		Equipment.allow_plain_dual_wield = _saved_dual_wield
+		_owns_dual_wield = false
 
 # Wraps an existing party and stash (e.g. for the Party & Stash screen) without
 # creating dojo test content. Strike/benchmark actions are unavailable (no dummy).

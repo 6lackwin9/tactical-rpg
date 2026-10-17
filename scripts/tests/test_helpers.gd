@@ -95,6 +95,20 @@ static func fork(path: String) -> bool:
 	remove_sandbox(path)
 	return ContentCatalog.fork_to(path) == OK and ContentCatalog.get_root() == path   # never write to res://
 
+# The ITEM1 migration seed (written in ITEM1-L, run on the shipped data by ITEM1-A, then archived).
+const ITEM1_SEED: String = "res://data/seeds/item1_migrate.gd"
+
+# Forks the shipped catalog into `path` and makes sure its items use item families: when the shipped data is still
+# legacy (flat items, before ITEM1-A) the migration seed runs on the FORK. Returns the seed report ({} when the shipped
+# data already has families or the seed is archived); check ContentCatalog.items_inherit() for success.
+static func fork_migrated(path: String) -> Dictionary:
+	if not fork(path):
+		return {"ok": false, "error": "fork failed"}
+	if ContentCatalog.items_inherit() or not ResourceLoader.exists(ITEM1_SEED):
+		return {}
+	var seed_script: GDScript = load(ITEM1_SEED)
+	return DictUtil.dict_of(seed_script.call("migrate"))
+
 # Back to the shipped content catalog; removes the sandbox folder.
 static func cleanup(path: String) -> void:
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
