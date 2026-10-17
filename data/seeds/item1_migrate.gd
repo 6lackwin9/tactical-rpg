@@ -62,7 +62,7 @@ static func migrate() -> Dictionary:
 		if str(row.get("family", "")).is_empty() and _is_retyped(row, family):
 			retyped.append(str(row["id"]))
 			var category: String = str(row.get("off_hand_category", ""))
-			if str(row.get("icon_id", "")).is_empty() and ItemArt.TYPE_ICON_IDS.has(category):
+			if str(row.get("icon_id", "")).is_empty() and category == "shortsword":
 				entry["icon_id"] = category   # keeps the shortsword icon once the legacy category is gone
 		for message: String in ContentCatalog.upsert("items", entry):
 			errors.append("%s: %s" % [str(row["id"]), message])
