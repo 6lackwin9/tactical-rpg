@@ -89,6 +89,29 @@ jobs:
         with:
           path: build/web
 
+  # Private itch.io page (restricted + password): pushes to main upload the build with
+  # butler when the variable ITCH_TARGET (e.g. user/tactical-rpg:html5) and the secret
+  # BUTLER_API_KEY are set (see docs/workflow/web.md).
+  itch:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ITCH_TARGET != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web
+
+      - name: Upload to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+        run: |
+          test -n "$BUTLER_API_KEY" || { echo "::error::secret BUTLER_API_KEY is not set"; exit 1; }
+          curl -fsSL --retry 3 -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q /tmp/butler.zip -d /tmp/butler && chmod +x /tmp/butler/butler
+          /tmp/butler/butler push web "$ITCH_TARGET" --userversion "${GITHUB_SHA::7}"
+
   deploy:
     needs: build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.WEB_PAGES == 'true'
