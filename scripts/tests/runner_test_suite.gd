@@ -32,6 +32,23 @@ static func run(tree_parent: Node = null) -> bool:
 	var formatted: String = SceneRunner.format_suite_output(sample)
 	ok = TestHelpers.report_ok(TAG, "Suite output counts PASS/FAIL and script errors", counts == Vector2i(1, 2) and formatted.contains("#4ade80") and formatted.contains("#f87171"), str(counts)) and ok
 
+	# Web glyph fallbacks: the runner's icons resolve in the default font or a bundled fallback.
+	var base: Font = ThemeDB.fallback_font
+	var saved: Array[Font] = base.fallbacks.duplicate()
+	WebFonts.install(true)
+	var missing: String = ""
+	var glyphs: String = "⚔⚒🌍🛡🗺▶↻⏻☰⟳✕⚠💀⛶⧉─"
+	for i: int in glyphs.length():
+		var code: int = glyphs.unicode_at(i)
+		var found: bool = base.has_char(code)
+		for f: Font in base.fallbacks:
+			found = found or f.has_char(code)
+		if not found:
+			missing += glyphs[i]
+	var added: int = base.fallbacks.size() - saved.size()
+	base.fallbacks = saved
+	ok = TestHelpers.report_ok(TAG, "Web fallback fonts cover the runner's icon glyphs", missing.is_empty() and added == WebFonts.FALLBACKS.size(), "missing '%s', added %d" % [missing, added]) and ok
+
 	if tree_parent == null:
 		return TestHelpers.report_ok(TAG, "Launch / menu / reload (needs a scene tree)", true, "skipped") and ok
 	var runner: SceneRunner = (load("res://scenes/scene_runner.tscn") as PackedScene).instantiate() as SceneRunner

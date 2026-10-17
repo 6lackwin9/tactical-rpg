@@ -382,7 +382,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ### Web build (browser)
 
-The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves; emoji icons come from bundled fallback fonts and are monochrome): [docs/workflow/web.md](docs/workflow/web.md).
 
 ## Headless Testing & Automated Quality Assurance
 
