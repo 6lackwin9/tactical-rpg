@@ -573,7 +573,7 @@ static func _test_save() -> bool:
 	checks["check clean state"] = QuestRunner.check(gs).is_empty()
 	# Re-saving a loaded save is byte-stable (saved_at aside).
 	var loaded: GameState = SaveGame.read(1)["state"] as GameState
-	checks["re-save byte-stable"] = loaded != null and SaveGame.write(loaded, 5).is_empty() and _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(5))) == _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(1)))
+	checks["re-save byte-stable"] = loaded != null and SaveGame.write(loaded, 0).is_empty() and _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(0))) == _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(1)))
 	# Chain: built-in 1 -> 2, then a custom 2 -> 3.
 	SaveMigrations.register(2, func(s: Dictionary) -> Dictionary:
 		var o: Dictionary = s.duplicate(true)
@@ -647,5 +647,5 @@ static func _test_loot() -> bool:
 	var xp2: Array[int] = _xp(gs2)
 	checks["empty pool: no offers, 0 picks"] = QuestRunner.offers(gs2, "q_noloot").is_empty() and QuestRunner.picks_allowed(gs2, "q_noloot") == 0
 	checks["empty pool: generic rewards only"] = DictUtil.to_bool(QuestRunner.complete(gs2, "q_noloot")["ok"]) and gs2.party.members[0].total_xp == xp2[0] + DictUtil.to_int(DictUtil.dict_of(_fx["t_one_rewards"])["xp"]) and gs2.loot_claimed.is_empty()
-	checks["state saves"] = gs.validate().is_empty() and SaveGame.write(gs, 4).is_empty()
+	checks["state saves"] = gs.validate().is_empty() and SaveGame.write(gs, 0).is_empty()
 	return _report("Loot: shared offers, claim removes from every pool, 0 picks = generic only, bad picks change nothing, flags gate and swap pools", checks)

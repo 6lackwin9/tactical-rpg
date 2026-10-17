@@ -36,3 +36,31 @@ static func create(world_id: String, base_unit_ids: Array[String], p_seed: int =
 	if not errors.is_empty():
 		return {"state": null, "errors": errors}
 	return {"state": state, "errors": errors}
+
+# Problems that keep `world_id` from starting a new game (UI1-L): a world is PLAYABLE when its resolved `start_party`
+# and its resolved `start_location` (EXP1-L) are both non-empty. Empty = playable.
+static func playable_errors(world_id: String) -> Array[String]:
+	var errors: Array[String] = []
+	if not WorldCatalog.has_world(world_id):
+		errors.append("Unknown world '%s'." % world_id)
+		return errors
+	if WorldCatalog.start_party(world_id).is_empty():
+		errors.append("World '%s' is not playable (no start party)." % world_id)
+	if MapRules.start_location(world_id).is_empty():
+		errors.append("World '%s' is not playable (no start location)." % world_id)
+	return errors
+
+# Every playable world id, in WorldCatalog order.
+static func playable_worlds() -> Array[String]:
+	var out: Array[String] = []
+	for w: String in WorldCatalog.world_ids():
+		if playable_errors(w).is_empty():
+			out.append(w)
+	return out
+
+# A new game in `world_id` with its fixed start party (UI1-L): {"state", "errors"} like create().
+static func create_for_world(world_id: String, p_seed: int = -1) -> Dictionary:
+	var errors: Array[String] = playable_errors(world_id)
+	if not errors.is_empty():
+		return {"state": null, "errors": errors}
+	return create(world_id, WorldCatalog.start_party(world_id), p_seed)

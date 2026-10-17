@@ -122,12 +122,16 @@ static func row_problems(e: Dictionary) -> Array[Dictionary]:
 		if e.get(key, null) != f["default"]:
 			out.append(problem(key, tier, "%s belongs to %s skills, not %s." % [str(f["label"]), "/".join(SkillKinds.kinds_with(key)), kind]))
 	var status_id: String = str(e["status_effect"])
+	# The magnitude status (status_effect, else grant_status) decides the range from its registry row (S12S-L).
 	var magnitude: int = DictUtil.to_int(e["status_magnitude"])
-	if status_id == StatusEffects.WEAKEN:
-		if magnitude < 1 or magnitude > StatusRegistry.cap_of(StatusEffects.WEAKEN):
-			out.append(problem("status_magnitude", tier, "weaken needs a magnitude 1-%d" % StatusRegistry.cap_of(StatusEffects.WEAKEN)))
+	var magnitude_status: String = SkillText.magnitude_status(e)
+	if StatusEffects.has_magnitude(magnitude_status):
+		var mag_min: int = StatusRegistry.magnitude_min(magnitude_status)
+		var mag_max: int = StatusRegistry.magnitude_max(magnitude_status)
+		if magnitude < mag_min or magnitude > mag_max:
+			out.append(problem("status_magnitude", tier, "%s needs a magnitude %d-%d" % [magnitude_status, mag_min, mag_max]))
 	elif magnitude != 0:
-		out.append(problem("status_magnitude", tier, "magnitude only applies to weaken"))
+		out.append(problem("status_magnitude", tier, "magnitude only applies to %s" % ", ".join(StatusRegistry.magnitude_ids())))
 	var grant: String = str(e["grant_status"])
 	var reach_min: int = DictUtil.to_int(e["reach_min"])
 	var reach_max: int = DictUtil.to_int(e["reach_max"])

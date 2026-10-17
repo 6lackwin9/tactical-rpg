@@ -9,7 +9,8 @@ extends RefCounted
 # reference scans / renames through the new json fields.
 # Runtime (checks 7-20): DialogueRunner visibility, all-or-nothing choices, services and giver / turn-in enforcement,
 # turn-in confirm / cancel, presence, node effects, ShopRules prices / stock / loot sales / selling, party gold from
-# quests, chests and NewGame, dialogue fights, save v4.
+# quests, chests and NewGame, dialogue fights, save v4. Commit 3 (DialoguePanelChecks): the shop return rule and the
+# dialogue / shop debug panels in the region map scene.
 # Fixtures: a content fork (test-only QUEST and CONSUMABLE items), sandbox quest / service / map files and save folder,
 # and hand-built worlds in an EMPTY sandbox world root; the shipped data is only read (ids picked by rule).
 # ==============================================================================
@@ -57,7 +58,7 @@ static func _choices(t: Dictionary, id: String) -> Array:
 
 # ------------------------------------------------------------------------------
 
-static func run() -> bool:
+static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
 	print("=== STARTING DIALOGUE TEST (DLG1-L)                  ===")
 	print("=======================================================")
@@ -106,6 +107,7 @@ static func run() -> bool:
 				ok = _test_gold() and ok
 				ok = _test_fight() and ok
 				ok = _test_save_v4() and ok
+				ok = DialoguePanelChecks.run(tree_parent) and ok   # commit 3: shop return rule, debug panels
 			else:
 				ok = false
 			SaveGame.reset_base_dir()

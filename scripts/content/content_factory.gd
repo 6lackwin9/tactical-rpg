@@ -15,6 +15,8 @@ static func _enum(names: Array, value: String, fallback: int) -> int:
 static func _name(names: Array, value: int) -> String:
 	return str(names[value]) if value >= 0 and value < names.size() else ""
 
+const NO_AUTO_SPEND: String = "_no_auto_spend"   # unit(): an empty spend stays empty (PartyBuilder preview, UI2-L)
+
 static func _ints(d: Variant) -> Dictionary:
 	var out: Dictionary = {}
 	if d is Dictionary:
@@ -259,7 +261,7 @@ static func unit(entry: Dictionary, display_name: String = "", default_ap: int =
 	var c: Combatant
 	if derived:
 		var spend: Dictionary = _ints(e["spend"])
-		if spend.is_empty():
+		if spend.is_empty() and not DictUtil.to_bool(entry.get(NO_AUTO_SPEND, false)):
 			spend = StatRules.auto_spend(arch.growth_per_level, StatRules.spend_pool(level))
 		c = Combatant.new(shown, 1, 1, 1, CharacterStats.new(arch, level, spend))
 	elif arch != null:

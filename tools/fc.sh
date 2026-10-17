@@ -7,6 +7,7 @@
 #   tools/fc.sh run <script.gd>  run a SceneTree script (scratch debugging), noise filtered
 #   tools/fc.sh safe_delete <kind> <id> [--apply]   scan, then delete a SYSTEM asset (refuses while referenced)
 #   tools/fc.sh export_placeholder <ns> <key> <variant> [team]   write a generated placeholder as PNG to its assets/ path (S14)
+#   tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>   write a placeholder blip to assets/audio/sfx/<key>.wav (S14-L3)
 #   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
 #   tools/fc.sh gate             the commit gate, same steps as check_project.ps1 -Fast -Quiet (class cache, parse-all, arena, dojo); no PowerShell needed
@@ -102,6 +103,7 @@ case "$1" in
   safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   gate) gate ;;
   export_placeholder) timeout 120 "$GODOT" --headless --path . -s tools/export_placeholder.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
+  gen_sfx) timeout 120 "$GODOT" --headless --path . -s tools/gen_placeholder_sfx.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
   all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
   *) sed -n '2,/^# Exit code/p' "$0" ;;   # the whole usage block, however many lines it grows to
 esac

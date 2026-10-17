@@ -46,6 +46,7 @@ tactical-rpg/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
 │   ├── scene_runner.tscn         # Main scene: Scene Runner menu (launch scenes, hot-reload scripts, run suites)
+│   ├── main_menu.tscn            # Player front door (UI1-L): continue, new game, load / save slots, settings, hub
 │   ├── test_arena.tscn           # Test harness scene: runs SuiteRegistry.run_all (headless exit code); windowed opens the runner
 │   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1 and the runner's suite buttons
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
@@ -55,7 +56,9 @@ tactical-rpg/
 │   ├── world_forge.tscn          # World Forge: author lore worlds; play their battles
 │   ├── world_forge.gd            # Mounts WorldForge; swaps in combat_arena for "Play this encounter"
 │   └── dojo/
-│       └── dojo_assertions.gd        # 42 headless dojo assertions (rules, session actions, filters, carry, catalog skills, dummy attacks, UI)
+│       ├── dojo_assertions.gd        # 42 headless dojo assertions: Dojo-1..18 here, then the two files below (CLN-12 split)
+│       ├── dojo_session_assertions.gd # session actions, gear integrity, logging, benchmark, catalog skills, dummy attacks
+│       └── dojo_ui_assertions.gd     # workspace panels, slot rules, stash filters, party viewer, carry, overlays
 ├── scripts/
 │   ├── content/                  # Content catalog engine (headless)
 │   │   ├── content_schema.gd         # Field lists per kind (tables in skill_fields.gd, item_fields.gd, class_unit_fields.gd): types, defaults, ranges, enums, refs, conditional fields; normalising
@@ -128,6 +131,7 @@ tactical-rpg/
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   ├── audio/                    # Sound by key (S14-L3): SoundEvents keys, SoundBank lookup, AudioDirector voices, PlaceholderSfx blips
 │   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
 │   │   ├── svg_raster.gd             # SVG string -> cached ImageTexture
 │   │   ├── unit_art.gd               # Class-glyph tokens (blue friendly / red hostile / yellow neutral) & portraits
@@ -171,7 +175,10 @@ tactical-rpg/
 │       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
 │       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
 │       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
-│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards & action FX
+│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards; hands action FX to the presenter
+│       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
+│       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
+│       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
 │       │   ├── combat_action_log_panel.gd # Compact resolution log dock
 │       │   ├── combat_inspector_panel.gd # Unit inspector (snapshot-aware)
 │       │   ├── combat_forecast_panel.gd  # Tactical forecast
@@ -189,7 +196,7 @@ tactical-rpg/
 │       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
 │       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
 │       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, tweens & floating text
+│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, FX layer
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -373,6 +380,10 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ---
 
+### Web build (browser)
+
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
@@ -390,7 +401,7 @@ The suites registered in [suite_registry.gd](scripts/tests/suite_registry.gd) (3
 9. **Scene Runner Test** (5 assertions, [runner_test_suite.gd](scripts/tests/runner_test_suite.gd)): every runnable scene listed (runner and test harness hidden), suite output parsing, launching the arena with a chosen catalog encounter plus restart and back to the menu, the unsaved-Forge-work guard (second press discards), and hot-reloading a script in place.
 10. **World Engine & World Forge Test** (9 assertions, [world_test_suite.gd](scripts/tests/world_test_suite.gd)): the shipped worlds load and validate (every element kind, lineage, descendants); inheritance (namespaced ids, overrides replace for the child only and old ids redirect, nearest-wins resolution, cycles and unknown parents rejected); same base / different lore (names differ, every stat, class, skill, AI plan and damage matches between `ashlands` and `tidewrack`, except the deliberately tuned boss); tuning deltas, named items (armor + mitigation, fixed vitals untouched) and disciplines apply exactly; world encounters (wave ambush, own battle, an inherited battle re-skinned) play to the end in the real engine with lore names, and `EncounterSource` lists both layers; on a sandbox copy: connections without inheriting, unconnected worlds refused, role / base / override / slot checks and safe deletes; authoring (new world, dangling references while drafting, overrides, renames rewriting plain / json / cross-world / override references, templates, save & reload); and the World Forge UI (create world, inherited read-only, override, dangling refs, tuning, play in the arena, save, delete) plus the Scene Runner launching a world battle.
 
-Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd)) when launched with `--headless`:
+Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** ([dojo_assertions.gd](scenes/dojo/dojo_assertions.gd), which calls [dojo_session_assertions.gd](scenes/dojo/dojo_session_assertions.gd) and [dojo_ui_assertions.gd](scenes/dojo/dojo_ui_assertions.gd)) when launched with `--headless`:
 
 - **Rules & formulas (Dojo-1 to 18)**: dummy vitals, melee formula with sword training, 50% mitigation, focus buff scaling, threshold tiers, deficit penalties, melee/ranged power gating, accessory stat propagation, class archetype equip restrictions, 1H/2H and off-hand scaling, crit rate and damage factor, stat allocation bounds, and reset to baseline.
 - **Session behavior (Dojo-19 to 25)**: strict-hand assertions Dojo-13d, 21d and 21e (dual wield only with the dojo flag); Quick Setup presets, class-proficiency skipping, 2H shield refusal / off-hand weapon acceptance, 1-block active-weapon switching, 1H dual-wield Dual Strike, stash duplicate integrity, strike log entries with breakdowns, rejected illegal actions logged as `FAILED`, and benchmark simulation leaving dummy HP untouched.
@@ -400,7 +411,7 @@ Additionally, `scenes/gear_dojo.tscn` runs **42 dedicated headless assertions** 
 
 ### Combat extensions (M1)
 
-Support skills (heal/buff on allies, `SupportRules`), gap-close attacks (`dash_tiles`), haste/bleed/taunt statuses, `learned_only` skills, a `reckless` AI profile and AI fixes (kiting, no idle turns, support healing); tested in `combat_extensions_test_suite.gd`. Example skills `mend`, `rally`, `taunt_shout`, `lunge`, `bleeding_cut` are in the catalog but in no class path yet (M2).
+Support skills (heal/buff on allies, `SupportRules`), gap-close attacks (`dash_tiles`), haste/bleed/taunt statuses, `learned_only` skills, a `reckless` AI profile and AI fixes (kiting, no idle turns, support healing); tested in `combat_extensions_test_suite.gd`, `combat_ext_attacks_test_suite.gd` and `combat_ext_ai_test_suite.gd` (helpers in `combat_ext_kit.gd`). Example skills `mend`, `rally`, `taunt_shout`, `lunge`, `bleeding_cut` are in the catalog but in no class path yet (M2).
 
 ### Riposte (M2a)
 
@@ -424,7 +435,7 @@ Skills are grouped into families with tiers chosen at planning time (higher tier
 
 ### Engine pieces (M2c-2a2)
 
-`cleanse` (support skills can remove debuffs from an ally, combinable with heal and buff), the `DISENGAGE` jump (move away from the nearest foe), the L-shaped `SWEEP` area for the Brawler, and a gear-budget value for unarmed loadouts. Example skills `purify`, `backflip`, `sweep_kick` are in the catalog (learned_only). Tested in `engine_pieces_test_suite.gd`.
+`cleanse` (support skills can remove debuffs from an ally, combinable with heal and buff), the `DISENGAGE` jump (move away from the nearest foe), the L-shaped `SWEEP` area for the Brawler, and a gear-budget value for unarmed loadouts. Example skills `purify`, `backflip`, `sweep_kick` are in the catalog (learned_only). Tested in `engine_pieces_test_suite.gd` (unarmed and gear budget in `unarmed_test_suite.gd`).
 
 ### Foundation cleanup (slice A)
 
@@ -436,11 +447,15 @@ Rest now puts the unit in Tactical stance (free entry). The skill after Rest pay
 
 ### Orb and tome, item effects (C1-L)
 
-Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spell/heal potency, status potency, spell reach, resist) that applies only while equipped; a two-handed main weapon cannot be paired with them. The Dojo Arcanist preset is now wand plus tome. Tested in `focus_gear_test_suite.gd`.
+Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spell/heal potency, status potency, spell reach, resist) that applies only while equipped; a two-handed main weapon cannot be paired with them. The Dojo Arcanist preset is now wand plus tome. Tested in `focus_gear_test_suite.gd` and `focus_gear_budget_test_suite.gd`.
 
 ### Weaken and data-driven riposte (D1-L)
 
 New `weaken` status (outgoing skill power -15 to -25%, cap 25%, refresh to the longest duration) with a `status_magnitude` skill field; zero-power attacks apply a status without dealing damage; riposte AP, mitigation and duration now come entirely from skill data. Tested in `weaken_test_suite.gd`.
+
+### Status expansion schema (S12S-L commit 1)
+
+The status registry gives every status a magnitude range and unit, and adds six rows with placeholder numbers: slow, expose, fortify, regen, poison and burn. They have no effect in combat yet (S12S-L commit 2). `status_magnitude` is validated per status on attack, support and defend skills, the `{magnitude}` text token shows its unit, and each status records which unit applied it (undo restores it). Tested in `status_expansion_test_suite.gd`.
 
 ### Area statuses and taunt from defend skills (M2C2B-L)
 
@@ -456,7 +471,7 @@ All six classes now have their real kits: three-tier skill families, eight advan
 
 ### AI skill use (AI1)
 
-The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. `AiProfile.smart_skills` switches it off for A/B balance runs. Tested in `ai_skills_test_suite.gd`.
+The tactical AI (enemies and preset drafts) now uses disengage, area attacks (never hitting its own side), cleanse-only skills, taunt, ally buffs, debuff attacks and riposte. The old `AiProfile.smart_skills = false` path was removed after the BAL2 rerun (CLN-16). Tested in `ai_skills_test_suite.gd` and `ai_skills_tactics_test_suite.gd` (fixtures in `ai_skills_kit.gd`).
 
 ### Skill unlock rule (SK2)
 
@@ -476,7 +491,7 @@ A skill is one **family template** plus up to two **rank modifiers** (absolute v
 - **Unit gear `none`**: a unit slot set to `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) opts out of the class default loadout; a blank slot still means "use the class default". Units only.
 - **Tiers**: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
 - **Trained fists**: an empty main hand with fist proficiency 2 or more hits with weapon power 15 + fist training and gets the fist crit bonus (`DamageCalculator.UNARMED_BASE_POWER`, `TRAINED_FIST_MIN_LEVEL`); `GearBudget.UNARMED_VALUE` reads the same constant. The damage formula itself is unchanged.
-- **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `smart_skills`, `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Refused plans print `PLAN FAIL <unit> <reason>` (with the step and the unit holding the tile) and every mode ends with `plan checks: N PLAN FAIL over M fights`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
+- **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Refused plans print `PLAN FAIL <unit> <reason>` (with the step and the unit holding the tile) and every mode ends with `plan checks: N PLAN FAIL over M fights`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
 - Tested in `bal2_rules_test_suite.gd`.
 
 ### Balance data pass (BAL2-A)
@@ -505,7 +520,7 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
-Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to debug slot 9. EXP1 is complete.
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
@@ -527,6 +542,8 @@ An item tier can now require a stat (training lowers the threshold), a proficien
 
 Worlds gain two kinds: `dialogues` (node trees with choices, conditions and effects; generated service choices for quest givers) and `shops` (stock, loot-table sales, buy and sell multipliers). Characters get a `dialogue` and `gone_flags` (flag conditions that remove them), the world manifest gets `start_gold` and custom `service_lines`, quests can reward `gold` and chests can hold gold. A lint warns when a quest giver can disappear without a quest variant that re-routes the quest. Base service lines live in `data/dialogue/services.json` (`ServiceCatalog`); rules in `DialogueRules` and `ShopRules`. Commit 2 adds the runtime: `DialogueRunner` (open a conversation, view it, pick choices that apply all their effects or none, confirm quest turn-ins, leave shops), shops with whole-number prices (buy rounds up, sell rounds down), limited stock and loot-table sales, party gold (from quests, chests, selling and dialogue; start gold per world) and save version 4 (party gold, shop stock) with a migration from version 3. Gone NPCs disappear from maps and conversations. Tested in `dialogue_test_suite.gd`.
 
+Dialogue and shop panels (DLG1-L commit 3): in the debug region map, press E next to an NPC to talk. The dialogue panel shows the speaker, the text and the choices (locked ones greyed out), a Continue button, and a turn-in step where you pick who receives the reward and which loot to take. A shop choice swaps in the shop panel (gold, buy list with stock left, sell list); Close returns to the conversation without repeating the node's effects. A dialogue fight is settled with the same Won / Fled / Lost buttons. Tested in `dialogue_panel_checks.gd` (run by the dialogue suite).
+
 ### Forge item tab (ITEM1-L commit 3)
 
 The Content Forge edits items and item families with dedicated sections: identity with a token palette, family and build chips, a base-values grid (base + adjustments = result, with band markers), modifier and tier tables (tiers for weapons, armor and shields alike), and a preview with the per-modifier gear budget. System items lock their key fields and their whole modifier and tier lists. A family edit shows a live impact panel (which items and loadout totals change) and needs a second Apply when it changes items; the batch is stored with `upsert_many`. Filter chips narrow the item list by family, hand, rarity, origin, usage, special, tiers and effects. Logic in `ItemFormModel`, widgets in `ItemTables`; tested in `item_form_model_test_suite.gd`.
@@ -535,9 +552,25 @@ The Content Forge edits items and item families with dedicated sections: identit
 
 Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the manifest `data/assets/manifest.json` (managed by `AssetCatalog`) points a key and variant at a file under `assets/art/<namespace>/` or at another key (alias); otherwise the generated placeholder template is used, then a fallback, so a texture is never missing. Unit files are composed onto the team-coloured token. Skills and statuses get generated placeholder icons (`SkillArt`, `StatusArt`). A manifest row whose key still has a template can always be removed (the placeholder comes back); a manifest-only key cannot be removed while content uses it. `tools/fc.sh export_placeholder <ns> <key> <variant> [team]` writes a template as a PNG to start real art from. The first rows (S14-A1) alias `goblin_brawler` to the berserker art and override the warrior token and portrait, the runed staff icon and rubble tiles with PNG exports of their placeholders, so shipped art looks as before (rubble tiles now all use their first variant). Tested in `asset_pipeline_test_suite.gd`.
 
+### Audio (S14-L3)
+
+Sound plays by key, never by file path. `SoundBank` looks up an `sfx` key through `AssetRegistry` (a manifest row pointing at `assets/audio/sfx/<key>.wav` or `.ogg`); a key with no file is silent and warns once. `SoundEvents` lists the keys (hit, crit, mitigated, heal, buff, debuff, defend, move_step, defeat and four UI keys) and which presenter preset plays which. One `AudioDirector` in the combat arena and one in the Scene Runner hold eight SFX voices and two UI voices, play the presenter's `fx_played` sounds and the playback buttons' click, and set the Master, Music, SFX and UI bus volumes (`default_bus_layout.tres`) from the new `SettingsFile` (`user://settings.cfg`, keys `audio/master|music|sfx|ui`, never part of a save). Headless runs, tests and the sim create no voices. `tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>` writes a placeholder blip. Tested in `audio_test_suite.gd`.
+
+### Combat presenter (S14-L2)
+
+All combat animation now goes through `CombatPresenter` (`scripts/ui/combat/`), which `CombatGridPanel` feeds from `CombatSession.fx_requested` and from its refresh slide. Timings and tween recipes live in one table (`FxPresets`; the durations are the old hard-coded ones) and `FxPresets.for_entry` maps a log entry to its presets: melee bump or ranged pulse, hit or mitigated shake and flash, heal, buff and defend pulses, a status icon pop when the entry names a real status, floating text (the old labels) and a defeat fade. `FxSettings` holds the speed (0.25 to 4, read later from the UI1-L settings file) and instant mode, which applies every end state at once and is always on in headless runs and tests. The presenter owns every tween and temporary node and ends them all (tokens at their end states) when the log resets, the encounter remounts, the timeline steps back or too many pile up; `fx_played` fires once per preset for the coming audio hook (S14-L3). Nothing in resolution, the log or the sim changed. Tested in `animation_lifecycle_test_suite.gd`.
+
 ### Forge class tab (CLASS1-L)
 
 A class's `skill_path` is now a map of skill family to unlock level (`{family: level}`, kept in entry order; `ClassArchetype.path_steps()` sorts by level then position, and the default loadout is the first five). CLASS1-M migrated the shipped classes to the map shape (and gave every unit `heal_below` 0.7), so the old list converter is switched off (`ClassUnitFields.LIST_PATH_CONVERTER` false; a list path is now a validation error). System classes lock their key fields (id, AI role, base stats, growth, proficiency); gear, pouch and path stay editable. Units gain an AI `heal_below` threshold (default 0.7). The Forge edits classes in five sections with a path table, proficiency rows, gear pickers grouped by item family and live stat, gear-budget and coverage panels (`ClassForgeModel`, `ForgePreview.class_panels`); soft warnings never block saving. Tested in `class_path` and `class_form_model` suites.
+
+### Main menu, new game and save slots (UI1-L)
+
+`scenes/main_menu.tscn` (Scene Runner > Main Menu) is the player's front door: **Continue** loads the newest save (autosave included; hidden when there is none), **New game** lists the playable worlds with their fixed starting party (world manifest `start_party`, inherited like `start_location`; a world is playable when both resolve) and starts with an autosave, **Load game** shows the autosave and five manual slots (one shared list across worlds; each row names its world) with a header read by `SaveGame.peek` (world, location, party levels, time; corrupt files show as unreadable, newer versions are listed but not loadable), **Settings** edits `user://settings.cfg` (`SettingsFile`: volumes, animation speed and instant mode, text size; never part of a save), and **Tools** (debug builds) returns to the Scene Runner. A started game opens the region map; Esc returns to the **hub** (world, location, party, Save game, Settings, Quit to main menu; Party opens the UI2-L party screen; Journal arrives with UI3). Overwriting or deleting a save, leaving a screen with unapplied changes and quitting with unsaved progress all ask first; saving is refused during a battle or conversation. Slots: 0 = autosave, 1-5 manual (`SaveGame.write` refuses anything else); no save version change. Every screen is a headless model (`MenuRouter`, `MainMenuModel`, `NewGameModel`, `SaveSlotsModel`, `SettingsModel`, `HubModel` in `scripts/ui/menus/`) over `CurrentGame` (the game in play); views only render. The Ashlands (and Tidewrack, which inherits it) start with warrior, ranger, rogue and mage (UI1-A); Iron Reaches is not playable yet. Each readable save can be **exported** to a JSON file anywhere (a file dialog; default name like `ashlands_slot2_20261017-1445.json`), and **Import** reads such a file from any world into a manual slot (migrated and validated like a load; it keeps its own save time so the autosave stays the resume point; asks before replacing a slot; not offered in the web build) (SAVE-IO, `SaveGame.export_to` / `import_from`, tested in `save_io_test_suite.gd`). Tested in `menus_test_suite.gd`.
+
+### Party screen, level-up and battle results (UI2-L)
+
+The hub's **Party** entry (a dot marks members with unspent level-up points) opens the roster: toggle who is in the active four (at most 4, at least 1), and see the selected member's stats split into base, class growth and spent points, the derived block (max HP, speed, tiles per move, crit, melee and ranged power, armor, debuff resist, AP), XP to the next level, passives and gold. From there **Level up** drafts points with + / - or Auto (the class weights) and shows every derived value before and after; Confirm is permanent and unspent points may wait (battles auto-spend them on a copy). **Skills** slots up to 5 class and 3 extra families (basics are always active; locked tiers show their unlock level; Use default returns to the class pick). **Gear** equips stash items per slot (the validator's proficiency, hand and requirement messages verbatim; an explicit item goes back to the stash, the slot reverts to the class default) or opens the drag-and-drop gear board on the same draft (`PartyGearBridge` over `CharacterEquipmentModal`). Every edit is a draft that Cancel or Back drops (Back asks first). After a fight on the region map the **battle results** screen lists XP and levels of the active members, new skill tiers and quests advanced, offers Level up per member (skippable) and Continue autosaves and returns to the map. Models: `PartyModel`, `StatsModel`, `LevelUpModel`, `LoadoutModel`, `GearModel`, `BattleResultsModel`, `PartyPreview` (derived block via `PartyBuilder.build(state, false)`, which leaves unspent points unspent). Tested in `party_screen_test_suite.gd`.
 
 ### Agent workflow tools
 
@@ -639,7 +672,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Planned.*
 
 - [ ] Dedicated automated test suite verifying SVG asset loads, dimensions, and texture caching.
-- [ ] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification).
+- [x] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification): `animation_lifecycle_test_suite.gd` (S14-L2).
 
 ### 4. Advanced Combat Rules & Combo Engine (`System 6`)
 

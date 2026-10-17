@@ -7,12 +7,13 @@ extends Node2D
 #   Panels & layout     -> scripts/ui/combat/      (CombatPanel subclasses, CombatDockHost)
 # Callers (game flow, test harness) may assign `encounter` before the scene
 # enters the tree (the Scene Runner does), or pass `-- --encounter=<catalog id>`;
-# it defaults to the Goblin Skirmish.
+# it defaults to the Goblin Skirmish. An AudioDirector plays the presenter's sounds (S14-L3).
 # ==============================================================================
 
 var encounter: CombatEncounter = null
 var session: CombatSession = null
 var host: CombatDockHost = null
+var audio: AudioDirector = null
 
 func _ready() -> void:
 	if encounter == null:
@@ -26,6 +27,12 @@ func _ready() -> void:
 	host = CombatDockHost.new()
 	canvas.add_child(host)
 	host.setup(session)
+	audio = AudioDirector.new()
+	add_child(audio)
+	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+	if grid != null:
+		audio.connect_presenter(grid.presenter)
+	audio.apply_volumes()
 	session.start()
 
 # `-- --encounter=<id>` loads any content-catalog encounter into the arena, e.g.
