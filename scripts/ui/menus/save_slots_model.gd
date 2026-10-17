@@ -2,7 +2,7 @@ class_name SaveSlotsModel
 extends RefCounted
 
 # ==============================================================================
-# Tactical RPG - Save / load slots model (UI1-L): one row per slot 0..3 from SaveGame.peek (0 = autosave, never
+# Tactical RPG - Save / load slots model (UI1-L): one row per slot 0..5 from SaveGame.peek (0 = autosave, 1-5 manual; never
 # written by a manual save). Load enters the game (warnings shown once, rule 6); save asks before overwriting and is
 # refused during a battle or conversation (rule 5); delete always asks. Answers to a question land in `last_errors`.
 # ==============================================================================

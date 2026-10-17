@@ -28,7 +28,7 @@ const PLAYTESTS_STRETCH: float = 1.6   # share of the right column's height (DEV
 # that isn't hidden is listed under "Other scenes".
 const SCENES: Array[Dictionary] = [
 	{"path": "res://scenes/main_menu.tscn", "name": "Main Menu", "icon": "▶",
-		"desc": "The player's front door: continue, new game in a playable world, load and save slots (autosave + 3), settings and the in-game hub."},
+		"desc": "The player's front door: continue, new game in a playable world, load and save slots (0 = autosave, 1-5 manual), settings and the in-game hub."},
 	{"path": "res://scenes/combat_arena.tscn", "name": "Combat Arena", "icon": "⚔",
 		"desc": "Plan and fight a battle. Pick a catalog encounter or any world's battle (played with that world's characters).", "encounters": true},
 	{"path": "res://scenes/content_forge.tscn", "name": "Content Forge", "icon": "⚒",
@@ -38,7 +38,7 @@ const SCENES: Array[Dictionary] = [
 	{"path": "res://scenes/gear_dojo.tscn", "name": "Gear & Skill Dojo", "icon": "🛡",
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
 	{"path": "res://scenes/overworld/region_map_debug.tscn", "name": "Region Map (debug)", "icon": "🗺",
-		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (autosaves to the autosave slot)."},
+		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (a game started from the main menu autosaves to slot 0; the standalone debug game writes nothing)."},
 ]
 const HIDDEN_SCENES: Array[String] = ["res://scenes/scene_runner.tscn", "res://scenes/test_arena.tscn"]
 

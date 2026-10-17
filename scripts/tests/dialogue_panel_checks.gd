@@ -95,6 +95,7 @@ static func _test_panels(tree_parent: Node) -> bool:
 		view.free()
 		return _report("Dialogue and shop panels", checks)
 	var gs: GameState = view.gs
+	CurrentGame.start(gs)
 	var dp: DialoguePanel = view.dialogue_panel
 	var sp: ShopPanel = view.shop_panel
 	# locked choice greyed: Mara's KNOW-gated Ask with only the low-KNOW member active
@@ -103,13 +104,15 @@ static func _test_panels(tree_parent: Node) -> bool:
 	var ask: int = DialogueTestSuite._find(dp.runner.view(), "Ask") if dp.runner != null else -1
 	var ask_btn: Button = dp._choices.get_child(ask) as Button if ask >= 0 and ask < dp._choices.get_child_count() else null
 	checks["talk opens the dialogue panel and blocks the map"] = dp.is_open() and view.busy()
+	checks["CurrentGame is busy during the dialogue"] = CurrentGame.busy()
 	checks["a locked choice is a disabled button"] = ask_btn != null and ask_btn.disabled
 	var _bye: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), DialogueTestSuite._line("farewell")))
 	checks["farewell closes the panel"] = not dp.is_open() and not view.busy()
+	checks["CurrentGame busy clears when the dialogue closes"] = not CurrentGame.busy()
 	# shop: open from Hest, buy one, close back to the dialogue
 	view.talk("hest")
 	var _shop: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), DialogueTestSuite._line("shop")))
-	checks["the shop service swaps in the shop panel"] = sp.is_open() and not dp.visible and sp.shop_qid == _q("s_hest") and view.busy()
+	checks["the shop service swaps in the shop panel"] = sp.is_open() and not dp.visible and sp.shop_qid == _q("s_hest") and view.busy() and CurrentGame.busy()
 	var gold0: int = gs.party.gold
 	var bought: Dictionary = sp.buy_one("item", DialogueTestSuite.I25)
 	checks["buy goes through ShopRules"] = DictUtil.to_bool(bought["ok"]) and gs.party.gold < gold0 and DictUtil.to_int(gs.party.stash.get(DialogueTestSuite.I25, 0)) >= 1
@@ -128,7 +131,11 @@ static func _test_panels(tree_parent: Node) -> bool:
 	var _fight: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), "Fight"))
 	checks["a dialogue fight opens the outcome panel"] = str(view.pending_fight.get("source", "")) == "dialogue" and not dp.is_open() and view.busy()
 	view.settle("won")
-	checks["won settles through DialogueRunner.after_fight"] = view.pending_fight.is_empty() and not view.busy()
+	checks["won settles through DialogueRunner.after_fight"] = view.pending_fight.is_empty() and not view.busy() and not CurrentGame.busy()
+	view.talk("mara")
+	checks["a view freed mid-talk clears the busy lock"] = CurrentGame.busy()
 	tree_parent.remove_child(view)
+	checks["exit_tree clears the busy lock"] = not CurrentGame.busy()
+	CurrentGame.end()
 	view.free()
 	return _report("Dialogue and shop panels (talk, locked choice, shop buy and close, turn-in step, dialogue fight)", checks)

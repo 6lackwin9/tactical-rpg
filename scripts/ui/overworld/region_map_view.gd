@@ -11,12 +11,12 @@ extends Control
 # E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
 # its Close returns to the dialogue; a dialogue fight uses the same battle (DialogueRunner.after_fight).
 # Moving and interacting are ignored while a conversation, shop or fight is open.
-# `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) (refused while a fight is pending). A world picker starts a new game.
+# `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) only for the main menu's game (CurrentGame.state()); the standalone debug game writes nothing
+# (refused while a fight is pending). A world picker starts a new game. busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
 # ==============================================================================
 
 signal fight_settled(res: Dictionary)   # UI2-L: the main menu host shows battle results on it
 
-const DEBUG_SLOT: int = SaveGame.AUTOSAVE_SLOT
 const TILE: int = 22
 const DEBUG_SEED: int = 7
 const COL_TILES: Dictionary = {".": Color(0.22, 0.22, 0.24), "#": Color(0.45, 0.38, 0.30), "~": Color(0.18, 0.32, 0.55)}
@@ -194,6 +194,7 @@ func _on_shop_closed() -> void:
 
 func _on_dialogue_fight(fight: Dictionary) -> void:
 	pending_fight = fight
+	_sync_busy()
 	_note("Fight! %s (dialogue with %s)" % [str(fight.get("encounter", "")), str(fight.get("character", ""))])
 	launch_battle.call_deferred()
 
@@ -276,15 +277,19 @@ func _event(e: Dictionary) -> void:
 				_event(DictUtil.dict_of(inner))
 		"fight":
 			pending_fight = e
+			_sync_busy()
 			_note("Fight! %s (%s%s)" % [str(e["encounter"]), str(e["source"]), ", elite" if DictUtil.to_bool(e["elite"]) else ""])
 			launch_battle.call_deferred()
 
 func _autosave() -> void:
 	if gs == null or not pending_fight.is_empty():
 		return
-	var errors: Array[String] = SaveGame.write(gs, DEBUG_SLOT)
-	if errors.is_empty() and CurrentGame.state() == gs:
-		CurrentGame.mark_saved(DEBUG_SLOT)
+	if gs != CurrentGame.state():
+		_note("Autosave skipped (debug game).")
+		return
+	var errors: Array[String] = SaveGame.autosave(gs)
+	if errors.is_empty():
+		CurrentGame.mark_saved(SaveGame.AUTOSAVE_SLOT)
 	if not errors.is_empty():
 		_note("Autosave refused: %s" % "; ".join(PackedStringArray(errors)))
 
@@ -293,7 +298,18 @@ func _note(text: String) -> void:
 	while log_lines.size() > 12:
 		log_lines.pop_front()
 
+# Mirrors busy() into CurrentGame for the main menu's game, so SaveSlotsModel refuses saves mid-fight / mid-talk.
+func _sync_busy() -> void:
+	if gs != null and gs == CurrentGame.state():
+		CurrentGame.set_busy(busy())
+
+func _exit_tree() -> void:
+	# a view freed mid-fight / mid-talk must not leave the save lock stuck
+	if gs != null and gs == CurrentGame.state():
+		CurrentGame.set_busy(false)
+
 func _refresh() -> void:
+	_sync_busy()
 	if _status == null:
 		return
 	if gs == null:

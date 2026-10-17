@@ -30,6 +30,7 @@ static func run() -> bool:
 		ok = _test_import(ash, tide) and ok
 		ok = _test_refusals(ash) and ok
 		ok = _test_model(ash) and ok
+		ok = _test_safety(ash) and ok
 	CurrentGame.end()
 	SaveGame.reset_base_dir()
 	TestHelpers.remove_sandbox(SANDBOX)
@@ -43,7 +44,7 @@ static func _test_export(gs: GameState) -> bool:
 	checks["written"] = SaveGame.write(gs, 2).is_empty()
 	var path: String = _file("ash.json")
 	checks["export"] = SaveGame.export_to(2, path).is_empty() and FileAccess.get_file_as_string(path) == FileAccess.get_file_as_string(SaveGame.path_for(2))
-	checks["no tmp left"] = not FileAccess.file_exists(path + ".tmp")
+	checks["no tmp left"] = not FileAccess.file_exists(path + SaveGame.TMP_EXT) and not FileAccess.file_exists(path + SaveGame.BAK_EXT)
 	checks["re-export overwrites"] = SaveGame.export_to(2, path).is_empty()
 	checks["empty slot refused"] = SaveGame.export_to(4, _file("none.json")) == ["No save in slot 4."] and not FileAccess.file_exists(_file("none.json"))
 	checks["no path refused"] = SaveGame.export_to(2, " ") == ["Pick a file to export to."]
@@ -117,3 +118,54 @@ static func _test_model(gs: GameState) -> bool:
 	checks["confirm replaces"] = str(SaveGame.peek(1)["world_id"]) == "ashlands"
 	checks["autosave refused"] = m.import_file(_file("model.json"), 0) == [SaveSlotsModel.MANUAL_ONLY]
 	return _report("SaveSlotsModel export and import", checks)
+
+static func _put(path: String, text: String) -> void:
+	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+# REVIEW-F1: export keeps the previous file, import clamps the save time and refuses huge files.
+static func _test_safety(gs: GameState) -> bool:
+	var checks: Dictionary = {}
+	var _w: Array[String] = SaveGame.write(gs, 2)
+	var slot_text: String = FileAccess.get_file_as_string(SaveGame.path_for(2))
+	# a normal export over an existing file replaces it and leaves no helper files
+	var path: String = _file("over.json")
+	_put(path, "old export")
+	checks["replaces"] = SaveGame.export_to(2, path).is_empty() and FileAccess.get_file_as_string(path) == slot_text
+	checks["no .bak / .fc_tmp left"] = not FileAccess.file_exists(path + SaveGame.BAK_EXT) and not FileAccess.file_exists(path + SaveGame.TMP_EXT)
+	# a user file named like the old temp name is never touched
+	var mine: String = path + ".tmp"
+	_put(mine, "mine")
+	checks["user .tmp file kept"] = SaveGame.export_to(2, path).is_empty() and FileAccess.get_file_as_string(mine) == "mine"
+	# a free temp name is chosen when the first one is taken
+	_put(path + SaveGame.TMP_EXT, "taken")
+	checks["taken tmp name skipped"] = SaveGame.export_to(2, path).is_empty() and FileAccess.get_file_as_string(path + SaveGame.TMP_EXT) == "taken"
+	# a user <target>.bak file survives an export over an existing target, byte-identical
+	var guarded: String = _file("guarded.json")
+	_put(guarded, "old")
+	_put(guarded + SaveGame.BAK_EXT, "user bak")
+	checks["user .bak kept"] = SaveGame.export_to(2, guarded).is_empty() and FileAccess.get_file_as_string(guarded + SaveGame.BAK_EXT) == "user bak" and FileAccess.get_file_as_string(guarded) == slot_text
+	checks["numbered bak removed"] = not FileAccess.file_exists(guarded + SaveGame.BAK_EXT + "1")
+	# forced rename failure (root ignores read-only folders, so the target is a folder): refused, nothing left behind
+	var held: String = _file("held_dir")
+	DirAccess.make_dir_recursive_absolute(held)
+	var errs: Array[String] = SaveGame.export_to(2, held)
+	checks["failed move reports and keeps the target"] = errs == ["Can't move the export into place at '%s' (the previous file was kept)." % held] and DirAccess.dir_exists_absolute(held)
+	checks["failed move leaves no tmp"] = not FileAccess.file_exists(held + SaveGame.TMP_EXT)
+	# import: future saved_at is clamped
+	var env: Dictionary = DictUtil.dict_of(JSON.parse_string(slot_text))
+	var now: int = int(Time.get_unix_time_from_system())
+	env["saved_at"] = now + 86400
+	var future: String = _file("future.json")
+	_put(future, JSON.stringify(env))
+	checks["future import ok"] = DictUtil.to_bool(SaveGame.import_from(future, 3)["ok"])
+	checks["future saved_at clamped"] = DictUtil.to_int(SaveGame.peek(3)["saved_at"]) <= int(Time.get_unix_time_from_system())
+	# import: files over 8 MiB are refused before reading
+	var _w4: Array[String] = SaveGame.write(gs, 4)
+	var before: String = FileAccess.get_file_as_string(SaveGame.path_for(4))
+	var big: String = _file("big.json")
+	_put(big, slot_text + " ".repeat(SaveGame.MAX_IMPORT_BYTES + 1 - slot_text.length() + 1024 * 1024))
+	checks["big file refused"] = JsonUtil.strings(SaveGame.import_from(big, 4)["errors"]) == ["File is too large to be a save."]
+	checks["slot untouched"] = FileAccess.get_file_as_string(SaveGame.path_for(4)) == before
+	return _report("Export keeps the previous file; import clamps time and size", checks)
