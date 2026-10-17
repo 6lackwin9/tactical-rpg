@@ -181,7 +181,7 @@ static func _settings_controls_ok(view: MainMenuView, speed: float, scale: float
 	var check_ok: bool = check.text == "Instant animations" and check.is_visible_in_tree() and check.get_theme_icon("unchecked").get_width() > 0
 	var buttons_ok: bool = _button(view, "Apply") != null and _button(view, "Revert") != null and _button(view, "Back") != null
 	# Centred: the grid's middle sits at the viewport's middle (within a pixel or two).
-	var grid: Control = view.find_child("SettingsGrid", true, false) as Control
+	var grid: Control = view.find_child("SettingsScroll", true, false) as Control   # DISPLAY1: the rows scroll; the scroll area is the centred column
 	var centred: bool = grid != null and absf(grid.get_global_rect().get_center().x - VIEW.x / 2.0) <= 2.0
 	return volumes == 4 and speed_ok and text_ok and check_ok and buttons_ok and centred
 

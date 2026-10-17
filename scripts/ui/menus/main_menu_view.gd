@@ -26,10 +26,12 @@ var _overlay: PanelContainer = null
 var _overlay_text: Label = null
 var _overlay_buttons: HBoxContainer = null
 var _notice_lines: Array[String] = []
+var _confirm: SettingsModel = null   # DISPLAY1: the settings model whose window change waits for Keep
 
 func _ready() -> void:
 	WebFonts.install()   # the browser build starts here (application/run/main_scene.web)
 	SettingsModel.push_to_listeners()   # saved animation/volume settings load here on web (idempotent after the runner)
+	DisplaySettings.apply_saved()   # window mode, size, vsync and frame cap, once (DISPLAY1; a no-op on web and headless)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
 	bg.color = COL_BG
@@ -205,7 +207,7 @@ func _build_overlay() -> void:
 func is_overlay_open() -> bool:
 	return _overlay != null and _overlay.visible
 
-func _open_overlay(message: String, buttons: Array[Button]) -> void:
+func _open_overlay(message: String, buttons: Array[Button], focus_index: int = 0) -> void:
 	_overlay_text.text = message
 	UiTheme.clear_children(_overlay_buttons)
 	for b: Button in buttons:
@@ -214,10 +216,41 @@ func _open_overlay(message: String, buttons: Array[Button]) -> void:
 	_overlay.visible = true
 	_overlay.reset_size()
 	_overlay.position = (size - _overlay.size) / 2.0
-	MainMenuView._focus.call_deferred(buttons[0])
+	MainMenuView._focus.call_deferred(buttons[focus_index])
 
 func _on_confirm_needed(message: String) -> void:
 	_open_overlay(message, [button("Yes", answer.bind(true)), button("No", answer.bind(false))] as Array[Button])
+
+# DISPLAY1 rule 6: the "Keep these display settings?" box with a visible countdown; Revert has focus.
+func begin_display_confirm(m: SettingsModel) -> void:
+	_confirm = m
+	_open_overlay(_confirm_text(), [button("Keep", _end_confirm.bind(true)), button("Revert", _end_confirm.bind(false))] as Array[Button], 1)
+
+func _confirm_text() -> String:
+	return "Keep these display settings? Reverting in %d s" % ceili(_confirm.confirm_left)
+
+func is_confirming() -> bool:
+	return _confirm != null
+
+# Keep writes the mode and size; Revert (also Esc and the timeout) restores the old ones.
+func _end_confirm(keep: bool) -> void:
+	var m: SettingsModel = _confirm
+	_confirm = null
+	_overlay.visible = false
+	if m != null:
+		if keep:
+			show_problems(m.keep_display())
+		else:
+			m.revert_display()
+	render()
+
+func _process(delta: float) -> void:
+	if _confirm == null:
+		return
+	if _confirm.tick(delta):
+		_end_confirm(false)
+	elif _confirm != null:
+		_overlay_text.text = _confirm_text()
 
 # Answers the open question (Yes runs the pending action) or closes a notice.
 func answer(yes: bool) -> void:
@@ -320,7 +353,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # Esc. On the results screen it is the Continue button (autosave, results_done), never a plain pop (REVIEW-F2).
 func cancel_pressed() -> void:
-	if is_overlay_open():
+	if _confirm != null:
+		_end_confirm(false)
+	elif is_overlay_open():
 		answer(false)
 	elif game_view != null and game_view.visible and game_view.get("battle") != null:
 		return   # BATTLE1-L: a battle covers the map; Esc stays with the arena (no hidden "finish the fight" overlay)

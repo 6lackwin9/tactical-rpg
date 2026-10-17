@@ -26,6 +26,11 @@ const KEYS: Dictionary = {
 	"anim/speed": {"type": TYPE_FLOAT, "default": 1.0, "levels": SPEED_LEVELS},
 	"anim/instant": {"type": TYPE_BOOL, "default": false},
 	"ui/text_scale": {"type": TYPE_FLOAT, "default": 1.0, "levels": TEXT_LEVELS},
+	# DISPLAY1 (desktop only; the web build writes none): "choices" is the list of allowed values, anything else reads as the default.
+	"display/window_mode": {"type": TYPE_STRING, "default": "windowed", "choices": ["windowed", "borderless", "fullscreen"]},
+	"display/resolution": {"type": TYPE_STRING, "default": "1280x720", "choices": ["1280x720", "1600x900", "1920x1080", "2560x1440"]},
+	"display/vsync": {"type": TYPE_BOOL, "default": true},
+	"display/max_fps": {"type": TYPE_INT, "default": 0, "choices": [30, 60, 120, 144, 0]},
 }
 
 static var _path: String = DEFAULT_PATH
@@ -120,4 +125,8 @@ static func _clean(key: String, value: Variant) -> Variant:
 		if row.has("levels"):
 			return snap(key, DictUtil.to_float(value))
 		return clampf(DictUtil.to_float(value), DictUtil.to_float(row.get("min", -INF)), DictUtil.to_float(row.get("max", INF)))
-	return value if typeof(value) == kind else null
+	if typeof(value) != kind:
+		return null
+	if row.has("choices") and not DictUtil.array_of(row["choices"]).has(value):
+		return null
+	return value
