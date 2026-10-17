@@ -8,9 +8,8 @@ Dispatch mode: **standard**.
 
 | Agent | Task | Worktree |
 | --- | --- | --- |
-| logic-builder | S14-L1 review fixes | ../ngp-s14 |
-| logic-builder | ITEM1-L commit 2 (tier engine) | ../ngp-item1c2 |
-| logic-builder | DLG1-L commit 1 (dialogue, shops schema) | ../ngp-dlg1 |
+| logic-builder | ITEM1-L commit 3 (Forge item tab) - running, wind-down: merge when done | ../ngp-item1c3 (feat/item1c3) |
+| logic-builder | S14-L1 review fixes - running, wind-down: merge when done | ../ngp-s14 (feat/s14l1) |
 
 Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-2, CLN-1/2/4/5/10/11/15, AI2 (diagnosis), M4-L + M4-A, PLAN1, EXP1-L commit 1, ITEM1-L commit 1. Specs written for EXP1, DLG1, TRAV1, REP1, S12, S14, UI1-3.
 
