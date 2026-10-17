@@ -13,28 +13,34 @@ const WAVE_ROUND: int = 2
 const WAVE_BLOCK: int = 1
 const PRIORITY_ROUND: int = 5   # striker band (8.1): the priority target down by this round
 
-# 5: generated encounters ([class, tier] per unit; "elite" / "boss" classes follow elite= / boss=).
+# 5: generated encounters ([class, tier] per unit; "elite" / "boss" classes follow elite= / boss=;
+# "wave" units arrive at WAVE_ROUND / WAVE_BLOCK). BAL3 3.3 archetypes (threat = sum of tier HP x
+# tier power, a hero 1.0): mob 5 minions, line 4 standard, wave 3 standard + 3 minion wave,
+# elite elite + 3 standard, boss boss + 2 standard + 2 minion wave.
 const GENERATED: Dictionary = {
 	"mob": {"enemies": [["brawler", "minion"], ["rogue", "minion"], ["ranger", "minion"], ["priest", "minion"], ["brawler", "minion"]]},
-	"line": {"enemies": [["warrior", "standard"], ["brawler", "standard"], ["ranger", "standard"]]},
+	"line": {"enemies": [["warrior", "standard"], ["brawler", "standard"], ["ranger", "standard"], ["rogue", "standard"]]},
 	"wave": {"enemies": [["brawler", "standard"], ["rogue", "standard"], ["ranger", "standard"]],
 		"wave": [["brawler", "minion"], ["rogue", "minion"], ["priest", "minion"]]},
-	"elite": {"enemies": [["@elite", "elite"], ["rogue", "standard"], ["mage", "standard"]]},
-	"boss": {"enemies": [["@boss", "boss"], ["ranger", "minion"], ["priest", "minion"]]},
+	"elite": {"enemies": [["@elite", "elite"], ["rogue", "standard"], ["mage", "standard"], ["warrior", "standard"]]},
+	"boss": {"enemies": [["@boss", "boss"], ["ranger", "standard"], ["priest", "standard"]],
+		"wave": [["ranger", "minion"], ["priest", "minion"]]},
 }
 
 # 6.4: limit tests. "allies": reference classes after the test unit; the first enemy of
-# striker_priority is the priority target.
+# striker_priority is the priority target. BAL3 3.2: "block" = [columns, rows] of the clumped
+# enemy start (SimVariants.apply_block, after the start distance); "tier_until" = {"level", "slot",
+# "tier"}: at levels up to "level" the enemy at "slot" uses "tier" instead.
 const SCENARIOS: Dictionary = {
 	"tank_hold": {"role": "tank", "allies": ["ranger", "mage"],
 		"enemies": [["brawler", "standard"], ["rogue", "standard"], ["brawler", "standard"], ["rogue", "standard"]]},
 	"ranged_dive": {"role": "ranged", "allies": ["warrior"],
 		"enemies": [["rogue", "standard"], ["rogue", "standard"], ["brawler", "standard"]]},
-	"aoe_swarm": {"role": "aoe", "allies": ["warrior"],
-		"enemies": [["brawler", "minion"], ["rogue", "minion"], ["ranger", "minion"], ["brawler", "minion"], ["rogue", "minion"], ["priest", "minion"]]},
+	"aoe_swarm": {"role": "aoe", "allies": ["warrior"], "block": [2, 3],
+		"enemies": [["brawler", "minion"], ["rogue", "minion"], ["brawler", "minion"], ["brawler", "minion"], ["rogue", "minion"], ["priest", "minion"]]},
 	"support_attrition": {"role": "support", "allies": ["warrior", "brawler"],
 		"enemies": [["ranger", "standard"], ["ranger", "standard"], ["mage", "standard"], ["rogue", "standard"]]},
-	"striker_priority": {"role": "striker", "allies": ["warrior"], "priority": true,
+	"striker_priority": {"role": "striker", "allies": ["warrior"], "priority": true, "tier_until": {"level": 3, "slot": 0, "tier": "standard"},
 		"enemies": [["mage", "elite"], ["warrior", "standard"], ["warrior", "standard"]]},
 }
 const ROLE_SCENARIO: Dictionary = {"tank": "tank_hold", "ranged": "ranged_dive", "aoe": "aoe_swarm", "support": "support_attrition", "striker": "striker_priority"}
@@ -117,10 +123,25 @@ static func scenario(runner: SimRunner, scenario_id: String, class_id: String, l
 		var rid: String = "simr_%s_%d" % [str(allies[i]), i + 2]
 		runner.define(rid, str(allies[i]), level, "hero", true, {"plain": true})
 		refs.append(rid)
-	var enemies: Array[String] = define_enemies(runner, DictUtil.array_of(s["enemies"]), level, 1, "warrior", "brawler")
+	var enemies: Array[String] = define_enemies(runner, scenario_enemies(scenario_id, level), level, 1, "warrior", "brawler")
 	var party: Array[String] = [test_id]
 	party.append_array(refs)
 	return {"party": party, "enemies": enemies, "priority": enemies[0] if DictUtil.to_bool(s.get("priority", false)) else "", "test": test_id, "refs": refs}
+
+# The [class, tier] enemy list of `scenario_id` at `level` ("tier_until" applied).
+static func scenario_enemies(scenario_id: String, level: int) -> Array:
+	var s: Dictionary = SCENARIOS[scenario_id]
+	var list: Array = DictUtil.array_of(s["enemies"]).duplicate(true)
+	var rule: Dictionary = DictUtil.dict_of(s.get("tier_until", {}))
+	if not rule.is_empty() and level <= DictUtil.int_of(rule, "level"):
+		var slot: int = DictUtil.int_of(rule, "slot")
+		list[slot] = [str(DictUtil.array_of(list[slot])[0]), str(rule["tier"])]
+	return list
+
+# The enemy block size of `scenario_id` (Vector2i.ZERO = standard deployment).
+static func scenario_block(scenario_id: String) -> Vector2i:
+	var raw: Array = DictUtil.array_of(DictUtil.dict_of(SCENARIOS[scenario_id]).get("block", []))
+	return Vector2i(DictUtil.to_int(raw[0]), DictUtil.to_int(raw[1])) if raw.size() == 2 else Vector2i.ZERO
 
 # ------------------------------------------------------------------------------
 # Fight sets

@@ -20,6 +20,8 @@ var observer: SimObserver = null    # commit 1b: the metrics collector
 var not_moved_total: int = 0        # distance: units left in place, summed over fights
 var fights: int = 0
 var plan_fails: int = 0             # fights stopped because confirm_plan() refused the preset plan
+var enemy_block: Vector2i = Vector2i.ZERO   # BAL3 3.2: columns x rows of the clumped enemy block (ZERO = none)
+var block_misses: int = 0           # fights where the enemy block found no room (enemies stay)
 
 func _init(p_args: SimArgs) -> void:
 	args = p_args
@@ -96,10 +98,15 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 	var entry: Dictionary = {"id": "sim_fight", "name": "Sim", "zone": "stone_arena", "arena": "CLOSED", "total_blocks": 6, "unit_ap": 12, "ap_regen": 4}
 	for key: Variant in base:
 		entry[key] = base[key]
-	entry.merge({"party": left, "enemies": right, "max_rounds": args.cap, "rng_seed": seed_value}, true)
+	var party_ids: Array[String] = left
+	var jitter_rng: RandomNumberGenerator = null
+	if args.jitter:
+		jitter_rng = SimVariants.jitter_rng(seed_value)
+		party_ids = SimVariants.shuffled(left, jitter_rng)
+	entry.merge({"party": party_ids, "enemies": right, "max_rounds": args.cap, "rng_seed": seed_value}, true)
 	var session := CombatSession.new(CatalogEncounter.from_entry(entry))
 	session.start()
-	_prepare(session)
+	_prepare(session, jitter_rng)
 	if observer != null:
 		observer.on_start(session)
 	var rounds: int = 0
@@ -159,9 +166,10 @@ func _report_plan_fail(session: CombatSession, round_num: int) -> void:
 		out("PLAN FAIL %s %s (round %d, preset %s, at %s, step %d of [%s]; tile held by [%s])" % [a.name, st.error_text, round_num, preset,
 			str(session.grid.get_position(a)), st.error_index + 1, ", ".join(steps), ", ".join(holders)])
 
-# After start(): enemy presets and the start distance; then the round-1 enemy
-# plan is redrafted (start() already scheduled it with the original profiles and positions).
-func _prepare(session: CombatSession) -> void:
+# After start(): enemy presets, the seeded start jitter (`jitter_rng`, null = off), the start
+# distance and the enemy block; then the round-1 enemy plan is redrafted (start() already
+# scheduled it with the original profiles and positions).
+func _prepare(session: CombatSession, jitter_rng: RandomNumberGenerator = null) -> void:
 	var changed: bool = false
 	if preset != "balanced":
 		for e: Combatant in session.enemies:
@@ -170,8 +178,16 @@ func _prepare(session: CombatSession) -> void:
 				var base: AiProfile = raw
 				session.encounter.ai_profiles[e] = PlanPresets.profile_for(preset, base)
 		changed = true
+	if jitter_rng != null:
+		SimVariants.jitter_start(session.grid, session.allies, session.enemies, jitter_rng)
+		changed = true
 	if args.distance > 0:
 		not_moved_total += SimVariants.apply_distance(session.grid, session.allies, session.enemies, args.distance)
+		changed = true
+	if enemy_block != Vector2i.ZERO:
+		var shift: int = jitter_rng.randi_range(-1, 1) if jitter_rng != null else 0
+		if not SimVariants.apply_block(session.grid, session.allies, session.enemies, enemy_block, args.distance, shift):
+			block_misses += 1
 		changed = true
 	if changed:
 		session.resolver.scheduled_actions.clear()

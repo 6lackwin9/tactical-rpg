@@ -22,7 +22,7 @@
 #     keys:  cap=1..30 (10)  loadout=default|newest|role  spend=class|cons|primary|mixed|all
 #            preset=<PlanPresets id>|both  distance=default|2..6 (role: 4)  score=both|hp|binary  quick  metrics=on|off  band=lo-hi (30-70)
 #            comp=c1,..(<=4)  enc=<ids>|generated|all  elevel=+n|-n|catalog  elite=<class>  boss=<class>
-#            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>
+#            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>  jitter=on|off (on)
 #     full role/sweep runs take ~3 s per party fight: raise SIM_TIMEOUT or split by role= / level (one process each)
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
@@ -85,7 +85,7 @@ parse() {
 }
 
 suite() {  # $1 = scene, $2 = label, $3 = optional pattern
-  timeout 290 "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1
+  timeout "${SUITE_TIMEOUT:-290}" "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1   # SUITE_TIMEOUT: slow containers (arena ~5.5 min on the cloud box 2026-10-17)
   local code=$? pass fail
   pass=$(grep -c "PASS" "$OUT/$2.out"); fail=$(grep "FAIL" "$OUT/$2.out" | grep -vc ": PASS")
   echo "[$2] PASS $pass  FAIL $fail   (full log: $OUT/$2.out)"

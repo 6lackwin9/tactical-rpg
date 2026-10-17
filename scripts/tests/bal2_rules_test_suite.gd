@@ -7,7 +7,20 @@ extends RefCounted
 # range > 1). Commit 3: the unit gear sentinel ContentSchema.NO_ITEM ("none") per slot and pouch.
 # Commit 4: the elite / boss tier values. Units are built from the class rules (hero, default spend,
 # class gear) or in memory; expectations derive from CharacterStats / DamageCalculator / StatRules.
+# BAL3-S (docs/specs/BAL3.md 3.1-3.3): the sim's seeded start jitter, the clumped enemy block, the
+# role scenario scale and the encounter archetypes; threat totals derive from the StatRules tiers.
 # ==============================================================================
+
+const SimArgs = preload("res://tools/sim/sim_args.gd")
+const SimRunner = preload("res://tools/sim/sim_runner.gd")
+const SimVariants = preload("res://tools/sim/sim_variants.gd")
+const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
+
+# Records every unit's tile (by name) when a sim fight starts (after the runner's placement).
+class StartObserver extends "res://tools/sim/sim_observer.gd":
+	var tiles: Dictionary = {}
+	func on_start(session: CombatSession) -> void:
+		tiles = Bal2RulesTestSuite._tiles_of(session.grid, session.allies + session.enemies)
 
 const TAG: String = "BAL2"
 const MAX_TEST_LEVEL: int = 9
@@ -32,6 +45,12 @@ static func run() -> bool:
 	ok = _test_tier_values() and ok
 	ok = _test_trained_fists() and ok
 	ok = _test_fist_edges() and ok
+	ok = _test_jitter_bounds() and ok
+	ok = _test_jitter_order() and ok
+	ok = _test_jitter_runner() and ok
+	ok = _test_enemy_block() and ok
+	ok = _test_role_scale() and ok
+	ok = _test_archetypes() and ok
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	return ok
 
@@ -363,3 +382,267 @@ static func _authored_bare() -> bool:
 	c.power_override = 30
 	var res: Dictionary = DamageCalculator.attack_power(c)
 	return not DictUtil.to_bool(res["trained_fists"]) and DictUtil.to_int(res["attack_power"]) == 30 and not DamageCalculator.trained_fists(c)
+
+# ------------------------------------------------------------------------------
+# BAL3-S: sim start jitter, enemy block, scenario scale, encounter archetypes
+# ------------------------------------------------------------------------------
+
+const JITTER_PARTY: int = 4
+const JITTER_FOES: int = 6
+
+static func _tiles_of(grid: CombatGrid, units: Array[Combatant]) -> Dictionary:
+	var out: Dictionary = {}
+	for c: Combatant in units:
+		if grid.has_combatant(c):
+			out[c.name] = grid.get_position(c)
+	return out
+
+# A standard deployment of JITTER_PARTY allies and JITTER_FOES enemies (every second unit ranged)
+# on a closed arena.
+static func _deployed() -> Dictionary:
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [])
+	var allies: Array[Combatant] = []
+	var foes: Array[Combatant] = []
+	for i: int in range(JITTER_PARTY):
+		allies.append(Combatant.new("A%d" % i, 100, 10, 1 + (i % 2) * 3))
+	for i: int in range(JITTER_FOES):
+		foes.append(Combatant.new("E%d" % i, 100, 10, 1 + (i % 2) * 3))
+	grid.deploy_combatants(allies, foes)
+	return {"grid": grid, "allies": allies, "foes": foes}
+
+static func _units(d: Dictionary, key: String) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	out.assign(DictUtil.array_of(d[key]))
+	return out
+
+static func _grid(d: Dictionary) -> CombatGrid:
+	var g: CombatGrid = d["grid"]
+	return g
+
+# Every unit within 1 tile of its standard tile, on the same half, on a walkable non-exit tile, alone.
+static func _test_jitter_bounds() -> bool:
+	var checks: Dictionary = {}
+	var seeds: Array[int] = SimArgs.new().seeds()
+	var moved_total: int = 0
+	for s: int in seeds + [_extra_seed()]:
+		var d: Dictionary = _deployed()
+		var grid: CombatGrid = _grid(d)
+		var units: Array[Combatant] = _units(d, "allies") + _units(d, "foes")
+		var before: Dictionary = _tiles_of(grid, units)
+		moved_total += SimVariants.jitter_start(grid, _units(d, "allies"), _units(d, "foes"), SimVariants.jitter_rng(s))
+		var after: Dictionary = _tiles_of(grid, units)
+		var seen: Dictionary = {}
+		for c: Combatant in units:
+			var a: Vector2i = after[c.name]
+			var b: Vector2i = before[c.name]
+			if grid.get_distance(a, b) > 1 or CombatGrid.is_party_half(a) != CombatGrid.is_party_half(b) or not grid.is_walkable(a) or grid.is_exit_tile(a) or seen.has(a):
+				checks["seed %d: %s %s -> %s inside its half, 1 tile, alone" % [s, c.name, str(b), str(a)]] = false
+			seen[a] = true
+		checks["seed %d: every unit still deployed" % s] = after.size() == units.size()
+		var again: Dictionary = _deployed()
+		SimVariants.jitter_start(_grid(again), _units(again, "allies"), _units(again, "foes"), SimVariants.jitter_rng(s))
+		checks["seed %d: same seed, same layout" % s] = _tiles_of(_grid(again), _units(again, "allies") + _units(again, "foes")) == after
+	checks["some unit moves over the seeds (%d moves)" % moved_total] = moved_total > 0
+	# A blocked neighbour and the far half are never offered.
+	var walled: Dictionary = _deployed()
+	var wg: CombatGrid = _grid(walled)
+	var w_front: Combatant = _units(walled, "allies")[0]
+	var w_here: Vector2i = wg.get_position(w_front)
+	var open_before: Array[Vector2i] = SimVariants.jitter_options(wg, w_front)
+	var wall_tile: Vector2i = Vector2i(-1, -1)
+	for t: Vector2i in open_before:
+		if t != w_here:
+			wall_tile = t
+			break
+	checks["a free neighbour exists to wall off"] = wg.is_valid_coord(wall_tile)
+	if wg.is_valid_coord(wall_tile):
+		wg.set_terrain(wall_tile, Terrain.Type.WALL)   # after deploy_combatants: really exercised
+	var options: Array[Vector2i] = SimVariants.jitter_options(wg, w_front)
+	checks["options start with the own tile"] = not options.is_empty() and options[0] == w_here
+	var bad: bool = false
+	for t: Vector2i in options:
+		if t != w_here and (not wg.is_walkable(t) or wg.is_occupied(t) or not CombatGrid.is_party_half(t)):
+			bad = true
+	checks["options: walkable, free, own half (wall at %s refused)" % str(wall_tile)] = not bad and not options.has(wall_tile)
+	return TestHelpers.report(TAG, "BAL3-S jitter: up to 1 tile inside the own half, never onto a unit or blocked tile, seeded", checks)
+
+static func _extra_seed() -> int:
+	return SimVariants.JITTER_SALT   # one more seed outside the sim's default list
+
+# The seeded party order keeps the members and is reproducible per seed.
+static func _test_jitter_order() -> bool:
+	var checks: Dictionary = {}
+	var ids: Array[String] = []
+	for c: String in SimArgs.DEFAULT_COMP:
+		ids.append("p_" + c)
+	var orders: Dictionary = {}
+	for s: int in SimArgs.new().seeds() + [_extra_seed()]:
+		var a: Array[String] = SimVariants.shuffled(ids, SimVariants.jitter_rng(s))
+		var b: Array[String] = SimVariants.shuffled(ids, SimVariants.jitter_rng(s))
+		var sa: Array[String] = a.duplicate()
+		sa.sort()
+		var si: Array[String] = ids.duplicate()
+		si.sort()
+		checks["seed %d: same members %s" % [s, str(a)]] = sa == si
+		checks["seed %d: same order twice" % s] = a == b
+		orders[",".join(a)] = true
+	checks["the input list is not changed"] = ids.size() == SimArgs.DEFAULT_COMP.size() and ids[0] == "p_" + SimArgs.DEFAULT_COMP[0]
+	checks["the order varies over the seeds (%d orders)" % orders.size()] = orders.size() > 1
+	return TestHelpers.report(TAG, "BAL3-S jitter: seeded party order", checks)
+
+# Runner level (sandbox): jitter on by default, jitter=off gives the standard deployment exactly;
+# on keeps both sides inside their halves without overlap.
+static func _test_jitter_runner() -> bool:
+	var checks: Dictionary = {}
+	checks["jitter default on"] = _sim_args(["party"]).jitter
+	checks["jitter=off parses"] = not _sim_args(["party", "jitter=off"]).jitter
+	checks["jitter=maybe refused"] = not SimArgs.new().parse(PackedStringArray(["party", "jitter=maybe"]))
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		for on: bool in [false, true]:
+			var args: SimArgs = _sim_args(["party", "5", "cap=1", "jitter=%s" % ("on" if on else "off")])
+			var runner := SimRunner.new(args)
+			var obs := StartObserver.new()
+			runner.observer = obs
+			var party: Array[String] = SimScenarios.define_party(runner, SimArgs.DEFAULT_COMP, args.level)
+			var enc: Dictionary = SimScenarios.encounter(runner, "line", args.level, 0, false, args.elite_class, args.boss_class)
+			var foes: Array[String] = []
+			foes.assign(DictUtil.array_of(enc["enemies"]))
+			var seed_value: int = args.seeds()[0]
+			var res: Dictionary = runner.fight(party, foes, seed_value)
+			checks["jitter %s: fight ran" % str(on)] = DictUtil.to_bool(res.get("ok", false))
+			var plain := CatalogEncounter.from_entry({"id": "bal3_t_plain", "name": "T", "zone": "stone_arena", "arena": "CLOSED", "party": party, "enemies": foes, "max_rounds": 1, "rng_seed": seed_value})
+			plain.build()
+			var standard: Dictionary = _tiles_of(plain.grid, plain.allies + plain.enemies)
+			if not on:
+				checks["jitter off: start tiles = standard deployment %s" % str(obs.tiles)] = obs.tiles == standard and not standard.is_empty()
+				continue
+			var seen: Dictionary = {}
+			var bad: Array[String] = []
+			for n: Variant in obs.tiles:
+				var t: Vector2i = obs.tiles[n]
+				if CombatGrid.is_party_half(t) != str(n).begins_with("simp_") or seen.has(t):
+					bad.append("%s %s" % [str(n), str(t)])
+				seen[t] = true
+			checks["jitter on: every unit on its own half, no overlap %s" % str(bad)] = bad.is_empty() and obs.tiles.size() == standard.size()
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "BAL3-S jitter in the runner: default on, off = the standard deployment", checks)
+
+static func _sim_args(tokens: Array[String]) -> SimArgs:
+	var a := SimArgs.new()
+	a.parse(PackedStringArray(tokens))
+	return a
+
+# The aoe_swarm block: every block unit on one rectangle of adjacent tiles on the enemy half, the
+# nearest column that keeps the start distance; the row shift moves it.
+static func _test_enemy_block() -> bool:
+	var checks: Dictionary = {}
+	var size: Vector2i = SimScenarios.scenario_block("aoe_swarm")
+	var swarm: int = DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["aoe_swarm"])["enemies"]).size()
+	checks["aoe_swarm has a block that holds every enemy (%s, %d enemies)" % [str(size), swarm]] = size.x > 0 and size.y > 0 and size.x * size.y == swarm
+	checks["other scenarios keep the standard deployment"] = SimScenarios.scenario_block("tank_hold") == Vector2i.ZERO
+	var dist: int = SimArgs.ROLE_DISTANCE
+	for shift: int in [-1, 0, 1]:
+		var d: Dictionary = _deployed()
+		var grid: CombatGrid = _grid(d)
+		var allies: Array[Combatant] = _units(d, "allies")
+		var foes: Array[Combatant] = _units(d, "foes")
+		checks["shift %d: block placed" % shift] = SimVariants.apply_block(grid, allies, foes, size, dist, shift)
+		var tiles: Array[Vector2i] = []
+		for c: Combatant in foes:
+			tiles.append(grid.get_position(c))
+		var front: int = CombatGrid.GRID_W
+		var near: int = 1 << 30
+		for t: Vector2i in tiles:
+			front = mini(front, t.x)
+			for a: Combatant in allies:
+				near = mini(near, grid.get_distance(grid.get_position(a), t))
+		var mid: int = floori(float(CombatGrid.GRID_H) / 2.0) + shift
+		var expected: Array[Vector2i] = SimVariants.block_tiles(front, mid, size)
+		var sorted_t: Array[Vector2i] = tiles.duplicate()
+		sorted_t.sort()
+		expected.sort()
+		checks["shift %d: units fill the %s block at column %d, middle row %d" % [shift, str(size), front, mid]] = sorted_t == expected
+		checks["shift %d: block on the enemy half" % shift] = not CombatGrid.is_party_half(Vector2i(front, 0))
+		checks["shift %d: nearest ally distance %d = start distance %d (nearest fitting column)" % [shift, near, dist]] = near == dist
+	return TestHelpers.report(TAG, "BAL3-S aoe_swarm: clumped enemy block at the start distance", checks)
+
+static func _classes(list: Array) -> Array[String]:
+	var out: Array[String] = []
+	for raw: Variant in list:
+		out.append(str(DictUtil.array_of(raw)[0]))
+	return out
+
+static func _tiers(list: Array) -> Array[String]:
+	var out: Array[String] = []
+	for raw: Variant in list:
+		out.append(str(DictUtil.array_of(raw)[1]))
+	return out
+
+static func _threat(list: Array) -> float:
+	var t: float = 0.0
+	for tier: String in _tiers(list):
+		t += StatRules.tier_hp(tier) * StatRules.tier_power(tier)
+	return t
+
+# BAL3 3.2 role scale: aoe_swarm all melee minions with a third brawler, striker_priority's target
+# standard only up to L3; ranged_dive stays standard melee divers (its third rogue was dropped: with
+# jitter the ranger is already inside the band).
+static func _test_role_scale() -> bool:
+	var checks: Dictionary = {}
+	var swarm: Array = SimScenarios.scenario_enemies("aoe_swarm", 5)
+	var swarm_classes: Array[String] = _classes(swarm)
+	checks["aoe_swarm: no ranger, three brawlers %s" % str(swarm_classes)] = not swarm_classes.has("ranger") and swarm_classes.count("brawler") == 3
+	checks["aoe_swarm: every enemy a minion"] = _tiers(swarm).count("minion") == swarm.size()
+	for c: String in swarm_classes:
+		checks["aoe_swarm %s is melee at L5" % c] = _hero(c, 5).attack_range == 1
+	var rule: Dictionary = DictUtil.dict_of(DictUtil.dict_of(SimScenarios.SCENARIOS["striker_priority"]).get("tier_until", {}))
+	var last: int = DictUtil.int_of(rule, "level")
+	var authored: Array = DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["striker_priority"])["enemies"])
+	checks["striker_priority: the rule ends at L3 (%d)" % last] = last == 3
+	checks["striker_priority L%d: priority target standard" % last] = _tiers(SimScenarios.scenario_enemies("striker_priority", last))[0] == "standard"
+	checks["striker_priority L%d: priority target keeps its authored tier %s" % [last + 2, _tiers(authored)[0]]] = _tiers(SimScenarios.scenario_enemies("striker_priority", last + 2))[0] == _tiers(authored)[0] and _tiers(authored)[0] == "elite"
+	checks["striker_priority: only the priority slot changes"] = _tiers(SimScenarios.scenario_enemies("striker_priority", last)).slice(1) == _tiers(authored).slice(1) \
+		and _classes(SimScenarios.scenario_enemies("striker_priority", last)) == _classes(authored)
+	var dive: Array = SimScenarios.scenario_enemies("ranged_dive", 5)
+	checks["ranged_dive: standard divers only %s" % str(_classes(dive))] = _tiers(dive).count("standard") == dive.size()
+	var melee: int = 0
+	for c: String in _classes(dive):
+		melee += 1 if _hero(c, 5).attack_range == 1 else 0
+	checks["ranged_dive: every one of the %d enemies is a melee diver (%d)" % [dive.size(), melee]] = melee == dive.size()
+	return TestHelpers.report(TAG, "BAL3-S role scenario scale (aoe_swarm, striker_priority L3; ranged_dive divers)", checks)
+
+# BAL3 3.3 archetypes: threat (tier HP x tier power, waves included) rises with the target band
+# order mob < line < wave < elite < boss and stays under a full party; compositions per the spec.
+static func _test_archetypes() -> bool:
+	var checks: Dictionary = {}
+	var std: float = StatRules.tier_hp("standard") * StatRules.tier_power("standard")
+	var minion: float = StatRules.tier_hp("minion") * StatRules.tier_power("minion")
+	var party: float = float(PartyState.PARTY_MAX) * StatRules.tier_hp("hero") * StatRules.tier_power("hero")
+	var threat: Dictionary = {}
+	var bodies: Dictionary = {}
+	for enc: String in SimArgs.GENERATED:
+		var g: Dictionary = SimScenarios.GENERATED[enc]
+		var all: Array = DictUtil.array_of(g["enemies"]) + DictUtil.array_of(g.get("wave", []))
+		threat[enc] = _threat(all)
+		bodies[enc] = all.size()
+	var order: Array[String] = ["mob", "line", "wave", "elite", "boss"]
+	for i: int in range(order.size() - 1):
+		checks["threat %s %.2f < %s %.2f" % [order[i], DictUtil.to_float(threat[order[i]]), order[i + 1], DictUtil.to_float(threat[order[i + 1]])]] = DictUtil.to_float(threat[order[i]]) < DictUtil.to_float(threat[order[i + 1]])
+	checks["boss threat %.2f < party of %d %.2f" % [DictUtil.to_float(threat["boss"]), PartyState.PARTY_MAX, party]] = DictUtil.to_float(threat["boss"]) < party
+	checks["line = %d standard" % PartyState.PARTY_MAX] = is_equal_approx(DictUtil.to_float(threat["line"]), float(PartyState.PARTY_MAX) * std) and DictUtil.to_int(bodies["line"]) == PartyState.PARTY_MAX
+	var elite_t: float = StatRules.tier_hp("elite") * StatRules.tier_power("elite")
+	checks["elite = elite + %d standard" % (PartyState.PARTY_MAX - 1)] = is_equal_approx(DictUtil.to_float(threat["elite"]), elite_t + float(PartyState.PARTY_MAX - 1) * std) and DictUtil.to_int(bodies["elite"]) == PartyState.PARTY_MAX
+	var boss_g: Dictionary = SimScenarios.GENERATED["boss"]
+	var boss_t: float = StatRules.tier_hp("boss") * StatRules.tier_power("boss")
+	checks["boss = boss + 2 standard + 2 minion wave"] = is_equal_approx(DictUtil.to_float(threat["boss"]), boss_t + 2.0 * std + 2.0 * minion) \
+		and _tiers(DictUtil.array_of(boss_g["wave"])) == ["minion", "minion"] and _tiers(DictUtil.array_of(boss_g["enemies"])).count("standard") == 2
+	checks["mob and wave unchanged (5 minions; 3 standard + 3 minion wave)"] = is_equal_approx(DictUtil.to_float(threat["mob"]), 5.0 * minion) and is_equal_approx(DictUtil.to_float(threat["wave"]), 3.0 * std + 3.0 * minion)
+	# The boss wave reaches the fight as wave units at the sim's wave round.
+	var runner := SimRunner.new(_sim_args(["party"]))
+	var enc: Dictionary = SimScenarios.encounter(runner, "boss", 5, 0, false, "warrior", "brawler")
+	var base: Dictionary = DictUtil.dict_of(enc["base"])
+	checks["boss encounter: %d wave units at round %d" % [DictUtil.array_of(base.get("wave_units", [])).size(), DictUtil.int_of(base, "wave_round")]] = DictUtil.array_of(base.get("wave_units", [])).size() == DictUtil.array_of(boss_g["wave"]).size() \
+		and DictUtil.int_of(base, "wave_round") == SimScenarios.WAVE_ROUND
+	return TestHelpers.report(TAG, "BAL3-S encounter archetypes: threat order, compositions from the tier rules", checks)

@@ -16,6 +16,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | `check_project.ps1` (per-file parse) on a Linux cloud container | ~8 min | avoid; use `-Fast` |
 | `tools/fc.sh sim duel 5` (3 seeds) | ~90 s; `tier` ~2 min; 10 seeds ~5 min | acceptable; run in background / in parallel (own sandboxes) |
 | `tools/fc.sh sim` on a fresh cloud checkout (2026-10-17, BAL3-R0) | hung silently with empty output for ~40 min (stale class cache after a new `class_name`, e.g. `AssetRegistry`); cloud role runs: L3 19 min, L5 35 min, L7 40 min with 4 runs in parallel | fc.sh imports automatically when the class cache is stale (one import under flock for parallel runs); timeouts print TIMEOUT; sim has a 120 s startup watchdog |
+| `tools/fc.sh gate` arena suite on the cloud container (2026-10-17, BAL3-S) | ~5.5 min, base commit included, so the default 290 s suite timeout fails there | set `SUITE_TIMEOUT=900` (seconds; default 290) when gating in the cloud |
 | Builder agent for M1 | ~23 min, ~300k tokens, 159 tool calls | the dominant cost; see below |
 | Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
 | Brainstorm agent | ~1.5 min, ~56k tokens | cheap, keep |

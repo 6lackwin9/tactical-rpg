@@ -47,6 +47,7 @@ var roles: Array[String] = ROLES.duplicate()
 var classes: Array[String] = CLASSES.duplicate()
 var dupes: bool = false
 var sample: int = 0              # sweep dupes=on: draw this many multisets (0 = all)
+var jitter: bool = true          # BAL3 3.1: seeded start jitter and party order (off = the standard deployment)
 var targets: Dictionary = SimTargets.defaults()
 var error: String = ""           # non-empty: print the usage and run nothing
 
@@ -204,6 +205,10 @@ func _parse_key(key: String, value: String) -> bool:
 			if not ON_OFF.has(value):
 				return _fail("dupes must be on or off (got '%s')" % value)
 			dupes = value == "on"
+		"jitter":
+			if not ON_OFF.has(value):
+				return _fail("jitter must be on or off (got '%s')" % value)
+			jitter = value == "on"
 		"sample":
 			if not value.is_valid_int() or int(value) < 1:
 				return _fail("sample must be a positive number (got '%s')" % value)
@@ -265,9 +270,9 @@ func show_binary() -> bool:
 # One line echoing the effective arguments (every table starts with it).
 func header() -> String:
 	var lvl: String = "all" if all_levels else str(level)
-	var text: String = "ARGS mode %s, level %s, seeds %d, cap %d, loadout %s, spend %s, preset %s, distance %s, score %s, quick %s, metrics %s, band %d-%d" % [
+	var text: String = "ARGS mode %s, level %s, seeds %d, cap %d, loadout %s, spend %s, preset %s, distance %s, score %s, quick %s, metrics %s, band %d-%d, jitter %s" % [
 		mode, lvl, seed_count, cap, loadout, spend, preset,
-		"default" if distance == 0 else str(distance), score, "on" if quick else "off", "on" if metrics else "off", band_lo, band_hi]
+		"default" if distance == 0 else str(distance), score, "on" if quick else "off", "on" if metrics else "off", band_lo, band_hi, "on" if jitter else "off"]
 	match mode:
 		"party", "sweep":
 			text += ", enc %s, elevel %s, elite %s, boss %s" % [",".join(encounters), ("%+d" % elevel) if elevel_set else "+0 (catalog authored)", elite_class, boss_class]
@@ -297,4 +302,5 @@ static func usage() -> Array[String]:
 		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all (generated)  elevel=+n|-n|catalog (+0)",
 		"       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
 		"       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
+		"       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
 	]

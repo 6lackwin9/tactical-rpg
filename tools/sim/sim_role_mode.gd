@@ -43,6 +43,7 @@ func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Ar
 	var refs: Array[String] = []
 	refs.assign(DictUtil.array_of(sc["refs"]))
 	var variants: Array[Dictionary] = []
+	runner.enemy_block = SimScenarios.scenario_block(scenario_id)
 	for sv: String in spends():
 		runner.spend_variant = sv
 		for pv: String in presets():
@@ -59,6 +60,7 @@ func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Ar
 			variants.append(acc)
 	runner.spend_variant = "class"
 	runner.preset = "balanced"
+	runner.enemy_block = Vector2i.ZERO
 	return variants
 
 func role_mode() -> void:
@@ -104,6 +106,9 @@ func role_mode() -> void:
 				line += " %-22s" % SimRoles.cell(k, SimRoles.spread(str(k["id"]), runs_c), args.targets, primary)
 			out(line + " " + str(ranks.get(class_id, "")))
 		out("loadouts: " + _loadouts_line(role))
+	out("block misses: %d" % runner.block_misses)
+	if runner.block_misses > 0:
+		out("BLOCK MISS: %d fights where the enemy block found no room (enemies stayed put); results may be skewed" % runner.block_misses)
 
 func _bands_line(ks: Array[Dictionary]) -> String:
 	var parts: Array[String] = []
