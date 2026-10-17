@@ -57,7 +57,8 @@
 				"riposte": 3,
 				"intimidate": 4,
 				"sunder": 5,
-				"shield_wall": 5
+				"shield_wall": 5,
+				"rend_armor": 6
 			},
 			"main_hand": "wpn_hand_axe",
 			"off_hand": "shd_kite",
@@ -122,7 +123,8 @@
 				"barbed_arrow": 5,
 				"volley": 5,
 				"deadeye": 5,
-				"focus": 5
+				"focus": 5,
+				"crippling_shot": 6
 			},
 			"main_hand": "wpn_shortbow",
 			"off_hand": "",
@@ -263,7 +265,9 @@
 				"hex": 5,
 				"greater_mend": 5,
 				"renewal": 5,
-				"judgement": 7
+				"judgement": 7,
+				"aegis": 6,
+				"rejuvenate": 6
 			},
 			"main_hand": "wpn_cleric_mace",
 			"off_hand": "wpn_tome",
@@ -328,7 +332,8 @@
 				"backflip": 4,
 				"hamstring": 5,
 				"lacerate": 5,
-				"assassinate": 7
+				"assassinate": 7,
+				"envenom": 6
 			},
 			"main_hand": "wpn_stiletto",
 			"off_hand": "",
