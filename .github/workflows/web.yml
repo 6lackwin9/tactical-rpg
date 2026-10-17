@@ -107,6 +107,7 @@ jobs:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
         run: |
+          ITCH_TARGET="${ITCH_TARGET/.itch.io/}"   # accept "user.itch.io/game:html5" too
           test -n "$BUTLER_API_KEY" || { echo "::error::secret BUTLER_API_KEY is not set"; exit 1; }
           curl -fsSL --retry 3 -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
           unzip -q /tmp/butler.zip -d /tmp/butler && chmod +x /tmp/butler/butler
