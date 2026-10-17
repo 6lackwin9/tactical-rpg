@@ -10,6 +10,8 @@ extends RefCounted
 # Field: {"key", "label", "type", "default", ...}
 #   type: id | string | text | int | float | bool | enum | ref | refs | stats | strings | json | multi_pick | template
 #         | table (ordered {key: int}, e.g. the class skill path) | dict_pick ({key: {..}} rows, e.g. class proficiency)
+#         | modifier_table / tier_table (item `modifiers` / `tiers` lists) | hand_grid (family `base` / `bands`, per hand);
+#           these three store like json (ITEM1 commit 3: typed Forge widgets, ItemFormModel / ItemTables)
 #   min / max / step     numeric range (table: the value range)
 #   min_len / max_len    string length caps (field_errors)
 #   group                Forge section of a class / unit field (identity, stats, proficiency, skills, loadout; units: ai)
@@ -324,7 +326,7 @@ static func coerce(f: Dictionary, value: Variant) -> Variant:
 						if amount != 0:
 							stats[str(key)] = amount
 			return stats
-		"json":
+		"json", "modifier_table", "tier_table", "hand_grid":
 			return _copy(value) if (value is Array or value is Dictionary) else _copy(fallback)
 		"table":
 			# Ordered {String key: level}; insertion order is kept. Values stay unclamped (the validator names a bad level);

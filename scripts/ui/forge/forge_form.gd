@@ -16,6 +16,9 @@ extends VBoxContainer
 # Class tab (CLASS1): `table` is the skill path table (family picker, standard / custom level, ladder, default-loadout preview),
 # `dict_pick` the proficiency rows (type, level, scaling, guarded Remove), class stats show a "Remaining" chip, gear refs with
 # `choices` records are grouped by item family, and length-capped text fields show a live counter in their label.
+# Item tabs (ITEM1 commit 3): `modifier_table`, `tier_table` and `hand_grid` are built by ItemTables; a layout block may
+# name read-only panels ("pre" / "post" ids) that `panel_fn(id) -> Control` builds; a string field whose state lists
+# `options` is a dropdown; checklist options show their `option_help` / disabled reason as tooltip (engine rules).
 # ==============================================================================
 
 signal edited(key: String)
@@ -30,6 +33,7 @@ var state_fn: Callable = Callable()
 var layout_fn: Callable = Callable()
 var footer_fn: Callable = Callable()
 var problems_fn: Callable = Callable()
+var panel_fn: Callable = Callable()   # panel id -> Control (read-only panels of a layout block)
 var _controllers: Dictionary = {}  # keys other fields depend on
 var _grid: GridContainer = null
 var _widgets: Dictionary = {}      # key -> control (hooked forms refresh these in place)
@@ -68,6 +72,7 @@ func rebuild() -> void:
 		for raw: Variant in blocks:
 			var block: Dictionary = DictUtil.dict_of(raw)
 			add_child(UiTheme.header(str(block.get("title", ""))))
+			_add_panels(DictUtil.array_of(block.get("pre", [])))
 			var grid: GridContainer = _new_grid()
 			add_child(grid)
 			if _grid == null:
@@ -77,6 +82,7 @@ func rebuild() -> void:
 				if not f.is_empty():
 					_add_row(f, grid)
 					keys.append(str(key))
+			_add_panels(DictUtil.array_of(block.get("post", [])))
 		_signature = ",".join(keys)
 		if footer_fn.is_valid():
 			var footer: Variant = footer_fn.call()
@@ -92,6 +98,37 @@ func rebuild() -> void:
 		if str(f["key"]) == "system" and not DictUtil.to_bool(draft.get("system", false)):
 			continue
 		_add_row(f, _grid)
+
+# Read-only panels of a layout block (built by panel_fn; the panel registers its own live refresher with add_live).
+func _add_panels(ids: Array) -> void:
+	if not panel_fn.is_valid():
+		return
+	for id: Variant in ids:
+		var panel: Variant = panel_fn.call(str(id))
+		if panel is Control:
+			var control: Control = panel
+			control.name = "Panel_" + str(id)
+			add_child(control)
+
+# A panel of the current form ("" panels are not built; tests read them).
+func panel_control(id: String) -> Control:
+	return get_node_or_null("Panel_" + id) as Control
+
+# Sets `key` like user input (edited signal, refresh of states / live widgets / problem marks); table widgets use it.
+func put(key: String, value: Variant) -> void:
+	_put(key, value)
+
+# Registers a refresher called after every edit (live labels of table rows and panels).
+func add_live(refresh: Callable) -> void:
+	_live.append(refresh)
+
+# The current problems of the hook ({field, index | rank, message} rows; empty without a problems hook).
+func current_problems() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if problems_fn.is_valid():
+		for raw: Variant in DictUtil.array_of(problems_fn.call()):
+			out.append(DictUtil.dict_of(raw))
+	return out
 
 func _new_grid() -> GridContainer:
 	var grid := GridContainer.new()
@@ -238,7 +275,10 @@ func _set_checklist_state(control: Control, info: Dictionary, enabled: bool) -> 
 		if child is CheckBox:
 			var box: CheckBox = child
 			var off: Dictionary = DictUtil.dict_of(info.get("disabled_options", {}))
-			box.disabled = not enabled or off.has(str(box.get_meta("value", "")))
+			var value: String = str(box.get_meta("value", ""))
+			box.disabled = not enabled or off.has(value)
+			var help: String = str(DictUtil.dict_of(info.get("option_help", {})).get(value, ""))
+			box.tooltip_text = str(off[value]) if off.has(value) else help
 
 func _mark_problems() -> void:
 	if not problems_fn.is_valid():
@@ -273,6 +313,12 @@ func _widget(f: Dictionary) -> Control:
 	var readonly: bool = DictUtil.to_bool(f.get("readonly", false)) or not DictUtil.to_bool(info.get("enabled", true))
 	match str(f["type"]):
 		"id", "string":
+			var choices: Array = DictUtil.array_of(info.get("options", []))
+			if str(f["type"]) == "string" and not choices.is_empty():
+				var listed: Array[String] = []
+				for c: Variant in choices:
+					listed.append(str(c))
+				return _enum_widget(key, listed, str(value), readonly, {}, true)
 			var line := LineEdit.new()
 			line.text = str(value)
 			line.editable = not readonly
@@ -330,6 +376,12 @@ func _widget(f: Dictionary) -> Control:
 			return _proficiency_widget(f, readonly)
 		"multi_pick":
 			return _checklist_widget(f, value, info, readonly)
+		"modifier_table":
+			return ItemTables.modifier_table(self, key, info, readonly)
+		"tier_table":
+			return ItemTables.tier_table(self, key, info, readonly)
+		"hand_grid":
+			return ItemTables.hand_grid(self, key, str(f.get("grid", "base")), readonly)
 		"strings":
 			var tags := LineEdit.new()
 			var parts: Array[String] = []
@@ -410,7 +462,9 @@ func _checklist_widget(f: Dictionary, value: Variant, info: Dictionary, readonly
 	for option: String in options:
 		var check := CheckBox.new()
 		check.text = option
+		check.name = "Option_" + option
 		check.set_meta("value", option)
+		check.tooltip_text = str(DictUtil.dict_of(info.get("option_help", {})).get(option, ""))
 		check.button_pressed = current.has(option)
 		check.disabled = readonly
 		check.toggled.connect(func(on: bool) -> void:

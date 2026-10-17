@@ -288,12 +288,23 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	forge.duplicate_selected()
 	var copy_id: String = forge.selected_id
 	forge.form.set_value("name", "Forge Claymore")
-	forge.form.set_value("base_power", 40)
+	# ITEM1 commit 3: numbers are derived (family base + adjust modifiers); the power edit is an adjust modifier.
+	var power_base: int = DictUtil.to_int(ItemFamilies.base_of(ItemFormModel.family_row(forge.form.draft), str(forge.form.draft["hand"]))["power"])
+	var mods: Array = []
+	for mod: Dictionary in ItemModifiers.modifiers_of(forge.form.draft):
+		if not (str(mod.get("kind", "")) == "adjust" and str(mod.get("field", "")) == "power"):
+			mods.append(mod)
+	mods.append({"kind": "adjust", "field": "power", "delta": 40 - power_base})
+	forge.form.set_value("modifiers", mods)
 	checks["template applied"] = copy_id == "wpn_claymore_copy" and forge.apply() and DictUtil.to_int(ContentCatalog.get_entry("items", copy_id)["base_power"]) == 40
-	# Conditional fields follow the type.
-	checks["weapon fields shown"] = forge.form.field_control("base_power") != null and forge.form.field_control("heal") == null
-	forge.form.set_value("item_type", "CONSUMABLE")
-	checks["consumable fields shown"] = forge.form.field_control("heal") != null and forge.form.field_control("base_power") == null
+	# Conditional sections follow the family's item type.
+	checks["weapon fields shown"] = forge.form.panel_control("base") != null and forge.form.field_control("modifiers") != null and forge.form.field_control("heal") == null
+	var consumable_family: String = ""
+	for fam: Dictionary in ContentCatalog.entries("item_families"):
+		if ItemFamilies.item_type_of(fam) == "CONSUMABLE" and consumable_family.is_empty():
+			consumable_family = str(fam["id"])
+	forge.form.set_value("family", consumable_family)
+	checks["consumable fields shown"] = forge.form.field_control("heal") != null and forge.form.field_control("modifiers") == null and forge.form.panel_control("base") == null
 	forge.revert()
 	# Invalid drafts are refused with the problem listed.
 	forge.form.set_value("id", "Bad Id")

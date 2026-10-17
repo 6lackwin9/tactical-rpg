@@ -4,6 +4,7 @@ extends RefCounted
 # Item and item-family validation rules (CLN-9 split; FORGE1_ITEMS 1, 2, 4, 6). ContentCatalog.validate_entry dispatches here.
 # Problems are {"field", "index" (1-based list row, 0 = the field), "message"}; the *_errors functions map them to strings.
 # Legacy mode (no item families yet, until ITEM1-A): items are flat rows checked by the pre-family rules.
+# Tier limits come from ItemModifiers (TIER_* constants), shared with the Forge tier table (ItemFormModel.tier_limits).
 
 static func problem(field: String, index: int, message: String) -> Dictionary:
 	return {"field": field, "index": index, "message": message}
@@ -166,10 +167,10 @@ static func tier_problems(e: Dictionary, family: Dictionary) -> Array[Dictionary
 		for key: Variant in t:
 			if not ItemModifiers.TIER_KEYS.has(str(key)):
 				out.append(problem("tiers", n, "Tier %d: unknown key '%s' (keys: %s)." % [n, str(key), ", ".join(ItemModifiers.TIER_KEYS)]))
-		if str(t.get("label", "")).length() > 24:
-			out.append(problem("tiers", n, "Tier %d: the label is %d characters (max 24)." % [n, str(t.get("label", "")).length()]))
-		if str(t.get("desc", "")).length() > 120:
-			out.append(problem("tiers", n, "Tier %d: the description is %d characters (max 120)." % [n, str(t.get("desc", "")).length()]))
+		if str(t.get("label", "")).length() > ItemModifiers.TIER_LABEL_MAX:
+			out.append(problem("tiers", n, "Tier %d: the label is %d characters (max %d)." % [n, str(t.get("label", "")).length(), ItemModifiers.TIER_LABEL_MAX]))
+		if str(t.get("desc", "")).length() > ItemModifiers.TIER_DESC_MAX:
+			out.append(problem("tiers", n, "Tier %d: the description is %d characters (max %d)." % [n, str(t.get("desc", "")).length(), ItemModifiers.TIER_DESC_MAX]))
 		var when: Dictionary = DictUtil.dict_of(t.get("when", {}))
 		var group: String = ""
 		var value: int = 0
@@ -179,7 +180,7 @@ static func tier_problems(e: Dictionary, family: Dictionary) -> Array[Dictionary
 				if not ContentSchema.STAT_KEYS.has(stat):
 					out.append(problem("tiers", n, "Tier %d: unknown stat '%s'." % [n, stat]))
 				value = DictUtil.to_int(when.get("value", 0))
-				out.append_array(_range_problem(value, 1, 40, n, "stat value"))
+				out.append_array(_range_problem(value, ItemModifiers.TIER_STAT_MIN, ItemModifiers.TIER_STAT_MAX, n, "stat value"))
 				out.append_array(_unknown_keys(when, ["type", "stat", "value"], n, "criterion"))
 				group = "stat:" + stat
 			ItemModifiers.WHEN_PROFICIENCY:
@@ -211,6 +212,7 @@ static func tier_problems(e: Dictionary, family: Dictionary) -> Array[Dictionary
 static func _bonus_problems(bonus: Dictionary, type: String, n: int) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var any: bool = false
+	var ranges: Dictionary = ItemModifiers.TIER_BONUS_RANGES
 	for key: Variant in bonus:
 		var k: String = str(key)
 		match k:
@@ -218,27 +220,30 @@ static func _bonus_problems(bonus: Dictionary, type: String, n: int) -> Array[Di
 				if type != "WEAPON":
 					out.append(problem("tiers", n, "Tier %d: a power bonus is for weapons only." % n))
 				var p: int = DictUtil.to_int(bonus[key])
-				out.append_array(_range_problem(p, 0, 50, n, "power bonus"))
+				var p_rng: Array = ranges["power"]
+				out.append_array(_range_problem(p, DictUtil.to_int(p_rng[0]), DictUtil.to_int(p_rng[1]), n, "power bonus"))
 				any = any or p > 0
 			"mitigation":
 				if type != "ARMOR" and type != "SHIELD":
 					out.append(problem("tiers", n, "Tier %d: a mitigation bonus is for armor and shields only." % n))
 				var m: int = DictUtil.to_int(bonus[key])
-				out.append_array(_range_problem(m, 0, 20, n, "mitigation bonus"))
+				var m_rng: Array = ranges["mitigation"]
+				out.append_array(_range_problem(m, DictUtil.to_int(m_rng[0]), DictUtil.to_int(m_rng[1]), n, "mitigation bonus"))
 				any = any or m > 0
 			"stat_bonuses":
 				var stats: Dictionary = DictUtil.dict_of(bonus[key])
-				if stats.size() > 3:
-					out.append(problem("tiers", n, "Tier %d: at most 3 stat bonuses." % n))
+				if stats.size() > ItemModifiers.TIER_MAX_STATS:
+					out.append(problem("tiers", n, "Tier %d: at most %d stat bonuses." % [n, ItemModifiers.TIER_MAX_STATS]))
+				var s_rng: Array = ranges["stat_bonuses"]
 				for stat: Variant in stats:
 					if not ContentSchema.STAT_KEYS.has(str(stat)):
 						out.append(problem("tiers", n, "Tier %d: unknown stat '%s'." % [n, str(stat)]))
-					out.append_array(_range_problem(DictUtil.to_int(stats[stat]), 1, 5, n, "%s bonus" % str(stat)))
+					out.append_array(_range_problem(DictUtil.to_int(stats[stat]), DictUtil.to_int(s_rng[0]), DictUtil.to_int(s_rng[1]), n, "%s bonus" % str(stat)))
 				any = any or not stats.is_empty()
 			"effects":
 				var fx: Array = DictUtil.array_of(bonus[key])
-				if fx.size() > 2:
-					out.append(problem("tiers", n, "Tier %d: at most 2 effects." % n))
+				if fx.size() > ItemModifiers.TIER_MAX_EFFECTS:
+					out.append(problem("tiers", n, "Tier %d: at most %d effects." % [n, ItemModifiers.TIER_MAX_EFFECTS]))
 				for message: String in Passives.validate_effects(fx, _skills(), true, true):
 					out.append(problem("tiers", n, "Tier %d: %s" % [n, message]))
 				any = any or not fx.is_empty()
@@ -308,6 +313,17 @@ static func _legacy_errors(e: Dictionary) -> Array[String]:
 		errors.append("Off-hand category '%s' needs the matching gear type '%s'." % [str(e["off_hand_category"]), str(e["off_hand_category"])])
 	if ContentSchema.EQUIP_TYPES.has(type):
 		errors.append_array(Passives.validate_effects(e["effects"], _skills(), true, true))
+		# Threshold tiers apply to every gear type (armor and shield tiers too; the commit 2 tier engine).
+		var tiers: Variant = e["threshold_tiers"]
+		if not (tiers is Array):
+			errors.append("Threshold tiers must be a list.")
+		else:
+			var tier_list: Array = tiers
+			for t: Variant in tier_list:
+				var tier: Dictionary = t if t is Dictionary else {}
+				if not tier.has("stat") or not tier.has("threshold"):
+					errors.append("Each threshold tier needs \"stat\" and \"threshold\".")
+					break
 	match type:
 		"WEAPON":
 			if slot != "MAIN_HAND" and slot != "OFF_HAND":
@@ -323,16 +339,6 @@ static func _legacy_errors(e: Dictionary) -> Array[String]:
 					errors.append("An orb or tome needs off-hand category '%s' (matching its gear type)." % str(e["weapon_type"]))
 				if DictUtil.to_bool(e["two_handed"]):
 					errors.append("Orb and tome weapons are never two-handed.")
-			var tiers: Variant = e["threshold_tiers"]
-			if not (tiers is Array):
-				errors.append("Threshold tiers must be a list.")
-			else:
-				var tier_list: Array = tiers
-				for t: Variant in tier_list:
-					var tier: Dictionary = t if t is Dictionary else {}
-					if not tier.has("stat") or not tier.has("threshold"):
-						errors.append("Each threshold tier needs \"stat\" and \"threshold\".")
-						break
 		"SHIELD":
 			if slot != "OFF_HAND":
 				errors.append("Shields go in the OFF_HAND slot.")

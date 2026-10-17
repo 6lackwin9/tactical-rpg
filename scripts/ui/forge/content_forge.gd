@@ -26,6 +26,13 @@ extends Control
 # the skill path table, gear pickers grouped by item family), locked key fields on system classes, the live derived panels
 # (ForgePreview.class_panels) under the form, and Apply disabled while the draft has errors (warnings never block). Units use
 # the same hooks for their groups (the AI group shows heal_below only for a SUPPORT role, hides thresholds when reckless).
+#
+# Items and item families (ITEM1 commit 3): ItemFormModel decides sections, locks, options, limits and problems; ItemTables
+# renders the modifier and tier tables, the family base / band grids and the read-only panels (tokens, chips, base values,
+# preview, impact, used by). An item draft is re-resolved after every edit and Apply stores its stored shape (family +
+# modifiers). A family Apply that changes items is two-step (the impact first, then a confirming click) and stores the
+# family in one batch (upsert_many). The item list has filter chips (family, hand, rarity, special, tiers, effects, origin,
+# used by). Apply is disabled while the draft has problems; warnings (bands, budget, tokens) never block them.
 # ==============================================================================
 
 signal playtest_requested(encounter: CatalogEncounter)
@@ -36,6 +43,7 @@ var draft_dirty: bool = false
 var form: ForgeForm = null
 var skill_filters: Dictionary = SkillFilter.default_filters()
 var skill_sort: String = "name"
+var item_filters: Dictionary = ItemFormModel.default_filters()
 
 var _list: ItemList = null
 var _list_ids: Array[String] = []
@@ -57,6 +65,8 @@ var _pending_delete: String = ""
 var _pending_origin: String = ""
 var _switching_kind: bool = false
 var _class_panels: RichTextLabel = null   # the live derived panels under the class form (footer)
+var _item_bar: VBoxContainer = null
+var _pending_apply: String = ""   # a family draft whose impact was shown (the next Apply of the same draft confirms)
 
 func _init() -> void:
 	name = "ContentForge"
@@ -121,6 +131,7 @@ func _build() -> void:
 	_side_filter.item_selected.connect(func(_i: int) -> void: refresh_list())
 	left.add_child(_side_filter)
 	_build_skill_bar(left)
+	_build_item_bar(left)
 	_list = ItemList.new()
 	_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_list.item_selected.connect(func(i: int) -> void:
@@ -243,6 +254,48 @@ func _build_skill_bar(parent: VBoxContainer) -> void:
 		tri.item_selected.connect(func(i: int) -> void: set_skill_filter(tri_key, ["any", "yes", "no"][i]))
 		row3.add_child(tri)
 
+# Filter chips of the item list (matrix 6: family, hand, rarity, special, has tiers, has effects, origin, used by).
+func _build_item_bar(parent: VBoxContainer) -> void:
+	_item_bar = VBoxContainer.new()
+	_item_bar.name = "ItemBar"
+	_item_bar.add_theme_constant_override("separation", 2)
+	parent.add_child(_item_bar)
+	var flow := HFlowContainer.new()
+	_item_bar.add_child(flow)
+	var labels: Dictionary = {"family": "family", "hand": "hand", "rarity": "rarity", "origin": "origin", "used_by": "used by",
+		"special": "special", "has_tiers": "tiers", "has_effects": "effects"}
+	for key: String in ["family", "hand", "rarity", "origin", "used_by", "special", "has_tiers", "has_effects"]:
+		var opt := OptionButton.new()
+		opt.name = "ItemFilter_" + key
+		opt.fit_to_longest_item = false
+		opt.clip_text = true
+		opt.custom_minimum_size.x = 80
+		var filter_key: String = key
+		opt.item_selected.connect(func(i: int) -> void: set_item_filter(filter_key, str(opt.get_item_metadata(i))))
+		flow.add_child(opt)
+	_fill_item_bar(labels)
+
+# (Re)fills the chip choices (the family list follows the catalog) keeping the current filter values.
+func _fill_item_bar(labels: Dictionary = {}) -> void:
+	for child: Node in _item_bar.get_child(0).get_children():
+		var opt: OptionButton = child as OptionButton
+		if opt == null:
+			continue
+		var key: String = str(opt.name).trim_prefix("ItemFilter_")
+		var title: String = str(labels.get(key, opt.get_meta("title", key)))
+		opt.set_meta("title", title)
+		opt.clear()
+		for value: String in ItemFormModel.filter_options(key):
+			var any: bool = value.is_empty() or value == "any"
+			opt.add_item("%s: %s" % [title, "any" if any else value])
+			opt.set_item_metadata(opt.item_count - 1, value)
+			if value == str(item_filters.get(key, "")):
+				opt.select(opt.item_count - 1)
+
+func set_item_filter(key: String, value: Variant) -> void:
+	item_filters[key] = value
+	refresh_list()
+
 func _column(parent: Control, width: int) -> VBoxContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, UiTheme.COL_BORDER, 6, 8, 8))
@@ -298,11 +351,28 @@ func _configure_form() -> void:
 		form.layout_fn = func() -> Array[Dictionary]: return ClassForgeModel.layout("units", form.draft)
 		form.footer_fn = Callable()
 		form.problems_fn = Callable()
+	elif _item_kind():
+		var k: String = kind
+		form.state_fn = func(key: String) -> Dictionary: return ItemFormModel.state(k, form.draft, key, selected_id)
+		form.layout_fn = func() -> Array[Dictionary]: return ItemFormModel.layout(k, form.draft)
+		form.footer_fn = Callable()
+		form.problems_fn = func() -> Array[Dictionary]: return draft_problem_list()
+		form.panel_fn = func(id: String) -> Control: return ItemTables.panel(form, id, selected_id)
+		return
 	else:
 		form.state_fn = Callable()
 		form.layout_fn = Callable()
 		form.footer_fn = Callable()
 		form.problems_fn = Callable()
+	form.panel_fn = Callable()
+
+# The item and item-family tabs (ItemFormModel hooks).
+func _item_kind() -> bool:
+	return kind == "items" or kind == "item_families"
+
+# Kinds whose Apply is disabled while the draft has problems (the problems bar says "Cannot save").
+func _gated() -> bool:
+	return _skills() or kind == "classes" or _item_kind()
 
 func _on_ranks_changed(entry: Dictionary) -> void:
 	form.replace_draft(entry)
@@ -327,6 +397,10 @@ func show_kind(p_kind: String) -> void:
 	_sync_kind_buttons()
 	_side_filter.visible = kind == "units"
 	_skill_bar.visible = _skills()
+	_item_bar.visible = kind == "items"
+	if kind == "items":
+		_fill_item_bar()
+	_pending_apply = ""
 	_playtest_btn.visible = kind == "units" or kind == "encounters"
 	_configure_form()
 	selected_id = ""
@@ -354,7 +428,10 @@ func refresh_list() -> void:
 	for e: Dictionary in ContentCatalog.entries(kind):
 		var entry_name: String = str(e.get("name", ""))
 		name_count[entry_name] = DictUtil.int_of(name_count, entry_name) + 1
-	for e: Dictionary in ContentCatalog.entries(kind):
+	var listed: Array[Dictionary] = ContentCatalog.entries(kind)
+	if kind == "items":
+		listed = ItemFormModel.filter_items(listed, item_filters)
+	for e: Dictionary in listed:
 		var id: String = str(e.get("id", ""))
 		var label: String = str(e.get("name", id))
 		if DictUtil.int_of(name_count, label) > 1:
@@ -370,7 +447,9 @@ func refresh_list() -> void:
 		if kind == "units":
 			extra = "  · %s" % str(e.get("side", ""))
 		elif kind == "items":
-			extra = "  · %s" % str(e.get("item_type", "")).to_lower()
+			extra = "  · %s" % (str(e.get("family", "")) if not str(e.get("family", "")).is_empty() else str(e.get("item_type", "")).to_lower())
+		elif kind == "item_families":
+			extra = "  · %s, %d items" % [str(e.get("item_type", "")).to_lower(), ContentCatalog.items_of_family(id).size()]
 		_list.add_item("%s%s%s" % [mark, label, extra])
 		_list.set_item_tooltip(_list.item_count - 1, id)
 		_list_ids.append(id)
@@ -424,6 +503,10 @@ func new_entry() -> void:
 		d = SkillFormModel.new_entry(str(d["id"]))
 	elif kind == "classes":
 		d = ClassForgeModel.new_entry(str(d["id"]))   # a class that validates as it starts (FORGE1_CLASSES 2.0)
+	elif kind == "items":
+		d = ItemFormModel.new_entry(str(d["id"]))
+	elif kind == "item_families":
+		d = ItemFormModel.new_family(ContentCatalog.unique_id(kind, "new_family"))
 	if kind == "units" and _side_filter.selected > 0:
 		d["side"] = _side_filter.get_item_text(_side_filter.selected)
 	selected_id = ""
@@ -510,6 +593,15 @@ func _on_form_edited(key: String) -> void:
 		_switching_kind = true
 		form.replace_draft(SkillFormModel.switch_kind(form.draft, str(form.draft.get("kind", "ATTACK"))))
 		_switching_kind = false
+	if form.kind == "items" and kind == "items":
+		ItemFormModel.sync(form.draft, key)   # derived keys follow family / hand / modifiers / tiers
+		if key == "family" or key == "hand":
+			form.rebuild.call_deferred()   # options and limits of the build section and the tables depend on them
+	elif form.kind == "item_families" and kind == "item_families":
+		ItemFormModel.sync_family(form.draft, key)
+		if key == "hands" or key == "item_type":
+			form.rebuild.call_deferred()   # the base / band grids have one row per hand
+	_pending_apply = ""
 	draft_dirty = true
 	_refresh_side_panels()
 	_update_dirty_label()
@@ -524,6 +616,9 @@ func draft_problem_list() -> Array[Dictionary]:
 	elif kind == "classes":
 		for p: Dictionary in ClassForgeModel.draft_problems(form.draft, selected_id):
 			out.append({"field": str(p["field"]), "rank": 0, "message": str(p["message"])})
+	elif _item_kind():
+		for p: Dictionary in ItemFormModel.draft_problems(kind, form.draft, selected_id):
+			out.append({"field": str(p["field"]), "rank": 0, "index": DictUtil.to_int(p.get("index", 0)), "message": str(p["message"])})
 	else:
 		for message: String in ContentCatalog.validate_entry(kind, form.draft, selected_id):
 			out.append({"field": "", "rank": 0, "message": message})
@@ -541,8 +636,18 @@ func draft_problems() -> Array[String]:
 # Stores the draft in the catalog; false (with the problems shown) if invalid.
 func apply() -> bool:
 	var errors: Array[String] = draft_problems()
+	if errors.is_empty() and kind == "item_families" and not _confirm_family_apply():
+		return false
 	if errors.is_empty():
-		errors = ContentCatalog.upsert_skill(form.draft, selected_id) if _skills() else ContentCatalog.upsert(kind, form.draft, selected_id)
+		if _skills():
+			errors = ContentCatalog.upsert_skill(form.draft, selected_id)
+		elif kind == "items":
+			errors = ContentCatalog.upsert(kind, ItemFormModel.stored_of(form.draft), selected_id)   # family + modifiers (list order kept)
+		elif kind == "item_families" and not selected_id.is_empty() and str(form.draft.get("id", "")) == selected_id:
+			errors = ContentCatalog.upsert_many(kind, [form.draft])   # one batch; the family's items re-resolve (FORGE1_ITEMS 3 rail 2)
+		else:
+			errors = ContentCatalog.upsert(kind, form.draft, selected_id)
+	_pending_apply = ""
 	if not errors.is_empty():
 		_show_problems(errors)
 		_set_status("Not applied: fix the problems listed on the right.", true)
@@ -553,6 +658,22 @@ func apply() -> bool:
 	_refresh_side_panels()
 	_set_status("Applied %s (Save to write it to disk)." % selected_id)
 	return true
+
+# Two-step Apply of a family edit that changes items (FORGE1_ITEMS 3 rail 5): the first click shows the impact and returns
+# false; a second click on the SAME draft confirms. Edits in between reset it (_on_form_edited).
+func _confirm_family_apply() -> bool:
+	if not ItemFormModel.needs_confirm(form.draft, selected_id):
+		return true
+	var signature: String = JSON.stringify(ItemModifiers.sorted_value(form.draft))
+	if _pending_apply == signature:
+		return true
+	_pending_apply = signature
+	_set_status("Impact: %s. Click Apply again to confirm." % str(ItemFormModel.impact(form.draft, selected_id)["text"]))
+	return false
+
+# True while a family Apply waits for its confirming click (tests read it).
+func apply_pending() -> bool:
+	return not _pending_apply.is_empty()
 
 # Applies a dirty draft before navigating away; false keeps the user on it.
 func commit_draft() -> bool:
@@ -664,29 +785,45 @@ func _refresh_side_panels() -> void:
 	# Apply is blocked while a skill or class draft has problems; Delete and the origin button follow the selected asset.
 	if kind == "classes" and _class_panels != null and is_instance_valid(_class_panels):
 		_class_panels.text = ForgePreview.class_panels(form.draft)
-	_apply_btn.disabled = (_skills() or kind == "classes") and not errors.is_empty()
+	_apply_btn.disabled = _gated() and not errors.is_empty()
 	_apply_btn.tooltip_text = ("Cannot apply: %d problem%s (listed on the right)" % [errors.size(), "" if errors.size() == 1 else "s"]) if _apply_btn.disabled else "Store the edits in the catalog (Save writes them to disk)"
 	var system: bool = _is_system(selected_id)
 	_delete_btn.disabled = system
 	_delete_btn.tooltip_text = "System asset: delete is locked. Use SAFE DELETE (tools/fc.sh safe_delete) or make your own copy." if system else "Delete the selected entry (click twice)"
+	if _item_kind():
+		var del: Dictionary = ItemFormModel.delete_state(kind, selected_id)
+		_delete_btn.disabled = not DictUtil.to_bool(del["allowed"])
+		if _delete_btn.disabled:
+			_delete_btn.tooltip_text = str(del["reason"])
 	_origin_btn.visible = not selected_id.is_empty()
 	_origin_btn.text = "Demote to user" if system else "Promote to system"
 	_origin_btn.tooltip_text = "Delete becomes possible and key fields unlock." if system else "Lock key fields and delete (use for assets that tests or tuning rely on)."
 
 func _show_problems(errors: Array[String]) -> void:
+	var item_warnings: Array[String] = []
+	if _item_kind():
+		item_warnings = ItemFormModel.warnings(kind, form.draft)
 	if errors.is_empty():
 		_problems.text = "[color=#4ade80]✔ No problems.[/color]"
+		for w: String in item_warnings:   # item and family warnings (bands, budget, tokens) show even when Apply is allowed
+			_problems.text += "\n[color=#fbbf24]•[/color] " + w
 		return
 	var lines: Array[String] = []
-	var gated: bool = _skills() or kind == "classes"
+	var gated: bool = _gated()
 	if gated:
 		lines.append("[color=#f87171]Cannot save: %d problem%s[/color]" % [errors.size(), "" if errors.size() == 1 else "s"])
 	for err: String in errors:
 		lines.append("[color=#f87171]•[/color] " + err)
 	if gated:
-		for w: String in ContentCatalog.warnings_for(kind, form.draft):
+		if not _item_kind():
+			item_warnings = ContentCatalog.warnings_for(kind, form.draft)
+		for w: String in item_warnings:
 			lines.append("[color=#fbbf24]•[/color] " + w)
 	_problems.text = "\n".join(lines)
+
+# The problems bar text (tests read it).
+func problems_text() -> String:
+	return _problems.text
 
 func _update_dirty_label() -> void:
 	_dirty_label.text = "● unsaved changes" if ContentCatalog.is_dirty() else ""
@@ -702,6 +839,14 @@ func status_text() -> String:
 # True while Apply is disabled (a skill or class draft with errors; tests read it).
 func apply_blocked() -> bool:
 	return _apply_btn.disabled
+
+# The ids the entry list shows, in list order (tests read it).
+func list_ids() -> Array[String]:
+	return _list_ids.duplicate()
+
+# True while Delete is disabled for the selected entry (system asset, used family or item; tests read it).
+func delete_blocked() -> bool:
+	return _delete_btn.disabled
 
 # The live derived panels text of the class form ("" for other kinds; tests read it).
 func class_panels_text() -> String:

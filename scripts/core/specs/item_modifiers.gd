@@ -274,6 +274,26 @@ const WHEN_LEVEL: String = "unit_level_at_least"
 const WHEN_TYPES: Array[String] = [WHEN_STAT, WHEN_PROFICIENCY, WHEN_LEVEL]
 const BONUS_KEYS: Array[String] = ["power", "mitigation", "stat_bonuses", "effects"]
 const TIER_KEYS: Array[String] = ["label", "when", "bonus", "desc"]
+# Tier limits (section 4; single source for ItemValidator and the Forge tier table, ItemFormModel.tier_limits).
+const TIER_LABEL_MAX: int = 24
+const TIER_DESC_MAX: int = 120
+const TIER_STAT_MIN: int = 1   # stat_at_least value range
+const TIER_STAT_MAX: int = 40
+const TIER_BONUS_RANGES: Dictionary = {"power": [0, 50], "mitigation": [0, 20], "stat_bonuses": [1, 5]}
+const TIER_MAX_STATS: int = 3
+const TIER_MAX_EFFECTS: int = 2
+# Item types each bonus key is allowed on (stat_bonuses and effects: every gear type).
+const TIER_BONUS_TYPES: Dictionary = {"power": ["WEAPON"], "mitigation": ["ARMOR", "SHIELD"],
+	"stat_bonuses": ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"], "effects": ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"]}
+
+# The bonus keys a tier of an `item_type` item may carry (TIER_BONUS_TYPES, BONUS_KEYS order).
+static func tier_bonus_keys(item_type: String) -> Array[String]:
+	var out: Array[String] = []
+	for key: String in BONUS_KEYS:
+		var types: Array = TIER_BONUS_TYPES[key]
+		if types.has(item_type):
+			out.append(key)
+	return out
 
 # The tier label of a legacy description: the text before ":" ("Sunder Guard: +4 Power" -> "Sunder Guard").
 static func label_of_desc(desc: String) -> String:

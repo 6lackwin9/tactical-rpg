@@ -20,6 +20,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
 | `scripts/tests/item_tiers_test_suite.gd` | item tier criteria, bonuses, evaluation order, shipped loadouts unchanged (ITEM1 commit 2) | S3 | done |
+| `scripts/tests/item_form_model_test_suite.gd` | item and family Forge model and tabs (ITEM1 commit 3) | S5 | done |
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, locks, seed; model and Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
@@ -42,6 +43,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/content/validators/` | per-kind validation rules (SkillValidator, ItemValidator, ClassUnitValidator); ContentCatalog.validate_entry / warnings_for dispatch to them (CLN-9) | S5 | done |
 | `scripts/content/{skill,item,class_unit}_fields.gd` | per-kind field tables of ContentSchema (CLN-9b) | S5 | done |
 | `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel}.gd` | Forge skill tab logic and ranks panel (SKILL1) | S5 | done |
+| `scripts/ui/forge/{item_form_model,item_tables}.gd` | Forge item and item-family tabs: ItemFormModel (sections, locks, options, limits, problems, modifier and tier tables, impact, filters) and ItemTables (widgets) (ITEM1) | S5 | done |
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
