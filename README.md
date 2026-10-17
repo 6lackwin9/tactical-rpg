@@ -46,6 +46,7 @@ tactical-rpg/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
 │   ├── scene_runner.tscn         # Main scene: Scene Runner menu (launch scenes, hot-reload scripts, run suites)
+│   ├── main_menu.tscn            # Player front door (UI1-L): continue, new game, load / save slots, settings, hub
 │   ├── test_arena.tscn           # Test harness scene: runs SuiteRegistry.run_all (headless exit code); windowed opens the runner
 │   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1 and the runner's suite buttons
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
@@ -130,6 +131,7 @@ tactical-rpg/
 │   │       ├── grid_path.gd              # Breadth-first routes (centre tie-break); shared by planner, AI and commands
 │   │       ├── combat_resolver.gd        # Round resolution: AP/stance at start, effects at end, initiative, casualty cleanup
 │   │       └── block_snapshot.gd         # Historical state capture for deterministic scrubbing/replay
+│   ├── audio/                    # Sound by key (S14-L3): SoundEvents keys, SoundBank lookup, AudioDirector voices, PlaceholderSfx blips
 │   ├── art/                      # Procedural SVG art (rasterized + cached, no image assets)
 │   │   ├── svg_raster.gd             # SVG string -> cached ImageTexture
 │   │   ├── unit_art.gd               # Class-glyph tokens (blue friendly / red hostile / yellow neutral) & portraits
@@ -173,7 +175,10 @@ tactical-rpg/
 │       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
 │       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
 │       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
-│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards & action FX
+│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards; hands action FX to the presenter
+│       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
+│       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
+│       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
 │       │   ├── combat_action_log_panel.gd # Compact resolution log dock
 │       │   ├── combat_inspector_panel.gd # Unit inspector (snapshot-aware)
 │       │   ├── combat_forecast_panel.gd  # Tactical forecast
@@ -191,7 +196,7 @@ tactical-rpg/
 │       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
 │       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
 │       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, tweens & floating text
+│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, FX layer
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -511,7 +516,7 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
-Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to debug slot 9. EXP1 is complete.
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
@@ -543,9 +548,21 @@ The Content Forge edits items and item families with dedicated sections: identit
 
 Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the manifest `data/assets/manifest.json` (managed by `AssetCatalog`, empty for now) points a key and variant at a file under `assets/art/<namespace>/` or at another key (alias); otherwise the generated placeholder template is used, then a fallback, so a texture is never missing. Unit files are composed onto the team-coloured token. Skills and statuses get generated placeholder icons (`SkillArt`, `StatusArt`). A manifest row whose key still has a template can always be removed (the placeholder comes back); a manifest-only key cannot be removed while content uses it. `tools/fc.sh export_placeholder <ns> <key> <variant> [team]` writes a template as a PNG to start real art from. With the manifest empty, all shipped art looks exactly as before. Tested in `asset_pipeline_test_suite.gd`.
 
+### Audio (S14-L3)
+
+Sound plays by key, never by file path. `SoundBank` looks up an `sfx` key through `AssetRegistry` (a manifest row pointing at `assets/audio/sfx/<key>.wav` or `.ogg`); a key with no file is silent and warns once. `SoundEvents` lists the keys (hit, crit, mitigated, heal, buff, debuff, defend, move_step, defeat and four UI keys) and which presenter preset plays which. One `AudioDirector` in the combat arena and one in the Scene Runner hold eight SFX voices and two UI voices, play the presenter's `fx_played` sounds and the playback buttons' click, and set the Master, Music, SFX and UI bus volumes (`default_bus_layout.tres`) from the new `SettingsFile` (`user://settings.cfg`, keys `audio/master|music|sfx|ui`, never part of a save). Headless runs, tests and the sim create no voices. `tools/fc.sh gen_sfx <key> <wave> <hz_from> <hz_to> <ms> <envelope> <gain_db>` writes a placeholder blip. Tested in `audio_test_suite.gd`.
+
+### Combat presenter (S14-L2)
+
+All combat animation now goes through `CombatPresenter` (`scripts/ui/combat/`), which `CombatGridPanel` feeds from `CombatSession.fx_requested` and from its refresh slide. Timings and tween recipes live in one table (`FxPresets`; the durations are the old hard-coded ones) and `FxPresets.for_entry` maps a log entry to its presets: melee bump or ranged pulse, hit or mitigated shake and flash, heal, buff and defend pulses, a status icon pop when the entry names a real status, floating text (the old labels) and a defeat fade. `FxSettings` holds the speed (0.25 to 4, read later from the UI1-L settings file) and instant mode, which applies every end state at once and is always on in headless runs and tests. The presenter owns every tween and temporary node and ends them all (tokens at their end states) when the log resets, the encounter remounts, the timeline steps back or too many pile up; `fx_played` fires once per preset for the coming audio hook (S14-L3). Nothing in resolution, the log or the sim changed. Tested in `animation_lifecycle_test_suite.gd`.
+
 ### Forge class tab (CLASS1-L)
 
 A class's `skill_path` is now a map of skill family to unlock level (`{family: level}`, kept in entry order; `ClassArchetype.path_steps()` sorts by level then position, and the default loadout is the first five). CLASS1-M migrated the shipped classes to the map shape (and gave every unit `heal_below` 0.7), so the old list converter is switched off (`ClassUnitFields.LIST_PATH_CONVERTER` false; a list path is now a validation error). System classes lock their key fields (id, AI role, base stats, growth, proficiency); gear, pouch and path stay editable. Units gain an AI `heal_below` threshold (default 0.7). The Forge edits classes in five sections with a path table, proficiency rows, gear pickers grouped by item family and live stat, gear-budget and coverage panels (`ClassForgeModel`, `ForgePreview.class_panels`); soft warnings never block saving. Tested in `class_path` and `class_form_model` suites.
+
+### Main menu, new game and save slots (UI1-L)
+
+`scenes/main_menu.tscn` (Scene Runner > Main Menu) is the player's front door: **Continue** loads the newest save (autosave included; hidden when there is none), **New game** lists the playable worlds with their fixed starting party (world manifest `start_party`, inherited like `start_location`; a world is playable when both resolve) and starts with an autosave, **Load game** shows the autosave and three manual slots with a header read by `SaveGame.peek` (world, location, party levels, time; corrupt files show as unreadable, newer versions are listed but not loadable), **Settings** edits `user://settings.cfg` (`SettingsFile`: volumes, animation speed and instant mode, text size; never part of a save), and **Tools** (debug builds) returns to the Scene Runner. A started game opens the region map; Esc returns to the **hub** (world, location, party, Save game, Settings, Quit to main menu; Party and Journal arrive with UI2 and UI3). Overwriting or deleting a save, leaving a screen with unapplied changes and quitting with unsaved progress all ask first; saving is refused during a battle or conversation. Slots: 0 = autosave, 1-3 manual (`SaveGame.write` refuses anything else); no save version change. Every screen is a headless model (`MenuRouter`, `MainMenuModel`, `NewGameModel`, `SaveSlotsModel`, `SettingsModel`, `HubModel` in `scripts/ui/menus/`) over `CurrentGame` (the game in play); views only render. Tested in `menus_test_suite.gd`.
 
 ### Agent workflow tools
 
@@ -647,7 +664,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Planned.*
 
 - [ ] Dedicated automated test suite verifying SVG asset loads, dimensions, and texture caching.
-- [ ] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification).
+- [x] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification): `animation_lifecycle_test_suite.gd` (S14-L2).
 
 ### 4. Advanced Combat Rules & Combo Engine (`System 6`)
 

@@ -94,7 +94,7 @@ Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T
 | --- | --- | --- | --- |
 | S12S | approved | ITEM1-L, CLASS1-L | status slice, then S12T terrain and S12C combos in sequence (shared skill and plan files) |
 | S14-1 | proposed | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
-| UI1 | approved | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
+| UI1 | in-progress (UI1-L done 2026-10-17) | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
 
 ## Open engine items (tracked)
 
