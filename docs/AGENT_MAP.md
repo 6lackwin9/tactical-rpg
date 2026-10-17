@@ -47,7 +47,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | planner (Platform & Workflow thread) | cloud.md "Area threads", CLAUDE.md, planner and planner-ops skills, README table, decision row; daily routine now dispatches to area threads | n/a | PR #33 squash-merged |
-| planner (Platform & Workflow thread) + change-reviewer | cloud.md landing and release sections, CI only on PRs into main (docs-only skipped), planner skills, README table, decision row, `develop` branch | n/a | see PR |
+| planner (Platform & Workflow thread) + change-reviewer | cloud.md landing and release sections, CI only on PRs into main (docs-only skipped), planner skills, README table, decision row, `develop` branch | n/a | PR #34 squash-merged; WEB-DAILY (web.yml daily at 19:07 UTC and on demand, PR build only for web export changes) landed on develop |
 
 ### S14-L1 commit 3 item art (2026-10-17, cloud)
 

@@ -1,16 +1,18 @@
 # Web (HTML5) build: exported with the "Web" preset (single-threaded, so no
-# SharedArrayBuffer / cross-origin isolation headers are needed). Every PR into main (except
-# Markdown/docs-only ones) and every push to main builds it and uploads it as the "web-build" artifact; pushes to main also deploy
-# it to GitHub Pages once the repo variable WEB_PAGES is "true" (see docs/workflow/web.md).
+# SharedArrayBuffer / cross-origin isolation headers are needed). It builds and deploys once
+# a day (19:07 UTC, skipped when main has not changed since the last deploy) and on demand
+# (workflow_dispatch, always deploys). Each run uploads the "web-build" artifact, pushes to
+# itch.io and to GitHub Pages when those are configured (see docs/workflow/web.md). PRs into
+# main build it only when they touch the web export itself (preset or this workflow).
 name: web
 
 on:
+  schedule:
+    - cron: '7 19 * * *'
+  workflow_dispatch:
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
-  push:
-    branches: [main]
-  workflow_dispatch:
+    paths: ['export_presets.cfg', '.github/workflows/web.yml']
 
 concurrency:
   group: web-${{ github.ref }}
@@ -20,7 +22,32 @@ permissions:
   contents: read
 
 jobs:
+  # The daily run skips everything when main is still at the commit of the last successful
+  # scheduled or manual run; manual runs and PRs always build.
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      changed: ${{ steps.c.outputs.changed }}
+    steps:
+      - id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          last=$(gh api "repos/${{ github.repository }}/actions/workflows/web.yml/runs?branch=main&status=success&per_page=30" \
+            --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].head_sha // ""')
+          if [ "$last" = "$GITHUB_SHA" ]; then
+            echo "main unchanged since the last deploy (${last::7}); skipping"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -91,7 +118,7 @@ jobs:
         with:
           path: build/web
 
-  # Private itch.io page (restricted + password): pushes to main upload the build with
+  # Private itch.io page (restricted + password): scheduled and manual runs on main upload the build with
   # butler when the variable ITCH_TARGET (e.g. user/tactical-rpg:html5) and the secret
   # BUTLER_API_KEY are set (see docs/workflow/web.md).
   itch:

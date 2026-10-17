@@ -6,7 +6,7 @@ A browser build for cross-platform testing and porting checks (user 2026-10-17).
 
 - Preset `Web` in `export_presets.cfg`: single-threaded templates (`variant/thread_support=false`), so the page needs no cross-origin isolation headers (`COOP`/`COEP`) and no `SharedArrayBuffer`. GitHub Pages cannot set those headers, so the threaded templates are not used. The preset adds `data/*.json` to the pack (the catalogs are read with `FileAccess`, not as resources).
 - Renderer: the web always uses Compatibility (WebGL 2); desktop uses Forward+.
-- Workflow `.github/workflows/web.yml`: every PR into `main` (the batched release PR) and every push to `main` exports the build and uploads it as the `web-build` artifact (14 days). Pushes to `main` also deploy it to GitHub Pages when the repository variable `WEB_PAGES` is `true`.
+- Workflow `.github/workflows/web.yml` (user 2026-10-17: once a day and on request, to cut CI time): a daily run at 19:07 UTC on `main` exports the build, uploads it as the `web-build` artifact (14 days) and deploys it (itch.io below; GitHub Pages when the repository variable `WEB_PAGES` is `true`); it skips everything when `main` is still at the commit of the last successful daily or manual run. A manual run (**Actions > web > Run workflow** on `main`, or ask in the project chat: "deploy") always builds and deploys. Pushes to `main` no longer build; PRs into `main` build (no deploy) only when they change `export_presets.cfg` or `web.yml`.
 - Templates come from the GitHub release `.tpz` (downloads.godotengine.org is blocked in the cloud); only `web_nothreads_*.zip` and `version.txt` are kept, cached per Godot version.
 
 ## Build it locally (cloud or Linux)
@@ -24,25 +24,25 @@ On Windows the editor's Export dialog uses the same preset once its export templ
 ## Playing it on the Windows PC (current hosting, user 2026-10-17)
 
 - From the editor: install the export templates once (**Editor > Manage Export Templates > Download and Install**), open the project, then click the **Run in Browser** button (the browser icon, top right). The editor exports the `Web` preset and opens it at `http://localhost:8060`.
-- From a CI build: on the PR or `main` run in the Actions tab, download `web-build`, unzip it, and in that folder run `python -m http.server 8000`, then open `http://localhost:8000`.
+- From a CI build: on the latest `web` run in the Actions tab, download `web-build`, unzip it, and in that folder run `python -m http.server 8000`, then open `http://localhost:8000`.
 - Other devices on the same Wi-Fi: run the server with `python -m http.server 8000 --bind 0.0.0.0` and open `http://<PC's IPv4 address>:8000` on the phone or tablet (Windows may ask to allow Python through the firewall: allow it on private networks).
 - Cloud drives (Google Drive, OneDrive, Dropbox) do not serve web pages: they download or preview files and do not run the game.
 
 ## Private itch.io page (any device, user 2026-10-17)
 
-The `itch` job in `web.yml` uploads every push to `main` with butler once these are set (one time, by the repo owner):
+The `itch` job in `web.yml` uploads each daily or manual run on `main` with butler once these are set (one time, by the repo owner):
 
 1. On itch.io: **Upload new project**. Kind of project: **HTML**. Leave the upload empty (CI fills it). Embed options: viewport 1280 x 720, tick **Fullscreen button**; leave **SharedArrayBuffer support** off (the build is single-threaded). Visibility: **Restricted**, then set a password under **Password protect**. Save; the URL slug (for example `tactical-rpg`) is the project name.
 2. itch.io **Settings > API keys > Generate new API key**; copy it.
 3. GitHub repo **Settings > Secrets and variables > Actions**: **Secrets > New repository secret** `BUTLER_API_KEY` = the key; **Variables > New repository variable** `ITCH_TARGET` = `<itch username>/<project slug>:html5`.
-4. Re-run the latest `web` workflow on `main` (Actions tab) or merge any PR. After the first upload, tick **This file will be played in the browser** on the `html5` file in the project's edit page and save (one time).
+4. Run the `web` workflow on `main` (**Actions > web > Run workflow**). After the first upload, tick **This file will be played in the browser** on the `html5` file in the project's edit page and save (one time).
 
 ## Turning on GitHub Pages (once, by the repo owner)
 
 1. Pages on a private repository needs a paid plan (GitHub Pro or higher), and the published site is public to anyone with the URL.
 2. Repository **Settings > Pages > Build and deployment > Source**: choose **GitHub Actions**.
 3. **Settings > Secrets and variables > Actions > Variables > New repository variable**: name `WEB_PAGES`, value `true`.
-4. Re-run the latest `web` workflow on `main` (Actions tab) or merge any PR. The site is at `https://6lackwin9.github.io/tactical-rpg/`.
+4. Run the `web` workflow on `main` (**Actions > web > Run workflow**). The site is at `https://6lackwin9.github.io/tactical-rpg/`.
 
 ## What does not work in the web build
 
