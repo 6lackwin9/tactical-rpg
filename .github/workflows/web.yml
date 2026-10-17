@@ -1,14 +1,15 @@
 # Web (HTML5) build: exported with the "Web" preset (single-threaded, so no
-# SharedArrayBuffer / cross-origin isolation headers are needed). The Merge & Release thread
-# starts it (workflow_dispatch, always deploys) right after each release PR merges, and on
-# demand; a 19:07 UTC fallback run skips when main has not changed since the last deploy. Each run uploads the "web-build" artifact, pushes to
+# SharedArrayBuffer / cross-origin isolation headers are needed). Deploys are PAUSED until
+# there is a playable build (user 2026-10-17): it runs only on demand (workflow_dispatch,
+# always deploys). To resume, uncomment the schedule below and restore cloud.md release
+# step 4 (decision "Web deploy paused"). Each run uploads the "web-build" artifact, pushes to
 # itch.io and to GitHub Pages when those are configured (see docs/workflow/web.md). PRs into
 # main build it only when they touch the web export itself (preset or this workflow).
 name: web
 
 on:
-  schedule:
-    - cron: '7 19 * * *'
+  # schedule:                # paused (user 2026-10-17) until a playable build
+  #   - cron: '7 19 * * *'   # fallback daily run; skips when main is unchanged
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -23,7 +24,7 @@ permissions:
 
 jobs:
   # The daily run skips everything when main is still at the commit of the last successful
-  # scheduled or manual run; manual runs and PRs always build.
+  # scheduled or manual run (schedule paused for now); manual runs and PRs always build.
   check:
     runs-on: ubuntu-latest
     permissions:
@@ -118,7 +119,7 @@ jobs:
         with:
           path: build/web
 
-  # Private itch.io page (restricted + password): scheduled and manual runs on main upload the build with
+  # Private itch.io page (restricted + password): manual (and, when resumed, scheduled) runs on main upload the build with
   # butler when the variable ITCH_TARGET (e.g. user/tactical-rpg:html5) and the secret
   # BUTLER_API_KEY are set (see docs/workflow/web.md).
   itch:

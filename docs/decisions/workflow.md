@@ -35,6 +35,7 @@ Settled; do not re-litigate without asking the user. Scope: milestone planning, 
 | Content edits (user 2026-10-17) | Agents make every content edit; the user asks in plain words, approves new content on one card, reviews in the game (read-only viewers or the itch.io build) and can say "undo that" (a `git revert` of the task commit on `develop`). Small tweaks (values of existing rows, up to about 5 rows) land without a card and carry a before/after table; new rows, mechanics, removals or effect changes get a one-card spec first; balance-relevant combat values need a sim run; playtest notes are batched per area. Process: `docs/workflow/content-edits.md` | User 2026-10-17 (project chat, 17:23) |
 | Deploy after release (user 2026-10-17) | The Merge & Release thread starts `web.yml` (`workflow_dispatch` on `main`) right after each release PR merges; the 19:07 UTC cron stays as a fallback that skips when `main` is unchanged. Reason: on 2026-10-17 the cron had not fired by 19:31 UTC (GitHub schedule lag), so nothing reached itch.io after the release | User 2026-10-17 ("Deploy after release" card, 19:43) |
 | Twice-daily releases (user 2026-10-17, decision card 19:42 UTC) | The Merge & Release thread releases `develop` to `main` twice a day, at 11:52 and 17:52 UTC, plus on request, so finished work waits at most about six hours; each release still triggers the web deploy. | Release wait was the largest idle time left after batching (TASK_LOG, release #37 review). |
+| Web deploy paused (user 2026-10-17) | Web deploys pause until there is a playable build: no after-release run and no 19:07 UTC fallback (cron commented out in `web.yml`); manual runs ("deploy") still work. The browser and desktop already differ (WEB3 entry scenes); the local game runs from source, so it needs no export | User 2026-10-17 (project chat, 19:57) |
 
 ## Partly superseded rows (text unchanged; the newer row wins on the named part)
 
@@ -44,5 +45,7 @@ Settled; do not re-litigate without asking the user. Scope: milestone planning, 
 - "Batched merges": the release PR no longer skips the gate for docs-only batches, because `gate` became a required check on `main` (branch protection, user 2026-10-17); docs-only pushes to `main` still skip it.
 - "R1 test split (2026-10-16)": the `ArenaTestSuite` pass-through is removed in CLN-14 (`SuiteRegistry.run_all` is called directly).
 - "Web deploy schedule (user 2026-10-17)": the daily 19:07 UTC run is now the fallback; the deploy starts after each release merge ("Deploy after release (user 2026-10-17)").
+- "Web deploy schedule (user 2026-10-17)" and "Deploy after release (user 2026-10-17)": both paused by "Web deploy paused (user 2026-10-17)" until a playable build; resume by restoring the cron and release step 4.
+- "Twice-daily releases (user 2026-10-17)": "each release still triggers the web deploy" is paused by "Web deploy paused (user 2026-10-17)".
 
 See also balance.md "Small answers (user 2026-10-17)" for the CLN-15 placeholder-art answer.
