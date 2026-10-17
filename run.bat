@@ -7,6 +7,8 @@ rem                  Inside the -dev folder, run.bat and run_dev.bat both open d
 rem Two folders, so switching between main and dev never waits for a script cache rebuild.
 rem The dev game also keeps its own saves and settings: Godot puts user:// under %APPDATA%,
 rem so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
+rem When a pull changed the code, it first copies that game's saves (user://saves) to
+rem user://save_backups/<date>-<old commit> and keeps the newest 10 (user 2026-10-17).
 rem Before launching it fetches and fast-forwards the branch (about 1-2 s when nothing changed)
 rem and rebuilds the script cache only when the code changed (about a minute). It launches the
 rem copy on disk when offline, when the pull fails, when that folder has local changes or is on
@@ -38,6 +40,11 @@ setlocal EnableDelayedExpansion
       set "DIR=%~dp0."
     )
   )
+  if "!BRANCH!"=="develop" (
+    set "APPDATA=!APPDATA!\tactical-rpg-dev"
+    if not exist "!APPDATA!" mkdir "!APPDATA!"
+    echo Dev saves and settings: !APPDATA!
+  )
   cd /d "!DIR!"
   set "OLD="
   for /f %%h in ('git rev-parse HEAD 2^>nul') do set "OLD=%%h"
@@ -60,6 +67,16 @@ setlocal EnableDelayedExpansion
   )
   set "NEW="
   for /f %%h in ('git rev-parse HEAD 2^>nul') do set "NEW=%%h"
+  set "SAVES=!APPDATA!\Godot\app_userdata\rpg\saves"
+  set "BACKUPS=!APPDATA!\Godot\app_userdata\rpg\save_backups"
+  if defined OLD if not "!OLD!"=="!NEW!" if exist "!SAVES!\*" (
+    set "STAMP="
+    for /f %%t in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "STAMP=%%t"
+    if not defined STAMP set "STAMP=!OLD:~0,10!"
+    echo Code updated: backing up your saves to !BACKUPS!\!STAMP!-!OLD:~0,7!
+    robocopy "!SAVES!" "!BACKUPS!\!STAMP!-!OLD:~0,7!" /e /njh /njs /nfl /ndl /np >nul
+    for /f "skip=10 delims=" %%d in ('dir /b /ad /o-n "!BACKUPS!" 2^>nul') do rd /s /q "!BACKUPS!\%%d"
+  )
   if not exist ".godot\global_script_class_cache.cfg" set "OLD=none"
   if not "!OLD!"=="!NEW!" (
     echo Code updated: rebuilding the script cache, about a minute...
@@ -67,11 +84,6 @@ setlocal EnableDelayedExpansion
   )
   set "SHA=?"
   for /f %%h in ('git rev-parse --short HEAD 2^>nul') do set "SHA=%%h"
-  if "!BRANCH!"=="develop" (
-    set "APPDATA=!APPDATA!\tactical-rpg-dev"
-    if not exist "!APPDATA!" mkdir "!APPDATA!"
-    echo Dev saves and settings: !APPDATA!
-  )
   echo Running !CUR! at !SHA! from !DIR!
   start "" "!GODOT!" --path "!DIR!" res://scenes/scene_runner.tscn
   timeout /t 4 /nobreak >nul
