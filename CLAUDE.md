@@ -18,7 +18,7 @@ Read these instead of crawling the code:
 
 ## Roles and lanes (agents cannot message each other; the planner routes via the docs above)
 
-- **Planner** (skills `planner`, `planner-ops`; the writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in lanes, user confirmation gate, review, commit/push, README/docs. Desktop: the main session for everything; cloud: standing area threads (Gameplay, UI/UX, Assets & Audio, Balance, Design, Platform & Workflow), each working its area's tasks one at a time, one branch and PR per task; no new thread without asking the user first (the project chat is the front desk).
+- **Planner** (skills `planner`, `planner-ops`; the writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in lanes, user confirmation gate, review, commit/push, README/docs. Desktop: the main session for everything; cloud: standing area threads (Gameplay, UI/UX, Assets & Audio, Balance, Design, Platform & Workflow), each working its area's tasks one at a time on its own branch, squash-merged into `develop` without a PR; a Merge & Release thread batches `develop` into `main` with one PR; no new thread without asking the user first (the project chat is the front desk).
 - `design-brainstorm` agent (design lane): options and specs in `docs/specs/`; lists wanted roadmap and task rows in its report (the planner writes them); works ahead while builders run.
 - `logic-builder` agent (logic lane): engine, schema, validation, tests on the task's branch (desktop: a feature worktree); never edits shipped data; never commits (the planner or cloud thread does).
 - `asset-builder` agent (asset lane): fills `data/` through `ContentCatalog.upsert` against a merged schema; no code, no tests.

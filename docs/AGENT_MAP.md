@@ -12,11 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
-### AREA-THREADS standing area threads (2026-10-17, cloud)
+### AREA-THREADS and BATCH-MERGE: area threads, develop branch, batched releases (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
-| planner (Platform & Workflow thread) | cloud.md "Area threads", CLAUDE.md, planner and planner-ops skills, README table, decision row; daily routine now dispatches to area threads | n/a | see PR |
+| planner (Platform & Workflow thread) | cloud.md "Area threads", CLAUDE.md, planner and planner-ops skills, README table, decision row; daily routine now dispatches to area threads | n/a | PR #33 squash-merged |
+| planner (Platform & Workflow thread) + change-reviewer | cloud.md landing and release sections, CI only on PRs into main (docs-only skipped), planner skills, README table, decision row, `develop` branch | n/a | see PR |
 
 ### S14-L1 commit 3 item art (2026-10-17, cloud)
 
