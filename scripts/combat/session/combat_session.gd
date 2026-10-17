@@ -458,7 +458,7 @@ func plan_info() -> Dictionary:
 	var st: CombatPlan.SimState = plan.compile(focused_hero)
 	var text: String = "%s  •  AP %d/%d  •  next block %d  •  %s" % [focused_hero.name, st.ap_left, focused_hero.max_ap, mini(st.next_block, total_blocks), CombatTypes.stance_to_string(st.stance)]
 	for status: Variant in focused_hero.statuses:
-		text += "  •  %s" % StatusEffects.display_name(str(status))
+		text += "  •  %s" % StatusEffects.chip_text(focused_hero, str(status))
 	if st.error_index >= 0:
 		text += "  •  ⚠ step %d invalid: %s" % [st.error_index + 1, st.error_text]
 		info["warn"] = true

@@ -5,7 +5,9 @@ extends "res://tools/sim/sim_observer.gd"
 # overkill already clamped) and are buffered per unit; session.log_appended (fired right after each
 # action, then once per riposte) credits the buffer to that entry's actor. Changes still buffered at
 # block_completed have no entry (they fail the checks); HP lost after the last block_completed of a
-# round is the round-end bleed. Statuses are diffed per entry, positions sampled per block. No engine
+# round is the round-end damage (bleed, poison, burn: dot_taken, and dot_dealt of the status's source
+# from CombatResolver.last_round_end_steps); HP gained there by a unit with active regen is a heal
+# (heal_received + regen_received, heal_done of status_sources["regen"]; S12S-L rule 9). Statuses are diffed per entry, positions sampled per block. No engine
 # change: public signals and state only.
 # Self-checks print "METRIC FAIL <unit> <field>": the log's damage (capped at the victim's HP) must
 # equal the HP the victims lost, a heal entry's amount the HP gained, an area entry's hit count the
@@ -20,7 +22,7 @@ const FIELDS: Array[String] = [
 	"debuff_rounds", "area_casts", "area_foes_hit", "area_allies_hit", "kills", "blocks_alive", "survived",
 	"hp_end_frac", "min_hp_frac", "near_death_saves", "dist_sum", "dist_samples", "blocks_adjacent",
 	"hold_blocks", "taunt_blocks", "priority_dmg", "hp_start", "hp_end", "max_hp", "other_loss", "other_gain",
-	"overheal_unknown",
+	"overheal_unknown", "regen_received", "dot_dealt",
 ]
 
 var priority_name: String = ""     # display name of the scenario's priority target ("" = none)
@@ -45,7 +47,8 @@ var _pos: Dictionary = {}          # Combatant -> last known tile
 var _start_tile: Dictionary = {}   # Combatant -> first tile on the field
 var _below: Dictionary = {}        # Combatant -> true once under NEAR_DEATH_FRAC
 var _saves: Dictionary = {}        # healer -> {ally: true}
-var _round_end: bool = false       # after the last block_completed of a round: losses are bleed
+var _round_end: bool = false       # after the last block_completed of a round: losses are round-end damage
+var _steps_seen: Array[Dictionary] = []   # the resolver's last_round_end_steps already credited (same array = done)
 var _priority_down: int = 0
 
 func on_start(session: CombatSession) -> void:
@@ -57,6 +60,7 @@ func on_start(session: CombatSession) -> void:
 		d.clear()
 	_round_end = false
 	_priority_down = 0
+	_steps_seen = session.resolver.last_round_end_steps
 	for c: Combatant in session.allies + session.enemies:
 		_by_name[c.name] = c
 		_ally[c] = session.allies.has(c)
@@ -77,6 +81,7 @@ func on_start(session: CombatSession) -> void:
 	session.resolver.block_completed.connect(_on_block_completed)
 
 func on_step(_session_arg: CombatSession) -> void:
+	_credit_round_end()
 	_round_end = false
 	_check_priority()
 
@@ -85,6 +90,7 @@ func on_round(_session_arg: CombatSession) -> void:
 		_remember_statuses(c)
 
 func on_end(session: CombatSession, result: Dictionary) -> void:
+	_credit_round_end()
 	_flush_hold()
 	_flush_unexplained()
 	_check_priority()
@@ -151,6 +157,12 @@ func _on_health(new_hp: int, c: Combatant) -> void:
 	if _round_end:
 		if d < 0:
 			_add(c, "dot_taken", -d)
+		elif d > 0 and c.has_status(StatusEffects.REGEN):
+			_add(c, "heal_received", d)
+			_add(c, "regen_received", d)
+			var healer: Combatant = _unit(str(c.status_sources.get(StatusEffects.REGEN, "")))
+			if healer != null:
+				_add(healer, "heal_done", d)
 		elif d > 0:
 			_add(c, "other_gain", d)
 		return
@@ -373,6 +385,22 @@ static func _status_rounds(present: Dictionary, rounds: Dictionary) -> Dictionar
 func _remember_statuses(c: Combatant) -> void:
 	_pending[c] = _status_rounds(c.pending_statuses, c.pending_status_rounds)
 	_active[c] = _status_rounds(c.statuses, c.status_rounds_left)
+
+# Credits the round end's damage steps (bleed, poison, burn) to the status's source as dot_dealt, once
+# per apply_round_end_effects call (the resolver replaces the array on every call).
+func _credit_round_end() -> void:
+	if _session == null or _session.resolver == null:
+		return
+	var steps: Array[Dictionary] = _session.resolver.last_round_end_steps
+	if is_same(steps, _steps_seen):
+		return
+	_steps_seen = steps
+	for row: Dictionary in steps:
+		if str(row["status"]) == StatusEffects.REGEN:
+			continue   # regen is credited live in _on_health
+		var source: Combatant = _unit(str(row["source"]))
+		if source != null:
+			_add(source, "dot_dealt", DictUtil.to_int(row["amount"]))
 
 # ------------------------------------------------------------------------------
 # Per-block sampling

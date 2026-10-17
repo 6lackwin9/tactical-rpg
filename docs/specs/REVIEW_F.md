@@ -1,6 +1,6 @@
 # REVIEW-F: follow-ups from the retroactive review of the 2026-10-17 merges
 
-Status: approved (user 2026-10-17, F1-F5); questions Q1-Q3 still open
+Status: approved (user 2026-10-17, F1-F5); Q1-Q3 answered A ("all recs"): Q1 and Q2 join REVIEW-F2, Q3 joins REVIEW-F3
 Depends on: see each task
 Lane: logic (five tasks, no asset part)
 Touches: see each task; F5 overlaps F1-F3 and runs last
@@ -143,6 +143,8 @@ Acceptance checks:
 - Moving tests between suites, or CLN-8 helper consolidation beyond `GameState.of`.
 
 ## Questions for the user
+
+Answered 2026-10-17: A for all three (user, "all recs"). Q1 and Q2 are built in REVIEW-F2, Q3 in REVIEW-F3.
 
 Q1. A new game silently replaces the autosave (`new_game_model.gd:35`; UI1-L rule 4 says to autosave after a new game, but it never asks first). A player who starts a new game by mistake loses their most recent progress if they had not saved manually.
 
