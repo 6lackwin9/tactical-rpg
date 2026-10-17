@@ -7,20 +7,20 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 | Check | Desktop | Cloud |
 | --- | --- | --- |
 | `echo $CLAUDE_CODE_REMOTE` | empty | `true` |
-| Where you talk to Claude | a terminal on your machine | a Claude project (project chat plus one thread per task) |
+| Where you talk to Claude | a terminal on your machine | a Claude project (project chat plus standing area threads) |
 | Read next | [desktop.md](desktop.md) | [cloud.md](cloud.md) |
 
 ## What differs
 
 | Topic | Desktop | Cloud |
 | --- | --- | --- |
-| Planner | the main terminal session, one for everything | each task thread plans its own task; the project chat (coordinator) starts threads |
+| Planner | the main terminal session, one for everything | each area thread plans its area's tasks one at a time; the project chat (coordinator) routes asks and opens a new thread only with the user's approval |
 | Front desk | a second local session, found with `ListAgents` | the project chat |
-| Parallel builders | subagents in sibling worktrees (`../ngp-<id>`) | one thread per task, each in its own container; the six lane agents run one after another in that thread's checkout (the thread writes only planner docs itself, see cloud.md "Lanes inside a task thread") |
-| Branch | `feat/<id>-<slug>`, created by the planner | the branch the thread is given (`claude/...`); the PR title starts with the task id |
+| Parallel builders | subagents in sibling worktrees (`../ngp-<id>`) | one area thread per focus area, each in its own container; the six lane agents run one after another in that thread's checkout (the thread writes only planner docs itself, see cloud.md "Lanes inside an area thread") |
+| Branch | `feat/<id>-<slug>`, created by the planner | a new `claude/...` branch per task from the latest `main`; the PR title starts with the task id |
 | Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit; `change-reviewer` reviews the whole branch before the PR is marked ready and its verdict goes in the PR body |
 | Merge to `main` | planner fast-forwards locally and pushes | squash merge of the PR on GitHub |
-| Writer of `docs/TASKS.md`, ROADMAP, decisions, HISTORY | planner only | each thread for its own task's rows and the decisions you gave in that thread, inside its PR |
+| Writer of `docs/TASKS.md`, ROADMAP, decisions, HISTORY | planner only | each area thread for its tasks' rows and the decisions you gave in that thread, inside the task's PR |
 | `docs/AGENT_MAP.md` "Active now" | kept current by the planner | not used (the project's thread list is live); finished-run log still updated per merged PR |
 | Gate | `check_project.ps1 -Fast -Quiet` (~32 s) and IDE Problems tab 0 | `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (~3-4 min) and `tools/fc.sh docs`; no IDE rule; CI runs the same gate on every PR |
 | Godot | `C:/Program Files/Godot/godot.exe` | `/opt/godot/4.7.2/godot` on PATH (environment setup script, repo hook as fallback) |
@@ -40,7 +40,7 @@ The repo is the handover: state lives in `docs/TASKS.md`, `docs/AGENT_MAP.md`, t
 3. In `docs/TASKS.md`, write the branch name into the Status cell of each `in-progress` row, for example `in-progress (feat/dlg1-l, commit 3 open)`.
 4. Set `docs/AGENT_MAP.md` "Active now" to `No agents running (handover to cloud <date>)` and list the open branches there.
 5. Commit and push these docs to `main` (docs only, gate green), then close the local sessions.
-6. In the project chat, ask for the next task; each open branch becomes one thread.
+6. In the project chat, ask for the next task; each open branch goes to its area thread.
 
 ### Cloud to desktop
 
