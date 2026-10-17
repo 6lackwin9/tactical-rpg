@@ -39,8 +39,8 @@ static func delete(slot: int) -> bool:
 		return false
 	return DirAccess.remove_absolute(path_for(slot)) == OK
 
-# Problem strings; empty = written.
-static func write(state: GameState, slot: int = 1) -> Array[String]:
+# Problem strings; empty = written. `saved_at` > 0 keeps a given save time (import); else now.
+static func write(state: GameState, slot: int = 1, saved_at: int = 0) -> Array[String]:
 	var errors: Array[String] = []
 	if slot < AUTOSAVE_SLOT or slot > LAST_SLOT:
 		errors.append("Save slot must be 0-5.")
@@ -52,7 +52,7 @@ static func write(state: GameState, slot: int = 1) -> Array[String]:
 	if not errors.is_empty():
 		return errors
 	var envelope: Dictionary = {
-		"format": FORMAT, "version": VERSION, "saved_at": int(Time.get_unix_time_from_system()),
+		"format": FORMAT, "version": VERSION, "saved_at": saved_at if saved_at > 0 else int(Time.get_unix_time_from_system()),
 		"game_state": state.to_dict(),
 	}
 	if DirAccess.make_dir_recursive_absolute(_dir) != OK and not DirAccess.dir_exists_absolute(_dir):
@@ -74,14 +74,17 @@ static func write(state: GameState, slot: int = 1) -> Array[String]:
 
 # {"ok": bool, "errors": Array[String], "warnings": Array[String], "state": GameState or null}
 static func read(slot: int = 1) -> Dictionary:
-	var fail: Dictionary = {"ok": false, "errors": [] as Array[String], "warnings": [] as Array[String], "state": null}
-	var errors: Array[String] = []
 	if not exists(slot):
-		errors.append("No save in slot %d." % slot)
-		fail["errors"] = errors
-		return fail
+		var errors: Array[String] = ["No save in slot %d." % slot]
+		return {"ok": false, "errors": errors, "warnings": [] as Array[String], "state": null}
+	return decode(FileAccess.get_file_as_string(path_for(slot)))
+
+# A save file's text -> the read() result (+ "saved_at"): parse, format check, migrate, validate.
+static func decode(text: String) -> Dictionary:
+	var fail: Dictionary = {"ok": false, "errors": [] as Array[String], "warnings": [] as Array[String], "state": null, "saved_at": 0}
+	var errors: Array[String] = []
 	var json := JSON.new()
-	if json.parse(FileAccess.get_file_as_string(path_for(slot))) != OK or not (json.data is Dictionary):
+	if json.parse(text) != OK or not (json.data is Dictionary):
 		errors.append("Save file is corrupt or truncated.")
 		fail["errors"] = errors
 		return fail
@@ -105,7 +108,57 @@ static func read(slot: int = 1) -> Dictionary:
 		fail["errors"] = errors
 		fail["warnings"] = warnings
 		return fail
-	return {"ok": true, "errors": errors, "warnings": warnings, "state": state}
+	return {"ok": true, "errors": errors, "warnings": warnings, "state": state, "saved_at": DictUtil.to_int(envelope.get("saved_at", 0))}
+
+# ------------------------------------------------------------------------------
+# Export / import (SAVE-IO): a save as a file anywhere, so players can keep more than the slots hold.
+# ------------------------------------------------------------------------------
+
+# Copies the readable save in `slot` to `path` (tmp file then rename). Problem strings; empty = written.
+static func export_to(slot: int, path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var res: Dictionary = read(slot)
+	if not DictUtil.to_bool(res["ok"]):
+		errors.assign(DictUtil.array_of(res["errors"]))
+		return errors
+	if path.strip_edges().is_empty():
+		errors.append("Pick a file to export to.")
+		return errors
+	var tmp_path: String = path + ".tmp"
+	var file: FileAccess = FileAccess.open(tmp_path, FileAccess.WRITE)
+	if file == null:
+		errors.append("Can't open '%s' for writing." % path)
+		return errors
+	file.store_string(FileAccess.get_file_as_string(path_for(slot)))
+	file.close()
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	if DirAccess.rename_absolute(tmp_path, path) != OK:
+		DirAccess.remove_absolute(tmp_path)
+		errors.append("Can't move the export into place at '%s'." % path)
+	return errors
+
+# Reads the save file at `path` (any world; migrated and validated like read) into manual `slot`, keeping its
+# original save time. {ok, errors, warnings}; a refused file leaves the slot untouched.
+static func import_from(path: String, slot: int) -> Dictionary:
+	var errors: Array[String] = []
+	var out: Dictionary = {"ok": false, "errors": errors, "warnings": [] as Array[String]}
+	if not MANUAL_SLOTS.has(slot):
+		errors.append("Import into a manual slot (1-%d)." % LAST_SLOT)
+		return out
+	if not FileAccess.file_exists(path):
+		errors.append("No file at '%s'." % path)
+		return out
+	var res: Dictionary = decode(FileAccess.get_file_as_string(path))
+	out["warnings"] = res["warnings"]
+	if not DictUtil.to_bool(res["ok"]):
+		errors.assign(DictUtil.array_of(res["errors"]))
+		out["errors"] = errors
+		return out
+	errors = write(res["state"] as GameState, slot, DictUtil.to_int(res["saved_at"]))
+	out["errors"] = errors
+	out["ok"] = errors.is_empty()
+	return out
 
 # Writes the autosave slot (after a new game, a won or fled battle, an exploration `autosave` event).
 static func autosave(state: GameState) -> Array[String]:
