@@ -457,6 +457,8 @@ New `weaken` status (outgoing skill power -15 to -25%, cap 25%, refresh to the l
 
 The status registry gives every status a magnitude range and unit, and adds six rows with placeholder numbers: slow, expose, fortify, regen, poison and burn. They have no effect in combat yet (S12S-L commit 2). `status_magnitude` is validated per status on attack, support and defend skills, the `{magnitude}` text token shows its unit, and each status records which unit applied it (undo restores it). Tested in `status_expansion_test_suite.gd`.
 
+First carriers (S12S-A, placeholder numbers): five new families unlock at level 6, after every level-5 family, so no default loadout changes: Crippling Shot (ranger, slow), Rend Armor (warrior, expose), Envenom (rogue, poison), and for the priest Aegis (fortify) and Rejuvenate (regen). Seed `data/seeds/s12s.gd`.
+
 ### Area statuses and taunt from defend skills (M2C2B-L)
 
 Area attacks now roll their status once per unit hit (allies included); defend skills can grant riposte (immediate) or a support buff like taunt (queued). Tested in `skill_engine_test_suite.gd`.

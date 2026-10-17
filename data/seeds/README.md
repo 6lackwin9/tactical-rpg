@@ -31,3 +31,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
 | `dlg1a.gd` | DLG1-A (service lines, Ashlands dialogues, keep shop, gold) |
 | `ui1_start_party.gd` | UI1-A (Ashlands start party: warrior, ranger, rogue, mage; tidewrack inherits it) |
+| `s12s.gd` | S12S-A (crippling_shot, rend_armor, envenom, aegis, rejuvenate on class paths at level 6) |
