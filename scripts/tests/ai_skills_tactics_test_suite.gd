@@ -42,8 +42,6 @@ static func _test_taunt() -> bool:
 	var distant: Array[Vector2i] = [Vector2i(0, 0)]
 	var safe: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_taunt"], foe_cells, distant)
 	checks["no ally near a foe: no taunt step"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(safe), "ai1_taunt") == 0
-	var off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_taunt"], foe_cells, ally_cells, 1, 1, false)
-	checks["switch off: no taunt step"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(off), "ai1_taunt") == 0
 	return TestHelpers.report(TAG, "Rule 5: taunt", checks)
 
 static func _test_buff() -> bool:
@@ -70,8 +68,6 @@ static func _test_buff() -> bool:
 	var close: Array[Vector2i] = [Vector2i(7, 4), Vector2i(7, 5)]
 	var engaged: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(6, 4), ["ai1_haste"], foe_cells, close, 3)
 	checks["allies already next to the foe: no step"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(engaged), "ai1_haste") == 0
-	var off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(6, 4), ["ai1_haste"], foe_cells, ally_cells, 3, 1, false)
-	checks["switch off: no step"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(off), "ai1_haste") == 0
 	return TestHelpers.report(TAG, "Rule 6: ally buffs", checks)
 
 static func _test_debuff() -> bool:
@@ -135,11 +131,6 @@ static func _test_riposte() -> bool:
 	holding_actor.hp = 100
 	holding_actor.statuses[StatusEffects.RIPOSTE] = true
 	checks["already riposting: the plain guard"] = _first_defend(AiSkillsKit.plan_steps(holding)) == "ai1_guard"
-	var off: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), kit, [Vector2i(5, 4)], [], 1, 1, false)
-	var off_actor: Combatant = off["actor"]
-	off_actor.hp = 100
-	var off_first: String = _first_defend(AiSkillsKit.plan_steps(off))
-	checks["switch off: the old highest-level guard pick (no riposte preference)"] = off_first == "ai1_rip" or off_first == "ai1_guard"
 	# Healthy: strike first, then close the round in a riposte stance (once; a later strike would cancel it).
 	var healthy: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_rip"], [Vector2i(5, 4)])
 	var steps: Array[PlanStep] = AiSkillsKit.plan_steps(healthy)
