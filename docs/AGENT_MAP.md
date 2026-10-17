@@ -12,19 +12,17 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
-<<<<<<< HEAD
 ### BATTLE1-L battle link (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | planner (cloud thread, no subagent) | BATTLE1-L: map and dialogue fights open the combat arena (BattleScreen), outcomes settle through after_fight, results headline, battle_link suite | n/a / 60 | PR open |
-=======
+
 ### BAL2-R clean balance rerun (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | cloud thread (no subagent) | party, sweep, role, duel, tier at L3/L5 on main d6f716c; BALANCE_REPORT rewritten, old rerun archived as superseded | n/a / 30 | PR squash-merged; 0 PLAN FAIL, 0 METRIC FAIL |
->>>>>>> origin/main
 
 ### UI1-L menus and save slots (2026-10-17, cloud)
 
