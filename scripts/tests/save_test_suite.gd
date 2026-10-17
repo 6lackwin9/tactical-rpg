@@ -62,7 +62,7 @@ static func _rich_state() -> GameState:
 	if not pids.is_empty():
 		m.passives = [pids[0]] as Array[String]
 	g.party.add_to_stash(str(ContentCatalog.entries("items")[0]["id"]), 2)
-	g.location_id = "somewhere"
+	g.location_id = "qa:somewhere"   # qualified (save v3)
 	g.set_flag("intro.done", true)
 	g.set_flag("count", 7)
 	g.set_flag("name", "x")
@@ -200,7 +200,7 @@ static func _test_bad_files() -> bool:
 static func _test_migrations() -> bool:
 	SaveMigrations.reset()
 	var base: Dictionary = {"format": SaveGame.FORMAT, "version": 1, "saved_at": 0, "game_state": {"world_id": "w", "location_id": "old"}}
-	var no_step: Dictionary = SaveMigrations.migrate(base, 3)   # the built-in table stops at 2
+	var no_step: Dictionary = SaveMigrations.migrate(base, SaveGame.VERSION + 1)   # the built-in table stops at VERSION
 	SaveMigrations.register(1, func(state: Dictionary) -> Dictionary:
 		var out: Dictionary = state.duplicate(true)
 		out["location_id"] = "migrated_" + str(state.get("location_id", ""))

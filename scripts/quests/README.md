@@ -10,3 +10,5 @@ Purpose: Quest state machine, flags, rewards granting passives/skills/items.
 - `reward_grant.gd` (`RewardGrant`): `apply(gs, rewards, recipient_id, loot)`: xp to every active member, items to the stash, passives and skills (and picked loot) to one recipient; validates before changing anything; "already owned" is a note.
 
 Rules: gameplay logic as RefCounted rules engines, data validated through a catalog. Tests: `scripts/tests/quest_test_suite.gd` (schema), `scripts/tests/quest_runtime_test_suite.gd` (runtime and save).
+
+`RewardGrant.claim_loot(gs, qid)` claims a loot-table entry outside a quest turn-in (exploration chests): refuses unqualified ids and second claims, keeps `loot_claimed` sorted.

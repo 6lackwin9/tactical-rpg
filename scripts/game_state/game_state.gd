@@ -6,9 +6,14 @@ extends RefCounted
 # world, location, party, flags (bool / int / String, key [a-z0-9_.]), the structured quests blob
 # (S8: qualified quest id -> {state, objective}, checked by QuestRules.validate_blob) and loot_claimed
 # (qualified world loot ids, unique, saved sorted). Whole floats come back as ints.
+# S9 (EXP1-L, save v3): location_id is a QUALIFIED location id (world:id) or ""; position is the token tile on the
+# location's map ([-1, -1] = no map); explore holds the step counter; rng_seed + rolls drive GameRolls.
 # ==============================================================================
 
-const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed"]
+const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls"]
+const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe"]
+const NO_POSITION: Vector2i = Vector2i(-1, -1)
+const SEED_MAX: int = 2147483647
 
 var world_id: String = ""
 var location_id: String = ""
@@ -16,7 +21,14 @@ var party: PartyState = PartyState.new()
 var flags: Dictionary = {}
 var quests: Dictionary = {}
 var loot_claimed: Array[String] = []
+var position: Vector2i = NO_POSITION
+var explore: Dictionary = default_explore()
+var rng_seed: int = 0
+var rolls: Dictionary = {}   # stream id -> rolls drawn (int >= 0)
 var load_problems: Array[String] = []   # raw type problems found by from_dict (not saved; validate() reports them)
+
+static func default_explore() -> Dictionary:
+	return {"steps": 0, "next_at": 16, "loc_steps": 0, "last_safe": ""}
 
 static func create(p_world_id: String, p_party: PartyState) -> GameState:
 	var g := GameState.new()
@@ -66,6 +78,7 @@ func to_dict() -> Dictionary:
 	return {
 		"world_id": world_id, "location_id": location_id, "party": party.to_dict(),
 		"flags": flags.duplicate(true), "quests": quests.duplicate(true), "loot_claimed": _sorted(loot_claimed),
+		"position": [position.x, position.y], "explore": explore.duplicate(true), "rng_seed": rng_seed, "rolls": rolls.duplicate(true),
 	}
 
 static func _sorted(list: Array[String]) -> Array[String]:
@@ -95,6 +108,27 @@ static func from_dict(d: Dictionary) -> GameState:
 			if not (x is String):
 				g.load_problems.append("loot_claimed: '%s' is not a String." % str(x))
 	g.loot_claimed = JsonUtil.strings(raw_loot)
+	var raw_pos: Variant = JsonUtil.normalize(d.get("position", [NO_POSITION.x, NO_POSITION.y]))
+	var pos: Array = DictUtil.array_of(raw_pos)
+	if pos.size() != 2 or not (pos[0] is int) or not (pos[1] is int):
+		g.load_problems.append("position must be [x, y].")
+	else:
+		g.position = Vector2i(DictUtil.to_int(pos[0]), DictUtil.to_int(pos[1]))
+	var raw_explore: Variant = JsonUtil.normalize(d.get("explore", default_explore()))
+	if not (raw_explore is Dictionary):
+		g.load_problems.append("explore must be {steps, next_at, loc_steps, last_safe}.")
+	else:
+		g.explore = raw_explore
+	var raw_seed: Variant = JsonUtil.normalize(d.get("rng_seed", 0))
+	if not (raw_seed is int):
+		g.load_problems.append("rng_seed must be a whole number.")
+	else:
+		g.rng_seed = DictUtil.to_int(raw_seed)
+	var raw_rolls: Variant = JsonUtil.normalize(d.get("rolls", {}))
+	if not (raw_rolls is Dictionary):
+		g.load_problems.append("rolls must be an object {stream: count}.")
+	else:
+		g.rolls = raw_rolls
 	return g
 
 func equals(other: GameState) -> bool:
@@ -118,4 +152,27 @@ func validate() -> Array[String]:
 		elif seen.has(id):
 			errors.append("loot_claimed lists '%s' twice." % id)
 		seen[id] = true
+	if not location_id.is_empty() and not QuestRules.blob_key_ok(location_id):
+		errors.append("location_id '%s' must be a qualified id world:id (or empty)." % location_id)
+	if position.x < -1 or position.y < -1:
+		errors.append("position must be [x, y].")
+	errors.append_array(explore_errors(explore))
+	if rng_seed < 0 or rng_seed > SEED_MAX:
+		errors.append("rng_seed must be 0..%d." % SEED_MAX)
+	for key: Variant in rolls:
+		if not (key is String) or not JsonUtil.id_ok(str(key)) or not (rolls[key] is int) or DictUtil.to_int(rolls[key]) < 0:
+			errors.append("rolls: '%s' must be a stream id with a count >= 0." % str(key))
+	return errors
+
+static func explore_errors(e: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var ok: bool = e.size() == EXPLORE_KEYS.size()
+	for key: String in EXPLORE_KEYS:
+		ok = ok and e.has(key)
+	if ok:
+		ok = e["steps"] is int and DictUtil.to_int(e["steps"]) >= 0 and e["loc_steps"] is int and DictUtil.to_int(e["loc_steps"]) >= 0
+		ok = ok and e["next_at"] is int and DictUtil.to_int(e["next_at"]) >= 1 and DictUtil.to_int(e["next_at"]) <= 99
+		ok = ok and e["last_safe"] is String and (str(e["last_safe"]).is_empty() or QuestRules.blob_key_ok(str(e["last_safe"])))
+	if not ok:
+		errors.append("explore must be {steps, next_at, loc_steps, last_safe}.")
 	return errors

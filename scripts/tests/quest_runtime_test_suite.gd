@@ -483,7 +483,7 @@ static func _test_save() -> bool:
 	checks["round trip equal"] = DictUtil.to_bool(back["ok"]) and state != null and state.equals(gs)
 	checks["statuses round trip"] = state != null and QuestRunner.status(state, "q_strict") == "active" and QuestRunner.status(state, "q_flags") == "ready" and QuestRunner.status(state, "q_flow") == "completed"
 	var env: Dictionary = DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(1))))
-	checks["version 2 on disk"] = DictUtil.to_int(env["version"]) == SaveGame.VERSION and SaveGame.VERSION == 2
+	checks["current version on disk (>= 2)"] = DictUtil.to_int(env["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 2
 	checks["loot_claimed saved sorted"] = JsonUtil.strings(DictUtil.dict_of(env["game_state"])["loot_claimed"]) == [_q("lt_item"), _q("lt_skill")]
 	# Bad blobs fail validate and write.
 	var done: GameState = GameState.from_dict(gs.to_dict())

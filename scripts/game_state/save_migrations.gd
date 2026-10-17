@@ -4,8 +4,9 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Save migrations (S13): from_version -> from_version + 1 steps applied in order.
 # Built-in steps: 1 -> 2 (M4-L) keeps each quests entry that passes QuestRules.validate_blob on its own (after
-# JsonUtil.normalize), drops the others, and adds loot_claimed: []. Tests may register() extra or replacement
-# steps; reset() restores the built-in table.
+# JsonUtil.normalize), drops the others, and adds loot_claimed: []. 2 -> 3 (EXP1-L) adds position, explore, rolls
+# defaults and a deterministic rng_seed (hash of the v2 state), and qualifies location_id. Tests may register() extra
+# or replacement steps; reset() restores the built-in table.
 # ==============================================================================
 
 static var _steps: Dictionary = {}   # from_version (int) -> Callable(game_state: Dictionary) -> Dictionary
@@ -15,6 +16,7 @@ static func _table() -> Dictionary:
 	if not _installed:
 		_installed = true
 		_steps[1] = _v1_to_v2
+		_steps[2] = _v2_to_v3
 	return _steps
 
 static func register(from_version: int, step: Callable) -> void:
@@ -37,10 +39,25 @@ static func _v1_to_v2(state: Dictionary) -> Dictionary:
 	out["loot_claimed"] = []
 	return out
 
+# v2 -> v3: exploration defaults; rng_seed from the v2 state (same file = same seed); location_id qualified with
+# world_id when it resolves (a qualified id is kept when it resolves), else "".
+static func _v2_to_v3(state: Dictionary) -> Dictionary:
+	var out: Dictionary = state.duplicate(true)
+	out["rng_seed"] = String(JSON.stringify(state, "", true)).hash() & 0x7FFFFFFF
+	out["position"] = [GameState.NO_POSITION.x, GameState.NO_POSITION.y]
+	out["explore"] = GameState.default_explore()
+	out["rolls"] = {}
+	var world_id: String = str(state.get("world_id", ""))
+	var loc: String = str(state.get("location_id", ""))
+	var hit: Dictionary = WorldCatalog.resolve(world_id, "locations", loc) if not world_id.is_empty() and not loc.is_empty() else {}
+	out["location_id"] = str(hit.get("_qid", ""))
+	return out
+
 # Brings a save envelope to `target_version`. Returns
 # {"ok": bool, "errors": Array[String], "warnings": Array[String], "data": Dictionary (envelope at the target)}.
 # A newer version is refused; unknown keys inside game_state are dropped and listed as warnings, and so is every
-# quests entry a step dropped ("dropped invalid quest entry '<key>'").
+# quests entry a step dropped ("dropped invalid quest entry '<key>'") and a location_id a step cleared ("cleared
+# unresolved location_id '<id>'").
 static func migrate(envelope: Dictionary, target_version: int = SaveGame.VERSION) -> Dictionary:
 	var errors: Array[String] = []
 	var warnings: Array[String] = []
@@ -63,11 +80,14 @@ static func migrate(envelope: Dictionary, target_version: int = SaveGame.VERSION
 		if not (raw_quests is Dictionary):
 			warnings.append("dropped invalid quests blob (not an object)")
 		var before: Dictionary = DictUtil.dict_of(raw_quests)
+		var loc_before: String = str(state.get("location_id", ""))
 		state = DictUtil.dict_of(step.call(state))
 		var after: Dictionary = DictUtil.dict_of(state.get("quests", {}))
 		for key: Variant in before:
 			if not after.has(key):
 				warnings.append("dropped invalid quest entry '%s'" % str(key))
+		if not loc_before.is_empty() and str(state.get("location_id", "")).is_empty():
+			warnings.append("cleared unresolved location_id '%s'" % loc_before)
 		version += 1
 	for key: Variant in state.keys():
 		if not GameState.KEYS.has(str(key)):

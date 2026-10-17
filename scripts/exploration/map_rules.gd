@@ -293,7 +293,7 @@ static func _anchor_errors(t: Dictionary, grid_ok: bool, errors: Array[String]) 
 		seen[aid] = true
 		if not (a["x"] is int) or not (a["y"] is int):
 			errors.append("Anchor '%s': x and y must be whole numbers." % aid)
-		elif grid_ok and not is_open(t, int(a["x"]), int(a["y"])):
+		elif grid_ok and not is_open(t, DictUtil.to_int(a["x"]), DictUtil.to_int(a["y"])):
 			errors.append("Anchor '%s' is not on an open tile." % aid)
 	if not seen.has(SPAWN):
 		errors.append("Every map needs a '%s' anchor." % SPAWN)
@@ -320,7 +320,7 @@ static func _path_errors(t: Dictionary, grid_ok: bool, errors: Array[String]) ->
 			if pair.size() != 2 or not (pair[0] is int) or not (pair[1] is int):
 				errors.append("Path '%s' step %d must be [x, y]." % [pid, i])
 				break
-			var p: Vector2i = Vector2i(int(pair[0]), int(pair[1]))
+			var p: Vector2i = Vector2i(DictUtil.to_int(pair[0]), DictUtil.to_int(pair[1]))
 			if grid_ok and not is_open(t, p.x, p.y):
 				errors.append("Path '%s' step %d is not on an open tile." % [pid, i])
 			if i > 0 and absi(p.x - prev.x) + absi(p.y - prev.y) != 1:
@@ -368,6 +368,14 @@ static func location_errors(world_id: String, e: Dictionary) -> Array[String]:
 	var map_id: String = str(e.get("map", ""))
 	var bindings_raw: Variant = e.get("zone_bindings", {})
 	var markers_raw: Variant = e.get("markers", [])
+	# Types first, with or without a map (a wrong-typed value is never read as empty).
+	var types_ok: bool = true
+	if not (bindings_raw is Dictionary):
+		errors.append("Zone bindings must be an object {zone id: binding}.")
+		types_ok = false
+	if not (markers_raw is Array):
+		errors.append("Markers must be a list.")
+		types_ok = false
 	if map_id.is_empty():
 		if not DictUtil.dict_of(bindings_raw).is_empty() or not DictUtil.array_of(markers_raw).is_empty():
 			errors.append("Zone bindings and markers need a map.")
@@ -376,16 +384,13 @@ static func location_errors(world_id: String, e: Dictionary) -> Array[String]:
 	if t.is_empty():
 		errors.append("Unknown map template '%s'." % map_id)
 		return errors
-	if not (bindings_raw is Dictionary):
-		errors.append("Zone bindings must be an object {zone id: binding}.")
-	else:
-		var bindings: Dictionary = bindings_raw
-		for zone: Variant in bindings:
-			errors.append_array(binding_errors(world_id, t, map_id, str(zone), bindings[zone]))
-	if not (markers_raw is Array):
-		errors.append("Markers must be a list.")
-	else:
-		errors.append_array(markers_errors(world_id, e, t, markers_raw))
+	if not types_ok:
+		return errors
+	var bindings: Dictionary = bindings_raw
+	for zone: Variant in bindings:
+		errors.append_array(binding_errors(world_id, t, map_id, str(zone), bindings[zone]))
+	var markers: Array = markers_raw
+	errors.append_array(markers_errors(world_id, e, t, markers))
 	return errors
 
 static func binding_errors(world_id: String, t: Dictionary, map_id: String, zone: String, raw: Variant) -> Array[String]:
@@ -404,14 +409,14 @@ static func binding_errors(world_id: String, t: Dictionary, map_id: String, zone
 	var b: Dictionary = binding_full(raw)
 	for list_key: String in ["encounters", "elites"]:
 		errors.append_array(_pairs_errors(world_id, zone, list_key, b[list_key]))
-	if not (b["elite_pct"] is int) or int(b["elite_pct"]) < 0 or int(b["elite_pct"]) > 100:
+	if not (b["elite_pct"] is int) or DictUtil.to_int(b["elite_pct"]) < 0 or DictUtil.to_int(b["elite_pct"]) > 100:
 		errors.append("Zone binding '%s': elite_pct must be 0..100." % zone)
 	var steps_ok: bool = true
 	for key: String in ["steps_min", "steps_max"]:
-		if not (b[key] is int) or int(b[key]) < STEPS_LO or int(b[key]) > STEPS_HI:
+		if not (b[key] is int) or DictUtil.to_int(b[key]) < STEPS_LO or DictUtil.to_int(b[key]) > STEPS_HI:
 			errors.append("Zone binding '%s': %s must be %d..%d." % [zone, key, STEPS_LO, STEPS_HI])
 			steps_ok = false
-	if steps_ok and int(b["steps_min"]) > int(b["steps_max"]):
+	if steps_ok and DictUtil.to_int(b["steps_min"]) > DictUtil.to_int(b["steps_max"]):
 		errors.append("Zone binding '%s': steps_min is above steps_max." % zone)
 	if DictUtil.array_of(b["encounters"]).is_empty() and DictUtil.array_of(b["elites"]).is_empty():
 		errors.append("Zone binding '%s' binds no encounter." % zone)
@@ -436,7 +441,7 @@ static func _pairs_errors(world_id: String, zone: String, key: String, raw: Vari
 			errors.append("Zone binding '%s': %s lists '%s' twice." % [zone, key, ref])
 		seen[ref] = true
 		errors.append_array(WorldCatalog.ref_errors(world_id, "Zone binding '%s' %s" % [zone, key], "encounters", ref))
-		if not (pair[1] is int) or int(pair[1]) < WEIGHT_MIN or int(pair[1]) > WEIGHT_MAX:
+		if not (pair[1] is int) or DictUtil.to_int(pair[1]) < WEIGHT_MIN or DictUtil.to_int(pair[1]) > WEIGHT_MAX:
 			errors.append("Zone binding '%s': %s weight of '%s' must be %d..%d." % [zone, key, ref, WEIGHT_MIN, WEIGHT_MAX])
 	return errors
 
@@ -513,6 +518,9 @@ static func _marker_kind_errors(world_id: String, e: Dictionary, t: Dictionary, 
 			if not target_map.is_empty():
 				if not has_anchor(target_map, to_anchor):
 					errors.append("Marker '%s': to_anchor '%s' is not an anchor of map '%s'." % [mid, to_anchor, str(target_map.get("id", ""))])
+			elif to == WORLD_MAP:
+				if to_anchor != SPAWN:
+					errors.append("Marker '%s': a world_map exit always arrives at '%s' (to_anchor must be '%s')." % [mid, SPAWN, SPAWN])
 			elif to_anchor != SPAWN:
 				errors.append("Marker '%s': '%s' has no map, so to_anchor must be '%s'." % [mid, to, SPAWN])
 			if not (m["locked_text"] is String):
@@ -545,7 +553,7 @@ static func _ref_key_errors(world_id: String, mid: String, key: String, ref_kind
 
 static func _radius_once_errors(mid: String, m: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
-	if not (m["radius"] is int) or int(m["radius"]) < 0 or int(m["radius"]) > MAX_RADIUS:
+	if not (m["radius"] is int) or DictUtil.to_int(m["radius"]) < 0 or DictUtil.to_int(m["radius"]) > MAX_RADIUS:
 		errors.append("Marker '%s': radius must be 0..%d." % [mid, MAX_RADIUS])
 	if not (m["once"] is bool):
 		errors.append("Marker '%s': once must be true or false." % mid)
@@ -562,7 +570,7 @@ static func _chest_errors(world_id: String, mid: String, m: Dictionary) -> Array
 	for key: Variant in items:
 		if ContentCatalog.get_entry("items", str(key)).is_empty():
 			errors.append("Marker '%s': unknown base item '%s'." % [mid, str(key)])
-		if not (items[key] is int) or int(items[key]) < 1 or int(items[key]) > CHEST_COUNT_MAX:
+		if not (items[key] is int) or DictUtil.to_int(items[key]) < 1 or DictUtil.to_int(items[key]) > CHEST_COUNT_MAX:
 			errors.append("Marker '%s': count of '%s' must be 1..%d." % [mid, str(key), CHEST_COUNT_MAX])
 	var loot: String = str(m["loot"])
 	if not (m["loot"] is String):
@@ -594,6 +602,8 @@ static func location_warnings(e: Dictionary) -> Array[String]:
 		var m: Dictionary = DictUtil.dict_of(x)
 		if str(m.get("kind", "")) == "exit":
 			marked[str(m.get("to", ""))] = true
+			if str(m.get("to", "")) == WORLD_MAP and not DictUtil.array_of(m.get("sets_flags", [])).is_empty():
+				out.append("Exit '%s' to the world map: its sets_flags are ignored until the world map (TRAV1) exists." % str(m.get("id", "")))
 	for to: String in exit_targets(e):
 		if not marked.has(to):
 			out.append("Exit to '%s' has no marker on the map." % to)

@@ -470,7 +470,10 @@ static func remove(world_id: String, kind: String, local: String) -> String:
 			if not users.is_empty():
 				var labels: Array[String] = []
 				for u: Dictionary in users:
-					labels.append("%s %s:%s" % [str(u["kind"]), str(u["world"]), str(u["id"])])
+					if str(u["kind"]) == "world":
+						labels.append("world %s %s" % [str(u["world"]), str(u["key"])])
+					else:
+						labels.append("%s %s:%s" % [str(u["kind"]), str(u["world"]), str(u["id"])])
 				return "'%s' is still used by: %s." % [local, ", ".join(labels)]
 			list.remove_at(i)
 			_touch(world_id, kind)
@@ -524,6 +527,8 @@ static func references_to(world_id: String, kind: String, local: String) -> Arra
 	var target: String = qid(world_id, local)
 	var out: Array[Dictionary] = []
 	for w: String in dependents(world_id):
+		if kind == "locations" and _points_at(w, kind, str(manifest(w).get("start_location", "")), target):
+			out.append({"world": w, "kind": "world", "id": w, "key": "start_location", "index": -1})   # the manifest (EXP1-L)
 		for k2: String in WorldSchema.KINDS:
 			for e: Dictionary in own_entries(w, k2):
 				if k2 == kind and w == world_id and str(e.get("id", "")) == local:
@@ -647,6 +652,13 @@ static func _points_at(world_id: String, kind: String, ref: String, target_qid: 
 
 static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid: String) -> void:
 	var w: String = str(match_info["world"])
+	if str(match_info["kind"]) == "world":   # a manifest ref (start_location)
+		# Written in place: update_manifest re-validates extends / connects and could refuse the rewrite for an
+		# unrelated manifest problem, leaving a stale ref behind a successful rename; this field is a plain ref.
+		if _worlds().has(w):
+			_manifest_ref(w)[str(match_info["key"])] = ref_value(w, new_target)
+			_touch(w, "world")
+		return
 	var list: Array = _own_list(w, str(match_info["kind"]))
 	for i: int in range(list.size()):
 		var e: Dictionary = list[i]

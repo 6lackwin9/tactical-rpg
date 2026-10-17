@@ -9,7 +9,7 @@ extends RefCounted
 # leaves a half file. read() never returns a partially loaded state.
 # ==============================================================================
 
-const VERSION: int = 2   # 2: structured quests blob + loot_claimed (SaveMigrations built-in step 1 -> 2)
+const VERSION: int = 3   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 

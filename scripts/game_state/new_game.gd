@@ -7,8 +7,9 @@ extends RefCounted
 # (= automatic), default gear. Unknown units or worlds are refused.
 # ==============================================================================
 
-# {"state": GameState or null, "errors": Array[String]}
-static func create(world_id: String, base_unit_ids: Array[String]) -> Dictionary:
+# {"state": GameState or null, "errors": Array[String]}. `p_seed` >= 0 is the save's rng_seed as given (clamped to the
+# GameState range); -1 = from the system clock (EXP1-L: one deterministic random stream per save).
+static func create(world_id: String, base_unit_ids: Array[String], p_seed: int = -1) -> Dictionary:
 	var errors: Array[String] = []
 	if not WorldCatalog.has_world(world_id):
 		errors.append("Unknown world '%s'." % world_id)
@@ -29,6 +30,7 @@ static func create(world_id: String, base_unit_ids: Array[String]) -> Dictionary
 	if not errors.is_empty():
 		return {"state": null, "errors": errors}
 	var state: GameState = GameState.create(world_id, party)
+	state.rng_seed = mini(p_seed, GameState.SEED_MAX) if p_seed >= 0 else (int(Time.get_unix_time_from_system() * 1000.0) ^ Time.get_ticks_usec()) & GameState.SEED_MAX
 	errors = state.validate()
 	if not errors.is_empty():
 		return {"state": null, "errors": errors}

@@ -140,13 +140,17 @@ static func validate_entry(entry: Dictionary, current_id: String = "") -> Array[
 	return errors
 
 # Validates and stores (replacing `replace_id`, or the entry with the same id, in place; otherwise appended).
-# Returns the problems; nothing changes if any. Locations naming a renamed or removed id then fail validation.
+# Returns the problems; nothing changes if any. Renaming a template that world locations use is refused (used_by).
 static func upsert(entry: Dictionary, replace_id: String = "") -> Array[String]:
 	_ensure_loaded()
 	var clean: Dictionary = normalize(entry)
 	var new_id: String = str(clean["id"])
 	var old_id: String = replace_id if not replace_id.is_empty() else new_id
 	var errors: Array[String] = validate_entry(clean, old_id)
+	if old_id != new_id and has(old_id):
+		var users: Array[String] = used_by(old_id)
+		if not users.is_empty():
+			errors.append("Map '%s' is used by: %s; point those locations at another map before renaming it." % [old_id, ", ".join(users)])
 	if not errors.is_empty():
 		return errors
 	var at: int = _index_of(old_id)
@@ -157,11 +161,24 @@ static func upsert(entry: Dictionary, replace_id: String = "") -> Array[String]:
 	_state()["dirty"] = true
 	return errors
 
-# Removes a template. Locations naming it then fail validation (WorldCatalog.validate_all reports them).
+# Qualified ids of the world locations (every loaded world, own entries) whose `map` is `id`, sorted.
+static func used_by(id: String) -> Array[String]:
+	var out: Array[String] = []
+	for w: String in WorldCatalog.world_ids():
+		for e: Dictionary in WorldCatalog.own_entries(w, "locations"):
+			if str(e.get("map", "")) == id:
+				out.append(str(e["_qid"]))
+	out.sort()
+	return out
+
+# Removes a template unless a world location still uses it. Returns "" or why not.
 static func remove(id: String) -> String:
 	var at: int = _index_of(id)
 	if at < 0:
 		return "No map template '%s'." % id
+	var users: Array[String] = used_by(id)
+	if not users.is_empty():
+		return "Map '%s' is still used by: %s." % [id, ", ".join(users)]
 	_list().remove_at(at)
 	_state()["dirty"] = true
 	return ""

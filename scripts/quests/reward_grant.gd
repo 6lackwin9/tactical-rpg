@@ -8,6 +8,16 @@ extends RefCounted
 # recipient and "already owned" rules apply to them too. Validates everything before changing anything.
 # ==============================================================================
 
+# Marks world loot `qid` as claimed (EXP1-L chests): appends it and keeps loot_claimed sorted. "" or why not.
+static func claim_loot(gs: GameState, qid: String) -> String:
+	if not QuestRules.blob_key_ok(qid):
+		return "Loot '%s' must be a qualified id world:id." % qid
+	if gs.loot_claimed.has(qid):
+		return "Loot '%s' is already claimed." % qid
+	gs.loot_claimed.append(qid)
+	gs.loot_claimed.sort()
+	return ""
+
 # `rewards`: {xp, items, passives, skills}; `loot`: resolved world loot entries (with `_qid`).
 # Returns {ok, errors, granted: {xp, items, passives, skills, loot, recipient}, notes}.
 static func apply(gs: GameState, rewards: Dictionary, recipient_id: String = "", loot: Array[Dictionary] = []) -> Dictionary:
