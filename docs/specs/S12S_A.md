@@ -1,6 +1,6 @@
 # S12S-A: first skills using the new statuses (five new families on class paths)
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers"; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers")
 Depends on: S12S-L commit 1 (registry rows, magnitude validation, `{magnitude}` token)
 Lane: asset
 Touches: `data/catalog/skills.json` (5 new families, ranked storage via `ContentCatalog.upsert_skill`), `data/catalog/classes.json` (5 path steps via `upsert`), seed `data/seeds/s12s.gd`, `data/seeds/README.md`

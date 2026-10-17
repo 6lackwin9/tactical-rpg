@@ -1,6 +1,6 @@
 # UI2-L: party screen, level-up draft with preview, battle results with a skippable level-up prompt
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS progression-save "UI menus baseline answers (user 2026-10-17)", "Level-up spend", "M3 progression and save"; docs/specs/UI_MENUS_RULES.md 2.4-2.6; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS progression-save "UI menus baseline answers (user 2026-10-17)", "Level-up spend", "M3 progression and save"; docs/specs/UI_MENUS_RULES.md 2.4-2.6)
 Depends on: UI1-L (router, `CurrentGame`, hub); EXP1-L for the live battle hookup (`BattleBridge.apply` result); works without it on the award dict of `LevelUp.award_encounter`
 Lane: logic only (no asset part)
 Touches: new `scripts/ui/menus/{party_model,stats_model,level_up_model,loadout_model,gear_model,battle_results_model}.gd` + views `*_view.gd`, new `scripts/ui/menus/party_gear_bridge.gd`, `scripts/ui/character_equipment_modal.gd` (decoupling only if needed, rule 6), new `scripts/tests/party_screen_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`

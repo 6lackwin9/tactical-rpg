@@ -1,6 +1,6 @@
 # S12T-A: terrain numbers (one catalog row per terrain type)
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers"; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS combat "S12 baseline answers")
 Depends on: S12T-L commit 1 (terrain kind, fields, validator)
 Lane: asset
 Touches: new `data/catalog/terrain.json` (through `ContentCatalog.upsert` / `upsert_many("terrain", ...)` inside `begin_system_edit` / `end_system_edit`, rows are system origin), seed `data/seeds/s12t.gd`, `data/seeds/README.md`
