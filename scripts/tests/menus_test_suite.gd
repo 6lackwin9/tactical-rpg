@@ -38,6 +38,7 @@ static func run(tree_parent: Node = null) -> bool:
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
 	var ok: bool = _report("Shipped worlds validate with start_party", {"valid": WorldCatalog.validate_all().is_empty()})
+	ok = _test_shipped_start() and ok
 	TestHelpers.remove_sandbox(SANDBOX)
 	DirAccess.make_dir_recursive_absolute(SANDBOX + "/worlds")
 	WorldCatalog.use_root(SANDBOX + "/worlds")
@@ -63,6 +64,20 @@ static func run(tree_parent: Node = null) -> bool:
 	SaveGame.reset_base_dir()
 	TestHelpers.cleanup_worlds(SANDBOX)
 	return ok
+
+# UI1-A: the shipped campaign world starts with its fixed party; a child inherits it; a world without one is refused.
+static func _test_shipped_start() -> bool:
+	var checks: Dictionary = {}
+	var res: Dictionary = NewGame.create_for_world("ashlands")
+	var gs: GameState = res["state"] as GameState
+	var levels_ok: bool = gs != null and gs.party.members.size() == 4
+	if gs != null:
+		for m: UnitState in gs.party.members:
+			levels_ok = levels_ok and XpCurve.level_for(m.total_xp) == DictUtil.to_int(ContentCatalog.get_entry("units", m.base_unit).get("level", 1), 1)
+	checks["ashlands: four members at authored levels"] = levels_ok and gs.validate().is_empty()
+	checks["tidewrack inherits"] = WorldCatalog.start_party("tidewrack") == WorldCatalog.start_party("ashlands") and not WorldCatalog.start_party("ashlands").is_empty()
+	checks["iron_reaches not playable"] = JsonUtil.strings(NewGame.create_for_world("iron_reaches")["errors"]).has("World 'iron_reaches' is not playable (no start party).")
+	return _report("UI1-A: shipped start party", checks)
 
 static func _build_worlds(units: Array[String]) -> bool:
 	var errors: Array[String] = []
