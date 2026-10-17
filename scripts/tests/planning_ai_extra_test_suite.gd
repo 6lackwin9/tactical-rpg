@@ -384,8 +384,11 @@ static func compute() -> Dictionary:
 	var sniper_ok: bool = not snipe_steps.is_empty() and snipe_steps[0].mode == PlanStep.Mode.MOVE and snipe_steps[0].direction == Vector2i(1, 0)
 	var support_profile: AiProfile = snipe_ctx.profile_of(sniper).duplicate_profile()
 	support_profile.role = AiProfile.Role.SUPPORT
+	# BAL3-AI lever B: Focus opens only while the pre-cast incoming damage is below the ratio, so the bruiser is made weak.
+	bruiser.power_override = 1
+	var calm: bool = float(TacticalAI.incoming_damage(CombatPlan.new(snipe_ctx), sniper, snipe_ctx.total_blocks, snipe_grid.get_position(sniper))) < TacticalAI.FOCUS_PRESSURE_RATIO * float(sniper.hp)
 	var support_steps: Array[PlanStep] = TacticalAI.build_steps(sniper, snipe_ctx, support_profile)
-	var support_ok: bool = not support_steps.is_empty() and support_steps[0].skill.kind == SkillDef.Kind.FOCUS
+	var support_ok: bool = calm and not support_steps.is_empty() and support_steps[0].skill.kind == SkillDef.Kind.FOCUS
 
 	var weakling := Combatant.new("Weakling", 100, 10, 1)
 	weakling.hp = 10

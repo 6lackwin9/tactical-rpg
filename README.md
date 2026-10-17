@@ -551,6 +551,16 @@ Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (
 
 Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `gorge_ruins`; Ashlands starts at Warden Keep; the new Cinder Gate location; generic Horde characters and mob encounters; markers for patrols, chests, lore, a beacon and the gate that opens once the courtyard is held. World-map exits: TRAV1-A.
 
+### AI pressure levers (BAL3-AI)
+
+- **Incoming damage**: `TacticalAI.incoming_damage` estimates the strike chains of foes that would pick a unit by a given block (taunter first, then the foe's own preference; area attacks, crits, guard and cover left out).
+- **Focus under pressure**: Focus goes before a cast only while the incoming damage before that cast resolves is below 50% of current HP (`FOCUS_PRESSURE_RATIO`).
+- **Faster tier**: a unit expected to take at least its HP this round takes the highest-damage option that resolves by block 2 (`FAST_BLOCK`). Applies to every unit; the pick is by damage, so under pressure it may override the combo order.
+- **Heal reservation**: a SUPPORT unit with no heal in its draft appends its lowest affordable heal tier, last in the round, on the friend projected lowest at or below `heal_below` (0.7) by round end; recomputed every round; it never adds a move.
+- **Taunt pull**: a unit whose top target is a taunter it can strike or reach within this round's move commits to it: the taunter is its only target (it walks to it when the strike does not fit), and a hurt skirmisher's disengage and the low-HP guard while the taunter is out of reach (both would cost the move) are skipped.
+- **Minion skill ceiling**: minion-tier units without an explicit `skill_cap` use AP ceiling `StatRules.MINION_SKILL_CAP` (2, tiers I-II).
+- Tested in `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd` and `planning_ai_extra_test_suite.gd`.
+
 ### Plan claims (PLAN1)
 
 Preset auto-plans are always confirmable: an ally's approach, go-to or landing tile (support approaches included) is fixed once planned and later drafts keep off it (`CombatPlan.pinned_cell`), speed ties keep planning order, and the party preset re-drafts any ally a later draft made invalid. Enemy packs share the same planner, so they no longer plan onto a packmate's tile. Tested in `plan_claims_test_suite.gd`.

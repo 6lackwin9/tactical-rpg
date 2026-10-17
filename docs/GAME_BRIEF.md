@@ -89,6 +89,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 ## AI skill use (AI1)
 
 - `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte (the only AI path; the `smart_skills = false` switch was removed by CLN-16). Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`.
+- BAL3-AI (`TacticalAI.incoming_damage`): Focus goes before a cast only while the pre-cast incoming damage is < 50% of HP; a unit expected to take >= its HP this round takes the best option resolving by block 2 (may override the combo order); a SUPPORT unit keeps one lowest-tier heal last in the round (no extra move) when a friend is projected <= heal_below by round end; a unit whose top target is a taunter it can strike or reach within its move commits to it (only target, walks to it; skips a hurt skirmisher's disengage and the low-HP guard while the taunter is out of reach).
 
 ## Skill unlock rule (SK2)
 
@@ -115,7 +116,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 - Attack range +1 at PERC >= `CharacterStats.RANGE_PERC_THRESHOLD` (18) only for ranged weapons (base range > 1); melee units stay at range 1.
 - Unit gear slot `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) = no item; a blank slot = class default. Units only (classes and world characters reject it).
-- Tiers: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
+- Tiers: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`). Minion units without `skill_cap` use AP ceiling `StatRules.MINION_SKILL_CAP` (2; `TIERS[tier].skill_cap`, `tier_skill_cap`; BAL3-AI).
 - Trained fists: empty main hand + fist proficiency >= `DamageCalculator.TRAINED_FIST_MIN_LEVEL` (2): weapon power `UNARMED_BASE_POWER` (15) + fist training, fist crit bonus; `GearBudget.UNARMED_VALUE` reads the same constant. Inputs only, the formula is unchanged.
 - Sim: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value]` (`tools/balance_sim.gd` + `tools/sim/`); cells `binary/hp-margin`; duel = diagnostic band 30-70 (party and role targets: `docs/decisions/balance.md`). Modes party / role / sweep (BAL2_SIM 4-8): role tests start enemies 4 tiles away (`distance=` overrides); off-target values marked X; `METRIC FAIL` lines (`log_damage`, `log_area`, `log_heal`, `log_riposte`, `other_*`) mean the collector found HP it cannot explain; party fight ~3 s, full role run ~28 min. Tests: `bal2_rules_test_suite.gd`.
 

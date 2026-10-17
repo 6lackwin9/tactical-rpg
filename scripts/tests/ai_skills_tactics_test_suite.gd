@@ -4,7 +4,8 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - AI Skills: taunt, ally buffs, debuff attacks, riposte and 50 seeded 3v3 rounds
 # (slice AI1; split from AiSkillsTestSuite by CLN-12). Fixtures and helpers: AiSkillsKit. Every
-# expectation is derived from the rules, not from shipped skill numbers.
+# expectation is derived from the rules, not from shipped skill numbers. BAL3-AI: heal reservation and
+# taunt pull (docs/specs/BAL3.md section 4).
 # ==============================================================================
 
 const TAG: String = "AI1"
@@ -19,6 +20,8 @@ static func run() -> bool:
 		ok = _test_buff() and ok
 		ok = _test_debuff() and ok
 		ok = _test_riposte() and ok
+		ok = _test_heal_reservation() and ok
+		ok = _test_taunt_pull() and ok
 		ok = _test_simulation() and ok
 	AiSkillsKit.teardown()
 	return ok
@@ -156,6 +159,163 @@ static func _test_riposte() -> bool:
 	all_out_profile.defend_below = 0.0
 	checks["defend_below 0 (never guards, the all-out preset): no riposte"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(all_out), "ai1_rip") == 0
 	return TestHelpers.report(TAG, "Rule 8: riposte", checks)
+
+# ------------------------------------------------------------------------------
+# BAL3-AI: heal reservation, taunt pull
+# ------------------------------------------------------------------------------
+
+# A SUPPORT healer in reach of a full-HP ally that stands next to a melee foe; `foe_power` sets the projection.
+static func _reserve_scene(foe_power: int) -> Dictionary:
+	var s: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SUPPORT, Vector2i(2, 4), ["ai1_heal"], [Vector2i(5, 4)], [Vector2i(4, 4)], 3)
+	AiSkillsKit.unit_of(s, "foes", 0).power_override = foe_power
+	return s
+
+# The ally's projected HP fraction at the round's end (HP minus the round's incoming damage).
+static func _projected(s: Dictionary) -> float:
+	var ctx: PlanContext = s["ctx"]
+	var ally: Combatant = AiSkillsKit.unit_of(s, "allies", 1)
+	var incoming: int = TacticalAI.incoming_damage(CombatPlan.new(ctx), ally, ctx.total_blocks, ctx.grid.get_position(ally))
+	return float(ally.hp - incoming) / float(maxi(1, ally.max_hp))
+
+static func _test_heal_reservation() -> bool:
+	var checks: Dictionary = {}
+	var calm: Dictionary = _reserve_scene(5)
+	var calm_profile: AiProfile = calm["profile"]
+	var calm_ally: Combatant = AiSkillsKit.unit_of(calm, "allies", 1)
+	checks["calm board: the ally is at full HP and projected above heal_below"] = calm_ally.hp == calm_ally.max_hp and _projected(calm) > calm_profile.heal_below
+	var calm_steps: Array[PlanStep] = AiSkillsKit.plan_steps(calm)
+	checks["calm: no heal step"] = AiSkillsKit.count_of(calm_steps, "ai1_heal") == 0
+	var power: int = 5
+	var hot: Dictionary = _reserve_scene(power)
+	var hot_profile: AiProfile = hot["profile"]
+	while _projected(hot) > hot_profile.heal_below and power < 1000:
+		power += 5
+		hot = _reserve_scene(power)
+		hot_profile = hot["profile"]
+	var hot_ally: Combatant = AiSkillsKit.unit_of(hot, "allies", 1)
+	checks["pressure board: full HP now, projected at or below heal_below by the round's end"] = hot_ally.hp == hot_ally.max_hp and _projected(hot) <= hot_profile.heal_below
+	var hot_steps: Array[PlanStep] = AiSkillsKit.plan_steps(hot)
+	var last: PlanStep = hot_steps[hot_steps.size() - 1] if not hot_steps.is_empty() else null
+	checks["pressure: one heal, kept last and aimed at the projected ally"] = AiSkillsKit.count_of(hot_steps, "ai1_heal") == 1 and last != null and last.skill.id == "ai1_heal" and last.target == hot_ally
+	checks["the reserved plan is valid and still fights"] = AiSkillsKit.valid(hot, hot_steps) and AiSkillsKit.first_attack(hot, hot_steps) != null
+	# The projected ally stands beyond the heal's reach from where the draft leaves the healer: no walk to the front.
+	var hot_actor: Combatant = hot["actor"]
+	var heal_reach: int = SkillCatalog.find("ai1_heal").support_reach(hot_actor).y
+	var beyond: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SUPPORT, Vector2i(2, 4), ["ai1_heal"], [Vector2i(5, 4)], [Vector2i(3 + heal_reach, 4)], 3)
+	AiSkillsKit.unit_of(beyond, "foes", 0).power_override = power
+	var beyond_steps: Array[PlanStep] = AiSkillsKit.plan_steps(beyond)
+	var walked: bool = false
+	for step: PlanStep in beyond_steps:
+		walked = walked or step.mode == PlanStep.Mode.MOVE or step.mode == PlanStep.Mode.GOTO
+	checks["out of heal reach from the drafted spot: no reserved heal and no approach walk"] = _projected(beyond) <= hot_profile.heal_below and AiSkillsKit.count_of(beyond_steps, "ai1_heal") == 0 and not walked
+	var sniper: Dictionary = _reserve_scene(power)
+	var sniper_actor: Combatant = sniper["actor"]
+	var sniper_ctx: PlanContext = sniper["ctx"]
+	var sniper_profile: AiProfile = AiSkillsKit.ai_profile(AiProfile.Role.SNIPER)
+	checks["only the SUPPORT role reserves"] = AiSkillsKit.count_of(TacticalAI.build_steps(sniper_actor, sniper_ctx, sniper_profile), "ai1_heal") == 0
+	return TestHelpers.report(TAG, "BAL3-AI: heal reservation", checks)
+
+# The enemy-side actor stands next to Near; Tank taunts `tank_dist` tiles away; the actor's AP covers the walk to the
+# Tank or a strike on Near, not both (route tiles + strike AP - 1).
+static func _pull_scene(tank_dist: int, taunting: bool) -> Dictionary:
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [])
+	var actor: Combatant = AiSkillsKit.unit("Puller", grid, Vector2i(CombatGrid.GRID_W - 1 - tank_dist, 4), [])
+	var near: Combatant = AiSkillsKit.unit("Near", grid, Vector2i(CombatGrid.GRID_W - 2 - tank_dist, 4), [])
+	var tank: Combatant = AiSkillsKit.unit("Tank", grid, Vector2i(CombatGrid.GRID_W - 1, 4), [])
+	if taunting:
+		tank.statuses[StatusEffects.TAUNT] = true
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, [actor], [near, tank], 3)
+	var profile: AiProfile = AiSkillsKit.ai_profile(AiProfile.Role.AGGRESSOR)
+	ctx.profiles[actor] = profile
+	var plan := CombatPlan.new(ctx)
+	var route: Array[Vector2i] = plan.approach_path(actor, grid.get_position(actor), tank)
+	actor.ap = route.size() + SkillCatalog.find(AiSkillsKit.STRIKE).ap_cost(actor) - 1
+	return {"grid": grid, "actor": actor, "near": near, "tank": tank, "ctx": ctx, "profile": profile, "route": route, "fits": not route.is_empty() and plan.fits_move(actor, grid.get_position(actor), route)}
+
+static func _strikes_on(s: Dictionary, unit: Combatant) -> bool:
+	var actor: Combatant = s["actor"]
+	var ctx: PlanContext = s["ctx"]
+	var profile: AiProfile = s["profile"]
+	for step: PlanStep in TacticalAI.build_steps(actor, ctx, profile):
+		if step.mode == PlanStep.Mode.ENGAGE and step.target == unit:
+			return true
+	return false
+
+static func _test_taunt_pull() -> bool:
+	var checks: Dictionary = {}
+	var probe: Dictionary = _pull_scene(2, false)
+	var probe_ctx: PlanContext = probe["ctx"]
+	var probe_actor: Combatant = probe["actor"]
+	var move: int = CombatPlan.new(probe_ctx).max_move_tiles(probe_actor)
+	var close: int = mini(move, CombatGrid.GRID_W - 3)   # route = close - 1 tiles: inside the one move
+	var pull: Dictionary = _pull_scene(close, true)
+	checks["fixture: the route to the taunter fits the move"] = DictUtil.to_bool(pull["fits"])
+	var near: Combatant = pull["near"]
+	var tank: Combatant = pull["tank"]
+	checks["route within the move: the taunter is the only target (no strike on Near)"] = not _strikes_on(pull, near)
+	var pull_actor: Combatant = pull["actor"]
+	var pull_ctx: PlanContext = pull["ctx"]
+	var pull_profile: AiProfile = pull["profile"]
+	var walk_plan := CombatPlan.new(pull_ctx)
+	walk_plan.set_steps(pull_actor, TacticalAI.build_steps(pull_actor, pull_ctx, pull_profile))
+	var end_pos: Vector2i = walk_plan.compile(pull_actor).pos
+	checks["(it walks toward the taunter instead)"] = pull_ctx.grid.get_distance(end_pos, pull_ctx.grid.get_position(tank)) < pull_ctx.grid.get_distance(pull_ctx.grid.get_position(pull_actor), pull_ctx.grid.get_position(tank))
+	var calm: Dictionary = _pull_scene(close, false)
+	var calm_near: Combatant = calm["near"]
+	checks["no taunt: the reachable Near is struck"] = _strikes_on(calm, calm_near)
+	var far_dist: int = move + 2   # route = move + 1 tiles: beyond the one move
+	var far: Dictionary = _pull_scene(far_dist, true)
+	checks["fixture: the far route exceeds the move"] = not DictUtil.to_bool(far["fits"]) and far_dist <= CombatGrid.GRID_W - 2
+	var far_near: Combatant = far["near"]
+	checks["route beyond the move: no pull, Near is struck"] = _strikes_on(far, far_near)
+	# Guard suppression: a low-HP unit one tile beyond its reach of its only foe guards (and so loses the move);
+	# when that foe taunts, the pull skips that guard and the unit walks up and strikes it first (a guard once in
+	# reach no longer costs the move and stays allowed).
+	var calm_guard: Dictionary = _guard_scene(false)
+	var calm_guard_steps: Array[PlanStep] = _guard_steps(calm_guard)
+	var calm_tank: Combatant = calm_guard["tank"]
+	checks["fixture: low HP, the foe one tile beyond reach"] = DictUtil.to_bool(calm_guard["low"]) and DictUtil.to_bool(calm_guard["beyond_reach"])
+	checks["no taunt: the low-HP unit guards and does not strike"] = _has_kind(calm_guard_steps, SkillDef.Kind.DEFEND) and not _engages(calm_guard_steps, calm_tank)
+	var pull_guard: Dictionary = _guard_scene(true)
+	var pull_guard_steps: Array[PlanStep] = _guard_steps(pull_guard)
+	var pull_tank: Combatant = pull_guard["tank"]
+	var opener: PlanStep = pull_guard_steps[0] if not pull_guard_steps.is_empty() else null
+	checks["taunting foe within the move: no guard before the move, the unit opens by striking the taunter"] = opener != null and opener.mode == PlanStep.Mode.ENGAGE and opener.target == pull_tank
+	return TestHelpers.report(TAG, "BAL3-AI lever D: taunt pull", checks)
+
+# Lever D guard fixture: the actor at defend_below HP, its only foe (Tank) at basic reach + 1 (one tile inside the move).
+static func _guard_scene(taunting: bool) -> Dictionary:
+	var grid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [])
+	var actor: Combatant = AiSkillsKit.unit("Guarder", grid, Vector2i(4, 4), [])
+	var reach: int = SkillCatalog.find(AiSkillsKit.STRIKE).reach_for(actor).y
+	var tank: Combatant = AiSkillsKit.unit("Tank", grid, Vector2i(4 + reach + 1, 4), [])
+	if taunting:
+		tank.statuses[StatusEffects.TAUNT] = true
+	var ctx: PlanContext = TestHelpers.hand_ctx(grid, [actor], [tank], 3)
+	var profile: AiProfile = AiSkillsKit.ai_profile(AiProfile.Role.AGGRESSOR)
+	ctx.profiles[actor] = profile
+	actor.hp = floori(profile.defend_below * float(actor.max_hp))
+	var ratio: float = float(actor.hp) / float(actor.max_hp)
+	return {"actor": actor, "tank": tank, "ctx": ctx, "profile": profile, "low": ratio <= profile.defend_below and ratio > profile.flee_ratio,
+		"beyond_reach": grid.get_distance(grid.get_position(actor), grid.get_position(tank)) == reach + 1}
+
+static func _guard_steps(s: Dictionary) -> Array[PlanStep]:
+	var actor: Combatant = s["actor"]
+	var ctx: PlanContext = s["ctx"]
+	var profile: AiProfile = s["profile"]
+	return TacticalAI.build_steps(actor, ctx, profile)
+
+static func _has_kind(steps: Array[PlanStep], kind: SkillDef.Kind) -> bool:
+	for step: PlanStep in steps:
+		if step.skill != null and step.skill.kind == kind:
+			return true
+	return false
+
+static func _engages(steps: Array[PlanStep], unit: Combatant) -> bool:
+	for step: PlanStep in steps:
+		if step.mode == PlanStep.Mode.ENGAGE and step.target == unit:
+			return true
+	return false
 
 # ------------------------------------------------------------------------------
 # 50 seeded rounds of a 3v3 with mixed kits

@@ -391,8 +391,11 @@ static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	var role_name: String = str(e["ai_role"]) if not str(e["ai_role"]).is_empty() else (arch.ai_role if arch != null else "AGGRESSOR")
 	var role: AiProfile.Role = _enum(AiProfile.Role.keys(), role_name, 0) as AiProfile.Role
 	var cap: int = DictUtil.to_int(e["skill_cap"])
-	if cap <= 0:
-		cap = AiProfile.NO_CEILING if arch != null else 1   # class-derived: no AP ceiling, the unlock levels gate (Combatant.tier_unlocked)
+	if cap <= 0 and arch != null:
+		var tier_cap: int = StatRules.tier_skill_cap(str(e["tier"]))   # BAL3 section 5: minion-tier default ceiling
+		cap = tier_cap if tier_cap > 0 else AiProfile.NO_CEILING   # else no AP ceiling: the unlock levels gate (Combatant.tier_unlocked)
+	elif cap <= 0:
+		cap = 1
 	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), cap)
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])

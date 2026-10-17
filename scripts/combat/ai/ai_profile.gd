@@ -6,8 +6,9 @@ extends RefCounted
 # Role picks the behaviour pattern; the other fields tune it. The same profile
 # drives enemies every round and the player's "AI preset" sequences (see
 # PlanPresets). `skill_cap` is an AP ceiling: the highest skill level (AP) it may use.
-# Class-derived units get NO_CEILING; their skill unlocks are level-gated by
-# Combatant.tier_unlocked (SK2). Damage comes from the unit itself (DamageCalculator).
+# Class-derived units get NO_CEILING (minion tier: StatRules.tier_skill_cap, BAL3 section 5);
+# their skill unlocks are level-gated by Combatant.tier_unlocked (SK2). Damage comes from the
+# unit itself (DamageCalculator).
 # ==============================================================================
 
 const NO_CEILING: int = 5   # skill_cap meaning "no AP ceiling" (the highest skill level)

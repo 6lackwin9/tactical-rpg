@@ -32,6 +32,8 @@ const NO_CELL: Vector2i = Vector2i(-1, -1)
 # Combatant -> Callable(cell: Vector2i) -> float preference among equally ranked destination cells (higher first).
 var path_penalties: Dictionary = {}
 var goal_preferences: Dictionary = {}
+# AI drafts only (BAL3-AI lever C): Combatant -> true while TacticalAI drafts a unit that is likely to die this round.
+var ai_pressure: Dictionary = {}
 
 # The simulated end state of a (prefix of a) sequence.
 class SimState:
@@ -803,7 +805,17 @@ func estimate_cover(c: Combatant, skill: SkillDef, foe: Combatant, from: Vector2
 
 # Where `c` ends up after its planned move (its current tile if it isn't moving).
 func planned_position(c: Combatant) -> Vector2i:
+	return _position_after(c, _ally_moves())
+
+# planned_position of every unit in `units` (unit -> Vector2i) from one _ally_moves pass (TacticalAI estimates).
+func planned_positions(units: Array[Combatant]) -> Dictionary:
 	var moves: Dictionary = _ally_moves()
+	var out: Dictionary = {}
+	for c: Combatant in units:
+		out[c] = _position_after(c, moves)
+	return out
+
+func _position_after(c: Combatant, moves: Dictionary) -> Vector2i:
 	var raw: Variant = moves.get(c, null)
 	if raw is Dictionary:
 		var move: Dictionary = raw
