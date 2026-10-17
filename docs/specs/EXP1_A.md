@@ -109,7 +109,7 @@ name "The Cinder Gate"; description "A collapsed toll arch at the top of the gor
 | warden_keep | tev | npc | npc_b | character tev_quill |
 | warden_keep | hest | npc | npc_c | character hest_the_quartermaster |
 | warden_keep | stores | chest | chest_a | items {con_heal_potion: 1} |
-| warden_keep | hearth | lore | lore_a | lore one_fire_lit; sets_flags [ashlands.hearth_read] |
+| warden_keep | hearth | lore | lore_a | lore one_fire_lit; sets_flags [{key: ashlands.hearth_read, value: true}] |
 | ruined_courtyard | to_keep | exit | west | to warden_keep, to_anchor spawn |
 | ruined_courtyard | gate_road | exit | east | to cinder_gate, to_anchor west_in; requires_flags [ashlands.courtyard_held]; locked_text "Warden barricades close the gate road until the Courtyard is held." |
 | ruined_courtyard | warband | encounter | site_a | encounter courtyard_skirmish, trigger proximity, radius 1, once false, unless_flags [ashlands.courtyard_held] |
@@ -118,7 +118,7 @@ name "The Cinder Gate"; description "A collapsed toll arch at the top of the gor
 | ruined_courtyard | old_stones | lore | ruin_lore | lore the_long_dry |
 | cinder_gate | to_gorge | exit | west | to ruined_courtyard, to_anchor east_in |
 | cinder_gate | ambush | encounter | site_b | encounter pass_ambush, trigger proximity, radius 2, once false, unless_flags [ashlands.pass_cleared] |
-| cinder_gate | beacon | point | altar | sets_flags [ashlands.gate_beacon_lit] |
+| cinder_gate | beacon | point | altar | sets_flags [{key: ashlands.gate_beacon_lit, value: true}] |
 | cinder_gate | camp_cache | chest | camp_chest | items {con_heal_potion: 1} |
 
 Why `once: false` with `unless_flags` on the two quest fights: a win while the quest is not yet active must not remove the fight for good (M4 gives no retroactive credit); the marker disappears when the quest's `complete_flags` are set. `keep_stores` in the ruin chest exercises the shared claim rule: opening the chest first removes it from the quest pools; completing `hold_the_courtyard` with that pick first makes the chest give the elixir only.
