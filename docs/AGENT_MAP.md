@@ -18,6 +18,41 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | --- | --- | --- | --- |
 | planner (cloud thread) | Buy count cap, sell/give gold-cap notes, confirm_turn_in pre-check, integer price oracle | n/a / 15 | merged via PR |
 
+### UI1-L menus and save slots (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | SAVE-IO: save export / import through a file dialog, save_io suite | n/a / 15 | merged via PR |
+| planner (cloud thread, no subagent) | UI2-L: party, level-up, skills, gear, battle results screens; 5 shared save slots; screenshots 10-16 in project files ui1/ | n/a / 70 | merged via PR |
+| planner (cloud thread, no subagent) | UI1-A: ashlands start_party seed (warrior, ranger, rogue, mage) | n/a / 5 | merged via PR |
+| planner (cloud thread, no subagent) | start_party, slots 0-3 + peek + autosave, CurrentGame, SettingsFile, MenuRouter and five screen models, main menu scene; screenshots in project files ui1/ | n/a / 60 | merged via PR |
+
+### S14-L3 audio (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | Bus layout, SettingsFile audio keys, SoundEvents, SoundBank, AudioDirector, placeholder SFX tool, audio suite | n/a / 25 | merged via PR |
+
+### S14-L2 combat presenter (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | CombatPresenter, FxPresets, FxSettings instant mode, animation lifecycle suite | n/a / 40 | merged via PR |
+
+### Cloud cleanup threads (2026-10-17)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| cloud thread (no subagent) | CLN-12 suite split + CLN-6 ItemCatalog part | n/a | PR #8 squash-merged; PASS lines unchanged |
+| cloud thread (no subagent) | CLN-16 remove the `smart_skills = false` AI path, its tests and the sim key | n/a | PR #13 squash-merged |
+
+### S12S-L status expansion (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | Commit 1 schema: registry magnitude ranges, six status rows, magnitude validation, sources, StatusExpansion suite | 135k / 16 | PR #15 |
+| change-reviewer | Commit 1 review | 63k / 2 | no blockers; popup unit and comment fixed by the thread |
+
 ### DLG1-L commit 3 dialogue and shop panels (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
