@@ -9,7 +9,7 @@ Opens the Scene Runner on the user's Windows PC from the latest `main`. Only a s
 
 - Checkout: `C:\Users\tusha\OneDrive\Project\Godot\tactical-rpg\new-game-project` (remote `6lackwin9/tactical-rpg`).
 - Launcher: `run.bat` in the checkout (starts `C:\Program Files\Godot\godot.exe` on `res://scenes/scene_runner.tscn`).
-- PC launch thread in the Tactical Rpg project: [Scene Runner on PC](#cmsg_01TtkZhEhzkkQVCpjCh92r1EQKnptj6wj1CvUYyrAVsoDu).
+- PC launch thread in the Tactical Rpg project: [Launch game on your PC](#cmsg_01TtkZhEhzkkQVCpjCh92r1EQKnptj6wj1CvUYyrAVsoDu).
 
 ## 1. On the PC (Windows, `$CLAUDE_CODE_REMOTE` empty, the checkout path exists)
 
@@ -34,6 +34,6 @@ git pull --ff-only origin main; if ($?) { Start-Process .\run.bat; Start-Sleep 5
 
 You cannot start a window on the PC from here. Route it:
 
-- **Thread Claude in a cloud thread**: `send_message` to `@parent` (visibility `sent_to_shared_agent`): "PC launch requested: please relay `launch` to the Scene Runner on PC thread." Tell the user in one line that the launch was handed to their PC.
-- **Coordinator (main project window)**: `message_thread` the [Scene Runner on PC](#cmsg_01TtkZhEhzkkQVCpjCh92r1EQKnptj6wj1CvUYyrAVsoDu) thread with "launch", attaching the user's message id in `context_message_ids`, then a one-line `post_message` linking that thread. If that thread has no live session, start a thread session on the PC (Remote Control) with this skill as the brief.
+- **Thread Claude in a cloud thread**: get the coordinator's id with `get_channel_session_id`, then `send_message` to that `session_id`: "PC launch requested: please relay `launch` to the Launch game on your PC thread." Tell the user in one line that the launch was handed to their PC.
+- **Coordinator (main project window)**: `message_thread` the [Launch game on your PC](#cmsg_01TtkZhEhzkkQVCpjCh92r1EQKnptj6wj1CvUYyrAVsoDu) thread with "launch", attaching the user's message id in `context_message_ids`, then a one-line `post_message` linking that thread. If that thread has no live session, start a thread session on the PC (Remote Control) with this skill as the brief.
 - **Local Claude Code session on another device**: say the PC is the only place it can launch and point the user to the project thread above.
