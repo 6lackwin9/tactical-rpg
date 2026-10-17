@@ -79,7 +79,7 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
 | EXP1 | approved | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
-| DLG1 | approved | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
+| DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
 | TRAV1 | approved | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files); save v5 |
 | REP1 | approved | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |

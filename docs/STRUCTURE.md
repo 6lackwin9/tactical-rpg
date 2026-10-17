@@ -57,7 +57,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog); dialogue_runner.gd (DialogueRunner); panels in DLG1-L commit 3 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
-| `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1); later the world map and the dialogue / shop panels | S9, S10, S11 | in progress |
+| `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1), dialogue and shop panels (DialoguePanel, ShopPanel, DLG1); later the world map | S9, S10, S11 | in progress |
 | `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |
