@@ -29,6 +29,8 @@ const SCENES: Array[Dictionary] = [
 		"desc": "Build modular lore worlds: regions, factions, characters, named items, quests and encounters that inherit lore-free base assets; play their battles."},
 	{"path": "res://scenes/gear_dojo.tscn", "name": "Gear & Skill Dojo", "icon": "🛡",
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
+	{"path": "res://scenes/overworld/region_map_debug.tscn", "name": "Region Map (debug)", "icon": "🗺",
+		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (autosaves to slot 9)."},
 ]
 const HIDDEN_SCENES: Array[String] = ["res://scenes/scene_runner.tscn", "res://scenes/test_arena.tscn"]
 

@@ -505,6 +505,8 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to debug slot 9. EXP1 is complete.
+
 Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `gorge_ruins`; Ashlands starts at Warden Keep; the new Cinder Gate location; generic Horde characters and mob encounters; markers for patrols, chests, lore, a beacon and the gate that opens once the courtyard is held. World-map exits arrive with TRAV1.
 
 ### Plan claims (PLAN1)

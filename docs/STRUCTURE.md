@@ -41,11 +41,12 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
-| `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter); debug region-map scene in EXP1-L commit 3 | S9 | in progress |
+| `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter) | S9 | done |
 | `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
 | `scripts/dialogue/` | dialogue trees, speakers, shops, reputation | S11 | placeholder |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
+| `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1); later the world map and the dialogue / shop panels | S9, S10, S11 | in progress |
 | `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |

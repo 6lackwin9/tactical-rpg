@@ -136,7 +136,7 @@ static func _build_worlds(fx: Dictionary) -> bool:
 
 # ------------------------------------------------------------------------------
 
-static func run() -> bool:
+static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
 	print("=== STARTING EXPLORATION TEST (EXP1-L)               ===")
 	print("=======================================================")
@@ -182,6 +182,7 @@ static func run() -> bool:
 			ok = _test_flag_markers() and ok
 			ok = _test_bridge() and ok
 			ok = _test_save_v3() and ok
+			ok = _test_debug_scene(tree_parent) and ok
 		else:
 			ok = false
 		SaveGame.reset_base_dir()
@@ -1113,3 +1114,37 @@ static func _test_save_v3() -> bool:
 	var clock: GameState = NewGame.create(RUN, [str(_rx["party"])] as Array[String])["state"] as GameState
 	checks["NewGame clock seed in range"] = clock != null and clock.rng_seed >= 0 and clock.rng_seed <= GameState.SEED_MAX and clock.validate().is_empty()
 	return _report("Check 20: save v3 (v2 migration, qualified location, stable seed, validation, resume)", checks)
+
+# ------------------------------------------------------------------------------
+# Commit 3: the debug region-map scene (thin: drives ExploreRunner, autosaves to slot 9 in the sandbox)
+# ------------------------------------------------------------------------------
+
+const DEBUG_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
+
+static func _test_debug_scene(tree_parent: Node) -> bool:
+	var checks: Dictionary = {}
+	var packed: PackedScene = load(DEBUG_SCENE) as PackedScene
+	checks["scene loads"] = packed != null
+	if packed == null or tree_parent == null:
+		return _report("Debug scene (headless without a tree: load only)", checks)
+	checks["field"] = _set_field([{"id": "ambush", "kind": "encounter", "anchor": "a_touch", "encounter": "enc_a"}])
+	var view: RegionMapView = packed.instantiate() as RegionMapView
+	tree_parent.add_child(view)
+	checks["new game at the start location"] = view.start_game(RUN, SEED).is_empty() and view.gs != null and view.gs.location_id == _q("town")
+	if view.gs == null:
+		tree_parent.remove_child(view)
+		view.free()
+		return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 9)", checks)
+	checks["autosave wrote debug slot 9 in the sandbox"] = SaveGame.exists(RegionMapView.DEBUG_SLOT) and SaveGame.path_for(RegionMapView.DEBUG_SLOT).begins_with(SANDBOX)
+	view.take_exit("field")
+	checks["menu exit enters the field"] = view.gs.location_id == _q("field") and view.gs.position == Vector2i(1, 1)
+	view.gs.position = Vector2i(4, 2)
+	view.do_step(R)
+	checks["a fight opens the outcome panel"] = not view.pending_fight.is_empty() and view.gs.position == Vector2i(5, 2)
+	view.do_step(R)
+	checks["steps are ignored while a fight is pending"] = view.gs.position == Vector2i(5, 2)
+	view.settle("fled")
+	checks["fled button settles through after_fight"] = view.pending_fight.is_empty() and view.gs.position == Vector2i(4, 2) and _steps(view.gs) == 0
+	tree_parent.remove_child(view)
+	view.free()
+	return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 9)", checks)
