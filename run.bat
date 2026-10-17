@@ -5,6 +5,8 @@ rem   run.bat dev    latest develop (finished tasks not yet released) in the sib
 rem                  <this folder>-dev, a git worktree created on first use; run_dev.bat does the same.
 rem                  Inside the -dev folder, run.bat and run_dev.bat both open develop there.
 rem Two folders, so switching between main and dev never waits for a script cache rebuild.
+rem The dev game also keeps its own saves and settings: Godot puts user:// under %APPDATA%,
+rem so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
 rem Before launching it fetches and fast-forwards the branch (about 1-2 s when nothing changed)
 rem and rebuilds the script cache only when the code changed (about a minute). It launches the
 rem copy on disk when offline, when the pull fails, when that folder has local changes or is on
@@ -65,6 +67,11 @@ setlocal EnableDelayedExpansion
   )
   set "SHA=?"
   for /f %%h in ('git rev-parse --short HEAD 2^>nul') do set "SHA=%%h"
+  if "!BRANCH!"=="develop" (
+    set "APPDATA=!APPDATA!\tactical-rpg-dev"
+    if not exist "!APPDATA!" mkdir "!APPDATA!"
+    echo Dev saves and settings: !APPDATA!
+  )
   echo Running !CUR! at !SHA! from !DIR!
   start "" "!GODOT!" --path "!DIR!" res://scenes/scene_runner.tscn
   timeout /t 4 /nobreak >nul
