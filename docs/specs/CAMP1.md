@@ -1,6 +1,6 @@
 # CAMP1: Ashlands campaign "The Long Dry" (story pass, goal G4)
 
-Status: spec (design-brainstorm 2026-10-17; needs the user's answers below)
+Status: approved (user 2026-10-17, all four recommendations; decision "CAMP1 story" in docs/decisions/world-campaign.md)
 Depends on: TRAV1-A, REP1-A, BATTLE1-L (all on develop); BAL3-A for the one catalog unit (same file)
 Lane: asset (data only; no logic task needed)
 Touches: `data/worlds/ashlands/*`, `data/worlds/iron_reaches/{characters,dialogues,locations,routes}.json`, `data/catalog/units.json` (one row), seeds `data/seeds/camp1_*.gd`
