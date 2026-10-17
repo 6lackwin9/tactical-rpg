@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### Cloud cleanup threads (2026-10-17)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| cloud thread (no subagent) | CLN-12 suite split + CLN-6 ItemCatalog part | n/a | PR squash-merged; PASS lines unchanged (arena 414, dojo 45) |
+
 ### SKILL1 Forge skill tab (2026-10-17)
 
 | Agent | Task | Tokens / min | Outcome |
