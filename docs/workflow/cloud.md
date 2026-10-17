@@ -4,21 +4,34 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 
 ## Sessions
 
-- **Project chat (coordinator)**: the front desk. The user asks there; it starts one thread per task and relays follow-ups. It does not edit the repo.
-- **Task thread**: the planner for one task. It reads the task row and spec, runs the lane agents (`logic-builder`, `asset-builder`, `change-reviewer`, ...) as subagents in its own checkout, one after another, commits, pushes, opens the PR and merges it when allowed (below).
-- Cross-cutting planning (milestone order, a ROADMAP restructure, a cleanup pass) gets its own thread.
+- **Project chat (coordinator)**: the front desk. The user asks there; it routes each ask to the matching area thread and relays follow-ups. It does not edit the repo.
+- **Area thread**: a standing thread for one focus area (table below), not for one task. It is the planner for the tasks of its area: it works them one after another, and for each one reads the task row and spec, runs the lane agents as subagents in its own checkout, one after another, commits, pushes, opens the PR and merges it when allowed (below).
+- **New threads need the user's approval.** The coordinator opens an area thread when its first task arrives. Before opening any other thread, or a second thread for an area, it asks the user in the project chat and says why the work cannot go in an existing open thread. The PC launch thread stays as it is.
 - Decision requests go to the user in the thread (a decision card when offered): question, options with one-line consequences, one recommendation. Work continues on the recommended option unless the step cannot be undone.
 - Failure alerts: a thread reply that leads with what is blocked and what the thread is doing about it (replaces the desktop `ALERT` line).
 - Dispatch mode: the user types `mode <name>` in the project chat; it applies to later threads. Scheduled routines always run in economy mode.
 
-## One task, one thread, one branch
+## Area threads
 
-1. The thread works on the branch it is given (`claude/...`); one new branch per task. No sibling worktrees and no `tools/wt_remove.ps1`.
+| Area thread | Covers | Agents it runs |
+| --- | --- | --- |
+| Gameplay | combat, map, battles, grid, terrain, travel, quests, saves | `logic-builder`, `asset-builder` for the task's data |
+| UI/UX | screens, menus, HUD, browser rendering | `logic-builder`, `asset-builder` for UI art |
+| Assets & Audio | art, icons, SFX, fonts, catalog and world data | `asset-builder` |
+| Balance | sims, `docs/BALANCE_REPORT.md`, tuning | `balance`, then `design-brainstorm` for options |
+| Design | specs, decisions, the roadmap; each spec is approved here, then built in its area's thread | `design-brainstorm` |
+| Platform & Workflow | CI, the web build, playtest tooling, agent and skill changes, cleanups | `housekeeper`, `logic-builder` for tools and CI |
+
+Every area thread also runs `change-reviewer` on each branch before its PR is marked ready. A task whose area is unclear goes to the thread that owns most of its `Touches`.
+
+## One task at a time, one branch per task
+
+1. An area thread works its tasks in sequence. Each task gets its own branch (`claude/<task-id>-<slug>`, or the branch the thread was given for its first task), cut from the latest `main`, and its own squash-merged PR; the next task starts from `main` after the previous PR merges or is parked as an open PR. No sibling worktrees and no `tools/wt_remove.ps1`.
 2. Subagents work in the thread's checkout and never commit. The thread commits after each green `tools/fc.sh` step and pushes, so a recycled container or a usage limit loses nothing. `.agent/progress.md` is still kept, but the pushed branch is the real checkpoint.
 3. The thread updates only its own rows in `docs/TASKS.md` (status, branch name), its line in the `docs/AGENT_MAP.md` finished-runs log, and the decision rows for answers the user gave in that thread, all inside its own PR. Git merges replace the desktop "single writer" rule.
 4. Overlap: before starting, compare the task's `Touches` with the open PRs (GitHub reports merge conflicts); sequence tasks whose `Touches` overlap, as on desktop.
 
-## Lanes inside a task thread
+## Lanes inside an area thread
 
 The thread is the planner (lane table: skill `planner`). It writes the planner docs itself (TASKS rows, decisions given in the thread, AGENT_MAP line, README and docs deltas) and hands every other lane to that lane's agent, as on desktop:
 
@@ -46,7 +59,7 @@ The thread is the planner (lane table: skill `planner`). It writes the planner d
 
 ## Scheduled routines
 
-- Daily planner pass (economy mode): pick the next `approved` task whose `Depends on` rows are `done` and whose `Touches` do not overlap an open PR, start one thread for it, and stop at any design question. Balance and housekeeper routines are added later on request.
+- Daily planner pass (economy mode, 18:30 UTC): pick the next `approved` task whose `Depends on` rows are `done` and whose `Touches` do not overlap an open PR, and hand it to its area thread. The routine wakes the Platform & Workflow thread (no new thread per run), which only dispatches: it sends the task to the area thread's session as a cross-session message (thread found by title in the project's thread list), or keeps it when the area is Platform & Workflow. If the area has no live thread, it asks the coordinator session to open that area thread (already approved by the user) and pass the task on. The area thread stops at any design question. If the Platform & Workflow thread is closed, recreate the routine bound to the new one. Balance and housekeeper routines are added later on request.
 - Routines follow the same approval rule as threads.
 
 ## Environment
