@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### BAL3 balance levers spec (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| cloud thread (no subagent) | docs/specs/BAL3.md: sim, AI and data levers for I2-I14 with triggers, sequenced after the 12x9 grid and S12S-L | n/a / 25 | approved by the user (all recs) and merged via PR #29 |
+
 ### S14-A1 first manifest rows (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
