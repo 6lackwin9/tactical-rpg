@@ -24,6 +24,9 @@ var scene: String = ""            # current scene path (set by the hub; stamped 
 
 const WHEEL_BUTTONS: Array[String] = ["wheel_up", "wheel_down", "wheel_left", "wheel_right"]
 const ERROR_MAX: int = 500
+const CTL_PATH_SEGMENTS: int = 4   # trail control descriptions (section F)
+const CTL_TEXT_MAX: int = 40
+const CTL_TIP_MAX: int = 60
 
 var _start_ms: int = 0
 var _error_count: int = 0
@@ -363,11 +366,11 @@ func add_note(ctx: Dictionary) -> Dictionary:
 	flush()
 	return {"ok": true, "note": note, "errors": problems}
 
-# Control description {path: last 4 node-path segments, cls, text: 40 chars, tip: 60 chars}.
+# Control description {path: last CTL_PATH_SEGMENTS node-path segments, cls, text: CTL_TEXT_MAX chars, tip: CTL_TIP_MAX chars}.
 static func describe_control(path_text: String, cls: String, text: String, tip: String) -> Dictionary:
 	var parts: PackedStringArray = path_text.split("/", false)
-	var tail: PackedStringArray = parts.slice(maxi(0, parts.size() - 4))
-	return {"path": "/".join(tail), "cls": cls, "text": text.left(40), "tip": tip.left(60)}
+	var tail: PackedStringArray = parts.slice(maxi(0, parts.size() - CTL_PATH_SEGMENTS))
+	return {"path": "/".join(tail), "cls": cls, "text": text.left(CTL_TEXT_MAX), "tip": tip.left(CTL_TIP_MAX)}
 
 static func _pair(v: Variant) -> Array:
 	if v is Vector2:

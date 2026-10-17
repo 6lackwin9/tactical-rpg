@@ -11,7 +11,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses | S1, S4 | done |
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
-| `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
+| `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools | all | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` | headless suites; a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
@@ -64,10 +64,10 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |
 | `data/dialogue/` | services.json: lore-free base service lines (dialogue trees are world data in `data/worlds/<id>/dialogues.json`, shops in `shops.json`) | S11 | in progress |
 | `assets/art/{unit,item,tile,skill,status,ui}/`, `assets/audio/{sfx,music}/` | file overrides by folder pattern `<key>_<variant>.png/svg`, `<key>.ogg/wav` (S14) | S14 | in progress |
-| `scripts/playtest/` | PlaytestRecord (schema, validation, scenarios), PlanCodec, RoundOutcome, ContentFingerprint, PlaytestRecorder (session signals, trail, notes, hooks), PlaytestReplayer (replay, take-over, variant, tool logic), PlaytestSweep, PlaytestStore (ids, paths, atomic save, debug guard), TrailReport, PlaytestLogger (PLAYTEST1) | S16 | in progress |
-| `scripts/ui/playtest/` | playtest hub, UI trail, note box, browser, playback banner (PLAYTEST1) | S16 | proposed |
-| `playtests/{inbox,repro,scenarios}/` + `README.md` | shared user recordings, agent repros, one-seed scenarios; `.gdignore` keeps note images out of the import (PLAYTEST1) | S16 | in progress |
-| `tools/replay.gd`, `scripts/tests/playtest_test_suite.gd` | headless replay, variant and seed-sweep tool; playtest suite (PLAYTEST1; `tools/fc.sh replay`) | S16 | in progress |
+| `scripts/playtest/` | PlaytestRecord (schema, validation, scenarios), PlanCodec, RoundOutcome, ContentFingerprint, PlaytestRecorder (session signals, trail, notes, hooks), PlaytestReplayer (replay, take-over, variant, tool logic), PlaytestSweep, PlaytestStore (ids, paths, atomic save, debug guard), TrailReport, PlaytestLogger (PLAYTEST1) | S16 | done |
+| `scripts/ui/playtest/` | PlaytestHub (Scene Runner child: run recording, F8 notes, take-over branches), UiTrail (button, panel, modal, click, key, hover, leak trail), NoteBox, PlaytestBrowser (Scene Runner Playtests panel), PlaybackBanner (PLAYTEST1) | S16 | done |
+| `playtests/{inbox,repro,scenarios}/` + `README.md` | shared user recordings, agent repros, one-seed scenarios; `.gdignore` keeps note images out of the import (PLAYTEST1) | S16 | done |
+| `tools/replay.gd`, `scripts/tests/playtest_test_suite.gd` | headless replay, variant and seed-sweep tool; playtest suite (PLAYTEST1; `tools/fc.sh replay`) | S16 | done |
 
 Rules: gameplay logic in `scripts/**` as `RefCounted` rules engines; scenes only render; data in `data/**` validated through a catalog; one test suite per system in `scripts/tests/` registered with one `results.append` line in `SuiteRegistry.run_all` (`scripts/tests/suite_registry.gd`).
 

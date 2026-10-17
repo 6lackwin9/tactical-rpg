@@ -1,6 +1,6 @@
 # Playtests (PLAYTEST1)
 
-Shared playtest material: recordings the user made, agent repros and one-seed scenarios. The format and the rules are in `docs/specs/PLAYTEST1_L.md`; the code is in `scripts/playtest/` (logic) and `tools/replay.gd` (headless tool).
+Shared playtest material: recordings the user made, agent repros and one-seed scenarios. The format and the rules are in `docs/specs/PLAYTEST1_L.md`; the code is in `scripts/playtest/` (logic), `scripts/ui/playtest/` (Scene Runner hub, UI trail, F8 notes, browser, playback banner) and `tools/replay.gd` (headless tool).
 
 ## Layout
 
@@ -27,3 +27,17 @@ One scenario file is one Scene Runner entry: one encounter with one chosen seed 
 - `--trail-report`: `FLAG` lines for UI trail moments (dead or repeated clicks, long hovers, refused confirms, errors, undo churn, open / close problems, leaks, asset fallbacks)
 
 Exit 0 all match, 1 divergence or broken plan, 2 load or validation error.
+
+## Rendering noted moments
+
+`--render=notes|rounds --out=<dir> [--battle=K]` needs a display, so it runs without `--headless` under Xvfb:
+
+```bash
+xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 --path . -s tools/replay.gd -- <file or id> --render=notes --out=<dir>
+```
+
+It loads the arena in playback mode, jumps to each note of the battle (or each round end), waits two frames and saves `note_<n>.png` / `round_<r>.png` (`b<k>_round_<r>.png` when the recording has several battles).
+
+## In the game (debug builds)
+
+The Scene Runner's PLAYTESTS panel (under DEVELOPER) has the `Record playtests` toggle (pref `record_playtests`, default on), the recordings folder as selectable text with Open folder, and per recording Open (playback with the banner and its Notes jump list), Notes, Take over (battle and round pickers, a new branch recording) and Copy to repo; scenarios are listed below with Launch. F8 in any scene opens the note box (Ctrl+Enter saves, Esc cancels) with a screenshot of the moment.

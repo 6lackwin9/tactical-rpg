@@ -26,6 +26,7 @@ signal round_started(round_num: int)          # end of _begin_round (new round o
 signal round_confirmed(round_num: int)        # after a successful confirm_plan (the spec's `plan_confirmed`; that name is the bool below)
 signal round_concluded(round_num: int, over: bool)
 signal round_reset(round_num: int)            # start of reset_round, before the round is rewound
+signal plan_refused(round_num: int, reason: String)   # confirm_plan refused an invalid plan (reason = status_text)
 signal plan_edited(kind: String, actor: Combatant)   # add, remove, move, undo, clear, preset, preset_all (actor null)
 
 enum Phase { PLANNING, RESOLVING, REPLAY }
@@ -591,6 +592,7 @@ func confirm_plan(auto_play: bool = true) -> bool:
 	if not plan_is_valid():
 		status_text = "Fix the highlighted steps before confirming."
 		_notify()
+		plan_refused.emit(current_round, status_text)
 		return false
 	plan.commit(resolver)
 	plan_confirmed = true

@@ -2,9 +2,10 @@ class_name PlaytestTestSuite
 extends RefCounted
 
 # ==============================================================================
-# Tactical RPG - Playtest Test Suite (PLAYTEST1-L commit 1, acceptance checks 1-13)
+# Tactical RPG - Playtest Test Suite (PLAYTEST1-L, acceptance checks 1-13 plus the commit 2 UI checks 14-16)
 # Plan codec, record / replay round trip, redo, divergence, content staleness, validation, take-over and
-# branch, variants, seed sweep, notes and trail, release guard, trail report, UI and asset report.
+# branch, variants, seed sweep, notes and trail, release guard, trail report, UI and asset report; browser
+# helpers, arena playback with the banner, and the hub recording a live arena (needs a scene tree).
 # Recordings and fixture files live under TestHelpers.sandbox("playtest"); the encounter is picked by rule
 # (the smallest shipped encounter still running after MIN_ROUNDS preset-played rounds; recordings stop
 # there), shipped data is only read. Expectations come from the replay rules, never from shipped numbers.
@@ -16,7 +17,7 @@ const PRESETS: Array[String] = ["balanced", "aggressive", "focus_weakest", "defe
 
 static var SANDBOX: String = TestHelpers.sandbox("playtest")
 
-static func run() -> bool:
+static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
 	print("=== STARTING PLAYTEST TEST (PLAYTEST1-L)             ===")
 	print("=======================================================")
@@ -24,6 +25,7 @@ static func run() -> bool:
 	TestHelpers.remove_sandbox(SANDBOX)
 	DirAccess.make_dir_recursive_absolute(SANDBOX)
 	PlaytestStore.use_root(SANDBOX.path_join("rec"))
+	var saved_enabled: int = PlaytestStore.force_enabled
 	PlaytestStore.force_enabled = 1
 	var ok: bool = true
 	var enc_id: String = _pick_encounter()
@@ -38,13 +40,17 @@ static func run() -> bool:
 		ok = _test_take_over(path) and ok
 		ok = _test_variant(path) and ok
 		ok = _test_sweep(path) and ok
+		ok = _test_browser_helpers(path, enc_id) and ok
+		if tree_parent != null:
+			ok = _test_arena_playback(tree_parent, path) and ok
+			ok = _test_hub(tree_parent, path, enc_id) and ok
 	ok = _test_redo(enc_id) and ok
 	ok = _test_validation(enc_id) and ok
 	ok = _test_notes_trail(enc_id) and ok
 	ok = _test_release_guard(enc_id) and ok
 	ok = _test_trail_report() and ok
 	ok = _test_ui_asset_report() and ok
-	PlaytestStore.force_enabled = -1
+	PlaytestStore.force_enabled = saved_enabled
 	PlaytestStore.use_root(PlaytestStore.USER_ROOT)
 	AssetRegistry.resolve_observer = Callable()
 	TestHelpers.remove_sandbox(SANDBOX)
@@ -173,7 +179,7 @@ static func _mode_samples(session: CombatSession) -> Dictionary:
 		for d: Vector2i in CombatPlan.DIRS:
 			options.append_array(session.plan.cell_options(a, pos + d * 2))
 		for o: PlanOption in options:
-			var mode: String = str(PlanStep.Mode.keys()[o.step.mode])
+			var mode: String = PlanCodec.mode_name(o.step.mode)
 			if o.valid and not out.has(mode):
 				out[mode] = [a, o.step]
 	var first: Combatant = session.allies[0]
@@ -493,7 +499,7 @@ static func _test_notes_trail(enc_id: String) -> bool:
 		session = CombatSession.new(EncounterSource.create(enc_id))
 		rec.attach(session)
 		session.start()
-	var ctl: Dictionary = PlaytestRecorder.describe_control("/root/Arena/Ui/Bar/Box/Confirm", "Button", "Confirm the plan " + "x".repeat(60), "t".repeat(80))
+	var ctl: Dictionary = PlaytestRecorder.describe_control("/root/Arena/Ui/Bar/Box/Confirm", "Button", "Confirm the plan " + "x".repeat(PlaytestRecorder.CTL_TEXT_MAX), "t".repeat(PlaytestRecorder.CTL_TIP_MAX + 20))
 	var ctx: Dictionary = {"scene": "res://scenes/combat_arena.tscn", "mouse": Vector2(10.4, 20.6), "viewport": Vector2i(1280, 720), "ctl": ctl,
 		"tags": ["ui", "bug"], "text": "The confirm button is hard to find.", "image": ""}
 	var note: Dictionary = rec.note_stamp(ctx)
@@ -502,7 +508,9 @@ static func _test_notes_trail(enc_id: String) -> bool:
 		if not note.has(key):
 			missing.append(key)
 	c["every G field (%s)" % ", ".join(missing)] = missing.is_empty() and note.size() == PlaytestRecord.note_defaults().size()
-	c["ctl: last 4 path segments, 40 / 60 chars"] = str(ctl["path"]) == "Ui/Bar/Box/Confirm" and str(ctl["text"]).length() == 40 and str(ctl["tip"]).length() == 60
+	var segments: PackedStringArray = "/root/Arena/Ui/Bar/Box/Confirm".split("/", false)
+	var expected_path: String = "/".join(segments.slice(segments.size() - PlaytestRecorder.CTL_PATH_SEGMENTS))
+	c["ctl: last path segments, text / tip cut"] = str(ctl["path"]) == expected_path and str(ctl["text"]).length() == PlaytestRecorder.CTL_TEXT_MAX and str(ctl["tip"]).length() == PlaytestRecorder.CTL_TIP_MAX
 	c["mouse and viewport pairs"] = JsonUtil.deep_equal(note["mouse"], [10, 21]) and JsonUtil.deep_equal(note["viewport"], [1280, 720])
 	if session != null:
 		c["battle, round, phase from the session"] = DictUtil.to_int(note["battle"]) == 0 and DictUtil.to_int(note["round"]) == 1 and str(note["phase"]) == "planning"
@@ -702,3 +710,192 @@ static func _test_ui_asset_report() -> bool:
 	AssetRegistry.clear_warnings()
 	AssetRegistry.set_quiet(false)
 	return TestHelpers.report(TAG, "13. UI open / close, leak and asset flags; the asset observer logs once per source", c)
+
+# ------------------------------------------------------------------------------
+# 14-16. Commit 2: browser helpers, arena playback, hub (rules 1, 5-8)
+# ------------------------------------------------------------------------------
+
+const ARENA_SCENE: String = "res://scenes/combat_arena.tscn"
+
+static func _test_browser_helpers(path: String, enc_id: String) -> bool:
+	var c: Dictionary = {}
+	var data: Dictionary = _load(path)
+	var rec_id: String = str(data["id"])
+	var concluded: int = PlaytestRecord.concluded_rounds(PlaytestRecord.battle_at(data, 0)).size()
+	var sum: Dictionary = PlaytestStore.summary(path, ContentFingerprint.compute())
+	var battles: Array = DictUtil.array_of(sum["battles"])
+	c["summary: ok, id, one battle with its concluded rounds"] = DictUtil.to_bool(sum["ok"]) and str(sum["id"]) == rec_id and battles.size() == DictUtil.array_of(data["battles"]).size() \
+		and DictUtil.to_int(DictUtil.dict_of(battles[0])["rounds"]) == concluded and str(DictUtil.dict_of(battles[0])["encounter"]) == enc_id
+	c["summary of a missing file: not ok, error set"] = not DictUtil.to_bool(PlaytestStore.summary(SANDBOX.path_join("nope.json"), {})["ok"])
+	var images: String = PlaytestStore.image_dir(rec_id, path.get_base_dir())
+	DirAccess.make_dir_recursive_absolute(images)
+	_text(images.path_join("note_1.jpg"), "x")
+	var inbox: String = SANDBOX.path_join("inbox")
+	var copied: Dictionary = PlaytestStore.copy_to_repo(path, inbox)
+	var dest: String = str(copied["dest"])
+	c["copy to repo: <dest>/<id>/<id>.json and the images next to it"] = str(copied["error"]).is_empty() and dest == inbox.path_join(rec_id) \
+		and FileAccess.file_exists(dest.path_join("%s.json" % rec_id)) and FileAccess.file_exists(dest.path_join("note_1.jpg"))
+	var listed: Array[Dictionary] = PlaytestStore.list([inbox])
+	c["the inbox folder layout is listed"] = listed.size() == 1 and str(listed[0]["id"]) == rec_id
+	var scen_dir: String = SANDBOX.path_join("scenarios")
+	DirAccess.make_dir_recursive_absolute(scen_dir)
+	PlaytestStore.save_json(scen_dir.path_join("good.json"), {"format": PlaytestRecord.SCENARIO_FORMAT, "version": 1, "id": "good", "title": "t", "why": "w", "encounter": enc_id, "seed": 7})
+	PlaytestStore.save_json(scen_dir.path_join("bad.json"), {"format": PlaytestRecord.SCENARIO_FORMAT, "version": 1, "id": "bad", "encounter": enc_id, "seed": "x"})
+	var found: Array[Dictionary] = PlaytestStore.scenarios(scen_dir)
+	c["scenarios: only the valid one, with its seed and path"] = found.size() == 1 and str(found[0]["id"]) == "good" and DictUtil.to_int(found[0]["seed"]) == 7 \
+		and str(found[0]["path"]) == scen_dir.path_join("good.json")
+	var browser := PlaytestBrowser.new()
+	browser.dirs = [path.get_base_dir()]
+	browser.scenario_dir = scen_dir
+	browser.refresh()
+	c["browser lists every recording of the folder and the scenario"] = browser.summaries.size() == PlaytestStore.list(browser.dirs).size() and browser.scenario_box.get_child_count() == 1
+	browser.show_notes(path)
+	c["browser notes view names the recording"] = browser.detail.text.contains(rec_id)
+	browser.refresh()
+	var again: int = browser.summarized
+	browser.refresh(true)
+	c["menu refresh reuses unchanged summaries; Refresh reloads them all"] = again == 0 and browser.summarized == browser.summaries.size()
+	browser.free()
+	return TestHelpers.report(TAG, "14. Browser helpers: summary, copy to repo (inbox layout), scenarios, browser list", c)
+
+static func _arena(tree_parent: Node, fields: Dictionary) -> Node:
+	var arena: Node = (load(ARENA_SCENE) as PackedScene).instantiate()
+	for key: String in fields:
+		arena.set(key, fields[key])
+	tree_parent.add_child(arena)
+	return arena
+
+static func _drop(tree_parent: Node, node: Node) -> void:
+	tree_parent.remove_child(node)
+	node.free()
+
+static func _test_arena_playback(tree_parent: Node, path: String) -> bool:
+	var c: Dictionary = {}
+	c["no hub left over by earlier suites"] = PlaytestHub.instance == null
+	var data: Dictionary = _load(path)
+	var recorded: int = PlaytestRecord.concluded_rounds(PlaytestRecord.battle_at(data, 0)).size()
+	var arena: Node = _arena(tree_parent, {"playtest": path, "battle": 0})
+	var session: CombatSession = arena.get("session")
+	var banner: PlaybackBanner = arena.get("banner")
+	c["arena played the recording back (no load error)"] = str(arena.get("load_error")).is_empty() and session != null and banner != null
+	if session != null and banner != null:
+		c["fast-forwarded to the last recorded round"] = session.current_round == recorded and session.phase == CombatSession.Phase.REPLAY
+		c["banner: PLAYBACK <id> battle 0 round r/n"] = banner.title.text == "PLAYBACK %s battle 0 round %d/%d" % [str(data["id"]), session.viewed_round, recorded] and banner.take_over_button.visible
+		var target: int = maxi(1, recorded - 1)
+		PlaybackBanner.jump(session, {"round": target, "block": 2})
+		c["jump to a note: its round and block"] = session.viewed_round == target and session.replay_block == 2
+		c["banner follows the viewed round"] = banner.title.text.contains("round %d/%d" % [target, recorded])
+	_drop(tree_parent, arena)
+	var broken: Node = _arena(tree_parent, {"playtest": SANDBOX.path_join("missing.json")})
+	var error_banner: PlaybackBanner = broken.get("banner")
+	var load_error: String = str(broken.get("load_error"))
+	c["an unreadable recording falls back to a live battle and shows load_error"] = not load_error.is_empty() and broken.get("session") != null and error_banner != null \
+		and error_banner.title.text.contains(load_error) and not error_banner.take_over_button.visible
+	_drop(tree_parent, broken)
+	return TestHelpers.report(TAG, "15. Arena playback: fast-forward before the UI, banner, jump to note", c)
+
+static func _test_hub(tree_parent: Node, path: String, enc_id: String) -> bool:
+	var c: Dictionary = {}
+	var hub := PlaytestHub.new()
+	tree_parent.add_child(hub)
+	c["hub registers itself"] = PlaytestHub.instance == hub
+	c["no hooks before a recording opens (node_added, nodes, timer, F8)"] = hub.trail.hook_count() == 0 and not hub.is_processing_input() and not hub.trail.is_processing_input()
+	var unrecorded: Node = (load(ARENA_SCENE) as PackedScene).instantiate()
+	unrecorded.set("playtest", SANDBOX.path_join("missing.json"))
+	hub.scene_changed(ARENA_SCENE, unrecorded)
+	tree_parent.add_child(unrecorded)
+	var fallback_session: CombatSession = unrecorded.get("session")
+	c["the fallback battle of an unplayable recording is not recorded"] = hub.recorder != null and hub.recorder.session == null and hub.shown_session == null \
+		and DictUtil.array_of(hub.recorder.data["battles"]).is_empty() and fallback_session != null
+	_drop(tree_parent, unrecorded)
+	var arena: Node = (load(ARENA_SCENE) as PackedScene).instantiate()
+	arena.set("encounter", EncounterSource.create(enc_id))
+	hub.scene_changed(ARENA_SCENE, arena)
+	tree_parent.add_child(arena)
+	var rec: PlaytestRecorder = hub.recorder
+	var session: CombatSession = arena.get("session")
+	c["first launch opens the run recording and follows the arena battle"] = rec != null and session != null and rec.session == session and str(rec.battle().get("encounter", "")) == enc_id
+	if rec == null or session == null:
+		_drop(tree_parent, arena)
+		_drop(tree_parent, hub)
+		return TestHelpers.report(TAG, "16. Hub: run recording, refused confirm, note image, trail, take-over branch", c)
+	c["panels visible at scene start log an open"] = _type_count(rec.data, "panel") > 0
+	var probe := Button.new()
+	probe.text = "probe"
+	arena.add_child(probe)
+	probe.pressed.emit()
+	var last: Dictionary = DictUtil.dict_of(DictUtil.array_of(rec.data["trail"]).back())
+	c["a button press is a button event with its control"] = str(last["type"]) == "button" and str(DictUtil.dict_of(last["ctl"]).get("text", "")) == "probe"
+	var hero: Combatant = null
+	for a: Combatant in session.allies:
+		if a.is_active() and hero == null:
+			hero = a
+	var foe: Combatant = null
+	for e: Combatant in session.enemies:
+		if e.is_active() and foe == null:
+			foe = e
+	var strike: SkillDef = null
+	for o: PlanOption in session.plan_options(hero):
+		if o.step.mode == PlanStep.Mode.ENGAGE and strike == null:
+			strike = o.step.skill
+	if strike != null:
+		var foe_hp: int = foe.hp
+		foe.hp = 0   # a target that has fallen: the plan is flagged and Confirm is refused
+		session.plan.set_steps(hero, [PlanStep.engage(strike, foe)] as Array[PlanStep])
+		var refused: bool = not session.confirm_plan(false)
+		last = DictUtil.dict_of(DictUtil.array_of(rec.data["trail"]).back())
+		c["a refused confirm is a confirm event with ok false and the reason"] = refused and str(last["type"]) == "confirm" and not DictUtil.to_bool(last["ok"]) \
+			and str(last["reason"]) == session.status_text
+		foe.hp = foe_hp
+		session.plan_clear(hero)
+	else:
+		c["a hero with an engage option (fixture)"] = false
+	c["the note box is closed"] = not hub.is_note_open()
+	var vp: Viewport = tree_parent.get_viewport()
+	var keys_closed: int = _type_count(rec.data, "key")
+	vp.push_input(_key_event(KEY_F12, 0))
+	var keys_before: int = _type_count(rec.data, "key")
+	c["control: with the box closed a key reaches the game (a key event)"] = keys_before == keys_closed + 1
+	hub.open_note()
+	vp.push_input(_key_event(KEY_ENTER, 0))   # would confirm the plan (CombatDockHost)
+	vp.push_input(_key_event(KEY_F10, 0))     # would leave to the menu (Scene Runner)
+	vp.push_input(_key_event(KEY_A, 97))
+	c["while the note box is open keys never reach the game (no confirm, no key events), typing reaches the box, clicks hit the blocker"] = hub.is_note_open() \
+		and not session.plan_confirmed and _type_count(rec.data, "key") == keys_before and hub.note_box.text_edit.text == "\na" and hub.blocker.visible and hub.blocker.mouse_filter == Control.MOUSE_FILTER_STOP
+	vp.push_input(_key_event(KEY_ESCAPE, 0))
+	c["Esc closes the box and the blocker"] = not hub.is_note_open() and not hub.blocker.visible and DictUtil.array_of(rec.data["notes"]).is_empty()
+	var image := Image.create(8, 8, false, Image.FORMAT_RGB8)
+	var saved: Dictionary = hub.save_note("hub note", ["ui"] as Array[String], image, hub.note_context())
+	var note: Dictionary = DictUtil.dict_of(saved["note"])
+	var jpg: String = PlaytestStore.image_dir(rec.id(), rec.path.get_base_dir()).path_join("note_1.jpg")
+	c["F8 note: note_1.jpg written next to the recording, stamped with the live round"] = DictUtil.to_bool(saved["ok"]) and str(note["image"]) == "note_1.jpg" and FileAccess.file_exists(jpg) \
+		and DictUtil.to_int(note["battle"]) == 0 and DictUtil.to_int(note["round"]) == session.current_round and JsonUtil.deep_equal(note["tags"], ["ui"])
+	var run_path: String = rec.path
+	var source: Dictionary = _load(path)
+	var take: Node = (load(ARENA_SCENE) as PackedScene).instantiate()
+	take.set("playtest", path)
+	take.set("take_over", 2)
+	_drop(tree_parent, arena)   # the runner's order: close the running scene, tell the hub, add the new one
+	hub.scene_changed(ARENA_SCENE, take)
+	tree_parent.add_child(take)
+	var branch: PlaytestRecorder = hub.recorder
+	var take_session: CombatSession = take.get("session")
+	c["the run recording was saved with its battle and note"] = DictUtil.array_of(_load(run_path)["battles"]).size() == 1 and DictUtil.array_of(_load(run_path)["notes"]).size() == 1
+	c["take-over: a branch recording with parent {id, battle, round} following the replayed session"] = branch != null and branch != rec and take_session != null and branch.session == take_session \
+		and JsonUtil.deep_equal(branch.data["parent"], {"id": str(source["id"]), "battle": 0, "round": 2}) and take_session.current_round == 2 and take_session.is_planning()
+	var banner: PlaybackBanner = take.get("banner")
+	c["take-over banner names the branch"] = banner != null and banner.title.text.begins_with("TAKE-OVER of %s battle 0 from round 2" % str(source["id"])) and not banner.take_over_button.visible
+	hub.scene_changed(PlaytestHub.MENU_SCENE, null)
+	c["leaving the scene closes the branch recording"] = hub.recorder == null
+	c["no hooks left once the recording closed"] = hub.trail.hook_count() == 0 and not hub.trail.hooked() and not hub.is_processing_input() and hub.shown_session == null
+	_drop(tree_parent, take)
+	_drop(tree_parent, hub)
+	c["hub unregisters on exit"] = PlaytestHub.instance == null
+	return TestHelpers.report(TAG, "16. Hub: run recording, refused confirm, note image, trail, take-over branch", c)
+
+static func _key_event(code: Key, unicode: int) -> InputEventKey:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.unicode = unicode
+	ev.pressed = true
+	return ev

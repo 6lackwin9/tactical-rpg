@@ -143,3 +143,72 @@ static func source_rev() -> String:
 # File text, stripped; empty when the file does not exist (no engine error printed).
 static func _read(path: String) -> String:
 	return FileAccess.get_file_as_string(path).strip_edges() if FileAccess.file_exists(path) else ""
+
+# ------------------------------------------------------------------------------
+# Browser helpers (Scene Runner "Playtests" panel)
+# ------------------------------------------------------------------------------
+
+# One recording for the browser: {ok, id, path, repo, origin, created, notes, parent, stale, error,
+# battles: [{index, encounter, rounds (concluded), end, seed}]}. `current` = ContentFingerprint.compute() of this build.
+static func summary(path: String, current: Dictionary) -> Dictionary:
+	var out: Dictionary = {"ok": false, "id": path.get_file().get_basename(), "path": path, "repo": path.begins_with("res://"), "origin": "", "created": "",
+		"notes": 0, "parent": null, "stale": false, "error": "", "battles": []}
+	var loaded: Dictionary = load_json(path)
+	if not DictUtil.to_bool(loaded.get("ok", false)):
+		out["error"] = str(loaded.get("error", ""))
+		return out
+	var raw: Dictionary = DictUtil.dict_of(loaded["data"])
+	var problems: Array[String] = PlaytestRecord.errors(raw)
+	if not problems.is_empty():
+		out["error"] = problems[0]
+		return out
+	var data: Dictionary = PlaytestRecord.normalize(raw)
+	out["ok"] = true
+	out["id"] = str(data["id"])
+	out["origin"] = str(data["origin"])
+	out["created"] = str(data["created"])
+	out["notes"] = DictUtil.array_of(data["notes"]).size()
+	out["parent"] = data["parent"]
+	out["stale"] = DictUtil.to_bool(ContentFingerprint.diff(DictUtil.dict_of(data["content"]), current)["stale"])
+	var battles: Array = []
+	for raw_battle: Variant in DictUtil.array_of(data["battles"]):
+		var b: Dictionary = DictUtil.dict_of(raw_battle)
+		battles.append({"index": DictUtil.to_int(b["index"]), "encounter": str(b["encounter"]), "seed": DictUtil.to_int(b["seed"]),
+			"rounds": PlaytestRecord.concluded_rounds(b).size(), "end": b["end"]})
+	out["battles"] = battles
+	return out
+
+# Copies a user recording and its image folder to `<dest_root>/<id>/` (default res://playtests/inbox, writable
+# when the game runs from source); the images sit next to the JSON there. Returns {dest, error}: dest = the
+# destination folder, or "" with `error` set.
+static func copy_to_repo(path: String, dest_root: String = "res://playtests/inbox") -> Dictionary:
+	var id: String = path.get_file().get_basename()
+	var dest: String = dest_root.path_join(id)
+	var real_dest: String = ProjectSettings.globalize_path(dest)
+	if DirAccess.make_dir_recursive_absolute(real_dest) != OK:
+		return {"dest": "", "error": "Cannot create %s." % real_dest}
+	var copied: Error = DirAccess.copy_absolute(ProjectSettings.globalize_path(path), real_dest.path_join("%s.json" % id))
+	if copied != OK:
+		return {"dest": "", "error": "Cannot copy %s (%s)." % [path, error_string(copied)]}
+	var images: String = ProjectSettings.globalize_path(image_dir(id, path.get_base_dir()))
+	if DirAccess.dir_exists_absolute(images):
+		for f: String in DirAccess.get_files_at(images):
+			DirAccess.copy_absolute(images.path_join(f), real_dest.path_join(f))
+	return {"dest": dest, "error": ""}
+
+# Valid scenario files in `dir` (H), sorted by id: [{id, title, why, encounter, seed, path}].
+static func scenarios(dir: String = SCENARIO_DIR) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not DirAccess.dir_exists_absolute(dir):
+		return out
+	for f: String in DirAccess.get_files_at(dir):
+		if not f.ends_with(".json"):
+			continue
+		var loaded: Dictionary = load_json(dir.path_join(f))
+		var s: Dictionary = DictUtil.dict_of(loaded.get("data", {}))
+		if DictUtil.to_bool(loaded.get("ok", false)) and PlaytestRecord.scenario_errors(s).is_empty():
+			var entry: Dictionary = s.duplicate(true)
+			entry["path"] = dir.path_join(f)
+			out.append(entry)
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["id"]) < str(b["id"]))
+	return out

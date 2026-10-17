@@ -1,6 +1,6 @@
 # PLAYTEST1-L: playtest recordings, notes, in-game playback and headless replay
 
-Status: approved (user 2026-10-17, all open-question defaults accepted; design-brainstorm 2026-10-17)
+Status: review (commits 1-2 built, PR #7); approved (user 2026-10-17, all open-question defaults accepted; design-brainstorm 2026-10-17)
 Depends on: none (uses the merged `CombatSession`, `CombatPlan`, `EncounterSource`, Scene Runner)
 Lane: logic only (no asset part). Commit 1 (core, tool, suite) first; commit 2 (UI) depends on commit 1.
 Touches: new `scripts/playtest/*`, `scripts/art/asset_registry.gd` (observer hook only), new `scripts/ui/playtest/*`, `scripts/combat/session/combat_session.gd` (signals only), `scenes/combat_arena.gd` (playback, seed, take-over fields), `scripts/ui/runner/scene_runner.gd` (hub child, Playtests panel), new `tools/replay.gd`, `tools/fc.sh` (`replay` command), new `scripts/tests/playtest_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`, new `playtests/README.md`; STRUCTURE rows and README delta via the planner

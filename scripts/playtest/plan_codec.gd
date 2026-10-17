@@ -66,7 +66,7 @@ static func roster(session: CombatSession) -> Array:
 
 static func encode_step(session: CombatSession, step: PlanStep) -> Dictionary:
 	return {
-		"mode": str(PlanStep.Mode.keys()[step.mode]),
+		"mode": mode_name(step.mode),
 		"skill": step.skill.id if step.skill != null else "",
 		"target": unit_ref(session, step.target),
 		"dir": [step.direction.x, step.direction.y],
@@ -96,6 +96,27 @@ static func encode_plan(session: CombatSession, plan: CombatPlan) -> Array:
 # Decode
 # ------------------------------------------------------------------------------
 
+# PlanStep.Mode by key name (the enum's own value, whatever its numbering); SELF when unknown (check has() first).
+static func mode_of(name_text: String) -> PlanStep.Mode:
+	match name_text:
+		"ENGAGE":
+			return PlanStep.Mode.ENGAGE
+		"MOVE":
+			return PlanStep.Mode.MOVE
+		"GOTO":
+			return PlanStep.Mode.GOTO
+		"AREA":
+			return PlanStep.Mode.AREA
+		"WITHDRAW":
+			return PlanStep.Mode.WITHDRAW
+		"ALLY":
+			return PlanStep.Mode.ALLY
+	return PlanStep.Mode.SELF
+
+# The key name of a PlanStep.Mode value.
+static func mode_name(mode: PlanStep.Mode) -> String:
+	return str(PlanStep.Mode.find_key(mode))
+
 # {ok, errors, warnings, units: Array[Combatant], steps: Array (of Array[PlanStep])} for C.plans.
 static func decode_plans(session: CombatSession, plans: Array, roster_entries: Array, round_num: int) -> Dictionary:
 	var errors: Array[String] = []
@@ -120,13 +141,12 @@ static func decode_plans(session: CombatSession, plans: Array, roster_entries: A
 	return {"ok": errors.is_empty(), "errors": errors, "warnings": warnings, "units": units, "steps": step_lists}
 
 static func decode_step(session: CombatSession, actor: Combatant, d: Dictionary, roster_entries: Array, where: String, errors: Array[String], warnings: Array[String]) -> PlanStep:
-	var mode_name: String = str(d.get("mode", ""))
-	var mode_index: int = PlanStep.Mode.keys().find(mode_name)
-	if mode_index < 0:
-		errors.append("%s: unknown mode '%s'." % [where, mode_name])
+	var name_text: String = str(d.get("mode", ""))
+	if not PlanStep.Mode.has(name_text):
+		errors.append("%s: unknown mode '%s'." % [where, name_text])
 		return null
 	var step := PlanStep.new()
-	step.mode = mode_index as PlanStep.Mode
+	step.mode = mode_of(name_text)
 	var skill_id: String = str(d.get("skill", ""))
 	if not skill_id.is_empty():
 		var skill: SkillDef = SkillCatalog.find(skill_id)
