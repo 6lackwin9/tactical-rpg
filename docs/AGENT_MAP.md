@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### S14-A1 first manifest rows (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread) | Alias and four sample overrides exported and seeded (data/seeds/s14_a1.gd); commit 2 already done by ITEM1-A | n/a / 25 | merged via PR |
+
 ### DLG1-F dialogue and shop follow-ups (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
