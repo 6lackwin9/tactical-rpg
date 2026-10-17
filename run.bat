@@ -4,6 +4,7 @@ rem   run.bat        latest main (released code) in this folder
 rem   run.bat dev    latest develop (finished tasks not yet released) in the sibling folder
 rem                  <this folder>-dev, a git worktree created on first use; run_dev.bat does the same.
 rem                  Inside the -dev folder, run.bat and run_dev.bat both open develop there.
+rem Scene Runner's "Restart runner" button (DEVELOPER panel) calls this file to pull.
 rem Two folders, so switching between main and dev never waits for a script cache rebuild.
 rem The dev game also keeps its own saves and settings: Godot puts user:// under %APPDATA%,
 rem so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
@@ -41,7 +42,8 @@ setlocal EnableDelayedExpansion
     )
   )
   if "!BRANCH!"=="develop" (
-    set "APPDATA=!APPDATA!\tactical-rpg-dev"
+    rem Restart runner starts this from a dev game that already has the dev APPDATA: do not nest it.
+    if /i not "!APPDATA:~-17!"=="\tactical-rpg-dev" set "APPDATA=!APPDATA!\tactical-rpg-dev"
     if not exist "!APPDATA!" mkdir "!APPDATA!"
     echo Dev saves and settings: !APPDATA!
   )

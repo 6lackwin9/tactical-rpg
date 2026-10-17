@@ -13,6 +13,7 @@ extends Node
 # Developer tools: hot-reload scripts edited on disk (ScriptReloader), restart
 # the whole runner process (for new files / class_names), and run the headless
 # test suites in a background process with their PASS / FAIL output shown here.
+# Restart runner on Windows with run.bat + git runs run.bat (fetch + fast-forward, then relaunch) and reports old -> new commit.
 # Playtests (PLAYTEST1, debug builds): the PlaytestHub child records the run while the
 # `record_playtests` pref is on; the PLAYTESTS column lists recordings (Open, Notes, Take over,
 # Copy to repo) and scenarios (each launched with its seed).
@@ -20,6 +21,8 @@ extends Node
 
 const SELF_SCENE: String = "res://scenes/scene_runner.tscn"
 const PREFS_PATH: String = "user://scene_runner.cfg"
+const RESTART_TIP: String = "Pull the latest code for this folder (backs up saves), then start a fresh runner"
+const PULL_PATH: String = "user://pull_restart.cfg"
 const ARENA_SCENE: String = "res://scenes/combat_arena.tscn"
 const RIGHT_WIDTH: int = 470
 const PLAYTESTS_STRETCH: float = 1.6   # share of the right column's height (DEVELOPER = 1)
@@ -85,6 +88,7 @@ func _ready() -> void:
 	_build_pill()
 	_load_prefs()
 	_show_menu()
+	_report_pull()
 
 func _exit_tree() -> void:
 	if _suite_thread != null and _suite_thread.is_started():
@@ -200,9 +204,65 @@ func reload_scripts(only: Array[String] = []) -> Dictionary:
 
 # Starts a fresh runner process (picks up new files and class_names), then quits this one.
 func restart_runner() -> void:
+	if _pull_blocker().is_empty():
+		pull_and_restart()
+		return
 	var args: PackedStringArray = ["--path", ProjectSettings.globalize_path("res://"), SELF_SCENE]
 	OS.create_process(OS.get_executable_path(), args)
 	get_tree().quit()
+
+# "" = Restart runner pulls via run.bat; otherwise the reason it is not (tooltip text).
+static func restart_pulls_blocker(os_name: String, is_web: bool, has_run_bat: bool, has_git: bool) -> String:
+	if is_web:
+		return "Not available in the browser build"
+	if os_name != "Windows":
+		return "Needs Windows (run.bat does the pull)"
+	if not has_run_bat:
+		return "run.bat not found in the project folder"
+	if not has_git:
+		return "This folder is not a git checkout"
+	return ""
+
+static func pull_summary(old_sha: String, new_sha: String) -> String:
+	if old_sha.is_empty() or new_sha.is_empty():
+		return "Restarted; could not read the commit (is git on PATH?)."
+	if old_sha == new_sha:
+		return "Already up to date (%s). Local edits, another branch or being offline skip the pull; see the console." % new_sha
+	return "Pulled %s → %s." % [old_sha, new_sha]
+
+static func _head_sha(project_dir: String) -> String:
+	var out: Array = []
+	if OS.execute("git", ["-C", project_dir, "rev-parse", "--short", "HEAD"], out) != 0 or out.is_empty():
+		return ""
+	return str(out[0]).strip_edges()
+
+func _pull_blocker() -> String:
+	var dir: String = ProjectSettings.globalize_path("res://")
+	var has_git: bool = DirAccess.dir_exists_absolute(dir.path_join(".git")) or FileAccess.file_exists(dir.path_join(".git"))
+	return restart_pulls_blocker(OS.get_name(), OS.has_feature("web"), FileAccess.file_exists("res://run.bat"), has_git)
+
+# Records the current commit, runs run.bat (fetch + fast-forward + launch) and quits.
+func pull_and_restart() -> void:
+	var dir: String = ProjectSettings.globalize_path("res://")
+	var cfg := ConfigFile.new()
+	cfg.set_value("pull", "old_sha", _head_sha(dir))
+	cfg.set_value("pull", "time", Time.get_datetime_string_from_system())
+	cfg.save(PULL_PATH)
+	OS.create_process("cmd.exe", ["/c", ProjectSettings.globalize_path("res://run.bat")], true)
+	get_tree().quit()
+
+func _report_pull() -> void:
+	if not FileAccess.file_exists(PULL_PATH):
+		return
+	var cfg := ConfigFile.new()
+	var old_sha: String = ""
+	if cfg.load(PULL_PATH) == OK:
+		old_sha = str(cfg.get_value("pull", "old_sha", ""))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PULL_PATH))
+	var text: String = pull_summary(old_sha, _head_sha(ProjectSettings.globalize_path("res://")))
+	_set_status(text, false)
+	if _output != null:
+		_output.text = text
 
 # Back to the menu. A scene with unsaved work (has_unsaved_changes()) needs a second press.
 func back_to_menu() -> bool:
@@ -341,7 +401,7 @@ func _build_menu() -> void:
 	var reload_row := HBoxContainer.new()
 	dev_col.add_child(reload_row)
 	reload_row.add_child(UiTheme.button("⟳ Reload scripts", "Recompile scripts edited on disk (F5 also restarts the running scene)", func() -> void: reload_scripts(), UiTheme.FONT_MD))
-	reload_row.add_child(UiTheme.button("⏻ Restart runner", "Start a fresh runner process: needed for new files / class_names", func() -> void: restart_runner(), UiTheme.FONT_MD))
+	reload_row.add_child(UiTheme.button("⏻ Restart runner", RESTART_TIP if _pull_blocker().is_empty() else "Start a fresh runner process: needed for new files / class_names", func() -> void: restart_runner(), UiTheme.FONT_MD))
 	_pending_label = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
 	_pending_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dev_col.add_child(_pending_label)

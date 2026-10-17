@@ -51,6 +51,18 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = TestHelpers.report_ok(TAG, "Browser build starts in the main menu; desktop keeps the runner", web_entry == "res://scenes/main_menu.tscn" and ResourceLoader.exists(web_entry) and str(ProjectSettings.get_setting("application/run/main_scene")) == SceneRunner.SELF_SCENE, web_entry) and ok
 	ok = TestHelpers.report_ok(TAG, "Web fallback fonts cover the runner's icon glyphs", missing.is_empty() and added == WebFonts.FALLBACKS.size(), "missing '%s', added %d" % [missing, added]) and ok
 
+	var pr_ok: bool = SceneRunner.restart_pulls_blocker("Windows", false, true, true).is_empty()
+	var pr_web: bool = not SceneRunner.restart_pulls_blocker("Windows", true, true, true).is_empty()
+	var pr_linux: bool = not SceneRunner.restart_pulls_blocker("Linux", false, true, true).is_empty()
+	var pr_bat: bool = not SceneRunner.restart_pulls_blocker("Windows", false, false, true).is_empty()
+	var pr_git: bool = not SceneRunner.restart_pulls_blocker("Windows", false, true, false).is_empty()
+	ok = TestHelpers.report_ok(TAG, "Restart runner pulls only on Windows desktop with run.bat and .git", pr_ok and pr_web and pr_linux and pr_bat and pr_git) and ok
+	var sum_diff: String = SceneRunner.pull_summary("abc1234", "def5678")
+	var sum_same: String = SceneRunner.pull_summary("abc1234", "abc1234")
+	var sum_empty: String = SceneRunner.pull_summary("", "def5678")
+	ok = TestHelpers.report_ok(TAG, "Pull summary: changed shows old -> new; equal or unknown old says up to date with a hint",
+		sum_diff == "Pulled abc1234 → def5678." and sum_same.begins_with("Already up to date (abc1234)") and sum_same.contains("offline") and sum_empty.begins_with("Restarted; could not read the commit") and SceneRunner.pull_summary("abc1234", "") == sum_empty, sum_same) and ok
+
 	if tree_parent == null:
 		return TestHelpers.report_ok(TAG, "Launch / menu / reload (needs a scene tree)", true, "skipped") and ok
 	var saved_enabled: int = PlaytestStore.force_enabled

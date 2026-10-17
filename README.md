@@ -663,7 +663,7 @@ Or open the project in **Godot 4.7+** and press Play: the main scene is the Scen
 
 - **Combat Arena** (pick any catalog encounter or any world's battle), **Content Forge**, **World Forge**, **Gear & Skill Dojo**, plus any other scene added under `scenes/` (listed automatically).
 - In a running scene, the **☰ Menu** pill (bottom-right) or **F10** returns to the menu, **F6** restarts the scene, **F5** reloads edited scripts and restarts it.
-- **⟳ Reload scripts** recompiles scripts edited on disk (the menu shows how many are pending); brand-new files or new `class_name`s need **⏻ Restart runner**, which starts a fresh process.
+- **⟳ Reload scripts** recompiles scripts edited on disk (the menu shows how many are pending); brand-new files or new `class_name`s need **⏻ Restart runner**, which starts a fresh process. On Windows in a git checkout, **⏻ Restart runner** instead runs `run.bat` (fetch and fast-forward this folder's branch, back up saves, relaunch) and reports `Pulled <old> → <new>` on the next start.
 - **▶ Arena suite / ▶ Dojo suite** run the headless test scenes in a separate process and show their PASS / FAIL lines.
 
 The Content Forge and World Forge are read-only viewers; content changes go through `ContentCatalog.upsert` / WorldCatalog seed scripts (`docs/workflow/content-edits.md`). To run a catalog or world encounter directly:
