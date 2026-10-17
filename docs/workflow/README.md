@@ -16,7 +16,7 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 | --- | --- | --- |
 | Planner | the main terminal session, one for everything | each task thread plans its own task; the project chat (coordinator) starts threads |
 | Front desk | a second local session, found with `ListAgents` | the project chat |
-| Parallel builders | subagents in sibling worktrees (`../ngp-<id>`) | one thread per task, each in its own container; subagents run one after another in that thread's checkout |
+| Parallel builders | subagents in sibling worktrees (`../ngp-<id>`) | one thread per task, each in its own container; the six lane agents run one after another in that thread's checkout (the thread writes only planner docs itself, see cloud.md "Lanes inside a task thread") |
 | Branch | `feat/<id>-<slug>`, created by the planner | the branch the thread is given (`claude/...`); the PR title starts with the task id |
 | Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit; `change-reviewer` reviews the whole branch before the PR is marked ready and its verdict goes in the PR body |
 | Merge to `main` | planner fast-forwards locally and pushes | squash merge of the PR on GitHub |

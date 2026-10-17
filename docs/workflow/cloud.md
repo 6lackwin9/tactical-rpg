@@ -18,6 +18,23 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 3. The thread updates only its own rows in `docs/TASKS.md` (status, branch name), its line in the `docs/AGENT_MAP.md` finished-runs log, and the decision rows for answers the user gave in that thread, all inside its own PR. Git merges replace the desktop "single writer" rule.
 4. Overlap: before starting, compare the task's `Touches` with the open PRs (GitHub reports merge conflicts); sequence tasks whose `Touches` overlap, as on desktop.
 
+## Lanes inside a task thread
+
+The thread is the planner (lane table: skill `planner`). It writes the planner docs itself (TASKS rows, decisions given in the thread, AGENT_MAP line, README and docs deltas) and hands every other lane to that lane's agent, as on desktop:
+
+| Work in the task | Agent the thread runs |
+| --- | --- |
+| engine code, schema, validation, tools, tests, and fixes to them (review fixes included) | `logic-builder` |
+| catalog or world data and its seed | `asset-builder` |
+| a new or changed spec, design options | `design-brainstorm` |
+| simulator runs and `docs/BALANCE_REPORT.md` | `balance` |
+| review of the whole branch before the PR is marked ready | `change-reviewer` |
+| a cleanup pass (after a goal or milestone finishes, or on request) | `housekeeper` |
+
+1. Only these six agents (`.claude/agents/`) are dispatched; generic agent types are not used for lane work. Effort and model come from the dispatch-mode table (skill `planner-ops`).
+2. Work none of them covers goes to the user as a proposal: extend an existing agent or add a new agent type. Any new or changed agent or skill needs the user's approval before it merges.
+3. A thread that does a lane's work itself has broken the lane rule; "no subagent" is valid only for a planner-docs-only task (decision records, TASKS or ROADMAP edits). The AGENT_MAP line names each agent the thread ran.
+
 ## Pull request, approval and merge
 
 1. Push, then open a draft PR whose title starts with the task id; body: what changed and what to check.
