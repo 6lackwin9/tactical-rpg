@@ -3,7 +3,8 @@ extends VBoxContainer
 
 # ==============================================================================
 # Tactical RPG - In-game hub view (UI1-L): where the party is, the party summary and the hub entries (Party opens the
-# UI2-L party screen, a dot marks unspent level-up points; Journal stays disabled until UI3-L); Explore returns to the game scene when it exists.
+# UI2-L party screen, a dot marks unspent level-up points; Journal opens the UI3-L quest journal); Explore returns to the
+# game scene when it exists.
 # ==============================================================================
 
 const LABELS: Dictionary = {MenuRouter.PARTY: "Party", MenuRouter.JOURNAL: "Journal", MenuRouter.SAVE: "Save game", MenuRouter.SETTINGS: "Settings"}
