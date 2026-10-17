@@ -14,10 +14,20 @@ static func tile_at(terrain_type: Terrain.Type, coord: Vector2i) -> Texture2D:
 	var variant: int = int(SvgRaster.hash01(coord.x, coord.y, 7) * VARIANTS) % VARIANTS
 	return tile(terrain_type, variant)
 
+# Through AssetRegistry (key = snake_case type name, variant v0-v3): a manifest file (a v0 file serves every variant
+# without its own), else the template.
 static func tile(terrain_type: Terrain.Type, variant: int = 0) -> Texture2D:
+	return AssetRegistry.texture("tile", AssetRegistry.tile_key(terrain_type), "v%d" % variant)
+
+# Overlay keys are "overlay_exit" and "overlay_center" (any kind other than exit draws the center ring).
+static func overlay(kind: String) -> Texture2D:
+	return AssetRegistry.texture("tile", "overlay_exit" if kind == "exit" else "overlay_center", "v0")
+
+# The generated tile / overlay (cached "tile|<type>|<variant>" / "overlay|<kind>"); used by AssetRegistry.
+static func template_tile(terrain_type: Terrain.Type, variant: int) -> Texture2D:
 	return SvgRaster.texture("tile|%d|%d" % [terrain_type, variant], tile_svg(terrain_type, variant), 2.0)
 
-static func overlay(kind: String) -> Texture2D:
+static func template_overlay(kind: String) -> Texture2D:
 	return SvgRaster.texture("overlay|%s" % kind, overlay_svg(kind), 2.0)
 
 static func _wrap(body: String) -> String:

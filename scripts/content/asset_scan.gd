@@ -10,6 +10,34 @@ extends RefCounted
 
 const SCAN_DIRS: Array[String] = ["res://scripts/tests", "res://scenes/dojo", "res://data/seeds"]
 const WORLD_DIR: String = "res://data/worlds"
+const ASSETS_KIND: String = "assets"
+# Content fields that hold art keys, per asset namespace (S14-L1 schema contract).
+const KEY_FIELDS: Dictionary = {"unit": {"classes": "art", "units": "art"}, "item": {"items": "icon_id", "item_families": "art"}}
+const WORLD_KEY_FIELDS: Dictionary = {"unit": {"characters": "art"}, "item": {"items": "icon_id"}}
+
+# Everything that names art key `key` of namespace `ns`: content entries ("classes:<id>"), world entries
+# ("<world>:characters:<id>") and other manifest rows aliasing it ("assets:<row id>"; `exclude_id` is skipped; with a
+# `variant` only alias rows of that variant count). Content fields name a key for every variant.
+static func asset_refs(ns: String, key: String, exclude_id: String = "", variant: String = "") -> Array[String]:
+	var refs: Array[String] = []
+	if key.is_empty():
+		return refs
+	var fields: Dictionary = DictUtil.dict_of(KEY_FIELDS.get(ns, {}))
+	for kind: Variant in fields:
+		for e: Dictionary in ContentCatalog.entries(str(kind)):
+			if str(e.get(str(fields[kind]), "")) == key:
+				refs.append("%s:%s" % [str(kind), str(e.get("id", ""))])
+	var world_fields: Dictionary = DictUtil.dict_of(WORLD_KEY_FIELDS.get(ns, {}))
+	for world_id: String in WorldCatalog.world_ids():
+		for kind: Variant in world_fields:
+			for e: Dictionary in WorldCatalog.own_entries(world_id, str(kind)):
+				if str(e.get(str(world_fields[kind]), "")) == key:
+					refs.append("%s:%s:%s" % [world_id, str(kind), str(e.get("id", ""))])
+	for row: Dictionary in AssetCatalog.entries():
+		if variant.is_empty() or str(row.get("variant", "")) == variant:
+			if str(row.get("id", "")) != exclude_id and str(row.get("namespace", "")) == ns and str(row.get("alias_of", "")) == key:
+				refs.append("%s:%s" % [ASSETS_KIND, str(row.get("id", ""))])
+	return refs
 
 # "file:line" of every quoted occurrence of any id in tests, dojo scripts and seeds.
 static func scan_files(ids: Array[String]) -> Array[String]:
@@ -45,7 +73,11 @@ static func ids_of(kind: String, id: String) -> Array[String]:
 	return ids
 
 # Every reference to `kind`/`id`: catalog entries (ContentCatalog.references_to), tests, dojo scripts, seeds, world files.
+# Kind "assets" (an AssetCatalog row id "<ns>/<key>/<variant>") counts the content fields holding the key (asset_refs).
 static func scan(kind: String, id: String) -> Array[String]:
+	if kind == ASSETS_KIND:
+		var row: Dictionary = AssetCatalog.get_entry(id)
+		return asset_refs(str(row.get("namespace", "")), str(row.get("key", "")), id)
 	var ids: Array[String] = ids_of(kind, id)
 	var refs: Array[String] = []
 	for each_id: String in ids:

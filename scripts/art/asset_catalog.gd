@@ -250,11 +250,10 @@ static func validate_entry(entry: Dictionary, current_id: String = "") -> Array[
 	if not path.is_empty():
 		errors.append_array(_path_errors(ns, key, variant, path, ns_ok and key_ok and variant_ok))
 	if not alias.is_empty() and ns_ok:
-		if not AssetRegistry.has_key(ns, alias) or alias == key:
-			if alias == key:
-				errors.append("Alias target '%s' is an alias (one hop only)." % alias)
-			else:
-				errors.append("Alias target '%s' is not a known %s key." % [alias, ns])
+		if alias == key:
+			errors.append("An alias can't point at its own key ('%s')." % alias)
+		elif not AssetRegistry.has_key(ns, alias):
+			errors.append("Alias target '%s' is not a known %s key." % [alias, ns])
 		elif _is_alias(ns, alias, variant):
 			errors.append("Alias target '%s' is an alias (one hop only)." % alias)
 	if not _size_ok(e["size"]):
@@ -287,8 +286,13 @@ static func _path_errors(ns: String, key: String, variant: String, path: String,
 		errors.append("File '%s' does not load as %s." % [path, AssetRegistry.resource_type(ns)])
 	return errors
 
+static func _is_system(row: Dictionary) -> bool:
+	return str(row.get("origin", ORIGIN_USER)) == ORIGIN_SYSTEM
+
 # Validates and stores (replacing `replace_id`, or the row with the same id, in place; otherwise appended). The id is
-# always derived from namespace/key/variant. Outside the system-edit scope a new row is a user row.
+# always derived from namespace/key/variant. Origin (same rules as ContentCatalog): a new row is a user row outside the
+# system-edit scope; an existing row keeps its origin (change it with promote/demote); a system row is only replaced
+# inside the scope. Moving a row to another key/variant drops the old id, so it passes the remove check first.
 # Returns the problems; nothing changes if any.
 static func upsert(entry: Dictionary, replace_id: String = "") -> Array[String]:
 	_ensure_loaded()
@@ -298,11 +302,25 @@ static func upsert(entry: Dictionary, replace_id: String = "") -> Array[String]:
 	var new_id: String = str(clean["id"])
 	var old_id: String = replace_id if not replace_id.is_empty() else new_id
 	var old: Dictionary = get_entry(old_id)
-	if old.is_empty() and not in_system_edit():
-		clean["origin"] = ORIGIN_USER
-	elif not old.is_empty() and not entry.has("origin"):
+	var errors: Array[String] = []
+	if old.is_empty():
+		if not in_system_edit():
+			clean["origin"] = ORIGIN_USER
+	elif not in_system_edit():
+		if _is_system(old):
+			errors.append("'%s' is a system asset (origin system): edit it inside the system-edit scope." % old_id)
+			return errors
+		if entry.has("origin") and str(entry["origin"]) != str(old.get("origin", ORIGIN_USER)):
+			errors.append("Origin changes go through AssetCatalog.promote / demote.")
+			return errors
 		clean["origin"] = str(old.get("origin", ORIGIN_USER))
-	var errors: Array[String] = validate_entry(clean, old_id)
+	elif not entry.has("origin"):
+		clean["origin"] = str(old.get("origin", ORIGIN_USER))
+	errors = validate_entry(clean, old_id)
+	if errors.is_empty() and not old.is_empty() and new_id != old_id:
+		var blocked: String = removal_block(old_id)
+		if not blocked.is_empty():
+			errors.append(blocked)
 	if not errors.is_empty():
 		return errors
 	var at: int = _index_of(old_id)
@@ -313,15 +331,60 @@ static func upsert(entry: Dictionary, replace_id: String = "") -> Array[String]:
 	_state()["dirty"] = true
 	return errors
 
-# Removes a row. Refused (nothing changes) for system rows outside the system-edit scope.
+# Why removing row `id` would break art ("" when it may go), rule 7 (user decision 2026-10-17, option A): a key with a
+# generated template always may (the placeholder comes back); for a manifest-only key the row is refused while content
+# names the key or another row aliases it for the same variant, unless that variant still resolves through the
+# manifest afterwards (a tile v0 row serves the other variants).
+static func removal_block(id: String) -> String:
+	var row: Dictionary = get_entry(id)
+	if row.is_empty():
+		return ""
+	var ns: String = str(row.get("namespace", ""))
+	var key: String = str(row.get("key", ""))
+	var variant: String = str(row.get("variant", ""))
+	if AssetRegistry.has_template(ns, key):
+		return ""
+	if ns == "tile" and variant != "v0" and has(id_for(ns, key, "v0")):
+		return ""
+	var refs: Array[String] = AssetScan.asset_refs(ns, key, id, variant)
+	if refs.is_empty():
+		return ""
+	return "Asset '%s' is used by %s; remove the references first." % [id, ", ".join(refs)]
+
+# Removes a row. Refused (nothing changes) for system rows outside the system-edit scope and while removal_block says so.
 static func remove(id: String) -> String:
 	var at: int = _index_of(id)
 	if at < 0:
 		return "No asset '%s'." % id
-	var row: Dictionary = get_entry(id)
-	if str(row.get("origin", ORIGIN_USER)) == ORIGIN_SYSTEM and not in_system_edit():
+	if _is_system(get_entry(id)) and not in_system_edit():
 		return "'%s' is a system asset (origin system): delete is refused outside the system-edit scope." % id
+	var blocked: String = removal_block(id)
+	if not blocked.is_empty():
+		return blocked
 	_list().remove_at(at)
+	_state()["dirty"] = true
+	return ""
+
+# Promote a user row to system (explicit action; edits and delete then need the system-edit scope). "" or why not.
+static func promote(id: String) -> String:
+	return _set_origin(id, ORIGIN_SYSTEM)
+
+# Demote a system row back to user. Refused while a test or seed names the row id (AssetScan.scan_files). "" or why not.
+static func demote(id: String) -> String:
+	var row_ids: Array[String] = [id]
+	var refs: Array[String] = AssetScan.scan_files(row_ids)
+	if has(id) and _is_system(get_entry(id)) and not refs.is_empty():
+		return "'%s' is named by tests or seeds, so it stays system: %s." % [id, "; ".join(refs)]
+	return _set_origin(id, ORIGIN_USER)
+
+static func _set_origin(id: String, origin: String) -> String:
+	var at: int = _index_of(id)
+	if at < 0:
+		return "No asset '%s'." % id
+	var row: Dictionary = DictUtil.dict_of(_list()[at])
+	if str(row.get("origin", ORIGIN_USER)) == origin:
+		return "'%s' is already a %s asset." % [id, origin]
+	row["origin"] = origin
 	_state()["dirty"] = true
 	return ""
 

@@ -23,8 +23,20 @@ static func texture(key: String, svg: String, scale: float = 1.0) -> Texture2D:
 	_cache[cache_key] = tex
 	return tex
 
+# Also forgets the AssetRegistry "failed to load" warnings (a cleared cache warns again once per id) and its skill
+# family cache.
 static func clear_cache() -> void:
 	_cache.clear()
+	AssetRegistry.clear_warnings()
+	AssetRegistry.clear_family_cache()
+
+# A texture built elsewhere (AssetRegistry file art, "file|<id>|<team>") under `key` exactly; null when not cached.
+static func cached_texture(key: String) -> Texture2D:
+	var hit: Variant = _cache.get(key, null)
+	return hit if hit is Texture2D else null
+
+static func store(key: String, tex: Texture2D) -> void:
+	_cache[key] = tex
 
 # Deterministic 0..1 noise from integer coordinates + salt (for tile variation).
 static func hash01(x: int, y: int, salt: int = 0) -> float:

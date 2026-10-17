@@ -5,6 +5,8 @@ extends RefCounted
 # Tactical RPG - Asset Pipeline Test Suite (S14, spec S14-L1)
 # Part A (schema): AssetCatalog contract, manifest row validation (one bad row per message), key lists and the content
 # option lists / art validator reading the registry, resolve order with a missing file, the export tool.
+# Part B (resolution and art): every shipped key resolves at its size, UnitArt/TileArt delegation, skill and status
+# icons, file textures (cache, alias, broken file, size warning), the team overlay of unit files, safe remove.
 # Fixtures: AssetCatalog on a sandbox manifest whose asset root is a sandbox folder (files written there by the export
 # function); the shipped manifest and catalog are only read.
 # ==============================================================================
@@ -55,6 +57,9 @@ static func run() -> bool:
 	var ok: bool = true
 	ok = _test_shipped() and ok
 	ok = _test_key_lists() and ok
+	ok = _test_shipped_keys_resolve() and ok
+	ok = _test_delegation() and ok
+	ok = _test_icons() and ok
 	var sandboxed: bool = _use_sandbox()
 	ok = _report("Sandbox manifest and asset root under user://", {"sandboxed": sandboxed}) and ok
 	if sandboxed:
@@ -63,6 +68,9 @@ static func run() -> bool:
 		ok = _test_messages() and ok
 		ok = _test_alias_keys() and ok
 		ok = _test_resolve_missing_file() and ok
+		ok = _test_file_textures() and ok
+		ok = _test_team_overlay() and ok
+		ok = _test_safe_remove() and ok
 	_restore()
 	return ok
 
@@ -152,16 +160,28 @@ static func _test_contract() -> bool:
 	AssetCatalog.reload_from_disk()
 	c["round trip"] = AssetCatalog.has(id) and AssetCatalog.ids().size() == before and AssetCatalog.validate_all().is_empty()
 	# origin: new rows are user rows outside the system-edit scope; a system row refuses remove outside it
-	var sys_row: Dictionary = _row("unit", "warrior", "portrait", AssetRegistry.pattern_paths("unit", "warrior", "portrait")[0])
+	# (a key no content names, so only the origin rule decides the remove)
+	var sys_row: Dictionary = _row("unit", "qa_sys", "portrait", str(AssetRegistry.export_placeholder("unit", "qa_sys", "portrait")["path"]))
 	sys_row["origin"] = AssetCatalog.ORIGIN_SYSTEM
-	AssetCatalog.upsert(sys_row)
-	var sys_id: String = AssetCatalog.id_for("unit", "warrior", "portrait")
+	var sys_id: String = AssetCatalog.id_for("unit", "qa_sys", "portrait")
+	c["new row stored"] = AssetCatalog.upsert(sys_row).is_empty()
 	c["new row outside the scope is user"] = str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_USER
+	c["explicit origin change outside the scope refused"] = TestHelpers.any_contains(AssetCatalog.upsert(sys_row), "promote / demote") and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_USER
 	AssetCatalog.begin_system_edit()
-	AssetCatalog.upsert(sys_row)
+	var scoped: Array[String] = AssetCatalog.upsert(sys_row)
 	AssetCatalog.end_system_edit()
-	c["inside the scope it keeps system"] = str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_SYSTEM
+	c["inside the scope it becomes system"] = scoped.is_empty() and str(AssetCatalog.get_entry(sys_id).get("origin", "")) == AssetCatalog.ORIGIN_SYSTEM
+	var edit: Dictionary = sys_row.duplicate()
+	edit.erase("origin")
+	edit["note"] = "edited"
+	c["system row edit outside the scope refused"] = TestHelpers.any_contains(AssetCatalog.upsert(edit), "system-edit scope") and str(AssetCatalog.get_entry(sys_id)["note"]).is_empty()
+	var demoting: Dictionary = sys_row.duplicate()
+	demoting["origin"] = AssetCatalog.ORIGIN_USER
+	c["origin 'user' on a system row refused"] = not AssetCatalog.upsert(demoting).is_empty() and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_SYSTEM
+	var moved: Dictionary = _row("unit", "qa_sys", "token", "", UnitArt.CLASS_KEYS[0])
+	c["replace_id over a system row refused"] = not AssetCatalog.upsert(moved, sys_id).is_empty() and AssetCatalog.has(sys_id) and not AssetCatalog.has(AssetCatalog.id_for("unit", "qa_sys", "token"))
 	c["system row refuses remove"] = not AssetCatalog.remove(sys_id).is_empty() and AssetCatalog.has(sys_id)
+	c["demote / promote change the origin"] = AssetCatalog.demote(sys_id).is_empty() and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_USER and AssetCatalog.promote(sys_id).is_empty() and str(AssetCatalog.get_entry(sys_id)["origin"]) == AssetCatalog.ORIGIN_SYSTEM and not AssetCatalog.promote(sys_id).is_empty()
 	AssetCatalog.begin_system_edit()
 	var why: String = AssetCatalog.remove(sys_id)
 	AssetCatalog.end_system_edit()
@@ -171,8 +191,10 @@ static func _test_contract() -> bool:
 	AssetCatalog.save()
 	var raw: String = FileAccess.get_file_as_string(AssetCatalog.file_path()).replace("\"note\"", "\"bogus\"")
 	var f := FileAccess.open(AssetCatalog.file_path(), FileAccess.WRITE)
-	f.store_string(raw)
-	f.close()
+	c["manifest file reopened for writing"] = f != null
+	if f != null:
+		f.store_string(raw)
+		f.close()
 	AssetCatalog.reload_from_disk()
 	c["unknown field -> load error, save blocked"] = not AssetCatalog.load_errors().is_empty() and AssetCatalog.save_blocked() and AssetCatalog.validate_all().has("load")
 	_use_sandbox()
@@ -202,6 +224,7 @@ static func _test_messages() -> bool:
 		"File '%s' does not exist." % AssetRegistry.pattern_paths("item", "dagger", "icon")[0]: _row("item", "dagger", "icon", AssetRegistry.pattern_paths("item", "dagger", "icon")[0]),
 		"File '%s' does not load as Texture2D." % bad_png: _row("item", "broken", "icon", bad_png),
 		"Alias target 'nope' is not a known item key.": _row("item", "dagger", "icon", "", "nope"),
+		"An alias can't point at its own key ('dagger').": _row("item", "dagger", "icon", "", "dagger"),
 		"Set a path or an alias, not both.": _row("item", "dagger", "icon", good_path, "sword"),
 		"Set a path or an alias.": _row("item", "dagger", "icon"),
 		"Size must be two whole numbers 8-2048.": big,
@@ -258,3 +281,231 @@ static func _test_resolve_missing_file() -> bool:
 	AssetRegistry.clear_warnings()
 	_use_sandbox()
 	return _report("Resolve order: file, template, fallback; a missing file warns once", c)
+
+# ------------------------------------------------------------------------------
+# Part B: resolution and art
+# ------------------------------------------------------------------------------
+
+# The size a texture of ns/variant has: the composed token, else the namespace default.
+static func _want_size(ns: String, variant: String) -> Vector2i:
+	if ns == "unit" and variant == "token":
+		return AssetRegistry.TOKEN_SIZE
+	return AssetRegistry.default_size(ns, variant)
+
+static func _resolves(ns: String, key: String, variant: String, team: int = -1) -> bool:
+	var tex: Texture2D = AssetRegistry.texture(ns, key, variant, team)
+	return tex != null and Vector2i(tex.get_size()) == _want_size(ns, variant)
+
+# Acceptance 1: every key held by shipped content resolves to a texture of the expected size.
+static func _test_shipped_keys_resolve() -> bool:
+	var bad: Array[String] = []
+	var unit_keys: Array[String] = []
+	for e: Dictionary in ContentCatalog.entries("classes"):
+		unit_keys.append(str(e.get("art", "")))
+	for e: Dictionary in ContentCatalog.entries("units"):
+		unit_keys.append(ContentFactory.art_of(e))
+	for world_id: String in WorldCatalog.world_ids():
+		for e: Dictionary in WorldCatalog.own_entries(world_id, "characters"):
+			if not str(e.get("art", "")).is_empty():
+				unit_keys.append(str(e["art"]))
+	for key: String in unit_keys:
+		for variant: String in AssetRegistry.variants("unit"):
+			for team: int in range(UnitArt.Team.size()):
+				if not _resolves("unit", key, variant, team):
+					bad.append("unit/%s/%s/%d" % [key, variant, team])
+	for e: Dictionary in ContentCatalog.entries("items"):
+		var icon: String = str(e.get("icon_id", ""))
+		if not icon.is_empty() and not _resolves("item", icon, "icon"):
+			bad.append("item/" + icon)
+	for fam: String in AssetRegistry.skill_family_ids():
+		if not _resolves("skill", fam, "icon"):
+			bad.append("skill/" + fam)
+	for id: String in StatusRegistry.ids():
+		if not _resolves("status", id, "icon"):
+			bad.append("status/" + id)
+	for name: String in Terrain.Type.keys():
+		for variant: String in AssetRegistry.variants("tile"):
+			if not _resolves("tile", name.to_lower(), variant):
+				bad.append("tile/%s/%s" % [name.to_lower(), variant])
+	var c: Dictionary = {"every shipped key resolves at its size (%s)" % ", ".join(bad.slice(0, 5)): bad.is_empty(), "keys collected": unit_keys.size() >= ContentCatalog.entries("classes").size()}
+	c["unknown key -> fallback texture, never null"] = _resolves("unit", "qa_no_such_key", "token", 0) and _resolves("item", "qa_no_such_key", "icon") and _resolves("tile", "qa_no_such_key", "v0") and _resolves("skill", "qa_no_such_key", "icon") and _resolves("status", "qa_no_such_key", "icon")
+	c["ui blank texture"] = AssetRegistry.texture("ui", "qa_menu", "background") != null
+	c["sound unresolved -> null stream, no texture"] = AssetRegistry.stream("sfx", "qa_hit") == null and AssetRegistry.texture("sfx", "qa_hit", "stream") == null
+	return _report("Every shipped art key resolves (shipped manifest)", c)
+
+# Rule 4: UnitArt / TileArt keep their signatures and delegate; with no row the textures are today's templates.
+static func _test_delegation() -> bool:
+	var c: Dictionary = {}
+	var same_tokens: bool = true
+	for key: String in UnitArt.CLASS_KEYS:
+		if not AssetCatalog.keys_of("unit").has(key):
+			same_tokens = same_tokens and UnitArt.token(key, UnitArt.Team.HOSTILE) == UnitArt.template_token(key, UnitArt.Team.HOSTILE) and UnitArt.portrait(key, UnitArt.Team.FRIENDLY) == UnitArt.template_portrait(key, UnitArt.Team.FRIENDLY)
+	c["token / portrait == template for template-only keys"] = same_tokens
+	c["unknown class draws the unit template"] = UnitArt.token("qa_no_such_key", UnitArt.Team.NEUTRAL) == UnitArt.template_token("unit", UnitArt.Team.NEUTRAL)
+	c["normalize_class unknown -> unit"] = UnitArt.normalize_class("no_such_key") == "unit"
+	c["normalize_class keeps every class key"] = UnitArt.CLASS_KEYS.all(func(k: String) -> bool: return UnitArt.normalize_class(k) == k)
+	c["tile == template"] = TileArt.tile(Terrain.Type.GRASS, 1) == TileArt.template_tile(Terrain.Type.GRASS, 1) or AssetCatalog.keys_of("tile").has("grass")
+	c["overlays == templates"] = TileArt.overlay("exit") == TileArt.template_overlay("exit") and TileArt.overlay("center") == TileArt.template_overlay("center")
+	var t1: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
+	var t2: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
+	SvgRaster.clear_cache()
+	var t3: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
+	c["cached: same instance; clear_cache rebuilds"] = t1 == t2 and t3 != t1 and t3 != null
+	return _report("UnitArt / TileArt delegate to the registry (identical without rows)", c)
+
+# Acceptance 8 and rule 6: skill and status placeholder icons.
+static func _test_icons() -> bool:
+	var c: Dictionary = {}
+	var glyphs_ok: bool = true
+	for id: String in StatusRegistry.ids():
+		glyphs_ok = glyphs_ok and StatusArt.GLYPHS.has(id)
+	c["every status id has its own glyph"] = glyphs_ok
+	var distinct: Dictionary = {}
+	for id: String in StatusArt.GLYPHS:
+		distinct[str(StatusArt.GLYPHS[id])] = true
+	c["status glyphs are distinct"] = distinct.size() == StatusArt.GLYPHS.size()
+	c["status disc by kind"] = StatusArt.icon_svg(StatusRegistry.ids_where(StatusRegistry.KIND_BUFF)[0]).contains(StatusArt.BUFF_COLOR) and StatusArt.icon_svg(StatusRegistry.ids_where(StatusRegistry.KIND_DEBUFF)[0]).contains(StatusArt.DEBUFF_COLOR)
+	c["status without a glyph -> kind arrow"] = StatusArt.glyph_of("qa_new_status") == StatusArt.ARROW_DOWN
+	var skills_ok: bool = true
+	for fam: String in AssetRegistry.skill_family_ids():
+		var tex: Texture2D = SkillArt.icon(fam)
+		skills_ok = skills_ok and tex != null and Vector2i(tex.get_size()) == AssetRegistry.default_size("skill", "icon")
+	c["every shipped family icon is 64x64"] = skills_ok
+	var every_kind_coloured: bool = true
+	for fam: String in AssetRegistry.skill_family_ids():
+		var kind: String = str(ContentCatalog.get_entry("skills", fam).get("kind", ""))
+		every_kind_coloured = every_kind_coloured and SkillArt.KIND_COLORS.has(kind) and SkillArt.icon_svg(fam).contains(str(SkillArt.KIND_COLORS[kind]))
+	c["family disc coloured by its kind"] = every_kind_coloured
+	c["every kind has a glyph path"] = SkillArt.KIND_COLORS.keys().all(func(k: Variant) -> bool: return SkillArt.GLYPH_PATHS.has(str(SkillArt.KIND_GLYPHS.get(k, ""))))
+	c["unknown family -> the skill fallback look"] = SkillArt.icon_svg("qa_no_such_family") == SkillArt.icon_svg(str(AssetRegistry.FALLBACK_KEYS["skill"]))
+	c["no text in icon SVG"] = not SkillArt.icon_svg(AssetRegistry.skill_family_ids()[0]).contains("<text") and not StatusArt.icon_svg(StatusRegistry.ids()[0]).contains("<text")
+	return _report("Skill and status placeholder icons", c)
+
+# Acceptance 3-5 (texture part) and the size warning: file textures, alias, broken file, cache.
+static func _test_file_textures() -> bool:
+	var c: Dictionary = {}
+	var sword: Dictionary = AssetRegistry.export_placeholder("item", "sword", "icon")
+	AssetCatalog.upsert(_row("item", "sword", "icon", str(sword["path"])))
+	AssetCatalog.upsert(_row("item", "qa_blade", "icon", "", "sword"))
+	var file_tex: Texture2D = AssetRegistry.texture("item", "sword", "icon")
+	c["row with a file -> file texture"] = str(AssetRegistry.resolve("item", "sword", "icon")["source"]) == "file" and file_tex != null and file_tex != AssetRegistry.texture("item", "dagger", "icon")
+	var alias_tex: Texture2D = AssetRegistry.texture("item", "qa_blade", "icon")
+	c["alias -> the target's image data"] = alias_tex != null and alias_tex.get_image().get_data() == file_tex.get_image().get_data()
+	c["same arguments -> same instance"] = AssetRegistry.texture("item", "sword", "icon") == file_tex
+	SvgRaster.clear_cache()
+	var rebuilt: Texture2D = AssetRegistry.texture("item", "sword", "icon")
+	c["clear_cache -> a new instance"] = rebuilt != null and rebuilt != file_tex
+	# a file that exists but does not load: template texture, exactly one warning across two lookups
+	_write_text(str(sword["path"]), "not an image")
+	SvgRaster.clear_cache()
+	var a: Texture2D = AssetRegistry.texture("item", "sword", "icon")
+	var b: Texture2D = AssetRegistry.texture("item", "sword", "icon")
+	c["broken file -> template texture"] = a != null and a == b and Vector2i(a.get_size()) == AssetRegistry.default_size("item", "icon")
+	c["broken file -> one warning"] = AssetRegistry.warning_count() == 1
+	SvgRaster.clear_cache()
+	c["clear_cache forgets the warnings"] = AssetRegistry.warning_count() == 0
+	# a file whose size differs from the row size: a warning, never an error
+	var grass: Dictionary = AssetRegistry.export_placeholder("tile", "grass", "v0")
+	var sized: Dictionary = _row("tile", "grass", "v0", str(grass["path"]))
+	sized["size"] = [64, 64]
+	c["size mismatch is valid"] = AssetCatalog.validate_entry(sized).is_empty()
+	c["size mismatch warns"] = not AssetCatalog.warnings_for(sized).is_empty() and AssetCatalog.warnings_for(_row("tile", "grass", "v0", str(grass["path"]))).is_empty()
+	_use_sandbox()
+	return _report("File textures: cache, alias, broken file, size warning", c)
+
+static func _solid_png(row_path: String, size: Vector2i, color: Color) -> void:
+	var img := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+	img.fill(color)
+	var real: String = AssetCatalog.file_of(row_path)
+	DirAccess.make_dir_recursive_absolute(real.get_base_dir())
+	img.save_png(real)
+
+# Acceptance 6 (rule 3): one opaque unit file serves all three teams; the composed textures differ only outside the
+# 104x104 inner square (the rim), and inside they are the file.
+static func _test_team_overlay() -> bool:
+	var c: Dictionary = {}
+	var token_path: String = AssetRegistry.pattern_paths("unit", "qa_solid", "token")[0]
+	var portrait_path: String = AssetRegistry.pattern_paths("unit", "qa_solid", "portrait")[0]
+	_solid_png(token_path, Vector2i(52, 52), Color(0.2, 0.8, 0.4))   # half size: resized to the inner square
+	_solid_png(portrait_path, AssetRegistry.default_size("unit", "portrait"), Color(0.2, 0.8, 0.4, 0.5))
+	c["rows stored"] = AssetCatalog.upsert(_row("unit", "qa_solid", "token", token_path)).is_empty() and AssetCatalog.upsert(_row("unit", "qa_solid", "portrait", portrait_path)).is_empty()
+	var imgs: Array[Image] = []
+	var portraits: Array[Image] = []
+	for team: int in range(UnitArt.Team.size()):
+		var tex: Texture2D = UnitArt.token("qa_solid", team as UnitArt.Team)
+		var por: Texture2D = UnitArt.portrait("qa_solid", team as UnitArt.Team)
+		c["team %d token composed at 128" % team] = tex != null and Vector2i(tex.get_size()) == AssetRegistry.TOKEN_SIZE
+		c["team %d portrait at 240" % team] = por != null and Vector2i(por.get_size()) == AssetRegistry.default_size("unit", "portrait")
+		imgs.append(tex.get_image() if tex != null else Image.create(1, 1, false, Image.FORMAT_RGBA8))
+		portraits.append(por.get_image() if por != null else Image.create(1, 1, false, Image.FORMAT_RGBA8))
+	if imgs.size() == 3 and imgs[0].get_size() == AssetRegistry.TOKEN_SIZE:
+		var inner: Rect2i = AssetRegistry.TOKEN_INNER
+		var inside: Array[Vector2i] = [Vector2i(64, 64), inner.position, inner.end - Vector2i.ONE]
+		var outside: Array[Vector2i] = [Vector2i(64, 10), Vector2i(10, 64), Vector2i(2, 64), Vector2i(64, 2)]
+		var equal_inside: bool = true
+		for p: Vector2i in inside:
+			equal_inside = equal_inside and imgs[0].get_pixelv(p) == imgs[1].get_pixelv(p) and imgs[1].get_pixelv(p) == imgs[2].get_pixelv(p) and imgs[0].get_pixelv(p).is_equal_approx(Color(0.2, 0.8, 0.4))
+		c["inside the inner square: the file, equal for all teams"] = equal_inside
+		var pairs: Array[Vector2i] = [Vector2i(0, 1), Vector2i(1, 2), Vector2i(0, 2)]
+		for pair: Vector2i in pairs:
+			var differs: bool = false
+			for p: Vector2i in outside:
+				differs = differs or imgs[pair.x].get_pixelv(p) != imgs[pair.y].get_pixelv(p)
+			c["teams %d/%d differ on the rim" % [pair.x, pair.y]] = differs
+		c["portrait backdrop shows the team"] = portraits[0].get_pixel(12, 120) != portraits[1].get_pixel(12, 120)
+	c["one row, one key"] = AssetRegistry.keys("unit").has("qa_solid") and UnitArt.normalize_class("qa_solid") == "qa_solid"
+	_use_sandbox()
+	return _report("Team overlay: one unit file serves every team", c)
+
+static func _rule7(id: String, refs: Array[String]) -> String:
+	return "Asset '%s' is used by %s; remove the references first." % [id, ", ".join(refs)]
+
+# Acceptance 9 (rule 7, option A): a row whose key has a template may go even while content names the key (the
+# placeholder comes back); a manifest-only key is refused per variant while content names it or a row aliases it;
+# an unreferenced user row is removed.
+static func _test_safe_remove() -> bool:
+	var c: Dictionary = {}
+	# template key named by content: removal succeeds, the art falls back to the template
+	var first_class: Dictionary = ContentCatalog.entries("classes")[0]
+	var used: String = str(first_class.get("art", ""))
+	var exported: Dictionary = AssetRegistry.export_placeholder("unit", used, "token")
+	c["template-key row stored"] = AssetCatalog.upsert(_row("unit", used, "token", str(exported["path"]))).is_empty()
+	var used_id: String = AssetCatalog.id_for("unit", used, "token")
+	var refs: Array[String] = AssetScan.asset_refs("unit", used, used_id)
+	c["content reference found"] = refs.has("classes:%s" % str(first_class["id"]))
+	c["scan('assets', id) == asset_refs"] = AssetScan.scan(AssetScan.ASSETS_KIND, used_id) == refs
+	c["template key: removed although named"] = AssetRegistry.has_template("unit", used) and AssetCatalog.remove(used_id).is_empty() and not AssetCatalog.has(used_id)
+	c["template key: back to the template"] = str(AssetRegistry.resolve("unit", used, "token")["source"]) == "template"
+	# manifest-only key, per variant: a portrait alias row blocks the portrait row only
+	for variant: String in AssetRegistry.variants("unit"):
+		var path: String = str(AssetRegistry.export_placeholder("unit", "qa_only", variant)["path"])
+		c["qa_only %s stored" % variant] = AssetCatalog.upsert(_row("unit", "qa_only", variant, path)).is_empty()
+	c["alias row stored"] = AssetCatalog.upsert(_row("unit", "qa_only_alias", "portrait", "", "qa_only")).is_empty()
+	var portrait_id: String = AssetCatalog.id_for("unit", "qa_only", "portrait")
+	var alias_id: String = AssetCatalog.id_for("unit", "qa_only_alias", "portrait")
+	var alias_refs: Array[String] = ["%s:%s" % [AssetScan.ASSETS_KIND, alias_id]]
+	c["aliased variant refused with the rule 7 message"] = AssetCatalog.remove(portrait_id) == _rule7(portrait_id, alias_refs) and AssetCatalog.has(portrait_id)
+	c["the other variant is free"] = AssetCatalog.remove(AssetCatalog.id_for("unit", "qa_only", "token")).is_empty()
+	c["moving the aliased row to another key refused"] = AssetCatalog.upsert(_row("unit", "qa_moved", "portrait", "", UnitArt.CLASS_KEYS[0]), portrait_id).has(_rule7(portrait_id, alias_refs)) and AssetCatalog.has(portrait_id)
+	c["unreferenced alias row removed"] = AssetCatalog.remove(alias_id).is_empty() and not AssetCatalog.has(alias_id)
+	c["then the target row is removed"] = AssetCatalog.remove(portrait_id).is_empty() and not AssetCatalog.has(portrait_id)
+	# manifest-only key named by content (an item family's `art`, on a content fork)
+	var fork_path: String = TestHelpers.sandbox("asset_content")
+	TestHelpers.fork_migrated(fork_path)
+	var families: Array[Dictionary] = ContentCatalog.entries("item_families")
+	c["content fork has item families"] = ContentCatalog.get_root() == fork_path and not families.is_empty()
+	if not families.is_empty():
+		var icon_path: String = str(AssetRegistry.export_placeholder("item", "sword", "icon")["path"])
+		var only_path: String = AssetRegistry.pattern_paths("item", "qa_family_icon", "icon")[0]
+		DirAccess.copy_absolute(AssetCatalog.file_of(icon_path), AssetCatalog.file_of(only_path))
+		c["family icon row stored"] = AssetCatalog.upsert(_row("item", "qa_family_icon", "icon", only_path)).is_empty()
+		var fam: Dictionary = families[0].duplicate(true)
+		fam["art"] = "qa_family_icon"
+		c["family art set"] = ContentCatalog.upsert("item_families", fam).is_empty()
+		var only_id: String = AssetCatalog.id_for("item", "qa_family_icon", "icon")
+		var fam_refs: Array[String] = AssetScan.asset_refs("item", "qa_family_icon", only_id)
+		c["item_families art counts as a reference"] = fam_refs.has("item_families:%s" % str(fam["id"]))
+		c["named manifest-only key refused"] = AssetCatalog.remove(only_id) == _rule7(only_id, fam_refs) and AssetCatalog.has(only_id)
+	TestHelpers.cleanup(fork_path)
+	_use_sandbox()
+	return _report("Safe remove of manifest rows (rule 7 option A, per variant)", c)

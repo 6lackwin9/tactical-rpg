@@ -36,6 +36,10 @@ const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_center"]
 static var _warned: Dictionary = {}
 static var _warn_count: int = 0
 static var _quiet: bool = false
+# Skill family ids (template keys of the skill namespace), cached; see skill_family_ids.
+static var _family_list: Array[String] = []
+static var _family_set: Dictionary = {}
+static var _family_stamp: String = ""
 
 static func namespaces() -> Array[String]:
 	return NAMESPACES.duplicate()
@@ -99,19 +103,40 @@ static func template_keys(ns: String) -> Array[String]:
 			out = StatusRegistry.ids()
 	return out
 
-# Every skill family (head) id of the content catalog, in file order.
+# Every skill family (head) id of the content catalog, in file order. Cached per catalog root and row count; while the
+# skills are edited (dirty) it is rebuilt on every call and the cache is dropped, so a saved edit is picked up.
 static func skill_family_ids() -> Array[String]:
-	var out: Array[String] = []
-	for row: Dictionary in ContentCatalog.entries("skills"):
+	_refresh_families()
+	return _family_list.duplicate()
+
+static func _refresh_families() -> void:
+	var rows: Array[Dictionary] = ContentCatalog.entries("skills")
+	var stamp: String = "%s|%d" % [ContentCatalog.get_root(), rows.size()]
+	var dirty: bool = ContentCatalog.is_dirty("skills")
+	if not dirty and stamp == _family_stamp:
+		return
+	_family_list.clear()
+	_family_set.clear()
+	for row: Dictionary in rows:
 		var head: String = SkillRanks.head_of(row)
-		if not out.has(head):
-			out.append(head)
-	return out
+		if not _family_set.has(head):
+			_family_set[head] = true
+			_family_list.append(head)
+	_family_stamp = "" if dirty else stamp
+
+# Drops the skill family cache (SvgRaster.clear_cache calls it too).
+static func clear_family_cache() -> void:
+	_family_stamp = ""
+
+# True when ns/key has a generated template (removing its manifest rows brings the placeholder back).
+static func has_template(ns: String, key: String) -> bool:
+	return _has_template(ns, key)
 
 static func _has_template(ns: String, key: String) -> bool:
 	match ns:
 		"skill":
-			return skill_family_ids().has(key)
+			_refresh_families()
+			return _family_set.has(key)
 		"status":
 			return StatusRegistry.has(key)
 	return template_keys(ns).has(key)
@@ -173,6 +198,103 @@ static func resolve(ns: String, key: String, variant: String) -> Dictionary:
 	if _has_template(ns, k):
 		return {"source": "template", "key": k, "path": "", "id": ""}
 	return {"source": "fallback", "key": str(FALLBACK_KEYS.get(ns, "")), "path": "", "id": ""}
+
+# The texture of ns/key/variant (rule 1); never null for texture namespaces (null for sfx / music). `team` is the
+# UnitArt.Team for units and the rarity for items (0 when negative); other namespaces ignore it. A row file that fails
+# to load warns once per id and the template is used. File textures cache as "file|<id>|<team>" in SvgRaster.
+static func texture(ns: String, key: String, variant: String, team: int = -1) -> Texture2D:
+	if not is_texture_namespace(ns):
+		return null
+	var allowed: Array[String] = variants(ns)
+	var v: String = variant if allowed.has(variant) else allowed[0]
+	var r: Dictionary = resolve(ns, key, v)
+	var k: String = str(r["key"])
+	if str(r["source"]) == "file":
+		var tex: Texture2D = _file_texture(ns, v, team, str(r["id"]), str(r["path"]))
+		if tex != null:
+			return tex
+		warn_once(str(r["id"]))
+		if not _has_template(ns, k):
+			k = str(FALLBACK_KEYS.get(ns, ""))
+	return _template_texture(ns, k, v, team)
+
+# The sound of ns/key (the `stream` variant); null when it does not resolve to a loadable file (sound is optional).
+static func stream(ns: String, key: String) -> AudioStream:
+	if not AUDIO_NAMESPACES.has(ns):
+		return null
+	var r: Dictionary = resolve(ns, key, "stream")
+	if str(r["source"]) != "file":
+		return null
+	var res: Resource = load_file(ns, str(r["path"]))
+	if res is AudioStream:
+		return res
+	warn_once(str(r["id"]))
+	return null
+
+static func _file_texture(ns: String, variant: String, team: int, id: String, path: String) -> Texture2D:
+	var cache_key: String = "file|%s|%d" % [id, team]
+	var hit: Texture2D = SvgRaster.cached_texture(cache_key)
+	if hit != null:
+		return hit
+	var res: Resource = load_file(ns, path)
+	if not (res is Texture2D):
+		return null
+	var tex: Texture2D = res
+	if ns == "unit":
+		tex = _compose_unit(variant, team, tex.get_image())
+		if tex == null:
+			return null
+	SvgRaster.store(cache_key, tex)
+	return tex
+
+# Rule 3: unit files are drawn by code onto the team template (token: the glyph-less token at 128 px with the file
+# resized to the 104x104 inner square; portrait: the team backdrop at 240 px with the file at full size), so one file
+# serves all three teams and the spiked / dashed rims stay.
+static func _compose_unit(variant: String, team: int, file_img: Image) -> Texture2D:
+	if file_img == null or file_img.is_empty():
+		return null
+	var side: UnitArt.Team = _team_of(team)
+	var svg: String = UnitArt.portrait_backdrop_svg(side) if variant == "portrait" else UnitArt.token_svg("unit", side, false)
+	var base := Image.new()
+	if base.load_svg_from_buffer(svg.to_utf8_buffer(), TEMPLATE_SCALE) != OK:
+		return null
+	base.convert(Image.FORMAT_RGBA8)
+	var top: Image = file_img.duplicate() as Image
+	if top.is_compressed() and top.decompress() != OK:   # imported (VRAM-compressed) textures cannot be converted or blended
+		return null
+	top.convert(Image.FORMAT_RGBA8)
+	var area: Rect2i = Rect2i(Vector2i.ZERO, base.get_size()) if variant == "portrait" else TOKEN_INNER
+	if top.get_size() != area.size:
+		top.resize(area.size.x, area.size.y, Image.INTERPOLATE_BILINEAR)
+	base.blend_rect(top, Rect2i(Vector2i.ZERO, area.size), area.position)
+	return ImageTexture.create_from_image(base)
+
+# The generated template (today's SvgRaster cache keys), or the blank texture for ui.
+static func _template_texture(ns: String, key: String, variant: String, team: int) -> Texture2D:
+	match ns:
+		"unit":
+			var side: UnitArt.Team = _team_of(team)
+			return UnitArt.template_portrait(key, side) if variant == "portrait" else UnitArt.template_token(key, side)
+		"item":
+			var rarity: int = maxi(team, 0)
+			return SvgRaster.texture("item|%s|%d" % [key, rarity], ItemArt.icon_svg(key, rarity), TEMPLATE_SCALE)
+		"tile":
+			if TILE_OVERLAY_KEYS.has(key):
+				return TileArt.template_overlay(key.trim_prefix("overlay_"))
+			return TileArt.template_tile(maxi(tile_type(key), 0) as Terrain.Type, maxi(variants("tile").find(variant), 0))
+		"skill":
+			return SkillArt.template(key)
+		"status":
+			return StatusArt.template(key)
+	return _blank()
+
+static func _blank() -> Texture2D:
+	var hit: Texture2D = SvgRaster.cached_texture("blank|ui")
+	if hit != null:
+		return hit
+	var tex: Texture2D = ImageTexture.create_from_image(Image.create(8, 8, false, Image.FORMAT_RGBA8))
+	SvgRaster.store("blank|ui", tex)
+	return tex
 
 # Logs "AssetRegistry: '<id>' failed to load; using the placeholder." once per id per session.
 static func warn_once(id: String) -> void:
@@ -259,6 +381,10 @@ static func template_svg(ns: String, key: String, variant: String, team: int = -
 			if TILE_OVERLAY_KEYS.has(k):
 				return TileArt.overlay_svg(k.trim_prefix("overlay_"))
 			return TileArt.tile_svg(maxi(tile_type(k), 0) as Terrain.Type, maxi(variants("tile").find(variant), 0))
+		"skill":
+			return SkillArt.icon_svg(k)
+		"status":
+			return StatusArt.icon_svg(k)
 	return ""
 
 static func _team_of(team: int) -> UnitArt.Team:

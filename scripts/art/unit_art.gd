@@ -33,17 +33,22 @@ static func _palette(team: Team) -> Dictionary:
 	var raw: Variant = TEAM_PALETTES.get(team, TEAM_PALETTES[Team.NEUTRAL])
 	return raw if raw is Dictionary else {}
 
+# A known unit art key (template or manifest, AssetRegistry), else "unit".
 static func normalize_class(class_key: String) -> String:
 	var key: String = class_key.to_lower()
-	return key if CLASS_KEYS.has(key) else "unit"
+	return key if AssetRegistry.has_key("unit", key) else "unit"
 
 # ------------------------------------------------------------------------------
 # Tokens
 # ------------------------------------------------------------------------------
 
+# Through AssetRegistry: a manifest file (composed on the team rim), else the template, else the `unit` template.
 static func token(class_key: String, team: Team) -> Texture2D:
-	var key: String = normalize_class(class_key)
-	return SvgRaster.texture("token|%s|%d" % [key, team], token_svg(key, team), 2.0)
+	return AssetRegistry.texture("unit", class_key.to_lower(), "token", team)
+
+# The generated token (cached "token|<key>|<team>"); used by AssetRegistry.
+static func template_token(class_key: String, team: Team) -> Texture2D:
+	return SvgRaster.texture("token|%s|%d" % [class_key, team], token_svg(class_key, team), 2.0)
 
 # The token template; with_glyph false leaves the inner disc empty (the backdrop a unit token FILE is composed on).
 static func token_svg(class_key: String, team: Team, with_glyph: bool = true) -> String:
@@ -166,9 +171,22 @@ const CLASS_LOOKS: Dictionary = {
 	"unit": {"armor": "#64748b", "shade": "#334155", "label": "UNIT"},
 }
 
+# Through AssetRegistry: a manifest file (drawn over the team backdrop), else the template, else the `unit` template.
 static func portrait(class_key: String, team: Team) -> Texture2D:
-	var key: String = normalize_class(class_key)
-	return SvgRaster.texture("portrait|%s|%d" % [key, team], portrait_svg(key, team), 2.0)
+	return AssetRegistry.texture("unit", class_key.to_lower(), "portrait", team)
+
+# The generated portrait (cached "portrait|<key>|<team>"); used by AssetRegistry.
+static func template_portrait(class_key: String, team: Team) -> Texture2D:
+	return SvgRaster.texture("portrait|%s|%d" % [class_key, team], portrait_svg(class_key, team), 2.0)
+
+# The portrait template's team backdrop only (a portrait FILE is blended over it).
+static func portrait_backdrop_svg(team: Team) -> String:
+	var pal: Dictionary = _palette(team)
+	return """<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+<defs><radialGradient id="bg" cx="0.5" cy="0.35" r="0.8"><stop offset="0" stop-color="{light}" stop-opacity="0.55"/><stop offset="1" stop-color="{dark}"/></radialGradient></defs>
+<rect x="1" y="1" width="118" height="118" rx="10" fill="#0f172a"/>
+<rect x="1" y="1" width="118" height="118" rx="10" fill="url(#bg)" stroke="{rim}" stroke-width="2"/>
+</svg>""".format({"light": pal["light"], "dark": pal["dark"], "rim": pal["rim"]})
 
 static func portrait_svg(class_key: String, team: Team) -> String:
 	var pal: Dictionary = _palette(team)
