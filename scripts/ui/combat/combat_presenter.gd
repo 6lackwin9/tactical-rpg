@@ -56,7 +56,7 @@ func play(entry: ActionLogEntry, actor: Control, target: Control, target_px: Vec
 	if entry == null:
 		return
 	var distance: int = -1
-	if actor != null:
+	if actor != null and (target != null or entry.category == "MOVE"):
 		var d: Vector2 = (target_px - actor.position) / float(TILE_SIZE)
 		distance = roundi(absf(d.x) + absf(d.y))
 	var presets: Array[String] = FxPresets.for_entry(entry, distance)
@@ -227,6 +227,11 @@ func _add_temp(node: Control) -> void:
 
 # A new tween owned by the presenter and bound to `node` (dies with it).
 func _track(node: CanvasItem) -> Run:
+	var kept: Array[Run] = []
+	for old: Run in _live:   # drop runs whose node was freed
+		if is_instance_valid(old.node):
+			kept.append(old)
+	_live = kept
 	var run := Run.new()
 	run.node = node
 	run.tween = create_tween()

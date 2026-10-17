@@ -100,5 +100,5 @@ static func _clean(key: String, value: Variant) -> Variant:
 	if kind == TYPE_FLOAT:
 		if not (value is float or value is int):
 			return null
-		return clampf(float(value), DictUtil.to_float(row.get("min", -INF)), DictUtil.to_float(row.get("max", INF)))
+		return clampf(DictUtil.to_float(value), DictUtil.to_float(row.get("min", -INF)), DictUtil.to_float(row.get("max", INF)))
 	return value if typeof(value) == kind else null

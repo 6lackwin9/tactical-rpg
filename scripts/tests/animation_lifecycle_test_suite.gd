@@ -35,6 +35,7 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _test_kill(presenter, holder) and ok
 		ok = _test_speed(presenter, holder) and ok
 		ok = _test_overload(presenter, holder) and ok
+		ok = _test_settings(presenter, holder) and ok
 	ok = _test_signal(presenter, holder) and ok
 	FxSettings.instant = saved_instant
 	FxSettings.speed = saved_speed
@@ -253,4 +254,51 @@ static func _test_signal(presenter: CombatPresenter, holder: Control) -> bool:
 	presenter.play(entry, actor, target, target.position)
 	presenter.fx_played.disconnect(record)
 	var checks: Dictionary = {"order": played == FxPresets.for_entry(entry, 3), "ranged": played == (["attack_ranged", "mitigated", "float_text"] as Array[String])}
+	# No target on a non-MOVE entry: the pixel distance is not used (log coordinates decide, unknown = melee).
+	played.clear()
+	presenter.fx_played.connect(record)
+	presenter.play(entry, actor, null, Vector2(TILE * 8, TILE * 8))
+	presenter.fx_played.disconnect(record)
+	checks["null target uses log coordinates"] = played == FxPresets.for_entry(entry, -1)
 	return _report("fx_played fires once per preset in order", checks)
+
+# Settings: headless keeps instant on, speed is read, a freed node's run is pruned.
+static func _test_settings(presenter: CombatPresenter, holder: Control) -> bool:
+	var saved_instant: bool = FxSettings.instant
+	var saved_speed: float = FxSettings.speed
+	var cfg := ConfigFile.new()
+	cfg.set_value("anim", "speed", 2)
+	cfg.set_value("anim", "instant", false)
+	FxSettings.load_from(cfg)
+	var headless: bool = DisplayServer.get_name() == "headless"
+	var checks: Dictionary = {
+		"speed read": is_equal_approx(FxSettings.speed, 2.0),
+		"instant stays on headless": (not headless) or FxSettings.instant,
+	}
+	cfg.set_value("anim", "instant", true)
+	FxSettings.load_from(cfg)
+	checks["instant true is kept"] = FxSettings.instant
+	# Startup path (scene runner): the saved file is pushed to FxSettings without pressing Apply.
+	var dir: String = TestHelpers.sandbox("anim_settings")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var saved := ConfigFile.new()
+	saved.set_value("anim", "speed", 3.0)
+	saved.save(dir + "/settings.cfg")
+	SettingsFile.use_path(dir + "/settings.cfg")
+	FxSettings.set_speed(1.0)
+	SettingsModel.push_to_listeners()
+	checks["startup load applies saved speed"] = is_equal_approx(FxSettings.speed, 3.0)
+	SettingsFile.use_path()
+	TestHelpers.remove_sandbox(dir)
+	FxSettings.instant = false
+	var node := Control.new()
+	holder.add_child(node)
+	presenter.slide(node, Vector2(TILE, TILE))
+	node.free()
+	var other: Control = _token(holder, Vector2i(3, 3))
+	presenter.slide(other, Vector2(TILE * 4, TILE * 4))
+	checks["freed node's run pruned"] = presenter.live_count() == 1
+	presenter.kill_all()
+	FxSettings.instant = saved_instant
+	FxSettings.speed = saved_speed
+	return _report("FxSettings.load_from: headless instant, speed, pruning", checks)

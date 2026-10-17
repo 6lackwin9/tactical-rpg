@@ -73,7 +73,7 @@ func _ready() -> void:
 	reloader = ScriptReloader.new()
 	var audio := AudioDirector.new()   # S14-L3: one director per main scene
 	add_child(audio)
-	audio.apply_volumes()
+	SettingsModel.push_to_listeners()   # saved animation speed/instant and volumes apply at boot
 	if PlaytestStore.enabled():   # release builds (and test runs) get no hub at all
 		hub = PlaytestHub.new()
 		add_child(hub)
