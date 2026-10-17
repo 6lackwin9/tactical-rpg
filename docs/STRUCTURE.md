@@ -33,6 +33,8 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
+| `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
+| `.github/workflows/gate.yml` | GitHub Actions: fast gate (`tools/fc.sh gate`) and `tools/fc.sh docs` on every PR and push to `main` | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |
 | `scripts/combat/status/riposte_rules.gd`, `scripts/tests/riposte_test_suite.gd` | riposte counter rules and suite (M2a) | S12 | done |

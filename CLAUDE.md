@@ -1,5 +1,7 @@
 # Tactical RPG (Godot 4.7, GDScript)
 
+Environment: `$CLAUDE_CODE_REMOTE` empty = **desktop** (read `docs/workflow/desktop.md`), `true` = **cloud** (read `docs/workflow/cloud.md`). Both share everything in this file; what differs (sessions, branches, commits, merges, gate time, IDE rule) and how to switch: `docs/workflow/README.md`.
+
 Read these instead of crawling the code:
 
 - `docs/GAME_BRIEF.md`: layers, core rules/numbers, where to look for X
@@ -10,23 +12,23 @@ Read these instead of crawling the code:
 - `docs/BALANCE_REPORT.md`: latest balance runs and open issues
 - `docs/TASKS.md`: task queue (lanes, dependencies, status); specs in `docs/specs/`
 - `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained)
-- `docs/WORKFLOW.md`: tools and how to iterate
+- `docs/WORKFLOW.md`: tools and how to iterate; `docs/workflow/`: desktop vs cloud
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
 - Skills `godot-debug-checklist` (short edit checklist), `godot-known-issues` (consult BEFORE debugging), `gdscript-typing` (typing patterns)
 
-## Roles and lanes (agents cannot message each other; the main session routes via the docs above)
+## Roles and lanes (agents cannot message each other; the planner routes via the docs above)
 
-- Main session = **planner** (skills `planner`, `planner-ops`; the only writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in parallel lanes, user confirmation gate, review, commit/push, README/docs.
+- **Planner** (skills `planner`, `planner-ops`; the writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in lanes, user confirmation gate, review, commit/push, README/docs. Desktop: the main session for everything; cloud: each task thread for its own task (the project chat is the front desk).
 - `design-brainstorm` agent (design lane): options and specs in `docs/specs/`; lists wanted roadmap and task rows in its report (the planner writes them); works ahead while builders run.
-- `logic-builder` agent (logic lane): engine, schema, validation, tests in a feature worktree; never edits shipped data; never commits.
+- `logic-builder` agent (logic lane): engine, schema, validation, tests on the task's branch (desktop: a feature worktree); never edits shipped data; never commits (the planner or cloud thread does).
 - `asset-builder` agent (asset lane): fills `data/` through `ContentCatalog.upsert` against a merged schema; no code, no tests.
-- `balance` agent (balance lane): sims in its own clean `main` worktree on `balance-ready` systems; writes `docs/BALANCE_REPORT.md`.
+- `balance` agent (balance lane): sims on a clean `main` checkout (desktop: its own worktree) on `balance-ready` systems; writes `docs/BALANCE_REPORT.md`.
 - `change-reviewer` agent: read-only pre-commit review.
 - `housekeeper` agent (cleanup lane): finds legacy/redundant code, dead paths and bloat; proposes trims in `docs/specs/CLEANUP.md`; the planner adds confirmed ones to `docs/TASKS.md`/`docs/ROADMAP.md`; never implements (builders do, as separate tasks).
 
 ## Standing rules
 
-Strict static typing; README is updated with every change (builders report a docs delta, the planner applies it); commit/push only when `check_project.ps1 -Fast -Quiet` is clean (32 s; the plain script takes ~3 min; on Linux without PowerShell, `tools/fc.sh gate` runs the same steps) and IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/godot_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content through `ContentCatalog.upsert`, never raw JSON; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
+Strict static typing; README is updated with every change (builders report a docs delta, the planner applies it); commit/push only when `check_project.ps1 -Fast -Quiet` is clean (desktop ~32 s, cloud ~3-4 min; the plain script takes ~3 min on desktop; `tools/fc.sh gate` runs the same steps without PowerShell) and `tools/fc.sh docs` is clean; on desktop also the IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/godot_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content through `ContentCatalog.upsert`, never raw JSON; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
 
 ## Feedback rule
 

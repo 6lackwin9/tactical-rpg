@@ -1,6 +1,6 @@
 # Task queue (planner-owned; agents read only their task)
 
-Statuses: `idea` (brainstorm only), `spec` (spec written, awaiting approval), `approved`, `in-progress`, `review`, `done`. Lanes: `logic`, `asset`, `design`, `balance`. A task may start when everything in `Depends on` is `done` (schema-first tasks release their asset lane as soon as the schema slice is merged). Done rows move to `docs/archive/TASKS_DONE.md`.
+Statuses: `idea` (brainstorm only), `spec` (spec written, awaiting approval), `approved`, `in-progress`, `review`, `done`. Lanes: `logic`, `asset`, `design`, `balance`. A task may start when everything in `Depends on` is `done` (schema-first tasks release their asset lane as soon as the schema slice is merged). Done rows move to `docs/archive/TASKS_DONE.md`. An `in-progress` row names its branch in the Status cell, so either environment can resume it (`docs/workflow/README.md`).
 
 | Id | Title | Lane | Depends on | Status | Spec | Touches |
 | --- | --- | --- | --- | --- | --- | --- |

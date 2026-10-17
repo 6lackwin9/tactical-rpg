@@ -1,5 +1,7 @@
 # Godot 4 Workflow & Verification Rules
 
+These rules are written for the desktop IDE. In the cloud there is no IDE: the LSP and IDE Problems tab steps (2.2, 2.3, the LSP part of 3.3, and 6.7) do not apply, and `tools/fc.sh docs` is the markdown check (`docs/workflow/cloud.md`).
+
 ## 1. Static Typing & Code Standards
 
 - All GDScript files must use strict static typing (`-> void`, `: int`, etc.).
