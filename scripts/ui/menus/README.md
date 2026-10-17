@@ -1,6 +1,6 @@
 # scripts/ui/menus
 
-System: S7, S13. Status: UI1-L built (main menu, new game, save / load slots, settings, hub); UI2-L built (party, level-up, skills loadout, gear, battle results); UI3-L (journal) adds its screen here.
+System: S7, S13. Status: UI1-L built (main menu, new game, save / load slots, settings, hub); UI2-L built (party, level-up, skills loadout, gear, battle results); UI3-L built (quest journal).
 
 Every screen is a headless `RefCounted` model plus a thin view (spec `docs/specs/UI1_L.md`):
 
@@ -17,5 +17,6 @@ Every screen is a headless `RefCounted` model plus a thin view (spec `docs/specs
 | `loadout` | `loadout_model.gd` | `loadout_view.gd` |
 | `gear` | `gear_model.gd` (+ `party_gear_bridge.gd` for `CharacterEquipmentModal`) | `gear_view.gd` |
 | `results` | `battle_results_model.gd` | `battle_results_view.gd` |
+| `journal` | `journal_model.gd` (read only over `QuestRunner`) | `journal_view.gd` |
 
-Rules: models call only rule APIs (`NewGame`, `SaveGame`, `WorldCatalog`, `CurrentGame`, `SettingsFile`) and never touch a Node; actions return `Array[String]` problems (empty = done); a new screen adds a `MenuRouter` id, a `make_model` case and a view case in `MainMenuView.render`. Party screens take `{member}` (results take `{award, advanced}`) through `push(id, args)`; popping a screen calls `refresh()` on the one below when it has it. Tests: `scripts/tests/menus_test_suite.gd`, `scripts/tests/party_screen_test_suite.gd`.
+Rules: models call only rule APIs (`NewGame`, `SaveGame`, `WorldCatalog`, `CurrentGame`, `SettingsFile`) and never touch a Node; actions return `Array[String]` problems (empty = done); a new screen adds a `MenuRouter` id, a `make_model` case and a view case in `MainMenuView.render`. Party screens take `{member}` (results take `{award, advanced}`) through `push(id, args)`; popping a screen calls `refresh()` on the one below when it has it. Tests: `scripts/tests/menus_test_suite.gd`, `scripts/tests/party_screen_test_suite.gd`, `scripts/tests/save_io_test_suite.gd`, `scripts/tests/journal_test_suite.gd`. A view may set the `MainMenuView.FOCUS_META` meta to the control the host focuses first.

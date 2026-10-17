@@ -462,7 +462,9 @@ static func _test_hub_model() -> bool:
 	var checks: Dictionary = {"names": hub.world_name() == "MN Base" and hub.party().size() == 2}
 	checks["save opens"] = hub.open(MenuRouter.SAVE).is_empty() and r.top() == MenuRouter.SAVE
 	r.pop()
-	checks["unbuilt screen refused"] = hub.open(MenuRouter.JOURNAL) == ["The journal screen is not built yet."] and r.top() == MenuRouter.HUB
+	checks["journal opens (UI3-L)"] = hub.open(MenuRouter.JOURNAL).is_empty() and r.top() == MenuRouter.JOURNAL
+	r.pop()
+	checks["unknown entry refused"] = hub.open("nope") == ["Unknown hub entry 'nope'."] and r.top() == MenuRouter.HUB
 	CurrentGame.state().party.gold += 3
 	checks["dirty asks"] = hub.quit_to_menu().is_empty() and p.asked == ["Quit without saving?"] and CurrentGame.has_game()
 	r.decline()
