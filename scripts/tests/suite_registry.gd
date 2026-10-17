@@ -56,4 +56,5 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(ExplorationTestSuite.run(tree_parent))
 	results.append(DialogueTestSuite.run(tree_parent))
 	results.append(AssetPipelineTestSuite.run())
+	results.append(AnimationLifecycleTestSuite.run(tree_parent))
 	return not results.has(false)

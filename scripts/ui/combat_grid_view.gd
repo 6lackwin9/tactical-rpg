@@ -4,7 +4,8 @@ extends VBoxContainer
 # ==============================================================================
 # Tactical RPG - Combat Grid View Component
 # Manages the 9x9 tactical combat grid, spatial tile rendering, unit token nodes,
-# token selection highlights, hover tooltip cards, combat animations, and floating text.
+# token selection highlights and hover tooltip cards. Combat animation and floating text
+# live in CombatPresenter (S14-L2), which draws its temporary nodes on fx_layer.
 # ==============================================================================
 
 signal combatant_clicked(combatant: Combatant)
@@ -24,6 +25,7 @@ var grid_anchor: Control
 var grid_container: GridContainer
 var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
 var unit_overlay: Control
+var fx_layer: Control   # CombatPresenter's temporary nodes (labels, status pops); clear_tokens leaves it alone
 var plan_overlay: PlanOverlay
 var ghost_layer: Control
 var ghost_nodes: Dictionary = {}  # Combatant -> Control (planned-move shadows)
@@ -83,6 +85,12 @@ func _build_ui() -> void:
 	unit_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	unit_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE   # tokens (children) take clicks; empty tiles underneath must too
 	grid_anchor.add_child(unit_overlay)
+
+	fx_layer = Control.new()
+	fx_layer.name = "FxLayer"
+	fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grid_anchor.add_child(fx_layer)
 
 	# Planned-move shadows sit above the tokens so a shadow on an occupied tile stays clickable
 	ghost_layer = Control.new()
@@ -358,74 +366,3 @@ func show_hover_card(
 func hide_hover_card() -> void:
 	if grid_hover_tooltip != null:
 		grid_hover_tooltip.visible = false
-
-func animate_attacker_lunge(actor: Combatant, target_pos: Vector2) -> void:
-	var actor_token := get_token_for(actor)
-	if not is_instance_valid(actor_token):
-		return
-	var orig_pos: Vector2 = actor_token.position
-	var diff := target_pos - orig_pos
-	if diff.length() < 0.1:
-		return
-	var dir := diff.normalized() * 10.0
-	var tw := create_tween()
-	tw.tween_property(actor_token, "position", orig_pos + dir, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(actor_token, "position", orig_pos, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-
-func animate_token_impact(target: Combatant, is_damage: bool, is_mitigated: bool) -> void:
-	var target_token := get_token_for(target)
-	if not is_instance_valid(target_token):
-		return
-	var base_pos: Vector2 = target_token.position
-	var shake_tw := create_tween()
-	shake_tw.tween_property(target_token, "position", base_pos + Vector2(4, 0), 0.03)
-	shake_tw.tween_property(target_token, "position", base_pos + Vector2(-4, 0), 0.03)
-	shake_tw.tween_property(target_token, "position", base_pos + Vector2(2, 0), 0.03)
-	shake_tw.tween_property(target_token, "position", base_pos, 0.04)
-
-	var flash_col: Color
-	if is_mitigated:
-		flash_col = Color(0.4, 0.8, 1.8)
-	elif is_damage:
-		flash_col = Color(2.0, 0.35, 0.35)
-	else:
-		flash_col = Color(1.8, 1.6, 0.4)
-
-	var flash_tw := create_tween()
-	target_token.modulate = flash_col
-	flash_tw.tween_property(target_token, "modulate", Color.WHITE, 0.25)
-
-func animate_token_pulse(token_actor: Combatant, pulse_col: Color) -> void:
-	var token := get_token_for(token_actor)
-	if not is_instance_valid(token):
-		return
-	var tw := create_tween()
-	token.modulate = pulse_col
-	tw.tween_property(token, "modulate", Color.WHITE, 0.3)
-
-func animate_token_move(token_actor: Combatant, target_coord: Vector2i, duration: float = 0.25) -> void:
-	var token := get_token_for(token_actor)
-	if not is_instance_valid(token):
-		return
-	var target_px := Vector2(target_coord.x * TILE_SIZE, target_coord.y * TILE_SIZE)
-	var tw := create_tween()
-	tw.tween_property(token, "position", target_px, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-func spawn_floating_combat_text(pos: Vector2, text: String, color: Color) -> void:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 10)
-	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	lbl.add_theme_constant_override("shadow_offset_x", 1)
-	lbl.add_theme_constant_override("shadow_offset_y", 1)
-	lbl.position = pos + Vector2(8, -6)
-	lbl.scale = Vector2(1.2, 1.2)
-	unit_overlay.add_child(lbl)
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(lbl, "position", pos + Vector2(8, -28), 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(lbl, "scale", Vector2(1.0, 1.0), 0.25)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.55).set_delay(0.2)
-	tw.chain().tween_callback(lbl.queue_free)
