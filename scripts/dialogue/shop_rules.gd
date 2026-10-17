@@ -23,6 +23,7 @@ const SELL_MULT_MIN: float = 0.0
 const SELL_MULT_MAX: float = 1.0
 const UNLIMITED: int = -1
 const DERIVED: int = -1
+const BUY_MAX: int = 99   # most of one offer per buy (stock counts are 1..99); keeps price x count far from int overflow
 const REP_NEUTRAL: int = 100   # rb = rs until REP1
 
 # Item types a shop may buy: every ItemFamilies type but QUEST (also the schema default of `buys`).
@@ -230,6 +231,8 @@ static func buy(gs: GameState, shop_ref: String, kind: String, id: String, count
 		return _fail("The shop is closed.")
 	if count < 1 or (kind == "loot" and count != 1):
 		return _fail("Loot is sold one at a time." if kind == "loot" else "Buy at least one.")
+	if count > BUY_MAX:
+		return _fail("Buy at most %d at a time." % BUY_MAX)
 	var offer: Dictionary = {}
 	for o: Dictionary in offers(gs, shop_ref):
 		if str(o["kind"]) == kind and str(o["id"]) == id:
@@ -278,7 +281,8 @@ static func sell_list(gs: GameState, shop_ref: String) -> Array[Dictionary]:
 	return out
 
 # Sells `count` of `item` (it must be on sell_list and held). Stash falls, gold rises (capped at PartyState.GOLD_MAX).
-# Sold items never restock the shop. Returns {ok, errors, price (total)}.
+# Sold items never restock the shop. Gold above PartyState.GOLD_MAX is dropped with a note (decision "DLG1 open items"
+# (1)): `gold` is the amount actually added. Returns {ok, errors, price (total), gold, notes}.
 static func sell(gs: GameState, shop_ref: String, item: String, count: int = 1) -> Dictionary:
 	if not is_open(gs, shop_ref):
 		return _fail("The shop is closed.")
@@ -292,6 +296,9 @@ static func sell(gs: GameState, shop_ref: String, item: String, count: int = 1) 
 		return _fail("Not enough %s." % item)
 	var total: int = DictUtil.to_int(row["price"]) * count
 	var _removed: bool = gs.party.remove_from_stash(item, count)
-	var _added: int = gs.party.add_gold(total)
+	var added: int = gs.party.add_gold(total)
 	var errors: Array[String] = []
-	return {"ok": true, "errors": errors, "price": total}
+	var notes: Array[String] = []
+	if added < total:
+		notes.append("Gold is capped at %d (%d not added)." % [PartyState.GOLD_MAX, total - added])
+	return {"ok": true, "errors": errors, "price": total, "gold": added, "notes": notes}
