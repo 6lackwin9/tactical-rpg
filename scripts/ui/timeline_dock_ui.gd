@@ -180,12 +180,14 @@ func _build_ui() -> void:
 	banner_t1.text = "HOSTILE TIMELINE MASKED — SIMULTANEOUS PLANNING PHASE"
 	banner_t1.add_theme_font_size_override("font_size", 9)
 	banner_t1.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+	banner_t1.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	banner_vbox.add_child(banner_t1)
 
 	var banner_t2 := Label.new()
 	banner_t2.text = "Hostiles plan in secret. Check Threat Intel on the left to anticipate their actions."
 	banner_t2.add_theme_font_size_override("font_size", 8)
 	banner_t2.add_theme_color_override("font_color", Color(0.7, 0.6, 0.6))
+	banner_t2.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	banner_vbox.add_child(banner_t2)
 
 	var btn_view_party := Button.new()

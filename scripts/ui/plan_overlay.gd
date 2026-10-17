@@ -13,6 +13,7 @@ const TILE: int = 54
 const COL_COMMITTED: Color = Color(1.0, 0.85, 0.3, 0.9)
 const COL_PREVIEW: Color = Color(0.35, 0.9, 1.0, 0.95)
 const COL_REACH: Color = Color(1.0, 0.35, 0.35, 0.16)
+const HINT_WIDTH: float = 150.0
 const NONE: Vector2i = Vector2i(-1, -1)
 
 var ghost_texture: Texture2D = null
@@ -42,6 +43,7 @@ func _init() -> void:
 	_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hint_label.z_index = 40
 	_hint_label.visible = false
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_hint_label)
 
 func clear() -> void:
@@ -63,10 +65,14 @@ func refresh_hint() -> void:
 	_hint_label.visible = not hint_text.is_empty() and hint_cell != NONE
 	if _hint_label.visible:
 		_hint_label.text = hint_text
+		_hint_label.custom_minimum_size.x = HINT_WIDTH   # wraps inside the grid
+		_hint_label.size = Vector2(HINT_WIDTH, 0.0)
 		var pos: Vector2 = Vector2(hint_cell) * TILE + Vector2(TILE + 2, -2)
-		if pos.x > size.x - 150.0:
-			pos.x = Vector2(hint_cell).x * TILE - 150.0
-		_hint_label.position = Vector2(maxf(0.0, pos.x), maxf(0.0, pos.y))
+		if pos.x > size.x - HINT_WIDTH:
+			pos.x = Vector2(hint_cell).x * TILE - HINT_WIDTH
+		pos.x = clampf(pos.x, 0.0, maxf(0.0, size.x - HINT_WIDTH))
+		var hint_h: float = _hint_label.get_combined_minimum_size().y
+		_hint_label.position = Vector2(pos.x, clampf(pos.y, 0.0, maxf(0.0, size.y - hint_h)))
 	queue_redraw()
 
 static func _center(cell: Vector2i) -> Vector2:

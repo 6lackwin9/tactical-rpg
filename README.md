@@ -284,6 +284,7 @@ Every hit goes through `DamageCalculator.compute`: arena attacks (single-target 
 - **Layout**: the action timeline sits in the top row between the party and enemy rosters (its blocks shrink to fit the slot); the resolution log sits in the bottom bar next to the playback controls.
 - **Unit Inspector**: portrait, HP and **AP** gauges (AP debt shown), speed, basic-attack reach band, stance, target, buffs and statuses, gear, and AI threat intel for hostiles.
 - **Tactical Forecast Dock**: distance, reach-band check (in reach / too close / out of reach), stance matchup, the expected Strike hit and crit chance (section 2b), and the encounter's rules (blocks per round, AP pool and regen, exits).
+- Both side docks have a content-independent width (at least 270 px, `PANEL_WIDTH`; extra window width is shared evenly) and their text wraps or ellipsizes, so selecting a hero or an enemy never moves the grid or the other dock; the grid's move/attack preview wraps and stays inside the grid (COMBAT-LAYOUT, checked in `combat_ui_framework_test_suite.gd`). New labels in the docks must wrap or ellipsize.
 - **Action Feed & Modals**:
   - Compact active block log dock.
   - Filterable fullscreen action stream modal (`ATTACK`, `DEFEND`, `MOVE`, `BUFF`, `EVENT` quick filters, plus a **custom filter** row to show a single unit's actions and the actions aimed at it). In debug builds hovering an attack cell shows its damage formula.

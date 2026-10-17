@@ -7,6 +7,8 @@ extends PanelContainer
 # stance matchup multipliers, estimated damage, and arena landmark intel.
 # ==============================================================================
 
+const PANEL_WIDTH: float = 270.0
+
 var forecast_target_lbl: Label
 var forecast_dist_lbl: Label
 var forecast_range_badge: Label
@@ -18,7 +20,8 @@ var intel_turn_lbl: Label
 func _init() -> void:
 	name = "TacticalForecastUI"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(270, 468)
+	custom_minimum_size = Vector2(PANEL_WIDTH, 468)
+	clip_contents = true   # the width is fixed: long text wraps, it never widens the panel
 
 	var right_style := StyleBoxFlat.new()
 	right_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
@@ -42,6 +45,7 @@ func _build_ui() -> void:
 	forecast_hdr.text = "TACTICAL FORECAST & ARENA INTEL"
 	forecast_hdr.add_theme_font_size_override("font_size", 11)
 	forecast_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
+	_wrap(forecast_hdr)
 	right_vbox.add_child(forecast_hdr)
 
 	# Tactical Forecast Box
@@ -66,30 +70,35 @@ func _build_ui() -> void:
 	forecast_target_lbl.text = "Target: Enemy Brawler"
 	forecast_target_lbl.add_theme_font_size_override("font_size", 11)
 	forecast_target_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	_wrap(forecast_target_lbl)
 	fc_vbox.add_child(forecast_target_lbl)
 
 	forecast_dist_lbl = Label.new()
 	forecast_dist_lbl.text = "Distance: 1 Tile"
 	forecast_dist_lbl.add_theme_font_size_override("font_size", 10)
 	forecast_dist_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
+	_wrap(forecast_dist_lbl)
 	fc_vbox.add_child(forecast_dist_lbl)
 
 	forecast_range_badge = Label.new()
 	forecast_range_badge.text = "✓ IN ATTACK RANGE"
 	forecast_range_badge.add_theme_font_size_override("font_size", 10)
 	forecast_range_badge.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+	_wrap(forecast_range_badge)
 	fc_vbox.add_child(forecast_range_badge)
 
 	forecast_stance_lbl = Label.new()
 	forecast_stance_lbl.text = "Stance Matchup: Neutral vs Defensive"
 	forecast_stance_lbl.add_theme_font_size_override("font_size", 10)
 	forecast_stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	_wrap(forecast_stance_lbl)
 	fc_vbox.add_child(forecast_stance_lbl)
 
 	forecast_dmg_lbl = Label.new()
 	forecast_dmg_lbl.text = "Estimated Strike: ~12 dmg (Defending)"
 	forecast_dmg_lbl.add_theme_font_size_override("font_size", 10)
 	forecast_dmg_lbl.add_theme_color_override("font_color", Color(0.95, 0.5, 0.5))
+	_wrap(forecast_dmg_lbl)
 	fc_vbox.add_child(forecast_dmg_lbl)
 
 	# Arena Rules / Objectives
@@ -97,6 +106,7 @@ func _build_ui() -> void:
 	arena_hdr.text = "ARENA RULES & OBJECTIVES"
 	arena_hdr.add_theme_font_size_override("font_size", 10)
 	arena_hdr.add_theme_color_override("font_color", Color(0.85, 0.8, 0.55))
+	_wrap(arena_hdr)
 	right_vbox.add_child(arena_hdr)
 
 	var arena_card := PanelContainer.new()
@@ -120,18 +130,21 @@ func _build_ui() -> void:
 	intel_exit_lbl.text = "🚪 Exit tile: allows safe withdrawal"
 	intel_exit_lbl.add_theme_font_size_override("font_size", 9)
 	intel_exit_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	_wrap(intel_exit_lbl)
 	ar_vbox.add_child(intel_exit_lbl)
 
 	intel_turn_lbl = Label.new()
 	intel_turn_lbl.text = "⏱ Blocks / Round"
 	intel_turn_lbl.add_theme_font_size_override("font_size", 9)
 	intel_turn_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+	_wrap(intel_turn_lbl)
 	ar_vbox.add_child(intel_turn_lbl)
 
 	var right_hint := Label.new()
 	right_hint.text = "💡 Click any enemy unit to inspect their threat level."
 	right_hint.add_theme_font_size_override("font_size", 8)
 	right_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
+	_wrap(right_hint)
 	right_vbox.add_child(right_hint)
 
 # Arena rules line: blocks per round, AP pool and recovery, exits.
@@ -190,3 +203,6 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 		forecast_range_badge.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 		forecast_stance_lbl.text = "Stance: N/A"
 		forecast_dmg_lbl.text = "Est. Strike: N/A"
+
+func _wrap(lbl: Label) -> void:
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
