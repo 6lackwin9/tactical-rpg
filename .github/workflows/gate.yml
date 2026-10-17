@@ -1,11 +1,10 @@
 # Fast commit gate (same steps as check_project.ps1 -Fast -Quiet) plus the docs lint, on the batched develop -> main PR and on pushes to main.
-# Docs-only changes skip it (their markdown lint runs locally before they land on develop).
+# Docs-only pushes to main skip it; the release PR always runs it, since it is a required check on main.
 name: gate
 
 on:
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
   push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**']

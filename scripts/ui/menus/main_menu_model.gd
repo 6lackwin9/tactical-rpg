@@ -3,7 +3,7 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Main menu model (UI1-L): Continue (the newest save, autosave included; hidden when none), New game,
-# Load, Settings, Tools (debug builds only) and Quit.
+# Load, Settings, Tools (debug builds only) and Quit (not in the browser, where a tab can't be closed by the game).
 # ==============================================================================
 
 var router: MenuRouter = null
@@ -16,6 +16,9 @@ func can_continue() -> bool:
 
 func show_tools() -> bool:
 	return OS.is_debug_build()
+
+func show_quit() -> bool:
+	return not OS.has_feature("web")
 
 # Loads the newest save (rule 2).
 func continue_game() -> Array[String]:

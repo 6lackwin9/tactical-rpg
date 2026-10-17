@@ -57,19 +57,32 @@ The thread is the planner (lane table: skill `planner`). It writes the planner d
 2. Gate: `check_project.ps1 -Fast -Quiet` or `tools/fc.sh gate` (both work; ~3-4 min on a cloud container, not 32 s) and `tools/fc.sh docs`. There is no IDE Problems rule in the cloud.
 3. Approved means: the task row in `docs/TASKS.md` has status `approved` (set from the user's word) or the change is recorded as approved in `docs/decisions/*`. Only approved work lands on `develop`.
 4. Land it: `git fetch origin develop`, merge `origin/develop` into the task branch (resolve conflicts there; `docs/AGENT_MAP.md` and `docs/archive/TASKS_DONE.md` conflicts are "keep both"), re-run the gate if `develop` brought code changes since the last gate, then `git checkout develop && git merge --squash <task-branch> && git commit` and `git push origin develop`. If the push is rejected because `develop` moved, fetch and repeat from the merge step. Landing while a release PR is open is allowed: the new commit joins that batch and CI re-runs on it.
-5. The squash commit title starts with the task id; its body says what changed and ends with the `Review:` line, for example `Review: change-reviewer clean` or `Review: change-reviewer 1 high (fixed), 2 nits accepted`, and `Gate: fc.sh gate passed`. No task lands without both lines.
+5. The squash commit title starts with the task id; its body says what changed and ends with the `Review:` line, for example `Review: change-reviewer clean` or `Review: change-reviewer 1 high (fixed), 2 nits accepted`, and `Gate: fc.sh gate passed`. No task lands without both lines. It also carries a `Timing:` and a `Blocked-by:` line ("Task timing" below).
 6. Not approved: a small change waits on its pushed task branch and goes to the user as a question in the thread; a large one waits for the user's feedback before work starts. Rows in `spec` or `idea` status and any design question that comes up mid-task go to the user.
-7. Never push to `main`. Keep the task branch until its batch is on `main`, then delete it.
+7. Never push to `main`. Leave the task branch on the remote; the `branch-cleanup` workflow deletes it once its work is on `develop` ("Branch cleanup" below).
 
 ## Batched release to `main` (Merge & Release thread)
 
 1. Batch: once a day before the 18:30 UTC routine, and whenever the user asks, if `develop` is ahead of `main`.
 2. Check each task commit in `git log origin/main..origin/develop`: task id in the title, `Review:` and `Gate:` lines in the body, task row `approved` or a decision row. A commit that fails the check is reverted on `develop` (`git revert`, pushed) and sent back to its area thread through the coordinator. A reverted task lands again as a new squash commit of its fixed branch onto the latest `develop` (merging the old branch again would be a no-op for git).
-3. Open one PR `develop` -> `main` titled `Release <date>: <task ids>`; body: one line per task with its review verdict, plus anything waiting on the user. CI (`gate.yml`) runs on this PR only, and is skipped when the batch changes only Markdown and `docs/` (those passed `tools/fc.sh docs` before landing).
+3. Open one PR `develop` -> `main` titled `Release <date>: <task ids>`; body: one line per task with its review verdict, plus anything waiting on the user. CI (`gate.yml`) runs on this PR; `gate` is a required check on `main` (branch protection: PR required, no force push or deletion), so it always runs on the release PR, docs-only batches included.
 4. CI green: merge with a **merge commit** (not squash, so `develop` and `main` keep a shared history and the next batch has no conflicts). The push to `main` runs the gate again; the web build deploys at the next daily run (19:07 UTC) or on request.
 5. CI red: find the task commit that broke it (the failing suite names its area), revert it on `develop`, push (CI re-runs on the PR), and send the failure to its area thread through the coordinator. Never fix another area's code in this thread.
-6. After the merge, delete the task branches of the batch. Hotfix to `main` without `develop` only with the user's word; after any change that reaches `main` outside a release PR, merge `main` back into `develop` right away so the next batch does not conflict.
+6. Compile the batch's `Timing:` and `Blocked-by:` lines into `docs/metrics/TASK_LOG.md` (one row per task, release wait = landed to release merge) and refresh its Bottlenecks section: the biggest waits, the dependency chains behind them and how to decouple them. This is the only writer of that file, so it never conflicts. Hotfix to `main` without `develop` only with the user's word; after any change that reaches `main` outside a release PR, merge `main` back into `develop` right away so the next batch does not conflict.
 7. The `balance` agent keeps running on `origin/main`, so it measures released code only; ask for a release first when a balance run needs work still on `develop`.
+
+## Task timing
+
+Goal (user 2026-10-17): see where time goes, mainly idle time and dependence between steps; tokens are secondary. Each area thread notes timestamps as it works (`date -u +%H:%M` at each step) and puts two lines in the task's squash commit body:
+
+- `Timing: start=<HH:MM>Z landed=<HH:MM>Z work=<min> (build <min>, review <min>, rework <min>, conflicts <min>) wait=<min> (approval <min>, dependency <min>, ci <min>, merge <min>) gates=<count> mode=<dispatch mode> agents=<agents run> tokens=<subagent total, from the agents' reports>`
+- `Blocked-by: <task id, "user approval HH:MM-HH:MM", "merge of <id>", or none>`
+
+Work is time the thread is building, reviewing, gating or fixing; wait is time the task is ready or blocked and nobody works on it, by cause. Estimates are marked `~`. The Merge & Release thread adds the release wait and compiles the lines into `docs/metrics/TASK_LOG.md` at each batch.
+
+## Branch cleanup
+
+Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.github/workflows/branch-cleanup.yml` runs daily at 19:37 UTC and on request (**Actions > branch-cleanup > Run workflow**, optional dry run): it deletes every branch except `main` and `develop` that has no open PR, has had no commit for 6 hours, and is either the head of a merged PR or already contained in `develop`; branches with work not on `develop` are kept and listed in the run summary. Do not turn on the repository setting "Automatically delete head branches": the release PR's head is `develop`, so it would be deleted at every release.
 
 ## Scheduled routines
 

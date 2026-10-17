@@ -47,6 +47,8 @@ static func run(tree_parent: Node = null) -> bool:
 			missing += glyphs[i]
 	var added: int = base.fallbacks.size() - saved.size()
 	base.fallbacks = saved
+	var web_entry: String = str(ProjectSettings.get_setting("application/run/main_scene.web", ""))
+	ok = TestHelpers.report_ok(TAG, "Browser build starts in the main menu; desktop keeps the runner", web_entry == "res://scenes/main_menu.tscn" and ResourceLoader.exists(web_entry) and str(ProjectSettings.get_setting("application/run/main_scene")) == SceneRunner.SELF_SCENE, web_entry) and ok
 	ok = TestHelpers.report_ok(TAG, "Web fallback fonts cover the runner's icon glyphs", missing.is_empty() and added == WebFonts.FALLBACKS.size(), "missing '%s', added %d" % [missing, added]) and ok
 
 	if tree_parent == null:
