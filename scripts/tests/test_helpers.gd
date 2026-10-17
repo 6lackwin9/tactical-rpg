@@ -207,3 +207,24 @@ static func any_contains(list: Array[String], needle: String) -> bool:
 		if text.contains(needle):
 			return true
 	return false
+
+# The visible controls under `root` that could change a value or run an action (TOOLS-RO: the Forge viewers' forms have
+# none): enabled plain buttons, editable text / number fields, enabled dropdowns, checkboxes and menu buttons.
+static func live_controls(root: Node) -> Array[String]:
+	var out: Array[String] = []
+	for node: Node in root.find_children("*", "Control", true, false):
+		var control: Control = node as Control
+		if not control.is_visible_in_tree():
+			continue
+		var live: bool = false
+		if control is LineEdit:
+			live = (control as LineEdit).editable
+		elif control is TextEdit:
+			live = (control as TextEdit).editable
+		elif control is SpinBox:
+			live = (control as SpinBox).editable
+		elif control is BaseButton:
+			live = not (control as BaseButton).disabled
+		if live:
+			out.append("%s (%s)" % [str(root.get_path_to(control)), control.get_class()])
+	return out

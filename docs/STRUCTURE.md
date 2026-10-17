@@ -6,12 +6,12 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | --- | --- | --- | --- |
 | `scripts/core/specs/` | StatRules, ClassArchetype, Proficiency, Passives, CharacterStats | S2 | done |
 | `scripts/core/specs/{item_families,item_modifiers,item_text}.gd` | item family templates, modifier resolve/collapse, description tokens (ITEM1) | S3, S5 | done |
-| `scripts/content/class_forge_model.gd` | ClassForgeModel: class tab view model (layout, locks, path helpers, panels, grouped pickers, unit AI visibility) (CLASS1) | S5 | done |
+| `scripts/content/class_forge_model.gd` | ClassForgeModel: class tab view model (layout, path helpers, panels, grouped pickers, unit AI visibility) (CLASS1) | S5 | done |
 | `scripts/core/combat/`, `scripts/core/inventory/` | Combatant, DamageCalculator, equipment, inventory | S1, S3 | done |
 | `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses | S1, S4 | done |
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
-| `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools | all | done |
+| `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools (forge and world are read-only viewers since TOOLS-RO) | all | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | done |
 | `scripts/tests/status_expansion_effects_test_suite.gd` | slow tiles, expose/fortify armor rating, round-end order and logs, poison stacking, granted magnitudes and sources, Forge magnitude range (S12S-L commit 2) | S12 | done |
@@ -23,9 +23,9 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
 | `scripts/tests/item_tiers_test_suite.gd` | item tier criteria, bonuses, evaluation order, shipped loadouts unchanged (ITEM1 commit 2) | S3 | done |
-| `scripts/tests/item_form_model_test_suite.gd` | item and family Forge model and tabs (ITEM1 commit 3) | S5 | done |
+| `scripts/tests/item_form_model_test_suite.gd` | item and family Forge model and read-only viewer tabs (ITEM1 commit 3; TOOLS-RO) | S5 | done |
 | `scripts/tests/asset_pipeline_test_suite.gd` | asset manifest, key resolution, team overlay, skill and status icons, safe remove (S14-L1) | S14 | done |
-| `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, locks, seed; model and Forge class tab) | S5 | done |
+| `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, key-field rule, seed; model and read-only Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
 | `scripts/tests/dialogue_test_suite.gd` | dialogue trees, shops, service lines, gone-NPC lint, gold fields, ref scans (DLG1) | S11 | done |
@@ -36,7 +36,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/focus_gear_test_suite.gd`, `focus_gear_budget_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, replay.gd (PLAYTEST1), overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
-| `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
+| `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md`, `web.md` (browser build), `content-edits.md` (agent-driven content changes) | process | done |
 | `assets/fonts/`, `scripts/ui/runner/web_fonts.gd` | Web-only fallback fonts for emoji and symbol glyphs (`WebFonts.install`, called by the Scene Runner and the Main Menu, the browser build's entry scene); sources and licenses in `assets/fonts/README.md` | process | done |
 | `export_presets.cfg`, `.github/workflows/web.yml` | Web (HTML5) export preset (single-threaded) and the workflow that builds and deploys `main` once a day and on request (`docs/workflow/web.md`) | process | done |
 | `.github/workflows/branch-cleanup.yml` | daily deletion of remote task branches already on `develop` (`docs/workflow/cloud.md` "Branch cleanup") | process | done |
@@ -52,8 +52,8 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/content/{skill_kinds,skill_ranks,skill_text,asset_scan}.gd`, `tools/safe_delete.gd` | ranked skills, kind sections, description tokens, reference scan / safe delete (SKILL1; the migration seed `skill1_ranks.gd` is archived, CLN-2) | S5 | done |
 | `scripts/content/validators/` | per-kind validation rules (SkillValidator, ItemValidator, ClassUnitValidator); ContentCatalog.validate_entry / warnings_for dispatch to them (CLN-9) | S5 | done |
 | `scripts/content/{skill,item,class_unit}_fields.gd` | per-kind field tables of ContentSchema (CLN-9b) | S5 | done |
-| `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel}.gd` | Forge skill tab logic and ranks panel (SKILL1) | S5 | done |
-| `scripts/ui/forge/{item_form_model,item_tables}.gd` | Forge item and item-family tabs: ItemFormModel (sections, locks, options, limits, problems, modifier and tier tables, impact, filters) and ItemTables (widgets) (ITEM1) | S5 | done |
+| `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel}.gd` | Forge skill tab logic and read-only ranks panel (SKILL1; TOOLS-RO) | S5 | done |
+| `scripts/ui/forge/{item_form_model,item_tables}.gd` | Forge item and item-family tabs: ItemFormModel (sections, options, limits, problems, modifier and tier tables, filters) and ItemTables (read-only widgets) (ITEM1; TOOLS-RO) | S5 | done |
 | `scripts/art/` | SvgRaster, UnitArt, ItemArt, TileArt, SkillArt, StatusArt (generated placeholders); AssetRegistry (key to manifest file, template, fallback; team overlay) and AssetCatalog (manifest store) (S14-L1) | S14 | done |
 | `data/assets/` | manifest.json: art and sound file overrides and aliases (AssetCatalog; empty until S14-A1) | S14 | in progress |
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |

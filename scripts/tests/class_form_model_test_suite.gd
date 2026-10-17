@@ -4,14 +4,13 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Class Form Model Test Suite (CLASS1-L, FORGE1_CLASSES 2-5)
 # The headless class tab: five sections from the schema groups, control ranges equal to the rule constants, a new class
-# that validates, Save blocked by errors (never by warnings), locked key fields on system classes, the path ordering
-# helper and standard / custom levels, the default-loadout preview (acceptance 6), the family picker, the gear pickers
+# that validates, problems from errors (never from warnings), the key-field rule on system classes (no viewer locks),
+# the path ordering helper and standard / custom levels, the default-loadout preview (acceptance 6), the family picker, the gear pickers
 # grouped by item family with the dual-wield guard and the accessory flag, the stat / budget / coverage panels and the
-# unit AI group visibility. Read-only on the shipped catalog (fixtures picked by rule).
+# unit AI group visibility, and the read-only Forge viewer class tab. Read-only on the shipped catalog (fixtures by rule).
 # ==============================================================================
 
 const TAG: String = "ClassForm"
-static var SANDBOX: String = TestHelpers.sandbox("class_form_ui")
 
 static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
@@ -21,7 +20,7 @@ static func run(tree_parent: Node = null) -> bool:
 	var ok: bool = true
 	ok = _test_layout_and_ranges() and ok
 	ok = _test_new_and_save_state() and ok
-	ok = _test_locks() and ok
+	ok = _test_key_fields() and ok
 	ok = _test_path_helpers() and ok
 	ok = _test_default_loadout() and ok
 	ok = _test_pickers() and ok
@@ -101,29 +100,24 @@ static func _all_plain_heads() -> Array[Dictionary]:
 			out.append(row)
 	return out
 
-static func _test_locks() -> bool:
+# TOOLS-RO: the viewer has no locks (no field state carries one); the data rule (ContentCatalog.key_field_errors) still
+# makes a key-field change of a system class a problem, outside the system-edit scope only.
+static func _test_key_fields() -> bool:
 	var checks: Dictionary = {}
 	var system: Dictionary = _shipped()
 	var id: String = str(system["id"])
-	checks["a shipped class is locked"] = ClassForgeModel.is_locked(id)
-	var locked_ok: bool = true
-	for key: String in ["id", "base_stats", "growth", "proficiency", "ai_role"]:
-		var st: Dictionary = ClassForgeModel.state(system, key, id)
-		locked_ok = locked_ok and DictUtil.to_bool(st["locked"]) and not DictUtil.to_bool(st["enabled"]) and str(st["reason"]) == ClassForgeModel.LOCK_REASON
-	checks["key fields are disabled with the lock reason"] = locked_ok
-	var free_ok: bool = true
-	for key: String in ["name", "description", "art", "skill_path", "main_hand", "pouch"]:
-		free_ok = free_ok and not DictUtil.to_bool(ClassForgeModel.state(system, key, id)["locked"])
-	checks["name, description, art, path, gear and pouch stay editable"] = free_ok
-	var fresh: Dictionary = ClassForgeModel.new_entry("t_cf_lock")
-	checks["a new draft is never locked"] = not ClassForgeModel.is_locked("") and DictUtil.to_bool(ClassForgeModel.state(fresh, "base_stats", "")["enabled"])
-	ContentCatalog.begin_system_edit()
-	checks["inside the system-edit scope nothing is locked"] = not ClassForgeModel.is_locked(id)
-	ContentCatalog.end_system_edit()
+	var no_lock: bool = true
+	for f: Dictionary in ContentSchema.fields("classes"):
+		no_lock = no_lock and not ClassForgeModel.state(system, str(f["key"]), id).has("locked")
+	checks["no class field state carries a lock"] = no_lock
 	var changed: Dictionary = system.duplicate(true)
 	changed["ai_role"] = "SKIRMISHER" if str(changed["ai_role"]) != "SKIRMISHER" else "AGGRESSOR"
-	checks["a key-field change of a system class is a Save problem"] = ClassForgeModel.draft_problems(changed, id).any(func(p: Dictionary) -> bool: return str(p["field"]) == "ai_role")
-	return TestHelpers.report(TAG, "System classes: key fields locked with the reason", checks)
+	var role_problem: Callable = func(p: Dictionary) -> bool: return str(p["field"]) == "ai_role"
+	checks["a key-field change of a system class is a problem"] = ClassForgeModel.draft_problems(changed, id).any(role_problem)
+	ContentCatalog.begin_system_edit()
+	checks["...but not inside the system-edit scope"] = not ClassForgeModel.draft_problems(changed, id).any(role_problem)
+	ContentCatalog.end_system_edit()
+	return TestHelpers.report(TAG, "System classes: key-field rule (no viewer locks)", checks)
 
 static func _test_path_helpers() -> bool:
 	var checks: Dictionary = {}
@@ -309,14 +303,13 @@ static func _test_unit_ai() -> bool:
 	return TestHelpers.report(TAG, "Unit AI group visibility", checks)
 
 # ------------------------------------------------------------------------------
-# The class tab and the unit AI group in the real Content Forge scene (commit 2), on a sandbox fork.
+# The class tab and the unit AI group in the Content Forge viewer (TOOLS-RO: read-only, on the shipped catalog).
 # ------------------------------------------------------------------------------
 
 static func _test_forge_ui(tree_parent: Node) -> bool:
 	if tree_parent == null:
-		return TestHelpers.report_ok(TAG, "Forge class tab UI (needs a scene tree)", true, "skipped")
+		return TestHelpers.report_ok(TAG, "Forge class tab viewer (needs a scene tree)", true, "skipped")
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var host: Node = (load("res://scenes/content_forge.tscn") as PackedScene).instantiate()
 	tree_parent.add_child(host)
 	var forge: ContentForge = host.get("forge")
@@ -324,60 +317,47 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	var id: String = ContentCatalog.ids("classes")[0]
 	forge.select(id)
 	var system: Dictionary = ContentCatalog.get_entry("classes", id)
-	checks["a system class opens with the derived panels"] = forge.selected_id == id and forge.class_panels_text().contains("Gear budget") and forge.class_panels_text().contains("Proficiency coverage")
+	checks["a class opens with the derived panels"] = forge.selected_id == id and forge.class_panels_text().contains("Gear budget") and forge.class_panels_text().contains("Proficiency coverage")
 	var stats_box: Control = forge.form.field_control("base_stats")
 	var spin: SpinBox = stats_box.find_child("Stat_" + StatRules.STATS[0], true, false) as SpinBox if stats_box != null else null
-	checks["locked base stats: spinners are read-only, ranges from StatRules"] = spin != null and not spin.editable and is_equal_approx(spin.min_value, StatRules.STAT_FLOOR) and is_equal_approx(spin.max_value, StatRules.STAT_CEILING)
+	checks["base stats: read-only spinners, ranges from StatRules"] = spin != null and not spin.editable and is_equal_approx(spin.min_value, StatRules.STAT_FLOOR) and is_equal_approx(spin.max_value, StatRules.STAT_CEILING)
 	var name_edit: LineEdit = forge.form.field_control("name") as LineEdit
-	checks["name stays editable on a system class"] = name_edit != null and name_edit.editable
+	checks["the name is shown read-only"] = name_edit != null and not name_edit.editable and name_edit.text == str(system["name"])
 	var path_box: Control = forge.form.field_control("skill_path")
 	var rows: Node = path_box.find_child("Rows", true, false) if path_box != null else null
 	checks["the path table shows one row per entry"] = rows != null and rows.get_child_count() == DictUtil.dict_of(system["skill_path"]).size()
 	var prof_box: Control = forge.form.field_control("proficiency")
-	checks["the proficiency rows show one row per trained type, read-only when locked"] = prof_box != null and prof_box.get_child_count() == DictUtil.dict_of(system["proficiency"]).size() + 1 and prof_box.find_child("Level", true, false) is SpinBox and not (prof_box.find_child("Level", true, false) as SpinBox).editable
+	checks["the proficiency rows show one row per trained type"] = prof_box != null and prof_box.get_child_count() == DictUtil.dict_of(system["proficiency"]).size()
 	var main_opt: OptionButton = forge.form.field_control("main_hand") as OptionButton
 	var separators: int = 0
 	if main_opt != null:
 		for i: int in range(main_opt.item_count):
 			if main_opt.is_item_separator(i):
 				separators += 1
-	checks["the main hand picker is grouped by item family"] = separators > 1
-	# A new class starts valid; an off-budget edit blocks Apply; adding a path family through the table works.
-	forge.new_entry()
-	checks["a new class draft can be applied"] = not forge.apply_blocked() and forge.draft_problems().is_empty()
-	var fresh_stats: Dictionary = DictUtil.dict_of(forge.form.draft["base_stats"]).duplicate()
-	fresh_stats[StatRules.STATS[0]] = DictUtil.to_int(fresh_stats[StatRules.STATS[0]]) + 1
-	forge.form.set_value("base_stats", fresh_stats)
-	checks["an off-budget draft disables Apply"] = forge.apply_blocked()
-	fresh_stats[StatRules.STATS[0]] = DictUtil.to_int(fresh_stats[StatRules.STATS[0]]) - 1
-	forge.form.set_value("base_stats", fresh_stats)
-	var add_btn: Button = forge.form.field_control("skill_path").find_child("AddButton", true, false) as Button
-	checks["the path add button is enabled"] = add_btn != null and not add_btn.disabled
-	if add_btn != null:
-		add_btn.pressed.emit()
-	checks["Add family appends an entry"] = DictUtil.dict_of(forge.form.draft["skill_path"]).size() == 1
-	var new_id: String = str(forge.form.draft["id"])
-	checks["the new class applies as a user asset"] = forge.apply() and str(ContentCatalog.get_entry("classes", new_id)["origin"]) == ContentSchema.ORIGIN_USER
-	forge.select(new_id)
-	var user_spin: SpinBox = forge.form.field_control("base_stats").find_child("Stat_" + StatRules.STATS[0], true, false) as SpinBox
-	checks["a user class keeps its key fields editable"] = user_spin != null and user_spin.editable
-	forge.delete_selected()
-	forge.delete_selected()
-	checks["the user class can be deleted"] = not ContentCatalog.has("classes", new_id)
-	# Units: the AI group shows heal_below only for SUPPORT, and hides thresholds while reckless.
+	checks["the main hand picker is grouped by item family and disabled"] = separators > 1 and main_opt.disabled
+	var live: Array[String] = TestHelpers.live_controls(forge.form)
+	checks["no control of the class form can edit or act (%s)" % ", ".join(live)] = live.is_empty()
+	checks["no lock icon in the form"] = not forge.form.find_children("*", "Label", true, false).any(func(n: Node) -> bool: return (n as Label).text.contains("🔒"))
+	# Units: the AI group follows ClassForgeModel.layout (heal_below only for SUPPORT, no thresholds while reckless).
 	forge.show_kind("units")
-	var unit_id: String = ""
-	for u: Dictionary in ContentCatalog.entries("units"):
-		if str(u.get("stat_mode", "derived")) == "derived" and ClassForgeModel.effective_role(u) != "SUPPORT" and not DictUtil.to_bool(u.get("reckless", false)):
-			unit_id = str(u["id"])
-			break
-	forge.select(unit_id)
-	checks["a non-support unit hides heal_below"] = not unit_id.is_empty() and forge.form.field_control("heal_below") == null and forge.form.field_control("flee_ratio") != null
-	forge.form.set_value("ai_role", "SUPPORT")
-	checks["choosing SUPPORT shows heal_below"] = forge.form.field_control("heal_below") != null
-	forge.form.set_value("reckless", true)
-	checks["reckless hides the flee and guard thresholds"] = forge.form.field_control("flee_ratio") == null and forge.form.field_control("defend_below") == null
-	forge.revert()
+	var picks: Array[String] = []
+	for want: Callable in [
+		func(u: Dictionary) -> bool: return ClassForgeModel.effective_role(u) != "SUPPORT" and not DictUtil.to_bool(u.get("reckless", false)),
+		func(u: Dictionary) -> bool: return ClassForgeModel.effective_role(u) == "SUPPORT",
+		func(u: Dictionary) -> bool: return DictUtil.to_bool(u.get("reckless", false))]:
+		for u: Dictionary in ContentCatalog.entries("units"):
+			if str(u.get("stat_mode", "derived")) == "derived" and want.call(u):
+				picks.append(str(u["id"]))
+				break
+	var layout_ok: bool = not picks.is_empty()
+	for unit_id: String in picks:
+		forge.select(unit_id)
+		var shown: Array[String] = []
+		for block: Dictionary in ClassForgeModel.layout("units", forge.form.draft):
+			for key: Variant in DictUtil.array_of(block["fields"]):
+				shown.append(str(key))
+		for key: String in ["heal_below", "flee_ratio", "defend_below"]:
+			layout_ok = layout_ok and (forge.form.field_control(key) != null) == shown.has(key)
+	checks["the unit AI group shows exactly the layout's fields (%d units by rule)" % picks.size()] = layout_ok
 	host.queue_free()
-	TestHelpers.cleanup(SANDBOX)
-	return TestHelpers.report(TAG, "Forge class tab and unit AI group (scene)", checks)
+	return TestHelpers.report(TAG, "Forge viewer: class tab and unit AI group (scene)", checks)

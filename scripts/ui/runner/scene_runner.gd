@@ -32,9 +32,9 @@ const SCENES: Array[Dictionary] = [
 	{"path": "res://scenes/combat_arena.tscn", "name": "Combat Arena", "icon": "⚔",
 		"desc": "Plan and fight a battle. Pick a catalog encounter or any world's battle (played with that world's characters).", "encounters": true},
 	{"path": "res://scenes/content_forge.tscn", "name": "Content Forge", "icon": "⚒",
-		"desc": "Create and edit skills, items, classes, units and encounters; playtest them in the arena."},
+		"desc": "Read-only asset viewer: browse skills, items, classes, units and encounters, their engine preview and problems; playtest them in the arena."},
 	{"path": "res://scenes/world_forge.tscn", "name": "World Forge", "icon": "🌍",
-		"desc": "Build modular lore worlds: regions, factions, characters, named items, quests and encounters that inherit lore-free base assets; play their battles."},
+		"desc": "Read-only world viewer: regions, factions, characters, named items, quests and encounters that inherit lore-free base assets; play their battles."},
 	{"path": "res://scenes/gear_dojo.tscn", "name": "Gear & Skill Dojo", "icon": "🛡",
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
 	{"path": "res://scenes/overworld/region_map_debug.tscn", "name": "Region Map (debug)", "icon": "🗺",
@@ -174,7 +174,7 @@ func reload_scripts(only: Array[String] = []) -> Dictionary:
 	var skip: Array[String] = [own.resource_path]   # never recompile the runner while it runs
 	var result: Dictionary = reloader.reload_changed(only, skip)
 	if not ContentCatalog.is_dirty():
-		ContentCatalog.reload_from_disk()   # pick up catalog JSON edited outside the Forge too
+		ContentCatalog.reload_from_disk()   # pick up catalog JSON edited by seed scripts
 	var reloaded: Array = result["reloaded"]
 	var failed: Array = result["failed"]
 	var added: Array = result["new"]

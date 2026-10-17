@@ -8,8 +8,9 @@ extends RefCounted
 # two worlds can wear the same base units with different lore and play identically
 # (except explicit tuning deltas); references follow renames; worlds connect
 # without inheriting; authored worlds save and reload; world encounters play to
-# the end with their lore names; the World Forge UI and the Scene Runner can open
-# a world's battle. Writes go to a sandbox copy (a TestHelpers sandbox).
+# the end with their lore names; shipped worlds pass every former World Forge
+# Apply check (TOOLS-RO); the read-only World Forge viewer and the Scene Runner
+# can open a world's battle. Writes go to a sandbox copy (a TestHelpers sandbox).
 # ==============================================================================
 
 static var SANDBOX: String = TestHelpers.sandbox("world_test")
@@ -23,6 +24,7 @@ static func run(tree_parent: Node = null) -> bool:
 	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
 	var ok: bool = true
 	ok = _test_shipped_worlds() and ok
+	ok = _test_shipped_save_checks() and ok
 	ok = _test_inheritance() and ok
 	ok = _test_same_base_different_lore() and ok
 	ok = _test_tuning_items_disciplines() and ok
@@ -97,6 +99,20 @@ static func _test_shipped_worlds() -> bool:
 	listed.append_array(["dialogues", "shops"])
 	checks["kind list matches the schema"] = listed == WorldSchema.KINDS
 	return TestHelpers.report_ok(TAG, "Shipped worlds load and validate (every element kind, lineage, descendants)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not problems.is_empty() else str(ids))
+
+# TOOLS-RO: the checks the World Forge ran before Apply, over every shipped world with no tool open. validate_all() covers
+# the manifests and validate_entry per own entry; blocking_errors adds the shape rules (e.g. tuning keys) it does not.
+static func _test_shipped_save_checks() -> bool:
+	var bad: Array[String] = []
+	var count: int = 0
+	for w: String in WorldCatalog.world_ids():
+		bad.append_array(WorldCatalog.manifest_errors(w))
+		for kind: String in WorldSchema.KINDS:
+			for e: Dictionary in WorldCatalog.own_entries(w, kind):
+				count += 1
+				for message: String in WorldCatalog.blocking_errors(w, kind, e, str(e.get("id", ""))):
+					bad.append("%s/%s:%s: %s" % [w, kind, str(e.get("id", "")), message])
+	return TestHelpers.report_ok(TAG, "Shipped worlds pass every former World Forge Apply check (%d entries)" % count, bad.is_empty() and count > 0, str(bad))
 
 static func _test_inheritance() -> bool:
 	var checks: Dictionary = {}
@@ -327,56 +343,54 @@ static func _test_authoring_and_renames() -> bool:
 
 static func _test_forge_ui_and_runner(tree_parent: Node) -> bool:
 	if tree_parent == null:
-		return TestHelpers.report_ok(TAG, "World Forge UI & runner (need a scene tree)", true, "skipped")
+		return TestHelpers.report_ok(TAG, "World Forge viewer & runner (need a scene tree)", true, "skipped")
 	var host: Node = (load("res://scenes/world_forge.tscn") as PackedScene).instantiate()
 	tree_parent.add_child(host)
 	var forge: WorldForge = host.get("forge")
 	var checks: Dictionary = {}
-	checks["opens on a world"] = not forge.world_id.is_empty() and forge.kind == WorldForge.OVERVIEW
-	# New world extending another, from the UI.
-	checks["create world"] = forge.create_world("wide_world", "Wide World", ["tidewrack"]) and forge.world_id == "wide_world"
-	# Inherited entries are read-only; Override copies one in; the copy is editable.
+	checks["opens on a world overview"] = not forge.world_id.is_empty() and forge.kind == WorldForge.OVERVIEW and forge.form.visible
+	# A world that extends another (by rule): its inherited entries show read-only with the note, its own ones too.
+	var child: String = ""
+	for w: String in WorldCatalog.world_ids():
+		if WorldCatalog.lineage(w).size() > 1 and child.is_empty():
+			child = w
+	forge.set_world(child)
 	forge.show_kind("characters")
-	forge.select("ashlands:tev_quill")
-	checks["inherited is read-only"] = not forge.selected_inherited.is_empty() and not forge.form.visible and forge.selected_id.is_empty()
-	forge.select("pell_driftwood")
-	forge.override_selected()
-	checks["override from the forge"] = forge.selected_id.begins_with("pell_driftwood") and str(forge.form.draft.get("override", "")) == "tidewrack:pell_driftwood"
-	forge.form.set_value("name", "Wide-World Pell")
-	checks["edit and apply"] = forge.apply() and str(WorldCatalog.get_own("wide_world", "characters", forge.selected_id).get("name", "")) == "Wide-World Pell"
-	# A new character with a base unit, tuning and an unresolved reference: stored, problems listed.
-	forge.new_entry()
-	forge.form.set_value("id", "wide_hero")
-	forge.form.set_value("name", "Wide Hero")
-	forge.form.set_value("role", "party")
-	forge.form.set_value("base_unit", "warrior")
-	forge.form.set_value("home", "no_such_place")
-	checks["unresolved ref doesn't block apply"] = forge.apply() and not forge.draft_problems().is_empty()
-	forge.form.set_value("home", "")
-	forge.form.set_value("tuning", {"hp_pct": 10})
-	checks["fixed up"] = forge.apply() and forge.draft_problems().is_empty()
-	forge.form.set_value("tuning", {"mana": 3})
-	checks["blocking error refused"] = not forge.apply()
-	forge.revert()
-	# An encounter for the new world, played in the arena.
+	var inherited: String = ""
+	var own: String = ""
+	for e: Dictionary in WorldCatalog.merged_entries(child, "characters"):
+		if str(e["_world"]) != child and inherited.is_empty():
+			inherited = str(e["_qid"])
+		elif str(e["_world"]) == child and own.is_empty():
+			own = str(e.get("id", ""))
+	forge.select(inherited)
+	checks["an inherited entry shows read-only with its world named"] = not inherited.is_empty() and forge.selected_inherited == inherited and forge.form.visible
+	var inherited_live: Array[String] = TestHelpers.live_controls(forge.form)
+	checks["no control of the inherited entry can edit (%s)" % ", ".join(inherited_live)] = inherited_live.is_empty()
+	forge.select(own)
+	checks["an own entry shows with its problems"] = not own.is_empty() and forge.selected_id == own and forge.problems_text().contains("No problems")
+	var live: Array[String] = TestHelpers.live_controls(forge.form)
+	checks["no control of the own entry can edit (%s)" % ", ".join(live)] = live.is_empty()
+	var actions: Array[String] = []
+	for node: Node in forge.find_children("*", "Button", true, false):
+		var text: String = (node as Button).text
+		for word: String in ["Save", "Apply", "Revert", "New", "Duplicate", "Override", "Delete"]:
+			if text.contains(word):
+				actions.append(text)
+	checks["no Save, Apply, Revert, New, Duplicate, Override or Delete button (%s)" % ", ".join(actions)] = actions.is_empty()
+	# Play the first encounter the world sees (rule) in the arena.
 	forge.show_kind("encounters")
-	forge.new_entry()
-	forge.form.set_value("id", "wide_fight")
-	forge.form.set_value("name", "Wide Fight")
-	forge.form.set_value("party", ["wide_hero", "pell_driftwood"])
-	forge.form.set_value("enemies", ["brannoch_saltfist"])
-	checks["encounter applied"] = forge.apply() and forge.draft_problems().is_empty()
+	var encounters: Array[Dictionary] = WorldCatalog.merged_entries(child, "encounters")
+	var first: Dictionary = encounters[0] if not encounters.is_empty() else {}
+	forge.select(WorldCatalog.ref_value(child, first) if not first.is_empty() else "")
 	forge.playtest()
 	var arena: Node = host.get("arena")
 	var arena_session: CombatSession = arena.get("session") if arena != null else null
-	checks["playtest runs the arena"] = host.call("is_playtesting") and arena_session != null and arena_session.allies[0].name == "Wide Hero" and arena_session.allies[1].name == "Wide-World Pell"
+	var expected: WorldEncounter = WorldEncounter.new(child, str(first.get("id", "")))
+	checks["playtest runs the arena with the world encounter"] = DictUtil.to_bool(host.call("is_playtesting")) and arena_session != null and arena_session.encounter.encounter_name == expected.encounter_name
 	host.call("close_playtest")
-	# Unsaved guard and save.
-	checks["unsaved flagged"] = DictUtil.to_bool(host.call("has_unsaved_changes"))
-	checks["saved"] = forge.save_all() and not WorldCatalog.is_dirty()
-	forge.delete_world()
-	forge.delete_world()
-	checks["world deleted"] = not WorldCatalog.has_world("wide_world")
+	checks["Validate All shows WorldCatalog.validate_all()"] = JSON.stringify(forge.validate_all()) == JSON.stringify(WorldCatalog.validate_all())
+	checks["browsing never dirties the worlds"] = not WorldCatalog.is_dirty() and not DictUtil.to_bool(host.call("has_unsaved_changes"))
 	host.queue_free()
 	# Scene Runner: the arena picker offers world battles, and launching one plays that world's characters.
 	var runner: SceneRunner = (load("res://scenes/scene_runner.tscn") as PackedScene).instantiate() as SceneRunner
@@ -387,4 +401,4 @@ static func _test_forge_ui_and_runner(tree_parent: Node) -> bool:
 	runner.back_to_menu()
 	tree_parent.remove_child(runner)   # leaves the tree now (its PlaytestHub, if any, unregisters)
 	runner.queue_free()
-	return TestHelpers.report_ok(TAG, "World Forge UI: create world, inherited read-only, override, drafts with dangling refs, tuning, play in the arena, save, delete; runner launches world battles", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
+	return TestHelpers.report_ok(TAG, "World Forge viewer: inherited and own entries read-only, no edit actions, play in the arena, validate; runner launches world battles", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))

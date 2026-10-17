@@ -5,7 +5,7 @@ extends RefCounted
 # Tactical RPG - Skill Form Model (FORGE1 sections 3, 5, 6 and appendix F-I)
 # The headless brain of the skill tab of the Content Forge. Pure static functions over a RANKED skill entry (the draft the
 # form edits: a family template plus up to two rank modifiers): which sections and fields a kind shows, each field's
-# state (visible, locked, enabled, dynamic limits, allowed options and the reason when something is disabled), kind
+# state (visible, enabled, dynamic limits, allowed options and the reason when something is disabled), kind
 # switching, the ranks table (modifier cells, resolved rows), the live description preview, and why Save is blocked.
 # The controls (ForgeForm, SkillRanksPanel) only render what this returns, so every rule is tested without a window.
 # ==============================================================================
@@ -41,8 +41,6 @@ const KIND_DEFAULTS: Dictionary = {
 	"SUPPORT": {"heal_stat": "KNOW", "heal_base": 1},
 	"DEFEND": {"mitigation": 0.5},
 }
-
-const LOCK_REASON: String = "System asset: key field locked. Create your own copy to change it."
 
 # ------------------------------------------------------------------------------
 # Layout
@@ -105,21 +103,17 @@ static func is_visible(entry: Dictionary, key: String) -> bool:
 # Field state
 # ------------------------------------------------------------------------------
 
-# State of one control: {"visible", "enabled", "reason" (why disabled / locked / limited), "locked", "min", "max" (numbers or null),
+# State of one control: {"visible", "enabled", "reason" (why disabled / limited), "min", "max" (numbers or null),
 # "options" (allowed values, or [] for the schema default), "disabled_options": {value: reason}, "choices" (requires picker ids or null)}.
 # `head` is the id of the stored family being edited ("" for a new draft).
 static func state(entry: Dictionary, key: String, head: String = "") -> Dictionary:
-	var out: Dictionary = {"visible": is_visible(entry, key), "enabled": true, "reason": "", "locked": false, "min": null, "max": null, "options": [], "disabled_options": {}, "choices": null}
+	var out: Dictionary = {"visible": is_visible(entry, key), "enabled": true, "reason": "", "min": null, "max": null, "options": [], "disabled_options": {}, "choices": null}
 	var f: Dictionary = ContentSchema.field("skills", key)
 	if f.is_empty():
 		return out
 	var kind: String = str(entry.get("kind", "ATTACK"))
 	if DictUtil.to_bool(f.get("readonly", false)):
 		out["enabled"] = false
-	if DictUtil.to_bool(f.get("key_field", false)) and is_locked(head):
-		out["enabled"] = false
-		out["locked"] = true
-		out["reason"] = LOCK_REASON
 	var disabled: Dictionary = out["disabled_options"]
 	match key:
 		"basic":
@@ -131,7 +125,7 @@ static func state(entry: Dictionary, key: String, head: String = "") -> Dictiona
 				out["enabled"] = false
 				out["reason"] = "Basic and engine skills stay novice."
 		"requires":
-			if str(entry.get("grade", "novice")) == "novice" and not DictUtil.to_bool(out["locked"]):
+			if str(entry.get("grade", "novice")) == "novice":
 				out["enabled"] = false
 				out["reason"] = "A novice skill requires nothing: raise the grade first."
 			out["choices"] = requires_choices(entry, head)
@@ -193,12 +187,6 @@ static func state(entry: Dictionary, key: String, head: String = "") -> Dictiona
 		"cleanse_statuses":
 			out["options"] = ContentSchema.options_of(f)
 	return out
-
-static func is_locked(head: String) -> bool:
-	if head.is_empty() or ContentCatalog.in_system_edit():
-		return false
-	var rows: Array[Dictionary] = ContentCatalog.family_rows(head)
-	return not rows.is_empty() and ContentCatalog.is_system_origin(rows[0])
 
 # The grant dropdown per kind (never offers a buff the validator rejects).
 static func grant_options(kind: String) -> Array[String]:
@@ -299,11 +287,9 @@ static func problems_for(state_info: Dictionary, key: String, rank: int = 0) -> 
 # ------------------------------------------------------------------------------
 
 # {"allowed": bool, "reason": text}: whether the ranks section can add or remove ranks.
-static func ranks_editable(entry: Dictionary, head: String = "") -> Dictionary:
+static func ranks_editable(entry: Dictionary, _head: String = "") -> Dictionary:
 	if DictUtil.to_bool(entry.get("basic", false)) or DictUtil.to_bool(entry.get("system", false)):
 		return {"allowed": false, "reason": "single rank"}
-	if is_locked(head):
-		return {"allowed": false, "reason": LOCK_REASON}
 	return {"allowed": true, "reason": ""}
 
 # The ranks table: {"fields": [rank-modifiable keys the kind shows], "rows": [{"rank", "name", "values": {key: effective}, "modified": [keys],

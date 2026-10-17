@@ -15,8 +15,11 @@ Settled; do not re-litigate without asking the user. Scope: S5 catalog API, Cont
 | CLASS1 build choices (planner 2026-10-17) | The list-path converter is a const flag until CLASS1-M; unit AI field visibility is UI-only (storage unchanged); `heal_below` is clamped like other float fields; the duplicate-accessory check is per entry (own slots only); `ClassForgeModel` lives in `scripts/content`; renaming a skill onto a key a path already holds is refused | Planner 2026-10-17 |
 | S14-L2 spec approved (user 2026-10-17) | `docs/specs/S14_L2.md` approved as written ("Approve all" on the project decision card covering S12S-L, S14-L2 and S14-A1, 13:36 UTC); built in a cloud thread on its own branch and PR | User 2026-10-17 |
 | S14-L2 status pop (user 2026-10-17) | The combat status icon pops only when a log entry names a real status (outcome tag or status text equals a StatusRegistry display name); free status text pops nothing ("Real statuses only" on the build thread's decision card; as shipped in PR #9) | User 2026-10-17 |
+| Read-only tools (user 2026-10-17) | Content Forge, World Forge and the other creation tools become read-only asset viewers, still opened from the Scene Runner; save, clone, delete, new and other editing or maintenance actions are removed. Agents edit content through `ContentCatalog.upsert` seed scripts, and every check the tools ran on save runs as a test or gate check with no tool open (TOOLS-RO). No new tool features | User 2026-10-17 (project chat, 17:15) |
 
 ## Partly superseded rows (text unchanged; the newer row wins on the named part)
+
+- "FORGE1 skills answers", "FORGE1 class answers", "FORGE1 round 4 answers" (and items-gear.md "FORGE1 round 5 answers"): the editing, save, clone, delete and promote/demote flows they define are retired by "Read-only tools (user 2026-10-17)"; their validation rules still apply to data and now run as tests.
 
 - "upsert_many (2026-10-16)": "family-wide flags like `advanced`" now means `grade` ("FORGE1 round 4 answers"); `upsert_many` itself is unchanged.
 - "FORGE1 skills answers (user 2026-10-16)": "`evolves_from` question still open" is resolved by "FORGE1 round 4 answers" (`grade` + `requires`).

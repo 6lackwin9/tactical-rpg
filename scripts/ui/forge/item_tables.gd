@@ -9,8 +9,9 @@ extends RefCounted
 #   tier_table      one row per tier: label, criterion (stat / proficiency / unit level), bonuses allowed for the type
 #                   (power, mitigation, stat bonuses, effects), description (empty = auto)
 #   hand_grid       the family base numbers or soft bands per hand
-#   panel           read-only panels: description tokens, build chips, base values, preview, impact, used by (ForgeForm.panel_fn)
-# Edits go through ForgeForm.put (the draft, the edited signal, live refreshers); structural edits rebuild the form.
+#   panel           read-only panels: rendered description, build chips, base values, preview, used by (ForgeForm.panel_fn)
+# The Forge is a read-only viewer (TOOLS-RO): every control is built with readonly = true and ForgeForm hides the action
+# buttons and add rows; the per-control callbacks (ForgeForm.put) are inert (cleanup candidate).
 # ==============================================================================
 
 const BAD_TINT: Color = Color(1.0, 0.6, 0.6)
@@ -584,7 +585,7 @@ static func hand_grid(form: ForgeForm, key: String, grid_kind: String, readonly:
 # Read-only panels
 # ------------------------------------------------------------------------------
 
-# `stored_id` = the stored entry being edited ("" for a new draft).
+# `stored_id` = the stored entry shown.
 static func panel(form: ForgeForm, id: String, stored_id: String) -> Control:
 	match id:
 		"tokens":
@@ -595,8 +596,6 @@ static func panel(form: ForgeForm, id: String, stored_id: String) -> Control:
 			return _rich(form, func() -> String: return base_text(form.draft))
 		"preview":
 			return _rich(form, func() -> String: return preview_text(form.draft))
-		"impact":
-			return _rich(form, func() -> String: return impact_text(form.draft, stored_id))
 		"used_by":
 			return _rich(form, func() -> String: return used_by_text(stored_id if not stored_id.is_empty() else str(form.draft.get("id", ""))))
 	return null
@@ -615,12 +614,9 @@ static func _rich(form: ForgeForm, text_fn: Callable) -> RichTextLabel:
 	refresh.call()
 	return rich
 
-# Token palette (only tokens with a value now) that inserts at the description caret, plus the rendered text and its problems.
+# The rendered description of the item and its token problems and warnings.
 static func _tokens_panel(form: ForgeForm) -> Control:
 	var box := VBoxContainer.new()
-	var palette := HFlowContainer.new()
-	palette.name = "Palette"
-	box.add_child(palette)
 	var rendered: RichTextLabel = RichTextLabel.new()
 	rendered.name = "Rendered"
 	rendered.bbcode_enabled = true
@@ -631,17 +627,6 @@ static func _tokens_panel(form: ForgeForm) -> Control:
 	var refresh: Callable = func() -> void:
 		if not is_instance_valid(box):
 			return
-		UiTheme.clear_children(palette)
-		var editor: TextEdit = form.field_control("description") as TextEdit
-		for token: String in ItemFormModel.token_palette(form.draft):
-			var btn: Button = UiTheme.button("{%s}" % token, "Insert {%s} at the caret" % token, func() -> void:
-				var target: TextEdit = form.field_control("description") as TextEdit
-				if target != null:
-					target.insert_text_at_caret("{%s}" % token)
-					target.grab_focus()
-			, UiTheme.FONT_SM)
-			btn.disabled = editor == null or not editor.editable
-			palette.add_child(btn)
 		var d: Dictionary = ItemFormModel.description_preview(form.draft)
 		var lines: Array[String] = ["[color=#8ba3b8]Rendered:[/color] %s" % str(d["text"])]
 		for p: Variant in DictUtil.array_of(d["problems"]):
@@ -684,14 +669,6 @@ static func preview_text(draft: Dictionary) -> String:
 	var named: Array = DictUtil.array_of(p["named"])
 	lines.append("[color=#8ba3b8]Named items:[/color] %s" % (", ".join(PackedStringArray(named)) if not named.is_empty() else "none"))
 	return "\n".join(lines)
-
-static func impact_text(draft: Dictionary, stored_id: String) -> String:
-	var impact: Dictionary = ItemFormModel.impact(draft, stored_id)
-	var colour: String = "#f87171" if DictUtil.to_int(impact["errors"]) > 0 else ("#fbbf24" if DictUtil.to_int(impact["count"]) > 0 else "#4ade80")
-	var text: String = "[color=%s]%s[/color]" % [colour, str(impact["text"])]
-	if DictUtil.to_int(impact["count"]) > 0:
-		text += "\n[color=#8ba3b8]Apply asks for a second click to confirm (one batch: ContentCatalog.upsert_many).[/color]"
-	return text
 
 static func used_by_text(family_id: String) -> String:
 	var rows: Array[Dictionary] = ItemFormModel.used_by(family_id)

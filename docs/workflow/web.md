@@ -52,7 +52,6 @@ The `itch` job in `web.yml` uploads each daily or manual run on `main` with butl
 | Area | Behaviour in the browser |
 | --- | --- |
 | Scene Runner developer panel | Reload scripts, Restart runner and the Arena/Dojo suite buttons do nothing useful: the browser cannot start processes and the pack holds no editable script sources |
-| Content Forge and World Forge saves | `res://` is read-only: edits work for the session but saving to the catalog fails |
 | Saves and prefs (`user://`) | Work, stored in the browser's IndexedDB for that site; clearing site data wipes them |
 | Emoji icons in labels and buttons | Render from bundled fallback fonts (`assets/fonts`, web only): monochrome instead of the desktop's color emoji; they add about 2.5 MB to the download (Noto Emoji is the full font so new emoji work without re-subsetting) |
 | Keys | F5 may reload the browser tab instead of the scene; use the Menu pill buttons |

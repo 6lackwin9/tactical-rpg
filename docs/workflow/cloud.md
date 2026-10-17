@@ -23,7 +23,7 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 | Design | specs, decisions, the roadmap; each spec is approved here, then built in its area's thread | `design-brainstorm` |
 | Platform & Workflow | CI, the web build, playtest tooling, agent and skill changes, cleanups | `housekeeper`, `logic-builder` for tools and CI |
 
-Every area thread also runs `change-reviewer` on each task branch before it merges into `develop`. A task whose area is unclear goes to the thread that owns most of its `Touches`.
+Every area thread also runs `change-reviewer` on each task branch before it merges into `develop`. A task whose area is unclear goes to the thread that owns most of its `Touches`. Content changes (values, new items, enemies, abilities) follow `content-edits.md`: small tweaks land with a before/after table, new content needs one approval card.
 
 ## One task at a time, one branch per task
 
