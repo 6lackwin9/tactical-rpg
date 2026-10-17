@@ -24,9 +24,10 @@ git status --short --branch
 - If clean on `main`:
 
 ```powershell
-git pull --ff-only origin main; if ($?) { Start-Process .\run.bat; Start-Sleep 5; Get-Process godot -ErrorAction SilentlyContinue | Select-Object Id, StartTime }
+git pull --ff-only origin main; if ($?) { & "C:\Program Files\Godot\godot.exe" --headless --import --path . | Out-Null; Start-Process .\run.bat; Start-Sleep 5; Get-Process godot -ErrorAction SilentlyContinue | Select-Object Id, StartTime }
 ```
 
+- If the pull added new `class_name` scripts, the window can open blank grey (Godot's class cache is stale; `scene_runner.gd` fails with "Could not find type ..."). The command above rebuilds the cache with `godot --headless --import` before it starts `run.bat` (about a minute; `--editor --quit-after 50` can quit before the import finishes, see `godot-known-issues`).
 - A `godot` process with a fresh `StartTime` means it launched. Report the commit (`git rev-parse --short HEAD`) in one line.
 - Never kill or restart other `godot` processes (`Stop-Process -Name godot` stops other agents' suites and sims). Change no code and push nothing as part of a launch.
 
