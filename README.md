@@ -171,7 +171,10 @@ tactical-rpg/
 │       │   ├── combat_panel.gd           # UiPanel adapter with a typed CombatSession
 │       │   ├── combat_dock_host.gd       # Static dock regions, layout presets, undock/edit mode, modals, shortcuts
 │       │   ├── combat_roster_panel.gd    # Party / enemy roster (enemies shown only while on the field)
-│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards & action FX
+│       │   ├── combat_grid_panel.gd      # 9x9 grid tokens, hover cards; hands action FX to the presenter
+│       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
+│       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
+│       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
 │       │   ├── combat_action_log_panel.gd # Compact resolution log dock
 │       │   ├── combat_inspector_panel.gd # Unit inspector (snapshot-aware)
 │       │   ├── combat_forecast_panel.gd  # Tactical forecast
@@ -189,7 +192,7 @@ tactical-rpg/
 │       │   ├── world_forge.gd            # World picker / new world, element tabs, merged list (inherited marked), form, lore preview, Override, play
 │       │   ├── world_forge_source.gd     # Plugs WorldSchema / WorldCatalog into the shared ForgeForm (refs resolve from the edited world)
 │       │   └── world_preview.gd          # What an entry means: lore, what it plays as, where it differs from its base, who uses it
-│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, tweens & floating text
+│       ├── combat_grid_view.gd       # 9x9 grid rendering (54px tiles), tokens, tile input, FX layer
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
@@ -535,6 +538,10 @@ The Content Forge edits items and item families with dedicated sections: identit
 
 Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the manifest `data/assets/manifest.json` (managed by `AssetCatalog`, empty for now) points a key and variant at a file under `assets/art/<namespace>/` or at another key (alias); otherwise the generated placeholder template is used, then a fallback, so a texture is never missing. Unit files are composed onto the team-coloured token. Skills and statuses get generated placeholder icons (`SkillArt`, `StatusArt`). A manifest row whose key still has a template can always be removed (the placeholder comes back); a manifest-only key cannot be removed while content uses it. `tools/fc.sh export_placeholder <ns> <key> <variant> [team]` writes a template as a PNG to start real art from. With the manifest empty, all shipped art looks exactly as before. Tested in `asset_pipeline_test_suite.gd`.
 
+### Combat presenter (S14-L2)
+
+All combat animation now goes through `CombatPresenter` (`scripts/ui/combat/`), which `CombatGridPanel` feeds from `CombatSession.fx_requested` and from its refresh slide. Timings and tween recipes live in one table (`FxPresets`; the durations are the old hard-coded ones) and `FxPresets.for_entry` maps a log entry to its presets: melee bump or ranged pulse, hit or mitigated shake and flash, heal, buff and defend pulses, a status icon pop when the entry names a real status, floating text (the old labels) and a defeat fade. `FxSettings` holds the speed (0.25 to 4, read later from the UI1-L settings file) and instant mode, which applies every end state at once and is always on in headless runs and tests. The presenter owns every tween and temporary node and ends them all (tokens at their end states) when the log resets, the encounter remounts, the timeline steps back or too many pile up; `fx_played` fires once per preset for the coming audio hook (S14-L3). Nothing in resolution, the log or the sim changed. Tested in `animation_lifecycle_test_suite.gd`.
+
 ### Forge class tab (CLASS1-L)
 
 A class's `skill_path` is now a map of skill family to unlock level (`{family: level}`, kept in entry order; `ClassArchetype.path_steps()` sorts by level then position, and the default loadout is the first five). CLASS1-M migrated the shipped classes to the map shape (and gave every unit `heal_below` 0.7), so the old list converter is switched off (`ClassUnitFields.LIST_PATH_CONVERTER` false; a list path is now a validation error). System classes lock their key fields (id, AI role, base stats, growth, proficiency); gear, pouch and path stay editable. Units gain an AI `heal_below` threshold (default 0.7). The Forge edits classes in five sections with a path table, proficiency rows, gear pickers grouped by item family and live stat, gear-budget and coverage panels (`ClassForgeModel`, `ForgePreview.class_panels`); soft warnings never block saving. Tested in `class_path` and `class_form_model` suites.
@@ -639,7 +646,7 @@ The following modular systems and capabilities are planned according to the mast
 *Status: Planned.*
 
 - [ ] Dedicated automated test suite verifying SVG asset loads, dimensions, and texture caching.
-- [ ] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification).
+- [x] Animation lifecycle tests (Tween callbacks, duration timing, and queue free verification): `animation_lifecycle_test_suite.gd` (S14-L2).
 
 ### 4. Advanced Combat Rules & Combo Engine (`System 6`)
 
