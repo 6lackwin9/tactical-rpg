@@ -1,6 +1,6 @@
 # REVIEW-F: follow-ups from the retroactive review of the 2026-10-17 merges
 
-Status: proposed (all five tasks wait for the user's approval)
+Status: approved (user 2026-10-17, F1-F5); questions Q1-Q3 still open
 Depends on: see each task
 Lane: logic (five tasks, no asset part)
 Touches: see each task; F5 overlaps F1-F3 and runs last
