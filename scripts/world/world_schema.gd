@@ -4,8 +4,8 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - World Schema (the lore layer on top of the content catalog)
 # A world is a folder of lore entries: regions, locations, factions, characters,
-# named items, disciplines, quests, lore entries, encounters and loot (the world
-# loot table quests offer as special rewards). Entries never
+# named items, disciplines, quests, lore entries, encounters, loot (the world
+# loot table quests offer as special rewards), dialogue trees and shops. Entries never
 # carry gameplay of their own: they REFERENCE base assets from the Content Forge
 # catalog (`base:units`, `base:items`...) and add lore (names, backgrounds, art,
 # factions), plus optional explicit tuning deltas.
@@ -20,7 +20,7 @@ extends RefCounted
 # Every kind has `override` (the qualified id of an ancestor entry it replaces) and `tags`.
 # ==============================================================================
 
-const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot"]
+const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops"]
 
 # Deltas a character may apply to its base unit (flat unless _pct).
 const TUNING_KEYS: Array[String] = ["hp_pct", "power", "armor", "speed", "ap"]
@@ -59,6 +59,10 @@ static func kind_icon(kind: String) -> String:
 			return "⚔"
 		"loot":
 			return "🎁"
+		"dialogues":
+			return "💬"
+		"shops":
+			return "🛒"
 	return "•"
 
 static func _f(key: String, label: String, type: String, default: Variant, extra: Dictionary = {}) -> Dictionary:
@@ -91,6 +95,10 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = _encounter_fields()
 		"loot":
 			list = _loot_fields()
+		"dialogues":
+			list = _dialogue_fields()
+		"shops":
+			list = _shop_fields()
 		_:
 			return list
 	if kind != "world":
@@ -113,6 +121,9 @@ static func _world_fields() -> Array[Dictionary]:
 		_f("extends", "Extends", "refs", [], {"ref": "worlds", "help": "Parent worlds: this world inherits all their entries (later parents override earlier ones). Order matters."}),
 		_f("connects", "Connects to", "refs", [], {"ref": "worlds", "help": "Worlds this one links to without inheriting (locations may exit into them)."}),
 		_f("start_location", "Start location", "ref", "", {"ref": "locations", "optional": true, "help": "Where a new game enters this world. Empty = the nearest parent world's."}),
+		# Dialogue and gold (DLG1-L, S11); ranges are checked by WorldCatalog.manifest_errors, not clamped here.
+		_f("start_gold", "Start gold", "int", -1, {"help": "Party gold of a new game (-1 = the nearest parent world's, else 0)."}),
+		_f("service_lines", "Service lines", "json", {}, {"help": "{\"greeting\": \"{npc} nods.\"}: overrides of the base service lines (data/dialogue/services.json), merged along the lineage (nearest wins)."}),
 	]
 
 static func _region_fields() -> Array[Dictionary]:
@@ -167,6 +178,9 @@ static func _character_fields() -> Array[Dictionary]:
 		_f("passives", "Passives", "refs", [], {"ref": "base:passives", "help": "Traits from the character's background (also granted: its faction's, its disciplines' and its named items')."}),
 		_f("named_items", "Named items", "refs", [], {"ref": "items", "help": "Equipped on top of the base loadout, each in its own slot."}),
 		_f("tuning", "Tuning deltas", "json", {}, {"help": "Explicit gameplay deltas vs the base unit: {\"hp_pct\": 10, \"power\": 3, \"armor\": 2, \"speed\": 1, \"ap\": 2}. Empty = identical to the base."}),
+		# Dialogue and presence (DLG1-L, S11).
+		_f("dialogue", "Dialogue", "ref", "", {"ref": "dialogues", "optional": true, "help": "The tree shown when the party talks to this character. Empty = service choices only."}),
+		_f("gone_flags", "Gone when", "json", [], {"help": "[{\"key\": \"flag.key\", \"value\": true}]; ANY holding = the character is gone (no dialogue, no npc markers, shops closed)."}),
 	]
 
 static func _item_fields() -> Array[Dictionary]:
@@ -226,6 +240,31 @@ static func _loot_fields() -> Array[Dictionary]:
 		_f("count", "Count", "int", 1, {"help": "Items: 1..99; passives and skills: 1."}),
 		_f("rarity", "Rarity", "enum", "rare", {"options": ["common", "rare", "unique"]}),
 		_f("requires_flags", "Requires flags", "json", [], {"help": "[{\"key\", \"value\"}]; not offered while any fails."}),
+	]
+
+# Dialogue trees (DLG1-L, S11); DialogueRules.tree_errors validates the nodes.
+static func _dialogue_fields() -> Array[Dictionary]:
+	return [
+		_f("id", "ID", "id", ""),
+		_f("name", "Name", "string", "New Dialogue"),
+		_f("speaker", "Speaker", "ref", "", {"ref": "characters", "optional": true, "help": "Default speaker of every node. Empty = the character talked to."}),
+		_f("start", "Start node", "string", "", {"help": "Id of the first node shown."}),
+		_f("nodes", "Nodes", "json", [], {"help": "[{\"id\", \"speaker\", \"text\", \"choices\": [{\"text\", \"to\", \"requires\", \"unless\", \"effects\", \"show_locked\"}], \"effects\", \"next\", \"end\"}]; a node has exactly one of choices, next or end."}),
+		_f("services", "Service choices", "bool", true, {"help": "Append the generated quest offer / turn-in / shop / farewell choices to the start node."}),
+	]
+
+# Shops (DLG1-L, S11); ShopRules.shop_errors validates them. Multipliers are checked there, not clamped here.
+static func _shop_fields() -> Array[Dictionary]:
+	return [
+		_f("id", "ID", "id", ""),
+		_f("name", "Name", "string", "New Shop"),
+		_f("keeper", "Keeper", "ref", "", {"ref": "characters", "help": "The character who runs the shop (gone keeper = closed shop)."}),
+		_f("stock", "Stock", "json", [], {"help": "[{\"item\": \"base item id\", \"count\": -1, \"price\": -1, \"requires_flags\": []}]; count -1 = unlimited, price -1 = derived from the item value."}),
+		_f("loot", "Loot for sale", "json", [], {"help": "[{\"loot\": \"world loot ref\", \"price\": 150}]; item loot only, sold once (claimed)."}),
+		_f("buy_mult", "Buy multiplier", "float", 1.0, {"help": "0.5..3.0: derived buy price = ceil(value x mult)."}),
+		_f("sell_mult", "Sell multiplier", "float", 0.5, {"help": "0.0..1.0: sell price = floor(value x mult); 0 = buys nothing."}),
+		_f("buys", "Buys types", "json", ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY", "CONSUMABLE", "MATERIAL"], {"help": "Item types the shop buys (never QUEST)."}),
+		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; the shop is closed while any fails."}),
 	]
 
 static func _lore_fields() -> Array[Dictionary]:

@@ -48,4 +48,5 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(QuestTestSuite.run())
 	results.append(QuestRuntimeTestSuite.run())
 	results.append(ExplorationTestSuite.run(tree_parent))
+	results.append(DialogueTestSuite.run())
 	return not results.has(false)

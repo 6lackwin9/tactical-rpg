@@ -126,6 +126,34 @@ static func cleanup_worlds(path: String) -> void:
 	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
 	remove_sandbox(path)
 
+# Upserts a test-only base item of `item_type` into the CURRENT content catalog (call on a fork): with item families the
+# first family of that type is picked by rule, legacy flat items take the type directly. Returns the problems.
+static func add_item_of_type(id: String, item_type: String, value: int = 10) -> Array[String]:
+	if not ContentCatalog.get_root().begins_with(SANDBOX_ROOT + "/"):
+		var refused: Array[String] = ["add_item_of_type refuses the shipped catalog (fork first)."]
+		return refused
+	var entry: Dictionary = {"id": id, "name": id.capitalize(), "value": value}
+	if ContentCatalog.items_inherit():
+		for f: Dictionary in ContentCatalog.entries("item_families"):
+			if str(f.get("item_type", "")) == item_type:
+				entry["family"] = str(f["id"])
+				break
+		if not entry.has("family"):
+			var missing: Array[String] = ["No item family of type %s." % item_type]
+			return missing
+	else:
+		entry["item_type"] = item_type
+	return ContentCatalog.upsert("items", entry)
+
+# Points ServiceCatalog at `<dir>/services.json` (a sandbox file; nothing is written until save()).
+static func sandbox_services(dir: String) -> bool:
+	ServiceCatalog.use_path(dir.path_join("services.json"))
+	return ServiceCatalog.file_path().begins_with(SANDBOX_ROOT + "/")
+
+# Back to the shipped service lines.
+static func restore_services() -> void:
+	ServiceCatalog.use_path(ServiceCatalog.DEFAULT_PATH)
+
 # Deletes a sandbox folder and everything in it (only below SANDBOX_ROOT). SANDBOX_ROOT itself stays: removing it
 # could race with a parallel process that is creating its own sandbox there.
 static func remove_sandbox(path: String) -> void:

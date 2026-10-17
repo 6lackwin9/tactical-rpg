@@ -566,6 +566,12 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 				out.append(base.merged({"key": "exits", "index": i, "sub": "to"}))
 	if k2 == "locations":
 		out.append_array(_map_json_refs(w, e, kind, target, base))
+	if k2 == "dialogues":
+		out.append_array(_dialogue_json_refs(w, e, kind, target, base))
+	if k2 == "shops" and kind == "loot":
+		var for_sale: Array = DictUtil.array_of(e.get("loot", null))
+		for i: int in range(for_sale.size()):
+			_ref_at(w, DictUtil.dict_of(for_sale[i]), "loot", ["loot", i], kind, target, base, out)
 	if k2 == "quests" and e.get("steps", null) is Array and (kind == "locations" or kind == "encounters"):
 		var steps: Array = e["steps"]
 		var sub: String = "location" if kind == "locations" else "encounter"
@@ -632,6 +638,44 @@ static func _map_json_refs(w: String, e: Dictionary, kind: String, target: Strin
 			if _points_at(w, kind, ref, target):
 				out.append(base.merged({"key": "markers", "index": i, "path": ["markers", i, key], "value": ref}))
 	return out
+
+# Dialogue tree refs (DLG1-L): node speakers, quest refs of choice conditions, and the quest / shop / encounter refs of
+# node and choice effects. Path-addressed like the quest json refs.
+static func _dialogue_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var nodes: Array = DictUtil.array_of(e.get("nodes", null))
+	for i: int in range(nodes.size()):
+		var node: Dictionary = DictUtil.dict_of(nodes[i])
+		var at: Array = ["nodes", i]
+		if kind == "characters":
+			_ref_at(w, node, "speaker", at, kind, target, base, out)
+		_effect_refs(w, node.get("effects", null), at + ["effects"], kind, target, base, out)
+		var choices: Array = DictUtil.array_of(node.get("choices", null))
+		for j: int in range(choices.size()):
+			var c: Dictionary = DictUtil.dict_of(choices[j])
+			var c_at: Array = at + ["choices", j]
+			for list_key: String in ["requires", "unless"]:
+				var conds: Array = DictUtil.array_of(c.get(list_key, null))
+				for k: int in range(conds.size()):
+					var cond: Dictionary = DictUtil.dict_of(conds[k])
+					for key: Variant in DialogueRules.CONDITION_REF_KEYS:
+						if str(DialogueRules.CONDITION_REF_KEYS[key]) == kind and str(cond.get("kind", "flag")) == str(key):
+							_ref_at(w, cond, str(key), c_at + [list_key, k], kind, target, base, out)
+			_effect_refs(w, c.get("effects", null), c_at + ["effects"], kind, target, base, out)
+	return out
+
+static func _effect_refs(w: String, raw: Variant, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
+	var effects: Array = DictUtil.array_of(raw)
+	for k: int in range(effects.size()):
+		var fx: Dictionary = DictUtil.dict_of(effects[k])
+		for key: Variant in DialogueRules.EFFECT_REF_KEYS:
+			if str(DialogueRules.EFFECT_REF_KEYS[key]) == kind:
+				_ref_at(w, fx, str(key), at + [k], kind, target, base, out)
+
+# One path-addressed match when `holder[key]` is a String ref to `target` (`at` = the holder's path from the entry root).
+static func _ref_at(w: String, holder: Dictionary, key: String, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
+	if holder.get(key, null) is String and _points_at(w, kind, str(holder[key]), target):
+		out.append(base.merged({"key": str(at[0]), "index": DictUtil.to_int(at[1], -1) if at.size() > 1 else -1, "path": at + [key], "value": str(holder[key])}))
 
 static func _links_refs(w: String, links: Dictionary, at: Array, kind: String, target: String, base: Dictionary, out: Array[Dictionary]) -> void:
 	for key: Variant in links:
@@ -751,8 +795,17 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 	match kind:
 		"characters":
 			errors.append_array(_tuning_errors(e["tuning"], WorldSchema.TUNING_KEYS, "Character"))
+			if not (e["gone_flags"] is Array):
+				errors.append("Gone flags must be a list.")
 		"items":
 			errors.append_array(_tuning_errors(e["tuning"], WorldSchema.ITEM_TUNING_KEYS, "Item"))
+		"dialogues":
+			if not (e["nodes"] is Array):
+				errors.append("Nodes must be a list of node objects.")
+		"shops":
+			for key: String in ["stock", "loot", "buys", "requires_flags"]:
+				if not (e[key] is Array):
+					errors.append("%s must be a list." % str(WorldSchema.field("shops", key)["label"]))
 		"locations":
 			if not (e["exits"] is Array):
 				errors.append("Exits must be a list of {\"to\", \"label\"} objects.")
@@ -826,6 +879,10 @@ static func validate_entry(world_id: String, kind: String, entry: Dictionary, cu
 			errors.append_array(_encounter_errors(world_id, e))
 		"loot":
 			errors.append_array(_loot_errors(e))
+		"dialogues":
+			errors.append_array(DialogueRules.tree_errors(world_id, e))
+		"shops":
+			errors.append_array(ShopRules.shop_errors(world_id, e))
 	return errors
 
 # Is a qualified ref's world visible from `world_id` (itself, an ancestor, or connected)?
@@ -989,6 +1046,7 @@ static func _character_errors(world_id: String, e: Dictionary) -> Array[String]:
 	if str(e.get("base_unit", "")).is_empty():
 		errors.append("Choose the base unit this character plays as.")
 	errors.append_array(_tuning_errors(e["tuning"], WorldSchema.TUNING_KEYS, "Character"))
+	errors.append_array(QuestRules.condition_errors(e.get("gone_flags", []), "Gone flags"))
 	var slots: Dictionary = {}
 	for ref: String in _strings(e["named_items"]):
 		var named: Dictionary = resolve(world_id, "items", ref)
@@ -1095,6 +1153,10 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	var start: String = str(m.get("start_location", ""))
 	if not start.is_empty() and resolve(world_id, "locations", start).is_empty():
 		errors.append("Start location '%s' is unknown." % start)
+	var gold: Variant = m.get("start_gold", -1)
+	if not (gold is int) or DictUtil.to_int(gold) < -1 or DictUtil.to_int(gold) > 99999:
+		errors.append("Start gold must be -1 (inherited) or 0..99999.")
+	errors.append_array(DialogueRules.service_lines_errors(m.get("service_lines", {}), "Service lines"))
 	return errors
 
 # Every problem in one world's OWN entries: {"world/kind:id": [errors]}.

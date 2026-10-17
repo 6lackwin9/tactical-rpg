@@ -23,6 +23,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, locks, seed; model and Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
+| `scripts/tests/dialogue_test_suite.gd` | dialogue trees, shops, service lines, gone-NPC lint, gold fields, ref scans (DLG1) | S11 | done |
 | `scripts/tests/plan_claims_test_suite.gd` | preset plans always confirmable: approach tile claims, tie order, party redraft (PLAN1) | S1, S4 | done |
 | `scripts/tests/skill_unlock_test_suite.gd` | SK2 unlock rule suite (its schema default seed `sk2_schema.gd` is archived, CLN-2) | S2, S12 | done |
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
@@ -46,7 +47,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
 | `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter) | S9 | done |
 | `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
-| `scripts/dialogue/` | dialogue trees, speakers, shops, reputation | S11 | placeholder |
+| `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog); DialogueRunner and shop runtime in DLG1-L commit 2 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
 | `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1); later the world map and the dialogue / shop panels | S9, S10, S11 | in progress |
@@ -54,7 +55,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |
-| `data/dialogue/` | dialogue trees | S11 | placeholder |
+| `data/dialogue/` | services.json: lore-free base service lines (dialogue trees are world data in `data/worlds/<id>/dialogues.json`, shops in `shops.json`) | S11 | in progress |
 | `assets/` | audio, fonts, extra art | S14 | placeholder |
 
 Rules: gameplay logic in `scripts/**` as `RefCounted` rules engines; scenes only render; data in `data/**` validated through a catalog; one test suite per system in `scripts/tests/` registered with one `results.append` line in `SuiteRegistry.run_all` (`scripts/tests/suite_registry.gd`).

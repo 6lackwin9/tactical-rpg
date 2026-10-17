@@ -124,7 +124,7 @@ static func _test_templates(fx: Dictionary) -> bool:
 		"9 objectives": _template("t_bad", nine),
 		"unknown kind": _template("t_bad", ["have_item"]),
 		"extra objective key": {"id": "t_bad", "name": "Bad", "objectives": [{"kind": "flag", "flag": "x"}]},
-		"unknown reward key": _template("t_bad", ["flag"], {"gold": 5}),
+		"unknown reward key": _template("t_bad", ["flag"], {"coins": 5}),   # `gold` is a reward key since DLG1-L
 		"xp above max": _template("t_bad", ["flag"], {"xp": QuestRules.XP_MAX + 1}),
 		"xp not whole": _template("t_bad", ["flag"], {"xp": 1.5}),
 		"item count 0": _template("t_bad", ["flag"], {"items": {items[0]: 0}}),

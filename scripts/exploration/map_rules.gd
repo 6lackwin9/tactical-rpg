@@ -33,6 +33,7 @@ const DEFAULT_STEPS_MIN: int = 12
 const DEFAULT_STEPS_MAX: int = 20
 const MAX_CHEST_KEYS: int = 8
 const CHEST_COUNT_MAX: int = 99
+const CHEST_GOLD_MAX: int = 9999   # DLG1-L (S11)
 
 const TEMPLATE_FIELDS: Array[String] = ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "tags"]
 const BINDING_KEYS: Array[String] = ["encounters", "elites", "elite_pct", "steps_min", "steps_max"]
@@ -45,7 +46,7 @@ const MARKER_KINDS: Dictionary = {
 	"encounter": {"encounter": "", "trigger": "touch", "radius": 1, "once": true},
 	"roamer": {"encounter": "", "path": "", "radius": 0, "once": true},
 	"npc": {"character": ""},
-	"chest": {"items": {}, "loot": ""},
+	"chest": {"items": {}, "loot": "", "gold": 0},
 	"lore": {"lore": ""},
 	"point": {},
 }
@@ -406,7 +407,7 @@ static func binding_errors(world_id: String, t: Dictionary, map_id: String, zone
 	for key: Variant in DictUtil.dict_of(raw):
 		if not BINDING_KEYS.has(str(key)):
 			errors.append("Zone binding '%s': unknown key '%s'." % [zone, str(key)])
-	var b: Dictionary = binding_full(raw)
+	var b: Dictionary = binding_full(DictUtil.dict_of(raw))
 	for list_key: String in ["encounters", "elites"]:
 		errors.append_array(_pairs_errors(world_id, zone, list_key, b[list_key]))
 	if not (b["elite_pct"] is int) or DictUtil.to_int(b["elite_pct"]) < 0 or DictUtil.to_int(b["elite_pct"]) > 100:
@@ -580,7 +581,10 @@ static func _chest_errors(world_id: String, mid: String, m: Dictionary) -> Array
 		errors.append_array(ref_errs)
 		if ref_errs.is_empty() and str(WorldCatalog.resolve(world_id, "loot", loot).get("reward_kind", "")) != "item":
 			errors.append("Chest loot must be an item entry.")
-	if items.is_empty() and loot.is_empty():
+	var gold: Variant = m["gold"]
+	if not (gold is int) or DictUtil.to_int(gold) < 0 or DictUtil.to_int(gold) > CHEST_GOLD_MAX:
+		errors.append("Marker '%s': gold must be a whole number 0..%d." % [mid, CHEST_GOLD_MAX])
+	if items.is_empty() and loot.is_empty() and DictUtil.to_int(gold) <= 0:
 		errors.append("Chest '%s' holds nothing." % mid)
 	return errors
 

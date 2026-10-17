@@ -12,8 +12,9 @@ extends RefCounted
 
 const OBJECTIVE_KINDS: Array[String] = ["reach_location", "win_encounter", "flag"]
 const MAX_OBJECTIVES: int = 8
-const REWARD_KEYS: Array[String] = ["xp", "items", "passives", "skills"]
+const REWARD_KEYS: Array[String] = ["xp", "items", "passives", "skills", "gold"]
 const XP_MAX: int = 2000
+const GOLD_MAX: int = 5000   # DLG1-L (S11): party gold a template grants
 const ITEM_COUNT_MAX: int = 99
 const MAX_ITEM_KEYS: int = 8
 
@@ -23,6 +24,7 @@ const SOFT_MAX_SKILLS: int = 1
 const SOFT_MAX_XP: int = 300
 const SOFT_MAX_ITEMS: int = 6
 const SOFT_MAX_PICKS: int = 1
+const SOFT_MAX_GOLD: int = 200
 
 const MAX_VARIANTS: int = 8
 const VARIANT_KEYS: Array[String] = ["id", "when_flags", "unless_flags", "set"]
@@ -97,7 +99,7 @@ static func reward_ref_error(kind: String, ref: String) -> String:
 static func rewards_errors(raw: Variant) -> Array[String]:
 	var errors: Array[String] = []
 	if not (raw is Dictionary):
-		errors.append("Rewards must be an object {xp, items, passives, skills}.")
+		errors.append("Rewards must be an object {xp, items, passives, skills, gold}.")
 		return errors
 	var rewards: Dictionary = JsonUtil.normalize(raw)
 	for key: Variant in rewards:
@@ -109,6 +111,10 @@ static func rewards_errors(raw: Variant) -> Array[String]:
 			errors.append("Rewards xp must be a whole number.")
 		elif DictUtil.to_int(xp) < 0 or DictUtil.to_int(xp) > XP_MAX:
 			errors.append("Rewards xp must be 0..%d." % XP_MAX)
+	if rewards.has("gold"):
+		var gold: Variant = rewards["gold"]
+		if not is_int_value(gold) or DictUtil.to_int(gold) < 0 or DictUtil.to_int(gold) > GOLD_MAX:
+			errors.append("Rewards gold must be a whole number 0..%d." % GOLD_MAX)
 	if rewards.has("items"):
 		if not (rewards["items"] is Dictionary):
 			errors.append("Rewards items must be an object {item_id: count}.")
@@ -164,6 +170,8 @@ static func rewards_warnings(raw: Variant) -> Array[String]:
 		out.append("Rewards %d xp (soft cap %d)." % [DictUtil.to_int(rewards.get("xp", 0)), SOFT_MAX_XP])
 	if item_total(rewards) > SOFT_MAX_ITEMS:
 		out.append("Rewards %d items in total (soft cap %d)." % [item_total(rewards), SOFT_MAX_ITEMS])
+	if DictUtil.to_int(rewards.get("gold", 0)) > SOFT_MAX_GOLD:
+		out.append("Rewards %d gold (soft cap %d)." % [DictUtil.to_int(rewards.get("gold", 0)), SOFT_MAX_GOLD])
 	return out
 
 # ------------------------------------------------------------------------------
