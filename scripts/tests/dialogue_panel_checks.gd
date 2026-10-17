@@ -5,6 +5,7 @@ extends RefCounted
 # Tactical RPG - DLG1-L commit 3 checks, run by DialogueTestSuite on its runtime fixture world (dg_run):
 # the shop return rule (user decision 2026-10-17: closing a shop back to its node does not re-run the node's effects)
 # and the debug panels in the region map scene (talk, locked choice, shop buy and close, turn-in step, dialogue fight).
+# DLG1-F: buy count cap, selling at the gold cap, the turn-in pre-check on confirm, gold-cap notes from dialogue give.
 # ==============================================================================
 
 const DEBUG_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
@@ -12,6 +13,7 @@ const R: String = DialogueTestSuite.R
 
 static func run(tree_parent: Node) -> bool:
 	var ok: bool = _test_shop_return()
+	ok = _test_followups() and ok
 	ok = _test_panels(tree_parent) and ok
 	return ok
 
@@ -52,6 +54,32 @@ static func _test_shop_return() -> bool:
 	var moved: Dictionary = r.close_shop()
 	checks["a different to node is shown with its effects"] = str(moved.get("node", "")) == "after" and gs.party.gold == gold0 + 3
 	return _report("Shop return (user 2026-10-17): back to the opening node without its effects; another to node runs them", checks)
+
+static func _test_followups() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = DialogueTestSuite._gs()
+	gs.party.gold = 1000
+	var before: Dictionary = gs.to_dict()
+	var big: Dictionary = ShopRules.buy(gs, "s_hest", "item", DialogueTestSuite.I25, ShopRules.BUY_MAX + 1)
+	var huge: Dictionary = ShopRules.buy(gs, "s_hest", "item", DialogueTestSuite.I25, 1 << 50)
+	checks["buy count above BUY_MAX refused, nothing changes"] = not DictUtil.to_bool(big["ok"]) and not DictUtil.to_bool(huge["ok"]) and str(huge["errors"]).contains("at most") and JsonUtil.deep_equal(gs.to_dict(), before)
+	gs.party.add_to_stash(DialogueTestSuite.I25, 1)
+	gs.party.gold = PartyState.GOLD_MAX - 1
+	var sold: Dictionary = ShopRules.sell(gs, "s_hest", DialogueTestSuite.I25, 1)
+	checks["selling at the gold cap reports the added amount"] = DictUtil.to_bool(sold["ok"]) and gs.party.gold == PartyState.GOLD_MAX and DictUtil.to_int(sold["gold"]) == 1 and DictUtil.to_int(sold["price"]) > 1 and str(sold["notes"]).contains("capped")
+	var r: DialogueRunner = DialogueRunner.open(gs, "kit")
+	var _o: Dictionary = r.choose(DialogueTestSuite._find(r.view(), "Browse and go"))
+	var moved: Dictionary = r.close_shop()
+	checks["a dialogue give at the cap surfaces the note"] = str(moved.get("node", "")) == "after" and str(moved.get("notes", [])).contains("capped") and gs.party.gold == PartyState.GOLD_MAX
+	var gs2: GameState = DialogueTestSuite._gs()
+	var _st: Array[String] = QuestRunner.start(gs2, _q("q_hest"))
+	var _f: String = QuestRunner.set_flag(gs2, "dr.hest", true)
+	var hest: DialogueRunner = DialogueRunner.open(gs2, "hest")
+	var pend: Dictionary = hest.choose(DialogueTestSuite._find(hest.view(), "Hand it over"))
+	var _done: Dictionary = QuestRunner.complete(gs2, _q("q_hest"))
+	var late: Dictionary = hest.confirm_turn_in()
+	checks["confirm re-runs the pre-check"] = str(pend.get("pending", "")) == "turn_in" and not DictUtil.to_bool(late["ok"]) and " ".join(PackedStringArray(DictUtil.array_of(late["errors"]))).contains("be turned in (it is completed)") and not gs2.has_flag("dr.thanked")
+	return _report("DLG1-F: buy count cap, sell and give at the gold cap report, confirm_turn_in pre-check", checks)
 
 static func _test_panels(tree_parent: Node) -> bool:
 	var checks: Dictionary = {}

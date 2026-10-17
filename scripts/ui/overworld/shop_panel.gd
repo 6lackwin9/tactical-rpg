@@ -60,6 +60,8 @@ func sell_one(item: String) -> Dictionary:
 		return {}
 	var res: Dictionary = ShopRules.sell(gs, shop_qid, item, 1)
 	noted.emit("Sold %s for %d gold." % [item, DictUtil.to_int(res["price"])] if DictUtil.to_bool(res["ok"]) else "Sell refused: %s" % str(res["errors"]))
+	for n: Variant in DictUtil.array_of(res.get("notes", [])):
+		noted.emit(str(n))   # gold-cap note
 	refresh()
 	return res
 
