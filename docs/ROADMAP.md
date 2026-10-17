@@ -101,7 +101,7 @@ Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T
 | WEB1 | done | Web (HTML5) build on every PR, GitHub Pages and private itch.io option (`docs/workflow/web.md`) |
 | PLAYTEST1 | in-progress (PR #7) | Playtest recordings, notes, playback and headless replay; recorder logs clicks, hovers, UI open / close and asset loads (goal G1) |
 | GRID1 (12x9 grid) | in-progress (thread "12x9 combat grid layout") | 12x9 arena instead of a square grid, slimmer side panels, party left and enemies right; its thread records the decision and task row (goal G1) |
-| BATTLE1 | in-progress (thread "Link map fights to real battles") | Map, dialogue and (with TRAV1) road fights open the real combat arena instead of the debug outcome buttons (goal G1); its thread owns the TASKS row |
+| BATTLE1 | in-progress (BATTLE1-L, PR #24, thread "Link map fights to real battles") | Map, dialogue and (with TRAV1) road fights open the real combat arena instead of the debug outcome buttons (goal G1); its thread owns the TASKS row |
 
 ## Open engine items (tracked)
 
