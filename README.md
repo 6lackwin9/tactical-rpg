@@ -380,6 +380,10 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ---
 
+### Web build (browser)
+
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
@@ -562,7 +566,7 @@ A class's `skill_path` is now a map of skill family to unlock level (`{family: l
 
 ### Main menu, new game and save slots (UI1-L)
 
-`scenes/main_menu.tscn` (Scene Runner > Main Menu) is the player's front door: **Continue** loads the newest save (autosave included; hidden when there is none), **New game** lists the playable worlds with their fixed starting party (world manifest `start_party`, inherited like `start_location`; a world is playable when both resolve) and starts with an autosave, **Load game** shows the autosave and three manual slots with a header read by `SaveGame.peek` (world, location, party levels, time; corrupt files show as unreadable, newer versions are listed but not loadable), **Settings** edits `user://settings.cfg` (`SettingsFile`: volumes, animation speed and instant mode, text size; never part of a save), and **Tools** (debug builds) returns to the Scene Runner. A started game opens the region map; Esc returns to the **hub** (world, location, party, Save game, Settings, Quit to main menu; Party and Journal arrive with UI2 and UI3). Overwriting or deleting a save, leaving a screen with unapplied changes and quitting with unsaved progress all ask first; saving is refused during a battle or conversation. Slots: 0 = autosave, 1-3 manual (`SaveGame.write` refuses anything else); no save version change. Every screen is a headless model (`MenuRouter`, `MainMenuModel`, `NewGameModel`, `SaveSlotsModel`, `SettingsModel`, `HubModel` in `scripts/ui/menus/`) over `CurrentGame` (the game in play); views only render. Tested in `menus_test_suite.gd`.
+`scenes/main_menu.tscn` (Scene Runner > Main Menu) is the player's front door: **Continue** loads the newest save (autosave included; hidden when there is none), **New game** lists the playable worlds with their fixed starting party (world manifest `start_party`, inherited like `start_location`; a world is playable when both resolve) and starts with an autosave, **Load game** shows the autosave and three manual slots with a header read by `SaveGame.peek` (world, location, party levels, time; corrupt files show as unreadable, newer versions are listed but not loadable), **Settings** edits `user://settings.cfg` (`SettingsFile`: volumes, animation speed and instant mode, text size; never part of a save), and **Tools** (debug builds) returns to the Scene Runner. A started game opens the region map; Esc returns to the **hub** (world, location, party, Save game, Settings, Quit to main menu; Party and Journal arrive with UI2 and UI3). Overwriting or deleting a save, leaving a screen with unapplied changes and quitting with unsaved progress all ask first; saving is refused during a battle or conversation. Slots: 0 = autosave, 1-3 manual (`SaveGame.write` refuses anything else); no save version change. Every screen is a headless model (`MenuRouter`, `MainMenuModel`, `NewGameModel`, `SaveSlotsModel`, `SettingsModel`, `HubModel` in `scripts/ui/menus/`) over `CurrentGame` (the game in play); views only render. The Ashlands (and Tidewrack, which inherits it) start with warrior, ranger, rogue and mage (UI1-A); Iron Reaches is not playable yet. Tested in `menus_test_suite.gd`.
 
 ### Agent workflow tools
 
