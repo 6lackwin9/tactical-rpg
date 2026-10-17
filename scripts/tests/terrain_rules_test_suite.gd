@@ -120,6 +120,13 @@ static func _test_validator() -> bool:
 static func _test_catalog_rows() -> bool:
 	var checks: Dictionary = {}
 	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
+	# Independent of the shipped rows: the ICE row is removed in the fork (SAFE DELETE scope), so ICE is a new id
+	# below and the catalog has a missing row once terrain.json is saved.
+	var ice_id: String = Terrain.id_of(Terrain.Type.ICE)
+	if ContentCatalog.has("terrain", ice_id):
+		ContentCatalog.begin_system_edit(true)
+		checks["the sandbox drops its ICE row"] = ContentCatalog.remove("terrain", ice_id).is_empty()
+		ContentCatalog.end_system_edit()
 	checks["terrain is a catalog kind"] = ContentSchema.KINDS.has("terrain") and not ContentSchema.fields("terrain").is_empty()
 	var sand: Terrain.Type = Terrain.Type.SAND
 	var grass: Terrain.Type = Terrain.Type.GRASS
@@ -145,7 +152,15 @@ static func _test_catalog_rows() -> bool:
 	checks["an unknown terrain id is refused by upsert"] = ContentCatalog.upsert("terrain", {"id": "lava_pit"}).has("Unknown terrain type 'lava_pit'.")
 	checks["a WALL row is stored with move cost 1 (ignored)"] = ContentCatalog.upsert("terrain", {"id": wall_id, "move_cost": 3, "cover_guard": 0.5}).is_empty() and ContentCatalog.get_entry("terrain", wall_id).get("move_cost") == 1
 	ContentCatalog.end_system_edit()
-	checks["a new row outside the system scope is refused (user origin)"] = ContentCatalog.upsert("terrain", {"id": Terrain.id_of(Terrain.Type.ICE)}).has("Terrain rows are system assets (origin system).")
+	checks["a new row outside the system scope is refused (user origin)"] = not ContentCatalog.has("terrain", ice_id) and ContentCatalog.upsert("terrain", {"id": ice_id}).has("Terrain rows are system assets (origin system).")
+	# Editing an existing system row outside the scope works like every system asset: numbers may change (only the
+	# key field `id` is locked) and the row stays origin system; an explicit user origin is refused.
+	var sand_edit: Dictionary = ContentCatalog.get_entry("terrain", sand_id)
+	sand_edit.erase("origin")
+	checks["an outside-scope edit of a system row keeps origin system"] = ContentCatalog.upsert("terrain", sand_edit).is_empty() and ContentCatalog.is_system_origin(ContentCatalog.get_entry("terrain", sand_id))
+	var as_user: Dictionary = ContentCatalog.get_entry("terrain", sand_id)
+	as_user["origin"] = ContentSchema.ORIGIN_USER
+	checks["an edit that makes a system row user origin is refused"] = ContentCatalog.upsert("terrain", as_user).has("Terrain rows are system assets (origin system).")
 	checks["the catalog row wins over the code default"] = Terrain.move_cost(sand) == 3 and is_equal_approx(Terrain.cover_guard(Terrain.Type.RUBBLE), 0.25)
 	var h: Dictionary = Terrain.hazard(Terrain.Type.BURNING_GROUND)
 	checks["hazard() reads the row"] = str(h.get("status", "")) == burn and DictUtil.to_int(h.get("magnitude", -1)) == mag and str(h.get("on", "")) == TerrainFields.ON_ENTER and DictUtil.to_int(h.get("potency", 0)) == 100 and DictUtil.to_int(h.get("rounds", 0)) == 1
