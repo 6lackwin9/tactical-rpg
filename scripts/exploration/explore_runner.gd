@@ -55,6 +55,8 @@ static func presence(gs: GameState, loc_qid: String, m: Dictionary) -> String:
 		return "absent"
 	if kind == "exit" and not req_ok and unless_ok:
 		return "locked"
+	if kind == "npc" and DialogueRules.is_gone(gs, str(m.get("character", ""))):
+		return "absent"   # DLG1-L 2.1: a gone character's npc markers are absent
 	return "present" if req_ok and unless_ok else "absent"
 
 # Where a marker stands for `loc_steps` (roamers walk their path; others sit on their anchor). (-1, -1) = nowhere.
@@ -414,8 +416,8 @@ static func interact(gs: GameState, dir: Vector2i) -> Dictionary:
 		return out
 	return {"ok": true, "errors": errors, "kind": ""}
 
-# Items plus the loot item (when unclaimed and its requires_flags hold) in one RewardGrant, then the claim and the
-# done flag.
+# Items, gold (DLG1-L) plus the loot item (when unclaimed and its requires_flags hold) in one RewardGrant, then the
+# claim and the done flag.
 static func _open_chest(gs: GameState, loc_qid: String, m: Dictionary) -> Dictionary:
 	var items: Dictionary = JsonUtil.ints(m.get("items", {}))
 	var loot_qid: String = ""
@@ -427,10 +429,11 @@ static func _open_chest(gs: GameState, loc_qid: String, m: Dictionary) -> Dictio
 			var ref: String = str(loot.get("ref", ""))
 			items[ref] = DictUtil.to_int(items.get(ref, 0)) + DictUtil.to_int(loot.get("count", 1), 1)
 			loot_qid = lqid
-	var granted: Dictionary = RewardGrant.apply(gs, {"items": items}, "")
+	var gold: int = maxi(DictUtil.to_int(m.get("gold", 0)), 0)
+	var granted: Dictionary = RewardGrant.apply(gs, {"items": items, "gold": gold}, "")
 	if not DictUtil.to_bool(granted["ok"]):
 		return {"ok": false, "errors": granted["errors"], "kind": "chest"}
 	if not loot_qid.is_empty():
 		var _claim: String = RewardGrant.claim_loot(gs, loot_qid)
 	var _done: String = QuestRunner.set_flag(gs, MapRules.done_flag(loc_qid, str(m["id"])), true)
-	return {"ok": true, "empty": false, "items": items, "loot": loot_qid}
+	return {"ok": true, "empty": false, "items": items, "loot": loot_qid, "gold": DictUtil.to_int(DictUtil.dict_of(granted["granted"]).get("gold", 0))}

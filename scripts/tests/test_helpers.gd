@@ -127,12 +127,14 @@ static func cleanup_worlds(path: String) -> void:
 	remove_sandbox(path)
 
 # Upserts a test-only base item of `item_type` into the CURRENT content catalog (call on a fork): with item families the
-# first family of that type is picked by rule, legacy flat items take the type directly. Returns the problems.
-static func add_item_of_type(id: String, item_type: String, value: int = 10) -> Array[String]:
+# first family of that type is picked by rule, legacy flat items take the type directly. `extra` adds fields (a
+# CONSUMABLE needs an effect, e.g. {"heal": 10}). Returns the problems.
+static func add_item_of_type(id: String, item_type: String, value: int = 10, extra: Dictionary = {}) -> Array[String]:
 	if not ContentCatalog.get_root().begins_with(SANDBOX_ROOT + "/"):
 		var refused: Array[String] = ["add_item_of_type refuses the shipped catalog (fork first)."]
 		return refused
 	var entry: Dictionary = {"id": id, "name": id.capitalize(), "value": value}
+	entry.merge(extra, true)
 	if ContentCatalog.items_inherit():
 		for f: Dictionary in ContentCatalog.entries("item_families"):
 			if str(f.get("item_type", "")) == item_type:

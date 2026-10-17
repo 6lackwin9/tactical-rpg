@@ -31,6 +31,7 @@ static func create(world_id: String, base_unit_ids: Array[String], p_seed: int =
 		return {"state": null, "errors": errors}
 	var state: GameState = GameState.create(world_id, party)
 	state.rng_seed = mini(p_seed, GameState.SEED_MAX) if p_seed >= 0 else (int(Time.get_unix_time_from_system() * 1000.0) ^ Time.get_ticks_usec()) & GameState.SEED_MAX
+	state.party.gold = DialogueRules.start_gold(world_id)   # DLG1-L: the nearest set manifest start_gold, else 0
 	errors = state.validate()
 	if not errors.is_empty():
 		return {"state": null, "errors": errors}

@@ -17,6 +17,7 @@ static func _table() -> Dictionary:
 		_installed = true
 		_steps[1] = _v1_to_v2
 		_steps[2] = _v2_to_v3
+		_steps[3] = _v3_to_v4
 	return _steps
 
 static func register(from_version: int, step: Callable) -> void:
@@ -40,7 +41,8 @@ static func _v1_to_v2(state: Dictionary) -> Dictionary:
 	return out
 
 # v2 -> v3: exploration defaults; rng_seed from the v2 state (same file = same seed); location_id qualified with
-# world_id when it resolves (a qualified id is kept when it resolves), else "".
+# world_id when it resolves (a qualified id is kept when it resolves), else "". 3 -> 4 (DLG1-L) adds party.gold 0 and
+# shops {}.
 static func _v2_to_v3(state: Dictionary) -> Dictionary:
 	var out: Dictionary = state.duplicate(true)
 	out["rng_seed"] = String(JSON.stringify(state, "", true)).hash() & 0x7FFFFFFF
@@ -51,6 +53,15 @@ static func _v2_to_v3(state: Dictionary) -> Dictionary:
 	var loc: String = str(state.get("location_id", ""))
 	var hit: Dictionary = WorldCatalog.resolve(world_id, "locations", loc) if not world_id.is_empty() and not loc.is_empty() else {}
 	out["location_id"] = str(hit.get("_qid", ""))
+	return out
+
+# v3 -> v4 (DLG1-L): party gold 0 (when the party is an object) and no shop sales yet.
+static func _v3_to_v4(state: Dictionary) -> Dictionary:
+	var out: Dictionary = state.duplicate(true)
+	if out.get("party", null) is Dictionary:
+		var party: Dictionary = out["party"]
+		party["gold"] = 0
+	out["shops"] = {}
 	return out
 
 # Brings a save envelope to `target_version`. Returns

@@ -9,7 +9,7 @@ extends RefCounted
 # leaves a half file. read() never returns a partially loaded state.
 # ==============================================================================
 
-const VERSION: int = 3   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L)
+const VERSION: int = 4   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 

@@ -126,7 +126,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## Dialogue and shops (DLG1)
 
-- World kinds `dialogues` and `shops` (validated by `DialogueRules`, `ShopRules` in `scripts/dialogue/`); base service lines in `ServiceCatalog` (`data/dialogue/services.json`). Character `dialogue` and `gone_flags`; manifest `start_gold`, `service_lines`. Quest rewards: xp, items, passives, skills, gold (cap 5000, soft 200); chest gold 0..9999. Node effects are only `set_flag` and `give`; a turn-in effect comes first in its choice. Runtime in DLG1-L commit 2.
+- World kinds `dialogues` and `shops` (validated by `DialogueRules`, `ShopRules` in `scripts/dialogue/`); base service lines in `ServiceCatalog` (`data/dialogue/services.json`). Character `dialogue` and `gone_flags`; manifest `start_gold`, `service_lines`. Quest rewards: xp, items, passives, skills, gold (cap 5000, soft 200); chest gold 0..9999. Node effects are only `set_flag` and `give`; a turn-in effect comes first in its choice. Runtime: `DialogueRunner` (open, view, choose all-or-nothing, confirm_turn_in, close_shop, advance, after_fight); `ShopRules` prices are integers (buy ceil, sell floor) with stock counted in `GameState.shops`; party gold `PartyState.gold` (cap 9999999). Save version 4 (party gold, shops).
 
 ## Region maps (EXP1)
 

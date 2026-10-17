@@ -47,7 +47,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
 | `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter) | S9 | done |
 | `scripts/travel/` | world map, routes, travel events | S10 | placeholder |
-| `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog); DialogueRunner and shop runtime in DLG1-L commit 2 | S11 | in progress |
+| `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog); dialogue_runner.gd (DialogueRunner); panels in DLG1-L commit 3 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
 | `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1); later the world map and the dialogue / shop panels | S9, S10, S11 | in progress |

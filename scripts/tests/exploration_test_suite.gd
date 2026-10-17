@@ -1103,7 +1103,7 @@ static func _test_save_v3() -> bool:
 	walked.rolls[GameRolls.EXPLORE] = 3
 	var written: bool = SaveGame.write(walked, 5).is_empty()
 	var back: GameState = SaveGame.read(5)["state"] as GameState
-	checks["v3 round trip"] = written and back != null and back.equals(walked) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(5))))["version"]) == SaveGame.VERSION and SaveGame.VERSION == 3
+	checks["v3 round trip"] = written and back != null and back.equals(walked) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(5))))["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 3   # 4 since DLG1-L
 	var blank: GameState = _new_gs()
 	var resumed: Dictionary = ExploreRunner.resume(blank)
 	checks["resume with no location begins at the start location"] = DictUtil.to_bool(resumed["ok"]) and blank.location_id == _q("town")

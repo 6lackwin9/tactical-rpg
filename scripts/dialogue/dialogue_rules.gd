@@ -5,7 +5,8 @@ extends RefCounted
 # Tactical RPG - Dialogue Rules (S11, spec DLG1-L)
 # Constants and pure validation for world dialogue trees (WorldCatalog kind `dialogues`), dialogue choice
 # conditions and effects, base service lines (ServiceCatalog, manifest `service_lines`) and the gone-NPC quest
-# lint. No state, no RNG. The runtime (DialogueRunner, presence, services) builds on these in DLG1-L commit 2.
+# lint, plus the pure runtime reads (presence `is_gone`, conditions, best stat, start gold, service lines, the journal
+# turn-in rule) that DialogueRunner, ExploreRunner and ShopRules use. No state, no RNG.
 # A tree is {id, name, speaker, start, nodes, services}; a node has exactly one of non-empty `choices`, a `next`
 # node id or `end: true`. Node effects are set_flag / give only; choice effects are all-or-nothing at runtime.
 # Markers, quests, loot, routes and `gone_flags` keep the M4 flag-only condition grammar (QuestRules).
@@ -63,6 +64,7 @@ const DEFAULT_LINES: Dictionary = {
 	"farewell": "Farewell.",
 }
 const TOKENS: Array[String] = ["npc", "quest", "shop", "gold"]
+const TEXT_TOKENS: Array[String] = ["npc", "gold"]   # authored node and choice texts (DLG1 build choices)
 
 # ------------------------------------------------------------------------------
 # Trees (called by WorldCatalog.validate_entry for kind `dialogues`)
@@ -93,7 +95,7 @@ static func tree_errors(world_id: String, e: Dictionary) -> Array[String]:
 		errors.append("With services on, the start node needs choices.")
 	return errors
 
-# Soft problems of one tree: nodes no `to` / `next` reaches from the start node.
+# Soft problems of one tree: nodes no `to` / `next` reaches from the start node, and unguarded `give` nodes on a cycle.
 static func tree_warnings(e: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	var nodes: Array = DictUtil.array_of(JsonUtil.normalize(e.get("nodes", [])))
@@ -101,26 +103,89 @@ static func tree_warnings(e: Dictionary) -> Array[String]:
 	var start: String = str(e.get("start", ""))
 	if not by_id.has(start):
 		return out   # an error already
-	var reached: Dictionary = {start: true}
-	var queue: Array[String] = [start]
-	while not queue.is_empty():
-		var node: Dictionary = DictUtil.dict_of(by_id.get(queue.pop_front(), {}))
-		var targets: Array[String] = []
-		if node.get("next", "") is String:
-			targets.append(str(node.get("next", "")))
-		for c: Variant in DictUtil.array_of(node.get("choices", [])):
-			var to: Variant = DictUtil.dict_of(c).get("to", "")
-			if to is String:
-				targets.append(str(to))
-		for t: String in targets:
-			if by_id.has(t) and not reached.has(t):
-				reached[t] = true
-				queue.append(t)
+	var edges: Dictionary = _edges(by_id, start, DictUtil.to_bool(e.get("services", true)))
+	var reached: Dictionary = _reach(edges, start)
+	reached[start] = true
 	for n: Variant in nodes:
 		var nid: String = str(DictUtil.dict_of(n).get("id", ""))
 		if by_id.has(nid) and not reached.has(nid):
 			out.append("Node '%s' is not reachable from the start node." % nid)
+	for nid: Variant in by_id:
+		var node: Dictionary = by_id[nid]
+		if not _gives(node) or not _reach(edges, str(nid)).has(nid) or _guarded(edges, by_id, str(nid)):
+			continue
+		out.append("Node '%s' gives items or gold and sits on a dialogue cycle (it can be shown again and again); guard every way in with unless + set_flag." % str(nid))
 	return out
+
+# Node id -> [{to, choice ({} for a `next` edge or the generated service edge)}]. A choice with open_shop and `to` ""
+# returns to its own node (close_shop); with services on the generated choices lead back to the start node.
+static func _edges(by_id: Dictionary, start: String, services: bool) -> Dictionary:
+	var out: Dictionary = {}
+	for nid: Variant in by_id:
+		var node: Dictionary = by_id[nid]
+		var list: Array[Dictionary] = []
+		var next: Variant = node.get("next", "")
+		if next is String and by_id.has(str(next)):
+			list.append({"to": str(next), "choice": {}})
+		for c: Variant in DictUtil.array_of(node.get("choices", [])):
+			var choice: Dictionary = DictUtil.dict_of(c)
+			var to: String = str(choice.get("to", ""))
+			if to.is_empty() and _has_effect(choice.get("effects", []), "open_shop"):
+				to = str(nid)
+			if by_id.has(to):
+				list.append({"to": to, "choice": choice})
+		if services and str(nid) == start:
+			list.append({"to": start, "choice": {}})
+		out[str(nid)] = list
+	return out
+
+# Every node reachable in one or more steps from `from` (`from` itself only through a cycle).
+static func _reach(edges: Dictionary, from: String) -> Dictionary:
+	var seen: Dictionary = {}
+	var queue: Array[String] = [from]
+	while not queue.is_empty():
+		var at: String = queue.pop_front()
+		for edge: Variant in DictUtil.array_of(edges.get(at, [])):
+			var to: String = str(DictUtil.dict_of(edge).get("to", ""))
+			if not seen.has(to):
+				seen[to] = true
+				queue.append(to)
+	return seen
+
+static func _gives(node: Dictionary) -> bool:
+	return _has_effect(node.get("effects", []), "give")
+
+static func _has_effect(raw: Variant, effect: String) -> bool:
+	for fx: Variant in DictUtil.array_of(raw):
+		if str(DictUtil.dict_of(fx).get("effect", "")) == effect:
+			return true
+	return false
+
+# True when every way into `nid` is a choice whose `unless` holds a flag condition that the choice or the node itself
+# sets (set_flag with the same key and value): the repeat-once pattern, so the gift is shown once.
+static func _guarded(edges: Dictionary, by_id: Dictionary, nid: String) -> bool:
+	var node: Dictionary = by_id[nid]
+	for from: Variant in edges:
+		for edge: Variant in DictUtil.array_of(edges[from]):
+			var ed: Dictionary = DictUtil.dict_of(edge)
+			if str(ed.get("to", "")) != nid:
+				continue
+			var choice: Dictionary = DictUtil.dict_of(ed.get("choice", {}))
+			if choice.is_empty():
+				return false
+			var sets: Array = DictUtil.array_of(node.get("effects", [])) + DictUtil.array_of(choice.get("effects", []))
+			var ok: bool = false
+			for c: Variant in DictUtil.array_of(choice.get("unless", [])):
+				var cond: Dictionary = DictUtil.dict_of(c)
+				if str(cond.get("kind", "flag")) != "flag":
+					continue
+				for fx: Variant in sets:
+					var f: Dictionary = DictUtil.dict_of(fx)
+					if str(f.get("effect", "")) == "set_flag" and _same_condition(f, cond):
+						ok = true
+			if not ok:
+				return false
+	return true
 
 # Tree warnings of every OWN dialogue of `world_id`, prefixed with the dialogue's qualified id.
 static func dialogue_warnings(world_id: String) -> Array[String]:
@@ -185,12 +250,18 @@ static func _node_errors(world_id: String, index: int, raw: Variant, by_id: Dict
 	errors.append_array(effects_errors(world_id, node.get("effects", []), label, true))
 	return errors
 
+# Authored node / choice text: non-empty, at most MAX_TEXT, tokens TEXT_TOKENS only ({quest} and {shop} belong to the
+# generated service lines).
 static func _text_errors(raw: Variant, label: String) -> Array[String]:
 	var errors: Array[String] = []
 	if not (raw is String) or str(raw).strip_edges().is_empty():
 		errors.append("%s needs text." % label)
-	elif str(raw).length() > MAX_TEXT:
+		return errors
+	if str(raw).length() > MAX_TEXT:
 		errors.append("%s: text is longer than %d characters." % [label, MAX_TEXT])
+	for token: String in tokens_of(str(raw)):
+		if not TEXT_TOKENS.has(token):
+			errors.append("%s: Unknown token '%s' (authored texts allow {npc} and {gold})." % [label, token])
 	return errors
 
 static func _choice_errors(world_id: String, label: String, raw: Variant, by_id: Dictionary) -> Array[String]:
@@ -367,22 +438,27 @@ static func _goods_errors(fx: Dictionary, el: String) -> Array[String]:
 
 # Choice order rules: turn_in first and followed only by set_flag / give; open_shop and fight last; fight never
 # shares a choice with turn_in or open_shop. Unknown effects are "" (already reported).
+# One message per problem: when fight shares the choice with turn_in or open_shop only that is reported (the order
+# rules about those two effects would restate it).
 static func _order_errors(names: Array[String], label: String) -> Array[String]:
 	var errors: Array[String] = []
+	var share: bool = names.has("fight") and (names.has("turn_in") or names.has("open_shop"))
+	var movers: Array[String] = ["open_shop", "fight"]
 	var turn_at: int = names.find("turn_in")
 	if turn_at >= 0:
 		var bad: bool = turn_at != 0
 		for k: int in range(turn_at + 1, names.size()):
-			if not names[k].is_empty() and not NODE_EFFECTS.has(names[k]):
+			if not names[k].is_empty() and not NODE_EFFECTS.has(names[k]) and not (share and movers.has(names[k])):
 				bad = true
 		if bad:
 			errors.append("%s: turn_in must come first; only set_flag or give may follow." % label)
-	for last_only: String in ["open_shop", "fight"]:
+	if share:
+		errors.append("%s: fight can't share a choice with turn_in or open_shop." % label)
+		return errors
+	for last_only: String in movers:
 		for k: int in range(names.size()):
 			if names[k] == last_only and k != names.size() - 1:
 				errors.append("%s: %s must be the last effect." % [label, last_only])
-	if names.has("fight") and (names.has("turn_in") or names.has("open_shop")):
-		errors.append("%s: fight can't share a choice with turn_in or open_shop." % label)
 	return errors
 
 # ------------------------------------------------------------------------------
@@ -472,3 +548,113 @@ static func _same_condition(a: Dictionary, b: Dictionary) -> bool:
 
 static func _condition_text(cond: Dictionary) -> String:
 	return "%s = %s" % [str(cond.get("key", "")), str(JsonUtil.normalize(cond.get("value", true)))]
+
+# ------------------------------------------------------------------------------
+# Runtime reads (pure over GameState + the catalogs; DialogueRunner, ExploreRunner presence, ShopRules use them)
+# ------------------------------------------------------------------------------
+
+# A character is gone when ANY of its gone_flags holds; re-read on every call (no saved state). Refs resolve from
+# gs.world_id; an unknown character is never gone.
+static func is_gone(gs: GameState, character_ref: String) -> bool:
+	if character_ref.is_empty():
+		return false
+	var c: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", character_ref)
+	for cond: Variant in DictUtil.array_of(JsonUtil.normalize(c.get("gone_flags", []))):
+		if QuestRules.condition_met(gs, DictUtil.dict_of(cond)):
+			return true
+	return false
+
+# The resolved character's qualified id ("" when the ref is empty or unknown).
+static func character_qid(gs: GameState, ref: String) -> String:
+	return str(WorldCatalog.resolve(gs.world_id, "characters", ref).get("_qid", "")) if not ref.is_empty() else ""
+
+# The resolved quest's giver / effective turn-in (QuestRules.resolve already falls back to the giver) as qids.
+static func giver_qid(gs: GameState, resolved_quest: Dictionary) -> String:
+	return character_qid(gs, str(resolved_quest.get("giver", "")))
+
+static func turn_in_qid(gs: GameState, resolved_quest: Dictionary) -> String:
+	return character_qid(gs, str(resolved_quest.get("turn_in", "")))
+
+# The party gold of a new game in `world_id`: the nearest manifest (the world, then up the lineage) with start_gold
+# >= 0, else 0.
+static func start_gold(world_id: String) -> int:
+	var chain: Array[String] = WorldCatalog.lineage(world_id)
+	chain.reverse()
+	for w: String in chain:
+		var v: int = DictUtil.to_int(WorldCatalog.manifest(w).get("start_gold", -1), -1)
+		if v >= 0:
+			return v
+	return 0
+
+# The text of service line `id` for `world_id`: the base line (ServiceCatalog, else DEFAULT_LINES) with the manifest
+# `service_lines` merged along the lineage key by key (nearest wins).
+static func service_line(world_id: String, id: String) -> String:
+	var text: String = ServiceCatalog.text_of(id)
+	for w: String in WorldCatalog.lineage(world_id):
+		var lines: Dictionary = DictUtil.dict_of(WorldCatalog.manifest(w).get("service_lines", {}))
+		if lines.get(id, null) is String and not str(lines[id]).strip_edges().is_empty():
+			text = str(lines[id])
+	return text
+
+# `{token}` replaced by `values[token]`; unknown tokens stay as written.
+static func fill(text: String, values: Dictionary) -> String:
+	var out: String = text
+	for token: Variant in values:
+		out = out.replace("{%s}" % str(token), str(values[token]))
+	return out
+
+# The highest effective value of `stat` (PartyBuilder.build: gear and passives included) among the ACTIVE members.
+static func best_stat(gs: GameState, stat: String) -> int:
+	var best: int = 0
+	for m: UnitState in gs.party.active_members():
+		var c: Combatant = PartyBuilder.build(m)
+		if c != null and c.stats != null:
+			best = maxi(best, c.stats.get_effective_stat(stat))
+	return best
+
+# One dialogue condition (validated shape; kind defaults to flag).
+static func condition_holds(gs: GameState, raw: Dictionary) -> bool:
+	var cond: Dictionary = DictUtil.dict_of(JsonUtil.normalize(raw))
+	match str(cond.get("kind", "flag")):
+		"flag":
+			return QuestRules.condition_met(gs, cond)
+		"quest":
+			return QuestRunner.status(gs, str(cond.get("quest", ""))) == str(cond.get("status", ""))
+		"items":
+			return DictUtil.to_int(gs.party.stash.get(str(cond.get("item", "")), 0)) >= DictUtil.to_int(cond.get("count", 1), 1)
+		"gold":
+			return gs.party.gold >= DictUtil.to_int(cond.get("min", 0))
+		"stat":
+			return best_stat(gs, str(cond.get("stat", ""))) >= DictUtil.to_int(cond.get("min", 0))
+	return false
+
+# True when every `requires` condition holds and no `unless` condition does.
+static func choice_open(gs: GameState, choice: Dictionary) -> bool:
+	for c: Variant in DictUtil.array_of(choice.get("requires", [])):
+		if not condition_holds(gs, DictUtil.dict_of(c)):
+			return false
+	for c: Variant in DictUtil.array_of(choice.get("unless", [])):
+		if condition_holds(gs, DictUtil.dict_of(c)):
+			return false
+	return true
+
+# The generated "[STAT min] " prefix of a choice: one tag per stat condition in `requires`, in order.
+static func stat_prefix(choice: Dictionary) -> String:
+	var out: String = ""
+	for c: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("requires", []))):
+		var cond: Dictionary = DictUtil.dict_of(c)
+		if str(cond.get("kind", "flag")) == "stat":
+			out += "[%s %d] " % [str(cond.get("stat", "")), DictUtil.to_int(cond.get("min", 0))]
+	return out
+
+# Completes a ready quest from the journal (no NPC): only when its giver and effective turn-in both resolve to no
+# character; otherwise the turn-in goes through that NPC's dialogue. Same result shape as QuestRunner.complete.
+static func complete_from_journal(gs: GameState, ref: String, recipient_id: String = "", picks: Array[String] = []) -> Dictionary:
+	var q: Dictionary = QuestRunner.resolved(gs, ref)
+	var who: String = turn_in_qid(gs, q) if not q.is_empty() else ""
+	if who.is_empty() and not q.is_empty():
+		who = giver_qid(gs, q)
+	if not who.is_empty():
+		var errors: Array[String] = ["This quest is turned in to %s." % str(WorldCatalog.resolve(gs.world_id, "characters", who).get("name", who))]
+		return {"ok": false, "errors": errors, "granted": {}, "notes": [] as Array[String]}
+	return QuestRunner.complete(gs, ref, recipient_id, picks)

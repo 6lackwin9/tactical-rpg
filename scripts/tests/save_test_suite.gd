@@ -68,6 +68,8 @@ static func _rich_state() -> GameState:
 	g.set_flag("name", "x")
 	g.quests = {"qa:q1": {"state": "active", "objective": 2}, "qa:q2": {"state": "completed", "objective": 1}}
 	g.loot_claimed = ["qa:zeta", "qa:alpha"] as Array[String]
+	g.party.gold = 42   # save v4 (DLG1-L)
+	g.shops = {"qa:stall": {str(ContentCatalog.entries("items")[0]["id"]): 1}}
 	return g
 
 static func _test_game_state() -> bool:
@@ -219,7 +221,11 @@ static func _test_migrations() -> bool:
 		return out
 	)
 	var chain: Dictionary = SaveMigrations.migrate(chain_base, 3)
+	SaveMigrations.reset()
+	var v3: Dictionary = SaveMigrations.migrate({"version": 3, "game_state": {"world_id": "w", "party": {"members": []}}}, 4)
+	var v3_state: Dictionary = DictUtil.dict_of(DictUtil.dict_of(v3["data"]).get("game_state", {}))
 	var checks: Dictionary = {
+		"v3_to_v4_adds_gold_and_shops": DictUtil.to_bool(v3["ok"]) and DictUtil.dict_of(v3_state.get("party", {})).get("gold", -1) == 0 and JsonUtil.deep_equal(v3_state.get("shops", null), {}) and SaveGame.VERSION == 4,
 		"missing_step_fails": not DictUtil.to_bool(no_step["ok"]),
 		"step_applied": DictUtil.to_bool(up["ok"]) and DictUtil.dict_of(data["game_state"])["location_id"] == "migrated_old" and DictUtil.to_int(data["version"]) == 2,
 		"input_not_mutated": DictUtil.dict_of(base["game_state"])["location_id"] == "old" and DictUtil.to_int(base["version"]) == 1,

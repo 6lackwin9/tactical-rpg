@@ -3,11 +3,15 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Dialogue Test Suite (S11, spec DLG1-L)
-# Commit 1 (schema): dialogue trees, choice conditions and effects (DialogueRules), shops (ShopRules), the base service
-# lines (ServiceCatalog) and manifest service_lines / start_gold, quest reward gold and chest gold, character
-# gone_flags, the gone-NPC quest lint, and reference scans / renames through the new json fields (checks 1-6).
-# Fixtures: a content fork (one test-only QUEST item), a sandbox quest file and service file, and a hand-built world
-# in an EMPTY sandbox world root; the shipped data is only read (ids picked by rule) and never written.
+# Schema (checks 1-6): dialogue trees, choice conditions and effects (DialogueRules), shops (ShopRules), the base
+# service lines (ServiceCatalog) and manifest service_lines / start_gold, quest reward gold and chest gold, character
+# gone_flags, the gone-NPC quest lint, the review rules (text tokens, give-on-cycle lint, one gone_flags message), and
+# reference scans / renames through the new json fields.
+# Runtime (checks 7-20): DialogueRunner visibility, all-or-nothing choices, services and giver / turn-in enforcement,
+# turn-in confirm / cancel, presence, node effects, ShopRules prices / stock / loot sales / selling, party gold from
+# quests, chests and NewGame, dialogue fights, save v4.
+# Fixtures: a content fork (test-only QUEST and CONSUMABLE items), sandbox quest / service / map files and save folder,
+# and hand-built worlds in an EMPTY sandbox world root; the shipped data is only read (ids picked by rule).
 # ==============================================================================
 
 const TAG: String = "Dialogue"
@@ -55,7 +59,7 @@ static func _choices(t: Dictionary, id: String) -> Array:
 
 static func run() -> bool:
 	print("\n=======================================================")
-	print("=== STARTING DIALOGUE TEST (DLG1-L schema)           ===")
+	print("=== STARTING DIALOGUE TEST (DLG1-L)                  ===")
 	print("=======================================================")
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
@@ -81,8 +85,31 @@ static func run() -> bool:
 			ok = _test_shops(fx) and ok
 			ok = _test_gold_gone_services(fx) and ok
 			ok = _test_lint() and ok
+			ok = _test_review_rules() and ok
 			ok = _test_ref_scans() and ok
 			ok = _test_persistence() and ok
+			MapCatalog.use_path(SANDBOX + "/maps.json")
+			SaveGame.set_base_dir(SANDBOX + "/saves")
+			var rx: Dictionary = _runtime_fixtures()
+			if _build_runtime(rx):
+				ok = _test_visibility() and ok
+				ok = _test_all_or_nothing() and ok
+				ok = _test_services() and ok
+				ok = _test_enforcement() and ok
+				ok = _test_turn_in() and ok
+				ok = _test_gone() and ok
+				ok = _test_node_effects() and ok
+				ok = _test_prices() and ok
+				ok = _test_stock() and ok
+				ok = _test_loot_sale() and ok
+				ok = _test_selling() and ok
+				ok = _test_gold() and ok
+				ok = _test_fight() and ok
+				ok = _test_save_v4() and ok
+			else:
+				ok = false
+			SaveGame.reset_base_dir()
+			MapCatalog.use_path(MapCatalog.DEFAULT_PATH)
 		else:
 			ok = false
 	TestHelpers.restore_services()
@@ -113,7 +140,11 @@ static func _test_shipped() -> bool:
 	var d: Dictionary = WorldSchema.defaults("dialogues")
 	checks["dialogue defaults"] = DictUtil.to_bool(d["services"]) and DictUtil.array_of(d["nodes"]).is_empty() and str(d["name"]) == "New Dialogue"
 	var s: Dictionary = WorldSchema.defaults("shops")
-	checks["shop defaults"] = JsonUtil.strings(s["buys"]) == ShopRules.BUY_TYPES and is_equal_approx(DictUtil.to_float(s["buy_mult"]), 1.0) and is_equal_approx(DictUtil.to_float(s["sell_mult"]), 0.5) and str(s["name"]) == "New Shop"
+	var expected_buys: Array[String] = []
+	for t: String in ItemFamilies.ITEM_TYPES:
+		if t != "QUEST":
+			expected_buys.append(t)
+	checks["shop defaults"] = JsonUtil.strings(s["buys"]) == expected_buys and ShopRules.buy_types() == expected_buys and is_equal_approx(DictUtil.to_float(s["buy_mult"]), 1.0) and is_equal_approx(DictUtil.to_float(s["sell_mult"]), 0.5) and str(s["name"]) == "New Shop"
 	checks["chest gold default"] = DictUtil.to_int(DictUtil.dict_of(MapRules.MARKER_KINDS["chest"]).get("gold", -1)) == 0
 	checks["gold reward key"] = QuestRules.REWARD_KEYS.has("gold")
 	return _report("Shipped data validates with the new kinds and fields; defaults", checks)
@@ -310,7 +341,7 @@ static func _test_effects(fx: Dictionary) -> bool:
 	}
 	for label: Variant in bad:
 		var pair: Array = DictUtil.array_of(bad[label])
-		checks[str(label)] = _has(DialogueRules.effects_errors(W, pair[0], "Choice", false), str(pair[1]))
+		checks[str(label)] = _one(DialogueRules.effects_errors(W, pair[0], "Choice", false), str(pair[1]))
 	var nine: Array = []
 	for i: int in range(DialogueRules.MAX_EFFECTS + 1):
 		nine.append({"effect": "set_flag", "key": "dg.f%d" % i})
@@ -553,3 +584,561 @@ static func _test_persistence() -> bool:
 	checks["shop round-trips"] = JsonUtil.deep_equal(shop, WorldCatalog.get_own(W, "shops", "shop_b"))
 	checks["valid after reload"] = WorldCatalog.validate_world(W).is_empty() and WorldCatalog.load_errors().is_empty()
 	return _report("Persistence (dialogues.json and shops.json written, reload equal and valid)", checks)
+
+# ------------------------------------------------------------------------------
+# Review rules (DLG1 build choices): one gone_flags message, authored text tokens, give-on-cycle lint
+# ------------------------------------------------------------------------------
+
+static func _lint_tree(nodes: Array, services: bool) -> Dictionary:
+	return {"id": "d_lint", "name": "Lint", "start": "a", "services": services, "nodes": nodes}
+
+static func _test_review_rules() -> bool:
+	var checks: Dictionary = {}
+	var mara: Dictionary = WorldCatalog.get_own(W, "characters", "mara")
+	var not_list: Dictionary = mara.merged({"gone_flags": {"key": "dg.x"}}, true)
+	var v_errs: Array[String] = _errs("characters", not_list)
+	var b_errs: Array[String] = WorldCatalog.blocking_errors(W, "characters", not_list, "mara")
+	checks["non-list gone_flags: one problem"] = _one(v_errs, "Gone flags must be a list") and _one(b_errs, "Gone flags must be a list") and v_errs == b_errs
+	# Authored texts: {npc} and {gold} only.
+	var t: Dictionary = {"id": "d_tok", "name": "Tokens", "start": "a", "services": false, "nodes": [{"id": "a", "text": "{npc} has {gold}.", "choices": [{"text": "Hi {npc}", "to": "b"}]}, {"id": "b", "text": "Bye.", "end": true}]}
+	checks["npc and gold tokens ok"] = _errs("dialogues", t).is_empty()
+	_node(t, "a")["text"] = "About {quest}."
+	checks["quest token in a node"] = _one(_errs("dialogues", t), "Unknown token 'quest'")
+	_node(t, "a")["text"] = "Fine."
+	DictUtil.dict_of(_choices(t, "a")[0])["text"] = "Visit {shop}"
+	checks["shop token in a choice"] = _one(_errs("dialogues", t), "Unknown token 'shop'")
+	# give on a cycle: a -> b -> a (next) warns; a choice guarded by unless + the node's own set_flag does not.
+	var gift: Dictionary = {"effect": "give", "gold": 1}
+	var loop: Dictionary = _lint_tree([{"id": "a", "text": "A.", "choices": [{"text": "Go", "to": "b"}, {"text": "Bye", "to": ""}]}, {"id": "b", "text": "B.", "next": "a", "effects": [gift]}], false)
+	var warned: Array[String] = DialogueRules.tree_warnings(loop)
+	checks["give on a cycle warns"] = warned.size() == 1 and warned[0].contains("Node 'b' gives items or gold and sits on a dialogue cycle")
+	var guarded: Dictionary = loop.duplicate(true)
+	DictUtil.dict_of(_choices(guarded, "a")[0])["unless"] = [{"key": "dg.got"}]
+	DictUtil.array_of(_node(guarded, "b")["effects"]).append({"effect": "set_flag", "key": "dg.got"})
+	checks["unless + set_flag guard is quiet"] = DialogueRules.tree_warnings(guarded).is_empty()
+	var other_flag: Dictionary = guarded.duplicate(true)
+	DictUtil.dict_of(_choices(other_flag, "a")[0])["unless"] = [{"key": "dg.other"}]
+	checks["guard on another flag still warns"] = DialogueRules.tree_warnings(other_flag).size() == 1
+	var no_cycle: Dictionary = _lint_tree([{"id": "a", "text": "A.", "choices": [{"text": "Go", "to": "b"}]}, {"id": "b", "text": "B.", "end": true, "effects": [gift]}], false)
+	checks["give off a cycle is quiet"] = DialogueRules.tree_warnings(no_cycle).is_empty()
+	var start_gift: Dictionary = _lint_tree([{"id": "a", "text": "A.", "effects": [gift], "choices": [{"text": "Bye", "to": ""}]}], true)
+	checks["give on the start node with services warns"] = DialogueRules.tree_warnings(start_gift).size() == 1
+	start_gift["services"] = false
+	checks["same start node without services is quiet"] = DialogueRules.tree_warnings(start_gift).is_empty()
+	var shop_back: Dictionary = _lint_tree([{"id": "a", "text": "A.", "choices": [{"text": "Go", "to": "b"}]}, {"id": "b", "text": "B.", "effects": [gift], "choices": [{"text": "Shop", "to": "", "effects": [{"effect": "open_shop", "shop": "shop_b"}]}]}], false)
+	checks["open_shop back to a give node warns"] = DialogueRules.tree_warnings(shop_back).size() == 1
+	return _report("Review rules (one gone_flags message, {npc} / {gold} only in authored texts, give-on-cycle lint)", checks)
+
+# ------------------------------------------------------------------------------
+# Runtime fixtures (checks 7-20): world R + child KID, map m_dg, test items, two party units with different KNOW
+# ------------------------------------------------------------------------------
+
+const R: String = "dg_run"
+const KID: String = "dg_kid"
+const START_GOLD: int = 50
+const CHEST_GOLD: int = 25
+const GIFT: int = 5
+const FIXED: int = 7
+const LOOT_PRICE: int = 150
+const I15: String = "qa_dlg_value15"
+const I25: String = "qa_dlg_value25"
+const I0: String = "qa_dlg_value0"
+const MARA_GONE: Dictionary = {"key": "dr.mara_gone", "value": true}
+const HEST_GONE: Dictionary = {"key": "dr.hest_gone", "value": true}
+static var _rx: Dictionary = {}
+
+static func _q(local: String) -> String:
+	return WorldCatalog.qid(R, local)
+
+# Party units (built by rule) with two different effective KNOW values; three CONSUMABLE test items of value 15, 25, 0;
+# one shipped WEAPON (read only).
+static func _runtime_fixtures() -> Dictionary:
+	var rows: Array[Array] = []
+	for e: Dictionary in ContentCatalog.entries("units"):
+		if str(e.get("side", "")) != "party" or ContentFactory.class_of(e) == null:
+			continue
+		var id: String = str(e["id"])
+		var c: Combatant = PartyBuilder.build(UnitState.at_level(id, DictUtil.to_int(e.get("level", 1), 1), id))
+		if c != null and c.stats != null:
+			rows.append([id, c.stats.get_effective_stat("KNOW")])
+	var lo: Array = []
+	var hi: Array = []
+	for a: Array in rows:
+		for b: Array in rows:
+			if DictUtil.to_int(a[1]) < DictUtil.to_int(b[1]) and DictUtil.to_int(b[1]) <= DialogueRules.STAT_MAX and lo.is_empty():
+				lo = a
+				hi = b
+	var weapon: String = ""
+	for row: Dictionary in ContentCatalog.entries("items"):
+		if str(row.get("item_type", "")) == "WEAPON" and weapon.is_empty():
+			weapon = str(row["id"])
+	var added: Array[String] = []
+	for pair: Array in [[I15, 15], [I25, 25], [I0, 0]]:
+		added.append_array(TestHelpers.add_item_of_type(str(pair[0]), "CONSUMABLE", DictUtil.to_int(pair[1]), {"heal": 10}))
+	if not added.is_empty():
+		print("      [%s] runtime items: %s" % [TAG, str(added)])
+	return {"lo": str(lo[0]) if not lo.is_empty() else "", "hi": str(hi[0]) if not hi.is_empty() else "", "know_hi": DictUtil.to_int(hi[1]) if not hi.is_empty() else 0, "weapon": weapon, "items_ok": added.is_empty()}
+
+static func _map() -> Dictionary:
+	return {"id": "m_dg", "name": "Dialogue yard", "rows": ["########", "#......#", "#......#", "#......#", "#......#", "#......#", "#......#", "########"],
+		"anchors": [{"id": "spawn", "x": 1, "y": 1}, {"id": "a_npc", "x": 3, "y": 1}, {"id": "a_hest", "x": 3, "y": 3}, {"id": "a_chest", "x": 1, "y": 3}]}
+
+static func _mara_tree() -> Dictionary:
+	var know: int = DictUtil.to_int(_rx["know_hi"])
+	return {"id": "d_mara", "name": "Mara", "start": "hello", "nodes": [
+		{"id": "hello", "text": "{npc} nods; you hold {gold} gold.", "choices": [
+			{"text": "Ask", "to": "lore", "requires": [{"kind": "stat", "stat": "KNOW", "min": know}], "show_locked": true},
+			{"text": "Secret", "to": "hello", "requires": [{"key": "dr.secret"}]},
+			{"text": "Gift once", "to": "hello", "unless": [{"key": "dr.gift"}], "effects": [{"effect": "set_flag", "key": "dr.gift"}, {"effect": "give", "gold": GIFT}]},
+			{"text": "Trade", "to": "", "effects": [{"effect": "give", "gold": 5}, {"effect": "take", "items": {I15: 2}}]},
+			{"text": "Double take", "to": "hello", "effects": [{"effect": "take", "items": {I15: 1}}, {"effect": "take", "items": {I15: 1}}]},
+			{"text": "Start Tev's", "to": "hello", "effects": [{"effect": "start_quest", "quest": "q_tev"}]},
+		]},
+		{"id": "lore", "text": "Old tales.", "next": "hello", "effects": [{"effect": "give", "gold": 1}]},
+	]}
+
+static func _hest_tree() -> Dictionary:
+	return {"id": "d_hest", "name": "Hest", "start": "counter", "nodes": [
+		{"id": "counter", "text": "Buying?", "choices": [
+			{"text": "Hand it over", "to": "counter", "effects": [{"effect": "turn_in", "quest": "q_hest"}, {"effect": "set_flag", "key": "dr.thanked"}]},
+			{"text": "Fight", "effects": [{"effect": "set_flag", "key": "dr.fought"}, {"effect": "fight", "encounter": "enc_a"}]},
+			{"text": "Bye", "to": ""},
+		]},
+	]}
+
+static func _build_runtime(rx: Dictionary) -> bool:
+	_rx = rx
+	var checks: Dictionary = {"two units with different KNOW": not str(rx["lo"]).is_empty() and DictUtil.to_int(rx["know_hi"]) >= DialogueRules.STAT_MIN, "a weapon": not str(rx["weapon"]).is_empty(), "test items": DictUtil.to_bool(rx["items_ok"])}
+	if not TestHelpers.failed(checks).is_empty():
+		return _report("Runtime fixtures", checks)
+	var lo: String = str(rx["lo"])
+	var errors: Array[String] = []
+	errors.append_array(MapCatalog.upsert(_map()))
+	errors.append_array(QuestCatalog.upsert({"id": "t_gold", "name": "Gold", "objectives": [{"kind": "flag"}], "rewards": {"gold": QuestRules.SOFT_MAX_GOLD}}))
+	errors.append_array(QuestCatalog.upsert({"id": "t_win", "name": "Win", "objectives": [{"kind": "win_encounter"}], "rewards": {"xp": 1}}))
+	errors.append_array(WorldCatalog.create_world(R, "Dialogue runtime"))
+	errors.append_array(WorldCatalog.update_manifest(R, {"start_gold": START_GOLD}))
+	errors.append_array(WorldCatalog.create_world(KID, "Dialogue kid", [R]))
+	for pair: Array in [["lo", "party", lo], ["hi", "party", str(rx["hi"])], ["foe", "enemy", lo]]:
+		errors.append_array(WorldCatalog.upsert(R, "characters", {"id": pair[0], "name": str(pair[0]).capitalize(), "role": pair[1], "base_unit": pair[2]}))
+	errors.append_array(WorldCatalog.upsert(R, "characters", {"id": "mara", "name": "Mara", "base_unit": lo, "dialogue": "d_mara", "gone_flags": [MARA_GONE]}))
+	errors.append_array(WorldCatalog.upsert(R, "characters", {"id": "tev", "name": "Tev", "base_unit": lo}))
+	errors.append_array(WorldCatalog.upsert(R, "characters", {"id": "hest", "name": "Hest", "base_unit": lo, "dialogue": "d_hest", "gone_flags": [HEST_GONE]}))
+	errors.append_array(WorldCatalog.upsert(R, "encounters", {"id": "enc_a", "name": "Enc A", "party": ["lo"], "enemies": ["foe"]}))
+	errors.append_array(WorldCatalog.upsert(R, "locations", {"id": "yard", "name": "Yard", "map": "m_dg", "markers": [
+		{"id": "npc_mara", "kind": "npc", "anchor": "a_npc", "character": "mara"},
+		{"id": "npc_hest", "kind": "npc", "anchor": "a_hest", "character": "hest"},
+		{"id": "box", "kind": "chest", "anchor": "a_chest", "gold": CHEST_GOLD},
+	]}))
+	errors.append_array(WorldCatalog.upsert(R, "loot", {"id": "l_ring", "name": "Ring", "reward_kind": "item", "ref": I25, "count": 1}))
+	errors.append_array(WorldCatalog.upsert(R, "loot", {"id": "l_gem", "name": "Gem", "reward_kind": "item", "ref": I15, "count": 1}))
+	errors.append_array(WorldCatalog.upsert(R, "loot", {"id": "l_locked", "name": "Locked", "reward_kind": "item", "ref": I25, "count": 1, "requires_flags": [{"key": "dr.vip"}]}))
+	errors.append_array(WorldCatalog.upsert(R, "quests", {"id": "q_offer", "name": "Offer", "description": "Raise the signal for us.", "template": "t_gold", "giver": "mara",
+		"steps": [{"text": "Signal", "flag": "dr.signal"}], "loot_pool": ["l_ring"], "loot_picks": 1,
+		"variants": [{"id": "v_tev", "when_flags": [{"key": "dr.swap"}], "set": {"giver": "tev"}}, {"id": "v_gone", "when_flags": [MARA_GONE], "set": {"available": false}}]}))
+	errors.append_array(WorldCatalog.upsert(R, "quests", {"id": "q_tev", "name": "Tev's", "template": "t_gold", "giver": "tev", "steps": [{"text": "Tev", "flag": "dr.tev"}]}))
+	errors.append_array(WorldCatalog.upsert(R, "quests", {"id": "q_hest", "name": "Hest's", "template": "t_gold", "giver": "hest", "turn_in": "hest", "steps": [{"text": "Hest", "flag": "dr.hest"}], "loot_pool": ["l_gem"], "loot_picks": 1}))
+	errors.append_array(WorldCatalog.upsert(R, "quests", {"id": "q_journal", "name": "Journal", "template": "t_gold", "steps": [{"text": "Note", "flag": "dr.j"}]}))
+	errors.append_array(WorldCatalog.upsert(R, "quests", {"id": "q_win", "name": "Win", "template": "t_win", "steps": [{"text": "Win", "encounter": "enc_a"}]}))
+	errors.append_array(WorldCatalog.upsert(R, "shops", {"id": "s_hest", "name": "Hest's counter", "keeper": "hest", "buys": ["CONSUMABLE"],
+		"stock": [{"item": I15, "count": 2, "price": -1, "requires_flags": []}, {"item": I25, "count": -1, "price": -1, "requires_flags": []}, {"item": I0, "count": -1, "price": -1, "requires_flags": []}, {"item": str(rx["weapon"]), "count": -1, "price": FIXED, "requires_flags": []}],
+		"loot": [{"loot": "l_ring", "price": LOOT_PRICE}, {"loot": "l_locked", "price": LOOT_PRICE}]}))
+	errors.append_array(WorldCatalog.upsert(R, "shops", {"id": "s_zero", "name": "Tev's stall", "keeper": "tev", "sell_mult": 0.0}))
+	errors.append_array(WorldCatalog.upsert(R, "dialogues", _mara_tree()))
+	errors.append_array(WorldCatalog.upsert(R, "dialogues", _hest_tree()))
+	var problems: Dictionary = WorldCatalog.validate_world(R)
+	checks["stored"] = errors.is_empty()
+	checks["runtime world validates"] = problems.is_empty() and WorldCatalog.validate_world(KID).is_empty()
+	if not errors.is_empty() or not problems.is_empty():
+		print("      [%s] runtime fixture problems: %s %s" % [TAG, str(errors), str(problems)])
+	return _report("Runtime fixture world (dialogues, shops, quests, map with npc and chest markers)", checks)
+
+# A new game in R with both units; only the low-KNOW one active (the other is benched).
+static func _gs() -> GameState:
+	var gs: GameState = NewGame.create(R, [str(_rx["lo"]), str(_rx["hi"])] as Array[String], 7)["state"] as GameState
+	gs.party.active_ids = [str(_rx["lo"])] as Array[String]
+	return gs
+
+# Index of the first visible choice whose text contains `needle` (-1 = none).
+static func _find(v: Dictionary, needle: String) -> int:
+	var choices: Array = DictUtil.array_of(v.get("choices", []))
+	for i: int in range(choices.size()):
+		if str(DictUtil.dict_of(choices[i]).get("text", "")).contains(needle):
+			return i
+	return -1
+
+static func _line(id: String, quest_ref: String = "") -> String:
+	var values: Dictionary = {}
+	if not quest_ref.is_empty():
+		values["quest"] = str(WorldCatalog.resolve(R, "quests", quest_ref).get("name", ""))
+	return DialogueRules.fill(DialogueRules.service_line(R, id), values)
+
+static func _same(gs: GameState, before: Dictionary) -> bool:
+	return JsonUtil.deep_equal(gs.to_dict(), before)
+
+# ------------------------------------------------------------------------------
+# Check 7: visibility
+# ------------------------------------------------------------------------------
+
+static func _choice_at(v: Dictionary, i: int) -> Dictionary:
+	var choices: Array = DictUtil.array_of(v.get("choices", []))
+	return DictUtil.dict_of(choices[i]) if i >= 0 and i < choices.size() else {}
+
+static func _test_visibility() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	var r: DialogueRunner = DialogueRunner.open(gs, "mara")
+	checks["opened"] = r.errors.is_empty() and r.node_id == "hello" and not r.closed
+	var v: Dictionary = r.view()
+	var ask: int = _find(v, "Ask")
+	var row: Dictionary = _choice_at(v, ask)
+	checks["failing show_locked choice is locked"] = ask >= 0 and DictUtil.to_bool(row.get("locked", false))
+	checks["stat prefix generated"] = str(row.get("text", "")).begins_with("[KNOW %d] " % DictUtil.to_int(_rx["know_hi"]))
+	checks["failing hidden choice is hidden"] = _find(v, "Secret") == -1
+	checks["npc and gold tokens filled"] = str(v["text"]) == "Mara nods; you hold %d gold." % gs.party.gold and str(v["speaker"]) == _q("mara")
+	var before: Dictionary = gs.to_dict()
+	checks["locked choice changes nothing"] = not DictUtil.to_bool(r.choose(ask)["ok"]) and _same(gs, before) and r.node_id == "hello"
+	checks["unknown index refused"] = not DictUtil.to_bool(r.choose(99)["ok"]) and _same(gs, before)
+	gs.party.active_ids = [str(_rx["hi"])] as Array[String]
+	v = r.view()
+	checks["best ACTIVE member decides"] = _find(v, "Ask") >= 0 and not DictUtil.to_bool(_choice_at(v, _find(v, "Ask")).get("locked", true))
+	var _f: String = gs.set_flag("dr.secret", true)
+	checks["condition met shows the choice"] = _find(r.view(), "Secret") >= 0
+	var all: Array = DictUtil.array_of(r.view()["choices"])
+	checks["services follow the authored choices"] = str(DictUtil.dict_of(all.back()).get("text", "")) == _line("farewell")
+	return _report("Check 7: visibility (hidden vs show_locked, locked changes nothing, [STAT min] prefix, best active member)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 8: all-or-nothing
+# ------------------------------------------------------------------------------
+
+static func _test_all_or_nothing() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	gs.party.add_to_stash(I15, 1)
+	var r: DialogueRunner = DialogueRunner.open(gs, "mara")
+	var before: Dictionary = gs.to_dict()
+	var trade: Dictionary = r.choose(_find(r.view(), "Trade"))
+	checks["give + take with too few changes nothing"] = not DictUtil.to_bool(trade["ok"]) and TestHelpers.any_contains(JsonUtil.strings(trade["errors"]), "Not enough") and _same(gs, before) and not r.closed
+	checks["two takes are summed"] = not DictUtil.to_bool(r.choose(_find(r.view(), "Double take"))["ok"]) and _same(gs, before)
+	gs.party.add_to_stash(I15, 1)
+	checks["both takes run with enough"] = DictUtil.to_bool(r.choose(_find(r.view(), "Double take"))["ok"]) and not gs.party.stash.has(I15)
+	return _report("Check 8: all-or-nothing choices (failing take keeps the give back; takes summed)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 9: services
+# ------------------------------------------------------------------------------
+
+static func _test_services() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	var offer: String = _line("offer", "q_offer")
+	checks["offered by the giver"] = _find(DialogueRunner.open(gs, "mara").view(), offer) >= 0
+	var tev: DialogueRunner = DialogueRunner.open(gs, "tev")
+	var tv: Dictionary = tev.view()
+	checks["not offered by another NPC"] = _find(tv, offer) == -1
+	var all: Array = DictUtil.array_of(tv["choices"])
+	checks["no tree: greeting + farewell"] = tev.start == DialogueRunner.ROOT and str(tv["text"]) == DialogueRules.fill(DialogueRules.service_line(R, "greeting"), {"npc": "Tev", "gold": gs.party.gold}) and str(DictUtil.dict_of(all.back()).get("text", "")) == _line("farewell")
+	var _s: String = QuestRunner.set_flag(gs, "dr.swap", true)
+	tev = DialogueRunner.open(gs, "tev")
+	checks["a giver variant moves the offer"] = _find(tev.view(), offer) >= 0 and _find(DialogueRunner.open(gs, "mara").view(), offer) == -1
+	var went: Dictionary = tev.choose(_find(tev.view(), offer))
+	var ov: Dictionary = tev.view()
+	checks["offer node shows the description"] = DictUtil.to_bool(went["ok"]) and str(ov["text"]) == "Raise the signal for us." and _find(ov, _line("accept")) == 0 and _find(ov, _line("decline")) == 1
+	checks["decline returns to start"] = DictUtil.to_bool(tev.choose(1)["ok"]) and tev.node_id == tev.start and QuestRunner.status(gs, _q("q_offer")) == "available"
+	var _o: Dictionary = tev.choose(_find(tev.view(), offer))
+	checks["accept starts it"] = DictUtil.to_bool(tev.choose(0)["ok"]) and QuestRunner.status(gs, _q("q_offer")) == "active" and tev.node_id == tev.start
+	var _r: String = QuestRunner.set_flag(gs, "dr.signal", true)
+	var done: String = _line("turn_in", "q_offer")
+	checks["ready shows at the effective turn-in only"] = QuestRunner.status(gs, _q("q_offer")) == "ready" and _find(DialogueRunner.open(gs, "tev").view(), done) >= 0 and _find(DialogueRunner.open(gs, "mara").view(), done) == -1
+	gs.clear_flag("dr.swap")
+	var _c: Array[String] = QuestRunner.refresh(gs)
+	checks["turn-in follows the variant back"] = _find(DialogueRunner.open(gs, "mara").view(), done) >= 0 and _find(DialogueRunner.open(gs, "tev").view(), done) == -1
+	checks["shop service at the keeper"] = _find(DialogueRunner.open(gs, "hest").view(), _line("shop")) >= 0 and _find(DialogueRunner.open(gs, "mara").view(), _line("shop")) == -1
+	var hest: DialogueRunner = DialogueRunner.open(gs, "hest")
+	var shop_res: Dictionary = hest.choose(_find(hest.view(), _line("shop")))
+	checks["shop service opens the shop"] = str(shop_res.get("shop", "")) == _q("s_hest") and not DictUtil.to_bool(hest.choose(0)["ok"]) and DictUtil.to_bool(hest.close_shop()["ok"]) and hest.node_id == hest.start and hest.shop_qid.is_empty()
+	return _report("Check 9: services (offers at the resolved giver, variants move them, accept / decline, turn-in at the effective turn-in, shop)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 10: enforcement
+# ------------------------------------------------------------------------------
+
+static func _test_enforcement() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	var r: DialogueRunner = DialogueRunner.open(gs, "mara")
+	var before: Dictionary = gs.to_dict()
+	var res: Dictionary = r.choose(_find(r.view(), "Start Tev's"))
+	checks["authored start_quest of another giver refused"] = not DictUtil.to_bool(res["ok"]) and JsonUtil.strings(res["errors"]) == ["Only Tev gives this quest."] and _same(gs, before)
+	var _j: Array[String] = QuestRunner.start(gs, _q("q_journal"))
+	var _jf: String = QuestRunner.set_flag(gs, "dr.j", true)
+	checks["journal turn-in without giver / turn-in works"] = DictUtil.to_bool(DialogueRules.complete_from_journal(gs, _q("q_journal"))["ok"]) and QuestRunner.status(gs, _q("q_journal")) == "completed"
+	var _o: Array[String] = QuestRunner.start(gs, _q("q_offer"))
+	var _of: String = QuestRunner.set_flag(gs, "dr.signal", true)
+	var refused: Dictionary = DialogueRules.complete_from_journal(gs, _q("q_offer"))
+	checks["journal turn-in refused with a turn-in NPC"] = not DictUtil.to_bool(refused["ok"]) and JsonUtil.strings(refused["errors"]) == ["This quest is turned in to Mara."] and QuestRunner.status(gs, _q("q_offer")) == "ready"
+	return _report("Check 10: enforcement (start_quest only at the giver; journal turn-in only without NPCs)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 11: turn-in
+# ------------------------------------------------------------------------------
+
+static func _test_turn_in() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	var _s: Array[String] = QuestRunner.start(gs, _q("q_hest"))
+	var _f: String = QuestRunner.set_flag(gs, "dr.hest", true)
+	var r: DialogueRunner = DialogueRunner.open(gs, "hest")
+	var hand: int = _find(r.view(), "Hand it over")
+	var before: Dictionary = gs.to_dict()
+	var pend: Dictionary = r.choose(hand)
+	checks["pending lists the offers"] = str(pend.get("pending", "")) == "turn_in" and JsonUtil.strings(pend.get("offers", [])) == QuestRunner.offers(gs, _q("q_hest")) and JsonUtil.strings(pend.get("offers", [])).has(_q("l_gem")) and DictUtil.to_int(pend.get("picks_allowed", 0)) == 1 and _same(gs, before)
+	checks["busy while pending"] = not DictUtil.to_bool(r.choose(hand)["ok"]) and DictUtil.to_bool(r.view()["pending"])
+	checks["bad pick changes nothing"] = not DictUtil.to_bool(r.confirm_turn_in("", [_q("nope")] as Array[String])["ok"]) and _same(gs, before) and DictUtil.to_bool(r.view()["pending"])
+	checks["cancel keeps everything"] = DictUtil.to_bool(r.cancel()["ok"]) and _same(gs, before) and not DictUtil.to_bool(r.view()["pending"]) and r.node_id == "counter"
+	var _p: Dictionary = r.choose(hand)
+	var gold0: int = gs.party.gold
+	var reward: int = DictUtil.to_int(DictUtil.dict_of(QuestCatalog.get_entry("t_gold")["rewards"]).get("gold", 0))
+	var done: Dictionary = r.confirm_turn_in("", [_q("l_gem")] as Array[String])
+	checks["valid pick completes"] = DictUtil.to_bool(done["ok"]) and QuestRunner.status(gs, _q("q_hest")) == "completed" and gs.loot_claimed.has(_q("l_gem"))
+	checks["trailing set_flag applied"] = gs.get_flag("dr.thanked", false) == true and r.node_id == "counter"
+	checks["quest gold reaches the party once"] = reward > 0 and gs.party.gold == gold0 + reward and DictUtil.to_int(DictUtil.dict_of(done.get("granted", {})).get("gold", 0)) == reward
+	checks["no second grant"] = not DictUtil.to_bool(QuestRunner.complete(gs, _q("q_hest"))["ok"]) and gs.party.gold == gold0 + reward
+	return _report("Check 11: turn-in (pending offers, bad pick / cancel change nothing, confirm completes then trailing effects, gold once)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 12: gone
+# ------------------------------------------------------------------------------
+
+static func _marker(id: String) -> Dictionary:
+	for m: Dictionary in ExploreRunner.markers_of(WorldCatalog.resolve(R, "locations", "yard")):
+		if str(m["id"]) == id:
+			return m
+	return {}
+
+static func _test_gone() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	var loc: String = _q("yard")
+	var hest_offer: String = _line("offer", "q_hest")
+	checks["present before"] = DialogueRunner.open(gs, "hest").errors.is_empty() and ExploreRunner.presence(gs, loc, _marker("npc_hest")) == "present" and ShopRules.is_open(gs, "s_hest") and _find(DialogueRunner.open(gs, "hest").view(), hest_offer) >= 0
+	var _g: String = QuestRunner.set_flag(gs, str(HEST_GONE["key"]), true)
+	var r: DialogueRunner = DialogueRunner.open(gs, "hest")
+	checks["gone: can't be opened"] = r.closed and r.errors == (["Hest is gone."] as Array[String])
+	checks["gone: npc marker absent"] = ExploreRunner.presence(gs, loc, _marker("npc_hest")) == "absent" and ExploreRunner.presence(gs, loc, _marker("npc_mara")) == "present"
+	checks["gone: keeper's shop closed"] = not ShopRules.is_open(gs, "s_hest") and ShopRules.offers(gs, "s_hest").is_empty() and not DictUtil.to_bool(ShopRules.buy(gs, "s_hest", "item", I25)["ok"])
+	checks["gone: services never generated elsewhere"] = _find(DialogueRunner.open(gs, "mara").view(), hest_offer) == -1 and _find(DialogueRunner.open(gs, "tev").view(), hest_offer) == -1
+	gs.clear_flag(str(HEST_GONE["key"]))
+	checks["cleared: restored"] = DialogueRunner.open(gs, "hest").errors.is_empty() and ExploreRunner.presence(gs, loc, _marker("npc_hest")) == "present" and ShopRules.is_open(gs, "s_hest")
+	return _report("Check 12: gone (no conversation, npc marker absent, shop closed, services hidden; clearing restores)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 13: node effects and repeat-once choices
+# ------------------------------------------------------------------------------
+
+static func _test_node_effects() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	gs.party.active_ids = [str(_rx["hi"])] as Array[String]
+	var r: DialogueRunner = DialogueRunner.open(gs, "mara")
+	var gold0: int = gs.party.gold
+	var first: Dictionary = r.choose(_find(r.view(), "Ask"))
+	checks["node effects run when shown"] = DictUtil.to_bool(first["ok"]) and r.node_id == "lore" and gs.party.gold == gold0 + 1 and DictUtil.to_bool(r.view()["next"])
+	checks["advance follows next"] = DictUtil.to_bool(r.advance()["ok"]) and r.node_id == "hello"
+	var _again: Dictionary = r.choose(_find(r.view(), "Ask"))
+	checks["and again each time"] = gs.party.gold == gold0 + 2
+	var _back: Dictionary = r.advance()
+	var gold1: int = gs.party.gold
+	var gift: int = _find(r.view(), "Gift once")
+	checks["repeat-once choice shows once"] = gift >= 0 and DictUtil.to_bool(r.choose(gift)["ok"]) and gs.party.gold == gold1 + GIFT and _find(r.view(), "Gift once") == -1
+	checks["a choice node needs a choice"] = not DictUtil.to_bool(r.advance()["ok"])
+	var bye: Dictionary = r.choose(_find(r.view(), _line("farewell")))
+	checks["farewell ends"] = DictUtil.to_bool(bye.get("end", false)) and r.closed and DictUtil.to_bool(r.view()["end"]) and DictUtil.array_of(r.view()["choices"]).is_empty() and not DictUtil.to_bool(r.choose(0)["ok"])
+	return _report("Check 13: node effects run each time shown; unless + set_flag shows once", checks)
+
+# ------------------------------------------------------------------------------
+# Checks 14-17: shops
+# ------------------------------------------------------------------------------
+
+static func _test_prices() -> bool:
+	var checks: Dictionary = {}
+	for mults: Array in [[1.0, 0.5], [1.15, 0.85]]:
+		var shop: Dictionary = {"buy_mult": mults[0], "sell_mult": mults[1]}
+		var bm: int = roundi(DictUtil.to_float(mults[0]) * 100.0)
+		var sm: int = roundi(DictUtil.to_float(mults[1]) * 100.0)
+		for value: int in [15, 25]:
+			var label: String = "%d at %s/%s" % [value, str(mults[0]), str(mults[1])]
+			checks["buy ceil " + label] = ShopRules.buy_price(shop, value) == ceili(float(value * bm) / 100.0)
+			checks["sell floor " + label] = ShopRules.sell_price(shop, value) == floori(float(value * sm) / 100.0)
+		checks["fixed price ignores %s" % str(mults[0])] = ShopRules.buy_price(shop, 15, FIXED) == FIXED
+		checks["minimum buy 1 at %s" % str(mults[0])] = ShopRules.buy_price(shop, 0) == 1
+	var gs: GameState = _gs()
+	var entry: Dictionary = WorldCatalog.resolve(R, "shops", "s_hest")
+	var prices: Dictionary = {}
+	for o: Dictionary in ShopRules.offers(gs, "s_hest"):
+		prices[str(o["id"])] = DictUtil.to_int(o["price"])
+	checks["offers use the rule"] = DictUtil.to_int(prices.get(I15, -1)) == ShopRules.buy_price(entry, 15) and DictUtil.to_int(prices.get(str(_rx["weapon"]), -1)) == FIXED and DictUtil.to_int(prices.get(I0, -1)) == 1 and DictUtil.to_int(prices.get(_q("l_ring"), -1)) == LOOT_PRICE
+	return _report("Check 14: prices (ceil buy, floor sell, fixed price, minimum 1)", checks)
+
+static func _left(gs: GameState, id: String) -> int:
+	for o: Dictionary in ShopRules.offers(gs, "s_hest"):
+		if str(o["id"]) == id:
+			return DictUtil.to_int(o["left"])
+	return -99
+
+static func _test_stock() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	gs.party.gold = 1000
+	var price: int = ShopRules.buy_price(WorldCatalog.resolve(R, "shops", "s_hest"), 15)
+	var one: Dictionary = ShopRules.buy(gs, "s_hest", "item", I15)
+	var two: Dictionary = ShopRules.buy(gs, "s_hest", "item", I15)
+	var before: Dictionary = gs.to_dict()
+	var three: Dictionary = ShopRules.buy(gs, "s_hest", "item", I15)
+	checks["count-2 entry sells twice"] = DictUtil.to_bool(one["ok"]) and DictUtil.to_bool(two["ok"]) and gs.party.gold == 1000 - 2 * price and DictUtil.to_int(gs.party.stash.get(I15, 0)) == 2
+	checks["then sold out"] = not DictUtil.to_bool(three["ok"]) and JsonUtil.strings(three["errors"]) == ["Sold out."] and _same(gs, before) and _left(gs, I15) == 0
+	checks["gs.shops counts it"] = DictUtil.to_int(DictUtil.dict_of(gs.shops.get(_q("s_hest"), {})).get(I15, 0)) == 2
+	var back: GameState = GameState.from_dict(DictUtil.dict_of(JSON.parse_string(JSON.stringify(gs.to_dict()))))
+	checks["gs.shops round-trips"] = JsonUtil.deep_equal(back.shops, gs.shops) and back.validate().is_empty()
+	checks["unlimited never runs out"] = DictUtil.to_bool(ShopRules.buy(gs, "s_hest", "item", I25, 3)["ok"]) and DictUtil.to_bool(ShopRules.buy(gs, "s_hest", "item", I25, 3)["ok"]) and _left(gs, I25) == ShopRules.UNLIMITED and not DictUtil.dict_of(gs.shops.get(_q("s_hest"), {})).has(I25)
+	gs.party.gold = 0
+	before = gs.to_dict()
+	var broke: Dictionary = ShopRules.buy(gs, "s_hest", "item", I25)
+	checks["not enough gold changes nothing"] = JsonUtil.strings(broke["errors"]) == ["Not enough gold."] and _same(gs, before)
+	checks["not for sale"] = not DictUtil.to_bool(ShopRules.buy(gs, "s_hest", "item", QUEST_ITEM)["ok"])
+	return _report("Check 15: stock (limited sells out, gs.shops round-trips, unlimited, not enough gold)", checks)
+
+static func _test_loot_sale() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	gs.party.gold = 1000
+	var ring: String = _q("l_ring")
+	checks["quest offers the loot first"] = QuestRunner.offers(gs, _q("q_offer")).has(ring) and _left(gs, ring) == 1
+	checks["failing loot requires_flags not listed"] = _left(gs, _q("l_locked")) == -99
+	checks["loot count 2 refused"] = not DictUtil.to_bool(ShopRules.buy(gs, "s_hest", "loot", ring, 2)["ok"])
+	var held: int = DictUtil.to_int(gs.party.stash.get(I25, 0))
+	var bought: Dictionary = ShopRules.buy(gs, "s_hest", "loot", ring)
+	checks["buying claims it"] = DictUtil.to_bool(bought["ok"]) and gs.loot_claimed.has(ring) and gs.party.gold == 1000 - LOOT_PRICE and DictUtil.to_int(gs.party.stash.get(I25, 0)) == held + 1
+	checks["the quest no longer offers it"] = not QuestRunner.offers(gs, _q("q_offer")).has(ring)
+	checks["the shop no longer lists it"] = _left(gs, ring) == -99 and not DictUtil.to_bool(ShopRules.buy(gs, "s_hest", "loot", ring)["ok"])
+	var _v: String = gs.set_flag("dr.vip", true)
+	checks["listed once its flag holds"] = _left(gs, _q("l_locked")) == 1
+	return _report("Check 16: loot sale (claims the loot, leaves the quest pool and the shop; requires_flags respected)", checks)
+
+static func _test_selling() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	for id: String in [QUEST_ITEM, str(_rx["weapon"]), I0]:
+		gs.party.add_to_stash(id, 1)
+	gs.party.add_to_stash(I15, 2)
+	var listed: Array[String] = []
+	for row: Dictionary in ShopRules.sell_list(gs, "s_hest"):
+		listed.append(str(row["item"]))
+	checks["only bought types with a price >= 1"] = listed == ([I15] as Array[String])
+	checks["sell_mult 0 lists nothing"] = ShopRules.sell_list(gs, "s_zero").is_empty()
+	var gold0: int = gs.party.gold
+	var sold: Dictionary = ShopRules.sell(gs, "s_hest", I15)
+	checks["gold rises by the sell price"] = DictUtil.to_bool(sold["ok"]) and gs.party.gold == gold0 + ShopRules.sell_price(WorldCatalog.resolve(R, "shops", "s_hest"), 15) and DictUtil.to_int(gs.party.stash.get(I15, 0)) == 1
+	var before: Dictionary = gs.to_dict()
+	checks["QUEST items refused"] = not DictUtil.to_bool(ShopRules.sell(gs, "s_hest", QUEST_ITEM)["ok"]) and _same(gs, before)
+	checks["types outside buys refused"] = not DictUtil.to_bool(ShopRules.sell(gs, "s_hest", str(_rx["weapon"]))["ok"]) and _same(gs, before)
+	checks["more than held refused"] = not DictUtil.to_bool(ShopRules.sell(gs, "s_hest", I15, 2)["ok"]) and _same(gs, before)
+	checks["sold items never restock"] = _left(gs, I15) == 2
+	return _report("Check 17: selling (QUEST and other types not listed, sell_mult 0, gold rises)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 18: gold sources
+# ------------------------------------------------------------------------------
+
+static func _test_gold() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	checks["NewGame uses start_gold"] = gs.party.gold == START_GOLD and DialogueRules.start_gold(R) == START_GOLD
+	var kid: GameState = NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"] as GameState
+	checks["NewGame inherits start_gold"] = kid != null and kid.party.gold == START_GOLD
+	var _m: Array[String] = WorldCatalog.update_manifest(KID, {"start_gold": 0})
+	var kid0: GameState = NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"] as GameState
+	checks["a child's own start_gold wins"] = kid0 != null and kid0.party.gold == 0
+	var _m2: Array[String] = WorldCatalog.update_manifest(KID, {"start_gold": -1})
+	var entered: Dictionary = ExploreRunner.enter(gs, "yard")
+	var chest_at: Vector2i = MapRules.anchor_pos(MapCatalog.get_entry("m_dg"), "a_chest")
+	gs.position = chest_at + Vector2i(0, -1)
+	var gold0: int = gs.party.gold
+	var opened: Dictionary = ExploreRunner.interact(gs, Vector2i(0, 1))
+	checks["chest gold on first open"] = DictUtil.to_bool(entered["ok"]) and str(opened.get("kind", "")) == "chest" and DictUtil.to_int(opened.get("gold", 0)) == CHEST_GOLD and gs.party.gold == gold0 + CHEST_GOLD
+	var again: Dictionary = ExploreRunner.interact(gs, Vector2i(0, 1))
+	checks["not on the second"] = DictUtil.to_bool(again.get("empty", false)) and gs.party.gold == gold0 + CHEST_GOLD
+	checks["RewardGrant gold echoed"] = DictUtil.to_int(DictUtil.dict_of(RewardGrant.apply(gs, {"gold": 3}, "")["granted"]).get("gold", 0)) == 3 and gs.party.gold == gold0 + CHEST_GOLD + 3
+	gs.party.gold = PartyState.GOLD_MAX - 1
+	checks["gold capped at GOLD_MAX"] = DictUtil.to_bool(RewardGrant.apply(gs, {"gold": 5}, "")["ok"]) and gs.party.gold == PartyState.GOLD_MAX and gs.validate().is_empty()
+	var take_errs: Array[String] = RewardGrant.take(gs, {I25: 1}, 0)
+	checks["take validates first"] = take_errs.size() == 1 and take_errs[0].begins_with("Not enough") and gs.party.gold == PartyState.GOLD_MAX
+	return _report("Check 18: gold (quest once in check 11, chest first open only, NewGame inherited start_gold, cap)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 19: dialogue fights
+# ------------------------------------------------------------------------------
+
+static func _test_fight() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	var _e: Dictionary = ExploreRunner.enter(gs, "yard")
+	gs.position = Vector2i(2, 2)
+	var _w: Array[String] = QuestRunner.start(gs, _q("q_win"))
+	var r: DialogueRunner = DialogueRunner.open(gs, "hest")
+	var res: Dictionary = r.choose(_find(r.view(), "Fight"))
+	var fight: Dictionary = DictUtil.dict_of(res.get("fight", {}))
+	checks["returns the fight and closes"] = DictUtil.to_bool(res["ok"]) and JsonUtil.deep_equal(fight, {"source": "dialogue", "encounter": _q("enc_a"), "character": _q("hest")}) and r.closed
+	checks["effects before the fight applied"] = gs.get_flag("dr.fought", false) == true
+	var expected: GameState = GameState.from_dict(gs.to_dict())
+	var _wk: Dictionary = ExploreRunner.wake(expected)
+	var lost: Dictionary = DialogueRunner.after_fight(gs, fight, "lost")
+	checks["lost wakes by the EXP1 rule"] = DictUtil.to_bool(lost["ok"]) and gs.equals(expected) and gs.position == MapRules.anchor_pos(MapCatalog.get_entry("m_dg"), MapRules.SPAWN)
+	var won: Dictionary = DialogueRunner.after_fight(gs, fight, "won")
+	checks["won advances a waiting win_encounter quest"] = DictUtil.to_bool(won["ok"]) and JsonUtil.strings(won["advanced"]).has(_q("q_win")) and QuestRunner.status(gs, _q("q_win")) == "ready"
+	checks["bad outcome refused"] = not DictUtil.to_bool(DialogueRunner.after_fight(gs, fight, "draw")["ok"])
+	return _report("Check 19: fight effect (returns the fight, closes; lost wakes, won advances quests)", checks)
+
+# ------------------------------------------------------------------------------
+# Check 20: save v4
+# ------------------------------------------------------------------------------
+
+static func _write_raw(slot: int, text: String) -> void:
+	DirAccess.make_dir_recursive_absolute(SaveGame.base_dir())
+	var f := FileAccess.open(SaveGame.path_for(slot), FileAccess.WRITE)
+	f.store_string(text)
+	f.close()
+
+static func _test_save_v4() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _gs()
+	gs.party.gold = 123
+	gs.shops = {_q("s_hest"): {I15: 1}}
+	var v3: Dictionary = gs.to_dict()
+	v3.erase("shops")
+	DictUtil.dict_of(v3["party"]).erase("gold")
+	_write_raw(1, JSON.stringify({"format": SaveGame.FORMAT, "version": 3, "saved_at": 0, "game_state": v3}))
+	var read: Dictionary = SaveGame.read(1)
+	var st: GameState = read["state"] as GameState
+	checks["v3 migrates to gold 0 and shops {}"] = DictUtil.to_bool(read["ok"]) and st != null and st.party.gold == 0 and st.shops.is_empty() and JsonUtil.strings(read["warnings"]).is_empty()
+	var written: bool = SaveGame.write(gs, 2).is_empty()
+	var back: GameState = SaveGame.read(2)["state"] as GameState
+	checks["v4 round trip"] = written and back != null and back.equals(gs) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(2))))["version"]) == SaveGame.VERSION and SaveGame.VERSION == 4
+	var negative: GameState = GameState.from_dict(gs.to_dict())
+	negative.party.gold = -1
+	var zero: GameState = GameState.from_dict(gs.to_dict())
+	zero.shops = {_q("s_hest"): {I15: 0}}
+	var bad_qid: GameState = GameState.from_dict(gs.to_dict())
+	bad_qid.shops = {"s_hest": {I15: 1}}
+	var raw: Dictionary = gs.to_dict()
+	DictUtil.dict_of(raw["party"])["gold"] = 1.5
+	var not_whole: GameState = GameState.from_dict(raw)
+	var raw_shops: Dictionary = gs.to_dict()
+	raw_shops["shops"] = [1]
+	var not_object: GameState = GameState.from_dict(raw_shops)
+	for pair: Array in [["negative gold", negative], ["sold count 0", zero], ["unqualified shop id", bad_qid], ["gold not whole", not_whole], ["shops not an object", not_object]]:
+		var g: GameState = pair[1] as GameState
+		checks["%s fails validate and write" % str(pair[0])] = not g.validate().is_empty() and not SaveGame.write(g, 3).is_empty()
+	checks["nothing written for refusals"] = not SaveGame.exists(3)
+	return _report("Check 20: save v4 (v3 migrates; bad gold / shops fail validate and write)", checks)

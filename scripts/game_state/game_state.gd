@@ -8,9 +8,10 @@ extends RefCounted
 # (qualified world loot ids, unique, saved sorted). Whole floats come back as ints.
 # S9 (EXP1-L, save v3): location_id is a QUALIFIED location id (world:id) or ""; position is the token tile on the
 # location's map ([-1, -1] = no map); explore holds the step counter; rng_seed + rolls drive GameRolls.
+# S11 (DLG1-L, save v4): party.gold (PartyState) and shops = {shop qid: {item id: sold count >= 1}} (limited stock sold).
 # ==============================================================================
 
-const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls"]
+const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops"]
 const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe"]
 const NO_POSITION: Vector2i = Vector2i(-1, -1)
 const SEED_MAX: int = 2147483647
@@ -25,6 +26,7 @@ var position: Vector2i = NO_POSITION
 var explore: Dictionary = default_explore()
 var rng_seed: int = 0
 var rolls: Dictionary = {}   # stream id -> rolls drawn (int >= 0)
+var shops: Dictionary = {}   # shop qid -> {item id: sold count >= 1}
 var load_problems: Array[String] = []   # raw type problems found by from_dict (not saved; validate() reports them)
 
 static func default_explore() -> Dictionary:
@@ -79,6 +81,7 @@ func to_dict() -> Dictionary:
 		"world_id": world_id, "location_id": location_id, "party": party.to_dict(),
 		"flags": flags.duplicate(true), "quests": quests.duplicate(true), "loot_claimed": _sorted(loot_claimed),
 		"position": [position.x, position.y], "explore": explore.duplicate(true), "rng_seed": rng_seed, "rolls": rolls.duplicate(true),
+		"shops": shops.duplicate(true),
 	}
 
 static func _sorted(list: Array[String]) -> Array[String]:
@@ -129,6 +132,11 @@ static func from_dict(d: Dictionary) -> GameState:
 		g.load_problems.append("rolls must be an object {stream: count}.")
 	else:
 		g.rolls = raw_rolls
+	var raw_shops: Variant = JsonUtil.normalize(d.get("shops", {}))
+	if not (raw_shops is Dictionary):
+		g.load_problems.append("shops must be an object {shop qid: {item id: sold count}}.")
+	else:
+		g.shops = raw_shops
 	return g
 
 func equals(other: GameState) -> bool:
@@ -162,6 +170,21 @@ func validate() -> Array[String]:
 	for key: Variant in rolls:
 		if not (key is String) or not JsonUtil.id_ok(str(key)) or not (rolls[key] is int) or DictUtil.to_int(rolls[key]) < 0:
 			errors.append("rolls: '%s' must be a stream id with a count >= 0." % str(key))
+	errors.append_array(shops_errors(shops))
+	return errors
+
+static func shops_errors(blob: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	for key: Variant in blob:
+		if not (key is String) or not QuestRules.blob_key_ok(str(key)):
+			errors.append("shops: '%s' must be a qualified shop id world:id." % str(key))
+		if not (blob[key] is Dictionary):
+			errors.append("shops.%s must be an object {item id: sold count}." % str(key))
+			continue
+		var sold: Dictionary = blob[key]
+		for item: Variant in sold:
+			if not (item is String) or not JsonUtil.id_ok(str(item)) or not (sold[item] is int) or DictUtil.to_int(sold[item]) < 1:
+				errors.append("shops.%s: '%s' must be an item id with a sold count >= 1." % [str(key), str(item)])
 	return errors
 
 static func explore_errors(e: Dictionary) -> Array[String]:

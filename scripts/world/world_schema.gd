@@ -263,7 +263,7 @@ static func _shop_fields() -> Array[Dictionary]:
 		_f("loot", "Loot for sale", "json", [], {"help": "[{\"loot\": \"world loot ref\", \"price\": 150}]; item loot only, sold once (claimed)."}),
 		_f("buy_mult", "Buy multiplier", "float", 1.0, {"help": "0.5..3.0: derived buy price = ceil(value x mult)."}),
 		_f("sell_mult", "Sell multiplier", "float", 0.5, {"help": "0.0..1.0: sell price = floor(value x mult); 0 = buys nothing."}),
-		_f("buys", "Buys types", "json", ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY", "CONSUMABLE", "MATERIAL"], {"help": "Item types the shop buys (never QUEST)."}),
+		_f("buys", "Buys types", "json", ShopRules.buy_types(), {"help": "Item types the shop buys (every item type but QUEST by default; never QUEST)."}),
 		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; the shop is closed while any fails."}),
 	]
 

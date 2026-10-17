@@ -4,13 +4,16 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Party State (S7): the roster, who is active in a fight, the shared stash.
 # The roster may be larger than PARTY_MAX; only PARTY_MAX members take the field and earn XP.
+# S11 (DLG1-L, save v4): party gold 0..GOLD_MAX from quests, chests, selling and dialogue gifts.
 # ==============================================================================
 
 const PARTY_MAX: int = 4
+const GOLD_MAX: int = 9999999
 
 var members: Array[UnitState] = []
 var active_ids: Array[String] = []     # subset of member ids; empty = the first PARTY_MAX members
 var stash: Dictionary = {}             # item id -> count (>= 1)
+var gold: int = 0                      # a non-whole saved value loads as -1 so validate() refuses it
 
 func member(unit_id: String) -> UnitState:
 	for m: UnitState in members:
@@ -43,11 +46,28 @@ func add_member(m: UnitState) -> void:
 func add_to_stash(item_id: String, count: int = 1) -> void:
 	stash[item_id] = DictUtil.to_int(stash.get(item_id, 0)) + count
 
+# Removes `count` of `item_id`; false (and no change) when fewer are held. A count reaching 0 drops the key.
+func remove_from_stash(item_id: String, count: int = 1) -> bool:
+	var held: int = DictUtil.to_int(stash.get(item_id, 0))
+	if count < 1 or held < count:
+		return false
+	if held == count:
+		stash.erase(item_id)
+	else:
+		stash[item_id] = held - count
+	return true
+
+# Adds gold (clamped to GOLD_MAX); returns the amount actually added.
+func add_gold(amount: int) -> int:
+	var before: int = gold
+	gold = clampi(gold + maxi(amount, 0), 0, GOLD_MAX)
+	return gold - before
+
 func to_dict() -> Dictionary:
 	var rows: Array = []
 	for m: UnitState in members:
 		rows.append(m.to_dict())
-	return {"members": rows, "active_ids": active_ids.duplicate(), "stash": stash.duplicate()}
+	return {"members": rows, "active_ids": active_ids.duplicate(), "stash": stash.duplicate(), "gold": gold}
 
 static func from_dict(d: Dictionary) -> PartyState:
 	var p := PartyState.new()
@@ -55,6 +75,8 @@ static func from_dict(d: Dictionary) -> PartyState:
 		p.members.append(UnitState.from_dict(DictUtil.dict_of(raw)))
 	p.active_ids = JsonUtil.strings(d.get("active_ids", []))
 	p.stash = JsonUtil.ints(d.get("stash", {}))
+	var raw_gold: Variant = JsonUtil.normalize(d.get("gold", 0))
+	p.gold = DictUtil.to_int(raw_gold) if raw_gold is int else -1
 	return p
 
 func equals(other: PartyState) -> bool:
@@ -84,4 +106,6 @@ func validate() -> Array[String]:
 			errors.append("Stash item '%s' does not exist." % str(key))
 		elif DictUtil.to_int(stash[key]) < 1:
 			errors.append("Stash count of '%s' must be >= 1." % str(key))
+	if gold < 0 or gold > GOLD_MAX:
+		errors.append("gold must be 0..%d." % GOLD_MAX)
 	return errors

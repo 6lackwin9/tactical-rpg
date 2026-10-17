@@ -27,6 +27,7 @@ const VERSION: int = 1
 const STATE_KEY: StringName = &"world_catalog_state"
 # Marker key -> the world kind it references (location map markers, EXP1-L).
 const MARKER_REF_KEYS: Dictionary = {"encounter": "encounters", "character": "characters", "lore": "lore", "loot": "loot", "to": "locations"}
+const GONE_FLAGS_NOT_LIST: String = "Gone flags must be a list of {\"key\", \"value\"} conditions."
 
 # ------------------------------------------------------------------------------
 # State & loading
@@ -796,7 +797,7 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 		"characters":
 			errors.append_array(_tuning_errors(e["tuning"], WorldSchema.TUNING_KEYS, "Character"))
 			if not (e["gone_flags"] is Array):
-				errors.append("Gone flags must be a list.")
+				errors.append(GONE_FLAGS_NOT_LIST)
 		"items":
 			errors.append_array(_tuning_errors(e["tuning"], WorldSchema.ITEM_TUNING_KEYS, "Item"))
 		"dialogues":
@@ -1046,7 +1047,10 @@ static func _character_errors(world_id: String, e: Dictionary) -> Array[String]:
 	if str(e.get("base_unit", "")).is_empty():
 		errors.append("Choose the base unit this character plays as.")
 	errors.append_array(_tuning_errors(e["tuning"], WorldSchema.TUNING_KEYS, "Character"))
-	errors.append_array(QuestRules.condition_errors(e.get("gone_flags", []), "Gone flags"))
+	if e.get("gone_flags", []) is Array:
+		errors.append_array(QuestRules.condition_errors(e.get("gone_flags", []), "Gone flags"))
+	else:
+		errors.append(GONE_FLAGS_NOT_LIST)   # one message, the same one blocking_errors shows
 	var slots: Dictionary = {}
 	for ref: String in _strings(e["named_items"]):
 		var named: Dictionary = resolve(world_id, "items", ref)
