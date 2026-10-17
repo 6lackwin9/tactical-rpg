@@ -175,7 +175,7 @@ static func _roster(grid: CombatGrid, rng: RandomNumberGenerator, side: int) -> 
 			if not grid.is_occupied(cell):
 				break
 		var kit: Array[String] = []
-		for id: Variant in (kits[i] as Array):
+		for id: Variant in DictUtil.array_of(kits[i]):
 			kit.append(str(id))
 		out.append(AiSkillsKit.unit("S%dU%d" % [side, i], grid, cell, kit, 1 if i == 0 else 3, 240))
 	return out

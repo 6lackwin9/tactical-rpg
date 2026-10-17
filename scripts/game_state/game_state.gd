@@ -38,6 +38,12 @@ static func create(p_world_id: String, p_party: PartyState) -> GameState:
 	g.party = p_party
 	return g
 
+# Checked cast from a Variant (e.g. a result dict's "state"): the GameState, or null for anything else.
+static func of(v: Variant) -> GameState:
+	if v is GameState:
+		return v
+	return null
+
 # ------------------------------------------------------------------------------
 # Flags
 # ------------------------------------------------------------------------------

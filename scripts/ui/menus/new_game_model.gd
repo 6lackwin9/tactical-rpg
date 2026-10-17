@@ -45,7 +45,7 @@ func _create(world_id: String, p_seed: int) -> Array[String]:
 	var res: Dictionary = NewGame.create_for_world(world_id, p_seed)
 	var errors: Array[String] = []
 	errors.assign(DictUtil.array_of(res["errors"]))
-	var gs: GameState = res["state"] as GameState
+	var gs: GameState = GameState.of(res["state"])
 	if gs == null:
 		return errors
 	CurrentGame.start(gs)

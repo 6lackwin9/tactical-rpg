@@ -59,7 +59,7 @@ static func load_slot(p_router: MenuRouter, slot: int) -> Array[String]:
 	var res: Dictionary = SaveGame.read(slot)
 	var errors: Array[String] = []
 	errors.assign(DictUtil.array_of(res["errors"]))
-	var gs: GameState = res["state"] as GameState
+	var gs: GameState = GameState.of(res["state"])
 	if not DictUtil.to_bool(res["ok"]) or gs == null:
 		if errors.is_empty():
 			errors.append("Slot %d can't be loaded." % slot)

@@ -64,7 +64,7 @@ static func _party_unit() -> String:
 static func _fresh(world: String = RUN) -> GameState:
 	var uid: String = str(_fx["unit"])
 	var res: Dictionary = NewGame.create(world, [uid, uid] as Array[String])
-	return res["state"] as GameState
+	return GameState.of(res["state"])
 
 static func _step_flag(text: String, key: String) -> Dictionary:
 	return {"text": text, "flag": key}
@@ -517,7 +517,7 @@ static func _test_save() -> bool:
 	checks["every stored state present"] = states.has("active") and states.has("ready") and states.has("completed")
 	checks["write"] = SaveGame.write(gs, 1).is_empty()
 	var back: Dictionary = SaveGame.read(1)
-	var state: GameState = back["state"] as GameState
+	var state: GameState = GameState.of(back["state"])
 	checks["round trip equal"] = DictUtil.to_bool(back["ok"]) and state != null and state.equals(gs)
 	checks["statuses round trip"] = state != null and QuestRunner.status(state, "q_strict") == "active" and QuestRunner.status(state, "q_flags") == "ready" and QuestRunner.status(state, "q_flow") == "completed"
 	var env: Dictionary = DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(1))))
@@ -549,7 +549,7 @@ static func _test_save() -> bool:
 	f.store_string(v1_text)
 	f.close()
 	var migrated: Dictionary = SaveGame.read(3)
-	var m_state: GameState = migrated["state"] as GameState
+	var m_state: GameState = GameState.of(migrated["state"])
 	var warnings: Array[String] = JsonUtil.strings(migrated["warnings"])
 	checks["v1 migrates"] = DictUtil.to_bool(migrated["ok"]) and m_state != null
 	checks["good entry kept (float objective normalised)"] = m_state != null and m_state.quests.has(_q("q_strict")) and DictUtil.dict_of(m_state.quests[_q("q_strict")])["objective"] is int
@@ -572,7 +572,7 @@ static func _test_save() -> bool:
 	checks["check warns (unknown qid, index, loot)"] = found.size() == 3 and _snapshot(odd) == snap
 	checks["check clean state"] = QuestRunner.check(gs).is_empty()
 	# Re-saving a loaded save is byte-stable (saved_at aside).
-	var loaded: GameState = SaveGame.read(1)["state"] as GameState
+	var loaded: GameState = GameState.of(SaveGame.read(1)["state"])
 	checks["re-save byte-stable"] = loaded != null and SaveGame.write(loaded, 0).is_empty() and _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(0))) == _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(1)))
 	# Chain: built-in 1 -> 2, then a custom 2 -> 3.
 	SaveMigrations.register(2, func(s: Dictionary) -> Dictionary:

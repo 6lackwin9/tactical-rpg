@@ -178,7 +178,7 @@ static func _advance(gs: GameState, qid: String) -> void:
 	var stored: Dictionary = _stored(gs, qid)
 	gs.quests[qid] = {"state": "active", "objective": DictUtil.to_int(stored.get("objective", 0)) + 1}
 
-# Error text as GameState.set_flag ("" = set, then refresh).
+# Error text matches GameState.set_flag ("" = set, then refresh).
 static func set_flag(gs: GameState, key: String, value: Variant) -> String:
 	var err: String = gs.set_flag(key, value)
 	if err.is_empty():

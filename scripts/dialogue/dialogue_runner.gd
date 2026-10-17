@@ -5,7 +5,7 @@ extends RefCounted
 # Tactical RPG - Dialogue Runner (S11, spec DLG1-L 2.2-2.4): one conversation with one world character.
 # One instance per conversation, never saved. open() picks the character's tree (`dialogue`; "" = a generated root
 # with the `greeting` line and the service choices only). Showing a node runs its effects (every time it is shown),
-# except the return to the node a shop was opened from (user decision 2026-10-17, "DLG1 open items").
+# except the return to the node a shop was opened from (world-campaign.md "DLG1 shop return (user 2026-10-17)").
 # Visible choices: authored ones whose requires hold and unless don't; failing ones with show_locked appear locked;
 # the rest are hidden; then, on the start node with services on, the generated service choices in order: quest offers
 # (resolved giver = this character, status available), turn-ins (effective turn-in = this character, status ready),

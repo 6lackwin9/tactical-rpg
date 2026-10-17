@@ -9,8 +9,11 @@ func _init() -> void:
 	errors.append_array(WorldCatalog.manifest_errors("ashlands"))
 	errors.append_array(WorldCatalog.manifest_errors("tidewrack"))
 	if errors.is_empty():
-		print("save_world ", WorldCatalog.save_world("ashlands"))
+		var err: Error = WorldCatalog.save_world("ashlands")
+		print("save_world ", err)
+		if err != OK:
+			errors.append("save_world failed: %s" % error_string(err))
 		print("start_party tidewrack ", WorldCatalog.start_party("tidewrack"), " playable ", NewGame.playable_worlds())
-	else:
+	if not errors.is_empty():
 		print("ERROR ", errors)
 	quit(1 if not errors.is_empty() else 0)

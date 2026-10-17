@@ -104,8 +104,7 @@ static func _test_key_lists() -> bool:
 	for fam: String in AssetRegistry.skill_family_ids():
 		family_ok = family_ok and AssetRegistry.has_key("skill", fam)
 	c["every skill family is a skill key"] = family_ok
-	ContentCatalog.reload_from_disk()
-	c["content reload drops the skill family cache"] = AssetRegistry._family_stamp.is_empty() and AssetRegistry.skill_family_ids() == AssetRegistry._family_list
+	_check_family_reload(c)
 	var items_ok: bool = true
 	for key: String in ItemArt.UNIQUE_ICONS.keys():
 		items_ok = items_ok and AssetRegistry.has_key("item", key)
@@ -119,6 +118,31 @@ static func _test_key_lists() -> bool:
 	c["world art_inherit options == '' + keys(unit)"] = WorldSchema.options_of({"options_from": "art_inherit"}) == inherit
 	c["default sizes"] = AssetRegistry.default_size("unit", "token") == AssetRegistry.TOKEN_INNER.size and AssetRegistry.default_size("tile", "v3") == AssetRegistry.default_size("tile", "v0") and AssetRegistry.default_size("ui", "icon") == Vector2i.ZERO
 	return _report("Key lists, option lists and default sizes read the registry", c)
+
+# A content reload (same root) drops the skill family cache: a planted stale entry is gone after the reload, the
+# rebuilt list equals a fresh computation from the catalog, and a second reload empties and re-sets the stamp again.
+static func _check_family_reload(c: Dictionary) -> void:
+	var before: Array[String] = AssetRegistry.skill_family_ids()
+	AssetRegistry._family_list.append("__stale_family__")   # a stale cache would keep this
+	ContentCatalog.reload_from_disk()
+	var cleared: bool = AssetRegistry._family_stamp.is_empty()
+	var rebuilt: Array[String] = AssetRegistry.skill_family_ids()
+	c["content reload drops the skill family cache (stamp cleared)"] = cleared
+	c["rebuilt family list == fresh catalog heads == list before"] = rebuilt == _catalog_families() and rebuilt == before and not rebuilt.has("__stale_family__")
+	var stamped: bool = not AssetRegistry._family_stamp.is_empty()
+	ContentCatalog.reload_from_disk()
+	var cleared_again: bool = AssetRegistry._family_stamp.is_empty()
+	var again: Array[String] = AssetRegistry.skill_family_ids()
+	c["second reload, same root: cache cleared then rebuilt (stamp set again)"] = stamped and cleared_again and not AssetRegistry._family_stamp.is_empty() and again == _catalog_families()
+
+# Skill family heads computed straight from the catalog rows (file order, first occurrence).
+static func _catalog_families() -> Array[String]:
+	var out: Array[String] = []
+	for row: Dictionary in ContentCatalog.entries("skills"):
+		var head: String = SkillRanks.head_of(row)
+		if not out.has(head):
+			out.append(head)
+	return out
 
 static func _sorted(list: Array[String]) -> Array[String]:
 	var out: Array[String] = list.duplicate()

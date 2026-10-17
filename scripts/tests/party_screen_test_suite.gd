@@ -44,7 +44,7 @@ static func run() -> bool:
 # A new Ashlands game (four active members) plus a benched level-5 copy of the first member, as CurrentGame.
 static func _fresh() -> bool:
 	var res: Dictionary = NewGame.create_for_world("ashlands", 11)
-	var gs: GameState = res["state"] as GameState
+	var gs: GameState = GameState.of(res["state"])
 	if gs == null or gs.party.members.size() != PartyState.PARTY_MAX:
 		return _report("Fixture game", {"ashlands start party": false})
 	gs.party.add_member(UnitState.at_level(gs.party.members[0].base_unit, 5, BENCH))

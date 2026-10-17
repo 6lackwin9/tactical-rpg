@@ -7,6 +7,8 @@ extends RefCounted
 # 0..5 / autosave / peek / newest_slot, CurrentGame, SettingsFile. Part B (models): router, main menu, new game, save
 # slots, settings and hub models. Fixtures: hand-built worlds in an EMPTY sandbox world root, saves and the settings
 # file in the sandbox; the shipped catalog is only read (units picked by rule), shipped data is never written.
+# Ownership: the logic lane owns every test here, including _test_shipped_start (added by the asset task UI1-A; asset
+# tasks propose tests, logic tasks write them).
 # ==============================================================================
 
 const TAG: String = "Menus"
@@ -65,11 +67,11 @@ static func run(tree_parent: Node = null) -> bool:
 	TestHelpers.cleanup_worlds(SANDBOX)
 	return ok
 
-# UI1-A: the shipped campaign world starts with its fixed party; a child inherits it; a world without one is refused.
+# UI1-A (logic lane owns this test): the shipped campaign world starts with its fixed party; a child inherits it; a world without one is refused.
 static func _test_shipped_start() -> bool:
 	var checks: Dictionary = {}
 	var res: Dictionary = NewGame.create_for_world("ashlands")
-	var gs: GameState = res["state"] as GameState
+	var gs: GameState = GameState.of(res["state"])
 	var levels_ok: bool = gs != null and gs.party.members.size() == 4
 	if gs != null:
 		for m: UnitState in gs.party.members:
@@ -126,7 +128,7 @@ static func _test_start_party(units: Array[String]) -> bool:
 static func _test_create_for_world(units: Array[String]) -> bool:
 	var checks: Dictionary = {}
 	var res: Dictionary = NewGame.create_for_world(KID, 5)
-	var gs: GameState = res["state"] as GameState
+	var gs: GameState = GameState.of(res["state"])
 	checks["state valid"] = gs != null and gs.validate().is_empty() and gs.world_id == KID
 	if gs != null:
 		var ids: Array[String] = []
@@ -145,7 +147,7 @@ static func _test_create_for_world(units: Array[String]) -> bool:
 	return _report("Check 2: NewGame.create_for_world", checks)
 
 static func _new_state() -> GameState:
-	return NewGame.create_for_world(BASE, 3)["state"] as GameState
+	return GameState.of(NewGame.create_for_world(BASE, 3)["state"])
 
 static func _write_raw(slot: int, text: String) -> void:
 	DirAccess.make_dir_recursive_absolute(SaveGame.base_dir())
@@ -165,11 +167,11 @@ static func _test_slots() -> bool:
 	checks["slot 6 refused"] = SaveGame.write(gs, 6) == ["Save slot must be 0-5."]
 	checks["slot -1 refused"] = SaveGame.write(gs, -1) == ["Save slot must be 0-5."]
 	checks["autosave writes slot 0"] = SaveGame.autosave(gs).is_empty() and SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
-	var back: GameState = SaveGame.read(0)["state"] as GameState
+	var back: GameState = GameState.of(SaveGame.read(0)["state"])
 	checks["slot 0 reads back equal"] = back != null and back.equals(gs)
 	for slot: int in [4, 5]:
 		var written: bool = SaveGame.write(gs, slot).is_empty()
-		var round_trip: GameState = SaveGame.read(slot)["state"] as GameState
+		var round_trip: GameState = GameState.of(SaveGame.read(slot)["state"])
 		checks["slot %d round trip" % slot] = written and round_trip != null and round_trip.equals(gs) and JsonUtil.deep_equal(round_trip.to_dict(), gs.to_dict())
 	checks["constants"] = SaveGame.AUTOSAVE_SLOT == 0 and SaveGame.MANUAL_SLOTS == [1, 2, 3, 4, 5]
 	return _report("Check 3: save slots 0-5 and autosave", checks)
@@ -213,7 +215,7 @@ static func _test_peek() -> bool:
 # World, location (unless `local_location`: v2 keeps it local, read qualifies it) and party levels of peek equal read.
 static func _peek_matches(slot: int, local_location: bool = false) -> bool:
 	var head: Dictionary = SaveGame.peek(slot)
-	var gs: GameState = SaveGame.read(slot)["state"] as GameState
+	var gs: GameState = GameState.of(SaveGame.read(slot)["state"])
 	if gs == null or not DictUtil.to_bool(head["ok"]):
 		return false
 	var ok: bool = str(head["world_id"]) == gs.world_id
@@ -414,7 +416,7 @@ static func _test_new_game_model() -> bool:
 	checks["no autosave: no question"] = not r.is_asking() and not SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
 	checks["choose"] = m.choose(BASE, 11).is_empty() and not r.is_asking()
 	checks["current game set"] = CurrentGame.has_game() and CurrentGame.state().world_id == BASE and not CurrentGame.is_dirty()
-	var back: GameState = SaveGame.read(SaveGame.AUTOSAVE_SLOT)["state"] as GameState
+	var back: GameState = GameState.of(SaveGame.read(SaveGame.AUTOSAVE_SLOT)["state"])
 	checks["slot 0 written"] = back != null and back.equals(CurrentGame.state()) and CurrentGame.slot() == 0
 	checks["hub on top"] = r.stack == [MenuRouter.HUB] and p.started == 1
 	# Q1: a readable autosave is asked about first

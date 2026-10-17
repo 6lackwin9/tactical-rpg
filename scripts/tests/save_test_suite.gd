@@ -55,7 +55,7 @@ static func _party_unit() -> String:
 static func _rich_state() -> GameState:
 	var uid: String = _party_unit()
 	var res: Dictionary = NewGame.create(_world(), [uid, uid] as Array[String])
-	var g: GameState = res["state"] as GameState
+	var g: GameState = GameState.of(res["state"])
 	var m: UnitState = g.party.members[0]
 	m.total_xp = XpCurve.xp_for_level(4) + 7
 	LevelUp.confirm(m, {"STR": 1, "KNOW": 2})
@@ -103,7 +103,7 @@ static func _test_game_state() -> bool:
 static func _test_new_game() -> bool:
 	var uid: String = _party_unit()
 	var good: Dictionary = NewGame.create(_world(), [uid, uid] as Array[String])
-	var state: GameState = good["state"] as GameState
+	var state: GameState = GameState.of(good["state"])
 	var checks: Dictionary = {"valid_input": state != null and DictUtil.array_of(good["errors"]).is_empty() and state.validate().is_empty()}
 	if state != null:
 		var entry: Dictionary = ContentCatalog.get_entry("units", uid)
@@ -129,17 +129,17 @@ static func _test_write_read() -> bool:
 	checks["inside_sandbox"] = SaveGame.path_for(1).begins_with(SANDBOX)
 	var res: Dictionary = SaveGame.read(1)
 	checks["read_ok"] = DictUtil.to_bool(res["ok"]) and res["state"] != null
-	var back: GameState = res["state"] as GameState
+	var back: GameState = GameState.of(res["state"])
 	checks["equal_after_read"] = back != null and back.equals(g)
 	g.party.members[0].total_xp += 5
 	checks["overwrite_ok"] = SaveGame.write(g, 1).is_empty() and not FileAccess.file_exists(SaveGame.path_for(1) + ".tmp")
-	var back2: GameState = SaveGame.read(1)["state"] as GameState
+	var back2: GameState = GameState.of(SaveGame.read(1)["state"])
 	checks["overwrite_visible"] = back2 != null and back2.equals(g)
 	# Refuse invalid states without touching the existing file.
 	var broken: GameState = _rich_state()
 	broken.party.members[0].base_unit = "no_such_unit_xyz"
 	checks["invalid_refused"] = not SaveGame.write(broken, 1).is_empty()
-	var still: GameState = SaveGame.read(1)["state"] as GameState
+	var still: GameState = GameState.of(SaveGame.read(1)["state"])
 	checks["invalid_keeps_old_file"] = still != null and still.equals(g)
 	var dup: GameState = _rich_state()
 	dup.party.members[1].id = dup.party.members[0].id
@@ -196,7 +196,8 @@ static func _test_bad_files() -> bool:
 		"wrong_format": not DictUtil.to_bool(wrong_format["ok"]) and wrong_format["state"] == null,
 		"newer_version": not DictUtil.to_bool(newer["ok"]) and newer["state"] == null and _joined(newer["errors"]).contains("newer version"),
 		"invalid_state_rejected": not DictUtil.to_bool(empty_party["ok"]) and empty_party["state"] == null,
-		"unknown_key_dropped_with_warning": DictUtil.to_bool(extra["ok"]) and not DictUtil.array_of(extra["warnings"]).is_empty() and (extra["state"] as GameState).equals(g),
+		"unknown_key_dropped_with_warning": DictUtil.to_bool(extra["ok"]) and not DictUtil.array_of(extra["warnings"]).is_empty() and GameState.of(extra["state"]).equals(g),
+		"GameState.of: null for null / int / Dictionary, a GameState returns itself": GameState.of(null) == null and GameState.of(42) == null and GameState.of({}) == null and GameState.of(g) == g,
 	}
 	return TestHelpers.report(TAG, "corrupt, newer, unknown keys", checks)
 

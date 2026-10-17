@@ -757,7 +757,7 @@ static func _build_runtime(rx: Dictionary) -> bool:
 
 # A new game in R with both units; only the low-KNOW one active (the other is benched).
 static func _gs() -> GameState:
-	var gs: GameState = NewGame.create(R, [str(_rx["lo"]), str(_rx["hi"])] as Array[String], 7)["state"] as GameState
+	var gs: GameState = GameState.of(NewGame.create(R, [str(_rx["lo"]), str(_rx["hi"])] as Array[String], 7)["state"])
 	gs.party.active_ids = [str(_rx["lo"])] as Array[String]
 	return gs
 
@@ -1061,10 +1061,10 @@ static func _test_gold() -> bool:
 	var checks: Dictionary = {}
 	var gs: GameState = _gs()
 	checks["NewGame uses start_gold"] = gs.party.gold == START_GOLD and DialogueRules.start_gold(R) == START_GOLD
-	var kid: GameState = NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"] as GameState
+	var kid: GameState = GameState.of(NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"])
 	checks["NewGame inherits start_gold"] = kid != null and kid.party.gold == START_GOLD
 	var _m: Array[String] = WorldCatalog.update_manifest(KID, {"start_gold": 0})
-	var kid0: GameState = NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"] as GameState
+	var kid0: GameState = GameState.of(NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"])
 	checks["a child's own start_gold wins"] = kid0 != null and kid0.party.gold == 0
 	var _m2: Array[String] = WorldCatalog.update_manifest(KID, {"start_gold": -1})
 	var entered: Dictionary = ExploreRunner.enter(gs, "yard")
@@ -1126,10 +1126,10 @@ static func _test_save_v4() -> bool:
 	DictUtil.dict_of(v3["party"]).erase("gold")
 	_write_raw(1, JSON.stringify({"format": SaveGame.FORMAT, "version": 3, "saved_at": 0, "game_state": v3}))
 	var read: Dictionary = SaveGame.read(1)
-	var st: GameState = read["state"] as GameState
+	var st: GameState = GameState.of(read["state"])
 	checks["v3 migrates to gold 0 and shops {}"] = DictUtil.to_bool(read["ok"]) and st != null and st.party.gold == 0 and st.shops.is_empty() and JsonUtil.strings(read["warnings"]).is_empty()
 	var written: bool = SaveGame.write(gs, 2).is_empty()
-	var back: GameState = SaveGame.read(2)["state"] as GameState
+	var back: GameState = GameState.of(SaveGame.read(2)["state"])
 	checks["v4 round trip"] = written and back != null and back.equals(gs) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(2))))["version"]) == SaveGame.VERSION and SaveGame.VERSION == 4
 	var negative: GameState = GameState.from_dict(gs.to_dict())
 	negative.party.gold = -1
@@ -1144,7 +1144,7 @@ static func _test_save_v4() -> bool:
 	raw_shops["shops"] = [1]
 	var not_object: GameState = GameState.from_dict(raw_shops)
 	for pair: Array in [["negative gold", negative], ["sold count 0", zero], ["unqualified shop id", bad_qid], ["gold not whole", not_whole], ["shops not an object", not_object]]:
-		var g: GameState = pair[1] as GameState
+		var g: GameState = GameState.of(pair[1])
 		checks["%s fails validate and write" % str(pair[0])] = not g.validate().is_empty() and not SaveGame.write(g, 3).is_empty()
 	checks["nothing written for refusals"] = not SaveGame.exists(3)
 	return _report("Check 20: save v4 (v3 migrates; bad gold / shops fail validate and write)", checks)

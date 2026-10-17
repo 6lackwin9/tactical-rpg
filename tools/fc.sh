@@ -18,7 +18,7 @@
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   balance simulation (tools/balance_sim.gd, BAL2_SIM.md;
 #        timeout ${SIM_TIMEOUT:-900} s; script errors are shown)
 #     modes: duel [level] | tier [level] | levels | group [level] | stats [level|all] | party [level] | role [level] | sweep [level]
-#     keys:  cap=1..30 (10)  smart_skills=on|off  loadout=default|newest|role  spend=class|cons|primary|mixed|all
+#     keys:  cap=1..30 (10)  loadout=default|newest|role  spend=class|cons|primary|mixed|all
 #            preset=<PlanPresets id>|both  distance=default|2..6 (role: 4)  score=both|hp|binary  quick  metrics=on|off  band=lo-hi (30-70)
 #            comp=c1,..(<=4)  enc=<ids>|generated|all  elevel=+n|-n|catalog  elite=<class>  boss=<class>
 #            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>

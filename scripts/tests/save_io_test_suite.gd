@@ -22,8 +22,8 @@ static func run() -> bool:
 	TestHelpers.remove_sandbox(SANDBOX)
 	DirAccess.make_dir_recursive_absolute(SANDBOX + "/files")
 	SaveGame.set_base_dir(SANDBOX + "/saves")
-	var ash: GameState = NewGame.create_for_world("ashlands", 3)["state"] as GameState
-	var tide: GameState = NewGame.create_for_world("tidewrack", 4)["state"] as GameState
+	var ash: GameState = GameState.of(NewGame.create_for_world("ashlands", 3)["state"])
+	var tide: GameState = GameState.of(NewGame.create_for_world("tidewrack", 4)["state"])
 	var ok: bool = _report("Fixtures", {"sandboxed": SaveGame.base_dir().begins_with("user://"), "two worlds": ash != null and tide != null})
 	if ok:
 		ok = _test_export(ash) and ok
@@ -60,7 +60,7 @@ static func _test_import(ash: GameState, tide: GameState) -> bool:
 	var res: Dictionary = SaveGame.import_from(tide_file, 5)
 	var back: Dictionary = SaveGame.read(5)
 	checks["imported"] = DictUtil.to_bool(res["ok"]) and DictUtil.to_bool(back["ok"])
-	checks["same state"] = DictUtil.to_bool(back["ok"]) and JsonUtil.deep_equal((back["state"] as GameState).to_dict(), tide.to_dict())
+	checks["same state"] = DictUtil.to_bool(back["ok"]) and JsonUtil.deep_equal(GameState.of(back["state"]).to_dict(), tide.to_dict())
 	checks["other world kept"] = str(SaveGame.peek(5)["world_id"]) == "tidewrack"
 	checks["save time kept"] = DictUtil.to_int(SaveGame.peek(5)["saved_at"]) == old_at
 	# the autosave written after the export stays the newest save (Continue resumes it)

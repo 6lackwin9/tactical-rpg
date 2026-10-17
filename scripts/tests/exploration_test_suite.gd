@@ -437,6 +437,12 @@ const D: Vector2i = Vector2i(0, 1)
 static func _q(local: String, world: String = RUN) -> String:
 	return WorldCatalog.qid(world, local)
 
+# Checked cast of a result dict's "encounter" (null when it is not a GameEncounter).
+static func _encounter_of(v: Variant) -> GameEncounter:
+	if v is GameEncounter:
+		return v
+	return null
+
 # 12 x 10: walls round the edge except an open edge tile (0, 4); x 1..3 SAFE (no zone), x 4..7 `wilds` (DANGER,
 # bound by default), x 8..10 `fen` (DANGER, never bound).
 static func _run_map(id: String = "m_run", danger_everywhere: bool = false) -> Dictionary:
@@ -535,7 +541,7 @@ static func _build_runtime() -> bool:
 
 static func _new_gs(world: String = RUN) -> GameState:
 	var res: Dictionary = NewGame.create(world, [str(_rx["party"]), str(_rx["party"])] as Array[String], SEED)
-	return res["state"] as GameState
+	return GameState.of(res["state"])
 
 # A fresh state standing in RUN's field at (x, y) (entered at spawn first: hooks ran, last_safe = field).
 static func _in_field(x: int = 1, y: int = 1, world: String = RUN) -> GameState:
@@ -699,7 +705,7 @@ static func _test_determinism() -> bool:
 	var a: GameState = GameState.from_dict(base.to_dict())
 	var b: GameState = GameState.from_dict(base.to_dict())
 	checks["save the start"] = SaveGame.write(base, 1).is_empty()
-	var loaded: GameState = SaveGame.read(1)["state"] as GameState
+	var loaded: GameState = GameState.of(SaveGame.read(1)["state"])
 	var rolls_before: int = _rolls(a)
 	var run_a: Dictionary = _play(a, dirs)
 	var run_b: Dictionary = _play(b, dirs)
@@ -983,7 +989,7 @@ static func _test_bridge() -> bool:
 	checks["won: XpCurve.encounter_xp to each active member"] = DictUtil.to_bool(won["ok"]) and xp_ok
 	checks["won: the win_encounter quest advances"] = QuestRunner.status(gs, "q_win") == "ready" and DictUtil.array_of(won["advanced"]).has(_q("q_win"))
 	var made: Dictionary = BattleBridge.encounter_for(gs, _q("enc_a"))
-	var enc: GameEncounter = made["encounter"] as GameEncounter
+	var enc: GameEncounter = _encounter_of(made["encounter"])
 	var session: CombatSession = null
 	if enc != null:
 		session = CombatSession.new(enc)
@@ -993,7 +999,7 @@ static func _test_bridge() -> bool:
 		for c: Combatant in session.allies:
 			names_ok = names_ok and c.name != "Hero XR"
 	checks["encounter_for: exactly the active members as allies"] = session != null and session.allies.size() == gs.party.active_members().size() and names_ok and not session.enemies.is_empty()
-	var zoned: GameEncounter = BattleBridge.encounter_for(gs, _q("enc_a"), "forest")["encounter"] as GameEncounter
+	var zoned: GameEncounter = _encounter_of(BattleBridge.encounter_for(gs, _q("enc_a"), "forest")["encounter"])
 	checks["zone override"] = zoned != null and zoned.zone_id == "forest"
 	if session != null:
 		checks["live battle: no outcome yet"] = BattleBridge.outcome(session) == ""
@@ -1047,7 +1053,7 @@ static func _lossless_v2() -> bool:
 	var ok: bool = not DictUtil.dict_of(v2["quests"]).is_empty() and DictUtil.dict_of(v2["flags"]).size() >= 3
 	_write_raw(6, JSON.stringify({"format": SaveGame.FORMAT, "version": 2, "saved_at": 0, "game_state": v2}))
 	var res: Dictionary = SaveGame.read(6)
-	var st: GameState = res["state"] as GameState
+	var st: GameState = GameState.of(res["state"])
 	if st == null:
 		return false
 	ok = ok and JsonUtil.strings(res["warnings"]).is_empty()
@@ -1058,7 +1064,7 @@ static func _lossless_v2() -> bool:
 		else:
 			ok = ok and JsonUtil.deep_equal(now[key], v2[key])
 	ok = ok and SaveGame.write(st, 1).is_empty()
-	var again: GameState = SaveGame.read(1)["state"] as GameState
+	var again: GameState = GameState.of(SaveGame.read(1)["state"])
 	ok = ok and again != null and SaveGame.write(again, 2).is_empty()
 	return ok and _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(1))) == _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(2)))
 
@@ -1073,8 +1079,8 @@ static func _test_save_v3() -> bool:
 	_write_raw(3, text)
 	var one: Dictionary = SaveGame.read(3)
 	var two: Dictionary = SaveGame.read(3)
-	var s1: GameState = one["state"] as GameState
-	var s2: GameState = two["state"] as GameState
+	var s1: GameState = GameState.of(one["state"])
+	var s2: GameState = GameState.of(two["state"])
 	checks["v2 migrates"] = DictUtil.to_bool(one["ok"]) and s1 != null and JsonUtil.strings(one["warnings"]).is_empty()
 	checks["defaults added"] = s1 != null and s1.position == GameState.NO_POSITION and JsonUtil.deep_equal(s1.explore, GameState.default_explore()) and s1.rolls.is_empty()
 	checks["local location_id qualified"] = s1 != null and s1.location_id == _q("field")
@@ -1082,7 +1088,7 @@ static func _test_save_v3() -> bool:
 	v2["location_id"] = "nowhere"
 	_write_raw(3, JSON.stringify({"format": SaveGame.FORMAT, "version": 2, "saved_at": 0, "game_state": v2}))
 	var lost_read: Dictionary = SaveGame.read(3)
-	var lost_loc: GameState = lost_read["state"] as GameState
+	var lost_loc: GameState = GameState.of(lost_read["state"])
 	checks["unresolved location_id becomes '' with a warning"] = lost_loc != null and lost_loc.location_id.is_empty() and JsonUtil.strings(lost_read["warnings"]) == ["cleared unresolved location_id 'nowhere'"]
 	checks["lossless v2 -> v3 (flags, quests, loot_claimed)"] = _lossless_v2()
 	var bad_pos: GameState = GameState.from_dict(gs.to_dict())
@@ -1097,13 +1103,13 @@ static func _test_save_v3() -> bool:
 	raw_pos["position"] = ["a", 1]
 	var _gone: bool = SaveGame.delete(2)   # slots are 0..3 (UI1-L): the refusals below write slot 2
 	for pair: Array in [["bad position", bad_pos], ["explore with an extra key", bad_explore], ["negative rolls", bad_rolls], ["next_at 0", bad_next], ["position not ints", GameState.from_dict(raw_pos)]]:
-		var g: GameState = pair[1] as GameState
+		var g: GameState = GameState.of(pair[1])
 		checks["%s fails validate and write" % str(pair[0])] = not g.validate().is_empty() and not SaveGame.write(g, 2).is_empty()
 	checks["nothing written for refusals"] = not SaveGame.exists(2)
 	var walked: GameState = _in_field(5, 2)
 	walked.rolls[GameRolls.EXPLORE] = 3
 	var written: bool = SaveGame.write(walked, 1).is_empty()
-	var back: GameState = SaveGame.read(1)["state"] as GameState
+	var back: GameState = GameState.of(SaveGame.read(1)["state"])
 	checks["v3 round trip"] = written and back != null and back.equals(walked) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(1))))["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 3   # 4 since DLG1-L
 	var blank: GameState = _new_gs()
 	var resumed: Dictionary = ExploreRunner.resume(blank)
@@ -1112,7 +1118,7 @@ static func _test_save_v3() -> bool:
 	var res: Dictionary = ExploreRunner.resume(wall)
 	checks["resume fixes a position on a wall to spawn"] = DictUtil.to_bool(res["ok"]) and wall.position == Vector2i(1, 1) and _count(_events(res), "autosave") == 0
 	checks["NewGame seed used as given"] = _new_gs().rng_seed == SEED
-	var clock: GameState = NewGame.create(RUN, [str(_rx["party"])] as Array[String])["state"] as GameState
+	var clock: GameState = GameState.of(NewGame.create(RUN, [str(_rx["party"])] as Array[String])["state"])
 	checks["NewGame clock seed in range"] = clock != null and clock.rng_seed >= 0 and clock.rng_seed <= GameState.SEED_MAX and clock.validate().is_empty()
 	return _report("Check 20: save v3 (v2 migration, qualified location, stable seed, validation, resume)", checks)
 

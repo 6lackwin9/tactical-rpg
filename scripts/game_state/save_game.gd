@@ -201,7 +201,7 @@ static func import_from(path: String, slot: int) -> Dictionary:
 		out["errors"] = errors
 		return out
 	var stamp: int = mini(DictUtil.to_int(res["saved_at"]), int(Time.get_unix_time_from_system()))
-	errors = write(res["state"] as GameState, slot, stamp)
+	errors = write(GameState.of(res["state"]), slot, stamp)
 	out["errors"] = errors
 	out["ok"] = errors.is_empty()
 	return out
