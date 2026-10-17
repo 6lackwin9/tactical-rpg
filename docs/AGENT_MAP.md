@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### S12S-A status carriers (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | Five status families on class paths at level 6 (seed s12s.gd); loadouts, tier gates and duel/role sims unchanged | n/a / 30 | merged via PR |
+
 ### UI1-L menus and save slots (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |

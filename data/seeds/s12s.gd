@@ -19,7 +19,6 @@ func _init() -> void:
 	quit()
 
 func _skill(entry: Dictionary) -> void:
-	entry["origin"] = ContentSchema.ORIGIN_USER
 	errs.append_array(ContentCatalog.upsert_skill(entry))
 
 func _skills() -> void:
