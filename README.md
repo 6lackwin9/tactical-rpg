@@ -139,10 +139,12 @@ tactical-rpg/
 │   │   ├── dojo_breakdown.gd         # DamageCalculator result -> step-by-step BBCode explanation
 │   │   ├── dojo_log_entry.gd         # ActionLogEntry subclass carrying a math breakdown
 │   │   └── dojo_stat_defs.gd         # Display metadata (names, roles, colors) for the 6 core stats
+│   ├── playtest/                 # Playtest recordings (debug): record schema, plan codec, outcome, fingerprint, recorder, replayer, sweep, store, trail report, logger hook
 │   ├── tests/                    # Headless test suites & validation harnesses
 │   │   ├── core_rules_test_suite.gd  # Core combat rules via the planner: guard & matchup, stances, Focus, casualties, withdrawal, feed
 │   │   ├── class_rules_test_suite.gd # Six classes: budget/growth, spend variance, tiers, proficiency, passives, skill paths
 │   │   ├── content_test_suite.gd     # Catalog parity, round trips, validation, authoring, full-engine battle, Forge UI
+│   │   ├── playtest_test_suite.gd    # Playtest recordings: codec, round trip, redo, divergence, staleness, take-over, variant, sweep, trail report
 │   │   ├── runner_test_suite.gd      # Scene Runner: scene list, launch/restart/menu, unsaved-work guard, hot reload
 │   │   └── world_test_suite.gd       # Worlds: shipped data, inheritance, same-base/different-lore parity, tuning, renames, connections, Forge UI, runner
 │   └── ui/                       # View layer, docks, components & full-screen modals
@@ -201,6 +203,7 @@ tactical-rpg/
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       ├── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
 │       └── character_equipment_modal.gd # Party & Stash screen: 3 columns (party viewer, gear loadout, party stash) sharing one DojoSession
+├── playtests/                    # Shared playtest files: inbox/ (user recordings), repro/ (agent repros), scenarios/ (one seed each); see README.md
 ├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
 └── run.bat                       # Opens the Scene Runner (every scene, hot reload, test suites)
@@ -553,6 +556,10 @@ Runs in 4 phases:
 - `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
 
 Godot is found through the `GODOT` environment variable, then `godot` or `godot4` on PATH, then `C:\Program Files\Godot\godot.exe`. The script runs on Windows PowerShell 5.1 and on PowerShell 7 (`pwsh`) on Linux or macOS. `tools/fc.sh gate` runs the same steps as `-Fast -Quiet` in bash, so a Linux machine or cloud container only needs a Godot 4.7 binary.
+
+### Playtest recordings and replay (PLAYTEST1-L commit 1)
+
+In debug builds, battles can be recorded as versioned JSON in `user://playtests/<id>.json`. A recording holds the encounter, the seed, a content fingerprint, the confirmed plans and RNG state per round, the outcome per round, a UI trail (scenes, panels, modals, buttons, keys, clicks, hovers, plan edits, engine errors, asset fallbacks) and F8 notes. `tools/fc.sh replay <file|id>` replays a recording headlessly (exit 0 match, 1 divergence or broken plan, 2 invalid) and supports `--variant`/`--then`/`--write`, `--seeds`/`--fallback` and `--trail-report` (dead clicks, repeat clicks, long hovers, refused confirms, errors, undo churn, UI open/close problems, leaks, asset fallbacks). `CombatSession` emits `round_started`, `round_confirmed`, `round_concluded`, `round_reset` and `plan_edited`; `AssetRegistry.resolve_observer` is a playtest-only hook. The folder layout and the one-scenario rule are in `playtests/README.md`. Tested in `playtest_test_suite.gd`.
 
 ---
 

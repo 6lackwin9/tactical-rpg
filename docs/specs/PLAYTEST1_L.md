@@ -74,7 +74,7 @@ All JSON is written with `JSON.stringify(data, "  ", true)` through `JsonUtil` (
 | `key` | `key` (`OS.get_keycode_string`), `mods` | key presses, skipped while a `LineEdit` / `TextEdit` has focus |
 | `hover` | `ctl`, `ms` | `Viewport.gui_get_hovered_control()` polled every 100 ms; logged on leave when dwell >= 700 ms |
 | `plan_edit` | `kind` (`add`, `remove`, `move`, `undo`, `clear`, `preset`, `preset_all`), `unit` ref, `round` | `plan_edited` signal |
-| `confirm` | `ok: bool`, `reason` (session `status_text` when refused), `round` | `plan_confirmed` / refused confirm |
+| `confirm` | `ok: bool`, `reason` (session `status_text` when refused), `round` | `round_confirmed` / refused confirm (the arena calls `recorder.confirm_refused`) |
 | `round_reset`, `battle_reset`, `battle_end` | `battle`, `round` | session signals |
 | `view` | `round`, `block` | round / block navigation outside the live round (playback-control usage) |
 | `note` | `n` | note saved |
@@ -96,7 +96,7 @@ All JSON is written with `JSON.stringify(data, "  ", true)` through `JsonUtil` (
 
 ### Session additions (`combat_session.gd`, signals only, no behaviour change)
 
-`round_started(round_num)` at the end of `_begin_round`; `plan_confirmed(round_num)` after a successful `confirm_plan`; `round_concluded(round_num, over)` in `_conclude_round`; `round_reset(round_num)` in `reset_round`; `plan_edited(kind, actor)` from the `plan_*` mutators. `mounted` marks `start()` (a new battle entry). `export_log` is unchanged.
+`round_started(round_num)` at the end of `_begin_round`; `round_confirmed(round_num)` after a successful `confirm_plan` (named so because `plan_confirmed` is an existing bool on the session); `round_concluded(round_num, over)` in `_conclude_round`; `round_reset(round_num)` in `reset_round`; `plan_edited(kind, actor)` from the `plan_*` mutators. `mounted` marks `start()` (a new battle entry). `export_log` is unchanged.
 
 ## Rules (logic lane)
 

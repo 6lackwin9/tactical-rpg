@@ -31,7 +31,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, replay.gd (PLAYTEST1), overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
 | `.github/workflows/gate.yml` | GitHub Actions: fast gate (`tools/fc.sh gate`) and `tools/fc.sh docs` on every PR and push to `main` | process | done |
@@ -64,10 +64,10 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |
 | `data/dialogue/` | services.json: lore-free base service lines (dialogue trees are world data in `data/worlds/<id>/dialogues.json`, shops in `shops.json`) | S11 | in progress |
 | `assets/art/{unit,item,tile,skill,status,ui}/`, `assets/audio/{sfx,music}/` | file overrides by folder pattern `<key>_<variant>.png/svg`, `<key>.ogg/wav` (S14) | S14 | in progress |
-| `scripts/playtest/` | recording schema, plan codec, outcome, fingerprint, recorder, replayer, seed sweep, store (PLAYTEST1) | S16 | proposed |
+| `scripts/playtest/` | PlaytestRecord (schema, validation, scenarios), PlanCodec, RoundOutcome, ContentFingerprint, PlaytestRecorder (session signals, trail, notes, hooks), PlaytestReplayer (replay, take-over, variant, tool logic), PlaytestSweep, PlaytestStore (ids, paths, atomic save, debug guard), TrailReport, PlaytestLogger (PLAYTEST1) | S16 | in progress |
 | `scripts/ui/playtest/` | playtest hub, UI trail, note box, browser, playback banner (PLAYTEST1) | S16 | proposed |
-| `playtests/{inbox,repro,scenarios}/` + `README.md` | shared user recordings, agent repros, one-seed scenarios (PLAYTEST1) | S16 | proposed |
-| `tools/replay.gd`, `scripts/tests/playtest_test_suite.gd` | headless replay, variant and seed-sweep tool; playtest suite (PLAYTEST1) | S16 | proposed |
+| `playtests/{inbox,repro,scenarios}/` + `README.md` | shared user recordings, agent repros, one-seed scenarios; `.gdignore` keeps note images out of the import (PLAYTEST1) | S16 | in progress |
+| `tools/replay.gd`, `scripts/tests/playtest_test_suite.gd` | headless replay, variant and seed-sweep tool; playtest suite (PLAYTEST1; `tools/fc.sh replay`) | S16 | in progress |
 
 Rules: gameplay logic in `scripts/**` as `RefCounted` rules engines; scenes only render; data in `data/**` validated through a catalog; one test suite per system in `scripts/tests/` registered with one `results.append` line in `SuiteRegistry.run_all` (`scripts/tests/suite_registry.gd`).
 
