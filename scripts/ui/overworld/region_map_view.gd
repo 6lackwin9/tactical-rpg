@@ -6,6 +6,9 @@ extends Control
 # Thin: renders the GameState's location map (tiles, zone tint, markers, roamers, token) and forwards input to
 # ExploreRunner / BattleBridge. Arrow keys = step, E = interact in the facing direction. A fight shows a panel with
 # three debug outcomes (won / fled / lost -> ExploreRunner.after_fight); launching the real battle is out of scope.
+# E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
+# its Close returns to the dialogue; a dialogue fight uses the same outcome buttons (DialogueRunner.after_fight).
+# Moving and interacting are ignored while a conversation, shop or fight is open.
 # `autosave` events write debug slot 9 (refused while a fight is pending). A world picker starts a new game.
 # ==============================================================================
 
@@ -29,6 +32,8 @@ var _menu_box: VBoxContainer = null
 var _fight_panel: PanelContainer = null
 var _fight_label: Label = null
 var _log: Label = null
+var dialogue_panel: DialoguePanel = null
+var shop_panel: ShopPanel = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -65,6 +70,16 @@ func _ready() -> void:
 		fight_box.add_child(UiTheme.button(result.capitalize(), "Settle the fight as %s (ExploreRunner.after_fight)" % result, settle.bind(result)))
 	_fight_panel.visible = false
 	side.add_child(_fight_panel)
+	dialogue_panel = DialoguePanel.new()
+	dialogue_panel.shop_opened.connect(_on_shop_opened)
+	dialogue_panel.fight_started.connect(_on_dialogue_fight)
+	dialogue_panel.finished.connect(_refresh)
+	dialogue_panel.noted.connect(_on_noted)
+	side.add_child(dialogue_panel)
+	shop_panel = ShopPanel.new()
+	shop_panel.closed.connect(_on_shop_closed)
+	shop_panel.noted.connect(_on_noted)
+	side.add_child(shop_panel)
 	_log = UiTheme.label("")
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_log.custom_minimum_size = Vector2(260, 0)
@@ -93,6 +108,7 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 		return errors
 	gs = state
 	pending_fight = {}
+	_close_panels()
 	_handle(ExploreRunner.begin(gs))
 	return errors
 
@@ -109,19 +125,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		do_interact()
 		accept_event()
 
+# True while a fight, conversation or shop waits for the player (map input is ignored).
+func busy() -> bool:
+	return not pending_fight.is_empty() or (dialogue_panel != null and dialogue_panel.is_open()) or (shop_panel != null and shop_panel.is_open())
+
 func do_step(dir: Vector2i) -> void:
-	if gs == null or not pending_fight.is_empty():
+	if gs == null or busy():
 		return
 	facing = dir
 	_handle(ExploreRunner.step(gs, dir))
 
 func do_interact() -> void:
-	if gs == null or not pending_fight.is_empty():
+	if gs == null or busy():
 		return
 	var res: Dictionary = ExploreRunner.interact(gs, facing)
 	match str(res.get("kind", "")):
 		"npc":
-			_note("You speak with %s." % str(WorldCatalog.resolve(gs.world_id, "characters", str(res["character"])).get("name", res["character"])))
+			talk(str(res["character"]))
 		"lore":
 			_note("%s: %s" % [str(res["name"]), str(res["text"])])
 		"chest":
@@ -131,17 +151,55 @@ func do_interact() -> void:
 				_note("Interact refused: %s" % str(res["errors"]))
 	_refresh()
 
+# Opens the conversation with world character `character_ref` (DialogueRunner.open) in the dialogue panel.
+func talk(character_ref: String) -> void:
+	if gs == null or busy():
+		return
+	var r: DialogueRunner = DialogueRunner.open(gs, character_ref)
+	if not r.errors.is_empty():
+		_note("Talk refused: %s" % "; ".join(PackedStringArray(r.errors)))
+	else:
+		_note("You speak with %s." % r.character_name)
+		dialogue_panel.show_runner(r)
+	_refresh()
+
+func _on_shop_opened(shop_qid: String) -> void:
+	shop_panel.show_shop(gs, shop_qid)
+	_refresh()
+
+func _on_shop_closed() -> void:
+	dialogue_panel.shop_closed()
+	_refresh()
+
+func _on_dialogue_fight(fight: Dictionary) -> void:
+	pending_fight = fight
+	_note("Fight! %s (dialogue with %s)" % [str(fight.get("encounter", "")), str(fight.get("character", ""))])
+	_refresh()
+
+func _on_noted(text: String) -> void:
+	_note(text)
+	_refresh()
+
+func _close_panels() -> void:
+	if dialogue_panel != null:
+		dialogue_panel.visible = false
+		dialogue_panel.runner = null
+	if shop_panel != null:
+		shop_panel.visible = false
+		shop_panel.gs = null
+
 func take_exit(to: String) -> void:
-	if gs != null and pending_fight.is_empty():
+	if gs != null and not busy():
 		_handle(ExploreRunner.take_exit(gs, to))
 
-# Debug outcome button: settles the pending fight (no real battle is launched).
+# Debug outcome button: settles the pending fight (no real battle is launched). A dialogue fight settles through
+# DialogueRunner.after_fight, an exploration fight through ExploreRunner.after_fight.
 func settle(result: String) -> void:
 	if gs == null or pending_fight.is_empty():
 		return
 	var fight: Dictionary = pending_fight
 	pending_fight = {}
-	var res: Dictionary = ExploreRunner.after_fight(gs, fight, result)
+	var res: Dictionary = DialogueRunner.after_fight(gs, fight, result) if str(fight.get("source", "")) == "dialogue" else ExploreRunner.after_fight(gs, fight, result)
 	_note("Fight %s: %s (quests advanced: %s)" % [str(fight["encounter"]), result, str(res.get("advanced", []))])
 	_handle(res)
 
@@ -192,7 +250,7 @@ func _refresh() -> void:
 		_status.text = "%s  %s  steps %d / %d  rolls %s" % [gs.location_id, str(gs.position), DictUtil.to_int(gs.explore["steps"]), DictUtil.to_int(gs.explore["next_at"]), str(gs.rolls)]
 	for c: Node in _menu_box.get_children():
 		c.queue_free()
-	if gs != null and pending_fight.is_empty():
+	if gs != null and not busy():
 		for item: Dictionary in ExploreRunner.menu(gs):
 			_menu_box.add_child(UiTheme.button(str(item["label"]), "ExploreRunner.take_exit", take_exit.bind(str(item["to"]))))
 	_fight_panel.visible = not pending_fight.is_empty()
