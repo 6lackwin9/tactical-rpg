@@ -1,6 +1,6 @@
 # UI1-A: start party for the playable world
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS progression-save "UI menus baseline answers (user 2026-10-17)"; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS progression-save "UI menus baseline answers (user 2026-10-17)")
 Depends on: UI1-L commit 1 (`start_party` field and validation); EXP1-A merged (sets `start_location` on ashlands through the same `update_manifest` call path)
 Lane: asset
 Touches: `data/worlds/ashlands/world.json` (through `WorldCatalog.update_manifest`), seed `data/seeds/ui1_start_party.gd`, `data/seeds/README.md`

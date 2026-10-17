@@ -1,6 +1,6 @@
 # UI3-L: journal (quests only) over the M4 runtime
 
-Status: spec (design-brainstorm 2026-10-17; DECISIONS progression-save "UI menus baseline answers (user 2026-10-17)": journal = quests only for now; docs/specs/UI_MENUS_RULES.md 2.7; awaiting approval)
+Status: approved (user 2026-10-17) (design-brainstorm 2026-10-17; DECISIONS progression-save "UI menus baseline answers (user 2026-10-17)": journal = quests only for now; docs/specs/UI_MENUS_RULES.md 2.7)
 Depends on: UI1-L (router, `CurrentGame`, hub), M4-L (merged: `QuestRunner`, `QuestRules`, loot)
 Lane: logic only (no asset part)
 Touches: new `scripts/ui/menus/{journal_model,journal_view}.gd`, `scripts/ui/menus/hub_model.gd` (`open("journal")` wiring), new `scripts/tests/journal_test_suite.gd` + one line in `scripts/tests/suite_registry.gd`
