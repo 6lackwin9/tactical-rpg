@@ -4,8 +4,11 @@ Written 2026-10-17 22:06 UTC by the first Assets & Audio session ("Fresh session
 
 ## Queue (in order)
 
-1. REP1-A follow-up: when the REP1-L runtime commit lands on `develop` (Gameplay), run REP1_A spec checks 2-5 headlessly (throwaway script; enter the start location with `ExploreRunner.enter` before travel). Fix forward on a new branch only if a check fails. REP1-A data is on `develop` (b8845b1); only check 1 was verified, and the review traced the totals 10/20/35/40.
-2. Any other approved `-A` task whose logic is on `develop`. None today (BAL3-A belongs to the Balance thread).
+1. Empty. Take the next approved `-A` task whose logic is on `develop` (BAL3-A belongs to the Balance thread).
+
+## Update 2026-10-17 22:20 UTC (second session)
+
+REP1-A checks 2-5 passed headlessly against the REP1-L runtime (0717392), no data fix needed: new game neutral 0, spare choice shown locked, `ember_patrol` locked; courtyard 10 (friendly), spare choice opens once (+2 potions) then locks, Hest prices 15/24/29/38, bombs 40; gate watch 20 and Horde -10; oath 35 and `ember_patrol` offered at Hest; an `ash_raiders` win makes it ready, completion 40 and `ashlands.ruins_swept`. After use the spare choice stays visible as locked (`show_locked` with `unless`), as specced. A new class (`RepRules`) needs `godot --headless --import` before a `-s` script sees it.
 
 ## Landed today on `develop` (this session)
 
