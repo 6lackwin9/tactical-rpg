@@ -378,7 +378,7 @@ func update_inspector(
 	if boost_rds > 0:
 		effects.append("Focus x%.2f ATK (%d rds)" % [boost_mult, boost_rds])
 	for status: Variant in c.statuses:
-		effects.append(StatusEffects.display_name(str(status)))
+		effects.append(StatusEffects.chip_text(c, str(status)))
 	inspector_buffs_lbl.text = "Effects: " + (", ".join(effects) if not effects.is_empty() else "None active")
 
 	if inspector_gear_lbl:

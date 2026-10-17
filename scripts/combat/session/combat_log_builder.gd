@@ -253,6 +253,12 @@ static func format_resolver_message(msg: String) -> String:
 		formatted = "[color=#60a5fa]⚔ [b]" + msg + "[/b][/color]"
 	elif msg.begins_with("[Bleed]"):
 		formatted = "[color=#f87171]🩸 " + msg.substr(8) + "[/color]"
+	elif msg.begins_with("[Poison]"):
+		formatted = "[color=#a3e635]☠ " + msg.substr(9) + "[/color]"
+	elif msg.begins_with("[Burn]"):
+		formatted = "[color=#fb923c]🔥 " + msg.substr(7) + "[/color]"
+	elif msg.begins_with("[Regen]"):
+		formatted = "[color=#4ade80]✚ " + msg.substr(8) + "[/color]"
 	elif msg.begins_with("[Dash]") or msg.begins_with("[Dash Blocked]"):
 		formatted = "[color=#38bdf8]➜ " + msg + "[/color]"
 	elif msg.begins_with("[Move Cut Short]"):

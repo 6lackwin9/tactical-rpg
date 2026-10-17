@@ -122,8 +122,8 @@ Enforcement (also for authored effects): `start_quest` is refused unless the res
 - Open: shop `requires_flags` hold and the keeper is not gone.
 - Integer prices: `bm = roundi(buy_mult x 100)`, `sm = roundi(sell_mult x 100)`, `rb = rs = 100` (REP1 replaces them). Buy = `price` when > 0, else `maxi(1, ceil(value x bm x rb / 10000))`; sell = `floor(value x sm x rs / 10000)`. `value` = the base item's `value`. Loot sells at its fixed `price`.
 - `offers(gs, shop_ref) -> Array[Dictionary]` `{kind: "item" | "loot", id, item, count, price, left}`: stock entries whose `requires_flags` hold (`left` -1 = unlimited, else `count - sold`), then loot entries that are unclaimed and whose loot `requires_flags` hold.
-- `buy(gs, shop_ref, kind, id, count := 1) -> Dictionary`: refused when closed, `left < count` ("Sold out."), gold < price x count ("Not enough gold."), or loot with count != 1; then gold falls, the stash gains the items, limited stock adds to `gs.shops`, loot adds its qid through `RewardGrant.claim_loot` (it leaves every quest pool).
-- `sell_list(gs, shop_ref)`: stash items whose type is in `buys`, not `QUEST`, sell price >= 1. `sell(gs, shop_ref, item, count := 1)`: refused otherwise; stash falls, gold rises. Sold items never restock the shop; no restock at all in DLG1.
+- `buy(gs, shop_ref, kind, id, count := 1) -> Dictionary`: refused when closed, `count` above `BUY_MAX` 99 ("Buy at most 99 at a time.", DLG1-F), `left < count` ("Sold out."), gold < price x count ("Not enough gold."), or loot with count != 1; then gold falls, the stash gains the items, limited stock adds to `gs.shops`, loot adds its qid through `RewardGrant.claim_loot` (it leaves every quest pool).
+- `sell_list(gs, shop_ref)`: stash items whose type is in `buys`, not `QUEST`, sell price >= 1. `sell(gs, shop_ref, item, count := 1)`: refused otherwise; stash falls, gold rises (above `GOLD_MAX` the rest is dropped and reported: result `gold` = added, plus a note; DLG1-F). Sold items never restock the shop; no restock at all in DLG1.
 
 ### 2.6 Authoring lint (`DialogueRules.quest_warnings(world_id)`, warnings only)
 
