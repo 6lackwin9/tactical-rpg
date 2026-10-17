@@ -87,7 +87,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## AI skill use (AI1)
 
-- `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte when `AiProfile.smart_skills` is true (default); false = old behaviour. Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`.
+- `TacticalAI` (AI1 section at the end of `tactical_ai.gd`) casts disengage, area attacks, cleanse-only skills, taunt, ally buffs, debuff attacks and riposte (the only AI path; the `smart_skills = false` switch was removed by CLN-16). Area attacks need foes hit >= `area_min_foes` (2) and no ally hit. Zero-power attacks are only cast as debuffs. Tests: `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`.
 
 ## Skill unlock rule (SK2)
 

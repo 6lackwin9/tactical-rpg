@@ -184,7 +184,7 @@ Goblin placeholder art. Status: confirmed (user 2026-10-17, new from Q1).
 
 ### CLN-16
 
-Legacy AI path. Status: confirmed (user 2026-10-17, new from Q2).
+Legacy AI path. Status: done 2026-10-17 (the sim key `smart_skills` is now unknown).
 
 - What and where: `AiProfile.smart_skills` (`ai_profile.gd`, 2 uses) and its off branches in `tactical_ai.gd` (5 uses); `ai_skills_test_suite.gd` (7 uses) covers both paths; BAL2-L adds a sim switch for it (`tools/sim/*`).
 - Change: remove the `false` path, the field, its tests and the sim switch; fix GAME_BRIEF "AI skill use".
