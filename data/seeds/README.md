@@ -30,3 +30,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |
 | `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
 | `dlg1a.gd` | DLG1-A (service lines, Ashlands dialogues, keep shop, gold) |
+| `s14_a1.gd` | S14-A1 (first manifest rows: goblin_brawler alias, four sample file overrides; goblin_brawler art key) |
