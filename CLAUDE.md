@@ -12,17 +12,17 @@ Read these instead of crawling the code:
 - `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained)
 - `docs/WORKFLOW.md`: tools and how to iterate
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
-- Skill `godot-debug-checklist`: known issues table; consult BEFORE debugging
+- Skills `godot-debug-checklist` (short edit checklist), `godot-known-issues` (consult BEFORE debugging), `gdscript-typing` (typing patterns)
 
 ## Roles and lanes (agents cannot message each other; the main session routes via the docs above)
 
-- Main session = **planner** (skill `planner`): task queue (`docs/TASKS.md`), dispatch in parallel lanes, user confirmation gate, review, commit/push, README/docs.
-- `design-brainstorm` agent (design lane): options, specs in `docs/specs/`, roadmap proposals; writes only `docs/`; works ahead while builders run.
+- Main session = **planner** (skills `planner`, `planner-ops`; the only writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in parallel lanes, user confirmation gate, review, commit/push, README/docs.
+- `design-brainstorm` agent (design lane): options and specs in `docs/specs/`; lists wanted roadmap and task rows in its report (the planner writes them); works ahead while builders run.
 - `logic-builder` agent (logic lane): engine, schema, validation, tests in a feature worktree; never edits shipped data; never commits.
 - `asset-builder` agent (asset lane): fills `data/` through `ContentCatalog.upsert` against a merged schema; no code, no tests.
 - `balance` agent (balance lane): sims in its own clean `main` worktree on `balance-ready` systems; writes `docs/BALANCE_REPORT.md`.
 - `change-reviewer` agent: read-only pre-commit review.
-- `housekeeper` agent (cleanup lane): finds legacy/redundant code, dead paths and bloat; proposes trims in `docs/specs/CLEANUP.md`; after user confirmation adds cleanup tasks to `docs/TASKS.md`/`docs/ROADMAP.md`; never implements (builders do, as separate tasks).
+- `housekeeper` agent (cleanup lane): finds legacy/redundant code, dead paths and bloat; proposes trims in `docs/specs/CLEANUP.md`; the planner adds confirmed ones to `docs/TASKS.md`/`docs/ROADMAP.md`; never implements (builders do, as separate tasks).
 
 ## Standing rules
 

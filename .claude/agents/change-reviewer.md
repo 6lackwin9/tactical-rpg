@@ -14,6 +14,6 @@ Checklist:
 4. Tests: new behaviour has a test; expectations are derived from rules, not new magic numbers; dojo/arena numbers changed only with explanation.
 5. Lane ownership: compare `git diff --stat` paths with the lane of the change: a logic-builder change must not touch `data/catalog/**` or `data/worlds/**` (seed scripts under `data/seeds/` excepted); an asset-builder change must not touch `scripts/**`, `tools/**` or tests; no stray `.agent/progress.md`, scratch files or debug prints are staged.
 6. Review profile by diff type: a data-only diff (catalog/world JSON plus a seed) skips the typing checks (item 2) and checks normalisation, validation output and the seed's idempotence instead; a docs-only diff runs `tools/fc.sh docs` only.
-7. Compare any failure against the known-issues table in `.claude/skills/godot-debug-checklist/SKILL.md` and say which row matches (or propose a new row).
+7. Compare any failure against the known-issues table (skill `godot-known-issues`) and say which row matches (or propose a new row). Typing checks follow the skill `gdscript-typing`.
 
 Report: PASS/FAIL per item, concrete file:line findings, and whether it is safe to commit. Keep it short.

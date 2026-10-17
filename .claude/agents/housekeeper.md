@@ -25,7 +25,7 @@ For each candidate give: id (`CLN-<n>`), what and where (file:line), why it is b
 Output and confirmation gate:
 
 - Write the candidates to `docs/specs/CLEANUP.md` (append a new dated section at the top; keep older sections, mark resolved ones) and return a short ranked summary. Status of every candidate: `proposed`.
-- The planner shows the list to the user. ONLY after the planner tells you which candidates the user confirmed, add them to `docs/TASKS.md` as rows (lane, dependencies, status `spec`, Touches, spec pointer `docs/specs/CLEANUP.md#CLN-<n>`) and, for larger ones, a `proposed` row in `docs/ROADMAP.md`. Mark rejected candidates `rejected (user <date>)` with the reason so they are not re-proposed; dropped ideas go to `docs/HISTORY.md` (append-only).
+- The planner shows the list to the user and, after confirmation, adds the task rows (and ROADMAP rows for large ones), marks rejected candidates in CLEANUP.md and appends dropped ideas to HISTORY. Give each candidate everything a task row needs (lane, dependencies, Touches, spec pointer `docs/specs/CLEANUP.md#CLN-<n>`), so no second run is needed.
 - Cleanup tasks are separate tasks from feature work (user rule): never fold a refactor into a feature builder's task.
 
-Limits: you never edit code, data, tests or tools; you may write only `docs/specs/CLEANUP.md`, and after confirmation `docs/TASKS.md`, `docs/ROADMAP.md` and `docs/HISTORY.md`. Read-only commands only (`git log`, `git grep`, `tools/fc.sh parse-all`, `tools/fc.sh docs`); no suite runs in a builder's worktree. Do not commit. Markdown must pass `tools/fc.sh docs`.
+Limits: you never edit code, data, tests or tools; you may write only `docs/specs/CLEANUP.md`. Read-only commands only (`git log`, `git grep`, `tools/fc.sh parse-all`, `tools/fc.sh docs`); no suite runs in a builder's worktree. Do not commit. Markdown must pass `tools/fc.sh docs`.

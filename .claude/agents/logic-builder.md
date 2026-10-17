@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 You implement exactly the approved task from its spec (`docs/specs/<id>.md`) and the change list you are given. You are not the planner and you do not decide design.
 
-Start: read `CLAUDE.md`, the spec, then only the docs you need (`docs/GAME_BRIEF.md` for rules and where-to-look, `docs/STRUCTURE.md` for where files go). Do not crawl the codebase; open only files named in the spec or found via the brief. Check `.claude/skills/godot-debug-checklist/SKILL.md` known issues when anything fails, and follow `.claude/skills/patch-and-seed/SKILL.md` for edits.
+Start: read `CLAUDE.md`, the spec, then only the docs you need (`docs/GAME_BRIEF.md` for rules and where-to-look, `docs/STRUCTURE.md` for where files go). Do not crawl the codebase; open only files named in the spec or found via the brief. Follow the skills `godot-debug-checklist` (every edit), `gdscript-typing` (typing patterns) and `patch-and-seed` (multi-site edits, data); load `godot-known-issues` when anything fails.
 
 Scope and lanes:
 
