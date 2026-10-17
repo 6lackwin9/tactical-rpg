@@ -5,27 +5,27 @@ extends RefCounted
 # Tactical RPG - Focus gear test suite (C1-L: orb / tome off-hand weapons, item `effects`)
 # Item validation of the orb / tome rules, the item effects grammar (skill_potency family or group,
 # status_potency, spell_reach), hand rules (a two-handed main weapon refuses an orb / tome), runtime
-# hooks (power, heal, status chance, spell reach; equip and unequip are exact), the reach clamp and the
-# GearBudget weights. Expectations come from the fixture entries and the rules, never from shipped
-# numbers. Fixtures live in a sandbox fork of the catalog. Checks on the shipped C1 assets (wpn_orb,
-# priest proficiency) run once those assets exist in the catalog.
+# hooks (power, heal, status chance, spell reach; equip and unequip are exact) and the reach clamp.
+# Expectations come from the fixture entries and the rules, never from shipped numbers. Fixtures live in
+# a sandbox fork of the catalog. The GearBudget weights and the shipped C1 asset checks moved to
+# FocusGearBudgetTestSuite (CLN-12), which reuses seed_fixtures and the public helpers here.
 # ==============================================================================
 
 static var SANDBOX: String = TestHelpers.sandbox("focus_gear_test")
 
 const TAG: String = "FocusGear"
 
-static func _has_error(errors: Array[String], fragment: String) -> bool:
+static func has_error(errors: Array[String], fragment: String) -> bool:
 	for err: String in errors:
 		if err.contains(fragment):
 			return true
 	return false
 
-static func _near(a: float, b: float) -> bool:
+static func near(a: float, b: float) -> bool:
 	return absf(a - b) < 0.0001
 
 # A valid orb entry; `extra` overrides fields.
-static func _focus(id: String, kind: String, extra: Dictionary = {}) -> Dictionary:
+static func focus(id: String, kind: String, extra: Dictionary = {}) -> Dictionary:
 	var e: Dictionary = {"id": id, "name": id, "item_type": "WEAPON", "slot": "OFF_HAND", "weapon_type": kind,
 		"off_hand_category": kind, "base_power": 0, "base_range": 1, "scaling_stat": "INT"}
 	e.merge(extra, true)
@@ -45,7 +45,7 @@ static func run() -> bool:
 	if not TestHelpers.fork(SANDBOX):
 		TestHelpers.cleanup(SANDBOX)
 		return TestHelpers.report(TAG, "sandbox fork", {"forked": false})
-	_seed()
+	seed_fixtures()
 	var ok: bool = true
 	ok = _test_item_rules() and ok
 	ok = _test_effect_grammar() and ok
@@ -53,19 +53,17 @@ static func run() -> bool:
 	ok = _test_potency_and_heal() and ok
 	ok = _test_status_potency() and ok
 	ok = _test_spell_reach() and ok
-	ok = _test_gear_budget() and ok
-	ok = _test_shipped_assets() and ok
 	TestHelpers.cleanup(SANDBOX)
 	return ok
 
-static func _seed() -> void:
+static func seed_fixtures() -> void:
 	var spell: Dictionary = {"type": "skill_potency", "group": "spell", "value": 0.10}
 	var heal: Dictionary = {"type": "skill_potency", "group": "heal", "value": 0.10}
 	var reach: Dictionary = {"type": "spell_reach", "value": 1}
 	var status: Dictionary = {"type": "status_potency", "value": 5}
 	var entries: Array[Dictionary] = [
-		_focus("t_orb", "orb", {"effects": [spell, reach], "required_stats": {"INT": 8}}),
-		_focus("t_tome", "tome", {"effects": [heal, status]}),
+		focus("t_orb", "orb", {"effects": [spell, reach], "required_stats": {"INT": 8}}),
+		focus("t_tome", "tome", {"effects": [heal, status]}),
 		ContentSchema.normalize("items", {"id": "t_reach_ring", "name": "Reach ring", "item_type": "ACCESSORY", "slot": "ACCESSORY_1", "effects": [reach]}),
 		ContentSchema.normalize("items", {"id": "t_sword", "name": "Sword", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "base_power": 10}),
 	]
@@ -97,18 +95,18 @@ static func _equip(c: Combatant, item_id: String, slot: Equipment.EquipSlot) -> 
 static func _test_item_rules() -> bool:
 	var c: Dictionary = {}
 	for kind: String in Equipment.FOCUS_TYPES:
-		var good: Dictionary = _focus("t_new_" + kind, kind)
+		var good: Dictionary = focus("t_new_" + kind, kind)
 		c["valid %s accepted" % kind] = ContentCatalog.validate_entry("items", good).is_empty()
 		if ContentCatalog.items_inherit():
 			_family_rules(c, kind)
 			continue
-		c["%s must be off hand" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_x_" + kind, kind, {"slot": "MAIN_HAND"})), "off-hand only")
+		c["%s must be off hand" % kind] = has_error(ContentCatalog.validate_entry("items", focus("t_x_" + kind, kind, {"slot": "MAIN_HAND"})), "off-hand only")
 		var other: String = "tome" if kind == "orb" else "orb"
-		c["%s category must match" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_y_" + kind, kind, {"off_hand_category": other})), "needs off-hand category")
-		c["%s empty category refused" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_y2_" + kind, kind, {"off_hand_category": ""})), "needs off-hand category")
-		c["reverse match for category %s" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_z_" + kind, "sword", {"off_hand_category": kind})), "needs the matching gear type")
-		c["%s never two-handed" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_w_" + kind, kind, {"two_handed": true})), "never two-handed")
-		c["%s weapon only" % kind] = _has_error(ContentCatalog.validate_entry("items", _focus("t_v_" + kind, kind, {"item_type": "SHIELD"})), "item type WEAPON")
+		c["%s category must match" % kind] = has_error(ContentCatalog.validate_entry("items", focus("t_y_" + kind, kind, {"off_hand_category": other})), "needs off-hand category")
+		c["%s empty category refused" % kind] = has_error(ContentCatalog.validate_entry("items", focus("t_y2_" + kind, kind, {"off_hand_category": ""})), "needs off-hand category")
+		c["reverse match for category %s" % kind] = has_error(ContentCatalog.validate_entry("items", focus("t_z_" + kind, "sword", {"off_hand_category": kind})), "needs the matching gear type")
+		c["%s never two-handed" % kind] = has_error(ContentCatalog.validate_entry("items", focus("t_w_" + kind, kind, {"two_handed": true})), "never two-handed")
+		c["%s weapon only" % kind] = has_error(ContentCatalog.validate_entry("items", focus("t_v_" + kind, kind, {"item_type": "SHIELD"})), "item type WEAPON")
 	# Sweep: every catalog item with an orb / tome type validates exactly when the rule table holds.
 	var sweep_ok: bool = true
 	for entry: Dictionary in ContentCatalog.entries("items"):
@@ -130,17 +128,17 @@ static func _family_rules(c: Dictionary, kind: String) -> void:
 	for hand: String in ItemFamilies.MAIN_HANDS:
 		var wrong: Dictionary = stored.duplicate(true)
 		wrong["hand"] = hand
-		c["%s refuses hand %s (off-hand only, never two-handed)" % [kind, hand]] = _has_error(ContentCatalog.validate_entry("items", wrong), "not allowed by family")
-	var flat_main: Dictionary = _focus("t_x_" + kind, kind, {"slot": "MAIN_HAND", "off_hand_category": ""})
-	c["a flat %s without its category (a main-hand weapon) is still refused" % kind] = _has_error(ContentCatalog.validate_entry("items", flat_main), "not allowed by family")
-	var resolved: Dictionary = ItemModifiers.resolve(ItemModifiers.collapse(_focus("t_y_" + kind, kind), family), family)
+		c["%s refuses hand %s (off-hand only, never two-handed)" % [kind, hand]] = has_error(ContentCatalog.validate_entry("items", wrong), "not allowed by family")
+	var flat_main: Dictionary = focus("t_x_" + kind, kind, {"slot": "MAIN_HAND", "off_hand_category": ""})
+	c["a flat %s without its category (a main-hand weapon) is still refused" % kind] = has_error(ContentCatalog.validate_entry("items", flat_main), "not allowed by family")
+	var resolved: Dictionary = ItemModifiers.resolve(ItemModifiers.collapse(focus("t_y_" + kind, kind), family), family)
 	c["%s resolves to the off hand and its own category" % kind] = str(resolved["slot"]) == "OFF_HAND" and str(resolved["off_hand_category"]) == kind and not DictUtil.to_bool(resolved["two_handed"])
 	var main_focus: Dictionary = family.duplicate(true)
 	main_focus["hands"] = [ItemFamilies.HAND_MAIN_1H]
-	c["%s family: focus needs hands = off" % kind] = _has_error(ContentCatalog.validate_entry("item_families", main_focus, kind), "focus needs")
+	c["%s family: focus needs hands = off" % kind] = has_error(ContentCatalog.validate_entry("item_families", main_focus, kind), "focus needs")
 	var shield_focus: Dictionary = family.duplicate(true)
 	shield_focus["item_type"] = "SHIELD"
-	c["%s family: focus is a WEAPON rule" % kind] = _has_error(ContentCatalog.validate_entry("item_families", shield_focus, kind), "focus needs")
+	c["%s family: focus is a WEAPON rule" % kind] = has_error(ContentCatalog.validate_entry("item_families", shield_focus, kind), "focus needs")
 	c["%s family carries the focus rule" % kind] = ItemFamilies.has_rule(family, ItemFamilies.RULE_FOCUS)
 
 # ------------------------------------------------------------------------------
@@ -156,7 +154,7 @@ static func _test_effect_grammar() -> bool:
 		{"type": "ap_regen", "value": 1}, {"type": "skill", "skill": "strike"}]
 	var all_rejected: bool = true
 	for fx: Dictionary in bad_types:
-		all_rejected = all_rejected and _has_error(item_errs.call([fx]), "not allowed on items")
+		all_rejected = all_rejected and has_error(item_errs.call([fx]), "not allowed on items")
 	c["stat / proficiency / ap_regen / skill rejected on items"] = all_rejected
 	c["empty item effects allowed"] = (item_errs.call([]) as Array[String]).is_empty()
 	c["a passive still needs an effect"] = not Passives.validate_effects([], exists).is_empty()
@@ -170,7 +168,7 @@ static func _test_effect_grammar() -> bool:
 	c["status_potency bounds"] = (item_errs.call([{"type": "status_potency", "value": Passives.STATUS_POTENCY_MIN}]) as Array[String]).is_empty() and (item_errs.call([{"type": "status_potency", "value": Passives.STATUS_POTENCY_MAX}]) as Array[String]).is_empty() and not (item_errs.call([{"type": "status_potency", "value": Passives.STATUS_POTENCY_MIN - 1}]) as Array[String]).is_empty() and not (item_errs.call([{"type": "status_potency", "value": Passives.STATUS_POTENCY_MAX + 1}]) as Array[String]).is_empty()
 	c["spell_reach bounds"] = (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MIN}]) as Array[String]).is_empty() and (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MAX}]) as Array[String]).is_empty() and not (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MIN - 1}]) as Array[String]).is_empty() and not (item_errs.call([{"type": "spell_reach", "value": Passives.SPELL_REACH_MAX + 1}]) as Array[String]).is_empty()
 	c["resist allowed on items"] = (item_errs.call([{"type": "resist", "status": "stagger", "value": 10}]) as Array[String]).is_empty()
-	c["catalog refuses a bad item effect"] = _has_error(ContentCatalog.validate_entry("items", _focus("t_bad_fx", "orb", {"effects": [{"type": "ap_regen", "value": 1}]})), "not allowed on items")
+	c["catalog refuses a bad item effect"] = has_error(ContentCatalog.validate_entry("items", focus("t_bad_fx", "orb", {"effects": [{"type": "ap_regen", "value": 1}]})), "not allowed on items")
 	c["catalog accepts an armor with effects"] = ContentCatalog.validate_entry("items", ContentSchema.normalize("items", {"id": "t_arm_fx", "name": "x", "item_type": "ARMOR", "slot": "BODY", "weapon_type": Proficiency.ARMOR_TYPES[0], "effects": [{"type": "status_potency", "value": 3}]})).is_empty()
 	c["effects round-trip through the factory"] = ContentFactory.item_to_entry(ItemCatalog.create_equipment("t_orb"))["effects"] == ContentCatalog.get_entry("items", "t_orb")["effects"]
 	c["describe covers group, status, reach"] = Passives.describe({"effects": [{"type": "skill_potency", "group": "heal", "value": 0.1}, {"type": "status_potency", "value": 5}, {"type": "spell_reach", "value": 1}]}).contains("heal") and Passives.describe({"effects": [{"type": "spell_reach", "value": 1}]}).contains("reach")
@@ -265,11 +263,11 @@ static func _test_potency_and_heal() -> bool:
 	var mend_base: int = SupportRules.heal_amount(mage, mend)
 	var foe := Combatant.new("Foe", 500, 5, 1)
 	var dmg_base: Dictionary = DamageCalculator.compute(mage, foe, false, false, 1.0, false)
-	c["no bonus: potency_for_skill = potency_for"] = _near(mage.potency_for_skill(bolt), mage.potency_for(bolt.family_id()))
+	c["no bonus: potency_for_skill = potency_for"] = near(mage.potency_for_skill(bolt), mage.potency_for(bolt.family_id()))
 	_equip(mage, "t_orb", Equipment.EquipSlot.OFF_HAND)
 	mage.sync_from_stats_and_gear()
-	c["orb raises spell power by exactly x(1 + value)"] = _near(bolt.power_for(mage), bolt_base * (1.0 + spell_v))
-	c["orb does not change a non-spell skill"] = _near(strike.power_for(mage), strike_base)
+	c["orb raises spell power by exactly x(1 + value)"] = near(bolt.power_for(mage), bolt_base * (1.0 + spell_v))
+	c["orb does not change a non-spell skill"] = near(strike.power_for(mage), strike_base)
 	c["orb does not change the heal"] = SupportRules.heal_amount(mage, mend) == mend_base
 	var dmg_orb: Dictionary = DamageCalculator.compute(mage, foe, false, false, 1.0, false)
 	c["orb leaves DamageCalculator.compute alone"] = UiTheme.dict_int(dmg_orb, "final_dmg") == UiTheme.dict_int(dmg_base, "final_dmg")
@@ -282,8 +280,8 @@ static func _test_potency_and_heal() -> bool:
 	var stat_value: int = mage.stats.get_effective_stat(mend.heal_stat, mage.get_weapon_context())
 	var base_heal: int = mend.heal_base + roundi(float(stat_value) * mend.heal_mult)
 	c["tome raises the heal by x(1 + value)"] = SupportRules.heal_amount(mage, mend) == roundi(float(base_heal) * (1.0 + heal_v))
-	c["tome does not change spell power"] = _near(bolt.power_for(mage), bolt_base)
-	c["tome does not change strike"] = _near(strike.power_for(mage), strike_base)
+	c["tome does not change spell power"] = near(bolt.power_for(mage), bolt_base)
+	c["tome does not change strike"] = near(strike.power_for(mage), strike_base)
 	var dmg_tome: Dictionary = DamageCalculator.compute(mage, foe, false, false, 1.0, false)
 	c["tome leaves DamageCalculator.compute alone"] = UiTheme.dict_int(dmg_tome, "final_dmg") == UiTheme.dict_int(dmg_base, "final_dmg")
 	mage.inventory.unequip(Equipment.EquipSlot.OFF_HAND)
@@ -293,12 +291,12 @@ static func _test_potency_and_heal() -> bool:
 	_equip(mage, "t_orb", Equipment.EquipSlot.OFF_HAND)
 	mage.sync_from_stats_and_gear()
 	mage.sync_from_stats_and_gear()
-	c["repeated sync does not stack gear bonuses"] = _near(bolt.power_for(mage), bolt_base * (1.0 + spell_v))
+	c["repeated sync does not stack gear bonuses"] = near(bolt.power_for(mage), bolt_base * (1.0 + spell_v))
 	Passives.apply(mage, {"id": "t_c1_pass", "name": "x", "effects": [{"type": "skill_potency", "group": "spell", "value": 0.05}]})
-	c["passive and gear group bonuses add"] = _near(bolt.power_for(mage), bolt_base * (1.0 + spell_v + 0.05))
+	c["passive and gear group bonuses add"] = near(bolt.power_for(mage), bolt_base * (1.0 + spell_v + 0.05))
 	mage.inventory.unequip(Equipment.EquipSlot.OFF_HAND)
 	mage.sync_from_stats_and_gear()
-	c["unequipping subtracts only the gear part"] = _near(bolt.power_for(mage), bolt_base * 1.05)
+	c["unequipping subtracts only the gear part"] = near(bolt.power_for(mage), bolt_base * 1.05)
 	return TestHelpers.report(TAG, "potency and heal hooks", c)
 
 # ------------------------------------------------------------------------------
@@ -406,68 +404,3 @@ static func _test_spell_reach() -> bool:
 	c["raw gear reach adds up"] = clamped.gear_spell_reach == 2 * bonus
 	c["total gear reach is clamped"] = clamped.spell_reach_bonus() == mini(2 * bonus, Passives.GEAR_REACH_CAP) and plain.reach_for(clamped) == Vector2i((base["t_plain"] as Vector2i).x, (base["t_plain"] as Vector2i).y + Passives.GEAR_REACH_CAP)
 	return TestHelpers.report(TAG, "spell reach", c)
-
-# ------------------------------------------------------------------------------
-# GearBudget
-# ------------------------------------------------------------------------------
-
-static func _formula(entry: Dictionary) -> float:
-	var e: Dictionary = ContentSchema.normalize("items", entry)
-	var v: float = DictUtil.to_int(e["base_power"]) * GearBudget.W_POWER + DictUtil.to_int(e["mitigation"]) * GearBudget.W_MITIGATION
-	var bonuses: Dictionary = DictUtil.dict_of(e["stat_bonuses"])
-	for key: Variant in bonuses:
-		v += DictUtil.to_int(bonuses[key]) * GearBudget.W_STAT_POINT
-	v += DictUtil.to_int(e["burden"]) * GearBudget.W_BURDEN + maxi(0, DictUtil.to_int(e["block_cost"]) - 1) * GearBudget.W_EXTRA_BLOCK
-	for raw: Variant in DictUtil.array_of(e["effects"]):
-		var fx: Dictionary = DictUtil.dict_of(raw)
-		var value: float = DictUtil.to_float(fx.get("value", 0.0))
-		match str(fx.get("type", "")):
-			"skill_potency":
-				v += value * 20.0
-			"status_potency":
-				v += value * 0.2
-			"spell_reach":
-				v += value * 3.0
-	return v
-
-static func _test_gear_budget() -> bool:
-	var c: Dictionary = {}
-	c["weights are the spec's"] = _near(GearBudget.W_SKILL_POTENCY, 20.0) and _near(GearBudget.W_STATUS_POTENCY, 0.2) and _near(GearBudget.W_SPELL_REACH, 3.0)
-	for id: String in ["t_orb", "t_tome", "t_reach_ring"]:
-		var entry: Dictionary = ContentCatalog.get_entry("items", id)
-		c["%s value = formula" % id] = _near(GearBudget.item_value(entry), _formula(entry))
-	var bare: Dictionary = _focus("t_bare", "orb")
-	c["an item without effects is unchanged"] = _near(GearBudget.item_value(bare), 0.0)
-	c["+0.10 potency counts 2.0"] = _near(GearBudget.item_value(_focus("t_pot", "orb", {"effects": [{"type": "skill_potency", "group": "spell", "value": 0.10}]})), 2.0)
-	for id: String in ["wpn_orb", "wpn_tome"]:
-		if ContentCatalog.has("items", id):
-			var shipped: Dictionary = ContentCatalog.get_entry("items", id)
-			c["%s shipped value = formula" % id] = _near(GearBudget.item_value(shipped), _formula(shipped))
-	var loadouts_ok: bool = true
-	for class_id: String in ["mage", "priest"]:
-		loadouts_ok = loadouts_ok and GearBudget.check_class(ContentCatalog.get_entry("classes", class_id)).is_empty()
-	c["mage and priest default loadouts stay inside the band"] = loadouts_ok
-	return TestHelpers.report(TAG, "GearBudget effect weights", c)
-
-# ------------------------------------------------------------------------------
-# Shipped assets (C1-A1 / C1-A2): checked once they exist in the catalog
-# ------------------------------------------------------------------------------
-
-static func _test_shipped_assets() -> bool:
-	var c: Dictionary = {}
-	var priest: Dictionary = ContentCatalog.get_entry("classes", "priest")
-	var mage: Dictionary = ContentCatalog.get_entry("classes", "mage")
-	var priest_prof: Dictionary = DictUtil.dict_of(priest.get("proficiency", {}))
-	if not priest_prof.has("tome"):
-		print("    [FocusGear] shipped C1 assets: SKIP (priest tome proficiency not in the catalog yet; C1-A1 pending)")
-		return true
-	c["priest has no shield proficiency"] = not priest_prof.has("shield")
-	c["priest tome level 3, orb level 2"] = DictUtil.to_int(DictUtil.dict_of(priest_prof["tome"]).get("level", 0)) == 3 and DictUtil.to_int(DictUtil.dict_of(priest_prof.get("orb", {})).get("level", 0)) == 2
-	var mage_prof: Dictionary = DictUtil.dict_of(mage.get("proficiency", {}))
-	c["mage orb 3, tome 2"] = DictUtil.to_int(DictUtil.dict_of(mage_prof.get("orb", {})).get("level", 0)) == 3 and DictUtil.to_int(DictUtil.dict_of(mage_prof.get("tome", {})).get("level", 0)) == 2
-	var bad_unit: Array[String] = ContentCatalog.validate_entry("units", {"id": "t_shield_priest", "name": "x", "class_id": "priest", "off_hand": "shd_kite"})
-	c["a priest with a shield override fails the training check"] = _has_error(bad_unit, "no training in 'shield'")
-	for skill_id: String in ["arcane_bolt", "hex"]:
-		var skill: SkillDef = SkillCatalog.find(skill_id)
-		c["%s no longer names orb or tome" % skill_id] = skill != null and not skill.weapon_types.has("orb") and not skill.weapon_types.has("tome")
-	return TestHelpers.report(TAG, "shipped C1 assets", c)

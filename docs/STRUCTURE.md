@@ -12,10 +12,10 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
 | `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
-| `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` | headless suites; a suite = one file + one line in the registry (R1) | all | done |
+| `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
-| `scripts/tests/ai_skills_test_suite.gd` | AI use of the new skill kinds (AI1) | S4 | done |
+| `scripts/tests/ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`, `ai_skills_kit.gd` | AI use of the new skill kinds (AI1) | S4 | done |
 | `scripts/tests/bal2_rules_test_suite.gd` | BAL2-L rules: PERC range, unit gear `none`, tiers, trained fists | S2, S3 | done |
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
@@ -30,17 +30,17 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/skill_unlock_test_suite.gd` | SK2 unlock rule suite (its schema default seed `sk2_schema.gd` is archived, CLN-2) | S2, S12 | done |
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
-| `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
+| `scripts/tests/focus_gear_test_suite.gd`, `focus_gear_budget_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
 | `.github/workflows/gate.yml` | GitHub Actions: fast gate (`tools/fc.sh gate`) and `tools/fc.sh docs` on every PR and push to `main` | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
-| `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |
+| `scripts/tests/combat_extensions_test_suite.gd`, `combat_ext_attacks_test_suite.gd`, `combat_ext_ai_test_suite.gd`, `combat_ext_kit.gd` | S12-A/S4-A suites (M1) | S12, S4 | done |
 | `scripts/combat/status/riposte_rules.gd`, `scripts/tests/riposte_test_suite.gd` | riposte counter rules and suite (M2a) | S12 | done |
 | `scripts/core/specs/gear_budget.gd`, `scripts/tests/gear_budget_test_suite.gd` | GearBudget weights, loadout band, soft warnings; suite (M2d) | S3 | done |
 | `scripts/tests/skill_family_test_suite.gd` | skill families (family/tier/basic), planner tier grouping, active loadout (M2c-2a1) | S12 | done |
-| `scripts/combat/actions/disengage_command.gd`, `scripts/tests/engine_pieces_test_suite.gd` | disengage jump command; cleanse / disengage / SWEEP / unarmed suite (M2c-2a2) | S12 | done |
+| `scripts/combat/actions/disengage_command.gd`, `scripts/tests/engine_pieces_test_suite.gd`, `unarmed_test_suite.gd` | disengage jump command; cleanse / disengage / SWEEP suite, unarmed suite (M2c-2a2) | S12 | done |
 | `scripts/combat/status/status_registry.gd`, `scripts/tests/status_registry_test_suite.gd`, `scripts/tests/foundation_test_suite.gd` | single status table with stacking rules; suites for it and for slice A (skill potency hook, `unarmed` token, derived weapon hands) | S12 | done |
 | `scripts/content/{skill_kinds,skill_ranks,skill_text,asset_scan}.gd`, `tools/safe_delete.gd` | ranked skills, kind sections, description tokens, reference scan / safe delete (SKILL1; the migration seed `skill1_ranks.gd` is archived, CLN-2) | S5 | done |
 | `scripts/content/validators/` | per-kind validation rules (SkillValidator, ItemValidator, ClassUnitValidator); ContentCatalog.validate_entry / warnings_for dispatch to them (CLN-9) | S5 | done |
@@ -57,7 +57,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog); dialogue_runner.gd (DialogueRunner); panels in DLG1-L commit 3 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
-| `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1); later the world map and the dialogue / shop panels | S9, S10, S11 | in progress |
+| `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1), dialogue and shop panels (DialoguePanel, ShopPanel, DLG1); later the world map | S9, S10, S11 | in progress |
 | `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |

@@ -79,7 +79,7 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
 | EXP1 | approved | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
-| DLG1 | approved | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
+| DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
 | TRAV1 | approved | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files); save v5 |
 | REP1 | approved | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |
@@ -92,9 +92,9 @@ Rules and open questions: `docs/specs/S12_RULES.md` (S12S status expansion, S12T
 
 | Milestone | Status | Depends on | Notes |
 | --- | --- | --- | --- |
-| S12S | proposed | ITEM1-L, CLASS1-L | status slice, then S12T terrain and S12C combos in sequence (shared skill and plan files) |
+| S12S | approved | ITEM1-L, CLASS1-L | status slice, then S12T terrain and S12C combos in sequence (shared skill and plan files) |
 | S14-1 | proposed | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
-| UI1 | proposed | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
+| UI1 | approved | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
 
 ## Open engine items (tracked)
 

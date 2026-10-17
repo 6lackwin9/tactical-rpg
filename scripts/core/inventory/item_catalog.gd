@@ -23,13 +23,6 @@ static func create_consumable(id: String) -> Consumable:
 	var it: Item = create(id)
 	return it as Consumable
 
-# Every catalog item, in catalog order.
-static func all_items() -> Array[Item]:
-	var out: Array[Item] = []
-	for entry: Dictionary in ContentCatalog.entries("items"):
-		out.append(ContentFactory.item(entry))
-	return out
-
 # ------------------------------------------------------------------------------
 # Named shorthands
 # ------------------------------------------------------------------------------
@@ -48,9 +41,6 @@ static func create_steel_broadsword() -> Equipment:
 
 static func create_iron_shortsword() -> Equipment:
 	return create_equipment("wpn_shortsword")
-
-static func create_spiked_knuckles() -> Equipment:
-	return create_equipment("wpn_knuckles")
 
 static func create_shadow_dagger() -> Equipment:
 	return create_equipment("wpn_dagger")
