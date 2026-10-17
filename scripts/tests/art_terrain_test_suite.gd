@@ -81,6 +81,40 @@ static func run(_tree_parent: Node = null) -> bool:
 	var moved_into_lava: bool = grid.move_combatant(walker, Vector2i(0, -1))
 	var grid_ok: bool = deployed_off_wall and not placed_lava and not moved_into_lava and grid.get_position(walker) == Vector2i(2, 4)
 
+	# 6b. Standard deployment (GRID12): party left, enemies right; melee front column, ranged back column,
+	# rows from DEPLOY_ROWS; a walled-off column spills to the next one; halves split at the middle.
+	var dgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(11, 4)])
+	var p_melee := Combatant.new("PMelee", 50, 10, 1)
+	var p_ranged := Combatant.new("PRanged", 50, 10, 3)
+	var p_melee2 := Combatant.new("PMelee2", 50, 10, 1)
+	var e_melee := Combatant.new("EMelee", 50, 10, 1)
+	var e_ranged := Combatant.new("ERanged", 50, 10, 3)
+	var d_allies: Array[Combatant] = [p_melee, p_ranged, p_melee2]
+	var d_enemies: Array[Combatant] = [e_melee, e_ranged]
+	dgrid.deploy_combatants(d_allies, d_enemies)
+	var r0: int = CombatGrid.DEPLOY_ROWS[0]
+	var r1: int = CombatGrid.DEPLOY_ROWS[1]
+	var deploy_ok: bool = dgrid.get_position(p_melee) == Vector2i(CombatGrid.PARTY_FRONT_X, r0) and dgrid.get_position(p_ranged) == Vector2i(CombatGrid.PARTY_BACK_X, r0)
+	deploy_ok = deploy_ok and dgrid.get_position(p_melee2) == Vector2i(CombatGrid.PARTY_FRONT_X, r1)
+	deploy_ok = deploy_ok and dgrid.get_position(e_melee) == Vector2i(CombatGrid.ENEMY_FRONT_X, r0) and dgrid.get_position(e_ranged) == Vector2i(CombatGrid.ENEMY_BACK_X, r0)
+	var wgrid := CombatGrid.new(CombatGrid.ArenaType.CLOSED, [Vector2i(11, 4)])
+	for y: int in range(CombatGrid.GRID_H):
+		wgrid.set_terrain(Vector2i(CombatGrid.PARTY_FRONT_X, y), Terrain.Type.WALL)
+	var w_melee := Combatant.new("WMelee", 50, 10, 1)
+	var w_allies: Array[Combatant] = [w_melee]
+	wgrid.deploy_combatants(w_allies, none)
+	deploy_ok = deploy_ok and wgrid.get_position(w_melee) == Vector2i(CombatGrid.PARTY_BACK_X, r0)
+	deploy_ok = deploy_ok and CombatGrid.is_party_half(Vector2i((CombatGrid.GRID_W >> 1) - 1, 0)) and not CombatGrid.is_party_half(Vector2i(CombatGrid.GRID_W >> 1, 0))
+	deploy_ok = deploy_ok and CombatGrid.centre_distance(Vector2i(5, 4)) == CombatGrid.centre_distance(Vector2i(6, 4)) and CombatGrid.centre_distance(Vector2i(5, 4)) < CombatGrid.centre_distance(Vector2i(4, 4))
+	for enc_id: String in ["goblin_skirmish", "veterans_drill"]:
+		var dsession := CombatSession.new(CatalogEncounter.new(enc_id))
+		dsession.start()
+		for c: Combatant in dsession.allies:
+			deploy_ok = deploy_ok and dsession.grid.has_combatant(c) and CombatGrid.is_party_half(dsession.grid.get_position(c))
+		for c: Combatant in dsession.enemies:
+			deploy_ok = deploy_ok and dsession.grid.has_combatant(c) and not CombatGrid.is_party_half(dsession.grid.get_position(c))
+		dsession.dispose()
+
 	# 7. The Goblin Ambush (wave included) deploys and plays to a conclusion on every zone
 	var all_zones_play: bool = true
 	for zone_id: String in CombatZones.zone_ids():
@@ -137,8 +171,9 @@ static func run(_tree_parent: Node = null) -> bool:
 	print("  [Terrain] Glyph round-trip & walkability rules: %s" % ("PASS" if terrain_ok else "FAIL"))
 	print("  [Terrain] All zones valid 12x9 with walkable core & exit lane: %s" % ("PASS" if zones_ok else "FAIL"))
 	print("  [Terrain] Grid blocks placement/movement on blocked tiles; deploy skips them: %s" % ("PASS" if grid_ok else "FAIL"))
+	print("  [Terrain] Standard deployment: party left, enemies right, melee front, ranged back, blocked column spills: %s" % ("PASS" if deploy_ok else "FAIL"))
 	print("  [Terrain] Goblin Ambush (with its wave) deploys and concludes on every zone: %s" % ("PASS" if all_zones_play else "FAIL"))
 	print("  [Art] Terrain tiles (all variants) & overlays rasterize: %s" % ("PASS" if tiles_ok else "FAIL"))
 	print("  [Art] Item icons by gear type + bespoke rare weapon icons: %s" % ("PASS" if icons_ok else "FAIL"))
 
-	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and all_zones_play and tiles_ok and icons_ok
+	return tokens_ok and portraits_ok and sides_ok and terrain_ok and zones_ok and grid_ok and deploy_ok and all_zones_play and tiles_ok and icons_ok
