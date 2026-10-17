@@ -1,0 +1,42 @@
+# Web build (HTML5, GitHub Pages)
+
+A browser build for cross-platform testing and porting checks (user 2026-10-17). It is a release build and less debug-friendly than the desktop runner; playtesting and debugging stay on desktop.
+
+## How it is built
+
+- Preset `Web` in `export_presets.cfg`: single-threaded templates (`variant/thread_support=false`), so the page needs no cross-origin isolation headers (`COOP`/`COEP`) and no `SharedArrayBuffer`. GitHub Pages cannot set those headers, so the threaded templates are not used. The preset adds `data/*.json` to the pack (the catalogs are read with `FileAccess`, not as resources).
+- Renderer: the web always uses Compatibility (WebGL 2); desktop uses Forward+.
+- Workflow `.github/workflows/web.yml`: every PR and push to `main` exports the build and uploads it as the `web-build` artifact (14 days). Pushes to `main` also deploy it to GitHub Pages when the repository variable `WEB_PAGES` is `true`.
+- Templates come from the GitHub release `.tpz` (downloads.godotengine.org is blocked in the cloud); only `web_nothreads_*.zip` and `version.txt` are kept, cached per Godot version.
+
+## Build it locally (cloud or Linux)
+
+```bash
+v=4.7.2; d=~/.local/share/godot/export_templates/$v.stable; mkdir -p "$d"
+curl -fsSL -o /tmp/t.tpz "https://github.com/godotengine/godot/releases/download/$v-stable/Godot_v$v-stable_export_templates.tpz"
+unzip -o -j -q /tmp/t.tpz 'templates/web_nothreads_*' 'templates/version.txt' -d "$d"
+mkdir -p build/web && godot --headless --export-release "Web" build/web/index.html
+cd build/web && python3 -m http.server 8000   # then open http://localhost:8000
+```
+
+On Windows the editor's Export dialog uses the same preset once its export templates are installed. `build/` is git-ignored. To run a downloaded `web-build` artifact, unzip it and serve the folder the same way (opening `index.html` as a file does not work).
+
+## Turning on GitHub Pages (once, by the repo owner)
+
+1. Pages on a private repository needs a paid plan (GitHub Pro or higher), and the published site is public to anyone with the URL.
+2. Repository **Settings > Pages > Build and deployment > Source**: choose **GitHub Actions**.
+3. **Settings > Secrets and variables > Actions > Variables > New repository variable**: name `WEB_PAGES`, value `true`.
+4. Re-run the latest `web` workflow on `main` (Actions tab) or merge any PR. The site is at `https://6lackwin9.github.io/tactical-rpg/`.
+
+## What does not work in the web build
+
+| Area | Behaviour in the browser |
+| --- | --- |
+| Scene Runner developer panel | Reload scripts, Restart runner and the Arena/Dojo suite buttons do nothing useful: the browser cannot start processes and the pack holds no editable script sources |
+| Content Forge and World Forge saves | `res://` is read-only: edits work for the session but saving to the catalog fails |
+| Saves and prefs (`user://`) | Work, stored in the browser's IndexedDB for that site; clearing site data wipes them |
+| Emoji icons in labels and buttons | Show as boxes: the build has no emoji font (desktop falls back to the OS font) |
+| Keys | F5 may reload the browser tab instead of the scene; use the Menu pill buttons |
+| Debug output | Release build: no debug-only logs (`combat_last.log` is skipped) and no remote debugger |
+| Audio | Starts only after the first click or key press (browser autoplay rule) |
+| Touch / mobile | Runs, but the UI is built for mouse and keyboard |
