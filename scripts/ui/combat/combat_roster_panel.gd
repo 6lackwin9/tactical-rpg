@@ -80,7 +80,7 @@ func _tag_planning_state() -> void:
 		var mark: String = "○ no plan" if steps == 0 else ("⚠ %d" % steps if st.error_index >= 0 or st.runs_dry() else "✔ %d" % steps)
 		lbl.text = "%s • %s • AP %d" % [CombatTypes.stance_to_string(ally.current_stance), mark, st.ap_left]
 		for status: Variant in ally.statuses:
-			lbl.text += " • %s" % StatusEffects.display_name(str(status))
+			lbl.text += " • %s" % StatusEffects.chip_text(ally, str(status))
 
 func _card_for(c: Combatant) -> Control:
 	var raw: Variant = _roster.roster_cards.get(c, null)

@@ -5,8 +5,9 @@ extends RefCounted
 # Tactical RPG - Support Rules (heals and buffs; deliberately NOT DamageCalculator)
 # heal = heal_base + round(heal_stat x heal_mult), where heal_stat is the caster's
 # effective INT or KNOW. Healing never exceeds max HP (Combatant.heal clamps) and
-# never revives. Buff statuses (haste, taunt) are queued like every status: they
-# become active next round and last `status_rounds` rounds.
+# never revives. Buff statuses (haste, taunt, fortify, regen) are queued like every status: they
+# become active next round and last `status_rounds` rounds, carrying the skill's status_magnitude
+# and the caster's name (Combatant.pending_status_sources).
 # ==============================================================================
 
 const HEAL_STATS: Array[String] = ["INT", "KNOW"]
@@ -65,6 +66,6 @@ static func apply(caster: Combatant, target: Combatant, skill: SkillDef, rounds:
 		target.heal(heal_amount(caster, skill))
 		healed = target.hp - before
 	if not skill.grant_status.is_empty():
-		StatusEffects.queue(target, skill.grant_status, rounds)
+		StatusEffects.queue(target, skill.grant_status, rounds, skill.status_magnitude, caster.name if caster != null else "")
 		granted = skill.grant_status
 	return {"healed": healed, "status": granted, "cleansed": cleansed}

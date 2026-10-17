@@ -4,13 +4,14 @@ extends Control
 # ==============================================================================
 # Tactical RPG - Main menu host view (UI1-L commit 3; scene scenes/main_menu.tscn)
 # Thin: owns the MenuRouter, renders its top screen (main menu, new game, load / save slots, settings, hub) through the
-# per-screen views, shows the router's questions and notices as an overlay, and forwards keys (ui_cancel = Back or No).
+# per-screen views (UI2-L adds party, level-up, loadout, gear and battle results), shows the router's questions and notices as an overlay, and forwards keys (ui_cancel = Back or No).
 # A started game opens the exploration scene (EXP1 region map) when it exists; Esc there returns to the hub.
 # ==============================================================================
 
 const GAME_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
 const RUNNER_SCENE: String = "res://scenes/scene_runner.tscn"
 const BASE_FONT: int = 18
+const FOCUS_META: StringName = &"focus_target"
 const COL_BG: Color = Color(0.05, 0.07, 0.10, 1.0)
 
 var router: MenuRouter = null
@@ -64,6 +65,7 @@ func _ready() -> void:
 	router.notice.connect(_on_notice)
 	router.game_started.connect(open_game)
 	router.quit_requested.connect(_on_quit)
+	router.results_done.connect(_on_results_done)
 	render()
 
 # The theme's default font size follows the `ui/text_scale` setting.
@@ -93,6 +95,18 @@ func render() -> void:
 			view = SettingsView.new()
 		MenuRouter.HUB:
 			view = HubView.new()
+		MenuRouter.PARTY:
+			view = PartyView.new()
+		MenuRouter.LEVEL_UP:
+			view = LevelUpView.new()
+		MenuRouter.LOADOUT:
+			view = LoadoutView.new()
+		MenuRouter.GEAR:
+			view = GearView.new()
+		MenuRouter.RESULTS:
+			view = BattleResultsView.new()
+		MenuRouter.JOURNAL:
+			view = JournalView.new()
 	if view == null:
 		return
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -143,7 +157,15 @@ static func button(label: String, callback: Callable, enabled: bool = true) -> B
 	b.pressed.connect(callback)
 	return b
 
+# A compact button for rows and toolbars (`width` 0 = fit the text).
+static func small(b: Button, width: int = 0) -> Button:
+	b.custom_minimum_size = Vector2(width, 0)
+	return b
+
 static func focus_first(root: Node) -> void:
+	if root.has_meta(FOCUS_META):   # a view may name the control to focus (the journal's selected quest)
+		MainMenuView._focus.call_deferred(root.get_meta(FOCUS_META))
+		return
 	for child: Node in root.find_children("*", "BaseButton", true, false):
 		var b: BaseButton = child as BaseButton
 		if b != null and not b.disabled and b.is_visible_in_tree():
@@ -233,6 +255,8 @@ func open_game(gs: GameState) -> void:
 	if node == null or not node.has_method("play_state"):
 		return
 	game_view = node
+	if game_view.has_signal("fight_settled"):
+		game_view.connect("fight_settled", _on_fight_settled)
 	add_child(game_view)
 	move_child(game_view, _game_hint.get_index())
 	_menu.visible = false
@@ -254,6 +278,22 @@ func leave_game() -> bool:
 	render()
 	return true
 
+# UI2-L rule 8: a settled fight shows the results screen over the hidden map; Continue brings the map back.
+func _on_fight_settled(res: Dictionary) -> void:
+	if game_view == null or not CurrentGame.has_game():
+		return
+	game_view.visible = false
+	_menu.visible = true
+	_game_hint.visible = false
+	router.push(MenuRouter.RESULTS, {"award": DictUtil.dict_of(res.get("xp", {})), "advanced": res.get("advanced", [])})
+
+func _on_results_done() -> void:
+	if game_view == null:
+		return
+	game_view.visible = true
+	_menu.visible = false
+	_game_hint.visible = true
+
 func open_tools() -> void:
 	var host: Node = get_parent()
 	if host != null and host.has_method("back_to_menu"):
@@ -273,7 +313,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if is_overlay_open():
 		answer(false)
-	elif game_view != null:
+	elif game_view != null and game_view.visible:
 		var _left: bool = leave_game()
 	else:
 		router.pop()

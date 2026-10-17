@@ -2,8 +2,9 @@ class_name HubView
 extends VBoxContainer
 
 # ==============================================================================
-# Tactical RPG - In-game hub view (UI1-L): where the party is, the party summary and the hub entries (party and journal
-# stay disabled until UI2-L / UI3-L add their screens); Explore returns to the game scene when it exists.
+# Tactical RPG - In-game hub view (UI1-L): where the party is, the party summary and the hub entries (Party opens the
+# UI2-L party screen, a dot marks unspent level-up points; Journal opens the UI3-L quest journal); Explore returns to the
+# game scene when it exists.
 # ==============================================================================
 
 const LABELS: Dictionary = {MenuRouter.PARTY: "Party", MenuRouter.JOURNAL: "Journal", MenuRouter.SAVE: "Save game", MenuRouter.SETTINGS: "Settings"}
@@ -20,5 +21,6 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	if ResourceLoader.exists(MainMenuView.GAME_SCENE) and CurrentGame.has_game():
 		add_child(MainMenuView.button("Explore", func() -> void: host.open_game(CurrentGame.state())))
 	for id: String in HubModel.ENTRIES:
-		add_child(MainMenuView.button(str(LABELS[id]), host.act.bind(m.open.bind(id)), m.can_open(id)))
+		var label: String = str(LABELS[id]) + ("  •" if id == MenuRouter.PARTY and m.can_open(id) and PartyModel.new(host.router).badge() else "")
+		add_child(MainMenuView.button(label, host.act.bind(m.open.bind(id)), m.can_open(id)))
 	add_child(MainMenuView.button("Quit to main menu", host.act.bind(m.quit_to_menu)))

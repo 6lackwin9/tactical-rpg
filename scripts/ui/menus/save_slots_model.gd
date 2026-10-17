@@ -9,7 +9,7 @@ extends RefCounted
 
 const BUSY: String = "You can't save during a battle or a conversation."
 const NO_GAME: String = "There is no game to save."
-const MANUAL_ONLY: String = "Manual saves use slots 1-3 (slot 0 is the autosave)."
+const MANUAL_ONLY: String = "Manual saves use slots 1-5 (slot 0 is the autosave)."
 
 var router: MenuRouter = null
 var saving: bool = false            # true = the hub's Save screen, false = Load
@@ -44,6 +44,7 @@ func rows() -> Array[Dictionary]:
 			"world": str(WorldCatalog.manifest(world_id).get("name", world_id)), "location": location_name(world_id, str(head["location_id"])),
 			"party": ", ".join(party), "saved_at": Time.get_datetime_string_from_unix_time(at, true) if exists and at > 0 else "",
 			"can_load": ok and not saving, "can_save": saving and SaveGame.MANUAL_SLOTS.has(slot), "can_delete": exists,
+			"can_export": ok, "can_import": SaveGame.MANUAL_SLOTS.has(slot), "export_name": export_name(slot, world_id, at),
 		})
 	return out
 
@@ -74,7 +75,7 @@ func load(slot: int) -> Array[String]:
 	last_errors = load_slot(router, slot)
 	return last_errors
 
-# Manual save to slot 1..3; asks first when the slot holds a save.
+# Manual save to slot 1..5; asks first when the slot holds a save.
 func save(slot: int) -> Array[String]:
 	last_errors = []
 	if not CurrentGame.has_game():
@@ -94,6 +95,37 @@ func _save_now(slot: int) -> void:
 	if last_errors.is_empty():
 		CurrentGame.mark_saved(slot)
 		router.changed.emit()
+
+# SAVE-IO: a default file name for exporting `slot`, e.g. ashlands_slot2_20261017-1445.json.
+static func export_name(slot: int, world_id: String, saved_at: int) -> String:
+	var stamp: String = Time.get_datetime_string_from_unix_time(saved_at, false).replace("-", "").replace(":", "").replace("T", "-").left(13) if saved_at > 0 else "save"
+	return "%s_slot%d_%s.json" % [world_id if not world_id.is_empty() else "save", slot, stamp]
+
+func export_slot(slot: int, path: String) -> Array[String]:
+	last_errors = SaveGame.export_to(slot, path)
+	if last_errors.is_empty():
+		router.notice.emit(["Exported slot %d to %s." % [slot, path]] as Array[String])
+	return last_errors
+
+# Reads a save file into manual `slot`; asks first when the slot holds a save. Load warnings show as a notice.
+func import_file(path: String, slot: int) -> Array[String]:
+	last_errors = []
+	if not SaveGame.MANUAL_SLOTS.has(slot):
+		last_errors.append(MANUAL_ONLY)
+	elif SaveGame.exists(slot):
+		router.ask("Replace slot %d with the imported save?" % slot, _import_now.bind(path, slot))
+	else:
+		_import_now(path, slot)
+	return last_errors
+
+func _import_now(path: String, slot: int) -> void:
+	var res: Dictionary = SaveGame.import_from(path, slot)
+	last_errors.assign(DictUtil.array_of(res["errors"]))
+	var warnings: Array[String] = []
+	warnings.assign(DictUtil.array_of(res["warnings"]))
+	if last_errors.is_empty() and not warnings.is_empty():
+		router.notice.emit(warnings)
+	router.changed.emit()
 
 func delete(slot: int) -> Array[String]:
 	last_errors = []

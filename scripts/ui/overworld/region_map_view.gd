@@ -12,6 +12,8 @@ extends Control
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) (refused while a fight is pending). A world picker starts a new game.
 # ==============================================================================
 
+signal fight_settled(res: Dictionary)   # UI2-L: the main menu host shows battle results on it
+
 const DEBUG_SLOT: int = SaveGame.AUTOSAVE_SLOT
 const TILE: int = 22
 const DEBUG_SEED: int = 7
@@ -210,6 +212,8 @@ func settle(result: String) -> void:
 	var res: Dictionary = DialogueRunner.after_fight(gs, fight, result) if str(fight.get("source", "")) == "dialogue" else ExploreRunner.after_fight(gs, fight, result)
 	_note("Fight %s: %s (quests advanced: %s)" % [str(fight["encounter"]), result, str(res.get("advanced", []))])
 	_handle(res)
+	if DictUtil.to_bool(res.get("ok", false)):
+		fight_settled.emit(res)
 
 func _handle(res: Dictionary) -> void:
 	if not DictUtil.to_bool(res.get("ok", false)):

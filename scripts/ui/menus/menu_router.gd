@@ -13,6 +13,7 @@ signal confirm_needed(message: String)             # a yes / no question; answer
 signal notice(lines: Array[String])                # messages to show once (load warnings)
 signal game_started(gs: GameState)                 # a new or loaded game is ready (the host opens the game scene)
 signal quit_requested()                            # leave the application
+signal results_done()                              # the battle results screen closed (the host resumes the game scene)
 
 const MAIN: String = "main"
 const NEW_GAME: String = "new_game"
@@ -20,8 +21,12 @@ const LOAD: String = "load"
 const SAVE: String = "save"
 const SETTINGS: String = "settings"
 const HUB: String = "hub"
-const PARTY: String = "party"      # UI2-L
-const JOURNAL: String = "journal"  # UI3-L
+const PARTY: String = "party"          # UI2-L: roster, stats, passives
+const LEVEL_UP: String = "level_up"    # UI2-L: args {member}
+const LOADOUT: String = "loadout"      # UI2-L: args {member}
+const GEAR: String = "gear"            # UI2-L: args {member}
+const RESULTS: String = "results"      # UI2-L: args {award, advanced}
+const JOURNAL: String = "journal"      # UI3-L
 
 var stack: Array[String] = []
 var models: Dictionary = {}        # screen id on the stack -> its model
@@ -44,8 +49,9 @@ func has_draft(id: String = "") -> bool:
 	var m: RefCounted = model(id)
 	return m != null and m.has_method("has_draft") and DictUtil.to_bool(m.call("has_draft"))
 
-# The model for screen `id` (a fresh one each time the screen is opened).
-func make_model(id: String) -> RefCounted:
+# The model for screen `id` (a fresh one each time the screen is opened); `args` carries a member id or a battle award.
+func make_model(id: String, args: Dictionary = {}) -> RefCounted:
+	var member: String = str(args.get("member", ""))
 	match id:
 		MAIN:
 			return MainMenuModel.new(self)
@@ -59,14 +65,26 @@ func make_model(id: String) -> RefCounted:
 			return SettingsModel.new()
 		HUB:
 			return HubModel.new(self)
+		PARTY:
+			return PartyModel.new(self) if CurrentGame.has_game() else null
+		LEVEL_UP:
+			return LevelUpModel.new(member) if CurrentGame.has_game() else null
+		LOADOUT:
+			return LoadoutModel.new(member) if CurrentGame.has_game() else null
+		GEAR:
+			return GearModel.new(member) if CurrentGame.has_game() else null
+		JOURNAL:
+			return JournalModel.new() if CurrentGame.has_game() else null
+		RESULTS:
+			return BattleResultsModel.new(self, DictUtil.dict_of(args.get("award", {})), JsonUtil.strings(args.get("advanced", []))) if CurrentGame.has_game() else null
 	return null
 
-func push(id: String) -> void:
+func push(id: String, args: Dictionary = {}) -> void:
 	if stack.has(id):
 		models.erase(id)
 		stack.erase(id)
 	stack.append(id)
-	models[id] = make_model(id)
+	models[id] = make_model(id, args)
 	changed.emit()
 
 # Leaves the top screen; asks first when it has a draft. The bottom screen stays.
@@ -82,6 +100,9 @@ func _pop_now() -> void:
 	if stack.size() <= 1:
 		return
 	models.erase(stack.pop_back())
+	var back: RefCounted = model()
+	if back != null and back.has_method("refresh"):
+		back.call("refresh")   # the screen below re-reads what the popped screen may have changed
 	changed.emit()
 
 func replace(id: String) -> void:

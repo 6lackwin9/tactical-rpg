@@ -4,7 +4,7 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Menus Test Suite (UI1-L, S13)
 # Part A (schema): world start_party field and validation, the playable rule, NewGame.create_for_world, SaveGame slots
-# 0..3 / autosave / peek / newest_slot, CurrentGame, SettingsFile. Part B (models): router, main menu, new game, save
+# 0..5 / autosave / peek / newest_slot, CurrentGame, SettingsFile. Part B (models): router, main menu, new game, save
 # slots, settings and hub models. Fixtures: hand-built worlds in an EMPTY sandbox world root, saves and the settings
 # file in the sandbox; the shipped catalog is only read (units picked by rule), shipped data is never written.
 # ==============================================================================
@@ -157,18 +157,18 @@ static func _wipe_saves() -> void:
 	for slot: int in range(SaveGame.AUTOSAVE_SLOT, SaveGame.LAST_SLOT + 1):
 		var _gone: bool = SaveGame.delete(slot)
 
-# Check 3: slot range 0..3; slot 0 round trip.
+# Check 3: slot range 0..5; slot 0 round trip.
 static func _test_slots() -> bool:
 	_wipe_saves()
 	var gs: GameState = _new_state()
 	var checks: Dictionary = {}
-	checks["slot 4 refused"] = SaveGame.write(gs, 4) == ["Save slot must be 0-3."]
-	checks["slot -1 refused"] = SaveGame.write(gs, -1) == ["Save slot must be 0-3."]
+	checks["slot 6 refused"] = SaveGame.write(gs, 6) == ["Save slot must be 0-5."]
+	checks["slot -1 refused"] = SaveGame.write(gs, -1) == ["Save slot must be 0-5."]
 	checks["autosave writes slot 0"] = SaveGame.autosave(gs).is_empty() and SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
 	var back: GameState = SaveGame.read(0)["state"] as GameState
 	checks["slot 0 reads back equal"] = back != null and back.equals(gs)
-	checks["constants"] = SaveGame.AUTOSAVE_SLOT == 0 and SaveGame.MANUAL_SLOTS == [1, 2, 3]
-	return _report("Check 3: save slots 0-3 and autosave", checks)
+	checks["constants"] = SaveGame.AUTOSAVE_SLOT == 0 and SaveGame.MANUAL_SLOTS == [1, 2, 3, 4, 5]
+	return _report("Check 3: save slots 0-5 and autosave", checks)
 
 # Check 4: peek of missing, corrupt, v2 and current files; peek never migrates or changes the file.
 static func _test_peek() -> bool:
@@ -428,7 +428,7 @@ static func _test_save_slots_model() -> bool:
 	checks["busy refused"] = m.save(3) == ["You can't save during a battle or a conversation."] and not SaveGame.exists(3)
 	CurrentGame.set_busy(false)
 	var rows: Array[Dictionary] = m.rows()
-	checks["rows 0..3"] = rows.size() == 4 and str(rows[0]["label"]) == "Autosave" and str(rows[2]["status"]) == "ok" and not DictUtil.to_bool(rows[0]["can_save"]) and DictUtil.to_bool(rows[2]["can_save"])
+	checks["rows 0..5"] = rows.size() == SaveGame.LAST_SLOT + 1 and str(rows[0]["label"]) == "Autosave" and str(rows[2]["status"]) == "ok" and not DictUtil.to_bool(rows[0]["can_save"]) and DictUtil.to_bool(rows[2]["can_save"])
 	_write_raw(3, "{bad")
 	rows = m.rows()
 	checks["unreadable row: delete only"] = str(rows[3]["status"]) == "unreadable" and DictUtil.to_bool(rows[3]["can_delete"]) and not DictUtil.to_bool(SaveSlotsModel.new(r, false).rows()[3]["can_load"])
@@ -462,7 +462,9 @@ static func _test_hub_model() -> bool:
 	var checks: Dictionary = {"names": hub.world_name() == "MN Base" and hub.party().size() == 2}
 	checks["save opens"] = hub.open(MenuRouter.SAVE).is_empty() and r.top() == MenuRouter.SAVE
 	r.pop()
-	checks["unbuilt screen refused"] = hub.open(MenuRouter.JOURNAL) == ["The journal screen is not built yet."] and r.top() == MenuRouter.HUB
+	checks["journal opens (UI3-L)"] = hub.open(MenuRouter.JOURNAL).is_empty() and r.top() == MenuRouter.JOURNAL
+	r.pop()
+	checks["unknown entry refused"] = hub.open("nope") == ["Unknown hub entry 'nope'."] and r.top() == MenuRouter.HUB
 	CurrentGame.state().party.gold += 3
 	checks["dirty asks"] = hub.quit_to_menu().is_empty() and p.asked == ["Quit without saving?"] and CurrentGame.has_game()
 	r.decline()
