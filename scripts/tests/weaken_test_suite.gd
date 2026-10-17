@@ -259,7 +259,7 @@ static func _test_validation() -> bool:
 	checks["a damaging attack may weaken too"] = _errors(damaging).is_empty()
 	var rt: Dictionary = ContentSchema.normalize("skills", base)
 	checks["the new field round-trips through the factory"] = ContentFactory.skill_to_entry(ContentFactory.skill(rt)) == rt and ContentFactory.skill(rt).status_magnitude == 15
-	checks["the schema field has the spec range (default 0, 0..95)"] = _field("status_magnitude", "default") == 0 and _field("status_magnitude", "min") == 0 and _field("status_magnitude", "max") == 95
+	checks["the schema field has the spec range (default 0, 0..100 since S12S-L)"] = _field("status_magnitude", "default") == 0 and _field("status_magnitude", "min") == 0 and _field("status_magnitude", "max") == 100
 	checks["power_mult may now be 0 in the schema"] = is_equal_approx(DictUtil.to_float(_field("power_mult", "min")), 0.0)
 	checks["the shipped catalog still validates"] = ContentCatalog.validate_all().is_empty()
 	return TestHelpers.report(TAG, "Schema and validation", checks)

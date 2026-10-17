@@ -46,6 +46,7 @@ tactical-rpg/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
 │   ├── scene_runner.tscn         # Main scene: Scene Runner menu (launch scenes, hot-reload scripts, run suites)
+│   ├── main_menu.tscn            # Player front door (UI1-L): continue, new game, load / save slots, settings, hub
 │   ├── test_arena.tscn           # Test harness scene: runs SuiteRegistry.run_all (headless exit code); windowed opens the runner
 │   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1 and the runner's suite buttons
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
@@ -379,6 +380,10 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ---
 
+### Web build (browser)
+
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+
 ## Headless Testing & Automated Quality Assurance
 
 All features are tested headlessly without requiring a graphical window or GPU.
@@ -448,6 +453,10 @@ Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spe
 
 New `weaken` status (outgoing skill power -15 to -25%, cap 25%, refresh to the longest duration) with a `status_magnitude` skill field; zero-power attacks apply a status without dealing damage; riposte AP, mitigation and duration now come entirely from skill data. Tested in `weaken_test_suite.gd`.
 
+### Status expansion schema (S12S-L commit 1)
+
+The status registry gives every status a magnitude range and unit, and adds six rows with placeholder numbers: slow, expose, fortify, regen, poison and burn. They have no effect in combat yet (S12S-L commit 2). `status_magnitude` is validated per status on attack, support and defend skills, the `{magnitude}` text token shows its unit, and each status records which unit applied it (undo restores it). Tested in `status_expansion_test_suite.gd`.
+
 ### Area statuses and taunt from defend skills (M2C2B-L)
 
 Area attacks now roll their status once per unit hit (allies included); defend skills can grant riposte (immediate) or a support buff like taunt (queued). Tested in `skill_engine_test_suite.gd`.
@@ -511,7 +520,7 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
-Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to debug slot 9. EXP1 is complete.
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
@@ -554,6 +563,14 @@ All combat animation now goes through `CombatPresenter` (`scripts/ui/combat/`), 
 ### Forge class tab (CLASS1-L)
 
 A class's `skill_path` is now a map of skill family to unlock level (`{family: level}`, kept in entry order; `ClassArchetype.path_steps()` sorts by level then position, and the default loadout is the first five). CLASS1-M migrated the shipped classes to the map shape (and gave every unit `heal_below` 0.7), so the old list converter is switched off (`ClassUnitFields.LIST_PATH_CONVERTER` false; a list path is now a validation error). System classes lock their key fields (id, AI role, base stats, growth, proficiency); gear, pouch and path stay editable. Units gain an AI `heal_below` threshold (default 0.7). The Forge edits classes in five sections with a path table, proficiency rows, gear pickers grouped by item family and live stat, gear-budget and coverage panels (`ClassForgeModel`, `ForgePreview.class_panels`); soft warnings never block saving. Tested in `class_path` and `class_form_model` suites.
+
+### Main menu, new game and save slots (UI1-L)
+
+`scenes/main_menu.tscn` (Scene Runner > Main Menu) is the player's front door: **Continue** loads the newest save (autosave included; hidden when there is none), **New game** lists the playable worlds with their fixed starting party (world manifest `start_party`, inherited like `start_location`; a world is playable when both resolve) and starts with an autosave, **Load game** shows the autosave and five manual slots (one shared list across worlds; each row names its world) with a header read by `SaveGame.peek` (world, location, party levels, time; corrupt files show as unreadable, newer versions are listed but not loadable), **Settings** edits `user://settings.cfg` (`SettingsFile`: volumes, animation speed and instant mode, text size; never part of a save), and **Tools** (debug builds) returns to the Scene Runner. A started game opens the region map; Esc returns to the **hub** (world, location, party, Save game, Settings, Quit to main menu; Party opens the UI2-L party screen; Journal arrives with UI3). Overwriting or deleting a save, leaving a screen with unapplied changes and quitting with unsaved progress all ask first; saving is refused during a battle or conversation. Slots: 0 = autosave, 1-5 manual (`SaveGame.write` refuses anything else); no save version change. Every screen is a headless model (`MenuRouter`, `MainMenuModel`, `NewGameModel`, `SaveSlotsModel`, `SettingsModel`, `HubModel` in `scripts/ui/menus/`) over `CurrentGame` (the game in play); views only render. The Ashlands (and Tidewrack, which inherits it) start with warrior, ranger, rogue and mage (UI1-A); Iron Reaches is not playable yet. Each readable save can be **exported** to a JSON file anywhere (a file dialog; default name like `ashlands_slot2_20261017-1445.json`), and **Import** reads such a file from any world into a manual slot (migrated and validated like a load; it keeps its own save time so the autosave stays the resume point; asks before replacing a slot; not offered in the web build) (SAVE-IO, `SaveGame.export_to` / `import_from`, tested in `save_io_test_suite.gd`). Tested in `menus_test_suite.gd`.
+
+### Party screen, level-up and battle results (UI2-L)
+
+The hub's **Party** entry (a dot marks members with unspent level-up points) opens the roster: toggle who is in the active four (at most 4, at least 1), and see the selected member's stats split into base, class growth and spent points, the derived block (max HP, speed, tiles per move, crit, melee and ranged power, armor, debuff resist, AP), XP to the next level, passives and gold. From there **Level up** drafts points with + / - or Auto (the class weights) and shows every derived value before and after; Confirm is permanent and unspent points may wait (battles auto-spend them on a copy). **Skills** slots up to 5 class and 3 extra families (basics are always active; locked tiers show their unlock level; Use default returns to the class pick). **Gear** equips stash items per slot (the validator's proficiency, hand and requirement messages verbatim; an explicit item goes back to the stash, the slot reverts to the class default) or opens the drag-and-drop gear board on the same draft (`PartyGearBridge` over `CharacterEquipmentModal`). Every edit is a draft that Cancel or Back drops (Back asks first). After a fight on the region map the **battle results** screen lists XP and levels of the active members, new skill tiers and quests advanced, offers Level up per member (skippable) and Continue autosaves and returns to the map. Models: `PartyModel`, `StatsModel`, `LevelUpModel`, `LoadoutModel`, `GearModel`, `BattleResultsModel`, `PartyPreview` (derived block via `PartyBuilder.build(state, false)`, which leaves unspent points unspent). Tested in `party_screen_test_suite.gd`.
 
 ### Agent workflow tools
 
