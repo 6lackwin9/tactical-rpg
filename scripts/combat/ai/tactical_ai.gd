@@ -560,7 +560,7 @@ static func _precast(plan: CombatPlan, actor: Combatant, ranked: Array[Combatant
 			1:
 				options = _buff_options(plan, actor, cap, profile)
 			_:
-				options = _debuff_options(plan, actor, cap, profile)
+				options = _debuff_options(plan, actor, cap, profile, ranked)
 		for step: PlanStep in options:
 			var mark: int = plan.steps_of(actor).size()
 			if not plan.add_step(actor, step, false).is_empty():
@@ -592,11 +592,17 @@ static func _taunt_options(plan: CombatPlan, actor: Combatant, cap: int, profile
 
 # Ally buffs (haste...): the ally without the status that is farthest from the foes, but beyond
 # its attack reach + 1 (a buff on someone about to fight is wasted); the caster itself when allowed.
+# Fortify and regen (S12S-L rule 8) pick their own targets: _fortify_targets, _regen_targets.
 static func _buff_options(plan: CombatPlan, actor: Combatant, cap: int, profile: AiProfile) -> Array[PlanStep]:
 	var out: Array[PlanStep] = []
 	var grid: CombatGrid = plan.context.grid
 	var foes: Array[Combatant] = plan.context.foes_of(actor)
 	for skill: SkillDef in _ordered(_optional(SkillCatalog.ally_buffs(StatusEffects.TAUNT, cap, actor), profile), profile):
+		if skill.grant_status == StatusEffects.FORTIFY or skill.grant_status == StatusEffects.REGEN:
+			var picked: Array[Combatant] = _fortify_targets(plan, actor, skill) if skill.grant_status == StatusEffects.FORTIFY else _regen_targets(plan, actor, skill, profile)
+			for target: Combatant in picked:
+				out.append(PlanStep.self_skill(skill) if target == actor else PlanStep.ally(skill, target))
+			continue
 		var cands: Array[Dictionary] = []
 		var index: int = 0
 		for friend: Combatant in plan.context.friends_of(actor):
@@ -621,9 +627,120 @@ static func _buff_options(plan: CombatPlan, actor: Combatant, cap: int, profile:
 			out.append(PlanStep.self_skill(skill) if target == actor else PlanStep.ally(skill, target))
 	return out
 
+# Friends `skill` may target (active, on the grid, target mode allows), in friends_of order.
+static func _buff_candidates(plan: CombatPlan, actor: Combatant, skill: SkillDef) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for friend: Combatant in plan.context.friends_of(actor):
+		if not friend.is_active() or not plan.context.grid.has_combatant(friend):
+			continue
+		if (friend == actor and skill.target_mode == SkillDef.TargetMode.ALLY) or (friend != actor and skill.target_mode == SkillDef.TargetMode.SELF):
+			continue
+		if StatusEffects.has_any(friend, skill.grant_status):
+			continue
+		out.append(friend)
+	return out
+
+# Fortify: the ally or self with the most adjacent foes (ties: a taunting unit, then the lowest armor
+# rating, then friends order); a unit already fortified (or awaiting it) is skipped.
+static func _fortify_targets(plan: CombatPlan, actor: Combatant, skill: SkillDef) -> Array[Combatant]:
+	var grid: CombatGrid = plan.context.grid
+	var foes: Array[Combatant] = plan.context.foes_of(actor)
+	var cands: Array[Dictionary] = []
+	var index: int = 0
+	for friend: Combatant in _buff_candidates(plan, actor, skill):
+		index += 1
+		var pos: Vector2i = plan.planned_position(friend)
+		var adjacent: int = 0
+		for foe: Combatant in foes:
+			if foe.is_active() and grid.has_combatant(foe) and grid.get_distance(pos, grid.get_position(foe)) <= 1:
+				adjacent += 1
+		var taunting: int = 1 if StatusEffects.has_any(friend, StatusEffects.TAUNT) else 0
+		cands.append({"unit": friend, "adj": adjacent, "taunt": taunting, "armor": DamageCalculator.armor_rating(friend), "idx": index})
+	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		for key: String in ["adj", "taunt"]:
+			if DictUtil.to_int(a[key]) != DictUtil.to_int(b[key]):
+				return DictUtil.to_int(a[key]) > DictUtil.to_int(b[key])
+		if DictUtil.to_int(a["armor"]) != DictUtil.to_int(b["armor"]):
+			return DictUtil.to_int(a["armor"]) < DictUtil.to_int(b["armor"])
+		return DictUtil.to_int(a["idx"]) < DictUtil.to_int(b["idx"])
+	)
+	var out: Array[Combatant] = []
+	for entry: Dictionary in cands:
+		var unit: Combatant = entry["unit"]
+		out.append(unit)
+	return out
+
+# Regen: the most wounded ally below the heal threshold (_needs_heal) without regen. A SUPPORT unit
+# that can heal this round has already healed (build_steps runs _try_heal before the precast).
+static func _regen_targets(plan: CombatPlan, actor: Combatant, skill: SkillDef, profile: AiProfile) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for friend: Combatant in _buff_candidates(plan, actor, skill):
+		if _needs_heal(friend, profile):
+			out.append(friend)
+	out.sort_custom(func(a: Combatant, b: Combatant) -> bool:
+		var ra: float = float(a.hp) / float(maxi(1, a.max_hp))
+		var rb: float = float(b.hp) / float(maxi(1, b.max_hp))
+		return ra < rb if not is_equal_approx(ra, rb) else a.hp < b.hp
+	)
+	return out
+
+# True when `foe` may still be debuffed with `status`: a stack_potency status while its active + pending
+# magnitude is below the cap (S12S-L rule 8), any other status only when the foe neither carries nor awaits it.
+static func _debuff_open(foe: Combatant, status: String) -> bool:
+	if StatusRegistry.stacking_of(status) == StatusRegistry.STACK_POTENCY:
+		var cap: int = StatusRegistry.cap_of(status)
+		return cap <= 0 or DictUtil.int_of(foe.status_magnitudes, status) + DictUtil.int_of(foe.pending_status_magnitudes, status) < cap
+	return not StatusEffects.has_any(foe, status)
+
+# The friend with the lowest max HP (the fragile ally slow protects; ties: friends order), or null.
+static func _fragile_friend(plan: CombatPlan, actor: Combatant) -> Combatant:
+	var best: Combatant = null
+	for friend: Combatant in plan.context.friends_of(actor):
+		if friend.is_active() and plan.context.grid.has_combatant(friend) and (best == null or friend.max_hp < best.max_hp):
+			best = friend
+	return best
+
+# Foe order for a debuff attack inflicting `status` (S12S-L rule 8). `by_power` is the default order
+# (highest attack power first). Expose: the actor's ranked first target, then foes adjacent to an ally.
+# Slow: foes that can reach the fragile ally this round (one move of 2 blocks plus their attack reach),
+# nearest to the actor first. The rest follow in `by_power` order.
+static func _debuff_order(plan: CombatPlan, actor: Combatant, status: String, by_power: Array[Combatant], ranked: Array[Combatant]) -> Array[Combatant]:
+	var grid: CombatGrid = plan.context.grid
+	var first: Array[Combatant] = []
+	if status == StatusEffects.EXPOSE:
+		if not ranked.is_empty() and by_power.has(ranked[0]):
+			first.append(ranked[0])
+		for foe: Combatant in by_power:
+			if first.has(foe):
+				continue
+			for friend: Combatant in plan.context.friends_of(actor):
+				if friend != actor and friend.is_active() and grid.has_combatant(friend) and grid.get_distance(plan.planned_position(friend), grid.get_position(foe)) <= 1:
+					first.append(foe)
+					break
+	elif status == StatusEffects.SLOW:
+		var fragile: Combatant = _fragile_friend(plan, actor)
+		if fragile != null:
+			var target_pos: Vector2i = plan.planned_position(fragile)
+			var actor_pos: Vector2i = grid.get_position(actor)
+			var basic: SkillDef = SkillCatalog.lowest(SkillDef.Kind.ATTACK)
+			for foe: Combatant in by_power:
+				var threat: int = plan.max_move_tiles(foe) + (basic.reach_for(foe).y if basic != null else 1)
+				if grid.get_distance(grid.get_position(foe), target_pos) <= threat:
+					first.append(foe)
+			first.sort_custom(func(a: Combatant, b: Combatant) -> bool:
+				var da: int = grid.get_distance(actor_pos, grid.get_position(a))
+				var db: int = grid.get_distance(actor_pos, grid.get_position(b))
+				return da < db if da != db else by_power.find(a) < by_power.find(b)
+			)
+	var out: Array[Combatant] = first.duplicate()
+	for foe: Combatant in by_power:
+		if not out.has(foe):
+			out.append(foe)
+	return out
+
 # Debuff attacks (zero-power, inflicts a status): the foe with the highest attack power that does
-# not already carry (or await) the status.
-static func _debuff_options(plan: CombatPlan, actor: Combatant, cap: int, profile: AiProfile) -> Array[PlanStep]:
+# not already carry (or await) the status; stacking statuses, expose and slow as in _debuff_open / _debuff_order.
+static func _debuff_options(plan: CombatPlan, actor: Combatant, cap: int, profile: AiProfile, ranked: Array[Combatant] = []) -> Array[PlanStep]:
 	var out: Array[PlanStep] = []
 	var skills: Array[SkillDef] = _ordered(_optional(SkillCatalog.debuff_attacks(cap, actor), profile), profile)
 	if skills.is_empty():
@@ -642,10 +759,13 @@ static func _debuff_options(plan: CombatPlan, actor: Combatant, cap: int, profil
 			return DictUtil.to_int(a["power"]) > DictUtil.to_int(b["power"])
 		return DictUtil.to_int(a["idx"]) < DictUtil.to_int(b["idx"])
 	)
+	var by_power: Array[Combatant] = []
+	for entry: Dictionary in scored:
+		var unit: Combatant = entry["unit"]
+		by_power.append(unit)
 	for skill: SkillDef in skills:
-		for entry: Dictionary in scored:
-			var foe: Combatant = entry["unit"]
-			if not StatusEffects.has_any(foe, skill.status_effect):
+		for foe: Combatant in _debuff_order(plan, actor, skill.status_effect, by_power, ranked):
+			if _debuff_open(foe, skill.status_effect):
 				out.append(PlanStep.engage(skill, foe))
 	return out
 

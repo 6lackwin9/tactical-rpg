@@ -168,7 +168,7 @@ func refresh() -> void:
 		hero_bits.append("✦ ATK ×%.1f (%d rds)" % [hero.attack_boost_multiplier, hero.attack_boost_rounds_remaining])
 	hero_bits.append("AP %d/%d" % [hero.ap, hero.max_ap])
 	for status: Variant in hero.statuses:
-		hero_bits.append("⚡ %s" % StatusEffects.display_name(str(status)))
+		hero_bits.append("⚡ %s" % StatusEffects.chip_text(hero, str(status)))
 	if not hero.is_alive():
 		hero_bits = ["💀 Down - use Heal Hero"]
 	_hero_vitals.status.text = " • ".join(hero_bits)
@@ -179,7 +179,7 @@ func refresh() -> void:
 	if mit_pct > 0:
 		dummy_bits.append("🛡 Guard %d%%" % mit_pct)
 	for status: Variant in dummy.statuses:
-		dummy_bits.append("⚡ %s" % StatusEffects.display_name(str(status)))
+		dummy_bits.append("⚡ %s" % StatusEffects.chip_text(dummy, str(status)))
 	for status: Variant in dummy.pending_statuses:
 		dummy_bits.append("%s next round" % StatusEffects.display_name(str(status)))
 	if not dummy.is_alive():

@@ -69,7 +69,9 @@ One record per unit per fight, filled by reading `session.log_entries` after eve
 | `dmg_dealt` | Sum of `damage` of this unit's ATTACK entries and its riposte reactions on foes |
 | `dmg_dealt_ranged` | Part of `dmg_dealt` where the attacker was not adjacent (grid distance > 1) to the target at the hit |
 | `dmg_taken` | HP lost to foe hits (overkill excluded) |
-| `dot_taken` | HP lost at round end (bleed) |
+| `dot_taken` | HP lost at round end (bleed; since S12S-L also poison and burn) |
+| `dot_dealt` | Added by S12S-L: round-end damage from statuses this unit applied, credited to the status source |
+| `regen_received` | Added by S12S-L: HP restored to this unit by regen at round end (also counted in `heal_received`; the caster's `heal_done`) |
 | `attacks_received` | Foe ATTACK entries that targeted this unit (area hits count once per unit hit) |
 | `heal_done` / `overheal` | HP restored to allies or self, capped at their missing HP / the capped-off rest |
 | `heal_received` | HP restored to this unit |

@@ -26,6 +26,7 @@ extends RefCounted
 #     Guard           Defend skills (Guard -30%, Brace -50%, Fortress -70%)
 #     Armor           rating / (rating + 50); rating = gear mitigation + STR / 4
 #                     (or the unit's authored armor, Combatant.armor_override)
+#                     + active fortify - active expose magnitude (floor 0)
 # ==============================================================================
 
 const DEFAULT_UNIT_SCALING: float = 1.5
@@ -138,8 +139,15 @@ static func power_of(attacker: Combatant, is_ranged: bool = false, use_offhand: 
 # Defence & crits
 # ------------------------------------------------------------------------------
 
-# Armor rating: equipped gear mitigation (incl. unlocked tier mitigation) + STR / 4, unless the unit has authored armor.
+# Armor rating: the base rating plus an active fortify magnitude minus an active expose magnitude
+# (S12S-L, floor 0). Every caller (compute, planner estimate, forecast, sim stats) reads this one value.
 static func armor_rating(target: Combatant) -> int:
+	var fortify: int = target.active_magnitude(StatusEffects.FORTIFY)
+	var expose: int = target.active_magnitude(StatusEffects.EXPOSE)
+	return maxi(0, base_armor_rating(target) + fortify - expose)
+
+# Base armor rating: equipped gear mitigation (incl. unlocked tier mitigation) + STR / 4, unless the unit has authored armor.
+static func base_armor_rating(target: Combatant) -> int:
 	if target.armor_override >= 0:
 		return target.armor_override
 	var gear: int = target.inventory.get_total_flat_mitigation(target.stats) if target.inventory != null else 0
