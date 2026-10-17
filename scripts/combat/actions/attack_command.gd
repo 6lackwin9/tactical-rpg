@@ -154,19 +154,25 @@ func execute() -> void:
 	last_breakdown = ""
 	last_crit = false
 	reactions.clear()
+	broken_targets.clear()
+	combo_notes.clear()
+	failed = false
 	if not source.is_active():
+		failed = true
 		print("[%s] cannot act (defeated or withdrawn)." % source.name)
 		execution_log = "[Action Failed] %s cannot act (unit is inactive)." % source.name
 		return
 
 	var effective_target: Combatant = _get_effective_target()
 	if effective_target == null or not effective_target.is_active():
+		failed = true
 		var target_name: String = effective_target.name if effective_target != null else "None"
 		print("[%s] targeted [%s], but they are no longer in active combat." % [source.name, target_name])
 		execution_log = "[Attack Miss] %s targeted %s, but target is no longer in active combat." % [source.name, target_name]
 		return
 
 	if grid != null and not in_reach(effective_target):
+		failed = true
 		var dist: int = grid.get_distance(grid.get_position(source), grid.get_position(effective_target))
 		print("[%s] cannot reach [%s] (range %d-%d vs dist %d)!" % [source.name, effective_target.name, reach_min(), reach_max(), dist])
 		if dist < reach_min():
@@ -181,11 +187,12 @@ func execute() -> void:
 
 	var details: Array[String] = []
 	var damaging: bool = skill_mult > 0.0   # a zero-power attack (intimidate) only rolls its status: no damage, no crit, no reaction
+	var matched: Dictionary = exploit_against(effective_target) if damaging else {"status": "", "mult": 1.0}   # active statuses at the hit (S12C-L)
 	if damaging:
 		# The one damage formula: attack power x Focus x skill x stance x crit, then guard and armor.
 		var is_ranged: bool = source.attack_range > 1 and not use_offhand
 		var cover: float = CoverRules.cover_between(grid, source, effective_target, is_ranged)   # terrain cover (S12T-L)
-		var res: Dictionary = DamageCalculator.compute(source, effective_target, is_ranged, use_offhand, skill_mult, false, rng, -1, true, cover)
+		var res: Dictionary = DamageCalculator.compute(source, effective_target, is_ranged, use_offhand, skill_mult * DictUtil.to_float(matched["mult"], 1.0), false, rng, -1, true, cover)
 		var taken_now: int = effective_target.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage = taken_now
 		last_crit = DictUtil.to_bool(res["is_crit"])
@@ -225,12 +232,15 @@ func execute() -> void:
 	var counter: Dictionary = RiposteRules.counter(source, effective_target, grid, source.attack_range > 1 and not use_offhand, rng)
 	if not counter.is_empty():
 		reactions.append(counter)
+	# Then the combo effects of this hit (S12C-L rule 5): stance break, consume.
+	after_hit(effective_target, taken, matched)
+	var exploit_suffix: String = exploit_note(matched)
 
 	if not effective_target.is_alive():
-		execution_log = "[Attack] %s struck %s for %d damage%s -> %s DEFEATED!" % [
-			source.name, effective_target.name, taken, detail_suffix, effective_target.name
+		execution_log = "[Attack] %s struck %s for %d damage%s -> %s DEFEATED!%s" % [
+			source.name, effective_target.name, taken, detail_suffix, effective_target.name, exploit_suffix
 		]
 	else:
-		execution_log = "[Attack] %s struck %s for %d damage%s (Target HP: %d/%d)" % [
-			source.name, effective_target.name, taken, detail_suffix, effective_target.hp, effective_target.max_hp
+		execution_log = "[Attack] %s struck %s for %d damage%s (Target HP: %d/%d)%s" % [
+			source.name, effective_target.name, taken, detail_suffix, effective_target.hp, effective_target.max_hp, exploit_suffix
 		]

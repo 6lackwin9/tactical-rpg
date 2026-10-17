@@ -23,6 +23,8 @@ var cleanses: Array[String] = []   # debuffs the option would remove right now (
 var jump_to: Vector2i = Vector2i(-1, -1)   # disengage options: the landing tile the planner chose
 var hazard: String = ""     # "Hazard: <terrain name> (<status>)" chips of hazard tiles the step's route enters (S12T-L)
 var cover: float = 0.0      # attack options: the terrain cover in the expected hit (S12T-L)
+var flow: String = ""       # "flows into Defensive" when the step's skill is a flow move (S12C-L)
+var exploits: String = ""   # display name of the status the attack's expected hit exploits ("" = none; S12C-L)
 
 # The skill family of the option's step ("" for steps without a skill, e.g. withdraw) and its tier.
 func family() -> String:
@@ -75,6 +77,8 @@ func cost_text() -> String:
 		text += " • ~%d dmg" % damage
 		if cover > 0.0:
 			text += " (cover -%d%%)" % roundi(cover * 100.0)
+		if not exploits.is_empty():
+			text += " (exploits %s)" % exploits
 	if heal > 0:
 		text += " • ~+%d HP" % heal
 	if not cleanses.is_empty():
@@ -86,6 +90,8 @@ func cost_text() -> String:
 		text += " • %s" % StatusEffects.label_with_magnitude(grants, StatusEffects.magnitude_or_min(grants, step.skill.status_magnitude if step != null and step.skill != null else 0))
 	if jump_to != Vector2i(-1, -1):
 		text += " • jumps to %s" % str(jump_to)
+	if not flow.is_empty():
+		text += " • " + flow
 	if not warning.is_empty():
 		text += "\n⚠ " + warning
 	if not hazard.is_empty():

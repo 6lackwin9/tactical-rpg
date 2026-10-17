@@ -53,6 +53,9 @@ enum Area { NONE, PLUS, BURST, LINE, SWEEP }
 
 const CLEANSE_ALL: String = "all"   # keyword in cleanse_statuses: every debuff
 
+# Combo disrupt of an ATTACK (S12C-L): STANCE_BREAK sets a hit Offensive / Defensive target to Tactical.
+enum Disrupt { NONE, STANCE_BREAK }
+
 const SUPPORT_REACH: int = 3   # default reach of a SUPPORT skill (or the caster's attack range if longer)
 const MIN_LEVEL: int = 1
 const MAX_LEVEL: int = 5
@@ -86,6 +89,11 @@ var heal_mult: float = 0.0      # SUPPORT: heal per point of heal_stat (see Supp
 var grant_status: String = ""   # SUPPORT: buff status given to the target (StatusEffects.buffs())
 var cleanse_statuses: Array[String] = []   # SUPPORT: debuffs removed from the target, active and pending (CLEANSE_ALL = every debuff; empty = none)
 var jump_tiles: int = 0         # DISENGAGE: how many tiles the jump covers at most
+# Combos (S12C-L; family-level fields, ContentFactory builds them).
+var ends_in_stance: int = -1    # flow move: CombatTypes.StanceType the unit ends in after the last block (-1 = none)
+var disrupt: int = Disrupt.NONE # ATTACK: STANCE_BREAK knocks a surviving Offensive / Defensive target into Tactical
+var exploit: Array[Dictionary] = []   # ATTACK: [{"status": debuff id, "power_mult": float}] bonus vs an ACTIVE status
+var exploit_consume: bool = false     # ATTACK: remove the matched status with the highest multiplier after the hit
 var learned_only: bool = false  # unrestricted (hand-built) units don't know it unless they learn it
 var family: String = ""         # skill family (tiers of one skill); empty = its own id (see family_id())
 var tier: int = 1               # position in the family (1..5); each tier is its own skill with its own AP, blocks and power
@@ -160,8 +168,32 @@ func keeps_stance() -> bool:
 	var rule: String = str(SkillKinds.info(kind_name()).get("stance", ""))
 	return rule == "KEEP" or (rule == "KEEP_UNLESS_SET" and stance_override < 0)
 
-func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
+# The stance the unit fights this skill's blocks in (its hits use it for the stance matchup).
+func stance_during(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
 	return current if keeps_stance() else stance()
+
+# The stance the unit is in after the skill: a flow move's `ends_in_stance` when set (S12C-L), else stance_during.
+func stance_after(current: CombatTypes.StanceType) -> CombatTypes.StanceType:
+	if ends_in_stance >= 0:
+		return ends_in_stance as CombatTypes.StanceType
+	return stance_during(current)
+
+# True when the skill is a flow move (ends in a chosen stance for free).
+func flows() -> bool:
+	return ends_in_stance >= 0
+
+# Exploit (S12C-L rule 4): the best entry whose status is ACTIVE on `target` (pending statuses do not count), skipping
+# `skip` (statuses already consumed). {"status": id, "mult": float}; {"status": "", "mult": 1.0} when none applies.
+static func exploit_match(entries: Array[Dictionary], target: Combatant, skip: Array[String] = []) -> Dictionary:
+	var best: Dictionary = {"status": "", "mult": 1.0}
+	if target == null:
+		return best
+	for row: Dictionary in entries:
+		var status: String = str(row.get("status", ""))
+		var mult: float = DictUtil.to_float(row.get("power_mult", 1.0), 1.0)
+		if target.has_status(status) and not skip.has(status) and mult > DictUtil.to_float(best["mult"]):
+			best = {"status": status, "mult": mult}
+	return best
 
 # Automatic stance-switch penalty (AP): changing stance costs STANCE_SWITCH_COST; Move and Rest never pay (Rest enters Tactical for free).
 func switch_cost(current: CombatTypes.StanceType) -> int:

@@ -24,6 +24,8 @@ const SECTION_TITLES: Dictionary = {
 	"focus": "Focus",
 	"jump": "Jump",
 	"rest": "Rest",
+	"combo": "Combo",
+	"flow": "Flow move",
 }
 
 # The core sections (authored once); the kind sections come from SkillKinds.

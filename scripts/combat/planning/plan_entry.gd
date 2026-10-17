@@ -104,8 +104,19 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	command.ap_cost = skill_ap
 	command.stance_switch_cost = switch_ap
 	command.stance_on_start = -1 if skill.keeps_stance() else skill.stance()
+	command.stance_on_end = skill.ends_in_stance   # flow move (S12C-L): -1 = none
+	if skill.kind == SkillDef.Kind.ATTACK:
+		command.disrupt = skill.disrupt
+		command.exploit = skill.exploit.duplicate(true)
+		command.exploit_consume = skill.exploit_consume
 	command.est_damage = est_damage
 	return command
+
+# Planner note of a flow move: "flows into Defensive" ("" for other skills; S12C-L rule 1).
+func flow_note() -> String:
+	if skill == null or not skill.flows():
+		return ""
+	return "flows into %s" % CombatTypes.stance_to_string(skill.ends_in_stance as CombatTypes.StanceType)
 
 static func dir_arrow(dir: Vector2i) -> String:
 	if dir == Vector2i(1, 0):

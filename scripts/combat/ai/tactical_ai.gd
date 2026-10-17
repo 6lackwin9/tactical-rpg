@@ -17,6 +17,8 @@ extends RefCounted
 # Terrain (S12T-L rule 8): AI routes pay AI_HAZARD_PENALTY extra per hazard tile entered, and ranged
 # units prefer, among equally ranked firing / kiting cells, the one with the most cover against the
 # nearest ranged foe. Covered targets rank lower through the planner's estimate (it includes cover).
+# Combos (S12C-L rule 6): the strike order puts a stance-break skill first against a Defensive or riposting foe,
+# and an exploit skill first only when its status is active on the target (else after the plain strikes).
 # Targets may move, so plans can fizzle: that is the planning-phase gamble.
 # Used for enemies each round and for the player's AI presets (the player's own
 # planner is never forced: taunt only steers TacticalAI).
@@ -159,7 +161,8 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 
 # Tries skills of `kind` in preference order; returns true when one was added.
 # `make_step` builds the step from a skill (default: a self step).
-static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable, filter: Callable = Callable()) -> bool:
+# `target` (attacks): the foe the strike is for; combo skills are ordered against it (S12C-L rule 6, _combo_ordered).
+static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable, filter: Callable = Callable(), target: Combatant = null) -> bool:
 	# Attacks: single-target ones (area attacks go through _try_area; ranged units add the off-hand jab).
 	var skills: Array[SkillDef] = _strikes(actor, cap) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap, actor)
 	skills.reverse()  # highest level first
@@ -175,6 +178,8 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 	for skill: SkillDef in skills:
 		if skill.is_off_hand():
 			ordered.append(skill)
+	if kind == SkillDef.Kind.ATTACK and target != null:
+		ordered = _combo_ordered(plan, ordered, target)
 	for skill: SkillDef in ordered:
 		if filter.is_valid() and not DictUtil.to_bool(filter.call(skill)):
 			continue
@@ -194,7 +199,36 @@ static func _engage_any(plan: CombatPlan, actor: Combatant, ranked: Array[Combat
 		return true
 	for candidate: Combatant in ranked:
 		var engage: Callable = func(skill: SkillDef) -> PlanStep: return PlanStep.engage(skill, candidate)
-		if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage):
+		if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage, Callable(), candidate):
+			return true
+	return false
+
+# S12C-L rule 6: a stance-break skill goes first against a foe in Defensive stance or carrying riposte (active, or
+# planned in the shared plan); an exploit skill goes first when its multiplier applies to the target (an ACTIVE listed
+# status) and after the plain strikes when it does not. Otherwise the order is kept (stable). Affordability and reach
+# are still checked by add_step, so an unaffordable combo skill falls through to the next one.
+static func _combo_ordered(plan: CombatPlan, skills: Array[SkillDef], target: Combatant) -> Array[SkillDef]:
+	var guarded: bool = target.current_stance == CombatTypes.StanceType.DEFENSIVE or StatusEffects.has_any(target, StatusEffects.RIPOSTE) or _plans_riposte(plan, target)
+	var first: Array[SkillDef] = []
+	var middle: Array[SkillDef] = []
+	var last: Array[SkillDef] = []
+	for skill: SkillDef in skills:
+		var breaks: bool = guarded and skill.disrupt == SkillDef.Disrupt.STANCE_BREAK
+		var exploit_applies: bool = not str(SkillDef.exploit_match(skill.exploit, target)["status"]).is_empty()
+		if breaks or exploit_applies:
+			first.append(skill)
+		elif not skill.exploit.is_empty():
+			last.append(skill)
+		else:
+			middle.append(skill)
+	first.append_array(middle)
+	first.append_array(last)
+	return first
+
+# True when `foe`'s steps in the shared plan include a DEFEND skill that grants riposte.
+static func _plans_riposte(plan: CombatPlan, foe: Combatant) -> bool:
+	for step: PlanStep in plan.steps_of(foe):
+		if step.skill != null and step.skill.kind == SkillDef.Kind.DEFEND and step.skill.grant_status == StatusEffects.RIPOSTE:
 			return true
 	return false
 

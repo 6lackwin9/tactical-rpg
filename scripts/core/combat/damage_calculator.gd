@@ -234,8 +234,9 @@ static func compute(
 
 # The planner's expected hit for `skill`: no crit, no guard (unknown ahead), armor and terrain cover included
 # (`cover_ratio`: CoverRules.cover_for from where the attack is made; cover is known ahead).
-static func expected(attacker: Combatant, target: Combatant, skill: SkillDef, attacker_stance: int = -1, cover_ratio: float = 0.0) -> int:
-	var res: Dictionary = compute(attacker, target, expected_is_ranged(attacker, skill), skill.is_off_hand(), skill.power_for(attacker), false, null, attacker_stance, false, cover_ratio)
+# `power_scale` multiplies the skill power (the exploit multiplier, S12C-L).
+static func expected(attacker: Combatant, target: Combatant, skill: SkillDef, attacker_stance: int = -1, cover_ratio: float = 0.0, power_scale: float = 1.0) -> int:
+	var res: Dictionary = compute(attacker, target, expected_is_ranged(attacker, skill), skill.is_off_hand(), skill.power_for(attacker) * power_scale, false, null, attacker_stance, false, cover_ratio)
 	return DictUtil.to_int(res["final_dmg"])
 
 # True when `expected` treats `skill` as a ranged hit (cover applies): a ranged unit's main-hand attack.

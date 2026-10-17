@@ -743,6 +743,8 @@ static func _modifier_problems(kind: String, base: Dictionary, mods: Array[Dicti
 				continue
 			if key == "name":
 				out.append(_problem("name", rank, "Rank %d: rank names are derived (%s); a modifier cannot set the name." % [rank, SkillRanks.rank_name(str(base["name"]), rank)]))
+			elif SkillRanks.FAMILY_KEYS.has(key):
+				out.append(_problem(key, rank, SkillRanks.FAMILY_KEY_MESSAGE % key))
 			elif not SkillRanks.RANK_KEYS.has(key):
 				out.append(_problem(key, rank, "Rank %d: '%s' is base-only or unknown; a rank can only change %s." % [rank, key, ", ".join(SkillRanks.RANK_KEYS)]))
 			elif not allowed.has(key):

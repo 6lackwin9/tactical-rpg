@@ -50,6 +50,7 @@ class SimState:
 	var positioned: bool = false           # moved by hand (tile move / withdraw): its attacks don't chase
 	var lock: Combatant = null            # current target lock (attacking another costs a Switch Target block)
 	var est_hp: Dictionary = {}            # foe -> expected HP after the planned strikes
+	var consumed: Dictionary = {}          # foe -> Array[String] statuses an earlier planned exploit hit consumes (S12C-L)
 	var entries: Array[PlanEntry] = []
 	var error_index: int = -1              # first invalid step (-1 = valid)
 	var error_text: String = ""
@@ -76,6 +77,7 @@ class SimState:
 		positioned = o.positioned
 		lock = o.lock
 		est_hp = o.est_hp.duplicate()
+		consumed = o.consumed.duplicate(true)
 		entries = o.entries.duplicate()
 		error_index = o.error_index
 		error_text = o.error_text
@@ -646,7 +648,7 @@ func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 		var entry: PlanEntry = st.entries[st.entries.size() - 1]
 		for foe: Combatant in context.foes_of(c):
 			if foe.is_active() and grid.has_combatant(foe) and cells.has(grid.get_position(foe)):
-				var hit: int = estimate_damage(c, skill, entry.stance_after, foe, st.pos)
+				var hit: int = _estimate_hit(c, st, skill, skill.stance_during(entry.stance_before), foe, st.pos)
 				entry.est_damage += hit
 				st.est_hp[foe] = DictUtil.int_of(st.est_hp, foe) - hit
 		for friend: Combatant in context.friends_of(c):
@@ -743,7 +745,7 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 	entry.pos_before = st.pos
 	entry.pos_after = st.pos
 	if skill.kind == SkillDef.Kind.ATTACK and foe != null and not skill.is_area():
-		entry.est_damage = estimate_damage(c, skill, entry.stance_after, foe, _attack_from(st, dirs))
+		entry.est_damage = _estimate_hit(c, st, skill, skill.stance_during(entry.stance_before), foe, _attack_from(st, dirs))
 	st.entries.append(entry)
 	st.next_block = start + nblocks
 	st.acted = true
@@ -756,13 +758,36 @@ func _add_entry(c: Combatant, st: SimState, skill: SkillDef, index: int, foe: Co
 		st.ap_left = mini(st.max_ap, st.ap_left + skill.recover_ap)
 	return ""
 
-# Expected hit (DamageCalculator.expected): attack power x Focus x skill x stance
+# Expected hit (DamageCalculator.expected): attack power x Focus x skill x exploit x stance
 # matchup (against the target's stance now) x armor x terrain cover (from `from`, the tile the
 # attack is made from; NO_CELL = where `c` stands now). No crit; guard is unknown ahead.
-func estimate_damage(c: Combatant, skill: SkillDef, attacker_stance: CombatTypes.StanceType, foe: Combatant, from: Vector2i = NO_CELL) -> int:
+# Exploit (S12C-L): statuses ACTIVE on the foe now count (they stay active all round), except those in `consumed`.
+func estimate_damage(c: Combatant, skill: SkillDef, attacker_stance: CombatTypes.StanceType, foe: Combatant, from: Vector2i = NO_CELL, consumed: Array[String] = []) -> int:
 	if not skill.deals_damage():
 		return 0   # a zero-power attack (intimidate) deals nothing
-	return DamageCalculator.expected(c, foe, skill, attacker_stance, estimate_cover(c, skill, foe, from))
+	var exploit_mult: float = DictUtil.to_float(SkillDef.exploit_match(skill.exploit, foe, consumed)["mult"], 1.0)
+	return DamageCalculator.expected(c, foe, skill, attacker_stance, estimate_cover(c, skill, foe, from), exploit_mult)
+
+# Statuses on `foe` that the planned hits of `st` already consume (S12C-L exploit_consume).
+static func _consumed_on(st: SimState, foe: Combatant) -> Array[String]:
+	var used: Array[String] = []
+	var raw: Variant = st.consumed.get(foe, [])
+	if raw is Array:
+		var raw_list: Array = raw
+		used.assign(raw_list)
+	return used
+
+# One planned hit on `foe`: the estimate with the statuses this plan already consumes, then records the status this
+# hit consumes (exploit_consume) so the plan's later hits on the foe are estimated plain.
+func _estimate_hit(c: Combatant, st: SimState, skill: SkillDef, attacker_stance: CombatTypes.StanceType, foe: Combatant, from: Vector2i) -> int:
+	var used: Array[String] = _consumed_on(st, foe)
+	var hit: int = estimate_damage(c, skill, attacker_stance, foe, from, used)
+	if skill.exploit_consume and skill.deals_damage():
+		var status: String = str(SkillDef.exploit_match(skill.exploit, foe, used)["status"])
+		if not status.is_empty():
+			used.append(status)
+			st.consumed[foe] = used
+	return hit
 
 # Terrain cover of `foe` against `c`'s `skill` made from `from` (NO_CELL = where `c` stands now).
 func estimate_cover(c: Combatant, skill: SkillDef, foe: Combatant, from: Vector2i = NO_CELL) -> float:
@@ -1002,6 +1027,10 @@ func _probe(c: Combatant, step: PlanStep, base: SimState) -> PlanOption:
 			hits_allies += e.hits_allies
 			if e.target != null and not e.skill.is_area():
 				option.cover = estimate_cover(c, e.skill, e.target, e.pos_after)
+				var matched: String = str(SkillDef.exploit_match(e.skill.exploit, e.target, _consumed_on(base, e.target))["status"])   # statuses the plan's earlier hits consume do not count
+				option.exploits = StatusEffects.display_name(matched) if not matched.is_empty() and e.skill.deals_damage() else ""
+		if not e.flow_note().is_empty():
+			option.flow = e.flow_note()
 		if e.skill.kind == SkillDef.Kind.DISENGAGE:
 			option.jump_to = e.pos_after
 		if e.skill.kind == SkillDef.Kind.SUPPORT:

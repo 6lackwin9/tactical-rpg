@@ -188,7 +188,9 @@ func prepare_block(block: int) -> Array[ScheduledAction]:
 		if not action.is_cancelled and action.combatant.is_active():
 			if block >= action.start_block and block <= action.end_block:
 				if action.command is DefendCommand:
-					action.combatant.defense_mitigation_ratio = (action.command as DefendCommand).mitigation_ratio
+					var defend: DefendCommand = action.command as DefendCommand
+					if not defend.guard_broken:   # a stance break ended this guard for its remaining blocks (S12C-L)
+						action.combatant.defense_mitigation_ratio = defend.mitigation_ratio
 
 	# 2b. Notify when multi-block actions begin executing on this block
 	for action in scheduled_actions:
@@ -265,11 +267,33 @@ func execute_single_action(action: ScheduledAction) -> void:
 		log_emitted.emit(action.command.execution_log)
 	for reaction: Dictionary in action.command.reactions:
 		log_emitted.emit(str(reaction["log"]))
+	_apply_combo(action)
 
 	# Check for knockouts or withdrawals and cancel future actions
 	for c: Combatant in registered_combatants:
 		if not c.is_active():
 			_cancel_actions_for(c)
+
+# Combo results of a command that just resolved (S12C-L): stance breaks end the broken units' running guards (their
+# DefendCommands stop re-applying mitigation), then a flow move puts the unit in its end stance for free (not when the
+# command failed or the unit is no longer active). set_stance side effects stay (leaving Defensive ends riposte).
+func _apply_combo(action: ScheduledAction) -> void:
+	var cmd: BattleCommand = action.command
+	for broken: Combatant in cmd.broken_targets:
+		for other: ScheduledAction in scheduled_actions:
+			var running: bool = other.start_block <= action.end_block and other.end_block >= action.end_block
+			if other.combatant == broken and running and not other.is_cancelled and other.command is DefendCommand:
+				(other.command as DefendCommand).guard_broken = true
+	for note: String in cmd.combo_notes:
+		print(note)
+		log_emitted.emit(note)
+	var c: Combatant = action.combatant
+	if cmd.stance_on_end >= 0 and not cmd.failed and c.is_active():
+		var end_stance: CombatTypes.StanceType = cmd.stance_on_end as CombatTypes.StanceType
+		c.set_stance(end_stance)
+		var msg: String = "[Flow] %s flows into %s stance" % [c.name, CombatTypes.stance_to_string(end_stance)]
+		print(msg)
+		log_emitted.emit(msg)
 
 func _resolve_block(block: int) -> void:
 	var resolving := prepare_block(block)

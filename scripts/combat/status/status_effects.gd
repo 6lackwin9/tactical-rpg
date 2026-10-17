@@ -193,6 +193,15 @@ static func remove(target: Combatant, status: String) -> bool:
 	target.pending_status_sources.erase(status)
 	return found
 
+# Removes only the ACTIVE instance of `status` (a pending one queued for next round stays; exploit consume, S12C-L).
+static func remove_active(target: Combatant, status: String) -> bool:
+	var found: bool = target.statuses.has(status)
+	target.statuses.erase(status)
+	target.status_rounds_left.erase(status)
+	target.status_magnitudes.erase(status)
+	target.status_sources.erase(status)
+	return found
+
 # Next-round penalty for overspending: "" or the status it causes.
 static func debt_status(debt: int) -> String:
 	if debt >= DEBT_STUN:

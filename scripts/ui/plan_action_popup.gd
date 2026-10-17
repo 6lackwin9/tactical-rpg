@@ -120,6 +120,8 @@ static func _row_text(option: PlanOption) -> String:
 			text += " · %s%s" % [StatusEffects.display_name(status), magnitude]
 	if option.switches_target:
 		text += " · switch target"
+	if not option.flow.is_empty():
+		text += " · " + option.flow
 	return text
 
 func _choose(step: PlanStep) -> void:

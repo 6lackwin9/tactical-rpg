@@ -15,10 +15,10 @@ const REQUIRED_IDS: Array[String] = ["strike", "guard", "move", "rest", "switch_
 # stance: OFFENSIVE / DEFENSIVE / TACTICAL / NEUTRAL, KEEP (keeps the unit's stance), KEEP_UNLESS_SET (SUPPORT: keeps it unless
 # the row sets a stance override). ap: LEVEL (AP = level), PER_TILE (Move), FREE. cast: whom the skill is aimed at.
 const KINDS: Dictionary = {
-	"ATTACK": {"label": "Attack", "authorable": true, "sections": ["damage", "inflict", "reach", "area", "gate"], "stance": "OFFENSIVE", "ap": "LEVEL", "cast": "FOE", "icon": "⚔"},
-	"DEFEND": {"label": "Defend", "authorable": true, "sections": ["grant", "guard", "gate"], "stance": "DEFENSIVE", "ap": "LEVEL", "cast": "SELF", "icon": "🛡"},
-	"FOCUS": {"label": "Focus", "authorable": true, "sections": ["focus"], "stance": "TACTICAL", "ap": "LEVEL", "cast": "SELF", "icon": "✦"},
-	"SUPPORT": {"label": "Support", "authorable": true, "sections": ["reach", "support", "grant", "gate"], "stance": "KEEP_UNLESS_SET", "ap": "LEVEL", "cast": "ALLY", "icon": "+"},
+	"ATTACK": {"label": "Attack", "authorable": true, "sections": ["damage", "inflict", "combo", "flow", "reach", "area", "gate"], "stance": "OFFENSIVE", "ap": "LEVEL", "cast": "FOE", "icon": "⚔"},
+	"DEFEND": {"label": "Defend", "authorable": true, "sections": ["grant", "guard", "flow", "gate"], "stance": "DEFENSIVE", "ap": "LEVEL", "cast": "SELF", "icon": "🛡"},
+	"FOCUS": {"label": "Focus", "authorable": true, "sections": ["focus", "flow"], "stance": "TACTICAL", "ap": "LEVEL", "cast": "SELF", "icon": "✦"},
+	"SUPPORT": {"label": "Support", "authorable": true, "sections": ["reach", "support", "grant", "flow", "gate"], "stance": "KEEP_UNLESS_SET", "ap": "LEVEL", "cast": "ALLY", "icon": "+"},
 	"DISENGAGE": {"label": "Disengage", "authorable": true, "sections": ["jump"], "stance": "KEEP", "ap": "LEVEL", "cast": "SELF", "icon": "⤴"},
 	"REST": {"label": "Rest", "authorable": false, "sections": ["rest"], "stance": "TACTICAL", "ap": "FREE", "cast": "SELF", "icon": "💤"},
 	"MOVE": {"label": "Move", "authorable": false, "sections": [], "stance": "KEEP", "ap": "PER_TILE", "cast": "TILE", "icon": "➜"},
@@ -27,6 +27,7 @@ const KINDS: Dictionary = {
 }
 
 # Forge section id -> the skill fields it holds (a field may sit in two sections: status_magnitude, status_rounds).
+# flow / combo (S12C-L): family-level combo fields (SkillRanks.FAMILY_KEYS; ranks never set them).
 const SECTION_FIELDS: Dictionary = {
 	"damage": ["power_mult", "weapon_hand", "dash_tiles"],
 	"inflict": ["status_effect", "status_potency", "status_magnitude", "status_rounds"],
@@ -37,6 +38,8 @@ const SECTION_FIELDS: Dictionary = {
 	"guard": ["mitigation"],
 	"focus": ["boost", "boost_rounds"],
 	"jump": ["jump_tiles"],
+	"flow": ["ends_in_stance"],
+	"combo": ["disrupt", "exploit", "exploit_consume"],
 	"rest": ["recover_ap"],
 	"gate": ["weapon_types", "min_proficiency"],
 }

@@ -192,6 +192,7 @@ static func row_problems(e: Dictionary) -> Array[Dictionary]:
 			out.append(problem("reach_max", tier, "LINE areas start from an adjacent tile; leave the reach at 0 or 1."))
 		if not status_id.is_empty() and DictUtil.to_int(e["status_potency"]) <= 0:
 			out.append(problem("status_potency", tier, "Give the status a potency above 0."))
+	out.append_array(combo_problems(e, kind, tier))
 	# The weapon gate (ATTACK, DEFEND, SUPPORT): known gear types, and a type needs a proficiency to mean anything.
 	var types: Array[String] = ContentFactory._strings(e["weapon_types"])
 	for gear: String in types:
@@ -199,6 +200,48 @@ static func row_problems(e: Dictionary) -> Array[Dictionary]:
 			out.append(problem("weapon_types", tier, "Needs weapon type: unknown gear type '%s' (gear types or '%s')." % [gear, SkillDef.UNARMED_TOKEN]))
 	if not types.is_empty() and DictUtil.to_int(e["min_proficiency"]) < 1:
 		out.append(problem("min_proficiency", tier, "Needs proficiency: a weapon type is listed, so give a proficiency of at least 1 (otherwise the types do nothing)."))
+	return out
+
+const EXPLOIT_MAX_ENTRIES: int = 2
+const EXPLOIT_MULT_MIN: float = 1.05
+const EXPLOIT_MULT_MAX: float = 2.0
+
+# Combo fields (S12C-L): flow end stance, stance-break disrupt, exploit list and consume. Fields the kind does not show
+# are reported by the generic "belongs to" rule above.
+static func combo_problems(e: Dictionary, kind: String, tier: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var ends: String = str(e.get("ends_in_stance", ""))
+	if not ends.is_empty() and SkillKinds.has_field(kind, "ends_in_stance"):
+		var own: CombatTypes.StanceType = ContentFactory.skill(e).stance()
+		if ends == str(CombatTypes.StanceType.keys()[own]):
+			out.append(problem("ends_in_stance", tier, "Ends in stance equals the skill's stance; leave it empty."))
+		if kind == "DEFEND" and str(e.get("grant_status", "")) == StatusEffects.RIPOSTE:
+			out.append(problem("ends_in_stance", tier, "A riposte skill cannot flow: a stance change ends riposte."))
+	if kind != "ATTACK":
+		return out
+	var zero_power: bool = DictUtil.to_float(e.get("power_mult", 1.0), 1.0) <= 0.0
+	if str(e.get("disrupt", "NONE")) == "STANCE_BREAK" and zero_power:
+		out.append(problem("disrupt", tier, "A zero-power attack cannot break a stance."))
+	var exploit: Array = DictUtil.array_of(e.get("exploit", []))
+	if exploit.size() > EXPLOIT_MAX_ENTRIES:
+		out.append(problem("exploit", tier, "Exploit takes at most 2 statuses."))
+	var seen: Array[String] = []
+	var debuffs: Array[String] = StatusEffects.debuffs()
+	for raw: Variant in exploit:
+		var row: Dictionary = DictUtil.dict_of(raw)
+		var status: String = str(row.get("status", ""))
+		if not debuffs.has(status):
+			out.append(problem("exploit", tier, "Exploit status '%s' is not a debuff." % status))
+		elif seen.has(status):
+			out.append(problem("exploit", tier, "Exploit lists '%s' twice." % status))
+		seen.append(status)
+		var mult: float = DictUtil.to_float(row.get("power_mult", 0.0))
+		if mult < EXPLOIT_MULT_MIN or mult > EXPLOIT_MULT_MAX:
+			out.append(problem("exploit", tier, "Exploit power must be 1.05-2.0."))
+	if not exploit.is_empty() and zero_power:
+		out.append(problem("exploit", tier, "A zero-power attack cannot exploit."))
+	if DictUtil.to_bool(e.get("exploit_consume", false)) and exploit.is_empty():
+		out.append(problem("exploit_consume", tier, "Consume needs an exploit status."))
 	return out
 
 # `raw` is a ranked entry (no tier / family keys) or a flat row; `e` its normalized form.

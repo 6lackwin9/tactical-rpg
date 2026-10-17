@@ -32,6 +32,9 @@ const TOKEN_KINDS: Dictionary = {
 	"jump": ["DISENGAGE"],
 	"recover": ["REST"],
 	"unlock": ["ALL"],
+	"flow": ["ATTACK", "DEFEND", "SUPPORT", "FOCUS"],
+	"exploit": ["ATTACK"],
+	"disrupt": ["ATTACK"],
 }
 
 const COUNTED: Array[String] = ["blocks", "dash", "reach", "rounds", "jump"]
@@ -219,7 +222,28 @@ static func token_value(token: String, suffix: String, row: Dictionary, rank: in
 		"unlock":
 			var offset: int = DictUtil.to_int(row.get("unlock_offset", -1), -1)
 			return "+%d" % (offset if offset >= 0 else StatRules.TIER_UNLOCK_STEP * maxi(0, rank - 1))
+		"flow":
+			return format_flow(str(row.get("ends_in_stance", "")))
+		"exploit":
+			return format_exploit(DictUtil.array_of(row.get("exploit", [])))
+		"disrupt":
+			return "breaks stance" if str(row.get("disrupt", "NONE")) == "STANCE_BREAK" else ""
 	return ""
+
+# "ends in Defensive" for a flow skill's end stance name; "" when empty (S12C-L).
+static func format_flow(stance_name: String) -> String:
+	var i: int = CombatTypes.StanceType.keys().find(stance_name)
+	if stance_name.is_empty() or i < 0:
+		return ""
+	return "ends in %s" % CombatTypes.stance_to_string(i as CombatTypes.StanceType)
+
+# "x1.3 vs Exposed, x1.2 vs Slowed" for an exploit list (status display names); "" when empty (S12C-L).
+static func format_exploit(entries: Array) -> String:
+	var parts: Array[String] = []
+	for raw: Variant in entries:
+		var row: Dictionary = DictUtil.dict_of(raw)
+		parts.append("%s vs %s" % [format_mult(DictUtil.to_float(row.get("power_mult", 1.0), 1.0)), StatusEffects.display_name(str(row.get("status", "")))])
+	return ", ".join(parts)
 
 # The status a skill row's magnitude belongs to: status_effect if set, else grant_status (S12S-L).
 static func magnitude_status(row: Dictionary) -> String:

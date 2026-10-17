@@ -14,7 +14,7 @@ static func build() -> Array[Dictionary]:
 		_f("kind", "Kind", "enum", "ATTACK", {"options": SkillKinds.names(), "key_field": true, "help": "MOVE / TARGET / STATUS / REST are engine skills; author ATTACK, DEFEND, FOCUS, SUPPORT (heal / cleanse / buff a friendly unit or yourself) or DISENGAGE (jump away from an enemy)."}),
 		_f("level", "Level (= AP cost)", "int", 1, {"min": 1, "max": 5}),
 		_f("blocks", "Blocks", "int", 1, {"min": 1, "max": 6, "help": "Timeline length; the effect lands at the end of the last block."}),
-		_f("description", "Description", "template", "", {"max_len": 240, "help": "A template: {name} {ap} {blocks} {power} {dash} {reach} {weapons} {proficiency} {status} {potency} {magnitude} {rounds} {heal} {cleanse} {mitigation} {boost} {jump} {recover} {unlock}. {{ and }} are literal braces. Each rank renders it with its own numbers."}),
+		_f("description", "Description", "template", "", {"max_len": 240, "help": "A template: {name} {ap} {blocks} {power} {dash} {reach} {weapons} {proficiency} {status} {potency} {magnitude} {rounds} {heal} {cleanse} {mitigation} {boost} {jump} {recover} {unlock} {flow} {exploit} {disrupt}. {{ and }} are literal braces. Each rank renders it with its own numbers."}),
 		_f("template", "Description template (internal)", "string", "", {"internal": true, "help": "Flat rows carry the template their description was rendered from."}),
 		_f("system", "System skill", "bool", false, {"readonly": true, "key_field": true, "help": "Engine skills the planner inserts itself (Move, Rest, Switch Target, status blocks)."}),
 		_f("basic", "Basic skill", "bool", false, {"key_field": true, "help": "Owned by every unit from level 1; not counted against the active loadout slots; exactly one rank; not valid in a class path."}),
@@ -47,6 +47,11 @@ static func build() -> Array[Dictionary]:
 		_f("boost_rounds", "Boost rounds", "int", 2, {"min": 1, "max": 10}),
 		_f("jump_tiles", "Jump tiles", "int", 0, {"min": 0, "max": 6, "help": "Disengage: jump up to this many tiles away from the nearest (or a chosen) enemy. It is the unit's move for the round (first in the sequence, refused when rooted); AP is the skill's level; units can be leapt over, walls cannot."}),
 		_f("recover_ap", "AP recovered", "int", 2, {"min": 0, "max": 12}),
+		# Combos (S12C-L): family-level fields (SkillRanks.FAMILY_KEYS), one value for every rank.
+		_f("ends_in_stance", "Ends in stance", "enum", "", {"options": ["", "OFFENSIVE", "TACTICAL", "DEFENSIVE"], "help": "Flow move: after its last block the unit is in this stance for free, so a next action of that stance pays no switch. Empty = the skill's own stance. Leaving Defensive ends riposte, so a riposte DEFEND cannot flow. Set on the family, not per rank."}),
+		_f("disrupt", "Disrupt", "enum", "NONE", {"options": ["NONE", "STANCE_BREAK"], "help": "STANCE_BREAK: a damaging hit the target survives knocks an Offensive or Defensive target into Tactical (its running guard and riposte end). Not a status: no resist roll. Set on the family, not per rank."}),
+		_f("exploit", "Exploit", "json", [], {"help": "Status payoff: up to 2 entries [{\"status\": \"expose\", \"power_mult\": 1.3}]; against a target with one of these debuffs ACTIVE the skill's power is multiplied by the highest matching power (1.05-2.0). Set on the family, not per rank."}),
+		_f("exploit_consume", "Consume exploited status", "bool", false, {"help": "After the hit, remove the matched active status with the highest multiplier. Needs an exploit status."}),
 		_f("family", "Skill family", "string", "", {"readonly": true, "help": "Derived: the head skill id of a higher rank (empty on rank 1)."}),
 		_f("tier", "Rank", "int", 1, {"min": 1, "max": 5, "readonly": true, "help": "Derived: 1 for the head skill, 2 / 3 for <id>_2 / <id>_3."}),
 	]
