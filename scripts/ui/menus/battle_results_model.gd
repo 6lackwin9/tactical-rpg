@@ -5,16 +5,32 @@ extends RefCounted
 # Tactical RPG - Battle results model (UI2-L rule 8): XP and levels per member from the award dict
 # (LevelUp.award_encounter / BattleBridge.apply()["xp"]: member id -> {xp, old_level, new_level, unspent}); only listed
 # (active) members show. The level-up prompt is skippable; continue_on() autosaves and returns to the caller.
+# `outcome` (won / lost / fled, BATTLE1-L) sets the headline; only a won battle awards XP.
 # ==============================================================================
 
 var router: MenuRouter = null
 var award: Dictionary = {}
 var advanced: Array[String] = []   # quest qids advanced by this battle
+var outcome: String = "won"
 
-func _init(p_router: MenuRouter, p_award: Dictionary, p_advanced: Array[String] = []) -> void:
+const HEADLINES: Dictionary = {"won": "Victory", "lost": "Defeat", "fled": "Withdrew"}
+const NOTES: Dictionary = {
+	"lost": "The party woke at the last safe place, fully healed. No XP.",
+	"fled": "The party got away. No XP.",
+}
+
+func _init(p_router: MenuRouter, p_award: Dictionary, p_advanced: Array[String] = [], p_outcome: String = "won") -> void:
 	router = p_router
 	award = p_award
 	advanced = p_advanced
+	outcome = p_outcome
+
+func headline() -> String:
+	return "Battle results: %s" % str(HEADLINES.get(outcome, outcome))
+
+# One line on what a lost or fled battle meant ("" when won).
+func outcome_note() -> String:
+	return str(NOTES.get(outcome, ""))
 
 # [{id, name, xp, old_level, new_level, unspent}] in roster order; unspent is read live (it drops after a level-up).
 func rows() -> Array[Dictionary]:

@@ -279,7 +279,7 @@ func _on_fight_settled(res: Dictionary) -> void:
 	game_view.visible = false
 	_menu.visible = true
 	_game_hint.visible = false
-	router.push(MenuRouter.RESULTS, {"award": DictUtil.dict_of(res.get("xp", {})), "advanced": res.get("advanced", [])})
+	router.push(MenuRouter.RESULTS, {"award": DictUtil.dict_of(res.get("xp", {})), "advanced": res.get("advanced", []), "outcome": str(res.get("outcome", "won"))})
 
 func _on_results_done() -> void:
 	if game_view == null:
