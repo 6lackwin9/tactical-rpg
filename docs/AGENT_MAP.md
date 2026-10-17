@@ -16,6 +16,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | UI2-L: party, level-up, skills, gear, battle results screens; 5 shared save slots; screenshots 10-16 in project files ui1/ | n/a / 70 | merged via PR |
 | planner (cloud thread, no subagent) | UI1-A: ashlands start_party seed (warrior, ranger, rogue, mage) | n/a / 5 | merged via PR |
 | planner (cloud thread, no subagent) | start_party, slots 0-3 + peek + autosave, CurrentGame, SettingsFile, MenuRouter and five screen models, main menu scene; screenshots in project files ui1/ | n/a / 60 | merged via PR |
 

@@ -156,7 +156,7 @@ static func _test_write_read() -> bool:
 	checks["missing_item_refused"] = not SaveGame.write(gear, 2).is_empty()
 	checks["bad_flag_refused"] = not SaveGame.write(flag, 2).is_empty()
 	checks["nothing_written_for_refusals"] = not SaveGame.exists(2)
-	checks["slot_out_of_range_refused"] = SaveGame.write(g, 4) == ["Save slot must be 0-3."] and SaveGame.write(g, -1) == ["Save slot must be 0-3."]   # UI1-L: 0 = autosave
+	checks["slot_out_of_range_refused"] = SaveGame.write(g, 6) == ["Save slot must be 0-5."] and SaveGame.write(g, -1) == ["Save slot must be 0-5."]   # UI1-L: 0 = autosave
 	checks["delete"] = SaveGame.delete(1) and not SaveGame.exists(1) and not SaveGame.delete(1)
 	checks["read_missing"] = not DictUtil.to_bool(SaveGame.read(1)["ok"])
 	return TestHelpers.report(TAG, "write and read", checks)
