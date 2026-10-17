@@ -60,6 +60,6 @@ func _roll_status(victim: Combatant) -> String:
 	if status_effect.is_empty() or not victim.is_alive():
 		return ""
 	var chance: int = StatusEffects.apply_chance(victim, status_effect, status_potency)
-	if StatusEffects.try_inflict(victim, status_effect, status_potency, rng, status_rounds, status_magnitude):
+	if StatusEffects.try_inflict(victim, status_effect, status_potency, rng, status_rounds, status_magnitude, source.name):
 		return " [%s next round (%d%%)]" % [StatusEffects.display_name(status_effect), chance]
 	return " [resisted %s (%d%%)]" % [StatusEffects.display_name(status_effect).to_lower(), chance]
