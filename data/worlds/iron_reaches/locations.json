@@ -15,6 +15,9 @@
 				}
 			],
 			"encounters": [],
+			"map": "",
+			"zone_bindings": {},
+			"markers": [],
 			"tags": []
 		}
 	]

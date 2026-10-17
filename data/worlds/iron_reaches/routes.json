@@ -1,0 +1,29 @@
+{
+	"kind": "routes",
+	"version": 1,
+	"entries": [
+		{
+			"id": "south_road",
+			"name": "The south road",
+			"from": "slag_gate",
+			"to": "ashlands:warden_keep",
+			"two_way": true,
+			"time": 6,
+			"zone": "frozen_pass",
+			"encounter_pct": 20,
+			"repeat_pct": -1,
+			"encounters": [
+				[
+					"ashlands:ash_scouts",
+					1
+				]
+			],
+			"elites": [],
+			"elite_pct": 0,
+			"scripted": [],
+			"requires_flags": [],
+			"unless_flags": [],
+			"tags": []
+		}
+	]
+}

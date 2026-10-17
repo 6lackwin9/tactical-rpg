@@ -7,5 +7,9 @@
 	"connects": [
 		"ashlands"
 	],
+	"start_location": "",
+	"start_party": [],
+	"start_gold": -1,
+	"service_lines": {},
 	"version": 1
 }

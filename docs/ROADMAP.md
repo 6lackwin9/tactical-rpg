@@ -79,7 +79,7 @@ Rules: `docs/specs/S9_RULES.md` (exploration, EXP1), `S10_RULES.md` (travel, TRA
 | --- | --- | --- | --- |
 | EXP1 | done | M4-L | region maps, step-counter encounters, patrols, location entry hooks; save v3 |
 | DLG1 | done | M4-L, EXP1-L | dialogue, service choices from resolved quests, shops, gold, `gone_flags`; save v4 |
-| TRAV1 | TRAV1-L done (2026-10-17, develop); TRAV1-A next | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files) and BATTLE1 (road fights use the battle link, goal G4); save v5 |
+| TRAV1 | TRAV1-L and TRAV1-A done (2026-10-17, develop) | EXP1-L | world map, routes, fog, road encounters, world clock; after DLG1 (shared hub files) and BATTLE1 (road fights use the battle link, goal G4); save v5 |
 | REP1 | approved | DLG1-L | reputation int flags, condition operators, price multipliers; no save bump; after TRAV1-L (shared hub files) |
 | TRAV2 | idea | TRAV1, DLG1 | supplies |
 

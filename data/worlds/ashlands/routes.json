@@ -1,0 +1,84 @@
+{
+	"kind": "routes",
+	"version": 1,
+	"entries": [
+		{
+			"id": "old_road",
+			"name": "The old road",
+			"from": "warden_keep",
+			"to": "ruined_courtyard",
+			"two_way": true,
+			"time": 2,
+			"zone": "ruined_courtyard",
+			"encounter_pct": 15,
+			"repeat_pct": -1,
+			"encounters": [
+				[
+					"ash_scouts",
+					1
+				]
+			],
+			"elites": [],
+			"elite_pct": 5,
+			"scripted": [
+				{
+					"id": "first_raid",
+					"encounter": "ash_raiders",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "ashlands.courtyard_held",
+							"value": true
+						}
+					],
+					"sets_flags": [
+						{
+							"key": "ashlands.old_road_raided",
+							"value": true
+						}
+					]
+				}
+			],
+			"requires_flags": [],
+			"unless_flags": [],
+			"tags": []
+		},
+		{
+			"id": "high_road",
+			"name": "The high road",
+			"from": "warden_keep",
+			"to": "cinder_gate",
+			"two_way": true,
+			"time": 4,
+			"zone": "desert_outpost",
+			"encounter_pct": 25,
+			"repeat_pct": -1,
+			"encounters": [
+				[
+					"ash_scouts",
+					2
+				],
+				[
+					"ash_raiders",
+					2
+				]
+			],
+			"elites": [
+				[
+					"ash_patrol",
+					1
+				]
+			],
+			"elite_pct": 5,
+			"scripted": [],
+			"requires_flags": [
+				{
+					"key": "ashlands.courtyard_held",
+					"value": true
+				}
+			],
+			"unless_flags": [],
+			"tags": []
+		}
+	]
+}

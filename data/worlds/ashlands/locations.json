@@ -80,6 +80,15 @@
 						}
 					],
 					"lore": "one_fire_lit"
+				},
+				{
+					"id": "signpost",
+					"kind": "exit",
+					"anchor": "road",
+					"to": "world_map",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": []
 				}
 			],
 			"tags": []
@@ -312,6 +321,15 @@
 						"con_heal_potion": 1
 					},
 					"gold": 15
+				},
+				{
+					"id": "wastes_road",
+					"kind": "exit",
+					"anchor": "east",
+					"to": "world_map",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": []
 				}
 			],
 			"tags": []
