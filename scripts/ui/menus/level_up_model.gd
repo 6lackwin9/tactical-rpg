@@ -9,7 +9,11 @@ extends RefCounted
 const NO_POINTS: String = "No points left."
 
 var member_id: String = ""
+const NO_MEMBER: String = "No such party member."
+const SPEND_QUESTION: String = "Spend these points? This is permanent."
+
 var draft: Dictionary = {}   # stat -> drafted points (> 0 only)
+var last_errors: Array[String] = []   # errors of the last asked confirm (the host shows them)
 
 func _init(p_member: String) -> void:
 	member_id = p_member
@@ -61,27 +65,45 @@ func auto() -> void:
 func confirm() -> Array[String]:
 	var m: UnitState = _member()
 	if m == null:
-		var none: Array[String] = ["No party member '%s'." % member_id]
+		var none: Array[String] = [NO_MEMBER]
 		return none
 	var errors: Array[String] = LevelUp.confirm(m, draft.duplicate())
 	if errors.is_empty():
 		draft = {}
 	return errors
 
+# Q2: asks before the permanent spend; Yes applies confirm(). Returns the immediate errors (none when asking).
+func ask_confirm(router: MenuRouter) -> Array[String]:
+	last_errors = []
+	if _member() == null:
+		last_errors = [NO_MEMBER]
+	elif has_draft():
+		router.ask(SPEND_QUESTION, _confirm_now.bind(router))
+	return last_errors
+
+func _confirm_now(router: MenuRouter) -> void:
+	last_errors = confirm()
+	router.changed.emit()
+
 func cancel() -> void:
 	draft = {}
 
 # The member with the draft applied (a copy; the member is untouched).
 func drafted_state() -> UnitState:
-	var work: UnitState = _member().duplicate_state()
+	var m: UnitState = _member()
+	if m == null:
+		return null
+	var work: UnitState = m.duplicate_state()
 	var _e: Array[String] = LevelUp.confirm(work, draft.duplicate())
 	return work
 
 func before() -> Dictionary:
-	return PartyPreview.derived(_member())
+	var m: UnitState = _member()
+	return PartyPreview.derived(m) if m != null else {}
 
 func after() -> Dictionary:
-	return PartyPreview.derived(drafted_state())
+	var work: UnitState = drafted_state()
+	return PartyPreview.derived(work) if work != null else {}
 
 # Rule 4: [{family, name, skill, tier}] castable now but not at `old_level` (two built copies compared).
 func new_tiers(old_level: int) -> Array[Dictionary]:

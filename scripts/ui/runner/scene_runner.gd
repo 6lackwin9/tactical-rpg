@@ -28,17 +28,17 @@ const PLAYTESTS_STRETCH: float = 1.6   # share of the right column's height (DEV
 # that isn't hidden is listed under "Other scenes".
 const SCENES: Array[Dictionary] = [
 	{"path": "res://scenes/main_menu.tscn", "name": "Main Menu", "icon": "▶",
-		"desc": "The player's front door: continue, new game in a playable world, load and save slots (autosave + 3), settings and the in-game hub."},
+		"desc": "The player's front door: continue, new game in a playable world, load and save slots (0 = autosave, 1-5 manual), settings and the in-game hub."},
 	{"path": "res://scenes/combat_arena.tscn", "name": "Combat Arena", "icon": "⚔",
 		"desc": "Plan and fight a battle. Pick a catalog encounter or any world's battle (played with that world's characters).", "encounters": true},
 	{"path": "res://scenes/content_forge.tscn", "name": "Content Forge", "icon": "⚒",
-		"desc": "Create and edit skills, items, classes, units and encounters; playtest them in the arena."},
+		"desc": "Read-only asset viewer: browse skills, items, classes, units and encounters, their engine preview and problems; playtest them in the arena."},
 	{"path": "res://scenes/world_forge.tscn", "name": "World Forge", "icon": "🌍",
-		"desc": "Build modular lore worlds: regions, factions, characters, named items, quests and encounters that inherit lore-free base assets; play their battles."},
+		"desc": "Read-only world viewer: regions, factions, characters, named items, quests and encounters that inherit lore-free base assets; play their battles."},
 	{"path": "res://scenes/gear_dojo.tscn", "name": "Gear & Skill Dojo", "icon": "🛡",
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
 	{"path": "res://scenes/overworld/region_map_debug.tscn", "name": "Region Map (debug)", "icon": "🗺",
-		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (autosaves to the autosave slot)."},
+		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (a game started from the main menu autosaves to slot 0; the standalone debug game writes nothing)."},
 ]
 const HIDDEN_SCENES: Array[String] = ["res://scenes/scene_runner.tscn", "res://scenes/test_arena.tscn"]
 
@@ -73,7 +73,7 @@ func _ready() -> void:
 	reloader = ScriptReloader.new()
 	var audio := AudioDirector.new()   # S14-L3: one director per main scene
 	add_child(audio)
-	audio.apply_volumes()
+	SettingsModel.push_to_listeners()   # saved animation speed/instant and volumes apply at boot
 	if PlaytestStore.enabled():   # release builds (and test runs) get no hub at all
 		hub = PlaytestHub.new()
 		add_child(hub)
@@ -174,7 +174,7 @@ func reload_scripts(only: Array[String] = []) -> Dictionary:
 	var skip: Array[String] = [own.resource_path]   # never recompile the runner while it runs
 	var result: Dictionary = reloader.reload_changed(only, skip)
 	if not ContentCatalog.is_dirty():
-		ContentCatalog.reload_from_disk()   # pick up catalog JSON edited outside the Forge too
+		ContentCatalog.reload_from_disk()   # pick up catalog JSON edited by seed scripts
 	var reloaded: Array = result["reloaded"]
 	var failed: Array = result["failed"]
 	var added: Array = result["new"]

@@ -2,10 +2,10 @@ extends Node
 
 # ==============================================================================
 # Tactical RPG - Content Forge (scene host)
-# Mounts the ContentForge authoring UI. Playtest swaps it for the real combat
-# arena (combat_arena.tscn) running the chosen CatalogEncounter, with a
-# "Back to Forge" button on top; closing the arena returns to the Forge with
-# all unsaved catalog edits intact.
+# Mounts the ContentForge asset viewer (read-only; TOOLS-RO). Playtest swaps it
+# for the real combat arena (combat_arena.tscn) running the chosen
+# CatalogEncounter, with a "Back to Forge" button on top; closing the arena
+# returns to the viewer.
 #   Tool    -> scripts/ui/forge/   (ContentForge, ForgeForm, ForgePreview)
 #   Data    -> scripts/content/    (ContentCatalog, ContentSchema, ContentFactory)
 # ==============================================================================
@@ -51,14 +51,14 @@ func close_playtest() -> void:
 	if forge_layer != null:
 		forge_layer.visible = true
 
-# SceneRunner asks before leaving: unsaved catalog edits would be lost.
+# SceneRunner asks before leaving: in-memory catalog changes (made by code, never by the viewer) would be lost.
 func has_unsaved_changes() -> bool:
-	return ContentCatalog.is_dirty() or (forge != null and forge.draft_dirty)
+	return ContentCatalog.is_dirty()
 
 func is_playtesting() -> bool:
 	return arena != null
 
-# Leaving with unsaved catalog edits discards them (the menu already asked).
+# Leaving with in-memory catalog changes discards them (the menu already asked).
 func _exit_tree() -> void:
 	if ContentCatalog.is_dirty():
 		ContentCatalog.reload_from_disk()

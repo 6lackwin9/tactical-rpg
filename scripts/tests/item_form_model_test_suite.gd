@@ -4,16 +4,15 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Item Form Model Test Suite (ITEM1-L commit 3, FORGE1_ITEMS 6, matrix 4 suite 4 and 6)
 # The headless item and item-family tabs: sections from the matrix layout (no derived key is a control), a new item and a
-# new family that validate, Apply blocked by errors (never by warnings) with the row index of a table problem, locked key
-# fields and whole-list locks on system items, dynamic limits (delta keeps the resolved value in range, stat values from
-# ItemModifiers.KINDS), defaults that validate for every modifier kind, effect type and tier criterion, armor and shield
-# tiers editable through `tiers`, the token palette, the base-values grid and budget breakdown (sum = item_value), the
-# family impact panel and its two-step Apply, delete states, the item list filters, and the Forge item / family tabs.
+# new family that validate, problems from errors (never from warnings) with the row index of a table problem, the
+# key-field rule on system items (no viewer locks), dynamic limits (delta keeps the resolved value in range, stat values
+# from ItemModifiers.KINDS), defaults that validate for every modifier kind, effect type and tier criterion, armor and
+# shield tiers through `tiers`, the token palette, the base-values grid and budget breakdown (sum = item_value), the
+# family batch upsert and used-by, the item list filters, and the read-only Forge viewer item / family tabs.
 # Fixtures are picked by rule; every catalog edit runs in a sandbox fork.
 # ==============================================================================
 
 const TAG: String = "ItemForm"
-static var SANDBOX: String = TestHelpers.sandbox("item_form_ui")
 static var SANDBOX_MODEL: String = TestHelpers.sandbox("item_form_model")
 
 static func run(tree_parent: Node = null) -> bool:
@@ -26,13 +25,13 @@ static func run(tree_parent: Node = null) -> bool:
 	var ok: bool = true
 	ok = _test_layout() and ok
 	ok = _test_new_and_save_state() and ok
-	ok = _test_locks() and ok
+	ok = _test_key_fields() and ok
 	ok = _test_modifier_limits() and ok
 	ok = _test_effects() and ok
 	ok = _test_tiers() and ok
 	ok = _test_tokens_and_budget() and ok
 	ok = _test_filters() and ok
-	ok = _test_family_impact() and ok
+	ok = _test_family_batch() and ok
 	ok = _test_forge_ui(tree_parent) and ok
 	return ok
 
@@ -107,7 +106,7 @@ static func _test_layout() -> bool:
 	var family: Dictionary = ContentCatalog.entries("item_families")[0]
 	var f_blocks: Array[Dictionary] = ItemFormModel.layout("item_families", family)
 	var f_ids: Array[String] = _ids_of(f_blocks)
-	checks["family sections: identity, type, numbers, policy, rules, impact, used by"] = f_ids == ItemFormModel.FAMILY_SECTIONS
+	checks["family sections: identity, type, numbers, policy, rules, used by"] = f_ids == ItemFormModel.FAMILY_SECTIONS
 	var f_keys: Array[String] = _keys_of(f_blocks)
 	var visible: int = 0
 	var derived: Dictionary = ItemFamilies.derive(family)
@@ -156,40 +155,26 @@ static func _test_new_and_save_state() -> bool:
 	checks["switching the type resets slots / adjustable to the type"] = ContentFactory._strings(switched["slots"]) == ItemFamilies.ARMOR_SLOTS and ContentFactory._strings(switched["adjustable"]) == ItemFamilies.number_fields_for("ARMOR")
 	return TestHelpers.report(TAG, "New item and family validate; errors block Save with field and row; warnings never do", checks)
 
-static func _test_locks() -> bool:
+# TOOLS-RO: the viewer has no locks (no field state carries one); the data rule (ContentCatalog.key_field_errors) still
+# makes a list change of a system item a key-field problem on modifiers, outside the system-edit scope only.
+static func _test_key_fields() -> bool:
 	var checks: Dictionary = {}
 	var system: Dictionary = _item_of_type("WEAPON")
 	var id: String = str(system["id"])
-	checks["a shipped item is locked"] = ItemFormModel.is_locked("items", id)
-	var locked_ok: bool = true
-	var free_ok: bool = true
+	var no_lock: bool = true
 	for f: Dictionary in ContentSchema.fields("items"):
-		var st: Dictionary = ItemFormModel.state("items", system, str(f["key"]), id)
-		if DictUtil.to_bool(f.get("key_field", false)):
-			locked_ok = locked_ok and DictUtil.to_bool(st["locked"]) and not DictUtil.to_bool(st["enabled"]) and str(st["reason"]) == ItemFormModel.LOCK_REASON
-		elif ["name", "description", "value", "weight", "rarity", "starter_stash", "special_note"].has(str(f["key"])):
-			free_ok = free_ok and not DictUtil.to_bool(st["locked"]) and DictUtil.to_bool(st["enabled"])
-	checks["every key field is disabled with the lock reason"] = locked_ok
-	checks["name, description, value, weight, rarity, stash and note stay editable"] = free_ok
-	checks["whole-list lock: no modifier or tier can be added on a system item"] = not DictUtil.to_bool(ItemFormModel.can_add_modifier(system, id)["allowed"]) and not DictUtil.to_bool(ItemFormModel.can_add_tier(system, id)["allowed"])
+		no_lock = no_lock and not ItemFormModel.state("items", system, str(f["key"]), id).has("locked")
+	checks["no item field state carries a lock"] = no_lock
 	var edited: Dictionary = system.duplicate(true)
 	var mods: Array = DictUtil.array_of(edited["modifiers"]).duplicate(true)
 	mods.append({"kind": "stat_bonus", "stat": "PERC", "value": 1})
 	edited = _with_mods(edited, mods)
-	checks["a list change on a system item is a key-field problem on modifiers"] = ItemFormModel.draft_problems("items", edited, id).any(func(p: Dictionary) -> bool: return str(p["field"]) == "modifiers" and str(p["message"]).contains("key field"))
+	var key_problem: Callable = func(p: Dictionary) -> bool: return str(p["field"]) == "modifiers" and str(p["message"]).contains("key field")
+	checks["a list change on a system item is a key-field problem on modifiers"] = ItemFormModel.draft_problems("items", edited, id).any(key_problem)
 	ContentCatalog.begin_system_edit()
-	checks["inside the system-edit scope nothing is locked"] = not ItemFormModel.is_locked("items", id)
+	checks["...but not inside the system-edit scope"] = not ItemFormModel.draft_problems("items", edited, id).any(key_problem)
 	ContentCatalog.end_system_edit()
-	checks["a new draft is never locked"] = not ItemFormModel.is_locked("items", "")
-	checks["a system item cannot be deleted (SAFE DELETE)"] = not DictUtil.to_bool(ItemFormModel.delete_state("items", id)["allowed"]) and str(ItemFormModel.delete_state("items", id)["reason"]) == ItemFormModel.SAFE_DELETE_REASON
-	var fam_id: String = str(system["family"])
-	var fam: Dictionary = ContentCatalog.get_entry("item_families", fam_id)
-	var fam_locked: bool = true
-	for f: Dictionary in ContentSchema.fields("item_families"):
-		if DictUtil.to_bool(f.get("key_field", false)):
-			fam_locked = fam_locked and DictUtil.to_bool(ItemFormModel.state("item_families", fam, str(f["key"]), fam_id)["locked"])
-	checks["system family key fields are locked; base and bands stay editable"] = fam_locked and DictUtil.to_bool(ItemFormModel.state("item_families", fam, "base", fam_id)["enabled"]) and DictUtil.to_bool(ItemFormModel.state("item_families", fam, "bands", fam_id)["enabled"])
-	return TestHelpers.report(TAG, "Locked key fields and whole-list locks on system assets", checks)
+	return TestHelpers.report(TAG, "Key-field rule on system items (no viewer locks)", checks)
 
 static func _test_modifier_limits() -> bool:
 	var checks: Dictionary = {}
@@ -405,7 +390,7 @@ static func _test_filters() -> bool:
 	checks["every chip has choices"] = ["family", "hand", "rarity", "special", "has_tiers", "has_effects", "origin", "used_by"].all(func(k: String) -> bool: return ItemFormModel.filter_options(k).size() > 1)
 	return TestHelpers.report(TAG, "Item list filter chips", checks)
 
-static func _test_family_impact() -> bool:
+static func _test_family_batch() -> bool:
 	var checks: Dictionary = {}
 	checks["sandbox fork"] = TestHelpers.fork(SANDBOX_MODEL)
 	# The gear family with the most items (rule), its power (weapons) or mitigation (others) base +1 on every hand row.
@@ -418,36 +403,16 @@ static func _test_family_impact() -> bool:
 	var draft: Dictionary = best.duplicate(true)
 	for key: String in ItemFormModel.grid_keys(draft):
 		draft["base"] = ItemFormModel.with_base(draft, key, number, ItemFormModel.base_cell(draft, key, number) + 1)
-	var unchanged: Dictionary = ItemFormModel.impact(best, fam_id)
-	checks["no edit, no impact"] = DictUtil.to_int(unchanged["count"]) == 0 and str(unchanged["text"]) == "No item changes." and not ItemFormModel.needs_confirm(best, fam_id)
-	var impact: Dictionary = ItemFormModel.impact(draft, fam_id)
 	var users: Array[Dictionary] = ContentCatalog.items_of_family(fam_id)
-	var plus_one: bool = true
-	for row: Variant in DictUtil.array_of(impact["items"]):
-		for c: Variant in DictUtil.array_of(DictUtil.dict_of(row)["changes"]):
-			var change: Dictionary = DictUtil.dict_of(c)
-			plus_one = plus_one and str(change["field"]) == number and DictUtil.to_int(change["new"]) == DictUtil.to_int(change["old"]) + 1
-	checks["every item of the family changes by +1 %s" % number] = not fam_id.is_empty() and DictUtil.to_int(impact["count"]) == users.size() and plus_one
-	checks["the impact text names the items and asks to confirm"] = str(impact["text"]).begins_with("%d item" % users.size()) and ItemFormModel.needs_confirm(draft, fam_id)
-	var weight: float = GearBudget.W_POWER if number == "power" else GearBudget.W_MITIGATION
-	var totals_ok: bool = true
-	for l: Variant in DictUtil.array_of(impact["loadouts"]):
-		var lo: Dictionary = DictUtil.dict_of(l)
-		var hits: int = 0
-		for slot_row: Dictionary in GearBudget.loadout_breakdown(ContentCatalog.get_entry(str(lo["kind"]), str(lo["id"]))):
-			if str(ContentCatalog.get_entry("items", str(slot_row["id"])).get("family", "")) == fam_id:
-				hits += 1
-		totals_ok = totals_ok and is_equal_approx(DictUtil.to_float(lo["new"]) - DictUtil.to_float(lo["old"]), hits * weight)
-	checks["loadout totals move by the item value deltas"] = totals_ok
 	var before: Dictionary = {}
 	for item: Dictionary in users:
 		before[str(item["id"])] = DictUtil.to_int(item[str(ItemFamilies.FLAT_KEYS[number])])
 	var errors: Array[String] = ContentCatalog.upsert_many("item_families", [draft])   # base numbers are free fields of a system family
-	var moved: bool = errors.is_empty()
+	var moved: bool = errors.is_empty() and not users.is_empty()
 	for item: Dictionary in ContentCatalog.items_of_family(fam_id):
 		moved = moved and DictUtil.to_int(item[str(ItemFamilies.FLAT_KEYS[number])]) == DictUtil.to_int(before[str(item["id"])]) + 1
-	checks["the batch apply re-resolves every item of the family"] = moved
-	# A user family with a user item: id and type fixed while used, delete refused for the family, allowed for the item.
+	checks["the batch upsert re-resolves every item of the family"] = moved
+	# A user family with a user item: id and type fixed while used.
 	var fam: Dictionary = ItemFormModel.new_family(ContentCatalog.unique_id("item_families", "t_if_user_fam"))
 	var fam_errors: Array[String] = ContentCatalog.upsert("item_families", fam)
 	var item: Dictionary = ContentSchema.defaults("items")
@@ -461,23 +426,18 @@ static func _test_family_impact() -> bool:
 	checks["a user family and item store"] = fam_errors.is_empty() and item_errors.is_empty()
 	var st: Dictionary = ItemFormModel.state("item_families", ContentCatalog.get_entry("item_families", fid), "item_type", fid)
 	checks["a used family's item type is fixed with the reason"] = not DictUtil.to_bool(st["enabled"]) and str(st["reason"]).contains("item(s) use this family")
-	checks["a family with items cannot be deleted"] = not DictUtil.to_bool(ItemFormModel.delete_state("item_families", fid)["allowed"])
-	checks["an unused user item can be deleted"] = DictUtil.to_bool(ItemFormModel.delete_state("items", str(item["id"]))["allowed"])
 	checks["used by lists the item"] = ItemFormModel.used_by(fid).size() == 1
-	var promoted: String = ContentCatalog.promote("items", str(item["id"]))
-	checks["promote to system locks the item's key fields and its delete"] = promoted.is_empty() and ItemFormModel.is_locked("items", str(item["id"])) and not DictUtil.to_bool(ItemFormModel.delete_state("items", str(item["id"]))["allowed"])
 	TestHelpers.cleanup(SANDBOX_MODEL)
-	return TestHelpers.report(TAG, "Family impact panel, batch apply, used-by and delete states", checks)
+	return TestHelpers.report(TAG, "Family batch upsert, used family state and used-by", checks)
 
 # ------------------------------------------------------------------------------
-# Forge item and family tabs (scene)
+# Forge viewer item and family tabs (scene; TOOLS-RO: read-only on the shipped catalog)
 # ------------------------------------------------------------------------------
 
 static func _test_forge_ui(tree_parent: Node) -> bool:
 	if tree_parent == null:
-		return TestHelpers.report_ok(TAG, "Forge item tabs UI (needs a scene tree)", true, "skipped")
+		return TestHelpers.report_ok(TAG, "Forge viewer item tabs (needs a scene tree)", true, "skipped")
 	var checks: Dictionary = {}
-	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var host: Node = (load("res://scenes/content_forge.tscn") as PackedScene).instantiate()
 	tree_parent.add_child(host)
 	var forge: ContentForge = host.get("forge")
@@ -489,52 +449,23 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	var rows: Node = table.find_child("Rows", true, false) if table != null else null
 	checks["the modifier table shows one row per modifier"] = rows != null and rows.get_child_count() == ItemModifiers.modifiers_of(shipped).size()
 	var kind_opt: OptionButton = rows.get_child(0).find_child("Kind", true, false) as OptionButton if rows != null and rows.get_child_count() > 0 else null
-	var add_btn: Button = table.find_child("AddButton", true, false) as Button if table != null else null
-	checks["a system item's table is read-only (whole-list lock)"] = kind_opt != null and kind_opt.disabled and add_btn != null and add_btn.disabled
+	var add_row: Control = table.find_child("AddRow", true, false) as Control if table != null else null
+	checks["the table is read-only and has no add row"] = kind_opt != null and kind_opt.disabled and add_row != null and not add_row.visible
 	var family_opt: OptionButton = forge.form.field_control("family") as OptionButton
-	checks["the family picker is locked; name stays editable"] = family_opt != null and family_opt.disabled and (forge.form.field_control("name") as LineEdit).editable
+	checks["the family picker and the name are read-only"] = family_opt != null and family_opt.disabled and not (forge.form.field_control("name") as LineEdit).editable
 	var base_panel: RichTextLabel = forge.form.panel_control("base") as RichTextLabel
 	checks["the base values panel shows base + adjustments = result"] = base_panel != null and base_panel.text.contains(" = ")
 	checks["the preview panel shows the gear value"] = forge.form.panel_control("preview") != null and (forge.form.panel_control("preview") as RichTextLabel).text.contains("Gear value")
-	checks["a valid system item can be applied; its delete is disabled"] = not forge.apply_blocked() and forge.delete_blocked()
+	checks["a shipped item shows no problems"] = forge.entry_problems().is_empty() and forge.problems_text().contains("No problems")
+	var live: Array[String] = TestHelpers.live_controls(forge.form)
+	checks["no control of the item form can edit or act (%s)" % ", ".join(live)] = live.is_empty()
 	# Filter chip: has tiers.
 	forge.set_item_filter("has_tiers", "yes")
 	var tiered: int = ContentCatalog.entries("items").filter(func(r: Dictionary) -> bool: return not DictUtil.array_of(r["tiers"]).is_empty()).size()
 	checks["the has-tiers chip filters the list"] = forge.list_ids().size() == tiered
 	forge.set_item_filter("has_tiers", "any")
-	# A new item: add a modifier through the table, adjust it, apply as a user asset, delete it.
-	forge.new_entry()
-	checks["a new item draft can be applied"] = not forge.apply_blocked() and forge.draft_problems().is_empty()
-	var new_table: Control = forge.form.field_control("modifiers")
-	var new_add: Button = new_table.find_child("AddButton", true, false) as Button if new_table != null else null
-	var picker: OptionButton = new_table.find_child("AddKind", true, false) as OptionButton if new_table != null else null
-	var adjust_at: int = -1
-	if picker != null:
-		for i: int in range(picker.item_count):
-			if str(picker.get_item_metadata(i)) == "adjust" and not picker.is_item_disabled(i):
-				adjust_at = i
-		if adjust_at >= 0:
-			picker.select(adjust_at)
-	checks["the add button is enabled for a user draft"] = new_add != null and not new_add.disabled and adjust_at >= 0
-	if new_add != null:
-		new_add.pressed.emit()
-	checks["+ Add modifier appends an adjust row"] = ItemModifiers.modifiers_of(forge.form.draft).size() == 1 and str(ItemModifiers.modifiers_of(forge.form.draft)[0]["kind"]) == "adjust"
-	var field: String = str(ItemModifiers.modifiers_of(forge.form.draft)[0].get("field", ""))
-	var flat_key: String = str(ItemFamilies.FLAT_KEYS[field]) if ItemFamilies.FLAT_KEYS.has(field) else "base_power"
-	var before: int = DictUtil.to_int(forge.form.draft[flat_key])
-	var delta_spin: SpinBox = forge.form.field_control("modifiers").find_child("Delta", true, false) as SpinBox
-	var limit: int = roundi(delta_spin.max_value) if delta_spin != null else 0
-	var target: int = mini(2, limit)
-	if delta_spin != null:
-		delta_spin.value = target
-	var base_n: int = DictUtil.to_int(ItemFamilies.base_of(ItemFormModel.family_row(forge.form.draft), str(forge.form.draft["hand"]))[field]) if ItemFamilies.FLAT_KEYS.has(field) else 0
-	checks["the delta spinner re-resolves the draft"] = delta_spin != null and DictUtil.to_int(forge.form.draft[flat_key]) == base_n + target and before == base_n + 1
-	var new_id: String = str(forge.form.draft["id"])
-	checks["the new item applies in stored shape (family + modifiers)"] = forge.apply() and ItemModifiers.modifiers_of(ContentCatalog.get_entry("items", new_id)).size() == 1 and str(ContentCatalog.get_entry("items", new_id)["origin"]) == ContentSchema.ORIGIN_USER
-	forge.delete_selected()
-	forge.delete_selected()
-	checks["the user item can be deleted"] = not ContentCatalog.has("items", new_id)
-	# Families: a base edit of a used family needs a second Apply.
+	checks["the any chip lists every item"] = forge.list_ids().size() == ContentCatalog.entries("items").size()
+	# Families: the base grid and the used-by panel (the impact panel left with the edits).
 	forge.show_kind("item_families")
 	var fam_id: String = ""
 	for fam: Dictionary in ContentCatalog.entries("item_families"):
@@ -542,17 +473,9 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 			fam_id = str(fam["id"])
 			break
 	forge.select(fam_id)
-	checks["the family form shows the base grid and the impact panel"] = forge.form.field_control("base") != null and forge.form.panel_control("impact") != null
-	var number: String = ItemFamilies.number_fields_for(ItemFamilies.item_type_of(forge.form.draft))[0]
-	var key: String = ItemFormModel.grid_keys(forge.form.draft)[0]
-	forge.form.put("base", ItemFormModel.with_base(forge.form.draft, key, number, ItemFormModel.base_cell(forge.form.draft, key, number) + 1))
-	var impact_text: String = (forge.form.panel_control("impact") as RichTextLabel).text
-	checks["the impact panel updates live"] = impact_text.contains("change")
-	var first: bool = forge.apply()
-	checks["the first Apply only previews the impact"] = not first and forge.apply_pending() and forge.status_text().contains("Click Apply again")
-	var second: bool = forge.apply()
-	checks["the second Apply stores the family"] = second and not forge.apply_pending() and DictUtil.to_int(ItemFamilies.base_of(ContentCatalog.get_entry("item_families", fam_id), key)[number]) == ItemFormModel.base_cell(forge.form.draft, key, number)
-	forge.revert()
+	var used: RichTextLabel = forge.form.panel_control("used_by") as RichTextLabel
+	checks["the family form shows the base grid and who uses it, no impact panel"] = forge.form.field_control("base") != null and used != null and used.text.begins_with("%d item" % ContentCatalog.items_of_family(fam_id).size()) and forge.form.panel_control("impact") == null
+	var fam_live: Array[String] = TestHelpers.live_controls(forge.form)
+	checks["no control of the family form can edit or act (%s)" % ", ".join(fam_live)] = fam_live.is_empty()
 	host.queue_free()
-	TestHelpers.cleanup(SANDBOX)
-	return TestHelpers.report(TAG, "Forge item and family tabs (scene)", checks)
+	return TestHelpers.report(TAG, "Forge viewer item and family tabs (scene)", checks)

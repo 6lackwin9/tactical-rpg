@@ -4,7 +4,7 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Forge Preview (what a catalog entry turns into in the engine)
 # Builds the engine object from a draft entry and describes it as BBCode, plus
-# an icon / portrait texture. Pure functions: the Forge and tests both use them.
+# an icon / portrait texture. Pure functions: the Forge viewer and tests both use them.
 # ==============================================================================
 
 static func texture_for(kind: String, entry: Dictionary) -> Texture2D:
@@ -62,7 +62,7 @@ static func _skill_ranked(entry: Dictionary) -> String:
 		for r: String in requires:
 			names.append(str(ContentCatalog.get_entry("skills", r).get("name", r)))
 		t += _line("Requires", ", ".join(names))
-	t += _line("Origin", str(base["origin"]) + (" (key fields locked, delete locked)" if str(base["origin"]) == ContentSchema.ORIGIN_SYSTEM else ""))
+	t += _line("Origin", str(base["origin"]))
 	if rows.size() > 1:
 		t += "\n[b]Ranks[/b]\n"
 		for row: Dictionary in rows:

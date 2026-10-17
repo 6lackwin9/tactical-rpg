@@ -19,7 +19,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Stats: STR DEX INT CONS PERC KNOW. Max HP = 60 + CONS*8 + STR*2 (x tier HP). Speed = max(1, 8 + DEX - armor burden). Crit = 5% + 1%/DEX above 10 + 1%/weapon training level above 1, x1.5.
 - Damage: `DamageCalculator.compute` is the ONLY formula. Attack Power = (weapon power + training) + scaling stat x proficiency scaling (1.0-2.0, default 1.5), x tier power. Authored unit `power` is absolute. Hit = Attack x Focus x Skill x Stance matchup (1.25/0.75/1) x Crit x (1-Guard) x (1-Armor), armor = rating/(rating+50).
 - Combat: 6 blocks per round, simultaneous resolution, AP pool with regen, skill AP = skill level, stances Offensive > Tactical > Defensive > Offensive, +1 AP stance switch, AP debt allowed.
-- Classes (six shipped; the Forge may add user classes): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill tiers unlock by level (no skill cap; see "Skill unlock rule (SK2)" below), tiers hero/minion/standard/elite/boss scale HP and power.
+- Classes (six shipped; seed scripts may add user classes): warrior (tank), ranger, priest (support), brawler, rogue, mage. `StatRules`: budget 62 (6-18/stat), growth 5/level (max 3/stat), unit spend pool = 4 + (level-1) spent exactly (or empty = follow class weights), levels 1-10, skill tiers unlock by level (no skill cap; see "Skill unlock rule (SK2)" below), tiers hero/minion/standard/elite/boss scale HP and power.
 - Proficiency: `{gear type: {level 1-3, scaling 1.0-2.0}}` per class; unlisted gear unequippable; training gives +1 power, -2 requirement, crit, burden, block cost (lvl 3), skill gating (`SkillDef.weapon_types/min_proficiency`).
 - Passives: catalog templates (stat w/ context, proficiency, resist, ap_regen, skill). Granted only by SOURCES (world character, faction `grants`, discipline `passives`, named item `grants`; later quests/lore). Never by classes/base units.
 - Skills: class `skill_path` `{family: unlock level}` (order = entry position; `ClassArchetype.path_steps()` sorts by (level, position)) + `extra_skills` + `Combatant.learn_skill`. `Combatant.can_use` gates planner/AI.
@@ -109,7 +109,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 - Basics (strike, guard, move, rest, switch_target, offhand_jab) are owned by every unit from level 1 and are rejected in class paths.
 - `origin` system/user on every kind: system assets lock key fields (seeds edit them inside `begin_system_edit`/`end_system_edit`) and cannot be deleted; `promote`/`demote` switch origin. Safe delete: `AssetScan` + `tools/safe_delete.gd`.
 - Saving never drops data: a kind whose file loaded with errors is save-blocked (`ContentCatalog.save_blocked(kind)`); `validate_all` reports unfoldable skill families under `skills:fold`. `warnings_all` checks skills once per family, keyed `skills:<head id>`. `ContentSchema.fields()` always returns copies.
-- Forge skill logic: `scripts/ui/forge/skill_form_model.gd`, `skill_filter.gd`, `skill_ranks_panel.gd`.
+- Forge skill view (read-only): `scripts/ui/forge/skill_form_model.gd`, `skill_filter.gd`, `skill_ranks_panel.gd`.
 
 ## Balance rules and sim v2 (BAL2-L)
 

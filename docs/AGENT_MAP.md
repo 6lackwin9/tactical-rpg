@@ -12,6 +12,67 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### TOOLS-RO: creation tools become read-only viewers; content edit process documented (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | TOOLS-RO | ~294k / 28 | done; lock icons removed on user follow-up |
+| change-reviewer | TOOLS-RO | ~30k / 1 | 0 blockers, 2 nits |
+
+### COMBAT-LAYOUT: combat side docks keep their size on enemy select (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | COMBAT-LAYOUT: fixed-width combat docks, wrapped labels, clamped preview, layout test, before/after renders | ~75k / 42 | gate green |
+| change-reviewer (low) | COMBAT-LAYOUT whole branch | 21k / 3 | clean |
+
+### REVIEW-F4: pin Butler 15.32.0 with a sha256 check (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | REVIEW-F4 butler pin | ~15k / 2 | done |
+| change-reviewer | REVIEW-F4 butler pin | ~14k / <1 | no blockers |
+
+### REVIEW-F2: menu flow review fixes, new-game and level-up confirms (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | REVIEW-F2: menu flow fixes, Q1 autosave ask, Q2 level-up ask | ~84k / 38 | gate green |
+| change-reviewer (low) | REVIEW-F2 whole branch | 30k / 5 | clean |
+
+### PC-LAUNCH-CACHE: rebuild Godot's class cache after a pull, before launching (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | PC-LAUNCH-CACHE | ~12k / <1 | 2 fixes applied |
+
+### REVIEW-F1: save safety (export backup swap, debug map autosave, peek versions, busy) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | REVIEW-F1: save safety findings 1-9 plus review fixes | ~103k / ~13 | gate green |
+| change-reviewer (low) | REVIEW-F1 whole branch, then the fix diff | ~58k / ~1 | 2 medium fixed, clean |
+
+### REVIEW-F4 (partial): web CI cancels only PR runs, itch timeout, pack excludes tests and... (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | REVIEW-F4 partial | ~23.5k / ~10 | done; butler pin blocked |
+| change-reviewer | REVIEW-F4 partial | ~11k / <1 | no blockers |
+
+### S14-FIX: S14-L2/L3 review follow-ups (FX settings, audio director, presenter) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | S14-FIX: headless instant, AudioDirector stack, presenter distance, _live pruning, to_float, startup settings load | ~50k / ~22 | gate green |
+| change-reviewer (low) | S14-FIX whole branch | 17k / 1 | clean |
+
+### SHARED-LOGS: only Merge & Release writes AGENT_MAP, TASKS_DONE and TASK_LOG (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (Platform & Workflow thread) + change-reviewer | SHARED-LOGS: only Merge & Release writes the shared logs | 25k / 6 | landed on develop |
+
 ### BATTLE1-L battle link (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |

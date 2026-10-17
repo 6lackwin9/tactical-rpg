@@ -29,9 +29,11 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	var selected_button: Button = null
 	for g: Dictionary in groups:
 		list.add_child(MainMenuView.text(str(g["label"]), UiTheme.COL_HEADER, false))
-		for qid: String in JsonUtil.strings(g["quests"]):
-			var name: String = str(QuestRunner.resolved(CurrentGame.state(), qid).get("name", qid))
-			var b: Button = MainMenuView.button(("▶ " if qid == _model.selected else "") + name, func() -> void:
+		for raw_row: Variant in DictUtil.array_of(g["rows"]):
+			var row_data: Dictionary = DictUtil.dict_of(raw_row)
+			var qid: String = str(row_data["qid"])
+			var quest_name: String = str(row_data["name"])
+			var b: Button = MainMenuView.button(("▶ " if qid == _model.selected else "") + quest_name, func() -> void:
 				host.act(_model.select.bind(qid))
 				host.render())
 			b.focus_entered.connect(func() -> void:   # arrows move the focus, and the selection follows it (rule 5)

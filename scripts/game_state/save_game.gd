@@ -39,6 +39,19 @@ static func delete(slot: int) -> bool:
 		return false
 	return DirAccess.remove_absolute(path_for(slot)) == OK
 
+const TMP_EXT: String = ".fc_tmp"
+const BAK_EXT: String = ".bak"
+const MAX_IMPORT_BYTES: int = 8 * 1024 * 1024
+
+# A helper path `path + suffix` (numbered when taken) that no file or folder uses yet (never overwrites a user file).
+static func _free_path(path: String, suffix: String) -> String:
+	var tmp: String = path + suffix
+	var n: int = 1
+	while FileAccess.file_exists(tmp) or DirAccess.dir_exists_absolute(tmp):
+		tmp = "%s%s%d" % [path, suffix, n]
+		n += 1
+	return tmp
+
 # Problem strings; empty = written. `saved_at` > 0 keeps a given save time (import); else now.
 static func write(state: GameState, slot: int = 1, saved_at: int = 0) -> Array[String]:
 	var errors: Array[String] = []
@@ -59,13 +72,19 @@ static func write(state: GameState, slot: int = 1, saved_at: int = 0) -> Array[S
 		errors.append("Can't create the save folder '%s'." % _dir)
 		return errors
 	var final_path: String = path_for(slot)
-	var tmp_path: String = final_path + ".tmp"
+	var tmp_path: String = _free_path(final_path, TMP_EXT)
 	var file: FileAccess = FileAccess.open(tmp_path, FileAccess.WRITE)
 	if file == null:
 		errors.append("Can't open '%s' for writing." % tmp_path)
 		return errors
-	file.store_string(JSON.stringify(envelope, "\t"))
+	var wrote: bool = file.store_string(JSON.stringify(envelope, "\t"))
+	file.flush()
+	var write_ok: bool = wrote and file.get_error() == OK
 	file.close()
+	if not write_ok:
+		DirAccess.remove_absolute(tmp_path)
+		errors.append("Can't write '%s'." % final_path)
+		return errors
 	if DirAccess.rename_absolute(tmp_path, final_path) != OK:
 		# keep the previous save intact: never delete the final file before the new one is in place
 		DirAccess.remove_absolute(tmp_path)
@@ -124,18 +143,35 @@ static func export_to(slot: int, path: String) -> Array[String]:
 	if path.strip_edges().is_empty():
 		errors.append("Pick a file to export to.")
 		return errors
-	var tmp_path: String = path + ".tmp"
+	var tmp_path: String = _free_path(path, TMP_EXT)
 	var file: FileAccess = FileAccess.open(tmp_path, FileAccess.WRITE)
 	if file == null:
 		errors.append("Can't open '%s' for writing." % path)
 		return errors
-	file.store_string(FileAccess.get_file_as_string(path_for(slot)))
+	var wrote: bool = file.store_string(FileAccess.get_file_as_string(path_for(slot)))
+	file.flush()
+	var write_ok: bool = wrote and file.get_error() == OK
 	file.close()
-	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(path)
+	if not write_ok:
+		DirAccess.remove_absolute(tmp_path)
+		errors.append("Can't write '%s'." % path)
+		return errors
+	var had_old: bool = FileAccess.file_exists(path)
+	var bak_path: String = _free_path(path, BAK_EXT) if had_old else ""
+	if had_old:
+		if DirAccess.rename_absolute(path, bak_path) != OK:
+			DirAccess.remove_absolute(tmp_path)
+			errors.append("Can't move the export into place at '%s' (the previous file was kept)." % path)
+			return errors
 	if DirAccess.rename_absolute(tmp_path, path) != OK:
 		DirAccess.remove_absolute(tmp_path)
-		errors.append("Can't move the export into place at '%s'." % path)
+		if had_old and DirAccess.rename_absolute(bak_path, path) != OK:
+			errors.append("Can't move the export into place at '%s'; the previous file is at '%s'." % [path, bak_path])
+			return errors
+		errors.append("Can't move the export into place at '%s' (the previous file was kept)." % path)
+		return errors
+	if had_old:
+		DirAccess.remove_absolute(bak_path)
 	return errors
 
 # Reads the save file at `path` (any world; migrated and validated like read) into manual `slot`, keeping its
@@ -149,13 +185,23 @@ static func import_from(path: String, slot: int) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		errors.append("No file at '%s'." % path)
 		return out
+	var size_file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if size_file == null:
+		errors.append("Can't open '%s'." % path)
+		return out
+	var too_big: bool = size_file.get_length() > MAX_IMPORT_BYTES
+	size_file.close()
+	if too_big:
+		errors.append("File is too large to be a save.")
+		return out
 	var res: Dictionary = decode(FileAccess.get_file_as_string(path))
 	out["warnings"] = res["warnings"]
 	if not DictUtil.to_bool(res["ok"]):
 		errors.assign(DictUtil.array_of(res["errors"]))
 		out["errors"] = errors
 		return out
-	errors = write(res["state"] as GameState, slot, DictUtil.to_int(res["saved_at"]))
+	var stamp: int = mini(DictUtil.to_int(res["saved_at"]), int(Time.get_unix_time_from_system()))
+	errors = write(res["state"] as GameState, slot, stamp)
 	out["errors"] = errors
 	out["ok"] = errors.is_empty()
 	return out
@@ -178,6 +224,10 @@ static func peek(slot: int) -> Dictionary:
 		return out
 	var envelope: Dictionary = json.data
 	if str(envelope.get("format", "")) != FORMAT:
+		out["error"] = "unreadable"
+		return out
+	var raw_version: Variant = envelope.get("version", null)
+	if not (raw_version is int or raw_version is float) or DictUtil.to_int(raw_version) < 1:
 		out["error"] = "unreadable"
 		return out
 	out["saved_at"] = DictUtil.to_int(envelope.get("saved_at", 0))

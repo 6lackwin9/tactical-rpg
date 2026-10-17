@@ -65,6 +65,7 @@ static func _test_bank() -> bool:
 
 # Acceptance 3
 static func _test_director(tree_parent: Node) -> bool:
+	var baseline: AudioDirector = AudioDirector.active   # the host scene may own a director already
 	var director := AudioDirector.new()
 	if tree_parent != null:
 		tree_parent.add_child(director)
@@ -84,8 +85,20 @@ static func _test_director(tree_parent: Node) -> bool:
 	}
 	if director.is_inside_tree():
 		tree_parent.remove_child(director)
-	checks["active cleared on exit"] = tree_parent == null or AudioDirector.active == null
+	checks["active cleared on exit"] = tree_parent == null or AudioDirector.active == baseline
 	director.free()
+	if tree_parent != null:
+		var a := AudioDirector.new()
+		var b := AudioDirector.new()
+		tree_parent.add_child(a)
+		tree_parent.add_child(b)
+		checks["newest is active"] = AudioDirector.active == b
+		tree_parent.remove_child(b)
+		checks["older director active again after the newer exits"] = AudioDirector.active == a
+		tree_parent.remove_child(a)
+		checks["none of ours left gives the baseline"] = AudioDirector.active == baseline
+		a.free()
+		b.free()
 	return _report("AudioDirector headless: no voices, play is a no-op", checks)
 
 # Acceptance 4

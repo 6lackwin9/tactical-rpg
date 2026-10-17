@@ -9,6 +9,8 @@ extends PanelContainer
 
 signal gear_modal_requested(combatant: Combatant)
 
+const PANEL_WIDTH: float = 270.0
+
 var inspector_hdr: Label
 var btn_gear_modal: Button
 var inspector_avatar: TextureRect
@@ -34,7 +36,8 @@ var current_inspected_combatant: Combatant = null
 func _init() -> void:
 	name = "UnitInspectorUI"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(270, 468)
+	custom_minimum_size = Vector2(PANEL_WIDTH, 468)
+	clip_contents = true   # the width is fixed: long text wraps or ellipsizes, it never widens the panel
 
 	var left_style := StyleBoxFlat.new()
 	left_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
@@ -61,9 +64,9 @@ func _build_ui() -> void:
 	inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
 	inspector_hdr.add_theme_font_size_override("font_size", 10)
 	inspector_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
+	inspector_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inspector_hdr.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top_hdr_row.add_child(inspector_hdr)
-
-	top_hdr_row.add_spacer(false)
 
 	btn_gear_modal = Button.new()
 	btn_gear_modal.text = "🎒 GEAR"
@@ -195,12 +198,14 @@ func _build_ui() -> void:
 	inspector_name_lbl.text = "Warrior"
 	inspector_name_lbl.add_theme_font_size_override("font_size", 12)
 	inspector_name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	_wrap(inspector_name_lbl)
 	right_block.add_child(inspector_name_lbl)
 
 	inspector_team_lbl = Label.new()
 	inspector_team_lbl.text = "Allied Hero (Melee Frontline)"
 	inspector_team_lbl.add_theme_font_size_override("font_size", 9)
 	inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
+	_wrap(inspector_team_lbl)
 	right_block.add_child(inspector_team_lbl)
 
 	var info_sep := HSeparator.new()
@@ -235,23 +240,27 @@ func _build_ui() -> void:
 	inspector_pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.7, 0.9))
 	stats_row2.add_child(inspector_pos_lbl)
 
-	stats_row2.add_spacer(false)
 	inspector_target_lbl = Label.new()
 	inspector_target_lbl.text = "Target: Enemy Brawler"
 	inspector_target_lbl.add_theme_font_size_override("font_size", 9)
 	inspector_target_lbl.add_theme_color_override("font_color", Color(0.9, 0.75, 0.4))
+	inspector_target_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inspector_target_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	inspector_target_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	stats_row2.add_child(inspector_target_lbl)
 
 	inspector_buffs_lbl = Label.new()
 	inspector_buffs_lbl.text = "Effects: None active"
 	inspector_buffs_lbl.add_theme_font_size_override("font_size", 9)
 	inspector_buffs_lbl.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
+	_wrap(inspector_buffs_lbl)
 	right_block.add_child(inspector_buffs_lbl)
 
 	inspector_gear_lbl = Label.new()
 	inspector_gear_lbl.text = "Gear: Default Loadout"
 	inspector_gear_lbl.add_theme_font_size_override("font_size", 9)
 	inspector_gear_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	_wrap(inspector_gear_lbl)
 	right_block.add_child(inspector_gear_lbl)
 
 	# Allies: planning happens in the Plan Round screen; this container stays for layout symmetry
@@ -268,12 +277,14 @@ func _build_ui() -> void:
 	enemy_deck_hdr.text = "THREAT INTEL (AI BEHAVIOUR)"
 	enemy_deck_hdr.add_theme_font_size_override("font_size", 10)
 	enemy_deck_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+	_wrap(enemy_deck_hdr)
 	enemy_actions_container.add_child(enemy_deck_hdr)
 
 	left_hint = Label.new()
 	left_hint.text = "💡 Planning: click an enemy, yourself or a tile on the grid."
 	left_hint.add_theme_font_size_override("font_size", 8)
 	left_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
+	_wrap(left_hint)
 	left_vbox.add_child(left_hint)
 
 func update_inspector(
@@ -426,12 +437,18 @@ func _create_mini_action_card(act: Dictionary) -> PanelContainer:
 	act_name_lbl.add_theme_color_override("font_color", act_col)
 	act_hbox.add_child(act_name_lbl)
 
-	act_hbox.add_spacer(false)
-
 	var act_desc_lbl := Label.new()
 	act_desc_lbl.text = str(act["desc"])
 	act_desc_lbl.add_theme_font_size_override("font_size", 8)
 	act_desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	act_desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	act_desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	act_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	act_hbox.add_child(act_desc_lbl)
 
 	return act_card
+
+# Long text wraps inside the panel instead of widening it (a wrapped label's minimum width is tiny).
+func _wrap(lbl: Label) -> void:
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL

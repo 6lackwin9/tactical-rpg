@@ -23,7 +23,7 @@ static func run() -> bool:
 	ok = _test_ranks_view() and ok
 	ok = _test_description_editor() and ok
 	ok = _test_filter() and ok
-	ok = _test_locks_and_requires() and ok
+	ok = _test_key_fields_and_requires() and ok
 	TestHelpers.cleanup(SANDBOX)
 	return ok
 
@@ -214,7 +214,7 @@ static func _test_filter() -> bool:
 	checks["usage 'unused' agrees with references_to over the catalog"] = unused + used == shipped.size()
 	return TestHelpers.report(TAG, "SkillFilter predicates", checks)
 
-static func _test_locks_and_requires() -> bool:
+static func _test_key_fields_and_requires() -> bool:
 	var checks: Dictionary = {}
 	var system_head: String = ""
 	var advanced_head: String = ""
@@ -224,17 +224,20 @@ static func _test_locks_and_requires() -> bool:
 		if system_head.is_empty() and ContentCatalog.is_system_origin(row) and not DictUtil.to_bool(row.get("system", false)) and not DictUtil.to_bool(row.get("basic", false)):
 			system_head = str(row["id"])
 	if not system_head.is_empty():
+		# TOOLS-RO: the viewer has no locks; the data rule (ContentCatalog.key_field_errors) still refuses a key-field change.
 		var stored: Dictionary = ContentCatalog.skill_entry(system_head)
-		checks["key fields of a stored system skill are locked"] = DictUtil.to_bool(SkillFormModel.state(stored, "kind", system_head)["locked"])
-		checks["non-key fields stay editable"] = not DictUtil.to_bool(SkillFormModel.state(stored, "power_mult", system_head)["locked"])
-		checks["the ranks section is locked for it"] = not DictUtil.to_bool(SkillFormModel.ranks_editable(stored, system_head)["allowed"])
+		var other_grade: Dictionary = stored.duplicate(true)
+		other_grade["grade"] = "advanced" if str(stored.get("grade", "novice")) == "novice" else "novice"
+		var key_problem: Callable = func(p: Dictionary) -> bool: return str(p["field"]) == "key"
+		checks["a key-field change of a stored system skill is a validation problem"] = ContentCatalog.validate_skill_entry(other_grade, system_head).any(key_problem)
 		ContentCatalog.begin_system_edit()
-		checks["...but not inside the system-edit scope"] = not SkillFormModel.is_locked(system_head)
+		checks["...but not inside the system-edit scope"] = not ContentCatalog.validate_skill_entry(other_grade, system_head).any(key_problem)
 		ContentCatalog.end_system_edit()
+		checks["the field state carries no lock"] = not SkillFormModel.state(stored, "kind", system_head).has("locked")
 	else:
-		checks["a shipped system skill exists to test the lock"] = false
+		checks["a shipped system skill exists to test the key-field rule"] = false
 	var fresh: Dictionary = SkillFormModel.new_entry("t_form_new")
-	checks["a new draft is a user asset and unlocked"] = str(fresh["origin"]) == ContentSchema.ORIGIN_USER and not SkillFormModel.is_locked("t_form_new")
+	checks["a new draft is a user asset"] = str(fresh["origin"]) == ContentSchema.ORIGIN_USER
 	checks["requires is disabled while the grade is novice"] = not DictUtil.to_bool(SkillFormModel.state(fresh, "requires")["enabled"])
 	fresh["grade"] = "advanced"
 	checks["requires is enabled for a higher grade"] = DictUtil.to_bool(SkillFormModel.state(fresh, "requires")["enabled"])
@@ -250,4 +253,4 @@ static func _test_locks_and_requires() -> bool:
 	checks["the expert grade is listed disabled (reserved)"] = grade_state.has("expert")
 	var basic_state: Dictionary = SkillFormModel.state(fresh, "basic")
 	checks["the basic box is disabled with a reason"] = not DictUtil.to_bool(basic_state["enabled"]) and not str(basic_state["reason"]).is_empty()
-	return TestHelpers.report(TAG, "Locks and requires picker", checks)
+	return TestHelpers.report(TAG, "Key-field rule and requires picker", checks)

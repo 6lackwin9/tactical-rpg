@@ -3,24 +3,23 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Item Form Model (FORGE1_ITEMS 6, matrix 6; ITEM1-L commit 3)
-# The headless brain of the item and item-family tabs of the Content Forge: pure static functions over a draft.
-# An item draft is a RESOLVED row (what ContentCatalog.get_entry returns); `sync` re-resolves it after every edit so the
-# derived keys (item type, numbers, threshold tiers) follow the stored ones (family, hand, modifiers, tiers), and Apply
-# stores `stored_of(draft)` (family + modifiers, ItemModifiers.stored). Layout (eight item sections, seven family
-# sections), control state (locked key fields of system assets, options from the family, dynamic limits), the modifier
-# and tier tables (rows, defaults, add / remove / move, limits from ItemModifiers.KINDS and Passives.effect_specs), the
-# base-values grid, the budget breakdown, the family impact panel, the problems that disable Apply, the warnings that
-# never do, the delete state and the item list filters. The controls (ItemTables, ForgeForm) only render what this returns;
+# The headless brain of the item and item-family tabs of the Content Forge viewer: pure static functions over an entry.
+# An item draft is a RESOLVED row (what ContentCatalog.get_entry returns); `sync` re-resolves it so the derived keys (item
+# type, numbers, threshold tiers) follow the stored ones (family, hand, modifiers, tiers); `stored_of(draft)` is its stored
+# shape (family + modifiers, ItemModifiers.stored). Layout (eight item sections, six family sections), control state
+# (options from the family, dynamic limits), the modifier and tier tables (rows, defaults, limits from ItemModifiers.KINDS
+# and Passives.effect_specs), the base-values grid, the budget breakdown, the problems (errors), the warnings and the
+# item list filters. The controls (ItemTables, ForgeForm) only render what this returns;
 # ContentForge wires it (state_fn, layout_fn, problems_fn, panel_fn) for the "items" and "item_families" tabs.
 # ==============================================================================
 
 const ITEM_SECTIONS: Array[String] = ["identity", "build", "base", "modifiers", "tiers", "special", "consumable", "preview"]
-const FAMILY_SECTIONS: Array[String] = ["identity", "type", "numbers", "policy", "rules", "impact", "used_by"]
+const FAMILY_SECTIONS: Array[String] = ["identity", "type", "numbers", "policy", "rules", "used_by"]
 const SECTION_TITLES: Dictionary = {
 	"items": {"identity": "1 Identity", "build": "2 Family and build", "base": "3 Base values", "modifiers": "4 Modifiers",
 		"tiers": "5 Tier thresholds", "special": "6 Special", "consumable": "7 Consumable payload", "preview": "8 Preview"},
 	"item_families": {"identity": "Identity", "type": "Type and hands", "numbers": "Template numbers and bands",
-		"policy": "Modifier policy", "rules": "Engine rules", "impact": "Impact of the edits", "used_by": "Used by"},
+		"policy": "Modifier policy", "rules": "Engine rules", "used_by": "Used by"},
 }
 # Stored item fields per section (derived keys never show as controls; `slot` only for armor and accessories).
 const ITEM_FIELD_SECTIONS: Dictionary = {
@@ -41,11 +40,9 @@ const FAMILY_FIELD_SECTIONS: Dictionary = {
 }
 # Read-only panels a section shows: before its fields ("pre") or after them ("post").
 const ITEM_PANELS: Dictionary = {"identity": {"post": ["tokens"]}, "build": {"pre": ["chips"]}, "base": {"post": ["base"]}, "preview": {"post": ["preview"]}}
-const FAMILY_PANELS: Dictionary = {"impact": {"post": ["impact"]}, "used_by": {"post": ["used_by"]}}
+const FAMILY_PANELS: Dictionary = {"used_by": {"post": ["used_by"]}}
 
-const LOCK_REASON: String = "System asset: key field locked. Create your own copy to change it."
 const FAMILY_USED_REASON: String = "%d item(s) use this family: the %s is fixed while they do."
-const SAFE_DELETE_REASON: String = "System asset: delete is locked. Use SAFE DELETE (tools/fc.sh safe_delete) or make your own copy."
 const USAGES: Array[String] = ["class", "unit", "named", "unused"]
 const TRI: Array[String] = ["any", "yes", "no"]
 
@@ -165,16 +162,10 @@ static func field_visible(kind: String, draft: Dictionary, key: String, row: Dic
 			return ContentSchema.is_visible(f, check) and ItemFamilies.MODIFIABLE_TYPES.has(item_type(draft))
 	return ContentSchema.is_visible(f, check)
 
-# True when the stored `kind` asset `id` is a system asset whose key fields are locked (never inside the system-edit scope).
-static func is_locked(kind: String, id: String) -> bool:
-	if id.is_empty() or ContentCatalog.in_system_edit() or not ContentCatalog.has(kind, id):
-		return false
-	return ContentCatalog.is_system_origin(ContentCatalog.get_entry(kind, id))
-
 static func _blank_state() -> Dictionary:
-	return {"enabled": true, "locked": false, "reason": "", "min": null, "max": null, "step": null, "options": [], "disabled_options": {}}
+	return {"enabled": true, "reason": "", "min": null, "max": null, "step": null, "options": [], "disabled_options": {}}
 
-# State of one control: {"enabled", "locked", "reason", "min", "max", "step", "options", "disabled_options": {value: reason},
+# State of one control: {"enabled", "reason", "min", "max", "step", "options", "disabled_options": {value: reason},
 # "option_help": {value: text}, "choices" (grouped ref records)}. `stored_id` = the stored entry being edited ("" = new draft).
 static func state(kind: String, draft: Dictionary, key: String, stored_id: String = "") -> Dictionary:
 	var out: Dictionary = _blank_state()
@@ -183,10 +174,6 @@ static func state(kind: String, draft: Dictionary, key: String, stored_id: Strin
 		return out
 	if DictUtil.to_bool(f.get("readonly", false)):
 		out["enabled"] = false
-	if DictUtil.to_bool(f.get("key_field", false)) and is_locked(kind, stored_id):
-		out["enabled"] = false
-		out["locked"] = true
-		out["reason"] = LOCK_REASON
 	if kind == "item_families":
 		_family_state(out, draft, key, stored_id)
 	else:
@@ -207,8 +194,7 @@ static func _item_state(out: Dictionary, draft: Dictionary, key: String, stored_
 		"icon_id":
 			out["options"] = icon_options()
 		"damage_type":
-			if not DictUtil.to_bool(out["locked"]):
-				out["reason"] = "Empty = the family default (%s)." % (str(family.get("damage_type", "")) if not str(family.get("damage_type", "")).is_empty() else "none")
+			out["reason"] = "Empty = the family default (%s)." % (str(family.get("damage_type", "")) if not str(family.get("damage_type", "")).is_empty() else "none")
 		"modifiers":
 			out["max"] = DictUtil.to_int(family.get("max_modifiers", 0))
 			out["add"] = can_add_modifier(draft, stored_id)
@@ -223,7 +209,7 @@ static func _family_state(out: Dictionary, draft: Dictionary, key: String, store
 	var disabled: Dictionary = out["disabled_options"]
 	match key:
 		"id", "item_type":
-			if users > 0 and not DictUtil.to_bool(out["locked"]):
+			if users > 0:
 				out["enabled"] = false
 				out["reason"] = FAMILY_USED_REASON % [users, "id" if key == "id" else "item type"]
 		"hands":
@@ -524,11 +510,9 @@ static func modifier_kind_state(draft: Dictionary) -> Dictionary:
 			disabled[kind] = "Family '%s' does not allow %s modifiers." % [str(family.get("id", "")), kind]
 	return {"options": ItemModifiers.kind_names(), "disabled": disabled}
 
-# {"allowed", "reason"} of "+ Add modifier": locked list, a type without modifiers, the family cap or no allowed kind.
-static func can_add_modifier(draft: Dictionary, stored_id: String = "") -> Dictionary:
+# {"allowed", "reason"} of "+ Add modifier": a type without modifiers, the family cap or no allowed kind.
+static func can_add_modifier(draft: Dictionary, _stored_id: String = "") -> Dictionary:
 	var family: Dictionary = family_row(draft)
-	if is_locked("items", stored_id):
-		return {"allowed": false, "reason": LOCK_REASON}
 	if family.is_empty():
 		return {"allowed": false, "reason": "Pick a family first."}
 	var type: String = ItemFamilies.item_type_of(family)
@@ -792,9 +776,7 @@ static func tier_limits(draft: Dictionary) -> Dictionary:
 		"label_max": ItemModifiers.TIER_LABEL_MAX, "desc_max": ItemModifiers.TIER_DESC_MAX, "max_tiers": max_tiers(draft)}
 
 # {"allowed", "reason"} of "+ Add tier".
-static func can_add_tier(draft: Dictionary, stored_id: String = "") -> Dictionary:
-	if is_locked("items", stored_id):
-		return {"allowed": false, "reason": LOCK_REASON}
+static func can_add_tier(draft: Dictionary, _stored_id: String = "") -> Dictionary:
 	var family: Dictionary = family_row(draft)
 	if family.is_empty():
 		return {"allowed": false, "reason": "Pick a family first."}
@@ -932,7 +914,7 @@ static func with_tier_moved(draft: Dictionary, index: int, step: int) -> Array:
 	return list
 
 # ------------------------------------------------------------------------------
-# Families: new, sync, base / band grid, impact, used by
+# Families: new, sync, base / band grid, used by
 # ------------------------------------------------------------------------------
 
 # A fresh user family that validates. Gear families (WEAPON, SHIELD, ARMOR) are named after a gear token and every token
@@ -1065,77 +1047,6 @@ static func without_band(draft: Dictionary, key: String, field: String) -> Dicti
 		bands[key] = row
 	return bands
 
-# The impact panel of a family edit (FORGE1_ITEMS 3 rail 1): every item of the stored family resolved against the
-# draft. {"items": [{"id", "name", "changes": [{"field", "old", "new"}], "value_old", "value_new", "error"}],
-# "loadouts": [{"kind", "id", "name", "old", "new"}], "named": [qid], "count", "errors", "text"}.
-static func impact(draft: Dictionary, stored_id: String = "") -> Dictionary:
-	var family_id: String = stored_id if not stored_id.is_empty() else str(draft.get("id", ""))
-	var fam: Dictionary = ItemFamilies.derive(ContentSchema.normalize("item_families", draft))
-	var items: Array[Dictionary] = []
-	var delta_by_id: Dictionary = {}
-	var errors: int = 0
-	for item: Dictionary in ContentCatalog.items_of_family(family_id):
-		var fresh: Dictionary = ContentSchema.normalize("items", ItemModifiers.resolve(ItemModifiers.stored(item), fam))
-		var changes: Array[Dictionary] = []
-		for field: String in ItemFamilies.NUMBER_FIELDS:
-			var flat: String = str(ItemFamilies.FLAT_KEYS[field])
-			if DictUtil.to_int(item.get(flat, 0)) != DictUtil.to_int(fresh.get(flat, 0)):
-				changes.append({"field": field, "old": DictUtil.to_int(item.get(flat, 0)), "new": DictUtil.to_int(fresh.get(flat, 0))})
-		var item_errors: Array[String] = ItemValidator.item_errors(fresh, fam, true)
-		var old_value: float = GearBudget.item_value(item)
-		var new_value: float = GearBudget.item_value(fresh)
-		if changes.is_empty() and item_errors.is_empty():
-			continue
-		if not item_errors.is_empty():
-			errors += 1
-		delta_by_id[str(item.get("id", ""))] = new_value - old_value
-		items.append({"id": str(item.get("id", "")), "name": str(item.get("name", "")), "changes": changes, "value_old": old_value,
-			"value_new": new_value, "error": item_errors[0] if not item_errors.is_empty() else ""})
-	var loadouts: Array[Dictionary] = []
-	var named: Array[String] = []
-	if not delta_by_id.is_empty():
-		for kind: String in ["classes", "units"]:
-			for entry: Dictionary in ContentCatalog.entries(kind):
-				var shift: float = 0.0
-				var hit: bool = false
-				for row: Dictionary in GearBudget.loadout_breakdown(entry):
-					if delta_by_id.has(str(row["id"])):
-						shift += DictUtil.to_float(delta_by_id[str(row["id"])])
-						hit = true
-				if hit:
-					var old_total: float = GearBudget.loadout_value(entry)
-					loadouts.append({"kind": kind, "id": str(entry.get("id", "")), "name": str(entry.get("name", "")), "old": old_total, "new": old_total + shift})
-		for id: Variant in delta_by_id:
-			named.append_array(named_users(str(id)))
-	return {"items": items, "loadouts": loadouts, "named": named, "count": items.size(), "errors": errors, "text": impact_text(items, loadouts, named)}
-
-# "2 items change: wpn_x power 18 -> 20; class loadout totals warrior 27.0 -> 29.0; 1 named item" (or "No item changes.").
-static func impact_text(items: Array[Dictionary], loadouts: Array[Dictionary], named: Array[String]) -> String:
-	if items.is_empty():
-		return "No item changes."
-	var parts: Array[String] = []
-	for item: Dictionary in items:
-		var bits: Array[String] = []
-		for c: Variant in DictUtil.array_of(item["changes"]):
-			var change: Dictionary = DictUtil.dict_of(c)
-			bits.append("%s %d -> %d" % [str(change["field"]), DictUtil.to_int(change["old"]), DictUtil.to_int(change["new"])])
-		if not str(item["error"]).is_empty():
-			bits.append("BREAKS: " + str(item["error"]))
-		parts.append("%s %s" % [str(item["id"]), ", ".join(bits)])
-	var text: String = "%d item%s change: %s" % [items.size(), "" if items.size() == 1 else "s", "; ".join(parts)]
-	var totals: Array[String] = []
-	for l: Dictionary in loadouts:
-		totals.append("%s %.1f -> %.1f" % [str(l["id"]), DictUtil.to_float(l["old"]), DictUtil.to_float(l["new"])])
-	if not totals.is_empty():
-		text += "; loadout totals " + ", ".join(totals)
-	if not named.is_empty():
-		text += "; %d named item%s (%s)" % [named.size(), "" if named.size() == 1 else "s", ", ".join(named)]
-	return text
-
-# True when Apply of a family draft needs the second (confirm) click: it changes or breaks at least one item.
-static func needs_confirm(draft: Dictionary, stored_id: String = "") -> bool:
-	return DictUtil.to_int(impact(draft, stored_id)["count"]) > 0
-
 # The items of a family: [{"id", "name", "hand"}].
 static func used_by(family_id: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -1144,24 +1055,8 @@ static func used_by(family_id: String) -> Array[Dictionary]:
 	return out
 
 # ------------------------------------------------------------------------------
-# Delete state (FORGE_SHARED 12.3) and the item list filters (matrix 6)
+# The item list filters (matrix 6)
 # ------------------------------------------------------------------------------
-
-# {"allowed", "reason"} of Delete for a stored asset: system assets go through SAFE DELETE; a family with items and an
-# item a class, unit or other entry uses are refused with the users listed.
-static func delete_state(kind: String, id: String) -> Dictionary:
-	if id.is_empty() or not ContentCatalog.has(kind, id):
-		return {"allowed": true, "reason": ""}
-	if ContentCatalog.is_system_origin(ContentCatalog.get_entry(kind, id)):
-		return {"allowed": false, "reason": SAFE_DELETE_REASON}
-	if kind == "item_families":
-		var n: int = ContentCatalog.items_of_family(id).size()
-		if n > 0:
-			return {"allowed": false, "reason": "%d item(s) use this family; a family with items cannot be removed." % n}
-	var users: Array[String] = ContentCatalog.references_to(kind, id)
-	if not users.is_empty():
-		return {"allowed": false, "reason": "Used by: %s." % ", ".join(users)}
-	return {"allowed": true, "reason": ""}
 
 # Missing keys mean "any": family / hand / rarity / origin ("" = any), special / has_tiers / has_effects (any | yes | no),
 # used_by (any | class | unit | named | unused), text (substring of id or name).

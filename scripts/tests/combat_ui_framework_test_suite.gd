@@ -46,6 +46,17 @@ static func run(tree_parent: Node = null) -> bool:
 	session.select_combatant(warrior)
 	var inspector_ok: bool = enemy_shown and inspector_panel.inspector.inspector_name_lbl.text == "Warrior"
 
+	# 3b. The side panels and the grid keep their rects whichever unit is selected (hero or enemy)
+	var layout_stable: bool = true
+	if tree_parent != null:
+		var view_size: Vector2 = Vector2(1280, 720)   # the default / web window size
+		host.size = view_size
+		var hero_rects: Array[Vector2] = _dock_rects(host)
+		session.select_combatant(session.find_combatant("Enemy Brawler"))
+		var enemy_rects: Array[Vector2] = _dock_rects(host)
+		session.select_combatant(warrior)
+		layout_stable = hero_rects == enemy_rects and hero_rects[2].x + hero_rects[2].y <= view_size.x and hero_rects[0].y > 0.0
+
 	# 4. Tactical forecast targets the selected unit's opponent
 	var forecast_panel: CombatForecastPanel = host.get_panel("forecast") as CombatForecastPanel
 	var target: Combatant = session.forecast_target(warrior)
@@ -95,6 +106,7 @@ static func run(tree_parent: Node = null) -> bool:
 	print("  [UI] All 8 combat panels mounted in their dock regions: %s" % ("PASS" if docks_ok else "FAIL"))
 	print("  [UI] Tokens & roster bound to the simulated combatants: %s" % ("PASS" if tokens_ok else "FAIL"))
 	print("  [UI] Combatant selection & Unit Inspector synced: %s" % ("PASS" if inspector_ok else "FAIL"))
+	print("  [UI] Side panels and grid keep their size for hero and enemy selection, inside the viewport: %s" % ("PASS" if layout_stable else "FAIL"))
 	print("  [UI] Tactical forecast computed & rendered: %s" % ("PASS" if forecast_ok else "FAIL"))
 	print("  [UI] Action Log Modal toggle & entry view lifecycle: %s" % ("PASS" if log_modal_ok else "FAIL"))
 	print("  [UI] Timeline Modal toggle lifecycle: %s" % ("PASS" if timeline_modal_ok else "FAIL"))
@@ -106,6 +118,23 @@ static func run(tree_parent: Node = null) -> bool:
 	host.free()
 	session.dispose()
 
-	return (docks_ok and tokens_ok and inspector_ok and forecast_ok and
+	return (docks_ok and tokens_ok and inspector_ok and layout_stable and forecast_ok and
 		log_modal_ok and timeline_modal_ok and signals_ok and layout_ok)
 
+
+# Left panel, grid and right panel horizontal extents (x, width) after a synchronous layout pass;
+# heights are not compared: a one-shot pass leaves wrapped labels at a transient height.
+static func _dock_rects(host: CombatDockHost) -> Array[Vector2]:
+	_sort_now(host)
+	var rects: Array[Vector2] = []
+	for id: String in ["inspector", "grid", "forecast"]:
+		var r: Rect2 = host.get_panel(id).get_global_rect()
+		rects.append(Vector2(r.position.x, r.size.x))
+	return rects
+
+# Containers re-sort on the next frame; run the pass now, top-down.
+static func _sort_now(node: Node) -> void:
+	if node is Container:
+		(node as Container).notification(Container.NOTIFICATION_SORT_CHILDREN)
+	for child: Node in node.get_children():
+		_sort_now(child)

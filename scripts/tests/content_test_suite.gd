@@ -3,11 +3,13 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Content Catalog & Forge Test Suite
-# The shipped catalog (res://data/catalog) loads, validates and matches the
-# engine; entries round-trip through ContentFactory; validation catches bad
-# content; content authored through the API and the Content Forge UI saves,
-# reloads and plays a full battle in the combat engine. Writes go to a sandbox
-# copy (a TestHelpers sandbox) so the shipped catalog is never touched.
+# The shipped catalog (res://data/catalog) loads, validates, passes every check
+# the old Forge editor ran on Apply / Save (TOOLS-RO) and matches the engine;
+# entries round-trip through ContentFactory; validation catches bad content;
+# content authored through the API saves, reloads and plays a full battle in
+# the combat engine; the read-only Content Forge viewer browses it and playtests.
+# Writes go to a sandbox copy (a TestHelpers sandbox) so the shipped catalog is
+# never touched.
 # ==============================================================================
 
 static var SANDBOX: String = TestHelpers.sandbox("content_test")
@@ -21,6 +23,7 @@ static func run(tree_parent: Node = null) -> bool:
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	var ok: bool = true
 	ok = _test_shipped_catalog() and ok
+	ok = _test_shipped_save_checks() and ok
 	ok = _test_engine_parity() and ok
 	ok = _test_round_trip() and ok
 	ok = _test_validation() and ok
@@ -48,6 +51,44 @@ static func _test_shipped_catalog() -> bool:
 		all_present = all_present and (n > 0 or kind == "item_families")
 	var problems: Dictionary = ContentCatalog.validate_all()
 	return TestHelpers.report_ok(TAG, "Shipped catalog loads every kind and every entry validates", all_present and problems.is_empty() and ContentCatalog.load_errors().is_empty(), ", ".join(counts) if problems.is_empty() else str(problems))
+
+# TOOLS-RO: every check the Content Forge ran before Apply / Save, over all shipped data with no tool open. validate_all()
+# covers validate_entry per row (schema, references, icon keys, skill / item / class / unit rules, key fields stay put),
+# the required engine skills and the skill fold; this adds the per-entry checks Apply ran on top: the ranked skill family
+# (rank count, derived rank names, rank modifiers, template tokens: validate_skill_entry), the class draft problems (key
+# fields included), the item and family table problems (ItemFormModel.draft_problems), and the save() refusals.
+static func _test_shipped_save_checks() -> bool:
+	var checks: Dictionary = {}
+	var bad: Array[String] = []
+	for ranked: Dictionary in ContentCatalog.skill_entries():
+		for p: Dictionary in ContentCatalog.validate_skill_entry(ranked, str(ranked["id"])):
+			bad.append("skills:%s: %s" % [str(ranked["id"]), str(p["message"])])
+	var skill_count: int = ContentCatalog.skill_entries().size()
+	checks["every ranked skill family passes the skill Apply check (%d families) %s" % [skill_count, str(bad)]] = bad.is_empty() and skill_count > 0
+	bad = []
+	for cls: Dictionary in ContentCatalog.entries("classes"):
+		for p: Dictionary in ClassForgeModel.draft_problems(cls, str(cls["id"])):
+			bad.append("classes:%s: %s" % [str(cls["id"]), str(p["message"])])
+	checks["every class passes the class Apply check %s" % str(bad)] = bad.is_empty()
+	bad = []
+	if ContentCatalog.items_inherit():
+		for k: String in ["items", "item_families"]:
+			for e: Dictionary in ContentCatalog.entries(k):
+				for p: Dictionary in ItemFormModel.draft_problems(k, e, str(e["id"])):
+					bad.append("%s:%s: %s" % [k, str(e["id"]), str(p["message"])])
+	checks["every item and family passes the item Apply check %s" % str(bad)] = bad.is_empty()
+	var icons_ok: bool = true
+	for e: Dictionary in ContentCatalog.entries("items"):
+		var icon: String = str(e.get("icon_id", ""))
+		icons_ok = icons_ok and (icon.is_empty() or AssetRegistry.has_key("item", icon))
+	checks["every item icon_id is a known item icon key"] = icons_ok
+	var blocked: Array[String] = []
+	for k: String in ContentSchema.KINDS:
+		if ContentCatalog.save_blocked(k):
+			blocked.append(k)
+	var fold_errors: Array = SkillRanks.collapse(ContentCatalog.entries("skills"))["errors"]
+	checks["no kind is save-blocked and the skills fold for save %s" % str(blocked)] = blocked.is_empty() and fold_errors.is_empty()
+	return TestHelpers.report(TAG, "Shipped data passes every former Forge Apply / Save check", checks)
 
 # The engine's skills, items, classes and encounters are the catalog's.
 static func _test_engine_parity() -> bool:
@@ -257,90 +298,74 @@ static func _resolve(session: CombatSession) -> void:
 		session.step_next()
 
 # ------------------------------------------------------------------------------
-# Content Forge UI
+# Content Forge viewer (TOOLS-RO: read-only; runs on the sandbox fork with the authored test content)
 # ------------------------------------------------------------------------------
 
 static func _test_forge_ui(tree_parent: Node) -> bool:
 	if tree_parent == null:
-		return TestHelpers.report_ok(TAG, "Content Forge UI (needs a scene tree)", true, "skipped")
+		return TestHelpers.report_ok(TAG, "Content Forge viewer (needs a scene tree)", true, "skipped")
 	var host: Node = (load("res://scenes/content_forge.tscn") as PackedScene).instantiate()
 	tree_parent.add_child(host)
 	var forge: ContentForge = host.get("forge")
 	var checks: Dictionary = {}
 	checks["opens on skills"] = forge.kind == "skills" and not forge.selected_id.is_empty()
+	var before: String = JSON.stringify(ContentCatalog.skill_entries())
+	var dirty_before: bool = ContentCatalog.is_dirty()
 
-	# Skill tab: the form edits a ranked draft, a new skill is a user asset, an invalid template blocks Apply.
+	# Skill tab: the form shows the ranked entry; the ranks panel has no edit actions.
 	var ranked_head: String = ""
 	for ranked: Dictionary in ContentCatalog.skill_entries():
 		if SkillRanks.rank_count(ranked) > 1 and ranked_head.is_empty():
 			ranked_head = str(ranked["id"])
 	forge.select(ranked_head)
-	checks["skills: the draft is the ranked entry"] = not ranked_head.is_empty() and SkillRanks.rank_count(forge.form.draft) == SkillRanks.rank_count(ContentCatalog.skill_entry(ranked_head))
-	forge.new_entry()
-	checks["skills: a new draft is a user asset"] = str(forge.form.draft.get("origin", "")) == ContentSchema.ORIGIN_USER
-	forge.form.set_value("description", "{nope}")
-	checks["skills: an unknown token blocks Apply"] = not forge.apply() and not forge.draft_problems().is_empty()
-	forge.revert()
+	checks["skills: the form shows the ranked entry"] = not ranked_head.is_empty() and SkillRanks.rank_count(forge.form.draft) == SkillRanks.rank_count(ContentCatalog.skill_entry(ranked_head))
+	var ranks_panel: Node = forge.form.find_child("RanksPanel", true, false)
+	checks["skills: the ranks panel shows one resolved panel per rank"] = ranks_panel != null and ranks_panel.find_children("Resolved_*", "", true, false).size() == SkillRanks.rank_count(forge.form.draft)
+	var live: Array[String] = TestHelpers.live_controls(forge.form)
+	checks["skills: no control of the form can edit or act (%s)" % ", ".join(live)] = live.is_empty()
 
-	# Template: duplicate an item, edit it through the form, apply.
+	# No edit or maintenance action anywhere in the Forge (only browsing, filters, Reload, Validate All and Playtest).
+	var actions: Array[String] = []
+	for node: Node in forge.find_children("*", "Button", true, false):
+		var text: String = (node as Button).text
+		for word: String in ["Save", "Apply", "Revert", "New", "Duplicate", "Delete", "Promote", "Demote"]:
+			if text.contains(word):
+				actions.append(text)
+	checks["no Save, Apply, Revert, New, Duplicate, Delete or Promote button (%s)" % ", ".join(actions)] = actions.is_empty()
+	checks["no Forge method writes (save_all, apply, new_entry, duplicate_selected, delete_selected)"] = not ["save_all", "apply", "new_entry", "duplicate_selected", "delete_selected", "toggle_origin", "revert"].any(func(m: String) -> bool: return forge.has_method(m))
+
+	# Items: conditional sections follow the family's item type (weapon vs consumable, picked by rule).
 	forge.show_kind("items")
-	forge.select("wpn_claymore")
-	forge.duplicate_selected()
-	var copy_id: String = forge.selected_id
-	forge.form.set_value("name", "Forge Claymore")
-	# ITEM1 commit 3: numbers are derived (family base + adjust modifiers); the power edit is an adjust modifier.
-	var power_base: int = DictUtil.to_int(ItemFamilies.base_of(ItemFormModel.family_row(forge.form.draft), str(forge.form.draft["hand"]))["power"])
-	var mods: Array = []
-	for mod: Dictionary in ItemModifiers.modifiers_of(forge.form.draft):
-		if not (str(mod.get("kind", "")) == "adjust" and str(mod.get("field", "")) == "power"):
-			mods.append(mod)
-	mods.append({"kind": "adjust", "field": "power", "delta": 40 - power_base})
-	forge.form.set_value("modifiers", mods)
-	checks["template applied"] = copy_id == "wpn_claymore_copy" and forge.apply() and DictUtil.to_int(ContentCatalog.get_entry("items", copy_id)["base_power"]) == 40
-	# Conditional sections follow the family's item type.
+	var weapon_id: String = ""
+	var consumable_id: String = ""
+	for item: Dictionary in ContentCatalog.entries("items"):
+		var type: String = str(item.get("item_type", ""))
+		if type == "WEAPON" and weapon_id.is_empty():
+			weapon_id = str(item["id"])
+		elif type == "CONSUMABLE" and consumable_id.is_empty():
+			consumable_id = str(item["id"])
+	forge.select(weapon_id)
 	checks["weapon fields shown"] = forge.form.panel_control("base") != null and forge.form.field_control("modifiers") != null and forge.form.field_control("heal") == null
-	var consumable_family: String = ""
-	for fam: Dictionary in ContentCatalog.entries("item_families"):
-		if ItemFamilies.item_type_of(fam) == "CONSUMABLE" and consumable_family.is_empty():
-			consumable_family = str(fam["id"])
-	forge.form.set_value("family", consumable_family)
+	forge.select(consumable_id)
 	checks["consumable fields shown"] = forge.form.field_control("heal") != null and forge.form.field_control("modifiers") == null and forge.form.panel_control("base") == null
-	forge.revert()
-	# Invalid drafts are refused with the problem listed.
-	forge.form.set_value("id", "Bad Id")
-	checks["invalid refused"] = not forge.apply() and not forge.draft_problems().is_empty()
-	forge.revert()
-	forge.delete_selected()
-	forge.delete_selected()
-	checks["deleted"] = not ContentCatalog.has("items", copy_id)
+	checks["the item list has one row per item"] = forge.list_ids().size() == ContentCatalog.entries("items").size()
 
-	# New unit from scratch, then a sandbox playtest in the real arena.
+	# Units: playtest an authored unit in a sandbox fight in the real arena.
 	forge.show_kind("units")
-	forge.new_entry()
-	forge.form.set_value("id", "forge_scout")
-	forge.form.set_value("name", "Forge Scout")
-	forge.form.set_value("side", "party")
-	forge.form.set_value("class_id", "rogue")
-	forge.form.set_value("level", 3)
-	forge.form.set_value("tier", "standard")
-	checks["new unit applied"] = forge.apply() and ContentCatalog.has("units", "forge_scout")
+	forge.select("test_knight")
 	forge.playtest()
 	var playing: bool = DictUtil.to_bool(host.call("is_playtesting"))
 	var arena: Node = host.get("arena")
 	var arena_session: CombatSession = arena.get("session") if arena != null else null
-	checks["playtest runs the arena"] = playing and arena_session != null and arena_session.allies.size() == 1 and arena_session.allies[0].name == "Forge Scout"
+	checks["playtest runs the arena"] = playing and arena_session != null and arena_session.allies.size() == 1 and arena_session.allies[0].name == "Test Knight"
 	host.call("close_playtest")
 	checks["back to forge"] = not DictUtil.to_bool(host.call("is_playtesting"))
 
-	# Encounters list and save.
+	# Encounters list, preview, validate all; browsing never changes the catalog.
 	forge.show_kind("encounters")
 	forge.select("test_trial")
 	checks["encounter preview deploys"] = forge.selected_id == "test_trial" and ForgePreview.describe("encounters", ContentCatalog.get_entry("encounters", "test_trial")).contains("Test Marauder 2")
-	checks["saved"] = forge.save_all() and not ContentCatalog.is_dirty()
+	checks["Validate All shows ContentCatalog.validate_all()"] = JSON.stringify(forge.validate_all()) == JSON.stringify(ContentCatalog.validate_all()) and not forge.problems_text().is_empty()
+	checks["browsing never dirties or changes the catalog"] = ContentCatalog.is_dirty() == dirty_before and DictUtil.to_bool(host.call("has_unsaved_changes")) == dirty_before and JSON.stringify(ContentCatalog.skill_entries()) == before
 	host.queue_free()
-
-	var failed: Array[String] = []
-	for key: Variant in checks:
-		if not DictUtil.to_bool(checks[key]):
-			failed.append(str(key))
-	return TestHelpers.report_ok(TAG, "Content Forge UI: browse, template, conditional fields, validation, delete, new unit, playtest, save", failed.is_empty(), ", ".join(failed))
+	return TestHelpers.report(TAG, "Content Forge viewer: browse, ranked skills, conditional item sections, no edit actions, playtest, validate", checks)

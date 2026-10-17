@@ -74,6 +74,8 @@ Acceptance checks:
 
 ## REVIEW-F3: audio and FX (S14-L2, S14-L3)
 
+Findings 1, 3 and 4 were fixed by S14-FIX (on `develop`, 2026-10-17); findings 2, 5 and Q3 remain.
+
 Depends on: REVIEW-F2 (shared `menus_test_suite.gd`)
 Touches: `scripts/audio/audio_director.gd`, `scripts/ui/combat/combat_presenter.gd`, `scripts/ui/combat/fx_settings.gd`, `scripts/game_state/settings_file.gd` and every `SettingsFile.load()` caller (`settings_file.gd:83`, `scripts/tests/audio_test_suite.gd`, `scripts/tests/menus_test_suite.gd`), `scripts/tests/animation_lifecycle_test_suite.gd`
 

@@ -3,10 +3,9 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Class Forge Model (FORGE1_CLASSES 2-5)
-# The headless brain of the class tab of the Content Forge (and the unit AI group): pure static functions over a class
-# draft entry. Layout (the five sections from the schema `group`), each control's state (locked key fields on system
-# classes, ranges equal to the rule constants, disabled options and the reason), a fresh valid class, the problems that
-# disable Save (errors) and the warnings that never do, the skill path table (ordering, standard / custom levels, family
+# The headless brain of the class tab of the Content Forge viewer (and the unit AI group): pure static functions over a
+# class entry. Layout (the five sections from the schema `group`), each control's state (ranges equal to the rule
+# constants, disabled options and the reason), a fresh valid class, the problems of an entry (errors) and the warnings, the skill path table (ordering, standard / custom levels, family
 # picker, tier ladder, default-loadout preview), the stat, gear budget and proficiency coverage panels, and the gear
 # pickers grouped by item family (dual-wield guard, duplicate-accessory flag). The controls only render what this returns.
 # ==============================================================================
@@ -21,7 +20,6 @@ const SECTION_TITLES: Dictionary = {
 	"ai_advanced": "AI (advanced)",
 	"general": "Unit",
 }
-const LOCK_REASON: String = "System class: key field locked. Create your own copy to change it."
 const ID_FIXED_REASON: String = "The id is fixed after the first save (rename through the catalog API rewrites references)."
 const ROLE_HELP: Dictionary = {
 	"AGGRESSOR": "Closes distance and trades blows with the nearest foe.",
@@ -68,32 +66,21 @@ static func layout(kind: String = "classes", entry: Dictionary = {}) -> Array[Di
 static func group_of(kind: String, key: String) -> String:
 	return str(ContentSchema.field(kind, key).get("group", ""))
 
-# True when the stored class `class_id` is a system asset whose key fields are locked (never inside the system-edit scope).
-static func is_locked(class_id: String) -> bool:
-	if class_id.is_empty() or ContentCatalog.in_system_edit() or not ContentCatalog.has("classes", class_id):
-		return false
-	return ContentCatalog.is_system_origin(ContentCatalog.get_entry("classes", class_id))
-
-# State of one class control: {"enabled", "locked", "reason", "min", "max", "step", "options", "disabled_options": {value: reason}}.
-# `stored_id` is the id of the stored class being edited ("" for a new draft).
+# State of one class control: {"enabled", "reason", "min", "max", "step", "options", "disabled_options": {value: reason}}.
+# `stored_id` is the id of the stored class shown ("" for a new draft).
 static func state(entry: Dictionary, key: String, stored_id: String = "") -> Dictionary:
-	var out: Dictionary = {"enabled": true, "locked": false, "reason": "", "min": null, "max": null, "step": null, "options": [], "disabled_options": {}}
+	var out: Dictionary = {"enabled": true, "reason": "", "min": null, "max": null, "step": null, "options": [], "disabled_options": {}}
 	var f: Dictionary = ContentSchema.field("classes", key)
 	if f.is_empty():
 		return out
 	if DictUtil.to_bool(f.get("readonly", false)):
 		out["enabled"] = false
-	if DictUtil.to_bool(f.get("key_field", false)) and is_locked(stored_id):
-		out["enabled"] = false
-		out["locked"] = true
-		out["reason"] = LOCK_REASON
-	elif key == "id" and not stored_id.is_empty():
+	if key == "id" and not stored_id.is_empty():
 		out["enabled"] = false
 		out["reason"] = ID_FIXED_REASON
 	match key:
 		"ai_role":
-			if not DictUtil.to_bool(out["locked"]):
-				out["reason"] = str(ROLE_HELP.get(str(entry.get("ai_role", "")), ""))
+			out["reason"] = str(ROLE_HELP.get(str(entry.get("ai_role", "")), ""))
 		"main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2":
 			_slot_state(out, entry, key, "classes")
 		"pouch":
@@ -122,7 +109,7 @@ static func _slot_state(out: Dictionary, entry: Dictionary, key: String, kind: S
 # State of one unit control (the unit tab uses the same hooks): gear pickers grouped by family (with "none"), the pouch limit,
 # and the AI role dropdown whose empty entry names the class role.
 static func unit_state(entry: Dictionary, key: String) -> Dictionary:
-	var out: Dictionary = {"enabled": true, "locked": false, "reason": "", "min": null, "max": null, "step": null, "options": [], "disabled_options": {}}
+	var out: Dictionary = {"enabled": true, "reason": "", "min": null, "max": null, "step": null, "options": [], "disabled_options": {}}
 	match key:
 		"main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2":
 			_slot_state(out, entry, key, "units")

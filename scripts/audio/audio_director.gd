@@ -14,7 +14,15 @@ const SFX_VOICES: int = 8
 const UI_VOICES: int = 2
 const BUSES: Dictionary = {"Master": "audio/master", "Music": "audio/music", "SFX": "audio/sfx", "UI": "audio/ui"}
 
-static var active: AudioDirector = null
+static var _stack: Array[AudioDirector] = []
+
+# The most recently entered director still in the tree, or null.
+static var active: AudioDirector:
+	get:
+		for i: int in range(_stack.size() - 1, -1, -1):
+			if is_instance_valid(_stack[i]):
+				return _stack[i]
+		return null
 
 var _sfx: Array[AudioStreamPlayer] = []
 var _ui: Array[AudioStreamPlayer] = []
@@ -32,11 +40,10 @@ func _init() -> void:
 	name = "AudioDirector"
 
 func _enter_tree() -> void:
-	active = self
+	_stack.append(self)
 
 func _exit_tree() -> void:
-	if active == self:
-		active = null
+	_stack.erase(self)
 
 func _ready() -> void:
 	if not enabled():

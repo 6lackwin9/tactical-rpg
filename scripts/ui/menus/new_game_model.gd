@@ -7,6 +7,7 @@ extends RefCounted
 # ==============================================================================
 
 var router: MenuRouter = null
+var last_errors: Array[String] = []   # errors of the last asked start (the host shows them)
 
 func _init(p_router: MenuRouter) -> void:
 	router = p_router
@@ -24,7 +25,23 @@ func worlds() -> Array[Dictionary]:
 		out.append({"id": w, "name": str(m.get("name", w)), "tagline": str(m.get("tagline", "")), "party": party})
 	return out
 
+# Q1: starting over replaces the autosave, so a readable one is asked about first.
 func choose(world_id: String, p_seed: int = -1) -> Array[String]:
+	var head: Dictionary = SaveGame.peek(SaveGame.AUTOSAVE_SLOT)
+	if DictUtil.to_bool(head["ok"]) and NewGame.playable_worlds().has(world_id):
+		var world: String = str(head["world_id"])
+		var at: int = DictUtil.to_int(head["saved_at"])
+		router.ask("Starting a new game replaces your autosave (%s, %s, %s). Continue?" % [str(WorldCatalog.manifest(world).get("name", world)),
+			SaveSlotsModel.location_name(world, str(head["location_id"])), Time.get_datetime_string_from_unix_time(at, true) if at > 0 else "unknown time"], _start.bind(world_id, p_seed))
+		var asked: Array[String] = []
+		return asked
+	return _start(world_id, p_seed)
+
+func _start(world_id: String, p_seed: int) -> Array[String]:
+	last_errors = _create(world_id, p_seed)
+	return last_errors
+
+func _create(world_id: String, p_seed: int) -> Array[String]:
 	var res: Dictionary = NewGame.create_for_world(world_id, p_seed)
 	var errors: Array[String] = []
 	errors.assign(DictUtil.array_of(res["errors"]))

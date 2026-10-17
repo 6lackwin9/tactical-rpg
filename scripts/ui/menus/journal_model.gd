@@ -27,12 +27,15 @@ func refresh() -> void:
 	for g: Array in GROUPS:
 		var ids: Array[String] = QuestRunner.quests_with(gs, str(g[0]))
 		if not ids.is_empty():
-			_groups.append({"status": str(g[0]), "label": str(g[1]), "quests": ids})
+			var rows: Array[Dictionary] = []
+			for qid: String in ids:
+				rows.append({"qid": qid, "name": str(QuestRunner.resolved(gs, qid).get("name", qid))})
+			_groups.append({"status": str(g[0]), "label": str(g[1]), "quests": ids, "rows": rows})
 	var all: Array[String] = shown()
 	if not all.has(selected):
 		selected = all[0] if not all.is_empty() else ""
 
-# [{status, label, quests: [qid]}]; empty groups omitted.
+# [{status, label, quests: [qid], rows: [{qid, name}]}] (name resolved); empty groups omitted.
 func groups() -> Array[Dictionary]:
 	return _groups.duplicate(true)
 

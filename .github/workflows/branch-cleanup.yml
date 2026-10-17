@@ -14,6 +14,9 @@ on:
       min_age_hours:
         description: Skip branches with a commit newer than this many hours
         default: '6'
+      also_delete:
+        description: Space-separated branches to delete by name if they have no open PR (e.g. PR branches closed as superseded by a release)
+        default: ''
       dry_run:
         description: List only, delete nothing
         type: boolean
@@ -36,6 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MIN_AGE_HOURS: ${{ inputs.min_age_hours || '6' }}
           DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          ALSO_DELETE: ${{ inputs.also_delete }}
         run: |
           git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'
           dev_tree=$(git rev-parse origin/develop^{tree})
@@ -47,6 +51,7 @@ jobs:
             case "$ref" in main|develop|HEAD) continue ;; esac
             sha=$(git rev-parse "origin/$ref")
             if echo "$open" | grep -qx "$ref"; then why="open PR"; act=keep
+            elif echo " $ALSO_DELETE " | grep -q " $ref "; then why="named in also_delete"; act=delete
             elif [ "$(git log -1 --format=%ct "origin/$ref")" -gt "$cutoff" ]; then why="commit newer than ${MIN_AGE_HOURS}h"; act=keep
             elif echo "$merged" | grep -qx "$sha"; then why="head of a merged PR"; act=delete
             elif [ "$(git merge-tree --write-tree origin/develop "origin/$ref" 2>/dev/null | head -1)" = "$dev_tree" ]; then why="content already on develop"; act=delete

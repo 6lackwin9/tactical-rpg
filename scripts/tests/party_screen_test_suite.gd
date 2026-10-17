@@ -35,6 +35,7 @@ static func run() -> bool:
 		ok = _fresh() and _test_gear() and ok
 		ok = _fresh() and _test_results() and ok
 		ok = _fresh() and _test_router() and ok
+		ok = _fresh() and _test_review_f2() and ok
 	CurrentGame.end()
 	SaveGame.reset_base_dir()
 	TestHelpers.remove_sandbox(SANDBOX)
@@ -83,7 +84,7 @@ static func _test_level_up() -> bool:
 	checks["cancel leaves the member equal"] = m.equals(orig) and not lm2.has_draft()
 	return _report("Checks 1-2: level-up draft, confirm and cancel", checks)
 
-# Check 3: before / after differ as PartyPreview.derived of the confirmed state; +1 CONS adds 8 HP x the tier factor.
+# Check 3: before / after differ as PartyPreview.derived of the confirmed state; +1 CONS adds HP_PER_CONS HP x the tier factor.
 static func _test_preview() -> bool:
 	var checks: Dictionary = {}
 	var m: UnitState = _first()
@@ -94,7 +95,7 @@ static func _test_preview() -> bool:
 	var after: Dictionary = lm.after()
 	var scale: float = PartyBuilder.build(m.duplicate_state(), false).hp_scale
 	checks["before = current"] = JsonUtil.deep_equal(before, PartyPreview.derived(m))
-	checks["hp +8 x tier factor"] = absi(DictUtil.to_int(after["max_hp"]) - DictUtil.to_int(before["max_hp"]) - roundi(8.0 * scale)) <= 1
+	checks["hp +8 x tier factor"] = absi(DictUtil.to_int(after["max_hp"]) - DictUtil.to_int(before["max_hp"]) - roundi(float(CharacterStats.HP_PER_CONS) * scale)) <= 1
 	checks["confirm gives the after block"] = lm.confirm().is_empty() and JsonUtil.deep_equal(PartyPreview.derived(m), after)
 	checks["all derived keys"] = before.keys().size() == PartyPreview.DERIVED_LABELS.size()
 	return _report("Check 3: derived block before and after", checks)
@@ -116,7 +117,7 @@ static func _test_active() -> bool:
 	var party: PartyState = CurrentGame.state().party
 	var pm := PartyModel.new(null)
 	checks["implicit four"] = party.active_ids.is_empty() and pm.active_count() == 4
-	checks["fifth refused"] = pm.toggle_active(BENCH) == [PartyModel.MAX_ACTIVE]
+	checks["fifth refused"] = pm.toggle_active(BENCH) == [PartyModel.MAX_ACTIVE % PartyState.PARTY_MAX]
 	checks["first edit writes the four"] = party.active_ids == party.member_ids().slice(0, PartyState.PARTY_MAX)
 	for id: String in party.member_ids().slice(1, PartyState.PARTY_MAX):
 		var _e: Array[String] = pm.toggle_active(id)
@@ -258,6 +259,46 @@ static func _test_results() -> bool:
 	checks["returns to the caller"] = router.top() == MenuRouter.HUB and done[0] == 1
 	checks["points kept after skip"] = gs.party.members[0].unspent() > 0
 	return _report("Check 9: battle results", checks)
+
+# REVIEW-F2: gear errors tagged by source (a gear error naming "loadout" stays a gear error), null-safe level-up model,
+# Q2 level-up Confirm asks first, "Open loadout" on the results card.
+static func _test_review_f2() -> bool:
+	var checks: Dictionary = {}
+	var m: UnitState = _first()
+	var gm := GearModel.new(m.id)
+	gm.work.equipment["main_hand"] = "loadout_no_such_item"
+	var gear_errs: Array[String] = gm.confirm()
+	checks["gear error with 'loadout' stays a gear error"] = not gear_errs.is_empty() and gear_errs.any(func(e: String) -> bool: return e.contains("loadout_no_such_item")) and not m.equipment.has("main_hand")
+	var split: Dictionary = gm.work.validate_split()
+	checks["split keeps loadout errors apart"] = DictUtil.array_of(split["loadout"]).is_empty() and not DictUtil.array_of(split["other"]).is_empty()
+	var ghost := LevelUpModel.new("nobody")
+	checks["stale member: empty blocks"] = ghost.before().is_empty() and ghost.after().is_empty() and ghost.drafted_state() == null
+	checks["stale member: confirm returns the error"] = ghost.confirm() == [LevelUpModel.NO_MEMBER] and ghost.ask_confirm(MenuRouter.new(MenuRouter.HUB)) == [LevelUpModel.NO_MEMBER]
+	_leave_unspent(m, 2)
+	var router := MenuRouter.new(MenuRouter.HUB)
+	var lm := LevelUpModel.new(m.id)
+	var _a: Array[String] = lm.add("STR")
+	var before_str: int = DictUtil.to_int(m.spend.get("STR", 0))
+	checks["Q2 confirm asks first"] = lm.ask_confirm(router).is_empty() and router.is_asking() and router.pending_message == LevelUpModel.SPEND_QUESTION and DictUtil.to_int(m.spend.get("STR", 0)) == before_str
+	router.decline()
+	checks["declined: nothing spent, draft kept"] = DictUtil.to_int(m.spend.get("STR", 0)) == before_str and lm.has_draft()
+	var _b: Array[String] = lm.ask_confirm(router)
+	router.confirm()
+	checks["accepted: spent"] = lm.last_errors.is_empty() and DictUtil.to_int(m.spend.get("STR", 0)) == before_str + 1 and not lm.has_draft()
+	var empty := LevelUpModel.new(m.id)
+	checks["no draft: no question"] = empty.ask_confirm(router).is_empty() and not router.is_asking()
+	var rm := BattleResultsModel.new(router, {m.id: {"xp": 1, "old_level": 1, "new_level": 2, "unspent": 0}})
+	var lo := LoadoutModel.new(m.id)
+	var free: bool = lo.class_slots.size() < StatRules.MAX_CLASS_SLOTS or lo.extra_slots.size() < StatRules.MAX_EXTRA_SLOTS
+	checks["free slot rule"] = rm.has_free_slot(m.id) == free and not rm.has_free_slot("nobody")
+	router.push(MenuRouter.RESULTS, {"award": {m.id: {"xp": 1, "old_level": 1, "new_level": 2, "unspent": 0}}})
+	var shown: BattleResultsModel = router.model() as BattleResultsModel
+	checks["open_loadout pushes the loadout screen"] = shown.open_loadout(m.id).is_empty() and router.top() == MenuRouter.LOADOUT and (router.model() as LoadoutModel).member_id == m.id
+	router.pop()
+	checks["back on results"] = router.top() == MenuRouter.RESULTS
+	router.pop()
+	checks["generic pop never pops results"] = router.top() == MenuRouter.RESULTS
+	return _report("REVIEW-F2: gear error source, null-safe level-up, Q2 ask, Open loadout", checks)
 
 # Router wiring: party screens need a game; the hub's Party entry opens; level-up asks before discarding a draft.
 static func _test_router() -> bool:

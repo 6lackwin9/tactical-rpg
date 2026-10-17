@@ -127,9 +127,7 @@ func confirm() -> Array[String]:
 	var work: UnitState = m.duplicate_state()
 	work.loadout = draft_loadout()
 	var errors: Array[String] = []
-	for e: String in work.validate():
-		if e.contains("loadout"):
-			errors.append(e)
+	errors.assign(DictUtil.array_of(work.validate_split()["loadout"]))
 	if errors.is_empty():
 		m.loadout = work.loadout.duplicate(true)
 		_original = m.loadout.duplicate(true)

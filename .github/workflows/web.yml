@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: web-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -125,6 +125,7 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ITCH_TARGET != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -135,10 +136,14 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+          # Pinned. To bump: fetch LATEST and its sha256 from a GitHub runner (the cloud proxy blocks broth.itch.zone).
+          BUTLER_VERSION: '15.32.0'
+          BUTLER_SHA256: '2335971394ef6596f95ded0833e85ee28755e13761716ef4c91d6b11f69162f5'
         run: |
           ITCH_TARGET="${ITCH_TARGET/.itch.io/}"   # accept "user.itch.io/game:html5" too
           test -n "$BUTLER_API_KEY" || { echo "::error::secret BUTLER_API_KEY is not set"; exit 1; }
-          curl -fsSL --retry 3 -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          curl -fsSL --retry 3 -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/${BUTLER_VERSION}/archive/default
+          echo "$BUTLER_SHA256  /tmp/butler.zip" | sha256sum -c -
           unzip -q /tmp/butler.zip -d /tmp/butler && chmod +x /tmp/butler/butler
           /tmp/butler/butler push web "$ITCH_TARGET" --userversion "${GITHUB_SHA::7}"
 

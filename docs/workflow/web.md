@@ -8,6 +8,8 @@ A browser build for cross-platform testing and porting checks (user 2026-10-17).
 - Renderer: the web always uses Compatibility (WebGL 2); desktop uses Forward+.
 - Entry scene (WEB3, user 2026-10-17): the browser build opens on the Main Menu (`application/run/main_scene.web` = `scenes/main_menu.tscn`, which installs the fallback fonts and hides Quit, since a page cannot close its tab); the desktop keeps the Scene Runner (`run/main_scene`). Debug web exports still reach the tools through the menu's Tools button.
 - Workflow `.github/workflows/web.yml` (user 2026-10-17: once a day and on request, to cut CI time): a daily run at 19:07 UTC on `main` exports the build, uploads it as the `web-build` artifact (14 days) and deploys it (itch.io below; GitHub Pages when the repository variable `WEB_PAGES` is `true`); it skips everything when `main` is still at the commit of the last successful daily or manual run. A manual run (**Actions > web > Run workflow** on `main`, or ask in the project chat: "deploy") always builds and deploys. Pushes to `main` no longer build; PRs into `main` build (no deploy) only when they change `export_presets.cfg` or `web.yml`.
+- Pack contents (REVIEW-F4): the preset's `exclude_filter` drops `build/*`, `scripts/tests/*` and `data/seeds/*` (tests and seed scripts are dev-only; nothing shipped preloads them, `asset_scan.gd` only names the paths as strings). Re-check with `strings build/web/index.pck | grep -c "scripts/tests/"` (expect 0) after adding references.
+- CI hardening (REVIEW-F4): the concurrency group cancels in-progress runs only for PRs (a running deploy is never cancelled); the `itch` job has a 15-minute timeout. Butler is pinned to 15.32.0 (`BUTLER_VERSION` + `BUTLER_SHA256` in the `itch` job, checked with `sha256sum -c` before unzip); to bump, fetch the new version and its sha256 from a GitHub runner, since the cloud proxy blocks broth.itch.zone.
 - Templates come from the GitHub release `.tpz` (downloads.godotengine.org is blocked in the cloud); only `web_nothreads_*.zip` and `version.txt` are kept, cached per Godot version.
 
 ## Build it locally (cloud or Linux)
@@ -50,7 +52,6 @@ The `itch` job in `web.yml` uploads each daily or manual run on `main` with butl
 | Area | Behaviour in the browser |
 | --- | --- |
 | Scene Runner developer panel | Reload scripts, Restart runner and the Arena/Dojo suite buttons do nothing useful: the browser cannot start processes and the pack holds no editable script sources |
-| Content Forge and World Forge saves | `res://` is read-only: edits work for the session but saving to the catalog fails |
 | Saves and prefs (`user://`) | Work, stored in the browser's IndexedDB for that site; clearing site data wipes them |
 | Emoji icons in labels and buttons | Render from bundled fallback fonts (`assets/fonts`, web only): monochrome instead of the desktop's color emoji; they add about 2.5 MB to the download (Noto Emoji is the full font so new emoji work without re-subsetting) |
 | Keys | F5 may reload the browser tab instead of the scene; use the Menu pill buttons |

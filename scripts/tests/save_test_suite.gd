@@ -25,6 +25,7 @@ static func run() -> bool:
 	ok = _test_write_read() and ok
 	ok = _test_bad_files() and ok
 	ok = _test_migrations() and ok
+	ok = _test_peek_versions() and ok
 	_wipe()
 	SaveGame.reset_base_dir()
 	SaveMigrations.reset()
@@ -237,3 +238,30 @@ static func _test_migrations() -> bool:
 	}
 	SaveMigrations.reset()
 	return TestHelpers.report(TAG, "migrations", checks)
+
+# REVIEW-F1: version-less / zero / negative files are unreadable for peek, newest_slot and can_continue.
+static func _test_peek_versions() -> bool:
+	_wipe()
+	var good: GameState = _rich_state()
+	var _w: Array[String] = SaveGame.write(good, 1)
+	var env: Dictionary = DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(1))))
+	var _d: bool = SaveGame.delete(1)
+	var checks: Dictionary = {}
+	var bad_versions: Array[Variant] = [null, 0, -1, "x"]
+	for v: Variant in bad_versions:
+		var e: Dictionary = env.duplicate(true)
+		if v == null:
+			e.erase("version")
+		else:
+			e["version"] = v
+		e["saved_at"] = 4102444800
+		_write_raw(2, JSON.stringify(e))
+		var head: Dictionary = SaveGame.peek(2)
+		checks["version %s unreadable" % str(v)] = not DictUtil.to_bool(head["ok"]) and str(head["error"]) == "unreadable" and SaveGame.newest_slot() == -1
+	checks["can_continue false with only such a file"] = SaveGame.newest_slot() == -1
+	var e1: Dictionary = env.duplicate(true)
+	e1["version"] = 1
+	_write_raw(3, JSON.stringify(e1))
+	checks["version 1 still peeks ok"] = DictUtil.to_bool(SaveGame.peek(3)["ok"]) and SaveGame.newest_slot() == 3
+	_wipe()
+	return TestHelpers.report(TAG, "peek refuses version-less, 0 and negative files", checks)

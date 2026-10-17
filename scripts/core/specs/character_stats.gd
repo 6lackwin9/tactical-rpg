@@ -10,6 +10,7 @@ signal leveled_up(new_level: int)
 signal attribute_point_allocated(stat_name: String, new_val: int)
 
 const MAX_LEVEL: int = 10
+const HP_PER_CONS: int = 8   # max HP per effective CONS
 const RANGE_PERC_THRESHOLD: int = 18   # effective PERC that adds +1 range to a ranged weapon
 
 var class_archetype: ClassArchetype
@@ -143,7 +144,7 @@ func get_effective_stat(stat_name: String, context: Dictionary = {}, exclude_sou
 func get_max_hp(context: Dictionary = {}) -> int:
 	var effective_cons: int = get_effective_stat("CONS", context)
 	var effective_str: int = get_effective_stat("STR", context)
-	return 60 + (effective_cons * 8) + (effective_str * 2)
+	return 60 + (effective_cons * HP_PER_CONS) + (effective_str * 2)
 
 func get_initiative_speed(armor_burden: int = 0, context: Dictionary = {}) -> int:
 	var effective_dex: int = get_effective_stat("DEX", context)

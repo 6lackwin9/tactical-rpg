@@ -2,10 +2,10 @@ extends Node
 
 # ==============================================================================
 # Tactical RPG - World Forge (scene host)
-# Mounts the WorldForge authoring UI. "Play this encounter" swaps it for the real
-# combat arena running the chosen WorldEncounter (the world's own characters),
-# with a "Back to World Forge" button; closing the arena returns with all unsaved
-# world edits intact.
+# Mounts the WorldForge world viewer (read-only; TOOLS-RO). "Play this encounter"
+# swaps it for the real combat arena running the chosen WorldEncounter (the
+# world's own characters), with a "Back to World Forge" button; closing the arena
+# returns to the viewer.
 #   Tool  -> scripts/ui/world/   (WorldForge, WorldForgeSource, WorldPreview)
 #   Data  -> scripts/world/      (WorldCatalog, WorldSchema, WorldFactory)
 # ==============================================================================
@@ -51,14 +51,14 @@ func close_playtest() -> void:
 	if forge_layer != null:
 		forge_layer.visible = true
 
-# SceneRunner asks before leaving: unsaved world edits would be lost.
+# SceneRunner asks before leaving: in-memory world changes (made by code, never by the viewer) would be lost.
 func has_unsaved_changes() -> bool:
-	return WorldCatalog.is_dirty() or (forge != null and forge.draft_dirty)
+	return WorldCatalog.is_dirty()
 
 func is_playtesting() -> bool:
 	return arena != null
 
-# Leaving with unsaved edits discards them (the menu already asked).
+# Leaving with in-memory world changes discards them (the menu already asked).
 func _exit_tree() -> void:
 	if WorldCatalog.is_dirty():
 		WorldCatalog.reload_from_disk()

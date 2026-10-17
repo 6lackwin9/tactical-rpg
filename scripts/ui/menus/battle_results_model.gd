@@ -68,6 +68,21 @@ func level_up_now(id: String) -> Array[String]:
 		router.push(MenuRouter.LEVEL_UP, {"member": id})
 	return errors
 
+# UI2-L rule 4: a member with a free class or extra loadout slot can slot a newly unlocked family.
+func has_free_slot(id: String) -> bool:
+	if PartyPreview.member(id) == null:
+		return false
+	var lm := LoadoutModel.new(id)
+	return lm.class_slots.size() < StatRules.MAX_CLASS_SLOTS or lm.extra_slots.size() < StatRules.MAX_EXTRA_SLOTS
+
+func open_loadout(id: String) -> Array[String]:
+	var errors: Array[String] = []
+	if not award.has(id):
+		errors.append("'%s' took no part in this battle." % id)
+	else:
+		router.push(MenuRouter.LOADOUT, {"member": id})
+	return errors
+
 func skip() -> Array[String]:
 	return continue_on()
 

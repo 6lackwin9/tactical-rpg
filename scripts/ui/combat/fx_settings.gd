@@ -27,7 +27,7 @@ static func load_from(cfg: ConfigFile) -> void:
 		return
 	var raw_speed: Variant = cfg.get_value("anim", "speed", speed)
 	if raw_speed is float or raw_speed is int:
-		set_speed(float(raw_speed))
+		set_speed(DictUtil.to_float(raw_speed, speed))
 	var raw_instant: Variant = cfg.get_value("anim", "instant", instant)
 	if raw_instant is bool:
-		instant = raw_instant
+		instant = raw_instant or DisplayServer.get_name() == "headless"   # headless runs stay instant

@@ -2,14 +2,12 @@ class_name SkillRanksPanel
 extends VBoxContainer
 
 # ==============================================================================
-# Tactical RPG - Skill ranks panel (FORGE1 section 3)
-# The ranks section of the skill form: one column per rank (rank 1 = the template values, read-only here), editable
-# modifier cells for ranks 2+ (absolute values, modified cells highlighted with a reset button), add / remove / copy-previous
-# actions, and one resolved read-only panel per rank (name, cost, numbers, rendered description). All rules come from
-# SkillFormModel; the panel only renders them and emits `changed(entry)` with the edited copy of the draft.
+# Tactical RPG - Skill ranks panel (FORGE1 section 3; read-only since TOOLS-RO)
+# The ranks section of the skill viewer: one column per rank (rank 1 = the template values), the modifier cells of ranks 2+
+# (absolute values, modified cells highlighted), and one resolved panel per rank (name, cost, numbers, rendered
+# description). All rules come from SkillFormModel; the panel only renders them. Skills are edited through
+# ContentCatalog.upsert seed scripts, not here.
 # ==============================================================================
-
-signal changed(entry: Dictionary)
 
 const MODIFIED_COLOR: Color = Color(1.0, 0.85, 0.4)
 
@@ -27,23 +25,7 @@ func show_entry(p_entry: Dictionary, p_head: String = "") -> void:
 	add_child(UiTheme.header("Ranks"))
 	var view: Dictionary = SkillFormModel.ranks_view(entry, head)
 	var rows: Array = view["rows"]
-	var count: int = rows.size()
-	var bar := HBoxContainer.new()
-	bar.name = "RankActions"
-	var add_btn: Button = UiTheme.button("+ Add rank", "Add a rank (up to %d); it starts equal to the template" % StatRules.MAX_CLASS_TIER, func() -> void: changed.emit(SkillFormModel.add_rank(entry)), UiTheme.FONT_SM)
-	add_btn.name = "AddRank"
-	add_btn.disabled = not DictUtil.to_bool(view["can_add"])
-	bar.add_child(add_btn)
-	var remove_btn: Button = UiTheme.button("- Remove top rank", "Remove the highest rank", func() -> void: changed.emit(SkillFormModel.remove_top_rank(entry)), UiTheme.FONT_SM)
-	remove_btn.name = "RemoveRank"
-	remove_btn.disabled = not DictUtil.to_bool(view["can_remove"])
-	bar.add_child(remove_btn)
-	if not str(view["reason"]).is_empty():
-		bar.add_child(UiTheme.label("  " + str(view["reason"]), UiTheme.FONT_SM, UiTheme.COL_MUTED))
-		add_btn.tooltip_text = str(view["reason"])
-		remove_btn.tooltip_text = str(view["reason"])
-	add_child(bar)
-	if count > 1 or DictUtil.to_bool(view["can_add"]):
+	if rows.size() > 1:
 		add_child(_table(view))
 	_add_resolved(rows)
 
@@ -72,46 +54,21 @@ func _table(view: Dictionary) -> Control:
 		grid.add_child(label)
 		for raw: Variant in rows:
 			var r: Dictionary = DictUtil.dict_of(raw)
-			var rank: int = DictUtil.to_int(r["rank"])
-			grid.add_child(_cell(key, f, r, rank))
-	grid.add_child(UiTheme.label("", UiTheme.FONT_SM))
-	for raw: Variant in rows:
-		var rank: int = DictUtil.to_int(DictUtil.dict_of(raw)["rank"])
-		if rank >= 3:
-			var copy_btn: Button = UiTheme.button("Copy previous", "Copy rank %d's modifiers into this rank (values are copied; no link remains)" % (rank - 1), func() -> void: changed.emit(SkillFormModel.copy_previous(entry, rank)), UiTheme.FONT_SM)
-			copy_btn.name = "CopyPrevious%d" % rank
-			grid.add_child(copy_btn)
-		else:
-			grid.add_child(Control.new())
+			grid.add_child(_cell(key, f, r, DictUtil.to_int(r["rank"])))
 	return grid
 
-# One cell: rank 1 shows the template value read-only; ranks 2+ are editable absolute values.
+# One read-only cell: the effective value of `key` at `rank` (rank 2+ cells a rank modifies are highlighted).
 func _cell(key: String, f: Dictionary, row: Dictionary, rank: int) -> Control:
 	var values: Dictionary = DictUtil.dict_of(row["values"])
-	var value: Variant = values.get(key, f.get("default", 0))
-	if rank == 1:
-		var shown: String = _show(value)
-		if key == "unlock_offset":
-			shown = "+0"
-		var base_label: Label = UiTheme.label(shown, UiTheme.FONT_SM)
-		base_label.name = "Cell_%s_1" % key
-		return base_label
-	var modified: Array = DictUtil.array_of(row["modified"])
-	var is_modified: bool = modified.has(key)
-	var resolved: Dictionary = SkillRanks.effective(entry, rank)
-	var info: Dictionary = SkillFormModel.state(resolved, key, head)
-	var box := HBoxContainer.new()
-	var control: Control = _editor(key, f, value, info, rank)
-	control.name = "Cell_%s_%d" % [key, rank]
-	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if is_modified:
-		control.modulate = MODIFIED_COLOR
-	box.add_child(control)
-	if is_modified:
-		var reset: Button = UiTheme.button("↺", "Reset to the template value", func() -> void: changed.emit(SkillFormModel.reset_modifier(entry, rank, key)), UiTheme.FONT_SM)
-		reset.name = "Reset_%s_%d" % [key, rank]
-		box.add_child(reset)
-	return box
+	var shown: String = _show(values.get(key, f.get("default", 0)))
+	if key == "unlock_offset" and rank == 1:
+		shown = "+0"
+	var cell: Label = UiTheme.label(shown, UiTheme.FONT_SM)
+	cell.name = "Cell_%s_%d" % [key, rank]
+	if rank > 1 and DictUtil.array_of(row["modified"]).has(key):
+		cell.modulate = MODIFIED_COLOR
+		cell.tooltip_text = "Rank %d modifies this value" % rank
+	return cell
 
 func _show(value: Variant) -> String:
 	if value is Array:
@@ -123,74 +80,6 @@ func _show(value: Variant) -> String:
 		return "%s" % snappedf(DictUtil.to_float(value), 0.01)
 	var text: String = str(value)
 	return text if not text.is_empty() else "(none)"
-
-func _editor(key: String, f: Dictionary, value: Variant, info: Dictionary, rank: int) -> Control:
-	var locked: bool = DictUtil.to_bool(info.get("locked", false))
-	match str(f.get("type", "int")):
-		"int", "float":
-			var spin := SpinBox.new()
-			var is_float: bool = str(f["type"]) == "float"
-			var lo: float = DictUtil.to_float(info["min"]) if info.get("min", null) != null else DictUtil.to_float(f.get("min", -99999))
-			var hi: float = DictUtil.to_float(info["max"]) if info.get("max", null) != null else DictUtil.to_float(f.get("max", 99999))
-			spin.min_value = lo
-			spin.max_value = maxf(lo, hi)
-			spin.step = DictUtil.to_float(f.get("step", 0.01 if is_float else 1.0))
-			spin.value = DictUtil.to_float(value)
-			spin.editable = not locked
-			if key == "unlock_offset":
-				spin.tooltip_text = "-1 = auto (%d for this rank)" % (StatRules.TIER_UNLOCK_STEP * (rank - 1))
-			spin.value_changed.connect(func(v: float) -> void: changed.emit(SkillFormModel.set_modifier(entry, rank, key, v if is_float else roundi(v))))
-			return spin
-		"enum":
-			var opt := OptionButton.new()
-			var options: Array[String] = []
-			var allowed: Array = DictUtil.array_of(info.get("options", []))
-			if allowed.is_empty():
-				options = ContentSchema.options_of(f)
-			else:
-				for a: Variant in allowed:
-					options.append(str(a))
-			if not options.has(str(value)):
-				options.append(str(value))
-			for i: int in range(options.size()):
-				opt.add_item(options[i] if not options[i].is_empty() else "(none)", i)
-				opt.set_item_metadata(i, options[i])
-				if options[i] == str(value):
-					opt.select(i)
-			opt.disabled = locked
-			opt.item_selected.connect(func(i: int) -> void: changed.emit(SkillFormModel.set_modifier(entry, rank, key, str(opt.get_item_metadata(i)))))
-			return opt
-		"multi_pick":
-			var menu := MenuButton.new()
-			menu.text = _show(value)
-			menu.flat = false
-			var popup: PopupMenu = menu.get_popup()
-			var options: Array[String] = ContentSchema.options_of(f)
-			var current: Array[String] = ContentFactory._strings(value)
-			for i: int in range(options.size()):
-				popup.add_check_item(options[i], i)
-				popup.set_item_checked(i, current.has(options[i]))
-			popup.hide_on_checkable_item_selection = false
-			popup.id_pressed.connect(func(id: int) -> void:
-				var next: Array[String] = ContentFactory._strings(value)
-				var option: String = options[id]
-				if next.has(option):
-					next.erase(option)
-				else:
-					next.append(option)
-				if option == SkillDef.CLEANSE_ALL and next.has(option):
-					next = [option]
-				elif next.has(SkillDef.CLEANSE_ALL):
-					next.erase(SkillDef.CLEANSE_ALL)
-				var ordered: Array[String] = []
-				for candidate: String in options:
-					if next.has(candidate):
-						ordered.append(candidate)
-				changed.emit(SkillFormModel.set_modifier(entry, rank, key, ordered))
-			)
-			menu.disabled = locked
-			return menu
-	return UiTheme.label(_show(value), UiTheme.FONT_SM)
 
 # Read-only resolved panel per rank.
 func _add_resolved(rows: Array) -> void:
