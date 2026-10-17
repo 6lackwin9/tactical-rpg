@@ -273,7 +273,7 @@ static func _test_unarmed_brawler_fixture() -> bool:
 		var errors: Array[String] = ContentCatalog.upsert("classes", bare)
 		checks["sandbox brawler with main_hand '' accepted %s" % str(errors)] = errors.is_empty()
 		checks["class_rules tiers (null-safe weapon compare)"] = ClassRulesTestSuite._test_variance_and_tiers()
-		checks["engine_pieces unarmed (fixture weapon)"] = EnginePiecesTestSuite._test_unarmed()
+		checks["engine_pieces unarmed (fixture weapon)"] = UnarmedTestSuite._test_unarmed()
 	TestHelpers.cleanup(SANDBOX)
 	return TestHelpers.report(TAG, "Gear tests independent of the shipped brawler main hand (sandbox, main_hand '')", checks)
 
