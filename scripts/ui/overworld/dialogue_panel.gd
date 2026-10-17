@@ -91,7 +91,7 @@ func confirm_turn_in() -> Dictionary:
 	var res: Dictionary = runner.confirm_turn_in(recipient_id, picks)
 	if DictUtil.to_bool(res.get("ok", false)):
 		pending = {}
-		noted.emit("Quest complete: %s %s" % [str(res.get("granted", {})), str(res.get("notes", []))])
+		noted.emit("Quest complete: %s" % str(res.get("granted", {})))
 	else:
 		noted.emit("Turn-in refused: %s" % str(res.get("errors", [])))
 	_route(res)
@@ -112,6 +112,8 @@ func shop_closed() -> void:
 	_route(runner.close_shop())
 
 func _route(res: Dictionary) -> void:
+	for n: Variant in DictUtil.array_of(res.get("notes", [])):
+		noted.emit(str(n))   # e.g. the gold-cap note
 	if res.has("shop") and DictUtil.to_bool(res.get("ok", false)):
 		visible = false
 		shop_opened.emit(str(res["shop"]))

@@ -971,8 +971,12 @@ static func _test_prices() -> bool:
 		var sm: int = roundi(DictUtil.to_float(mults[1]) * 100.0)
 		for value: int in [15, 25]:
 			var label: String = "%d at %s/%s" % [value, str(mults[0]), str(mults[1])]
-			checks["buy ceil " + label] = ShopRules.buy_price(shop, value) == ceili(float(value * bm) / 100.0)
-			checks["sell floor " + label] = ShopRules.sell_price(shop, value) == floori(float(value * sm) / 100.0)
+			@warning_ignore("integer_division")
+			var buy_oracle: int = (value * bm + 99) / 100   # integer ceil, no floats (DLG1-F)
+			@warning_ignore("integer_division")
+			var sell_oracle: int = (value * sm) / 100        # integer floor
+			checks["buy ceil " + label] = ShopRules.buy_price(shop, value) == buy_oracle
+			checks["sell floor " + label] = ShopRules.sell_price(shop, value) == sell_oracle
 		checks["fixed price ignores %s" % str(mults[0])] = ShopRules.buy_price(shop, 15, FIXED) == FIXED
 		checks["minimum buy 1 at %s" % str(mults[0])] = ShopRules.buy_price(shop, 0) == 1
 	var gs: GameState = _gs()
