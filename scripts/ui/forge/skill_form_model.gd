@@ -167,8 +167,13 @@ static func state(entry: Dictionary, key: String, head: String = "") -> Dictiona
 		"status_potency":
 			out["min"] = 1
 		"status_magnitude":
-			out["min"] = 1
-			out["max"] = StatusRegistry.cap_of(StatusEffects.WEAKEN)
+			var magnitude_status: String = SkillText.magnitude_status(entry)
+			if StatusEffects.has_magnitude(magnitude_status):
+				out["min"] = StatusRegistry.magnitude_min(magnitude_status)
+				out["max"] = StatusRegistry.magnitude_max(magnitude_status)
+			else:
+				out["max"] = 0
+				out["reason"] = "Only %s carry a magnitude." % ", ".join(StatusRegistry.magnitude_ids())
 		"min_proficiency":
 			if not ContentFactory._strings(entry.get("weapon_types", [])).is_empty():
 				out["min"] = 1

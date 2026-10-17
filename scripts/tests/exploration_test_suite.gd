@@ -1057,10 +1057,10 @@ static func _lossless_v2() -> bool:
 			ok = ok and str(now[key]) == _q("field")
 		else:
 			ok = ok and JsonUtil.deep_equal(now[key], v2[key])
-	ok = ok and SaveGame.write(st, 7).is_empty()
-	var again: GameState = SaveGame.read(7)["state"] as GameState
-	ok = ok and again != null and SaveGame.write(again, 8).is_empty()
-	return ok and _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(7))) == _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(8)))
+	ok = ok and SaveGame.write(st, 1).is_empty()
+	var again: GameState = SaveGame.read(1)["state"] as GameState
+	ok = ok and again != null and SaveGame.write(again, 2).is_empty()
+	return ok and _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(1))) == _without_saved_at(FileAccess.get_file_as_string(SaveGame.path_for(2)))
 
 static func _test_save_v3() -> bool:
 	var checks: Dictionary = {}
@@ -1095,15 +1095,16 @@ static func _test_save_v3() -> bool:
 	bad_next.explore["next_at"] = 0
 	var raw_pos: Dictionary = gs.to_dict()
 	raw_pos["position"] = ["a", 1]
+	var _gone: bool = SaveGame.delete(2)   # slots are 0..3 (UI1-L): the refusals below write slot 2
 	for pair: Array in [["bad position", bad_pos], ["explore with an extra key", bad_explore], ["negative rolls", bad_rolls], ["next_at 0", bad_next], ["position not ints", GameState.from_dict(raw_pos)]]:
 		var g: GameState = pair[1] as GameState
-		checks["%s fails validate and write" % str(pair[0])] = not g.validate().is_empty() and not SaveGame.write(g, 4).is_empty()
-	checks["nothing written for refusals"] = not SaveGame.exists(4)
+		checks["%s fails validate and write" % str(pair[0])] = not g.validate().is_empty() and not SaveGame.write(g, 2).is_empty()
+	checks["nothing written for refusals"] = not SaveGame.exists(2)
 	var walked: GameState = _in_field(5, 2)
 	walked.rolls[GameRolls.EXPLORE] = 3
-	var written: bool = SaveGame.write(walked, 5).is_empty()
-	var back: GameState = SaveGame.read(5)["state"] as GameState
-	checks["v3 round trip"] = written and back != null and back.equals(walked) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(5))))["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 3   # 4 since DLG1-L
+	var written: bool = SaveGame.write(walked, 1).is_empty()
+	var back: GameState = SaveGame.read(1)["state"] as GameState
+	checks["v3 round trip"] = written and back != null and back.equals(walked) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(1))))["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 3   # 4 since DLG1-L
 	var blank: GameState = _new_gs()
 	var resumed: Dictionary = ExploreRunner.resume(blank)
 	checks["resume with no location begins at the start location"] = DictUtil.to_bool(resumed["ok"]) and blank.location_id == _q("town")
@@ -1116,7 +1117,7 @@ static func _test_save_v3() -> bool:
 	return _report("Check 20: save v3 (v2 migration, qualified location, stable seed, validation, resume)", checks)
 
 # ------------------------------------------------------------------------------
-# Commit 3: the debug region-map scene (thin: drives ExploreRunner, autosaves to slot 9 in the sandbox)
+# Commit 3: the debug region-map scene (thin: drives ExploreRunner, autosaves to the autosave slot 0 in the sandbox)
 # ------------------------------------------------------------------------------
 
 const DEBUG_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
@@ -1134,8 +1135,8 @@ static func _test_debug_scene(tree_parent: Node) -> bool:
 	if view.gs == null:
 		tree_parent.remove_child(view)
 		view.free()
-		return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 9)", checks)
-	checks["autosave wrote debug slot 9 in the sandbox"] = SaveGame.exists(RegionMapView.DEBUG_SLOT) and SaveGame.path_for(RegionMapView.DEBUG_SLOT).begins_with(SANDBOX)
+		return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 0)", checks)
+	checks["autosave wrote slot 0 in the sandbox"] = SaveGame.exists(RegionMapView.DEBUG_SLOT) and SaveGame.path_for(RegionMapView.DEBUG_SLOT).begins_with(SANDBOX)
 	view.take_exit("field")
 	checks["menu exit enters the field"] = view.gs.location_id == _q("field") and view.gs.position == Vector2i(1, 1)
 	view.gs.position = Vector2i(4, 2)
@@ -1147,4 +1148,4 @@ static func _test_debug_scene(tree_parent: Node) -> bool:
 	checks["fled button settles through after_fight"] = view.pending_fight.is_empty() and view.gs.position == Vector2i(4, 2) and _steps(view.gs) == 0
 	tree_parent.remove_child(view)
 	view.free()
-	return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 9)", checks)
+	return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 0)", checks)

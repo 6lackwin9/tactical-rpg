@@ -17,6 +17,10 @@ const KEYS: Dictionary = {
 	"audio/music": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	"audio/sfx": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	"audio/ui": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
+	# UI1-L: animation (read by FxSettings.load_from) and text size (the menu theme's default font size).
+	"anim/speed": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.25, "max": 4.0},
+	"anim/instant": {"type": TYPE_BOOL, "default": false},
+	"ui/text_scale": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.8, "max": 1.5},
 }
 
 static var _path: String = DEFAULT_PATH
@@ -65,6 +69,11 @@ static func set_value(key: String, value: Variant) -> void:
 	var parts: PackedStringArray = _split(key)
 	var clean: Variant = _clean(key, value)
 	_file().set_value(parts[0], parts[1], clean if clean != null else default_of(key))
+
+# `value` as `key` would store it: clamped, or the default when it has the wrong type (UI1-L settings draft).
+static func checked(key: String, value: Variant) -> Variant:
+	var clean: Variant = _clean(key, value)
+	return clean if clean != null else default_of(key)
 
 static func get_float(key: String) -> float:
 	return DictUtil.to_float(get_value(key))

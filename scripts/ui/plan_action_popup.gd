@@ -113,7 +113,11 @@ static func _row_text(option: PlanOption) -> String:
 	elif step.skill != null and step.skill.kind == SkillDef.Kind.ATTACK and not step.skill.deals_damage():
 		text += " · No damage"
 		if not step.skill.status_effect.is_empty():
-			text += " · %s%s" % [StatusEffects.display_name(step.skill.status_effect), (" -%d%%" % step.skill.status_magnitude) if step.skill.status_magnitude > 0 else ""]
+			var status: String = step.skill.status_effect
+			var magnitude: String = SkillText.format_magnitude(status, step.skill.status_magnitude)
+			if not magnitude.is_empty():
+				magnitude = (" -" if StatusRegistry.magnitude_unit(status) == StatusRegistry.UNIT_PCT else " ") + magnitude
+			text += " · %s%s" % [StatusEffects.display_name(status), magnitude]
 	if option.switches_target:
 		text += " · switch target"
 	return text

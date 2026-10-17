@@ -13,6 +13,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
 | `scripts/ui/{combat,forge,dojo,world,runner,framework}/` | panels and tools | all | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
+| `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | in-progress |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
 | `scripts/tests/ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`, `ai_skills_kit.gd` | AI use of the new skill kinds (AI1) | S4 | done |
@@ -34,6 +35,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md` | process | done |
+| `export_presets.cfg`, `.github/workflows/web.yml` | Web (HTML5) export preset (single-threaded) and the workflow that builds it on every PR and deploys it to GitHub Pages from `main` (`docs/workflow/web.md`) | process | done |
 | `.github/workflows/gate.yml` | GitHub Actions: fast gate (`tools/fc.sh gate`) and `tools/fc.sh docs` on every PR and push to `main` | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd`, `combat_ext_attacks_test_suite.gd`, `combat_ext_ai_test_suite.gd`, `combat_ext_kit.gd` | S12-A/S4-A suites (M1) | S12, S4 | done |
@@ -60,7 +62,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/game_state/settings_file.gd` | SettingsFile: `user://settings.cfg` key table (audio keys S14-L3; UI1-L adds its keys), never in a save slot | S14, UI1 | in progress |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
 | `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1), dialogue and shop panels (DialoguePanel, ShopPanel, DLG1); later the world map | S9, S10, S11 | in progress |
-| `scripts/ui/menus/` | main menu, party screen, journal | S7, S13 | placeholder |
+| `scripts/ui/menus/` | main menu, new game, save slots, settings, hub (UI1-L); party screen, journal (UI2, UI3) | S7, S13 | in use |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |

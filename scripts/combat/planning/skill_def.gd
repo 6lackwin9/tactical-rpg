@@ -72,7 +72,7 @@ var weapon_hand: WeaponHand = WeaponHand.MAIN   # ATTACK: which hand's weapon th
 var stance_override: int = -1  # ATTACK in another stance pool (e.g. Shield Bash is Defensive)
 var status_effect: String = "" # status rolled on hit (StatusEffects), active next round
 var status_potency: int = 0
-var status_magnitude: int = 0   # weaken only: percent the inflicted instance carries (not rolled; 1-25)
+var status_magnitude: int = 0   # carried by the inflicted / granted instance (not rolled; range and unit from the status registry row)
 var reach_min: int = 0          # skill-specific reach band (0 = the unit's default band)
 var reach_max: int = 0
 var weapon_types: Array[String] = []   # gear types that may use it (empty = any); class-derived units only
