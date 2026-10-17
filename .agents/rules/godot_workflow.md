@@ -11,14 +11,14 @@
 Whenever creating new script files, deleting files, or modifying `class_name` definitions:
 
 1. **Regenerate Class Cache**: Run `godot --headless --editor --quit-after 50` to ensure `.godot/global_script_class_cache.cfg` and UIDs are updated.
-2. **Recycle Headless LSP Daemon**: If a headless Godot LSP process is running (`Get-Process godot`), terminate it (`Stop-Process -Name godot -Force`). The IDE extension will automatically restart it with the fresh symbol registry so the IDE Problems tab has zero false diagnostics.
+2. **Recycle the IDE language server only when safe**: never `Stop-Process -Name godot` (parallel worktrees run other agents' suites and sims as `godot` processes). Recycle the LSP only when no agent is running, or stop the editor LSP process by its PID. In a worktree, false IDE diagnostics usually come from the main checkout's class cache: trust `tools/fc.sh parse` there.
 3. **Audit Diagnostics**: Run headless integration tests and verify that the active LSP reports 0 errors and 0 warnings.
 
 ## 3. Mandatory Post-Code Error Resolution Protocol
 
 After making any code edits or additions to scripts (`*.gd`), scenes (`*.tscn`), or configuration files:
 
-1. **Run Automated Project Check**: Immediately execute `powershell -NoProfile -ExecutionPolicy Bypass -File .\check_project.ps1` (or `.\check_project.bat --no-pause`).
+1. **Run the per-edit gate**: `tools/fc.sh parse` after each edit, `tools/fc.sh arena` / `dojo` for behaviour, and `check_project.ps1 -Fast -Quiet` (about 30 s) before handing work back. The full `check_project.ps1` (about 3 min) runs only before a milestone merge.
 2. **Verify 3 Check Stages**:
    - All GDScript files must pass Godot parser syntax check (`--check-only`) with 0 errors.
    - Global class cache and imports must compile cleanly (`--editor --quit-after 50`).
@@ -29,7 +29,7 @@ After making any code edits or additions to scripts (`*.gd`), scenes (`*.tscn`),
 
 Only after all current problems and verification checks have passed cleanly:
 
-1. **Synchronize `README.md`**: The agent must always review and update `README.md` after any code change to reflect:
+1. **Synchronize `README.md`**: builders report a docs delta and the planner applies it, so `README.md` is updated with every change to reflect:
    - Any new, extracted, or relocated files in the codebase architecture directory breakdown.
    - Newly implemented features, mechanics, or UI capabilities.
    - Updated assertion counts and test coverage in the testing section.
@@ -115,7 +115,7 @@ To prevent IDE warnings from ever appearing, adhere strictly to these patterns:
 
 - **Root Cause**: When new methods or properties are added to existing `class_name` scripts (`CharacterStats`, `Equipment`, `Inventory`, etc.), the running background Godot Language Server process retains old parsed ASTs in memory. Callers of the newly added methods report false `UNSAFE_METHOD_ACCESS` or `UNSAFE_PROPERTY_ACCESS` warnings.
 - **Remediation Protocol**:
-  1. Kill the running Godot LSP process: `Stop-Process -Name godot -Force -ErrorAction SilentlyContinue`.
+  1. Only when no agent is running suites or sims, stop the editor LSP process by its PID (never `Stop-Process -Name godot`: it kills other agents' runs).
   2. Regenerate the project class cache: `& "C:\Program Files\Godot\godot.exe" --headless --editor --quit-after 50`.
   3. The IDE extension will automatically restart the LSP with the fresh symbol registry, clearing all false method/property warnings.
 
