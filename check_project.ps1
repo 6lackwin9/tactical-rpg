@@ -14,18 +14,26 @@ Write-Host "=======================================================" -Foreground
 Write-Host "=== TACTICAL RPG: POST-CODE ERROR & TEST CHECK      ===" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
-# Locate Godot executable
+# Locate Godot executable: $env:GODOT, then "godot" / "godot4" on PATH, then the default Windows install
 $godotExe = $null
-$cmd = Get-Command "godot" -ErrorAction SilentlyContinue
-if ($cmd) {
-    $godotExe = $cmd.Source
+if ($env:GODOT -and (Test-Path $env:GODOT)) {
+    $godotExe = $env:GODOT
 }
-elseif (Test-Path "C:\Program Files\Godot\godot.exe") {
+else {
+    foreach ($name in @("godot", "godot4")) {
+        $cmd = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($cmd) {
+            $godotExe = $cmd.Source
+            break
+        }
+    }
+}
+if (-not $godotExe -and (Test-Path "C:\Program Files\Godot\godot.exe")) {
     $godotExe = "C:\Program Files\Godot\godot.exe"
 }
 
 if (-not $godotExe) {
-    Write-Host "[ERROR] Godot executable not found in PATH or 'C:\Program Files\Godot\godot.exe'." -ForegroundColor Red
+    Write-Host "[ERROR] Godot executable not found: set GODOT, put godot or godot4 on PATH, or install to 'C:\Program Files\Godot\godot.exe'." -ForegroundColor Red
     exit 1
 }
 
@@ -66,9 +74,10 @@ Write-Host "  -> Global class cache and imports up to date." -ForegroundColor Gr
 # STEP 2: Syntax & Static Typing Check Across All GDScript Files
 # ------------------------------------------------------------------------------
 Write-Host "`n[2/4] Validating all GDScript files with Godot parser..." -ForegroundColor Yellow
-$gdFiles = Get-ChildItem -Path $projectRoot -Recurse -Filter "*.gd" | Where-Object { $_.FullName -notmatch "\\\.godot\\" }
+$gdFiles = Get-ChildItem -Path $projectRoot -Recurse -Filter "*.gd" | Where-Object { $_.FullName -notmatch "[\\/]\.godot[\\/]" }
 $scriptErrors = 0
 $scriptsChecked = 0
+$crashCodes = @(-1073741819, 139)
 
 if ($Fast) {
     $fastResult = Invoke-GodotProcess -Arguments @("--headless", "--path", ".", "-s", "tools/parse_all.gd")
@@ -82,18 +91,18 @@ if ($Fast) {
 
 
 foreach ($file in $gdFiles) {
-    $relPath = $file.FullName.Replace($projectRoot + "\", "").Replace("\", "/")
+    $relPath = $file.FullName.Substring($projectRoot.Length).TrimStart("\", "/").Replace("\", "/")   # works on Windows PowerShell 5.1 and pwsh
     $resPath = "res://$relPath"
     $scriptsChecked++
 
     $result = Invoke-GodotProcess -Arguments @("--headless", "--check-only", "-s", $resPath)
-    # Godot 4.7 can crash (0xC0000005) while unloading cross-referencing scripts at shutdown,
-    # AFTER parsing succeeded. Re-check once; if it still only crashes at shutdown with no
-    # script/parse error reported, count it as parsed and warn instead of failing.
-    $shutdownCrash = ($result.ExitCode -eq -1073741819) -and ($result.Output -notmatch "SCRIPT ERROR|Parse Error|Compile Error")
+    # Godot 4.7 can crash (0xC0000005 on Windows, SIGSEGV = 139 on Linux/macOS) while unloading
+    # cross-referencing scripts at shutdown, AFTER parsing succeeded. Re-check once; if it still only
+    # crashes at shutdown with no script/parse error reported, count it as parsed and warn instead of failing.
+    $shutdownCrash = ($result.ExitCode -in $crashCodes) -and ($result.Output -notmatch "SCRIPT ERROR|Parse Error|Compile Error")
     if ($shutdownCrash) {
         $result = Invoke-GodotProcess -Arguments @("--headless", "--check-only", "-s", $resPath)
-        $shutdownCrash = ($result.ExitCode -eq -1073741819) -and ($result.Output -notmatch "SCRIPT ERROR|Parse Error|Compile Error")
+        $shutdownCrash = ($result.ExitCode -in $crashCodes) -and ($result.Output -notmatch "SCRIPT ERROR|Parse Error|Compile Error")
         if ($shutdownCrash) {
             Write-Host "  [WARN] $relPath parsed OK; Godot crashed only while shutting down (engine teardown issue)" -ForegroundColor DarkYellow
             continue

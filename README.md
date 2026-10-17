@@ -537,7 +537,7 @@ A class's `skill_path` is now a map of skill family to unlock level (`{family: l
 
 ### Agent workflow tools
 
-`CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `safe_delete`, `all`); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md), `tools/fc.sh docs` includes a markdown lint subset (`tools/md_lint.awk`), `tools/wt_remove.ps1` removes a finished worktree on OneDrive (clears the read-only folder flag git trips on) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `logic-builder`, `asset-builder`, `balance`, `change-reviewer`, `housekeeper` for cleanup proposals) live in `.claude/`.
+`CLAUDE.md` indexes `docs/` (game brief, roadmap, structure incl. placeholder folders, decisions, history of deprecated ideas, balance report, workflow) and defines the agent roles and parallel lanes (design-brainstorm, logic-builder, asset-builder, balance, change-reviewer; the main session plans via the `planner` skill, queue in `docs/TASKS.md`, specs in `docs/specs/`). `tools/fc.sh` gives compact checks (`parse`, `parse-all`, `arena`, `dojo`, `run`, `sim`, `safe_delete`, `all`, and `gate`, the commit gate without PowerShell); `check_project.ps1 -Fast -Quiet` runs the full check in ~30 s (see docs/EFFICIENCY.md), `tools/fc.sh docs` includes a markdown lint subset (`tools/md_lint.awk`), `tools/wt_remove.ps1` removes a finished worktree on OneDrive (clears the read-only folder flag git trips on) and `tools/balance_sim.gd` (`fc.sh sim duel|tier|levels`) runs headless AI-vs-AI balance tables. Claude Code skills (`godot-debug-checklist`, `patch-and-seed`) and agents (`design-brainstorm`, `logic-builder`, `asset-builder`, `balance`, `change-reviewer`, `housekeeper` for cleanup proposals) live in `.claude/`.
 
 ### Automated Check Script (`check_project.ps1`)
 
@@ -547,6 +547,8 @@ Runs in 4 phases:
 - `[2/4]` Validates GDScript syntax & static typing across every project script (`--headless --check-only`); a crash only while Godot shuts down after a clean parse is reported as a warning.
 - `[3/4]` Executes the headless arena test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0. (The Scene Runner's suite buttons run the same scenes.)
 - `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
+
+Godot is found through the `GODOT` environment variable, then `godot` or `godot4` on PATH, then `C:\Program Files\Godot\godot.exe`. The script runs on Windows PowerShell 5.1 and on PowerShell 7 (`pwsh`) on Linux or macOS. `tools/fc.sh gate` runs the same steps as `-Fast -Quiet` in bash, so a Linux machine or cloud container only needs a Godot 4.7 binary.
 
 ---
 
@@ -564,6 +566,12 @@ Or via Windows Batch:
 
 ```cmd
 check_project.bat
+```
+
+On Linux or macOS (bash only, or `pwsh ./check_project.ps1 -Fast -Quiet` if PowerShell 7 is installed):
+
+```bash
+GODOT=/path/to/Godot_v4.7-stable_linux.x86_64 tools/fc.sh gate
 ```
 
 ### Run the Game (Scene Runner)

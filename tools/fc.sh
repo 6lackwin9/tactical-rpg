@@ -8,6 +8,8 @@
 #   tools/fc.sh safe_delete <kind> <id> [--apply]   scan, then delete a SYSTEM asset (refuses while referenced)
 #   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
+#   tools/fc.sh gate             the commit gate, same steps as check_project.ps1 -Fast -Quiet (class cache, parse-all, arena, dojo); no PowerShell needed
+#   Godot binary: $GODOT, else godot / godot4 on PATH, else the default Windows install
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   balance simulation (tools/balance_sim.gd, BAL2_SIM.md;
 #        timeout ${SIM_TIMEOUT:-900} s; script errors are shown)
 #     modes: duel [level] | tier [level] | levels | group [level] | stats [level|all] | party [level] | role [level] | sweep [level]
@@ -18,7 +20,7 @@
 #     full role/sweep runs take ~3 s per party fight: raise SIM_TIMEOUT or split by role= / level (one process each)
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
-GODOT="${GODOT:-/c/Program Files/Godot/godot.exe}"
+GODOT="${GODOT:-$(command -v godot || command -v godot4 || echo "/c/Program Files/Godot/godot.exe")}"
 OUT="${TMPDIR:-/tmp}/fc/$(pwd | md5sum | cut -c1-8)"   # one log folder per worktree so parallel lanes never overwrite each other
 mkdir -p "$OUT"
 status=0
@@ -40,9 +42,10 @@ parse() {
 
 suite() {  # $1 = scene, $2 = label, $3 = optional pattern
   timeout 290 "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1
-  local pass fail
+  local code=$? pass fail
   pass=$(grep -c "PASS" "$OUT/$2.out"); fail=$(grep "FAIL" "$OUT/$2.out" | grep -vc ": PASS")
   echo "[$2] PASS $pass  FAIL $fail   (full log: $OUT/$2.out)"
+  [ $code -ne 0 ] && { echo "[$2] FAIL Godot exit code $code"; status=1; }
   grep -n "SCRIPT ERROR" -A1 "$OUT/$2.out" | head -20
   grep -n "FAIL" "$OUT/$2.out" | grep -v ": PASS" | head -30
   [ -n "$3" ] && grep -n -- "$3" "$OUT/$2.out" | head -30
@@ -64,15 +67,35 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }
 
+parse_all() {
+  local res
+  res=$(timeout 300 "$GODOT" --headless --path . -s tools/parse_all.gd 2>&1 | grep -E "^§|SCRIPT ERROR|Parse Error|Compile Error" -A1 | sed "s/^§ //")
+  echo "$res"
+  echo "$res" | grep -Eq "SCRIPT ERROR|Parse Error|Compile Error|FAIL" && status=1
+}
+
+gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step
+  if [ ! -x "$GODOT" ] && ! command -v "$GODOT" >/dev/null; then echo "[gate] FAIL Godot not found: set GODOT or put godot / godot4 on PATH"; status=1; return; fi
+  if ! timeout 300 "$GODOT" --headless --editor --quit-after 50 > "$OUT/editor.out" 2>&1; then
+    echo "[gate] FAIL class cache / import scan (full log: $OUT/editor.out)"; status=1; return
+  fi
+  echo "[gate] class cache and imports up to date"
+  parse_all; [ $status -ne 0 ] && return
+  suite res://scenes/test_arena.tscn arena; [ $status -ne 0 ] && return
+  suite res://scenes/gear_dojo.tscn dojo; [ $status -ne 0 ] && return
+  echo "[gate] ALL CHECKS PASSED"
+}
+
 case "$1" in
   parse) parse ;;
-  parse-all) res=$(timeout 300 "$GODOT" --headless --path . -s tools/parse_all.gd 2>&1 | grep -E "^§|SCRIPT ERROR|Parse Error|Compile Error" -A1 | sed "s/^§ //"); echo "$res"; echo "$res" | grep -Eq "SCRIPT ERROR|Parse Error|Compile Error|FAIL" && status=1 ;;
+  parse-all) parse_all ;;
   arena) suite res://scenes/test_arena.tscn arena "$2" ;;
   dojo) suite res://scenes/gear_dojo.tscn dojo "$2" ;;
   run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;
   sim) timeout "${SIM_TIMEOUT:-900}" "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //" ;;
   docs) docs_check ;;
   safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
+  gate) gate ;;
   all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
   *) sed -n '2,/^# Exit code/p' "$0" ;;   # the whole usage block, however many lines it grows to
 esac

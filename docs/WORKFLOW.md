@@ -26,7 +26,7 @@
 
 | Tool | Use |
 | --- | --- |
-| `tools/fc.sh parse / arena / dojo / run / sim / all` | Compact checks and scratch scripts (see header of the script) |
+| `tools/fc.sh parse / arena / dojo / run / sim / all / gate` | Compact checks and scratch scripts (see header of the script); `gate` is the commit gate in bash for Linux or cloud machines without PowerShell |
 | `tools/balance_sim.gd` (via `fc.sh sim duel\|tier\|levels [level]`) | Headless AI-vs-AI win-rate tables, sides swapped, 3 seeds. Duel at one level takes about 90 s |
 | Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
 | Agent `change-reviewer` | Pre-commit review: fast checks, strict typing, docs/README, known-issues match; read-only |

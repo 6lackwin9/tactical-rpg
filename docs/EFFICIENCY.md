@@ -12,6 +12,8 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | `tools/fc.sh dojo` | 2.5 s | fine |
 | `check_project.ps1` (old default) | 188 s, ~170 output lines (~9k tokens of PASS lines) | **slow + noisy**: 130+ Godot launches (one per file) |
 | `check_project.ps1 -Fast -Quiet` | 32 s, ~20 output lines | pre-commit default |
+| `tools/fc.sh gate` / `check_project.ps1 -Fast -Quiet` on a Linux cloud container (2026-10-17) | ~3.5 min on a fresh clone, ~3 min with the class cache; parse steps take ~17 s, so the arena suite (inferred) dominates | slow but usable; worth measuring the arena suite there if cloud checks become routine |
+| `check_project.ps1` (per-file parse) on a Linux cloud container | ~8 min | avoid; use `-Fast` |
 | `tools/fc.sh sim duel 5` (3 seeds) | ~90 s; `tier` ~2 min; 10 seeds ~5 min | acceptable; run in background / in parallel (own sandboxes) |
 | Builder agent for M1 | ~23 min, ~300k tokens, 159 tool calls | the dominant cost; see below |
 | Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
