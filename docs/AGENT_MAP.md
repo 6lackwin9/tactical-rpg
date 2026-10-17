@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### UI1-L menus and save slots (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| planner (cloud thread, no subagent) | start_party, slots 0-3 + peek + autosave, CurrentGame, SettingsFile, MenuRouter and five screen models, main menu scene; screenshots in project files ui1/ | n/a / 60 | merged via PR |
+
 ### S14-L3 audio (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |

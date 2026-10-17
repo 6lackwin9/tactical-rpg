@@ -55,6 +55,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(QuestRuntimeTestSuite.run())
 	results.append(ExplorationTestSuite.run(tree_parent))
 	results.append(DialogueTestSuite.run(tree_parent))
+	results.append(MenusTestSuite.run(tree_parent))
 	results.append(AssetPipelineTestSuite.run())
 	results.append(AnimationLifecycleTestSuite.run(tree_parent))
 	results.append(AudioTestSuite.run(tree_parent))

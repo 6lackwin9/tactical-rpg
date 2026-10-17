@@ -46,6 +46,7 @@ tactical-rpg/
 │   ├── combat_arena.tscn         # Main scene: combat UI foundation (CombatSession + CombatDockHost)
 │   ├── combat_arena.gd           # Builds the session for an encounter and mounts the dock host
 │   ├── scene_runner.tscn         # Main scene: Scene Runner menu (launch scenes, hot-reload scripts, run suites)
+│   ├── main_menu.tscn            # Player front door (UI1-L): continue, new game, load / save slots, settings, hub
 │   ├── test_arena.tscn           # Test harness scene: runs SuiteRegistry.run_all (headless exit code); windowed opens the runner
 │   ├── test_arena.gd             # Harness: headless exit code for check_project.ps1 and the runner's suite buttons
 │   ├── gear_dojo.tscn            # Dedicated Gear, Skill & Damage Formula Benchmark scene
@@ -511,7 +512,7 @@ Lore-free region map templates live in `data/maps/maps.json` (`MapCatalog`, rule
 
 The exploration runtime (EXP1-L commit 2) walks a region map step by step: a seeded step counter (threshold 12-20 steps, 10% elite chance, from the zone binding) starts mob fights, markers start placed fights, roamers patrol fixed paths, chests grant loot once, exits move between locations (world-map exits wait for TRAV1). `BattleBridge` builds every game fight from the world encounter plus the active party (`GameEncounter`), awards XP, calls the quest hooks and maps the result to won, fled (round limit or the whole party withdrawing) or lost (party wakes at the last safe tile or spawn, fully healed). `GameRolls` gives every save its own deterministic random streams, so a reload replays the same fights. Save version 3 adds the position, exploration state and roll counters, with a built-in 2 to 3 migration.
 
-Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to debug slot 9. EXP1 is complete.
+Debug region map (EXP1-L commit 3, Scene Runner > Region Map (debug), `scenes/overworld/region_map_debug.tscn`): pick a world and start a new game, walk with the arrow keys, press E to interact, use exit buttons in menu locations, and settle each fight with Won / Fled / Lost buttons instead of a real battle; it autosaves to the autosave slot 0 (debug slot 9 before UI1-L). EXP1 is complete.
 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
@@ -554,6 +555,10 @@ All combat animation now goes through `CombatPresenter` (`scripts/ui/combat/`), 
 ### Forge class tab (CLASS1-L)
 
 A class's `skill_path` is now a map of skill family to unlock level (`{family: level}`, kept in entry order; `ClassArchetype.path_steps()` sorts by level then position, and the default loadout is the first five). CLASS1-M migrated the shipped classes to the map shape (and gave every unit `heal_below` 0.7), so the old list converter is switched off (`ClassUnitFields.LIST_PATH_CONVERTER` false; a list path is now a validation error). System classes lock their key fields (id, AI role, base stats, growth, proficiency); gear, pouch and path stay editable. Units gain an AI `heal_below` threshold (default 0.7). The Forge edits classes in five sections with a path table, proficiency rows, gear pickers grouped by item family and live stat, gear-budget and coverage panels (`ClassForgeModel`, `ForgePreview.class_panels`); soft warnings never block saving. Tested in `class_path` and `class_form_model` suites.
+
+### Main menu, new game and save slots (UI1-L)
+
+`scenes/main_menu.tscn` (Scene Runner > Main Menu) is the player's front door: **Continue** loads the newest save (autosave included; hidden when there is none), **New game** lists the playable worlds with their fixed starting party (world manifest `start_party`, inherited like `start_location`; a world is playable when both resolve) and starts with an autosave, **Load game** shows the autosave and three manual slots with a header read by `SaveGame.peek` (world, location, party levels, time; corrupt files show as unreadable, newer versions are listed but not loadable), **Settings** edits `user://settings.cfg` (`SettingsFile`: volumes, animation speed and instant mode, text size; never part of a save), and **Tools** (debug builds) returns to the Scene Runner. A started game opens the region map; Esc returns to the **hub** (world, location, party, Save game, Settings, Quit to main menu; Party and Journal arrive with UI2 and UI3). Overwriting or deleting a save, leaving a screen with unapplied changes and quitting with unsaved progress all ask first; saving is refused during a battle or conversation. Slots: 0 = autosave, 1-3 manual (`SaveGame.write` refuses anything else); no save version change. Every screen is a headless model (`MenuRouter`, `MainMenuModel`, `NewGameModel`, `SaveSlotsModel`, `SettingsModel`, `HubModel` in `scripts/ui/menus/`) over `CurrentGame` (the game in play); views only render. Tested in `menus_test_suite.gd`.
 
 ### Agent workflow tools
 

@@ -9,10 +9,10 @@ extends Control
 # E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
 # its Close returns to the dialogue; a dialogue fight uses the same outcome buttons (DialogueRunner.after_fight).
 # Moving and interacting are ignored while a conversation, shop or fight is open.
-# `autosave` events write debug slot 9 (refused while a fight is pending). A world picker starts a new game.
+# `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) (refused while a fight is pending). A world picker starts a new game.
 # ==============================================================================
 
-const DEBUG_SLOT: int = 9
+const DEBUG_SLOT: int = SaveGame.AUTOSAVE_SLOT
 const TILE: int = 22
 const DEBUG_SEED: int = 7
 const COL_TILES: Dictionary = {".": Color(0.22, 0.22, 0.24), "#": Color(0.45, 0.38, 0.30), "~": Color(0.18, 0.32, 0.55)}
@@ -111,6 +111,14 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 	_close_panels()
 	_handle(ExploreRunner.begin(gs))
 	return errors
+
+# Plays an existing game (the main menu's new or loaded game, UI1-L): resumes at its location, or enters the start
+# location when it has none yet.
+func play_state(state: GameState) -> void:
+	gs = state
+	pending_fight = {}
+	_close_panels()
+	_handle(ExploreRunner.begin(gs) if gs.location_id.is_empty() else ExploreRunner.resume(gs))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.is_pressed() or event.is_echo():
@@ -233,6 +241,8 @@ func _autosave() -> void:
 	if gs == null or not pending_fight.is_empty():
 		return
 	var errors: Array[String] = SaveGame.write(gs, DEBUG_SLOT)
+	if errors.is_empty() and CurrentGame.state() == gs:
+		CurrentGame.mark_saved(DEBUG_SLOT)
 	if not errors.is_empty():
 		_note("Autosave refused: %s" % "; ".join(PackedStringArray(errors)))
 

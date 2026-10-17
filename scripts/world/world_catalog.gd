@@ -1157,11 +1157,44 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	var start: String = str(m.get("start_location", ""))
 	if not start.is_empty() and resolve(world_id, "locations", start).is_empty():
 		errors.append("Start location '%s' is unknown." % start)
+	errors.append_array(start_party_errors(m.get("start_party", [])))
 	var gold: Variant = m.get("start_gold", -1)
 	if not (gold is int) or DictUtil.to_int(gold) < -1 or DictUtil.to_int(gold) > 99999:
 		errors.append("Start gold must be -1 (inherited) or 0..99999.")
 	errors.append_array(DialogueRules.service_lines_errors(m.get("service_lines", {}), "Service lines"))
 	return errors
+
+# Problems with a manifest `start_party` value (UI1-L): known party-side catalog units, at most PartyState.PARTY_MAX,
+# no duplicates.
+static func start_party_errors(raw: Variant) -> Array[String]:
+	var errors: Array[String] = []
+	var ids: Array[String] = _strings(raw)
+	var seen: Dictionary = {}
+	for id: String in ids:
+		if seen.has(id):
+			errors.append("Start party lists '%s' twice." % id)
+			continue
+		seen[id] = true
+		var unit: Dictionary = ContentCatalog.get_entry("units", id)
+		if unit.is_empty():
+			errors.append("Start party unit '%s' is not a known unit." % id)
+		elif str(unit.get("side", "enemy")) != "party":
+			errors.append("Start party unit '%s' is not a party unit." % id)
+	if ids.size() > PartyState.PARTY_MAX:
+		errors.append("A start party holds at most 4 units.")
+	return errors
+
+# The resolved start party of `world_id`: its own non-empty `start_party`, else the nearest ancestor's (lineage order,
+# the same rule as `start_location`). [] when none.
+static func start_party(world_id: String) -> Array[String]:
+	var chain: Array[String] = lineage(world_id)
+	chain.reverse()
+	for w: String in chain:
+		var ids: Array[String] = _strings(manifest(w).get("start_party", []))
+		if not ids.is_empty():
+			return ids
+	var none: Array[String] = []
+	return none
 
 # Every problem in one world's OWN entries: {"world/kind:id": [errors]}.
 static func validate_world(world_id: String) -> Dictionary:
