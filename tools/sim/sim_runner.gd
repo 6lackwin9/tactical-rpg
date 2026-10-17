@@ -1,7 +1,7 @@
 extends RefCounted
 
 # Balance sim runner (BAL2_SIM.md sections 1-3): sandbox units with variants, one fight with the
-# round cap / smart_skills / preset / start distance, the binary and HP-margin scores, and the
+# round cap / preset / start distance, the binary and HP-margin scores, and the
 # side-swapped matchup average. Loaded with preload (no class_name); writes only the sandbox fork.
 
 const SimArgs = preload("res://tools/sim/sim_args.gd")
@@ -17,7 +17,6 @@ var _written: Dictionary = {}       # unit id -> spend variant last upserted (""
 var spend_variant: String = "class"
 var preset: String = "balanced"
 var observer: SimObserver = null    # commit 1b: the metrics collector
-var smart_noted: int = -1           # last profile count printed for smart_skills off
 var not_moved_total: int = 0        # distance: units left in place, summed over fights
 var fights: int = 0
 var plan_fails: int = 0             # fights stopped because confirm_plan() refused the preset plan
@@ -160,7 +159,7 @@ func _report_plan_fail(session: CombatSession, round_num: int) -> void:
 		out("PLAN FAIL %s %s (round %d, preset %s, at %s, step %d of [%s]; tile held by [%s])" % [a.name, st.error_text, round_num, preset,
 			str(session.grid.get_position(a)), st.error_index + 1, ", ".join(steps), ", ".join(holders)])
 
-# After start(): enemy presets, smart_skills off and the start distance; then the round-1 enemy
+# After start(): enemy presets and the start distance; then the round-1 enemy
 # plan is redrafted (start() already scheduled it with the original profiles and positions).
 func _prepare(session: CombatSession) -> void:
 	var changed: bool = false
@@ -170,18 +169,6 @@ func _prepare(session: CombatSession) -> void:
 			if raw is AiProfile:
 				var base: AiProfile = raw
 				session.encounter.ai_profiles[e] = PlanPresets.profile_for(preset, base)
-		changed = true
-	if not args.smart_skills:
-		var n: int = 0
-		for key: Variant in session.encounter.ai_profiles:
-			var raw_p: Variant = session.encounter.ai_profiles[key]
-			if raw_p is AiProfile:
-				var p: AiProfile = raw_p
-				p.smart_skills = false
-				n += 1
-		if n != smart_noted:
-			out("smart_skills off: %d profiles" % n)
-			smart_noted = n
 		changed = true
 	if args.distance > 0:
 		not_moved_total += SimVariants.apply_distance(session.grid, session.allies, session.enemies, args.distance)

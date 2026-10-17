@@ -26,7 +26,6 @@ var level: int = 5
 var all_levels: bool = false     # `stats all`
 var seed_count: int = 3
 var cap: int = 10
-var smart_skills: bool = true
 var loadout: String = "default"
 var spend: String = "class"      # one of SPENDS or "all"
 var preset: String = "balanced"  # a PlanPresets id or "both"
@@ -106,10 +105,6 @@ func _parse_key(key: String, value: String) -> bool:
 			if not value.is_valid_int() or int(value) < CAP_MIN or int(value) > CAP_MAX:
 				return _fail("cap must be %d..%d (got '%s')" % [CAP_MIN, CAP_MAX, value])
 			cap = int(value)
-		"smart_skills":
-			if not ON_OFF.has(value):
-				return _fail("smart_skills must be on or off (got '%s')" % value)
-			smart_skills = value == "on"
 		"loadout":
 			if not LOADOUTS.has(value):
 				return _fail("loadout must be one of %s (got '%s')" % [str(LOADOUTS), value])
@@ -270,8 +265,8 @@ func show_binary() -> bool:
 # One line echoing the effective arguments (every table starts with it).
 func header() -> String:
 	var lvl: String = "all" if all_levels else str(level)
-	var text: String = "ARGS mode %s, level %s, seeds %d, cap %d, smart_skills %s, loadout %s, spend %s, preset %s, distance %s, score %s, quick %s, metrics %s, band %d-%d" % [
-		mode, lvl, seed_count, cap, "on" if smart_skills else "off", loadout, spend, preset,
+	var text: String = "ARGS mode %s, level %s, seeds %d, cap %d, loadout %s, spend %s, preset %s, distance %s, score %s, quick %s, metrics %s, band %d-%d" % [
+		mode, lvl, seed_count, cap, loadout, spend, preset,
 		"default" if distance == 0 else str(distance), score, "on" if quick else "off", "on" if metrics else "off", band_lo, band_hi]
 	match mode:
 		"party", "sweep":
@@ -295,7 +290,7 @@ static func usage() -> Array[String]:
 		"       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
 		"       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
 		"       sweep [level]      every 4-class composition vs enc: ranking, swap delta, top-5 appearances",
-		"keys:  cap=1..30 (10)  smart_skills=on|off (on)  loadout=default|newest|role (default; party side)",
+		"keys:  cap=1..30 (10)  loadout=default|newest|role (default; party side)",
 		"       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
 		"       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
 		"       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
