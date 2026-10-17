@@ -6,6 +6,14 @@ Work is time a thread is actively building, reviewing, gating or fixing. Wait is
 
 ## Bottlenecks (updated each batch; newest first)
 
+### 2026-10-17 releases #35 and #36 (Merge & Release thread)
+
+1. **The first batch cost ~40 min of release work, mostly conflicts.** Seven old per-task PRs were squash-landed on `develop` 16:15-16:29; every one conflicted in the shared docs tables (AGENT_MAP, TASKS, TASKS_DONE, ROADMAP, DECISIONS index) and one in a data manifest (fixed by re-running its seed). Two local gates (~5 min each, run in a separate worktree) and one CI run (~3 min) then took #35 to `main` at 16:46. Landed-to-main wait: ~17 min.
+2. **Mid-batch landings re-run CI.** GATE-DEDUPE and WEB-DAILY landed on `develop` while #35 was open, so CI ran three times on it; each run took ~3 min. Acceptable; cheaper than a second release.
+3. **On-demand release #36 took ~3 min** (one CI run, no conflicts), because the batch was small and already gated on `develop`.
+
+**Suggested decoupling**: the shared-log suggestion below (area threads stop editing AGENT_MAP / TASKS_DONE directly) would remove nearly all release-time conflicts.
+
 ### 2026-10-17 (backfill from git, PR and thread timestamps; all splits are estimates)
 
 1. **Waiting after the work was done was the biggest cost, not CI.** Six PRs sat 47-107 min after their last real commit: S14-A1 (~95 min), DLG1-F (~80), BAL2-R (~47), S14-A2, WEB2 and PLAYTEST1-L (still open at the first release, 60-90 min each). The cause was the per-task merge order: each PR waited for approval or for related PRs to merge first, then had to catch up with `main`.
@@ -26,26 +34,27 @@ Times are UTC. Start = the thread's first visible work for the task (backfill: t
 
 | Task | Area | Start | Landed | Work | Wait (cause) | Runs | Blocked by | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TIMING + BRANCH-CLEANUP | Platform | 16:35 | 16:55 (develop) | ~15 | ~3 merge | gate 1 | - | backfill from GitHub API; proxy blocks branch deletes, so a workflow does it |
-| WEB3 | UI/UX | 16:34 | 16:53 (develop) | ~12 | ~4 merge, ~3 gate queue | gate 1 | patch left unpushed by the browser-build thread | built 15:30-ish, idle ~90 min (est.) |
-| WEB-DAILY | Platform | 16:31 | 16:47 (develop) | ~12 | ~4 merge | gate 2 | - | merging develop forced the second gate |
+| GATE-DEDUPE | Merge & Release | 16:34 | 16:38 (develop), main 16:46 (#35) | ~4 | ~8 release | gate 1 local + CI 1 | - | duplicate --import step left by S14-A1 + WEB2 |
+| TIMING + BRANCH-CLEANUP | Platform | 16:35 | 16:55 (develop), main 16:52 (#36) | ~15 | ~3 merge | gate 1 | - | backfill from GitHub API; proxy blocks branch deletes, so a workflow does it |
+| WEB3 | UI/UX | 16:34 | 16:53 (develop), main 16:52 (#36) | ~12 | ~4 merge, ~3 gate queue | gate 1 | patch left unpushed by the browser-build thread | built 15:30-ish, idle ~90 min (est.) |
+| WEB-DAILY | Platform | 16:31 | 16:42 (develop), main 16:46 (#35) | ~12 | ~4 merge | gate 2 | - | merging develop forced the second gate |
 | BATCH-MERGE | Platform | 16:06 | 16:13 (#34) | ~6 | ~4 ci | gate 1 local + CI 1 | - | |
 | AREA-THREADS | Platform | 15:55 | 16:05 (#33) | ~6 | ~4 ci, ~1 merge | gate 1 local + CI 1 | - | one AGENT_MAP conflict |
 | S14-L1 c3 | Assets | 15:44 | 15:56 (#32) | ~6 | ~6 ci | CI 1 | S14-A1 merge | |
-| GRID12 | Gameplay | 15:02 | release #35 | ~41 | ~60 release (est.) | CI 0 before batch | approval order | 1 main merge |
+| GRID12 | Gameplay | 15:02 | 16:29 (develop), main 16:46 (#35) | ~41 | ~60 release (est.) | CI 0 before batch | approval order | 1 main merge |
 | REVIEW-STEP | Platform | 15:23 | 15:51 (#30) | ~20 | ~4 ci, ~4 approval (est.) | CI 1 | user approval | 1 main merge |
 | BAL3 spec | Design | 15:15 | 15:39 (#29) | ~7 | ~17 approval (est.) | CI 1 | user approval | |
-| S12S-A | Assets | 14:44 | release #35 | ~56 | ~35 dependency, ~60 release (est.) | CI 2 | S12S-L c2-3 | 1 main merge |
+| S12S-A | Assets | 14:44 | 16:29 (develop), main 16:46 (#35) | ~56 | ~35 dependency, ~60 release (est.) | CI 2 | S12S-L c2-3 | 1 main merge |
 | pc-launch skill | Platform | 15:15 | 15:23 (#27) | ~4 | ~4 ci | CI 1 | user approval | |
 | S12S-L c2-3 | Gameplay | 14:43 | 15:28 (#26) | ~36 | ~8 ci | CI 1 | S12S-L c1 | |
-| ROADMAP-GOALS | Design | 15:09 | release #35 | ~10 | ~75 approval, release (est.) | CI 0 before batch | user approval | |
-| BATTLE1-L | Gameplay | 15:12 | release #35 | ~20 | ~65 release (est.) | CI 0 before batch | approval order | 1 main merge |
+| ROADMAP-GOALS | Design | 15:09 | 16:29 (develop), main 16:46 (#35) | ~10 | ~75 approval, release (est.) | CI 0 before batch | user approval | |
+| BATTLE1-L | Gameplay | 15:12 | 16:29 (develop), main 16:46 (#35) | ~20 | ~65 release (est.) | CI 0 before batch | approval order | 1 main merge |
 | UI3-L | UI/UX | 15:03 | 15:15 (#23) | ~8 | ~4 ci | CI 1 | SAVE-IO | |
-| WEB2 | UI/UX | ~15:00 | release #35 | ~26 | ~70 release, approval (est.) | CI 8 | - | 8 CI runs |
+| WEB2 | UI/UX | ~15:00 | 16:29 (develop), main 16:46 (#35) | ~26 | ~70 release, approval (est.) | CI 8 | - | 8 CI runs |
 | SAVE-IO | UI/UX | 14:56 | 15:03 (#21) | ~3 | ~4 ci | CI 1 | UI2-L | |
 | UI2-L | UI/UX | 14:33 | 14:56 (#20) | ~19 | ~4 ci | CI 1 | UI1-A | |
 | UI1-A | Assets | 14:29 | 14:33 (#19) | ~1 | ~3 ci | CI 1 | UI1-L | |
-| S14-A2 | Assets | 14:22 | release #35 | ~12 | ~50 dependency, ~70 release (est.) | CI 3 | S14-A1 | 1 main merge |
+| S14-A2 | Assets | 14:22 | 16:29 (develop), main 16:46 (#35) | ~12 | ~50 dependency, ~70 release (est.) | CI 3 | S14-A1 | 1 main merge |
 | UI1-L | UI/UX | 14:02 | 14:29 (#17) | ~20 | ~7 ci | CI 1 | - | |
 | S14-L3 | Gameplay | 14:10 | 14:22 (#16) | ~9 | ~3 ci | CI 1 | S14-L2 | |
 | S12S-L c1 | Gameplay | 14:09 | 14:43 (#15) | ~24 | ~10 merge, ci | CI 1 | approval | 2 main merges |
@@ -56,7 +65,7 @@ Times are UTC. Start = the thread's first visible work for the task (backfill: t
 | DEC-BATCH | Design | 13:58 | 14:01 (#10) | ~1 | ~3 ci | CI 1 | - | |
 | S14-L2 | Gameplay | 13:36 | 14:10 (#9) | ~17 | ~17 ci, approval (est.) | CI 1 | - | |
 | CLN-12 | Platform | 13:35 | 13:59 (#8) | ~17 | ~7 ci | CI 1 | - | |
-| PLAYTEST1-L | Gameplay | 13:39 | release #35 | ~115 | ~65 release (est.) | CI 1 | spec approval (13:50-13:55) | |
+| PLAYTEST1-L | Gameplay | 13:39 | 16:29 (develop), main 16:46 (#35) | ~115 | ~65 release (est.) | CI 1 | spec approval (13:50-13:55) | |
 | DLG1-L c3 | Gameplay | 13:28 | 13:50 (#6) | ~18 | ~3 ci | CI 1 | - | |
 | S14-A1 | Assets | 13:36 | 15:31 (#5) | ~16 | ~95 approval, merge (est.) | CI 1 | merge order | 3 main merges |
 | S14-F | Assets | ~13:28 | 13:36 (#4) | ~5 | ~3 ci | CI 1 | - | |
