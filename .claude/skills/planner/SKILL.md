@@ -13,7 +13,7 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 | --- | --- | --- | --- |
 | design | `design-brainstorm` | `docs/` (specs, proposals, task rows with status `spec`) | code, data |
 | logic | `logic-builder` | `scripts/**`, `tools/**`, schema/validation, tests | shipped `data/**` |
-| asset | `asset-builder` | `data/catalog/**`, `data/worlds/**` via `ContentCatalog.upsert` | scripts, tests, docs |
+| asset | `asset-builder` | `data/catalog/**`, `data/worlds/**`, `data/seeds/<task>.gd` via the catalogs' `upsert` | scripts, tests, docs |
 | balance | `balance` | `docs/BALANCE_REPORT.md`, sims on a clean `main` worktree | everything else |
 | review | `change-reviewer` | read-only | - |
 | cleanup | `housekeeper` | `docs/specs/CLEANUP.md`; after user confirmation `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/HISTORY.md` rows | code, data, tests, tools (builders implement confirmed cleanup tasks) |
@@ -22,13 +22,13 @@ If the custom agent types are not yet callable (agent files added this session),
 
 ## Front desk and alerts (user 2026-10-17)
 
-The front-desk session (`Tactical RPG Dashboard`, formerly `new-game-project-09`) is the user's interactive desk. Send it decision requests (question, recommendation and options in one message), a one-line ack on reading each relayed message plus a short done note when finished, and short summaries when a task finishes or a review has findings. Keep `docs/AGENT_MAP.md` and `docs/TASKS.md` current: the desk reads them for status. Anything needing a permission prompt or hard to reverse is still confirmed in this terminal.
+The front-desk session is the user's interactive desk; find it with `ListAgents` (its display name can change). Send it decision requests (question, recommendation and options in one message), a one-line ack on reading each relayed message plus a short done note when finished, and short summaries when a task finishes or a review has findings. Keep `docs/AGENT_MAP.md` and `docs/TASKS.md` current: the desk reads them for status. Anything needing a permission prompt or hard to reverse is still confirmed in this terminal.
 
 Hard failures get an immediate one-line alert, without waiting for a done note: `ALERT <task>: <what failed>, <what you are doing about it>`. Triggers: an agent error, crash or usage limit; `check_project` failing twice on the same task; a merge conflict; a blocked task or stalled agent; anything that would otherwise only be logged. Routine fixes a builder resolves on its own stay in the done notes.
 
 ## Dispatch modes (user 2026-10-17)
 
-The user switches mode with "mode standard", "mode economy" or "mode sprint" (typed in the front-desk session `new-game-project-09`, relayed here). Ack with the active mode on read. The mode persists until changed and applies to every later dispatch; agents already running are untouched. Pass `effort` explicitly on every Agent call per the table (this table is the explicit instruction for setting effort) and `model` where the table names one. Current mode: **standard** (record changes in `docs/AGENT_MAP.md` Active section).
+The user switches mode with "mode standard", "mode economy" or "mode sprint" (typed in the front-desk session, relayed here). Ack with the active mode on read. The mode persists until changed and applies to every later dispatch; agents already running are untouched. Pass `effort` explicitly on every Agent call per the table (this table is the explicit instruction for setting effort) and `model` where the table names one. Current mode: **standard** (record changes in `docs/AGENT_MAP.md` Active section).
 
 | Agent | standard (default, quality baseline) | economy (fewest tokens) | sprint (least wall-clock time) |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ The user switches mode with "mode standard", "mode economy" or "mode sprint" (ty
 
 ## 1. Plan (no code changes)
 
-1. Read `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/STRUCTURE.md`, `docs/HISTORY.md` (do not propose deprecated concepts), `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`). Do not crawl code.
+1. Read `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/STRUCTURE.md`, `docs/HISTORY.md` (do not propose deprecated concepts), the decisions files (per CLAUDE.md). Do not crawl code.
 2. Pick tasks the user marked `approved`. A task needs a spec in `docs/specs/`: if it has none, dispatch `design-brainstorm` in the background to write it (it also drafts specs for the NEXT tasks while builders work).
 3. Present the task list, lanes, dependencies and parallel plan to the user. **Make no changes until they confirm.** Design questions go to the user.
 
@@ -55,12 +55,12 @@ The user switches mode with "mode standard", "mode economy" or "mode sprint" (ty
 2. Schema-first handshake: for a task with new schema, run the `logic-builder` on the schema slice first as its OWN run (brief: "slice 1 only, end the run with the report"), so the asset lane starts minutes, not a whole build, later; review and merge it quickly (small), then start the `asset-builder` (branching from the updated `main`) in parallel with the logic-builder's remaining behaviour work. They edit different folders, so merges stay clean. Merge order: schema slice, then logic, then data (or data first if its tests are generic); run the full check after each merge.
 3. Parallel limits: no hard cap on builders (logic + asset). Soft warning at more than 3 at once: tell the user how many would run, the merge/review load it creates (rebases, hub-file conflicts, planner serial merge time, usage limits) and whether to prioritise or slow down; tasks run in parallel only when their `Touches` (docs/TASKS.md) do not overlap, otherwise sequence them (merge the smaller or more foundational one first). Run `tools/overlap.sh` while worktrees are active and before every merge: it lists files edited in more than one worktree. The shared hub files (`content_schema.gd`, `content_catalog.gd`, `content_factory.gd`, `skill_def.gd`, `combatant.gd`, `suite_registry.gd`; item/class schema edits now land in `item_fields.gd` / `class_unit_fields.gd` and validators in `scripts/content/validators/`) are the usual conflict points, so give two logic tasks that both need them a merge order up front.
 4. Keep agents busy: while builders run, `design-brainstorm` writes the next specs and the `balance` agent runs on frozen systems; reviewers run in the background on finished branches while the next task starts. Independent tasks with no shared files run in separate worktrees at the same time. Standing auto-dispatches (no user decision involved, docs only): a new balance report -> `design-brainstorm` options right away; a finished builder -> `change-reviewer` right away, while the planner drafts the docs delta in parallel.
-5. Before writing a brief, check it against the spec and `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`) (a brief narrower than a recorded user decision cost a rerun in SKILL1-A). Briefs name the worktree, branch, slice, gate command and "do not commit".
+5. Before writing a brief, check it against the spec and the decisions files (per CLAUDE.md) (a brief narrower than a recorded user decision cost a rerun in SKILL1-A). Briefs name the worktree, branch, slice, gate command and "do not commit".
 6. Mark tasks `in-progress` in `docs/TASKS.md`. Move rows to `docs/archive/TASKS_DONE.md` once done (keeps the queue small).
 
 ## 3. Review and ship
 
-1. Review each report; run `change-reviewer` (and `tools/fc.sh all`). If a builder failed the same thing twice, ask the user rather than retry. Review fixes go to the SAME builder via `SendMessage` while it is resumable (it keeps its context); spawn a fresh one only when it was stopped or failed, and point it at `.agent/progress.md`. If the planner itself changes code or data after a builder's gate (flag flip, seed re-run), re-run the gate before the review.
+1. Review each report; run `change-reviewer`, which runs the suites (don't run them a second time yourself unless you changed something after the review). If a builder failed the same thing twice, ask the user rather than retry. Review fixes go to the SAME builder via `SendMessage` while it is resumable (it keeps its context); spawn a fresh one only when it was stopped or failed, and point it at `.agent/progress.md`. If the planner itself changes code or data after a builder's gate (flag flip, seed re-run), re-run the gate before the review.
 2. Apply the builders' "docs delta" (README, GAME_BRIEF, STRUCTURE, new decision rows go to the matching `docs/decisions/<system>.md`; HISTORY append-only), update `docs/ROADMAP.md` and `docs/TASKS.md` statuses.
 3. Record cost: note the model passed to each dispatch (Agent `model` parameter or "inherited") and the main-session token counter delta in the "Cost tracking" table of `docs/AGENT_MAP.md`. Append a row to the "Agent run log" in `docs/WORKFLOW.md` and update `docs/AGENT_MAP.md` (move the finished agent from Active into its milestone section, creating the section at the TOP of the finished list: newest first; add new dispatches to Active when you launch them).
 4. Run `check_project.ps1 -Fast -Quiet` and `tools/fc.sh docs` (markdown lint; the IDE panel only lints open files). If clean: commit with the attribution trailer from the session's system reminder (it follows the current model), merge to `main` (fast-forward), push, remove the worktree and branch with `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>` (plain `git worktree remove` fails on OneDrive).

@@ -11,12 +11,12 @@ Start: read `CLAUDE.md`, the spec, `docs/GAME_BRIEF.md` (rules) and `.claude/ski
 
 Scope:
 
-- You edit ONLY `data/catalog/*`, `data/worlds/*` and your seed script under `data/seeds/<task>.gd`, and only through a `ContentCatalog.upsert/remove` seed script (idempotent; commit it in `data/seeds/` so the planner can re-run it after a rebase when the logic lane renormalises the JSON), followed by `validate_all()` (must print `{}`) and `save_all()` (0). Never hand-edit JSON. You do NOT touch `scripts/**`, tests or docs.
+- You edit ONLY `data/catalog/*`, `data/worlds/*` and your seed script under `data/seeds/<task>.gd`, and only through a `ContentCatalog.upsert/remove` seed script (idempotent; leave it in `data/seeds/` so the planner can re-run it after a rebase when the logic lane renormalises the JSON), followed by `validate_all()` (must print `{}`) and `save_all()` (0). Never hand-edit JSON. You do NOT touch `scripts/**`, tests or docs.
 - Use the numbers in the spec and the tier/scaling authoring rules in `docs/specs`; if a number is missing, ask rather than invent. Respect the gear budget (`ContentCatalog.warnings_all()` must not gain new warnings unless the spec allows a `special` item with a note).
 - If validation rejects what the spec asks for, that is a schema gap: STOP and report it to the planner with the exact error (the logic-builder owns schema changes). Two failed attempts at the same record = stop and report.
 - Check with `tools/fc.sh parse-all` and `tools/fc.sh arena` (the generic content tests loop over the catalog). If an existing test fails because a shipped number changed, report it with the test name; do not edit tests.
 
-- If the brief contradicts the spec or `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`), say so in the first line of your report and put the contested part behind a constant in the seed (e.g. `APPLY_X := false`) so the planner can flip it and re-run.
+- If the brief contradicts the spec or the decisions files (per CLAUDE.md), say so in the first line of your report and put the contested part behind a constant in the seed (e.g. `APPLY_X := false`) so the planner can flip it and re-run.
 - Checkpoint (runs can be cut off by usage limits or API errors): keep `.agent/progress.md` in the worktree (gitignored) with done steps, next step and the last check result; on start, if it exists, continue from it.
 
 Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never commit, push or merge.

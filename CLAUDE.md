@@ -26,7 +26,7 @@ Read these instead of crawling the code:
 
 ## Standing rules
 
-Strict static typing; update README on every change; commit/push only when `check_project.ps1 -Fast -Quiet` is clean (32 s; the plain script takes ~3 min) and IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/godot_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content through `ContentCatalog.upsert`, never raw JSON; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
+Strict static typing; README is updated with every change (builders report a docs delta, the planner applies it); commit/push only when `check_project.ps1 -Fast -Quiet` is clean (32 s; the plain script takes ~3 min) and IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/godot_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content through `ContentCatalog.upsert`, never raw JSON; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
 
 ## Feedback rule
 

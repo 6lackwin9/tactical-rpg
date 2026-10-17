@@ -5,19 +5,18 @@ description: Pre/post-edit checklist and known-issue lookup for this Godot tacti
 
 # Godot tactical RPG: edit checklist and known issues
 
-Rule: when something fails, look it up in **Known issues** first. Only debug from scratch if nothing matches, then add the new cause to the table.
+Rule: when something fails, look it up in **Known issues** first. Only debug from scratch if nothing matches, then add the new cause to the table. Fixed or obsolete rows move to `docs/archive/KNOWN_ISSUES_ARCHIVE.md`.
 
 ## Every edit: process
 
 1. **Before editing**: read the file's current content (it may have changed on disk). Prefer the Edit/Write tools; use patch scripts for multi-site edits. Avoid `sed` line-range edits.
 2. **New or renamed `class_name` scripts**: refresh the class cache before anything else:
    `godot --headless --editor --quit-after 50` (IDE diagnostics such as "Identifier X not declared" are stale until this runs).
-3. **Parse check**: `godot --headless --path . --check-only --quit` (or `check_project.ps1`, which does cache refresh, per-file parse, then both test scenes).
-4. **Tests**: `godot --headless res://scenes/test_arena.tscn > /tmp/arena.out 2>&1` then `grep -n "FAIL\|SCRIPT ERROR" /tmp/arena.out`; Dojo suite: `res://scenes/gear_dojo.tscn`. Use `timeout 280` and `run_in_background` for long runs.
+3. **Parse check**: `tools/fc.sh parse` after each edit (refreshes the class cache when it sees new `.gd` files).
+4. **Tests**: `tools/fc.sh arena` / `tools/fc.sh dojo` (failures first, log path printed); before handing work back, `check_project.ps1 -Fast -Quiet` (about 30 s). The full `check_project.ps1` (about 3 min) runs only before a milestone merge. Use `run_in_background` for long runs.
 5. **Strict typing pass**: no `UNSAFE_*` warnings, no untyped loop vars, no unused params, no unsafe casts (use `DictUtil.array_of/dict_of/to_int/...`).
 6. **Data edits**: change catalog JSON only through `ContentCatalog.upsert` (validates, rewrites refs) in a seed script, then `validate_all()` must be `{}` and `save_all()` returns 0.
-7. **README** updated for every change; commit/push only when `check_project.ps1` is clean (trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`).
-8. **Markdown check**: when editing or creating `.md` files, verify 0 markdownlint warnings in the IDE Problems tab. Table delimiters must have spaces around pipes (`| --- | --- |`, MD060), headings and lists surrounded by single blank lines (MD022, MD032), and no consecutive blank lines (MD012).
+7. **Markdown check**: when editing or creating `.md` files, run `tools/fc.sh docs` (markdownlint subset) and verify 0 markdownlint warnings in the IDE Problems tab. Table delimiters need spaces around pipes (`| --- | --- |`, MD060), headings and lists need single blank lines around them (MD022, MD032), and no consecutive blank lines (MD012).
 
 ## Debug method (cheap first)
 
@@ -40,26 +39,21 @@ Rule: when something fails, look it up in **Known issues** first. Only debug fro
 | `sed` line edits corrupt match blocks | Line numbers shifted | Never use sed ranges; use Edit |
 | Unit stat/number tests fail after class/data changes | Test hard-codes old values (class budgets, speeds, power) | Print real values, derive expectations from rules (`StatRules`, `Proficiency`) not magic numbers |
 | Skill missing for a class unit (`riposte` etc.) | `known_skills` = class path families unlocked by level (SK2 rule, `Combatant.tier_unlocked`); `min_proficiency` gating | Raise unit level or add `extra_skills`; check `Combatant.can_use` |
-| Catalog refuses a class/unit | `StatRules`: budget 62, growth 5 (max 3/stat), spend exactly `4 + (level-1)` or empty, skill level <= cap of its path step, loadout gear must be trained and fit the slot | Read the validation message; fix data, not the rule |
-| Off-hand-only items (`wpn_dagger`, tome) rejected in MAIN_HAND | `off_hand_category` set | Use a main-hand item (e.g. `wpn_stiletto`) |
-| Authored `power` unit does double scaling | Tier `power_scale` must not apply to authored power | Authored power is absolute (DamageCalculator) |
+| Catalog refuses a class/unit | `StatRules`: budget 62, growth 5 (max 3/stat), spend exactly `4 + (level-1)` or empty, path rules (`ClassUnitValidator.path_errors`), loadout gear must be trained and fit the slot | Read the validation message; fix data, not the rule |
 | Unit art empty/wrong | Unit `art` empty means "class art" | Use `ContentFactory.art_of(entry)` |
 | Planner: friend can't enter a tile a faster friend vacates | `CombatPlan._ally_moves` evaluates in sequence-creation order | Evaluate faster units first (speed desc) |
 | Speeds/tiles-per-block differ wildly between units | Speed = 8 + DEX - burden; ranger/scout are much faster than warriors | Do not assume the warrior is faster in tests; compare `speed` |
-| Test calls removed API (`stats.mastery`, `allowed_gear_types`, `masteries`, `class_to_entry(..., desc)`) | Mastery replaced by `Proficiency` + `Passives` | Use `stats.proficiency`, `ContentFactory.apply_passives`, `class.make_proficiency()` |
 | Passive adds nothing at max level | Proficiency level clamps to 3 | Test passives on gear below level 3 or on stat/resist effects |
-| IDE shows UNSAFE warnings referencing removed classes (`MasterySystem`) | Stale language-server state | Ignore until the editor scan; trust `--check-only` |
 | `reset_round` test uses stale Combatant objects | At round 1 `reset_round()` calls `start()`, which rebuilds every Combatant | Test round-reset behaviour from round 2 (advance first) and re-fetch units after reset |
 | New level-2+ catalog skill changes existing AI/test numbers | Hand-built units with empty `known_skills` know every skill | Mark new example skills `learned_only: true` or add them via `extra_skills` |
 | Self-buff granted by a DEFEND skill vanishes immediately | The skill's own stance switch calls `set_stance`, which removes riposte | Grant in `on_start` after the stance switch (`StatusEffects.grant_now`) |
-| `git worktree remove` fails with "Permission denied" on Windows; half-deleted entries pile up in `.git/worktrees` and every git command prints errors | OneDrive sets the read-only attribute on folders; Git for Windows deletes the files but cannot remove read-only folders (fixed 2026-10-17) | `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>` (clears `attrib -R`, deletes worktree + metadata, prunes, deletes the merged branch) |
-| In a worktree after a rebase: `Identifier "XxxTestSuite" not declared`, arena PASS 0 | The rebase brought in new `class_name` files; that worktree's class cache is stale | Run `godot --headless --editor --quit-after 50` in that worktree (fc.sh refreshes only when it sees new untracked .gd files) |
-| Grade/requires test on a shipped skill fails after a `requires` pairing is added | A dependant (greater_mend requires mend) blocks the grade change | Pick fixture families by rule (no dependants) or use a test-only sandbox family; never hard-code shipped ids |
-| A Content Forge / content test fails once and passes on re-run | Fixed (CLN-8). Was: two agents ran suites at the same time and the content tests forked to fixed `user://` sandbox names, so they collided | Suites now fork through `TestHelpers.sandbox(tag)` + `TestHelpers.fork` / `fork_worlds` (`user://test_sandboxes/<pid>_<n>_<tag>`, removed by `cleanup`). New suites must use them, never a fixed `user://` path. If it still happens, look for a suite that bypasses TestHelpers |
-| Sim fight ends early with a healthy party, or a `PLAN FAIL` line | `confirm_plan` refused an invalid preset step (before PLAN1: an ally's approach tile was taken by a later, faster ally's draft) | Read the `PLAN FAIL` line (unit, step, tile held by); check `CombatPlan._ally_moves` / `pinned_cell` |
-| A perl `s/re/rep/` helper leaves a literal `$1` and drops the matched line | The replacement was a plain string (single quotes or `\| Sim fight ends early with a healthy party, or a `PLAN FAIL` line | `confirm_plan` refused an invalid preset step (before PLAN1: an ally's approach tile was taken by a later, faster ally's draft) | Read the `PLAN FAIL` line (unit, step, tile held by); check `CombatPlan._ally_moves` / `pinned_cell` |
-| A commit lands although `tools/fc.sh docs` printed `FAIL` | `fc.sh docs | tail -1 && git commit` takes the exit code of `tail`, not of `fc.sh` | Capture the output and test it: `out=$(tools/fc.sh docs); echo "$out" | grep -q FAIL && exit 1`, or run `fc.sh docs` on its own before committing |
-`), so captures were never interpolated | Use `s/(...)/$1.../e`-free forms: build the replacement inside the s/// itself, or use the Edit tool; grep for a literal `$1` after any scripted edit |
-| `WARNING: ... invalid UID uid://... - using text path` in a worktree | The worktree's `.godot/` has no `uid_cache.bin` yet (stale import cache), harmless | Run `godot --headless --editor --quit-after 50` in that worktree |
-| `tools/fc.sh parse` reports OK but new `.gd` files were never parsed | `git status --short` collapses an untracked folder into one line, so files inside it were skipped | Fixed in BAL2-L (`git status --short -uall`) |
+| `git worktree remove` fails with "Permission denied"; half-removed entries in `.git/worktrees` | OneDrive marks folders read-only and Git for Windows cannot remove them | `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>`; if an entry survives, clear attributes on `.git/worktrees/<name>` and delete it, then `git worktree prune` |
+| In a worktree after a rebase: `Identifier "XxxTestSuite" not declared`, arena PASS 0 | The rebase brought in new `class_name` files; that worktree's class cache is stale | Run `godot --headless --editor --quit-after 50` in that worktree |
 | IDE Problems tab shows errors in a worktree (e.g. "NO_ITEM not found") while Godot's headless parse is clean | The IDE language server reads the main checkout's class cache, not the worktree's | Trust `tools/fc.sh parse` in the worktree; the false errors clear after merge |
+| `WARNING: ... invalid UID uid://... - using text path` in a worktree | The worktree's `.godot/` has no `uid_cache.bin` yet (stale import cache), harmless | Run `godot --headless --editor --quit-after 50` in that worktree |
+| Grade/requires test on a shipped skill fails after a `requires` pairing is added | A dependant (greater_mend requires mend) blocks the grade change | Pick fixture families by rule (no dependants) or use a test-only sandbox family; never hard-code shipped ids |
+| A content test fails once and passes on re-run | A suite forks to a fixed `user://` path instead of `TestHelpers.sandbox(tag)` | Use `TestHelpers.sandbox` + `fork` / `fork_worlds` / `cleanup` in every suite |
+| Sim fight ends early with a healthy party, or a `PLAN FAIL` line | `confirm_plan` refused an invalid preset step | Read the `PLAN FAIL` line (unit, step, tile held by); check `CombatPlan._ally_moves` / `pinned_cell` |
+| `check_project` fails a suite that printed no FAIL line | Any output line containing "fail" (any case) counts as a failure, e.g. a `push_warning` text | Use the quiet test hooks (`set_quiet`) or word warnings without "fail" |
+| A scripted edit leaves a literal `$1` and drops the matched line | The perl replacement was built as a plain string (single quotes or a variable), so captures never interpolated | Write the replacement inside the `s///` itself, or use the Edit tool; grep for a literal `$1` after any scripted edit |
+| A commit lands although `tools/fc.sh docs` printed `FAIL` | Piping `fc.sh docs` into `tail` before `&& git commit` takes the exit code of `tail` | Capture the output and test it (`out=$(tools/fc.sh docs)`, then `grep -q FAIL` on it), or run `fc.sh docs` on its own first |

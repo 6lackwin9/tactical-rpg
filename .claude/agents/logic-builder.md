@@ -22,7 +22,7 @@ Rules:
 - Add rule-derived tests (one suite per system, registered with one line in `scripts/tests/suite_registry.gd`). Do not hard-code numbers you have not printed.
 - Verify with `tools/fc.sh parse` then `tools/fc.sh all`; finish with `check_project.ps1 -Fast -Quiet`. Logs are per worktree (see fc.sh output).
 - Uncertainty rule: after two failed targeted fixes for the same problem, or on any gameplay/design question, STOP and report the question with findings and options instead of guessing.
-- If the brief contradicts the spec or `docs/DECISIONS.md` (index) + `docs/decisions/<system>.md` (read only the targeted system; superseded rows in `docs/decisions/archive.md`), say so in the first line of your report (do the safe reading and keep the other behind a flag or note).
+- If the brief contradicts the spec or the decisions files (per CLAUDE.md), say so in the first line of your report (do the safe reading and keep the other behind a flag or note).
 - Checkpoint (runs can be cut off by usage limits or API errors): keep `.agent/progress.md` in the worktree (gitignored) with done steps, next step, files touched and the last check result; update it after each step. On start, if it exists, read it and continue from "next" instead of re-deriving.
 - Run `tools/fc.sh docs` if you touched any markdown (it includes a markdownlint subset).
 
