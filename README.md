@@ -29,7 +29,7 @@ A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDSc
 
 ```text
 tactical-rpg/
-├── assets/                       # Static assets (icon.svg only; all art is generated in code, see scripts/art/)
+├── assets/                       # Static assets (icon.svg plus assets/art and assets/audio folders (file overrides through data/assets/manifest.json); placeholder art is generated in code, see scripts/art/)
 ├── data/
 │   └── catalog/                  # Content catalog (JSON, edited in the Content Forge): the single source of game content
 │       ├── skills.json               # Every skill tier (attacks, defends, focus, rest + engine skills marked "system")
@@ -530,6 +530,10 @@ Worlds gain two kinds: `dialogues` (node trees with choices, conditions and effe
 ### Forge item tab (ITEM1-L commit 3)
 
 The Content Forge edits items and item families with dedicated sections: identity with a token palette, family and build chips, a base-values grid (base + adjustments = result, with band markers), modifier and tier tables (tiers for weapons, armor and shields alike), and a preview with the per-modifier gear budget. System items lock their key fields and their whole modifier and tier lists. A family edit shows a live impact panel (which items and loadout totals change) and needs a second Apply when it changes items; the batch is stored with `upsert_many`. Filter chips narrow the item list by family, hand, rarity, origin, usage, special, tiers and effects. Logic in `ItemFormModel`, widgets in `ItemTables`; tested in `item_form_model_test_suite.gd`.
+
+### Asset pipeline (S14-L1)
+
+Art keys now resolve through `AssetRegistry` (`scripts/art/`): a row in the manifest `data/assets/manifest.json` (managed by `AssetCatalog`, empty for now) points a key and variant at a file under `assets/art/<namespace>/` or at another key (alias); otherwise the generated placeholder template is used, then a fallback, so a texture is never missing. Unit files are composed onto the team-coloured token. Skills and statuses get generated placeholder icons (`SkillArt`, `StatusArt`). A manifest row whose key still has a template can always be removed (the placeholder comes back); a manifest-only key cannot be removed while content uses it. `tools/fc.sh export_placeholder <ns> <key> <variant> [team]` writes a template as a PNG to start real art from. With the manifest empty, all shipped art looks exactly as before. Tested in `asset_pipeline_test_suite.gd`.
 
 ### Forge class tab (CLASS1-L)
 

@@ -21,6 +21,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
 | `scripts/tests/item_tiers_test_suite.gd` | item tier criteria, bonuses, evaluation order, shipped loadouts unchanged (ITEM1 commit 2) | S3 | done |
 | `scripts/tests/item_form_model_test_suite.gd` | item and family Forge model and tabs (ITEM1 commit 3) | S5 | done |
+| `scripts/tests/asset_pipeline_test_suite.gd` | asset manifest, key resolution, team overlay, skill and status icons, safe remove (S14-L1) | S14 | done |
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, locks, seed; model and Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
 | `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
@@ -30,7 +31,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1 | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `scripts/combat/status/support_rules.gd`, `scripts/combat/actions/support_command.gd` | heal/buff rules and command (M1) | S12 | done |
 | `scripts/tests/combat_extensions_test_suite.gd` | S12-A/S4-A suite (M1) | S12, S4 | done |
@@ -44,6 +45,8 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/content/{skill,item,class_unit}_fields.gd` | per-kind field tables of ContentSchema (CLN-9b) | S5 | done |
 | `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel}.gd` | Forge skill tab logic and ranks panel (SKILL1) | S5 | done |
 | `scripts/ui/forge/{item_form_model,item_tables}.gd` | Forge item and item-family tabs: ItemFormModel (sections, locks, options, limits, problems, modifier and tier tables, impact, filters) and ItemTables (widgets) (ITEM1) | S5 | done |
+| `scripts/art/` | SvgRaster, UnitArt, ItemArt, TileArt, SkillArt, StatusArt (generated placeholders); AssetRegistry (key to manifest file, template, fallback; team overlay) and AssetCatalog (manifest store) (S14-L1) | S14 | done |
+| `data/assets/` | manifest.json: art and sound file overrides and aliases (AssetCatalog; empty until S14-A1) | S14 | in progress |
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
@@ -58,7 +61,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |
 | `data/dialogue/` | services.json: lore-free base service lines (dialogue trees are world data in `data/worlds/<id>/dialogues.json`, shops in `shops.json`) | S11 | in progress |
-| `assets/` | audio, fonts, extra art | S14 | placeholder |
+| `assets/art/{unit,item,tile,skill,status,ui}/`, `assets/audio/{sfx,music}/` | file overrides by folder pattern `<key>_<variant>.png/svg`, `<key>.ogg/wav` (S14) | S14 | in progress |
 
 Rules: gameplay logic in `scripts/**` as `RefCounted` rules engines; scenes only render; data in `data/**` validated through a catalog; one test suite per system in `scripts/tests/` registered with one `results.append` line in `SuiteRegistry.run_all` (`scripts/tests/suite_registry.gd`).
 
