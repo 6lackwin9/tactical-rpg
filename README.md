@@ -382,7 +382,7 @@ The Content Forge catalog is the **lore-free base library** (skills, items, clas
 
 ### Web build (browser)
 
-The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR into `main` (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons): [docs/workflow/web.md](docs/workflow/web.md).
+The `Web` export preset builds a single-threaded HTML5 version for cross-platform testing; `.github/workflows/web.yml` builds it on every PR into `main` (artifact `web-build`) and publishes `main` to GitHub Pages. Setup and what does not work in the browser (developer panel, Forge saves, emoji icons come from bundled fallback fonts and are monochrome): [docs/workflow/web.md](docs/workflow/web.md).
 
 ## Headless Testing & Automated Quality Assurance
 
@@ -588,7 +588,7 @@ The hub's **Journal** lists the current world's quests the party knows about, gr
 
 Runs in 4 phases:
 
-- `[1/4]` Verifies global class cache and asset imports (`--headless --editor --quit-after 50`).
+- `[1/4]` Verifies global class cache and asset imports (`--headless --import`).
 - `[2/4]` Validates GDScript syntax & static typing across every project script (`--headless --check-only`); a crash only while Godot shuts down after a clean parse is reported as a warning.
 - `[3/4]` Executes the headless arena test harness (`--headless scenes/test_arena.tscn`), asserting exit code 0. (The Scene Runner's suite buttons run the same scenes.)
 - `[4/4]` Executes the headless gear dojo suite (`--headless scenes/gear_dojo.tscn`), asserting exit code 0.
