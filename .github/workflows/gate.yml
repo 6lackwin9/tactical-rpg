@@ -1,10 +1,14 @@
-# Fast commit gate (same steps as check_project.ps1 -Fast -Quiet) plus the docs lint, on every PR.
+# Fast commit gate (same steps as check_project.ps1 -Fast -Quiet) plus the docs lint, on the batched develop -> main PR and on pushes to main.
+# Docs-only changes skip it (their markdown lint runs locally before they land on develop).
 name: gate
 
 on:
   pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
 
 concurrency:
   group: gate-${{ github.ref }}

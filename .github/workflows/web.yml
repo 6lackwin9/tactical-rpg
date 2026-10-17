@@ -1,11 +1,13 @@
 # Web (HTML5) build: exported with the "Web" preset (single-threaded, so no
-# SharedArrayBuffer / cross-origin isolation headers are needed). Every PR and push to
-# main builds it and uploads it as the "web-build" artifact; pushes to main also deploy
+# SharedArrayBuffer / cross-origin isolation headers are needed). Every PR into main (except
+# Markdown/docs-only ones) and every push to main builds it and uploads it as the "web-build" artifact; pushes to main also deploy
 # it to GitHub Pages once the repo variable WEB_PAGES is "true" (see docs/workflow/web.md).
 name: web
 
 on:
   pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   push:
     branches: [main]
   workflow_dispatch:

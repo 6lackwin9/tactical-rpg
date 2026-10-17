@@ -6,7 +6,7 @@ A browser build for cross-platform testing and porting checks (user 2026-10-17).
 
 - Preset `Web` in `export_presets.cfg`: single-threaded templates (`variant/thread_support=false`), so the page needs no cross-origin isolation headers (`COOP`/`COEP`) and no `SharedArrayBuffer`. GitHub Pages cannot set those headers, so the threaded templates are not used. The preset adds `data/*.json` to the pack (the catalogs are read with `FileAccess`, not as resources).
 - Renderer: the web always uses Compatibility (WebGL 2); desktop uses Forward+.
-- Workflow `.github/workflows/web.yml`: every PR and push to `main` exports the build and uploads it as the `web-build` artifact (14 days). Pushes to `main` also deploy it to GitHub Pages when the repository variable `WEB_PAGES` is `true`.
+- Workflow `.github/workflows/web.yml`: every PR into `main` (the batched release PR) and every push to `main` exports the build and uploads it as the `web-build` artifact (14 days). Pushes to `main` also deploy it to GitHub Pages when the repository variable `WEB_PAGES` is `true`.
 - Templates come from the GitHub release `.tpz` (downloads.godotengine.org is blocked in the cloud); only `web_nothreads_*.zip` and `version.txt` are kept, cached per Godot version.
 
 ## Build it locally (cloud or Linux)
