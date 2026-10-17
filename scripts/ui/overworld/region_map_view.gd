@@ -9,10 +9,10 @@ extends Control
 # E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
 # its Close returns to the dialogue; a dialogue fight uses the same outcome buttons (DialogueRunner.after_fight).
 # Moving and interacting are ignored while a conversation, shop or fight is open.
-# `autosave` events write debug slot 9 (refused while a fight is pending). A world picker starts a new game.
+# `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) (refused while a fight is pending). A world picker starts a new game.
 # ==============================================================================
 
-const DEBUG_SLOT: int = 9
+const DEBUG_SLOT: int = SaveGame.AUTOSAVE_SLOT
 const TILE: int = 22
 const DEBUG_SEED: int = 7
 const COL_TILES: Dictionary = {".": Color(0.22, 0.22, 0.24), "#": Color(0.45, 0.38, 0.30), "~": Color(0.18, 0.32, 0.55)}
