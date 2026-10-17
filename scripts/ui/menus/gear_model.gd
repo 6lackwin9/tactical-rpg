@@ -62,9 +62,7 @@ func stash_rows() -> Array[Dictionary]:
 
 func _gear_errors(state: UnitState) -> Array[String]:
 	var errors: Array[String] = []
-	for e: String in state.validate():
-		if not e.contains("loadout"):
-			errors.append(e)
+	errors.assign(DictUtil.array_of(state.validate_split()["other"]))
 	return errors
 
 func equip(slot: String, item_id: String) -> Array[String]:

@@ -89,8 +89,8 @@ func push(id: String, args: Dictionary = {}) -> void:
 
 # Leaves the top screen; asks first when it has a draft. The bottom screen stays.
 func pop() -> void:
-	if stack.size() <= 1:
-		return
+	if stack.size() <= 1 or top() == RESULTS:
+		return   # the results screen closes only through BattleResultsModel.continue_on (autosave, results_done)
 	if has_draft():
 		ask("Discard your changes?", _pop_now)
 		return

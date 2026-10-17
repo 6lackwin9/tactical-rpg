@@ -68,6 +68,7 @@ static func _test_flow() -> bool:
 	var gs: GameState = _fresh()
 	var qid: String = _qid(gs, FIRST)
 	var jm := JournalModel.new()
+	checks["fresh: no groups"] = jm.groups().is_empty()
 	checks["fresh: not shown"] = _group_of(jm, qid).is_empty() and QuestRunner.status(gs, qid) == "available"
 	checks["started"] = QuestRunner.start(gs, qid).is_empty()
 	jm.refresh()
@@ -149,6 +150,11 @@ static func _test_offers() -> bool:
 	checks["claimed by the first"] = DictUtil.to_bool(QuestRunner.complete(gs, first, gs.party.members[0].id, picks)["ok"])
 	var _t: Array[String] = QuestRunner.start(gs, second)
 	jm.refresh()
+	var second_offers: Array[String] = QuestRunner.offers(gs, second)
+	var second_names: Array[String] = []
+	for lqid: String in second_offers:
+		second_names.append(str(WorldCatalog.resolve(gs.world_id, "loot", lqid).get("name", "")))
+	checks["journal offers = QuestRunner.offers after the claim"] = JsonUtil.strings(jm.entry(second)["offers"]) == second_names and not second_offers.has(shared)
 	checks["gone from the second"] = _group_of(jm, second) == "active" and not JsonUtil.strings(jm.entry(second)["offers"]).has(shared_name)
 	return _report("Check 4: offers and claimed loot", checks)
 

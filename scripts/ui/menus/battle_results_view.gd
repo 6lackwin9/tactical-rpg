@@ -28,7 +28,11 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 			for t: Dictionary in LevelUpModel.new(id).new_tiers(old_level):
 				names.append(str(t["name"]))
 			if not names.is_empty():
-				card.add_child(MainMenuView.text("   New: " + ", ".join(names), UiTheme.COL_HEADER))
+				var new_line := HBoxContainer.new()
+				card.add_child(new_line)
+				new_line.add_child(MainMenuView.text("   New: " + ", ".join(names), UiTheme.COL_HEADER, false))
+				if m.has_free_slot(id):
+					new_line.add_child(MainMenuView.small(MainMenuView.button("Open loadout", host.act.bind(m.open_loadout.bind(id)))))
 	var rewards: String = m.rewards_text()
 	if not rewards.is_empty():
 		add_child(MainMenuView.text(rewards, UiTheme.COL_MUTED))

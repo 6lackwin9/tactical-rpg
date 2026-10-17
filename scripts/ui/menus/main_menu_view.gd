@@ -313,12 +313,18 @@ func _on_quit() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
+	cancel_pressed()
+	accept_event()
+
+# Esc. On the results screen it is the Continue button (autosave, results_done), never a plain pop (REVIEW-F2).
+func cancel_pressed() -> void:
 	if is_overlay_open():
 		answer(false)
 	elif game_view != null and game_view.visible and game_view.get("battle") != null:
 		return   # BATTLE1-L: a battle covers the map; Esc stays with the arena (no hidden "finish the fight" overlay)
 	elif game_view != null and game_view.visible:
 		var _left: bool = leave_game()
+	elif router.top() == MenuRouter.RESULTS and router.model() is BattleResultsModel:
+		act((router.model() as BattleResultsModel).continue_on)
 	else:
 		router.pop()
-	accept_event()

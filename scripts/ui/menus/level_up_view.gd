@@ -32,7 +32,7 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	buttons.add_child(MainMenuView.button("Auto", _redraw.bind(host, func() -> Array[String]:
 		m.auto()
 		return [] as Array[String]), m.points_left() > 0))
-	buttons.add_child(MainMenuView.button("Confirm", _redraw.bind(host, m.confirm), m.has_draft()))
+	buttons.add_child(MainMenuView.button("Confirm", _redraw.bind(host, m.ask_confirm.bind(host.router)), m.has_draft()))
 	buttons.add_child(MainMenuView.button("Cancel", _redraw.bind(host, func() -> Array[String]:
 		m.cancel()
 		return [] as Array[String]), m.has_draft()))

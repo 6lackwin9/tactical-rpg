@@ -167,6 +167,10 @@ static func _test_slots() -> bool:
 	checks["autosave writes slot 0"] = SaveGame.autosave(gs).is_empty() and SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
 	var back: GameState = SaveGame.read(0)["state"] as GameState
 	checks["slot 0 reads back equal"] = back != null and back.equals(gs)
+	for slot: int in [4, 5]:
+		var written: bool = SaveGame.write(gs, slot).is_empty()
+		var round_trip: GameState = SaveGame.read(slot)["state"] as GameState
+		checks["slot %d round trip" % slot] = written and round_trip != null and round_trip.equals(gs) and JsonUtil.deep_equal(round_trip.to_dict(), gs.to_dict())
 	checks["constants"] = SaveGame.AUTOSAVE_SLOT == 0 and SaveGame.MANUAL_SLOTS == [1, 2, 3, 4, 5]
 	return _report("Check 3: save slots 0-5 and autosave", checks)
 
@@ -318,6 +322,14 @@ static func _test_scene(tree_parent: Node) -> bool:
 	checks["new game lists the world"] = _has_button(view, "Start in MN Base")
 	view.act((r.model() as NewGameModel).choose.bind(BASE, 4))
 	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.top() == MenuRouter.HUB
+	# REVIEW-F2: Esc on the results screen is Continue (autosave, results_done, map back, no RESULTS left)
+	var done: Array[int] = [0]
+	r.results_done.connect(func() -> void: done[0] += 1)
+	var _gone: bool = SaveGame.delete(SaveGame.AUTOSAVE_SLOT)
+	view._on_fight_settled({"xp": {}, "advanced": [] as Array[String], "outcome": "won"})
+	checks["results shown over the hidden map"] = r.top() == MenuRouter.RESULTS and not view.game_view.visible
+	view.cancel_pressed()
+	checks["Esc on results: autosave written, map back"] = SaveGame.exists(SaveGame.AUTOSAVE_SLOT) and done[0] == 1 and view.game_view.visible and not r.stack.has(MenuRouter.RESULTS) and r.top() == MenuRouter.HUB
 	checks["back to the hub"] = view.leave_game() and view.game_view == null and _has_button(view, "Quit to main menu") and _has_button(view, "Explore")
 	CurrentGame.state().party.gold += 2
 	view.act((r.model() as HubModel).quit_to_menu)
@@ -399,11 +411,27 @@ static func _test_new_game_model() -> bool:
 	var rows: Array[Dictionary] = m.worlds()
 	var checks: Dictionary = {"playable worlds listed": rows.size() == 2 and str(rows[0]["id"]) == BASE and DictUtil.array_of(rows[0]["party"]).size() == 2 and str(rows[0]["tagline"]) == "A test world."}
 	checks["unplayable refused"] = m.choose(BARE) == ["World '%s' is not playable (no start party)." % BARE] and not CurrentGame.has_game()
-	checks["choose"] = m.choose(BASE, 11).is_empty()
+	checks["no autosave: no question"] = not r.is_asking() and not SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
+	checks["choose"] = m.choose(BASE, 11).is_empty() and not r.is_asking()
 	checks["current game set"] = CurrentGame.has_game() and CurrentGame.state().world_id == BASE and not CurrentGame.is_dirty()
 	var back: GameState = SaveGame.read(SaveGame.AUTOSAVE_SLOT)["state"] as GameState
 	checks["slot 0 written"] = back != null and back.equals(CurrentGame.state()) and CurrentGame.slot() == 0
 	checks["hub on top"] = r.stack == [MenuRouter.HUB] and p.started == 1
+	# Q1: a readable autosave is asked about first
+	var r2: MenuRouter = MenuRouter.new(MenuRouter.NEW_GAME)
+	var m2: NewGameModel = r2.model() as NewGameModel
+	var old_autosave: GameState = CurrentGame.state()
+	var asked_ok: bool = m2.choose(BASE, 12).is_empty() and r2.is_asking() and r2.pending_message.begins_with("Starting a new game replaces your autosave (") and r2.pending_message.ends_with("). Continue?")
+	checks["Q1 asks over a readable autosave"] = asked_ok and CurrentGame.state() == old_autosave
+	r2.decline()
+	checks["declined: nothing replaced"] = CurrentGame.state() == old_autosave and r2.top() == MenuRouter.NEW_GAME
+	checks["unplayable world: error, no question"] = m2.choose(BARE) == ["World '%s' is not playable (no start party)." % BARE] and not r2.is_asking()
+	var _again: Array[String] = m2.choose(BASE, 12)
+	r2.confirm()
+	checks["accepted: new game replaces it"] = CurrentGame.state() != old_autosave and r2.top() == MenuRouter.HUB
+	_write_raw(SaveGame.AUTOSAVE_SLOT, "not json")
+	var r3: MenuRouter = MenuRouter.new(MenuRouter.NEW_GAME)
+	checks["unreadable autosave: no question"] = (r3.model() as NewGameModel).choose(BASE, 13).is_empty() and not r3.is_asking() and r3.top() == MenuRouter.HUB
 	return _report("Check 6: NewGameModel.choose", checks)
 
 # Check 7: save(0) refused; overwrite asks; busy refuses; load enters the game and shows warnings once.

@@ -6,7 +6,7 @@ extends RefCounted
 # level-up, loadout and gear. Toggling active edits PartyState.active_ids directly (rule 2).
 # ==============================================================================
 
-const MAX_ACTIVE: String = "The active party holds at most 4."
+const MAX_ACTIVE: String = "The active party holds at most %d."
 const KEEP_ONE: String = "Keep at least one active member."
 
 var router: MenuRouter = null
@@ -64,7 +64,7 @@ func toggle_active(id: String) -> Array[String]:
 		else:
 			party.active_ids.erase(id)
 	elif party.active_ids.size() >= PartyState.PARTY_MAX:
-		errors.append(MAX_ACTIVE)
+		errors.append(MAX_ACTIVE % PartyState.PARTY_MAX)
 	else:
 		party.active_ids.append(id)
 	return errors

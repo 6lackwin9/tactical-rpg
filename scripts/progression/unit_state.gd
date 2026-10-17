@@ -140,6 +140,15 @@ func validate() -> Array[String]:
 			errors.append("%s: unknown carried item '%s'." % [at, item_id])
 	return errors
 
+# validate() split by source without parsing text: {"loadout": [...], "other": [...]} (REVIEW-F2).
+func validate_split() -> Dictionary:
+	var loadout_errs: Array[String] = _loadout_errors("Unit '%s'" % id)
+	var other: Array[String] = []
+	for e: String in validate():
+		if not loadout_errs.has(e):
+			other.append(e)
+	return {"loadout": loadout_errs, "other": other}
+
 func _loadout_errors(at: String) -> Array[String]:
 	var errors: Array[String] = []
 	var cls: Array[String] = JsonUtil.strings(loadout.get("class", []))
