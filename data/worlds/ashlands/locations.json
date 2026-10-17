@@ -64,7 +64,8 @@
 					"sets_flags": [],
 					"items": {
 						"con_heal_potion": 1
-					}
+					},
+					"gold": 10
 				},
 				{
 					"id": "hearth",
@@ -198,7 +199,8 @@
 					"items": {
 						"con_focus_elixir": 1
 					},
-					"loot": "keep_stores"
+					"loot": "keep_stores",
+					"gold": 25
 				},
 				{
 					"id": "old_stones",
@@ -308,7 +310,8 @@
 					"sets_flags": [],
 					"items": {
 						"con_heal_potion": 1
-					}
+					},
+					"gold": 15
 				}
 			],
 			"tags": []

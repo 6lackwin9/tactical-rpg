@@ -21,6 +21,13 @@
 				"ember_brigandine"
 			],
 			"tuning": {},
+			"dialogue": "mara_talk",
+			"gone_flags": [
+				{
+					"key": "ashlands.mara_fallen",
+					"value": true
+				}
+			],
 			"tags": []
 		},
 		{
@@ -40,6 +47,13 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "tev_talk",
+			"gone_flags": [
+				{
+					"key": "ashlands.tev_fallen",
+					"value": true
+				}
+			],
 			"tags": []
 		},
 		{
@@ -57,6 +71,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "hest_talk",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -74,6 +90,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -91,6 +109,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -108,6 +128,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -125,6 +147,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -142,6 +166,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -159,6 +185,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -176,6 +204,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -193,6 +223,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -210,6 +242,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -227,6 +261,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		},
 		{
@@ -244,6 +280,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
 			"tags": []
 		}
 	]

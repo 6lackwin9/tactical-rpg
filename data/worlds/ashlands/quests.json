@@ -50,7 +50,23 @@
 					"ashen_horde"
 				]
 			},
-			"variants": [],
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill",
+						"turn_in": "tev_quill",
+						"description": "Mara is gone. Tev holds the line in her place: clear the Courtyard."
+					}
+				}
+			],
 			"loot_pool": [
 				"keep_stores",
 				"wardens_drill",

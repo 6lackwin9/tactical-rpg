@@ -1,0 +1,212 @@
+{
+	"kind": "dialogues",
+	"version": 1,
+	"entries": [
+		{
+			"id": "mara_talk",
+			"name": "Mara at the map table",
+			"speaker": "mara_voss",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Mara looks up from a map pinned flat with knives. \"Make it quick.\"",
+					"choices": [
+						{
+							"text": "What is this place?",
+							"to": "keep"
+						},
+						{
+							"text": "These ash drifts are fresh. The Horde is close.",
+							"to": "drifts",
+							"requires": [
+								{
+									"kind": "stat",
+									"stat": "KNOW",
+									"min": 14
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.mara_drifts_told",
+									"value": true
+								}
+							],
+							"show_locked": true
+						},
+						{
+							"text": "The Courtyard is ours.",
+							"to": "proud",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "hold_the_courtyard",
+									"status": "completed"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.mara_courtyard_thanks",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "keep",
+					"text": "\"Warden Keep. One fire, four walls and too few of us to hold either.\"",
+					"next": "hello"
+				},
+				{
+					"id": "drifts",
+					"text": "\"Sharp eyes. Take this; you will need it before I do.\"",
+					"next": "hello",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "ashlands.mara_drifts_told",
+							"value": true
+						},
+						{
+							"effect": "give",
+							"items": {
+								"con_focus_elixir": 1
+							}
+						}
+					]
+				},
+				{
+					"id": "proud",
+					"text": "\"It is. For now. Drink to it later.\"",
+					"next": "hello",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "ashlands.mara_courtyard_thanks",
+							"value": true
+						},
+						{
+							"effect": "give",
+							"gold": 20
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "tev_talk",
+			"name": "Tev by the arrow bench",
+			"speaker": "tev_quill",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Tev is whittling arrow shafts. \"Smoke's wrong today.\"",
+					"choices": [
+						{
+							"text": "What do you see?",
+							"to": "smoke"
+						},
+						{
+							"text": "The pass is clear.",
+							"to": "thanks",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "cinder_gate_watch",
+									"status": "completed"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.tev_pass_thanks",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "smoke",
+					"text": "\"Too much of it, too close, and upwind. Someone wants us looking the wrong way.\"",
+					"next": "hello"
+				},
+				{
+					"id": "thanks",
+					"text": "\"Then I owe you a drink and an arrow. Have the arrow money.\"",
+					"next": "hello",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "ashlands.tev_pass_thanks",
+							"value": true
+						},
+						{
+							"effect": "give",
+							"gold": 15
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "hest_talk",
+			"name": "Hest at the stores",
+			"speaker": "hest_the_quartermaster",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Hest counts arrows without looking up. \"Buying or bothering?\"",
+					"choices": [
+						{
+							"text": "Trade a fire bomb back for coin?",
+							"to": "traded",
+							"requires": [
+								{
+									"kind": "items",
+									"item": "con_fire_bomb",
+									"count": 1
+								}
+							],
+							"show_locked": true,
+							"effects": [
+								{
+									"effect": "take",
+									"items": {
+										"con_fire_bomb": 1
+									}
+								},
+								{
+									"effect": "give",
+									"gold": 20
+								}
+							]
+						},
+						{
+							"text": "What do the stores need?",
+							"to": "needs"
+						}
+					]
+				},
+				{
+					"id": "traded",
+					"text": "\"Fewer bombs in the hall is fine by me.\"",
+					"next": "hello"
+				},
+				{
+					"id": "needs",
+					"text": "\"Everything. Bring the potions back unopened and we will get along.\"",
+					"next": "hello"
+				}
+			],
+			"services": true,
+			"tags": []
+		}
+	]
+}

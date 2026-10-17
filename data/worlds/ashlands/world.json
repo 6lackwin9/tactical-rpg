@@ -6,5 +6,7 @@
 	"extends": [],
 	"connects": [],
 	"start_location": "warden_keep",
+	"start_gold": 50,
+	"service_lines": {},
 	"version": 1
 }

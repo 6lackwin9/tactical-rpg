@@ -1,0 +1,61 @@
+{
+	"kind": "shops",
+	"version": 1,
+	"entries": [
+		{
+			"id": "hest_stores",
+			"name": "Keep Stores Counter",
+			"keeper": "hest_the_quartermaster",
+			"stock": [
+				{
+					"item": "con_heal_potion",
+					"count": -1,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "con_focus_elixir",
+					"count": 5,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "con_fire_bomb",
+					"count": 3,
+					"price": 40,
+					"requires_flags": []
+				},
+				{
+					"item": "shd_buckler",
+					"count": 1,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "arm_leather",
+					"count": 1,
+					"price": -1,
+					"requires_flags": []
+				}
+			],
+			"loot": [
+				{
+					"loot": "keep_ring",
+					"price": 150
+				}
+			],
+			"buy_mult": 1.0,
+			"sell_mult": 0.5,
+			"buys": [
+				"WEAPON",
+				"SHIELD",
+				"ARMOR",
+				"ACCESSORY",
+				"CONSUMABLE",
+				"MATERIAL"
+			],
+			"requires_flags": [],
+			"tags": []
+		}
+	]
+}

@@ -18,7 +18,8 @@
 				"xp": 60,
 				"items": {
 					"con_heal_potion": 2
-				}
+				},
+				"gold": 30
 			},
 			"tags": []
 		},
@@ -38,7 +39,8 @@
 				"xp": 40,
 				"items": {
 					"con_focus_elixir": 1
-				}
+				},
+				"gold": 25
 			},
 			"tags": []
 		},
@@ -55,7 +57,8 @@
 				"xp": 80,
 				"items": {
 					"con_heal_potion": 1
-				}
+				},
+				"gold": 40
 			},
 			"tags": []
 		},
@@ -75,7 +78,8 @@
 				"xp": 50,
 				"items": {
 					"con_focus_elixir": 1
-				}
+				},
+				"gold": 20
 			},
 			"tags": []
 		}
