@@ -444,6 +444,10 @@ Orb and tome are off-hand-only focus weapons; items carry an `effects` list (spe
 
 New `weaken` status (outgoing skill power -15 to -25%, cap 25%, refresh to the longest duration) with a `status_magnitude` skill field; zero-power attacks apply a status without dealing damage; riposte AP, mitigation and duration now come entirely from skill data. Tested in `weaken_test_suite.gd`.
 
+### Status expansion schema (S12S-L commit 1)
+
+The status registry gives every status a magnitude range and unit, and adds six rows with placeholder numbers: slow, expose, fortify, regen, poison and burn. They have no effect in combat yet (S12S-L commit 2). `status_magnitude` is validated per status on attack, support and defend skills, the `{magnitude}` text token shows its unit, and each status records which unit applied it (undo restores it). Tested in `status_expansion_test_suite.gd`.
+
 ### Area statuses and taunt from defend skills (M2C2B-L)
 
 Area attacks now roll their status once per unit hit (allies included); defend skills can grant riposte (immediate) or a support buff like taunt (queued). Tested in `skill_engine_test_suite.gd`.
