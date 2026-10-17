@@ -20,4 +20,5 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	add_child(MainMenuView.button("Settings", m.open.bind(MenuRouter.SETTINGS)))
 	if m.show_tools():
 		add_child(MainMenuView.button("Tools (Forge, Dojo, Test Arena)", host.open_tools))
-	add_child(MainMenuView.button("Quit", host.act.bind(m.quit_requested)))
+	if m.show_quit():
+		add_child(MainMenuView.button("Quit", host.act.bind(m.quit_requested)))

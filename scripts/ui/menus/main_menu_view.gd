@@ -28,6 +28,7 @@ var _overlay_buttons: HBoxContainer = null
 var _notice_lines: Array[String] = []
 
 func _ready() -> void:
+	WebFonts.install()   # the browser build starts here (application/run/main_scene.web)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
 	bg.color = COL_BG
