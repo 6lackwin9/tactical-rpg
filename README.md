@@ -477,7 +477,9 @@ Area attacks now roll their status once per unit hit (allies included); defend s
 
 ### Progression and saves (M3)
 
-Party state, XP curve (starting values in `data/progression/xp_curve.json`), level-up spend, a builder that turns a saved unit into a combatant, and a versioned single-slot JSON save with migrations (`user://saves`). No UI yet. Tested in `progression_test_suite.gd` and `save_test_suite.gd`.
+Party state, XP curve (starting values in `data/progression/xp_curve.json`), level-up spend, a builder that turns a saved unit into a combatant, and a versioned single-slot JSON save with migrations (`user://saves`). No UI yet. Tested in `progression_test_suite.gd`, `save_test_suite.gd` and `save_compat_test_suite.gd`.
+
+Save compatibility (SAVE-COMPAT): `scripts/tests/fixtures/saves/save_v<N>.json` holds one sample save per save version, built from a played Ashlands state (party, gear, quests, claimed loot, gold, shops, exploration, world clock). `save_compat_test_suite.gd` decodes each one every gate run (migrate + validate against the shipped catalog and worlds), so a change that breaks old saves fails the gate. A `SaveGame.VERSION` bump or a format-breaking change adds or updates the fixtures in the same task (`tools/fc.sh run tools/gen_save_fixtures.gd`, then review the diff); renaming a shipped id the fixtures use fails the suite on purpose.
 
 ### Class skill content (M2C2B)
 
