@@ -11,7 +11,7 @@ Updated 2026-10-18 15:40 UTC (rotation by context size) by Balance session sessi
 ## Queue (all blocked on others)
 
 1. MORALE1-B (balance, report only; spec `docs/specs/MORALE1.md` 6): waits on MORALE1-A (Assets).
-2. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase) then PACE1-B: wait on PACE1-L (Gameplay). PACE1 adds a B3 trigger: boss median under 7 rounds (sim prints no round count yet; PACE1-S adds it).
+2. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase) then PACE1-B: UNBLOCKED (PACE1-L on develop: schema 39daec9, behaviour a1ca665; ask the coordinator for the slot). Gameplay's hooks: `EncounterPhases.pace_of(entry, tier_of)` pace resolver; `WorldEncounter.grant_all_start` (default false) for the sim's start=on; enraged via `CatalogEncounter.is_enraged(c)` / `EncounterPhases.enraged_refs`; start buffs carry source "start:..." (BattleMetrics credits nobody); Empower = outgoing power x(1+mag/100) in power_for and riposte. PACE1 adds a B3 trigger: boss median under 7 rounds (sim prints no round count yet; PACE1-S adds it).
 3. LEVERS1-B (balance; Design's spec, approved 0525027 + "Smarter Shield Wall" e0f1ae5): BAL5-R is "before"; also check warrior-row won-fight allies hp_end >= 40 at L5/L7 after LEVERS1-L3 (AI guard rule) and A3 (shield_wall in the default five).
 
 ## Open cards in this thread (Tushar)
