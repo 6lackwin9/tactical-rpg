@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: bd932b2 -->
+<!-- last: a990fb7 -->
 
 ## 2026-10-18
 
@@ -30,6 +30,7 @@ In the game:
 
 Every change that touched the game:
 
+- BAL5-R1b: re-measure under the re-draft fix and BAL5-AI (a990fb7)
 - MORALE1-L (schema): enemy morale encounter fields, validation and preview (6a473ad)
 - CAMPLABEL1-S: campaign sim fall label names the fight actually lost (c40a7dd)
 - ITEMPOW1-A: battle items worth using (potion 90, bomb 45, start gold 100) (02c6bf4)
@@ -107,6 +108,8 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- PLATFORM-HANDOVER: rotation after GATE-SPLIT (context 278k) (d54daa9)
+- PATCH-NOTES: GATE-SPLIT (a817f3c)
 - GATE-SPLIT: per-system gates; area threads gate with `fc.sh gate auto`; CI runs the arena as 8 parallel jobs by system, so a red job names the broken system (bd932b2)
 - PATCH-NOTES: MORALE1-L (schema), ASSETS-PREFS (0c3869c)
 - ASSETS-PREFS: sprite animation notes in the world asset preferences (b7e5e1e)
