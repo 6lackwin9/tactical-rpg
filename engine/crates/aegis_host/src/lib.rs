@@ -10,6 +10,8 @@
 //!   preset {preset, unit?}                     AI-draft one ally (or every ally) with a PlanPresets tactic
 //!   plan {unit, steps: [...]}                  replace an ally's steps; reports each step's problem
 //!   plan_view {unit?}                          compiled timeline per ally (blocks, AP, targets, est. damage)
+//!   probe {unit, step}                         would this step fit next? (valid, reason, entries it adds); no change
+//!   add_step {unit, step} / undo {unit} / clear {unit}   edit an ally's steps one at a time
 //!   confirm                                    lock the party plan and schedule it
 //!   step                                       resolve one action (or block wrap-up)
 //!   resolve                                    resolve to the end of the round
@@ -50,7 +52,7 @@ impl Host {
     /// Handles one request and returns the reply (always an object with `ok`).
     pub fn handle(&mut self, req: &Value) -> Value {
         let cmd = req.get("cmd").and_then(Value::as_str).unwrap_or("");
-        let mutating = matches!(cmd, "new" | "preset" | "plan" | "confirm" | "step" | "resolve" | "advance" | "autoplay");
+        let mutating = matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay");
         let mut reply = match cmd {
             "new" => self.new_battle(req),
             "history" => json!({"ok": true, "history": self.history}),
@@ -108,6 +110,10 @@ impl Host {
                 json!({"ok": true, "plan": plan_view(s, None)})
             }
             "plan" => set_plan(s, req),
+            "probe" => probe(s, req),
+            "add_step" => edit_steps(s, req, "add"),
+            "undo" => edit_steps(s, req, "undo"),
+            "clear" => edit_steps(s, req, "clear"),
             "plan_view" => json!({"ok": true, "plan": plan_view(s, unit_arg(s, req, "unit"))}),
             "confirm" => {
                 if s.confirm_plan() {
@@ -316,4 +322,64 @@ fn plan_view(s: &Session, only: Option<UnitId>) -> Value {
         );
     }
     Value::Object(out)
+}
+
+/// The step as the next input of `unit`, without changing the plan: {valid, reason, ap, blocks, entries}.
+fn probe(s: &mut Session, req: &Value) -> Value {
+    let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("probe needs a party unit") };
+    let step = match req.get("step").map(|v| step_from(s, v)) {
+        Some(Ok(st)) => st,
+        Some(Err(e)) => return err(e),
+        None => return err("probe needs a step"),
+    };
+    let had_entry = s.plan.sequences.contains_key(&u);
+    let before = s.plan.steps_of(u);
+    let base = s.plan.compile(&s.w, u).entries.len();
+    let problem = s.plan.add_step(&s.w, u, step, true);
+    let result = if problem.is_empty() {
+        let st = s.plan.compile(&s.w, u);
+        let added: Vec<Value> = st.entries[base..]
+            .iter()
+            .map(|e| json!({"skill": s.w.cat.skills[e.skill].id, "start": e.start_block, "end": e.end_block(&s.w), "ap": e.total_ap(), "est_damage": e.est_damage, "est_heal": e.est_heal, "to": [e.pos_after.x, e.pos_after.y]}))
+            .collect();
+        let ap: i32 = st.entries[base..].iter().map(|e| e.total_ap()).sum();
+        json!({"ok": true, "valid": true, "ap": ap, "ap_left": st.ap_left, "entries": added})
+    } else {
+        json!({"ok": true, "valid": false, "reason": problem})
+    };
+    if had_entry {
+        s.plan.set_steps(u, before);
+    } else {
+        s.plan.clear(u);
+    }
+    result
+}
+
+fn edit_steps(s: &mut Session, req: &Value, op: &str) -> Value {
+    if s.phase != Phase::Planning || s.plan_confirmed {
+        return err("not planning");
+    }
+    let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("needs a party unit") };
+    match op {
+        "add" => {
+            let step = match req.get("step").map(|v| step_from(s, v)) {
+                Some(Ok(st)) => st,
+                Some(Err(e)) => return err(e),
+                None => return err("add_step needs a step"),
+            };
+            let problem = s.plan.add_step(&s.w, u, step, true);
+            if !problem.is_empty() {
+                return err(problem);
+            }
+        }
+        "undo" => {
+            let n = s.plan.steps_of(u).len();
+            if n == 0 {
+                return err("nothing to undo");
+            }
+            s.plan.remove_step(u, n - 1);
+        }
+        _ => s.plan.set_steps(u, Vec::new()),
+    }
+    json!({"ok": true, "plan": plan_view(s, Some(u))})
 }

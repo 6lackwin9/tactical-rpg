@@ -27,6 +27,7 @@ pub struct ProfEntry {
 pub struct ClassDef {
     pub id: String,
     pub name: String,
+    pub art: String,
     pub ai_role: String,
     pub base_stats: IndexMap<String, i32>,
     pub growth: IndexMap<String, i32>,
@@ -60,6 +61,7 @@ impl ClassDef {
         Self {
             id: string(o, "id", ""),
             name: string(o, "name", "New Class"),
+            art: string(o, "art", "warrior"),
             ai_role: string(o, "ai_role", "AGGRESSOR"),
             base_stats: int_map(o, "base_stats"),
             growth: int_map(o, "growth"),
@@ -83,6 +85,7 @@ impl ClassDef {
 pub struct UnitDef {
     pub id: String,
     pub name: String,
+    pub art: String,
     pub side: String,
     pub class_id: String,
     pub level: i32,
@@ -116,6 +119,7 @@ impl UnitDef {
         Self {
             id: string(o, "id", ""),
             name: string(o, "name", "New Unit"),
+            art: string(o, "art", ""),
             side: string(o, "side", "enemy"),
             class_id: string(o, "class_id", ""),
             level: int(o, "level", 1),

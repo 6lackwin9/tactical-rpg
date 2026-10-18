@@ -90,6 +90,8 @@ pub struct Session {
     pub plan_confirmed: bool,
     pub wave: Vec<UnitId>,
     pub reinforcements_spawned: bool,
+    /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
+    pub art: Vec<String>,
     pending: VecDeque<usize>,
 }
 
@@ -111,11 +113,13 @@ impl Session {
         }
         let mut built = Vec::new();
         let mut profiles = IndexMap::new();
+        let mut art = Vec::new();
         for (i, id) in party_ids.iter().chain(enemy_ids.iter()).chain(wave_ids.iter()).enumerate() {
             let mut e = lookup(id).unwrap();
             e.name = names[i].clone();
             built.push(build_unit(&cat, &e, def.unit_ap));
             profiles.insert(i, AiProfile::for_unit(&cat, &e));
+            art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });
         }
         let n_party = party_ids.len();
         let n_deployed = n_party + enemy_ids.len();
@@ -137,7 +141,7 @@ impl Session {
         for u in w.units.iter_mut() {
             u.loadout_locked = true;
         }
-        let mut s = Session { def, w, resolver, plan: Plan::new(), current_round: 1, current_block: 1, phase: Phase::Planning, combat_over: false, outcome: String::new(), plan_confirmed: false, wave, reinforcements_spawned: false, pending: VecDeque::new() };
+        let mut s = Session { def, w, resolver, plan: Plan::new(), current_round: 1, current_block: 1, phase: Phase::Planning, combat_over: false, outcome: String::new(), plan_confirmed: false, wave, reinforcements_spawned: false, art, pending: VecDeque::new() };
         s.begin_round(1);
         s
     }

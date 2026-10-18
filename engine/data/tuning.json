@@ -1,0 +1,14 @@
+{
+  "_doc": "Feel tuning for aegis-gui (ENGINE_SPEC section 5). Edit while the game runs: it reloads within a second. Times in ms, sizes in logical pixels (640x360 canvas).",
+  "step_ms": 420,
+  "round_pause_ms": 900,
+  "float_ms": 900,
+  "float_rise_px": 16,
+  "hit_flash_ms": 180,
+  "hit_shake_px": 2,
+  "heal_color": [96, 220, 120],
+  "damage_color": [255, 96, 80],
+  "crit_color": [255, 210, 60],
+  "intent_arrows": true,
+  "token_px": 28
+}

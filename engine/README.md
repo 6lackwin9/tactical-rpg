@@ -19,7 +19,8 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
 | `crates/aegis_host/` | The command API (JSON request in, JSON reply out): state, skills, plan, preset, confirm, step, resolve, advance, autoplay, history |
 | `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout) |
-| `crates/aegis_app/` | Old egui demo, kept until the GUI rework (spec E5) |
+| `crates/aegis_gui/` | `aegis-gui`: the battle screen (layout A) on a 640x360 pixel canvas; agent link on port 47800 |
+| `crates/aegis_app/` | Old egui demo (superseded by `aegis_gui`; to retire) |
 | `crates/aegis_core/` | Old shared types (used by `aegis_app` only) |
 
 ## Parity with Godot
@@ -49,3 +50,22 @@ printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \
 
 Every mutating request is recorded; `{"cmd":"history"}` returns them, and feeding them to a fresh `serve` replays the
 battle exactly.
+
+## The battle screen (aegis-gui)
+
+```bash
+cargo run --release -p aegis_gui -- encounter=goblin_skirmish     # or goblin_ambush, veterans_drill; seed=N
+```
+
+Click a hero to select it; click a foe, an ally, the hero itself or an empty tile for its options (each shows AP and the
+expected damage or heal); right click closes a menu or undoes the last step. Strip: Party / Hero apply a tactic
+(`>` cycles it), Auto plays the battle out, Confirm resolves the round. Keys: Enter confirm, Space step / next round,
+A autoplay, Z undo, L log, R restart, F12 screenshot.
+
+Feel values (timings, floating numbers, hit flash, colours) live in `engine/data/tuning.json` and reload while the game
+runs. The GUI also serves the command API on `127.0.0.1:47800` plus `ui_tree` (every widget with its id, text, rect
+and state), `screenshot` and `click {id}`, so an agent sees and acts on the same screen:
+
+```bash
+aegis link '{"cmd":"ui_tree"}' '{"cmd":"click","id":"unit.2"}' '{"cmd":"screenshot"}'
+```

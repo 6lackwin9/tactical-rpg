@@ -1,0 +1,19 @@
+[package]
+name = "aegis_gui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "aegis-gui"
+path = "src/main.rs"
+
+[dependencies]
+aegis_data = { path = "../aegis_data" }
+aegis_rules = { path = "../aegis_rules" }
+aegis_battle = { path = "../aegis_battle" }
+aegis_host = { path = "../aegis_host" }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+winit = "0.30.5"
+pixels = "0.15.0"
+png = "0.17.13"

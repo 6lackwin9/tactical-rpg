@@ -191,9 +191,11 @@ fn main() -> Result<()> {
         (Some("sim"), Some("duel")) => sim_duel(&args),
         (Some("battle"), Some(_)) => battle(&args),
         (Some("serve"), _) => serve(&args),
+        (Some("link"), _) => link(&raw),
         _ => {
             println!("aegis sim duel [level] [seeds] [preset=balanced] [jitter=on|off] [json]\naegis battle <encounter id> [seed=N] [preset=balanced] [log]
-aegis serve   (JSON lines on stdin / stdout; see crates/aegis_host)");
+aegis serve   (JSON lines on stdin / stdout; see crates/aegis_host)
+aegis link '<json>' ... [port=47800]   (requests to a running aegis-gui)");
             Ok(())
         }
     }
@@ -216,6 +218,22 @@ fn serve(args: &Args) -> Result<()> {
         };
         writeln!(out, "{reply}")?;
         out.flush()?;
+    }
+    Ok(())
+}
+
+/// `aegis link '<json>' ...`: sends requests to a running aegis-gui (agent link) and prints each reply line.
+fn link(raw: &[String]) -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+    let port = raw.iter().find_map(|a| a.strip_prefix("port=")).unwrap_or("47800");
+    let stream = std::net::TcpStream::connect(format!("127.0.0.1:{port}")).with_context(|| format!("no aegis-gui listening on port {port}"))?;
+    let mut writer = stream.try_clone()?;
+    let mut reader = BufReader::new(stream);
+    for req in raw.iter().skip(1).filter(|a| !a.starts_with("port=")) {
+        writeln!(writer, "{req}")?;
+        let mut line = String::new();
+        reader.read_line(&mut line)?;
+        print!("{line}");
     }
     Ok(())
 }
