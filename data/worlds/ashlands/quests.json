@@ -5,7 +5,7 @@
 		{
 			"id": "hold_the_courtyard",
 			"name": "Hold the Courtyard",
-			"description": "The Horde is massing. Mara needs the courtyard held until the keep's gates can be reinforced.",
+			"description": "The Long Dry has come early, and the Horde with it. Mara needs the Courtyard held while the keep's gates are shored up.",
 			"giver": "mara_voss",
 			"faction": "ember_wardens",
 			"region": "cinder_pass",
@@ -200,6 +200,9 @@
 				],
 				"related_factions": [
 					"ember_wardens"
+				],
+				"leads_to": [
+					"steel_for_the_gate"
 				]
 			},
 			"variants": [
@@ -297,6 +300,170 @@
 			"loot_picks": 1,
 			"reputation": {
 				"ember_wardens": 5
+			},
+			"tags": []
+		},
+		{
+			"id": "steel_for_the_gate",
+			"name": "Steel for the Gate",
+			"description": "The Cinder Gate will not hold another Long Dry on timber. Mara sends you up the south road to Slag Gate for Orsa Tallow's steel.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "ashen_marches",
+			"requires": [
+				"warden_oath"
+			],
+			"steps": [
+				{
+					"text": "Load Orsa's steel at Slag Gate",
+					"flag": "ashlands.steel_loaded",
+					"value": true
+				},
+				{
+					"text": "Bring the steel to Warden Keep",
+					"location": "warden_keep"
+				}
+			],
+			"reward": "Hest's thanks and a pick from the stores.",
+			"template": "signal_and_return",
+			"turn_in": "hest_the_quartermaster",
+			"requires_flags": [],
+			"complete_flags": [
+				{
+					"key": "ashlands.steel_delivered",
+					"value": true
+				}
+			],
+			"auto_start": true,
+			"links": {
+				"follows": [
+					"warden_oath"
+				],
+				"leads_to": [
+					"keep_one_fire_lit"
+				],
+				"related_characters": [
+					"mara_voss",
+					"hest_the_quartermaster"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill"
+					}
+				}
+			],
+			"loot_pool": [
+				"keep_stores",
+				"keep_ring"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 10
+			},
+			"tags": []
+		},
+		{
+			"id": "keep_one_fire_lit",
+			"name": "Keep One Fire Lit",
+			"description": "Grakka Ashmaw has gathered the warbands past the Cinder Gate. Break him and the Horde scatters.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [
+				"steel_for_the_gate"
+			],
+			"steps": [
+				{
+					"text": "Find the Ashmaw Camp",
+					"location": "ashmaw_camp"
+				},
+				{
+					"text": "Break Grakka Ashmaw",
+					"encounter": "ashmaw_stand"
+				}
+			],
+			"reward": "The Wardens' gratitude and the chieftain's torc.",
+			"template": "reach_and_clear",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "ashlands.steel_spent",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "ashlands.horde_broken",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"follows": [
+					"steel_for_the_gate"
+				],
+				"related_characters": [
+					"mara_voss",
+					"grakka_ashmaw"
+				],
+				"related_locations": [
+					"ashmaw_camp"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill",
+						"turn_in": "tev_quill"
+					}
+				},
+				{
+					"id": "steel_to_gate",
+					"when_flags": [
+						{
+							"key": "ashlands.steel_to_gate",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"steps": {
+							"1": {
+								"text": "Break Grakka; the barred gate cut off his flankers",
+								"encounter": "ashmaw_stand_barred"
+							}
+						}
+					}
+				}
+			],
+			"loot_pool": [
+				"chieftains_torc",
+				"keep_ring",
+				"rallying_cry",
+				"wardens_drill"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 15,
+				"ashen_horde": -20
 			},
 			"tags": []
 		}

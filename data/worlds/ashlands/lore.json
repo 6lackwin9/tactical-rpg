@@ -15,6 +15,13 @@
 			"category": "myth",
 			"text": "The first Warden swore never to let the keep's hearth go cold. The Wardens say the Horde fears the glow more than the steel.",
 			"tags": []
+		},
+		{
+			"id": "ashmaw_banner",
+			"name": "The Ashmaw Banner",
+			"category": "rumor",
+			"text": "A hide banner nailed to the arch, one skull per warband. Somebody is uniting the Horde.",
+			"tags": []
 		}
 	]
 }

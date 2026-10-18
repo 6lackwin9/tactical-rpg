@@ -50,6 +50,79 @@
 									"value": true
 								}
 							]
+						},
+						{
+							"text": "The steel is here. Where does it go?",
+							"to": "steel_choice",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "steel_for_the_gate",
+									"status": "completed"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_spent",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "It's over. The Horde is scattered.",
+							"to": "end_gate",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "completed"
+								},
+								{
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "It's over. The Horde is scattered.",
+							"to": "end_arms",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "completed"
+								},
+								{
+									"key": "ashlands.steel_to_arms",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							]
 						}
 					]
 				},
@@ -91,6 +164,79 @@
 							"gold": 20
 						}
 					]
+				},
+				{
+					"id": "steel_choice",
+					"text": "Mara weighs a bar of slag-steel. \"Enough for one thing done well. The gate, or your hands?\"",
+					"choices": [
+						{
+							"text": "Bar the Cinder Gate.",
+							"to": "gate_barred",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_spent",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								},
+								{
+									"effect": "add_flag",
+									"key": "rep.ashlands.ember_wardens",
+									"delta": 10
+								}
+							]
+						},
+						{
+							"text": "Arm the party.",
+							"to": "party_armed",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_spent",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_to_arms",
+									"value": true
+								},
+								{
+									"effect": "give",
+									"items": {
+										"arm_plate": 1
+									}
+								}
+							]
+						},
+						{
+							"text": "Let me think.",
+							"to": "hello"
+						}
+					]
+				},
+				{
+					"id": "gate_barred",
+					"text": "\"Then the gorge is shut behind you. Whatever waits in the wastes waits alone.\"",
+					"next": "hello"
+				},
+				{
+					"id": "party_armed",
+					"text": "\"Then go out sharp. Hest has the rest on his counter.\"",
+					"next": "hello"
+				},
+				{
+					"id": "end_gate",
+					"text": "\"One fire lit, and a door that holds. The Long Dry is over. This year.\"",
+					"next": "hello"
+				},
+				{
+					"id": "end_arms",
+					"text": "\"The wastes will remember that steel. Rest; you have earned the hearth.\"",
+					"next": "hello"
 				}
 			],
 			"services": true,
@@ -126,6 +272,22 @@
 									"value": true
 								}
 							]
+						},
+						{
+							"text": "Where do we get steel?",
+							"to": "steel",
+							"requires": [
+								{
+									"key": "ashlands.oath_sworn",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_delivered",
+									"value": true
+								}
+							]
 						}
 					]
 				},
@@ -149,6 +311,11 @@
 							"gold": 15
 						}
 					]
+				},
+				{
+					"id": "steel",
+					"text": "\"Slag Gate, up the south road. Orsa sells to us at cost. Take the signpost to the world map.\"",
+					"next": "hello"
 				}
 			],
 			"services": true,
@@ -242,6 +409,79 @@
 				}
 			],
 			"services": true,
+			"tags": []
+		},
+		{
+			"id": "grakka_parley",
+			"name": "Grakka at the fire",
+			"speaker": "grakka_ashmaw",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "A goblin in a crown of rusted nails grins over the fire. \"Come to beg for your little flame?\"",
+					"choices": [
+						{
+							"text": "Leave the pass and live.",
+							"to": "scorn"
+						},
+						{
+							"text": "Then we fight.",
+							"to": "",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "active"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "fight",
+									"encounter": "ashmaw_stand"
+								}
+							]
+						},
+						{
+							"text": "Then we fight. Your flankers are not coming.",
+							"to": "",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "active"
+								},
+								{
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "fight",
+									"encounter": "ashmaw_stand_barred"
+								}
+							]
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "scorn",
+					"text": "\"The Long Dry is mine. Your fire goes out tonight.\"",
+					"next": "hello"
+				}
+			],
+			"services": false,
 			"tags": []
 		}
 	]

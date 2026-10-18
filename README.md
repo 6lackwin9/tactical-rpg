@@ -38,7 +38,7 @@ tactical-rpg/
 │       ├── units.json                # Party members & enemies: vitals or class/level-derived, loadout, skills, AI profile
 │       └── encounters.json           # Battles: zone, exits, round rules, party & enemy rosters
 │   └── worlds/                   # Lore worlds (JSON, edited by seed scripts; browsed in the World Forge): modular, inheritable; reference catalog assets
-│       ├── ashlands/                 # Root world: Ember Wardens vs the Ashen Horde (regions, locations, factions, characters, named item, disciplines, quest, lore, 2 encounters)
+│       ├── ashlands/                 # Root world: Ember Wardens vs the Ashen Horde (regions, locations, factions, characters, named item, disciplines, quests, lore, encounters, the CAMP1 campaign)
 │       ├── tidewrack/                # extends ashlands: the same war re-skinned (overrides) plus its own coast, characters and encounter; a tuned boss
 │       └── iron_reaches/             # separate world that connects to ashlands (a road into Warden Keep) without inheriting
 │           └── world.json + regions / locations / factions / characters / items / disciplines / quests / lore / encounters .json per world
@@ -536,6 +536,8 @@ Refactor only, no behaviour change: shared test helpers live in `TestHelpers` (`
 Quest templates live in `data/quests/quests.json` (`QuestCatalog`); world quests bind them to world locations, encounters and flags and add metadata `links`, flag-conditioned `variants` (only whitelisted fields, so no branching inside a quest), a `turn_in` NPC and a `loot_pool` drawn from the new per-world loot table (`loot.json`). Validation and reference scans (incl. renames through links, variants and pools) are in `QuestRules` and `WorldCatalog`. The runtime (slice 2) adds `QuestRunner` and `RewardGrant` (turn-in is all-or-nothing; claimed loot leaves every pool) and save version 2 with a built-in migration that refuses damaged quest data instead of silently dropping it. Tested in `quest_test_suite.gd`.
 
 Sample quests (M4-A, seed `data/seeds/m4a.gd`): four lore-free templates (reach_and_clear, two_stop_delivery, clear_site, signal_and_return), an Ashlands loot table (wardens_drill, rallying_cry, keep_ring, keep_stores) shared by three quest pools, the new Ashlands quests cinder_gate_watch and warden_oath (variants for a fallen Mara or Tev) and the existing quests bound to templates.
+
+Ashlands campaign "The Long Dry" (CAMP1-A1/A2, seeds `data/seeds/camp1_unit.gd` then `camp1_story.gd`): after the oath, `steel_for_the_gate` (auto start) sends the party to Slag Gate (now the playable `walled_town` map, Orsa's steel at cost) and raids the wagon on the south road; Mara's steel choice either bars the Cinder Gate (Wardens +10, the finale loses its wave) or arms the party (an `arm_plate` plus 4 steel rows at Hest); `keep_one_fire_lit` opens the `wastes_track` to the new Ashmaw Camp, where Grakka Ashmaw's parley is the first dialogue `fight` (boss unit `goblin_warlord`, encounters `ashmaw_stand` / `ashmaw_stand_barred`); Mara's epilogue sets `ashlands.campaign_done`.
 
 ### Region map schema (EXP1-L commit 1)
 

@@ -13,6 +13,7 @@
 		"mage"
 	],
 	"start_gold": 50,
+	"start_supplies": -1,
 	"service_lines": {},
 	"version": 1
 }

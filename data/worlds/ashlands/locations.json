@@ -330,6 +330,108 @@
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": []
+				},
+				{
+					"id": "banner",
+					"kind": "lore",
+					"anchor": "ruin_lore",
+					"requires_flags": [
+						{
+							"key": "quest.ashlands.cinder_gate_watch.ready",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"lore": "ashmaw_banner"
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "ashmaw_camp",
+			"name": "The Ashmaw Camp",
+			"description": "A ring of hide tents in the wastes, smoke rising from a dozen fires.",
+			"kind": "camp",
+			"region": "cinder_pass",
+			"exits": [
+				{
+					"to": "cinder_gate",
+					"label": "back to the Cinder Gate"
+				}
+			],
+			"encounters": [
+				"ashmaw_stand",
+				"ashmaw_stand_barred",
+				"ash_raiders",
+				"ash_scouts",
+				"ash_patrol"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {
+				"ruins": {
+					"encounters": [
+						[
+							"ash_raiders",
+							3
+						],
+						[
+							"ash_scouts",
+							1
+						]
+					],
+					"elites": [
+						[
+							"ash_patrol",
+							1
+						]
+					],
+					"elite_pct": 15,
+					"steps_min": 10,
+					"steps_max": 16
+				}
+			},
+			"markers": [
+				{
+					"id": "to_world",
+					"kind": "exit",
+					"anchor": "west",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map"
+				},
+				{
+					"id": "grakka",
+					"kind": "npc",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "grakka_ashmaw"
+				},
+				{
+					"id": "war_chest",
+					"kind": "chest",
+					"anchor": "ruin_chest",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"items": {
+						"con_heal_potion": 2
+					},
+					"gold": 40
+				},
+				{
+					"id": "patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "ash_patrol",
+					"path": "patrol",
+					"radius": 1,
+					"once": true
 				}
 			],
 			"tags": []

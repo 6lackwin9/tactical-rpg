@@ -50,6 +50,17 @@
 			"rarity": "common",
 			"requires_flags": [],
 			"tags": []
+		},
+		{
+			"id": "chieftains_torc",
+			"name": "Chieftain's Torc",
+			"description": "",
+			"reward_kind": "item",
+			"ref": "acc_swift_amulet",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
 		}
 	]
 }

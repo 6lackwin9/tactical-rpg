@@ -79,6 +79,43 @@
 			],
 			"unless_flags": [],
 			"tags": []
+		},
+		{
+			"id": "wastes_track",
+			"name": "The wastes track",
+			"from": "cinder_gate",
+			"to": "ashmaw_camp",
+			"two_way": true,
+			"time": 3,
+			"zone": "desert_outpost",
+			"encounter_pct": 30,
+			"repeat_pct": -1,
+			"encounters": [
+				[
+					"ash_raiders",
+					2
+				],
+				[
+					"ash_scouts",
+					1
+				]
+			],
+			"elites": [
+				[
+					"ash_patrol",
+					1
+				]
+			],
+			"elite_pct": 10,
+			"scripted": [],
+			"requires_flags": [
+				{
+					"key": "ashlands.steel_spent",
+					"value": true
+				}
+			],
+			"unless_flags": [],
+			"tags": []
 		}
 	]
 }

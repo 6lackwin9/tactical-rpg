@@ -15,9 +15,40 @@
 				}
 			],
 			"encounters": [],
-			"map": "",
+			"map": "walled_town",
 			"zone_bindings": {},
-			"markers": [],
+			"markers": [
+				{
+					"id": "orsa",
+					"kind": "npc",
+					"anchor": "npc_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "orsa_tallow"
+				},
+				{
+					"id": "signpost",
+					"kind": "exit",
+					"anchor": "road",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map"
+				},
+				{
+					"id": "yard_crate",
+					"kind": "chest",
+					"anchor": "chest_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"items": {
+						"con_heal_potion": 1
+					},
+					"gold": 20
+				}
+			],
 			"tags": []
 		}
 	]

@@ -20,7 +20,25 @@
 			],
 			"elites": [],
 			"elite_pct": 0,
-			"scripted": [],
+			"scripted": [
+				{
+					"id": "wagon_raid",
+					"encounter": "ashlands:ash_raiders",
+					"requires_flags": [
+						{
+							"key": "ashlands.steel_loaded",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "ashlands.steel_delivered",
+							"value": true
+						}
+					],
+					"sets_flags": []
+				}
+			],
 			"requires_flags": [],
 			"unless_flags": [],
 			"tags": []

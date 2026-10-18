@@ -283,6 +283,34 @@
 			"dialogue": "",
 			"gone_flags": [],
 			"tags": []
+		},
+		{
+			"id": "grakka_ashmaw",
+			"name": "Grakka Ashmaw",
+			"title": "Chieftain of the Horde",
+			"role": "enemy",
+			"base_unit": "goblin_warlord",
+			"art": "",
+			"background": "Wears a crown of rusted nails, one for every Warden post he burned.",
+			"personality": "",
+			"faction": "ashen_horde",
+			"home": "",
+			"disciplines": [],
+			"passives": [],
+			"named_items": [],
+			"tuning": {},
+			"dialogue": "grakka_parley",
+			"gone_flags": [
+				{
+					"key": "quest.ashlands.keep_one_fire_lit.ready",
+					"value": true
+				},
+				{
+					"key": "ashlands.horde_broken",
+					"value": true
+				}
+			],
+			"tags": []
 		}
 	]
 }
