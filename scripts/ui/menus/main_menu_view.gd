@@ -5,7 +5,9 @@ extends Control
 # Tactical RPG - Main menu host view (UI1-L commit 3; scene scenes/main_menu.tscn)
 # Thin: owns the MenuRouter, renders its top screen (main menu, new game, load / save slots, settings, hub) through the
 # per-screen views (UI2-L adds party, level-up, loadout, gear and battle results), shows the router's questions and notices as an overlay, and forwards keys (ui_cancel = Back or No).
-# A started game opens the exploration scene (EXP1 region map) when it exists; Esc there returns to the hub.
+# A started game opens the exploration scene (EXP1 region map) when it exists (router stack bottom PLAY); Esc or the
+# Menu button there open the game menu (HUB) as a popup over the paused map, and every screen opened from it (party,
+# level up, skills, gear, journal, save, load, settings) shows in the same popup (UIR-2, UI-REVIEW1 Q1 B).
 # ==============================================================================
 
 const GAME_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
@@ -16,8 +18,11 @@ const W_ROW: int = 140
 const W_STEP: int = 48
 const FOCUS_META: StringName = &"focus_target"
 const COL_BG: Color = Color(0.05, 0.07, 0.10, 1.0)
-const POPUP_MAX: Vector2 = Vector2(900, 620)   # the settings popup's largest size; it shrinks to fit the viewport
+const POPUP_MAX: Vector2 = Vector2(900, 620)   # the settings popup's (and game menu's) largest size; it shrinks to fit the viewport
+const POPUP_WIDE: Vector2 = Vector2(1216, 656)   # UIR-2: the in-play party / journal / save / load screens (1280x720 minus the margin)
 const POPUP_MARGIN: float = 32.0
+# UIR-2: in-play screens without their own ScreenFrame yet scroll inside the popup (UIR-3 / UIR-4 frame them and drop out of this list)
+const UNFRAMED_POPUP: Array[String] = [MenuRouter.PARTY, MenuRouter.LEVEL_UP, MenuRouter.LOADOUT, MenuRouter.GEAR, MenuRouter.JOURNAL]
 const POPUP_DIM: Color = Color(0, 0, 0, 0.5)
 const RESULTS_DIM: Color = Color(0, 0, 0, 0.35)   # BATTLE-FLOW: lighter, the battle stays readable behind the results
 const POPUP_LAYER: int = 30   # above the arena's canvas layers, so the popup shows over a mounted battle
@@ -38,7 +43,8 @@ var _popup_panel: PanelContainer = null
 var _slayer: CanvasLayer = null    # CONTROLS-HELP: holds the settings popup
 var _stheme: Theme = null
 var _game_mode: Node.ProcessMode = Node.PROCESS_MODE_INHERIT   # game_view's process_mode before the popup paused it
-var _menu_pill: Button = null      # CONTROLS-HELP: "☰ Menu" over the game scene; opens Settings
+var _menu_pill: Button = null      # CONTROLS-HELP: "☰ Menu" over the game scene; opens the game menu (UIR-2)
+var _popup_max: Vector2 = POPUP_MAX   # the open popup's largest size (UIR-2: wide for in-play screens)
 var _rlayer: CanvasLayer = null    # BATTLE-FLOW: the battle results popup, in a canvas layer above the arena's (a Control in this view would sit below it)
 var _rtheme: Theme = null
 var _rpopup: Control = null
@@ -77,7 +83,7 @@ func _ready() -> void:
 	_problems.add_theme_color_override("font_color", UiTheme.COL_BAD)
 	_problems.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_problems)
-	_game_hint = text("Esc: settings", UiTheme.COL_MUTED, false)
+	_game_hint = text("Esc: menu", UiTheme.COL_MUTED, false)
 	_game_hint.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_game_hint.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_game_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -89,6 +95,7 @@ func _ready() -> void:
 	_build_overlay()
 	apply_text_scale()
 	router = MenuRouter.new()
+	router.play_scene = ResourceLoader.exists(GAME_SCENE)   # rule 9: without the exploration scene a started game opens the hub full screen
 	router.changed.connect(render)
 	router.confirm_needed.connect(_on_confirm_needed)
 	router.notice.connect(_on_notice)
@@ -154,10 +161,14 @@ func render() -> void:
 	UiTheme.clear_children(_popup_panel)
 	UiTheme.clear_children(_rpanel)
 	apply_text_scale()   # the saved size (the settings screen previews its draft in its build)
+	if game_view != null and game_view.get_parent() == self and not router.in_play():
+		_close_game()   # UIR-2: the game left the stack (quit to the main menu)
 	var id: String = router.top()
 	var over_battle: bool = _results_over_battle()
 	var results_model: BattleResultsModel = router.model(MenuRouter.RESULTS) as BattleResultsModel if router.stack.has(MenuRouter.RESULTS) else null
-	var popup: bool = id == MenuRouter.SETTINGS
+	var in_play_popup: bool = play_popup(id)
+	var popup: bool = id == MenuRouter.SETTINGS or in_play_popup
+	_popup_max = POPUP_WIDE if in_play_popup and id != MenuRouter.SETTINGS and id != MenuRouter.HUB else POPUP_MAX
 	if not popup and _volumes_previewed:
 		restore_volumes()   # the popup closed: an unapplied draft volume goes back to the saved one
 	var in_results: bool = id == MenuRouter.RESULTS and over_battle
@@ -174,7 +185,7 @@ func render() -> void:
 	if minimised:
 		_results_pill.text = "%s ▴" % (results_model.headline() if results_model != null else "Results")
 	_sync_game_visibility()
-	if id == MenuRouter.SETTINGS and router.stack.size() > 1:
+	if id == MenuRouter.SETTINGS and router.stack.size() > 1 and not in_play_popup:
 		# The screen below stays visible behind the dim; it is only a backdrop, so nothing in it takes focus.
 		var below: String = router.stack[-2]
 		var under: Control = _make_view(below)
@@ -186,9 +197,19 @@ func render() -> void:
 				(n as Control).focus_mode = Control.FOCUS_NONE
 	var view: Control = _make_view(id)
 	if view == null:
-		return
+		_show_problems()
+		_sync_menu_pill()
+		return   # PLAY: the game scene is all there is
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	if popup:
+	if popup and in_play_popup and UNFRAMED_POPUP.has(id):
+		var scroll := ScrollContainer.new()
+		scroll.name = "PopupScroll"
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.follow_focus = true
+		_popup_panel.add_child(scroll)
+		view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.add_child(view)
+	elif popup:
 		_popup_panel.add_child(view)
 	elif in_results:
 		_rpanel.add_child(view)
@@ -202,6 +223,11 @@ func render() -> void:
 	_show_problems()
 	_sync_menu_pill()
 	focus_first(view)
+
+# UIR-2: true when `id` shows as a popup over the paused game scene: any menu screen above PLAY while the game is open,
+# except the battle results flow (results and the level-up / loadout opened from them keep their own layout).
+func play_popup(id: String) -> bool:
+	return id != MenuRouter.PLAY and router.in_play() and game_view != null and not router.stack.has(MenuRouter.RESULTS)
 
 # BATTLE-FLOW: the results screen is a popup (not a full screen) while the settled fight's arena is still mounted.
 func _results_over_battle() -> bool:
@@ -293,14 +319,14 @@ func _build_popup() -> void:
 	_menu_pill = Button.new()
 	_menu_pill.name = "MenuPill"
 	_menu_pill.text = "☰ Menu"
-	_menu_pill.tooltip_text = "Settings and controls (Esc)"
+	_menu_pill.tooltip_text = "Game menu: party, journal, save, load, settings (Esc)"
 	_menu_pill.focus_mode = Control.FOCUS_NONE   # keyboard focus stays with the game; Esc is the keyboard route
 	_menu_pill.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_menu_pill.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_menu_pill.offset_right = -12
 	_menu_pill.offset_top = 8
 	_menu_pill.visible = false
-	_menu_pill.pressed.connect(open_settings_in_game)
+	_menu_pill.pressed.connect(open_menu_in_game)
 	_menu_pill.theme = _stheme
 	pill_layer.add_child(_menu_pill)
 
@@ -332,14 +358,14 @@ func _restore_results() -> void:
 	if m != null:
 		m.set_minimised(false)
 
-# The panel is POPUP_MAX, or the viewport minus a margin when that is smaller, and centred.
+# The panel is its largest size (POPUP_MAX, or POPUP_WIDE for in-play screens), or the viewport minus a margin when that is smaller, and centred.
 func _layout_popup() -> void:
-	_layout_panel(_popup, _popup_panel)
+	_layout_panel(_popup, _popup_panel, _popup_max)
 
-func _layout_panel(root: Control, panel: PanelContainer) -> void:
+func _layout_panel(root: Control, panel: PanelContainer, most: Vector2 = POPUP_MAX) -> void:
 	if root == null or panel == null or not root.visible:
 		return
-	var target := Vector2(minf(POPUP_MAX.x, root.size.x - 2.0 * POPUP_MARGIN), minf(POPUP_MAX.y, root.size.y - 2.0 * POPUP_MARGIN))
+	var target := Vector2(minf(most.x, root.size.x - 2.0 * POPUP_MARGIN), minf(most.y, root.size.y - 2.0 * POPUP_MARGIN))
 	panel.custom_minimum_size = target
 	panel.size = target
 	panel.position = ((root.size - target) / 2.0).floor()
@@ -519,12 +545,18 @@ func _show_next_notice() -> void:
 # ------------------------------------------------------------------------------
 
 func open_game(gs: GameState) -> void:
-	if not ResourceLoader.exists(GAME_SCENE):
-		return   # rule 9: stay on the hub until the exploration scene exists
-	var packed: PackedScene = load(GAME_SCENE) as PackedScene
+	if game_view != null and game_view.get_parent() == self:
+		_close_game()   # a game loaded from the in-play menu replaces the one on screen
+	var packed: PackedScene = load(GAME_SCENE) as PackedScene if ResourceLoader.exists(GAME_SCENE) else null
 	var node: Node = packed.instantiate() if packed != null else null
 	if node == null or not node.has_method("play_state"):
+		if node != null:
+			node.free()
+		if router.top() != MenuRouter.HUB:
+			router.clear_to(MenuRouter.HUB)   # only a broken scene gets here (a missing one already made enter_game open the hub): full-screen menu, no Return to map
 		return
+	if not router.in_play():
+		router.clear_to(MenuRouter.PLAY)   # the game scene is the bottom of the stack (also when a caller opens it directly)
 	game_view = node
 	if "results_popup" in game_view:
 		game_view.set("results_popup", true)   # a won / lost / fled battle keeps its arena for the results popup
@@ -537,20 +569,18 @@ func open_game(gs: GameState) -> void:
 	_sync_menu_pill()
 	game_view.call("play_state", gs)
 
-# Back from the game scene to the hub (refused while a fight, conversation or shop waits).
-func leave_game() -> bool:
+# Frees the game scene and shows the menu screens again (UIR-2: quitting to the main menu or loading another game; the
+# old "Back to hub" exit is gone, the hub is a popup over the map now).
+func _close_game() -> void:
 	if game_view == null:
-		return false
-	if game_view.has_method("busy") and DictUtil.to_bool(game_view.call("busy")):
-		show_problems(["Finish the fight or conversation first."] as Array[String])
-		return false
-	remove_child(game_view)
+		return
+	if game_view.get_parent() == self:
+		remove_child(game_view)
 	game_view.queue_free()
 	game_view = null
+	_game_mode = Node.PROCESS_MODE_INHERIT
 	_menu.visible = true
 	_game_hint.visible = false
-	render()
-	return true
 
 # UI2-L rule 8: a settled fight shows the results screen over the hidden map; Continue brings the map back.
 func _on_fight_settled(res: Dictionary) -> void:
@@ -598,11 +628,12 @@ func _on_results_done() -> void:
 func in_game() -> bool:
 	return game_view != null and game_view.visible
 
-# Esc / the Menu button during play: the settings popup over the game (not over a results popup or another popup).
-func open_settings_in_game() -> void:
-	if not in_game() or router.stack.has(MenuRouter.RESULTS) or router.top() == MenuRouter.SETTINGS or is_overlay_open():
+# Esc / the Menu button during play: the game menu (HUB) as a popup over the paused game; only from the bare game scene
+# (not over a results popup, another popup or a question).
+func open_menu_in_game() -> void:
+	if not in_game() or router.top() != MenuRouter.PLAY or is_overlay_open():
 		return
-	router.push(MenuRouter.SETTINGS)
+	router.push(MenuRouter.HUB)
 
 # The game under the settings popup stops: no timers, no key or mouse handling (combat also gets keys_blocked, set in render()).
 func _block_game(blocked: bool) -> void:
@@ -622,16 +653,7 @@ func _place_popup(in_layer: bool) -> void:
 
 func _sync_menu_pill() -> void:
 	if _menu_pill != null:
-		_menu_pill.visible = in_game() and router != null and router.top() != MenuRouter.SETTINGS and not router.stack.has(MenuRouter.RESULTS)
-
-# "Back to hub" in the in-game settings popup: closes the popup, then leaves the game scene (refused while busy).
-func leave_from_settings() -> void:
-	if game_view != null and game_view.has_method("busy") and DictUtil.to_bool(game_view.call("busy")):
-		show_problems(["Finish the fight or conversation first."] as Array[String])
-		return
-	router.pop()
-	if router.top() != MenuRouter.SETTINGS and not router.is_asking():
-		var _left: bool = leave_game()
+		_menu_pill.visible = in_game() and router != null and router.top() == MenuRouter.PLAY
 
 func open_tools() -> void:
 	var host: Node = get_parent()
@@ -653,8 +675,8 @@ func _input(event: InputEvent) -> void:
 	var mouse: InputEventMouseButton = event as InputEventMouseButton
 	if mouse == null or not mouse.pressed or mouse.button_index != MOUSE_BUTTON_RIGHT or not is_visible_in_tree():
 		return
-	if game_view != null and game_view.visible and not _results_over_battle() and router.top() != MenuRouter.SETTINGS:
-		return   # the map and the fights own the right button (not under the results popup: there it closes it)
+	if in_game() and router.top() == MenuRouter.PLAY:
+		return   # the map and the fights own the right button (not under a popup: there it is Back)
 	cancel_pressed()
 	get_viewport().set_input_as_handled()
 
@@ -674,7 +696,7 @@ func cancel_pressed() -> void:
 		act((router.model() as BattleResultsModel).continue_on)   # the popup's X: close = autosave, results_done
 	elif router.top() == MenuRouter.SETTINGS:
 		router.pop()   # asks first when the draft changed; also the in-game popup (right click and the cross come here too)
-	elif in_game():
-		open_settings_in_game()   # CONTROLS-HELP: nothing above used Esc (a panel in the scene or the arena takes it first), so it opens Settings
+	elif in_game() and router.top() == MenuRouter.PLAY:
+		open_menu_in_game()   # nothing in the scene used Esc (a panel or the arena takes it first), so it opens the game menu (UIR-2)
 	else:
 		router.pop()

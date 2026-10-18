@@ -160,36 +160,48 @@ static func _is_open(host: MainMenuView) -> bool:
 	var p: Control = _popup(host)
 	return host.router.top() == MenuRouter.SETTINGS and p != null and p.visible
 
+# UIR-2: Esc / the Menu button open the game menu (HUB) in the same popup layer; Settings is one of its entries.
+static func _menu_open(host: MainMenuView) -> bool:
+	var p: Control = _popup(host)
+	return host.router.top() == MenuRouter.HUB and p != null and p.visible
+
 # The Esc path: the host's _unhandled_input receives the key when nothing below took it.
 static func _esc(host: MainMenuView) -> void:
 	host._unhandled_input(_key(KEY_ESCAPE))
 
 static func _open_close_checks(f: Dictionary, checks: Dictionary) -> void:
 	var host: MainMenuView = f["host"] as MainMenuView
-	checks["starts closed"] = not _is_open(host)
+	checks["starts closed"] = not _menu_open(host) and host.router.top() == MenuRouter.PLAY
 	var pill: Button = host.find_child("MenuPill", true, false) as Button
 	checks["the Menu button shows during play"] = pill != null and pill.visible and pill.text.contains("Menu")
 	_esc(host)
-	checks["Esc opens Settings"] = _is_open(host)
+	checks["Esc opens the game menu"] = _menu_open(host)
+	checks["the Menu button hides while open"] = pill != null and not pill.visible
+	var entry: Button = host.find_child("Hub_" + MenuRouter.SETTINGS, true, false) as Button
+	checks["Settings is a menu entry"] = entry != null and not entry.disabled
+	if entry != null:
+		entry.pressed.emit()
+	checks["the entry opens Settings"] = _is_open(host)
 	var tabs: TabContainer = SettingsUiTestSuite.tabs_of(host)
 	checks["all four tabs"] = tabs != null and tabs.get_tab_count() == 4 and tabs.get_tab_title(3) == SettingsView.TAB_CONTROLS
-	checks["the Menu button hides while open"] = pill != null and not pill.visible
 	var close: Button = host.find_child("SettingsClose", true, false) as Button
 	checks["the cross exists"] = close != null
 	if close != null:
 		close.pressed.emit()
-	checks["the cross closes it"] = not _is_open(host)
+	checks["the cross goes back to the menu"] = not _is_open(host) and _menu_open(host)
+	_esc(host)
+	checks["Esc closes the menu"] = not _menu_open(host) and host.router.top() == MenuRouter.PLAY
 	checks["the Menu button is back"] = pill != null and pill.visible
 	pill.pressed.emit()
-	checks["the Menu button opens it"] = _is_open(host)
+	checks["the Menu button opens it"] = _menu_open(host)
 	_esc(host)
-	checks["Esc closes it"] = not _is_open(host)
+	checks["Esc closes it"] = not _menu_open(host)
 	var ev := InputEventMouseButton.new()
 	ev.button_index = MOUSE_BUTTON_RIGHT
 	ev.pressed = true
 	_esc(host)
 	host._input(ev)
-	checks["right click closes it"] = not _is_open(host)
+	checks["right click closes it"] = not _menu_open(host) and host.router.top() == MenuRouter.PLAY
 
 static func _test_region(tree_parent: Node) -> bool:
 	var checks: Dictionary = {}
@@ -197,7 +209,7 @@ static func _test_region(tree_parent: Node) -> bool:
 	checks["the region map is showing"] = f["view"] is RegionMapView and (f["host"] as MainMenuView).in_game()
 	_open_close_checks(f, checks)
 	_free(f["holder"] as Node)
-	return TestHelpers.report(TAG, "Settings opens with Esc / Menu on the region map; the cross, Esc and right click close it", checks)
+	return TestHelpers.report(TAG, "The game menu opens with Esc / Menu on the region map; Settings from it; the cross, Esc and right click close", checks)
 
 static func _test_combat(tree_parent: Node) -> bool:
 	var checks: Dictionary = {}
@@ -210,7 +222,7 @@ static func _test_combat(tree_parent: Node) -> bool:
 		var dock: Variant = view.battle.arena.get("host") if view.battle.arena != null else null
 		checks["combat keys are free again after closing"] = dock is CombatDockHost and not (dock as CombatDockHost).keys_blocked
 	_free(f["holder"] as Node)
-	return TestHelpers.report(TAG, "Settings opens over a fight with Esc and closes with the cross and Esc", checks)
+	return TestHelpers.report(TAG, "The game menu opens over a fight with Esc; Settings from it; the cross and Esc close", checks)
 
 static func _test_blocked_region(tree_parent: Node) -> bool:
 	var checks: Dictionary = {}
@@ -219,12 +231,12 @@ static func _test_blocked_region(tree_parent: Node) -> bool:
 	var view: RegionMapView = f["view"] as RegionMapView
 	checks["running before"] = view != null and view.can_process()
 	_esc(host)
-	checks["open"] = _is_open(host)
+	checks["open"] = _menu_open(host)
 	checks["the map is paused (no key or mouse input reaches it)"] = view != null and not view.can_process()
 	_esc(host)
 	checks["closed: the map runs again"] = view != null and view.can_process()
 	_free(f["holder"] as Node)
-	return TestHelpers.report(TAG, "Input underneath is blocked on the region map while Settings is open", checks)
+	return TestHelpers.report(TAG, "Input underneath is blocked on the region map while the game menu is open", checks)
 
 static func _test_blocked_combat(tree_parent: Node) -> bool:
 	var checks: Dictionary = {}
@@ -239,7 +251,7 @@ static func _test_blocked_combat(tree_parent: Node) -> bool:
 		if dock != null:
 			checks["keys free before"] = not dock.keys_blocked
 			_esc(host)
-			checks["open"] = _is_open(host)
+			checks["open"] = _menu_open(host)
 			checks["keys_blocked while open"] = dock.keys_blocked
 			checks["the fight is paused"] = not battle.can_process()
 			var playing: bool = battle.session.is_auto_playing
@@ -248,4 +260,4 @@ static func _test_blocked_combat(tree_parent: Node) -> bool:
 			_esc(host)
 			checks["closed: keys_blocked cleared"] = not dock.keys_blocked and battle.can_process()
 	_free(f["holder"] as Node)
-	return TestHelpers.report(TAG, "Input underneath is blocked in combat while Settings is open", checks)
+	return TestHelpers.report(TAG, "Input underneath is blocked in combat while the game menu is open", checks)

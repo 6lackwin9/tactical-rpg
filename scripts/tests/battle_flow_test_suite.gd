@@ -246,7 +246,7 @@ static func _closed_checks(f: Dictionary, checks: Dictionary) -> void:
 	var done: Array[int] = f["done"] as Array[int]
 	checks["closed: results_done exactly once"] = done[0] == 1
 	checks["closed: one autosave"] = SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
-	checks["closed: back below the results, no RESULTS left"] = host.router.top() == MenuRouter.MAIN and not host.router.stack.has(MenuRouter.RESULTS)
+	checks["closed: back below the results (the game scene, UIR-2 PLAY), no RESULTS left"] = host.router.top() == MenuRouter.PLAY and not host.router.stack.has(MenuRouter.RESULTS)
 	checks["closed: arena freed, map shown"] = view.battle == null and view.visible and view.active_battle() == null
 
 static func _test_close_cross(tree_parent: Node) -> bool:

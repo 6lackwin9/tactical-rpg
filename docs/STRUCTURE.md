@@ -15,6 +15,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/ui/combat/intent_overlay.gd`, `scripts/ui/combat/intent_text.gd` | enemy tell chips and arrows on the grid; tell wording for cards, hover card, timeline and forecast (INTENT1-U) | S16 | done |
 | `scripts/ui/combat/combat_hud_metrics.gd` | CombatHudMetrics: combat layout C sizes (column widths, tile size, card heights and dropped lines per text size) (COMBAT-UI2-L1) | S16 | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
+| `scripts/tests/game_menu_test_suite.gd` | in-play game menu popup, busy rules, new game selection, load question, 1280x720 fit (UIR-2) | S13 | done |
 | `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | done |
 | `scripts/tests/status_expansion_effects_test_suite.gd` | slow tiles, expose/fortify armor rating, round-end order and logs, poison stacking, granted magnitudes and sources, Forge magnitude range (S12S-L commit 2) | S12 | done |
 | `scripts/tests/status_expansion_ai_test_suite.gd` | AI use of the new statuses and sim metrics regen_received / dot_dealt on a fixture fight (S12S-L commit 3) | S12, S4, S15 | done |

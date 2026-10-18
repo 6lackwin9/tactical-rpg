@@ -2,60 +2,95 @@ class_name SaveSlotsView
 extends VBoxContainer
 
 # ==============================================================================
-# Tactical RPG - Save / load slots view (UI1-L): one row per slot (autosave, 1-5) with its header from peek; Load or
-# Save plus Delete per row; Export (readable saves) and Import (manual slots) through a file dialog (SAVE-IO; hidden in
-# the web build, which has no file system to pick from).
+# Tactical RPG - Save / load slots view (UI1-L; UIR-2): a ScreenFrame (Back in the pinned bar) with one fixed-height row
+# per slot (autosave, 1-5): two lines always (header, then "Empty" or where and who), and the row actions in fixed
+# slots at the right (Load or Save here, Export, Import, Delete); an absent action leaves its slot empty (no disabled
+# buttons). Export / Import go through a file dialog (SAVE-IO; hidden in the web build, which has no file system).
 # ==============================================================================
+
+const SLOT_NAMES: Array[String] = ["SlotMain", "SlotExport", "SlotImport", "SlotDelete"]
+const SLOT_EXPORT: int = 1   # indices into SLOT_NAMES of the file-dialog slots (absent in the web build)
+const SLOT_IMPORT: int = 2
 
 func build(host: MainMenuView, model: RefCounted) -> void:
 	var m: SaveSlotsModel = model as SaveSlotsModel
-	add_theme_constant_override("separation", 10)
-	add_child(MainMenuView.title("Save game" if m.saving else "Load game"))
-	# The rows scroll (they fill the height left between the title and Back); Back stays on screen below the list.
-	var scroll := ScrollContainer.new()
-	scroll.name = "SlotScroll"
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.follow_focus = true
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(scroll)
-	var list := VBoxContainer.new()
-	list.add_theme_constant_override("separation", 8)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var frame: ScreenFrame = ScreenFrame.make("Save game" if m.saving else "Load game", MainMenuView.button("Back", host.router.pop))
+	add_child(frame)
+	frame.scroll.name = "SlotScroll"   # the rows scroll; Back stays pinned below
+	var files: bool = files_available()
+	var first: Button = null
 	for row: Dictionary in m.rows():
-		var card: VBoxContainer = UiTheme.card(list)
+		var slot: int = DictUtil.to_int(row["slot"])
 		var status: String = str(row["status"])
+		var card: VBoxContainer = UiTheme.card(frame.column)
+		card.get_parent().name = "SlotRow%d" % slot
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 8)
+		card.add_child(line)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_constant_override("separation", 2)
+		line.add_child(info)
 		var head: String = str(row["label"])
-		match status:
-			"empty":
-				head += "  (empty)"
-			"ok":
-				head += "  %s  ·  %s" % [str(row["world"]), str(row["saved_at"])]
-			_:
-				head += "  (%s)" % status
-		card.add_child(MainMenuView.text(head, UiTheme.COL_HEADER if status == "ok" else UiTheme.COL_MUTED))
+		if status == "ok":
+			head += "  ·  %s  ·  %s" % [str(row["world"]), str(row["saved_at"])]
+		info.add_child(_line(head, UiTheme.COL_HEADER if status == "ok" else UiTheme.COL_MUTED))
+		var second: String = "Empty"
 		if status == "ok":
 			var where: String = str(row["location"])
-			card.add_child(MainMenuView.text(("%s  ·  " % where if not where.is_empty() else "") + str(row["party"])))
-		var buttons := HBoxContainer.new()
-		card.add_child(buttons)
-		var slot: int = DictUtil.to_int(row["slot"])
-		if m.saving:
-			if DictUtil.to_bool(row["can_save"]):
-				buttons.add_child(MainMenuView.button("Save here", host.act.bind(m.save.bind(slot))))
-		else:
-			buttons.add_child(MainMenuView.button("Load", host.act.bind(m.load.bind(slot)), DictUtil.to_bool(row["can_load"])))
+			second = ("%s  ·  " % where if not where.is_empty() else "") + str(row["party"])
+		elif status != "empty":
+			second = "Can't be read (%s)" % status
+		info.add_child(_line(second, UiTheme.COL_TEXT if status == "ok" else UiTheme.COL_MUTED))
+		var main: Button = null
+		if m.saving and DictUtil.to_bool(row["can_save"]):
+			main = MainMenuView.button("Save here", host.act.bind(m.save.bind(slot)))
+		elif not m.saving and DictUtil.to_bool(row["can_load"]):
+			main = MainMenuView.button("Load", host.act.bind(m.load.bind(slot)))
+		var exp_b: Button = null
+		if files and DictUtil.to_bool(row["can_export"]):
+			exp_b = MainMenuView.button("Export", _pick.bind(host, FileDialog.FILE_MODE_SAVE_FILE, str(row["export_name"]), func(path: String) -> void: host.act(m.export_slot.bind(slot, path))))
+		var imp_b: Button = null
+		if files and DictUtil.to_bool(row["can_import"]):
+			imp_b = MainMenuView.button("Import", _pick.bind(host, FileDialog.FILE_MODE_OPEN_FILE, "", func(path: String) -> void: host.act(m.import_file.bind(path, slot))))
+		var del_b: Button = null
 		if DictUtil.to_bool(row["can_delete"]) and slot != SaveGame.AUTOSAVE_SLOT:
-			buttons.add_child(MainMenuView.button("Delete", host.act.bind(m.delete.bind(slot))))
-		if files_available():
-			if DictUtil.to_bool(row["can_export"]):
-				buttons.add_child(MainMenuView.small(MainMenuView.button("Export", _pick.bind(host, FileDialog.FILE_MODE_SAVE_FILE, str(row["export_name"]), func(path: String) -> void: host.act(m.export_slot.bind(slot, path)))), 140))
-			if DictUtil.to_bool(row["can_import"]):
-				buttons.add_child(MainMenuView.small(MainMenuView.button("Import", _pick.bind(host, FileDialog.FILE_MODE_OPEN_FILE, "", func(path: String) -> void: host.act(m.import_file.bind(path, slot)))), 140))
-	var back: Button = MainMenuView.button("Back", host.router.pop)
-	back.name = "BackButton"
-	add_child(back)
+			del_b = MainMenuView.button("Delete", host.act.bind(m.delete.bind(slot)))
+		var actions: Array[Button] = [main, exp_b, imp_b, del_b]
+		var widest: Array[String] = ["Save here" if m.saving else "Load", "Export", "Import", "Delete"]
+		for i: int in actions.size():
+			if (i == SLOT_EXPORT or i == SLOT_IMPORT) and not files:
+				continue
+			line.add_child(_slot(actions[i], widest[i], SLOT_NAMES[i]))
+		if first == null and main != null:
+			first = main
+	if first != null:
+		set_meta(MainMenuView.FOCUS_META, first)
+
+# A one-line label that never wraps (rows keep one height); long text ends in an ellipsis.
+static func _line(value: String, color: Color) -> Label:
+	var l: Label = MainMenuView.text(value, color, false)
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.custom_minimum_size = Vector2(80, 0)
+	return l
+
+# The row-class button for a fixed action slot; an absent action keeps the slot's width with an invisible stand-in of
+# the same label, so the slots line up down the list at every text size.
+static func _slot(action: Button, label: String, slot_name: String) -> Button:
+	var b: Button = action
+	if b == null:
+		b = MainMenuView.button(label, func() -> void: pass, false)
+		b.name = slot_name + "Empty"
+		b.modulate = Color(1, 1, 1, 0)
+		b.focus_mode = Control.FOCUS_NONE
+		b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.set_meta("placeholder", true)
+	else:
+		b.name = slot_name
+	return MainMenuView.small(b)
 
 static func files_available() -> bool:
 	return not OS.has_feature("web")

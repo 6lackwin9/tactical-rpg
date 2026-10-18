@@ -20,7 +20,8 @@ const NEW_GAME: String = "new_game"
 const LOAD: String = "load"
 const SAVE: String = "save"
 const SETTINGS: String = "settings"
-const HUB: String = "hub"
+const HUB: String = "hub"             # UIR-2 (Q1 B): the game menu; during play a popup over the paused map
+const PLAY: String = "play"           # UIR-2: the game scene itself (no model, no view); the bottom of the stack during play
 const PARTY: String = "party"          # UI2-L: roster, stats, passives
 const LEVEL_UP: String = "level_up"    # UI2-L: args {member}
 const LOADOUT: String = "loadout"      # UI2-L: args {member}
@@ -30,6 +31,7 @@ const JOURNAL: String = "journal"      # UI3-L
 
 var stack: Array[String] = []
 var models: Dictionary = {}        # screen id on the stack -> its model
+var play_scene: bool = true   # the host has a game scene to show (false: enter_game opens the full-screen hub instead of PLAY)
 var pending_message: String = ""
 var pending_destructive: bool = false   # the open question is destructive: No gets the focus
 var _pending: Callable = Callable()
@@ -141,9 +143,14 @@ func decline() -> void:
 	pending_message = ""
 	pending_destructive = false
 
-# Starts playing `gs`: shows `warnings` once, opens the hub and tells the host.
+# True while a game is being played (the game scene is the bottom of the stack).
+func in_play() -> bool:
+	return stack.has(PLAY)
+
+# Starts playing `gs`: shows `warnings` once, puts the game scene (PLAY) at the bottom of the stack and tells the host
+# (UIR-2: the hub is no longer a screen of its own; Esc / the Menu button push it as a popup over the paused map).
 func enter_game(gs: GameState, warnings: Array[String] = []) -> void:
 	if not warnings.is_empty():
 		notice.emit(warnings)
-	clear_to(HUB)
+	clear_to(PLAY if play_scene else HUB)   # decided before clearing: one stack change, no PLAY then HUB
 	game_started.emit(gs)

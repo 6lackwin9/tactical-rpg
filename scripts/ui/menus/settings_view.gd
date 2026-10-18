@@ -88,14 +88,7 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	footer.alignment = BoxContainer.ALIGNMENT_END
 	footer.add_theme_constant_override("separation", 10)
 	add_child(footer)
-	if host.in_game():   # CONTROLS-HELP: opened during play; the way back to the hub lives here (Esc now opens this popup)
-		var hub: Button = MainMenuView.small(MainMenuView.button("Back to hub", host.leave_from_settings))
-		hub.name = "SettingsLeaveGame"
-		hub.tooltip_text = "Leave the game scene (refused while a fight, conversation or shop is open)"
-		footer.add_child(hub)
-		var spacer := Control.new()
-		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		footer.add_child(spacer)
+	# UIR-2: during play Settings is an entry of the game menu popup; closing it returns there (no "Back to hub" here).
 	var restore: Button = MainMenuView.small(MainMenuView.button("Restore defaults", func() -> void:
 		m.restore_defaults()
 		host.render()))

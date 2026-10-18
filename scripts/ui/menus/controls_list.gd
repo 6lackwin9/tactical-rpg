@@ -34,7 +34,7 @@ const HARD_CODED: Array[Dictionary] = [
 	{"group": GROUP_MAPS, "action": "Move the party", "keys": "Arrow keys, W A S D (hold to keep walking)", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_W", "KEY_A", "KEY_S", "KEY_D"]},
 	{"group": GROUP_MAPS, "action": "Interact (talk, open, read)", "keys": "E", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["KEY_E"]},
 	{"group": GROUP_MAPS, "action": "Interact with a marker next to the party", "keys": "Left click", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["MOUSE_BUTTON_LEFT"]},
-	{"group": GROUP_MAPS, "action": "Open Settings (from any scene)", "keys": "Esc, the Menu button", "src": "res://scripts/ui/menus/main_menu_view.gd", "tokens": ["ui_cancel"]},
+	{"group": GROUP_MAPS, "action": "Open the game menu (from any scene)", "keys": "Esc, the Menu button", "src": "res://scripts/ui/menus/main_menu_view.gd", "tokens": ["ui_cancel"]},
 	{"group": GROUP_COMBAT, "action": "Close the log / timeline panel", "keys": "Esc", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_ESCAPE"]},
 	{"group": GROUP_COMBAT, "action": "Combat log", "keys": "L", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_L"]},
 	{"group": GROUP_COMBAT, "action": "Timeline", "keys": "F, Tab", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_F", "KEY_TAB"]},

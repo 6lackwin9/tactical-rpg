@@ -4,10 +4,12 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Save / load slots model (UI1-L): one row per slot 0..5 from SaveGame.peek (0 = autosave, 1-5 manual; never
 # written by a manual save). Load enters the game (warnings shown once, rule 6); save asks before overwriting and is
-# refused during a battle or conversation (rule 5); delete always asks. Answers to a question land in `last_errors`.
+# refused during a battle, conversation or shop (rule 5); delete always asks. Answers to a question land in `last_errors`.
+# UIR-2: overwrite / delete questions name what is lost (`describe`) and focus No; loading over a game in progress with
+# unsaved changes asks first.
 # ==============================================================================
 
-const BUSY: String = "You can't save during a battle or a conversation."
+const BUSY: String = "You can't save during a battle, a conversation or while a shop is open."
 const NO_GAME: String = "There is no game to save."
 const MANUAL_ONLY: String = "Manual saves use slots 1-5 (slot 0 is the autosave)."
 
@@ -42,11 +44,26 @@ func rows() -> Array[Dictionary]:
 		out.append({
 			"slot": slot, "label": "Autosave" if slot == SaveGame.AUTOSAVE_SLOT else "Slot %d" % slot, "status": status,
 			"world": str(WorldCatalog.manifest(world_id).get("name", world_id)), "location": location_name(world_id, str(head["location_id"])),
-			"party": ", ".join(party), "saved_at": Time.get_datetime_string_from_unix_time(at, true) if exists and at > 0 else "",
+			"party": ", ".join(party), "saved_at": Time.get_datetime_string_from_unix_time(at, true).left(16) if exists and at > 0 else "",
 			"can_load": ok and not saving, "can_save": saving and SaveGame.MANUAL_SLOTS.has(slot), "can_delete": exists,
 			"can_export": ok, "can_import": SaveGame.MANUAL_SLOTS.has(slot), "export_name": export_name(slot, world_id, at),
 		})
 	return out
+
+# "The Ashlands, Warden Keep, 2026-10-18 14:21" for a readable save ("" when the slot is empty or unreadable).
+static func describe(slot: int) -> String:
+	var head: Dictionary = SaveGame.peek(slot)
+	if not DictUtil.to_bool(head["ok"]):
+		return ""
+	var world_id: String = str(head["world_id"])
+	var parts: PackedStringArray = PackedStringArray([str(WorldCatalog.manifest(world_id).get("name", world_id))])
+	var where: String = location_name(world_id, str(head["location_id"]))
+	if not where.is_empty():
+		parts.append(where)
+	var at: int = DictUtil.to_int(head["saved_at"])
+	if at > 0:
+		parts.append(Time.get_datetime_string_from_unix_time(at, true).left(16))
+	return ", ".join(parts)
 
 static func location_name(world_id: String, location_id: String) -> String:
 	if location_id.is_empty():
@@ -71,9 +88,20 @@ static func load_slot(p_router: MenuRouter, slot: int) -> Array[String]:
 	p_router.enter_game(gs, warnings)
 	return errors
 
+# Loads `slot`; over a game in progress with unsaved changes it asks first (destructive, No focused).
 func load(slot: int) -> Array[String]:
-	last_errors = load_slot(router, slot)
+	last_errors = []
+	if CurrentGame.has_game() and CurrentGame.busy():
+		last_errors.append(HubModel.BUSY_LEAVE)   # same rule as Quit: not in the middle of a fight, conversation or shop
+		return last_errors
+	if CurrentGame.has_game() and CurrentGame.is_dirty() and DictUtil.to_bool(SaveGame.peek(slot)["ok"]):
+		router.ask("Load %s (%s)? Unsaved progress in the current game is lost." % ["the autosave" if slot == SaveGame.AUTOSAVE_SLOT else "slot %d" % slot, describe(slot)], _load_now.bind(slot), true)
+		return last_errors
+	_load_now(slot)
 	return last_errors
+
+func _load_now(slot: int) -> void:
+	last_errors = load_slot(router, slot)
 
 # Manual save to slot 1..5; asks first when the slot holds a save.
 func save(slot: int) -> Array[String]:
@@ -85,7 +113,8 @@ func save(slot: int) -> Array[String]:
 	elif not SaveGame.MANUAL_SLOTS.has(slot):
 		last_errors.append(MANUAL_ONLY)
 	elif SaveGame.exists(slot):
-		router.ask("Overwrite slot %d?" % slot, _save_now.bind(slot), true)
+		var what: String = describe(slot)
+		router.ask("Overwrite slot %d%s?" % [slot, ": " + what if not what.is_empty() else ""], _save_now.bind(slot), true)
 	else:
 		_save_now(slot)
 	return last_errors
@@ -113,7 +142,8 @@ func import_file(path: String, slot: int) -> Array[String]:
 	if not SaveGame.MANUAL_SLOTS.has(slot):
 		last_errors.append(MANUAL_ONLY)
 	elif SaveGame.exists(slot):
-		router.ask("Replace slot %d with the imported save?" % slot, _import_now.bind(path, slot), true)
+		var what: String = describe(slot)
+		router.ask("Replace slot %d%s with the imported save?" % [slot, " (%s)" % what if not what.is_empty() else ""], _import_now.bind(path, slot), true)
 	else:
 		_import_now(path, slot)
 	return last_errors
@@ -132,7 +162,8 @@ func delete(slot: int) -> Array[String]:
 	if not SaveGame.exists(slot):
 		last_errors.append("Slot %d is empty." % slot)
 	else:
-		router.ask("Delete the save in slot %d?" % slot, _delete_now.bind(slot), true)
+		var what: String = describe(slot)
+		router.ask("Delete the save in slot %d%s?" % [slot, " (%s)" % what if not what.is_empty() else ""], _delete_now.bind(slot), true)
 	return last_errors
 
 func _delete_now(slot: int) -> void:

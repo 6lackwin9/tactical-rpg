@@ -14,7 +14,8 @@ Every screen is a headless `RefCounted` model plus a thin view (spec `docs/specs
 | (display) | - | `display_settings.gd` (`DisplaySettings`: window mode, size, vsync and frame cap through a `Backend`; the base `Backend` only records calls and is used headless and in tests, `RealBackend` calls `DisplayServer` / `Engine`; `apply_saved()` at boot) |
 | (style) | - | `menu_style.gd` (`MenuStyle.theme()`: bordered Button states and a visible CheckBox, set on the menu column and the question overlay only, never on combat UI; UIR-1: `MenuStyle.selected_box()` / `mark_selected(button, on)` / `is_selected(button)`: a filled box with a gold edge marks the selected row, the label never changes) |
 | (frame) | - | `screen_frame.gd` (UIR-1, `ScreenFrame.make(title, back, primary, extras)`: centred title, a scrolling `FrameColumn` of at most 1000 px, an `ActionBar` pinned below the scroll with Back first and the primary action last on the right; screens adopt it in UIR-2/3/4/6; `tools/frame_shot.gd` renders a sample, `xvfb-run godot -s tools/frame_shot.gd -- --scale=1.0 --out=<png>`) |
-| `hub` | `hub_model.gd` | `hub_view.gd` |
+| `play` | - (UIR-2: the game scene; the bottom of the stack during play; Esc / ☰ Menu pushes `hub`) | - |
+| `hub` | `hub_model.gd` (UIR-2: the game menu, a popup over the paused map; screens without a ScreenFrame scroll in it via `UNFRAMED_POPUP`) | `hub_view.gd` |
 | `party` | `party_model.gd` (+ `stats_model.gd`, `party_preview.gd`) | `party_view.gd` |
 | `level_up` | `level_up_model.gd` | `level_up_view.gd` |
 | `loadout` | `loadout_model.gd` | `loadout_view.gd` |

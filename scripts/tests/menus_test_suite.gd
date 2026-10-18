@@ -484,9 +484,9 @@ static func _test_scene(tree_parent: Node) -> bool:
 			back.pressed.emit()
 		checks["%s: Back pops" % id] = r.top() == MenuRouter.MAIN
 	r.push(MenuRouter.NEW_GAME)
-	checks["new game lists the world"] = _has_button(view, "Start in MN Base")
+	checks["new game lists the world as a selectable card, one Start"] = view.find_child("WorldCard_" + BASE, true, false) is Button and _has_button(view, "Start")
 	view.act((r.model() as NewGameModel).choose.bind(BASE, 4))
-	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.top() == MenuRouter.HUB
+	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.stack == [MenuRouter.PLAY]
 	# REVIEW-F2: Esc on the results screen is Continue (autosave, results_done, map back, no RESULTS left)
 	var done: Array[int] = [0]
 	r.results_done.connect(func() -> void: done[0] += 1)
@@ -494,8 +494,9 @@ static func _test_scene(tree_parent: Node) -> bool:
 	view._on_fight_settled({"xp": {}, "advanced": [] as Array[String], "outcome": "won"})
 	checks["results shown over the hidden map"] = r.top() == MenuRouter.RESULTS and not view.game_view.visible
 	view.cancel_pressed()
-	checks["Esc on results: autosave written, map back"] = SaveGame.exists(SaveGame.AUTOSAVE_SLOT) and done[0] == 1 and view.game_view.visible and not r.stack.has(MenuRouter.RESULTS) and r.top() == MenuRouter.HUB
-	checks["back to the hub"] = view.leave_game() and view.game_view == null and _has_button(view, "Quit to main menu") and _has_button(view, "Explore")
+	checks["Esc on results: autosave written, map back"] = SaveGame.exists(SaveGame.AUTOSAVE_SLOT) and done[0] == 1 and view.game_view.visible and not r.stack.has(MenuRouter.RESULTS) and r.top() == MenuRouter.PLAY
+	view.cancel_pressed()
+	checks["Esc opens the game menu over the map"] = r.top() == MenuRouter.HUB and view.game_view.visible and _has_button(view, "Quit to main menu") and _has_button(view, "Return to map")
 	CurrentGame.state().party.gold += 2
 	view.act((r.model() as HubModel).quit_to_menu)
 	checks["dirty quit shows the question"] = view.is_overlay_open() and r.is_asking()
@@ -504,7 +505,7 @@ static func _test_scene(tree_parent: Node) -> bool:
 	r.ask("Harmless question?", func() -> void: pass)
 	checks["harmless question focuses Yes"] = view.overlay_default_button() != null and view.overlay_default_button().text == "Yes" and not r.pending_destructive
 	view.answer(false)
-	checks["confirmed: main menu with Continue"] = not CurrentGame.has_game() and r.top() == MenuRouter.MAIN and _has_button(view, "Continue")
+	checks["confirmed: main menu with Continue, game scene gone"] = not CurrentGame.has_game() and r.top() == MenuRouter.MAIN and _has_button(view, "Continue") and view.game_view == null
 	tree_parent.remove_child(view)
 	view.free()
 	CurrentGame.end()
@@ -585,22 +586,23 @@ static func _test_new_game_model() -> bool:
 	checks["current game set"] = CurrentGame.has_game() and CurrentGame.state().world_id == BASE and not CurrentGame.is_dirty()
 	var back: GameState = GameState.of(SaveGame.read(SaveGame.AUTOSAVE_SLOT)["state"])
 	checks["slot 0 written"] = back != null and back.equals(CurrentGame.state()) and CurrentGame.slot() == 0
-	checks["hub on top"] = r.stack == [MenuRouter.HUB] and p.started == 1
+	checks["the game scene (PLAY) is the stack"] = r.stack == [MenuRouter.PLAY] and p.started == 1
 	# Q1: a readable autosave is asked about first
 	var r2: MenuRouter = MenuRouter.new(MenuRouter.NEW_GAME)
 	var m2: NewGameModel = r2.model() as NewGameModel
 	var old_autosave: GameState = CurrentGame.state()
 	var asked_ok: bool = m2.choose(BASE, 12).is_empty() and r2.is_asking() and r2.pending_message.begins_with("Starting a new game replaces your autosave (") and r2.pending_message.ends_with("). Continue?")
 	checks["Q1 asks over a readable autosave"] = asked_ok and CurrentGame.state() == old_autosave
+	checks["UIR-2: the autosave question is destructive (No focused)"] = r2.pending_destructive
 	r2.decline()
 	checks["declined: nothing replaced"] = CurrentGame.state() == old_autosave and r2.top() == MenuRouter.NEW_GAME
 	checks["unplayable world: error, no question"] = m2.choose(BARE) == ["World '%s' is not playable (no start party)." % BARE] and not r2.is_asking()
 	var _again: Array[String] = m2.choose(BASE, 12)
 	r2.confirm()
-	checks["accepted: new game replaces it"] = CurrentGame.state() != old_autosave and r2.top() == MenuRouter.HUB
+	checks["accepted: new game replaces it"] = CurrentGame.state() != old_autosave and r2.top() == MenuRouter.PLAY
 	_write_raw(SaveGame.AUTOSAVE_SLOT, "not json")
 	var r3: MenuRouter = MenuRouter.new(MenuRouter.NEW_GAME)
-	checks["unreadable autosave: no question"] = (r3.model() as NewGameModel).choose(BASE, 13).is_empty() and not r3.is_asking() and r3.top() == MenuRouter.HUB
+	checks["unreadable autosave: no question"] = (r3.model() as NewGameModel).choose(BASE, 13).is_empty() and not r3.is_asking() and r3.top() == MenuRouter.PLAY
 	return _report("Check 6: NewGameModel.choose", checks)
 
 # Check 7: save(0) refused; overwrite asks; busy refuses; load enters the game and shows warnings once.
@@ -618,19 +620,19 @@ static func _test_save_slots_model() -> bool:
 	var _gone: bool = SaveGame.delete(2)
 	checks["empty slot saves at once"] = m.save(2).is_empty() and p.asked.is_empty() and SaveGame.exists(2) and CurrentGame.slot() == 2
 	CurrentGame.state().party.gold += 1
-	checks["existing slot asks"] = m.save(2).is_empty() and p.asked == ["Overwrite slot 2?"] and CurrentGame.is_dirty()
+	checks["existing slot asks, naming what is lost"] = m.save(2).is_empty() and p.asked == ["Overwrite slot 2: %s?" % SaveSlotsModel.describe(2)] and CurrentGame.is_dirty() and SaveSlotsModel.describe(2).begins_with("MN Base")
 	checks["overwrite question is destructive (No focused)"] = r.pending_destructive
 	r.confirm()
 	checks["confirmed overwrite saved"] = m.last_errors.is_empty() and not CurrentGame.is_dirty()
 	CurrentGame.set_busy(true)
-	checks["busy refused"] = m.save(3) == ["You can't save during a battle or a conversation."] and not SaveGame.exists(3)
+	checks["busy refused (says why)"] = m.save(3) == [SaveSlotsModel.BUSY] and SaveSlotsModel.BUSY.contains("battle") and SaveSlotsModel.BUSY.contains("shop") and not SaveGame.exists(3)
 	CurrentGame.set_busy(false)
 	var rows: Array[Dictionary] = m.rows()
 	checks["rows 0..5"] = rows.size() == SaveGame.LAST_SLOT + 1 and str(rows[0]["label"]) == "Autosave" and str(rows[2]["status"]) == "ok" and not DictUtil.to_bool(rows[0]["can_save"]) and DictUtil.to_bool(rows[2]["can_save"])
 	_write_raw(3, "{bad")
 	rows = m.rows()
 	checks["unreadable row: delete only"] = str(rows[3]["status"]) == "unreadable" and DictUtil.to_bool(rows[3]["can_delete"]) and not DictUtil.to_bool(SaveSlotsModel.new(r, false).rows()[3]["can_load"])
-	checks["delete asks"] = m.delete(3).is_empty() and p.asked.back() == "Delete the save in slot 3?" and SaveGame.exists(3)
+	checks["delete asks"] = m.delete(3).is_empty() and p.asked.back() == "Delete the save in slot 3?" and SaveGame.exists(3) and SaveSlotsModel.describe(3).is_empty()
 	r.confirm()
 	checks["deleted on confirm"] = not SaveGame.exists(3)
 	checks["delete empty refused"] = m.delete(3) == ["Slot 3 is empty."]
@@ -644,7 +646,7 @@ static func _test_save_slots_model() -> bool:
 	CurrentGame.end()
 	var loader := SaveSlotsModel.new(r, false)
 	checks["corrupt load keeps the screen"] = not loader.load(3).is_empty() and not CurrentGame.has_game() and p.started == 0
-	checks["load enters the game"] = loader.load(1).is_empty() and CurrentGame.has_game() and CurrentGame.slot() == 1 and r.top() == MenuRouter.HUB and p.started == 1
+	checks["load enters the game"] = loader.load(1).is_empty() and CurrentGame.has_game() and CurrentGame.slot() == 1 and r.top() == MenuRouter.PLAY and p.started == 1
 	checks["warnings shown once"] = p.notices == ["cleared unresolved location_id 'nowhere'"]
 	_wipe_saves()
 	return _report("Check 7: SaveSlotsModel save / load / delete", checks)
@@ -660,11 +662,14 @@ static func _test_hub_model() -> bool:
 	var checks: Dictionary = {"names": hub.world_name() == "MN Base" and hub.party().size() == 2}
 	checks["save opens"] = hub.open(MenuRouter.SAVE).is_empty() and r.top() == MenuRouter.SAVE
 	r.pop()
-	checks["journal opens (UI3-L)"] = hub.open(MenuRouter.JOURNAL).is_empty() and r.top() == MenuRouter.JOURNAL
-	r.pop()
+	if JournalModel.new().shown().is_empty():
+		checks["journal without quests says why (UIR-2)"] = hub.open(MenuRouter.JOURNAL) == [HubModel.NO_QUESTS] and r.top() == MenuRouter.HUB
+	else:
+		checks["journal opens (UI3-L)"] = hub.open(MenuRouter.JOURNAL).is_empty() and r.top() == MenuRouter.JOURNAL
+		r.pop()
 	checks["unknown entry refused"] = hub.open("nope") == ["Unknown hub entry 'nope'."] and r.top() == MenuRouter.HUB
 	CurrentGame.state().party.gold += 3
-	checks["dirty asks"] = hub.quit_to_menu().is_empty() and p.asked == ["Quit without saving?"] and CurrentGame.has_game()
+	checks["dirty asks"] = hub.quit_to_menu().is_empty() and p.asked.size() == 1 and p.asked[0].begins_with("Quit to the main menu without saving?") and r.pending_destructive and CurrentGame.has_game()
 	r.decline()
 	CurrentGame.mark_saved(1)
 	checks["clean quits at once"] = hub.quit_to_menu().is_empty() and p.asked.size() == 1 and not CurrentGame.has_game() and r.stack == [MenuRouter.MAIN]

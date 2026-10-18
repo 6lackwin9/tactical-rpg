@@ -2,26 +2,35 @@ class_name NewGameView
 extends VBoxContainer
 
 # ==============================================================================
-# Tactical RPG - New game view (UI1-L): one card per playable world with its fixed starting party; Start = choose().
+# Tactical RPG - New game view (UI1-L; UIR-2): a ScreenFrame with one selectable card per playable world (name, tagline,
+# its fixed starting party); a click or Enter on a card selects it (MenuStyle selected box, the label never changes);
+# Back first and Start (the selected world) last in the action bar.
 # ==============================================================================
 
 func build(host: MainMenuView, model: RefCounted) -> void:
 	var m: NewGameModel = model as NewGameModel
-	add_theme_constant_override("separation", 10)
-	add_child(MainMenuView.title("New game"))
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var worlds: Array[Dictionary] = m.worlds()
+	var start: Button = MainMenuView.button("Start", host.act.bind(m.start.bind(-1)), not worlds.is_empty() and not m.selected.is_empty())
+	var frame: ScreenFrame = ScreenFrame.make("New game", MainMenuView.button("Back", host.router.pop), start)
+	add_child(frame)
 	if worlds.is_empty():
-		add_child(MainMenuView.text("No world is playable yet (a world needs a start party and a start location).", UiTheme.COL_WARN))
+		frame.column.add_child(MainMenuView.text("No world is playable yet (a world needs a start party and a start location).", UiTheme.COL_WARN))
 	for w: Dictionary in worlds:
-		var card: VBoxContainer = UiTheme.card(self)
-		card.add_child(MainMenuView.text(str(w["name"]), UiTheme.COL_HEADER))
+		var id: String = str(w["id"])
+		var lines: PackedStringArray = PackedStringArray([str(w["name"])])
 		if not str(w["tagline"]).is_empty():
-			card.add_child(MainMenuView.text(str(w["tagline"]), UiTheme.COL_MUTED))
-		var names: PackedStringArray = PackedStringArray()
-		for raw: Variant in DictUtil.array_of(w["party"]):
-			var p: Dictionary = DictUtil.dict_of(raw)
-			var cls: String = str(p["class"])
-			names.append("%s (%sLv %d)" % [str(p["name"]), "" if cls.is_empty() or cls == str(p["name"]) else cls + ", ", DictUtil.to_int(p["level"])])
-		card.add_child(MainMenuView.text("Party: " + ", ".join(names)))
-		card.add_child(MainMenuView.button("Start in %s" % str(w["name"]), host.act.bind(m.choose.bind(str(w["id"]), -1))))
-	add_child(MainMenuView.button("Back", host.router.pop))
+			lines.append(str(w["tagline"]))
+		lines.append(NewGameModel.party_line(DictUtil.array_of(w["party"])))
+		var card: Button = MainMenuView.button("\n".join(lines), func() -> void:
+			host.act(m.select.bind(id))
+			host.render())
+		card.name = "WorldCard_" + id
+		card.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		MenuStyle.mark_selected(card, id == m.selected)
+		frame.column.add_child(card)
+		if id == m.selected:
+			set_meta(MainMenuView.FOCUS_META, card)
