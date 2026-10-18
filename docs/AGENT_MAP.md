@@ -12,6 +12,173 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### COMBAT-UI3-F: drafts fill empty blocks, hostile HP beside name, compact strip labels (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | COMBAT-UI3-F | 90k / 22 | fill, hostile HP, strip labels |
+| change-reviewer | COMBAT-UI3-F | 25k / 1 | clean, 4 nits |
+
+### PURSE1-L: encounter purses pay gold and loot on a win (save v10) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | PURSE1-L | 82k / 33 | runtime, save v10, gate green |
+| change-reviewer | PURSE1-L | 24k / 1 | clean, 3 nits |
+
+### COMBAT-UI3: combat HUD layout A (planning strip, merged enemy card, hero panel) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | COMBAT-UI3 | ~450k / 49 | built layout A |
+| change-reviewer | COMBAT-UI3 | 29k / 1 | clean, Touches nit fixed |
+
+### MORALE1-B: morale balance probe report (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| balance | MORALE1-B | 56k / 47 min | report landed |
+| change-reviewer | MORALE1-B | 17k / 1 min | 1 minor (fixed) |
+
+### HANDOVER-ASSETS: Assets & Audio wind-down handover (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Assets & Audio thread, HANDOVER-ASSETS | HANDOVER-ASSETS | none / - | done |
+
+### PURSE1-L (schema): encounter purse field and validation (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | PURSE1-L (schema) | 81k / 26 | schema slice, gate green |
+| change-reviewer | PURSE1-L (schema) | 18k / 1 | clean, 2 nits |
+
+### PACE1-L: two-act boss behaviour (or_round, enrage, empower, enraged intents, start buffs, boss warning) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | PACE1-L | 122k / 31 | behaviour, gate green |
+| change-reviewer | PACE1-L | 32k / 1 | clean, 4 nits |
+
+### MORALE1-A: enemy morale on ash_scouts and ash_raiders (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | MORALE1-A | 19k / 1 | seed ok | ; | change-reviewer | MORALE1-A | 16k / 1 | clean |
+
+### UIR-6: dialogue as a full-width bottom bar, shop as a popup, text scale (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | UIR-6 | 196k / 31 | built + review fixes |
+| change-reviewer | UIR-6 | 79k / 3 | 2 should-fix, 6 nits |
+
+### BAL5-R (probe): why shield_wall's fortify moved nothing (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BAL5-R probe | 60k / 15 | grant works; shield_wall rarely cast |
+
+### PACE1-L (schema): phase enrage and or_round, empower status, pace and start_status fields (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | PACE1-L (schema) | 165k / 39 | schema slice, gate green |
+| change-reviewer | PACE1-L (schema) | 62k / 2 | clean, 5 nits |
+
+### BAL5-R: final trio rerun; shield_wall fortify moved nothing, gaps stand (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| balance | BAL5-R | 43k / 50 | gaps stand; report corrected (claimed all cells identical) |
+
+### MORALE1-S: world sims carry the five morale fields (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MORALE1-S | 36k / 6 | done, gate auto balance 44/0 |
+| change-reviewer | MORALE1-S | 29k / 1 | clean, 4 nits |
+
+### MAPDEV1-U: map debug tools only in debug scenes; play bars show place and supplies (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MAPDEV1-U | 213k / 98 | built region + world map, docs, gate clean |
+| change-reviewer | MAPDEV1-U | 53k / 2 | clean, 3 nits |
+
+### MORALE1-L: enemy morale in battle (losses, breaks, flee bonus, surrender, Fearless) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MORALE1-L | 149k / 37 | behaviour + review fixes, gate clean |
+| change-reviewer | MORALE1-L | 57k / 2 | 0 high, 2 medium, 2 nits |
+
+### BAL5-A: shield_wall fortify extra grant and potion price 30 (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | BAL5-A | 27k / 13 | done, gate auto 951/0 |
+| change-reviewer | BAL5-A | 18k / 1 | clean, 4 nits |
+
+### BAL5-L: extra_grants skill field (second grant on DEFEND/SUPPORT skills) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BAL5-L | 96k / 41 | done, gate auto 950/0 |
+| change-reviewer | BAL5-L | 40k / 1 | clean, 3 nits |
+
+### BAL5-S2 + POTLEDGER: support_attrition scenario and potion heals in the sim ledger (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BAL5-S2 + POTLEDGER | 100k / 25 | done (STATCRED part dropped, duplicate of 3fa4cea) |
+| change-reviewer | BAL5-S2 + POTLEDGER | 30k / 1 | clean, 5 nits |
+
+### STATCRED1-L: battle report credits each status to the unit that applied it (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | STATCRED1-L | 71k / 40 | fixed + 2 follow-ups, gate clean |
+| change-reviewer | STATCRED1-L | 35k / 1 | 0 high, 1 medium, 3 nits |
+
+### UIR-3: Character popup with Stats, Level up, Skills and Gear tabs (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | UIR-3 | 382k / 61 | built, review fixes, gate clean |
+| change-reviewer | UIR-3 | 119k / 12 | 3 highs, 1 medium, 6 nits |
+
+### BAL5-R1b: re-measure under the re-draft fix and BAL5-AI (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| balance | BAL5-R1b | ~50k / 62 | T3, S2, potion price fire; B3 no |
+
+### GATE-SPLIT: per-system gates, parallel CI jobs per system (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | GATE-SPLIT | 30k / 1 | PASS |
+
+### MORALE1-L (schema): enemy morale encounter fields, validation and preview (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MORALE1-L (schema) | 82k / 22 | schema slice, gate clean |
+| change-reviewer | MORALE1-L (schema) | 39k / 2 | clean, 3 nits |
+
+### ASSETS-PREFS: sprite animation notes in the world asset preferences (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Assets & Audio thread, ASSETS-PREFS | ASSETS-PREFS | none / - | done |
+
+### CAMPLABEL1-S: campaign sim fall label names the fight actually lost (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | CAMPLABEL1-S | 17k / 1 | clean, 3 nits |
+
 ### USAGE: 2026-10-18 11:45 usage report, delta and efficiency (2026-10-18, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
