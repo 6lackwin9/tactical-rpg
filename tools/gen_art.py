@@ -117,6 +117,7 @@ CHARACTERS = {
     "hest_the_quartermaster": {**HUMAN, "skin": "#e0b48c", "body": "#6b4a2f", "trim": GOLD, "helm": "cap", "hair": "#b9b2a4", "beard": "#b9b2a4", "prop": "ledger", "bw": 1.15, "eyes": "#3b2a1a"},
     "bryn_hale": {**HUMAN, "skin": "#d9a679", "body": "#4a4f5c", "trim": EMBER, "helm": "steel", "plume": "#9aa6b4", "prop": "sword", "bw": 1.1, "eyes": "#3b2a1a"},
     "sella_marsh": {**HUMAN, "skin": "#d9ad86", "body": "#52603f", "trim": LEATHER, "helm": "hood", "hood": "#445234", "prop": "bow", "quiver": True, "eyes": "#3b2a1a"},
+    "wenn_tallow": {**HUMAN, "skin": "#e6bf99", "body": "#8a6a42", "trim": "#c9b27a", "helm": "cap", "hair": "#a8672e", "prop": "bow", "bw": 0.9, "eyes": "#3b2a1a"},
     "kit_vane": {**HUMAN, "skin": "#e0b48c", "body": "#35323a", "trim": "#6a5a7a", "helm": "hood", "hood": "#2b2830", "prop": "dagger", "bw": 0.9, "eyes": "#3b2a1a"},
     "oren_dusk": {**HUMAN, "skin": "#c99466", "body": "#6a3a2e", "trim": EMBER, "helm": "wizard", "hood": "#4a2a26", "beard": "#8a8a92", "prop": "staff", "eyes": "#3b2a1a"},
     "alda_wren": {**HUMAN, "skin": "#e6bf99", "body": "#d8d4cc", "trim": GOLD, "helm": "cowl", "hood": "#c9c4b8", "prop": "mace", "eyes": "#3b2a1a"},

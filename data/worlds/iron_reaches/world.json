@@ -9,6 +9,7 @@
 	],
 	"start_location": "",
 	"start_party": [],
+	"party_max": -1,
 	"start_gold": -1,
 	"start_supplies": -1,
 	"service_lines": {},

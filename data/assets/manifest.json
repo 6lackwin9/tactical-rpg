@@ -4432,6 +4432,36 @@
 			"frames": 1,
 			"origin": "user",
 			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/wenn_tallow/portrait",
+			"namespace": "unit",
+			"key": "wenn_tallow",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/wenn_tallow_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/wenn_tallow/token",
+			"namespace": "unit",
+			"key": "wenn_tallow",
+			"variant": "token",
+			"path": "res://assets/art/unit/wenn_tallow_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
 		}
 	]
 }

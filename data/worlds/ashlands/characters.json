@@ -446,6 +446,25 @@
 			"dialogue": "muster_talk",
 			"gone_flags": [],
 			"tags": []
+		},
+		{
+			"id": "wenn_tallow",
+			"name": "Wenn Tallow",
+			"title": "Orsa's Carter",
+			"role": "npc",
+			"base_unit": "ranger",
+			"art": "wenn_tallow",
+			"background": "Orsa's nephew; drives the steel wagon and swears he can shoot.",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [],
+			"named_items": [],
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
 		}
 	]
 }

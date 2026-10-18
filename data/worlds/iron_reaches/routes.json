@@ -23,7 +23,7 @@
 			"scripted": [
 				{
 					"id": "wagon_raid",
-					"encounter": "ashlands:ash_raiders",
+					"encounter": "ashlands:wagon_raid",
 					"requires_flags": [
 						{
 							"key": "ashlands.steel_loaded",

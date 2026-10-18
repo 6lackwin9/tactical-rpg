@@ -34,12 +34,12 @@
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
 			"phases": [],
-			"objective": "rout",
+			"objective": "hold",
 			"objective_tiles": [],
 			"objective_rounds": 3,
 			"objective_unit": "",
 			"objective_count": 1,
-			"objective_text": "",
+			"objective_text": "Hold the Courtyard: keep the ring for 3 rounds, or drive them off.",
 			"deployment": "standard",
 			"guests": [],
 			"protect": [],
@@ -49,7 +49,7 @@
 			"id": "pass_ambush",
 			"name": "Ambush at the Cinder Gate",
 			"description": "A brawler and a skirmisher bait the party; at Round 1 Block 4 an archer and a smokecaller fall on them.",
-			"intro": "Too quiet. Tev raises a hand: smoke, upwind, much too close.",
+			"intro": "Too quiet. Bryn raises a hand: smoke, upwind, much too close.",
 			"location": "cinder_gate",
 			"zone": "forest_clearing",
 			"arena": "CLOSED",
@@ -300,12 +300,12 @@
 					"pause_autoplay": true
 				}
 			],
-			"objective": "rout",
+			"objective": "slay",
 			"objective_tiles": [],
 			"objective_rounds": 3,
-			"objective_unit": "",
+			"objective_unit": "grakka_ashmaw",
 			"objective_count": 1,
-			"objective_text": "",
+			"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
 			"deployment": "standard",
 			"guests": [],
 			"protect": [],
@@ -401,12 +401,12 @@
 					"pause_autoplay": false
 				}
 			],
-			"objective": "rout",
+			"objective": "slay",
 			"objective_tiles": [],
 			"objective_rounds": 3,
-			"objective_unit": "",
+			"objective_unit": "grakka_ashmaw",
 			"objective_count": 1,
-			"objective_text": "",
+			"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
 			"deployment": "standard",
 			"guests": [],
 			"protect": [],
@@ -452,6 +452,54 @@
 			"deployment": "standard",
 			"guests": [],
 			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "wagon_raid",
+			"name": "Raid on the Steel Wagon",
+			"description": "Raiders hit Orsa's wagon on the south road; Wenn must live to drive it home.",
+			"intro": "The wagon lurches. Goblins come out of the ditch on both sides.",
+			"location": "ruined_courtyard",
+			"zone": "ruined_courtyard",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"mara_voss",
+				"tev_quill"
+			],
+			"enemies": [
+				"ash_brawler",
+				"ash_skirmisher",
+				"ash_shaman"
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "ambush",
+			"guests": [
+				"wenn_tallow"
+			],
+			"protect": [
+				"wenn_tallow"
+			],
 			"tags": []
 		}
 	]
