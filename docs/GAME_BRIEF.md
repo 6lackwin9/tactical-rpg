@@ -116,7 +116,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 - Attack range +1 at PERC >= `CharacterStats.RANGE_PERC_THRESHOLD` (18) only for ranged weapons (base range > 1); melee units stay at range 1.
 - Unit gear slot `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) = no item; a blank slot = class default. Units only (classes and world characters reject it).
-- Tiers: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`). Minion units without `skill_cap` use AP ceiling `StatRules.MINION_SKILL_CAP` (2; `TIERS[tier].skill_cap`, `tier_skill_cap`; BAL3-AI).
+- Tiers: elite 1.25 HP / 1.0 power (BAL3 Q3), boss 1.5 / 1.1 (`StatRules.TIERS`). Minion units without `skill_cap` use AP ceiling `StatRules.MINION_SKILL_CAP` (2; `TIERS[tier].skill_cap`, `tier_skill_cap`; BAL3-AI).
 - Trained fists: empty main hand + fist proficiency >= `DamageCalculator.TRAINED_FIST_MIN_LEVEL` (2): weapon power `UNARMED_BASE_POWER` (15) + fist training, fist crit bonus; `GearBudget.UNARMED_VALUE` reads the same constant. Inputs only, the formula is unchanged.
 - Sim: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value]` (`tools/balance_sim.gd` + `tools/sim/`); cells `binary/hp-margin`; duel = diagnostic band 30-70 (party and role targets: `docs/decisions/balance.md`). Modes party / role / sweep (BAL2_SIM 4-8): role tests start enemies 4 tiles away (`distance=` overrides); off-target values marked X; `METRIC FAIL` lines (`log_damage`, `log_area`, `log_heal`, `log_riposte`, `other_*`) mean the collector found HP it cannot explain; party fight ~3 s, full role run ~28 min. Tests: `bal2_rules_test_suite.gd`.
 

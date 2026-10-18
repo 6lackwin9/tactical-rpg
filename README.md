@@ -505,7 +505,7 @@ A skill is one **family template** plus up to two **rank modifiers** (absolute v
 
 - **Range**: the +1 attack range at PERC 18 (`CharacterStats.RANGE_PERC_THRESHOLD`) now applies only to ranged weapons (base range above 1); melee units stay at range 1.
 - **Unit gear `none`**: a unit slot set to `none` (`ContentSchema.NO_ITEM`, pouch `["none"]`) opts out of the class default loadout; a blank slot still means "use the class default". Units only.
-- **Tiers**: elite 1.25 HP / 1.1 power, boss 1.5 / 1.1 (`StatRules.TIERS`).
+- **Tiers**: elite 1.25 HP / 1.0 power (BAL3 Q3; was 1.1), boss 1.5 / 1.1 (`StatRules.TIERS`).
 - **Trained fists**: an empty main hand with fist proficiency 2 or more hits with weapon power 15 + fist training and gets the fist crit bonus (`DamageCalculator.UNARMED_BASE_POWER`, `TRAINED_FIST_MIN_LEVEL`); `GearBudget.UNARMED_VALUE` reads the same constant. The damage formula itself is unchanged.
 - **Balance sim**: `tools/fc.sh sim <duel|tier|levels|group|stats> [level] [seeds] [key=value ...]` (helpers in `tools/sim/`). Keys: `cap` (default 10), `loadout=default|newest`, `spend`, `preset`, `distance`, `score=both|hp|binary`, `quick`, `band=lo-hi`. Refused plans print `PLAN FAIL <unit> <reason>` (with the step and the unit holding the tile) and every mode ends with `plan checks: N PLAN FAIL over M fights`. Cells print `binary/hp-margin` scores; duel rows outside the 30-70 diagnostic band are flagged LOW/HIGH. Modes `party` (up to 4 vs catalog or generated mob/line/wave/elite/boss encounters), `role` (five limit-test scenarios per role, start distance 4, KPIs as mean [floor..ceiling] with ranking) and `sweep` (all 4-class compositions, swap delta, top-5 counts) use a per-unit metrics collector fed by each unit's `health_changed` signal; it self-checks every log entry against real HP changes and prints `METRIC FAIL` on any mismatch. Off-target values are marked X; `target=<key>:<lo>-<hi>` overrides a band. A full role run is about 28 min (split with `role=` or raise `SIM_TIMEOUT`).
 - Tested in `bal2_rules_test_suite.gd`.
@@ -513,7 +513,7 @@ A skill is one **family template** plus up to two **rank modifiers** (absolute v
 ### Balance sim levers (BAL3-S)
 
 - **Start jitter**: by default every fight shifts each unit's start tile by up to 1 tile inside its own half (never onto a unit, wall or exit) and shuffles the party order, both seeded by the fight seed (same seed, same layout); `jitter=off` restores the standard deployment for A/B. Applies to every mode; role mode applies jitter before the start-distance placement.
-- **Generated encounters**: mob 5 minions; line 4 standard (warrior, brawler, ranger, rogue); wave 3 standard + 3 minion wave; elite = elite + rogue, mage, warrior standard; boss = boss + ranger, priest standard + ranger, priest minion wave at round 2. Threat = sum of tier HP x tier power (minion 0.24, standard 0.56, elite 1.375, boss 1.65; party of 4 = 4.00): 1.20 / 2.24 / 2.40 / 3.06 / 3.25.
+- **Generated encounters**: mob 5 minions; line 4 standard (warrior, brawler, ranger, rogue); wave 3 standard + 3 minion wave; elite = elite + rogue, mage, warrior standard; boss = boss + ranger, priest standard + ranger, priest minion wave at round 2. Threat = sum of tier HP x tier power (minion 0.24, standard 0.56, elite 1.25, boss 1.65; party of 4 = 4.00): 1.20 / 2.24 / 2.40 / 2.93 / 3.25.
 - **Role scenarios**: `aoe_swarm` starts its 6 melee minions (3 brawler, 2 rogue, 1 priest) in a 2x3 block of adjacent tiles at the start distance; `striker_priority`'s priority mage is standard tier at L3 and below (elite above); `ranged_dive` unchanged.
 - Tested in `bal2_rules_test_suite.gd`.
 
@@ -552,6 +552,12 @@ Real battles from the map (BATTLE1-L): a fight on the region map (step counter, 
 Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (kept through turn-in, cleared by abandon); the Ashlands warband and Cinder Gate ambush markers hide once their fight is won while the quest is active.
 
 Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `gorge_ruins`; Ashlands starts at Warden Keep; the new Cinder Gate location; generic Horde characters and mob encounters; markers for patrols, chests, lore, a beacon and the gate that opens once the courtyard is held. World-map exits: TRAV1-A.
+
+### Balance data pass (BAL3-A)
+
+- `sweep_kick` power_mult 0.7/0.9/1.05 -> 0.8/1.0/1.15 (brawler aoe_swarm foes/cast 1.43 -> 1.57), seed `data/seeds/bal3.gd`.
+- Elite tier power 1.1 -> 1.0 (HP 1.25 kept); the sim warrior tank loadout drops `riposte` so `shield_wall` is drafted.
+- Tried and reverted (no effect on their metric): `firebomb` reach 3, `mend` heal 10/12/14, `renewal` regen, kite shield mitigation 4-5. Details in `docs/BALANCE_REPORT.md`.
 
 ### AI pressure levers (BAL3-AI)
 

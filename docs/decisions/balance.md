@@ -15,6 +15,8 @@ Settled; do not re-litigate without asking the user. Scope: balance targets, sim
 | BAL3 plan (user 2026-10-17) | The auto-plan abort (BAL2 rerun I1) is fixed on main (PLAN1, ca1d094). Next: BAL2-R, a clean rerun on current main that replaces the outdated rerun section; then design-brainstorm writes a BAL3 spec for the data and AI levers (I2-I14). Role bands stay unchanged until that rerun (I10) | User 2026-10-17 |
 | BAL3 answers (user 2026-10-17) | All BAL3 recs accepted: (Q1) plan and order in `docs/specs/BAL3.md` (BAL3-R0 baseline after the 12x9 grid and S12S-L merge, then sim, AI, data, final rerun; levers only when their trigger fires; per-block re-targeting deferred); (Q2) party targets measured at equal level with a party of 4; (Q3) if solo elite stays under 30% after seeded jitter, elite power 1.1 -> 1.0 (HP 1.25 and boss unchanged) | User 2026-10-17 |
 | BAL3-S ranged_dive (user 2026-10-17, decision card) | Skip the spec's third standard rogue in `ranged_dive` (BAL3 3.2): keep three divers | With BAL3-S start jitter the ranger already clears 61 (band 50-85), so the R0 trigger no longer fires; four divers drop it to 6 |
+| BAL3-AI lever C scope (user 2026-10-17, decision card) | The "faster tier when likely to die" rule applies to every unit, enemies included | Matches the spec and keeps the AI symmetric; the support_attrition drop (78 -> 50) is left to later support levers |
+| BAL3-A elite power applied (2026-10-18, per BAL3 Q3) | Elite tier power 1.1 -> 1.0, HP 1.25 kept (`StatRules.TIERS`) | Q3 trigger fired: solo elite L5 was 0 for 5 of 6 classes after jitter; after the change still 0 for those 5 (priest 33 -> 50), so BAL3-R reports it |
 
 ## Partly superseded rows (text unchanged; the newer row wins on the named part)
 

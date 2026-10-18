@@ -644,15 +644,15 @@
 			"description": "{name}: {power} power. Sweep area, hits allies too. Aim at a diagonal neighbour to pick the quadrant. Bare hands or feet.",
 			"learned_only": true,
 			"area": "SWEEP",
-			"power_mult": 0.7,
+			"power_mult": 0.8,
 			"ranks": [
 				{
 					"level": 3,
-					"power_mult": 0.9
+					"power_mult": 1.0
 				},
 				{
 					"level": 4,
-					"power_mult": 1.05
+					"power_mult": 1.15
 				}
 			]
 		},

@@ -305,7 +305,7 @@ static func _tiered(class_id: String, level: int, tier: String) -> Combatant:
 
 static func _test_tier_values() -> bool:
 	var checks: Dictionary = {}
-	checks["elite hp 1.25 / power 1.1"] = is_equal_approx(StatRules.tier_hp("elite"), 1.25) and is_equal_approx(StatRules.tier_power("elite"), 1.1)
+	checks["elite hp 1.25 / power 1.0 (BAL3 Q3)"] = is_equal_approx(StatRules.tier_hp("elite"), 1.25) and is_equal_approx(StatRules.tier_power("elite"), 1.0)
 	checks["boss hp 1.5 / power 1.1"] = is_equal_approx(StatRules.tier_hp("boss"), 1.5) and is_equal_approx(StatRules.tier_power("boss"), 1.1)
 	checks["hero, minion, standard unchanged"] = is_equal_approx(StatRules.tier_hp("hero"), 1.0) and is_equal_approx(StatRules.tier_power("hero"), 1.0) \
 		and is_equal_approx(StatRules.tier_hp("minion"), 0.4) and is_equal_approx(StatRules.tier_power("minion"), 0.6) \
@@ -318,7 +318,7 @@ static func _test_tier_values() -> bool:
 	var parts: Dictionary = DamageCalculator.attack_power(hero)
 	var unscaled_power: float = DictUtil.to_float(parts["weapon_power"]) + DictUtil.to_float(parts["unit_power"])
 	checks["elite max_hp %d = round(%d x 1.25)" % [elite.max_hp, unscaled_hp]] = elite.max_hp == roundi(float(unscaled_hp) * StatRules.tier_hp("elite"))
-	checks["elite power %d = round(%.1f x 1.1)" % [DamageCalculator.power_of(elite), unscaled_power]] = DamageCalculator.power_of(elite) == maxi(1, roundi(unscaled_power * StatRules.tier_power("elite")))
+	checks["elite power %d = round(%.1f x tier power)" % [DamageCalculator.power_of(elite), unscaled_power]] = DamageCalculator.power_of(elite) == maxi(1, roundi(unscaled_power * StatRules.tier_power("elite")))
 	var hp: Array[int] = []
 	var pw: Array[int] = []
 	for tier: String in ["minion", "standard", "hero", "elite", "boss"]:
@@ -326,8 +326,8 @@ static func _test_tier_values() -> bool:
 		hp.append(c.max_hp)
 		pw.append(DamageCalculator.power_of(c))
 	checks["HP minion < standard < hero < elite < boss %s" % str(hp)] = hp[0] < hp[1] and hp[1] < hp[2] and hp[2] < hp[3] and hp[3] < hp[4]
-	checks["power minion < standard < hero < elite <= boss %s" % str(pw)] = pw[0] < pw[1] and pw[1] < pw[2] and pw[2] < pw[3] and pw[3] <= pw[4]
-	return TestHelpers.report(TAG, "Tier values: elite 1.25 / 1.1, boss 1.5 / 1.1; ordering", checks)
+	checks["power minion < standard < hero <= elite <= boss %s" % str(pw)] = pw[0] < pw[1] and pw[1] < pw[2] and pw[2] <= pw[3] and pw[3] <= pw[4]
+	return TestHelpers.report(TAG, "Tier values: elite 1.25 / 1.0, boss 1.5 / 1.1; ordering", checks)
 
 # ------------------------------------------------------------------------------
 # Commit 5: trained fists (DamageCalculator.UNARMED_BASE_POWER, fist proficiency >= 2)

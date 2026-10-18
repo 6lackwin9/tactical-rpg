@@ -66,7 +66,7 @@ const TIERS: Dictionary = {
 	"hero": {"hp": 1.0, "power": 1.0, "label": "Hero"},
 	"minion": {"hp": 0.4, "power": 0.6, "label": "Minion", "skill_cap": MINION_SKILL_CAP},
 	"standard": {"hp": 0.7, "power": 0.8, "label": "Standard"},
-	"elite": {"hp": 1.25, "power": 1.1, "label": "Elite"},   # BAL2 answers (user 2026-10-17)
+	"elite": {"hp": 1.25, "power": 1.0, "label": "Elite"},   # BAL3 Q3 (user 2026-10-17); hp 1.25 from BAL2
 	"boss": {"hp": 1.5, "power": 1.1, "label": "Boss"},
 }
 

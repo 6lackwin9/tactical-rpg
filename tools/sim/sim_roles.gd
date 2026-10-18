@@ -15,7 +15,7 @@ const SECONDARY: Dictionary = {"warrior": ["support"], "ranger": ["aoe"], "pries
 
 # 6.3 role loadouts at L5; L7_SWAPS replace one family from level 7 on.
 const LOADOUTS: Dictionary = {
-	"warrior": {"tank": ["taunt_shout", "shield_bash", "riposte", "intimidate", "shield_wall"],
+	"warrior": {"tank": ["taunt_shout", "shield_bash", "intimidate", "shield_wall"],
 		"support": ["taunt_shout", "intimidate", "shield_bash", "sunder", "riposte"]},
 	"ranger": {"ranged": ["aimed_shot", "pinning_shot", "leap_back", "barbed_arrow", "deadeye"],
 		"aoe": ["aimed_shot", "pinning_shot", "leap_back", "volley", "deadeye"]},
