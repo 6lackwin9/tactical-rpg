@@ -1,24 +1,25 @@
 # Design handover
 
-Written 2026-10-18 08:25 UTC by the Design session (rotation by context size, `cloud.md` "Usage caps"). Read this, then `docs/workflow/cloud.md` and `docs/workflow/design-review.md`.
+Written 2026-10-18 16:30 UTC by the Design session at the project wind-down (Tushar 16:28: move to an "interactive" mode, agents act only on his requests). Read this, then `docs/workflow/cloud.md` and `docs/workflow/design-review.md`. Resume only when Tushar asks for Design work.
 
-## Queue
+## State
 
-- Nothing waits on the user from Design. All cards answered (BREPORT1, BAL5, Orsa quest, HEAL1).
-- Next spec: MORALE1 (enemy morale, builds on OBJ1 slay; TASKS row, `docs/specs/DESIGN_REVIEW1.md` 4.3) once OBJ1-L is on `develop`. Then the remaining DR1 design rows in `docs/TASKS.md` (for example COMBO-A2).
-- First design review: due when RECRUIT1-L, INTENT1-L, MAPREAD1-L1, ITEMUSE1-L and MAPREAD1-L2 are on `develop` (`docs/design/OPTION_BRANCHES.md`). Candidate option-build ideas are listed there. Option builds need the rotating build slot from the coordinator.
+- Nothing waits on the user from Design. Nothing is in flight.
+- Option builds are paused: Design proposes, Tushar approves (decision workflow "Option builds paused"). UI picks he approves are preferences unless the idea came from him.
+- Done today (all on `develop`): MORALE1 spec (rule 8 flee form accepted from MORALE1-L, c75bb11), PACE1 spec, PURSE1 spec, design reviews DR2 and DR3 (answered, copies in `docs/specs/`), COMBAT-UI3 mockups (Tushar picked A plus changes; UI/UX builds it; canvas https://claude.ai/artifact/E75abGsPLH6E6GZfBXVASi), LEVERS1 spec (`docs/specs/LEVERS1.md`, approved 14:26 all recs, plus "Smarter Shield Wall" card 15:36, e0f1ae5).
 
-## Handed off today
+## Queue (start only on request)
 
-- BREPORT1-L to Gameplay (BREPORT1-U to UI/UX after UIR-4).
-- BAL5-SIM/R1/AI/PH/L/A/R to Balance (trio re-measure first).
-- HEAL1-L to Gameplay (pings Assets for HEAL1-A, UI/UX for HEAL1-U, Balance for HEAL1-S/B). Not parallel with BREPORT1-L. User changed the defeat rule: 3 supplies forced rest at the last checkpoint, else back to the last rest place (decision progression-save "HEAL1 between-battle healing").
-- OPTLAUNCH1 landed (Platform): `run.bat opt a|b|c`.
+- Remaining DR1 design rows in `docs/TASKS.md`: KEEP1, DIFF1, DEEDS1, RESPEC1, OFFHAND1, DESERT1, COMBO-A2.
+- Next design review (DR4): rule 1 counts from 8e2530a (`docs/design/OPTION_BRANCHES.md`).
+- Watch items from BAL5-R (d4ab083): line / wave / elite / boss clears 26 / 28 / 38 / 26 are under their bands with no lever in BAL5 (boss slightly too hard, not too easy). Balance owns the follow-up; Design may be asked for levers. Bodyguard (T4) returns only if LEVERS1-B still shows warrior-row won-fight allies under 40.
 
 ## Routines
 
-- "Design review check" trig_01C87VVsqRTJWf99ggm9vqam (12:20 and 18:20 UTC) is bound to the old Design session. The new session recreates it bound to itself (same prompt as in `design-review.md` "The check routine") and asks the coordinator to disable the old one.
+- "Design review check" trig_016jzPSMrdHLPY3E6KFJzfHP (12:20 and 18:20 UTC) is DISABLED (wind-down, 16:30). Re-enable with update_trigger only if Tushar asks for scheduled reviews again.
 
-## Session ids for hand-offs (2026-10-18 08:20)
+## Rules changed today
 
-Gameplay cse_017rPg9X4j3FhvPDo3t93bwo, UI/UX cse_01Rs6SLjohzJBiLs4ezyKKBN, Assets & Audio cse_01UywiZpBegbdrmR76smao3d, Balance cse_012hWXrrHGj1VxCBHAEN59mo (may have rotated), Platform cse_01BW1xnuo5QGUqFTpZpTWKyj.
+- No "landed <id> <sha>" pings to Merge & Release (f1db72d); patch notes are written per release.
+- Never touch the `engine` branch until Tushar approves (decision "Engine branch hold").
+- Timing: lines carry `type=` and `tokens=`.
