@@ -1,5 +1,78 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## BAL5-R1 trio re-measure 2026-10-18
+
+Branch claude/bal5-r1 (develop c78b8ba, BAL5-SIM tooling; not on main yet). Trios are warrior plus two recruits, boss phase on (default), jitter on, 0 PLAN FAIL and 0 METRIC FAIL in every run. Cells: sweep and party 10 seeds, role and tier 3 seeds as the spec says (the role cell is a mean over 6 variants, ranges in the raw logs). Logs: scratchpad `r1/`. Wall about 2 h (4 processes in parallel; role L5 about 1 h, sweeps 20-60 min). Not run (time): role at L3 and L7, tier and party at other levels; the triggers below are all decided on L5 numbers, which is where the spec reads them.
+
+Trio sweep, boss only (`sweep <lvl> 10 size=3 lead=warrior enc=boss`), boss clear % per trio:
+
+| Trio | L3 | L5 | L7 |
+| --- | --- | --- | --- |
+| ranger, rogue | 60 | 40 | 30 |
+| ranger, brawler | 20 | 30 | 60 |
+| ranger, mage | 50 | 30 | 40 |
+| ranger, priest | 30 | 10 | 0 |
+| brawler, rogue | 20 | 30 | 40 |
+| brawler, mage | 20 | 20 | 20 |
+| priest, mage | 10 | 20 | 30 |
+| priest, rogue | 10 | 10 | 30 |
+| priest, brawler | 0 | 0 | 20 |
+| rogue, mage | 70 | 20 | 20 |
+| mean (band 30-50) | 29 | 21 | 29 |
+
+All three means are just under the band; the gap flipped from far too easy (80-100 with 4 heroes, no phase) to slightly too hard. Trios below 20 (the spec floor): 5 at L3, 5 at L5, 3 at L7 of 10; every priest trio is at or below 30 at L5. Class swap delta: priest is -18 (L3), -14 (L5 all-encounter), -15 (L7), the worst class each time.
+
+L5 full sweep (5 encounters, mean over trios): mob 76 (band >= 90), line 32 (70-90), wave 27 (55-80), elite 33 (50-75), boss 21 (30-50). With a trio the default L5 line and elite are now far below band, not above it (section 7 closed: the 4-hero excess was party size).
+
+Role L5 (mean over variants):
+
+| Role | Metric | Measured | Band |
+| --- | --- | --- | --- |
+| tank (warrior) | clear | 33 | 30-85 |
+| tank | allies hp_end won-fights / all | 9 / 6 | >= 40 / >= 15 |
+| tank | survival | 33 | >= 35 |
+| tank | dmg_taken share, rank | 45, rank 1 | rank 1 |
+| support (priest) | heal share of party HP | 1 | >= 20 (interim >= 5) |
+| support | priest down before round 3 | 78% | alive at r3 >= 60% (here 22%) |
+| support | priest clear | 50 | 30-85 |
+| aoe | swarm clear (brawler / mage) | 56 / 72 | >= 70 |
+| aoe | foes/cast brawler (rank 2) / mage (rank 1) | 1.09 / 1.51 | brawler rank 1 and >= 1.5; mage >= 1.0 |
+| aoe | allies/cast brawler / mage / ranger | 0.04 / 0.14 / 0.22 | <= 0.3 |
+
+Solo vs a brawler foe (`tier 5 3 tier_foe=brawler`, 1v1 win %): boss warrior 0, ranger 67, priest 0, brawler 0, rogue 0, mage 50 (band 10-20). Elite: warrior 67, ranger 67, mage 67, others 0.
+
+Ashmaw stand (`party 5 10 world=ashlands enc=ashmaw_stand`, full HP, level 5, the BOSS1-A phase is already in the data): clear per trio ranger-priest 90, ranger-brawler 90, ranger-mage 80, brawler-mage 80, ranger-rogue 60, priest-brawler 60, priest-mage 60, rogue-mage 60, brawler-rogue 50, priest-rogue 30; mean 66 (band 30-50). No before-BOSS1-A run was taken, and the barred stand and arrival-HP path were not run.
+
+Trigger table (BAL5_LEVERS sections 1-7):
+
+| Trigger | Fires? | Measured value | Threshold |
+| --- | --- | --- | --- |
+| B1 trio re-measure (sec 1) | done | boss mean 29 / 21 / 29 at L3 / L5 / L7 | band 30-50 |
+| B2 sim boss phase | already on | phase on by default in these runs | n/a |
+| B3 boss HP 1.5 -> 1.8 | no | L5 boss mean 21 | fires only if above 60 |
+| B4 boss double action | no (design review) | n/a | n/a |
+| T1 won-fight split | done in tooling | won 9 vs all 6 | n/a |
+| T2 early taunt | YES | won-fight allies hp_end 9; survival 33 | below 40 or below 35 at L5 |
+| T3 second grant | not yet (only after T2) | n/a | still failing after T2 |
+| S1 healer self-care | YES | priest down before round 3 in 78% of L5 support fights | >= 50% |
+| S2 support_attrition change | not yet (only after S1) | heal share 1 | under 5 after S1 |
+| A1 trio swarm | tooling state not checked | roles above were run with the sim default | with Q1 |
+| A2 friendly-fire tolerance | YES | brawler foes/cast 1.09; mage 1.51 | brawler < 1.5 or mage < 1.0 |
+| A3 mage AoE at L3 | no | needs Q4 yes; L3 role not run | Q4 yes |
+| D1 / D2 (sec 5) | D2 measurable now | solo boss: ranger 67, mage 50, warrior 0, others 0 | 10-20 per class |
+| F1 / F2 / F3 (sec 6) | F2 trigger: YES on its face | stand clear mean 66 (full HP, phase present) | trio clear > 50 after BOSS1-A |
+| Sec 7 line / elite | no longer a lever | line 32, elite 33 at L5 | 70-90 / 50-75 |
+
+Issues for the brainstorm agent:
+
+- Boss band is now slightly low (21-29 vs 30-50) and trio spread is huge (0 to 70); priest trios cannot win bosses. B3 does not fire; consider the opposite check (no change) before any tier edit.
+- Tank survival 33 and won-fight allies hp_end 9: T2 fires. The mage-slot comparison also shows the warrior leaves allies near 6% in all variants.
+- Priest dies before round 3 in 78% of fights: S1 fires; heal share 1 confirms it never casts enough.
+- Brawler AoE 1.09 foes/cast against 1.5: A2 fires; mage 1.51 and friendly fire are fine.
+- Solo vs a brawler boss: ranger 67 and mage 50 are far above 10-20 while five classes are at 0-ish; D2 band needs the user (Q3).
+- Ashmaw stand is still easy at full HP (66 vs 30-50); the arrival-HP (HEAL1) and barred runs are still missing, as is the pre-BOSS1-A comparison.
+- Not measured: role at L3 and L7, sweep elite at L3/L7.
+
 ## BAL4-ATTR campaign attrition 2026-10-18 (rerun v4)
 
 Headline v3 (before encounter objectives/phases were applied in the sim): means 3.08 / 3.41 battles (arms / gate, no heal), 3.51 / 3.98 full, 3.26 / 3.73 at 25, 3.38 / 3.82 at 50; arms clears 18 / 51 / 30 / 40 of 100 and gate 51 / 98 / 77 / 84. Older runs: 2.04 / 3.54 / 2.70 / 2.94 (first run, older Ashlands data).
