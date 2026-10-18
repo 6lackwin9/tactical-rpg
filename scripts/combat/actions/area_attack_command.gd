@@ -17,6 +17,7 @@ var status_rounds: int = 1       # how long an inflicted status lasts once activ
 var last_damage: int = 0         # total dealt
 var last_hits: int = 0
 var last_breakdown: String = ""
+var crit_hits: Array[Dictionary] = []   # [{unit: Combatant, killed: bool}] per critical hit, in hit order (MORALE1 rule 6)
 
 func _init(p_source: Combatant, p_grid: CombatGrid, p_cells: Array[Vector2i], p_skill_mult: float, p_block_cost: int = 2) -> void:
 	super(p_source, 0, p_block_cost)
@@ -28,6 +29,7 @@ func _init(p_source: Combatant, p_grid: CombatGrid, p_cells: Array[Vector2i], p_
 func execute() -> void:
 	last_damage = 0
 	last_hits = 0
+	crit_hits.clear()
 	reactions.clear()
 	broken_targets.clear()
 	combo_notes.clear()
@@ -51,6 +53,8 @@ func execute() -> void:
 		var taken: int = victim.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage += taken
 		last_hits += 1
+		if DictUtil.to_bool(res["is_crit"]):
+			crit_hits.append({"unit": victim, "killed": not victim.is_alive()})
 		var status_note: String = _roll_status(victim)   # one independent roll per unit hit
 		parts.append("%s %d%s%s%s%s" % [victim.name, taken, " CRIT" if DictUtil.to_bool(res["is_crit"]) else "", " DEFEATED" if not victim.is_alive() else "", status_note, exploit_note(matched)])
 		breakdowns.append("%s: %s" % [victim.name, DamageCalculator.describe(res)])

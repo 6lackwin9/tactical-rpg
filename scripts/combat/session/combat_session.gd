@@ -297,6 +297,7 @@ func _step_resolution() -> void:
 	if not _pending_actions.is_empty():
 		var act: CombatResolver.ScheduledAction = _pending_actions.pop_front()
 		resolver.execute_single_action(act)
+		encounter.on_action_resolved(act)   # MORALE1 rule 6: crits are read here
 		_append_entry(CombatLogBuilder.from_action(act, current_round, current_block, allies, grid), true)
 		for reaction: Dictionary in act.command.reactions:
 			_append_entry(CombatLogBuilder.riposte_entry(reaction, current_round, current_block, allies), true)
@@ -459,7 +460,12 @@ func enemy_intents() -> Array[Dictionary]:
 	if not is_planning() or resolver == null:
 		var none: Array[Dictionary] = []
 		return none
-	return IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule)
+	var records: Array[Dictionary] = IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule)
+	for record: Dictionary in records:   # MORALE1 rule 13: the state word and group, never the value or flee ratio
+		var unit: Combatant = record["unit"]
+		record["morale_state"] = encounter.morale_state_of(unit)
+		record["morale_group"] = encounter.morale_group_of(unit)
+	return records
 
 # The intent record of one enemy ({} when it has none: not planning, not an active enemy on the grid).
 func intent_of(enemy: Combatant) -> Dictionary:

@@ -57,6 +57,22 @@ func on_block_start(_round_num: int, _block_num: int) -> ActionLogEntry:
 func on_block_end(_round_num: int, _block_num: int) -> void:
 	pass
 
+# Right after an action resolves (before its log entry): a chance to read what it did (MORALE1: crits). Default: nothing.
+func on_action_resolved(_action: CombatResolver.ScheduledAction) -> void:
+	pass
+
+# MORALE1 rule 13: the shown morale state of `c` ("steady", "shaken", "wavering", "fearless"; "" = morale off or none).
+func morale_state_of(_c: Combatant) -> String:
+	return ""
+
+# MORALE1 rule 13: the morale group index of `c` (-1 = morale off or none).
+func morale_group_of(_c: Combatant) -> int:
+	return -1
+
+# MORALE1 rule 8: the flee ratio `c` drafts with, given its live profile's `base`. Default: `base`.
+func flee_ratio_of(_c: Combatant, base: float) -> float:
+	return base
+
 # A unit spawned but held back (BOSS1: a phase wave before its phase fires): off the field and skipped by the
 # end-of-battle check. Default: none.
 func is_reserved(_c: Combatant) -> bool:
