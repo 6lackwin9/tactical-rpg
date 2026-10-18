@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 1c617f5 -->
+<!-- last: a8f2444 -->
 
 ## 2026-10-18
 
@@ -11,7 +11,7 @@ In the game:
 - **Map movement**: walk with WASD or the arrow keys, hold a key to keep walking, and the party slides smoothly between tiles.
 - **Game menu**: Esc on the map opens a menu over the paused map with Party, Journal, Save, Load, Settings and Quit; New Game and save/load fixes.
 - **Healing between battles**: HP now carries over between fights, you regain some after each win, and rest places and Make camp (3 supplies) heal fully. Rest places added at Warden Keep and Slag Gate.
-- **Enemy intent**: in combat planning, enemies show what they plan to do (chips, arrows and a short line), and Bryn's Warden's Eye passive reveals more.
+- **Enemy intent**: in combat planning, enemies show what they plan to do (chips, arrows and a short line), and Bryn's Warden's Eye passive reveals more; enemies no longer skip their turn when a packmate's plan blocks theirs, and an enemy with nothing to do shows "Holding".
 - **Boss phases**: Grakka changes phase mid-fight (Crown of Nails), with a phase banner in combat.
 - **Battle objectives**: fights can be about more than defeat: hold the courtyard, the wagon raid with Wenn Tallow, slay Grakka.
 - **Recruiting**: Bryn and five story recruits join through the campaign, with the Toller muster and new priest and brawler units.
@@ -30,6 +30,8 @@ In the game:
 
 Every change that touched the game:
 
+- POUCH-TIDY: meaningful no-pouch test and stale pouch comments (8c1494c)
+- INTENT1-U follow-up: enemies no longer skip their turn; "Holding" tell (f65f0bb)
 - BAL5-AI: early taunt with walk-in, healer self-care, AoE friendly-fire tolerance (7ceddcb)
 - UIR-2: game menu popup over the paused map (Party, Journal, Save, Load, Settings, Quit), new game, save/load fixes (52dda97)
 - HEAL1-B: campaign check passes (arms 46, gate 95) (ddbb56c)
@@ -102,6 +104,11 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- GATE-TIMEOUT: CI gate allows 900 s per suite; the arena suite now takes ~10 min (a8f2444)
+- PREFS-ASSETS-SPLIT: split asset preferences into content and world files (d80d9ed)
+- DESIGN-PREFS: four preferences from today's Design answers (3a317ef)
+- PREFS-FILES: design, UI and asset preference files in docs/preferences (462d2f2)
+- PATCH-NOTES: PATCH_NOTES.md, its generator and the coordinator and assets cutbacks (bd9bff1)
 - RELEASE-LOGS: shared logs for the 2026-10-18 midday batch (1c617f5)
 - USAGE: 2026-10-18 11:45 usage report, delta and efficiency (2f01ec6)
 - UI-UX-HANDOVER: queue and notes for the next UI/UX session (2b2f70e)
