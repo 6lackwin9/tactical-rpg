@@ -144,7 +144,7 @@ func launch(path: String, encounter_id: String = "", opts: Dictionary = {}) -> b
 		hub.scene_changed(path, scene)   # before the scene enters the tree: its battle is followed from start()
 	add_child(scene)
 	menu_layer.visible = false
-	pill_layer.visible = true
+	pill_layer.visible = pill_shown_for(path)
 	_leave_armed = false
 	_save_prefs()
 	return true
@@ -517,6 +517,10 @@ func _build_pill() -> void:
 	_pill_hint = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_WARN)
 	row.add_child(_pill_hint)
 
+# The pill is a test-environment aid: hidden in the real game (main menu and what it runs); hotkeys still work.
+static func pill_shown_for(path: String) -> bool:
+	return path != "res://scenes/main_menu.tscn"
+
 static func note_button_shown(has_hub: bool, recording: bool) -> bool:
 	return has_hub and recording
 
@@ -531,7 +535,7 @@ func _open_note_from_pill() -> void:
 	pill_layer.visible = false
 	await RenderingServer.frame_post_draw
 	hub.open_note()
-	pill_layer.visible = true
+	pill_layer.visible = pill_shown_for(active_path)
 
 func _flash_pill(text: String) -> void:
 	if _pill_hint != null:

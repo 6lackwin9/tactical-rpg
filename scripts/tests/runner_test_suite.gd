@@ -75,6 +75,9 @@ static func run(tree_parent: Node = null) -> bool:
 		runner.note_button != null and not runner.note_button.visible and SceneRunner.note_button_shown(true, true)
 		and not SceneRunner.note_button_shown(true, false) and not SceneRunner.note_button_shown(false, true)) and ok
 
+	ok = TestHelpers.report_ok(TAG, "Pill hidden for the real game (main menu), shown for test scenes",
+		not SceneRunner.pill_shown_for("res://scenes/main_menu.tscn") and SceneRunner.pill_shown_for("res://scenes/combat_arena.tscn")) and ok
+
 	# Launch the arena with a chosen catalog encounter; restart keeps it; menu frees it.
 	var launched: bool = runner.launch("res://scenes/combat_arena.tscn", "veterans_drill")
 	var arena: Node = runner.active_scene
