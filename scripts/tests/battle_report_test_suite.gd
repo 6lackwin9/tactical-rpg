@@ -65,6 +65,7 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _test_frozen() and ok
 		ok = _test_dot_and_regen() and ok
 		ok = _test_status_source() and ok
+		ok = _test_potion_ledger() and ok
 		ok = _test_no_outcome_change() and ok
 	else:
 		ok = TestHelpers.report_ok(TAG, "sandbox fork and fixture skills", false) and ok
@@ -523,6 +524,31 @@ static func _test_status_source() -> bool:
 	m.freeze()
 	s.dispose()
 	return TestHelpers.report(TAG, "status credit goes to its applier, not the next actor (STATCRED1-L)", checks)
+
+# A pouch potion (ITEMUSE1) the hero drinks: its heal is heal_received in the ledger (not other_gain), the logged
+# item heal matches, no heal_done / heal cast for the user, and the closed fight has no METRIC FAIL.
+static func _test_potion_ledger() -> bool:
+	var checks: Dictionary = {}
+	var s: CombatSession = _session(_runner(), 43)
+	var hero: Combatant = s.allies[0]
+	hero.hp = maxi(1, roundi(float(hero.max_hp) * 0.5))   # room to heal
+	var potion := Consumable.new("t_br_potion", "Test Potion", Consumable.ConsumableType.HEALTH_POTION, maxi(1, roundi(float(hero.max_hp) * 0.25)))
+	hero.inventory.battle_pouch.append(potion)
+	var m := BattleMetrics.new()
+	m.quiet = true
+	m.attach(s)
+	var cmd := ItemCommand.new(hero, hero, potion, s.grid)
+	var act := CombatResolver.ScheduledAction.new(hero, cmd, 1, 1)
+	cmd.execute()
+	s.log_appended.emit(CombatLogBuilder.from_action(act, s.current_round, 1, s.allies, s.grid))
+	m.finish()
+	var rec: Dictionary = DictUtil.dict_of(m.units.get(hero.name, {}))
+	checks["the potion was used and healed (%d)" % cmd.last_heal] = cmd.used and cmd.last_heal > 0
+	checks["its heal is heal_received, not other_gain"] = DictUtil.int_of(rec, "heal_received") == cmd.last_heal and DictUtil.int_of(rec, "other_gain") == 0
+	checks["no heal_done or heal cast for the user"] = DictUtil.int_of(rec, "heal_done") == 0 and DictUtil.int_of(rec, "heal_casts") == 0
+	checks["the HP ledger balances: no METRIC FAIL %s" % str(m.fail_lines)] = m.fail_lines.is_empty() and m.checks > 0
+	s.dispose()
+	return TestHelpers.report(TAG, "a potion use balances the HP ledger (heal_received)", checks)
 
 static func _row(report: Dictionary, unit_name: String) -> Dictionary:
 	for raw: Variant in DictUtil.array_of(report.get("rows", [])):

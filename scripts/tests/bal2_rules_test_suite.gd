@@ -760,18 +760,21 @@ static func _test_trio_sweep() -> bool:
 	checks["size=2 lead=priest: priest + each other class (%d)" % others] = pairs.size() == others
 	return TestHelpers.report(TAG, "BAL5-SIM K2 trio sweep: size=3 lead=warrior", checks)
 
-# K5: A1 makes aoe_swarm a trio (warrior + priest refs); S2 (s2=on) turns one support_attrition ranger
-# into a brawler and touches no other scenario.
+# K5: A1 makes aoe_swarm a trio (warrior + priest refs); S2 (trigger fired in BAL5-R1b) is now the authored
+# support_attrition: one ranger of the BAL2 list (ranger, ranger, mage, rogue standard) turned into a brawler; s2=on adds
+# nothing and touches no other scenario.
 static func _test_scenario_edits() -> bool:
 	var checks: Dictionary = {}
 	var swarm_allies: Array = DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["aoe_swarm"])["allies"])
 	checks["A1: aoe_swarm refs warrior + priest (a trio with the test unit) %s" % str(swarm_allies)] = swarm_allies.size() == 2 and swarm_allies.has("warrior") and swarm_allies.has("priest")
+	var bal2: Array = [["ranger", "standard"], ["ranger", "standard"], ["mage", "standard"], ["rogue", "standard"]]
 	var plain: Array = SimScenarios.scenario_enemies("support_attrition", 5)
 	var s2: Array = SimScenarios.scenario_enemies("support_attrition", 5, true)
-	checks["S2 off: the authored enemies"] = plain == DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["support_attrition"])["enemies"])
-	checks["S2 on: same size and tiers"] = s2.size() == plain.size() and _tiers(s2) == _tiers(plain)
-	checks["S2 on: one ranger fewer, one brawler more"] = _classes(s2).count("ranger") == _classes(plain).count("ranger") - 1 and _classes(s2).count("brawler") == _classes(plain).count("brawler") + 1
-	checks["S2 on: mage and rogue kept"] = _classes(s2).count("mage") == _classes(plain).count("mage") and _classes(s2).count("rogue") == _classes(plain).count("rogue")
+	checks["S2 authored: the scenario's enemies are S2_ENEMIES"] = plain == SimScenarios.S2_ENEMIES
+	checks["S2 authored: same size and tiers as BAL2"] = plain.size() == bal2.size() and _tiers(plain) == _tiers(bal2)
+	checks["S2 authored: one ranger fewer, one brawler more than BAL2"] = _classes(plain).count("ranger") == _classes(bal2).count("ranger") - 1 and _classes(plain).count("brawler") == _classes(bal2).count("brawler") + 1
+	checks["S2 authored: mage and rogue kept"] = _classes(plain).count("mage") == _classes(bal2).count("mage") and _classes(plain).count("rogue") == _classes(bal2).count("rogue")
+	checks["s2=on: no change"] = s2 == plain
 	checks["S2 leaves other scenarios alone"] = SimScenarios.scenario_enemies("tank_hold", 5, true) == SimScenarios.scenario_enemies("tank_hold", 5)
 	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
@@ -780,7 +783,7 @@ static func _test_scenario_edits() -> bool:
 		var sc: Dictionary = SimScenarios.scenario(runner, "aoe_swarm", "mage", 5)
 		checks["A1: aoe_swarm party of 3 (%d)" % DictUtil.array_of(sc["party"]).size()] = DictUtil.array_of(sc["party"]).size() == 3
 	TestHelpers.cleanup(SANDBOX)
-	return TestHelpers.report(TAG, "BAL5 K5 scenario edits: A1 trio swarm, S2 behind s2=on", checks)
+	return TestHelpers.report(TAG, "BAL5 K5 scenario edits: A1 trio swarm, S2 authored (s2=on no change)", checks)
 
 # B2 / BAL5-PH: the generated boss carries one valid phase on the boss unit (hp_below), phase=off and the
 # other archetypes carry none; in fights the phase fires with phase on and never with phase off.

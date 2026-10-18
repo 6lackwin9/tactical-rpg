@@ -424,11 +424,14 @@ func _riposte(defender: Combatant, attacker: Combatant, e: ActionLogEntry) -> vo
 	h["loss"] = left - take
 	_hold[attacker] = h
 
-# A support entry: gains are heals by `actor` (the target's must equal the logged heal).
+# A support entry: gains are heals by `actor` (the target's must equal the logged heal). An item entry (a pouch potion,
+# ITEMUSE1) balances the ledger as heal_received on its side only: it is no heal by the user (no heal_done, cast,
+# overheal or save), and the target's gain must equal the logged item heal.
 func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 	var target: Combatant = _unit(e.target_name)
 	var target_gain: int = 0
 	var heal_entry: bool = e.skill_subtype == "Support"
+	var item_entry: bool = e.skill_subtype == "Item"
 	for key: Variant in changed:
 		var c: Combatant = key
 		var b: Dictionary = changed[key]
@@ -436,6 +439,11 @@ func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 			_add(c, "other_loss", DictUtil.int_of(b, "loss"))
 		var gain: int = DictUtil.int_of(b, "gain")
 		if gain <= 0:
+			continue
+		if item_entry and not _foes(actor, c):
+			_add(c, "heal_received", gain)
+			if c == target:
+				target_gain = gain
 			continue
 		if not heal_entry or _foes(actor, c):
 			_add(c, "other_gain", gain)
@@ -453,6 +461,10 @@ func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 			var saves: Array = DictUtil.array_of(_detail(actor).get("saves", []))
 			saves.append({"ally": c.name, "hp": before, "round": _session.current_round, "order": _order()})
 			_detail(actor)["saves"] = saves
+	if item_entry:
+		checks += 1
+		if target_gain != e.value_num:
+			_fail(actor.name, "log_item_heal %s: %d logged, %d HP gained" % [e.skill_name, e.value_num, target_gain])
 	if heal_entry:
 		_add(actor, "heal_casts", 1)
 		checks += 1
