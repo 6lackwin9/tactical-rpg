@@ -92,6 +92,12 @@ static func run_region(view: RegionMapView) -> bool:
 	view.size = VIEW   # the arena parent may have no size; the full-rect layout follows the view
 	var free: Rect2 = RegionMapView.free_rect(canvas.size, view._top, view._side)
 	checks["the canvas fills the view, the panels float over it"] = canvas.size == view.size and free.size.x > 0.0 and free.size.y > 0.0 and view._side.get_parent() == canvas.get_parent()
+	# WMAP-BLANK: the world map opened over a running region map fills it (it was zero-sized and drew nothing)
+	if view.world_map == null and gs != null:
+		view.open_world_map()
+		var wm: WorldMapView = view.world_map
+		checks["the world map opened over the region map fills the view, its canvas too"] = wm != null and wm.size == view.size and wm._canvas.size == view.size
+		view.close_world_map()
 	if t.is_empty() or free.size.x <= 0.0 or free.size.y <= 0.0:
 		print("      map view sizes: view %s canvas %s free %s" % [str(view.size), str(canvas.size), str(free)])
 		return _report("Region map view (camera, click with offset)", checks)

@@ -76,7 +76,8 @@ var _card: PanelContainer = null
 var _card_label: Label = null
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Offsets too: added inside a running scene (embedded over the region map) the plain preset keeps the zero size.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root = Control.new()
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -419,6 +420,7 @@ func settle(result: String, keep_battle: bool = false) -> void:
 		return
 	var fight: Dictionary = pending_fight
 	pending_fight = {}
+	var report: Dictionary = battle.report() if battle != null else {}   # BREPORT1 1.5: built before the arena closes
 	if not keep_battle:
 		_close_battle()
 	var res: Dictionary = TravelRunner.after_fight(gs, fight, result)
@@ -426,6 +428,7 @@ func settle(result: String, keep_battle: bool = false) -> void:
 	_handle(res, gs)
 	if DictUtil.to_bool(res.get("ok", false)):
 		res["outcome"] = result
+		res["report"] = report
 		fight_settled.emit(res)
 		if result == "lost":
 			arrived.emit(gs.location_id)
