@@ -9,6 +9,15 @@ Every commit on a design option branch, so the user can pick whole options or mi
 | DESIGN_REVIEW1 (2026-10-18) | `docs/specs/DESIGN_REVIEW1.md` | before the cycle existed (no option builds) | - | closed (answered 2026-10-18 01:34) |
 | next | - | - | - | due when RECRUIT1-L, INTENT1-L, MAPREAD1-L1, ITEMUSE1-L and MAPREAD1-L2 are on `develop` |
 
+## Candidates for the next review
+
+Ideas better judged by playing than by sims, to weigh for the next option set:
+
+- Boss acts twice per round (BAL5 boss gap; `docs/specs/BAL5_LEVERS.md`)
+- Warrior bodyguard: takes hits meant for an adjacent ally (BAL5 tank gap)
+- Priest ward / damage absorb skill (BAL5 healer gap)
+- Mage self-centred cone (BAL5 AoE gap)
+
 ## Option sets
 
 None yet. Each set gets a section like this:
