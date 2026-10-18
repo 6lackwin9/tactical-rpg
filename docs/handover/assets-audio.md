@@ -1,29 +1,20 @@
 # Assets & Audio handover
 
-Written 2026-10-18 00:42 UTC by the third Assets & Audio session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
+Written 2026-10-18 by the fourth Assets & Audio session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
 
 ## Queue (in order)
 
-1. Empty. Take the next approved `-A` task whose logic is on `develop`.
+1. MUSIC2 (proposed to the user, not yet approved): wire the remaining music contexts and make their tracks. Proposal: location `kind` town/fortress -> `town`; ruin/camp -> `danger`; shop panel open -> `shop`; roamer or ambush fights -> `encounter`; tracks `town`, `shop`, `danger`, `boss`, `travel` via `tools/gen_music.py`. See the thread "Menu music track" for his answer.
 
 ## Landed on `develop` (this session)
 
-- CAMP1-A1 + CAMP1-A2 (793d456): goblin_warlord and the whole Ashlands story; spec section 7 checks 1-6 pass headlessly.
-- TRAV2-A (ba415d6): start supplies 10, Hest 2 gold, chests 4/6/6; checks 1-4 pass.
-
-## Handed off
-
-- CAMP1-B (balance sim of the Ashmaw fights) went to the Balance thread through the coordinator; it runs once CAMP1 is on `main`.
-- goblin_warlord landed in `units.json` ahead of BAL3-A (its branch did not touch that file); if BAL3-A conflicts there, re-run the seeds.
-
-## Waiting on the user
-
-- Nothing.
+- MUSIC1-A + MUSIC1-L (a836119): five generated loops (`menu_theme`, `ashlands`, `iron_reaches`, `tidewrack`, `combat`) and `MusicDirector` (requests by scene context, data-only fallback chain, 1 s crossfade). Spec `docs/specs/MUSIC1.md` rules 1-7.
 
 ## Notes for the next session
 
-- A catalog unit seed must wrap `ContentCatalog.upsert` in `begin_system_edit()` / `end_system_edit()`, or the row gets `origin: user` and the Origin arena test fails.
-- Run the gate with `SUITE_TIMEOUT=600 tools/fc.sh gate`: the arena suite now passes 290 s on the cloud box and the default limit exits 124.
-- Never `pkill -f godot`: the shell's own command line contains the Godot path and the shell dies (exit 144). Kill by pid.
-- `save_world` writes new schema defaults (for example `start_supplies: -1`) after a schema lands; expected.
-- Branches to delete at the next cleanup (landed): `claude/assets-audio-zspfs7`, `claude/TRAV2-A-supplies`.
+- Tracks come from `python3 tools/gen_music.py [key ...]` (numpy + ffmpeg/libvorbis, ~45 s for all five). Each track is a function in that file (notes, chords, instruments); add a function and a `TRACKS` entry for a new one, then a manifest row through a seed like `data/seeds/music1_a.gd`, and set `loop=true` in the new `.ogg.import`.
+- A new track needs no code: name it by the chain in MUSIC1 rule 7 (`<region>_<context>`, `<world>_<context>`, `<context>`, or a plain region/world key for field).
+- Location kinds today: fortress (warden_keep), ruin, gate, camp, town (gull_harbour only), wild. Only kind `town` maps to the `town` context so far.
+- UI/UX owns the volume-slider samples in `settings_view.gd`; they dropped their placeholder menu loop.
+- Earlier notes still hold: seeds wrap catalog unit upserts in `begin_system_edit()`; run the gate with `SUITE_TIMEOUT=600 tools/fc.sh gate`; never `pkill -f godot`.
+- Branches to delete at the next cleanup (landed): `claude/assets-audio-zspfs7`, `claude/TRAV2-A-supplies`, `claude/project-thread-5tn3pn`.
