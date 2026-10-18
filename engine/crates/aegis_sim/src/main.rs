@@ -92,26 +92,29 @@ fn run_monte_carlo(scenario: &str, count: usize) -> SimReport {
 }
 
 fn create_scenario_units(scenario: &str) -> (Vec<Combatant>, Vec<Combatant>) {
+    // Exact level 1 stats matching Godot sim_party (warrior, ranger, priest)
     let allies = vec![
-        Combatant::new("warrior", "Warrior", Team::Allies, 60, 16, 4, 10),
-        Combatant::new("ranger", "Ranger", Team::Allies, 45, 14, 2, 12),
-        Combatant::new("priest", "Priest", Team::Allies, 40, 10, 1, 9),
+        Combatant::new("warrior", "simp_warrior_1", Team::Allies, 242, 41, 18, 10),
+        Combatant::new("ranger", "simp_ranger_2", Team::Allies, 158, 35, 6, 12),
+        Combatant::new("priest", "simp_priest_3", Team::Allies, 176, 34, 5, 9),
     ];
 
     let enemies = match scenario {
         "Bandit Ambush (High Pressure)" => vec![
-            Combatant::new("bandit_leader", "Bandit Leader", Team::Enemies, 40, 15, 3, 11),
-            Combatant::new("bandit_thug", "Bandit Thug", Team::Enemies, 30, 12, 2, 8),
-            Combatant::new("bandit_archer", "Bandit Archer", Team::Enemies, 25, 13, 1, 13),
+            Combatant::new("bandit_leader", "Bandit Leader", Team::Enemies, 140, 38, 12, 11),
+            Combatant::new("bandit_thug", "Bandit Thug", Team::Enemies, 100, 32, 8, 8),
+            Combatant::new("bandit_archer", "Bandit Archer", Team::Enemies, 85, 34, 6, 13),
         ],
         "Boss Encounter (Ashmaw Stand)" => vec![
-            Combatant::new("ashmaw", "Ashmaw the Devourer", Team::Enemies, 120, 22, 5, 8),
-            Combatant::new("cinder_imp", "Cinder Imp", Team::Enemies, 20, 8, 1, 14),
+            Combatant::new("ashmaw", "Ashmaw the Devourer", Team::Enemies, 350, 48, 16, 8),
+            Combatant::new("cinder_imp", "Cinder Imp", Team::Enemies, 60, 24, 4, 14),
         ],
         _ => vec![
-            Combatant::new("goblin_grunt", "Goblin Grunt", Team::Enemies, 25, 9, 1, 9),
-            Combatant::new("goblin_grunt", "Goblin Grunt", Team::Enemies, 25, 9, 1, 9),
-            Combatant::new("goblin_shaman", "Goblin Shaman", Team::Enemies, 20, 11, 0, 7),
+            Combatant::new("goblin_brawler", "Goblin Brawler", Team::Enemies, 108, 31, 9, 8),
+            Combatant::new("goblin_skirmisher", "Goblin Skirmisher", Team::Enemies, 65, 32, 7, 14),
+            Combatant::new("goblin_archer", "Goblin Archer", Team::Enemies, 71, 35, 7, 13),
+            Combatant::new("goblin_shaman", "Goblin Shaman", Team::Enemies, 77, 25, 6, 7),
+            Combatant::new("goblin_berserker", "Goblin Berserker", Team::Enemies, 108, 31, 5, 11),
         ],
     };
 
