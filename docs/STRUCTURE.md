@@ -26,6 +26,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd`, `ai_skills_kit.gd` | AI use of the new skill kinds (AI1) | S4 | done |
 | `scripts/tests/bal2_rules_test_suite.gd` | BAL2-L rules: PERC range, unit gear `none`, tiers, trained fists | S2, S3 | done |
 | `scripts/tests/bal2_sim_test_suite.gd` | balance sim args, targets, role map/loadouts, sweep counts, collector self-checks (BAL2-L 1b) | S15 | done |
+| `scripts/tests/bal4_campaign_test_suite.gd` | campaign sim: story order from quest data, trios, heal modes, HP carry-over, stop at first loss (BAL4-ATTR) | S15 | done |
 | `scripts/tests/{item_families,item_modifiers}_test_suite.gd` | ITEM1 suites (TestHelpers.fork_migrated) | S3, S5 | done |
 | `scripts/tests/item_tiers_test_suite.gd` | item tier criteria, bonuses, evaluation order, shipped loadouts unchanged (ITEM1 commit 2) | S3 | done |
 | `scripts/tests/item_form_model_test_suite.gd` | item and family Forge model and read-only viewer tabs (ITEM1 commit 3; TOOLS-RO) | S5 | done |
@@ -42,7 +43,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `data/seeds/` | asset seeds of tasks in flight only (`ContentCatalog.upsert` scripts); `README.md` indexes executed seeds by task and merge commit; a seed leaves the folder in the cleanup pass after its task merges (files stay in git history, CLN-2) | S5 | done |
 | `scripts/tests/skill_engine_test_suite.gd` | area-attack status, DEFEND taunt/riposte grants (M2C2B-L) | S12 | done |
 | `scripts/tests/focus_gear_test_suite.gd`, `focus_gear_budget_test_suite.gd` | orb/tome rules, item effects, gear bonuses (C1-L) | S3 | done |
-| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode; preloaded), parse_all.gd, replay.gd (PLAYTEST1), overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd, forge_shot.gd (Forge screenshots) | S15 | done |
+| `tools/` | fc.sh (per-worktree logs), balance_sim.gd + `tools/sim/` (sim_args, sim_runner, sim_variants, sim_observer, sim_metrics, sim_targets, sim_roles, sim_scenarios, sim_party, sim_role_mode, sim_world, sim_campaign; preloaded), parse_all.gd, replay.gd (PLAYTEST1), overlap.sh, md_lint.awk, wt_remove.ps1, export_placeholder.gd, forge_shot.gd (Forge screenshots) | S15 | done |
 | `docs/TASKS.md`, `docs/specs/` | task queue and per-task specs (logic/asset contracts) | process | done |
 | `docs/workflow/` | desktop vs cloud workflow: `README.md` (differences, switching), `desktop.md`, `cloud.md`, `web.md` (browser build), `content-edits.md` (agent-driven content changes), `design-review.md` (design review cycle and option branches); `docs/design/OPTION_BRANCHES.md`: option-branch commit ledger; `docs/handover/<area>.md`: cloud area-thread handovers (cloud.md "Fresh sessions") | process | done |
 | `assets/fonts/`, `scripts/ui/runner/web_fonts.gd` | Web-only fallback fonts for emoji and symbol glyphs (`WebFonts.install`, called by the Scene Runner and the Main Menu, the browser build's entry scene); sources and licenses in `assets/fonts/README.md` | process | done |

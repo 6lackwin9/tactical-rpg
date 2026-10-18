@@ -2,6 +2,25 @@
 
 Archived 2026-10-17 from `docs/BALANCE_REPORT.md` (size limit); text unchanged.
 
+## CAMP1-B Ashmaw finale sim 2026-10-18
+
+Method: `enc=` cannot target world encounters (they live in `data/worlds/ashlands/encounters.json`, not in the sim catalog). A scratch wrapper (not committed, scratchpad `bal3r/ash_sim.gd`, a copy of `tools/balance_sim.gd`) upserts both encounters into the forked sandbox catalog with the story characters mapped to their base units (grakka_ashmaw -> goblin_warlord L6 boss, ash_shaman -> goblin_shaman, ash_archer -> goblin_archer, flankers goblin_berserker / goblin_brawler / goblin_skirmisher, all L3 minions), then runs `party 5 5 enc=...` with the default comp warrior,ranger,priest,mage and authored enemy levels. Character `tuning` is ignored. Party of 4 heroes, not the story's two-hero opening party.
+
+| Encounter | Party loadout | Clear % | Rounds | Survivors | Party hp | hp score |
+| --- | --- | --- | --- | --- | --- | --- |
+| ashmaw_stand (flankers at round 2) | default | 100 | 6.0 | 3.6/4 | 0.63 | 1.00 |
+| ashmaw_stand | role | 100 | 5.4 | 3.4/4 | 0.67 | 1.00 |
+| ashmaw_stand_barred | default | 100 | 3.4 | 4.0/4 | 0.93 | 1.00 |
+| ashmaw_stand_barred | role | 100 | 3.4 | 4.0/4 | 0.91 | 1.00 |
+
+Extra runs: party L3 and L4 (default, authored enemies) give the same picture (stand 5.8 / 5.6 rounds, 3.6 / 3.8 survivors, hp 0.63 / 0.72; barred 3.6 rounds, 4.0/4, hp 0.91). Level-matched foes (`elevel=+0`, all at L5): barred 100 (4.2 rounds, 4.0/4, hp 0.90; role 3.8, hp 0.84); `ashmaw_stand` could not run (sim unit error on the skirmisher copy, 0 fights). 0 PLAN FAIL, 0 METRIC FAIL in all CAMP1-B runs.
+
+Interpretation: both finales are cleared 100% by an L3-L5 four-hero party against the boss band 30-50, so they are far too easy as a boss fight; the barred variant is lighter as intended (3.4 vs 6 rounds, 4/4 survivors, hp 0.93 vs 0.63), but the stand also loses almost no hero, because the authored foes are L3 minions around a single L6 boss.
+
+The BAL3-R0 baseline (input to BAL3) is archived, text unchanged apart from its heading note, in `docs/archive/BALANCE_REPORT_2026-10.md`, above the BAL2-R rerun.
+
+The BAL2-R clean rerun (input to BAL3) is archived, text unchanged, in `docs/archive/BALANCE_REPORT_2026-10.md`.
+
 ## BAL3-R0 baseline 2026-10-17 (after 12x9 grid + S12S-L; superseded by BAL3-R in `docs/BALANCE_REPORT.md`)
 
 Scope: BAL3-R0 (docs/specs/BAL3.md). Checkout: cloud thread, branch claude/balance-kwjk9v at develop 7df8b86 (no sim-relevant change vs main 3942238: 12x9 combat grid, party left / enemies right, and S12S-L statuses). Method as in BAL2-R (archived): `tools/fc.sh sim party|sweep|role|duel|tier`, cap 10, smart_skills on, 3 seeds, spend class, preset balanced (role: spend class/cons/primary x preset balanced/aggressive), no code or data edits. Levels 3 and 5, plus 7 for party and role. About 3,300 fights: **0 `PLAN FAIL` and 0 `METRIC FAIL` in every run**. X = outside the decided target. Raw output: scratchpad `r0/` of the run (not committed). Tooling note: a fresh checkout needs `godot --headless --import` once before `tools/fc.sh sim`; with a stale class cache (new `AssetRegistry` class) the sim hangs silently and prints nothing (cost 40 min here).

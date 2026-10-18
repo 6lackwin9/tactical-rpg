@@ -578,6 +578,13 @@ Quest ready flag (QUEST2): a quest that becomes ready sets `quest.<qid>.ready` (
 
 Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `gorge_ruins`; Ashlands starts at Warden Keep; the new Cinder Gate location; generic Horde characters and mob encounters; markers for patrols, chests, lore, a beacon and the gate that opens once the courtyard is held. World-map exits: TRAV1-A.
 
+### Campaign attrition sim (BAL4-ATTR)
+
+- `tools/fc.sh sim campaign [level] [seeds] [heal=none|full|<pct>] [comp=c1,c2,c3] [elevel=..] [steel=arms|gate]` plays the Ashlands story fights in quest order (`courtyard_skirmish`, `pass_ambush`, the road raid `ash_raiders`, then `ashmaw_stand` or `ashmaw_stand_barred` for the steel-to-gate choice), read from the world data (`tools/sim/sim_world.gd`).
+- Party: the warrior plus two recruits (all 10 trios by default) at party level 5; foes keep their authored levels; each fight uses the encounter's `max_rounds`.
+- Attrition: HP carries over, statuses reset, downed heroes stay down (`heal=full` revives, `heal=<pct>` heals the standing heroes by that share of max HP); a run ends at the first uncleared battle. Prints battles survived, the battle where it fell and party HP% after each battle, per trio and steel choice.
+- Tested in `bal4_campaign_test_suite.gd`.
+
 ### Balance data pass (BAL3-A)
 
 - `sweep_kick` power_mult 0.7/0.9/1.05 -> 0.8/1.0/1.15 (brawler aoe_swarm foes/cast 1.43 -> 1.57), seed `data/seeds/bal3.gd`.

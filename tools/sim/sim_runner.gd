@@ -22,6 +22,8 @@ var fights: int = 0
 var plan_fails: int = 0             # fights stopped because confirm_plan() refused the preset plan
 var enemy_block: Vector2i = Vector2i.ZERO   # BAL3 3.2: columns x rows of the clumped enemy block (ZERO = none)
 var block_misses: int = 0           # fights where the enemy block found no room (enemies stay)
+var start_hp: Dictionary = {}       # campaign mode: party unit name -> HP the fight starts with (absent = full)
+var rounds_override: int = 0        # campaign mode: > 0 replaces the `cap` round limit (the encounter's authored max_rounds)
 
 func _init(p_args: SimArgs) -> void:
 	args = p_args
@@ -103,15 +105,19 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 	if args.jitter:
 		jitter_rng = SimVariants.jitter_rng(seed_value)
 		party_ids = SimVariants.shuffled(left, jitter_rng)
-	entry.merge({"party": party_ids, "enemies": right, "max_rounds": args.cap, "rng_seed": seed_value}, true)
+	var round_limit: int = rounds_override if rounds_override > 0 else args.cap
+	entry.merge({"party": party_ids, "enemies": right, "max_rounds": round_limit, "rng_seed": seed_value}, true)
 	var session := CombatSession.new(CatalogEncounter.from_entry(entry))
 	session.start()
 	_prepare(session, jitter_rng)
+	for a: Combatant in session.allies:
+		if start_hp.has(a.name):
+			a.hp = clampi(DictUtil.to_int(start_hp[a.name]), 0, a.max_hp)
 	if observer != null:
 		observer.on_start(session)
 	var rounds: int = 0
 	var plan_failed: bool = false
-	for round_num: int in range(args.cap):
+	for round_num: int in range(round_limit):
 		rounds = round_num + 1
 		session.plan_apply_preset_all(preset)
 		if not session.confirm_plan():
@@ -136,8 +142,15 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 		if c.is_active():
 			survivors += 1
 	var won: bool = session.outcome == EncounterObjectives.WON   # OBJ1 rule 11: a hold, escape or slay win scores 1 like a KO win
-	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": 1.0 if won else binary_score(l, r), "hp": 1.0 if won else hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0,
+	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": 1.0 if won else binary_score(l, r), "hp": 1.0 if won else hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0, "won": won or r <= 0.0,
 		"survivors": survivors, "party_size": session.allies.size(), "plan_fail": plan_failed}
+	var end_hp: Dictionary = {}
+	var end_max: Dictionary = {}
+	for c: Combatant in session.allies:
+		end_hp[c.name] = c.hp
+		end_max[c.name] = c.max_hp
+	result["party_hp"] = end_hp
+	result["party_max"] = end_max
 	if observer != null:
 		observer.on_end(session, result)
 	session.dispose()

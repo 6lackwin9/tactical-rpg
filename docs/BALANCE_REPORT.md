@@ -1,5 +1,52 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## BAL4-ATTR campaign attrition 2026-10-18 (rerun v3)
+
+Superseded: the first run (older Ashlands data, before RECRUIT1-A / OBJ1-A / BOSS1-A) had headline means 2.04 / 3.54 / 2.70 / 2.94 battles (heal none / full / 25 / 50); its tables are replaced by this section.
+
+Method: `tools/fc.sh sim campaign 5 10 heal=<mode>` on branch claude/bal4-attr at 1959db8 (develop merged). Data state: after RECRUIT1-A (Bryn the named warrior with his perk), OBJ1-A (objectives), BOSS1-A (boss phases, ambush layout); OBJ1-L objective wins count. Story order, arms steel: B1 `courtyard_skirmish`, B2 `pass_ambush`, B3 `wagon_raid`, B4 `ashmaw_stand`; gate steel ends with `ashmaw_stand_barred`. Party level 5, the warrior plus 2 recruits, all 10 trios, 10 seeds each, foes at authored levels, each fight at its encounter's `max_rounds`. HP carries over, statuses reset, downed heroes stay down (only `heal=full` revives); a run ends at the first uncleared battle. Heal between battles: none; full (today's rule); 25 / 50 (standing heroes heal that share of max HP). 0 PLAN FAIL and 0 METRIC FAIL in all four runs (780 / 800 / 792 / 796 fights). Four runs in parallel with SIM_TIMEOUT=3300 took 1,955 s wall. Level 4 and 6 not run.
+
+Mean battles survived out of 4, cells arms / gate (full chain cleared of 10 seeds, arms / gate):
+
+| Trio | none | full | 25 | 50 |
+| --- | --- | --- | --- | --- |
+| ranger, priest | 3.6 / 3.9 (6 / 9) | 3.6 / 4.0 (6 / 10) | 3.4 / 3.9 (4 / 9) | 3.5 / 3.9 (5 / 9) |
+| ranger, brawler | 3.1 / 3.4 (1 / 4) | 3.7 / 4.0 (7 / 10) | 3.6 / 3.9 (6 / 9) | 3.5 / 3.9 (5 / 9) |
+| ranger, rogue | 3.1 / 3.6 (1 / 6) | 3.3 / 3.9 (3 / 9) | 3.2 / 3.8 (2 / 8) | 3.3 / 3.9 (3 / 9) |
+| ranger, mage | 3.3 / 3.5 (3 / 5) | 3.8 / 4.0 (8 / 10) | 3.7 / 4.0 (7 / 10) | 3.8 / 4.0 (8 / 10) |
+| priest, brawler | 3.0 / 3.4 (2 / 6) | 3.2 / 4.0 (2 / 10) | 3.0 / 3.5 (2 / 7) | 3.2 / 3.8 (2 / 8) |
+| priest, rogue | 3.1 / 3.7 (1 / 7) | 3.2 / 4.0 (2 / 10) | 3.1 / 3.8 (1 / 8) | 3.2 / 3.8 (2 / 8) |
+| priest, mage | 3.2 / 3.6 (4 / 8) | 3.5 / 4.0 (5 / 10) | 3.0 / 3.7 (2 / 9) | 3.2 / 3.7 (4 / 9) |
+| brawler, rogue | 2.8 / 3.1 (0 / 3) | 3.2 / 3.9 (2 / 9) | 3.1 / 3.6 (1 / 6) | 3.2 / 3.8 (2 / 8) |
+| brawler, mage | 2.6 / 2.7 (0 / 1) | 3.9 / 4.0 (9 / 10) | 3.1 / 3.3 (1 / 3) | 3.3 / 3.5 (3 / 5) |
+| rogue, mage | 3.0 / 3.2 (0 / 2) | 3.7 / 4.0 (7 / 10) | 3.4 / 3.8 (4 / 8) | 3.6 / 3.9 (6 / 9) |
+| mean | 3.08 / 3.41 (18 / 51 of 100) | 3.51 / 3.98 (51 / 98) | 3.26 / 3.73 (30 / 77) | 3.38 / 3.82 (40 / 84) |
+
+Mean over trios and both steels: none 3.25, full 3.76, 25 3.51, 50 3.61.
+
+Mean party HP% after each battle (all 10 trios, runs that reached the battle; later values are survivor-biased):
+
+| Heal | B1 | B2 | B3 | B4 arms | B4 gate |
+| --- | --- | --- | --- | --- | --- |
+| none | 90 | 74 | 61 | 10 | 33 |
+| full | 90 | 84 | 87 | 24 | 75 |
+| 25 | 90 | 82 | 79 | 15 | 55 |
+| 50 | 90 | 82 | 83 | 19 | 62 |
+
+Where runs fall: B4 is the fall point in almost every case under every heal mode (arms: 5-10 of 10 per trio for 9 of 10 trios with no heal; gate: 1-8). Falls before B4 are rare: B2 x1 in four trios (priest+brawler, priest+mage, brawler+rogue, brawler+mage), and brawler+mage with no heal falls at B3 twice. No trio falls at B1.
+
+Per-battle drain, no heal (percentage points of party HP): B1 10, B2 16, B3 13, B4 wipes or leaves 10 (arms) / 33 (gate). Weakest trios without heal: brawler+mage (HP 83 / 59 / 35 after B1-B3, 2.6 survived) and rogue+mage (87 / 62 / 37). Healthiest: ranger+priest (96 / 90 / 84).
+
+Ranking by battles survived, no heal: ranger+priest 3.8; ranger+rogue, ranger+mage, priest+rogue, priest+mage 3.4; ranger+brawler, priest+brawler 3.2; rogue+mage 3.1; brawler+rogue 3.0; brawler+mage 2.6. With full heal: brawler+mage 4.0; ranger+mage, rogue+mage 3.9; ranger+brawler 3.9; brawler+rogue last at 3.5.
+
+Findings for the HEAL1 spec (context: the user wants fights threatening through attrition, no loss penalty, little tuning):
+
+- With no heal the party now lasts 3.25 of 4 battles on average (3.08 arms, 3.41 gate): B1-B3 cost only about 40 points of party HP in total (90 / 74 / 61 left), so the first three fights alone do not wipe parties. Attrition shows up only at B4, which a no-heal party reaches at 61% HP and then loses (arms 18 of 100 cleared, gate 51 of 100).
+- Heal level changes the outcome mostly through B4 entry HP: 61% (none), 79% (25), 83% (50), 87% (full). The arms clear rate rises 18 / 30 / 40 / 51 and the gate clear rate 51 / 77 / 84 / 98 of 100 across none / 25 / 50 / full.
+- Even with full heal the arms finale is lost in about half of runs (51 of 100 cleared; worst trios ranger+rogue 3, priest+brawler 2, priest+rogue 2, brawler+rogue 2 of 10), while the gate finale is almost always cleared (98 of 100). The heal rule matters less than which B4 the player faces.
+- A heal of 50 gives most trios a survivable chain on the gate steel (84 of 100) but not on the arms steel (40 of 100); 25 to 50 adds only 0.10 battles on average. Downed heroes stay down in 25 / 50 (no revive tested), which is the likely reason B4 end-HP stays low.
+- Differences between trios are small compared with the old data: at heal 50 all trios survive 3.4-3.9; brawler+mage is the weakest in every mode (B3 HP 35 with no heal). Priest+rogue, an outlier in the first run, is now an ordinary trio.
+
 ## BAL3-R final rerun 2026-10-18
 
 Scope: BAL3-R (docs/specs/BAL3.md sections 7 and 8). Checkout: cloud thread, branch claude/bal3-r-final at develop a3b7c35 (BAL3-R0, S, AI, A and CAMP1-A1/A2 landed; develop instead of main is agreed). Method as in BAL3-R0: `tools/fc.sh sim party|sweep|role|duel|tier`, cap 10, smart_skills, spend class, preset balanced (role: spend class/cons/primary x preset balanced/aggressive), jitter on (new). **Party and sweep use 5 seeds (R0: 3)**, role 3 seeds, duel/tier 3 seeds; so R0 -> R deltas mix the BAL3 levers with the seed count. About 3,000 fights. **0 `METRIC FAIL` everywhere; 2 `PLAN FAIL` (1 in sweep L3, 1 in sweep L5, both path reach under jitter), 0 in all other runs.** Sweep L7 was not completed (hit a 3,000 s timeout, run in parallel with others). X = outside the decided target. Raw output: scratchpad `bal3r/` (not committed).
@@ -156,19 +203,4 @@ Cloud run times (4 cores): role L3 / L5 / L7 about 25-40 min in parallel, sweep 
 
 ## CAMP1-B Ashmaw finale sim 2026-10-18
 
-Method: `enc=` cannot target world encounters (they live in `data/worlds/ashlands/encounters.json`, not in the sim catalog). A scratch wrapper (not committed, scratchpad `bal3r/ash_sim.gd`, a copy of `tools/balance_sim.gd`) upserts both encounters into the forked sandbox catalog with the story characters mapped to their base units (grakka_ashmaw -> goblin_warlord L6 boss, ash_shaman -> goblin_shaman, ash_archer -> goblin_archer, flankers goblin_berserker / goblin_brawler / goblin_skirmisher, all L3 minions), then runs `party 5 5 enc=...` with the default comp warrior,ranger,priest,mage and authored enemy levels. Character `tuning` is ignored. Party of 4 heroes, not the story's two-hero opening party.
-
-| Encounter | Party loadout | Clear % | Rounds | Survivors | Party hp | hp score |
-| --- | --- | --- | --- | --- | --- | --- |
-| ashmaw_stand (flankers at round 2) | default | 100 | 6.0 | 3.6/4 | 0.63 | 1.00 |
-| ashmaw_stand | role | 100 | 5.4 | 3.4/4 | 0.67 | 1.00 |
-| ashmaw_stand_barred | default | 100 | 3.4 | 4.0/4 | 0.93 | 1.00 |
-| ashmaw_stand_barred | role | 100 | 3.4 | 4.0/4 | 0.91 | 1.00 |
-
-Extra runs: party L3 and L4 (default, authored enemies) give the same picture (stand 5.8 / 5.6 rounds, 3.6 / 3.8 survivors, hp 0.63 / 0.72; barred 3.6 rounds, 4.0/4, hp 0.91). Level-matched foes (`elevel=+0`, all at L5): barred 100 (4.2 rounds, 4.0/4, hp 0.90; role 3.8, hp 0.84); `ashmaw_stand` could not run (sim unit error on the skirmisher copy, 0 fights). 0 PLAN FAIL, 0 METRIC FAIL in all CAMP1-B runs.
-
-Interpretation: both finales are cleared 100% by an L3-L5 four-hero party against the boss band 30-50, so they are far too easy as a boss fight; the barred variant is lighter as intended (3.4 vs 6 rounds, 4/4 survivors, hp 0.93 vs 0.63), but the stand also loses almost no hero, because the authored foes are L3 minions around a single L6 boss.
-
-The BAL3-R0 baseline (input to BAL3) is archived, text unchanged apart from its heading note, in `docs/archive/BALANCE_REPORT_2026-10.md`, above the BAL2-R rerun.
-
-The BAL2-R clean rerun (input to BAL3) is archived, text unchanged, in `docs/archive/BALANCE_REPORT_2026-10.md`.
+Archived verbatim in `docs/archive/BALANCE_REPORT_2026-10.md` (above BAL3-R0).

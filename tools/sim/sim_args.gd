@@ -5,7 +5,7 @@ extends RefCounted
 
 const SimTargets = preload("res://tools/sim/sim_targets.gd")
 
-const MODES: Array[String] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep"]
+const MODES: Array[String] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign"]
 const CLASSES: Array[String] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]
 const SPENDS: Array[String] = ["class", "cons", "primary", "mixed"]
 const LOADOUTS: Array[String] = ["default", "newest", "role"]
@@ -38,6 +38,8 @@ var band_lo: int = 30            # duel diagnostic band (alias of target duel:lo
 var band_hi: int = 70
 # Commit 1b: party / role / sweep
 var comp: Array[String] = DEFAULT_COMP.duplicate()
+var comp_set: bool = false       # campaign: comp= picks one party instead of all 10 trios
+var heal: String = "none"        # campaign: between-battle healing "none", "full" or a percent of max HP (the number)
 var encounters: Array[String] = GENERATED.duplicate()
 var elevel: int = 0              # generated enemies at party level + elevel
 var elevel_set: bool = false     # true: catalog encounters use party level + elevel too
@@ -156,6 +158,15 @@ func _parse_key(key: String, value: String) -> bool:
 				if not CLASSES.has(c):
 					return _fail("comp: unknown class '%s' (one of %s)" % [c, str(CLASSES)])
 			comp = picked
+			comp_set = true
+		"heal":
+			var pct_text: String = value.trim_suffix("%")
+			if value == "none" or value == "full":
+				heal = value
+			elif pct_text.is_valid_int() and int(pct_text) >= 0 and int(pct_text) <= 100:
+				heal = str(int(pct_text))
+			else:
+				return _fail("heal must be none, full or a percent 0..100 (got '%s')" % value)
 		"enc":
 			var picked_enc: Array[String] = []
 			for e: String in _list(value):
@@ -280,6 +291,8 @@ func header() -> String:
 				text += ", comp %s" % ",".join(comp)
 			else:
 				text += ", dupes %s, sample %s" % ["on" if dupes else "off", str(sample) if sample > 0 else "all"]
+		"campaign":
+			text += ", comp %s, heal %s" % [",".join(comp) if comp_set else "all trios (warrior + 2 of ranger,priest,brawler,rogue,mage)", heal]
 		"role":
 			text += ", role %s, class %s" % [",".join(roles), ",".join(classes)]
 	return text
@@ -295,6 +308,7 @@ static func usage() -> Array[String]:
 		"       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
 		"       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
 		"       sweep [level]      every 4-class composition vs enc: ranking, swap delta, top-5 appearances",
+		"       campaign [level]   Ashlands story fights in quest order, HP carried over (level = party level, default 5): all 10 trios, both steel choices",
 		"keys:  cap=1..30 (10)  loadout=default|newest|role (default; party side)",
 		"       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
 		"       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
@@ -302,5 +316,6 @@ static func usage() -> Array[String]:
 		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all (generated)  elevel=+n|-n|catalog (+0)",
 		"       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
 		"       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
+		"       heal=none|full|<pct> (none; campaign: between-battle healing, full also revives)  comp=.. picks one campaign party",
 		"       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
 	]

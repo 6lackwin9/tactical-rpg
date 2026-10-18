@@ -2,7 +2,7 @@ extends SceneTree
 
 # Balance simulator: headless AI-vs-AI battles on a sandbox copy of the catalog (BAL2_SIM.md).
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]     (tools/fc.sh sim help: the usage)
-#   modes duel | tier | levels | group | stats | party | role | sweep; keys in tools/sim/sim_args.gd.
+#   modes duel | tier | levels | group | stats | party | role | sweep | campaign; keys in tools/sim/sim_args.gd.
 #   party / sweep: tools/sim/sim_party.gd; role: tools/sim/sim_role_mode.gd; per-unit metrics and
 #   conservation checks: tools/sim/sim_metrics.gd; targets (section 8, X marks): tools/sim/sim_targets.gd.
 # Scores per fight (left side): binary (KO, else the HP lead with a 0.02 band) and HP margin
@@ -16,6 +16,7 @@ const SimVariants = preload("res://tools/sim/sim_variants.gd")
 const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimParty = preload("res://tools/sim/sim_party.gd")
 const SimRoleMode = preload("res://tools/sim/sim_role_mode.gd")
+const SimCampaign = preload("res://tools/sim/sim_campaign.gd")
 
 const CLASSES: Array[String] = SimArgs.CLASSES
 const TIER_ORDER: Array[String] = ["minion", "standard", "elite", "boss"]
@@ -58,6 +59,8 @@ func _initialize() -> void:
 			SimParty.new(args, runner, metrics).sweep_mode()
 		"role":
 			SimRoleMode.new(args, runner, metrics).role_mode()
+		"campaign":
+			SimCampaign.new(args, runner).campaign_mode()
 	runner.distance_note()
 	if metrics.keep_totals and not metrics.totals.is_empty():
 		_out("METRICS per unit over every fight of this table (the left/party unit and its foes):")
