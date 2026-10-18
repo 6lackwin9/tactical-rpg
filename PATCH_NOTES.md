@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 7780fe0 -->
+<!-- last: f70e79a -->
 
 ## 2026-10-18
 
@@ -33,6 +33,7 @@ In the game:
 
 Every change that touched the game:
 
+- MORALE1-S: world sims carry the five morale fields (f70e79a)
 - MAPDEV1-U: map debug tools only in debug scenes; play bars show place and supplies (7780fe0)
 - MORALE1-L: enemy morale in battle (losses, breaks, flee bonus, surrender, Fearless) (f344531)
 - BAL5-A: shield_wall fortify extra grant and potion price 30 (744f175)
@@ -118,6 +119,8 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- UI-UX-HANDOVER: queue and notes for the next UI/UX session (8d12e98)
+- PATCH-NOTES: MAPDEV1-U, Gameplay handover (5a11e86)
 - GAMEPLAY-HANDOVER: rotation after MORALE1-L, STATCRED1-L, UIR-2 (c87d94d)
 - PATCH-NOTES: MORALE1-L, LEVERS1 approval (c23d235)
 - LEVERS1-B: point the S2 dependency at BAL5-S2 (b9fcc80) (6c01248)
