@@ -1,29 +1,27 @@
-# Platform & Workflow handover (2026-10-18 13:00 UTC)
+# Platform & Workflow handover (2026-10-18 16:35 UTC)
 
-Rotated by context size (278k). Read cloud.md first; everything below is what is in flight.
+Wind-down into interactive mode (user 16:28 UTC, decision "Interactive mode"). Read cloud.md and planner-ops first. Act only on Tushar's direct requests, one at a time; nothing is in flight.
 
-## Routines bound to the old session (recreate on the new one, then delete these)
+## Routines (bound to session `session_01F3J8BGWSSBbqckdqifYoJF`; all disabled, none deleted)
 
-- Daily dispatch 18:30 UTC: `trig_01G4hERhAcmLSpcpZgzrsQ8y` (respects the building slots, cloud.md "Usage caps").
-- Mode switch 15:45 UTC: `trig_01BDg2cGEakGSdBb7XYWFWY7` (send_later). At 15:45: planner-ops "Current mode" to economy, fill the standard row of `docs/metrics/usage/MODE_TRIAL.md`, land it, tell each area thread "mode economy until 18:45 UTC", and send_later 18:45 to switch back to split (economy for build lanes, standard for specs, design reviews and the final review).
+- Daily dispatch 18:30 UTC: `trig_01N9R25tiPX24hLTHheFbZN4` (disabled 16:29). A new session re-creates it bound to itself only when Tushar leaves interactive mode, then deletes this one.
+- Economy switch `trig_015dJ9i26R7HxetNLkJENRfR`: already fired (15:45), ended.
+- Switch back to split 18:45 `trig_01SKRLnLTjLGya2pjJkAna4H`: disabled; the trial ended early.
+- Design review check `trig_016jzPSMrdHLPY3E6KFJzfHP` belongs to Design (asked to disable it).
 
-## Usage tracking (user 2026-10-18; repo home `docs/metrics/usage/`, README there)
+## Usage tracking (repo home `docs/metrics/usage/`, README there)
 
-- On each pasted report: CSV into `reports/`, sessions.json and pins.json, HISTORY row, `efficiency.py` (time without Z), DELTA section, copy to `/mnt/project-files/metrics/`, reply with the delta only (top 3 threads and why), cutbacks need Tushar's typed OK.
-- `get_session <id>` returns exact per-session usage (`external_metadata.usage`: cache reads, writes, output, cost). Use it for the trials instead of guessing rows by title.
-- Sonnet trial: Assets & Audio `cse_01V6GmFsz2ESnDgqza17YhQt`, Sonnet since 12:15; `TRIAL_SONNET.md` (the thread sends "landed <id> <sha> model=<m>").
-- Mode baseline: standard 12:42-15:45, economy 15:45-18:45; `MODE_TRIAL.md`; report with the delta after 18:45.
+- Latest report 15:59 (`reports/2026-10-18T15-59.csv`, DELTA and HISTORY rows, `EFFICIENCY_2026-10-18T15-59.md`): +325M since 11:45, 16.3M per landed build task.
+- On a pasted report: CSV, sessions.json and pins.json (`get_session <id>` gives exact per-session usage), HISTORY row, `efficiency.py`, DELTA section, copy to `/mnt/project-files/metrics/`, reply with the delta only; cutbacks need Tushar's typed OK.
+- Mode trial ended early (standard baseline only, `MODE_TRIAL.md`). Sonnet trial (`TRIAL_SONNET.md`): one clean Sonnet task (MORALE1-A); Assets & Audio still sends `landed <id> <sha> model=<m>` here when it lands something.
 
-## Queue
+## Queue (only on request)
 
-- CLN-17, CLN-18: approved (user 12:14), cleanup lane; wait for the rotating building slot (coordinator assigns).
-- Arena trim, proposed in `docs/EFFICIENCY.md`: Playtest 89 s, CombatUiFramework 86 s, Bal2Rules 81 s, Planning 71 s are 42% of the arena; ask Tushar before starting.
-- Forge tab fixes: waiting on Tushar's list.
+- CLN-17, CLN-18 approved (cleanup lane).
+- Arena trim proposed in `docs/EFFICIENCY.md` (Playtest, CombatUiFramework, Bal2Rules, Planning are 42% of the arena): ask first.
+- Forge tab fixes: parked until Tushar sends his list (he said "later", 14:43).
+- `branch-cleanup.yml` skips `engine` once the next release reaches main; 40 squash-merged branches are kept because their content cannot be proven on develop (`/mnt/project-files/platform/deleted_branches_2026-10-18.txt` lists the 32 deleted).
 
 ## Landed this session
 
-RUNNER-WINDOW 5ddcea3, PATCH-NOTES bd9bff1 (Merge & Release writes PATCH_NOTES.md; landing threads send it "landed <id> <sha>"), PREFS-FILES 462d2f2 and PREFS-ASSETS-SPLIT d80d9ed (`docs/preferences/`), FC-TIMEOUT 182f9bb, TRIAL-SONNET e1bedb0, GATE-SPLIT bd932b2 (8 systems, `fc.sh gate auto`, CI matrix; release pinning step in cloud.md). Release PR #39 still runs the old single CI job; the next batch uses the matrix, so watch its first run.
-
-## Sessions
-
-Coordinator `session_015sTvb6o2FYckV681cWHXtS`; Merge & Release `cse_01KhQLgrvAgUunc9TcJKTHzK`; Gameplay `cse_01448UbhXvTzeBA1Brw4buLy`; UI/UX `cse_01JBWtdZFJoHPjEnzP1TUwVR`; Balance `cse_017JH6C5a2uwCQHAbGFH5whk`; Design `cse_01GS8RxAznG7gTrbfCb7w5uB`; Assets & Audio `cse_01V6GmFsz2ESnDgqza17YhQt`.
+ENGINE-HOLD 15c3a03, MODE-ECONOMY 6fb06ac, USAGE fb133e2, PATCH-NOTES-BATCH f1db72d, INTERACTIVE (this commit).
