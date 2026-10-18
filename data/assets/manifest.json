@@ -4462,6 +4462,273 @@
 			"frames": 1,
 			"origin": "user",
 			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/intent_attack/icon",
+			"namespace": "ui",
+			"key": "intent_attack",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_attack_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_area/icon",
+			"namespace": "ui",
+			"key": "intent_area",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_area_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_support/icon",
+			"namespace": "ui",
+			"key": "intent_support",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_support_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_guard/icon",
+			"namespace": "ui",
+			"key": "intent_guard",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_guard_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_focus/icon",
+			"namespace": "ui",
+			"key": "intent_focus",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_focus_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_rest/icon",
+			"namespace": "ui",
+			"key": "intent_rest",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_rest_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_retreat/icon",
+			"namespace": "ui",
+			"key": "intent_retreat",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_retreat_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_move/icon",
+			"namespace": "ui",
+			"key": "intent_move",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_move_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_flee/icon",
+			"namespace": "ui",
+			"key": "intent_flee",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_flee_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_switch/icon",
+			"namespace": "ui",
+			"key": "intent_switch",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_switch_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_stunned/icon",
+			"namespace": "ui",
+			"key": "intent_stunned",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_stunned_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_act/icon",
+			"namespace": "ui",
+			"key": "intent_act",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_act_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_arriving/icon",
+			"namespace": "ui",
+			"key": "intent_arriving",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_arriving_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/badge_foresight/icon",
+			"namespace": "ui",
+			"key": "badge_foresight",
+			"variant": "icon",
+			"path": "res://assets/art/ui/badge_foresight_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/chip_slay/icon",
+			"namespace": "ui",
+			"key": "chip_slay",
+			"variant": "icon",
+			"path": "res://assets/art/ui/chip_slay_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/chip_guest/icon",
+			"namespace": "ui",
+			"key": "chip_guest",
+			"variant": "icon",
+			"path": "res://assets/art/ui/chip_guest_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "tile/overlay_objective/v0",
+			"namespace": "tile",
+			"key": "overlay_objective",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_objective_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "sfx/miss/stream",
+			"namespace": "sfx",
+			"key": "miss",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/miss.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
 		}
 	]
 }

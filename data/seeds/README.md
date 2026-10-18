@@ -42,3 +42,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | `camp1_unit.gd` | CAMP1-A1 (goblin_warlord boss unit for the Ashlands finale; run before camp1_story) |
 | `camp1_story.gd` | CAMP1-A2 (Ashlands story: steel_for_the_gate, keep_one_fire_lit, Ashmaw Camp, wastes_track, wagon raid, Grakka and Orsa dialogues, steel choice, epilogue) |
 | `trav2a.gd` | TRAV2-A (Ashlands supplies: manifest start_supplies 10, hest_stores supply_price 2, chest supplies on stores / ruin_cache / camp_cache) |
+| `art2_a.gd` | ART2-A (manifest rows for intent chips, badge_foresight, chip_slay, chip_guest, overlay_objective_v0, sfx miss; run `tools/gen_art.py chips overlays` first) |

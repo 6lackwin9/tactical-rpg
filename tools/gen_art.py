@@ -920,6 +920,10 @@ def marker(kind: str, size: int = 32) -> Image.Image:
     elif kind == "poi":
         c.ell(50, 50, 34, 34, None, ol="#f4f4f4", w=7)
         c.ell(50, 50, 8, 8, "#f4f4f4", w=1.5)
+    elif kind == "objective":
+        c.ell(50, 50, 44, 44, None, ol="#7a3a12", w=9)
+        c.ell(50, 50, 44, 44, None, ol=GOLD, w=5, )
+        c.ell(50, 50, 36, 36, None, ol=EMBER, w=2.5, )
     elif kind == "badge_quest":
         c.ell(50, 50, 44, 44, "#1d1810", ol=GOLD, w=5)
         c.rect(42, 16, 58, 58, GOLD, ol=None)
@@ -932,7 +936,7 @@ def marker(kind: str, size: int = 32) -> Image.Image:
     return c.done()
 
 
-OVERLAYS = ["npc", "chest", "chest_open", "lore", "exit", "exit_locked", "encounter", "roamer", "poi"]
+OVERLAYS = ["npc", "chest", "chest_open", "lore", "exit", "exit_locked", "encounter", "roamer", "poi", "objective"]
 
 
 def g_overlays(out: str) -> None:
@@ -943,6 +947,85 @@ def g_overlays(out: str) -> None:
 def g_markers(out: str) -> None:
     for k in ("quest", "ready"):
         save(marker("badge_" + k), "ui/badge_%s_icon.png" % k, out)
+
+
+# ART2-A: intent kind chips (hostile-red rim), foresight/slay/guest chips, one 32 px each (ui namespace).
+HOSTILE = "#c23a32"
+
+
+def cg_burst(c, col=EMBER):
+    pts = []
+    for i in range(16):
+        r = 44 if i % 2 == 0 else 22
+        a = math.radians(-90 + i * 22.5)
+        pts.append((50 + r * math.cos(a), 50 + r * math.sin(a)))
+    c.poly(pts, col, w=2.4)
+
+
+def cg_back(c, col=ASH):
+    c.poly([(14, 50), (46, 18), (46, 38), (86, 38), (86, 62), (46, 62), (46, 82)], col, w=2.4)
+
+
+def cg_exit(c, col=ASH):
+    c.rect(56, 16, 86, 84, None, ol=col, w=5, r=3)
+    c.poly([(10, 40), (36, 40), (36, 26), (62, 50), (36, 74), (36, 60), (10, 60)], col, w=2.4)
+
+
+def cg_question(c, col=ASH):
+    c.arc(50, 36, 18, 180, 70, col, w=10)
+    c.line([(52, 52), (50, 64)], col, w=10)
+    c.ell(50, 82, 7, 7, col, w=1.5)
+
+
+def cg_chevron(c, col=GOLD):
+    c.poly([(16, 20), (46, 20), (80, 50), (46, 80), (16, 80), (50, 50)], col, w=2.4)
+
+
+def cg_crown(c, col=GOLD):
+    c.poly([(14, 76), (14, 32), (34, 52), (50, 24), (66, 52), (86, 32), (86, 76)], col, w=2.4)
+    c.line([(18, 66), (82, 66)], shade(col, -0.35), w=3, ol=None)
+
+
+def cg_guest(c, col="#6fbf9a"):
+    gl_shield(c, col)
+
+
+CHIP_GLYPHS = {
+    "attack": lambda c: gl_slash(c, "#e8edf2"), "area": cg_burst, "support": lambda c: gl_plus(c, "#6fbf73"),
+    "guard": lambda c: gl_shield(c, "#8fa8c8"), "focus": gl_star, "rest": gl_moon, "retreat": cg_back,
+    "move": gl_boot, "flee": None, "switch": gl_swap, "stunned": gl_dizzy, "act": cg_question, "arriving": cg_chevron,
+}
+
+
+def chip(glyph_fn, rim: str, bg: str = "#1d1214", size: int = 32) -> Image.Image:
+    c = Cv(size)
+    c.ell(50, 50, 46, 46, bg, ol=rim, w=7)
+    base = c.done()
+    g = Cv(size)
+    glyph_fn(g)
+    s = int(size * 0.66)
+    base.alpha_composite(g.done().resize((s, s), Image.LANCZOS), ((size - s) // 2, (size - s) // 2))
+    return base
+
+
+def flee_chip(size: int = 32) -> Image.Image:
+    c = Cv(size)
+    c.ell(50, 50, 46, 46, "#1d1214", ol=HOSTILE, w=7)
+    base = c.done()
+    for fn, box, off in ((lambda g: gl_boot(g, LEATHER), 20, (3, 9)), (cg_exit, 17, (13, 6))):
+        g = Cv(size)
+        fn(g)
+        base.alpha_composite(g.done().resize((box, box), Image.LANCZOS), off)
+    return base
+
+
+def g_chips(out: str) -> None:
+    for k, fn in CHIP_GLYPHS.items():
+        img = flee_chip() if k == "flee" else chip(fn, HOSTILE)
+        save(img, "ui/intent_%s_icon.png" % k, out)
+    save(chip(gl_eye, GOLD, "#1d1810"), "ui/badge_foresight_icon.png", out)
+    save(chip(cg_crown, GOLD, "#1d1810"), "ui/chip_slay_icon.png", out)
+    save(chip(cg_guest, "#4f9ad0", "#101a22"), "ui/chip_guest_icon.png", out)
 
 
 # ------------------------------------------------------------------------------
@@ -1284,7 +1367,7 @@ def g_menu(out: str) -> None:
 GROUPS = {
     "characters": g_characters, "classes": g_classes, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
-    "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
+    "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
 }
 
 
