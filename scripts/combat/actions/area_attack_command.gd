@@ -31,6 +31,7 @@ func execute() -> void:
 	reactions.clear()
 	broken_targets.clear()
 	combo_notes.clear()
+	exploited.clear()
 	failed = false
 	if not source.is_active():
 		failed = true
@@ -57,6 +58,7 @@ func execute() -> void:
 		if not counter.is_empty():
 			reactions.append(counter)
 		after_hit(victim, taken, matched)   # stance break, then consume (S12C-L rule 5)
+		note_exploit(victim, matched)
 	last_breakdown = "\n".join(breakdowns)
 	if last_hits == 0:
 		execution_log = "[Area Miss] %s's %s hit nobody." % [source.name, command_name]

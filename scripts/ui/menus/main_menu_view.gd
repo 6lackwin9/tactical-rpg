@@ -560,7 +560,7 @@ func _on_fight_settled(res: Dictionary) -> void:
 	_menu.visible = true
 	_game_hint.visible = false
 	router.push(MenuRouter.RESULTS, {"award": DictUtil.dict_of(res.get("xp", {})), "advanced": res.get("advanced", []), "outcome": str(res.get("outcome", "won")),
-		"rewards": BattleResultsModel.rewards_of(res)})
+		"rewards": BattleResultsModel.rewards_of(res), "report": DictUtil.dict_of(res.get("report", {}))})
 	var battle: BattleScreen = active_battle()
 	var m: BattleResultsModel = router.model(MenuRouter.RESULTS) as BattleResultsModel
 	if battle != null and m != null:

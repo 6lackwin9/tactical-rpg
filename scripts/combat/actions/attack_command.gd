@@ -156,6 +156,7 @@ func execute() -> void:
 	reactions.clear()
 	broken_targets.clear()
 	combo_notes.clear()
+	exploited.clear()
 	failed = false
 	if not source.is_active():
 		failed = true
@@ -234,6 +235,7 @@ func execute() -> void:
 		reactions.append(counter)
 	# Then the combo effects of this hit (S12C-L rule 5): stance break, consume.
 	after_hit(effective_target, taken, matched)
+	note_exploit(effective_target, matched)
 	var exploit_suffix: String = exploit_note(matched)
 
 	if not effective_target.is_alive():

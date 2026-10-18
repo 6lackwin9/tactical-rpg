@@ -6,7 +6,7 @@ extends RefCounted
 
 const SimArgs = preload("res://tools/sim/sim_args.gd")
 const SimVariants = preload("res://tools/sim/sim_variants.gd")
-const SimObserver = preload("res://tools/sim/sim_observer.gd")
+const SimObserver = preload("res://scripts/combat/session/battle_observer.gd")   # BREPORT1-L: moved from tools/sim/sim_observer.gd
 const SimRoles = preload("res://tools/sim/sim_roles.gd")
 
 const MAX_STEPS_PER_ROUND: int = 600   # safety stop for one round's step loop

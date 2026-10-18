@@ -21,6 +21,9 @@ signal block_started(block: int)
 signal block_completed(block: int)
 signal log_emitted(message: String)
 signal action_note(action: ScheduledAction, message: String)   # something happened as a command started (e.g. a chase)
+# BREPORT1 1.3: one combo of a resolved command (kind exploit, break or flow; a flow's target is the actor, status "").
+# Emitted in _apply_combo for what it applies or logs; changes nothing.
+signal combo_resolved(kind: String, actor: Combatant, target: Combatant, status: String, skill: String, killed: bool)
 
 var scheduled_actions: Array[ScheduledAction] = []
 var registered_combatants: Array[Combatant] = []
@@ -288,8 +291,16 @@ func _apply_combo(action: ScheduledAction) -> void:
 		print(note)
 		log_emitted.emit(note)
 	var c: Combatant = action.combatant
+	for row: Dictionary in cmd.exploited:
+		var raw: Variant = row["target"]
+		if raw is Combatant:
+			var victim: Combatant = raw
+			combo_resolved.emit("exploit", c, victim, str(row["status"]), cmd.command_name, not victim.is_alive())
+	for broken: Combatant in cmd.broken_targets:
+		combo_resolved.emit("break", c, broken, "", cmd.command_name, not broken.is_alive())
 	if cmd.stance_on_end >= 0 and not cmd.failed and c.is_active():
 		var end_stance: CombatTypes.StanceType = cmd.stance_on_end as CombatTypes.StanceType
+		combo_resolved.emit("flow", c, c, "", cmd.command_name, not c.is_alive())
 		c.set_stance(end_stance)
 		var msg: String = "[Flow] %s flows into %s stance" % [c.name, CombatTypes.stance_to_string(end_stance)]
 		print(msg)

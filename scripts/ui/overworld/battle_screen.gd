@@ -12,6 +12,8 @@ extends Node
 # host) an outcome settles itself after a beat instead of waiting for Continue, and the host shows the results popup over
 # the still-mounted arena. replay() plays the finished battle again from round 1 (replay_finished when it ends);
 # set_shown() hides or shows the arena layers while a menu screen covers the game.
+# BREPORT1-L: a BattleMetrics follows the session from the mount (round checkpoints undo rewound rounds); report() builds
+# the results popup's battle report once the outcome is known, then freezes the collector (Replay cannot change it).
 # ==============================================================================
 
 signal finished(outcome: String)
@@ -50,6 +52,8 @@ var _intro_root: Control = null
 var _arming: bool = false          # replay() is stepping the session; check() must not react
 var _settled: bool = false         # finished was emitted by the auto path
 var _auto_pending: bool = false
+var _metrics: BattleMetrics = null
+var _report: Dictionary = {}       # built by the first report() call with an outcome
 
 # {ok, errors, screen: BattleScreen or null}: the battle for `p_fight` ({encounter, zone?, ...} from a fight event) added
 # under `parent` and started.
@@ -88,6 +92,9 @@ func _mount(node: Node, enc: CombatEncounter, store: GameState = null) -> void:
 	session = arena.get("session") as CombatSession
 	_build_banner()
 	if session != null:
+		_metrics = BattleMetrics.new()
+		_metrics.quiet = true   # live self-check failures are kept in fail_lines, not printed
+		_metrics.attach(session)
 		session.changed.connect(check)
 	check()
 
@@ -141,6 +148,20 @@ func _auto_finish() -> void:
 # ------------------------------------------------------------------------------
 # Replay (BATTLE-FLOW): the arena's own round playback, round 1 to the last, then replay_finished
 # ------------------------------------------------------------------------------
+
+# The battle report (BattleReport.build): {} while the battle has no outcome or no session; the first call with an
+# outcome closes and freezes the collector and caches the dict, later calls return the same report.
+func report() -> Dictionary:
+	if not _report.is_empty():
+		return _report
+	if session == null or _metrics == null:
+		return {}
+	var result: String = BattleBridge.outcome(session)
+	if result.is_empty():
+		return {}
+	_metrics.finish()
+	_report = BattleReport.build(_metrics, session, result)
+	return _report
 
 # Starts the playback from round 1. False when there is no session.
 func replay() -> bool:
@@ -292,6 +313,8 @@ func _write_back() -> void:
 func close() -> void:
 	if session != null and session.changed.is_connected(check):
 		session.changed.disconnect(check)
+	if _metrics != null:
+		_metrics.freeze()
 	session = null
 	var parent: Node = get_parent()
 	if parent != null:

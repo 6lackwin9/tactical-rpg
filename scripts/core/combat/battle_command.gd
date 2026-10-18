@@ -33,6 +33,7 @@ var exploit: Array[Dictionary] = []  # [{"status", "power_mult"}]
 var exploit_consume: bool = false
 var broken_targets: Array[Combatant] = []   # filled by execute(): units whose stance this command broke
 var combo_notes: Array[String] = []         # break log lines, emitted after the reactions
+var exploited: Array[Dictionary] = []       # filled by execute(): [{"target": Combatant, "status"}] per exploited hit (BREPORT1 1.3)
 
 func _init(p_source: Combatant, p_priority: int = 0, p_block_cost: int = 1) -> void:
 	source = p_source
@@ -72,6 +73,12 @@ func after_hit(target: Combatant, taken: int, matched: Dictionary) -> void:
 	var status: String = str(matched.get("status", ""))
 	if exploit_consume and not status.is_empty():
 		StatusEffects.remove_active(target, status)
+
+# Notes an exploited hit for CombatResolver.combo_resolved (no effect on the fight).
+func note_exploit(target: Combatant, matched: Dictionary) -> void:
+	var status: String = str(matched.get("status", ""))
+	if not status.is_empty():
+		exploited.append({"target": target, "status": status})
 
 # Log suffix of an exploited hit: " (exploits Exposed)", "" when no exploit applied.
 static func exploit_note(matched: Dictionary) -> String:

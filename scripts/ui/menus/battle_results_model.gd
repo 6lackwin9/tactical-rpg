@@ -9,6 +9,8 @@ extends RefCounted
 # BATTLE-FLOW: the screen is a popup over the combat arena; each row carries the XP bar values (fill = progress in the
 # current level, gain = the part of it this battle earned), `rewards` lists every non-XP reward the battle gave, and
 # `minimised` / `replay_handler` drive the minimise pill and Replay (the host wires the handler to the arena).
+# BREPORT1-L: `report` is the battle's BattleReport dict ({} = none; a dict with BattleReport.problems is treated as none);
+# report_columns / report_rows / best_moment give the view its table, cells ("-" for 0) and hover tips.
 # ==============================================================================
 
 var router: MenuRouter = null
@@ -18,20 +20,23 @@ var outcome: String = "won"
 var rewards: Dictionary = {}       # non-XP rewards: gold, supplies, items {ref: count}, loot (qid or Array), reputation {faction: delta}
 var minimised: bool = false
 var replay_handler: Callable = Callable()   # set while the arena is still mounted
+var report: Dictionary = {}        # BREPORT1: the battle report ({} = no report section)
 
 const HEADLINES: Dictionary = {"won": "Victory", "lost": "Defeat", "fled": "Fled"}
 const REWARD_KEYS: Array[String] = ["gold", "supplies", "items", "loot", "reputation"]
+const REPORT_LABELS: Dictionary = {"name": "Hero", "dealt": "Damage", "taken": "Taken", "healed": "Healed", "effects": "Effects", "combos": "Combos"}
 const NOTES: Dictionary = {
 	"lost": "The party woke at the last safe place, fully healed. No XP.",
 	"fled": "The party got away. No XP.",
 }
 
-func _init(p_router: MenuRouter, p_award: Dictionary, p_advanced: Array[String] = [], p_outcome: String = "won", p_rewards: Dictionary = {}) -> void:
+func _init(p_router: MenuRouter, p_award: Dictionary, p_advanced: Array[String] = [], p_outcome: String = "won", p_rewards: Dictionary = {}, p_report: Dictionary = {}) -> void:
 	router = p_router
 	award = p_award
 	advanced = p_advanced
 	outcome = p_outcome
 	rewards = p_rewards
+	report = p_report if BattleReport.problems(p_report).is_empty() else {}
 
 # The non-XP reward keys of a settled fight's result dict (the router args carry them as `rewards`).
 static func rewards_of(res: Dictionary) -> Dictionary:
@@ -117,6 +122,48 @@ func reward_lines() -> Array[String]:
 static func _pretty(ref: String) -> String:
 	var tail: String = ref.get_slice(":", ref.get_slice_count(":") - 1)
 	return tail.replace("_", " ").capitalize()
+
+# ------------------------------------------------------------------------------
+# Battle report (BREPORT1-L 1.5)
+# ------------------------------------------------------------------------------
+
+func has_report() -> bool:
+	return not report.is_empty() and not DictUtil.array_of(report.get("rows", [])).is_empty()
+
+# [{id, label}] of the shown columns, in table order.
+func report_columns() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not has_report():
+		return out
+	for raw: Variant in DictUtil.array_of(report.get("columns", [])):
+		var id: String = str(raw)
+		out.append({"id": id, "label": str(REPORT_LABELS.get(id, id))})
+	return out
+
+# [{name, state, guest, cells: {id: text}, tips: {id: text}}] per row: the name cell carries " (guest)" and the
+# "down" / "left" tag, numbers show "-" for 0, tips are "" when there is nothing to add.
+func report_rows() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not has_report():
+		return out
+	for raw: Variant in DictUtil.array_of(report.get("rows", [])):
+		var row: Dictionary = DictUtil.dict_of(raw)
+		var state: String = str(row.get("state", "standing"))
+		var guest: bool = DictUtil.to_bool(row.get("guest", false))
+		var name_cell: String = str(row.get("name", "")) + (" (guest)" if guest else "") + ("" if state == "standing" else " (%s)" % state)
+		var cells: Dictionary = {"name": name_cell}
+		for id: String in ["dealt", "taken", "healed", "effects", "combos"]:
+			var n: int = DictUtil.int_of(row, id)
+			cells[id] = "-" if n == 0 else str(n)
+		var tips: Dictionary = {"name": "", "dealt": BattleReport.dealt_tip(row), "taken": BattleReport.taken_tip(row), "healed": BattleReport.healed_tip(row),
+			"effects": BattleReport.effects_tip(row), "combos": BattleReport.combos_tip(row)}
+		out.append({"name": str(row.get("name", "")), "state": state, "guest": guest, "cells": cells, "tips": tips})
+	return out
+
+# "Best moment: ..." or "" (no report, or no moment).
+func best_moment() -> String:
+	var best: String = str(report.get("best", "")) if has_report() else ""
+	return "" if best.is_empty() else "Best moment: " + best
 
 # ------------------------------------------------------------------------------
 # Popup state (BATTLE-FLOW)

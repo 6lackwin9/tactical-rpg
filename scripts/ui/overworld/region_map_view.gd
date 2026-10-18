@@ -700,6 +700,7 @@ func settle(result: String, keep_battle: bool = false) -> void:
 		return
 	var fight: Dictionary = pending_fight
 	pending_fight = {}
+	var report: Dictionary = battle.report() if battle != null else {}   # BREPORT1 1.5: built before the arena closes
 	if not keep_battle:
 		_close_battle()
 	var res: Dictionary = DialogueRunner.after_fight(gs, fight, result) if str(fight.get("source", "")) == "dialogue" else ExploreRunner.after_fight(gs, fight, result)
@@ -707,6 +708,7 @@ func settle(result: String, keep_battle: bool = false) -> void:
 	_handle(res)
 	if DictUtil.to_bool(res.get("ok", false)):
 		res["outcome"] = result
+		res["report"] = report
 		fight_settled.emit(res)
 
 func _handle(res: Dictionary) -> void:
