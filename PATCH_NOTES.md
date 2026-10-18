@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 3878540 -->
+<!-- last: 3fa4cea -->
 
 ## 2026-10-18
 
@@ -31,6 +31,7 @@ In the game:
 
 Every change that touched the game:
 
+- STATCRED1-L: battle report credits each status to the unit that applied it (3fa4cea)
 - UIR-3: Character popup with Stats, Level up, Skills and Gear tabs (3878540)
 - BAL5-R1b: re-measure under the re-draft fix and BAL5-AI (a990fb7)
 - MORALE1-L (schema): enemy morale encounter fields, validation and preview (6a473ad)
@@ -110,6 +111,7 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- PATCH-NOTES: UIR-3, LEVERS1 spec (c8073e9)
 - LEVERS1 spec: brawler spin and priest Ward (DR2-LEVERS) (8e414c0)
 - PATCH-NOTES: BAL5-R1b, PLATFORM-HANDOVER (d241191)
 - PLATFORM-HANDOVER: rotation after GATE-SPLIT (context 278k) (d54daa9)
