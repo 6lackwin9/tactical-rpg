@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: e1662da -->
+<!-- last: c40a7dd -->
 
 ## 2026-10-18
 
@@ -30,6 +30,7 @@ In the game:
 
 Every change that touched the game:
 
+- CAMPLABEL1-S: campaign sim fall label names the fight actually lost (c40a7dd)
 - ITEMPOW1-A: battle items worth using (potion 90, bomb 45, start gold 100) (02c6bf4)
 - POUCH-TIDY: meaningful no-pouch test and stale pouch comments (8c1494c)
 - INTENT1-U follow-up: enemies no longer skip their turn; "Holding" tell (f65f0bb)
@@ -105,6 +106,7 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- PATCH-NOTES: marker fix, PURSE1, DR3, release #39 (ff2247c)
 - PURSE1: approved (purse all recs), decision and task rows (e1662da)
 - DR3-ANSWERS: design review 3 approved (all recs) (bd6f885)
 - DESIGN-LEDGER: design review 3 sent (reviewed at 8e2530a) (c337595)
