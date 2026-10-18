@@ -4,7 +4,9 @@ Written 2026-10-18 08:45 UTC by the seventh Assets & Audio session ("Fresh sessi
 
 ## Queue
 
-Empty. The slot was handed back to the coordinator at 08:45. Queue new approved `-A` rows the coordinator or peers relay until you hold the slot again.
+1. HEAL1-A (unblocked by HEAL1-L schema 44e0641, Gameplay 08:27): `rest: true` on ashlands:warden_keep and iron_reaches:slag_gate via seed `data/seeds/heal1.gd` (`docs/specs/HEAL1.md` section 6). Waits for the rotating slot.
+
+The slot was handed back to the coordinator at 08:45. Queue new approved `-A` rows the coordinator or peers relay until you hold the slot again.
 
 Live peers: Gameplay session_017rPg9X4j3FhvPDo3t93bwo, UI/UX session_01Rs6SLjohzJBiLs4ezyKKBN, Balance session_012hWXrrHGj1VxCBHAEN59mo, coordinator session_015sTvb6o2FYckV681cWHXtS.
 
