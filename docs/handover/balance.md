@@ -12,7 +12,7 @@ Updated 2026-10-18 16:35 UTC (project wind-down to interactive mode) by Balance 
 
 ## Queue (start only when Tushar asks)
 
-1. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase): unblocked (PACE1-L landed, develop 6e72b3b; Gameplay's hooks are in its handover). Not started. Then PACE1-B. PACE1 adds a B3 trigger: boss median under 7 rounds.
+1. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase): unblocked (PACE1-L landed, develop 6e72b3b; Gameplay's hooks are in its handover). Not started. Gameplay's hooks (PACE1-L schema 39daec9, behaviour a1ca665): `EncounterPhases.pace_of(entry, tier_of)` pace resolver; `WorldEncounter.grant_all_start` (default false) for the sim's start=on; enraged via `CatalogEncounter.is_enraged(c)` / `EncounterPhases.enraged_refs`; start buffs carry source "start:..." (BattleMetrics credits nobody); Empower = outgoing power x(1+mag/100) in power_for and riposte. Then PACE1-B. PACE1 adds a B3 trigger: boss median under 7 rounds.
 2. MORALE1-B follow-ups (proposals, need Tushar's approval as tasks): sim morale counters (`fled_shaken`, `fled_wavering`, `surrendered`, `break_by_crit_only`, `break_round`); campaign rerun with a higher SIM_TIMEOUT (both arms timed out at 900 s with 7 of 10 trios) or `comp=` per trio; question whether trios at 1.1-1.7 rounds vs ash_raiders are fine or want `morale_break` 40.
 3. LEVERS1-B: waits on LEVERS1-A1/A2/A3. BAL5-R is "before"; also check warrior-row won-fight allies hp_end >= 40 at L5/L7 after LEVERS1-L3 and A3.
 
