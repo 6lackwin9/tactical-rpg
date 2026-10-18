@@ -1,26 +1,24 @@
 # Assets & Audio handover
 
-Written 2026-10-18 05:40 UTC by the sixth Assets & Audio session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`. Dispatch mode is economy (asset-builder low/sonnet, change-reviewer low).
+Written 2026-10-18 08:45 UTC by the seventh Assets & Audio session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md` ("Usage caps": Assets & Audio builds only while the coordinator gives it the rotating slot; build lanes run in economy mode; rotate by context size, about 120k tokens). Decision "SONNET-TRIAL" (a499b3f): this area runs on Sonnet as a trial.
 
-## Queue (in order)
+## Queue
 
-1. ITEMUSE1-A (`use_reach` on the three consumables) after Gameplay's ITEMUSE1-L lands (Gameplay pings).
-2. Then any new `-A` rows the coordinator relays.
+Empty. The slot was handed back to the coordinator at 08:45. Queue new approved `-A` rows the coordinator or peers relay until you hold the slot again.
 
-Live peers: Gameplay session_01HQvENsjr5dFTBZp6L6GkPU, UI/UX session_01EFGiKxfL6TjsoGEDnQG5hc, Balance session_012hWXrrHGj1VxCBHAEN59mo.
+Live peers: Gameplay session_017rPg9X4j3FhvPDo3t93bwo, UI/UX session_01Rs6SLjohzJBiLs4ezyKKBN, Balance session_012hWXrrHGj1VxCBHAEN59mo, coordinator session_015sTvb6o2FYckV681cWHXtS.
 
 ## Landed on `develop` (this session)
 
-- INTENT1-A (4205bc1): passive `wardens_eye` (foresight) on Bryn. Seed `data/seeds/intent1_a.gd`.
-- BOSS1-A (1303031): Crown of Nails on both Ashmaw stands, Empty Gorge line on the barred one. Seed `data/seeds/boss1.gd`.
-- OBJ1-A (bda1aa0): courtyard hold, `wagon_raid` with Wenn Tallow (ambush, protect), slay Grakka on both stands, Wenn placeholder art. Seed `data/seeds/obj1.gd`.
+- ART2-A (0218602): intent kind chips `ui/intent_<kind>` (one per `IntentRules.KINDS`), `badge_foresight`, `chip_slay`, `chip_guest`, tile `overlay_objective`, sfx `miss` (already mapped, now audible). Generator group `chips` in `tools/gen_art.py`, seed `data/seeds/art2_a.gd`. UI/UX uses them in INTENT1-U and OBJ1-U.
+- ITEMUSE1-A (3048364): `use_reach` potion 1, elixir 0, bomb 3. Seed `data/seeds/itemuse1_a.gd`.
+- ITEMUSE1-A2 (fda40cc): class `pouch` rows emptied (decision "No free class potion"). Seed `data/seeds/itemuse1_a2.gd`. Logic follow-ups (bal2_rules test now compares [] to [], stale comments) sent to Gameplay.
 
 ## Notes for the next session
 
-- New shipped catalog rows: upsert inside `ContentCatalog.begin_system_edit()` / `end_system_edit()` with `"origin": "system"` (known-issues row; origin_test_suite fails otherwise).
-- Run seeds with `tools/fc.sh run <seed>` (plain `godot -s` lacks the art options); `save_world` writes schema defaults onto untouched rows, which is fine.
-- Ashlands encounter `party` lists stay Mara/Tev: the campaign party comes from `start_party`, and tidewrack re-skins those two in `world_test_suite`.
-- wagon_raid's ambush puts 1 of its 3 raiders behind the party (roster rule); the spec acceptance said two. Told Gameplay.
-- A new character needs a `CHARACTERS` row in `tools/gen_art.py` (logic-builder), then `gen_art.py characters`, `godot --headless --import`, `tools/fc.sh run data/seeds/art1_a.gd`. Never commit `tools/__pycache__/`.
-- Earlier notes hold: gate with `SUITE_TIMEOUT=600 tools/fc.sh gate`; never `pkill -f godot`; world seeds use `WorldCatalog.save_world(<world>)`.
-- Branches to delete at the next cleanup (landed): `claude/INTENT1-A-wardens-eye`, `claude/BOSS1-A-crown-of-nails`, `claude/OBJ1-A-objectives`, `claude/project-thread-0lygm1`.
+- The Ashlands placeholder audit (`/mnt/project-files/ashlands-art/AUDIT.md`) is fully built; new art comes only from new specs or UI rows.
+- The arena suite now runs past 600 s: gate with `SUITE_TIMEOUT=1200 tools/fc.sh gate > file` as a background command.
+- `ContentCatalog.save_all()` renormalises `data/catalog/encounters.json`: revert that file after running a catalog seed.
+- Shipped catalog rows: upsert inside `begin_system_edit()` / `end_system_edit()` with `"origin": "system"`. Run seeds with `tools/fc.sh run <seed>`; commit the seed's `.uid`.
+- New art: extend `tools/gen_art.py`, `godot --headless --import`, manifest rows via a seed (see `art2_a.gd`). Never commit `tools/__pycache__/`.
+- Branches to delete at the next cleanup (landed): `claude/assets-audio-9c0dia`, `claude/ITEMUSE1-A-use-reach`, `claude/ITEMUSE1-A2-class-pouch`, `claude/ASSETS-HANDOVER`.
