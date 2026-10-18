@@ -60,7 +60,7 @@ static func hp_pct(state: Dictionary) -> float:
 
 # One run of party `ids` through `fights` ([{"enc": encounter dict, "label"}]) with seed `seed_value`:
 # {"wins", "fell_at" (1-based battle, 0 = none), "hp": [party HP % after each fought battle, before the heal],
-#  "alive": [heroes up after each battle]}.
+#  "alive": [heroes up after each battle]}; plus "skipped" (1-based battle) when a jitter PLAN SKIP (K6) dropped the run.
 func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary:
 	var state: Dictionary = {}
 	var wins: int = 0
@@ -82,6 +82,8 @@ func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary
 		var res: Dictionary = runner.fight(up, foes, seed_value + i * SEED_STEP, DictUtil.dict_of(enc["base"]))
 		runner.start_hp = {}
 		runner.rounds_override = 0
+		if DictUtil.to_bool(res.get("skipped", false)):
+			return {"wins": wins, "fell_at": 0, "hp": hp_after, "alive": alive_after, "skipped": i + 1}
 		if not DictUtil.to_bool(res.get("ok", false)):
 			fell_at = i + 1
 			break
@@ -130,6 +132,7 @@ func campaign_mode() -> void:
 		var ids: Array[String] = SimScenarios.define_party(runner, comp, args.level)
 		var overall_wins: float = 0.0
 		var overall_total: float = 0.0
+		var overall_runs: int = 0   # runs counted (jitter PLAN SKIP runs left out)
 		for steel: String in STEELS:
 			var fights: Array = fights_for(steel)
 			var total: int = fights.size()
@@ -138,8 +141,13 @@ func campaign_mode() -> void:
 			var fell: Dictionary = {}
 			var hp_sum: Array[float] = []
 			var hp_n: Array[int] = []
+			var runs: int = 0
 			for s: int in args.seeds():
 				var r: Dictionary = run_party(ids, fights, s)
+				if r.has("skipped"):
+					out("  %s steel %s seed %d: skipped at battle %d (PLAN SKIP: jitter, unreachable target)" % [",".join(comp), steel, s, DictUtil.to_int(r["skipped"])])
+					continue
+				runs += 1
 				var hp_list: Array = DictUtil.array_of(r["hp"])
 				var hp_text: Array[String] = []
 				for k: int in range(hp_list.size()):
@@ -164,13 +172,14 @@ func campaign_mode() -> void:
 			for b: int in range(1, total + 1):
 				if fell.has(b):
 					fell_text.append("b%d x%d" % [b, DictUtil.to_int(fell[b])])
-			var seeds_n: float = float(maxi(1, args.seed_count))
+			var seeds_n: float = float(maxi(1, runs))
 			out("%-24s steel %-4s survived %.1f/%d, campaign cleared %d/%d, fell: %s, mean party hp%% after: [%s]" % [",".join(comp), steel, wins_sum / seeds_n, total,
-				clears, args.seed_count, ", ".join(fell_text) if not fell_text.is_empty() else "never", ", ".join(avg_hp)])
+				clears, runs, ", ".join(fell_text) if not fell_text.is_empty() else "never", ", ".join(avg_hp)])
 			overall_wins += wins_sum
-			overall_total += float(total * args.seed_count)
-		out("%-24s TRIO summary (both steel choices): survived %.1f of %.1f battles per run" % [",".join(comp), overall_wins / float(maxi(1, args.seed_count * STEELS.size())),
-			overall_total / float(maxi(1, args.seed_count * STEELS.size()))])
+			overall_total += float(total * runs)
+			overall_runs += runs
+		out("%-24s TRIO summary (both steel choices): survived %.1f of %.1f battles per run" % [",".join(comp), overall_wins / float(maxi(1, overall_runs)),
+			overall_total / float(maxi(1, overall_runs))])
 
 static func out(text: String) -> void:
 	print("§ " + text)

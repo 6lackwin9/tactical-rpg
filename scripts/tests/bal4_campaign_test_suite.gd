@@ -4,7 +4,9 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - BAL4-ATTR campaign sim test suite (docs/specs/DESIGN_REVIEW1.md 3.3)
 # tools/sim/sim_world.gd and sim_campaign.gd: the story fight order against the quest data, HP carried
-# between battles, the between-battle heal options and the run stopping at the first loss. Fixtures are
+# between battles, the between-battle heal options and the run stopping at the first loss. BAL5-SIM K1:
+# `world=<id>` (bare enc= ids find that world's encounters) and story characters with extras spawning
+# through WorldFactory (as WorldEncounter does). Fixtures are
 # sandbox units by class / level / tier; expectations derive from the rules and the world data.
 # ==============================================================================
 
@@ -39,6 +41,8 @@ static func run() -> bool:
 	ok = _test_args() and ok
 	ok = _test_story_order() and ok
 	ok = _test_world_enc() and ok
+	ok = _test_world_key() and ok
+	ok = _test_world_characters() and ok
 	ok = _test_trios() and ok
 	ok = _test_heal() and ok
 	ok = _test_runs() and ok
@@ -258,3 +262,114 @@ static func _test_runs() -> bool:
 		checks["fight records carry party_hp"] = runner.fights > 0
 	TestHelpers.cleanup(SANDBOX)
 	return TestHelpers.report(TAG, "Campaign runs: HP carry-over, heal=full, stop at the first loss", checks)
+
+# K1 `world=<id>`: a bare enc= id that is a world encounter becomes world:<world>/<id> whatever the token
+# order; generated ids stay generated; enc=world:<id> keeps working and uses the world= world.
+static func _test_world_key() -> bool:
+	var checks: Dictionary = {}
+	var enc_id: String = ""
+	for e: Dictionary in WorldCatalog.own_entries(SimWorld.WORLD, "encounters"):
+		if not ContentCatalog.has("encounters", str(e["id"])) and not SimArgs.GENERATED.has(str(e["id"])):
+			enc_id = str(e["id"])
+			break
+	checks["a world encounter id that is not a catalog or generated id exists"] = not enc_id.is_empty()
+	if enc_id.is_empty():
+		return TestHelpers.report(TAG, "world= key", checks)
+	var want: String = "%s%s/%s" % [SimArgs.REF_PREFIX, SimWorld.WORLD, enc_id]
+	var before: SimArgs = _parse(["party", "world=%s" % SimWorld.WORLD, "enc=%s,boss" % enc_id])
+	var after: SimArgs = _parse(["party", "enc=%s,boss" % enc_id, "world=%s" % SimWorld.WORLD])
+	checks["world= then enc=: %s" % str(before.encounters)] = before.error.is_empty() and before.encounters == ([want, "boss"] as Array[String])
+	checks["enc= then world=: same"] = after.error.is_empty() and after.encounters == before.encounters
+	checks["without world= a bare world id is refused"] = not SimArgs.new().parse(PackedStringArray(["party", "enc=%s" % enc_id]))
+	checks["world=<unknown> refused"] = not SimArgs.new().parse(PackedStringArray(["party", "world=no_such_world"]))
+	checks["enc=world:<id> still parses"] = _parse(["party", "enc=world:%s" % enc_id]).error.is_empty()
+	checks["header shows the world"] = before.header().contains("world %s" % SimWorld.WORLD)
+	# A child world sees its parent's encounters (inherited): world=<child> enc=<parent id>.
+	var child: String = ""
+	for w: String in WorldCatalog.world_ids():
+		if w != SimWorld.WORLD and WorldCatalog.lineage(w).has(SimWorld.WORLD) and WorldCatalog.has_entry(w, "encounters", enc_id):
+			child = w
+			break
+	if not child.is_empty():
+		var c: SimArgs = _parse(["party", "world=%s" % child, "enc=%s" % enc_id])
+		checks["child world %s sees inherited %s" % [child, enc_id]] = c.error.is_empty() and c.encounters == (["%s%s/%s" % [SimArgs.REF_PREFIX, child, enc_id]] as Array[String])
+		checks["parse_ref uses the given default world"] = SimArgs.parse_ref("world:x", child) == ([child, "x"] as Array[String])
+	return TestHelpers.report(TAG, "BAL5-SIM K1 world= key", checks)
+
+# Every (world, encounter, character ref) of the world data, enemies and waves, with the character.
+static func _story_refs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for w: String in WorldCatalog.world_ids():
+		for e: Dictionary in WorldCatalog.merged_entries(w, "encounters"):
+			for ref: Variant in DictUtil.array_of(e.get("enemies", [])) + DictUtil.array_of(e.get("wave_units", [])):
+				var ch: Dictionary = WorldCatalog.resolve(w, "characters", str(ref))
+				if not ch.is_empty():
+					out.append({"world": w, "encounter": str(e["id"]), "ref": str(ref), "character": ch})
+	return out
+
+# Records the spawned units of every fight: lore_ref -> {max_hp, speed, max_ap, power} at the start.
+class SpawnObserver extends "res://tools/sim/sim_observer.gd":
+	var spawned: Dictionary = {}
+	func on_start(session: CombatSession) -> void:
+		spawned = {}
+		for c: Combatant in session.allies + session.enemies:
+			spawned[c.lore_ref] = Bal4CampaignTestSuite._vitals(c)
+
+static func _vitals(c: Combatant) -> Dictionary:
+	return {"max_hp": c.max_hp, "speed": c.speed, "max_ap": c.max_ap, "power": DamageCalculator.power_of(c, c.attack_range > 1)}
+
+# K1 characters: a plain story character plays as its base unit id; a character with extras plays as
+# a simw_ copy that, in a fight, spawns with the max HP, speed, AP and power the game's WorldEncounter
+# of the same battle gives it (base unit through ContentFactory, then WorldFactory.apply_character).
+static func _test_world_characters() -> bool:
+	var checks: Dictionary = {}
+	var plain: Dictionary = {}
+	var extra: Dictionary = {}
+	for r: Dictionary in _story_refs():
+		var ch: Dictionary = r["character"]
+		var div: String = WorldFactory.divergence(ch, str(r["world"]))
+		if div.is_empty() and plain.is_empty():
+			plain = r
+		elif not div.is_empty() and not DictUtil.dict_of(ch.get("tuning", {})).is_empty() and extra.is_empty():
+			extra = r
+	checks["a plain story foe exists"] = not plain.is_empty()
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked and not plain.is_empty():
+		var runner := SimRunner.new(_parse(["party"]))
+		var enc: Dictionary = SimWorld.encounter(runner, str(plain["encounter"]), TEST_LEVEL, false, str(plain["world"]))
+		var base_id: String = str(DictUtil.dict_of(plain["character"])["base_unit"])
+		checks["plain %s plays as its base unit %s" % [str(plain["ref"]), base_id]] = DictUtil.array_of(enc.get("enemies", [])).has(base_id) or DictUtil.array_of(DictUtil.dict_of(enc.get("base", {})).get("wave_units", [])).has(base_id)
+	if forked and not extra.is_empty():
+		var w: String = str(extra["world"])
+		var ch_e: Dictionary = extra["character"]
+		var args: SimArgs = _parse(["party", str(TEST_LEVEL), "1", "cap=1", "comp=warrior", "jitter=off", "world=%s" % w])
+		var runner_e := SimRunner.new(args)
+		var obs := SpawnObserver.new()
+		runner_e.observer = obs
+		var enc_e: Dictionary = SimWorld.encounter(runner_e, str(extra["encounter"]), TEST_LEVEL, false, w, true)
+		var foes: Array[String] = []
+		foes.assign(DictUtil.array_of(enc_e["enemies"]))
+		var copy: String = "simw_%s" % str(ch_e["_qid"]).replace(":", "_")
+		checks["%s (tuning %s) plays as the copy %s" % [str(extra["ref"]), str(ch_e["tuning"]), copy]] = foes.has(copy) or DictUtil.array_of(DictUtil.dict_of(enc_e["base"]).get("wave_units", [])).has(copy)
+		var party: Array[String] = SimScenarios.define_party(runner_e, args.comp, TEST_LEVEL)
+		runner_e.fight(party, foes, args.seeds()[0], DictUtil.dict_of(enc_e["base"]))
+		var game := WorldEncounter.new(w, str(extra["encounter"]))
+		game.build()
+		var expect: Dictionary = {}
+		var plain_v: Dictionary = {}
+		for c: Combatant in game.allies + game.enemies + game.wave:
+			if c.lore_ref == str(ch_e["_qid"]):
+				expect = _vitals(c)
+				var base_c: Combatant = ContentFactory.unit(WorldFactory.unit_entry(ch_e), "", game.unit_ap)
+				plain_v = _vitals(base_c)
+		var found: Dictionary = DictUtil.dict_of(obs.spawned.get(str(ch_e["_qid"]), {}))
+		checks["the copy spawned with the character applied (lore_ref)"] = not found.is_empty()
+		checks["the game's WorldEncounter spawns the character"] = not expect.is_empty()
+		if not found.is_empty() and not expect.is_empty():
+			checks["vitals %s = WorldEncounter's %s" % [str(found), str(expect)]] = found == expect
+			checks["the extras change the unit vs its base %s (not vacuous)" % str(plain_v)] = found != plain_v
+	elif forked:
+		checks["no tuned story foe in the world data (K1 tuning path not exercised)"] = true
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "BAL5-SIM K1 story characters: base units, extras through WorldFactory", checks)

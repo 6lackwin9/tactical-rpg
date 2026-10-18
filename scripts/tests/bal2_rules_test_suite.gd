@@ -9,18 +9,58 @@ extends RefCounted
 # class gear) or in memory; expectations derive from CharacterStats / DamageCalculator / StatRules.
 # BAL3-S (docs/specs/BAL3.md 3.1-3.3): the sim's seeded start jitter, the clumped enemy block, the
 # role scenario scale and the encounter archetypes; threat totals derive from the StatRules tiers.
+# BAL5-SIM / BAL5-PH (docs/specs/BAL5_LEVERS.md section 8): K2 trio sweep and party seeds, K3 won-fight
+# split, heal casts and down round, K4 tier_foe, K5 scenario edits (A1, S2) and the generated boss
+# phase (B2), K6 jitter reach refusals as skipped fights. K1 (world=) lives in bal4_campaign_test_suite.
 # ==============================================================================
 
 const SimArgs = preload("res://tools/sim/sim_args.gd")
 const SimRunner = preload("res://tools/sim/sim_runner.gd")
 const SimVariants = preload("res://tools/sim/sim_variants.gd")
 const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
+const SimParty = preload("res://tools/sim/sim_party.gd")
+const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
+const SimRoles = preload("res://tools/sim/sim_roles.gd")
+const SimTargets = preload("res://tools/sim/sim_targets.gd")
 
 # Records every unit's tile (by name) when a sim fight starts (after the runner's placement).
 class StartObserver extends "res://tools/sim/sim_observer.gd":
 	var tiles: Dictionary = {}
 	func on_start(session: CombatSession) -> void:
 		tiles = Bal2RulesTestSuite._tiles_of(session.grid, session.allies + session.enemies)
+
+# The metrics collector plus an independent count of heal entries per actor, the first round each unit
+# is at 0 HP, and whether the generated boss phase fired.
+class CountingMetrics extends "res://tools/sim/sim_metrics.gd":
+	var heal_entries: Dictionary = {}   # actor name -> heal entries this fight
+	var downs: Dictionary = {}          # unit name -> round first seen at 0 HP
+	var phase_fired: bool = false
+	var _watched: CombatSession = null
+	func on_start(session: CombatSession) -> void:
+		super(session)
+		heal_entries = {}
+		downs = {}
+		phase_fired = false
+		_watched = session
+		session.log_appended.connect(_count)
+	func _count(e: ActionLogEntry) -> void:
+		if e.category == "BUFF" and e.skill_subtype == "Support":
+			heal_entries[e.actor_name] = DictUtil.int_of(heal_entries, e.actor_name) + 1
+	func on_step(session: CombatSession) -> void:
+		super(session)
+		for c: Combatant in session.allies + session.enemies:
+			if c.hp <= 0 and not downs.has(c.name):
+				downs[c.name] = session.current_round
+		var enc: CatalogEncounter = session.encounter as CatalogEncounter
+		if enc != null and enc.phase_runtime.is_fired(str(SimScenarios.BOSS_PHASE["id"])):
+			phase_fired = true
+	func on_end(session: CombatSession, result: Dictionary) -> void:
+		for c: Combatant in session.allies + session.enemies:
+			if c.hp <= 0 and not downs.has(c.name):
+				downs[c.name] = session.current_round
+		if _watched != null and _watched.log_appended.is_connected(_count):
+			_watched.log_appended.disconnect(_count)
+		super(session, result)
 
 const TAG: String = "BAL2"
 const MAX_TEST_LEVEL: int = 9
@@ -51,6 +91,13 @@ static func run() -> bool:
 	ok = _test_enemy_block() and ok
 	ok = _test_role_scale() and ok
 	ok = _test_archetypes() and ok
+	ok = _test_bal5_args() and ok
+	ok = _test_trio_sweep() and ok
+	ok = _test_scenario_edits() and ok
+	ok = _test_boss_phase() and ok
+	ok = _test_won_split() and ok
+	ok = _test_heal_down_metrics() and ok
+	ok = _test_reach_skip() and ok
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	return ok
 
@@ -646,3 +693,246 @@ static func _test_archetypes() -> bool:
 	checks["boss encounter: %d wave units at round %d" % [DictUtil.array_of(base.get("wave_units", [])).size(), DictUtil.int_of(base, "wave_round")]] = DictUtil.array_of(base.get("wave_units", [])).size() == DictUtil.array_of(boss_g["wave"]).size() \
 		and DictUtil.int_of(base, "wave_round") == SimScenarios.WAVE_ROUND
 	return TestHelpers.report(TAG, "BAL3-S encounter archetypes: threat order, compositions from the tier rules", checks)
+
+# ------------------------------------------------------------------------------
+# BAL5-SIM / BAL5-PH (docs/specs/BAL5_LEVERS.md section 8)
+# ------------------------------------------------------------------------------
+
+# K2 seeds, K4 tier_foe, K5 phase / s2 keys: defaults, values, refusals.
+static func _test_bal5_args() -> bool:
+	var checks: Dictionary = {}
+	checks["party cells default to PARTY_SEEDS (%d)" % SimArgs.PARTY_SEEDS] = _sim_args(["party"]).seed_count == SimArgs.PARTY_SEEDS
+	checks["sweep cells default to PARTY_SEEDS"] = _sim_args(["sweep"]).seed_count == SimArgs.PARTY_SEEDS
+	checks["duel keeps the general default (%d)" % SimArgs.new().seed_count] = _sim_args(["duel"]).seed_count == SimArgs.new().seed_count
+	checks["role keeps the general default"] = _sim_args(["role"]).seed_count == SimArgs.new().seed_count
+	checks["positional seeds win in party (5)"] = _sim_args(["party", "5", "5"]).seed_count == 5
+	checks["quick wins in party (1 seed)"] = _sim_args(["party", "quick"]).seed_count == 1
+	var sw: SimArgs = _sim_args(["sweep", "size=3", "lead=warrior"])
+	checks["size=3 lead=warrior parse"] = sw.error.is_empty() and sw.comp_size == 3 and sw.lead == "warrior"
+	checks["default size is SimParty.COMP_SIZE, no lead"] = SimArgs.new().comp_size == SimParty.COMP_SIZE and SimArgs.new().lead.is_empty()
+	checks["size=0 refused"] = not SimArgs.new().parse(PackedStringArray(["sweep", "size=0"]))
+	checks["size above PARTY_MAX refused"] = not SimArgs.new().parse(PackedStringArray(["sweep", "size=%d" % (PartyState.PARTY_MAX + 1)]))
+	checks["lead=<unknown class> refused"] = not SimArgs.new().parse(PackedStringArray(["sweep", "lead=dragon"]))
+	var mirror: SimArgs = _sim_args(["tier"])
+	checks["tier_foe default mirror: each hero fights its own class"] = mirror.tier_foe == SimArgs.MIRROR and mirror.tier_foe_for("mage") == "mage"
+	var fixed: SimArgs = _sim_args(["tier", "tier_foe=brawler"])
+	var all_brawler: bool = true
+	for c: String in SimArgs.CLASSES:
+		all_brawler = all_brawler and fixed.tier_foe_for(c) == "brawler"
+	checks["tier_foe=brawler: every hero fights a brawler"] = fixed.error.is_empty() and all_brawler
+	checks["tier_foe header"] = fixed.header().contains("tier_foe brawler")
+	checks["tier_foe=<unknown> refused"] = not SimArgs.new().parse(PackedStringArray(["tier", "tier_foe=dragon"]))
+	checks["phase default on"] = _sim_args(["party"]).boss_phase
+	checks["phase=off parses"] = not _sim_args(["party", "phase=off"]).boss_phase
+	checks["phase=maybe refused"] = not SimArgs.new().parse(PackedStringArray(["party", "phase=maybe"]))
+	checks["s2 default off, s2=on parses"] = not _sim_args(["role"]).s2 and _sim_args(["role", "s2=on"]).s2
+	return TestHelpers.report(TAG, "BAL5-SIM keys: party seeds, size / lead, tier_foe, phase, s2", checks)
+
+# K2: size=3 lead=warrior gives the warrior plus every pair of the other classes (C(n-1, 2)); the default
+# sweep stays the C(n, COMP_SIZE) distinct compositions.
+static func _test_trio_sweep() -> bool:
+	var checks: Dictionary = {}
+	var others: int = SimArgs.CLASSES.size() - 1
+	var trios: Array = SimParty.new(_sim_args(["sweep", "size=3", "lead=warrior"]), null, null).compositions()
+	checks["%d trios = C(%d, 2)" % [trios.size(), others]] = trios.size() == others * (others - 1) / 2
+	var keys: Dictionary = {}
+	var shape: bool = true
+	for raw: Variant in trios:
+		var t: Array = DictUtil.array_of(raw)
+		shape = shape and t.size() == 3 and str(t[0]) == "warrior" and not t.slice(1).has("warrior") and str(t[1]) != str(t[2])
+		var sorted_t: Array = t.duplicate()
+		sorted_t.sort()
+		keys[",".join(PackedStringArray(sorted_t))] = true
+	checks["each trio: the warrior first plus two different other classes"] = shape
+	checks["all trios distinct"] = keys.size() == trios.size()
+	var n: int = SimArgs.CLASSES.size()
+	var k: int = SimParty.COMP_SIZE
+	var expected: int = 1
+	for i: int in range(k):
+		expected = expected * (n - i) / (i + 1)
+	checks["default sweep: C(%d, %d) = %d compositions" % [n, k, expected]] = SimParty.new(_sim_args(["sweep"]), null, null).compositions().size() == expected
+	var pairs: Array = SimParty.new(_sim_args(["sweep", "size=2", "lead=priest"]), null, null).compositions()
+	checks["size=2 lead=priest: priest + each other class (%d)" % others] = pairs.size() == others
+	return TestHelpers.report(TAG, "BAL5-SIM K2 trio sweep: size=3 lead=warrior", checks)
+
+# K5: A1 makes aoe_swarm a trio (warrior + priest refs); S2 (s2=on) turns one support_attrition ranger
+# into a brawler and touches no other scenario.
+static func _test_scenario_edits() -> bool:
+	var checks: Dictionary = {}
+	var swarm_allies: Array = DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["aoe_swarm"])["allies"])
+	checks["A1: aoe_swarm refs warrior + priest (a trio with the test unit) %s" % str(swarm_allies)] = swarm_allies.size() == 2 and swarm_allies.has("warrior") and swarm_allies.has("priest")
+	var plain: Array = SimScenarios.scenario_enemies("support_attrition", 5)
+	var s2: Array = SimScenarios.scenario_enemies("support_attrition", 5, true)
+	checks["S2 off: the authored enemies"] = plain == DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["support_attrition"])["enemies"])
+	checks["S2 on: same size and tiers"] = s2.size() == plain.size() and _tiers(s2) == _tiers(plain)
+	checks["S2 on: one ranger fewer, one brawler more"] = _classes(s2).count("ranger") == _classes(plain).count("ranger") - 1 and _classes(s2).count("brawler") == _classes(plain).count("brawler") + 1
+	checks["S2 on: mage and rogue kept"] = _classes(s2).count("mage") == _classes(plain).count("mage") and _classes(s2).count("rogue") == _classes(plain).count("rogue")
+	checks["S2 leaves other scenarios alone"] = SimScenarios.scenario_enemies("tank_hold", 5, true) == SimScenarios.scenario_enemies("tank_hold", 5)
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		var runner := SimRunner.new(_sim_args(["role"]))
+		var sc: Dictionary = SimScenarios.scenario(runner, "aoe_swarm", "mage", 5)
+		checks["A1: aoe_swarm party of 3 (%d)" % DictUtil.array_of(sc["party"]).size()] = DictUtil.array_of(sc["party"]).size() == 3
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "BAL5 K5 scenario edits: A1 trio swarm, S2 behind s2=on", checks)
+
+# B2 / BAL5-PH: the generated boss carries one valid phase on the boss unit (hp_below), phase=off and the
+# other archetypes carry none; in fights the phase fires with phase on and never with phase off.
+static func _test_boss_phase() -> bool:
+	var checks: Dictionary = {}
+	var runner := SimRunner.new(_sim_args(["party"]))
+	var on: Dictionary = SimScenarios.encounter(runner, "boss", 5, 0, false, "warrior", "brawler", true)
+	var off: Dictionary = SimScenarios.encounter(runner, "boss", 5, 0, false, "warrior", "brawler", false)
+	var foes: Array = DictUtil.array_of(on["enemies"])
+	var phases: Array = DictUtil.array_of(DictUtil.dict_of(on["base"]).get("phases", []))
+	checks["phase on: one phase"] = phases.size() == 1
+	checks["phase off: no phase"] = DictUtil.array_of(DictUtil.dict_of(off["base"]).get("phases", [])).is_empty()
+	for enc_id: String in SimArgs.GENERATED:
+		if enc_id != "boss":
+			var other: Dictionary = SimScenarios.encounter(runner, enc_id, 5, 0, false, "warrior", "brawler", true)
+			checks["%s has no phase" % enc_id] = DictUtil.array_of(DictUtil.dict_of(other["base"]).get("phases", [])).is_empty()
+	if phases.size() == 1:
+		var p: Dictionary = DictUtil.dict_of(phases[0])
+		var boss_id: String = str(foes[0])
+		var trig: Dictionary = DictUtil.dict_of(p["trigger"])
+		checks["trigger hp_below on the boss unit %s (tier boss)" % boss_id] = str(trig["kind"]) == EncounterPhases.TRIGGER_HP_BELOW and str(trig["unit"]) == boss_id and boss_id.contains("_boss_")
+		var on_boss: bool = true
+		for fx: Variant in DictUtil.array_of(p["effects"]):
+			on_boss = on_boss and str(DictUtil.dict_of(fx).get("unit", boss_id)) == boss_id
+		checks["every effect targets the boss"] = on_boss
+		var entry: Dictionary = {"enemies": foes, "wave_units": DictUtil.dict_of(on["base"]).get("wave_units", []), "phases": phases, "max_rounds": SimArgs.new().cap}
+		var problems: Array[String] = EncounterPhases.problems(entry, func(_ref: String) -> bool: return true)
+		checks["the phase passes the BOSS1 validator %s" % str(problems)] = problems.is_empty()
+		checks["BOSS_PHASE itself keeps the placeholder (copies are filled)"] = str(DictUtil.dict_of(SimScenarios.BOSS_PHASE["trigger"])["unit"]) == SimScenarios.BOSS_REF
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		var fired: Dictionary = {}
+		for phase_on: bool in [true, false]:
+			var args: SimArgs = _sim_args(["party", "5", "1", "jitter=off", "cap=6"])
+			var r := SimRunner.new(args)
+			var obs := CountingMetrics.new()
+			obs.quiet = true
+			r.observer = obs
+			var party: Array[String] = SimScenarios.define_party(r, ["warrior", "ranger", "mage", "rogue"] as Array[String], StatRules.MAX_LEVEL)
+			var enc: Dictionary = SimScenarios.encounter(r, "boss", 5, 0, false, "warrior", "brawler", phase_on)
+			var e_ids: Array[String] = []
+			e_ids.assign(DictUtil.array_of(enc["enemies"]))
+			var n: int = 0
+			for s: int in SimArgs.new().seeds():
+				r.fight(party, e_ids, s, DictUtil.dict_of(enc["base"]))
+				n += 1 if obs.phase_fired else 0
+			fired[phase_on] = n
+		checks["phase on: fired in some fight (%d)" % DictUtil.to_int(fired[true])] = DictUtil.to_int(fired[true]) > 0
+		checks["phase off: never fired"] = DictUtil.to_int(fired[false]) == 0
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "BAL5-PH generated boss phase (B2): one hp_below phase on the boss, phase=off restores BAL3", checks)
+
+# A fight-set fixture of `count` enemies of class / tier at `level`.
+static func _foes(runner: SimRunner, tag: String, class_id: String, tier: String, level: int, count: int) -> Array[String]:
+	var ids: Array[String] = []
+	for i: int in range(count):
+		var id: String = "bal5_%s_%d" % [tag, i]
+		runner.define(id, class_id, level, tier, false)
+		ids.append(id)
+	return ids
+
+# K3 won-fight split: units_won holds exactly the cleared fights (an easy set adds to it, a hopeless one
+# does not); the tank band is read on the won-fight KPI, the all-fight KPI has its own floor band.
+static func _test_won_split() -> bool:
+	var checks: Dictionary = {}
+	var ks: Array[Dictionary] = SimRoles.kpis("tank")
+	var bands: Dictionary = {}
+	for k: Dictionary in ks:
+		bands[str(k["id"])] = str(k["band"])
+	checks["tank: allies hp_end won-fight KPI carries tank_ally_hp"] = str(bands.get("ally_hp_won", "")) == "tank_ally_hp"
+	checks["tank: all-fight KPI carries tank_ally_hp_all"] = str(bands.get("ally_hp", "")) == "tank_ally_hp_all" and SimTargets.DEFAULTS.has("tank_ally_hp_all")
+	checks["all-fight floor below the won-fight floor"] = SimTargets.lo(SimTargets.defaults(), "tank_ally_hp_all") < SimTargets.lo(SimTargets.defaults(), "tank_ally_hp")
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		var args: SimArgs = _sim_args(["role", "5", "2", "jitter=off", "cap=4"])
+		var runner := SimRunner.new(args)
+		var metrics := SimMetrics.new()
+		metrics.quiet = true
+		runner.observer = metrics
+		var party: Array[String] = SimScenarios.define_party(runner, ["warrior", "ranger"] as Array[String], StatRules.MAX_LEVEL)
+		var easy: Array[String] = _foes(runner, "easy", "rogue", "minion", 1, 1)
+		var wall: Array[String] = _foes(runner, "wall", "warrior", "boss", StatRules.MAX_LEVEL, 4)
+		var acc: Dictionary = SimScenarios.empty_set()
+		SimScenarios.run_seeds(runner, metrics, party, easy, {}, args.seeds(), "", acc)
+		var after_easy: float = DictUtil.to_float(acc["cleared"])
+		checks["easy set cleared every fight (%d of %d)" % [int(after_easy), int(DictUtil.to_float(acc["fights"]))]] = after_easy > 0.0 and after_easy == DictUtil.to_float(acc["fights"])
+		var refs: Array[String] = [party[1]]
+		var v_easy: Dictionary = {"refs": SimScenarios.sum_units(acc, refs), "refs_won": SimScenarios.sum_units(acc, refs, "units_won")}
+		checks["every fight won: won-fight KPI = all-fight KPI"] = is_equal_approx(SimRoles.kpi_value("ally_hp_won", v_easy), SimRoles.kpi_value("ally_hp", v_easy))
+		SimScenarios.run_seeds(runner, metrics, party, wall, {}, args.seeds(), "", acc)
+		checks["hopeless set added fights, no clears"] = DictUtil.to_float(acc["fights"]) > after_easy and DictUtil.to_float(acc["cleared"]) == after_easy
+		var won_fights: float = DictUtil.to_float(DictUtil.dict_of(DictUtil.dict_of(acc["units_won"]).get(party[0], {})).get("fights", 0.0))
+		var all_fights: float = DictUtil.to_float(DictUtil.dict_of(DictUtil.dict_of(acc["units"]).get(party[0], {})).get("fights", 0.0))
+		checks["units_won counts the cleared fights only (%d of %d)" % [int(won_fights), int(all_fights)]] = won_fights == DictUtil.to_float(acc["cleared"]) and all_fights == DictUtil.to_float(acc["fights"])
+		var v: Dictionary = {"refs": SimScenarios.sum_units(acc, refs), "refs_won": SimScenarios.sum_units(acc, refs, "units_won")}
+		checks["losses lower the all-fight KPI, not the won-fight one"] = SimRoles.kpi_value("ally_hp", v) < SimRoles.kpi_value("ally_hp_won", v) and is_equal_approx(SimRoles.kpi_value("ally_hp_won", v), SimRoles.kpi_value("ally_hp_won", v_easy))
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "BAL5 K3 won-fight split of allies hp_end", checks)
+
+# K3 healer metrics: heal_casts = the heal entries an actor logged; downed / down_round = the first round
+# at 0 HP (independent count); down_early = downed before EARLY_DOWN_ROUND; support KPIs read them.
+static func _test_heal_down_metrics() -> bool:
+	var checks: Dictionary = {}
+	var ids: Array[String] = []
+	for k: Dictionary in SimRoles.kpis("support"):
+		ids.append(str(k["id"]))
+	checks["support KPIs list heal casts, early down %, down round"] = ids.has("heal_casts") and ids.has("down_early") and ids.has("down_round")
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		var args: SimArgs = _sim_args(["role", "5", "3", "jitter=off"])
+		var runner := SimRunner.new(args)
+		var obs := CountingMetrics.new()
+		obs.quiet = true
+		runner.observer = obs
+		var party: Array[String] = SimScenarios.define_party(runner, ["priest", "warrior"] as Array[String], 5)
+		var foes: Array[String] = _foes(runner, "press", "brawler", "standard", 6, 3)
+		var heal_total: int = 0
+		var downs_total: int = 0
+		var casts_ok: bool = true
+		var down_ok: bool = true
+		for s: int in args.seeds():
+			var res: Dictionary = runner.fight(party, foes, s)
+			if not DictUtil.to_bool(res.get("ok", false)):
+				continue
+			for n: Variant in obs.units:
+				var rec: Dictionary = DictUtil.dict_of(obs.units[n])
+				var expected_casts: int = DictUtil.int_of(obs.heal_entries, n)
+				heal_total += expected_casts
+				casts_ok = casts_ok and DictUtil.int_of(rec, "heal_casts") == expected_casts
+				var downed: bool = obs.downs.has(n)
+				downs_total += 1 if downed else 0
+				var round_at: int = DictUtil.int_of(obs.downs, n) if downed else 0
+				down_ok = down_ok and DictUtil.int_of(rec, "downed") == (1 if downed else 0) and DictUtil.int_of(rec, "down_round") == round_at \
+					and DictUtil.int_of(rec, "down_early") == (1 if downed and round_at < SimMetrics.EARLY_DOWN_ROUND else 0)
+		checks["heal_casts = heal entries logged per actor (%d entries)" % heal_total] = casts_ok
+		checks["the fixture heals (not vacuous)"] = heal_total > 0
+		checks["downed / down_round / down_early match the first 0-HP round"] = down_ok
+		checks["the fixture downs a unit (%d)" % downs_total] = downs_total > 0
+		var t: Dictionary = {"heal_casts": 6.0, "fights": 3.0, "downed": 2.0, "down_round": 7.0, "down_early": 1.0}
+		var v: Dictionary = {"test": t}
+		checks["KPI heal casts/f = casts / fights"] = is_equal_approx(SimRoles.kpi_value("heal_casts", v), 2.0)
+		checks["KPI down round = mean over downed fights"] = is_equal_approx(SimRoles.kpi_value("down_round", v), 3.5)
+		checks["KPI down early % over all fights"] = is_equal_approx(SimRoles.kpi_value("down_early", v), 100.0 / 3.0)
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "BAL5 K3 healer metrics: heal casts, down round", checks)
+
+# K6: the reach texts of CombatPlan (too far, no path) are reach errors; others are not.
+static func _test_reach_skip() -> bool:
+	var checks: Dictionary = {}
+	for text: String in ["Too far: 9 tiles to the target (move cost 9), A can move 3 cost per block for 2 blocks in a round.", "No path to that tile.",
+			"No path to get A within reach of B.", "B is too far for Lunge: 5 tiles to cross (move cost 5), it covers 2."]:
+		checks["reach: %s" % text.left(30)] = SimRunner.is_reach_error(text)
+	for text: String in ["Not enough AP for Strike.", "", "Target is not an enemy."]:
+		checks["not reach: '%s'" % text.left(30)] = not SimRunner.is_reach_error(text)
+	var r := SimRunner.new(_sim_args(["party"]))
+	checks["a new runner has no skips or fails"] = r.plan_skips == 0 and r.plan_fails == 0
+	return TestHelpers.report(TAG, "BAL5 K6 jitter PLAN SKIP: reach refusals are skipped fights", checks)

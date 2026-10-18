@@ -35,7 +35,7 @@ func presets() -> Array[String]:
 # Variant records of `class_id` in `scenario_id` (one per spend x preset). `plain`: the test slot is
 # a reference unit (class spend, default loadout; the support baseline).
 func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Array[Dictionary]:
-	var sc: Dictionary = SimScenarios.scenario(runner, scenario_id, class_id, args.level, plain)
+	var sc: Dictionary = SimScenarios.scenario(runner, scenario_id, class_id, args.level, plain, args.s2)
 	var party: Array[String] = []
 	party.assign(DictUtil.array_of(sc["party"]))
 	var foes: Array[String] = []
@@ -56,6 +56,7 @@ func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Ar
 			acc["test"] = SimScenarios.sum_units(acc, test_names)
 			acc["party"] = SimScenarios.sum_units(acc, party)
 			acc["refs"] = SimScenarios.sum_units(acc, refs)
+			acc["refs_won"] = SimScenarios.sum_units(acc, refs, "units_won")
 			acc["cap"] = args.cap
 			variants.append(acc)
 	runner.spend_variant = "class"

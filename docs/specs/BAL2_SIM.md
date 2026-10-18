@@ -165,7 +165,7 @@ Every advanced family's `requires` (deadeye: aimed_shot, greater_mend: mend, cyc
 | --- | --- | --- | --- |
 | `tank_hold` | test + ranger + mage (fragile references) | standard brawler, rogue, brawler, rogue | focused melee pack diving the back line |
 | `ranged_dive` | test + warrior | standard rogue, rogue, brawler | divers that bypass the tank |
-| `aoe_swarm` | test + warrior | minion brawler, rogue, ranger, brawler, rogue, priest | six weak foes |
+| `aoe_swarm` | test + warrior (BAL5-SIM A1: + priest, a trio) | minion brawler, rogue, ranger, brawler, rogue, priest | six weak foes |
 | `support_attrition` | test + warrior + brawler | standard ranger, ranger, mage, rogue | sustained ranged damage on the party |
 | `striker_priority` | test + warrior | elite mage (priority target) + standard warrior, warrior (screen) | reach and remove a protected target |
 

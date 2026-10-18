@@ -3,7 +3,10 @@ extends RefCounted
 # Balance sim world encounters (BAL4-ATTR, docs/specs/DESIGN_REVIEW1.md 3.3): the Ashlands story
 # fights in quest order, read from the world data through WorldCatalog (read-only), with the story
 # characters mapped to their base catalog units (CAMP1: every foe is a catalog unit at its authored
-# level). Loaded with preload (no class_name); nothing is written.
+# level). BAL5-SIM K1: any world's encounters (own or inherited, WorldCatalog.resolve); a character
+# with extras (named items, passives, disciplines, tuning: WorldFactory.divergence) plays as a sandbox
+# copy simw_<world>_<id> of its base unit that spawns through WorldFactory.apply_character, as in
+# WorldEncounter. Loaded with preload (no class_name); only sandbox units are written.
 
 const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
 const SimRunner = preload("res://tools/sim/sim_runner.gd")
@@ -75,49 +78,50 @@ static func story_fights(steel_to_gate: bool) -> Array[Dictionary]:
 					out.append({"quest": str(q["id"]), "encounter": raid, "scripted": true})
 	return out
 
-# Base unit id of every story character (characters.json base_unit) of `world`.
-static func base_units(world: String = WORLD) -> Dictionary:
-	var out: Dictionary = {}
-	for c: Dictionary in WorldCatalog.own_entries(world, "characters"):
-		out[str(c["id"])] = str(c.get("base_unit", ""))
-	return out
-
-# {"enemies": base unit ids, "base": encounter fields, "label", "max_rounds"} of encounter `enc_id` of
-# `world`; like SimScenarios.encounter for a catalog entry, with the roster mapped to base units.
+# {"enemies": unit ids, "base": encounter fields, "label", "max_rounds"} of encounter `enc_id` as seen
+# from `world`; like SimScenarios.encounter for a catalog entry, with the roster mapped to units (_ref).
 # elevel_set: the foes are level-shifted sandbox copies at `foe_level` (as for catalog encounters).
 # full: also the objective, deployment, phases, guests and protect fields (refs mapped to the same unit ids).
 static func encounter(runner: SimRunner, enc_id: String, foe_level: int, elevel_set: bool, world: String = WORLD, full: bool = false) -> Dictionary:
-	var entry: Dictionary = {}
-	for e: Dictionary in WorldCatalog.own_entries(world, "encounters"):
-		if str(e["id"]) == enc_id:
-			entry = e
+	var entry: Dictionary = WorldCatalog.resolve(world, "encounters", enc_id)
 	if entry.is_empty():
 		return {}
-	var units: Dictionary = base_units(world)
+	var ctx: Dictionary = {"runner": runner, "world": world, "level": foe_level, "shifted": elevel_set}
 	var base: Dictionary = {}
 	for key: String in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen", "wave_round", "wave_block", "wave_label"]:
 		if entry.has(key):
 			base[key] = entry[key]
-	var enemies: Array[String] = SimScenarios._catalog_ids(runner, _mapped(DictUtil.array_of(entry.get("enemies", [])), units), foe_level, elevel_set)
-	base["wave_units"] = SimScenarios._catalog_ids(runner, _mapped(DictUtil.array_of(entry.get("wave_units", [])), units), foe_level, elevel_set)
+	var enemies: Array[String] = _refs(ctx, DictUtil.array_of(entry.get("enemies", [])))
+	base["wave_units"] = _refs(ctx, DictUtil.array_of(entry.get("wave_units", [])))
 	if full:
 		for key: String in ["objective", "objective_tiles", "objective_rounds", "objective_count", "objective_text", "deployment"]:
 			if entry.has(key):
 				base[key] = entry[key]
-		var ctx: Dictionary = {"runner": runner, "units": units, "level": foe_level, "shifted": elevel_set}
 		base["objective_unit"] = _ref(ctx, str(entry.get("objective_unit", "")))
 		base["guests"] = _refs(ctx, DictUtil.array_of(entry.get("guests", [])))
 		base["protect"] = _refs(ctx, DictUtil.array_of(entry.get("protect", [])))
 		base["phases"] = _phases(ctx, DictUtil.array_of(entry.get("phases", [])))
 	return {"enemies": enemies, "base": base, "label": enc_id, "max_rounds": DictUtil.to_int(entry.get("max_rounds", 0))}
 
-# The final sandbox/catalog unit id of story reference `id` ("" stays "").
+# The final sandbox/catalog unit id of story reference `id` ("" stays ""): a plain character (or a catalog
+# unit id) is its base unit (a level-shifted copy when shifted); a character with extras is the copy
+# simw_<world>_<id> of its base unit, defined with SimRunner "character" so it spawns with those extras.
 static func _ref(ctx: Dictionary, id: String) -> String:
 	if id.is_empty():
 		return ""
 	var runner: SimRunner = ctx["runner"]
-	var ids: Array[String] = SimScenarios._catalog_ids(runner, _mapped([id], DictUtil.dict_of(ctx["units"])), DictUtil.to_int(ctx["level"]), DictUtil.to_bool(ctx["shifted"]))
-	return ids[0]
+	var world: String = str(ctx["world"])
+	var level: int = DictUtil.to_int(ctx["level"])
+	var shifted: bool = DictUtil.to_bool(ctx["shifted"])
+	var character: Dictionary = WorldCatalog.resolve(world, "characters", id)
+	var base_id: String = str(character.get("base_unit", id)) if not character.is_empty() else id
+	if character.is_empty() or WorldFactory.divergence(character, world).is_empty():
+		return SimScenarios._catalog_ids(runner, [base_id], level, shifted)[0]
+	var e: Dictionary = ContentCatalog.get_entry("units", base_id)
+	var copy: String = "simw_%s" % str(character.get("_qid", id)).replace(":", "_")
+	runner.define(copy, str(e.get("class_id", "")), level if shifted else DictUtil.to_int(e.get("level", 1), 1), str(e.get("tier", "standard")), false,
+		{"copy_of": base_id, "character": [world, id]})
+	return copy
 
 static func _refs(ctx: Dictionary, ids: Array) -> Array[String]:
 	var out: Array[String] = []
@@ -152,9 +156,3 @@ static func _map_node(ctx: Dictionary, node: Variant) -> Variant:
 			res_a.append(_map_node(ctx, v))
 		return res_a
 	return node
-
-static func _mapped(ids: Array, units: Dictionary) -> Array:
-	var out: Array = []
-	for raw: Variant in ids:
-		out.append(str(units.get(str(raw), str(raw))))
-	return out

@@ -23,6 +23,9 @@
 #            preset=<PlanPresets id>|both  distance=default|2..6 (role: 4)  score=both|hp|binary  quick  metrics=on|off  band=lo-hi (30-70)
 #            comp=c1,..(<=4)  enc=<ids>|generated|all|world:[<world>/]<id>  elevel=+n|-n|catalog  elite=<class>  boss=<class>
 #            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>  jitter=on|off (on)
+#            world=<id> (bare enc= ids find that world's encounters)  size=<n> lead=<class> (sweep; size=3 lead=warrior = the 10 trios)
+#            tier_foe=mirror|<class>  phase=on|off (generated boss phase, on)  s2=on|off (off); party / sweep default 10 seeds
+#     jitter refusals on an unreachable target print PLAN SKIP and are skipped fights, not PLAN FAIL (BAL5-SIM K6)
 #     full role/sweep runs take ~3 s per party fight: raise SIM_TIMEOUT or split by role= / level (one process each)
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1

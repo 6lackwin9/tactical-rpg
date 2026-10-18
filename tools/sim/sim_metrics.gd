@@ -14,6 +14,7 @@ extends "res://tools/sim/sim_observer.gd"
 # units it touched; a gain outside a heal entry or a loss without an attack entry is unexplained.
 
 const NEAR_DEATH_FRAC: float = 0.25   # near_death_saves: an ally under this HP share, then healed
+const EARLY_DOWN_ROUND: int = 3       # BAL5 K3: down_early = downed before this round (spec S1 trigger)
 
 # Summed per unit per fight (the KPI block divides by fights / samples).
 const FIELDS: Array[String] = [
@@ -23,6 +24,7 @@ const FIELDS: Array[String] = [
 	"hp_end_frac", "min_hp_frac", "near_death_saves", "dist_sum", "dist_samples", "blocks_adjacent",
 	"hold_blocks", "taunt_blocks", "priority_dmg", "hp_start", "hp_end", "max_hp", "other_loss", "other_gain",
 	"overheal_unknown", "regen_received", "dot_dealt",
+	"heal_casts", "downed", "down_round", "down_early",   # BAL5 K3: heal entries attempted; first time at 0 HP (round; before EARLY_DOWN_ROUND)
 ]
 
 var priority_name: String = ""     # display name of the scenario's priority target ("" = none)
@@ -154,6 +156,11 @@ func _on_health(new_hp: int, c: Combatant) -> void:
 	rec["min_hp_frac"] = minf(DictUtil.float_of(rec, "min_hp_frac", 1.0), float(new_hp) / maxf(1.0, float(c.max_hp)))
 	if new_hp > 0 and float(new_hp) < NEAR_DEATH_FRAC * float(c.max_hp):
 		_below[c] = true
+	if new_hp <= 0 and DictUtil.int_of(rec, "downed") == 0:
+		var down_at: int = _session.current_round if _session != null else 0
+		rec["downed"] = 1
+		rec["down_round"] = down_at
+		rec["down_early"] = 1 if down_at < EARLY_DOWN_ROUND else 0
 	if _round_end:
 		if d < 0:
 			_add(c, "dot_taken", -d)
@@ -282,6 +289,7 @@ func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 			saved[c] = true
 			_saves[actor] = saved
 	if heal_entry:
+		_add(actor, "heal_casts", 1)
 		checks += 1
 		if target_gain != e.value_num:
 			_fail(actor.name, "log_heal %s: %d logged, %d HP gained" % [e.skill_name, e.value_num, target_gain])
