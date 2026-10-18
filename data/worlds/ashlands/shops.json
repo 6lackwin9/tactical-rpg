@@ -10,7 +10,7 @@
 				{
 					"item": "con_heal_potion",
 					"count": -1,
-					"price": -1,
+					"price": 30,
 					"requires_flags": []
 				},
 				{

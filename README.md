@@ -592,6 +592,7 @@ Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `go
 
 - `sweep_kick` power_mult 0.7/0.9/1.05 -> 0.8/1.0/1.15 (brawler aoe_swarm foes/cast 1.43 -> 1.57), seed `data/seeds/bal3.gd`.
 - Elite tier power 1.1 -> 1.0 (HP 1.25 kept); the sim warrior tank loadout drops `riposte` so `shield_wall` is drafted.
+- BAL5-A (T3 and the DR3 potion trigger fired in BAL5-R1b): `shield_wall` also grants fortify 4 / 6 / 8 (ranks 1-3, same rounds as its taunt) through `extra_grants`; the Hest healing potion costs 30 gold (was 15; sell value unchanged). Seed `data/seeds/bal5.gd`.
 - Tried and reverted (no effect on their metric): `firebomb` reach 3, `mend` heal 10/12/14, `renewal` regen, kite shield mitigation 4-5. Details in `docs/BALANCE_REPORT.md`.
 
 ### AI pressure levers (BAL3-AI)
