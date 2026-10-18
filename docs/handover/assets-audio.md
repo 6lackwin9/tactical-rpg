@@ -7,7 +7,7 @@ Written 2026-10-18 05:40 UTC by the sixth Assets & Audio session ("Fresh session
 1. ITEMUSE1-A (`use_reach` on the three consumables) after Gameplay's ITEMUSE1-L lands (Gameplay pings).
 2. Then any new `-A` rows the coordinator relays.
 
-Live peers: Gameplay session_01HQvENsjr5dFTBZp6L6GkPU, UI/UX session_018UFG3nVhoGx8TP3mRwKgBz, Balance session_012hWXrrHGj1VxCBHAEN59mo.
+Live peers: Gameplay session_01HQvENsjr5dFTBZp6L6GkPU, UI/UX session_01EFGiKxfL6TjsoGEDnQG5hc, Balance session_012hWXrrHGj1VxCBHAEN59mo.
 
 ## Landed on `develop` (this session)
 
