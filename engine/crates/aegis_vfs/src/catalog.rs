@@ -57,7 +57,7 @@ impl CatalogStore {
 
     /// Loads all standard catalogs from the reference game.
     pub fn load_all_standard(&mut self) -> Result<HashMap<String, usize>, VfsError> {
-        let standard_kinds = ["classes", "skills", "items", "encounters", "passives", "terrain"];
+        let standard_kinds = ["classes", "skills", "items", "encounters", "passives", "terrain", "units"];
         let mut results = HashMap::new();
         for kind in standard_kinds {
             let count = self.load_catalog(kind)?;

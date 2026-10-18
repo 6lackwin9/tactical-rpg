@@ -32,6 +32,18 @@ impl Vfs {
         }
     }
 
+    /// Discovers the project root by locating `data/catalog` in current or parent folders.
+    pub fn discover() -> Self {
+        let candidates = [".", "..", "../..", "../../.."];
+        for candidate in candidates {
+            let path = Path::new(candidate);
+            if path.join("data").join("catalog").is_dir() {
+                return Self::new(candidate, candidate);
+            }
+        }
+        Self::new(".", ".")
+    }
+
     /// Resolves a virtual path like `res://data/catalog/skills.json` or `user://saves/slot_1.json`
     /// to an absolute physical filesystem path.
     pub fn resolve(&self, vpath: &str) -> Result<PathBuf, VfsError> {
