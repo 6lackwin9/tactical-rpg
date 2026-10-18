@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 6fb06ac -->
+<!-- last: a1ca665 -->
 
 ## 2026-10-18
 
@@ -35,6 +35,7 @@ In the game:
 
 Every change that touched the game:
 
+- PACE1-L: two-act boss behaviour (enrage by HP or round, empower buff, enraged intents shown, world start buffs, Forge warning); no boss uses it until PACE1-A data (a1ca665)
 - MORALE1-A: enemy morale on ash_scouts and ash_raiders (69c82e0)
 - UIR-6: dialogue as a full-width bottom bar, shop as a popup, text scale (c2de328)
 - PACE1-L (schema): boss enrage phase, empower status, encounter pace and start_status fields; no combat effect until the behaviour commit (39daec9)
