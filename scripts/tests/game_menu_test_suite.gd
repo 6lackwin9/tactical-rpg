@@ -197,6 +197,8 @@ static func _test_in_play(tree_parent: Node) -> bool:
 	SettingsUiTestSuite.layout(host)
 	var first: Node = host.game_view
 	checks["playing: the stack is the game scene"] = r.stack == [MenuRouter.PLAY] and host.in_game() and not _popup_shown(host)
+	var play_ok: bool = MapDevChecks.run_play(first as RegionMapView, "main menu route") if first is RegionMapView else false   # MAPDEV1-U
+	checks["the main menu's game is a region map without debug controls"] = play_ok
 	host.cancel_pressed()
 	SettingsUiTestSuite.layout(host)
 	checks["Esc: game menu popup over the visible, paused map"] = r.top() == MenuRouter.HUB and _popup_shown(host) and host.game_view.visible and not host.game_view.can_process()

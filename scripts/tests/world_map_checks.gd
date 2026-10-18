@@ -41,6 +41,7 @@ static func run(tree_parent: Node) -> bool:
 	var ok: bool = TestHelpers.report(TAG, "Debug scenes load", loads)
 	ok = _test_standalone(tree_parent, packed_world) and ok
 	ok = _test_region_hand_over(tree_parent, packed_region) and ok
+	ok = _test_play_mode(tree_parent, packed_region) and ok   # MAPDEV1-U
 	return ok
 
 static func _test_standalone(tree_parent: Node, packed: PackedScene) -> bool:
@@ -52,6 +53,7 @@ static func _test_standalone(tree_parent: Node, packed: PackedScene) -> bool:
 		tree_parent.remove_child(view)
 		view.free()
 		return TestHelpers.report(TAG, "World map scene (standalone)", checks)
+	var dev_ok: bool = MapDevChecks.run_world_debug(view)   # MAPDEV1-U
 	var pins: Dictionary = view.pin_positions()
 	var pin_keys: Array[String] = []
 	for k: Variant in pins:
@@ -101,7 +103,21 @@ static func _test_standalone(tree_parent: Node, packed: PackedScene) -> bool:
 	checks["debug game never writes the autosave"] = not SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
 	tree_parent.remove_child(view)
 	view.free()
-	return TestHelpers.report(TAG, "World map scene (standalone: pins, click to travel, clock)", checks)
+	return TestHelpers.report(TAG, "World map scene (standalone: pins, click to travel, clock)", checks) and dev_ok
+
+# MAPDEV1-U: a region map with debug_tools off (as the main menu opens it) and the world map over it.
+static func _test_play_mode(tree_parent: Node, packed: PackedScene) -> bool:
+	var view: RegionMapView = packed.instantiate() as RegionMapView
+	view.debug_tools = false
+	tree_parent.add_child(view)
+	var gs: GameState = GameState.of(RegionMapView.new_state(R, SEED)["state"])
+	var ok: bool = gs != null
+	if ok:
+		view.play_state(gs)
+		ok = MapDevChecks.run_world_play(view, _q("m1"))
+	tree_parent.remove_child(view)
+	view.free()
+	return TestHelpers.report(TAG, "Play-mode region map with the world map over it", {"state built": gs != null}) and ok
 
 static func _test_region_hand_over(tree_parent: Node, packed: PackedScene) -> bool:
 	var checks: Dictionary = {}

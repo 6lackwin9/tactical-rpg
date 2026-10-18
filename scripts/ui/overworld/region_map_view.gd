@@ -24,7 +24,8 @@ extends Control
 # ready badges sit on the npc icon; the side column lists the location's markers ("Here" legend: icon, label, state; hovering
 # a row pulses its tile); walking onto a point logs its note (POINT_LOOK_NOTE without one, SPENT_NOTE once used up).
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) only for the main menu's game (CurrentGame.state()); the standalone debug game writes nothing
-# (refused while a fight is pending). A world picker starts a new game. busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
+# (refused while a fight is pending). A world picker starts a new game (debug_tools only, MAPDEV1-U; in play the bar shows the
+# place name and supplies). busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
 # A world_map exit (marker or menu entry, TRAV1-L commit 3) opens the WorldMapView over the map; it hands back on
 # arrival (or after a lost road fight) and on Back; its road fights count as busy() and re-emit `fight_settled`.
 # ==============================================================================
@@ -71,6 +72,12 @@ const GLIDE_SNAP_TILES: float = 3.0
 # Name placement: a label hidden because it would overlap another (shown while its marker is hovered).
 const NO_LABEL: Vector2 = Vector2(-1.0e9, -1.0e9)
 const LABEL_PAD: float = 2.0
+const DEBUG_IDLE: String = "Pick a world and start a new game."
+const DEBUG_ONLY_REFUSAL: String = "New game refused: only the debug scene starts a game here (use the main menu's New Game)."
+const BAR_GAP: int = 16   # px between the place name, supplies and (debug scene) the debug controls
+const SUPPLIES_TEXT: String = "Supplies %d / %d"
+const CHEST_EMPTY_NOTE: String = "The chest is empty."
+const CHEST_NOTHING_NOTE: String = "Found nothing of use."
 const NOTHING_NOTE: String = "Nothing to interact with there."
 const FAR_NOTE: String = "Walk next to it first (arrow keys), then press E or click it."
 const BUMP_NOTES: Dictionary = {"npc": "Someone is in the way: press E to talk.", "chest": "A chest: press E to open it.", "lore": "Something to read: press E."}
@@ -80,12 +87,18 @@ var pending_fight: Dictionary = {}
 var battle: BattleScreen = null
 var results_popup: bool = false   # BATTLE-FLOW: the main menu host shows the results over the arena, so a battle settles without closing it
 var dev_outcomes: bool = false
+# MAPDEV1-U: the world picker, New game and the debug status line exist only when this is on (read in _ready). The debug
+# scene file sets it; the main menu's game turns it off before adding the view, and start_game refuses without it.
+@export var debug_tools: bool = false
 var launch_errors: Array[String] = []
 var facing: Vector2i = Vector2i(0, 1)
 var log_lines: Array[String] = []
 
 var _world_pick: OptionButton = null
-var _status: Label = null
+var new_game_button: Button = null
+var _status: Label = null   # debug status line (debug_tools only)
+var place_label: Label = null   # play bar: the location's name
+var supplies_label: Label = null   # play bar: "Supplies n / max"
 var hint: Label = null
 var _canvas: Control = null
 var _menu_box: VBoxContainer = null
@@ -125,14 +138,21 @@ func _ready() -> void:
 	var top_box := VBoxContainer.new()
 	_top = float_panel(_root, top_box, false)
 	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", BAR_GAP)
 	top_box.add_child(bar)
-	_world_pick = OptionButton.new()
-	for w: String in WorldCatalog.world_ids():
-		_world_pick.add_item(w)
-	bar.add_child(_world_pick)
-	bar.add_child(UiTheme.button("New game", "NewGame.create with the first party units, then ExploreRunner.begin", _on_new_game))
-	_status = UiTheme.label("Pick a world and start a new game.")
-	bar.add_child(_status)
+	place_label = UiTheme.label("", UiTheme.FONT_LG, UiTheme.COL_TITLE)
+	bar.add_child(place_label)
+	supplies_label = UiTheme.label("")
+	bar.add_child(supplies_label)
+	if debug_tools:   # MAPDEV1-U: the debug scene only; the main menu's game never builds these
+		_world_pick = OptionButton.new()
+		for w: String in WorldCatalog.world_ids():
+			_world_pick.add_item(w)
+		bar.add_child(_world_pick)
+		new_game_button = UiTheme.button("New game", "NewGame.create with the first party units, then ExploreRunner.begin", _on_new_game)
+		bar.add_child(new_game_button)
+		_status = UiTheme.label(DEBUG_IDLE)
+		bar.add_child(_status)
 	hint = UiTheme.label(HINT, UiTheme.FONT_MD, UiTheme.COL_MUTED)
 	top_box.add_child(hint)
 	var side := VBoxContainer.new()
@@ -532,7 +552,12 @@ static func new_state(world_id: String, p_seed: int = DEBUG_SEED) -> Dictionary:
 	return NewGame.create(world_id, units, p_seed)
 
 # A new game in `world_id` with the first party units of the catalog, entered at the world's start location.
+# Debug scene only (debug_tools): otherwise refused with nothing changed (MAPDEV1-U).
 func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
+	if not debug_tools:
+		_note(DEBUG_ONLY_REFUSAL)
+		_refresh()
+		return [DEBUG_ONLY_REFUSAL] as Array[String]
 	var res: Dictionary = new_state(world_id, p_seed)
 	var errors: Array[String] = []
 	errors.assign(DictUtil.array_of(res["errors"]))
@@ -650,6 +675,43 @@ static func point_note(v: Dictionary, marker: Dictionary) -> String:
 	var note: String = str(marker.get("note", "")).strip_edges()
 	return note if not note.is_empty() else POINT_LOOK_NOTE
 
+# MAPDEV1-U: an opened chest's note in words: "Found: Healing Draught x2, 12 gold, 4 supplies" (item display names,
+# "xN" only above one; the loot item is already in `items`), CHEST_NOTHING_NOTE when it held nothing.
+static func chest_note(res: Dictionary) -> String:
+	var parts: Array[String] = []
+	var items: Dictionary = DictUtil.dict_of(res.get("items", {}))
+	var ids: Array[String] = []
+	for k: Variant in items:
+		ids.append(str(k))
+	ids.sort()
+	for item_id: String in ids:
+		var n: int = DictUtil.to_int(items[item_id])
+		if n <= 0:
+			continue
+		var item_name: String = str(ContentCatalog.get_entry("items", item_id).get("name", item_id))
+		parts.append(item_name if n == 1 else "%s x%d" % [item_name, n])
+	var gold: int = DictUtil.to_int(res.get("gold", 0))
+	if gold > 0:
+		parts.append("%d gold" % gold)
+	var got: int = DictUtil.to_int(res.get("supplies", 0))
+	if got > 0:
+		parts.append("%d supplies" % got)
+	return CHEST_NOTHING_NOTE if parts.is_empty() else "Found: " + ", ".join(PackedStringArray(parts))
+
+# MAPDEV1-U play bar: the current location's display name ("" with no game or no location).
+static func place_name(state: GameState) -> String:
+	if state == null:
+		return ""
+	return str(ExploreRunner.location(state).get("name", ""))
+
+# The display name of location `ref` in the game's world (the ref itself when it has none).
+static func location_name(state: GameState, ref: String) -> String:
+	var loc_name: String = str(WorldCatalog.resolve(state.world_id, "locations", ref).get("name", "")) if state != null else ""
+	return loc_name if not loc_name.is_empty() else ref
+
+static func supplies_text(state: GameState) -> String:
+	return "" if state == null else SUPPLIES_TEXT % [state.party.supplies, PartyState.SUPPLIES_MAX]
+
 func do_interact() -> void:
 	if _input_blocked():
 		return
@@ -661,10 +723,9 @@ func do_interact() -> void:
 			_note("%s: %s" % [str(res["name"]), str(res["text"])])
 		"chest":
 			if DictUtil.to_bool(res.get("empty", false)):
-				_note("The chest is empty.")
+				_note(CHEST_EMPTY_NOTE)
 			else:
-				var got: int = DictUtil.to_int(res.get("supplies", 0))
-				_note("Opened: %s %s%s" % [str(res.get("items", {})), str(res.get("loot", "")), " +%d supplies" % got if got > 0 else ""])
+				_note(chest_note(res))
 				for n: Variant in DictUtil.array_of(res.get("notes", [])):
 					_note(str(n))   # TRAV2-L: supplies cap note
 		_:
@@ -764,6 +825,7 @@ func open_world_map() -> void:
 		return
 	world_map = WorldMapView.new()
 	world_map.embedded = true
+	world_map.debug_tools = debug_tools   # MAPDEV1-U: the debug line only over the debug scene's game
 	world_map.results_popup = results_popup
 	add_child(world_map)
 	world_map.show_state(gs)
@@ -783,7 +845,7 @@ func close_world_map() -> void:
 	_refresh()
 
 func _on_world_map_arrived(location_qid: String) -> void:
-	_note("Arrived at %s." % location_qid)
+	_note("Arrived at %s." % location_name(gs, location_qid))   # MAPDEV1-U: the place name
 	close_world_map()
 
 func _on_world_map_fight(res: Dictionary) -> void:
@@ -858,7 +920,7 @@ func _handle(res: Dictionary) -> void:
 func _event(e: Dictionary) -> void:
 	match str(e.get("kind", "")):
 		"entered":
-			_note("Entered %s." % str(e["location"]))
+			_note("Entered %s." % location_name(gs, str(e["location"])))   # MAPDEV1-U: the place name, not the qid
 		"autosave":
 			_autosave()
 		"locked":
@@ -929,12 +991,17 @@ func _refresh() -> void:
 	else:
 		var shop_open: bool = shop_panel != null and shop_panel.is_open()
 		MusicDirector.request_game(self, MusicDirector.region_context(gs, shop_open), gs)   # unchanged requests are no-ops
-	if _status == null:
+	if place_label == null:
 		return
-	if gs == null:
-		_status.text = "Pick a world and start a new game."
-	else:
-		_status.text = "%s  %s  steps %d / %d  rolls %s" % [gs.location_id, str(gs.position), DictUtil.to_int(gs.explore["steps"]), DictUtil.to_int(gs.explore["next_at"]), str(gs.rolls)]
+	place_label.text = place_name(gs)
+	supplies_label.text = supplies_text(gs)
+	supplies_label.add_theme_color_override("font_color", UiTheme.COL_WARN if gs != null and gs.party.supplies == 0 else UiTheme.COL_TEXT)
+	supplies_label.visible = gs != null
+	if _status != null:
+		if gs == null:
+			_status.text = DEBUG_IDLE
+		else:
+			_status.text = "%s  %s  steps %d / %d  rolls %s" % [gs.location_id, str(gs.position), DictUtil.to_int(gs.explore["steps"]), DictUtil.to_int(gs.explore["next_at"]), str(gs.rolls)]
 	for c: Node in _menu_box.get_children():
 		c.queue_free()
 	if not _input_blocked():

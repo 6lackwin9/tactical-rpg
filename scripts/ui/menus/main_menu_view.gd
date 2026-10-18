@@ -578,6 +578,8 @@ func open_game(gs: GameState) -> void:
 	if not router.in_play():
 		router.clear_to(MenuRouter.PLAY)   # the game scene is the bottom of the stack (also when a caller opens it directly)
 	game_view = node
+	if "debug_tools" in game_view:
+		game_view.set("debug_tools", false)   # MAPDEV1-U: the scene file is the debug scene; in play no world picker / New game / debug status
 	if "results_popup" in game_view:
 		game_view.set("results_popup", true)   # a won / lost / fled battle keeps its arena for the results popup
 	if game_view.has_signal("fight_settled"):

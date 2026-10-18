@@ -187,6 +187,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_bridge() and ok
 			ok = _test_save_v3() and ok
 			ok = _test_debug_scene(tree_parent) and ok
+			ok = _test_map_dev(tree_parent) and ok   # MAPDEV1-U: debug controls only in the debug scene, play bar, chest note
 			ok = MapViewChecks.run_pure() and ok   # MAPVIEW1: camera and world layout (pure)
 			ok = MapReadChecks.run_pure() and ok   # MAPREAD1-L2: icon keys, placement rules (pure)
 			ok = MapKeysChecks.run_pure() and ok   # MAPKEYS1-U: crowded name placement (pure)
@@ -1032,6 +1033,41 @@ static func _test_map_read(tree_parent: Node) -> bool:
 	tree_parent.remove_child(view)
 	view.free()
 	return ok
+
+# MAPDEV1-U: the debug scene keeps its world picker / New game / status; a view with debug_tools off (the main menu
+# route) shows the place name and supplies instead, and the chest note names the items.
+static func _test_map_dev(tree_parent: Node) -> bool:
+	var item0: String = str(_rx["item0"])
+	var ok: bool = MapDevChecks.run_chest_note(item0, str(_rx["item1"]))
+	var packed: PackedScene = load(DEBUG_SCENE) as PackedScene
+	if packed == null or tree_parent == null:
+		return _report("Map dev bar (headless without a tree: scene skipped)", {"scene loads": packed != null}) and ok
+	var debug_view: RegionMapView = packed.instantiate() as RegionMapView
+	tree_parent.add_child(debug_view)
+	ok = MapDevChecks.run_debug(debug_view) and ok
+	tree_parent.remove_child(debug_view)
+	debug_view.free()
+	var checks: Dictionary = {}
+	checks["field with a chest"] = _set_field([{"id": "box", "kind": "chest", "anchor": "a_chest", "items": {item0: 2}, "supplies": 3}])
+	var view: RegionMapView = packed.instantiate() as RegionMapView
+	view.debug_tools = false   # as MainMenuView.open_game does
+	tree_parent.add_child(view)
+	view.play_state(_in_field(2, 4))
+	ok = MapDevChecks.run_play(view, "fixture field") and ok
+	view.facing = D
+	var before: int = view.gs.party.supplies
+	view.do_interact()
+	var note: String = view.log_lines.back() if not view.log_lines.is_empty() else ""
+	var item_name: String = str(ContentCatalog.get_entry("items", item0).get("name", ""))
+	var got: int = view.gs.party.supplies
+	checks["the chest note names the item by display name, no braces"] = not item_name.is_empty() and note.begins_with("Found: ") and note.contains(item_name + " x2") and not note.contains("{")
+	var added: int = got - before
+	checks["the chest note counts the supplies added"] = added == mini(3, PartyState.SUPPLIES_MAX - before) and (note.contains("%d supplies" % added) if added > 0 else not note.contains("supplies"))
+	checks["the play bar follows the new supplies"] = view.supplies_label.text == RegionMapView.SUPPLIES_TEXT % [got, PartyState.SUPPLIES_MAX]
+	tree_parent.remove_child(view)
+	view.free()
+	ok = _set_field([]) and ok
+	return _report("Map dev bar: chest note and supplies in play (MAPDEV1-U)", checks) and ok
 
 # ------------------------------------------------------------------------------
 # Checks 17 and 18: chests, flag markers

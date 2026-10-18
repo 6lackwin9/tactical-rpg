@@ -9,7 +9,7 @@ extends Control
 # fight panel offers Start battle again and the debug outcomes (`dev_outcomes` always shows them). The clock shows
 # GameState.time. Embedded by RegionMapView on a world_map exit: `arrived` (trip done, or woken after a lost fight)
 # hands back to the region map, Back closes without travelling. Standalone (scenes/overworld/world_map_debug.tscn): a
-# world picker starts a debug game. REVIEW-F1: `autosave` events write slot 0 only for the main menu's game
+# world picker starts a debug game (debug_tools only, MAPDEV1-U). REVIEW-F1: `autosave` events write slot 0 only for the main menu's game
 # (CurrentGame.state()); busy() (a fight is pending) is mirrored to CurrentGame.set_busy.
 # MAPVIEW1: the canvas fills the view, the top strip and the side column float over it (RegionMapView.float_panel). When
 # the asset registry serves ui key "<world>_world_map" (ashlands_world_map, 1920x1080) from a file, it is drawn
@@ -41,6 +41,7 @@ const LAYOUT_FRACTION: float = 0.38
 const BACKDROP_SUFFIX: String = "_world_map"   # ui key "<world id>_world_map" (ashlands_world_map), variant "background"
 const BACKDROP_VARIANT: String = "background"
 const NO_POS: Vector2 = Vector2(-1.0, -1.0)
+const PLAY_STATUS: String = "%s   Time %d   %s"   # MAPDEV1-U: place name, clock, RegionMapView.supplies_text
 const OUT_OF_SUPPLIES: String = "Out of supplies: road fights are more likely."   # TRAV2-L status warning at 0
 const ARROW_SIZE: float = 10.0
 const DASH: float = 6.0
@@ -56,6 +57,10 @@ var pending_fight: Dictionary = {}
 var battle: BattleScreen = null
 var results_popup: bool = false   # BATTLE-FLOW: see RegionMapView
 var dev_outcomes: bool = false
+# MAPDEV1-U: the world picker / New game (standalone) and the debug status line (location id, time, supplies, rolls) only
+# when this is on (read in _ready). world_map_debug.tscn sets it; RegionMapView passes its own flag when it embeds the
+# view. Off (the main menu's game): the status shows the place name, the time and the supplies in words.
+@export var debug_tools: bool = false
 var launch_errors: Array[String] = []
 var log_lines: Array[String] = []
 
@@ -91,7 +96,7 @@ func _ready() -> void:
 	if embedded:
 		_back = UiTheme.button("Back", "Close the world map without travelling", back)
 		bar.add_child(_back)
-	else:
+	elif debug_tools:
 		_world_pick = OptionButton.new()
 		for w: String in WorldCatalog.world_ids():
 			_world_pick.add_item(w)
@@ -137,6 +142,10 @@ func _on_new_game() -> void:
 
 # Standalone: a new debug game in `world_id` (RegionMapView.new_state), entered at the world's start location.
 func start_game(world_id: String, p_seed: int = RegionMapView.DEBUG_SEED) -> Array[String]:
+	if not debug_tools:   # MAPDEV1-U: the debug scene only
+		_note(RegionMapView.DEBUG_ONLY_REFUSAL)
+		_refresh()
+		return [RegionMapView.DEBUG_ONLY_REFUSAL] as Array[String]
 	var res: Dictionary = RegionMapView.new_state(world_id, p_seed)
 	var errors: Array[String] = []
 	errors.assign(DictUtil.array_of(res["errors"]))
@@ -379,7 +388,7 @@ func travel_to(location_qid: String) -> void:
 			_note("Road fight! %s (%s%s) after %d leg(s)" % [str(pending_fight["encounter"]), str(pending_fight["source"]), ", elite" if DictUtil.to_bool(pending_fight["elite"]) else "", DictUtil.to_int(res["legs_done"])])
 			launch_battle.call_deferred()
 		"arrived":
-			_note("Arrived at %s (time %d, supplies -%d)." % [gs.location_id, gs.time, DictUtil.to_int(res.get("supplies_spent", 0))])
+			_note("Arrived at %s (time %d, supplies -%d)." % [RegionMapView.location_name(gs, gs.location_id), gs.time, DictUtil.to_int(res.get("supplies_spent", 0))])
 			arrived.emit(gs.location_id)
 	_refresh()
 
@@ -441,7 +450,7 @@ func _handle(res: Dictionary, state: GameState) -> void:
 		var ev: Dictionary = DictUtil.dict_of(e)
 		match str(ev.get("kind", "")):
 			"entered":
-				_note("Entered %s." % str(ev["location"]))
+				_note("Entered %s." % RegionMapView.location_name(state, str(ev["location"])))   # MAPDEV1-U: the place name
 			"flags_set":
 				_note("Flags set: %s" % str(ev["flags"]))
 			"autosave":
@@ -477,6 +486,15 @@ func _exit_tree() -> void:
 # Drawing
 # ------------------------------------------------------------------------------
 
+# The status line's first row: debug = "<qid>  time n  supplies n/max  rolls {..}" (the idle prompt without a game); play =
+# "<place>  Time n  Supplies n / max" (PLAY_STATUS; "" without a game).
+static func status_line(state: GameState, debug: bool) -> String:
+	if state == null:
+		return RegionMapView.DEBUG_IDLE if debug else ""
+	if debug:
+		return "%s  time %d  supplies %d/%d  rolls %s" % [state.location_id, state.time, state.party.supplies, PartyState.SUPPLIES_MAX, str(state.rolls)]
+	return PLAY_STATUS % [RegionMapView.place_name(state), state.time, RegionMapView.supplies_text(state)]
+
 # The status line as shown (tests).
 func status_text() -> String:
 	return _status.text if _status != null else ""
@@ -486,7 +504,7 @@ func _refresh() -> void:
 	MusicDirector.request_game(self, MusicDirector.CTX_TRAVEL, gs)   # MUSIC1: travel falls back to field
 	if _status == null:
 		return
-	_status.text = "Pick a world and start a new game." if gs == null else "%s  time %d  supplies %d/%d  rolls %s" % [gs.location_id, gs.time, gs.party.supplies, PartyState.SUPPLIES_MAX, str(gs.rolls)]
+	_status.text = status_line(gs, debug_tools)
 	if gs != null and gs.party.supplies == 0:
 		_status.text += "\n" + OUT_OF_SUPPLIES   # TRAV2-L: the starved warning
 	if _back != null:

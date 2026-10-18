@@ -214,7 +214,7 @@ static func _test_map_input(tree_parent: Node) -> bool:
 	checks["bumping the chest: no move, faces it, notes press E"] = gs.position == chest + Vector2i(0, -1) and view.facing == Vector2i(0, 1) and _last(view) == str(RegionMapView.BUMP_NOTES["chest"])
 	var gold0: int = gs.party.gold
 	_key(vp, KEY_E)
-	checks["E opens the chest"] = gs.party.gold == gold0 + DialogueTestSuite.CHEST_GOLD and _last(view).begins_with("Opened")
+	checks["E opens the chest"] = gs.party.gold == gold0 + DialogueTestSuite.CHEST_GOLD and _last(view).begins_with("Found: ") and _last(view).contains("%d gold" % DialogueTestSuite.CHEST_GOLD)
 	_key(vp, KEY_E)
 	checks["E again: the chest is empty"] = _last(view) == "The chest is empty." and gs.party.gold == gold0 + DialogueTestSuite.CHEST_GOLD
 	# nothing: face away from the chest
