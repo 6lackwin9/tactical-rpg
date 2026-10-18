@@ -88,7 +88,8 @@ parse() {
 }
 
 suite() {  # $1 = scene, $2 = label, $3 = optional pattern
-  timeout "${SUITE_TIMEOUT:-290}" "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1   # SUITE_TIMEOUT: slow containers (arena ~5.5 min on the cloud box 2026-10-17)
+  local limit=290; [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && limit=900   # cloud box: arena ~9.5 min (2026-10-18)
+  timeout "${SUITE_TIMEOUT:-$limit}" "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1   # SUITE_TIMEOUT overrides
   local code=$? pass fail
   pass=$(grep -c "PASS" "$OUT/$2.out"); fail=$(grep "FAIL" "$OUT/$2.out" | grep -vc ": PASS")
   echo "[$2] PASS $pass  FAIL $fail   (full log: $OUT/$2.out)"
