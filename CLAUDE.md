@@ -8,6 +8,7 @@ Read these instead of crawling the code:
 - `docs/ROADMAP.md`: systems, statuses (proposed/approved/in-progress/done/balance-ready), milestone order
 - `docs/STRUCTURE.md`: where code goes, including reserved placeholder folders
 - `docs/DECISIONS.md`: index of settled decisions (do not re-litigate); rows live in `docs/decisions/<system>.md` (read only the system you work on), superseded rows in `docs/decisions/archive.md`
+- `docs/preferences/`: Tushar's design, UI and asset preferences that are not formal decisions (read the one for your area)
 - `docs/HISTORY.md`: deprecated/tried ideas with reasons (append-only; never re-propose without new reasons)
 - `docs/BALANCE_REPORT.md`: latest balance runs and open issues
 - `docs/TASKS.md`: task queue (lanes, dependencies, status); specs in `docs/specs/`
