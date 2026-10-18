@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: d4ab083 -->
+<!-- last: 39daec9 -->
 
 ## 2026-10-18
 
@@ -33,6 +33,7 @@ In the game:
 
 Every change that touched the game:
 
+- PACE1-L (schema): boss enrage phase, empower status, encounter pace and start_status fields; no combat effect until the behaviour commit (39daec9)
 - MORALE1-S: world sims carry the five morale fields (f70e79a)
 - MAPDEV1-U: map debug tools only in debug scenes; play bars show place and supplies (7780fe0)
 - MORALE1-L: enemy morale in battle (losses, breaks, flee bonus, surrender, Fearless) (f344531)
