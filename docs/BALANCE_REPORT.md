@@ -1,5 +1,65 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## BAL5-R1b (BAL5-AI rerun) 2026-10-18
+
+Branch claude/bal5-ai-rerun (develop a8dcf23: BAL5-AI T2/S1/A2 AI levers 7ceddcb and the enemy re-draft fix f65f0bb). Same commands and seeds as BAL5-R1 (level 5, boss phase on, jitter on), plus the R1b additions (HEAL1 chain, potion arm, solo scouts). 0 PLAN FAIL everywhere; 0 METRIC FAIL except the potion arm (see below). Wall about 62 min (up to 4 processes in parallel). Logs: scratchpad `rerun/`. The stand was run as `sweep 5 10 size=3 lead=warrior world=ashlands enc=ashmaw_stand` (one row per trio, same cells as R1's party runs).
+
+Before (R1) / after:
+
+| Cell | R1 | Now | Band |
+| --- | --- | --- | --- |
+| boss sweep mean, L5 | 21 | 26 | 30-50 |
+| best / worst trio (boss) | 40 / 0 (ranger-rogue / priest-brawler) | 50 / 10 (brawler-rogue / priest-brawler) | |
+| full L5 sweep: mob / line / wave / elite / boss | 76 / 32 / 27 / 33 / 21 | 91 / 26 / 28 / 38 / 26 | 90 / 70-90 / 55-80 / 50-75 / 30-50 |
+| tank (warrior row) clear | 33 (R1 mean) | 89 [67..100] | 50-85 |
+| tank allies hp_end won / all | 9 / 6 | 30 / 26 (warrior); brawler row 9 / 6 | >= 40 / >= 15 |
+| tank survival | 33 | 61 [33..100] (warrior) | >= 60 (spec 35) |
+| priest heal share of party HP | 1 | 2 [0..14] | >= 20 (interim 5) |
+| priest down before round 3 | 78% | 83% (cell "down<r3") | alive at r3 >= 60% |
+| support priest clear | 50 | 50 | 30-85 |
+| AoE foes/cast brawler / mage | 1.09 / 1.51 | 0.79 [0.62..1.11] / 1.74 | >= 1.5 / >= 1.0 |
+| AoE allies/cast brawler / mage / ranger | 0.04 / 0.14 / 0.22 | 0.10 / 0.38 / 0.04 | <= 0.3 |
+| swarm clear brawler / mage | 56 / 72 | 61 / 83 | >= 70 |
+| ashmaw stand clear mean (10 trios) | 66 | 73 | 30-50 |
+| solo warrior vs ash_scouts | 20 (RECRUIT1-B) | 20 (hp score 0.37, 4.5 rounds) | >= 90 |
+
+Caveat on R1 tank numbers: R1's tank cell (33 clear, 9 / 6, survival 33) matches the brawler row of today's tank table (33, 9 / 6, 33), not the warrior row, so the warrior-row before/after above may be comparing different rows. Today's warrior row is the primary tank.
+
+HEAL1 chain (`campaign 5 10 heal=rally rest=3 extra=4:ash_raiders`, 994 fights; potion arm adds `pouch=con_heal_potion,con_heal_potion,con_heal_potion`, 994 fights). Finale clears of 100 per steel; falls are counted from the fell_at numbers (CAMPLABEL1 label bug ignored):
+
+| Arm | HEAL1-B | Now (no potion) | Potion arm | Pass |
+| --- | --- | --- | --- | --- |
+| arms | 46 | 63 | 82 | 30-55 |
+| gate | 95 | 97 | 97 | >= 75 |
+| falls at fell_at 4 / 2 (both steels) | arms 53 + gate 4 | 38 / 2 | 19 / 2 | |
+
+Without potions arms rose 46 to 63 (above 55): the re-draft fix and AI levers made the chain easier, since the rules are the same. Trios still stuck on arms: priest+rogue 1 of 10 (9 falls at battle 4), priest+brawler 4, rogue+mage 4. Potions lift arms to 82 and lift every trio except priest+rogue (1) and brawler+rogue (7). Potion-arm METRIC FAIL: 1104 of 37972 checks, all hp / other_gain mismatches (potion healing is not in the metric ledger); it is a tooling gap, not a game failure, but potion arm numbers are otherwise valid (0 PLAN FAIL).
+
+Trigger table:
+
+| Trigger | Fires? | Measured value | Threshold |
+| --- | --- | --- | --- |
+| T3 second grant (extra_grants) | YES on won-fight allies hp_end | warrior won-fight allies hp_end 30; tank survival 61 | hp_end < 40 or survival < 35: hp_end part fails, survival passes |
+| S2 support_attrition change | YES | priest heal share 2 after S1; priest still down before r3 in 83% | under 5 |
+| A2 result | brawler fails, mage passes | brawler 0.79 foes/cast (fell from 1.09), mage 1.74 | brawler >= 1.5, mage >= 1.0 |
+| B3 boss HP 1.5 -> 1.8 | no | L5 boss mean 26 | fires only above 60 |
+| PACE1 boss median fight < 7 rounds | not measurable | sweep and party output carry no boss round count (only the role and party-mode "rounds" columns) | median < 7 |
+| Potion price 15 -> 30 (BAL5-A) | YES | arms finale 82 with potions | arms above 55 |
+| ASHPACE1 scout cut | cut is supported | solo warrior vs ash_scouts 20 (not 90+) | cut only if not already 90+ |
+| F2 stand | YES on its face | stand mean 73 at full HP (66 in R1) | trio clear > 50 |
+
+Re-draft fix: big shifts against R1 are mob 76 to 91, stand 66 to 73, the HEAL1 arms 46 to 63 and tank survival; line and wave did not move. The AI levers and the re-draft fix were not separated (one change set), so attribution is a guess; a run on f65f0bb alone would split them.
+
+Issues for the brainstorm agent:
+
+- T3: warrior survival passes but allies still finish at 30 percent HP in won fights (target 40); the S1/T2 levers did not close it.
+- Priest is still the worst class: down before r3 in 83%, heal share 2; S2 fires. Priest trios remain worst on boss and arms (priest+rogue arms 1 of 10 even with potions).
+- Brawler AoE fell to 0.79 foes/cast after A2 (the mage rose to 1.74); the brawler cast count may have dropped from the AI changes rather than risen. Brawler is the open A2 miss.
+- Potions make arms 82: the price lever (15 to 30) fires; a rerun after it is needed. Potion healing should be added to the metric ledger.
+- Solo ash_scouts is still 20 (Goblin Archer deals 224 with 100 percent rng); ASHPACE1's scout cut is justified.
+- Boss round counts are not printed by sweep: PACE1's median trigger needs a sim metric.
+- Stand 73 and arms-without-potions 63 both exceed their targets; F2 fires.
+
 ## HEAL1-B campaign with HEAL1 rules 2026-10-18
 
 Branch claude/heal1-b (develop f3d8ac2, with HEAL1-L, HEAL1-A and the HEAL1-S sim keys). Command `tools/fc.sh sim campaign 5 10 heal=rally rest=3 extra=4:ash_raiders` (level 5, all 10 trios, 10 seeds, both steels, objectives and phases on), against the baseline `campaign 5 10` (heal=none, no rest, no extra) run in parallel. 994 / 784 fights, 0 PLAN FAIL and 0 METRIC FAIL in both. Wall about 29 min (both in parallel, CPU shared with a test run). Logs: scratchpad `heal1b/`.
