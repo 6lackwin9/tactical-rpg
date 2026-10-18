@@ -76,7 +76,7 @@ func _init() -> void:
 		_chk("template " + tid, QuestCatalog.upsert(t))
 	print("quest save ", QuestCatalog.save())
 
-	_chk("manifest", WorldCatalog.update_manifest("ashlands", {"start_gold": 50}))
+	_chk("manifest", WorldCatalog.update_manifest("ashlands", {"start_gold": 100}))  # ITEMPOW1-A raised it from 50
 
 	var mara: Array = [
 		_node("hello", "Mara looks up from a map pinned flat with knives. \"Make it quick.\"", {"choices": [

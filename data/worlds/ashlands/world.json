@@ -10,7 +10,7 @@
 		"bryn_hale"
 	],
 	"party_max": 3,
-	"start_gold": 50,
+	"start_gold": 100,
 	"start_supplies": 10,
 	"service_lines": {},
 	"version": 1
