@@ -279,6 +279,7 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		SettingsFile.set_value("ui/text_scale", saved_scale)
 
 	_hover_card_checks(tree_parent, checks)
+	_autoplay_ui_checks(tree_parent, checks)
 	checks["party slots follow the cap, never fewer than the heroes, fallback 3 when unknown"] = (
 		CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 2).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 4).party_slots == 4
 		and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 1).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 1, 5).party_slots == CombatHudMetrics.PARTY_SLOTS)
@@ -451,3 +452,158 @@ static func _hover_card_checks(tree_parent: Node, checks: Dictionary) -> void:
 		scales_ok = scales_ok and scale_grid.hover_card.size.y <= float(scale_host.metrics.tile * CombatHudMetrics.GRID_ROWS)
 		_card_free(tree_parent, scale_host, saved)
 	checks["hover card: fits its content (no clipping) inside the board at all four text sizes"] = scales_ok
+
+
+# ------------------------------------------------------------------------------
+# COMBAT-UI2-L3: the timeline row's Tactic dropdowns, Autoplay toggle and text sizes (one screen per case)
+# ------------------------------------------------------------------------------
+
+static func _key_event(code: Key) -> InputEventKey:
+	var key := InputEventKey.new()
+	key.keycode = code
+	key.pressed = true
+	return key
+
+static func _pick(opt: OptionButton, id: String) -> void:
+	for i: int in range(opt.item_count):
+		if str(opt.get_item_metadata(i)) == id:
+			opt.select(i)
+			opt.item_selected.emit(i)
+			return
+
+static func _autoplay_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+
+	# Text sizes: the row keeps its fixed height and every control stays inside the dock; font >= 14 px at Normal.
+	var fits_ok: bool = true
+	var floor_ok: bool = true
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var fit_host: CombatDockHost = _card_host(tree_parent, VIEWS[0], scale)
+		var fit_panel: CombatTimelinePanel = fit_host.get_panel("timeline") as CombatTimelinePanel
+		var dock: TimelineDockUI = fit_panel.dock
+		_sort_now(fit_host)
+		var need: float = dock.tracks_container.get_combined_minimum_size().y
+		var rect: Rect2 = fit_panel.get_global_rect()
+		fits_ok = fits_ok and need <= float(CombatHudMetrics.TOP_H) + 0.5 and rect.size.y <= float(CombatHudMetrics.TOP_H) + 0.5
+		for node: Node in dock.find_children("*", "Control", true, false):
+			var ctrl: Control = node as Control
+			if ctrl.is_visible_in_tree() and ctrl.size.x > 0.0:
+				if ctrl.get_global_rect().end.x > rect.end.x + 0.5:
+					print("    outside the dock at %.2fx: %s %s" % [scale, str(ctrl.get_path()), str(ctrl.get_global_rect())])
+				fits_ok = fits_ok and ctrl.get_global_rect().end.x <= rect.end.x + 0.5
+		if not fits_ok:
+			print("    timeline row at %.2fx needs %.1f px of %d (panel %s)" % [scale, need, CombatHudMetrics.TOP_H, str(rect)])
+		var want_fs: int = UiTheme.hud_font()
+		for lbl: Label in [dock.plan_info_lbl, dock.ruler_tick_labels[0]]:
+			floor_ok = floor_ok and lbl.get_theme_font_size("font_size") == want_fs
+		floor_ok = floor_ok and dock.confirm_btn.get_theme_font_size("font_size") == want_fs and dock.hero_option.get_theme_font_size("font_size") == want_fs
+		floor_ok = floor_ok and (scale != 1.0 or want_fs == 14)
+		_card_free(tree_parent, fit_host, saved)
+	checks["timeline row: fixed height, nothing clipped or outside the dock at all four text sizes"] = fits_ok
+	checks["timeline row: text uses UiTheme.text_scale() with the 14 px floor (ruler, info, buttons, dropdowns)"] = floor_ok
+
+	# Dropdown contents, Draft menu gone, Tactic picks drive CombatAutoplay.
+	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
+	var panel: CombatTimelinePanel = host.get_panel("timeline") as CombatTimelinePanel
+	var dock: TimelineDockUI = panel.dock
+	var ap: CombatAutoplay = host.autoplay
+	var session: CombatSession = host.session
+	var hero: Combatant = session.focused_hero
+	var entries: Array[Dictionary] = CombatAutoplay.tactic_entries(true)
+	var party_ids: Array[String] = []
+	for i: int in range(dock.party_option.item_count):
+		party_ids.append(str(dock.party_option.get_item_metadata(i)))
+	var hero_ids: Array[String] = []
+	for i: int in range(dock.hero_option.item_count):
+		hero_ids.append(str(dock.hero_option.get_item_metadata(i)))
+	var expect_party: Array[String] = []
+	var expect_hero: Array[String] = []
+	for e: Dictionary in entries:
+		expect_hero.append(str(e["id"]))
+		if str(e["id"]) != PlanPresets.CUSTOM:
+			expect_party.append(str(e["id"]))
+	checks["timeline row: party dropdown lists the tactics, hero dropdown the tactics plus Custom; the Draft menu is gone"] = (
+		party_ids == expect_party and hero_ids == expect_hero and dock.find_children("*", "MenuButton", true, false).is_empty()
+		and dock.hero_option.get_item_tooltip(0) == str(entries[0]["description"]))
+	# The party dropdown sets every hero (and clears overrides); the hero dropdown overrides one row.
+	var other: String = expect_party[1]
+	_pick(dock.party_option, other)
+	var party_ok: bool = ap.get_party_tactic() == other and not ap.has_override(hero) and dock.hero_option.get_item_metadata(dock.hero_option.selected) == other
+	var row_pick: String = expect_party[2]
+	_pick(dock.hero_option, row_pick)
+	checks["timeline row: the party dropdown sets every hero, the hero dropdown overrides the shown hero"] = party_ok and ap.has_override(hero) and ap.tactic_of(hero) == row_pick and ap.get_party_tactic() == other
+	# One manual edit shows Custom (edited); picking a tactic asks first, Keep leaves it, Redraft restores the row.
+	dock.clear_btn.pressed.emit()
+	var edited_text: String = dock.hero_option.get_item_text(dock.hero_option.selected)
+	var edited_ok: bool = ap.is_edited(hero) and str(dock.hero_option.get_item_metadata(dock.hero_option.selected)) == PlanPresets.CUSTOM and edited_text.ends_with("(edited)")
+	_pick(dock.hero_option, expect_party[0])
+	var asks: bool = dock.redraft_pending() and ap.is_edited(hero)
+	dock.confirm_no_btn.pressed.emit()
+	var kept: bool = not dock.redraft_pending() and ap.is_edited(hero) and dock.hero_option.get_item_text(dock.hero_option.selected).ends_with("(edited)")
+	_pick(dock.hero_option, expect_party[0])
+	dock.confirm_yes_btn.pressed.emit()
+	var restored_text: String = dock.hero_option.get_item_text(dock.hero_option.selected)
+	checks["timeline row: one manual edit shows Custom (edited); a tactic pick asks before redrafting, Keep keeps, Redraft restores"] = (
+		edited_ok and asks and kept and not ap.is_edited(hero) and ap.tactic_of(hero) == expect_party[0] and not restored_text.contains("edited")
+		and restored_text == PlanPresets.label(expect_party[0]))
+	# Deliberate Custom (no edits yet) applies at once and stays Custom without the edited tag.
+	_pick(dock.hero_option, PlanPresets.CUSTOM)
+	checks["timeline row: choosing Custom on purpose applies at once and is not tagged edited"] = (
+		not dock.redraft_pending() and ap.tactic_of(hero) == PlanPresets.CUSTOM and not ap.is_edited(hero)
+		and dock.hero_option.get_item_text(dock.hero_option.selected) == PlanPresets.label(PlanPresets.CUSTOM))
+	# Guests: no row picker.
+	session.encounter.guests.append(hero)
+	panel.refresh()
+	var guest_ok: bool = dock.hero_option.disabled
+	session.encounter.guests.erase(hero)
+	panel.refresh()
+	checks["timeline row: a guest's hero dropdown is disabled (guests always play Balanced)"] = guest_ok and not dock.hero_option.disabled
+	_card_free(tree_parent, host, saved)
+
+	# Autoplay toggle, A and Space, banner.
+	var host2: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
+	var panel2: CombatTimelinePanel = host2.get_panel("timeline") as CombatTimelinePanel
+	var dock2: TimelineDockUI = panel2.dock
+	var ap2: CombatAutoplay = host2.autoplay
+	var starts_off: bool = not ap2.is_on() and not dock2.autoplay_btn.button_pressed
+	dock2.autoplay_btn.button_pressed = true
+	var toggled_on: bool = ap2.is_on() and dock2.autoplay_btn.button_pressed
+	host2._unhandled_input(_key_event(KEY_SPACE))
+	var space_pauses: bool = not ap2.is_on() and not dock2.autoplay_btn.button_pressed and ap2.pause_reason() == "Autoplay paused."
+	var note_shown: bool = dock2.plan_info_lbl.text == ap2.pause_reason()
+	host2._unhandled_input(_key_event(KEY_A))
+	var a_on: bool = ap2.is_on() and dock2.autoplay_btn.button_pressed and dock2.plan_info_lbl.text != "Autoplay paused."
+	host2._unhandled_input(_key_event(KEY_A))
+	var a_off: bool = not ap2.is_on()
+	checks["autoplay toggle: starts off, the button turns it on, Space pauses it (banner shows why), A toggles"] = starts_off and toggled_on and space_pauses and note_shown and a_on and a_off
+	# Safety stop reason reaches the banner.
+	ap2.set_autoplay(true)
+	var hero2: Combatant = host2.session.allies[0]
+	host2.session.select_combatant(hero2)
+	ap2._pause("Autoplay paused: %s is at 22%% HP" % hero2.name, false)
+	checks["autoplay toggle: a safety stop's reason shows in the row"] = dock2.plan_info_lbl.text.contains("is at 22% HP") and not dock2.autoplay_btn.button_pressed
+	_card_free(tree_parent, host2, saved)
+
+	# Replay / playback hosts (setup without autoplay): A, Space and the toggle never draft or confirm a live round.
+	SettingsFile.set_value("ui/text_scale", 1.0)
+	var rsession := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+	var rhost := CombatDockHost.new()
+	tree_parent.add_child(rhost)
+	rhost.size = VIEWS[0]
+	rhost.setup(rsession, false)
+	rsession.start()
+	var rdock: TimelineDockUI = (rhost.get_panel("timeline") as CombatTimelinePanel).dock
+	var round_before: int = rsession.current_round
+	rhost._unhandled_input(_key_event(KEY_A))
+	rdock.autoplay_btn.button_pressed = true
+	rhost._unhandled_input(_key_event(KEY_SPACE))   # plain session play / pause path, not autoplay
+	rsession.is_auto_playing = false
+	var no_steps: bool = true
+	for ally: Combatant in rsession.allies:
+		no_steps = no_steps and rsession.plan.steps_of(ally).is_empty()
+	checks["replay host: A and the Autoplay toggle are no-ops (no autoplay, no tactic dropdowns, nothing drafted)"] = (
+		rhost.autoplay == null and not rdock.autoplay_btn.visible and not rdock.party_option.visible and not rdock.hero_option.visible
+		and rsession.is_planning() and not rsession.plan_confirmed and rsession.current_round == round_before and no_steps and rhost._autoplay_timer == null)
+	_card_free(tree_parent, rhost, saved)

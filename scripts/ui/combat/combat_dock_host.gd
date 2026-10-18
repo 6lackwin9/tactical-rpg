@@ -32,6 +32,7 @@ const LAYOUTS: Dictionary = {
 }
 const CORE_COG_PX: int = 32   # the settings cog (UIR-5: 32 px bordered button)
 const AUTO_PLAY_INTERVAL: float = 0.55
+const AUTOPLAY_TICK: float = 0.3
 
 var session: CombatSession = null
 var keys_blocked: bool = false   # BATTLE-FLOW: set while the results popup covers the arena
@@ -39,6 +40,7 @@ var current_layout: String = DEFAULT_LAYOUT
 var log_modal: CombatLogModal
 var timeline_modal: TimelineModal
 var metrics: CombatHudMetrics = null   # the sizes last applied by _fit()
+var autoplay: CombatAutoplay = null    # AUTO1 tactics + the Autoplay loop (the timeline row's controls bind to it)
 
 var _panels: Dictionary = {}    # String -> CombatPanel
 var _regions: Dictionary = {}   # String -> BoxContainer
@@ -51,6 +53,7 @@ var _layout_option: OptionButton
 var _zone_option: OptionButton
 var _edit_mode: bool = false
 var _auto_timer: Timer
+var _autoplay_timer: Timer
 var _top_row: Control
 var _center_row: Control
 var _bottom_panel: PanelContainer
@@ -163,7 +166,8 @@ func _add_region(parent: Control, region: String, expand_h: bool, expand_v: bool
 # Setup
 # ------------------------------------------------------------------------------
 
-func setup(p_session: CombatSession) -> void:
+# `with_autoplay` false (replay / playback arenas): no CombatAutoplay, no tactic dropdowns, A and Space-pause do nothing.
+func setup(p_session: CombatSession, with_autoplay: bool = true) -> void:
 	session = p_session
 	_overlay_layer.set_session(session)
 	var panels: Array[CombatPanel] = [
@@ -182,6 +186,14 @@ func setup(p_session: CombatSession) -> void:
 		_overlay_layer.host_panel(panel)
 		panel.bind(session)
 	_wire_hover_card()
+	var timeline: CombatTimelinePanel = get_panel("timeline") as CombatTimelinePanel
+	if with_autoplay:
+		autoplay = CombatAutoplay.new(session)
+		if timeline != null:
+			timeline.bind_autoplay(autoplay)
+		_start_autoplay_timer()
+	elif timeline != null:
+		timeline.disable_autoplay()
 
 	log_modal.cell_clicked.connect(func(e: ActionLogEntry) -> void: session.select_log_entry(e))
 	timeline_modal.action_lookup_fn = session.find_recorded_action
@@ -196,6 +208,30 @@ func setup(p_session: CombatSession) -> void:
 	layout_changed.connect(_fit)
 	session.mounted.connect(_fit)
 	_fit()
+
+# Drives CombatAutoplay.tick() (draft, confirm, advance); stops itself when the battle is over.
+func _start_autoplay_timer() -> void:
+	_autoplay_timer = Timer.new()
+	_autoplay_timer.wait_time = AUTOPLAY_TICK
+	_autoplay_timer.timeout.connect(func() -> void:
+		if session == null or session.combat_over:
+			_autoplay_timer.stop()
+		elif autoplay != null and not keys_blocked:
+			autoplay.tick()
+	)
+	add_child(_autoplay_timer)
+	_autoplay_timer.start()
+	session.round_started.connect(func(_round_num: int) -> void:   # a reset battle starts ticking again
+		if _autoplay_timer.is_stopped() and _autoplay_timer.is_inside_tree():
+			_autoplay_timer.start()
+	)
+
+# A battle that belongs to a save remembers the tactics and the Autoplay switch in its GameState (AUTO1 rule 8).
+func bind_game_state(store: GameState) -> void:
+	if autoplay == null or store == null:
+		return
+	autoplay.store = store
+	autoplay.load_settings(store.autoplay)
 
 # Roster cards drive the grid's hover card: focus opens it at once, a click pins it.
 func _wire_hover_card() -> void:
@@ -586,8 +622,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			session.select_block(session.playhead() - 1)
 		KEY_E, KEY_RIGHT:
 			session.select_block(session.playhead() + 1)
+		KEY_A:
+			if autoplay != null:
+				autoplay.toggle()   # A: Autoplay on / off (off = the same pause as Space)
+			else:
+				handled = false
 		KEY_SPACE:
-			session.toggle_auto_play()
+			if autoplay != null and autoplay.is_on():
+				autoplay.request_pause()   # Space pauses autoplay: this round finishes, the next stops in planning
+			else:
+				session.toggle_auto_play()
 		_:
 			handled = false
 	if handled:

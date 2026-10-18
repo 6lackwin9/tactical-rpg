@@ -67,7 +67,7 @@ static func open(parent: Node, gs: GameState, p_fight: Dictionary) -> Dictionary
 	var screen := BattleScreen.new()
 	screen.fight = p_fight
 	parent.add_child(screen)
-	screen._mount(packed.instantiate(), enc)
+	screen._mount(packed.instantiate(), enc, gs)
 	if screen.session == null:
 		parent.remove_child(screen)
 		screen.queue_free()
@@ -80,8 +80,9 @@ static func open(parent: Node, gs: GameState, p_fight: Dictionary) -> Dictionary
 	screen.play_intro(("Ambush! " if ambush else "Battle: ") + label, "%d %s" % [screen.session.enemies.size(), "enemy" if screen.session.enemies.size() == 1 else "enemies"])
 	return {"ok": true, "errors": errors, "screen": screen}
 
-func _mount(node: Node, enc: CombatEncounter) -> void:
+func _mount(node: Node, enc: CombatEncounter, store: GameState = null) -> void:
 	arena = node
+	arena.set("autoplay_store", store)   # the save that remembers the tactics and the Autoplay switch
 	arena.set("encounter", enc)   # read by the arena's _ready, before it builds the session
 	add_child(arena)
 	session = arena.get("session") as CombatSession
