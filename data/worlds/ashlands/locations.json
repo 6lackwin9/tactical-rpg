@@ -65,7 +65,8 @@
 					"items": {
 						"con_heal_potion": 1
 					},
-					"gold": 10
+					"gold": 10,
+					"supplies": 4
 				},
 				{
 					"id": "hearth",
@@ -209,7 +210,8 @@
 						"con_focus_elixir": 1
 					},
 					"loot": "keep_stores",
-					"gold": 25
+					"gold": 25,
+					"supplies": 6
 				},
 				{
 					"id": "old_stones",
@@ -320,7 +322,8 @@
 					"items": {
 						"con_heal_potion": 1
 					},
-					"gold": 15
+					"gold": 15,
+					"supplies": 6
 				},
 				{
 					"id": "wastes_road",

@@ -89,7 +89,7 @@
 				}
 			],
 			"buy_mult": 1.0,
-			"supply_price": 0,
+			"supply_price": 2,
 			"sell_mult": 0.5,
 			"buys": [
 				"WEAPON",
