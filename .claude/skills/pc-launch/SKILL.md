@@ -27,6 +27,8 @@ git status --short --branch
 Start-Process .\run.bat; Start-Sleep 8; Get-Process godot -ErrorAction SilentlyContinue | Select-Object Id, StartTime
 ```
 
+  For a design-review option ("launch option A/B/C" or "launch option" plus a branch name) use `Start-Process .\run.bat -ArgumentList 'opt','a'` (or `b`, `c`, a branch name): it opens the newest `claude/design-opt-<date>-<letter>` in the sibling worktree `new-game-project-opt` with its own saves under `%APPDATA%\tactical-rpg-opt`; an unknown option prints a message and does not launch. Report the branch and commit it echoes.
+
   For unreleased work ("launch dev") use `Start-Process .\run.bat -ArgumentList dev`; the first dev launch creates the `-dev` folder and imports it (a few minutes). A pull that changed code makes `run.bat` rebuild the script cache first (`godot --headless --import`, about a minute), so a fresh window can take that long; a blank grey window means the cache is still stale (`scene_runner.gd` "Could not find type ..."): run that import and launch again (see `godot-known-issues`).
 - A `godot` process with a fresh `StartTime` means it launched. Report the commit (`git rev-parse --short HEAD`) in one line.
 - Never kill or restart other `godot` processes (`Stop-Process -Name godot` stops other agents' suites and sims). Change no code and push nothing as part of a launch.

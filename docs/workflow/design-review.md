@@ -40,7 +40,7 @@ A routine bound to the Design session fires at 12:20 and 18:20 UTC, after the 11
 
 ## How the user plays an option
 
-Through the "Launch game on your PC" thread: the user says "launch option A" (or names the branch) in any thread and the coordinator relays it. Until `run.bat opt` exists (task OPTLAUNCH1, Platform & Workflow), the PC session opens the branch in a third folder next to the dev one, `<checkout>-opt`, a git worktree switched to the option branch (`git worktree add <checkout>-opt origin/<branch>` the first time, `git -C <checkout>-opt switch --detach origin/<branch>` after a fetch for the next option), and starts Godot there with `APPDATA` pointed at `%APPDATA%\tactical-rpg-opt`, so option saves and settings never touch main or dev saves. The report names the branch per option and a short "what to try" list.
+Through the "Launch game on your PC" thread: the user says "launch option A" (or names the branch) in any thread and the coordinator relays it. The PC session runs `run.bat opt a` (or `b`, `c`, or `run.bat opt <branch>`): `a`/`b`/`c` resolves to the newest remote `claude/design-opt-<date>-<letter>`, and the branch opens in a third folder next to the dev one, `<checkout>-opt` (a detached git worktree, switched to the branch tip on later launches unless it has local changes), with `APPDATA` pointed at `%APPDATA%\tactical-rpg-opt`, so option saves and settings never touch main or dev saves. Manual fallback: `git worktree add --detach <checkout>-opt origin/<branch>`, then start Godot there with that `APPDATA`. The report names the branch per option and a short "what to try" list.
 
 ## Approval and landing
 

@@ -216,7 +216,8 @@ tactical-rpg/
 ├── check_project.ps1             # 4-step automated validation script (cache, syntax, arena suite, dojo suite)
 ├── check_project.bat             # Batch launcher for check_project.ps1
 ├── run.bat                       # Pulls the latest main, then opens the Scene Runner (every scene, hot reload, test suites)
-└── run_dev.bat                   # Same on the latest develop (finished work not yet released), from the sibling folder <checkout>-dev
+├── run_dev.bat                   # Same on the latest develop (finished work not yet released), from the sibling folder <checkout>-dev
+└── run_opt.bat                   # Same for a design-review option build: run_opt.bat <a|b|c|branch>, from the sibling folder <checkout>-opt
 ```
 
 ---
@@ -697,9 +698,10 @@ One launcher for everything:
 ```cmd
 run.bat
 run_dev.bat
+run.bat opt a
 ```
 
-`run.bat` fetches and fast-forwards `main` first (about 1-2 s when nothing changed), rebuilds the script cache only when the code changed (about a minute), shows the branch and commit, and launches; `run_dev.bat` (or `run.bat dev`) does the same on `develop`, where finished tasks land before each release, from a sibling folder `<checkout>-dev` (a git worktree created on first use, about 15 MB), so switching between the two never waits for a cache rebuild. When a pull changed the code, it first copies that game's saves to `user://save_backups/<date>-<old commit>` (newest 10 kept), so a change that breaks a save can be undone by copying a backup back into `user://saves`. The dev game keeps its own saves and settings (`run.bat` points `%APPDATA%` at `%APPDATA%\tactical-rpg-dev` for it), so dev saves never mix with main's. Offline, a failed pull, local changes or a folder on another branch: it launches the copy on disk and changes nothing.
+`run.bat` fetches and fast-forwards `main` first (about 1-2 s when nothing changed), rebuilds the script cache only when the code changed (about a minute), shows the branch and commit, and launches; `run_dev.bat` (or `run.bat dev`) does the same on `develop`, where finished tasks land before each release, from a sibling folder `<checkout>-dev` (a git worktree created on first use, about 15 MB), so switching between the two never waits for a cache rebuild. When a pull changed the code, it first copies that game's saves to `user://save_backups/<date>-<old commit>` (newest 10 kept), so a change that breaks a save can be undone by copying a backup back into `user://saves`. The dev game keeps its own saves and settings (`run.bat` points `%APPDATA%` at `%APPDATA%\tactical-rpg-dev` for it), so dev saves never mix with main's. Offline, a failed pull, local changes or a folder on another branch: it launches the copy on disk and changes nothing. `run.bat opt <a|b|c|branch>` (or `run_opt.bat`) opens a design-review option build: `a`/`b`/`c` is the newest remote branch `claude/design-opt-<date>-<letter>`, anything else a branch name; it runs in the sibling worktree `<checkout>-opt` (detached, switched to the branch tip after a fetch unless that folder has local changes) with its own saves and settings under `%APPDATA%\tactical-rpg-opt`; Restart runner inside that folder reopens the same option on its newest commit.
 
 Or open the project in **Godot 4.7+** and press Play: the main scene is the Scene Runner. From its menu:
 
