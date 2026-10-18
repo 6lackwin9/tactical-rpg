@@ -14,6 +14,10 @@ const TAG: String = "QuestRun"
 static var SANDBOX: String = TestHelpers.sandbox("quest_runtime")
 const RUN: String = "qa_run"
 const KID: String = "qa_run_kid"
+const HOME: String = "qa_x_home"   # QUESTX: connects FAR
+const FAR: String = "qa_x_far"
+const XKID: String = "qa_x_kid"   # extends HOME
+const ISO: String = "qa_x_iso"   # neither extended nor connected
 
 static var _fx: Dictionary = {}
 
@@ -45,6 +49,7 @@ static func run() -> bool:
 		ok = _test_inheritance() and ok
 		ok = _test_save() and ok
 		ok = _test_loot() and ok
+		ok = _test_cross_world() and ok
 	SaveGame.reset_base_dir()
 	SaveMigrations.reset()
 	QuestCatalog.use_path(QuestCatalog.DEFAULT_PATH)
@@ -154,6 +159,15 @@ static func _build() -> bool:
 	]
 	for q: Dictionary in quests:
 		errors.append_array(WorldCatalog.upsert(RUN, "quests", q))
+	errors.append_array(QuestCatalog.upsert({"id": "rt_cross", "name": "Cross", "objectives": [{"kind": "reach_location"}, {"kind": "reach_location"}]}))
+	for w: String in [HOME, FAR, ISO]:
+		errors.append_array(WorldCatalog.create_world(w, w))
+	errors.append_array(WorldCatalog.create_world(XKID, XKID, [HOME]))
+	errors.append_array(WorldCatalog.update_manifest(HOME, {"connects": [FAR]}))
+	for loc: Array in [[HOME, "h1"], [FAR, "f1"], [ISO, "i1"]]:
+		errors.append_array(WorldCatalog.upsert(str(loc[0]), "locations", {"id": str(loc[1]), "name": str(loc[1])}))
+	errors.append_array(WorldCatalog.upsert(HOME, "quests", {"id": "x_cross", "name": "Cross", "template": "rt_cross", "steps": [{"text": "Home", "location": "h1"}, {"text": "Far", "location": "%s:f1" % FAR}]}))
+	errors.append_array(WorldCatalog.upsert(FAR, "quests", {"id": "x_cross", "name": "Far twin", "template": "rt_cross", "steps": [{"text": "A", "location": "f1"}, {"text": "B", "location": "f1"}]}))
 	var ov: String = WorldCatalog.override_entry(KID, "quests", "%s:q_lock" % RUN)
 	var problems: Array[String] = []
 	for key: Variant in WorldCatalog.validate_world(RUN):
@@ -496,6 +510,48 @@ static func _test_inheritance() -> bool:
 	checks["parent qid resolves to the override"] = QuestRunner.status(gs, _q("q_lock")) == "active"
 	checks["inherited events"] = QuestRunner.on_location_reached(gs, "l1").has(_q("q_flow"))
 	return _report("Inheritance: inherited quest keeps the parent qid, a child override gets the child qid", checks)
+
+# ------------------------------------------------------------------------------
+# QUESTX: quests keep tracking in a connected world
+# ------------------------------------------------------------------------------
+
+static func _test_cross_world() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _fresh(HOME)
+	var cq: String = "%s:x_cross" % HOME
+	checks["accepted at home"] = gs != null and QuestRunner.start(gs, "x_cross").is_empty() and gs.quests.has(cq)
+	QuestRunner.on_location_reached(gs, "h1")
+	checks["first step done at home"] = DictUtil.to_int(DictUtil.dict_of(gs.quests.get(cq, {})).get("objective", -1)) == 1
+	gs.world_id = FAR   # the party crosses into the connected world
+	checks["still active"] = QuestRunner.status(gs, cq) == "active" and QuestRunner.quests_with(gs, "active").has(cq)
+	checks["objective target is world-qualified"] = str(QuestRunner.current_objective(gs, cq).get("target", "")) == "%s:f1" % FAR
+	checks["journal data (group list + name) still shows it"] = QuestRunner.quests_with(gs, "active").has(cq) and str(QuestRunner.resolved(gs, cq).get("name", "")) == "Cross"
+	checks["same-named far quest is a different quest"] = QuestRunner.status(gs, "%s:x_cross" % FAR) == "available" and cq != "%s:x_cross" % FAR
+	var advanced: Array[String] = QuestRunner.on_location_reached(gs, "f1")
+	checks["step counted in the connected world"] = advanced.has(cq) and not advanced.has("%s:x_cross" % FAR)
+	checks["quest ready"] = QuestRunner.status(gs, cq) == "ready" and QuestRunner.quests_with(gs, "ready").has(cq)
+	checks["completes from the connected world"] = bool(QuestRunner.complete(gs, cq)["ok"]) and QuestRunner.status(gs, cq) == "completed"
+	# Reverse direction: accepted in FAR (which lists no connections), tracked while the party is in HOME (which connects to FAR).
+	var back: GameState = _fresh(FAR)
+	var fq: String = "%s:x_cross" % FAR
+	checks["far quest accepted"] = QuestRunner.start(back, "x_cross").is_empty()
+	back.world_id = HOME
+	checks["far quest visible from home (connection followed both ways)"] = QuestRunner.status(back, fq) == "active"
+	# Inherited quest + child override of its target location: the event fires in the child and the quest progresses.
+	var kid: GameState = _fresh(XKID)
+	checks["override made"] = kid != null and WorldCatalog.override_entry(XKID, "locations", "%s:h1" % HOME) == "h1"
+	checks["inherited quest accepted"] = QuestRunner.start(kid, "%s:x_cross" % HOME).is_empty()
+	QuestRunner.on_location_reached(kid, "h1")
+	checks["child-overridden location advances the quest"] = DictUtil.to_int(DictUtil.dict_of(kid.quests.get(cq, {})).get("objective", -1)) == 1
+	# Negative: a world that is neither extended nor connected stays invisible.
+	var lone: GameState = _fresh(ISO)
+	checks["iso state"] = lone != null and QuestRunner.status(lone, "%s:x_cross" % FAR) == "invalid"
+	var stray: GameState = _fresh(HOME)
+	stray.quests[fq] = {"state": "active", "objective": 0}
+	stray.world_id = ISO
+	checks["unlinked world: invisible"] = QuestRunner.status(stray, fq) == "invalid" and QuestRunner.quests_with(stray, "active").is_empty()
+	checks["unlinked world: events don't progress it"] = QuestRunner.on_location_reached(stray, "%s:f1" % FAR).is_empty() and DictUtil.to_int(DictUtil.dict_of(stray.quests[fq]).get("objective", -1)) == 0
+	return _report("QUESTX: active quests of connected worlds keep tracking; unlinked worlds stay invisible", checks)
 
 # ------------------------------------------------------------------------------
 # Check 15: save

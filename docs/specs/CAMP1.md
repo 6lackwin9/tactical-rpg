@@ -29,7 +29,7 @@ Side quest `ember_patrol` (Hest, rep 30) stays optional. `iron_reaches:iron_for_
 
 ## 2. Findings that shape the data (no engine change needed)
 
-- F1. Quests resolve only inside a world's `extends` lineage, not `connects`: while the party is in the Ashlands, `iron_for_embers` (an Iron Reaches quest) is invisible, so its "deliver to Warden Keep" step can never count. CAMP1 keeps the middle quest in the Ashlands and uses a flag set at Slag Gate; Orsa's tree has `services: false` so the broken quest is never offered. A later fix is a separate idea row (QUESTX).
+- F1. Quests resolve only inside a world's `extends` lineage, not `connects`: while the party is in the Ashlands, `iron_for_embers` (an Iron Reaches quest) is invisible, so its "deliver to Warden Keep" step can never count. CAMP1 keeps the middle quest in the Ashlands and uses a flag set at Slag Gate; Orsa's tree has `services: false` so the broken quest is never offered. A later fix is a separate idea row (QUESTX). **Fixed by QUESTX (2026-10-18):** QuestRunner now tracks stored quests of connected worlds (see README, Quests); Orsa's `services: false` stays a data question.
 - F2. Slag Gate is a menu location (`map: ""`) and menus show no NPCs, so Orsa cannot be talked to. CAMP1 gives it the `walled_town` map.
 - F3. Battle link: BATTLE1-L is on develop, so map, road and dialogue fights are real battles. No dialogue on develop has a `fight` effect yet (G1 lists "the Cinder Gate dialogue fight"); Grakka's parley adds the first one.
 - F4. `ExploreRunner.enter` refreshes quests before the arrival check, so "flag set in another world, then reach the keep" completes on arrival.
