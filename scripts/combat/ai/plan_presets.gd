@@ -9,9 +9,25 @@ extends RefCounted
 # ==============================================================================
 
 const IDS: Array[String] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy", "withdraw"]
+# AUTO1 battle autoplay tactics: every combat preset except Fall Back (autoplay never retreats on its own), plus
+# CUSTOM ("I plan this hero myself"; also shown on a row the player edited this round). Not a preset: no profile.
+const AUTO_IDS: Array[String] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"]
+const CUSTOM: String = "custom"
+const DEFAULT_TACTIC: String = "balanced"
+
+# The tactic dropdown entries in order: AUTO_IDS then CUSTOM.
+static func tactic_ids() -> Array[String]:
+	var out: Array[String] = AUTO_IDS.duplicate()
+	out.append(CUSTOM)
+	return out
+
+static func is_tactic(id: String) -> bool:
+	return AUTO_IDS.has(id) or id == CUSTOM
 
 static func label(id: String) -> String:
 	match id:
+		"custom":
+			return "✎ Custom"
 		"balanced":
 			return "⚖ Balanced"
 		"aggressive":
@@ -30,6 +46,8 @@ static func label(id: String) -> String:
 
 static func description(id: String) -> String:
 	match id:
+		"custom":
+			return "You plan this hero yourself: autoplay stops each round with this row empty."
 		"balanced":
 			return "The unit's own role: fights, guards when hurt, flees when nearly down."
 		"aggressive":

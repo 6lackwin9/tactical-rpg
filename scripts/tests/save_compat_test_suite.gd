@@ -66,6 +66,11 @@ static func _check_version(version: int) -> bool:
 			checks["world clock"] = g.time == 240
 		else:
 			checks["clock defaulted"] = g.time == 0
+		if version >= 7:
+			var heroes: Dictionary = DictUtil.dict_of(g.autoplay.get("heroes", {}))
+			checks["autoplay"] = DictUtil.to_bool(g.autoplay.get("on", false)) and str(g.autoplay.get("party", "")) == "aggressive" and heroes.size() == 2 and heroes.values().has(PlanPresets.CUSTOM)
+		else:
+			checks["autoplay migrated off"] = JsonUtil.deep_equal(g.autoplay, GameState.default_autoplay())   # AUTO1-L: v6 -> v7
 		if version >= 6:
 			checks["supplies"] = g.party.supplies == 7
 			var again: Dictionary = SaveGame.decode(JSON.stringify({"format": SaveGame.FORMAT, "version": SaveGame.VERSION, "saved_at": 1, "game_state": g.to_dict()}))

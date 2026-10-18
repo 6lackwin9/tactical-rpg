@@ -89,6 +89,13 @@ func plan_context() -> PlanContext:
 func profile_of(c: Combatant) -> AiProfile:
 	return plan_context().profile_of(c)
 
+# Stable key of a party unit across battles (AUTO1: per-hero autoplay tactics are saved under it). Default: the world
+# character it plays, else its name; GameEncounter uses the party member id.
+func hero_key(c: Combatant) -> String:
+	if c == null:
+		return ""
+	return c.lore_ref if not c.lore_ref.is_empty() else c.name
+
 # AI-drafted sequence for c from the current state (preset_id: see PlanPresets).
 func draft_steps(c: Combatant, preset_id: String = "balanced", shared: CombatPlan = null) -> Array[PlanStep]:
 	var ctx: PlanContext = shared.context if shared != null else plan_context()

@@ -14,6 +14,7 @@ var party_state: PartyState = null
 var zone_override: String = ""
 var _built: Dictionary = {}   # roster id (PARTY_PREFIX + n) -> Combatant, rebuilt on every build()
 var _bases: Dictionary = {}   # roster id -> base unit id
+var _member_ids: Dictionary = {}   # Combatant -> party member id (hero_key)
 
 func _init(p_world_id: String = "", p_local_id: String = "", p_party: PartyState = null, p_zone: String = "") -> void:
 	super(p_world_id, p_local_id)
@@ -29,6 +30,7 @@ func load_definition() -> void:
 func build() -> void:
 	_built.clear()
 	_bases.clear()
+	_member_ids.clear()
 	if party_state != null:
 		for m: UnitState in party_state.active_members():
 			var c: Combatant = PartyBuilder.build(m)
@@ -36,6 +38,7 @@ func build() -> void:
 				var rid: String = "%s%d" % [PARTY_PREFIX, _built.size()]
 				_built[rid] = c
 				_bases[rid] = m.base_unit
+				_member_ids[c] = m.id
 	super()
 
 func _ids(key: String) -> Array[String]:
@@ -63,3 +66,9 @@ func _spawn(unit_id: String, display_name: String) -> Combatant:
 	unit_classes[c] = ContentFactory.art_of(entry)
 	ai_profiles[c] = ContentFactory.ai_profile(entry, c)
 	return c
+
+# The party member id (AUTO1 per-hero tactics are saved under it); other units as in CombatEncounter.
+func hero_key(c: Combatant) -> String:
+	if _member_ids.has(c):
+		return str(_member_ids[c])
+	return super(c)

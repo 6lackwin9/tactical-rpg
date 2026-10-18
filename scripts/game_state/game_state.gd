@@ -10,9 +10,12 @@ extends RefCounted
 # location's map ([-1, -1] = no map); explore holds the step counter; rng_seed + rolls drive GameRolls.
 # S11 (DLG1-L, save v4): party.gold (PartyState) and shops = {shop qid: {item id: sold count >= 1}} (limited stock sold).
 # S10 (TRAV1-L, save v5): time = the world clock (int >= 0), advanced by travel legs.
+# AUTO1-L (save v7): autoplay = {on: bool, party: tactic id, heroes: {party member id: tactic id or "custom"}}, the
+# remembered battle-autoplay choice (PlanPresets.AUTO_IDS; off in a new game). CombatAutoplay reads and writes it.
 # ==============================================================================
 
-const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time"]
+const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay"]
+const AUTOPLAY_KEYS: Array[String] = ["on", "party", "heroes"]
 const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe"]
 const NO_POSITION: Vector2i = Vector2i(-1, -1)
 const SEED_MAX: int = 2147483647
@@ -29,10 +32,14 @@ var rng_seed: int = 0
 var rolls: Dictionary = {}   # stream id -> rolls drawn (int >= 0)
 var shops: Dictionary = {}   # shop qid -> {item id: sold count >= 1}
 var time: int = 0   # world clock (TRAV1-L)
+var autoplay: Dictionary = default_autoplay()   # AUTO1-L remembered autoplay choice
 var load_problems: Array[String] = []   # raw type problems found by from_dict (not saved; validate() reports them)
 
 static func default_explore() -> Dictionary:
 	return {"steps": 0, "next_at": 16, "loc_steps": 0, "last_safe": ""}
+
+static func default_autoplay() -> Dictionary:
+	return {"on": false, "party": PlanPresets.DEFAULT_TACTIC, "heroes": {}}
 
 static func create(p_world_id: String, p_party: PartyState) -> GameState:
 	var g := GameState.new()
@@ -89,7 +96,7 @@ func to_dict() -> Dictionary:
 		"world_id": world_id, "location_id": location_id, "party": party.to_dict(),
 		"flags": flags.duplicate(true), "quests": quests.duplicate(true), "loot_claimed": _sorted(loot_claimed),
 		"position": [position.x, position.y], "explore": explore.duplicate(true), "rng_seed": rng_seed, "rolls": rolls.duplicate(true),
-		"shops": shops.duplicate(true), "time": time,
+		"shops": shops.duplicate(true), "time": time, "autoplay": autoplay.duplicate(true),
 	}
 
 static func _sorted(list: Array[String]) -> Array[String]:
@@ -150,6 +157,11 @@ static func from_dict(d: Dictionary) -> GameState:
 		g.load_problems.append("time must be a whole number >= 0.")
 	else:
 		g.time = DictUtil.to_int(raw_time)
+	var raw_auto: Variant = JsonUtil.normalize(d.get("autoplay", default_autoplay()))
+	if not (raw_auto is Dictionary):
+		g.load_problems.append("autoplay must be {on, party, heroes}.")
+	else:
+		g.autoplay = raw_auto
 	return g
 
 func equals(other: GameState) -> bool:
@@ -186,6 +198,29 @@ func validate() -> Array[String]:
 	errors.append_array(shops_errors(shops))
 	if time < 0:
 		errors.append("time must be a whole number >= 0.")
+	errors.append_array(autoplay_errors(autoplay))
+	return errors
+
+# {on: bool, party: one of PlanPresets.AUTO_IDS, heroes: {non-empty key: AUTO_IDS id or "custom"}}, nothing else.
+static func autoplay_errors(a: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var ok: bool = a.size() == AUTOPLAY_KEYS.size()
+	for key: String in AUTOPLAY_KEYS:
+		ok = ok and a.has(key)
+	if not ok:
+		errors.append("autoplay must be {on, party, heroes}.")
+		return errors
+	if not (a["on"] is bool):
+		errors.append("autoplay.on must be true or false.")
+	if not (a["party"] is String) or not PlanPresets.AUTO_IDS.has(str(a["party"])):
+		errors.append("autoplay.party '%s' must be one of %s." % [str(a["party"]), ", ".join(PlanPresets.AUTO_IDS)])
+	if not (a["heroes"] is Dictionary):
+		errors.append("autoplay.heroes must be an object {hero id: tactic}.")
+		return errors
+	var heroes: Dictionary = a["heroes"]
+	for key: Variant in heroes:
+		if not (key is String) or str(key).is_empty() or not (heroes[key] is String) or not PlanPresets.is_tactic(str(heroes[key])):
+			errors.append("autoplay.heroes: '%s' must map a hero id to a tactic (%s)." % [str(key), ", ".join(PlanPresets.tactic_ids())])
 	return errors
 
 static func shops_errors(blob: Dictionary) -> Array[String]:

@@ -587,6 +587,8 @@ Worlds gain the kind `routes` (`data/worlds/<id>/routes.json`: `from`, `to`, `tw
 
 Ashlands supplies (TRAV2-A, seed `data/seeds/trav2a.gd`): a new Ashlands game starts with 10 supplies (manifest `start_supplies`), Hest's stores sell them at 2 gold each (`supply_price`), and the chests `stores` (Warden Keep, 4), `ruin_cache` (Ruined Courtyard, 6) and `camp_cache` (Cinder Gate, 6) top them up. Iron Reaches and Tidewrack have no supply source yet.
 
+Battle autoplay logic (AUTO1-L, controls come with the layout C combat screen): `CombatAutoplay` drafts every hero's plan each round from a party tactic (Balanced, All-out Attack, Focus Weakest, Guard & Counter, Kite at Range, Economy) with per-hero overrides or Custom, confirms and plays it, and advances; the player can pause (the next round stops drafted), and it pauses itself when a hero is downed or drops to 30% HP or lower that round, or when a draft is invalid. Save version 7 keeps the tactics and the on/off switch per save (off in a new game). Playtest rounds record `source` (player or auto). Tested in `autoplay_test_suite.gd`.
+
 Road data (TRAV1-A, seed `data/seeds/trav1a.gd`): the old road from Warden Keep to the Ruined Courtyard (time 2, a one-shot `ash_raiders` ambush before the courtyard is held), the high road to the Cinder Gate (time 4, closed until `ashlands.courtyard_held`), and the two-way south road from the Iron Reaches Slag Gate to Warden Keep (time 6, owned by Iron Reaches). Warden Keep (`signpost`) and the Cinder Gate (`wastes_road`) have exits to the world map.
 
 ### Reputation (REP1-L)

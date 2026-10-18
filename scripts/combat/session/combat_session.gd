@@ -80,6 +80,7 @@ var next_round_label: String = ""    # empty = no round advance available
 # Planning: the party's plan for the live round.
 var plan: CombatPlan = null               # per-unit command sequences (rebuilt each round)
 var plan_confirmed: bool = false         # sequences locked and scheduled
+var confirm_source: String = "player"     # who confirmed the live round's plan: "player" or "auto" (AUTO1 autoplay; recorded per round)
 var preview_step: PlanStep = null         # hovered option being previewed on the grid
 
 var _pending_actions: Array[CombatResolver.ScheduledAction] = []
@@ -165,6 +166,7 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 
 	plan = CombatPlan.new(encounter.plan_context())
 	plan_confirmed = false
+	confirm_source = "player"
 	encounter.schedule_round(resolver, round_num)
 	_refresh_archive()
 
@@ -587,7 +589,8 @@ func plan_is_valid() -> bool:
 
 # Locks the party's sequences, schedules them with the enemies' and starts resolving
 # (auto-play; `auto_play` false lets the caller step manually). Refused while any is invalid.
-func confirm_plan(auto_play: bool = true) -> bool:
+# `source` "auto" marks a round confirmed by CombatAutoplay (kept in confirm_source; the playtest recorder stores it).
+func confirm_plan(auto_play: bool = true, source: String = "player") -> bool:
 	if not is_planning():
 		return false
 	if not plan_is_valid():
@@ -597,6 +600,7 @@ func confirm_plan(auto_play: bool = true) -> bool:
 		return false
 	plan.commit(resolver)
 	plan_confirmed = true
+	confirm_source = source
 	_refresh_archive(false)
 	status_text = "Plan confirmed: resolving the round (Step to go block by block)."
 	if auto_play:

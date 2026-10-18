@@ -39,6 +39,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Change a class: `data/catalog/classes.json` via upsert; rules in `stat_rules.gd`.
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.
 - Playtest recordings and replay: `scripts/playtest/` (PlaytestRecorder, PlaytestReplayer.run_file, TrailReport), tool `tools/fc.sh replay`; UI (hub, trail, F8 notes, browser, playback banner): `scripts/ui/playtest/`; arena playback fields (`playtest`, `battle`, `take_over`, `battle_seed`): `scenes/combat_arena.gd`.
+- Battle autoplay (AUTO1): `scripts/combat/session/combat_autoplay.gd` (`CombatAutoplay`, tick-driven; tactics in `PlanPresets.AUTO_IDS` + `CUSTOM`); remembered in `GameState.autoplay` (save v7); recorded rounds carry `source` player/auto.
 - Test expectations for a system: its suite in `scripts/tests/` (class rules: `class_rules_test_suite.gd`).
 
 See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `docs/decisions/<system>.md` for why things are the way they are.
