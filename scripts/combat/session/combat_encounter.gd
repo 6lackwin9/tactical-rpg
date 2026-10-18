@@ -25,6 +25,7 @@ var allies: Array[Combatant] = []        # the heroes, then the guests (OBJ1 rul
 var guests: Array[Combatant] = []        # party-side extras (also in allies): planned like heroes, no XP, never saved
 var enemies: Array[Combatant] = []        # includes reinforcements not yet on the field
 var party_stash: Inventory = null
+var party_cap: int = 0                    # party slots the combat HUD shows; 0 = unknown (the HUD falls back to its default)
 var reinforcements_spawned: bool = false  # generic "extra wave has entered" flag (snapshotted)
 
 var zone_id: String = "stone_arena"      # CombatZones terrain preset applied in build()
@@ -192,3 +193,7 @@ static func make_event_entry(round_num: int, block_num: int, actor: String, acto
 	entry.skill_subtype = subtype
 	entry.status_text = status
 	return entry
+
+# Party slots the combat HUD shows: the explicit cap, else 0 (unknown). World battles override it.
+func party_slots() -> int:
+	return party_cap

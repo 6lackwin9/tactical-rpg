@@ -16,6 +16,8 @@ signal fx_played(preset_id: String, entry: ActionLogEntry)   # once per preset (
 
 const TILE_SIZE: int = CombatGridView.TILE_SIZE
 
+var tile_px: int = TILE_SIZE   # the grid panel sets the fitted tile size
+
 # One live tween and the end state kill_all restores on its node.
 class Run:
 	var tween: Tween
@@ -57,7 +59,7 @@ func play(entry: ActionLogEntry, actor: Control, target: Control, target_px: Vec
 		return
 	var distance: int = -1
 	if actor != null and (target != null or entry.category == "MOVE"):
-		var d: Vector2 = (target_px - actor.position) / float(TILE_SIZE)
+		var d: Vector2 = (target_px - actor.position) / float(tile_px)
 		distance = roundi(absf(d.x) + absf(d.y))
 	var presets: Array[String] = FxPresets.for_entry(entry, distance)
 	var planned: int = 0
@@ -206,7 +208,7 @@ func _status_pop(on: Control, status_id: String) -> void:
 	icon.custom_minimum_size = Vector2(FxPresets.STATUS_ICON_PX, FxPresets.STATUS_ICON_PX)
 	icon.size = icon.custom_minimum_size
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var start: Vector2 = on.position + Vector2((TILE_SIZE - FxPresets.STATUS_ICON_PX) / 2.0, -FxPresets.STATUS_ICON_PX / 2.0)
+	var start: Vector2 = on.position + Vector2((tile_px - FxPresets.STATUS_ICON_PX) / 2.0, -FxPresets.STATUS_ICON_PX / 2.0)
 	icon.position = start
 	_add_temp(icon)
 	var run: Run = _track(icon)

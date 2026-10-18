@@ -46,6 +46,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.
 - Music choice and fallback chain: `scripts/audio/music_director.gd`; spec `docs/specs/MUSIC1.md` rules 1-8; tracks via `tools/gen_music.py`. Location kind -> music context: `MusicDirector.KIND_CONTEXT`.
 - Playtest recordings and replay: `scripts/playtest/` (PlaytestRecorder, PlaytestReplayer.run_file, TrailReport), tool `tools/fc.sh replay`; UI (hub, trail, F8 notes, browser, playback banner): `scripts/ui/playtest/`; arena playback fields (`playtest`, `battle`, `take_over`, `battle_seed`): `scenes/combat_arena.gd`.
+- Combat HUD (COMBAT-UI2-L1, layout C): `scripts/ui/combat/combat_dock_host.gd` (regions top / left_top / left / center / right_top / right / bottom_*), all sizes from `scripts/ui/combat/combat_hud_metrics.gd` (`CombatHudMetrics.compute`, `tile_for`: tile = floor(min(h/9, w/12)) >= 48); cards in `scripts/ui/roster_panel_ui.gd`; HUD font `UiTheme.hud_font()` (14 px floor, `UiTheme.text_scale()`); no gear button or equipment modal in battle.
 - Battle autoplay (AUTO1): `scripts/combat/session/combat_autoplay.gd` (`CombatAutoplay`, tick-driven; tactics in `PlanPresets.AUTO_IDS` + `CUSTOM`); remembered in `GameState.autoplay` (save v7); recorded rounds carry `source` player/auto.
 - Test expectations for a system: its suite in `scripts/tests/` (class rules: `class_rules_test_suite.gd`).
 

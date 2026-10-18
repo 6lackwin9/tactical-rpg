@@ -3,6 +3,9 @@ extends Control
 
 # ==============================================================================
 # Tactical RPG - Combat Dock Host (production combat UI layout)
+# COMBAT-UI2-L1 layout C: timeline row on top, a slim party column (+ inspector) left, the biggest grid in the
+# middle, a slim hostile column (+ forecast) right, playback buttons and the one-line log ticker at the bottom;
+# every size comes from CombatHudMetrics (_fit). No gear button or equipment modal in battle.
 # Static dock regions filled from data-driven layout presets. The game UI stays
 # fixed; a layout edit mode (⚙ / F9) lets any panel be undocked into a floating
 # UiWindow - its region keeps a same-size placeholder so nothing reflows - and
@@ -12,20 +15,21 @@ extends Control
 
 signal layout_changed()
 
-const REGIONS: Array[String] = ["top_left", "top_center", "top_right", "left", "center", "right", "bottom_left", "bottom_center"]
+const REGIONS: Array[String] = ["top", "left_top", "left", "center", "right_top", "right", "bottom_left", "bottom_center"]
 const DEFAULT_LAYOUT: String = "Standard"
 const LAYOUTS: Dictionary = {
 	"Standard": {
-		"top_left": ["party"], "top_center": ["timeline"], "top_right": ["enemies"],
-		"left": ["inspector"], "center": ["grid"], "right": ["forecast"],
+		"top": ["timeline"],
+		"left_top": ["party"], "left": ["inspector"], "center": ["grid"], "right_top": ["enemies"], "right": ["forecast"],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 	"Mirrored": {
-		"top_left": ["enemies"], "top_center": ["timeline"], "top_right": ["party"],
-		"left": ["forecast"], "center": ["grid"], "right": ["inspector"],
+		"top": ["timeline"],
+		"left_top": ["enemies"], "left": ["forecast"], "center": ["grid"], "right_top": ["party"], "right": ["inspector"],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 }
+const CORE_COG_PX: int = 32   # the settings cog (UIR-5: 32 px bordered button)
 const AUTO_PLAY_INTERVAL: float = 0.55
 
 var session: CombatSession = null
@@ -33,7 +37,7 @@ var keys_blocked: bool = false   # BATTLE-FLOW: set while the results popup cove
 var current_layout: String = DEFAULT_LAYOUT
 var log_modal: CombatLogModal
 var timeline_modal: TimelineModal
-var gear_modal: CharacterEquipmentModal = null
+var metrics: CombatHudMetrics = null   # the sizes last applied by _fit()
 
 var _panels: Dictionary = {}    # String -> CombatPanel
 var _regions: Dictionary = {}   # String -> BoxContainer
@@ -46,6 +50,10 @@ var _layout_option: OptionButton
 var _zone_option: OptionButton
 var _edit_mode: bool = false
 var _auto_timer: Timer
+var _top_row: Control
+var _center_row: Control
+var _bottom_panel: PanelContainer
+var _columns: Array[Control] = []
 
 func _init() -> void:
 	name = "CombatDockHost"
@@ -60,37 +68,46 @@ func _init() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 4)
-	margin.add_theme_constant_override("margin_bottom", 4)
+	margin.add_theme_constant_override("margin_left", CombatHudMetrics.MARGIN_H)
+	margin.add_theme_constant_override("margin_right", CombatHudMetrics.MARGIN_H)
+	margin.add_theme_constant_override("margin_top", CombatHudMetrics.MARGIN_V)
+	margin.add_theme_constant_override("margin_bottom", CombatHudMetrics.MARGIN_V)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 4)
+	root.add_theme_constant_override("separation", CombatHudMetrics.ROW_SEP)
 	margin.add_child(root)
 
-	var top := _row(root, 8)
-	top.custom_minimum_size = Vector2(0, 96)
-	_add_region(top, "top_left", false)
-	_add_region(top, "top_center", true)
-	_add_region(top, "top_right", false)
+	# Top row: the timeline, with room at the right for the 32 px settings cog.
+	var top := _row(root, 4)
+	_top_row = top
+	top.custom_minimum_size = Vector2(0, CombatHudMetrics.TOP_H)
+	_add_region(top, "top", true, true)
+	var cog_gap := Control.new()
+	cog_gap.custom_minimum_size = Vector2(CORE_COG_PX + 4, 0)
+	top.add_child(cog_gap)
 
-	var center := _row(root, 10)
+	# Centre row: party column | grid | hostile column.
+	var center := _row(root, CombatHudMetrics.COL_SEP)
+	_center_row = center
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_region(center, "left", false)
-	_add_region(center, "center", true)
-	_add_region(center, "right", false)
+	var left_col := _column(center)
+	_add_region(left_col, "left_top", false, false)
+	_add_region(left_col, "left", false, true)
+	_add_region(center, "center", true, true)
+	var right_col := _column(center)
+	_add_region(right_col, "right_top", false, false)
+	_add_region(right_col, "right", false, true)
 
-	var bottom_panel := PanelContainer.new()
-	bottom_panel.custom_minimum_size = Vector2(0, 96)
-	bottom_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.07, 0.09, 0.14, 0.98), Color(0.22, 0.32, 0.46, 0.9), 6, 8, 3))
-	root.add_child(bottom_panel)
+	_bottom_panel = PanelContainer.new()
+	_bottom_panel.custom_minimum_size = Vector2(0, 36)
+	_bottom_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.07, 0.09, 0.14, 0.98), Color(0.22, 0.32, 0.46, 0.9), 6, 8, 2))
+	root.add_child(_bottom_panel)
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 10)
-	bottom_panel.add_child(bottom)
-	_add_region(bottom, "bottom_left", false)
-	_add_region(bottom, "bottom_center", true)
+	_bottom_panel.add_child(bottom)
+	_add_region(bottom, "bottom_left", false, true)
+	_add_region(bottom, "bottom_center", true, true)
 
 	_float_layer = Control.new()
 	_float_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -118,12 +135,24 @@ func _row(parent: Control, separation: int) -> HBoxContainer:
 	parent.add_child(row)
 	return row
 
-func _add_region(parent: Control, region: String, expand: bool) -> void:
+# A fixed-width column holding two stacked regions (party / inspector, hostiles / forecast).
+func _column(parent: Control) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(CombatHudMetrics.SIDE_W, 0)
+	col.add_theme_constant_override("separation", CombatHudMetrics.COL_GAP)
+	col.clip_contents = true
+	parent.add_child(col)
+	_columns.append(col)
+	return col
+
+func _add_region(parent: Control, region: String, expand_h: bool, expand_v: bool) -> void:
 	var box := VBoxContainer.new()
 	box.name = region
-	box.add_theme_constant_override("separation", 6)
-	if expand:
+	box.add_theme_constant_override("separation", CombatHudMetrics.COL_GAP)
+	if expand_h:
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if expand_v:
+		box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	if region == "center":
 		box.alignment = BoxContainer.ALIGNMENT_CENTER
 	parent.add_child(box)
@@ -162,6 +191,39 @@ func setup(p_session: CombatSession) -> void:
 	session.changed.connect(_on_session_changed)
 	apply_layout(DEFAULT_LAYOUT)
 	_sync_zone_option()
+	resized.connect(_fit)
+	layout_changed.connect(_fit)
+	session.mounted.connect(_fit)
+	_fit()
+
+# Sizes the whole screen from CombatHudMetrics: the grid's tile, the columns' fixed panel heights, the strips.
+func _fit() -> void:
+	if session == null or _panels.is_empty():
+		return
+	var view: Vector2 = size if size.x > 1.0 and size.y > 1.0 else Vector2(1280, 720)
+	metrics = CombatHudMetrics.compute(view, UiTheme.text_scale(), session.allies.size(), maxi(session.enemies.size(), CombatHudMetrics.HOSTILE_SLOTS), session.encounter.party_slots())
+	_top_row.custom_minimum_size = Vector2(0, CombatHudMetrics.TOP_H)
+	_bottom_panel.custom_minimum_size = Vector2(0, metrics.bottom_h)
+	_set_slot_height("party", metrics.party_panel_h)
+	_set_slot_height("enemies", metrics.hostile_panel_h)
+	_set_slot_height("inspector", metrics.inspector_h)
+	_set_slot_height("forecast", metrics.forecast_h)
+	for id: String in ["party", "enemies"]:
+		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
+		if roster != null:
+			roster.apply_metrics(metrics)
+	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
+	if grid != null:
+		grid.set_tile_px(metrics.tile)
+		var board: int = metrics.tile * CombatGridView.GRID_W + CombatGridView.FRAME_PX
+		_set_slot_height("grid", metrics.tile * CombatGridView.GRID_H + CombatGridView.FRAME_PX)
+		_slot("grid").custom_minimum_size.x = board
+
+func _set_slot_height(panel_id: String, h: int) -> void:
+	var slot: MarginContainer = _slot(panel_id)
+	if slot != null:
+		slot.custom_minimum_size = Vector2(0, h)
+		slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
 func get_panel(panel_id: String) -> CombatPanel:
 	var raw: Variant = _panels.get(panel_id, null)
@@ -270,10 +332,14 @@ func apply_layout(layout_name: String) -> void:
 
 func _apply_region_flags(slot: Control, region: String) -> void:
 	match region:
-		"top_center", "bottom_center":
+		"top", "bottom_center":
 			slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		"center":
 			slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		"left", "right":
+			slot.size_flags_horizontal = Control.SIZE_FILL
+			slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		_:
 			slot.size_flags_horizontal = Control.SIZE_FILL
 	var panel_raw: Variant = _panels.get(slot.name.trim_prefix("Slot_"), null)
@@ -342,16 +408,18 @@ func dock_all() -> void:
 
 func _build_edit_controls() -> void:
 	var corner := Button.new()
+	corner.name = "SettingsCog"
 	corner.text = "⚙"
 	corner.tooltip_text = "Layout edit mode [F9]: undock panels, switch layout presets"
 	corner.focus_mode = Control.FOCUS_NONE
-	corner.flat = true
-	corner.add_theme_font_size_override("font_size", 11)
+	corner.add_theme_font_size_override("font_size", UiTheme.hud_font(18))
+	corner.add_theme_stylebox_override("normal", UiTheme.box(Color(0.10, 0.14, 0.20, 0.95), Color(0.38, 0.5, 0.68, 0.9), 4, 2, 2))
+	corner.add_theme_stylebox_override("hover", UiTheme.box(Color(0.16, 0.22, 0.32, 0.95), Color(0.55, 0.75, 1.0, 1.0), 4, 2, 2))
 	corner.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	corner.offset_left = -26
-	corner.offset_right = -2
-	corner.offset_top = 0
-	corner.offset_bottom = 20
+	corner.offset_left = -(CombatHudMetrics.MARGIN_H + CORE_COG_PX) + 12
+	corner.offset_right = corner.offset_left + CORE_COG_PX
+	corner.offset_top = CombatHudMetrics.MARGIN_V
+	corner.offset_bottom = CombatHudMetrics.MARGIN_V + CORE_COG_PX
 	corner.pressed.connect(func() -> void: set_edit_mode(not _edit_mode))
 	add_child(corner)
 
@@ -431,8 +499,6 @@ func open_modal(kind: String) -> void:
 		"timeline":
 			timeline_modal.open_modal()
 			_refresh_timeline_modal()
-		"gear":
-			_open_gear_modal()
 
 func close_modals() -> bool:
 	if log_modal.visible:
@@ -456,16 +522,6 @@ func _refresh_timeline_modal() -> void:
 		session.can_view_next_round()
 	)
 
-# The Party & Stash screen is built on first use (it syncs gear into unit stats).
-func _open_gear_modal() -> void:
-	if gear_modal == null:
-		gear_modal = CharacterEquipmentModal.new()
-		gear_modal.equipment_updated.connect(func(_c: Combatant) -> void: session.notify_external_change())
-		add_child(gear_modal)
-		gear_modal.setup_heroes(session.allies, session.encounter.party_stash)
-	var hero: Combatant = session.selected_combatant if session.is_ally(session.selected_combatant) else session.focused_hero
-	gear_modal.open_modal(hero)
-
 # ------------------------------------------------------------------------------
 # Keyboard shortcuts
 # ------------------------------------------------------------------------------
@@ -488,8 +544,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				timeline_modal.close_modal()
 			else:
 				open_modal("timeline")
-		KEY_G:
-			open_modal("gear")
 		KEY_BACKSPACE:
 			if session.is_planning():
 				session.plan_undo_last()

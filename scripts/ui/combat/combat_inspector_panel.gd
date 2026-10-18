@@ -4,8 +4,8 @@ extends CombatPanel
 # ==============================================================================
 # Tactical RPG - Combat Unit Inspector Panel
 # Portrait, vitals, stance, target and buffs for the selected unit, plus AI threat
-# intel for hostiles. Planning lives in the Plan Round screen. The 🎒 GEAR button
-# asks the host for the Party & Stash screen.
+# intel for hostiles. Planning lives in the Plan Round screen. Read-only: no gear
+# button (equipment is changed outside battle); COMBAT-UI2-L2 turns it into the hover card.
 # ==============================================================================
 
 var inspector: UnitInspectorUI
@@ -15,12 +15,11 @@ func _init() -> void:
 	panel_id = "inspector"
 	panel_title = "Unit Inspector"
 	panel_icon = "🧍"
-	default_min_size = Vector2(270, 468)
+	default_min_size = Vector2(CombatHudMetrics.SIDE_W, 160)
 	inspector = UnitInspectorUI.new()
 	add_child(inspector)
 
 func _on_bound() -> void:
-	inspector.gear_modal_requested.connect(func(_c: Combatant) -> void: modal_requested.emit("gear"))
 	session.hover_changed.connect(func(_c: Combatant) -> void: refresh())   # while planning, hovering inspects
 
 func refresh() -> void:

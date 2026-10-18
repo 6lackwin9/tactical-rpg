@@ -38,7 +38,6 @@ const HARD_CODED: Array[Dictionary] = [
 	{"group": GROUP_COMBAT, "action": "Close the log / timeline panel", "keys": "Esc", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_ESCAPE"]},
 	{"group": GROUP_COMBAT, "action": "Combat log", "keys": "L", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_L"]},
 	{"group": GROUP_COMBAT, "action": "Timeline", "keys": "F, Tab", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_F", "KEY_TAB"]},
-	{"group": GROUP_COMBAT, "action": "Party and gear", "keys": "G", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_G"]},
 	{"group": GROUP_COMBAT, "action": "Undo the last planned step", "keys": "Backspace", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_BACKSPACE"]},
 	{"group": GROUP_COMBAT, "action": "Confirm the plan", "keys": "Enter", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_ENTER", "KEY_KP_ENTER"]},
 	{"group": GROUP_COMBAT, "action": "Previous block", "keys": "Q, Left", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_Q", "KEY_LEFT"]},

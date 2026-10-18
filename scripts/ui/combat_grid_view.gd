@@ -17,10 +17,12 @@ signal tile_unhovered()
 signal grid_right_clicked()      # anywhere on the board (planning: undo the last step)
 signal ghost_clicked(combatant: Combatant)   # a planned-move shadow
 
-const TILE_SIZE: int = 54
+const TILE_SIZE: int = 54   # the default tile; the combat screen fits `tile_px` to the window (CombatHudMetrics)
+const FRAME_PX: int = 4
 const GRID_W: int = CombatGrid.GRID_W
 const GRID_H: int = CombatGrid.GRID_H
 
+var tile_px: int = TILE_SIZE
 var grid_frame: PanelContainer
 var grid_anchor: Control
 var grid_container: GridContainer
@@ -39,22 +41,15 @@ var hover_status_lbl: Label
 
 func _init() -> void:
 	name = "CombatGridView"
-	custom_minimum_size = Vector2(TILE_SIZE * GRID_W + 6, 480)
+	custom_minimum_size = Vector2(tile_px * GRID_W + FRAME_PX, tile_px * GRID_H + FRAME_PX)
 	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	alignment = BoxContainer.ALIGNMENT_CENTER
 	add_theme_constant_override("separation", 4)
 	_build_ui()
 
 func _build_ui() -> void:
-	var grid_header := Label.new()
-	grid_header.text = "%dx%d COMBAT GRID" % [GRID_W, GRID_H]
-	grid_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	grid_header.add_theme_font_size_override("font_size", 11)
-	grid_header.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	add_child(grid_header)
-
 	grid_frame = PanelContainer.new()
-	grid_frame.custom_minimum_size = Vector2(TILE_SIZE * GRID_W + 4, TILE_SIZE * GRID_H + 4)
+	grid_frame.custom_minimum_size = Vector2(tile_px * GRID_W + FRAME_PX, tile_px * GRID_H + FRAME_PX)
 	var frame_style := StyleBoxFlat.new()
 	frame_style.bg_color = Color(0.05, 0.07, 0.1, 1.0)
 	frame_style.border_color = Color(0.22, 0.32, 0.46, 1.0)
@@ -68,7 +63,7 @@ func _build_ui() -> void:
 	add_child(grid_frame)
 
 	grid_anchor = Control.new()
-	grid_anchor.custom_minimum_size = Vector2(TILE_SIZE * GRID_W, TILE_SIZE * GRID_H)
+	grid_anchor.custom_minimum_size = Vector2(tile_px * GRID_W, tile_px * GRID_H)
 	grid_frame.add_child(grid_anchor)
 
 	grid_container = GridContainer.new()
@@ -105,7 +100,7 @@ func _build_ui() -> void:
 	grid_hover_tooltip.name = "GridHoverTooltip"
 	grid_hover_tooltip.visible = false
 	grid_hover_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	grid_hover_tooltip.custom_minimum_size = Vector2(130, 46)
+	grid_hover_tooltip.custom_minimum_size = Vector2(130, 46)   # grows with the text size
 	var hov_style := StyleBoxFlat.new()
 	hov_style.bg_color = Color(0.06, 0.08, 0.12, 0.96)
 	hov_style.border_color = Color(0.35, 0.55, 0.85, 0.9)
@@ -123,18 +118,51 @@ func _build_ui() -> void:
 	grid_hover_tooltip.add_child(hov_vbox)
 
 	hover_name_lbl = Label.new()
-	hover_name_lbl.add_theme_font_size_override("font_size", 9)
+	hover_name_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	hov_vbox.add_child(hover_name_lbl)
 
 	hover_hp_lbl = Label.new()
-	hover_hp_lbl.add_theme_font_size_override("font_size", 8)
+	hover_hp_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	hover_hp_lbl.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
 	hov_vbox.add_child(hover_hp_lbl)
 
 	hover_status_lbl = Label.new()
-	hover_status_lbl.add_theme_font_size_override("font_size", 7)
+	hover_status_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	hover_status_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.85))
 	hov_vbox.add_child(hover_status_lbl)
+
+# Resizes the board to `px` per tile (COMBAT-UI2: the biggest tile the window allows): tiles, frame, tokens and
+# ghosts. Token positions follow the grid cells they stand on; the owner redraws overlays and FX afterwards.
+func set_tile_px(px: int) -> void:
+	if px == tile_px:
+		return
+	tile_px = px
+	var board := Vector2(px * GRID_W, px * GRID_H)
+	custom_minimum_size = board + Vector2(FRAME_PX, FRAME_PX)
+	grid_frame.custom_minimum_size = board + Vector2(FRAME_PX, FRAME_PX)
+	grid_anchor.custom_minimum_size = board
+	plan_overlay.tile = px
+	plan_overlay.queue_redraw()
+	for child: Node in grid_container.get_children():
+		var tile_rect: Control = child as Control
+		if tile_rect != null:
+			tile_rect.custom_minimum_size = Vector2(px, px)
+	for token: Variant in unit_token_nodes.values():
+		var ctrl: Control = token as Control
+		if ctrl == null:
+			continue
+		ctrl.custom_minimum_size = Vector2(px, px)
+		ctrl.size = Vector2(px, px)
+		for part: Node in ctrl.get_children():
+			var part_ctrl: Control = part as Control
+			if part_ctrl == null:
+				continue
+			if part_ctrl is TextureRect:
+				part_ctrl.custom_minimum_size = Vector2(px - 6, px - 6)
+				part_ctrl.size = Vector2(px - 6, px - 6)
+			else:
+				part_ctrl.custom_minimum_size = Vector2(px, px)
+				part_ctrl.size = Vector2(px, px)
 
 # Builds the 12x9 board from per-tile textures (Vector2i -> Texture2D), optional
 # overlays drawn on top (exits, landmarks) and hover tooltips (terrain info).
@@ -148,7 +176,7 @@ func setup_tile_textures(textures: Dictionary, overlays: Dictionary = {}, toolti
 		for x: int in range(GRID_W):
 			var coord := Vector2i(x, y)
 			var tile_rect := TextureRect.new()
-			tile_rect.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
+			tile_rect.custom_minimum_size = Vector2(tile_px, tile_px)
 			tile_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			tile_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			tile_rect.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -191,12 +219,12 @@ func clear_tokens() -> void:
 
 func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vector2i) -> Control:
 	var token_ctrl := Control.new()
-	token_ctrl.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
+	token_ctrl.custom_minimum_size = Vector2(tile_px, tile_px)
 	token_ctrl.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
 	var icon := TextureRect.new()
 	icon.texture = texture
-	icon.custom_minimum_size = Vector2(TILE_SIZE - 6, TILE_SIZE - 6)
+	icon.custom_minimum_size = Vector2(tile_px - 6, tile_px - 6)
 	icon.position = Vector2(3, 3)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -205,7 +233,7 @@ func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vecto
 
 	var sel_border := ReferenceRect.new()
 	sel_border.name = "SelectionBorder"
-	sel_border.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
+	sel_border.custom_minimum_size = Vector2(tile_px, tile_px)
 	sel_border.border_color = Color(1.0, 0.85, 0.25, 0.95)
 	sel_border.border_width = 2.0
 	sel_border.editor_only = false
@@ -238,7 +266,7 @@ func create_unit_token(combatant: Combatant, texture: Texture2D, grid_pos: Vecto
 	else:
 		token_ctrl.visible = true
 		token_ctrl.modulate.a = 1.0
-		token_ctrl.position = Vector2(grid_pos.x * TILE_SIZE, grid_pos.y * TILE_SIZE)
+		token_ctrl.position = Vector2(grid_pos.x * tile_px, grid_pos.y * tile_px)
 
 	return token_ctrl
 
@@ -253,9 +281,9 @@ func update_ghosts(ghosts: Array[Dictionary]) -> void:
 		var small: bool = DictUtil.to_bool(g.get("small", false))
 		keep[unit] = true
 		var node: Control = _ghost_for(unit, g.get("texture", null))
-		var size_px: float = 28.0 if small else float(TILE_SIZE - 8)
+		var size_px: float = 28.0 if small else float(tile_px - 8)
 		node.size = Vector2(size_px, size_px)
-		node.position = Vector2(cell * TILE_SIZE) + (Vector2(TILE_SIZE - size_px - 2, 2) if small else Vector2(4, 4))
+		node.position = Vector2(cell * tile_px) + (Vector2(tile_px - size_px - 2, 2) if small else Vector2(4, 4))
 		node.visible = true
 	for unit_key: Variant in ghost_nodes:
 		if not keep.has(unit_key):
@@ -350,15 +378,15 @@ func show_hover_card(
 	# Position adjacent to token within grid boundaries
 	var target_pos: Vector2
 	if token != null and token.visible and pos != Vector2i(-1, -1):
-		target_pos = token.position + Vector2(TILE_SIZE + 4, -4)
+		target_pos = token.position + Vector2(tile_px + 4, -4)
 	elif pos != Vector2i(-1, -1):
-		target_pos = Vector2(pos.x * TILE_SIZE + TILE_SIZE + 4, pos.y * TILE_SIZE - 4)
+		target_pos = Vector2(pos.x * tile_px + tile_px + 4, pos.y * tile_px - 4)
 	else:
 		target_pos = Vector2(8, 8)
 
-	if target_pos.x + 140 > GRID_W * TILE_SIZE:
+	if target_pos.x + 140 > GRID_W * tile_px:
 		target_pos.x = maxf(0.0, target_pos.x - 146)
-	if target_pos.y + 55 > GRID_H * TILE_SIZE:
+	if target_pos.y + 55 > GRID_H * tile_px:
 		target_pos.y = maxf(0.0, target_pos.y - 45)
 	grid_hover_tooltip.position = target_pos
 	grid_hover_tooltip.z_index = 50

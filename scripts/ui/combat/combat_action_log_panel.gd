@@ -3,8 +3,8 @@ extends CombatPanel
 
 # ==============================================================================
 # Tactical RPG - Combat Action Log Panel
-# Compact single-cell resolution log (ActionLogDockUI). ◀ ▶ step through entries,
-# clicking a cell jumps to it, ⛶ EXPAND asks the host for the full log modal.
+# One-line log ticker (ActionLogDockUI, newest line). ◀ ▶ step through entries,
+# clicking the line or Expand asks the host for the full log modal over the grid.
 # ==============================================================================
 
 var dock: ActionLogDockUI
@@ -14,10 +14,11 @@ func _init() -> void:
 	panel_id = "action_log"
 	panel_title = "Resolution Log"
 	panel_icon = "📜"
-	default_min_size = Vector2(430, 84)
+	default_min_size = Vector2(200, 28)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dock = ActionLogDockUI.new()
 	dock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dock.set_ticker(true, UiTheme.hud_font())
 	add_child(dock)
 
 func _on_bound() -> void:
@@ -30,4 +31,5 @@ func _on_bound() -> void:
 func refresh() -> void:
 	if session == null:
 		return
+	dock.empty_text = "No actions yet: %s" % session.status_text if session.is_planning() and not session.status_text.is_empty() else "No actions yet"
 	dock.update_active_cell(session.log_entries, session.active_log_index)

@@ -14,7 +14,7 @@ func _init() -> void:
 	panel_id = "forecast"
 	panel_title = "Tactical Forecast"
 	panel_icon = "🎯"
-	default_min_size = Vector2(270, 468)
+	default_min_size = Vector2(CombatHudMetrics.SIDE_W, 160)
 	forecast = TacticalForecastUI.new()
 	add_child(forecast)
 

@@ -9,13 +9,14 @@ extends Control
 # ring plus a short cost hint. Purely visual; mouse input passes through.
 # ==============================================================================
 
-const TILE: int = 54
+const TILE: int = 54   # the default; the combat screen fits `tile` to the window (CombatHudMetrics)
 const COL_COMMITTED: Color = Color(1.0, 0.85, 0.3, 0.9)
 const COL_PREVIEW: Color = Color(0.35, 0.9, 1.0, 0.95)
 const COL_REACH: Color = Color(1.0, 0.35, 0.35, 0.16)
 const HINT_WIDTH: float = 150.0
 const NONE: Vector2i = Vector2i(-1, -1)
 
+var tile: int = TILE
 var ghost_texture: Texture2D = null
 var committed_trail: Array[Vector2i] = []    # every tile walked, from the start tile
 var committed_marks: Array[Vector2i] = []    # tiles where a move block ends (numbered)
@@ -67,29 +68,29 @@ func refresh_hint() -> void:
 		_hint_label.text = hint_text
 		_hint_label.custom_minimum_size.x = HINT_WIDTH   # wraps inside the grid
 		_hint_label.size = Vector2(HINT_WIDTH, 0.0)
-		var pos: Vector2 = Vector2(hint_cell) * TILE + Vector2(TILE + 2, -2)
+		var pos: Vector2 = Vector2(hint_cell) * tile + Vector2(tile + 2, -2)
 		if pos.x > size.x - HINT_WIDTH:
-			pos.x = Vector2(hint_cell).x * TILE - HINT_WIDTH
+			pos.x = Vector2(hint_cell).x * tile - HINT_WIDTH
 		pos.x = clampf(pos.x, 0.0, maxf(0.0, size.x - HINT_WIDTH))
 		var hint_h: float = _hint_label.get_combined_minimum_size().y
 		_hint_label.position = Vector2(pos.x, clampf(pos.y, 0.0, maxf(0.0, size.y - hint_h)))
 	queue_redraw()
 
-static func _center(cell: Vector2i) -> Vector2:
-	return Vector2(cell) * TILE + Vector2(TILE, TILE) * 0.5
+func _center(cell: Vector2i) -> Vector2:
+	return Vector2(cell) * tile + Vector2(tile, tile) * 0.5
 
 func _draw() -> void:
 	for cell: Vector2i in reach_tiles:
-		draw_rect(Rect2(Vector2(cell) * TILE + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), COL_REACH)
+		draw_rect(Rect2(Vector2(cell) * tile + Vector2(2, 2), Vector2(tile - 4, tile - 4)), COL_REACH)
 	for cell: Vector2i in ally_hit_tiles:
-		draw_rect(Rect2(Vector2(cell) * TILE + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(1.0, 0.6, 0.1, 0.45))
-		draw_rect(Rect2(Vector2(cell) * TILE + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(1.0, 0.6, 0.1, 0.95), false, 2.0)
+		draw_rect(Rect2(Vector2(cell) * tile + Vector2(2, 2), Vector2(tile - 4, tile - 4)), Color(1.0, 0.6, 0.1, 0.45))
+		draw_rect(Rect2(Vector2(cell) * tile + Vector2(2, 2), Vector2(tile - 4, tile - 4)), Color(1.0, 0.6, 0.1, 0.95), false, 2.0)
 	_draw_trail(committed_trail, committed_marks, COL_COMMITTED, true)
 	_draw_ghost(committed_ghost, 0.3)   # where the hero starts (its token shows the planned spot)
 	_draw_trail(preview_trail, preview_marks, COL_PREVIEW, false)
 	_draw_ghost(preview_ghost, 0.7)
 	if preview_target != NONE:
-		draw_arc(_center(preview_target), TILE * 0.46, 0.0, TAU, 28, Color(1.0, 0.35, 0.35, 0.95), 2.5)
+		draw_arc(_center(preview_target), tile * 0.46, 0.0, TAU, 28, Color(1.0, 0.35, 0.35, 0.95), 2.5)
 
 func _draw_trail(trail: Array[Vector2i], marks: Array[Vector2i], col: Color, numbered: bool) -> void:
 	if trail.size() < 2:
@@ -104,7 +105,7 @@ func _draw_trail(trail: Array[Vector2i], marks: Array[Vector2i], col: Color, num
 func _draw_ghost(cell: Vector2i, alpha: float) -> void:
 	if cell == NONE:
 		return
-	var rect := Rect2(Vector2(cell) * TILE + Vector2(5, 5), Vector2(TILE - 10, TILE - 10))
+	var rect := Rect2(Vector2(cell) * tile + Vector2(5, 5), Vector2(tile - 10, tile - 10))
 	if ghost_texture != null:
 		draw_texture_rect(ghost_texture, rect, false, Color(1, 1, 1, alpha))
 	else:

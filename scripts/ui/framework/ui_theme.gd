@@ -24,6 +24,19 @@ const COL_BAD: Color = Color(0.97, 0.45, 0.45)
 const COL_WARN: Color = Color(0.98, 0.78, 0.3)
 const COL_INFO: Color = Color(0.4, 0.8, 1.0)
 
+const HUD_FONT: int = 14   # UIR-5: the smallest combat HUD text at Normal size
+
+# The saved text size (settings `ui/text_scale`: Small .. Extra large) as a factor; 1.0 at Normal.
+static func text_scale() -> float:
+	return maxf(0.5, SettingsFile.get_float("ui/text_scale"))
+
+# A font size scaled by the text size setting (X8); HUD text uses `hud_font()` so Normal never goes below 14 px.
+static func scaled(px: int) -> int:
+	return roundi(float(px) * text_scale())
+
+static func hud_font(px: int = HUD_FONT) -> int:
+	return scaled(maxi(px, HUD_FONT))
+
 static func box(
 	bg: Color = COL_CARD_BG,
 	border: Color = COL_BORDER,

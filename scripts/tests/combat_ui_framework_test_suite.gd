@@ -19,7 +19,7 @@ static func run(tree_parent: Node = null) -> bool:
 
 	# 1. Every panel is mounted in its dock region of the default layout
 	var expected_regions: Dictionary = {
-		"party": "top_left", "timeline": "top_center", "enemies": "top_right",
+		"party": "left_top", "timeline": "top", "enemies": "right_top",
 		"inspector": "left", "grid": "center", "forecast": "right",
 		"playback": "bottom_left", "action_log": "bottom_center",
 	}
@@ -118,7 +118,9 @@ static func run(tree_parent: Node = null) -> bool:
 	host.free()
 	session.dispose()
 
-	return (docks_ok and tokens_ok and inspector_ok and layout_stable and forecast_ok and
+	var hud_ok: bool = _hud_checks(tree_parent)
+
+	return (hud_ok and docks_ok and tokens_ok and inspector_ok and layout_stable and forecast_ok and
 		log_modal_ok and timeline_modal_ok and signals_ok and layout_ok)
 
 
@@ -138,3 +140,169 @@ static func _sort_now(node: Node) -> void:
 		(node as Container).notification(Container.NOTIFICATION_SORT_CHILDREN)
 	for child: Node in node.get_children():
 		_sort_now(child)
+
+
+# ------------------------------------------------------------------------------
+# COMBAT-UI2-L1: layout C numbers (derived from the rules in CombatHudMetrics / the spec, not from shipped content)
+# ------------------------------------------------------------------------------
+
+const VIEWS: Array[Vector2] = [Vector2(1280, 720), Vector2(1280, 800), Vector2(1680, 720)]
+
+static func _hud_checks(tree_parent: Node) -> bool:
+	var checks: Dictionary = {}
+	var saved_scale: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+
+	# Pure metrics: the tile formula, minimum tile, fixed column heights, line dropping, at every size and text size.
+	var tile_ok: bool = true
+	var heights_ok: bool = true
+	var rows_ok: bool = true
+	for view: Vector2 in VIEWS:
+		var last_party_rows: int = 99
+		var last_hostile_rows: int = 99
+		for scale: float in SettingsFile.TEXT_LEVELS:
+			for party_n: int in [1, 3]:
+				var m: CombatHudMetrics = CombatHudMetrics.compute(view, scale, party_n, 5)
+				var expect: int = maxi(48, floori(minf(float(m.area_h - CombatHudMetrics.FRAME) / 9.0, float(m.area_w - CombatHudMetrics.FRAME) / 12.0)))
+				tile_ok = tile_ok and m.tile == expect and m.tile >= 48
+				heights_ok = heights_ok and m.party_panel_h + m.inspector_h + CombatHudMetrics.COL_GAP == m.area_h
+				heights_ok = heights_ok and m.hostile_panel_h + m.forecast_h + CombatHudMetrics.COL_GAP == m.area_h and not m.hostile_scroll
+				heights_ok = heights_ok and m.inspector_h > 0 and m.forecast_h > 0
+				if party_n == 3:
+					rows_ok = rows_ok and m.party_rows <= last_party_rows and m.hostile_rows <= last_hostile_rows
+					last_party_rows = m.party_rows
+					last_hostile_rows = m.hostile_rows
+				rows_ok = rows_ok and m.party_rows >= CombatHudMetrics.PARTY_ROWS_MIN and m.hostile_rows >= CombatHudMetrics.HOSTILE_ROWS_MIN
+	checks["tile = floor(min(h/9, w/12)), at least 48, at 3 window sizes x 4 text sizes"] = tile_ok
+	checks["column panel heights are fixed and add up to the centre row, no hostile scroll"] = heights_ok
+	checks["cards only drop lines as text grows (never below the minimum rows)"] = rows_ok
+	checks["tile_for: a short area is height-bound, a narrow one width-bound, tiny floors at 48"] = (
+		CombatHudMetrics.tile_for(Vector2(2000, 540)) == 60 and CombatHudMetrics.tile_for(Vector2(600, 2000)) == 50
+		and CombatHudMetrics.tile_for(Vector2(100, 100)) == CombatHudMetrics.MIN_TILE)
+
+	# Text scale: the HUD font never drops below 14 px at Normal and follows the setting.
+	SettingsFile.set_value("ui/text_scale", 1.0)
+	var normal: int = UiTheme.hud_font(9)
+	SettingsFile.set_value("ui/text_scale", 1.3)
+	var large: int = UiTheme.hud_font(9)
+	SettingsFile.set_value("ui/text_scale", saved_scale)
+	checks["HUD font: 14 px floor at Normal, scaled by the text size"] = normal == 14 and large == roundi(14.0 * 1.3)
+
+	if tree_parent != null:
+		var session := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+		var host := CombatDockHost.new()
+		tree_parent.add_child(host)
+		host.setup(session)
+		session.start()
+		var party: CombatRosterPanel = host.get_panel("party") as CombatRosterPanel
+		var foes: CombatRosterPanel = host.get_panel("enemies") as CombatRosterPanel
+		var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+		var in_view: int = session.enemies_in_view().size()
+		checks["hero and hostile cards all show (one per unit in view, no scrolling)"] = (
+			party.visible_card_count() == session.allies.size() and foes.visible_card_count() == in_view and in_view >= 1
+			and not host.metrics.hostile_scroll)
+		checks["empty party slots are muted outlines up to the slot count"] = party.empty_slot_count() == host.metrics.party_slots - session.allies.size()
+
+		# Sizes at each window size: the grid tile, the fixed panel heights, nothing outside the window.
+		var sizes_ok: bool = true
+		var fixed_ok: bool = true
+		var inside_ok: bool = true
+		for view: Vector2 in VIEWS:
+			host.size = view
+			host._fit()
+			_sort_now(host)
+			sizes_ok = sizes_ok and host.metrics.tile >= 48 and grid.grid_view.tile_px == host.metrics.tile
+			fixed_ok = fixed_ok and party.content_fits() and foes.content_fits() and host._slot("party").custom_minimum_size.y == host.metrics.party_panel_h and host._slot("enemies").custom_minimum_size.y == host.metrics.hostile_panel_h
+			for id: String in ["timeline", "party", "grid", "enemies", "forecast", "action_log"]:
+				var r: Rect2 = host.get_panel(id).get_global_rect()
+				inside_ok = inside_ok and r.position.x >= -0.5 and r.end.x <= view.x + 0.5
+			session.select_combatant(session.enemies[0])   # selecting a hostile keeps the fixed heights
+			fixed_ok = fixed_ok and party.content_fits() and foes.content_fits() and host._slot("party").custom_minimum_size.y == host.metrics.party_panel_h
+			session.select_combatant(session.allies[0])
+		checks["grid tile fitted to the window (>= 48) at 1280x720, 1280x800, 1680x720"] = sizes_ok
+		checks["party and hostile panels keep their fixed heights; every panel inside the window"] = fixed_ok and inside_ok
+
+		# A hero card click selects that hero for the timeline.
+		var second: Combatant = session.allies[1]
+		var card: Control = party._card_for(second)
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		card.gui_input.emit(click)
+		checks["clicking a hero card selects the hero"] = session.selected_combatant == second and session.focused_hero == second
+
+		# Rule 7: no gear button, no equipment modal path in battle.
+		var gear_buttons: int = 0
+		for node: Node in host.find_children("*", "Button", true, false):
+			var btn: Button = node as Button
+			if btn.text.contains("GEAR") or btn.text.contains("🎒") or btn.tooltip_text.contains("Gear"):
+				gear_buttons += 1
+		host.open_modal("gear")
+		var key := InputEventKey.new()
+		key.keycode = KEY_G
+		key.pressed = true
+		host._unhandled_input(key)
+		checks["no gear button and no equipment modal path in the battle scene"] = (
+			gear_buttons == 0 and host.find_children("*", "CharacterEquipmentModal", true, false).is_empty()
+			and not ("btn_gear" in (host.get_panel("playback") as CombatPlaybackPanel).controls)
+			and not ("btn_gear_modal" in (host.get_panel("inspector") as CombatInspectorPanel).inspector))
+
+		# The log is a one-line ticker; Expand opens the log modal.
+		var ticker: ActionLogDockUI = (host.get_panel("action_log") as CombatActionLogPanel).dock
+		checks["log is a one-line ticker that expands into the log modal"] = ticker.ticker and ticker.ticker_lbl != null and not ticker.ticker_lbl.text.contains("\n")
+		ticker.btn_expand_log.pressed.emit()
+		checks["log is a one-line ticker that expands into the log modal"] = checks["log is a one-line ticker that expands into the log modal"] and host.log_modal.visible
+		host.close_modals()
+
+		tree_parent.remove_child(host)
+		host.free()
+		session.dispose()
+
+		# One screen per case: the largest text size on its own host.
+		SettingsFile.set_value("ui/text_scale", 1.3)
+		var xl_session := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+		var xl_host := CombatDockHost.new()
+		tree_parent.add_child(xl_host)
+		xl_host.size = Vector2(1280, 720)
+		xl_host.setup(xl_session)
+		xl_session.start()
+		_sort_now(xl_host)
+		var xl_party: CombatRosterPanel = xl_host.get_panel("party") as CombatRosterPanel
+		var xl_foes: CombatRosterPanel = xl_host.get_panel("enemies") as CombatRosterPanel
+		var xl_ok: bool = xl_host.metrics.fs == roundi(14.0 * 1.3) and xl_host.metrics.tile >= 48
+		xl_ok = xl_ok and xl_party.visible_card_count() == xl_session.allies.size() and xl_foes.visible_card_count() == xl_session.enemies_in_view().size()
+		xl_ok = xl_ok and xl_party.content_fits() and xl_foes.content_fits() and xl_host.metrics.party_panel_h + xl_host.metrics.inspector_h + CombatHudMetrics.COL_GAP == xl_host.metrics.area_h
+		checks["Extra large text: cards still show, grid >= 48, cards fit their fixed heights"] = xl_ok
+		tree_parent.remove_child(xl_host)
+		xl_host.free()
+		xl_session.dispose()
+		SettingsFile.set_value("ui/text_scale", saved_scale)
+
+	checks["party slots follow the cap, never fewer than the heroes, fallback 3 when unknown"] = (
+		CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 2).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 4).party_slots == 4
+		and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 1).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 1, 5).party_slots == CombatHudMetrics.PARTY_SLOTS)
+	if tree_parent != null:
+		var cap_ok: bool = true
+		for cap: int in [2, 4]:   # one screen per case
+			var enc := CatalogEncounter.new("goblin_skirmish")
+			enc.party_cap = cap
+			var cap_session := CombatSession.new(enc)
+			var cap_host := CombatDockHost.new()
+			tree_parent.add_child(cap_host)
+			cap_host.setup(cap_session)
+			cap_session.start()
+			var cap_party: CombatRosterPanel = cap_host.get_panel("party") as CombatRosterPanel
+			cap_ok = cap_ok and cap_party.empty_slot_count() + cap_session.allies.size() == maxi(cap, cap_session.allies.size()) and cap_host.metrics.party_slots == maxi(cap, cap_session.allies.size())
+			tree_parent.remove_child(cap_host)
+			cap_host.free()
+			cap_session.dispose()
+		checks["a party cap of 2 shows 2 slots and a cap of 4 shows 4 (heroes + muted empty slots)"] = cap_ok
+
+	print("\n=======================================================")
+	print("=== COMBAT UI LAYOUT C (COMBAT-UI2-L1) ASSERTIONS   ===")
+	print("=======================================================")
+	var all_ok: bool = true
+	for label: String in checks:
+		var ok: bool = DictUtil.to_bool(checks[label])
+		all_ok = all_ok and ok
+		print("  [UI] %s: %s" % [label, "PASS" if ok else "FAIL"])
+	return all_ok

@@ -72,3 +72,7 @@ func hero_key(c: Combatant) -> String:
 	if _member_ids.has(c):
 		return str(_member_ids[c])
 	return super(c)
+
+# The saved party's cap (`PartyState.max_active`); without a party the world's cap.
+func party_slots() -> int:
+	return party_state.max_active if party_state != null else super()

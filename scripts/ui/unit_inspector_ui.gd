@@ -7,12 +7,9 @@ extends PanelContainer
 # and hostile AI threat intel.
 # ==============================================================================
 
-signal gear_modal_requested(combatant: Combatant)
-
-const PANEL_WIDTH: float = 270.0
+const PANEL_WIDTH: float = 220.0
 
 var inspector_hdr: Label
-var btn_gear_modal: Button
 var inspector_avatar: TextureRect
 var inspector_name_lbl: Label
 var inspector_team_lbl: Label
@@ -36,7 +33,7 @@ var current_inspected_combatant: Combatant = null
 func _init() -> void:
 	name = "UnitInspectorUI"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(PANEL_WIDTH, 468)
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	clip_contents = true   # the width is fixed: long text wraps or ellipsizes, it never widens the panel
 
 	var left_style := StyleBoxFlat.new()
@@ -53,31 +50,25 @@ func _init() -> void:
 	_build_ui()
 
 func _build_ui() -> void:
+	var scroll := ScrollContainer.new()   # a fixed-height panel: the details scroll when the text size needs more room
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(scroll)
 	var left_vbox := VBoxContainer.new()
-	left_vbox.add_theme_constant_override("separation", 5)
-	add_child(left_vbox)
+	left_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_vbox.add_theme_constant_override("separation", 3)
+	scroll.add_child(left_vbox)
 
 	var top_hdr_row := HBoxContainer.new()
 	left_vbox.add_child(top_hdr_row)
 
 	inspector_hdr = Label.new()
-	inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
-	inspector_hdr.add_theme_font_size_override("font_size", 10)
+	inspector_hdr.text = "INSPECTOR"
+	inspector_hdr.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
 	inspector_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_hdr.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	top_hdr_row.add_child(inspector_hdr)
 
-	btn_gear_modal = Button.new()
-	btn_gear_modal.text = "🎒 GEAR"
-	btn_gear_modal.add_theme_font_size_override("font_size", 9)
-	btn_gear_modal.tooltip_text = "Open Character Gear & Attribute Screen"
-	btn_gear_modal.focus_mode = Control.FOCUS_NONE
-	btn_gear_modal.pressed.connect(func() -> void:
-		if current_inspected_combatant != null:
-			gear_modal_requested.emit(current_inspected_combatant)
-	)
-	top_hdr_row.add_child(btn_gear_modal)
 
 	# Selected Unit Profile Card (2-Block: Left=Sprite+Vitals, Right=Stats)
 	var profile_card := PanelContainer.new()
@@ -93,15 +84,13 @@ func _build_ui() -> void:
 	profile_card.add_theme_stylebox_override("panel", prof_style)
 	left_vbox.add_child(profile_card)
 
-	var prof_hbox := HBoxContainer.new()
-	prof_hbox.add_theme_constant_override("separation", 10)
-	profile_card.add_child(prof_hbox)
-
-	# Left Block: Avatar Sprite + Vitals
-	var left_block := VBoxContainer.new()
-	left_block.custom_minimum_size = Vector2(92, 0)
-	left_block.add_theme_constant_override("separation", 4)
-	prof_hbox.add_child(left_block)
+	var prof_vbox := VBoxContainer.new()
+	prof_vbox.add_theme_constant_override("separation", 3)
+	profile_card.add_child(prof_vbox)
+	var prof_hbox := HBoxContainer.new()   # avatar beside the name and team
+	prof_hbox.add_theme_constant_override("separation", 6)
+	prof_vbox.add_child(prof_hbox)
+	var left_block := prof_vbox   # the gauges sit under the avatar row
 
 	var sprite_frame := PanelContainer.new()
 	var spr_style := StyleBoxFlat.new()
@@ -114,10 +103,10 @@ func _build_ui() -> void:
 	spr_style.content_margin_top = 2
 	spr_style.content_margin_bottom = 2
 	sprite_frame.add_theme_stylebox_override("panel", spr_style)
-	left_block.add_child(sprite_frame)
+	prof_hbox.add_child(sprite_frame)
 
 	inspector_avatar = TextureRect.new()
-	inspector_avatar.custom_minimum_size = Vector2(88, 88)
+	inspector_avatar.custom_minimum_size = Vector2(52, 52)
 	inspector_avatar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	inspector_avatar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	sprite_frame.add_child(inspector_avatar)
@@ -131,18 +120,18 @@ func _build_ui() -> void:
 	hp_gauge_vbox.add_child(hp_hdr_row)
 	var hp_tag := Label.new()
 	hp_tag.text = "HP"
-	hp_tag.add_theme_font_size_override("font_size", 9)
+	hp_tag.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	hp_tag.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
 	hp_hdr_row.add_child(hp_tag)
 	hp_hdr_row.add_spacer(false)
 	inspector_hp_lbl = Label.new()
 	inspector_hp_lbl.text = "100/100"
-	inspector_hp_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_hp_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_hp_lbl.add_theme_color_override("font_color", Color.WHITE)
 	hp_hdr_row.add_child(inspector_hp_lbl)
 
 	inspector_hp_bar = ProgressBar.new()
-	inspector_hp_bar.custom_minimum_size = Vector2(88, 8)
+	inspector_hp_bar.custom_minimum_size = Vector2(0, 8)
 	inspector_hp_bar.show_percentage = false
 	var hp_bg := StyleBoxFlat.new()
 	hp_bg.bg_color = Color(0.18, 0.08, 0.08, 0.9)
@@ -163,18 +152,18 @@ func _build_ui() -> void:
 	ap_gauge_vbox.add_child(ap_hdr_row)
 	var ap_tag := Label.new()
 	ap_tag.text = "AP"
-	ap_tag.add_theme_font_size_override("font_size", 9)
+	ap_tag.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	ap_tag.add_theme_color_override("font_color", Color(0.3, 0.75, 1.0))
 	ap_hdr_row.add_child(ap_tag)
 	ap_hdr_row.add_spacer(false)
 	inspector_ap_lbl = Label.new()
 	inspector_ap_lbl.text = "12/12"
-	inspector_ap_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_ap_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_ap_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
 	ap_hdr_row.add_child(inspector_ap_lbl)
 
 	inspector_ap_bar = ProgressBar.new()
-	inspector_ap_bar.custom_minimum_size = Vector2(88, 8)
+	inspector_ap_bar.custom_minimum_size = Vector2(0, 8)
 	inspector_ap_bar.show_percentage = false
 	inspector_ap_bar.max_value = 12
 	inspector_ap_bar.value = 12
@@ -189,76 +178,77 @@ func _build_ui() -> void:
 	hp_gauge_vbox.add_child(inspector_ap_bar)
 
 	# Right Block: Identity & Stats
-	var right_block := VBoxContainer.new()
+	var head_block := VBoxContainer.new()
+	head_block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prof_hbox.add_child(head_block)
+	var right_block := VBoxContainer.new()   # the stat lines under the gauges
 	right_block.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_block.add_theme_constant_override("separation", 3)
-	prof_hbox.add_child(right_block)
+	right_block.add_theme_constant_override("separation", 2)
+	prof_vbox.add_child(right_block)
 
 	inspector_name_lbl = Label.new()
 	inspector_name_lbl.text = "Warrior"
-	inspector_name_lbl.add_theme_font_size_override("font_size", 12)
+	inspector_name_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font(16))
 	inspector_name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	_wrap(inspector_name_lbl)
-	right_block.add_child(inspector_name_lbl)
+	head_block.add_child(inspector_name_lbl)
 
 	inspector_team_lbl = Label.new()
-	inspector_team_lbl.text = "Allied Hero (Melee Frontline)"
-	inspector_team_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_team_lbl.text = "Hero"
+	inspector_team_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
 	_wrap(inspector_team_lbl)
-	right_block.add_child(inspector_team_lbl)
+	head_block.add_child(inspector_team_lbl)
 
 	var info_sep := HSeparator.new()
 	right_block.add_child(info_sep)
 
 	inspector_stance_lbl = Label.new()
 	inspector_stance_lbl.text = "Stance: Neutral"
-	inspector_stance_lbl.add_theme_font_size_override("font_size", 10)
+	inspector_stance_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_stance_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
 	right_block.add_child(inspector_stance_lbl)
 
-	var stats_row1 := HBoxContainer.new()
+	var stats_row1 := VBoxContainer.new()
 	right_block.add_child(stats_row1)
 	inspector_speed_lbl = Label.new()
 	inspector_speed_lbl.text = "Speed: 15"
-	inspector_speed_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_speed_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_speed_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	stats_row1.add_child(inspector_speed_lbl)
 
-	stats_row1.add_spacer(false)
 	inspector_range_lbl = Label.new()
 	inspector_range_lbl.text = "Reach: 1 tile"
-	inspector_range_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_range_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_range_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	stats_row1.add_child(inspector_range_lbl)
 
-	var stats_row2 := HBoxContainer.new()
+	var stats_row2 := VBoxContainer.new()
 	right_block.add_child(stats_row2)
 	inspector_pos_lbl = Label.new()
 	inspector_pos_lbl.text = "Pos: (4, 4)"
-	inspector_pos_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_pos_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_pos_lbl.add_theme_color_override("font_color", Color(0.5, 0.7, 0.9))
 	stats_row2.add_child(inspector_pos_lbl)
 
 	inspector_target_lbl = Label.new()
 	inspector_target_lbl.text = "Target: Enemy Brawler"
-	inspector_target_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_target_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_target_lbl.add_theme_color_override("font_color", Color(0.9, 0.75, 0.4))
 	inspector_target_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inspector_target_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	inspector_target_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	stats_row2.add_child(inspector_target_lbl)
 
 	inspector_buffs_lbl = Label.new()
 	inspector_buffs_lbl.text = "Effects: None active"
-	inspector_buffs_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_buffs_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_buffs_lbl.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
 	_wrap(inspector_buffs_lbl)
 	right_block.add_child(inspector_buffs_lbl)
 
 	inspector_gear_lbl = Label.new()
 	inspector_gear_lbl.text = "Gear: Default Loadout"
-	inspector_gear_lbl.add_theme_font_size_override("font_size", 9)
+	inspector_gear_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	inspector_gear_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
 	_wrap(inspector_gear_lbl)
 	right_block.add_child(inspector_gear_lbl)
@@ -275,14 +265,14 @@ func _build_ui() -> void:
 
 	var enemy_deck_hdr := Label.new()
 	enemy_deck_hdr.text = "THREAT INTEL (AI BEHAVIOUR)"
-	enemy_deck_hdr.add_theme_font_size_override("font_size", 10)
+	enemy_deck_hdr.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	enemy_deck_hdr.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 	_wrap(enemy_deck_hdr)
 	enemy_actions_container.add_child(enemy_deck_hdr)
 
 	left_hint = Label.new()
-	left_hint.text = "💡 Planning: click an enemy, yourself or a tile on the grid."
-	left_hint.add_theme_font_size_override("font_size", 8)
+	left_hint.text = "Click an enemy, yourself or a tile to plan."
+	left_hint.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	left_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
 	_wrap(left_hint)
 	left_vbox.add_child(left_hint)
@@ -324,14 +314,12 @@ func update_inspector(
 	var alive: bool = cur_hp > 0
 
 	current_inspected_combatant = c
-	if btn_gear_modal:
-		btn_gear_modal.visible = is_ally
 
 	inspector_name_lbl.text = c.name
 
 	if is_ally:
-		inspector_hdr.text = "UNIT INSPECTOR & ACTION SETUP"
-		inspector_team_lbl.text = "Allied Hero (Party Member)"
+		inspector_hdr.text = "INSPECTOR"
+		inspector_team_lbl.text = "Hero"
 		inspector_team_lbl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0))
 		inspector_avatar.texture = sprite_texture
 		ally_actions_container.visible = alive
@@ -339,8 +327,8 @@ func update_inspector(
 		if not alive:
 			left_hint.text = "💀 Unit is defeated. Future commands cancelled."
 	else:
-		inspector_hdr.text = "ENEMY INTEL & BEHAVIOUR"
-		inspector_team_lbl.text = "Hostile Enemy Unit"
+		inspector_hdr.text = "HOSTILE INTEL"
+		inspector_team_lbl.text = "Hostile"
 		inspector_team_lbl.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
 		inspector_avatar.texture = sprite_texture
 		ally_actions_container.visible = false
@@ -428,21 +416,22 @@ func _create_mini_action_card(act: Dictionary) -> PanelContainer:
 	act_style.content_margin_bottom = 2
 	act_card.add_theme_stylebox_override("panel", act_style)
 
-	var act_hbox := HBoxContainer.new()
+	var act_hbox := VBoxContainer.new()   # name over description: the column is narrow
 	act_card.add_child(act_hbox)
 
 	var act_name_lbl := Label.new()
 	act_name_lbl.text = str(act["name"])
 	var act_col: Color = act.get("color", Color.WHITE)
+	act_name_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
+	act_name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	act_name_lbl.add_theme_color_override("font_color", act_col)
 	act_hbox.add_child(act_name_lbl)
 
 	var act_desc_lbl := Label.new()
 	act_desc_lbl.text = str(act["desc"])
-	act_desc_lbl.add_theme_font_size_override("font_size", 8)
+	act_desc_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
 	act_desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
 	act_desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	act_desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	act_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	act_hbox.add_child(act_desc_lbl)
 

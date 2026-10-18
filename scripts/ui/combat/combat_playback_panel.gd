@@ -4,7 +4,7 @@ extends CombatPanel
 # ==============================================================================
 # Tactical RPG - Playback & Round Control Panel
 # Step / auto-play / reset buttons, phase badge, status line and the round
-# advance button. ⛶ and 🎒 ask the host for the timeline / gear screens.
+# advance button. ⛶ asks the host for the timeline screen (no gear button: equipment is changed outside battle).
 # Every button plays the UI click (AudioDirector.ui_event).
 # ==============================================================================
 
@@ -15,7 +15,7 @@ func _init() -> void:
 	panel_id = "playback"
 	panel_title = "Playback"
 	panel_icon = "⏯"
-	default_min_size = Vector2(170, 90)
+	default_min_size = Vector2(300, 28)
 	controls = PlaybackControlsUI.new()
 	add_child(controls)
 
@@ -27,7 +27,6 @@ func _on_bound() -> void:
 	controls.reset_game_pressed.connect(_clicked.bind(func() -> void: session.reset_battle()))
 	controls.next_round_pressed.connect(_clicked.bind(func() -> void: session.advance_round()))
 	controls.popout_pressed.connect(_clicked.bind(func() -> void: modal_requested.emit("timeline")))
-	controls.gear_pressed.connect(_clicked.bind(func() -> void: modal_requested.emit("gear")))
 
 # A button press: the UI click sound (S14-L3; silent without a director or sound), then the action.
 func _clicked(action: Callable) -> void:

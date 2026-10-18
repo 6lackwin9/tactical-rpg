@@ -9,7 +9,7 @@ extends CombatPanel
 # hovering a roster card also highlights the unit here.
 # ==============================================================================
 
-const TILE_SIZE: int = 54
+const TILE_SIZE: int = CombatGridView.TILE_SIZE
 
 var grid_view: CombatGridView
 var popup: PlanActionPopup
@@ -272,6 +272,19 @@ func _reach_around(center: Vector2i, near: int, far: int) -> Array[Vector2i]:
 				tiles.append(cell)
 	return tiles
 
+# Fits the board to `px` per tile (CombatHudMetrics.tile): tokens jump to their cells, FX use the new size.
+func set_tile_px(px: int) -> void:
+	if px == grid_view.tile_px:
+		return
+	presenter.kill_all()
+	grid_view.set_tile_px(px)
+	presenter.tile_px = px
+	for c: Combatant in grid_view.unit_token_nodes:
+		var token: Control = grid_view.get_token_for(c)
+		if token != null and session != null and session.grid != null:
+			token.position = Vector2(session.position_of(c) * px)
+	refresh()
+
 func token_count() -> int:
 	return grid_view.unit_token_nodes.size()
 
@@ -298,7 +311,7 @@ func refresh() -> void:
 			token.visible = false
 			token.modulate.a = 0.0
 			continue
-		var target_px := Vector2(session.position_of(c) * TILE_SIZE)
+		var target_px := Vector2(session.position_of(c) * grid_view.tile_px)
 		if not token.visible:
 			token.position = target_px
 		token.visible = true
@@ -324,5 +337,5 @@ func _on_fx(entry: ActionLogEntry) -> void:
 	var target_token: Control = grid_view.get_token_for(session.find_combatant(entry.target_name))
 	var target_px: Vector2 = target_token.position if target_token != null else Vector2.ZERO
 	if entry.category == "MOVE" and entry.coord_to != Vector2i(-1, -1):
-		target_px = Vector2(entry.coord_to * TILE_SIZE)
+		target_px = Vector2(entry.coord_to * grid_view.tile_px)
 	presenter.play(entry, actor_token, target_token, target_px)
