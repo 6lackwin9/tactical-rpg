@@ -31,6 +31,7 @@ Every area thread also runs `change-reviewer` on each task branch before it merg
 2. Subagents work in the thread's checkout and never commit. The thread commits after each green `tools/fc.sh` step and pushes, so a recycled container or a usage limit loses nothing. `.agent/progress.md` is still kept, but the pushed branch is the real checkpoint.
 3. The thread updates only its own rows in `docs/TASKS.md` (status, branch name; it deletes the row when the task lands) and the decision rows for answers the user gave in that thread, inside its own task commit. It never edits `docs/AGENT_MAP.md` or `docs/archive/TASKS_DONE.md`: their entries go in the squash commit as `AgentMap:` and `Done:` lines and the Merge & Release thread writes both files at release time (decision "Shared logs"). Git merges replace the desktop "single writer" rule.
 4. Overlap: before starting, compare the task's `Touches` with the other areas' unmerged task branches (`git branch -r`, the area threads' status) and with `develop`; sequence tasks whose `Touches` overlap, as on desktop.
+5. Hands off `engine` (decision "Engine branch hold"): it is the user's live engine branch. No thread or agent pushes to it, merges it or into it, rebases, deletes, or cuts a task branch from it until the user approves in a typed message.
 
 ## Lanes inside an area thread
 
@@ -112,7 +113,7 @@ Work is time the thread is building, reviewing, gating or fixing; wait is time t
 
 ## Branch cleanup
 
-Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.github/workflows/branch-cleanup.yml` runs daily at 19:37 UTC and on request (**Actions > branch-cleanup > Run workflow**, optional dry run): it deletes every branch except `main` and `develop` that has no open PR (this keeps the release branch while its PR is open), has had no commit for 6 hours, and is either the head of a merged PR or already contained in `develop`; branches with work not on `develop` are kept and listed in the run summary. Do not turn on the repository setting "Automatically delete head branches": the release PR's head is `develop`, so it would be deleted at every release.
+Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.github/workflows/branch-cleanup.yml` runs daily at 19:37 UTC and on request (**Actions > branch-cleanup > Run workflow**, optional dry run): it deletes every branch except `main`, `develop` and `engine` that has no open PR (this keeps the release branch while its PR is open), has had no commit for 6 hours, and is either the head of a merged PR or already contained in `develop` (squash-landed branches whose files later changed on `develop` are not detected; delete those by name with `also_delete` after checking their content is on `develop`); branches with work not on `develop` are kept and listed in the run summary. Do not turn on the repository setting "Automatically delete head branches": the release PR's head is `develop`, so it would be deleted at every release.
 
 ## Scheduled routines
 
