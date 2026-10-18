@@ -52,6 +52,8 @@ Band confirmation:
 
 Ashmaw stand per trio (clear of 10): ranger+priest 10, ranger+mage 10, ranger+rogue 9, ranger+brawler 9, brawler+mage 9, priest+mage 7, rogue+mage 7, brawler+rogue 6, priest+brawler 3, priest+rogue 3. Swap deltas ranger +36.7, mage +15.8, priest -25.8, rogue -17.5. HEAL1 arms per trio with potions: all 10 for ranger+brawler/rogue/mage, priest+mage, brawler+mage, rogue+mage; priest+rogue 1, priest+brawler 5, brawler+rogue 7, ranger+priest 9. Without potions: priest+rogue 1, priest+brawler 4, rogue+mage 4, brawler+mage 6.
 
+Probe answer (2026-10-18, after BAL5-R): the extra grant works (`plan_entry.gd:91`, `defend_command.gd:30`; fortify 4 active for a round after a cast), but the warrior almost never casts shield_wall. In sweeps and campaigns it is not in the default loadout at all (first 5 class-path skills, `content_factory.gd:362`: taunt_shout, shield_bash, riposte, intimidate, sunder; shield_wall is 6th). In the role tank loadout it was cast 6 times in 18 fights, all in rounds 4-5, because the AI uses a plain DEFEND skill only as a low-HP guard at 40% HP or less (`tactical_ai.gd:1103-1118`); 4 of 6 came in the last round. So T3 cannot close the tank gap as built; the next step is a design call (AI guard use or loadout), routed to Design with LEVERS1.
+
 Open question (needs a probe before anything is tuned): the tank loadout includes shield_wall and BAL5-A gave it a fortify extra grant, yet tank hp_end, survival and clear did not move by a single point. Either the sim tank rarely casts shield_wall, or the extra grant does not reach the sim fight, or the effect is below the noise of the 3 seeds. A cast-count probe (`tools/fc.sh run`) would tell which.
 
 Remaining gaps and the spec's next step:
