@@ -11,6 +11,7 @@ extends Control
 
 const TILE: int = 54
 const COL_ARROW: Color = Color(1.0, 0.35, 0.35, 0.9)
+const CHIP_FOR_IDLE: String = "rest"
 const CHIP_MIN: int = 18
 const CHIP_MAX: int = 26
 
@@ -41,7 +42,7 @@ func show_tells(records: Array[Dictionary], grid: CombatGrid) -> void:
 		_cells[unit] = from
 		var chip: TextureRect = _chip_for(unit)
 		var kind: String = str(rec["kind"])
-		chip.texture = AssetRegistry.texture("ui", "intent_" + kind, "icon")
+		chip.texture = AssetRegistry.texture("ui", "intent_" + (CHIP_FOR_IDLE if kind == IntentRules.IDLE else kind), "icon")   # no idle art: reuse the rest chip
 		chip.tooltip_text = IntentText.first_line(rec)
 		var target: Variant = rec.get("target", null)
 		var aim: Vector2i = rec.get("cell", IntentRules.NO_CELL)

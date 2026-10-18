@@ -101,6 +101,7 @@ static func run(_tree_parent: Node = null) -> bool:
 	ok = _test_matches_schedule() and ok
 	ok = _test_reset_round() and ok
 	ok = _test_engage_and_arriving() and ok
+	ok = _test_pack_drafts() and ok
 	ok = _test_reveal() and ok
 	ok = _test_display_only() and ok
 	return ok
@@ -329,8 +330,42 @@ static func _test_engage_and_arriving() -> bool:
 	var late: Dictionary = session.intent_of(enc.latecomer)
 	checks["a wave unit reports arriving"] = str(late.get("kind", "")) == IntentRules.ARRIVING
 	checks["arriving has no target, cell, blocks or plan"] = late.get("target", enc.bryn) == null and late.get("cell", Vector2i.ZERO) == IntentRules.NO_CELL and late.get("blocks", Vector2i.ONE) == Vector2i.ZERO and not DictUtil.to_bool(late.get("revealed", true)) and DictUtil.array_of(late.get("plan", ["x"])).is_empty()
+	# An enemy on the grid when the round was scheduled but with no action holds (idle), it is not "arriving".
+	var held: Combatant = enc.walker
+	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
+		if a.combatant == held:
+			a.is_cancelled = true
+	var hold: Dictionary = session.intent_of(held)
+	checks["an on-grid enemy scheduled with no action reports idle"] = str(hold.get("kind", "")) == IntentRules.IDLE
+	checks["idle has no target, cell, blocks or plan"] = hold.get("target", enc.bryn) == null and hold.get("cell", Vector2i.ZERO) == IntentRules.NO_CELL and hold.get("blocks", Vector2i.ONE) == Vector2i.ZERO and DictUtil.array_of(hold.get("plan", ["x"])).is_empty()
+	checks["the latecomer still reports arriving"] = str(session.intent_of(enc.latecomer).get("kind", "")) == IntentRules.ARRIVING
+	checks["idle is a listed kind"] = IntentRules.KINDS.has(IntentRules.IDLE)
 	session.dispose()
-	return TestHelpers.report(TAG, "engage, area, move cells and arriving", checks)
+	return TestHelpers.report(TAG, "engage, area, move cells, idle and arriving", checks)
+
+# ------------------------------------------------------------------------------
+# 5b. Packmates do not break each other's drafts (goblin_skirmish round 1)
+# ------------------------------------------------------------------------------
+
+static func _test_pack_drafts() -> bool:
+	var checks: Dictionary = {}
+	var session := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+	session.start()
+	var active: int = 0
+	var acting: int = 0
+	var none_arriving: bool = true
+	for e: Combatant in session.enemies:
+		if e.is_active() and session.grid.has_combatant(e):
+			active += 1
+			if _count_actions(session, e) > 0:
+				acting += 1
+			else:
+				none_arriving = none_arriving and str(session.intent_of(e).get("kind", "")) != IntentRules.ARRIVING
+	checks["fixture: the encounter has several enemies on the grid"] = active >= 2
+	checks["every active on-grid enemy has a scheduled action in round 1 (%d/%d)" % [acting, active]] = acting == active
+	checks["an enemy without one never reads arriving"] = none_arriving
+	session.dispose()
+	return TestHelpers.report(TAG, "pack drafts (goblin_skirmish round 1)", checks)
 
 # ------------------------------------------------------------------------------
 # 6. Who is revealed (rule 3, Q2 A) and what (rule 4)

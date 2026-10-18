@@ -11,12 +11,14 @@ extends RefCounted
 # Read through CombatSession.enemy_intents() (planning only). One record per active
 # enemy on the grid:
 #   unit      Combatant         the enemy
-#   kind      String            kind_of(first scheduled action), or ARRIVING when it has none
+#   kind      String            kind_of(first scheduled action); with none: IDLE ("Holding") for an enemy that was
+#                               on the grid when the round's enemies were scheduled, ARRIVING for one that was not
+#                               (a wave unit placed later)
 #   target    Combatant or null attack / support: the command target; move: the Engage's
 #                               approach target (WalkCommand.approach_target); else null
 #   cell      Vector2i          area: the aimed tile; move or flee without a target: the goal; else NO_CELL
-#   blocks    Vector2i          (start_block, end_block) of the first action; (0, 0) when arriving
-#   skill     String            display name of the first action ("" when arriving)
+#   blocks    Vector2i          (start_block, end_block) of the first action; (0, 0) when arriving or idle
+#   skill     String            display name of the first action ("" when arriving or idle)
 #   revealed  bool              a foresight holder is targeted by any of the enemy's actions this round (reveals)
 #   readers   Array[Combatant]  the foresight holders it targets (empty unless revealed); their
 #                               Combatant.foresight_source names the passive (hover card "Read by ...")
@@ -27,7 +29,8 @@ extends RefCounted
 const NO_CELL: Vector2i = Vector2i(-1, -1)
 const ARRIVING: String = "arriving"
 # Every kind a record can carry (UI chips map these; "act" = any other command).
-const KINDS: Array[String] = ["attack", "area", "support", "guard", "focus", "rest", "retreat", "move", "flee", "switch", "stunned", "act", ARRIVING]
+const IDLE: String = "idle"
+const KINDS: Array[String] = ["attack", "area", "support", "guard", "focus", "rest", "retreat", "move", "flee", "switch", "stunned", "act", ARRIVING, IDLE]
 
 # The tell kind of one command.
 static func kind_of(cmd: BattleCommand) -> String:
@@ -123,12 +126,13 @@ static func readers_of(actions: Array[CombatResolver.ScheduledAction], party: Ar
 	return out
 
 # The record of one enemy (see the header for the keys).
-static func intent_of(unit: Combatant, party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid) -> Dictionary:
+static func intent_of(unit: Combatant, party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid, on_grid_at_schedule: Array[Combatant] = []) -> Dictionary:
 	var actions: Array[CombatResolver.ScheduledAction] = actions_of(unit, scheduled)
 	var plan: Array[Dictionary] = []
 	var readers: Array[Combatant] = []
 	if actions.is_empty():
-		return {"unit": unit, "kind": ARRIVING, "target": null, "cell": NO_CELL, "blocks": Vector2i.ZERO, "skill": "", "revealed": false, "readers": readers, "plan": plan}
+		var empty_kind: String = IDLE if on_grid_at_schedule.has(unit) else ARRIVING
+		return {"unit": unit, "kind": empty_kind, "target": null, "cell": NO_CELL, "blocks": Vector2i.ZERO, "skill": "", "revealed": false, "readers": readers, "plan": plan}
 	var record: Dictionary = action_record(actions[0])
 	readers = readers_of(actions, party, grid)
 	if not readers.is_empty():
@@ -141,9 +145,9 @@ static func intent_of(unit: Combatant, party: Array[Combatant], scheduled: Array
 	return record
 
 # One record per active enemy on the grid, in `enemies` order.
-static func intents(enemies: Array[Combatant], party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid) -> Array[Dictionary]:
+static func intents(enemies: Array[Combatant], party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid, on_grid_at_schedule: Array[Combatant] = []) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for e: Combatant in enemies:
 		if e.is_active() and grid != null and grid.has_combatant(e):
-			out.append(intent_of(e, party, scheduled, grid))
+			out.append(intent_of(e, party, scheduled, grid, on_grid_at_schedule))
 	return out

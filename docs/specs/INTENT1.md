@@ -24,7 +24,7 @@ While planning, the player sees for every enemy what it does in its first block:
 | Key | Type | Meaning |
 | --- | --- | --- |
 | unit | Combatant | the enemy |
-| kind | String | `kind_of` of its first scheduled action (lowest `start_block`), or `arriving` when it has none |
+| kind | String | `kind_of` of its first scheduled action (lowest `start_block`), `idle` when it was on the grid at scheduling but has none (shown "Holding"), or `arriving` when it was placed after scheduling |
 | target | Combatant or null | attack and support: the command target; move: `WalkCommand.approach_target`; else null |
 | cell | Vector2i | area: the aim cell; move without a target: the goal; else (-1, -1) |
 | blocks | Vector2i | first action's start and end block |
@@ -56,6 +56,7 @@ While planning, the player sees for every enemy what it does in its first block:
 - An enemy whose only action is an Engage shows `move` with the attack target as `target`.
 - With no `foresight` holder, every `plan` is empty; with Bryn holding it, an enemy attacking Bryn in block 4 only is revealed, one attacking only Sella is not, an area whose cells cover Bryn's tile is revealed.
 - A wave unit arriving mid-round reports `arriving`.
+- An on-grid enemy scheduled with no action reports `idle` (follow-up 2026-10-18: packmate drafts that broke earlier drafts left units idle and mislabelled "Arriving").
 - Combat results of a recorded replay are identical with tells on and off.
 - UI (U): at 1280x720 all four text sizes, chips and arrows never cover the hover card; `I` hides and shows them.
 

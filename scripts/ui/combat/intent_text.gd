@@ -17,6 +17,8 @@ static func core(rec: Dictionary) -> String:
 	var kind: String = str(rec.get("kind", ""))
 	if kind == IntentRules.ARRIVING:
 		return "Arriving"
+	if kind == IntentRules.IDLE:
+		return "Holding"
 	var skill: String = str(rec.get("skill", ""))
 	var target: Variant = rec.get("target", null)
 	var cell: Vector2i = rec.get("cell", IntentRules.NO_CELL)
@@ -31,6 +33,8 @@ static func core(rec: Dictionary) -> String:
 static func first_line(rec: Dictionary) -> String:
 	if str(rec.get("kind", "")) == IntentRules.ARRIVING:
 		return "Arriving"
+	if str(rec.get("kind", "")) == IntentRules.IDLE:
+		return "Holding"
 	return "%s (%s)" % [core(rec), block_text(rec.get("blocks", Vector2i.ZERO))]
 
 # "B3 Shield Bash on Bryn": one line of a revealed plan.

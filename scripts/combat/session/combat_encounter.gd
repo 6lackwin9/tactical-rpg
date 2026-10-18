@@ -180,10 +180,41 @@ func draft_steps(c: Combatant, preset_id: String = "balanced", shared: CombatPla
 func schedule_enemy_ai(resolver: CombatResolver) -> void:
 	var ctx: PlanContext = plan_context()
 	var enemy_plan := CombatPlan.new(ctx)
+	var drafted: Array[Combatant] = []
 	for e: Combatant in enemies:
 		if e.is_active() and grid.has_combatant(e):
+			drafted.append(e)
 			TacticalAI.build_steps(e, ctx, ctx.profile_of(e), enemy_plan)   # drafts into the shared plan: packmates avoid each other
+	# A packmate drafted later can claim a tile an earlier draft needed and break it (the commit would then drop that
+	# unit's actions). Re-draft the broken ones in enemy order (a re-draft moves the unit to the end of the plan's
+	# sequences, which only affects commit order), a bounded number of passes.
+	for _pass: int in range(drafted.size()):
+		var redrafted: bool = false
+		for e: Combatant in drafted:
+			if _draft_broken(enemy_plan, e):
+				TacticalAI.build_steps(e, ctx, ctx.profile_of(e), enemy_plan)
+				redrafted = true
+		if not redrafted:
+			break
+	# Still broken: keep each unit's valid prefix (none: hold). Plans only shrink, so this ends.
+	var trimmed: bool = true
+	while trimmed:
+		trimmed = false
+		for e: Combatant in drafted:
+			if _draft_broken(enemy_plan, e):
+				var st: CombatPlan.SimState = enemy_plan.compile(e)
+				var steps: Array[PlanStep] = enemy_plan.steps_of(e)
+				var keep: int = st.error_index if st.error_index >= 0 else 0
+				enemy_plan.set_steps(e, steps.slice(0, keep))
+				trimmed = true
 	enemy_plan.commit(resolver)
+
+# True when the unit's draft does not compile or compiles to nothing.
+static func _draft_broken(enemy_plan: CombatPlan, e: Combatant) -> bool:
+	if enemy_plan.steps_of(e).is_empty():
+		return false
+	var st: CombatPlan.SimState = enemy_plan.compile(e)
+	return st.error_index >= 0 or st.entries.is_empty()
 
 # Convenience for subclasses: an EVENT log entry for narration / triggers.
 static func make_event_entry(round_num: int, block_num: int, actor: String, actor_is_ally: bool, skill: String, subtype: String, outcome: String, detail: String, status: String) -> ActionLogEntry:

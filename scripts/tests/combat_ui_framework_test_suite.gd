@@ -742,8 +742,9 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 		var beh: Label = card.find_child("BehaviourLabel", true, false) as Label
 		var badge: Control = card.find_child("ForesightBadge", true, false) as Control
 		var blocks: Vector2i = rec["blocks"]
-		var first: String = "Arriving" if str(rec["kind"]) == IntentRules.ARRIVING else "%s (%s)" % [IntentText.core(rec), IntentText.block_text(blocks)]
-		next_ok = next_ok and beh != null and beh.text == ("Arriving" if first == "Arriving" else "Next: " + first) and badge != null and badge.visible == DictUtil.to_bool(rec["revealed"])
+		var bare: String = "Arriving" if str(rec["kind"]) == IntentRules.ARRIVING else ("Holding" if str(rec["kind"]) == IntentRules.IDLE else "")
+		var first: String = bare if not bare.is_empty() else "%s (%s)" % [IntentText.core(rec), IntentText.block_text(blocks)]
+		next_ok = next_ok and beh != null and beh.text == (bare if not bare.is_empty() else "Next: " + first) and badge != null and badge.visible == DictUtil.to_bool(rec["revealed"])
 		if DictUtil.to_bool(rec["revealed"]):
 			read_foes += 1
 		var target: Variant = rec["target"]

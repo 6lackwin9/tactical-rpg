@@ -67,7 +67,7 @@ func _rebuild() -> void:
 func _behaviour_line(c: Combatant) -> String:
 	var rec: Dictionary = session.intent_of(c)
 	if not rec.is_empty():
-		return IntentText.first_line(rec) if str(rec["kind"]) == IntentRules.ARRIVING else "Next: " + IntentText.first_line(rec)
+		return IntentText.first_line(rec) if str(rec["kind"]) == IntentRules.ARRIVING or str(rec["kind"]) == IntentRules.IDLE else "Next: " + IntentText.first_line(rec)
 	var profile: AiProfile = session.encounter.profile_of(c)
 	return "%s - hit %d" % [AiProfile.role_name(profile.role), DamageCalculator.power_of(c, c.attack_range > 1)]
 

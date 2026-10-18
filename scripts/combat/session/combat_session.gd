@@ -84,6 +84,7 @@ var plan: CombatPlan = null               # per-unit command sequences (rebuilt 
 var plan_confirmed: bool = false         # sequences locked and scheduled
 var confirm_source: String = "player"     # who confirmed the live round's plan: "player" or "auto" (AUTO1 autoplay; recorded per round)
 var preview_step: PlanStep = null         # hovered option being previewed on the grid
+var _enemies_on_grid_at_schedule: Array[Combatant] = []   # active enemies on the grid when this round's enemies were scheduled (IntentRules idle vs arriving)
 
 var _pending_actions: Array[CombatResolver.ScheduledAction] = []
 
@@ -176,6 +177,10 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	plan = CombatPlan.new(encounter.plan_context())
 	plan_confirmed = false
 	confirm_source = "player"
+	_enemies_on_grid_at_schedule = []
+	for foe: Combatant in enemies:
+		if foe.is_active() and grid.has_combatant(foe):
+			_enemies_on_grid_at_schedule.append(foe)
 	encounter.schedule_round(resolver, round_num)
 	_refresh_archive()
 
@@ -454,7 +459,7 @@ func enemy_intents() -> Array[Dictionary]:
 	if not is_planning() or resolver == null:
 		var none: Array[Dictionary] = []
 		return none
-	return IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid)
+	return IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule)
 
 # The intent record of one enemy ({} when it has none: not planning, not an active enemy on the grid).
 func intent_of(enemy: Combatant) -> Dictionary:
