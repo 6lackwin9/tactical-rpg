@@ -4,7 +4,8 @@ extends SceneTree
 # through the shipped code and writes what it computed as JSON for the Rust parity tests. New file; nothing in the
 # Godot project calls it.
 #   godot --headless --path <project> -s <abs path to this file> -- out=<abs dir> [only=catalog,units,damage]
-# Files: catalog.json (resolved entries per kind), units.json (unit snapshots), damage.json (DamageCalculator cases).
+# Files: catalog.json (resolved entries per kind), units.json (unit snapshots), damage.json (DamageCalculator cases),
+# rng.json (seeded RandomNumberGenerator draws).
 
 const KINDS: Array[String] = ["classes", "units", "skills", "items", "passives", "encounters", "terrain"]
 const TIERS: Array[String] = ["hero", "minion", "standard", "elite", "boss"]
@@ -12,7 +13,7 @@ const STANCES: Array[int] = [0, 1, 2, 3]   # CombatTypes.StanceType NEUTRAL, OFF
 const SLOTS: Array[String] = ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"]
 
 var out_dir: String = ""
-var only: Array[String] = ["catalog", "units", "damage"]
+var only: Array[String] = ["catalog", "units", "damage", "rng"]
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -35,7 +36,25 @@ func _initialize() -> void:
 		_write("units.json", {"units": rows})
 	if only.has("damage"):
 		_write("damage.json", {"cases": _damage(units)})
+	if only.has("rng"):
+		_write("rng.json", _rng())
 	quit()
+
+# Seeded RandomNumberGenerator draws (the PCG32 port is checked against them).
+func _rng() -> Array:
+	var rows: Array = []
+	for seed_value: int in [0, 1, 1337, 42, 987654321, -5]:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value
+		var draws: Array = []
+		for i: int in range(6):
+			draws.append(["randi", rng.randi()])
+			draws.append(["randf", rng.randf()])
+			draws.append(["range", rng.randi_range(-1, 1)])
+			draws.append(["range", rng.randi_range(0, 99)])
+			draws.append(["rangef", rng.randf_range(0.5, 2.0)])
+		rows.append({"seed": seed_value, "draws": draws})
+	return rows
 
 func _write(file_name: String, data: Variant) -> void:
 	var path: String = out_dir.path_join(file_name)
@@ -112,8 +131,11 @@ func _damage(specs: Array[Dictionary]) -> Array:
 		if key.begins_with("unit:") or key.ends_with(":1:hero") or key.ends_with(":5:hero") or key.ends_with(":10:hero") or key.ends_with(":5:boss"):
 			pool.append(spec)
 	var built: Array[Combatant] = []
+	var keys: Array[String] = []
 	for spec: Dictionary in pool:
-		built.append(ContentFactory.unit(spec["entry"]))
+		var entry: Dictionary = spec["entry"]
+		built.append(ContentFactory.unit(entry))
+		keys.append(str(spec["key"]))
 	var cases: Array = []
 	for a: int in range(pool.size()):
 		for t: int in range(pool.size()):
@@ -123,16 +145,16 @@ func _damage(specs: Array[Dictionary]) -> Array:
 				var ranged: bool = flags & 1 != 0
 				var offhand: bool = flags & 2 != 0
 				var crit: bool = flags & 4 != 0
-				cases.append(_case(pool[a]["key"], pool[t]["key"], attacker, target, ranged, offhand, 1.0, crit, -1, 0.0, 0.0))
-			cases.append(_case(pool[a]["key"], pool[t]["key"], attacker, target, false, false, 1.75, false, -1, 0.3, 0.0))
-			cases.append(_case(pool[a]["key"], pool[t]["key"], attacker, target, true, false, 0.6, false, -1, 0.5, 0.5))
+				cases.append(_case(keys[a], keys[t], attacker, target, ranged, offhand, 1.0, crit, -1, 0.0, 0.0))
+			cases.append(_case(keys[a], keys[t], attacker, target, false, false, 1.75, false, -1, 0.3, 0.0))
+			cases.append(_case(keys[a], keys[t], attacker, target, true, false, 0.6, false, -1, 0.5, 0.5))
 	var few: int = mini(pool.size(), 6)
 	for a: int in range(few):
 		for t: int in range(few):
 			for sa: int in STANCES:
 				for sd: int in STANCES:
 					built[t].current_stance = sd as CombatTypes.StanceType
-					cases.append(_case(pool[a]["key"], pool[t]["key"], built[a], built[t], false, false, 1.0, false, sa, 0.0, 0.0))
+					cases.append(_case(keys[a], keys[t], built[a], built[t], false, false, 1.0, false, sa, 0.0, 0.0))
 			built[t].current_stance = CombatTypes.StanceType.NEUTRAL
 	return cases
 

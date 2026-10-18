@@ -152,3 +152,31 @@ fn damage_cases_match_godot() {
     }
     d.check("damage cases", cases.len());
 }
+
+#[test]
+fn rng_matches_godot() {
+    use aegis_rules::rng::GodotRng;
+    let path = out_dir().join("rng.json");
+    let rows: Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("missing rng.json - run engine/parity/export.sh")).unwrap();
+    let mut n = 0;
+    for row in rows.as_array().unwrap() {
+        let seed = row["seed"].as_i64().unwrap();
+        let mut r = GodotRng::from_i64(seed);
+        for d in row["draws"].as_array().unwrap() {
+            let kind = d[0].as_str().unwrap();
+            let want = &d[1];
+            match kind {
+                "randi" => assert_eq!(r.randi(), want.as_i64().unwrap(), "seed {seed} draw {n}"),
+                "range" => {
+                    let got = if n % 5 == 2 { r.randi_range(-1, 1) } else { r.randi_range(0, 99) };
+                    assert_eq!(got as i64, want.as_i64().unwrap(), "seed {seed} draw {n}");
+                }
+                "randf" => assert!((r.randf() - want.as_f64().unwrap()).abs() < 1e-12, "seed {seed} draw {n}"),
+                "rangef" => assert!((r.randf_range(0.5, 2.0) - want.as_f64().unwrap()).abs() < 1e-12, "seed {seed} draw {n}"),
+                _ => unreachable!(),
+            }
+            n += 1;
+        }
+    }
+    eprintln!("rng: {n} draws match Godot");
+}

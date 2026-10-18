@@ -3,6 +3,7 @@
 
 pub mod damage;
 pub mod gear;
+pub mod rng;
 pub mod stats;
 pub mod unit;
 
