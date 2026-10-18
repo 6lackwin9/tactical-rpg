@@ -203,10 +203,35 @@ func _prepare(session: CombatSession, jitter_rng: RandomNumberGenerator = null) 
 		if not SimVariants.apply_block(session.grid, session.allies, session.enemies, enemy_block, args.distance, shift):
 			block_misses += 1
 		changed = true
+	if not args.pouch.is_empty():
+		apply_pouch(session, args.pouch)   # party only: the enemy plan is unchanged
 	if changed:
 		session.resolver.scheduled_actions.clear()
 		session.plan = CombatPlan.new(session.encounter.plan_context())
 		session.encounter.schedule_round(session.resolver, session.current_round)
+
+# ITEMUSE1 rule 9 (`pouch=`): every party unit's battle pouch becomes `ids` (catalog consumables, unknown ids skipped)
+# and its AI profile may use items. Enemies keep use_items off.
+static func apply_pouch(session: CombatSession, ids: Array[String]) -> void:
+	for a: Combatant in session.allies:
+		a.inventory.battle_pouch.clear()
+		for id: String in ids:
+			var entry: Dictionary = ContentCatalog.get_entry("items", id)
+			var built: Item = ContentFactory.item(entry) if not entry.is_empty() else null
+			if built is Consumable:
+				a.inventory.add_to_battle_pouch(built as Consumable)
+		var raw: Variant = session.encounter.ai_profiles.get(a, null)
+		var profile: AiProfile = AiProfile.new()
+		if raw is AiProfile:
+			var base: AiProfile = raw
+			profile = base.duplicate_profile()
+		profile.use_items = true
+		session.encounter.ai_profiles[a] = profile
+	# the round-start snapshot already exists: refresh it so a reset round keeps the pouch
+	var snap: BlockSnapshot = session.snapshot_at(session.current_round, 0)
+	if snap != null:
+		for a: Combatant in session.allies:
+			snap.pouches[a] = a.inventory.battle_pouch.duplicate()
 
 # Remaining HP / max HP summed over a side (inactive units count 0; wave units count from the start).
 static func side_hp_frac(units: Array[Combatant]) -> float:

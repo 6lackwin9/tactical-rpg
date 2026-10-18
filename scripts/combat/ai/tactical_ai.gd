@@ -41,6 +41,7 @@ const MAX_HEALS: int = 2
 const AI_HAZARD_PENALTY: int = 3   # PLACEHOLDER (S12T-L): extra route cost per hazard tile an AI move enters
 const FOCUS_PRESSURE_RATIO: float = 0.5   # BAL3-AI lever B: Focus first only while the pre-cast incoming damage is below this share of HP
 const FAST_BLOCK: int = 2                 # BAL3-AI lever C: a unit likely to die prefers options that resolve by this block
+const ITEM_HEAL_RATIO: float = 0.35       # ITEMUSE1 rule 9: drink a potion when the round would leave it at or below this HP share
 
 # With shared, the draft is written into that plan (replacing the actor's steps), so it
 # sees - and avoids - the moves its friends have already planned there.
@@ -59,6 +60,8 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 		var prefer: Callable = cover_preference(grid, foes)
 		if prefer.is_valid():
 			plan.goal_preferences[actor] = prefer
+	if profile.use_items:   # ITEMUSE1 rule 9 (sim only): at most one item step, first in the sequence
+		_try_item(plan, actor, ctx)
 	var cap: int = ctx.skill_cap_of(actor)
 	var guarded: bool = false
 	var focused: bool = false
@@ -354,6 +357,50 @@ static func _fast_strike(plan: CombatPlan, actor: Combatant, ranked: Array[Comba
 # SUPPORT: heals the most wounded friend (at or below profile.heal_below) with an
 # ally-target healing skill, highest level first. The caster itself is a candidate
 # when the skill allows self-targeting.
+# ITEMUSE1 rule 9: a heal potion on itself when the expected incoming damage leaves it at or below ITEM_HEAL_RATIO of max
+# HP by round end and no friend plans a heal on it; else a bomb on the weakest foe in the bomb's reach whose HP is at or
+# below the bomb's damage. Elixirs are never AI-used. True when a step was added.
+static func _try_item(plan: CombatPlan, actor: Combatant, ctx: PlanContext) -> bool:
+	var grid: CombatGrid = ctx.grid
+	var pos: Vector2i = grid.get_position(actor)
+	var potion: Consumable = null
+	var bomb: Consumable = null
+	for item_id: String in ItemCommand.pouch_ids(actor):
+		var con: Consumable = ItemCommand.pouch_item(actor, item_id)
+		if not ItemCommand.offered(con) or plan.items_left(actor, item_id) <= 0:
+			continue
+		if potion == null and con.heal_amount > 0 and not ItemCommand.aims_at_foes(con):
+			potion = con
+		elif bomb == null and ItemCommand.aims_at_foes(con):
+			bomb = con
+	if potion != null:
+		var after: int = actor.hp - incoming_damage(plan, actor, ctx.total_blocks, pos)
+		if float(after) <= ITEM_HEAL_RATIO * float(actor.max_hp) and not _heal_planned_on(plan, actor, ctx):
+			if plan.add_step(actor, PlanStep.use_item(potion.id, actor), false).is_empty():
+				return true
+	if bomb != null:
+		var best: Combatant = null
+		for foe: Combatant in ctx.foes_of(actor):
+			if not foe.is_active() or not grid.has_combatant(foe) or foe.hp > bomb.damage_amount:
+				continue
+			if grid.get_distance(pos, grid.get_position(foe)) > bomb.reach():
+				continue
+			if best == null or foe.hp < best.hp:
+				best = foe
+		if best != null and plan.add_step(actor, PlanStep.use_item(bomb.id, best), false).is_empty():
+			return true
+	return false
+
+# True when a friend of `actor` already plans a heal (support skill or heal item) on it this round.
+static func _heal_planned_on(plan: CombatPlan, actor: Combatant, ctx: PlanContext) -> bool:
+	for friend: Combatant in ctx.friends_of(actor):
+		if friend == actor:
+			continue
+		for e: PlanEntry in plan.entries_for(friend):
+			if e.target == actor and ((e.item != null and e.item.heal_amount > 0) or (e.item == null and e.skill != null and e.skill.heals())):
+				return true
+	return false
+
 static func _try_heal(plan: CombatPlan, actor: Combatant, profile: AiProfile, cap: int, already: Array[Combatant]) -> Combatant:
 	var skills: Array[SkillDef] = []
 	for s: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, actor):

@@ -51,6 +51,7 @@ var dupes: bool = false
 var sample: int = 0              # sweep dupes=on: draw this many multisets (0 = all)
 var jitter: bool = true          # BAL3 3.1: seeded start jitter and party order (off = the standard deployment)
 var targets: Dictionary = SimTargets.defaults()
+var pouch: Array[String] = []    # ITEMUSE1 rule 9: pouch=<id,id,id> gives every party unit this battle pouch and use_items (empty = off)
 var error: String = ""           # non-empty: print the usage and run nothing
 
 # Parses `args` (OS.get_cmdline_user_args()). False (and `error` set) on an unknown key or value.
@@ -220,6 +221,14 @@ func _parse_key(key: String, value: String) -> bool:
 			if not ON_OFF.has(value):
 				return _fail("jitter must be on or off (got '%s')" % value)
 			jitter = value == "on"
+		"pouch":
+			var ids: Array[String] = _list(value)
+			if ids.is_empty() or ids.size() > UnitState.POUCH_MAX:
+				return _fail("pouch must list 1..%d consumable ids (got '%s')" % [UnitState.POUCH_MAX, value])
+			for id: String in ids:
+				if str(ContentCatalog.get_entry("items", id).get("item_type", "")) != "CONSUMABLE":
+					return _fail("pouch: '%s' is not a consumable item" % id)
+			pouch = ids
 		"sample":
 			if not value.is_valid_int() or int(value) < 1:
 				return _fail("sample must be a positive number (got '%s')" % value)
@@ -295,6 +304,8 @@ func header() -> String:
 			text += ", comp %s, heal %s" % [",".join(comp) if comp_set else "all trios (warrior + 2 of ranger,priest,brawler,rogue,mage)", heal]
 		"role":
 			text += ", role %s, class %s" % [",".join(roles), ",".join(classes)]
+	if not pouch.is_empty():
+		text += ", pouch %s" % ",".join(pouch)   # shown only when set: default runs print the same header
 	return text
 
 static func usage() -> Array[String]:
@@ -318,4 +329,5 @@ static func usage() -> Array[String]:
 		"       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
 		"       heal=none|full|<pct> (none; campaign: between-battle healing, full also revives)  comp=.. picks one campaign party",
 		"       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
+		"       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
 	]

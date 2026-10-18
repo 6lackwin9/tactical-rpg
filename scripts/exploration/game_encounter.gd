@@ -15,6 +15,8 @@ var zone_override: String = ""
 var _built: Dictionary = {}   # roster id (PARTY_PREFIX + n) -> Combatant, rebuilt on every build()
 var _bases: Dictionary = {}   # roster id -> base unit id
 var _member_ids: Dictionary = {}   # Combatant -> party member id (hero_key)
+var _own_pouch: Dictionary = {}    # Combatant -> Array[Consumable]: battle_pouch items built from the member's saved pouch
+var _unloaded: Dictionary = {}     # Combatant -> Array[String]: saved pouch ids that found no battle slot (kept on write-back)
 
 func _init(p_world_id: String = "", p_local_id: String = "", p_party: PartyState = null, p_zone: String = "") -> void:
 	super(p_world_id, p_local_id)
@@ -31,10 +33,16 @@ func build() -> void:
 	_built.clear()
 	_bases.clear()
 	_member_ids.clear()
+	_own_pouch.clear()
+	_unloaded.clear()
 	if party_state != null:
 		for m: UnitState in party_state.active_members():
-			var c: Combatant = PartyBuilder.build(m)
+			var report: Dictionary = PartyBuilder.build_report(m)
+			var raw_c: Variant = report.get("combatant", null)
+			var c: Combatant = raw_c if raw_c is Combatant else null
 			if c != null:
+				_own_pouch[c] = DictUtil.array_of(report.get("pouch", []))
+				_unloaded[c] = JsonUtil.strings(report.get("pouch_unloaded", []))
 				var rid: String = "%s%d" % [PARTY_PREFIX, _built.size()]
 				_built[rid] = c
 				_bases[rid] = m.base_unit
@@ -72,6 +80,30 @@ func hero_key(c: Combatant) -> String:
 	if _member_ids.has(c):
 		return str(_member_ids[c])
 	return super(c)
+
+# ITEMUSE1 rule 7 (every outcome: won, fled, lost): each member's saved pouch becomes the items of its own pouch still in
+# the hero's battle_pouch, in slot order (used items are gone). Guests (OBJ1) have no member and are never written.
+# Safe to call more than once.
+func write_back_pouches() -> void:
+	if party_state == null:
+		return
+	for key: Variant in _member_ids:
+		if not (key is Combatant):
+			continue
+		var c: Combatant = key
+		if is_guest(c):
+			continue
+		var m: UnitState = party_state.member(str(_member_ids[c]))
+		if m == null:
+			continue
+		var kept: Array[String] = []
+		for raw: Variant in DictUtil.array_of(_own_pouch.get(c, [])):
+			if raw is Consumable:
+				var con: Consumable = raw
+				if c.inventory.battle_pouch.has(con):
+					kept.append(con.id)
+		kept.append_array(JsonUtil.strings(_unloaded.get(c, [])))
+		m.pouch = kept
 
 # The saved party's cap (`PartyState.max_active`); without a party the world's cap.
 func party_slots() -> int:

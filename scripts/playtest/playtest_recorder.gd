@@ -155,6 +155,7 @@ func _on_mounted() -> void:
 	b["seed"] = session.encounter.rng_seed
 	b["seed_source"] = seed_source
 	b["roster"] = PlanCodec.roster(session)
+	b["pouches"] = PlanCodec.pouches(session)   # ITEMUSE1: replays rebuild the heroes' pouches from this
 	battles.append(b)
 	data["battles"] = battles
 	battle_index = battles.size() - 1

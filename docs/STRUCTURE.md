@@ -57,6 +57,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/core/specs/gear_budget.gd`, `scripts/tests/gear_budget_test_suite.gd` | GearBudget weights, loadout band, soft warnings; suite (M2d) | S3 | done |
 | `scripts/tests/skill_family_test_suite.gd` | skill families (family/tier/basic), planner tier grouping, active loadout (M2c-2a1) | S12 | done |
 | `scripts/combat/actions/disengage_command.gd`, `scripts/tests/engine_pieces_test_suite.gd`, `unarmed_test_suite.gd` | disengage jump command; cleanse / disengage / SWEEP suite, unarmed suite (M2c-2a2) | S12 | done |
+| `scripts/combat/actions/item_command.gd`, `scripts/tests/item_use_test_suite.gd`, `item_use_battle_checks.gd` | battle item command (pouch use, ITEMUSE1); schema suite and stage 2 checks | ITEMUSE1 | done |
 | `scripts/combat/status/status_registry.gd`, `scripts/tests/status_registry_test_suite.gd`, `scripts/tests/foundation_test_suite.gd` | single status table with stacking rules; suites for it and for slice A (skill potency hook, `unarmed` token, derived weapon hands) | S12 | done |
 | `scripts/content/{skill_kinds,skill_ranks,skill_text,asset_scan}.gd`, `tools/safe_delete.gd` | ranked skills, kind sections, description tokens, reference scan / safe delete (SKILL1; the migration seed `skill1_ranks.gd` is archived, CLN-2) | S5 | done |
 | `scripts/content/validators/` | per-kind validation rules (SkillValidator, ItemValidator, ClassUnitValidator); ContentCatalog.validate_entry / warnings_for dispatch to them (CLN-9) | S5 | done |

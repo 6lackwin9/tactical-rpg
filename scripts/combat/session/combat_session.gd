@@ -676,6 +676,10 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		c.status_sources = _dict_of(snap.status_sources, c)
 		c.pending_status_sources = _dict_of(snap.pending_status_sources, c)
 		c.riposted.clear()
+		var pouch_raw: Variant = snap.pouches.get(c, null)
+		if pouch_raw is Array and c.inventory != null:
+			var pouch_list: Array = pouch_raw
+			c.inventory.battle_pouch.assign(pouch_list)   # ITEMUSE1 rule 6: items used after the snapshot come back
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
 			grid.combatant_positions[c] = pos_raw
@@ -768,6 +772,8 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 		snap.pending_status_magnitudes[c] = c.pending_status_magnitudes.duplicate()
 		snap.status_sources[c] = c.status_sources.duplicate()
 		snap.pending_status_sources[c] = c.pending_status_sources.duplicate()
+		if c.inventory != null:
+			snap.pouches[c] = c.inventory.battle_pouch.duplicate()   # same Consumable objects (GameEncounter write-back tracks them)
 	return snap
 
 # A copy of the per-unit dictionary stored in a snapshot (empty when missing).

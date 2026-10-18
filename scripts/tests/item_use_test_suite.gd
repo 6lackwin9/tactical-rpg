@@ -7,6 +7,7 @@ extends RefCounted
 # the consumable `use_reach` field (type defaults, validation, factory round trip, battle-offer warning), the ITEM plan
 # step shape and the AiProfile `use_items` switch. Test items live in a sandbox catalog fork; expectations come from
 # the rules (Consumable.TYPE_REACH, UnitState.POUCH_MAX, the save fixtures), never from shipped numbers.
+# Stage 2 (behaviour) lives in ItemUseBattleChecks (item_use_battle_checks.gd).
 # ==============================================================================
 
 static var SANDBOX: String = TestHelpers.sandbox("item_use_test")
@@ -26,6 +27,7 @@ static func run() -> bool:
 	ok = _test_plan_step() and ok
 	ok = _test_ai_switch() and ok
 	ok = _test_saves() and ok
+	ok = ItemUseBattleChecks.run() and ok   # stage 2: options, resolution, reset, AI, sim key, write-back, gear draft
 	if not TestHelpers.fork(SANDBOX):
 		TestHelpers.cleanup(SANDBOX)
 		return TestHelpers.report(TAG, "sandbox fork", {"forked": false})

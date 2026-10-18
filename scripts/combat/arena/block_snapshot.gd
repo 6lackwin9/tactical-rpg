@@ -28,3 +28,4 @@ var status_magnitudes: Dictionary = {} # Combatant -> Dictionary (magnitude per 
 var pending_status_magnitudes: Dictionary = {} # Combatant -> Dictionary (queued magnitude per status, copy)
 var status_sources: Dictionary = {}    # Combatant -> Dictionary (status -> applier unit name, copy)
 var pending_status_sources: Dictionary = {} # Combatant -> Dictionary (queued status -> applier unit name, copy)
+var pouches: Dictionary = {}           # Combatant -> Array[Consumable] (battle_pouch copy, ITEMUSE1 rule 6: undo / reset give items back)

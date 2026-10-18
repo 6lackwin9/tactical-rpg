@@ -19,7 +19,9 @@ var equipment: Dictionary = {}             # slot name (ContentSchema.LOADOUT_SL
 var carried: Array[String] = []            # item ids in the unit's own carry
 var pouch: Array[String] = []              # ITEMUSE1: consumable ids in battle-pouch slot order (max POUCH_MAX, repeats allowed)
 
-const POUCH_MAX: int = 3   # = Inventory.max_pouch_slots (the battle pouch a hero fills before a fight)
+# Must equal Inventory.max_pouch_slots (the battle pouch a hero fills before a fight); guarded by
+# ItemUseTestSuite "unit pouch" check "POUCH_MAX = the inventory pouch".
+const POUCH_MAX: int = 3
 
 static func create(p_id: String, p_base_unit: String) -> UnitState:
 	var s := UnitState.new()

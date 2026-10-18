@@ -9,12 +9,19 @@ extends RefCounted
 # (the party screen's preview shows only confirmed and drafted points, UI2-L).
 # ==============================================================================
 
-# {"combatant": Combatant or null, "warnings": Array[String], "errors": Array[String]}
+# ITEMUSE1 (open question): the shipped warrior / ranger / priest / mage class rows carry a default pouch (a heal potion).
+# false (spec reading "each hero carries a small pouch filled before the fight"): a hero's battle pouch is only its saved
+# pouch, so no free potion each battle. true: the saved pouch is added after the class default (the planner's "adds").
+const HERO_KEEPS_CLASS_POUCH: bool = false
+
+# {"combatant": Combatant or null, "warnings": Array[String], "errors": Array[String], "pouch": Array[Consumable] (the
+# battle_pouch items that came from the state's own pouch, ITEMUSE1: GameEncounter writes the unused ones back),
+# "pouch_unloaded": Array[String] (saved pouch ids that found no free slot; kept as they are on write-back)}
 static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionary:
 	var warnings: Array[String] = []
 	var errors: Array[String] = state.validate()
 	if not errors.is_empty():
-		return {"combatant": null, "warnings": warnings, "errors": errors}
+		return {"combatant": null, "warnings": warnings, "errors": errors, "pouch": [] as Array[Consumable], "pouch_unloaded": [] as Array[String]}
 	var work: UnitState = state.duplicate_state()
 	if auto_spend:
 		LevelUp.auto_for(work)
@@ -40,11 +47,18 @@ static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionar
 			c.inventory.equip(eq, slot)
 	for item_id: String in work.carried:
 		c.inventory.add_item(ContentFactory.item(ContentCatalog.get_entry("items", item_id)))
-	for pouch_id: String in work.pouch:   # ITEMUSE1 rule 1: added after any unit-row pouch, in slot order (full = refused)
+	if not HERO_KEEPS_CLASS_POUCH:
+		c.inventory.battle_pouch.clear()   # the class / unit-row default pouch is not a hero's: only the saved pouch counts
+	var own: Array[Consumable] = []
+	var unloaded: Array[String] = []
+	for pouch_id: String in work.pouch:   # ITEMUSE1 rule 1: in slot order (a full battle pouch refuses the rest)
 		var pouch_item: Item = ContentFactory.item(ContentCatalog.get_entry("items", pouch_id))
 		if pouch_item is Consumable:
 			var con: Consumable = pouch_item
-			c.inventory.add_to_battle_pouch(con)
+			if c.inventory.add_to_battle_pouch(con):
+				own.append(con)
+			else:
+				unloaded.append(pouch_id)
 	c.sync_from_stats_and_gear()
 	c.hp = c.max_hp
 	var cls: Array[String] = JsonUtil.strings(work.loadout.get("class", []))
@@ -53,7 +67,7 @@ static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionar
 		var err: String = c.set_loadout(cls, ext)
 		if not err.is_empty():
 			warnings.append("Unit '%s': stored loadout ignored (%s)." % [work.id, err])
-	return {"combatant": c, "warnings": warnings, "errors": errors}
+	return {"combatant": c, "warnings": warnings, "errors": errors, "pouch": own, "pouch_unloaded": unloaded}
 
 # The world character a member plays (RECRUIT1-L): `lore_ref` is its qualified id; {} when empty or unresolved.
 static func character_of(state: UnitState) -> Dictionary:

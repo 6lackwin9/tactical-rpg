@@ -6,7 +6,8 @@ extends RefCounted
 # A recording is plain JSON-shaped data (docs/specs/PLAYTEST1_L.md, sections A-I):
 #   recording {format, version, id, origin, created, engine, source_rev, scenario, parent,
 #              content, battles, trail, trail_dropped, asset_templates, notes}
-#   battle    {index, encounter, seed, seed_source, roster, rounds, end}
+#   battle    {index, encounter, seed, seed_source, roster, pouches, rounds, end} (pouches: ITEMUSE1, [{ref, items}] per ally at
+#             battle start; [] in older recordings = units keep the pouch they are built with)
 #   round     {round, rng_state, plans, attempts, discarded, plan_ms, edits, outcome, source}
 #             source: who confirmed the plans, "player" or "auto" (AUTO1 battle autoplay); older files default to player
 #   note      {n, t, origin, scene, battle, round, block, phase, mouse, viewport, ctl, tags, text, image}
@@ -36,7 +37,7 @@ static func recording_defaults() -> Dictionary:
 		"scenario": "", "parent": null, "content": {}, "battles": [], "trail": [], "trail_dropped": 0, "asset_templates": 0, "notes": []}
 
 static func battle_defaults() -> Dictionary:
-	return {"index": 0, "encounter": "", "seed": 0, "seed_source": "encounter", "roster": [], "rounds": [], "end": end_entry("abandoned", 0)}
+	return {"index": 0, "encounter": "", "seed": 0, "seed_source": "encounter", "roster": [], "pouches": [], "rounds": [], "end": end_entry("abandoned", 0)}
 
 static func round_defaults() -> Dictionary:
 	return {"round": 1, "rng_state": "0", "plans": [], "attempts": 1, "discarded": [], "plan_ms": 0, "edits": 0, "outcome": {}, "source": "player"}

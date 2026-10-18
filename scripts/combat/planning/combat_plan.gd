@@ -283,7 +283,7 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 		PlanStep.Mode.AREA:
 			return _apply_area(c, st, step, index)
 		PlanStep.Mode.ITEM:
-			return "Using items in battle is not available yet."   # ITEMUSE1 stage 2 compiles ITEM steps (ItemCommand)
+			return _apply_item(c, st, step, index)
 	return "Unknown step."
 
 # "" when `c` may move now, otherwise why not.
@@ -626,6 +626,50 @@ func _apply_ally(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 		entry.est_heal = SupportRules.effective_heal(ally, SupportRules.heal_amount(c, skill))
 		entry.est_cleanse = SupportRules.cleansable(ally, skill)
 	return add_problem
+
+# ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. 1 AP, `use_blocks` blocks at the lowest free blocks like a
+# SELF step, no auto-move: the target must stand within the item's reach of the user's planned tile when the step
+# starts. Earlier ITEM steps of this round use up copies (nothing leaves the pouch before the command resolves).
+func _apply_item(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
+	var con: Consumable = ItemCommand.pouch_item(c, step.item_id)
+	var item_name: String = con.name if con != null else str(ContentCatalog.get_entry("items", step.item_id).get("name", step.item_id))
+	if con == null or items_left(c, step.item_id, index) <= 0:
+		return "No %s left in %s's pouch." % [item_name, c.name]
+	if not ItemCommand.offered(con):
+		return "%s can't be used in battle." % item_name
+	var target: Combatant = step.target if step.target != null else c
+	var side: String = ItemCommand.side_problem(c, con, target, context.foes_of(c))
+	if not side.is_empty():
+		return side
+	if not target.is_active() or not context.grid.has_combatant(target):
+		return "%s is not on the field." % target.name
+	if target != c and context.grid.get_distance(st.pos, context.grid.get_position(target)) > con.reach():
+		return "Out of reach for %s." % item_name
+	var problem: String = _add_entry(c, st, ItemCommand.skill_for(con), index, target)
+	if not problem.is_empty():
+		return problem
+	var entry: PlanEntry = st.entries[st.entries.size() - 1]
+	entry.item = con
+	entry.skill_ap = ItemCommand.ITEM_AP
+	st.ap_left += entry.skill.ap_cost(c) - ItemCommand.ITEM_AP   # _add_entry charged the skill's AP; an item costs ITEM_AP
+	if st.dry_entry == st.entries.size() - 1 and st.ap_left >= 0:
+		st.dry_entry = -1
+	if con.heal_amount > 0:
+		entry.est_heal = mini(con.heal_amount, maxi(0, target.max_hp - target.hp))
+	if con.damage_amount > 0:
+		entry.est_damage = con.damage_amount
+		st.est_hp[target] = maxi(0, DictUtil.int_of(st.est_hp, target, target.hp) - con.damage_amount)
+	return ""
+
+# Copies of `item_id` in `c`'s pouch not claimed by its ITEM steps before step `before` (-1 = all planned steps).
+func items_left(c: Combatant, item_id: String, before: int = -1) -> int:
+	var n: int = ItemCommand.pouch_count(c, item_id)
+	var steps: Array[PlanStep] = steps_of(c)
+	var upto: int = steps.size() if before < 0 else mini(before, steps.size())
+	for i: int in range(upto):
+		if steps[i].mode == PlanStep.Mode.ITEM and steps[i].item_id == item_id:
+			n -= 1
+	return n
 
 # Area attack aimed at a tile: no auto-move, the tile must already be in reach.
 func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
@@ -987,6 +1031,25 @@ func target_options(c: Combatant, target: Combatant) -> Array[PlanOption]:
 		var foe_cell: Vector2i = context.grid.get_position(target)
 		for skill: SkillDef in SkillCatalog.area_attacks(cap, c):
 			out.append(_probe(c, PlanStep.area_at(skill, foe_cell), base))
+	out.append_array(item_options(c, target, base))
+	return out
+
+# ITEMUSE1 rule 2: one "Use <item> (<n> left)" option per distinct pouch item whose type is offered, that may be aimed
+# at `target` (self, ally or foe by type) and whose copies are not all claimed by this round's earlier ITEM steps.
+func item_options(c: Combatant, target: Combatant, base: SimState = null) -> Array[PlanOption]:
+	var out: Array[PlanOption] = []
+	var start: SimState = base if base != null else compile(c)
+	if start.error_index >= 0 or start.withdrawn or not c.is_active() or target == null or not target.is_active() or not context.grid.has_combatant(target):
+		return out
+	for item_id: String in ItemCommand.pouch_ids(c):
+		var con: Consumable = ItemCommand.pouch_item(c, item_id)
+		var left: int = items_left(c, item_id)
+		if left <= 0 or not ItemCommand.offered(con) or not ItemCommand.side_problem(c, con, target, context.foes_of(c)).is_empty():
+			continue
+		var option: PlanOption = _probe(c, PlanStep.use_item(item_id, target), start)
+		option.item_left = left
+		option.label = "Use %s (%d left)" % [con.name, left]
+		out.append(option)
 	return out
 
 # Options when `c` clicks an empty tile (or the exit): move there, or aim an area attack.

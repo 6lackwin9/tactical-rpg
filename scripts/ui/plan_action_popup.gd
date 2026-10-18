@@ -110,7 +110,9 @@ func _make_row(index: int, option: PlanOption) -> Button:
 static func _row_text(option: PlanOption) -> String:
 	var step: PlanStep = option.step
 	var name_text: String = step.skill.label() if step.skill != null else "🏃 Withdraw"
-	if step.mode == PlanStep.Mode.GOTO:
+	if step.mode == PlanStep.Mode.ITEM:
+		name_text = option.label if not option.label.is_empty() else step.title()
+	elif step.mode == PlanStep.Mode.GOTO:
 		name_text = "➜ Move here"
 	elif step.mode == PlanStep.Mode.AREA:
 		name_text = "%s ✸ area" % step.skill.label()

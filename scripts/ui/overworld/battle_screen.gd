@@ -134,6 +134,7 @@ func _auto_finish() -> void:
 	if _settled or session == null or replaying or check().is_empty():
 		return
 	_settled = true
+	_write_back()
 	finished.emit(outcome)
 
 # ------------------------------------------------------------------------------
@@ -275,7 +276,14 @@ func finish() -> void:
 	if check().is_empty():
 		return
 	_settled = true
+	_write_back()
 	finished.emit(outcome)
+
+# ITEMUSE1 rule 7: the heroes' unused pouch items go back to their saved pouches (every outcome; guests never).
+func _write_back() -> void:
+	if session != null and session.encounter is GameEncounter:
+		var game_enc: GameEncounter = session.encounter as GameEncounter
+		game_enc.write_back_pouches()
 
 # Frees the arena (its _exit_tree disposes the session) and this screen.
 func close() -> void:

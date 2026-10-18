@@ -33,6 +33,7 @@ var chase: bool = false                    # ATTACK (single target): adjust one 
 var switch_ap: int = 0                    # automatic stance-switch penalty
 var stance_before: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
 var stance_after: CombatTypes.StanceType = CombatTypes.StanceType.NEUTRAL
+var item: Consumable = null               # ITEM (ITEMUSE1): the pouch consumable used (skill = ItemCommand.skill_for)
 
 static func create(p_skill: SkillDef, p_start: int, p_step_index: int) -> PlanEntry:
 	var entry := PlanEntry.new()
@@ -52,56 +53,59 @@ func end_block() -> int:
 
 func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 	var command: BattleCommand
-	match skill.kind:
-		SkillDef.Kind.ATTACK:
-			if skill.is_area():
-				var area := AreaAttackCommand.new(actor, grid, cells, skill.power_for(actor), skill.blocks)
-				area.status_rounds = skill.status_rounds
-				area.aim_cell = aim
-				command = area
-			else:
-				var attack := AttackCommand.new(actor, target, skill.power_for(actor), skill.blocks, 0, grid)
-				attack.use_offhand = skill.is_off_hand()
-				attack.follow_tiles = 1 if (chase and skill.dash_tiles <= 0) else 0   # one-tile adjustment when the attack starts
-				attack.dash_tiles = skill.dash_tiles
-				attack.status_rounds = skill.status_rounds
-				var band: Vector2i = skill.reach_for(actor)
-				attack.min_range = band.x
-				attack.max_range = band.y
-				command = attack
-			command.status_effect = skill.status_effect
-			command.status_potency = skill.status_potency
-			if not skill.status_effect.is_empty():
-				command.status_potency += actor.status_potency_bonus()   # item / passive status_potency effects
-			command.status_magnitude = skill.status_magnitude
-		SkillDef.Kind.STATUS:
-			command = StatusBlockCommand.new(actor, status_name)
-		SkillDef.Kind.SUPPORT:
-			var support := SupportCommand.new(actor, target, skill, grid, skill.blocks)
-			support.est_heal = est_heal
-			command = support
-		SkillDef.Kind.DEFEND:
-			var defend := DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
-			defend.grant_status = skill.grant_status
-			defend.status_rounds = skill.status_rounds
-			defend.status_magnitude = skill.status_magnitude
-			command = defend
-		SkillDef.Kind.FOCUS:
-			command = FocusCommand.new(actor, skill.boost, skill.boost_rounds, skill.blocks, 0)
-		SkillDef.Kind.MOVE:
-			# Engage approaches walk the planned path too (no live re-chasing); the attack
-			# itself closes a one-tile gap when it starts.
-			var walk := WalkCommand.new(actor, grid, path, blocks())
-			walk.expected_start = pos_before
-			walk.goal = goal
-			walk.approach_target = target
-			command = walk
-		SkillDef.Kind.DISENGAGE:
-			command = DisengageCommand.new(actor, grid, pos_after, skill.jump_tiles, skill.blocks)
-		SkillDef.Kind.TARGET:
-			command = TargetCommand.new(actor, target, 2)
-		_:
-			command = RestCommand.new(actor, skill.recover_ap, skill.blocks)
+	if item != null:
+		command = ItemCommand.new(actor, target, item, grid, blocks())
+	else:
+		match skill.kind:
+			SkillDef.Kind.ATTACK:
+				if skill.is_area():
+					var area := AreaAttackCommand.new(actor, grid, cells, skill.power_for(actor), skill.blocks)
+					area.status_rounds = skill.status_rounds
+					area.aim_cell = aim
+					command = area
+				else:
+					var attack := AttackCommand.new(actor, target, skill.power_for(actor), skill.blocks, 0, grid)
+					attack.use_offhand = skill.is_off_hand()
+					attack.follow_tiles = 1 if (chase and skill.dash_tiles <= 0) else 0   # one-tile adjustment when the attack starts
+					attack.dash_tiles = skill.dash_tiles
+					attack.status_rounds = skill.status_rounds
+					var band: Vector2i = skill.reach_for(actor)
+					attack.min_range = band.x
+					attack.max_range = band.y
+					command = attack
+				command.status_effect = skill.status_effect
+				command.status_potency = skill.status_potency
+				if not skill.status_effect.is_empty():
+					command.status_potency += actor.status_potency_bonus()   # item / passive status_potency effects
+				command.status_magnitude = skill.status_magnitude
+			SkillDef.Kind.STATUS:
+				command = StatusBlockCommand.new(actor, status_name)
+			SkillDef.Kind.SUPPORT:
+				var support := SupportCommand.new(actor, target, skill, grid, skill.blocks)
+				support.est_heal = est_heal
+				command = support
+			SkillDef.Kind.DEFEND:
+				var defend := DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
+				defend.grant_status = skill.grant_status
+				defend.status_rounds = skill.status_rounds
+				defend.status_magnitude = skill.status_magnitude
+				command = defend
+			SkillDef.Kind.FOCUS:
+				command = FocusCommand.new(actor, skill.boost, skill.boost_rounds, skill.blocks, 0)
+			SkillDef.Kind.MOVE:
+				# Engage approaches walk the planned path too (no live re-chasing); the attack
+				# itself closes a one-tile gap when it starts.
+				var walk := WalkCommand.new(actor, grid, path, blocks())
+				walk.expected_start = pos_before
+				walk.goal = goal
+				walk.approach_target = target
+				command = walk
+			SkillDef.Kind.DISENGAGE:
+				command = DisengageCommand.new(actor, grid, pos_after, skill.jump_tiles, skill.blocks)
+			SkillDef.Kind.TARGET:
+				command = TargetCommand.new(actor, target, 2)
+			_:
+				command = RestCommand.new(actor, skill.recover_ap, skill.blocks)
 	command.command_name = skill.display_name
 	command.ap_cost = skill_ap
 	command.stance_switch_cost = switch_ap

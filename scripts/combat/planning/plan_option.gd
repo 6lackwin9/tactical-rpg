@@ -26,6 +26,7 @@ var cover: float = 0.0      # attack options: the terrain cover in the expected 
 var flow: String = ""       # "flows into Defensive" when the step's skill is a flow move (S12C-L)
 var exploits: String = ""   # display name of the status the attack's expected hit exploits ("" = none; S12C-L)
 var item_left: int = 0      # ITEM options (ITEMUSE1): pouch copies of the step's item still unplanned this round
+var label: String = ""      # ITEM options: "Use <item> (<n> left)" (the action popup shows it)
 
 # The skill family of the option's step ("" for steps without a skill, e.g. withdraw) and its tier.
 func family() -> String:
