@@ -78,7 +78,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(DisplayTestSuite.run(tree_parent))
 	results.append(BattleLinkTestSuite.run(tree_parent))
 	results.append(BattleFlowTestSuite.run(tree_parent))
-	results.append(PartyScreenTestSuite.run())
+	results.append(PartyScreenTestSuite.run(tree_parent))
 	results.append(SaveIoTestSuite.run())
 	results.append(JournalTestSuite.run())
 	results.append(AssetPipelineTestSuite.run())

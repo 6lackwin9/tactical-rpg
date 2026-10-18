@@ -15,7 +15,7 @@ const BENCH: String = "ps_bench"
 static func _report(label: String, checks: Dictionary) -> bool:
 	return TestHelpers.report(TAG, label, checks)
 
-static func run() -> bool:
+static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
 	print("=== STARTING PARTY SCREEN TEST (UI2-L)               ===")
 	print("=======================================================")
@@ -36,6 +36,8 @@ static func run() -> bool:
 		ok = _fresh() and _test_results() and ok
 		ok = _fresh() and _test_router() and ok
 		ok = _fresh() and _test_review_f2() and ok
+		if tree_parent != null:
+			ok = _test_pouch_screen(tree_parent) and ok
 	CurrentGame.end()
 	SaveGame.reset_base_dir()
 	TestHelpers.remove_sandbox(SANDBOX)
@@ -328,3 +330,168 @@ static func _test_router() -> bool:
 	CurrentGame.end()
 	checks["no game, no party"] = router.make_model(MenuRouter.PARTY) == null and router.make_model(MenuRouter.GEAR, {"member": "x"}) == null
 	return _report("Router and hub wiring", checks)
+
+# ------------------------------------------------------------------------------
+# ITEMUSE1-U: the battle pouch on the Gear screen (one screen per case; consumable picked by rule)
+# ------------------------------------------------------------------------------
+
+const VIEW: Vector2 = Vector2(1280, 720)
+
+# A catalog item the pouch accepts: the first whose stash row shows up as a pouch candidate.
+static func _pouch_item(m: UnitState, skip: String = "") -> String:
+	for e: Dictionary in ContentCatalog.entries("items"):
+		var id: String = str(e["id"])
+		if id == skip or id == ContentSchema.NO_ITEM or str(e.get("item_type", "")) != "CONSUMABLE":
+			continue
+		var probe := GearModel.new(m.id)
+		probe.stash[id] = 1
+		if probe.pouch_candidates().any(func(c: Dictionary) -> bool: return str(c["item"]) == id):
+			return id
+	return ""
+
+# A host on the Gear screen of the first member with `stock` of `item` in the stash.
+static func _gear_host(tree_parent: Node, item: String, stock: int) -> Dictionary:
+	var m: UnitState = _first()
+	m.pouch.clear()
+	var party: PartyState = CurrentGame.state().party
+	party.stash.clear()
+	for i: int in range(stock):
+		party.add_to_stash(item)
+	var holder := SubViewport.new()
+	holder.size = Vector2i(VIEW)
+	tree_parent.add_child(holder)
+	var host: MainMenuView = (load("res://scenes/main_menu.tscn") as PackedScene).instantiate() as MainMenuView
+	holder.add_child(host)
+	host.router.push(MenuRouter.GEAR, {"member": m.id})
+	SettingsUiTestSuite.layout(host)
+	return {"holder": holder, "host": host, "member": m}
+
+static func _drop_host(f: Dictionary) -> void:
+	var holder: Node = f["holder"] as Node
+	holder.get_parent().remove_child(holder)
+	holder.free()
+
+static func _btn(host: Node, node_name: String) -> Button:
+	return host.find_child(node_name, true, false) as Button
+
+static func _press(host: MainMenuView, b: Button) -> void:
+	b.pressed.emit()
+	SettingsUiTestSuite.layout(host)
+
+static func _stash_count(m: GearModel, item: String) -> int:
+	return DictUtil.to_int(m.stash.get(item, 0))
+
+static func _test_pouch_screen(tree_parent: Node) -> bool:
+	var m0: UnitState = _first()
+	var item: String = _pouch_item(m0)
+	if item.is_empty():
+		return _report("ITEMUSE1-U: pouch on the Gear screen", {"fixture consumable": false})
+	var all_ok: bool = true
+	var party: PartyState = CurrentGame.state().party
+	var add_name: String = "PouchAdd_" + item
+
+	# Add moves one from the stash into the next slot.
+	var f: Dictionary = _gear_host(tree_parent, item, UnitState.POUCH_MAX + 1)
+	var host: MainMenuView = f["host"] as MainMenuView
+	var gm: GearModel = host.router.model() as GearModel
+	var c: Dictionary = {}
+	c["three empty slots"] = host.find_children("PouchSlot*", "HBoxContainer", true, false).size() == UnitState.POUCH_MAX and gm.pouch_rows().is_empty()
+	c["candidate count"] = gm.pouch_candidates().any(func(r: Dictionary) -> bool: return str(r["item"]) == item and DictUtil.to_int(r["count"]) == UnitState.POUCH_MAX + 1)
+	_press(host, _btn(host, add_name))
+	var gm2: GearModel = host.router.model() as GearModel
+	c["slot 0 holds it"] = gm2.pouch_rows().size() == 1 and str(gm2.pouch_rows()[0]["item"]) == item and gm2.work.pouch[0] == item
+	c["stash dropped by one"] = _stash_count(gm2, item) == UnitState.POUCH_MAX
+	c["candidate count dropped"] = gm2.pouch_candidates().any(func(r: Dictionary) -> bool: return str(r["item"]) == item and DictUtil.to_int(r["count"]) == UnitState.POUCH_MAX)
+	c["Remove button shown"] = _btn(host, "PouchRemove0") != null and _btn(host, "PouchRemove1") == null
+	c["real stash untouched until Confirm"] = DictUtil.to_int(party.stash.get(item, 0)) == UnitState.POUCH_MAX + 1 and m0.pouch.is_empty()
+	all_ok = _report("ITEMUSE1-U: Add moves one into the next slot", c) and all_ok
+	_drop_host(f)
+
+	# Add is disabled at POUCH_MAX.
+	f = _gear_host(tree_parent, item, UnitState.POUCH_MAX + 1)
+	host = f["host"] as MainMenuView
+	for i: int in range(UnitState.POUCH_MAX):
+		_press(host, _btn(host, add_name))
+	c = {}
+	var full_add: Button = _btn(host, add_name)
+	c["pouch full"] = (host.router.model() as GearModel).pouch_rows().size() == UnitState.POUCH_MAX
+	c["Add disabled"] = full_add != null and full_add.disabled
+	c["one left in the stash"] = _stash_count(host.router.model() as GearModel, item) == 1
+	all_ok = _report("ITEMUSE1-U: Add disabled at POUCH_MAX", c) and all_ok
+	_drop_host(f)
+
+	# Remove returns the item.
+	f = _gear_host(tree_parent, item, 1)
+	host = f["host"] as MainMenuView
+	_press(host, _btn(host, add_name))
+	c = {}
+	c["emptied the stash row"] = not (host.router.model() as GearModel).stash.has(item)
+	_press(host, _btn(host, "PouchRemove0"))
+	var back: GearModel = host.router.model() as GearModel
+	c["pouch empty again"] = back.pouch_rows().is_empty()
+	c["item back in the stash"] = _stash_count(back, item) == 1
+	c["Add enabled again"] = _btn(host, add_name) != null and not _btn(host, add_name).disabled
+	all_ok = _report("ITEMUSE1-U: Remove returns the item", c) and all_ok
+	_drop_host(f)
+
+	# Back discards the draft (after the discard question).
+	f = _gear_host(tree_parent, item, 1)
+	host = f["host"] as MainMenuView
+	var member: UnitState = f["member"] as UnitState
+	_press(host, _btn(host, add_name))
+	c = {}
+	host.router.pop()
+	c["asks before discarding"] = host.router.is_asking() and host.router.top() == MenuRouter.GEAR
+	host.router.confirm()
+	c["left the screen"] = host.router.top() != MenuRouter.GEAR
+	c["pouch unchanged"] = member.pouch.is_empty()
+	c["stash unchanged"] = DictUtil.to_int(party.stash.get(item, 0)) == 1
+	all_ok = _report("ITEMUSE1-U: Back discards the pouch draft", c) and all_ok
+	_drop_host(f)
+
+	# Confirm writes UnitState.pouch and the stash.
+	f = _gear_host(tree_parent, item, 2)
+	host = f["host"] as MainMenuView
+	member = f["member"] as UnitState
+	_press(host, _btn(host, add_name))
+	_press(host, _btn(host, add_name))
+	c = {}
+	var confirm: Button = null
+	for n: Node in host.find_children("*", "Button", true, false):
+		if (n as Button).text == "Confirm":
+			confirm = n as Button
+	c["Confirm enabled"] = confirm != null and not confirm.disabled
+	_press(host, confirm)
+	c["pouch written"] = member.pouch.size() == 2 and member.pouch[0] == item and member.pouch[1] == item
+	c["stash written"] = DictUtil.to_int(party.stash.get(item, 0)) == 0
+	all_ok = _report("ITEMUSE1-U: Confirm writes UnitState.pouch", c) and all_ok
+	member.pouch.clear()
+	_drop_host(f)
+
+	# Fit at every text size, with a full pouch and a stocked stash.
+	c = {}
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		SettingsFile.set_value("ui/text_scale", scale)
+		f = _gear_host(tree_parent, item, UnitState.POUCH_MAX + 1)
+		host = f["host"] as MainMenuView
+		_press(host, _btn(host, add_name))
+		_press(host, _btn(host, add_name))
+		var tag: String = "text %.2f" % scale
+		var area := Rect2(Vector2.ZERO, VIEW)
+		var body: Control = host.find_child("GearBody", true, false) as Control
+		var scroll: ScrollContainer = host.find_child("GearScroll", true, false) as ScrollContainer
+		var section: Control = host.find_child("PouchSection", true, false) as Control
+		c[tag + ": section built"] = body != null and scroll != null and section != null
+		if body != null and scroll != null and section != null:
+			c[tag + ": no sideways overflow"] = body.get_combined_minimum_size().x <= scroll.size.x + 1.0
+			c[tag + ": section as wide as its rows"] = section.get_rect().size.x >= section.get_combined_minimum_size().x - 1.0
+		var shown: Array[String] = []
+		for n: Node in host.find_children("*", "Button", true, false):
+			var b: Button = n as Button
+			if b.is_visible_in_tree() and (b.text == "Confirm" or b.text == "Back") and not area.encloses(b.get_global_rect()):
+				shown.append(b.text)
+		c[tag + ": Confirm and Back inside 1280x720"] = shown.is_empty() and _btn(host, add_name) != null
+		_drop_host(f)
+	SettingsFile.set_value("ui/text_scale", 1.0)
+	all_ok = _report("ITEMUSE1-U: pouch section fits at every text size", c) and all_ok
+	return all_ok
