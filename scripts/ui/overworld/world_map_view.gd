@@ -33,6 +33,7 @@ var gs: GameState = null
 var embedded: bool = false   # set before entering the tree: true = opened by the region map (Back, no world picker)
 var pending_fight: Dictionary = {}
 var battle: BattleScreen = null
+var results_popup: bool = false   # BATTLE-FLOW: see RegionMapView
 var dev_outcomes: bool = false
 var launch_errors: Array[String] = []
 var log_lines: Array[String] = []
@@ -211,7 +212,15 @@ func launch_battle() -> void:
 		_note("Battle refused: %s" % "; ".join(PackedStringArray(launch_errors)))
 	else:
 		battle = screen
-		battle.finished.connect(settle)
+		battle.auto_results = results_popup
+		battle.finished.connect(_on_battle_finished)
+	_refresh()
+
+func _on_battle_finished(result: String) -> void:
+	settle(result, results_popup)
+
+func close_settled_battle() -> void:
+	_close_battle()
 	_refresh()
 
 func _close_battle() -> void:
@@ -223,12 +232,13 @@ func _close_battle() -> void:
 # Settles the pending road fight through TravelRunner.after_fight. won: the leg completes and the map stays open (click
 # again to go on); fled: the party stays at the leg's start; lost: the party wakes in a location, so `arrived` hands
 # back. `fight_settled` carries the result plus {outcome}.
-func settle(result: String) -> void:
+func settle(result: String, keep_battle: bool = false) -> void:
 	if gs == null or pending_fight.is_empty():
 		return
 	var fight: Dictionary = pending_fight
 	pending_fight = {}
-	_close_battle()
+	if not keep_battle:
+		_close_battle()
 	var res: Dictionary = TravelRunner.after_fight(gs, fight, result)
 	_note("Road fight %s: %s (quests advanced: %s)" % [str(fight["encounter"]), result, str(res.get("advanced", []))])
 	_handle(res, gs)

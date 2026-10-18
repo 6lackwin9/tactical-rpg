@@ -29,6 +29,7 @@ const MARKER_GLYPHS: Dictionary = {"exit": "⇨", "encounter": "!", "roamer": "R
 var gs: GameState = null
 var pending_fight: Dictionary = {}
 var battle: BattleScreen = null
+var results_popup: bool = false   # BATTLE-FLOW: the main menu host shows the results over the arena, so a battle settles without closing it
 var dev_outcomes: bool = false
 var launch_errors: Array[String] = []
 var facing: Vector2i = Vector2i(0, 1)
@@ -241,6 +242,7 @@ func open_world_map() -> void:
 		return
 	world_map = WorldMapView.new()
 	world_map.embedded = true
+	world_map.results_popup = results_popup
 	add_child(world_map)
 	world_map.show_state(gs)
 	world_map.arrived.connect(_on_world_map_arrived)
@@ -279,7 +281,24 @@ func launch_battle() -> void:
 		_note("Battle refused: %s" % "; ".join(PackedStringArray(launch_errors)))
 	else:
 		battle = screen
-		battle.finished.connect(settle)
+		battle.auto_results = results_popup
+		battle.finished.connect(_on_battle_finished)
+	_refresh()
+
+func _on_battle_finished(result: String) -> void:
+	settle(result, results_popup)
+
+# The arena that is still mounted after its fight settled (results popup mode), in this view or the world map; else null.
+func active_battle() -> BattleScreen:
+	if battle != null:
+		return battle
+	return world_map.battle if world_map != null else null
+
+# Closes the arena kept for the results popup and shows the map again.
+func close_settled_battle() -> void:
+	_close_battle()
+	if world_map != null:
+		world_map.close_settled_battle()
 	_refresh()
 
 func _close_battle() -> void:
@@ -291,12 +310,13 @@ func _close_battle() -> void:
 # Settles the pending fight with `result` (the battle's outcome, or a debug outcome button) and closes the battle.
 # A dialogue fight settles through DialogueRunner.after_fight, an exploration fight through ExploreRunner.after_fight.
 # `fight_settled` carries the result plus {outcome}.
-func settle(result: String) -> void:
+func settle(result: String, keep_battle: bool = false) -> void:
 	if gs == null or pending_fight.is_empty():
 		return
 	var fight: Dictionary = pending_fight
 	pending_fight = {}
-	_close_battle()
+	if not keep_battle:
+		_close_battle()
 	var res: Dictionary = DialogueRunner.after_fight(gs, fight, result) if str(fight.get("source", "")) == "dialogue" else ExploreRunner.after_fight(gs, fight, result)
 	_note("Fight %s: %s (quests advanced: %s)" % [str(fight["encounter"]), result, str(res.get("advanced", []))])
 	_handle(res)

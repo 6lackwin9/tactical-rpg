@@ -25,7 +25,7 @@ const PARTY: String = "party"          # UI2-L: roster, stats, passives
 const LEVEL_UP: String = "level_up"    # UI2-L: args {member}
 const LOADOUT: String = "loadout"      # UI2-L: args {member}
 const GEAR: String = "gear"            # UI2-L: args {member}
-const RESULTS: String = "results"      # UI2-L: args {award, advanced, outcome (BATTLE1-L)}
+const RESULTS: String = "results"      # UI2-L: args {award, advanced, outcome (BATTLE1-L), rewards (BATTLE-FLOW, non-XP)}
 const JOURNAL: String = "journal"      # UI3-L
 
 var stack: Array[String] = []
@@ -76,7 +76,7 @@ func make_model(id: String, args: Dictionary = {}) -> RefCounted:
 		JOURNAL:
 			return JournalModel.new() if CurrentGame.has_game() else null
 		RESULTS:
-			return BattleResultsModel.new(self, DictUtil.dict_of(args.get("award", {})), JsonUtil.strings(args.get("advanced", [])), str(args.get("outcome", "won"))) if CurrentGame.has_game() else null
+			return BattleResultsModel.new(self, DictUtil.dict_of(args.get("award", {})), JsonUtil.strings(args.get("advanced", [])), str(args.get("outcome", "won")), DictUtil.dict_of(args.get("rewards", {}))) if CurrentGame.has_game() else null
 	return null
 
 func push(id: String, args: Dictionary = {}) -> void:

@@ -70,7 +70,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/game_state/settings_file.gd` | SettingsFile: `user://settings.cfg` key table (audio keys S14-L3; UI1-L adds its keys), never in a save slot | S14, UI1 | in progress |
 | `scripts/game_state/game_rolls.gd` | GameRolls: per-save deterministic random streams (explore, travel) | S9, S10 | done |
 | `scenes/overworld/`, `scripts/ui/overworld/` | debug region map (RegionMapView, EXP1), battle screen into the combat arena (BattleScreen, BATTLE1), dialogue and shop panels (DialoguePanel, ShopPanel, DLG1); later the world map | S9, S10, S11 | in progress |
-| `scripts/ui/menus/` | main menu, new game, save slots, settings, hub (UI1-L); party screen, journal (UI2, UI3) | S7, S13 | in use |
+| `scripts/ui/menus/` | main menu, new game, save slots, settings, hub (UI1-L); party screen, journal (UI2, UI3); battle results popup and `xp_bar.gd` (BATTLE-FLOW) | S7, S13 | in use |
 | `data/progression/` | xp_curve.json (M3) | S7 | done |
 | `data/quests/` | quests.json (lore-free quest templates; empty until M4-A) | S8 | in progress |
 | `data/maps/` | maps.json (lore-free region map templates, MapCatalog; EXP1) | S9 | in progress |

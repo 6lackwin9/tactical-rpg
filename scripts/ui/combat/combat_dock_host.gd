@@ -29,6 +29,7 @@ const LAYOUTS: Dictionary = {
 const AUTO_PLAY_INTERVAL: float = 0.55
 
 var session: CombatSession = null
+var keys_blocked: bool = false   # BATTLE-FLOW: set while the results popup covers the arena
 var current_layout: String = DEFAULT_LAYOUT
 var log_modal: CombatLogModal
 var timeline_modal: TimelineModal
@@ -471,7 +472,7 @@ func _open_gear_modal() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo or session == null:
+	if key == null or not key.pressed or key.echo or session == null or keys_blocked:
 		return
 	var handled: bool = true
 	match key.keycode:
