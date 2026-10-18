@@ -8,7 +8,8 @@ Every commit on a design option branch, so the user can pick whole options or mi
 | --- | --- | --- | --- | --- |
 | DESIGN_REVIEW1 (2026-10-18) | `docs/specs/DESIGN_REVIEW1.md` | before the cycle existed (no option builds) | - | closed (answered 2026-10-18 01:34) |
 | DESIGN_REVIEW2 (2026-10-18) | `docs/specs/DESIGN_REVIEW2.md` | a499b3f | none (option builds paused 08:29) | closed (answered 2026-10-18 08:37, all recs) |
-| next | - | - | - | rule 1 counts from a499b3f |
+| DESIGN_REVIEW3 (2026-10-18) | `/mnt/project-files/design-review/DESIGN_REVIEW_2026-10-18-3.md` | 8e2530a | none (option builds paused) | waiting on the user (sent 12:40) |
+| next | - | - | - | rule 1 counts from 8e2530a |
 
 ## Candidates for the next review
 
