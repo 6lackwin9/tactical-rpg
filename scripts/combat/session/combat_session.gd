@@ -28,6 +28,7 @@ signal round_concluded(round_num: int, over: bool)
 signal round_reset(round_num: int)            # start of reset_round, before the round is rewound
 signal plan_refused(round_num: int, reason: String)   # confirm_plan refused an invalid plan (reason = status_text)
 signal plan_edited(kind: String, actor: Combatant)   # add, remove, move, undo, clear, preset, preset_all (actor null)
+signal phase_fired(entry: ActionLogEntry, info: Dictionary)   # BOSS1: a phase fired live (never on a reset re-log); info = CombatEncounter.phase_info
 
 enum Phase { PLANNING, RESOLVING, REPLAY }
 
@@ -160,6 +161,12 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	if raw_entry is ActionLogEntry:
 		var intro_entry: ActionLogEntry = raw_entry
 		_append_entry(intro_entry, false)
+	var fired_now: Array[ActionLogEntry] = []
+	for raw_phase: Variant in DictUtil.array_of(intro.get("entries", [])):
+		if raw_phase is ActionLogEntry:
+			var phase_entry: ActionLogEntry = raw_phase
+			_append_entry(phase_entry, false)
+			fired_now.append(phase_entry)
 	_set_phase(str(intro.get("phase", "ROUND %d: PLANNING PHASE" % round_num)), COL_PLANNING)
 	status_text = str(intro.get("status", "Round %d: plan actions, then resolve." % round_num))
 	_log_text(str(intro.get("log", "")))
@@ -178,7 +185,15 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	focused_hero = first_active
 	selected_combatant = first_active
 	_notify()
+	if roll_over:   # after a reset the round-start phases are only re-logged (they fired before)
+		for phase_entry: ActionLogEntry in fired_now:
+			_emit_phase(phase_entry)
 	round_started.emit(round_num)
+
+func _emit_phase(entry: ActionLogEntry) -> void:
+	var info: Dictionary = encounter.phase_info(entry)
+	if not info.is_empty():
+		phase_fired.emit(entry, info)
 
 # The active skill loadout can only change outside combat: locked from start() until dispose().
 func _set_loadouts_locked(locked: bool) -> void:
@@ -266,6 +281,7 @@ func _step_resolution() -> void:
 			_append_entry(trigger, true)
 			status_text = "%s - Block %d" % [trigger.skill_name, current_block]
 			_notify()
+			_emit_phase(trigger)
 			return
 		_log_text("[color=#fde047][b]━━━ BLOCK %d RESOLUTION (ROUND %d) ━━━[/b][/color]" % [current_block, current_round])
 		_pending_actions = resolver.prepare_block(current_block)
@@ -281,8 +297,9 @@ func _step_resolution() -> void:
 		resolver.block_completed.emit(current_block)
 		if current_block >= total_blocks:
 			resolver.apply_round_end_effects()   # bleeding lands before the round is judged
+		encounter.on_block_end(current_round, current_block)
 		_capture_snapshot(current_block)
-		var over: bool = resolver.is_combat_resolved(allies, enemies)
+		var over: bool = resolver.is_combat_resolved(allies, encounter.live_enemies())   # reserved units do not count
 		if over or current_block >= total_blocks:
 			_conclude_round(over)
 			return
@@ -659,6 +676,8 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 			grid.combatant_positions[c] = pos_raw
 		else:
 			grid.combatant_positions.erase(c)
+	encounter.restore_phase_state(snap.phase_state, snap.round_num)   # BOSS1: fired / due / dropped and live AI profiles
+
 # Timeline copy of the live round's commands. While planning it also includes
 # the party's unsent plan so the timeline shows it.
 func _refresh_archive(with_plan: bool = true) -> void:
@@ -722,6 +741,7 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 	snap.block_index = block_idx
 	snap.round_num = current_round
 	snap.reinforcements_spawned = encounter.reinforcements_spawned
+	snap.phase_state = encounter.phase_state()
 	for c: Combatant in resolver.registered_combatants:
 		snap.positions[c] = grid.get_position(c)
 		snap.hps[c] = c.hp

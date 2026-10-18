@@ -9,6 +9,7 @@ extends RefCounted
 var block_index: int = 0
 var round_num: int = 1
 var reinforcements_spawned: bool = false
+var phase_state: Dictionary = {}       # CombatEncounter.phase_state() copy (BOSS1: fired / due / dropped)
 var positions: Dictionary = {}         # Combatant -> Vector2i
 var hps: Dictionary = {}               # Combatant -> int
 var max_hps: Dictionary = {}           # Combatant -> int

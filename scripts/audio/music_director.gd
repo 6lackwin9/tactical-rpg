@@ -274,10 +274,12 @@ static func combat_context(enc: CombatEncounter) -> String:
 	var ce: CatalogEncounter = enc as CatalogEncounter
 	if ce == null:
 		return CTX_COMBAT
-	for list_key: String in ["enemies", "wave_units"]:
-		for id: String in JsonUtil.strings(ce.definition.get(list_key, [])):
-			if str(ce._unit_entry(id).get("tier", "")) == "boss":
-				return CTX_BOSS
+	var refs: Array[String] = JsonUtil.strings(ce.definition.get("enemies", []))
+	refs.append_array(JsonUtil.strings(ce.definition.get("wave_units", [])))
+	refs.append_array(EncounterPhases.reserved_refs(ce.definition))   # BOSS1 rule 8: phase waves too
+	for id: String in refs:
+		if str(ce._unit_entry(id).get("tier", "")) == "boss":
+			return CTX_BOSS
 	return CTX_COMBAT
 
 # ------------------------------------------------------------------------------

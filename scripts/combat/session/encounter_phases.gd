@@ -7,9 +7,15 @@ extends RefCounted
 # A phase = {id, name, trigger, effects, pause_autoplay}; it issues no commands: its
 # effects only change inputs between blocks or rounds (a line, a wave, a buff, an AI tweak).
 #
-# Step 1 (schema contract): parsing with defaults and the shared validator. The runtime
-# (firing, reserved units, snapshot state) lands in step 2; until then `phases` is
-# accepted and ignored by the battle code.
+# Static part: parsing with defaults and the shared validator (both catalogs).
+# Instance part (one per battle, owned by CatalogEncounter, spec rules 1 to 6):
+#   fired    phase id -> [round, block] (block 0 = round start), in fire order
+#   due      ids met but not yet fired (fire before the next block, or at the next round start)
+#   dropped  ids that can no longer fire (their hp_below trigger unit went down / withdrew first)
+# state() / restore() copy all three for BlockSnapshot.phase_state. Phase-wave units are
+# spawned in build() and stay reserved (off the field, skipped by the end-of-battle check)
+# until their phase fires. AI changes apply from the next enemy draft (live profile = base
+# profile + the ai settings of every fired phase in fire order). No random numbers.
 #
 # Phase object:
 #   id              String  snake_case, unique in the encounter (required)
@@ -61,6 +67,206 @@ const EFFECT_KEYS: Dictionary = {
 	EFFECT_STATUS: ["type", "unit", "status", "rounds", "magnitude"],
 	EFFECT_AI: ["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"],
 }
+
+const SUBTYPE: String = "Phase"     # EVENT entry skill_subtype of a phase
+const OUTCOME: String = "PHASE"
+
+# ------------------------------------------------------------------------------
+# Runtime state (one battle)
+# ------------------------------------------------------------------------------
+
+var phases: Array[Dictionary] = []   # parsed, list order
+var fired: Dictionary = {}           # phase id -> [round, block]
+var due: Array[String] = []
+var dropped: Array[String] = []
+var wave_units: Dictionary = {}      # phase id -> Array[Combatant] (spawned in build, reserved until it fires)
+var _reserved: Dictionary = {}       # Combatant -> phase id
+var _entries: Dictionary = {}        # phase id -> ActionLogEntry of its last firing (re-logged after a reset)
+var _entry_ids: Dictionary = {}      # ActionLogEntry -> phase id
+var _base_profiles: Dictionary = {}  # Combatant -> AiProfile before any phase (captured on first use)
+
+static func create(raw: Variant) -> EncounterPhases:
+	var p := EncounterPhases.new()
+	p.phases = parse(raw)
+	return p
+
+func is_empty() -> bool:
+	return phases.is_empty()
+
+func phase(id: String) -> Dictionary:
+	for p: Dictionary in phases:
+		if str(p["id"]) == id:
+			return p
+	return {}
+
+func is_fired(id: String) -> bool:
+	return fired.has(id)
+
+func is_dropped(id: String) -> bool:
+	return dropped.has(id)
+
+# Registers a spawned phase-wave unit (reserved until phase `id` fires).
+func reserve(id: String, c: Combatant) -> void:
+	if not wave_units.has(id):
+		var fresh: Array[Combatant] = []
+		wave_units[id] = fresh
+	var units: Array[Combatant] = wave_units[id]
+	units.append(c)
+	_reserved[c] = id
+
+func is_reserved(c: Combatant) -> bool:
+	return _reserved.has(c) and not fired.has(str(_reserved[c]))
+
+func units_of(id: String) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	if wave_units.has(id):
+		var units: Array[Combatant] = wave_units[id]
+		out.assign(units)
+	return out
+
+# A copy of fired / due / dropped (BlockSnapshot.phase_state).
+func state() -> Dictionary:
+	return {"fired": fired.duplicate(true), "due": due.duplicate(), "dropped": dropped.duplicate()}
+
+func restore(s: Dictionary) -> void:
+	fired = DictUtil.dict_of(s.get("fired", {})).duplicate(true)
+	due = _strings(s.get("due", []))
+	dropped = _strings(s.get("dropped", []))
+
+# Rule 1: after a block resolves, an unfired hp_below phase is due once its trigger unit is at or under pct % HP;
+# a trigger unit that is down or withdrawn first drops it. `unit_of(ref) -> Combatant` = the first unit of that ref.
+func check_block_end(unit_of: Callable) -> void:
+	for p: Dictionary in phases:
+		var id: String = str(p["id"])
+		var trigger: Dictionary = p["trigger"]
+		if str(trigger["kind"]) != TRIGGER_HP_BELOW or fired.has(id) or dropped.has(id) or due.has(id):
+			continue
+		var raw: Variant = unit_of.call(str(trigger["unit"]))
+		var c: Combatant = raw as Combatant
+		if c == null or not c.is_active():
+			dropped.append(id)
+		elif c.hp * 100 <= DictUtil.to_int(trigger["pct"]) * c.max_hp:
+			due.append(id)
+
+# Rule 1: round phases are due at the start of their round.
+func mark_round(round_num: int) -> void:
+	for p: Dictionary in phases:
+		var id: String = str(p["id"])
+		var trigger: Dictionary = p["trigger"]
+		if str(trigger["kind"]) == TRIGGER_ROUND and DictUtil.to_int(trigger["round"]) == round_num and not fired.has(id) and not dropped.has(id) and not due.has(id):
+			due.append(id)
+
+# The first due phase in list order ("" = none).
+func next_due() -> String:
+	for p: Dictionary in phases:
+		if due.has(str(p["id"])):
+			return str(p["id"])
+	return ""
+
+# Marks `id` fired at [round, block] and keeps its EVENT entry (the encounter applies the effects).
+func mark_fired(id: String, round_num: int, block_num: int, entry: ActionLogEntry) -> void:
+	due.erase(id)
+	fired[id] = [round_num, block_num]
+	if _entries.has(id):
+		_entry_ids.erase(_entries[id])
+	_entries[id] = entry
+	_entry_ids[entry] = id
+
+# Entries of the phases fired at the start of `round_num` (fire order): re-logged after reset_round.
+func round_start_entries(round_num: int) -> Array[ActionLogEntry]:
+	var out: Array[ActionLogEntry] = []
+	for id: Variant in fired:
+		var at: Array = fired[id]
+		if DictUtil.to_int(at[0]) == round_num and DictUtil.to_int(at[1]) == 0 and _entries.has(id):
+			var entry: ActionLogEntry = _entries[id]
+			out.append(entry)
+	return out
+
+# {id, name, actor, line, pause_autoplay} of a phase EVENT entry ({} for any other entry).
+func info(entry: ActionLogEntry) -> Dictionary:
+	if entry == null or not _entry_ids.has(entry):
+		return {}
+	var id: String = str(_entry_ids[entry])
+	var p: Dictionary = phase(id)
+	var line: String = ""
+	for fx: Dictionary in effects_of(p, EFFECT_LINE):
+		line = str(fx["text"])
+	return {"id": id, "name": str(p.get("name", "")), "actor": entry.actor_name, "line": line, "pause_autoplay": DictUtil.to_bool(p.get("pause_autoplay", true), true)}
+
+# Rule 5: every unit an ai effect names gets its live profile = base + the ai settings of every phase fired before
+# `round_num` (or at its start), in fire order. `units_of_ref(ref) -> Array` of Combatants. Units no phase touches keep
+# whatever profile they have (a sim preset, say), and nothing changes until a phase with an ai effect has fired.
+func apply_profiles(profiles: Dictionary, units_of_ref: Callable, round_num: int) -> void:
+	var settings: Array[Dictionary] = []   # ai effects that apply, in fire order
+	for id: Variant in fired:
+		var at: Array = fired[id]
+		var r: int = DictUtil.to_int(at[0])
+		if r < round_num or (r == round_num and DictUtil.to_int(at[1]) == 0):
+			settings.append_array(effects_of(phase(str(id)), EFFECT_AI))
+	if settings.is_empty() and _base_profiles.is_empty():
+		return
+	for fx: Dictionary in settings:   # capture the base of every touched unit before its first change
+		for c: Combatant in _combatants(units_of_ref.call(str(fx["unit"]))):
+			if not _base_profiles.has(c) and profiles.get(c, null) is AiProfile:
+				var current: AiProfile = profiles[c]
+				_base_profiles[c] = current.duplicate_profile()
+	for c: Variant in _base_profiles:
+		var base: AiProfile = _base_profiles[c]
+		profiles[c] = base.duplicate_profile()
+	for fx: Dictionary in settings:
+		for c: Combatant in _combatants(units_of_ref.call(str(fx["unit"]))):
+			if profiles.get(c, null) is AiProfile:
+				var live: AiProfile = profiles[c]
+				apply_ai(live, fx)
+
+# One parsed ai effect onto a profile.
+static func apply_ai(profile: AiProfile, fx: Dictionary) -> void:
+	if fx.has("role"):
+		var role_index: int = AI_ROLES.find(str(fx["role"]))
+		if role_index >= 0:
+			profile.role = role_index as AiProfile.Role
+	if fx.has("target_pref"):
+		profile.target_pref = AiProfile.TargetPref.WEAKEST if str(fx["target_pref"]) == "WEAKEST" else AiProfile.TargetPref.NEAREST
+	if fx.has("reckless"):
+		profile.reckless = DictUtil.to_bool(fx["reckless"])
+	if fx.has("flee_ratio"):
+		profile.flee_ratio = DictUtil.to_float(fx["flee_ratio"])
+	if fx.has("defend_below"):
+		profile.defend_below = DictUtil.to_float(fx["defend_below"])
+	if fx.has("heal_below"):
+		profile.heal_below = DictUtil.to_float(fx["heal_below"])
+
+# The effects of a parsed phase of one type, in list order.
+static func effects_of(p: Dictionary, type: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for fx: Dictionary in _dicts(p.get("effects", [])):
+		if str(fx.get("type", "")) == type:
+			out.append(fx)
+	return out
+
+static func _combatants(raw: Variant) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for v: Variant in DictUtil.array_of(raw):
+		if v is Combatant:
+			var c: Combatant = v
+			out.append(c)
+	return out
+
+# One line per phase for viewers: "Phase <name>: <trigger> -> <effect types>". `name_of(ref) -> String`.
+static func summary_lines(raw: Variant, name_of: Callable) -> Array[String]:
+	var out: Array[String] = []
+	for p: Dictionary in parse(raw):
+		var trigger: Dictionary = p["trigger"]
+		var when: String = ""
+		if str(trigger["kind"]) == TRIGGER_HP_BELOW:
+			when = "%s at %d%% HP" % [str(name_of.call(str(trigger["unit"]))), DictUtil.to_int(trigger["pct"])]
+		else:
+			when = "round %d" % DictUtil.to_int(trigger.get("round", 0))
+		var types: Array[String] = []
+		for fx: Dictionary in _dicts(p["effects"]):
+			types.append(str(fx["type"]))
+		out.append("Phase %s: %s -> %s" % [str(p["name"]), when, ", ".join(types)])
+	return out
 
 # ------------------------------------------------------------------------------
 # Parsing (defaults filled; call on a validated entry)

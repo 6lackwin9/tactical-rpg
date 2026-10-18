@@ -16,6 +16,7 @@ var encounter_id: String = ""
 var definition: Dictionary = {}
 var units_by_id: Dictionary = {}   # unit id -> Array of Combatants spawned from it (encounter order)
 var wave: Array[Combatant] = []     # reinforcements: off the field until wave_round / wave_block
+var phase_runtime: EncounterPhases = EncounterPhases.new()   # BOSS1 phases of this battle (rebuilt in build())
 
 func _init(p_encounter_id: String = "") -> void:
 	encounter_id = p_encounter_id
@@ -68,7 +69,15 @@ func build() -> void:
 	var party_ids: Array[String] = _ids("party")
 	var enemy_ids: Array[String] = _ids("enemies")
 	var wave_ids: Array[String] = _ids("wave_units")
-	var names: Dictionary = _display_names(party_ids + enemy_ids + wave_ids)
+	phase_runtime = EncounterPhases.create(definition.get("phases", []))
+	var phase_ids: Array[String] = []   # phase-wave refs in phase order (parallel: the phase each belongs to)
+	var phase_of: Array[String] = []
+	for p: Dictionary in phase_runtime.phases:
+		for ref: String in EncounterPhases.wave_refs_of(p):
+			if not _unit_entry(ref).is_empty():
+				phase_ids.append(ref)
+				phase_of.append(str(p["id"]))
+	var names: Dictionary = _display_names(party_ids + enemy_ids + wave_ids + phase_ids)
 	var slot: int = 0
 	for id: String in party_ids:
 		party.append(_spawn(id, str(names[slot])))
@@ -81,6 +90,11 @@ func build() -> void:
 		var arriving: Combatant = _spawn(id, str(names[slot]))
 		wave.append(arriving)
 		foes.append(arriving)   # on the enemy side from the start, off the field until the wave
+		slot += 1
+	for i: int in range(phase_ids.size()):
+		var reserved: Combatant = _spawn(phase_ids[i], str(names[slot]))
+		phase_runtime.reserve(phase_of[i], reserved)
+		foes.append(reserved)   # registered like the wave; reserved (off the field) until its phase fires
 		slot += 1
 	allies = party
 	enemies = foes
@@ -169,6 +183,9 @@ func _place_leftovers(units: Array[Combatant], party_side: bool) -> void:
 # The wave enters before its block resolves (announced as an EVENT log cell). It
 # has no plan for the rest of that round; the AI plans it from the next round.
 func on_block_start(round_num: int, block_num: int) -> ActionLogEntry:
+	var due_id: String = phase_runtime.next_due()   # BOSS1 rule 2: a phase met at the end of the last block fires first
+	if not due_id.is_empty():
+		return _fire_phase(due_id, round_num, block_num)
 	if wave.is_empty() or reinforcements_spawned:
 		return null
 	if round_num != DictUtil.to_int(definition["wave_round"]) or block_num != DictUtil.to_int(definition["wave_block"]):
@@ -183,10 +200,92 @@ func on_block_start(round_num: int, block_num: int) -> ActionLogEntry:
 		"ARRIVED", "%s join the battle." % ", ".join(arrived), "%d more hostiles" % arrived.size())
 
 # ------------------------------------------------------------------------------
+# Phases (BOSS1, EncounterPhases; spec rules 1 to 6)
+# ------------------------------------------------------------------------------
+
+func is_reserved(c: Combatant) -> bool:
+	return phase_runtime.is_reserved(c)
+
+func on_block_end(_round_num: int, _block_num: int) -> void:
+	phase_runtime.check_block_end(func(ref: String) -> Combatant: return unit(ref, 0))
+
+func phase_state() -> Dictionary:
+	return phase_runtime.state()
+
+func restore_phase_state(state: Dictionary, round_num: int) -> void:
+	phase_runtime.restore(state)
+	_apply_phase_profiles(round_num)
+
+func phase_info(entry: ActionLogEntry) -> Dictionary:
+	return phase_runtime.info(entry)
+
+# Every unit spawned from roster ref `ref` (encounter order).
+func units_of_ref(ref: String) -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	out.assign(DictUtil.array_of(units_by_id.get(ref, [])))
+	return out
+
+func _apply_phase_profiles(round_num: int) -> void:
+	phase_runtime.apply_profiles(ai_profiles, units_of_ref, round_num)
+
+# Fires phase `id` at [round, block] (block 0 = round start): line, wave, status, then ai (rule 3). Returns its EVENT entry.
+func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
+	var p: Dictionary = phase_runtime.phase(id)
+	var trigger: Dictionary = p["trigger"]
+	var actor: String = encounter_name
+	if str(trigger["kind"]) == EncounterPhases.TRIGGER_HP_BELOW:
+		var trigger_unit: Combatant = unit(str(trigger["unit"]), 0)
+		if trigger_unit != null:
+			actor = trigger_unit.name
+	var detail: String = ""
+	for fx: Dictionary in EncounterPhases.effects_of(p, EncounterPhases.EFFECT_LINE):
+		detail = str(fx["text"])
+	var parts: Array[String] = []
+	for fx: Dictionary in EncounterPhases.effects_of(p, EncounterPhases.EFFECT_WAVE):
+		var units: Array[Combatant] = phase_runtime.units_of(id)
+		_place_leftovers(units, false)
+		var arrived: int = 0
+		for c: Combatant in units:
+			if grid.has_combatant(c):
+				arrived += 1
+		var label: String = str(fx["label"])
+		parts.append(label if not label.is_empty() else "%d more hostiles" % arrived)
+	for fx: Dictionary in EncounterPhases.effects_of(p, EncounterPhases.EFFECT_STATUS):
+		var status: String = str(fx["status"])
+		var granted: bool = false
+		for c: Combatant in units_of_ref(str(fx["unit"])):
+			if c.is_active() and grid.has_combatant(c) and not is_reserved(c):
+				StatusEffects.grant_now(c, status, DictUtil.to_int(fx["rounds"]), DictUtil.to_int(fx["magnitude"]), "phase:%s" % id)
+				granted = true
+		if granted:
+			parts.append(StatusEffects.display_name(status))
+	if not EncounterPhases.effects_of(p, EncounterPhases.EFFECT_AI).is_empty():
+		parts.append("new tactics from the next round" if block_num > 0 else "new tactics")
+	var entry: ActionLogEntry = CombatEncounter.make_event_entry(round_num, block_num, actor, false, str(p["name"]), EncounterPhases.SUBTYPE,
+		EncounterPhases.OUTCOME, detail, ", ".join(parts))
+	phase_runtime.mark_fired(id, round_num, block_num, entry)
+	return entry
+
+# ------------------------------------------------------------------------------
 # Round flow & narration
 # ------------------------------------------------------------------------------
 
+# Rule 2 / 6: phases fired at this round's start (after a reset: re-logged, not applied again), then round phases
+# of this round and phases met at the end of the last round fire (list order) before the enemy draft; the live AI
+# profiles are rebuilt for this round's draft. They come back under "entries".
 func prepare_round(round_num: int) -> Dictionary:
+	var info: Dictionary = _intro(round_num)
+	var entries: Array[ActionLogEntry] = phase_runtime.round_start_entries(round_num)
+	phase_runtime.mark_round(round_num)
+	var id: String = phase_runtime.next_due()
+	while not id.is_empty():
+		entries.append(_fire_phase(id, round_num, 0))
+		id = phase_runtime.next_due()
+	_apply_phase_profiles(round_num)
+	info["entries"] = entries
+	return info
+
+func _intro(round_num: int) -> Dictionary:
 	if round_num == 1:
 		return {
 			"phase": "ROUND 1: PLANNING PHASE",

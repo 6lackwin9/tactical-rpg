@@ -41,12 +41,14 @@ static func outcome(session: CombatSession) -> String:
 	var at_limit: bool = session.phase == CombatSession.Phase.REPLAY and session.current_round >= session.encounter.max_rounds
 	return "fled" if at_limit else ""
 
-# [{level, tier}] of the encounter's enemies and reinforcements (the XP inputs), seen from `world_id`.
+# [{level, tier}] of the encounter's enemies, reinforcements and phase waves (the XP inputs, whether or not they
+# arrived), seen from `world_id`.
 static func enemy_levels(world_id: String, encounter_qid: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var enc: Dictionary = WorldCatalog.resolve(world_id, "encounters", encounter_qid)
 	var refs: Array[String] = JsonUtil.strings(enc.get("enemies", []))
 	refs.append_array(JsonUtil.strings(enc.get("wave_units", [])))
+	refs.append_array(EncounterPhases.reserved_refs(enc))   # BOSS1 rule 8
 	for ref: String in refs:
 		var entry: Dictionary = WorldFactory.unit_entry(WorldCatalog.resolve(world_id, "characters", ref))
 		if entry.is_empty():

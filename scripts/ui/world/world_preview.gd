@@ -186,13 +186,15 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 	text += _line("Enemies", _names_of(world_id, "characters", e["enemies"]))
 	if not DictUtil.array_of(e["wave_units"]).is_empty():
 		text += _line("Wave (R%d B%d)" % [DictUtil.to_int(e["wave_round"]), DictUtil.to_int(e["wave_block"])], _names_of(world_id, "characters", e["wave_units"]))
+	for phase_line: String in EncounterPhases.summary_lines(e.get("phases", []), func(ref: String) -> String: return _name_of(world_id, "characters", ref)):
+		text += _esc(phase_line) + "\n"   # BOSS1 rule 9
 	if not DictUtil.array_of(e["party"]).is_empty() and not DictUtil.array_of(e["enemies"]).is_empty():
 		var enc := WorldEncounter.new(world_id, "")
 		enc.apply_definition(e)
 		enc.build()
 		var placed: Array[String] = []
 		for c: Combatant in enc.allies + enc.enemies:
-			placed.append("%s %s" % [c.name, str(enc.grid.get_position(c)) if enc.grid.has_combatant(c) else "[color=#f87171](off-field until the wave)[/color]"])
+			placed.append("%s %s" % [c.name, str(enc.grid.get_position(c)) if enc.grid.has_combatant(c) else ("[color=#f87171](off-field until its phase)[/color]" if enc.is_reserved(c) else "[color=#f87171](off-field until the wave)[/color]")])
 		text += _line("Deployment", ", ".join(placed))
 	text += "\n" + _esc(str(e["description"]))
 	if not str(e["intro"]).is_empty():

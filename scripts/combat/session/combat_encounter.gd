@@ -33,7 +33,8 @@ func build() -> void:
 	pass
 
 # Applies the starting state of `round_num` (round 1 right after build()).
-# Returns intro info: {"entry": ActionLogEntry or null, "phase": String, "status": String, "log": String}
+# Returns intro info: {"entry": ActionLogEntry or null, "entries": Array[ActionLogEntry] (logged after entry; BOSS1
+# phases fired at the round start), "phase": String, "status": String, "log": String}
 func prepare_round(_round_num: int) -> Dictionary:
 	return {}
 
@@ -46,6 +47,36 @@ func schedule_round(resolver: CombatResolver, _round_num: int) -> void:
 # announce something (the block then resolves on the next step), or null.
 func on_block_start(_round_num: int, _block_num: int) -> ActionLogEntry:
 	return null
+
+# After a block resolves (after round-end effects on the last block, before the end-of-battle check): a chance to
+# notice state changes (BOSS1: hp_below phases become due). Default: nothing.
+func on_block_end(_round_num: int, _block_num: int) -> void:
+	pass
+
+# A unit spawned but held back (BOSS1: a phase wave before its phase fires): off the field and skipped by the
+# end-of-battle check. Default: none.
+func is_reserved(_c: Combatant) -> bool:
+	return false
+
+# The enemies that count for the end-of-battle check (every enemy that is not reserved).
+func live_enemies() -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for e: Combatant in enemies:
+		if not is_reserved(e):
+			out.append(e)
+	return out
+
+# Encounter-owned battle state kept in every BlockSnapshot (BOSS1: phase fired / due / dropped); {} = none.
+func phase_state() -> Dictionary:
+	return {}
+
+# Restores phase_state() from a snapshot of `round_num` (and rebuilds anything derived from it).
+func restore_phase_state(_state: Dictionary, _round_num: int) -> void:
+	pass
+
+# {id, name, actor, line, pause_autoplay} when `entry` is a phase EVENT entry of this battle, else {}.
+func phase_info(_entry: ActionLogEntry) -> Dictionary:
+	return {}
 
 # Narration when a round concludes: {"phase": String, "status": String, "log": String}
 func round_summary(_round_num: int, _combat_over: bool) -> Dictionary:

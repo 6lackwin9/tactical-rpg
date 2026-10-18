@@ -17,7 +17,8 @@ extends RefCounted
 #             the draft on the timeline; it stays paused until set_autoplay(true). Safety stops (a hero downed this
 #             round, or a hero crossing SAFETY_HP_PCT % HP this round: above it at the start, at or below at the end)
 #             and an invalid draft pause the same way
-#             with a reason ("Autoplay paused: Bryn is at 22% HP").
+#             with a reason ("Autoplay paused: Bryn is at 22% HP"). A boss phase with pause_autoplay (BOSS1 rule 7) pauses
+#             at the next planning phase with the reason "<trigger unit or encounter>: <phase name>".
 #   Remembered  bind a GameState: its `autoplay` blob {on, party, heroes} is read at creation and written on every
 #             change (hero keys from CombatEncounter.hero_key). Only player choices change `on`; stops do not.
 # ==============================================================================
@@ -57,6 +58,7 @@ func _init(p_session: CombatSession, p_store: GameState = null) -> void:
 	session.round_reset.connect(_on_round_reset)
 	session.round_concluded.connect(_on_round_concluded)
 	session.plan_edited.connect(_on_plan_edited)
+	session.phase_fired.connect(_on_phase_fired)
 	if session.resolver != null:
 		_on_round_started(session.current_round)
 
@@ -65,7 +67,7 @@ func detach() -> void:
 	if session == null:
 		return
 	for pair: Array in [[session.round_started, _on_round_started], [session.round_reset, _on_round_reset],
-			[session.round_concluded, _on_round_concluded], [session.plan_edited, _on_plan_edited]]:
+			[session.round_concluded, _on_round_concluded], [session.plan_edited, _on_plan_edited], [session.phase_fired, _on_phase_fired]]:
 		var sig: Signal = pair[0]
 		var cb: Callable = pair[1]
 		if sig.is_connected(cb):
@@ -354,6 +356,18 @@ func _on_round_concluded(_round_num: int, over: bool) -> void:
 	var reason: String = safety_reason(session.allies, _hp_at_start)
 	if not reason.is_empty():
 		_pause(reason, false)
+
+# BOSS1 rule 7: a battle-only stop like the safety stops (the saved switch stays on); the next planning phase stops
+# drafted (a phase fired at a round start stops that round's planning).
+func _on_phase_fired(_entry: ActionLogEntry, info: Dictionary) -> void:
+	if not running or not DictUtil.to_bool(info.get("pause_autoplay", true), true):
+		return
+	_pause(phase_reason(info), false)
+	_stop_next = true
+
+# "<trigger unit or encounter>: <phase name>".
+static func phase_reason(info: Dictionary) -> String:
+	return "%s: %s" % [str(info.get("actor", "")), str(info.get("name", ""))]
 
 func _on_plan_edited(kind: String, actor: Combatant) -> void:
 	if _drafting or not EDIT_KINDS.has(kind) or actor == null:
