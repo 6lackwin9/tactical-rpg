@@ -15,6 +15,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/ui/combat/intent_overlay.gd`, `scripts/ui/combat/intent_text.gd` | enemy tell chips and arrows on the grid; tell wording for cards, hover card, timeline and forecast (INTENT1-U) | S16 | done |
 | `scripts/ui/combat/combat_hud_metrics.gd` | CombatHudMetrics: combat layout C sizes (column widths, tile size, card heights and dropped lines per text size) (COMBAT-UI2-L1) | S16 | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
+| `scripts/tests/purse_test_suite.gd` | encounter purse schema and validation, both catalogs (PURSE1-L) | S13 | in-progress |
 | `scripts/tests/game_menu_test_suite.gd` | in-play game menu popup, busy rules, new game selection, load question, 1280x720 fit (UIR-2) | S13 | done |
 | `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | done |
 | `scripts/tests/status_expansion_effects_test_suite.gd` | slow tiles, expose/fortify armor rating, round-end order and logs, poison stacking, granted magnitudes and sources, Forge magnitude range (S12S-L commit 2) | S12 | done |
@@ -71,7 +72,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
-| `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter) | S9 | done |
+| `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter), purse_rules.gd (PurseRules: encounter purse field and validation; roll/pay in PURSE1-L) | S9 | done |
 | `scripts/travel/` | TravelRules (route validation, graph, fog, path, view), TravelRunner (trips, road fights) | S10 | done (TRAV1-L) |
 | `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog), rep_rules.gd (RepRules: rep flag keys and values, rep key lint, bands and price factors; REP1); dialogue_runner.gd (DialogueRunner); panels in DLG1-L commit 3 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |

@@ -96,6 +96,7 @@ static func run_all(tree_parent: Node = null, systems: PackedStringArray = Packe
 	if _on("menus"): results.append(AudioSettingsTestSuite.run(tree_parent))
 	if _on("menus"): results.append(DisplayTestSuite.run(tree_parent))
 	if _on("world"): results.append(BattleLinkTestSuite.run(tree_parent))
+	if _on("world"): results.append(PurseTestSuite.run())
 	if _on("combat_ui"): results.append(BattleFlowTestSuite.run(tree_parent))
 	if _on("party_save"): results.append(PartyScreenTestSuite.run(tree_parent))
 	if _on("party_save"): results.append(SaveIoTestSuite.run())

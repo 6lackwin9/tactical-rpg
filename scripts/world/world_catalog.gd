@@ -1159,6 +1159,7 @@ static func _encounter_errors(world_id: String, e: Dictionary) -> Array[String]:
 	errors.append_array(EncounterObjectives.problems(e, func(ref: String) -> bool: return guest_ok(world_id, ref)))
 	errors.append_array(EncounterMorale.problems(e))   # MORALE1 spec 1.1
 	errors.append_array(EncounterPhases.start_status_problems(e.get("start_status", [])))   # PACE1 spec 3.4
+	errors.append_array(PurseRules.problems(e, func(ref: String) -> String: return PurseRules.world_loot_check(world_id, ref)))   # PURSE1 spec 3
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		for x: Variant in DictUtil.array_of(exits):
@@ -1312,13 +1313,16 @@ static func world_warnings(world_id: String) -> Array[String]:
 	return out
 
 # PACE1 3.5: "<qid>: Boss fight '<id>' has no enrage phase (PACE1)." for each own encounter of the world whose pace
-# resolves to boss (tiers from the characters' base units, as in this world) without an enrage phase.
+# resolves to boss (tiers from the characters' base units, as in this world) without an enrage phase; PURSE1 purse
+# warnings (PurseRules.warnings) with the same prefix.
 static func encounter_warnings(world_id: String) -> Array[String]:
 	var out: Array[String] = []
 	var tier_of: Callable = func(ref: String) -> String:
 		return str(ContentSchema.normalize("units", WorldFactory.unit_entry(resolve(world_id, "characters", ref))).get("tier", ""))
 	for e: Dictionary in own_entries(world_id, "encounters"):
 		for w: String in EncounterPhases.pace_warnings(e, tier_of):
+			out.append("%s:%s: %s" % [world_id, str(e.get("id", "")), w])
+		for w: String in PurseRules.warnings(e):   # PURSE1 spec 3: soft cap, empty purse
 			out.append("%s:%s: %s" % [world_id, str(e.get("id", "")), w])
 	return out
 

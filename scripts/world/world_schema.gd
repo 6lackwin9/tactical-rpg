@@ -348,6 +348,7 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("morale_leader", "Morale leader", "string", "", {"help": "Morale only: a ref from Enemies; empty = the first boss or elite enemy, else none."}),
 		_f("morale_groups", "Morale groups", "json", [], {"help": "Morale only: [[enemy index, ...], ...]; every enemy in exactly one group; [] = one group."}),
 		_f("morale_text", "Morale text", "string", "", {"help": "Morale only: at most 80 characters; empty = the generated break line."}),
+		_f("purse", "Purse", "json", {}, {"help": "{\"gold_min\": 0, \"gold_max\": gold_min, \"loot\": \"\", \"once\": true} (PURSE1; PurseRules): gold 0..500 rolled on a win; loot = a world loot id (item reward), claimed once per save; once = pays only the first win. {} = no purse."}),
 		_f("guests", "Guests", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "At most 2 party-side extras: party characters, or npcs whose base unit has side party."}),
 		_f("protect", "Protect", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "Guests that must survive (each must be in Guests)."}),
 	]
