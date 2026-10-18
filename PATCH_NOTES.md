@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: a1ca665 -->
+<!-- last: fb133e2 -->
 
 ## 2026-10-18
 
@@ -125,6 +125,8 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- USAGE: 15:59 usage report and delta (fb133e2)
+- BALANCE-HANDOVER: PACE1-S unblocked (6e72b3b)
 - MODE-ECONOMY: economy dispatch window 15:45-18:45 UTC; mode-trial rows updated (6fb06ac)
 - LEVERS1: Shield Wall guard rule and default-kit slot decided (L3, A3) (e0f1ae5)
 - GAMEPLAY-HANDOVER: add LEVERS1-L3 to the queue (b0fda75)
