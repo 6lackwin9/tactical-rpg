@@ -12,6 +12,7 @@ const TIME_MIN: int = 1
 const TIME_MAX: int = 20
 const PCT_MAX: int = 100
 const REPEAT_HALF: int = -1   # repeat_pct -1 = encounter_pct / 2, rounded down
+const STARVED_PCT: int = 150  # TRAV2-L: road chance x1.5 (rounded down, capped at PCT_MAX) while supplies are 0
 const MAX_SCRIPTED: int = 4
 const SCRIPTED_KEYS: Array[String] = ["id", "encounter", "requires_flags", "unless_flags", "sets_flags"]
 const SCRIPTED_FLAG_KEYS: Array[String] = ["requires_flags", "unless_flags", "sets_flags"]
@@ -227,11 +228,17 @@ static func repeat_chance(route: Dictionary) -> int:
 	var repeat: int = DictUtil.to_int(route.get("repeat_pct", REPEAT_HALF))
 	return floori(DictUtil.to_int(route.get("encounter_pct", 0)) / 2.0) if repeat == REPEAT_HALF else repeat
 
-# The road chance of the next leg on `route`: repeat once its traversed flag is set, else encounter_pct.
-static func leg_chance(gs: GameState, route: Dictionary) -> int:
+# The road chance of the next leg on `route`: repeat once its traversed flag is set, else encounter_pct; then the
+# starved chance when `starved` (TRAV2-L: the party had 0 supplies at the leg start).
+static func leg_chance(gs: GameState, route: Dictionary, starved: bool = false) -> int:
+	var chance: int = DictUtil.to_int(route.get("encounter_pct", 0))
 	if gs.get_flag(traversed_flag(str(route["_qid"])), false) == true:
-		return repeat_chance(route)
-	return DictUtil.to_int(route.get("encounter_pct", 0))
+		chance = repeat_chance(route)
+	return starved_chance(chance) if starved else chance
+
+# A road chance while starved: chance x STARVED_PCT / 100, rounded down, capped at PCT_MAX (0 stays 0).
+static func starved_chance(chance: int) -> int:
+	return mini(PCT_MAX, maxi(chance, 0) * STARVED_PCT / 100)
 
 # The party supplies of a new game in `world_id` (TRAV2-L): the nearest manifest (the world, then up the lineage) with
 # start_supplies >= 0, else PartyState.SUPPLIES_START.
@@ -329,7 +336,7 @@ static func route_in(world_id: String, route_qid: String) -> Dictionary:
 			return r
 	return {}
 
-# What the world map draws: {current, nodes: [{qid, name, visited}], routes: [{qid, from, to, two_way, open, time}]}
+# What the world map draws: {current, supplies (TRAV2-L), nodes: [{qid, name, visited}], routes: [{qid, from, to, two_way, open, time}]}
 # for known nodes only; a closed route is listed only when both its endpoints are known, an open one when both are.
 static func view(gs: GameState) -> Dictionary:
 	var known_nodes: Array[String] = known(gs)
@@ -344,4 +351,4 @@ static func view(gs: GameState) -> Dictionary:
 		if not known_nodes.has(a) or not known_nodes.has(b):
 			continue
 		route_list.append({"qid": str(r["_qid"]), "from": a, "to": b, "two_way": DictUtil.to_bool(r.get("two_way", true)), "open": is_open(gs, r), "time": DictUtil.to_int(r.get("time", 0))})
-	return {"current": gs.location_id, "nodes": node_list, "routes": route_list}
+	return {"current": gs.location_id, "supplies": gs.party.supplies, "nodes": node_list, "routes": route_list}

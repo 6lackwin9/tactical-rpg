@@ -26,6 +26,7 @@ const SELL_MULT_MAX: float = 1.0
 const UNLIMITED: int = -1
 const DERIVED: int = -1
 const BUY_MAX: int = 99   # most of one offer per buy (stock counts are 1..99); keeps price x count far from int overflow
+const SUPPLIES: String = "supplies"   # TRAV2-L: offer kind and id of travel supplies
 const SUPPLY_PRICE_MAX: int = 999   # TRAV2-L: gold per travel supply (0 = sells none)
 const REP_NEUTRAL: int = 100   # rb = rs of the neutral band (and of a keeper without a faction)
 
@@ -234,6 +235,10 @@ static func offers(gs: GameState, shop_ref: String) -> Array[Dictionary]:
 		if lqid.is_empty() or gs.loot_claimed.has(lqid) or not _holds(gs, loot.get("requires_flags", [])):
 			continue
 		out.append({"kind": "loot", "id": lqid, "item": str(loot.get("ref", "")), "count": DictUtil.to_int(loot.get("count", 1), 1), "price": DictUtil.to_int(l.get("price", 1)), "left": 1})
+	# TRAV2-L 2.3: travel supplies at the fixed supply_price (no band factor, unlimited); left = room up to the cap.
+	var supply_price: int = DictUtil.to_int(shop.get("supply_price", 0))
+	if supply_price > 0:
+		out.append({"kind": SUPPLIES, "id": SUPPLIES, "item": "", "count": 1, "price": supply_price, "left": maxi(PartyState.SUPPLIES_MAX - gs.party.supplies, 0)})
 	return out
 
 static func _fail(message: String) -> Dictionary:
@@ -258,6 +263,8 @@ static func buy(gs: GameState, shop_ref: String, kind: String, id: String, count
 	if offer.is_empty():
 		return _fail("'%s' is not for sale here." % id)
 	var left: int = DictUtil.to_int(offer["left"])
+	if kind == SUPPLIES:
+		return _buy_supplies(gs, DictUtil.to_int(offer["price"]), left, count)
 	if left != UNLIMITED and left < count:
 		return _fail("Sold out.")
 	var total: int = DictUtil.to_int(offer["price"]) * count
@@ -278,6 +285,18 @@ static func buy(gs: GameState, shop_ref: String, kind: String, id: String, count
 		gs.shops[sqid] = sold
 	var errors: Array[String] = []
 	return {"ok": true, "errors": errors, "price": total, "items": {item: amount}}
+
+# Supplies (TRAV2-L 2.3): all-or-nothing; no stash change, no gs.shops entry. {ok, errors, price (total), supplies}.
+static func _buy_supplies(gs: GameState, price: int, left: int, count: int) -> Dictionary:
+	if count > left:
+		return _fail("You can carry at most %d supplies." % PartyState.SUPPLIES_MAX)
+	var total: int = price * count
+	if gs.party.gold < total:
+		return _fail("Not enough gold.")
+	gs.party.gold -= total
+	var added: int = gs.party.add_supplies(count)
+	var errors: Array[String] = []
+	return {"ok": true, "errors": errors, "price": total, "supplies": added}
 
 # Stash items the shop buys: type in `buys`, never QUEST, sell price >= 1: [{item, count (held), price}], stash order.
 static func sell_list(gs: GameState, shop_ref: String) -> Array[Dictionary]:

@@ -20,6 +20,7 @@ signal fight_settled(res: Dictionary)
 const PIN_RADIUS: float = 9.0
 const CLICK_RADIUS: float = 16.0
 const LAYOUT_FRACTION: float = 0.38
+const OUT_OF_SUPPLIES: String = "Out of supplies: road fights are more likely."   # TRAV2-L status warning at 0
 const ARROW_SIZE: float = 10.0
 const DASH: float = 6.0
 const COL_ROUTE: Color = Color(0.75, 0.70, 0.55)
@@ -194,7 +195,7 @@ func travel_to(location_qid: String) -> void:
 			_note("Road fight! %s (%s%s) after %d leg(s)" % [str(pending_fight["encounter"]), str(pending_fight["source"]), ", elite" if DictUtil.to_bool(pending_fight["elite"]) else "", DictUtil.to_int(res["legs_done"])])
 			launch_battle.call_deferred()
 		"arrived":
-			_note("Arrived at %s (time %d)." % [gs.location_id, gs.time])
+			_note("Arrived at %s (time %d, supplies -%d)." % [gs.location_id, gs.time, DictUtil.to_int(res.get("supplies_spent", 0))])
 			arrived.emit(gs.location_id)
 	_refresh()
 
@@ -281,11 +282,17 @@ func _exit_tree() -> void:
 # Drawing
 # ------------------------------------------------------------------------------
 
+# The status line as shown (tests).
+func status_text() -> String:
+	return _status.text if _status != null else ""
+
 func _refresh() -> void:
 	_sync_busy()
 	if _status == null:
 		return
-	_status.text = "Pick a world and start a new game." if gs == null else "%s  time %d  rolls %s" % [gs.location_id, gs.time, str(gs.rolls)]
+	_status.text = "Pick a world and start a new game." if gs == null else "%s  time %d  supplies %d/%d  rolls %s" % [gs.location_id, gs.time, gs.party.supplies, PartyState.SUPPLIES_MAX, str(gs.rolls)]
+	if gs != null and gs.party.supplies == 0:
+		_status.text += "\n" + OUT_OF_SUPPLIES   # TRAV2-L: the starved warning
 	if _back != null:
 		_back.disabled = busy()
 	_fight_panel.visible = not pending_fight.is_empty() and battle == null

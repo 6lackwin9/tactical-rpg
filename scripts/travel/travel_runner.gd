@@ -4,7 +4,7 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Travel runner (S10, spec TRAV1-L 2.3-2.5): auto-pathed trips over the world map, leg by leg.
 # Stateless: everything lives in the GameState (location_id = the current node, time, flags, rolls). Per leg: the clock
-# advances, then a scripted road fight (first matching entry) or the road roll (GameRolls stream "travel"); a fight
+# advances and the leg's supplies are paid (TRAV2-L: `route.time`, clamped at 0, travel never refused), then a scripted road fight (first matching entry) or the road roll (GameRolls stream "travel"); a fight
 # stops the trip and the caller plays it (BattleBridge.encounter_for(gs, fight.encounter, fight.zone)) and then calls
 # after_fight. The remaining path is never stored: after a won fight the caller calls travel() again. Entry autosaves
 # of one trip collapse into one `autosave` event at the end; none while a fight is pending (the runner does no I/O).
@@ -23,7 +23,7 @@ static func current_node(gs: GameState) -> String:
 
 # Travels towards `to_ref` (a location ref seen from gs.world_id). Refused (state unchanged) unless the party stands on
 # a node and a path exists. Returns {ok, status: "fight" | "arrived", legs_done, time (spent by this call), events,
-# fight (status fight) | location (status arrived)}.
+# fight (status fight) | location (status arrived), supplies_spent (this call), starved_legs (legs rolled at 0 supplies)}.
 static func travel(gs: GameState, to_ref: String) -> Dictionary:
 	var start: String = current_node(gs)
 	if start.is_empty():
@@ -45,24 +45,30 @@ static func travel(gs: GameState, to_ref: String) -> Dictionary:
 		at = leg_to
 	var events: Array[Dictionary] = []
 	var spent: int = 0
+	var supplies_spent: int = 0
+	var starved_legs: int = 0
 	var legs_done: int = 0
 	for leg: Dictionary in plan:
 		var route: Dictionary = leg["route"]
 		var leg_time: int = DictUtil.to_int(route.get("time", 0))
+		var starved: bool = gs.party.supplies == 0   # TRAV2-L 2.1: read before this leg is paid
 		gs.time += leg_time
 		spent += leg_time
-		var fight: Dictionary = _leg_fight(gs, route, str(leg["from"]), str(leg["to"]))
+		supplies_spent += gs.party.spend_supplies(leg_time)
+		if starved:
+			starved_legs += 1
+		var fight: Dictionary = _leg_fight(gs, route, str(leg["from"]), str(leg["to"]), starved)
 		if not fight.is_empty():
 			var errors: Array[String] = []
-			return {"ok": true, "errors": errors, "status": "fight", "fight": fight, "legs_done": legs_done, "time": spent, "events": events}
+			return {"ok": true, "errors": errors, "status": "fight", "fight": fight, "legs_done": legs_done, "time": spent, "events": events, "supplies_spent": supplies_spent, "starved_legs": starved_legs}
 		var entered: Dictionary = complete_leg(gs, str(route["_qid"]), str(leg["to"]))
 		if not DictUtil.to_bool(entered["ok"]):
-			return {"ok": false, "errors": entered["errors"], "status": "stopped", "legs_done": legs_done, "time": spent, "events": events}
+			return {"ok": false, "errors": entered["errors"], "status": "stopped", "legs_done": legs_done, "time": spent, "events": events, "supplies_spent": supplies_spent, "starved_legs": starved_legs}
 		events.append_array(_without_autosave(entered["events"]))
 		legs_done += 1
 	events.append({"kind": "autosave"})
 	var ok_errors: Array[String] = []
-	return {"ok": true, "errors": ok_errors, "status": "arrived", "location": gs.location_id, "legs_done": legs_done, "time": spent, "events": events}
+	return {"ok": true, "errors": ok_errors, "status": "arrived", "location": gs.location_id, "legs_done": legs_done, "time": spent, "events": events, "supplies_spent": supplies_spent, "starved_legs": starved_legs}
 
 static func _without_autosave(raw: Variant) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -72,8 +78,9 @@ static func _without_autosave(raw: Variant) -> Array[Dictionary]:
 			out.append(d)
 	return out
 
-# The fight of this leg ({} = none): the first armed scripted entry, else the road roll.
-static func _leg_fight(gs: GameState, route: Dictionary, from_qid: String, to_qid: String) -> Dictionary:
+# The fight of this leg ({} = none): the first armed scripted entry (supplies ignored), else the road roll (x1.5 when
+# `starved`, TRAV2-L 2.2).
+static func _leg_fight(gs: GameState, route: Dictionary, from_qid: String, to_qid: String, starved: bool = false) -> Dictionary:
 	var rq: String = str(route["_qid"])
 	for x: Variant in DictUtil.array_of(route.get("scripted", [])):
 		var s: Dictionary = DictUtil.dict_of(JsonUtil.normalize(x))
@@ -84,7 +91,7 @@ static func _leg_fight(gs: GameState, route: Dictionary, from_qid: String, to_qi
 			return _fight(gs, route, SOURCE_SCRIPTED, str(s.get("encounter", "")), sid, false, from_qid, to_qid)
 	var normal: Array = DictUtil.array_of(route.get("encounters", []))
 	var elites: Array = DictUtil.array_of(route.get("elites", []))
-	var chance: int = TravelRules.leg_chance(gs, route)
+	var chance: int = TravelRules.leg_chance(gs, route, starved)
 	if chance <= 0 or (normal.is_empty() and elites.is_empty()):
 		return {}
 	if not GameRolls.chance(gs, GameRolls.TRAVEL, chance):

@@ -441,5 +441,11 @@ static func _open_chest(gs: GameState, loc_qid: String, m: Dictionary) -> Dictio
 		return {"ok": false, "errors": granted["errors"], "kind": "chest"}
 	if not loot_qid.is_empty():
 		var _claim: String = RewardGrant.claim_loot(gs, loot_qid)
+	# TRAV2-L 2.4: supplies after the grant (not a reward key); above the cap they are lost with a note.
+	var want: int = maxi(DictUtil.to_int(m.get("supplies", 0)), 0)
+	var added: int = gs.party.add_supplies(want)
 	var _done: String = QuestRunner.set_flag(gs, MapRules.done_flag(loc_qid, str(m["id"])), true)
-	return {"ok": true, "empty": false, "items": items, "loot": loot_qid, "gold": DictUtil.to_int(DictUtil.dict_of(granted["granted"]).get("gold", 0))}
+	var out: Dictionary = {"ok": true, "empty": false, "items": items, "loot": loot_qid, "gold": DictUtil.to_int(DictUtil.dict_of(granted["granted"]).get("gold", 0)), "supplies": added}
+	if added < want:
+		out["notes"] = ["Supplies are capped at %d (%d left behind)." % [PartyState.SUPPLIES_MAX, want - added]] as Array[String]
+	return out

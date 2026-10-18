@@ -8,7 +8,8 @@ extends RefCounted
 # Runtime (checks 5-17, TravelRuntimeChecks): graph, fog, path, trips, chances, scripted fights, determinism, outcomes,
 # cross-world, menu, save v5. Scenes (WorldMapChecks): the debug world map and the region map hand-over.
 # TRAV2-L (supplies, schema slice; checks T1-T5): PartyState.supplies, save v6, manifest start_supplies, shop
-# supply_price, chest supplies. The save_v6.json fixture load and round trip live in SaveCompatTestSuite.
+# supply_price, chest supplies (the save_v6.json fixture load and round trip live in SaveCompatTestSuite); behaviour
+# (checks T6-T14, world T2): per-leg spending, the starved x1.5 road chance, buying supplies, chest supplies, view.
 # Fixtures: hand-built worlds in an EMPTY sandbox world root and a sandbox map file; the shipped catalog is only read
 # (a combat zone picked by rule), shipped data is never written.
 # ==============================================================================
@@ -93,6 +94,7 @@ static func run(tree_parent: Node = null) -> bool:
 			QuestCatalog.use_path(SANDBOX + "/quests.json")
 			SaveGame.set_base_dir(SANDBOX + "/saves")
 			ok = _test_supplies_schema() and ok   # TRAV2-L checks 1-5
+			ok = _test_supplies_runtime() and ok   # TRAV2-L checks 6-14
 			ok = TravelRuntimeChecks.run() and ok   # commit 2: checks 5-17
 			ok = WorldMapChecks.run(tree_parent) and ok   # commit 3: debug world map scene, region map hand-over
 			SaveGame.reset_base_dir()
@@ -411,3 +413,281 @@ static func _test_supplies_chest() -> bool:
 	checks["supplies-only chest valid"] = MapRules.markers_errors(W, {}, tmpl, [chest.merged({"supplies": 3})]).is_empty()
 	checks["empty chest (supplies 0) still errors"] = _one(MapRules.markers_errors(W, {}, tmpl, [chest.merged({"supplies": 0})]), "Chest 'box' holds nothing.")
 	return _report("TRAV2 check 5: chest supplies validation and the holds-nothing rule", checks)
+
+# ------------------------------------------------------------------------------
+# TRAV2-L checks 6-14: supplies behaviour (world T2, units picked by rule)
+# ------------------------------------------------------------------------------
+
+const T2: String = "tv_sup"
+const T2_SEED: int = 4242
+const SEED_TRIES: int = 400
+static var _t2_unit: String = ""
+
+static func _t2_route(id: String, from: String, to: String, extra: Dictionary = {}) -> Dictionary:
+	var r: Dictionary = {"id": id, "name": id, "from": from, "to": to, "time": 1, "encounter_pct": 0}
+	r.merge(extra, true)
+	return r
+
+static func _build_t2() -> bool:
+	_t2_unit = TravelRuntimeChecks._pick_unit("party")
+	var enemy: String = TravelRuntimeChecks._pick_unit("enemy")
+	var errors: Array[String] = []
+	if _t2_unit.is_empty() or enemy.is_empty():
+		errors.append("no unit picked")
+	var map: Dictionary = _map()
+	map["id"] = "m_t2"
+	map["anchors"] = [{"id": "spawn", "x": 1, "y": 1}, {"id": "a_chest", "x": 1, "y": 2}]
+	errors.append_array(MapCatalog.upsert(map))
+	errors.append_array(WorldCatalog.create_world(T2, "TV Supplies"))
+	errors.append_array(WorldCatalog.upsert(T2, "factions", {"id": "guild", "name": "Guild"}))
+	errors.append_array(WorldCatalog.upsert(T2, "characters", {"id": "hero", "name": "Hero", "role": "party", "base_unit": _t2_unit}))
+	errors.append_array(WorldCatalog.upsert(T2, "characters", {"id": "foe", "name": "Foe", "role": "enemy", "base_unit": enemy}))
+	errors.append_array(WorldCatalog.upsert(T2, "characters", {"id": "seller", "name": "Seller", "base_unit": _t2_unit, "faction": "guild"}))
+	for id: String in ["enc_a", "enc_s", "elite_a"]:
+		errors.append_array(WorldCatalog.upsert(T2, "encounters", {"id": id, "name": id, "party": ["hero"], "enemies": ["foe"], "max_rounds": 2}))
+	for id: String in ["a0", "a1", "a2", "b0", "b1", "b2", "c0", "c1", "d0", "d1", "e0", "e1", "z0", "z1", "s0", "s1", "lonely"]:
+		errors.append_array(WorldCatalog.upsert(T2, "locations", {"id": id, "name": id.capitalize()}))
+	errors.append_array(WorldCatalog.upsert(T2, "locations", {"id": "cache", "name": "Cache", "map": "m_t2",
+		"markers": [{"id": "box", "kind": "chest", "anchor": "a_chest", "supplies": 6}]}))
+	var road: Array = [["enc_a", 1]]
+	for r: Dictionary in [
+		_t2_route("r_a01", "a0", "a1", {"time": 2}), _t2_route("r_a12", "a1", "a2", {"time": 3}),
+		_t2_route("r_b01", "b0", "b1", {"time": 3, "encounter_pct": 20, "encounters": road}), _t2_route("r_b12", "b1", "b2", {"time": 3, "encounter_pct": 20, "encounters": road}),
+		_t2_route("r_c", "c0", "c1", {"encounter_pct": 20, "encounters": road}),
+		_t2_route("r_d", "d0", "d1", {"encounter_pct": 25, "repeat_pct": -1, "encounters": road}),
+		_t2_route("r_e", "e0", "e1", {"encounter_pct": 67, "encounters": road, "elites": [["elite_a", 1]], "elite_pct": 30}),
+		_t2_route("r_z", "z0", "z1", {"encounters": road}),
+		_t2_route("r_s", "s0", "s1", {"time": 2, "scripted": [{"id": "amb", "encounter": "enc_s", "requires_flags": [{"key": "t2.go"}]}]}),
+	]:
+		errors.append_array(WorldCatalog.upsert(T2, "routes", r))
+	errors.append_array(WorldCatalog.upsert(T2, "shops", {"id": "sup", "name": "Supplies", "keeper": "seller", "supply_price": 2}))
+	errors.append_array(WorldCatalog.upsert(T2, "shops", {"id": "plain", "name": "Plain", "keeper": "seller"}))
+	errors.append_array(WorldCatalog.upsert(T2, "shops", {"id": "shut", "name": "Shut", "keeper": "seller", "supply_price": 2, "requires_flags": [{"key": "t2.open"}]}))
+	var problems: Dictionary = WorldCatalog.validate_world(T2)
+	if not errors.is_empty() or not problems.is_empty():
+		print("      T2 fixture errors: %s %s" % [str(errors), str(problems)])
+	return _report("TRAV2 fixture world T2 (routes, scripted route, shops, a supplies chest)", {"no errors": errors.is_empty(), "validates": problems.is_empty()})
+
+# A fresh T2 state at `loc` with `supplies`; `p_seed` = its rng_seed.
+static func _t2_at(loc: String, supplies: int, p_seed: int = T2_SEED) -> GameState:
+	var gs: GameState = GameState.of(NewGame.create(T2, [_t2_unit, _t2_unit] as Array[String], p_seed)["state"])
+	var _e: Dictionary = ExploreRunner.enter(gs, loc)
+	for q: String in TravelRules.nodes(T2):   # no fog in these checks: every node visited
+		var _v: String = gs.set_flag(MapRules.visited_flag(q), true)
+	gs.party.supplies = supplies
+	return gs
+
+static func _t2q(id: String) -> String:
+	return WorldCatalog.qid(T2, id)
+
+# The next `n` travel-stream draws (0..99) of `gs`, from a copy (gs is unchanged).
+static func _peek(gs: GameState, n: int) -> Array[int]:
+	var copy: GameState = GameState.from_dict(gs.to_dict())
+	var out: Array[int] = []
+	for i: int in range(n):
+		out.append(GameRolls.range_i(copy, GameRolls.TRAVEL, 0, 99))
+	return out
+
+# A copy of `base` reseeded so its next travel draws satisfy `want` (Callable(Array[int]) -> bool); null when none.
+static func _seeded(base: GameState, n: int, want: Callable) -> GameState:
+	for i: int in range(SEED_TRIES):
+		var g: GameState = GameState.from_dict(base.to_dict())
+		g.rng_seed = (T2_SEED + 7919 * i) & GameState.SEED_MAX
+		if DictUtil.to_bool(want.call(_peek(g, n))):
+			return g
+	return null
+
+static func _status(res: Dictionary) -> String:
+	return str(res.get("status", ""))
+
+static func _travel_rolls(gs: GameState) -> int:
+	return DictUtil.to_int(gs.rolls.get(GameRolls.TRAVEL, 0))
+
+static func _test_supplies_runtime() -> bool:
+	if not _build_t2():
+		return false
+	var ok: bool = true
+	ok = _test_supplies_spending() and ok
+	ok = _test_supplies_starved_roll() and ok
+	ok = _test_supplies_leg_start() and ok
+	ok = _test_supplies_determinism() and ok
+	ok = _test_supplies_scripted() and ok
+	ok = _test_supplies_shop_buy() and ok
+	ok = _test_supplies_bands() and ok
+	ok = _test_supplies_chest_open() and ok
+	ok = _test_supplies_view() and ok
+	return ok
+
+static func _test_supplies_spending() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _t2_at("a0", 10)
+	var res: Dictionary = TravelRunner.travel(gs, "a2")
+	checks["legs 2 + 3 from 10 leave 5, report 5"] = _status(res) == "arrived" and gs.party.supplies == 5 and DictUtil.to_int(res.get("supplies_spent", -1)) == 5 and DictUtil.to_int(res.get("starved_legs", -1)) == 0
+	var low: GameState = _t2_at("a0", 4)
+	var low_res: Dictionary = TravelRunner.travel(low, "a2")
+	checks["from 4: leaves 0, reports 4"] = _status(low_res) == "arrived" and low.party.supplies == 0 and DictUtil.to_int(low_res.get("supplies_spent", -1)) == 4
+	var none: GameState = _t2_at("a0", 0)
+	var none_res: Dictionary = TravelRunner.travel(none, "a2")
+	checks["from 0: not refused, spends 0, both legs starved"] = _status(none_res) == "arrived" and none.location_id == _t2q("a2") and none.party.supplies == 0 and DictUtil.to_int(none_res.get("supplies_spent", -1)) == 0 and DictUtil.to_int(none_res.get("starved_legs", -1)) == 2
+	var refused: GameState = _t2_at("a0", 7)
+	var snap: String = JSON.stringify(refused.to_dict(), "", true)
+	var no_path: Dictionary = TravelRunner.travel(refused, "lonely")
+	var unknown: Dictionary = TravelRunner.travel(refused, "nowhere")
+	checks["a refused trip changes nothing"] = not DictUtil.to_bool(no_path["ok"]) and not DictUtil.to_bool(unknown["ok"]) and JSON.stringify(refused.to_dict(), "", true) == snap
+	return _report("TRAV2 check 6: each leg costs its route time, clamped at 0; travel is never refused for supplies", checks)
+
+static func _test_supplies_starved_roll() -> bool:
+	var checks: Dictionary = {}
+	checks["reference values"] = TravelRules.starved_chance(15) == 22 and TravelRules.starved_chance(7) == 10 and TravelRules.starved_chance(41) == 61 and TravelRules.starved_chance(67) == 100 and TravelRules.starved_chance(100) == 100 and TravelRules.starved_chance(0) == 0
+	var c_route: Dictionary = TravelRules.route_in(T2, _t2q("r_c"))
+	var base: GameState = _t2_at("c0", 0)
+	checks["encounter_pct 20 starved = 30"] = TravelRules.leg_chance(base, c_route, true) == 30 and TravelRules.leg_chance(base, c_route) == 20
+	# A draw in [20, 30) fights only when starved.
+	var lo: int = DictUtil.to_int(c_route["encounter_pct"])
+	var hi: int = TravelRules.starved_chance(lo)
+	var g: GameState = _seeded(base, 1, func(d: Array[int]) -> bool: return d[0] >= lo and d[0] < hi)
+	checks["seed found for a draw in [20, 30)"] = g != null
+	if g != null:
+		var fed: GameState = GameState.from_dict(g.to_dict())
+		fed.party.supplies = 5
+		checks["that draw fights at 0 supplies, not with supplies"] = _status(TravelRunner.travel(g, "c1")) == "fight" and _status(TravelRunner.travel(fed, "c1")) == "arrived"
+	var d_route: Dictionary = TravelRules.route_in(T2, _t2q("r_d"))
+	var d: GameState = _t2_at("d0", 0)
+	var _t: String = d.set_flag(TravelRules.traversed_flag(_t2q("r_d")), true)
+	checks["traversed, repeat_pct -1, encounter_pct 25: starved 18"] = TravelRules.leg_chance(d, d_route, true) == 18 and TravelRules.leg_chance(d, d_route) == 12
+	var e_route: Dictionary = TravelRules.route_in(T2, _t2q("r_e"))
+	checks["encounter_pct 67 starved = 100"] = TravelRules.leg_chance(base, e_route, true) == TravelRules.PCT_MAX
+	var z: GameState = _t2_at("z0", 0)
+	var z_res: Dictionary = TravelRunner.travel(z, "z1")
+	checks["encounter_pct 0 never fights (no draw)"] = _status(z_res) == "arrived" and _travel_rolls(z) == 0
+	# Elite chance unchanged: on r_e at 0 supplies every leg fights; the elite draw (second) decides against elite_pct.
+	var e_base: GameState = _t2_at("e0", 0)
+	var elite_pct: int = DictUtil.to_int(e_route["elite_pct"])
+	var elite_g: GameState = _seeded(e_base, 2, func(dr: Array[int]) -> bool: return dr[1] < elite_pct)
+	var plain_g: GameState = _seeded(e_base, 2, func(dr: Array[int]) -> bool: return dr[1] >= elite_pct and dr[1] < TravelRules.starved_chance(elite_pct))
+	checks["seeds found for the elite draw"] = elite_g != null and plain_g != null
+	if elite_g != null and plain_g != null:
+		var fe: Dictionary = DictUtil.dict_of(TravelRunner.travel(elite_g, "e1").get("fight", {}))
+		var fp: Dictionary = DictUtil.dict_of(TravelRunner.travel(plain_g, "e1").get("fight", {}))
+		checks["elite_pct is not scaled"] = DictUtil.to_bool(fe.get("elite", false)) and not fp.is_empty() and not DictUtil.to_bool(fp.get("elite", true))
+	return _report("TRAV2 check 7: the starved road roll (x1.5 rounded down, capped at 100; elite chance unchanged)", checks)
+
+static func _test_supplies_leg_start() -> bool:
+	var checks: Dictionary = {}
+	var b_route: Dictionary = TravelRules.route_in(T2, _t2q("r_b01"))
+	var lo: int = DictUtil.to_int(b_route["encounter_pct"])
+	var hi: int = TravelRules.starved_chance(lo)
+	var base: GameState = _t2_at("b0", 2)
+	# Both draws in [20, 30): leg 1 (2 supplies at its start) passes, leg 2 (0 at its start) fights.
+	var g: GameState = _seeded(base, 2, func(d: Array[int]) -> bool: return d[0] >= lo and d[0] < hi and d[1] >= lo and d[1] < hi)
+	checks["seed found"] = g != null
+	if g != null:
+		var res: Dictionary = TravelRunner.travel(g, "b2")
+		checks["leg 1 normal, leg 2 starved"] = _status(res) == "fight" and DictUtil.to_int(res["legs_done"]) == 1 and str(DictUtil.dict_of(res["fight"]).get("route", "")) == _t2q("r_b12")
+		checks["starved_legs 1, supplies 0, spent 2"] = DictUtil.to_int(res.get("starved_legs", -1)) == 1 and g.party.supplies == 0 and DictUtil.to_int(res.get("supplies_spent", -1)) == 2
+	return _report("TRAV2 check 8: 'out of supplies' is read at each leg start (before paying it)", checks)
+
+static func _test_supplies_determinism() -> bool:
+	var checks: Dictionary = {}
+	var a: GameState = _t2_at("b0", 0)
+	var b: GameState = _t2_at("b0", 0)
+	var ra: Dictionary = TravelRunner.travel(a, "b2")
+	var rb: Dictionary = TravelRunner.travel(b, "b2")
+	checks["equal states at 0 give equal results"] = JsonUtil.deep_equal(ra.get("fight", {}), rb.get("fight", {})) and _status(ra) == _status(rb) and JSON.stringify(a.to_dict()) == JSON.stringify(b.to_dict())
+	# Same draws: per seed, the starved and the fed trip differ in travel draws only by their pick draws (one per fight).
+	var same: bool = true
+	for i: int in range(12):
+		var starved: GameState = _t2_at("c0", 0, T2_SEED + i)
+		var fed: GameState = _t2_at("c0", 5, T2_SEED + i)
+		var rs: Dictionary = TravelRunner.travel(starved, "c1")
+		var rf: Dictionary = TravelRunner.travel(fed, "c1")
+		var picks: int = (1 if _status(rs) == "fight" else 0) - (1 if _status(rf) == "fight" else 0)
+		same = same and _travel_rolls(starved) - _travel_rolls(fed) == picks
+		if _status(rs) == _status(rf):
+			same = same and _travel_rolls(starved) == _travel_rolls(fed)
+	checks["starving changes the threshold, not the draws"] = same
+	return _report("TRAV2 check 9: determinism (equal states, equal fights; starving adds no draw)", checks)
+
+static func _test_supplies_scripted() -> bool:
+	var checks: Dictionary = {}
+	var at0: GameState = _t2_at("s0", 0)
+	var _g0: String = at0.set_flag("t2.go", true)
+	var fight0: Dictionary = DictUtil.dict_of(TravelRunner.travel(at0, "s1").get("fight", {}))
+	checks["a scripted fight fires the same at 0 supplies"] = str(fight0.get("source", "")) == TravelRunner.SOURCE_SCRIPTED and str(fight0.get("event", "")) == "amb"
+	var gs: GameState = _t2_at("s0", 5)
+	var _g: String = gs.set_flag("t2.go", true)
+	var leg_time: int = DictUtil.to_int(TravelRules.route_in(T2, _t2q("r_s"))["time"])
+	var res: Dictionary = TravelRunner.travel(gs, "s1")
+	var fight: Dictionary = DictUtil.dict_of(res.get("fight", {}))
+	checks["the fight leg is paid"] = DictUtil.to_int(res.get("supplies_spent", -1)) == leg_time and gs.party.supplies == 5 - leg_time
+	var fled: Dictionary = TravelRunner.after_fight(gs, fight, "fled")
+	checks["fled keeps the leg's supplies spent"] = DictUtil.to_bool(fled["ok"]) and gs.party.supplies == 5 - leg_time and gs.location_id == _t2q("s0")
+	var again: Dictionary = TravelRunner.travel(gs, "s1")
+	var won: Dictionary = TravelRunner.after_fight(gs, DictUtil.dict_of(again.get("fight", {})), "won")
+	checks["won completes the leg without a second charge"] = DictUtil.to_bool(won["ok"]) and gs.location_id == _t2q("s1") and gs.party.supplies == 5 - 2 * leg_time
+	return _report("TRAV2 check 10: scripted road fights ignore supplies; fled keeps them spent; won charges once", checks)
+
+static func _supply_offer(gs: GameState, shop: String) -> Dictionary:
+	for o: Dictionary in ShopRules.offers(gs, _t2q(shop)):
+		if str(o["kind"]) == ShopRules.SUPPLIES:
+			return o
+	return {}
+
+static func _test_supplies_shop_buy() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _t2_at("a0", 3)
+	gs.party.gold = 10
+	var price: int = DictUtil.to_int(WorldCatalog.get_own(T2, "shops", "sup")["supply_price"])
+	var offer: Dictionary = _supply_offer(gs, "sup")
+	checks["offer row"] = str(offer.get("id", "")) == ShopRules.SUPPLIES and DictUtil.to_int(offer.get("price", 0)) == price and DictUtil.to_int(offer.get("left", -1)) == PartyState.SUPPLIES_MAX - 3 and str(offer.get("item", "x")).is_empty()
+	var stash_before: Dictionary = gs.party.stash.duplicate()
+	var shops_before: Dictionary = gs.shops.duplicate(true)
+	var res: Dictionary = ShopRules.buy(gs, _t2q("sup"), ShopRules.SUPPLIES, ShopRules.SUPPLIES, 5)
+	checks["price 2, buy 5 from 10 gold and 3 supplies: 0 gold, 8 supplies"] = DictUtil.to_bool(res["ok"]) and gs.party.gold == 10 - 5 * price and gs.party.supplies == 8 and DictUtil.to_int(res.get("price", 0)) == 5 * price and DictUtil.to_int(res.get("supplies", 0)) == 5 and not res.has("items")
+	checks["stash and gs.shops unchanged"] = JsonUtil.deep_equal(gs.party.stash, stash_before) and JsonUtil.deep_equal(gs.shops, shops_before)
+	var full: GameState = _t2_at("a0", 97)
+	full.party.gold = 100
+	var snap: String = JSON.stringify(full.to_dict(), "", true)
+	var over: Dictionary = ShopRules.buy(full, _t2q("sup"), ShopRules.SUPPLIES, ShopRules.SUPPLIES, 3)
+	checks["3 at 97 refuses, nothing changed"] = _one(JsonUtil.strings(over["errors"]), "You can carry at most 99 supplies.") and JSON.stringify(full.to_dict(), "", true) == snap
+	var poor: GameState = _t2_at("a0", 0)
+	poor.party.gold = price - 1
+	checks["unaffordable refuses"] = _one(JsonUtil.strings(ShopRules.buy(poor, _t2q("sup"), ShopRules.SUPPLIES, ShopRules.SUPPLIES, 1)["errors"]), "Not enough gold.") and poor.party.supplies == 0
+	checks["supply_price 0: no row"] = _supply_offer(gs, "plain").is_empty()
+	checks["closed shop: no row, refuses"] = _supply_offer(gs, "shut").is_empty() and not DictUtil.to_bool(ShopRules.buy(gs, _t2q("shut"), ShopRules.SUPPLIES, ShopRules.SUPPLIES, 1)["ok"])
+	# The panel: gold + supplies label, x1 / x5 buttons.
+	var panel := ShopPanel.new()
+	panel.show_shop(gs, _t2q("sup"))
+	var labels: Array[String] = []
+	for c: Node in panel._buy.get_children():
+		labels.append((c as Button).text)
+	checks["panel shows supplies x1 and x5"] = panel._gold.text == "Gold: %d  Supplies: %d/99" % [gs.party.gold, gs.party.supplies] and labels.has("Supplies x1 - %d gold" % price) and labels.has("Supplies x5 - %d gold" % (5 * price))
+	panel.free()
+	return _report("TRAV2 check 11: buying supplies (all-or-nothing, cap, gold, no stash or gs.shops change)", checks)
+
+static func _test_supplies_bands() -> bool:
+	var checks: Dictionary = {}
+	var price: int = DictUtil.to_int(WorldCatalog.get_own(T2, "shops", "sup")["supply_price"])
+	var fq: String = _t2q("guild")
+	for value: int in [DictUtil.to_int(RepRules.BANDS["friendly"]["lo"]), DictUtil.to_int(RepRules.BANDS["unfriendly"]["hi"])]:
+		var gs: GameState = _t2_at("a0", 0)
+		var _s: String = gs.set_flag(RepRules.key(fq), value)
+		var band: String = ShopRules.keeper_band(gs, ShopRules.shop_of(gs, _t2q("sup")))
+		checks["%s: price stays supply_price" % band] = (band == "friendly" or band == "unfriendly") and DictUtil.to_int(_supply_offer(gs, "sup").get("price", 0)) == price
+	return _report("TRAV2 check 12: the supply price ignores reputation bands", checks)
+
+static func _test_supplies_chest_open() -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _t2_at("cache", 5)
+	var opened: Dictionary = ExploreRunner.interact(gs, Vector2i(0, 1))
+	checks["supplies 6 at 5: 11, reports 6"] = str(opened.get("kind", "")) == "chest" and gs.party.supplies == 11 and DictUtil.to_int(opened.get("supplies", -1)) == 6 and not opened.has("notes")
+	var again: Dictionary = ExploreRunner.interact(gs, Vector2i(0, 1))
+	checks["opening again gives nothing"] = DictUtil.to_bool(again.get("empty", false)) and gs.party.supplies == 11
+	var high: GameState = _t2_at("cache", 97)
+	var capped: Dictionary = ExploreRunner.interact(high, Vector2i(0, 1))
+	checks["at 97: reports 2, cap note, done"] = high.party.supplies == PartyState.SUPPLIES_MAX and DictUtil.to_int(capped.get("supplies", -1)) == 2 and JsonUtil.strings(capped.get("notes", [])) == (["Supplies are capped at 99 (4 left behind)."] as Array[String]) and high.get_flag(MapRules.done_flag(_t2q("cache"), "box"), false) == true
+	return _report("TRAV2 check 13: chest supplies (granted after the reward; overflow lost with a note)", checks)
+
+static func _test_supplies_view() -> bool:
+	var gs: GameState = _t2_at("a0", 17)
+	return _report("TRAV2 check 14: TravelRules.view(gs).supplies", {"view supplies": DictUtil.to_int(TravelRules.view(gs).get("supplies", -1)) == gs.party.supplies and gs.party.supplies == 17})

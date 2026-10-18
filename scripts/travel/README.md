@@ -1,7 +1,7 @@
 # scripts/travel
 
-System: S10 (world map and travel). Status: in progress (TRAV1-L commits 1-3: schema, runtime, debug scene). Spec:
-`docs/specs/TRAV1_L.md`; rules: `docs/specs/S10_RULES.md`.
+System: S10 (world map and travel). Status: in progress (TRAV1-L commits 1-3: schema, runtime, debug scene; TRAV2-L supplies). Spec:
+`docs/specs/TRAV1_L.md`, `docs/specs/TRAV2_L.md`; rules: `docs/specs/S10_RULES.md`.
 
 ## Files
 
@@ -13,12 +13,18 @@ System: S10 (world map and travel). Status: in progress (TRAV1-L commits 1-3: sc
     it can see; each copy carries `_from` / `_to` (endpoint qids as seen from `world_id`).
   - `nodes(world_id)`: every endpoint qid of the graph (first-seen order); world map nodes are derived, not authored.
   - Runtime reads: `is_open`, `legs` (allowed directions of open routes), `known` (fog: visited, or one open leg from
-    a visited node), `path` (least time, then fewest legs, then the route qid list), `leg_chance` / `repeat_chance`,
-    `route_in`, `view` (what the world map draws), and the flag names `traversed_flag` / `event_done_flag`.
+    a visited node), `path` (least time, then fewest legs, then the route qid list), `leg_chance(gs, route, starved)` /
+    `repeat_chance` / `starved_chance` (TRAV2-L: x`STARVED_PCT` 150 / 100, rounded down, capped at 100),
+    `start_supplies(world_id)` (nearest manifest `start_supplies` >= 0, else 10), `route_in`, `view` (what the world
+    map draws, with `supplies`), and the flag names `traversed_flag` / `event_done_flag`.
 - `travel_runner.gd` (`TravelRunner`): `travel(gs, to_ref)` runs the legs of a trip (clock, scripted fight, road roll on
   the GameRolls stream `travel`, leg completion through `ExploreRunner.enter`); a fight stops the trip and the caller
   plays it, then calls `after_fight(gs, fight, outcome)` (won completes the leg, fled stays, lost wakes at the leg's
   start). One `autosave` event at the end of a trip, none while a fight is pending; the remaining path is not saved.
+  Supplies (TRAV2-L): per leg, `starved` = supplies 0 at the leg start, then the clock, then
+  `spend_supplies(route.time)` (clamped at 0; travel is never refused); scripted fights ignore supplies, the road roll
+  uses the starved chance (same number of draws). A fled or lost leg keeps its supplies spent; a won fight does not
+  charge again. Results carry `supplies_spent` and `starved_legs`.
 
 ## Data
 

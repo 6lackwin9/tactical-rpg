@@ -181,7 +181,13 @@ func do_interact() -> void:
 		"lore":
 			_note("%s: %s" % [str(res["name"]), str(res["text"])])
 		"chest":
-			_note("The chest is empty." if DictUtil.to_bool(res.get("empty", false)) else "Opened: %s %s" % [str(res.get("items", {})), str(res.get("loot", ""))])
+			if DictUtil.to_bool(res.get("empty", false)):
+				_note("The chest is empty.")
+			else:
+				var got: int = DictUtil.to_int(res.get("supplies", 0))
+				_note("Opened: %s %s%s" % [str(res.get("items", {})), str(res.get("loot", "")), " +%d supplies" % got if got > 0 else ""])
+				for n: Variant in DictUtil.array_of(res.get("notes", [])):
+					_note(str(n))   # TRAV2-L: supplies cap note
 		_:
 			if not DictUtil.to_bool(res.get("ok", true)):
 				_note("Interact refused: %s" % str(res["errors"]))
