@@ -1,25 +1,29 @@
-# Platform & Workflow handover
+# Platform & Workflow handover (2026-10-18 13:00 UTC)
 
-Written 2026-10-18 05:40 UTC by the outgoing Platform & Workflow session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
+Rotated by context size (278k). Read cloud.md first; everything below is what is in flight.
+
+## Routines bound to the old session (recreate on the new one, then delete these)
+
+- Daily dispatch 18:30 UTC: `trig_01G4hERhAcmLSpcpZgzrsQ8y` (respects the building slots, cloud.md "Usage caps").
+- Mode switch 15:45 UTC: `trig_01BDg2cGEakGSdBb7XYWFWY7` (send_later). At 15:45: planner-ops "Current mode" to economy, fill the standard row of `docs/metrics/usage/MODE_TRIAL.md`, land it, tell each area thread "mode economy until 18:45 UTC", and send_later 18:45 to switch back to split (economy for build lanes, standard for specs, design reviews and the final review).
+
+## Usage tracking (user 2026-10-18; repo home `docs/metrics/usage/`, README there)
+
+- On each pasted report: CSV into `reports/`, sessions.json and pins.json, HISTORY row, `efficiency.py` (time without Z), DELTA section, copy to `/mnt/project-files/metrics/`, reply with the delta only (top 3 threads and why), cutbacks need Tushar's typed OK.
+- `get_session <id>` returns exact per-session usage (`external_metadata.usage`: cache reads, writes, output, cost). Use it for the trials instead of guessing rows by title.
+- Sonnet trial: Assets & Audio `cse_01V6GmFsz2ESnDgqza17YhQt`, Sonnet since 12:15; `TRIAL_SONNET.md` (the thread sends "landed <id> <sha> model=<m>").
+- Mode baseline: standard 12:42-15:45, economy 15:45-18:45; `MODE_TRIAL.md`; report with the delta after 18:45.
 
 ## Queue
 
-- No approved Platform task is open. Ideas waiting on a housekeeper or user decision: CLN-17 (unwired Dojo-27), CLN-18 (Forge widget leftovers after TOOLS-RO).
-- Landed on `develop` since the last handover (release picks them up): SPLIT-LANDING, GATE-ONCE (decision "Gate once per task"), PULL-RESTART (Restart runner pulls via run.bat), FORGE-VIEW (display-only Forge, in-game skill preview per rank), NOTE-BUTTON ("✎ Note" pill button), MODE-ECONOMY (planner-ops current mode = economy, user 2026-10-18), OPTLAUNCH1 (`run.bat opt a|b|c|<branch>`, `run_opt.bat`, pc-launch "launch option A").
+- CLN-17, CLN-18: approved (user 12:14), cleanup lane; wait for the rotating building slot (coordinator assigns).
+- Arena trim, proposed in `docs/EFFICIENCY.md`: Playtest 89 s, CombatUiFramework 86 s, Bal2Rules 81 s, Planning 71 s are 42% of the arena; ask Tushar before starting.
+- Forge tab fixes: waiting on Tushar's list.
 
-## Waiting on the user
+## Landed this session
 
-- Nothing. Tushar tests on dev (`run_dev.bat`, then Restart runner) until a stable build; main later. He will send tab-specific Forge fixes (Items, Passives, Classes, Units, Encounters, Terrain) after the Skills redesign.
+RUNNER-WINDOW 5ddcea3, PATCH-NOTES bd9bff1 (Merge & Release writes PATCH_NOTES.md; landing threads send it "landed <id> <sha>"), PREFS-FILES 462d2f2 and PREFS-ASSETS-SPLIT d80d9ed (`docs/preferences/`), FC-TIMEOUT 182f9bb, TRIAL-SONNET e1bedb0, GATE-SPLIT bd932b2 (8 systems, `fc.sh gate auto`, CI matrix; release pinning step in cloud.md). Release PR #39 still runs the old single CI job; the next batch uses the matrix, so watch its first run.
 
-## Routines and watches
+## Sessions
 
-- Daily dispatch routine "Daily task dispatch to area threads (economy)", `trig_01QHhPUNaSM7dBgUu2hTDFQn`, 18:30 UTC, is bound to THIS (outgoing) session. Recreate it on the new session with the same prompt (`get_trigger` shows it) and send the coordinator the new id so it can disable this one.
-- No PR subscriptions.
-
-## Notes for the next session
-
-- Untested on Windows so far: PULL-RESTART (Restart runner -> run.bat), OPTLAUNCH1 (`run.bat opt`). Watch the first reports from the "Launch game on your PC" thread.
-- "send my playtests": Scene Runner "Copy to repo" only copies into the PC folder's `playtests/inbox/`; the coordinator was asked to have the PC launch thread commit and push it on a `claude/playtests-<date>` branch, then this thread lands it on develop. Not yet exercised.
-- The auto-mode safety check blocks recording a decision without the user's own words in this thread (a coordinator relay of a card tap is not enough): ask for a one-line reply first.
-- In the cloud the arena suite needs `SUITE_TIMEOUT=900 bash tools/fc.sh gate` (default 290 s times out).
-- Branches to delete at the next cleanup: `claude/split-landing`, `claude/gate-once`, `claude/pull-restart`, `claude/forge-viewer`, `claude/playtest-notes`, `claude/optlaunch1`.
+Coordinator `session_015sTvb6o2FYckV681cWHXtS`; Merge & Release `cse_01KhQLgrvAgUunc9TcJKTHzK`; Gameplay `cse_01448UbhXvTzeBA1Brw4buLy`; UI/UX `cse_01JBWtdZFJoHPjEnzP1TUwVR`; Balance `cse_017JH6C5a2uwCQHAbGFH5whk`; Design `cse_01GS8RxAznG7gTrbfCb7w5uB`; Assets & Audio `cse_01V6GmFsz2ESnDgqza17YhQt`.
