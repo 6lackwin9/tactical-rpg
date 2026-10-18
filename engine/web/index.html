@@ -34,12 +34,12 @@
       <div class="battle-status-pill">
         <span class="pill-label">ROUND</span>
         <span id="round-display" class="pill-val">1 / 6</span>
-        <span id="verdict-display" class="pill-status ongoing">ONGOING</span>
+        <span id="verdict-display" class="pill-status ongoing">PLANNING</span>
       </div>
 
       <div class="action-buttons">
-        <button id="btn-advance" class="btn btn-primary" title="Advance to next tactical block/round">
-          <span class="btn-icon">⚔️</span> Advance Round
+        <button id="btn-advance" class="btn btn-primary" title="Execute current planned actions or auto-resolve round">
+          <span class="btn-icon">⚔️</span> Resolve Round
         </button>
         <button id="btn-autoplay" class="btn btn-secondary" title="Toggle automatic step execution">
           <span class="btn-icon">▶</span> Auto-Play
@@ -69,26 +69,91 @@
         </div>
       </aside>
 
-      <!-- Center Column: 12x9 Tactical Battlefield Canvas -->
+      <!-- Center Column: 12x9 Tactical Battlefield Canvas & Command Dock -->
       <section class="arena-section">
         <div class="arena-header">
           <div class="arena-title">
             <span class="arena-location-icon">📍</span>
             <span id="arena-name">World: Ashlands • Zone: Ruined Courtyard</span>
           </div>
-          <div class="arena-coords" id="cursor-coords">Tile: [—, —]</div>
+          <div class="arena-meta-right">
+            <span id="active-mode-badge" class="mode-badge">COMMAND: SELECT UNIT</span>
+            <div class="arena-coords" id="cursor-coords">Tile: [—, —]</div>
+          </div>
         </div>
 
         <div class="canvas-wrapper">
-          <canvas id="battlefield-canvas" width="840" height="630"></canvas>
-          <div id="combat-overlay" class="combat-overlay"></div>
+          <canvas id="battlefield-canvas" width="840" height="580"></canvas>
+          
+          <!-- Damage Forecast Banner (appears during targeting) -->
+          <div id="forecast-banner" class="forecast-banner hidden">
+            <div class="forecast-header">
+              <span class="forecast-icon">🎯</span>
+              <span id="forecast-title">COMBAT FORECAST</span>
+            </div>
+            <div class="forecast-body">
+              <div class="forecast-unit attacker">
+                <span id="forecast-atk-name" class="name">Warrior</span>
+                <span id="forecast-atk-dmg" class="val">32 DMG</span>
+              </div>
+              <div class="forecast-vs">VS</div>
+              <div class="forecast-unit defender">
+                <span id="forecast-def-name" class="name">Goblin Brawler</span>
+                <span id="forecast-def-hp" class="val">76 / 108 HP</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hover Unit Tooltip -->
+          <div id="unit-tooltip" class="unit-tooltip hidden">
+            <div id="tooltip-name" class="tt-name">Unit</div>
+            <div id="tooltip-hp" class="tt-hp">HP: 100/100</div>
+            <div id="tooltip-stats" class="tt-stats">ATK 30 | ARM 8</div>
+          </div>
+        </div>
+
+        <!-- Tactical Command Dock for Selected Hero -->
+        <div class="command-dock">
+          <div class="command-dock-header">
+            <span class="dock-label">ACTION DOCK:</span>
+            <span id="dock-hero-name" class="dock-hero-name">Select a Hero</span>
+            <span id="dock-ap" class="dock-ap-badge">AP: 12 / 12</span>
+          </div>
+          <div class="command-buttons-grid">
+            <button id="cmd-move" class="cmd-btn" data-cmd="move" title="Move unit to reachable tile (1 AP per tile)">
+              <span class="cmd-icon">🚶</span>
+              <span class="cmd-text">Move</span>
+              <span class="cmd-cost">3 AP</span>
+            </button>
+            <button id="cmd-attack" class="cmd-btn" data-cmd="attack" title="Basic Weapon Strike">
+              <span class="cmd-icon">⚔️</span>
+              <span class="cmd-text" id="cmd-attack-label">Strike</span>
+              <span class="cmd-cost">4 AP</span>
+            </button>
+            <button id="cmd-skill" class="cmd-btn" data-cmd="skill" title="Special Class Skill">
+              <span class="cmd-icon">✨</span>
+              <span class="cmd-text" id="cmd-skill-label">Shield Bash</span>
+              <span class="cmd-cost">5 AP</span>
+            </button>
+            <button id="cmd-guard" class="cmd-btn" data-cmd="guard" title="Raise guard: Mitigates 30% incoming damage">
+              <span class="cmd-icon">🛡️</span>
+              <span class="cmd-text">Guard</span>
+              <span class="cmd-cost">2 AP</span>
+            </button>
+            <button id="cmd-hold" class="cmd-btn" data-cmd="hold" title="Hold position and preserve action points">
+              <span class="cmd-icon">⏳</span>
+              <span class="cmd-text">Hold</span>
+              <span class="cmd-cost">0 AP</span>
+            </button>
+          </div>
         </div>
 
         <div class="arena-legend">
           <div class="legend-item"><span class="legend-swatch ally-swatch"></span> Party Deployment (Col 5)</div>
           <div class="legend-item"><span class="legend-swatch enemy-swatch"></span> Horde Deployment (Col 7)</div>
-          <div class="legend-item"><span class="legend-swatch range-swatch"></span> Attack Reach</div>
-          <div class="legend-tip">💡 Click any unit or grid tile to inspect & plan actions</div>
+          <div class="legend-item"><span class="legend-swatch move-swatch"></span> Reachable Move</div>
+          <div class="legend-item"><span class="legend-swatch attack-swatch"></span> Attack Range</div>
+          <div class="legend-tip">💡 Select hero, pick command, click tile/target. [Space] to resolve.</div>
         </div>
       </section>
 
@@ -140,6 +205,10 @@
             <div class="detail-row">
               <span class="detail-label">Target Pref:</span>
               <span id="inspect-pref" class="detail-val">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Intent:</span>
+              <span id="inspect-intent" class="detail-val intent-highlight">Ready</span>
             </div>
           </div>
         </div>
