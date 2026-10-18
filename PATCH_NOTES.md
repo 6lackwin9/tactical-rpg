@@ -2,12 +2,13 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 49a8a70 -->
+<!-- last: 744f175 -->
 
 ## 2026-10-18
 
 In the game:
 
+- **Balance**: Shield Wall now also fortifies the user (4/6/8 by rank) alongside its taunt, and the healing potion costs 30 in the Hest shop (was 15).
 - **Character screen**: one Character popup with Stats, Level up, Skills and Gear tabs; questions and the Gear board no longer hide under other in-game popups.
 - **Map movement**: walk with WASD or the arrow keys, hold a key to keep walking, and the party slides smoothly between tiles.
 - **Game menu**: Esc on the map opens a menu over the paused map with Party, Journal, Save, Load, Settings and Quit; New Game and save/load fixes.
@@ -31,6 +32,7 @@ In the game:
 
 Every change that touched the game:
 
+- BAL5-A: shield_wall fortify extra grant and potion price 30 (744f175)
 - BAL5-L: extra_grants skill field (second grant on DEFEND/SUPPORT skills) (49a8a70)
 - BAL5-S2 + POTLEDGER: support_attrition scenario and potion heals in the sim ledger (b9fcc80)
 - STATCRED1-L: battle report credits each status to the unit that applied it (3fa4cea)
@@ -113,6 +115,8 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- MORALE1 spec: flee bonus never lowers an authored ratio (rule 8) (c75bb11)
+- PATCH-NOTES: BAL5-L (26e90d7)
 - PATCH-NOTES: BAL5-S2 + POTLEDGER (5e034c6)
 - PATCH-NOTES: STATCRED1-L (f38bc19)
 - PATCH-NOTES: UIR-3, LEVERS1 spec (c8073e9)
