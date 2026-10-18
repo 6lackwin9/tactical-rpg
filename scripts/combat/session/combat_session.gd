@@ -425,6 +425,22 @@ func find_recorded_action(combatant: Combatant, block: int) -> CombatResolver.Sc
 func is_planning() -> bool:
 	return phase == Phase.PLANNING and is_live_view() and not combat_over and not plan_confirmed
 
+# Enemy intent tells (INTENT1): one record per active enemy on the grid, read from the enemies' scheduled actions
+# (the party plan is not scheduled until confirm, so editing it never changes these). Keys and rules: IntentRules
+# (unit, kind, target, cell, blocks, skill, revealed, readers, plan). Read-only; empty outside is_planning().
+func enemy_intents() -> Array[Dictionary]:
+	if not is_planning() or resolver == null:
+		var none: Array[Dictionary] = []
+		return none
+	return IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid)
+
+# The intent record of one enemy ({} when it has none: not planning, not an active enemy on the grid).
+func intent_of(enemy: Combatant) -> Dictionary:
+	for record: Dictionary in enemy_intents():
+		if record["unit"] == enemy:
+			return record
+	return {}
+
 # Next inputs for `actor`, each probed against the sequence so far (valid or why not).
 func plan_options(actor: Combatant) -> Array[PlanOption]:
 	return plan.options(actor) if is_planning() and actor != null else []

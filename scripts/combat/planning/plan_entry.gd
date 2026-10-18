@@ -26,6 +26,7 @@ var est_damage: int = 0                   # ATTACK: expected hit (DamageCalculat
 var est_heal: int = 0                     # SUPPORT: expected HP restored (clamped to the target's missing HP)
 var est_cleanse: Array[String] = []       # SUPPORT: debuffs the cast would remove from its target right now
 var cells: Array[Vector2i] = []           # ATTACK (area): tiles hit
+var aim: Vector2i = Vector2i(-1, -1)       # ATTACK (area): the aimed tile (display only: intent tells)
 var hits_allies: int = 0                  # ATTACK (area): allies standing in the area (friendly fire)
 var status_name: String = ""               # STATUS: the status that took this block
 var chase: bool = false                    # ATTACK (single target): adjust one tile at the start if out of reach
@@ -56,6 +57,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 			if skill.is_area():
 				var area := AreaAttackCommand.new(actor, grid, cells, skill.power_for(actor), skill.blocks)
 				area.status_rounds = skill.status_rounds
+				area.aim_cell = aim
 				command = area
 			else:
 				var attack := AttackCommand.new(actor, target, skill.power_for(actor), skill.blocks, 0, grid)

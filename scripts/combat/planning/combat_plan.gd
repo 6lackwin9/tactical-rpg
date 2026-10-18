@@ -648,6 +648,7 @@ func _apply_area(c: Combatant, st: SimState, step: PlanStep, index: int) -> Stri
 	var problem: String = _add_entry(c, st, skill, index, null, [], 0, cells)
 	if problem.is_empty():
 		var entry: PlanEntry = st.entries[st.entries.size() - 1]
+		entry.aim = step.cell
 		for foe: Combatant in context.foes_of(c):
 			if foe.is_active() and grid.has_combatant(foe) and cells.has(grid.get_position(foe)):
 				var hit: int = _estimate_hit(c, st, skill, skill.stance_during(entry.stance_before), foe, st.pos)

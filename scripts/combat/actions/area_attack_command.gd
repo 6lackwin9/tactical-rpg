@@ -10,6 +10,7 @@ extends BattleCommand
 
 var grid: CombatGrid = null
 var cells: Array[Vector2i] = []
+var aim_cell: Vector2i = Vector2i(-1, -1)   # the tile the area was aimed at (display only: intent tells; -1 = unknown)
 var skill_mult: float = 1.0
 var status_rounds: int = 1       # how long an inflicted status lasts once active
 
