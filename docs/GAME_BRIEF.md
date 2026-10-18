@@ -48,6 +48,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Playtest recordings and replay: `scripts/playtest/` (PlaytestRecorder, PlaytestReplayer.run_file, TrailReport), tool `tools/fc.sh replay`; UI (hub, trail, F8 notes, browser, playback banner): `scripts/ui/playtest/`; arena playback fields (`playtest`, `battle`, `take_over`, `battle_seed`): `scenes/combat_arena.gd`.
 - Combat HUD (COMBAT-UI2-L1, layout C): `scripts/ui/combat/combat_dock_host.gd` (regions top / left_top / left / center / right_top / right / bottom_*), all sizes from `scripts/ui/combat/combat_hud_metrics.gd` (`CombatHudMetrics.compute`, `tile_for`: tile = floor(min(h/9, w/12)) >= 48); cards in `scripts/ui/roster_panel_ui.gd`; HUD font `UiTheme.hud_font()` (14 px floor, `UiTheme.text_scale()`); no gear button or equipment modal in battle.
 - Battle autoplay (AUTO1): `scripts/combat/session/combat_autoplay.gd` (`CombatAutoplay`, tick-driven; tactics in `PlanPresets.AUTO_IDS` + `CUSTOM`); remembered in `GameState.autoplay` (save v7); recorded rounds carry `source` player/auto.
+- Battle items (ITEMUSE1): hero pouch `UnitState.pouch` (save v8, `PartyBuilder` fills `battle_pouch`); item reach `Consumable.reach()` / `reach_for` (field `use_reach`); step `PlanStep.Mode.ITEM`; AI switch `AiProfile.use_items` (off).
 - Test expectations for a system: its suite in `scripts/tests/` (class rules: `class_rules_test_suite.gd`).
 
 See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `docs/decisions/<system>.md` for why things are the way they are.

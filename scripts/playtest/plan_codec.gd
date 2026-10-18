@@ -3,13 +3,13 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Plan Codec (PLAYTEST1 section D: PlanStep <-> JSON)
-# Step: {mode, skill, target, dir, tiles, cell}; unit ref: {side: ally | enemy, i, name}.
+# Step: {mode, skill, target, dir, tiles, cell[, item]} (item: ITEM steps only, ITEMUSE1); unit ref: {side: ally | enemy, i, name}.
 # FIELDS maps every PlanStep script property to its JSON key; the playtest suite fails when PlanStep
 # gains a property without an entry here, so new step fields cannot be dropped silently.
 # Decode errors name the round, unit and step (1-based); a name mismatch alone is a warning.
 # ==============================================================================
 
-const FIELDS: Dictionary = {"mode": "mode", "skill": "skill", "target": "target", "direction": "dir", "tiles": "tiles", "cell": "cell"}
+const FIELDS: Dictionary = {"mode": "mode", "skill": "skill", "target": "target", "direction": "dir", "tiles": "tiles", "cell": "cell", "item_id": "item"}
 const NO_CELL: Array = [-1, -1]
 
 # ------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ static func roster(session: CombatSession) -> Array:
 # ------------------------------------------------------------------------------
 
 static func encode_step(session: CombatSession, step: PlanStep) -> Dictionary:
-	return {
+	var out: Dictionary = {
 		"mode": mode_name(step.mode),
 		"skill": step.skill.id if step.skill != null else "",
 		"target": unit_ref(session, step.target),
@@ -73,6 +73,9 @@ static func encode_step(session: CombatSession, step: PlanStep) -> Dictionary:
 		"tiles": step.tiles,
 		"cell": [step.cell.x, step.cell.y],
 	}
+	if not step.item_id.is_empty():
+		out["item"] = step.item_id   # only ITEM steps carry it, so older recordings encode unchanged
+	return out
 
 static func encode_steps(session: CombatSession, steps: Array[PlanStep]) -> Array:
 	var out: Array = []
@@ -111,6 +114,8 @@ static func mode_of(name_text: String) -> PlanStep.Mode:
 			return PlanStep.Mode.WITHDRAW
 		"ALLY":
 			return PlanStep.Mode.ALLY
+		"ITEM":
+			return PlanStep.Mode.ITEM   # ITEMUSE1: decoded fully (item id, target) in stage 2
 	return PlanStep.Mode.SELF
 
 # The key name of a PlanStep.Mode value.
@@ -166,6 +171,7 @@ static func decode_step(session: CombatSession, actor: Combatant, d: Dictionary,
 	step.direction = _vec(d.get("dir", [0, 0]), Vector2i.ZERO)
 	step.tiles = DictUtil.to_int(d.get("tiles", 1), 1)
 	step.cell = _vec(d.get("cell", NO_CELL), Vector2i(-1, -1))
+	step.item_id = str(d.get("item", ""))
 	return step
 
 # Puts decoded plans on the session's live plan, in recorded order.

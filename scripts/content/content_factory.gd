@@ -121,6 +121,7 @@ static func item(entry: Dictionary) -> Item:
 			DictUtil.to_int(e["heal"]), DictUtil.to_int(e["damage"]), str(e["buff_stat"]), DictUtil.to_float(e["buff_pct"]), DictUtil.to_int(e["duration"]),
 			DictUtil.to_int(e["use_blocks"]), DictUtil.to_float(e["weight"]), DictUtil.to_int(e["value"]), rarity)
 		con.max_stack = DictUtil.to_int(e["max_stack"])
+		con.use_reach = DictUtil.to_int(e["use_reach"])
 		result = con
 	elif ContentSchema.EQUIP_TYPES.has(type):
 		var tiers: Array[Dictionary] = []
@@ -181,6 +182,7 @@ static func item_to_entry(it: Item, starter_stash: bool = false) -> Dictionary:
 			"consumable_type": _name(Consumable.ConsumableType.keys(), con.consumable_type),
 			"heal": con.heal_amount, "damage": con.damage_amount, "buff_stat": con.buff_stat,
 			"buff_pct": con.buff_percent, "duration": con.buff_duration_rounds, "use_blocks": con.block_cost,
+			"use_reach": con.use_reach,
 		})
 	return ContentSchema.normalize("items", e)
 

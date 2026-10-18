@@ -282,6 +282,8 @@ func _apply(c: Combatant, st: SimState, step: PlanStep, index: int) -> String:
 			return _apply_engage(c, st, step, index)
 		PlanStep.Mode.AREA:
 			return _apply_area(c, st, step, index)
+		PlanStep.Mode.ITEM:
+			return "Using items in battle is not available yet."   # ITEMUSE1 stage 2 compiles ITEM steps (ItemCommand)
 	return "Unknown step."
 
 # "" when `c` may move now, otherwise why not.

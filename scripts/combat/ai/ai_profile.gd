@@ -32,6 +32,7 @@ var reckless: bool = false      # never flees or guards, always charges the near
 const DEFAULT_HEAL_BELOW: float = 0.7   # also the unit schema default of `heal_below` (CLASS1)
 var heal_below: float = DEFAULT_HEAL_BELOW   # SUPPORT role: heal the most wounded ally at or below this HP fraction
 var area_min_foes: int = 2      # AI1: an area attack is chosen only if it hits at least this many foes (clamped to 1..6 on use)
+var use_items: bool = false     # ITEMUSE1 1.4: may add a battle-pouch item step; only the sim (pouch=) sets it
 
 const AREA_MIN_FOES_MIN: int = 1
 const AREA_MIN_FOES_MAX: int = 6
@@ -59,6 +60,7 @@ func duplicate_profile() -> AiProfile:
 	copy.reckless = reckless
 	copy.heal_below = heal_below
 	copy.area_min_foes = area_min_foes
+	copy.use_items = use_items
 	return copy
 
 static func role_name(p_role: Role) -> String:

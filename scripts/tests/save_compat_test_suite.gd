@@ -71,6 +71,13 @@ static func _check_version(version: int) -> bool:
 			checks["autoplay"] = DictUtil.to_bool(g.autoplay.get("on", false)) and str(g.autoplay.get("party", "")) == "aggressive" and heroes.size() == 2 and heroes.values().has(PlanPresets.CUSTOM)
 		else:
 			checks["autoplay migrated off"] = JsonUtil.deep_equal(g.autoplay, GameState.default_autoplay())   # AUTO1-L: v6 -> v7
+		if version >= 8:
+			checks["pouch"] = not g.party.members[0].pouch.is_empty()
+		else:
+			var empty: bool = true
+			for m: UnitState in g.party.members:
+				empty = empty and m.pouch.is_empty()
+			checks["pouch migrated empty"] = empty   # ITEMUSE1-L: v7 -> v8
 		if version >= 6:
 			checks["supplies"] = g.party.supplies == 7
 			var again: Dictionary = SaveGame.decode(JSON.stringify({"format": SaveGame.FORMAT, "version": SaveGame.VERSION, "saved_at": 1, "game_state": g.to_dict()}))

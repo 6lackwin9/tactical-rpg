@@ -18,6 +18,16 @@ func _init() -> void:
 		push_error("gen_save_fixtures: can't create a new Ashlands game: %s" % str(res.get("errors", [])))
 		quit(1)
 		return
+	# A pinned roster (the pre-RECRUIT1 four heroes at the world's start XP), so the fixtures do not follow the shipped
+	# start_party (RECRUIT1-A cut it to one hero) and older fixtures stay byte-identical when a version is added.
+	var start_xp: int = g.party.members[0].total_xp if not g.party.members.is_empty() else 0
+	var roster: Array[UnitState] = []
+	for base: String in ["warrior", "ranger", "rogue", "mage"]:
+		var m: UnitState = UnitState.create(base, base)
+		m.total_xp = start_xp
+		roster.append(m)
+	g.party.members = roster
+	g.party.active_ids = [] as Array[String]
 	g.location_id = "ashlands:warden_keep"
 	g.party.gold = 75
 	g.party.add_to_stash("con_heal_potion", 2)
@@ -35,13 +45,17 @@ func _init() -> void:
 	g.position = Vector2i(2, 3)
 	g.time = 240
 	g.party.supplies = 7
+	g.party.members[0].pouch = ["con_heal_potion", "con_heal_potion", "con_fire_bomb"] as Array[String]
 	g.autoplay = {"on": true, "party": "aggressive", "heroes": {g.party.members[0].id: "balanced", g.party.members[1].id: PlanPresets.CUSTOM}}
 	var errors: Array[String] = g.validate()
 	if not errors.is_empty():
 		push_error("gen_save_fixtures: played state invalid: %s" % str(errors))
 		quit(1)
 		return
-	var v7: Dictionary = g.to_dict()
+	var v8: Dictionary = g.to_dict()
+	var v7: Dictionary = v8.duplicate(true)
+	for raw: Variant in DictUtil.array_of(DictUtil.dict_of(v7["party"]).get("members", [])):
+		DictUtil.dict_of(raw).erase("pouch")
 	var v6: Dictionary = v7.duplicate(true)
 	v6.erase("autoplay")
 	var v5: Dictionary = v6.duplicate(true)
@@ -57,7 +71,7 @@ func _init() -> void:
 	v2["location_id"] = "warden_keep"   # v2 saves had an unqualified location id
 	var v1: Dictionary = v2.duplicate(true)
 	v1.erase("loot_claimed")
-	var by_version: Dictionary = {1: v1, 2: v2, 3: v3, 4: v4, 5: v5, 6: v6, 7: v7}
+	var by_version: Dictionary = {1: v1, 2: v2, 3: v3, 4: v4, 5: v5, 6: v6, 7: v7, 8: v8}
 	for version: int in range(1, SaveGame.VERSION + 1):
 		if not by_version.has(version):
 			push_error("gen_save_fixtures: no derivation for save version %d; add one to by_version first (nothing written)." % version)

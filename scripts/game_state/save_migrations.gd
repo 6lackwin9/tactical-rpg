@@ -21,6 +21,7 @@ static func _table() -> Dictionary:
 		_steps[4] = _v4_to_v5
 		_steps[5] = _v5_to_v6
 		_steps[6] = _v6_to_v7
+		_steps[7] = _v7_to_v8
 	return _steps
 
 static func register(from_version: int, step: Callable) -> void:
@@ -46,7 +47,8 @@ static func _v1_to_v2(state: Dictionary) -> Dictionary:
 # v2 -> v3: exploration defaults; rng_seed from the v2 state (same file = same seed); location_id qualified with
 # world_id when it resolves (a qualified id is kept when it resolves), else "". 3 -> 4 (DLG1-L) adds party.gold 0 and
 # shops {}. 4 -> 5 (TRAV1-L) adds time 0. 5 -> 6 (TRAV2-L) adds party.supplies PartyState.SUPPLIES_START. 6 -> 7
-# (AUTO1-L) adds autoplay GameState.default_autoplay() (off, Balanced, no per-hero tactics).
+# (AUTO1-L) adds autoplay GameState.default_autoplay() (off, Balanced, no per-hero tactics). 7 -> 8 (ITEMUSE1-L) adds
+# pouch [] to every party member.
 static func _v2_to_v3(state: Dictionary) -> Dictionary:
 	var out: Dictionary = state.duplicate(true)
 	out["rng_seed"] = String(JSON.stringify(state, "", true)).hash() & 0x7FFFFFFF
@@ -86,6 +88,18 @@ static func _v5_to_v6(state: Dictionary) -> Dictionary:
 static func _v6_to_v7(state: Dictionary) -> Dictionary:
 	var out: Dictionary = state.duplicate(true)
 	out["autoplay"] = GameState.default_autoplay()
+	return out
+
+# v7 -> v8 (ITEMUSE1-L): every party member (when the party and the member are objects) gets an empty battle pouch;
+# nothing else changes.
+static func _v7_to_v8(state: Dictionary) -> Dictionary:
+	var out: Dictionary = state.duplicate(true)
+	if out.get("party", null) is Dictionary:
+		var party: Dictionary = out["party"]
+		for raw: Variant in DictUtil.array_of(party.get("members", [])):
+			if raw is Dictionary:
+				var member: Dictionary = raw
+				member["pouch"] = []
 	return out
 
 # Brings a save envelope to `target_version`. Returns

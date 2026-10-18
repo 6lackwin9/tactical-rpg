@@ -40,6 +40,11 @@ static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionar
 			c.inventory.equip(eq, slot)
 	for item_id: String in work.carried:
 		c.inventory.add_item(ContentFactory.item(ContentCatalog.get_entry("items", item_id)))
+	for pouch_id: String in work.pouch:   # ITEMUSE1 rule 1: added after any unit-row pouch, in slot order (full = refused)
+		var pouch_item: Item = ContentFactory.item(ContentCatalog.get_entry("items", pouch_id))
+		if pouch_item is Consumable:
+			var con: Consumable = pouch_item
+			c.inventory.add_to_battle_pouch(con)
 	c.sync_from_stats_and_gear()
 	c.hp = c.max_hp
 	var cls: Array[String] = JsonUtil.strings(work.loadout.get("class", []))
