@@ -56,6 +56,7 @@ var replay_cursor: int = -1         # replay: index into log_entries whose resul
 var entry_snapshots: Dictionary = {} # ActionLogEntry -> BlockSnapshot (state right after that log point)
 var phase: Phase = Phase.PLANNING
 var combat_over: bool = false
+var outcome: String = ""            # OBJ1: "" while the battle goes on, then the encounter's verdict (won, lost or fled)
 var is_auto_playing: bool = false
 
 # Multi-round timeline archive
@@ -97,6 +98,7 @@ func start() -> void:
 	dispose()
 	is_auto_playing = false
 	combat_over = false
+	outcome = ""
 	max_unlocked_round = 1
 	round_actions.clear()
 	round_snapshots.clear()
@@ -225,6 +227,7 @@ func reset_round() -> void:
 		return
 	_truncate_log_from_round(current_round)
 	combat_over = false
+	outcome = ""
 	# Rounds carry state over, so rewind to how this round started.
 	var start_snap: BlockSnapshot = snapshot_at(current_round, 0)
 	if start_snap != null:
@@ -295,12 +298,14 @@ func _step_resolution() -> void:
 
 	if _pending_actions.is_empty():
 		resolver.block_completed.emit(current_block)
-		if current_block >= total_blocks:
+		var end_of_round: bool = current_block >= total_blocks
+		if end_of_round:
 			resolver.apply_round_end_effects()   # bleeding lands before the round is judged
 		encounter.on_block_end(current_round, current_block)
+		outcome = encounter.verdict(current_round, current_block, end_of_round)   # OBJ1 rule 3 (reserved units do not count)
 		_capture_snapshot(current_block)
-		var over: bool = resolver.is_combat_resolved(allies, encounter.live_enemies())   # reserved units do not count
-		if over or current_block >= total_blocks:
+		var over: bool = not outcome.is_empty()
+		if over or end_of_round:
 			_conclude_round(over)
 			return
 		current_block += 1
@@ -597,7 +602,7 @@ func plan_apply_preset_all(preset_id: String) -> void:
 		return
 	for a: Combatant in allies:
 		if a.is_active():
-			encounter.draft_steps(a, preset_id, plan)
+			encounter.draft_steps(a, encounter.party_preset_for(a, preset_id), plan)   # OBJ1 rule 2: guests Balanced
 	# A later ally's draft can still break an earlier one (its move lands on the earlier
 	# ally's route, so the approach detours and later steps no longer fit): re-draft those
 	# against the claims now on the board, in planning order (bounded, one pass per ally).
@@ -605,7 +610,7 @@ func plan_apply_preset_all(preset_id: String) -> void:
 		var redrafted: bool = false
 		for a: Combatant in allies:
 			if a.is_active() and not plan.is_valid(a):
-				encounter.draft_steps(a, preset_id, plan)
+				encounter.draft_steps(a, encounter.party_preset_for(a, preset_id), plan)
 				redrafted = true
 		if not redrafted:
 			break
@@ -676,6 +681,8 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 			grid.combatant_positions[c] = pos_raw
 		else:
 			grid.combatant_positions.erase(c)
+	encounter.reinforcements_spawned = snap.reinforcements_spawned   # a reset round re-runs its wave
+	encounter.restore_objective_state(snap.objective_state)           # OBJ1: hold rounds counted
 	encounter.restore_phase_state(snap.phase_state, snap.round_num)   # BOSS1: fired / due / dropped and live AI profiles
 
 # Timeline copy of the live round's commands. While planning it also includes
@@ -742,6 +749,7 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 	snap.round_num = current_round
 	snap.reinforcements_spawned = encounter.reinforcements_spawned
 	snap.phase_state = encounter.phase_state()
+	snap.objective_state = encounter.objective_state()
 	for c: Combatant in resolver.registered_combatants:
 		snap.positions[c] = grid.get_position(c)
 		snap.hps[c] = c.hp

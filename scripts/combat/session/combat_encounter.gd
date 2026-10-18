@@ -12,6 +12,8 @@ extends RefCounted
 # Subclass and override the virtual methods below.
 # ==============================================================================
 
+const GUEST_PRESET: String = "balanced"   # OBJ1 rule 2: the AI drafts guests with the Balanced tactic
+
 var encounter_name: String = "Encounter"
 var max_rounds: int = 1
 var total_blocks: int = 6      # blocks in a round (roughly three actions)
@@ -19,7 +21,8 @@ var ap_regen: int = 4          # AP regained at each round start (-1 = refill to
 var unit_ap: int = 12          # AP pool of units without their own (carries across rounds)
 var rng_seed: int = 1337      # seeds status rolls so a battle replays identically
 var grid: CombatGrid = null
-var allies: Array[Combatant] = []
+var allies: Array[Combatant] = []        # the heroes, then the guests (OBJ1 rule 1)
+var guests: Array[Combatant] = []        # party-side extras (also in allies): planned like heroes, no XP, never saved
 var enemies: Array[Combatant] = []        # includes reinforcements not yet on the field
 var party_stash: Inventory = null
 var reinforcements_spawned: bool = false  # generic "extra wave has entered" flag (snapshotted)
@@ -65,6 +68,46 @@ func live_enemies() -> Array[Combatant]:
 		if not is_reserved(e):
 			out.append(e)
 	return out
+
+# OBJ1 rule 3: after each block (after round-end effects and on_block_end) "" while the battle goes on, else won,
+# lost or fled; `end_of_round` is true after the last block. Default (today's rule): over when no ally or no enemy
+# that counts is active; won when an ally stands, else fled when one is alive (withdrew), else lost.
+func verdict(_round_num: int, _block_num: int, _end_of_round: bool) -> String:
+	var standing: bool = false
+	var alive: bool = false
+	for a: Combatant in allies:
+		standing = standing or a.is_active()
+		alive = alive or a.is_alive()
+	var foe_standing: bool = false
+	for e: Combatant in live_enemies():
+		foe_standing = foe_standing or e.is_active()
+	if standing and foe_standing:
+		return ""
+	if standing:
+		return "won"
+	return "fled" if alive else "lost"
+
+# The party units that are not guests (OBJ1 rule 1).
+func heroes() -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for a: Combatant in allies:
+		if not guests.has(a):
+			out.append(a)
+	return out
+
+func is_guest(c: Combatant) -> bool:
+	return c != null and guests.has(c)
+
+# The preset an AI draft of the whole party uses for `c` (OBJ1 rule 2: guests always Balanced).
+func party_preset_for(c: Combatant, preset_id: String) -> String:
+	return GUEST_PRESET if is_guest(c) else preset_id
+
+# Objective state kept in every BlockSnapshot (OBJ1: hold rounds counted); {} = none.
+func objective_state() -> Dictionary:
+	return {}
+
+func restore_objective_state(_state: Dictionary) -> void:
+	pass
 
 # Encounter-owned battle state kept in every BlockSnapshot (BOSS1: phase fired / due / dropped); {} = none.
 func phase_state() -> Dictionary:
@@ -121,9 +164,9 @@ func profile_of(c: Combatant) -> AiProfile:
 	return plan_context().profile_of(c)
 
 # Stable key of a party unit across battles (AUTO1: per-hero autoplay tactics are saved under it). Default: the world
-# character it plays, else its name; GameEncounter uses the party member id.
+# character it plays, else its name; GameEncounter uses the party member id. Guests have none ("": never saved).
 func hero_key(c: Combatant) -> String:
-	if c == null:
+	if c == null or guests.has(c):
 		return ""
 	return c.lore_ref if not c.lore_ref.is_empty() else c.name
 

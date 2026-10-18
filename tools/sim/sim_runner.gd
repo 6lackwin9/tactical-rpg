@@ -135,7 +135,8 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 	for c: Combatant in session.allies:
 		if c.is_active():
 			survivors += 1
-	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": binary_score(l, r), "hp": hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0,
+	var won: bool = session.outcome == EncounterObjectives.WON   # OBJ1 rule 11: a hold, escape or slay win scores 1 like a KO win
+	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": 1.0 if won else binary_score(l, r), "hp": 1.0 if won else hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0,
 		"survivors": survivors, "party_size": session.allies.size(), "plan_fail": plan_failed}
 	if observer != null:
 		observer.on_end(session, result)

@@ -118,11 +118,14 @@ func has_override(hero: Combatant) -> bool:
 	return hero_tactics.has(_key(hero))
 
 # Picks the hero's tactic (AUTO_IDS or CUSTOM): the row's edits are dropped and it is redrafted at once while planning
-# (CUSTOM: emptied). The party tactic clears the override. False for an unknown id or a non-party unit.
+# (CUSTOM: emptied). The party tactic clears the override. False for an unknown id, a non-party unit or a unit with
+# no hero key (an OBJ1 guest: drafted Balanced, never saved).
 func set_hero_tactic(hero: Combatant, id: String) -> bool:
 	if hero == null or not session.is_ally(hero) or not PlanPresets.is_tactic(id):
 		return false
 	var key: String = _key(hero)
+	if key.is_empty():
+		return false
 	if id == party_tactic:
 		hero_tactics.erase(key)
 	else:
@@ -252,7 +255,7 @@ func _draft_round() -> void:
 	if not overridden.is_empty():
 		for a: Combatant in session.allies:
 			if a.is_active() and not session.plan.is_valid(a) and tactic_of(a) != PlanPresets.CUSTOM:
-				session.plan_apply_preset(a, tactic_of(a))
+				session.plan_apply_preset(a, session.encounter.party_preset_for(a, tactic_of(a)))   # OBJ1 rule 2: guests Balanced
 	for a: Combatant in session.allies:
 		if a.is_active() and not session.plan.is_valid(a):
 			_invalid.append(a)

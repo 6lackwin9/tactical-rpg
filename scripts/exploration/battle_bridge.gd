@@ -26,9 +26,12 @@ static func encounter_for(gs: GameState, encounter_qid: String, zone: String = "
 	var enc := GameEncounter.new(world, str(hit["id"]), gs.party, zone)
 	return {"ok": true, "errors": errors, "encounter": enc}
 
-# won (combat over, a party member stands), lost (over, every party member down), fled (round limit reached with
-# both sides standing, or the party withdrew); "" while the battle can still go on.
+# The session's verdict when the battle ended (OBJ1 rule 3: objectives, guests, protect); else today's rule: won (combat
+# over, a party member stands), lost (over, every party member down), fled (round limit reached with both sides
+# standing, or the party withdrew); "" while the battle can still go on.
 static func outcome(session: CombatSession) -> String:
+	if not session.outcome.is_empty():
+		return session.outcome
 	var standing: bool = false
 	var alive: bool = false
 	for c: Combatant in session.allies:
@@ -58,7 +61,7 @@ static func enemy_levels(world_id: String, encounter_qid: String) -> Array[Dicti
 	return out
 
 # {ok, errors, xp: member id -> LevelUp result, advanced: quest qids}. won: XP to every active member, then the quest
-# hook; lost / fled change nothing here.
+# hook; lost / fled change nothing here. Guests (OBJ1) are not party members: no XP, nothing written back.
 static func apply(gs: GameState, encounter_qid: String, result: String) -> Dictionary:
 	var errors: Array[String] = []
 	var advanced: Array[String] = []

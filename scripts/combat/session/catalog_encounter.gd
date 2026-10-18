@@ -17,6 +17,11 @@ var definition: Dictionary = {}
 var units_by_id: Dictionary = {}   # unit id -> Array of Combatants spawned from it (encounter order)
 var wave: Array[Combatant] = []     # reinforcements: off the field until wave_round / wave_block
 var phase_runtime: EncounterPhases = EncounterPhases.new()   # BOSS1 phases of this battle (rebuilt in build())
+var objective_runtime: EncounterObjectives = EncounterObjectives.new()   # OBJ1 objective of this battle (rebuilt in build())
+var deployment: String = EncounterObjectives.STANDARD
+var protected_guests: Array[Combatant] = []   # guests that must live (OBJ1 `protect`)
+var _verdict: String = ""   # the last non-empty verdict (round_summary reads it)
+const FLED_TEXT: String = "The party withdrew."
 
 func _init(p_encounter_id: String = "") -> void:
 	encounter_id = p_encounter_id
@@ -42,6 +47,8 @@ func apply_definition(entry: Dictionary) -> void:
 	ap_regen = DictUtil.to_int(definition["ap_regen"], 4)
 	unit_ap = DictUtil.to_int(definition["unit_ap"], 12)
 	rng_seed = DictUtil.to_int(definition["rng_seed"], 1337)
+	var raw_deployment: String = str(definition.get("deployment", EncounterObjectives.STANDARD))
+	deployment = raw_deployment if EncounterObjectives.DEPLOYMENTS.has(raw_deployment) else EncounterObjectives.STANDARD
 
 func is_defined() -> bool:
 	return ContentCatalog.has("encounters", encounter_id)
@@ -69,6 +76,7 @@ func build() -> void:
 	var party_ids: Array[String] = _ids("party")
 	var enemy_ids: Array[String] = _ids("enemies")
 	var wave_ids: Array[String] = _ids("wave_units")
+	var guest_ids: Array[String] = _guest_ids()
 	phase_runtime = EncounterPhases.create(definition.get("phases", []))
 	var phase_ids: Array[String] = []   # phase-wave refs in phase order (parallel: the phase each belongs to)
 	var phase_of: Array[String] = []
@@ -77,11 +85,22 @@ func build() -> void:
 			if not _unit_entry(ref).is_empty():
 				phase_ids.append(ref)
 				phase_of.append(str(p["id"]))
-	var names: Dictionary = _display_names(party_ids + enemy_ids + wave_ids + phase_ids)
+	var names: Dictionary = _display_names(party_ids + enemy_ids + wave_ids + phase_ids + guest_ids)   # guests last: names unchanged
 	var slot: int = 0
 	for id: String in party_ids:
 		party.append(_spawn(id, str(names[slot])))
 		slot += 1
+	guests.clear()
+	protected_guests.clear()
+	var protect_ids: Array[String] = JsonUtil.strings(definition.get("protect", []))
+	var guest_slot: int = party_ids.size() + enemy_ids.size() + wave_ids.size() + phase_ids.size()
+	for id: String in guest_ids:   # OBJ1 rule 1: after the heroes, on the party side
+		var guest: Combatant = _spawn(id, str(names[guest_slot]))
+		guests.append(guest)
+		party.append(guest)
+		if protect_ids.has(id):
+			protected_guests.append(guest)
+		guest_slot += 1
 	for id: String in enemy_ids:
 		foes.append(_spawn(id, str(names[slot])))
 		slot += 1
@@ -98,7 +117,9 @@ func build() -> void:
 		slot += 1
 	allies = party
 	enemies = foes
-	grid.deploy_combatants(allies, deployed)
+	objective_runtime = EncounterObjectives.create(definition)
+	_verdict = ""
+	grid.deploy_combatants(allies, deployed, deployment)
 	_place_leftovers(allies, true)
 	_place_leftovers(deployed, false)
 
@@ -122,6 +143,14 @@ func _ids(key: String) -> Array[String]:
 		for v: Variant in list:
 			if not _unit_entry(str(v)).is_empty():
 				out.append(str(v))
+	return out
+
+# Guest roster refs (OBJ1): known ones, each once, at most MAX_GUESTS.
+func _guest_ids() -> Array[String]:
+	var out: Array[String] = []
+	for id: String in _ids("guests"):
+		if not out.has(id) and out.size() < EncounterObjectives.MAX_GUESTS:
+			out.append(id)
 	return out
 
 # The unit entry roster id `unit_id` spawns from (virtual: a catalog unit here; a
@@ -158,7 +187,17 @@ func _spawn(unit_id: String, display_name: String) -> Combatant:
 
 # Units the standard deployment couldn't fit (and reinforcement waves) go to the
 # free tile nearest the arena middle on their side's half (party left, enemies right).
+# Ambush / centre (OBJ1 1.2): enemy arrivals alternate groups A, B, A... and take the free tile nearest the group front.
 func _place_leftovers(units: Array[Combatant], party_side: bool) -> void:
+	if not party_side and deployment != EncounterObjectives.STANDARD:
+		var turn: int = 0
+		for c: Combatant in units:
+			if grid.has_combatant(c):
+				continue
+			var cols: Array[int] = CombatGrid.layout_columns(deployment, "a" if turn % 2 == 0 else "b")
+			grid.place_near_front(c, cols[0])
+			turn += 1
+		return
 	for c: Combatant in units:
 		if grid.has_combatant(c):
 			continue
@@ -205,6 +244,32 @@ func on_block_start(round_num: int, block_num: int) -> ActionLogEntry:
 
 func is_reserved(c: Combatant) -> bool:
 	return phase_runtime.is_reserved(c)
+
+# ------------------------------------------------------------------------------
+# Objective (OBJ1, EncounterObjectives; spec section 2 rules 3 to 7)
+# ------------------------------------------------------------------------------
+
+func verdict(_round_num: int, _block_num: int, end_of_round: bool) -> String:
+	var target: Combatant = null
+	if objective_runtime.objective == EncounterObjectives.SLAY:
+		target = unit(objective_runtime.unit_ref, 0)
+	_verdict = objective_runtime.verdict(heroes(), guests, protected_guests, live_enemies(), grid, end_of_round, target)
+	return _verdict
+
+func objective_state() -> Dictionary:
+	return objective_runtime.state()
+
+func restore_objective_state(state: Dictionary) -> void:
+	objective_runtime.restore(state)
+	_verdict = ""
+
+# The objective line (rule 9): the authored text or the generated one, names from this battle's units.
+func objective_text() -> String:
+	return EncounterObjectives.text_of(definition, func(ref: String) -> String: return _ref_name(ref))
+
+func _ref_name(ref: String) -> String:
+	var c: Combatant = unit(ref, 0)
+	return c.name if c != null else str(_unit_entry(ref).get("name", ref))
 
 func on_block_end(_round_num: int, _block_num: int) -> void:
 	phase_runtime.check_block_end(func(ref: String) -> Combatant: return unit(ref, 0))
@@ -298,6 +363,12 @@ func _intro(round_num: int) -> Dictionary:
 		"log": "\n[color=#38bdf8][b]⚔ ROUND %d: PLANNING ⚔[/b][/color]" % round_num,
 	}
 
+func _defeat_summary() -> Dictionary:
+	return {
+		"phase": "💀 DEFEAT - PARTY FALLEN",
+		"status": "💀 Your party was wiped out. Reset the battle to try a new plan.",
+		"log": "\n[color=#f87171][b]💀 DEFEAT: the party has fallen.[/b][/color]",
+	}
 
 func party_alive() -> bool:
 	for a: Combatant in allies:
@@ -305,19 +376,27 @@ func party_alive() -> bool:
 			return true
 	return false
 
+# The battle end reads the verdict (OBJ1): won -> victory (also an escape with everyone out), lost -> defeat, fled ->
+# "battle left" with the reason (a slay target got away, else the party withdrew).
 func round_summary(round_num: int, combat_over: bool) -> Dictionary:
-	if combat_over and party_alive():
+	var ending: String = _verdict
+	if combat_over and ending.is_empty():   # no verdict stored (a subclass ended the battle): today's reading
+		ending = EncounterObjectives.WON if party_alive() else EncounterObjectives.LOST
+	if combat_over and ending == EncounterObjectives.WON:
 		return {
 			"phase": "🏆 VICTORY",
 			"status": "🏆 %s: the enemy is down or has fled. Review the replay." % encounter_name,
 			"log": "\n[color=#38bdf8][b]🏆 VICTORY: %s won![/b][/color]" % encounter_name,
 		}
-	if combat_over:
+	if combat_over and ending == EncounterObjectives.FLED:
+		var why: String = objective_runtime.note if not objective_runtime.note.is_empty() else FLED_TEXT
 		return {
-			"phase": "💀 DEFEAT - PARTY FALLEN",
-			"status": "💀 Your party was wiped out. Reset the battle to try a new plan.",
-			"log": "\n[color=#f87171][b]💀 DEFEAT: the party has fallen.[/b][/color]",
+			"phase": "⚑ BATTLE LEFT",
+			"status": "⚑ %s: %s" % [encounter_name, why],
+			"log": "\n[color=#fde047][b]⚑ %s: %s[/b][/color]" % [encounter_name, why],
 		}
+	if combat_over:
+		return _defeat_summary()
 	if round_num >= max_rounds:
 		return {
 			"phase": "ROUND %d CONCLUDED - STALEMATE" % round_num,

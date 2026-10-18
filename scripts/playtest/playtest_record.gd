@@ -206,9 +206,11 @@ static func scenario_errors(s: Dictionary) -> Array[String]:
 # Battle end (shared by the recorder and the replayer)
 # ------------------------------------------------------------------------------
 
-# won / lost / fled from BattleBridge.outcome once the battle is over; timeout when the last round
+# won / lost / fled from the session's outcome (OBJ1 rule 11) once the battle is over; timeout when the last round
 # concluded with both sides standing; abandoned otherwise (the battle was left first).
 static func end_of(session: CombatSession, rounds_done: int) -> Dictionary:
+	if not session.outcome.is_empty():
+		return end_entry(session.outcome, rounds_done)
 	if session.combat_over:
 		return end_entry(BattleBridge.outcome(session), rounds_done)
 	if session.phase == CombatSession.Phase.REPLAY and session.current_round >= session.encounter.max_rounds:
