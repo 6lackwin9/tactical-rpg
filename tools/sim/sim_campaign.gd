@@ -109,7 +109,7 @@ func fights_for(steel: String) -> Array:
 	var out: Array = []
 	var foe_level: int = clampi(args.level + args.elevel, 1, StatRules.MAX_LEVEL)
 	for f: Dictionary in SimWorld.story_fights(steel == "gate"):
-		var enc: Dictionary = SimWorld.encounter(runner, str(f["encounter"]), foe_level, args.elevel_set)
+		var enc: Dictionary = SimWorld.encounter(runner, str(f["encounter"]), foe_level, args.elevel_set, SimWorld.WORLD, true)
 		if not enc.is_empty():
 			out.append(enc)
 	return out

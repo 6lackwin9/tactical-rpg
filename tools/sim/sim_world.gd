@@ -75,31 +75,83 @@ static func story_fights(steel_to_gate: bool) -> Array[Dictionary]:
 					out.append({"quest": str(q["id"]), "encounter": raid, "scripted": true})
 	return out
 
-# Base unit id of every story character (characters.json base_unit).
-static func base_units() -> Dictionary:
+# Base unit id of every story character (characters.json base_unit) of `world`.
+static func base_units(world: String = WORLD) -> Dictionary:
 	var out: Dictionary = {}
-	for c: Dictionary in WorldCatalog.own_entries(WORLD, "characters"):
+	for c: Dictionary in WorldCatalog.own_entries(world, "characters"):
 		out[str(c["id"])] = str(c.get("base_unit", ""))
 	return out
 
-# {"enemies": base unit ids, "base": encounter fields, "label", "max_rounds"} of Ashlands encounter
-# `enc_id`; like SimScenarios.encounter for a catalog entry, with the roster mapped to base units.
+# {"enemies": base unit ids, "base": encounter fields, "label", "max_rounds"} of encounter `enc_id` of
+# `world`; like SimScenarios.encounter for a catalog entry, with the roster mapped to base units.
 # elevel_set: the foes are level-shifted sandbox copies at `foe_level` (as for catalog encounters).
-static func encounter(runner: SimRunner, enc_id: String, foe_level: int, elevel_set: bool) -> Dictionary:
+# full: also the objective, deployment, phases, guests and protect fields (refs mapped to the same unit ids).
+static func encounter(runner: SimRunner, enc_id: String, foe_level: int, elevel_set: bool, world: String = WORLD, full: bool = false) -> Dictionary:
 	var entry: Dictionary = {}
-	for e: Dictionary in WorldCatalog.own_entries(WORLD, "encounters"):
+	for e: Dictionary in WorldCatalog.own_entries(world, "encounters"):
 		if str(e["id"]) == enc_id:
 			entry = e
 	if entry.is_empty():
 		return {}
-	var units: Dictionary = base_units()
+	var units: Dictionary = base_units(world)
 	var base: Dictionary = {}
 	for key: String in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen", "wave_round", "wave_block", "wave_label"]:
 		if entry.has(key):
 			base[key] = entry[key]
 	var enemies: Array[String] = SimScenarios._catalog_ids(runner, _mapped(DictUtil.array_of(entry.get("enemies", [])), units), foe_level, elevel_set)
 	base["wave_units"] = SimScenarios._catalog_ids(runner, _mapped(DictUtil.array_of(entry.get("wave_units", [])), units), foe_level, elevel_set)
+	if full:
+		for key: String in ["objective", "objective_tiles", "objective_rounds", "objective_count", "objective_text", "deployment"]:
+			if entry.has(key):
+				base[key] = entry[key]
+		var ctx: Dictionary = {"runner": runner, "units": units, "level": foe_level, "shifted": elevel_set}
+		base["objective_unit"] = _ref(ctx, str(entry.get("objective_unit", "")))
+		base["guests"] = _refs(ctx, DictUtil.array_of(entry.get("guests", [])))
+		base["protect"] = _refs(ctx, DictUtil.array_of(entry.get("protect", [])))
+		base["phases"] = _phases(ctx, DictUtil.array_of(entry.get("phases", [])))
 	return {"enemies": enemies, "base": base, "label": enc_id, "max_rounds": DictUtil.to_int(entry.get("max_rounds", 0))}
+
+# The final sandbox/catalog unit id of story reference `id` ("" stays "").
+static func _ref(ctx: Dictionary, id: String) -> String:
+	if id.is_empty():
+		return ""
+	var runner: SimRunner = ctx["runner"]
+	var ids: Array[String] = SimScenarios._catalog_ids(runner, _mapped([id], DictUtil.dict_of(ctx["units"])), DictUtil.to_int(ctx["level"]), DictUtil.to_bool(ctx["shifted"]))
+	return ids[0]
+
+static func _refs(ctx: Dictionary, ids: Array) -> Array[String]:
+	var out: Array[String] = []
+	for raw: Variant in ids:
+		out.append(_ref(ctx, str(raw)))
+	return out
+
+# Phases with every unit reference (`unit`, `units`) mapped like the roster.
+static func _phases(ctx: Dictionary, phases: Array) -> Array:
+	var out: Array = []
+	for raw: Variant in phases:
+		out.append(_map_node(ctx, raw))
+	return out
+
+static func _map_node(ctx: Dictionary, node: Variant) -> Variant:
+	if node is Dictionary:
+		var d: Dictionary = node
+		var res: Dictionary = {}
+		for k: Variant in d:
+			var v: Variant = d[k]
+			if str(k) == "unit" and v is String:
+				res[k] = _ref(ctx, str(v))
+			elif str(k) == "units" and v is Array:
+				res[k] = _refs(ctx, DictUtil.array_of(v))
+			else:
+				res[k] = _map_node(ctx, v)
+		return res
+	if node is Array:
+		var arr: Array = node
+		var res_a: Array = []
+		for v: Variant in arr:
+			res_a.append(_map_node(ctx, v))
+		return res_a
+	return node
 
 static func _mapped(ids: Array, units: Dictionary) -> Array:
 	var out: Array = []

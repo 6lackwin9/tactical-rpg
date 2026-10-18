@@ -21,7 +21,7 @@
 #     modes: duel [level] | tier [level] | levels | group [level] | stats [level|all] | party [level] | role [level] | sweep [level]
 #     keys:  cap=1..30 (10)  loadout=default|newest|role  spend=class|cons|primary|mixed|all
 #            preset=<PlanPresets id>|both  distance=default|2..6 (role: 4)  score=both|hp|binary  quick  metrics=on|off  band=lo-hi (30-70)
-#            comp=c1,..(<=4)  enc=<ids>|generated|all  elevel=+n|-n|catalog  elite=<class>  boss=<class>
+#            comp=c1,..(<=4)  enc=<ids>|generated|all|world:[<world>/]<id>  elevel=+n|-n|catalog  elite=<class>  boss=<class>
 #            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>  jitter=on|off (on)
 #     full role/sweep runs take ~3 s per party fight: raise SIM_TIMEOUT or split by role= / level (one process each)
 # Exit code 1 when anything failed.

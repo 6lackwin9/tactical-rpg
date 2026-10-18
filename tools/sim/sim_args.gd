@@ -12,6 +12,7 @@ const LOADOUTS: Array[String] = ["default", "newest", "role"]
 const SCORES: Array[String] = ["both", "hp", "binary"]
 const ON_OFF: Array[String] = ["on", "off"]
 const GENERATED: Array[String] = ["mob", "line", "wave", "elite", "boss"]
+const REF_PREFIX: String = "world:"   # `enc=world:<id>` / `enc=world:<world>/<id>` (party mode, default world ashlands)
 const ROLES: Array[String] = ["tank", "ranged", "aoe", "support", "striker"]
 const CAP_MIN: int = 1
 const CAP_MAX: int = 30
@@ -176,6 +177,11 @@ func _parse_key(key: String, value: String) -> bool:
 				elif e == "all":
 					picked_enc.append_array(GENERATED)
 					picked_enc.append_array(catalog_encounters())
+				elif e.begins_with(REF_PREFIX):
+					var ref: Array[String] = parse_ref(e)
+					if ref.is_empty() or not has_encounter(ref[0], ref[1]):
+						return _fail("enc: unknown world encounter '%s' (world:<id> in ashlands or world:<world>/<id>)" % e)
+					picked_enc.append(e)
 				elif GENERATED.has(e) or ContentCatalog.has("encounters", e):
 					picked_enc.append(e)
 				else:
@@ -236,6 +242,26 @@ func _parse_key(key: String, value: String) -> bool:
 		_:
 			return _fail("unknown key '%s'" % key)
 	return true
+
+# `enc=world:<id>` or `world:<world>/<id>` -> [world, id] ([] when `text` is not a world reference).
+static func parse_ref(text: String) -> Array[String]:
+	var out: Array[String] = []
+	if not text.begins_with(REF_PREFIX):
+		return out
+	var parts: PackedStringArray = text.trim_prefix(REF_PREFIX).split("/", false)
+	if parts.size() == 1:
+		out.append_array(["ashlands", parts[0]])
+	elif parts.size() == 2:
+		out.append_array([parts[0], parts[1]])
+	return out
+
+static func has_encounter(world: String, enc_id: String) -> bool:
+	if not WorldCatalog.world_ids().has(world):
+		return false
+	for e: Dictionary in WorldCatalog.own_entries(world, "encounters"):
+		if str(e["id"]) == enc_id:
+			return true
+	return false
 
 # Every encounter in the current catalog (`enc=all` adds them after the generated five).
 static func catalog_encounters() -> Array[String]:
@@ -324,7 +350,7 @@ static func usage() -> Array[String]:
 		"       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
 		"       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
 		"       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
-		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all (generated)  elevel=+n|-n|catalog (+0)",
+		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
 		"       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
 		"       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
 		"       heal=none|full|<pct> (none; campaign: between-battle healing, full also revives)  comp=.. picks one campaign party",

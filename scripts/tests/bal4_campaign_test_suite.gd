@@ -12,6 +12,8 @@ const SimArgs = preload("res://tools/sim/sim_args.gd")
 const SimRunner = preload("res://tools/sim/sim_runner.gd")
 const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
 const SimWorld = preload("res://tools/sim/sim_world.gd")
+const SimParty = preload("res://tools/sim/sim_party.gd")
+const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimCampaign = preload("res://tools/sim/sim_campaign.gd")
 
 # Records the allies' HP sum at the start of every fight.
@@ -36,6 +38,7 @@ static func run() -> bool:
 	var ok: bool = true
 	ok = _test_args() and ok
 	ok = _test_story_order() and ok
+	ok = _test_world_enc() and ok
 	ok = _test_trios() and ok
 	ok = _test_heal() and ok
 	ok = _test_runs() and ok
@@ -57,7 +60,11 @@ static func _test_args() -> bool:
 	checks["heal=lots refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "heal=lots"]))
 	var c: SimArgs = _parse(["campaign", "comp=warrior,ranger,priest"])
 	checks["comp= picks one party"] = c.comp_set and c.comp.size() == 3
-	return TestHelpers.report(TAG, "campaign arguments: mode, heal, comp", checks)
+	var w: SimArgs = _parse(["party", "comp=warrior", "enc=world:courtyard_skirmish,world:ashlands/ashmaw_stand"])
+	checks["enc=world: parses (default world and world/id), comp of 1"] = w.error.is_empty() and w.encounters.size() == 2 and w.comp.size() == 1
+	checks["enc=world:<unknown> refused"] = not SimArgs.new().parse(PackedStringArray(["party", "enc=world:no_such_fight"]))
+	checks["parse_ref maps to [world, id]"] = SimArgs.parse_ref("world:x") == (["ashlands", "x"] as Array[String]) and SimArgs.parse_ref("world:w/x") == (["w", "x"] as Array[String]) and SimArgs.parse_ref("x").is_empty()
+	return TestHelpers.report(TAG, "campaign arguments: mode, heal, comp, world encounters", checks)
 
 # Order derived from the data: a quest's fights come after those of every quest it requires, every
 # story step encounter appears, the side quest is out, the steel choice swaps only the finale.
@@ -131,6 +138,39 @@ static func _test_story_order() -> bool:
 		checks["every foe maps to a catalog unit"] = mapped and any_foes
 	TestHelpers.cleanup(SANDBOX)
 	return TestHelpers.report(TAG, "Story fight order from the quest data, scripted raid, steel choice", checks)
+
+# `enc=world:<id>` resolves to the foes the campaign uses, plus the authored objective, rounds and guests.
+static func _test_world_enc() -> bool:
+	var checks: Dictionary = {}
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		var args: SimArgs = _parse(["party", "comp=warrior"])
+		var runner := SimRunner.new(args)
+		var party := SimParty.new(args, runner, SimMetrics.new())
+		var same: bool = true
+		var objective_ok: bool = true
+		var rounds_ok: bool = true
+		var guests_ok: bool = true
+		var checked: int = 0
+		for e: Dictionary in WorldCatalog.own_entries(SimWorld.WORLD, "encounters"):
+			var id: String = str(e["id"])
+			var via_party: Dictionary = party.world_encounter("world:%s" % id)
+			var via_campaign: Dictionary = SimWorld.encounter(runner, id, TEST_LEVEL, false)
+			same = same and DictUtil.array_of(via_party.get("enemies", [])) == DictUtil.array_of(via_campaign.get("enemies", []))
+			var base: Dictionary = DictUtil.dict_of(via_party.get("base", {}))
+			objective_ok = objective_ok and str(base.get("objective", "")) == str(e.get("objective", ""))
+			rounds_ok = rounds_ok and DictUtil.to_int(via_party.get("max_rounds", -1)) == DictUtil.to_int(e.get("max_rounds", 0))
+			guests_ok = guests_ok and DictUtil.array_of(base.get("guests", [])).size() == DictUtil.array_of(e.get("guests", [])).size()
+			checked += 1
+		checks["world encounters checked"] = checked > 0
+		checks["world encounter foes equal the campaign's"] = same
+		checks["objective copied"] = objective_ok
+		checks["max_rounds is the authored one"] = rounds_ok
+		checks["guests kept"] = guests_ok
+		checks["non-world id is not a world encounter"] = party.world_encounter("mob").is_empty()
+	TestHelpers.cleanup(SANDBOX)
+	return TestHelpers.report(TAG, "World encounters in party mode resolve like the campaign's", checks)
 
 static func _test_trios() -> bool:
 	var checks: Dictionary = {}

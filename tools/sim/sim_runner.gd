@@ -24,6 +24,7 @@ var enemy_block: Vector2i = Vector2i.ZERO   # BAL3 3.2: columns x rows of the cl
 var block_misses: int = 0           # fights where the enemy block found no room (enemies stay)
 var start_hp: Dictionary = {}       # campaign mode: party unit name -> HP the fight starts with (absent = full)
 var rounds_override: int = 0        # campaign mode: > 0 replaces the `cap` round limit (the encounter's authored max_rounds)
+var objective_wins: bool = false    # party mode world encounters: an objective win (hold, escape, slay) counts as cleared
 
 func _init(p_args: SimArgs) -> void:
 	args = p_args
@@ -94,6 +95,9 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 	var waves: Array[String] = []
 	for raw: Variant in DictUtil.array_of(base.get("wave_units", [])):
 		waves.append(str(raw))
+	for raw: Variant in DictUtil.array_of(base.get("guests", [])):
+		waves.append(str(raw))
+	waves.append_array(EncounterPhases.reserved_refs(base))
 	for id: String in left + right + waves:
 		if not _write(id):
 			return {"ok": false}
@@ -142,7 +146,7 @@ func fight(left: Array[String], right: Array[String], seed_value: int, base: Dic
 		if c.is_active():
 			survivors += 1
 	var won: bool = session.outcome == EncounterObjectives.WON   # OBJ1 rule 11: a hold, escape or slay win scores 1 like a KO win
-	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": 1.0 if won else binary_score(l, r), "hp": 1.0 if won else hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0, "won": won or r <= 0.0,
+	var result: Dictionary = {"ok": true, "l": l, "r": r, "bin": 1.0 if won else binary_score(l, r), "hp": 1.0 if won else hp_score(l, r), "rounds": rounds, "cleared": r <= 0.0 or (objective_wins and won), "won": won or r <= 0.0,
 		"survivors": survivors, "party_size": session.allies.size(), "plan_fail": plan_failed}
 	var end_hp: Dictionary = {}
 	var end_max: Dictionary = {}

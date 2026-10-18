@@ -582,6 +582,7 @@ Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `go
 - `tools/fc.sh sim campaign [level] [seeds] [heal=none|full|<pct>] [comp=c1,c2,c3] [elevel=..] [steel=arms|gate]` plays the Ashlands story fights in quest order (`courtyard_skirmish`, `pass_ambush`, the road raid `ash_raiders`, then `ashmaw_stand` or `ashmaw_stand_barred` for the steel-to-gate choice), read from the world data (`tools/sim/sim_world.gd`).
 - Party: the warrior plus two recruits (all 10 trios by default) at party level 5; foes keep their authored levels; each fight uses the encounter's `max_rounds`.
 - Attrition: HP carries over, statuses reset, downed heroes stay down (`heal=full` revives, `heal=<pct>` heals the standing heroes by that share of max HP); a run ends at the first uncleared battle. Prints battles survived, the battle where it fell and party HP% after each battle, per trio and steel choice.
+- World encounters in party mode: `enc=world:<id>[,world:<id2>...]` or `world:<world>/<id>` (default world ashlands) runs a story encounter: story characters mapped to base units at authored levels (`elevel` shifts them), the encounter's `max_rounds`, objective, deployment, phases and guests; an objective win counts as cleared; any `comp=` of 1-4 classes (sweep accepts world ids too). Example: `tools/fc.sh sim party 5 1 comp=warrior,ranger,priest enc=world:ashmaw_stand`. The campaign mode uses the same full encounters.
 - Tested in `bal4_campaign_test_suite.gd`.
 
 ### Balance data pass (BAL3-A)

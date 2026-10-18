@@ -9,6 +9,7 @@ const SimRunner = preload("res://tools/sim/sim_runner.gd")
 const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
 const SimTargets = preload("res://tools/sim/sim_targets.gd")
+const SimWorld = preload("res://tools/sim/sim_world.gd")
 
 const SAMPLE_SEED: int = 7   # sweep dupes=on sample=n draw
 const TOP_N: int = 5
@@ -26,7 +27,12 @@ func _init(p_args: SimArgs, p_runner: SimRunner, p_metrics: SimMetrics) -> void:
 # One composition against one encounter over every spend variant, preset and seed.
 func run_comp(comp: Array[String], enc_id: String) -> Dictionary:
 	var party: Array[String] = SimScenarios.define_party(runner, comp, args.level)
-	var enc: Dictionary = SimScenarios.encounter(runner, enc_id, args.level, args.elevel, args.elevel_set, args.elite_class, args.boss_class)
+	var enc: Dictionary = world_encounter(enc_id)
+	var is_world: bool = not enc.is_empty()
+	if not is_world:
+		enc = SimScenarios.encounter(runner, enc_id, args.level, args.elevel, args.elevel_set, args.elite_class, args.boss_class)
+	runner.objective_wins = is_world
+	runner.rounds_override = DictUtil.to_int(enc.get("max_rounds", 0))
 	var acc: Dictionary = SimScenarios.empty_set()
 	var foes: Array[String] = []
 	foes.assign(DictUtil.array_of(enc["enemies"]))
@@ -37,8 +43,19 @@ func run_comp(comp: Array[String], enc_id: String) -> Dictionary:
 			SimScenarios.run_seeds(runner, metrics, party, foes, DictUtil.dict_of(enc["base"]), args.seeds(), "", acc)
 	runner.spend_variant = "class"
 	runner.preset = "balanced"
+	runner.objective_wins = false
+	runner.rounds_override = 0
 	acc["party_ids"] = party
 	return acc
+
+# The world encounter of `enc=world:...` id `enc_id` (authored foes/levels unless elevel was given, the full
+# objective / deployment / phases / guests, its own max_rounds); {} for any other id.
+func world_encounter(enc_id: String) -> Dictionary:
+	var ref: Array[String] = SimArgs.parse_ref(enc_id)
+	if ref.is_empty():
+		return {}
+	var foe_level: int = clampi(args.level + args.elevel, 1, StatRules.MAX_LEVEL)
+	return SimWorld.encounter(runner, ref[1], foe_level, args.elevel_set, ref[0], true)
 
 # "" or " X" for a clear % against the encounter's band (generated encounters only).
 func clear_mark(enc_id: String, pct: float) -> String:
