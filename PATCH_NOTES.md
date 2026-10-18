@@ -2,12 +2,13 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: a990fb7 -->
+<!-- last: 3878540 -->
 
 ## 2026-10-18
 
 In the game:
 
+- **Character screen**: one Character popup with Stats, Level up, Skills and Gear tabs; questions and the Gear board no longer hide under other in-game popups.
 - **Map movement**: walk with WASD or the arrow keys, hold a key to keep walking, and the party slides smoothly between tiles.
 - **Game menu**: Esc on the map opens a menu over the paused map with Party, Journal, Save, Load, Settings and Quit; New Game and save/load fixes.
 - **Healing between battles**: HP now carries over between fights, you regain some after each win, and rest places and Make camp (3 supplies) heal fully. Rest places added at Warden Keep and Slag Gate.
@@ -30,6 +31,7 @@ In the game:
 
 Every change that touched the game:
 
+- UIR-3: Character popup with Stats, Level up, Skills and Gear tabs (3878540)
 - BAL5-R1b: re-measure under the re-draft fix and BAL5-AI (a990fb7)
 - MORALE1-L (schema): enemy morale encounter fields, validation and preview (6a473ad)
 - CAMPLABEL1-S: campaign sim fall label names the fight actually lost (c40a7dd)
@@ -108,6 +110,8 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- LEVERS1 spec: brawler spin and priest Ward (DR2-LEVERS) (8e414c0)
+- PATCH-NOTES: BAL5-R1b, PLATFORM-HANDOVER (d241191)
 - PLATFORM-HANDOVER: rotation after GATE-SPLIT (context 278k) (d54daa9)
 - PATCH-NOTES: GATE-SPLIT (a817f3c)
 - GATE-SPLIT: per-system gates; area threads gate with `fc.sh gate auto`; CI runs the arena as 8 parallel jobs by system, so a red job names the broken system (bd932b2)
