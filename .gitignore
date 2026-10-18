@@ -35,7 +35,3 @@ test_*.txt
 
 # run.bat opt: branch the -opt worktree was opened from
 .opt_branch
-
-# Engine saves and Rust build outputs
-saves/
-engine/target/

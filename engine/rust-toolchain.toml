@@ -1,0 +1,3 @@
+[toolchain]
+# llvm-mingw is the MinGW on PATH; the gnu toolchain cannot link against it (no libgcc).
+channel = "stable-x86_64-pc-windows-gnullvm"

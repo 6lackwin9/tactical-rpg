@@ -33,12 +33,13 @@ impl Vfs {
     }
 
     /// Discovers the project root by locating `data/catalog` in current or parent folders.
+    /// `user://` maps to `<root>/engine` so engine saves never land in the Godot project.
     pub fn discover() -> Self {
         let candidates = [".", "..", "../..", "../../.."];
         for candidate in candidates {
             let path = Path::new(candidate);
             if path.join("data").join("catalog").is_dir() {
-                return Self::new(candidate, candidate);
+                return Self::new(candidate, path.join("engine"));
             }
         }
         Self::new(".", ".")

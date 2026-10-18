@@ -6,7 +6,8 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 
 * **Original proposal (Markdown-as-language, superseded by the spec):** [ENGINE_PROPOSAL.md](ENGINE_PROPOSAL.md)
 * **Active Branch:** `engine`
-* **Toolchain:** Rust (`stable-x86_64-pc-windows-gnu`)
+* **Toolchain:** Rust `stable-x86_64-pc-windows-gnullvm`, pinned in `rust-toolchain.toml`. The MinGW on PATH is llvm-mingw, and the plain `gnu` toolchain fails to link against it (`unable to find library -lgcc_eh`).
+* **Saves:** `user://` maps to `engine/`, so autosaves go to `engine/saves/` (ignored by git), never the Godot project root.
 
 ## Workspace Structure
 
