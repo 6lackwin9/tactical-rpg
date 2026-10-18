@@ -6,7 +6,7 @@ Updated 2026-10-18 14:40 UTC by Gameplay session session_01448UbhXvTzeBA1Brw4buL
 
 1. **PACE1-L** (approved 09:33, `docs/specs/PACE1.md`; decision "PACE1 two-act boss" in decisions/combat.md): enrage and party_buff phase effects, `or_round` trigger, `empower` status, `start_status` field (Q3 B: schema only, no reward data), `pace` field and boss warning, enraged intents. Commit 1 = schema slice. Overlaps MORALE1-L files (catalog_encounter, combat_session, schemas): merge develop first. On landing ping Assets (PACE1-A), Balance (PACE1-S) and UI/UX (PACE1-U).
 2. **PURSE1-L** (approved 12:28, `docs/specs/PURSE1.md`, decision "PURSE1 encounter purse" in items-gear.md): purse field + validation, GameState.purses + save bump, PurseRules, BattleBridge.apply hook. Commit 1 = schema slice; ping Assets for PURSE1-A after it. Sequence with other save-bump tasks.
-3. **LEVERS1-L1** then **LEVERS1-L2** (approved 14:26, `docs/specs/LEVERS1.md`), both after BAL5-L (check who owns BAL5-L; it is a logic row from the Balance levers spec). L1/L2 share tactical_ai.gd.
+3. **LEVERS1-L1** then **LEVERS1-L2** (approved 14:26, `docs/specs/LEVERS1.md`), both after BAL5-L (check who owns BAL5-L; it is a logic row from the Balance levers spec). L1/L2 share tactical_ai.gd. Then **LEVERS1-L3** (user card 15:36, LEVERS1 3.3, row e0f1ae5): AI guard rule in tactical_ai.gd (taunt DEFEND skill such as shield_wall cast in the first free block when an adjacent ally is targeted by a foe intent this round and the unit is not already taunting; reckless skips; low-HP guard unchanged); Assets then does A3.
 
 ## Landed on `develop` (this session)
 
