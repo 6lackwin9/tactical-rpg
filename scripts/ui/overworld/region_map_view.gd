@@ -11,6 +11,9 @@ extends Control
 # E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
 # its Close returns to the dialogue; a dialogue fight uses the same battle (DialogueRunner.after_fight).
 # Moving and interacting are ignored while a conversation, shop or fight is open.
+# POI-FIX (discoverability): a hint line under the bar names the keys (HINT); bumping a solid npc / chest / lore marker
+# notes "press E"; E on an empty tile notes NOTHING_NOTE; a left click on a marker tile next to the party faces it and
+# interacts (click_tile), a click on one further away notes FAR_NOTE.
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) only for the main menu's game (CurrentGame.state()); the standalone debug game writes nothing
 # (refused while a fight is pending). A world picker starts a new game. busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
 # A world_map exit (marker or menu entry, TRAV1-L commit 3) opens the WorldMapView over the map; it hands back on
@@ -25,6 +28,10 @@ const COL_TILES: Dictionary = {".": Color(0.22, 0.22, 0.24), "#": Color(0.45, 0.
 const COL_DANGER: Color = Color(0.85, 0.20, 0.15, 0.28)
 const COL_SAFE: Color = Color(0.20, 0.75, 0.30, 0.18)
 const MARKER_GLYPHS: Dictionary = {"exit": "⇨", "encounter": "!", "roamer": "R", "npc": "N", "chest": "C", "lore": "L", "point": "•"}
+const HINT: String = "Arrows: move   E: interact   Click: interact with a marker next to you"
+const NOTHING_NOTE: String = "Nothing to interact with there."
+const FAR_NOTE: String = "Walk next to it first (arrow keys), then press E or click it."
+const BUMP_NOTES: Dictionary = {"npc": "Someone is in the way: press E to talk.", "chest": "A chest: press E to open it.", "lore": "Something to read: press E."}
 
 var gs: GameState = null
 var pending_fight: Dictionary = {}
@@ -37,6 +44,7 @@ var log_lines: Array[String] = []
 
 var _world_pick: OptionButton = null
 var _status: Label = null
+var hint: Label = null
 var _canvas: Control = null
 var _menu_box: VBoxContainer = null
 var _fight_panel: PanelContainer = null
@@ -63,12 +71,15 @@ func _ready() -> void:
 	bar.add_child(UiTheme.button("New game", "NewGame.create with the first party units, then ExploreRunner.begin", _on_new_game))
 	_status = UiTheme.label("Pick a world and start a new game.")
 	bar.add_child(_status)
+	hint = UiTheme.label(HINT, UiTheme.FONT_MD, UiTheme.COL_MUTED)
+	root.add_child(hint)
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(body)
 	_canvas = Control.new()
 	_canvas.custom_minimum_size = Vector2(TILE * 24, TILE * 16)
 	_canvas.draw.connect(_draw_map)
+	_canvas.gui_input.connect(_on_canvas_input)
 	body.add_child(_canvas)
 	var side := VBoxContainer.new()
 	side.custom_minimum_size = Vector2(260, 0)
@@ -192,7 +203,47 @@ func do_interact() -> void:
 		_:
 			if not DictUtil.to_bool(res.get("ok", true)):
 				_note("Interact refused: %s" % str(res["errors"]))
+			else:
+				_note(NOTHING_NOTE)
 	_refresh()
+
+# A left click on the map: the tile under the pointer (click_tile).
+func _on_canvas_input(event: InputEvent) -> void:
+	var mb: InputEventMouseButton = event as InputEventMouseButton
+	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if click_tile(Vector2i(floori(mb.position.x / TILE), floori(mb.position.y / TILE))):
+		_canvas.accept_event()
+
+# A click on `tile`: next to the party it faces the tile and interacts (true); a present npc / chest / lore marker
+# further away gets FAR_NOTE (true); anything else is ignored (false).
+func click_tile(tile: Vector2i) -> bool:
+	if _input_blocked():
+		return false
+	var dir: Vector2i = tile - gs.position
+	if ExploreRunner.DIRS.has(dir):
+		facing = dir
+		do_interact()
+		return true
+	if MapRules.SOLID_KINDS.has(_marker_kind_at(tile)):
+		_note(FAR_NOTE)
+		_refresh()
+		return true
+	return false
+
+# The kind of the present marker drawn on `tile` ("" = none).
+func _marker_kind_at(tile: Vector2i) -> String:
+	if gs == null:
+		return ""
+	var loc: Dictionary = ExploreRunner.location(gs)
+	var t: Dictionary = ExploreRunner.template_of(loc)
+	if t.is_empty():
+		return ""
+	var loc_steps: int = DictUtil.to_int(gs.explore.get("loc_steps", 0))
+	for m: Dictionary in ExploreRunner.markers_of(loc):
+		if ExploreRunner.presence(gs, str(loc["_qid"]), m) == "present" and ExploreRunner.marker_pos(t, m, loc_steps) == tile:
+			return str(m["kind"])
+	return ""
 
 # Opens the conversation with world character `character_ref` (DialogueRunner.open) in the dialogue panel.
 func talk(character_ref: String) -> void:
@@ -339,6 +390,12 @@ func _event(e: Dictionary) -> void:
 			_autosave()
 		"locked":
 			_note(str(e["text"]))
+		"blocked":
+			var at: Array = DictUtil.array_of(e.get("at", []))
+			var kind: String = _marker_kind_at(Vector2i(DictUtil.to_int(at[0]), DictUtil.to_int(at[1]))) if e.has("marker") and at.size() == 2 else ""
+			var bump: String = str(BUMP_NOTES.get(kind, ""))
+			if not bump.is_empty() and (log_lines.is_empty() or log_lines[-1] != bump):
+				_note(bump)
 		"flags_set":
 			_note("Flags set: %s" % str(e["flags"]))
 		"exit":
