@@ -202,6 +202,12 @@ latest `main` to catch drift.
 - **Pixel art shapes the renderer:** integer scaling to a fixed low-resolution
   canvas, nearest-neighbour sampling, sprite atlases, a tilemap layer, a pixel
   font, and UI snapped to the pixel grid.
+- **Assets will be animated sprite sheets** (user, 2026-10-19): today's placeholder PNGs are a baseline only. Art stays
+  addressed by key (unit art key, terrain id; `aegis_gui` art loader), so a sheet with frames and states (idle, move,
+  attack, hit) can replace each image without layout changes. Sheet support lands with the animation work (E6).
+- **Two layers** (user feedback, 2026-10-19): the battlefield is pixel art scaled with nearest sampling; the interface
+  (panels, text, hover cards, menus) is drawn smooth at the window's real resolution with Open Sans (OFL, bundled in
+  `engine/assets/fonts`), matching the Godot HUD rather than a retro look.
 
 ## 10. Decisions and open questions
 

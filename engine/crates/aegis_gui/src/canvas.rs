@@ -1,7 +1,5 @@
 //! Software 2D drawing into an RGBA framebuffer at the logical resolution (integer-scaled to the window by pixels).
 
-use crate::font;
-
 pub type Rgba = [u8; 4];
 
 pub const fn rgb(r: u8, g: u8, b: u8) -> Rgba {
@@ -115,57 +113,6 @@ impl Canvas {
         }
     }
 
-    pub fn outline(&mut self, r: Rect, c: Rgba) {
-        for x in r.x..r.x + r.w {
-            self.blend(x, r.y, c);
-            self.blend(x, r.y + r.h - 1, c);
-        }
-        for y in r.y + 1..r.y + r.h - 1 {
-            self.blend(r.x, y, c);
-            self.blend(r.x + r.w - 1, y, c);
-        }
-    }
-
-    /// A panel: fill plus a 1 px border.
-    pub fn panel(&mut self, r: Rect, fill: Rgba, border: Rgba) {
-        self.fill(r, fill);
-        self.outline(r, border);
-    }
-
-    pub fn image(&mut self, img: &Image, x: i32, y: i32) {
-        for sy in 0..img.h {
-            for sx in 0..img.w {
-                let i = ((sy * img.w + sx) * 4) as usize;
-                self.blend(x + sx, y + sy, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
-            }
-        }
-    }
-
-    pub fn text(&mut self, x: i32, y: i32, s: &str, c: Rgba) -> i32 {
-        let mut cx = x;
-        for ch in s.chars() {
-            let g = font::glyph(ch);
-            for (row, bits) in g.iter().enumerate() {
-                for col in 0..font::GLYPH_W {
-                    if bits & (1 << (font::GLYPH_W - 1 - col)) != 0 {
-                        self.blend(cx + col, y + row as i32, c);
-                    }
-                }
-            }
-            cx += font::ADVANCE;
-        }
-        cx
-    }
-
-    /// Text clipped to `max_w` pixels; overflow ends in "..".
-    pub fn text_fit(&mut self, x: i32, y: i32, s: &str, max_w: i32, c: Rgba) {
-        self.text(x, y, &fit(s, max_w), c);
-    }
-
-    pub fn text_right(&mut self, right: i32, y: i32, s: &str, c: Rgba) {
-        self.text(right - font::text_width(s), y, s, c);
-    }
-
     /// Bresenham line; `dash` > 0 draws dash-on / dash-off segments.
     pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgba, dash: i32) {
         let (dx, dy) = ((x1 - x0).abs(), -(y1 - y0).abs());
@@ -190,33 +137,5 @@ impl Canvas {
             }
         }
     }
-
-    pub fn circle(&mut self, cx: i32, cy: i32, r: i32, c: Rgba) {
-        let (mut x, mut y, mut err) = (r, 0, 1 - r);
-        while x >= y {
-            for (a, b) in [(x, y), (y, x), (-y, x), (-x, y), (-x, -y), (-y, -x), (y, -x), (x, -y)] {
-                self.blend(cx + a, cy + b, c);
-            }
-            y += 1;
-            if err < 0 {
-                err += 2 * y + 1;
-            } else {
-                x -= 1;
-                err += 2 * (y - x) + 1;
-            }
-        }
-    }
 }
 
-/// `s` shortened to fit `max_w` pixels.
-pub fn fit(s: &str, max_w: i32) -> String {
-    let max_chars = (max_w / font::ADVANCE).max(0) as usize;
-    let n = s.chars().count();
-    if n <= max_chars {
-        return s.to_string();
-    }
-    let keep = max_chars.saturating_sub(2);
-    let mut out: String = s.chars().take(keep).collect();
-    out.push_str("..");
-    out
-}

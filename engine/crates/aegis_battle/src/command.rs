@@ -302,7 +302,7 @@ impl Command {
                     return;
                 }
                 w.units[src].guard = mitigation;
-                self.log = format!("[Defend] {src_name} raised guard ({}%)", (mitigation * 100.0) as i32);
+                self.log = if mitigation > 0.0 { format!("[Defend] {src_name} raises guard ({}% less damage)", (mitigation * 100.0).round() as i32) } else { format!("[Defend] {src_name} holds a defensive stance") };
             }
             CmdKind::Focus { boost, rounds } => {
                 if !w.units[src].is_alive() {
@@ -344,7 +344,7 @@ impl Command {
                     return;
                 }
                 w.units[src].active_target = target;
-                self.log = format!("[Target] {src_name} locks {:?}", target.map(|t| w.units[t].name.clone()));
+                self.log = match target { Some(t) => format!("[Target] {src_name} locks on {}", w.units[t].name), None => format!("[Target] {src_name} clears its target") };
             }
             CmdKind::Walk { path, expected_start, goal, .. } => {
                 let (moved, cut) = walk(w, rng, src, &path, expected_start, goal);

@@ -57,9 +57,11 @@ battle exactly.
 cargo run --release -p aegis_gui -- encounter=goblin_skirmish     # or goblin_ambush, veterans_drill; seed=N
 ```
 
-Click a hero to select it; click a foe, an ally, the hero itself or an empty tile for its options (each shows AP and the
-expected damage or heal); right click closes a menu or undoes the last step. Strip: Party / Hero apply a tactic
-(`>` cycles it), Auto plays the battle out, Confirm resolves the round. Keys: Enter confirm, Space step / next round,
+Hover anything (units, cards, plan blocks, menu options) for a detail card. Click a hero to select it; click a foe, an
+ally, the hero itself or an empty tile for its options (each shows AP and the
+expected damage or heal); right click closes a menu or undoes the last step. Strip: the Party and Hero dropdowns draft a tactic
+(with its description), Auto plays the battle out, Confirm resolves the round. The log (Expand) wraps and scrolls with
+the wheel or PageUp / PageDown. Keys: Enter confirm, Space step / next round,
 A autoplay, Z undo, L log, R restart, F12 screenshot.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `engine/data/tuning.json` and reload while the game
