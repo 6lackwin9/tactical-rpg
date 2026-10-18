@@ -23,6 +23,7 @@ signal step_reorder_requested(from_step: int, to_step: int)
 signal fit_changed()            # block width changed to fit the dock: the owner should redraw
 
 const BLOCK_GAP: int = 4
+const BANNER_TEXT: String = "🔒 Hostiles plan in secret; see Threat Intel on their card."
 const TRACK_WIDTH: int = 830   # block widths scale so a round always fills this width
 
 var btn_prev_round: Button
@@ -60,6 +61,7 @@ var banner_lbl: Label
 
 # Callable: func(combatant: Combatant, block: int) -> CombatResolver.ScheduledAction
 var action_lookup_fn: Callable
+var read_only: bool = false   # INTENT1-U: the shown track is a read enemy plan: no drag, no remove
 
 func _init() -> void:
 	name = "TimelineDockUI"
@@ -241,7 +243,7 @@ func _build_ui() -> void:
 	banner_hbox.add_theme_constant_override("separation", 10)
 	enemy_classified_banner.add_child(banner_hbox)
 
-	banner_lbl = UiTheme.label("🔒 Hostile plans hidden: they plan in secret, see Threat Intel on their card.", fs, Color(1.0, 0.45, 0.45))
+	banner_lbl = UiTheme.label(BANNER_TEXT, fs, Color(1.0, 0.45, 0.45))
 	banner_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	banner_lbl.clip_text = true
 	banner_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -447,9 +449,12 @@ func update_view(
 	active_playhead: int,
 	is_enemy_masked: bool,
 	can_go_prev: bool,
-	can_go_next: bool
+	can_go_next: bool,
+	tell: Dictionary = {},
+	track_lookup: Callable = Callable()
 ) -> void:
 	_m = row_metrics()
+	read_only = track_lookup.is_valid()
 	update_round_arrows(can_go_prev, can_go_next)
 
 	# Update Ruler highlights
@@ -479,6 +484,8 @@ func update_view(
 
 	# Handle enemy masked planning phase banner vs single track row
 	if is_enemy_masked:
+		# INTENT1-U: the banner stays, with the selected foe's block 1 tell in it
+		banner_lbl.text = ("🔒 Hostiles plan in secret. %s next: %s" % [str(tell["name"]), str(tell["line"])]) if not tell.is_empty() else BANNER_TEXT
 		enemy_classified_banner.visible = true
 		single_track_row.visible = false
 		return
@@ -498,8 +505,9 @@ func update_view(
 	var b: int = 1
 	while b <= total_blocks:
 		var act: CombatResolver.ScheduledAction = null
-		if action_lookup_fn.is_valid():
-			var found: Variant = action_lookup_fn.call(target_unit, b)
+		var lookup: Callable = track_lookup if track_lookup.is_valid() else action_lookup_fn
+		if lookup.is_valid():
+			var found: Variant = lookup.call(target_unit, b)
 			if found is CombatResolver.ScheduledAction:
 				act = found
 
@@ -638,14 +646,14 @@ func _create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int,
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event == null or not mouse_event.pressed:
 			return
-		if planning and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+		if planning and not read_only and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
 			var step_idx: int = _step_at(start_b)
 			if step_idx >= 0:
 				step_remove_requested.emit(step_idx)
 		elif mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			combatant_selected.emit(cur_c)
 	)
-	if planning:
+	if planning and not read_only:
 		clip.tooltip_text = "%s%s\nAP %d • drag onto another command to reorder • right-click to remove" % [cmd_display_name, ("\nExpected hit ~%d damage" % act.command.est_damage) if act.command.est_damage > 0 else "", act.command.ap_cost + act.command.stance_switch_cost]
 		clip.set_drag_forwarding(
 			func(_pos: Vector2) -> Variant:

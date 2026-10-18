@@ -79,4 +79,24 @@ func refresh() -> void:
 	if autoplay != null:
 		dock.set_autoplay_state(autoplay_state())
 	dock.set_planning(session.plan_info(), session.plan_step_index_at)   # shows the autoplay note in place of the info line
-	dock.update_view(session.timeline_unit(), session.playhead(), session.is_timeline_masked(), session.can_view_prev_round(), session.can_view_next_round())
+	var unit: Combatant = session.timeline_unit()
+	var masked: bool = session.is_timeline_masked()
+	var tell: Dictionary = {}
+	var lookup: Callable = Callable()
+	var foe: Combatant = session.selected_combatant
+	if masked and foe != null:
+		var rec: Dictionary = session.intent_of(foe)   # {} outside planning: the plain banner
+		if not rec.is_empty():
+			tell = {"name": foe.name, "line": IntentText.first_line(rec)}
+			if DictUtil.to_bool(rec["revealed"]):   # a read foe: its whole track, unmasked and read-only
+				masked = false
+				unit = foe
+				lookup = _planned_action_of
+	dock.update_view(unit, session.playhead(), masked, session.can_view_prev_round(), session.can_view_next_round(), tell, lookup)
+
+# The scheduled (not yet resolved) action `unit` starts at `block` this round (the revealed enemy track).
+func _planned_action_of(unit: Combatant, block: int) -> CombatResolver.ScheduledAction:
+	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
+		if a.combatant == unit and a.start_block == block and not a.is_cancelled:
+			return a
+	return null

@@ -191,6 +191,12 @@ func create_roster_card(combatant: Combatant, team_color: Color, is_ally: bool, 
 		# Hostile: row 1 name + stance chip, row 2 HP bar (both beside the token), row 3 the behaviour line.
 		stance_lbl.custom_minimum_size = Vector2(fs * 2.2, 0)   # the 3-letter chip
 		name_row.add_child(stance_lbl)
+		var eye: TextureRect = UiTheme.icon_rect(AssetRegistry.texture("ui", "badge_foresight", "icon"), lh)   # INTENT1-U: a foresight holder reads this foe's plan
+		eye.name = "ForesightBadge"
+		eye.tooltip_text = "Its whole round plan is read"
+		eye.visible = false
+		name_row.add_child(eye)
+		name_row.move_child(eye, 1)
 		_bar_row(lines, "Hp", "HP", combatant.hp, combatant.max_hp, Color(0.85, 0.3, 0.3), fs, lh)
 		if rows >= 3:
 			var beh: Label = UiTheme.label(behaviour_fn.call(combatant) if behaviour_fn.is_valid() else "", fs, Color(0.9, 0.65, 0.4))

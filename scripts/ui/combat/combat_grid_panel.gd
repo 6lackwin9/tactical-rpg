@@ -253,6 +253,26 @@ func _refresh_overlay() -> void:
 			overlay.hint_cell = tpos_for_hint(step, pst.pos)
 	overlay.refresh_hint()
 
+# INTENT1-U: the enemy kind chips and arrows show while planning, when the tells are on (setting ui/intent_tells, hotkey I).
+func tells_on() -> bool:
+	return SettingsFile.get_bool("ui/intent_tells")
+
+# Turns the tells on / off (and remembers it in the settings file unless `persist` is false).
+func set_tells(on: bool, persist: bool = true) -> void:
+	SettingsFile.set_value("ui/intent_tells", on)
+	if persist:
+		SettingsFile.save()
+	_refresh_tells()
+
+func toggle_tells() -> void:
+	set_tells(not tells_on())
+
+func _refresh_tells() -> void:
+	if session != null and session.grid != null and session.is_planning() and tells_on():
+		grid_view.intent_overlay.show_tells(session.enemy_intents(), session.grid)
+	else:
+		grid_view.intent_overlay.clear()
+
 # A shadow on each ally's planned destination; small when someone still stands there.
 func _refresh_ghosts() -> void:
 	var ghosts: Array[Dictionary] = []
@@ -347,6 +367,7 @@ func refresh() -> void:
 		presenter.slide(token, target_px)
 	grid_view.update_selection_highlight(session.selected_combatant)
 	_refresh_overlay()
+	_refresh_tells()
 	if popup.visible and not session.is_planning():
 		popup.close()
 	if hover_card.visible:
@@ -506,9 +527,10 @@ func _fill_card() -> void:
 			plan_lines.append("%d. %s" % [i + 1, steps[i].title()])
 	var intel: Array[Dictionary] = _threat_intel(c)
 	var versus: Array[String] = _versus_lines(c)
-	for compact: bool in [false, true]:   # the compact card (no gauge bars) when the full one is taller than the board
+	var intent: Dictionary = _intent_view(c)
+	for level: int in range(3):   # compact (no gauge bars), then tight (a hostile's tell only) when the card is taller than the board
 		hover_card.update_inspector(c, ally, session.position_text(c), session.encounter.get_sprite_texture(c), session.display_snapshot(),
-			intel, plan_lines, versus, compact)
+			intel, plan_lines, versus, level >= 1, intent, level >= 2)
 		hover_card.settle()
 		if hover_card.size.y <= _board_rect().size.y:
 			break
@@ -516,6 +538,21 @@ func _fill_card() -> void:
 func _board_rect() -> Rect2:
 	var px: float = float(grid_view.tile_px)
 	return Rect2(grid_view.grid_anchor.global_position, Vector2(px * CombatGridView.GRID_W, px * CombatGridView.GRID_H))
+
+# INTENT1-U: the hostile's tell for the hover card: {"first": the first action, "head": "Read by ..." (revealed only), "lines": the plan, one per action}. {} outside planning.
+func _intent_view(c: Combatant) -> Dictionary:
+	if session.is_ally(c):
+		return {}
+	var rec: Dictionary = session.intent_of(c)
+	if rec.is_empty():
+		return {}
+	var lines: Array[String] = []
+	var head: String = ""
+	if DictUtil.to_bool(rec["revealed"]):
+		head = IntentText.read_by(rec)
+		for raw: Variant in DictUtil.array_of(rec["plan"]):
+			lines.append(IntentText.plan_line(DictUtil.dict_of(raw)))
+	return {"first": IntentText.first_line(rec), "head": head, "lines": lines}
 
 # What the AI is known to do (role, strike power, guard and flee thresholds) for a hostile; one line each.
 func _threat_intel(c: Combatant) -> Array[Dictionary]:

@@ -28,6 +28,7 @@ var grid_anchor: Control
 var grid_container: GridContainer
 var grid_tile_nodes: Dictionary = {}  # Vector2i -> TextureRect
 var unit_overlay: Control
+var intent_overlay: IntentOverlay   # INTENT1-U: enemy kind chips and arrows (planning only), above the tokens
 var fx_layer: Control   # CombatPresenter's temporary nodes (labels, status pops); clear_tokens leaves it alone
 var plan_overlay: PlanOverlay
 var ghost_layer: Control
@@ -77,6 +78,9 @@ func _build_ui() -> void:
 	unit_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE   # tokens (children) take clicks; empty tiles underneath must too
 	grid_anchor.add_child(unit_overlay)
 
+	intent_overlay = IntentOverlay.new()
+	grid_anchor.add_child(intent_overlay)
+
 	fx_layer = Control.new()
 	fx_layer.name = "FxLayer"
 	fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -102,6 +106,7 @@ func set_tile_px(px: int) -> void:
 	grid_anchor.custom_minimum_size = board
 	plan_overlay.tile = px
 	plan_overlay.queue_redraw()
+	intent_overlay.set_tile(px)
 	for child: Node in grid_container.get_children():
 		var tile_rect: Control = child as Control
 		if tile_rect != null:

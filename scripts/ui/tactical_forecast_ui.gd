@@ -15,6 +15,7 @@ var forecast_range_badge: Label
 var forecast_stance_lbl: Label
 var forecast_dmg_lbl: Label
 var intel_turn_lbl: Label
+var forecast_threat_lbl: Label   # INTENT1-U: "Targets you in B1" when the hovered foe's tell aims at the planning hero
 
 func _init() -> void:
 	name = "TacticalForecastUI"
@@ -41,7 +42,9 @@ func _build_ui() -> void:
 	forecast_stance_lbl = _line("Stance: -", fs, Color(0.7, 0.8, 0.9))
 	forecast_dmg_lbl = _line("Strike: -", fs, Color(0.95, 0.5, 0.5))
 	intel_turn_lbl = _line("", fs, Color(0.6, 0.8, 1.0))   # the one arena rules line
-	for lbl: Label in [forecast_target_lbl, forecast_dist_lbl, forecast_range_badge, forecast_stance_lbl, forecast_dmg_lbl, intel_turn_lbl]:
+	forecast_threat_lbl = _line("", fs, Color(1.0, 0.5, 0.45))
+	forecast_threat_lbl.visible = false
+	for lbl: Label in [forecast_target_lbl, forecast_dist_lbl, forecast_range_badge, forecast_stance_lbl, forecast_dmg_lbl, forecast_threat_lbl, intel_turn_lbl]:
 		box.add_child(lbl)
 
 func _line(text: String, fs: int, color: Color) -> Label:
@@ -49,6 +52,11 @@ func _line(text: String, fs: int, color: Color) -> Label:
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return lbl
+
+# The hovered foe's tell against the planning hero ("" hides the line).
+func set_threat(text: String) -> void:
+	forecast_threat_lbl.text = text
+	forecast_threat_lbl.visible = not text.is_empty()
 
 # Arena rules line: blocks per round, AP pool and recovery, exits.
 func set_arena_intel(total_blocks: int, unit_ap: int, ap_regen: int, exits: Array[Vector2i]) -> void:

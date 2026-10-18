@@ -622,6 +622,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			session.select_block(session.playhead() - 1)
 		KEY_E, KEY_RIGHT:
 			session.select_block(session.playhead() + 1)
+		KEY_I:
+			var grid_panel: CombatGridPanel = get_panel("grid") as CombatGridPanel
+			if grid_panel != null:
+				grid_panel.toggle_tells()   # I: enemy tells (chips and arrows) on / off, remembered in the settings
+			else:
+				handled = false
 		KEY_A:
 			if autoplay != null:
 				autoplay.toggle()   # A: Autoplay on / off (off = the same pause as Space)

@@ -42,6 +42,7 @@ const HARD_CODED: Array[Dictionary] = [
 	{"group": GROUP_COMBAT, "action": "Confirm the plan", "keys": "Enter", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_ENTER", "KEY_KP_ENTER"]},
 	{"group": GROUP_COMBAT, "action": "Previous block", "keys": "Q, Left", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_Q", "KEY_LEFT"]},
 	{"group": GROUP_COMBAT, "action": "Next block", "keys": "E, Right", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_E", "KEY_RIGHT"]},
+	{"group": GROUP_COMBAT, "action": "Show / hide enemy tells (chips and arrows)", "keys": "I", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_I"]},
 	{"group": GROUP_COMBAT, "action": "Auto-play on / off", "keys": "Space", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_SPACE"]},
 	{"group": GROUP_COMBAT, "action": "Previous / next log entry", "keys": "[  ]", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_BRACKETLEFT", "KEY_BRACKETRIGHT"]},
 	{"group": GROUP_TESTING, "action": "Slot edit mode (arena)", "keys": "F9", "src": "res://scripts/ui/combat/combat_dock_host.gd", "tokens": ["KEY_F9"]},

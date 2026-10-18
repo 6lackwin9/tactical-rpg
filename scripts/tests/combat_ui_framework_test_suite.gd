@@ -280,6 +280,7 @@ static func _hud_checks(tree_parent: Node) -> bool:
 
 	_hover_card_checks(tree_parent, checks)
 	_autoplay_ui_checks(tree_parent, checks)
+	_intent_ui_checks(tree_parent, checks)
 	checks["party slots follow the cap, never fewer than the heroes, fallback 3 when unknown"] = (
 		CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 2).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 4).party_slots == 4
 		and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 1).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 1, 5).party_slots == CombatHudMetrics.PARTY_SLOTS)
@@ -607,3 +608,258 @@ static func _autoplay_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 		rhost.autoplay == null and not rdock.autoplay_btn.visible and not rdock.party_option.visible and not rdock.hero_option.visible
 		and rsession.is_planning() and not rsession.plan_confirmed and rsession.current_round == round_before and no_steps and rhost._autoplay_timer == null)
 	_card_free(tree_parent, rhost, saved)
+
+
+# ------------------------------------------------------------------------------
+# INTENT1-U: enemy intent tells in the combat UI (one screen per case; the fixture is IntentTestSuite's scripted battle,
+# expectations come from the scheduled actions and the spec's rules, never from shipped content)
+# ------------------------------------------------------------------------------
+
+static func _intent_host(tree_parent: Node, scale: float = 1.0, scripted: bool = true) -> CombatDockHost:
+	SettingsFile.set_value("ui/text_scale", scale)
+	var session: CombatSession = null
+	if scripted:
+		session = CombatSession.new(IntentTestSuite.ScriptedEncounter.new())
+	else:
+		session = CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+	var host := CombatDockHost.new()
+	tree_parent.add_child(host)
+	host.size = VIEWS[0]
+	host.setup(session)
+	session.start()
+	host._fit()
+	_sort_now(host)
+	return host
+
+static func _unit(host: CombatDockHost, unit_name: String) -> Combatant:
+	return host.session.find_combatant(unit_name)
+
+# All Label texts under a node.
+static func _texts(node: Node) -> Array[String]:
+	var out: Array[String] = []
+	for raw: Node in node.find_children("*", "Label", true, false):
+		var lbl: Label = raw as Label
+		out.append(lbl.text)
+	return out
+
+static func _has_text(node: Node, part: String) -> bool:
+	for text: String in _texts(node):
+		if text.contains(part):
+			return true
+	return false
+
+# Arrows the records ask for: a target on the grid or an aim cell, other than the enemy's own tile.
+static func _expected_arrows(session: CombatSession) -> int:
+	var n: int = 0
+	for rec: Dictionary in session.enemy_intents():
+		var unit: Combatant = rec["unit"]
+		var aim: Vector2i = rec["cell"]
+		var target: Variant = rec["target"]
+		if target is Combatant:
+			var foe: Combatant = target
+			if session.grid.has_combatant(foe) and session.grid.get_position(foe) != session.grid.get_position(unit):
+				n += 1
+		elif aim != IntentRules.NO_CELL and aim != session.grid.get_position(unit):
+			n += 1
+	return n
+
+# "B4" or "B4-5": the blocks of a scheduled action.
+static func _span(a: CombatResolver.ScheduledAction) -> String:
+	return "B%d" % a.start_block if a.end_block == a.start_block else "B%d-%d" % [a.start_block, a.end_block]
+
+static func _first_scheduled(session: CombatSession, unit: Combatant) -> CombatResolver.ScheduledAction:
+	return IntentRules.actions_of(unit, session.resolver.scheduled_actions)[0]
+
+# The card's lines stacked (each line's own minimum height, the body gap, the style margins): the headless layout pass
+# leaves the container minimum stale within one frame, so the card's own size is not read here.
+static func _stacked_height(card: UnitInspectorUI) -> float:
+	var total: float = 14.0
+	var body: Control = card.get_child(0) as Control
+	for child: Node in body.get_children():
+		total += (child as Control).get_combined_minimum_size().y + 2.0
+	return total
+
+static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+	var old_path: String = SettingsFile.path()
+	var sandbox: String = "user://intent_ui_settings.cfg"
+	SettingsFile.use_path(sandbox)   # the I hotkey saves the setting: keep it out of the player's file
+
+	# Planning: a chip per enemy on the grid (its kind's ui texture) and the arrows the records ask for; the setting defaults on.
+	var host: CombatDockHost = _intent_host(tree_parent)
+	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+	var overlay: IntentOverlay = grid.grid_view.intent_overlay
+	var records: Array[Dictionary] = host.session.enemy_intents()
+	var chips_ok: bool = records.size() > 0 and overlay.chip_count() == records.size()
+	for rec: Dictionary in records:
+		var unit: Combatant = rec["unit"]
+		var chip_raw: Variant = overlay.chips.get(unit, null)
+		if chip_raw is TextureRect:
+			var chip: TextureRect = chip_raw
+			chips_ok = chips_ok and chip.texture == AssetRegistry.texture("ui", "intent_" + str(rec["kind"]), "icon")
+		else:
+			chips_ok = false
+	checks["intent tells: planning shows a kind chip on every enemy token (ui key intent_<kind>)"] = chips_ok and SettingsFile.get_bool("ui/intent_tells") and grid.tells_on()
+	checks["intent tells: an arrow per target or aim cell, dashed for move and flee"] = _expected_arrows(host.session) > 0 and overlay.arrow_count() == _expected_arrows(host.session)
+	var move_dashed: int = 0
+	var move_recs: int = 0
+	for rec: Dictionary in records:
+		if str(rec["kind"]) == "move" and (rec["target"] is Combatant or rec["cell"] != IntentRules.NO_CELL):
+			move_recs += 1
+	for arrow: Dictionary in overlay.arrows:
+		if DictUtil.to_bool(arrow["dashed"]):
+			move_dashed += 1
+	checks["intent tells: dashed arrows are exactly the move tells"] = move_dashed == move_recs and move_recs > 0
+
+	# I toggles the tells and remembers it; the second press brings them back.
+	host._unhandled_input(_key_event(KEY_I))
+	var hidden: bool = overlay.chip_count() == 0 and overlay.arrow_count() == 0 and not SettingsFile.get_bool("ui/intent_tells")
+	host._unhandled_input(_key_event(KEY_I))
+	var shown: bool = overlay.chip_count() == records.size() and overlay.arrow_count() > 0 and SettingsFile.get_bool("ui/intent_tells")
+	checks["intent tells: I hides and shows the chips and arrows (remembered in the settings)"] = hidden and shown
+
+	# Resolution: the confirmed round hides them.
+	host.session.plan_apply_preset_all("balanced")
+	host.session.confirm_plan(false)
+	checks["intent tells: hidden once the round is confirmed (resolution)"] = not host.session.is_planning() and overlay.chip_count() == 0 and overlay.arrow_count() == 0
+	_card_free(tree_parent, host, saved)
+
+	# Hostile cards: the "Next:" line and the eye badge of a read foe (a standard battle; every hero holds the foresight perk).
+	var host2: CombatDockHost = _intent_host(tree_parent, 1.0, false)
+	for ally: Combatant in host2.session.allies:
+		Passives.apply(ally, IntentTestSuite.EYE)
+	var foes: CombatRosterPanel = host2.get_panel("enemies") as CombatRosterPanel
+	foes.refresh()
+	var next_ok: bool = host2.metrics.hostile_rows >= 3
+	var read_foes: int = 0
+	var attack_named: bool = false
+	for rec: Dictionary in host2.session.enemy_intents():
+		var unit2: Combatant = rec["unit"]
+		var card: Control = foes._card_for(unit2)
+		var beh: Label = card.find_child("BehaviourLabel", true, false) as Label
+		var badge: Control = card.find_child("ForesightBadge", true, false) as Control
+		var blocks: Vector2i = rec["blocks"]
+		var first: String = "Arriving" if str(rec["kind"]) == IntentRules.ARRIVING else "%s (%s)" % [IntentText.core(rec), IntentText.block_text(blocks)]
+		next_ok = next_ok and beh != null and beh.text == ("Arriving" if first == "Arriving" else "Next: " + first) and badge != null and badge.visible == DictUtil.to_bool(rec["revealed"])
+		if DictUtil.to_bool(rec["revealed"]):
+			read_foes += 1
+		var target: Variant = rec["target"]
+		if target is Combatant:   # the line names the target and the block
+			var tgt: Combatant = target
+			attack_named = attack_named or (beh.text.begins_with("Next: ") and beh.text.contains(tgt.name) and beh.text.contains("(B%d" % blocks.x))
+	checks["hostile cards: the behaviour line reads 'Next: <skill> on <target> (B<n>)', a read foe wears the eye badge"] = next_ok and read_foes > 0 and attack_named
+	_card_free(tree_parent, host2, saved)
+
+	# Hover card: Intent with the first action; a read foe lists its whole plan under "Read by ...".
+	var host3: CombatDockHost = _intent_host(tree_parent)
+	var grid3: CombatGridPanel = host3.get_panel("grid") as CombatGridPanel
+	var walker: Combatant = _unit(host3, "Walker")
+	grid3.pin_card(walker)
+	var acts: Array[CombatResolver.ScheduledAction] = IntentRules.actions_of(walker, host3.session.resolver.scheduled_actions)
+	var plan_re := RegEx.new()
+	plan_re.compile("^B\\d+(-\\d+)? ")
+	var plan_labels: int = 0
+	for text: String in _texts(grid3.hover_card):
+		if plan_re.search(text) != null:
+			plan_labels += 1
+	var plan_ok: bool = acts.size() >= 2 and plan_labels == acts.size()   # one line per scheduled action
+	for a: CombatResolver.ScheduledAction in acts:
+		if a.command is AttackCommand:
+			var atk: AttackCommand = a.command
+			plan_ok = plan_ok and _texts(grid3.hover_card).has("%s %s on %s" % [_span(a), atk.command_name, atk.target.name])
+	var read_ok: bool = _has_text(grid3.hover_card, "INTENT") and _has_text(grid3.hover_card, "Read by Bryn")
+	var first: Dictionary = host3.session.intent_of(walker)
+	var first_blocks: Vector2i = first["blocks"]
+	var first_ok: bool = _has_text(grid3.hover_card, "(B%d" % first_blocks.x)
+	grid3.pin_card(_unit(host3, "Cutter"))
+	var plain_ok: bool = _has_text(grid3.hover_card, "INTENT") and _has_text(grid3.hover_card, "on Sella (%s)" % _span(_first_scheduled(host3.session, _unit(host3, "Cutter")))) and not _has_text(grid3.hover_card, "Read by")
+	checks["hover card: a hostile shows Intent with its first action; a read foe lists its whole plan under 'Read by Bryn (...)'"] = read_ok and plan_ok and first_ok and plain_ok
+	_card_free(tree_parent, host3, saved)
+
+	# Timeline: a foe that is not read keeps the masked banner with its block 1 tell; a read foe's track shows unmasked and read-only.
+	var host4: CombatDockHost = _intent_host(tree_parent)
+	var dock: TimelineDockUI = (host4.get_panel("timeline") as CombatTimelinePanel).dock
+	var cutter4: Combatant = _unit(host4, "Cutter")
+	host4.session.select_combatant(cutter4)
+	var rec4: Dictionary = host4.session.intent_of(cutter4)
+	var masked_ok: bool = dock.enemy_classified_banner.visible and not dock.single_track_row.visible and dock.banner_lbl.text.contains("plan in secret") and dock.banner_lbl.text.contains(IntentText.core(rec4)) and not DictUtil.to_bool(rec4["revealed"])
+	var stalker4: Combatant = _unit(host4, "Stalker")
+	host4.session.select_combatant(stalker4)
+	var action_clips: int = 0
+	for clip: Node in dock.track_clips_hbox.get_children():
+		if _has_text(clip, "Attack"):
+			action_clips += 1
+	checks["timeline: a foe's masked banner shows its block 1 tell; a read foe's track is unmasked and read-only"] = (
+		masked_ok and not dock.enemy_classified_banner.visible and dock.single_track_row.visible and dock.read_only and action_clips == 1)
+	host4.session.select_combatant(host4.session.allies[0])
+	checks["timeline: selecting a hero again restores the editable track"] = not dock.read_only and not dock.enemy_classified_banner.visible
+	_card_free(tree_parent, host4, saved)
+
+	# Forecast: the planning hero is told when a hovered foe's tell aims at it.
+	var host5: CombatDockHost = _intent_host(tree_parent)
+	var fc: CombatForecastPanel = host5.get_panel("forecast") as CombatForecastPanel
+	var bryn: Combatant = _unit(host5, "Bryn")
+	host5.session.select_combatant(bryn)
+	host5.session.set_hovered(_unit(host5, "Stalker"))
+	var told: bool = fc.forecast.forecast_threat_lbl.visible and fc.forecast.forecast_threat_lbl.text == "Targets you in %s" % _span(_first_scheduled(host5.session, _unit(host5, "Stalker")))
+	host5.session.set_hovered(_unit(host5, "Cutter"))   # aims at Sella
+	var quiet: bool = not fc.forecast.forecast_threat_lbl.visible
+	checks["forecast: 'Targets you in B<n>' only when the hovered foe's tell aims at the planning hero"] = told and quiet
+	_card_free(tree_parent, host5, saved)
+
+	# Display only: the battle resolves the same with the tells on and off.
+	var outcomes: Array[Array] = []
+	for on: bool in [true, false]:
+		var host6: CombatDockHost = _intent_host(tree_parent, 1.0, false)
+		var grid6: CombatGridPanel = host6.get_panel("grid") as CombatGridPanel
+		grid6.set_tells(on, false)
+		host6.session.plan_apply_preset_all("balanced")
+		host6.session.confirm_plan(false)
+		TestHelpers.resolve_until_replay(host6.session)
+		outcomes.append(IntentTestSuite._outcome(host6.session))
+		_card_free(tree_parent, host6, saved)
+	SettingsFile.set_value("ui/intent_tells", true)
+	checks["intent tells: combat results are identical with the tells on and off"] = outcomes[0] == outcomes[1] and outcomes[0].size() > 6
+
+	# Layout: at 1280x720 in all four text sizes the chips and arrows sit under the hover card and inside the board.
+	var layers_ok: bool = true
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var host7: CombatDockHost = _intent_host(tree_parent, scale, false)
+		var grid7: CombatGridPanel = host7.get_panel("grid") as CombatGridPanel
+		var ov: IntentOverlay = grid7.grid_view.intent_overlay
+		var board: Rect2 = Rect2(Vector2.ZERO, Vector2(grid7.grid_view.tile_px * CombatGridView.GRID_W, grid7.grid_view.tile_px * CombatGridView.GRID_H))
+		layers_ok = layers_ok and ov.chip_count() > 0 and ov.get_parent() == grid7.hover_card.get_parent()
+		layers_ok = layers_ok and ov.z_index < grid7.hover_card.z_index and ov.get_index() < grid7.hover_card.get_index()
+		for chip_raw: Variant in ov.chips.values():
+			var chip7: TextureRect = chip_raw
+			layers_ok = layers_ok and board.encloses(Rect2(chip7.position, chip7.size)) and chip7.mouse_filter == Control.MOUSE_FILTER_IGNORE
+		for arrow7: Dictionary in ov.arrows:
+			var from7: Vector2i = arrow7["from"]
+			var to7: Vector2i = arrow7["to"]
+			layers_ok = layers_ok and board.has_point(ov._center(from7)) and board.has_point(ov._center(to7))
+		layers_ok = layers_ok and ov.mouse_filter == Control.MOUSE_FILTER_IGNORE
+		for ally7: Combatant in host7.session.allies:   # a read foe's card (the whole plan) still fits the board
+			Passives.apply(ally7, IntentTestSuite.EYE)
+		host7.session.changed.emit()
+		var read7: int = 0
+		for rec7: Dictionary in host7.session.enemy_intents():
+			if DictUtil.to_bool(rec7["revealed"]):
+				read7 += 1
+				var foe7: Combatant = rec7["unit"]
+				grid7.pin_card(foe7)
+				_sort_now(host7)
+				layers_ok = layers_ok and _stacked_height(grid7.hover_card) <= board.size.y and _has_text(grid7.hover_card, "Read by")
+
+		grid7.close_card()
+		layers_ok = layers_ok and read7 > 0
+		var tile_before: int = host7.metrics.tile
+		grid7.set_tells(false, false)
+		layers_ok = layers_ok and host7.metrics.tile == tile_before   # the tells never change the layout
+		SettingsFile.set_value("ui/intent_tells", true)
+		_card_free(tree_parent, host7, saved)
+	checks["intent tells: chips and arrows stay on the board, under the hover card and off the layout, at all four text sizes"] = layers_ok
+
+	SettingsFile.use_path(old_path)
+	DirAccess.remove_absolute(sandbox)

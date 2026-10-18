@@ -28,8 +28,14 @@ func refresh() -> void:
 	forecast.set_arena_intel(enc.total_blocks, enc.unit_ap, enc.ap_regen, session.grid.designated_exits)
 	var c: Combatant = session.selected_combatant
 	var hovered_foe: Combatant = session.hovered_combatant if session.is_planning() and session.hovered_combatant != null and not session.is_ally(session.hovered_combatant) else null
+	var threat: String = ""
 	if hovered_foe != null and session.focused_hero != null:
 		c = session.focused_hero   # planning: forecast the hero against the hovered enemy
+		var rec: Dictionary = session.intent_of(hovered_foe)
+		var blocks: Vector2i = rec.get("blocks", Vector2i.ZERO)
+		if not rec.is_empty() and rec.get("target", null) == c:
+			threat = "Targets you in %s" % IntentText.block_text(blocks)
+	forecast.set_threat(threat)
 	if c == null or not is_instance_valid(c):
 		return
 	var target: Combatant = hovered_foe if hovered_foe != null else session.forecast_target(c)

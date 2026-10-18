@@ -63,8 +63,11 @@ func _rebuild() -> void:
 		for enemy: Combatant in session.enemies:
 			_roster.create_roster_card(enemy, ENEMY_COLOR, false, session.grid.get_position(enemy))
 
-# The hostile card's one behaviour line: AI role and strike power.
+# The hostile card's one behaviour line: "Next: <first action>" while planning (INTENT1-U), else AI role and strike power.
 func _behaviour_line(c: Combatant) -> String:
+	var rec: Dictionary = session.intent_of(c)
+	if not rec.is_empty():
+		return IntentText.first_line(rec) if str(rec["kind"]) == IntentRules.ARRIVING else "Next: " + IntentText.first_line(rec)
 	var profile: AiProfile = session.encounter.profile_of(c)
 	return "%s - hit %d" % [AiProfile.role_name(profile.role), DamageCalculator.power_of(c, c.attack_range > 1)]
 
@@ -90,10 +93,27 @@ func refresh() -> void:
 			var card: Control = _card_for(enemy)
 			if card != null:
 				card.visible = in_view.has(enemy)
+	if not is_party:
+		_refresh_tells()
 	_roster.update_highlights(session.selected_combatant, session.allies)
 	_roster.update_all_roster_cards(session.allies, session.grid, session.display_snapshot())
 	if is_party:
 		_tag_planning_state()
+
+# Hostile cards: the behaviour line follows the tell and a revealed foe wears the eye badge.
+func _refresh_tells() -> void:
+	for enemy: Combatant in session.enemies:
+		var card: Control = _card_for(enemy)
+		if card == null:
+			continue
+		var beh: Label = card.find_child("BehaviourLabel", true, false) as Label
+		if beh != null:
+			beh.text = _behaviour_line(enemy)
+			beh.tooltip_text = beh.text   # the card clips long lines
+		var badge: Control = card.find_child("ForesightBadge", true, false) as Control
+		if badge != null:
+			var rec: Dictionary = session.intent_of(enemy)
+			badge.visible = not rec.is_empty() and DictUtil.to_bool(rec["revealed"])
 
 # While planning, each party card shows whether the hero has a sequence yet; otherwise the AP bar alone.
 func _tag_planning_state() -> void:

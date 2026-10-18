@@ -47,8 +47,9 @@ func set_pinned(value: bool) -> void:
 	add_theme_stylebox_override("panel", UiTheme.box(Color(0.06, 0.08, 0.12, 0.97), UiTheme.COL_WARN if value else Color(0.35, 0.55, 0.85, 0.9), 6, 8, 6, 2 if value else 1))
 
 # Rebuilds the card for one unit. `intel` is [{"name", "desc", "color"}] (hostile AI behaviour); `plan_lines` the
-# ally's plan steps; `versus_lines` the numbers against the selected hero (hostile cards). `compact` is the safety
-# valve for a board too short for the full card: HP and AP share one line and no gauge bars are drawn.
+# ally's plan steps; `intent` a hostile's tell ({first, head, lines}, INTENT1-U); `versus_lines` the numbers against the selected hero (hostile cards). `compact` is the safety
+# valve for a board too short for the full card: HP and AP share one line and no gauge bars are drawn. `tight` (hostile with
+# an intent tell) is the second valve: the AI behaviour and versus sections are left out, the tell stays.
 func update_inspector(
 	selected_combatant: Combatant,
 	is_ally: bool,
@@ -58,7 +59,9 @@ func update_inspector(
 	intel: Array[Dictionary] = [],
 	plan_lines: Array[String] = [],
 	versus_lines: Array[String] = [],
-	compact: bool = false
+	compact: bool = false,
+	intent: Dictionary = {},
+	tight: bool = false
 ) -> void:
 	if not selected_combatant:
 		return
@@ -151,19 +154,28 @@ func update_inspector(
 		for text: String in plan_lines:
 			_line(_body, text, fs, Color(0.8, 0.88, 0.96))
 	else:
-		_section("THREAT INTEL (AI BEHAVIOUR)", Color(1.0, 0.45, 0.45), fs)
+		if not tight or intent.is_empty():
+			_section("THREAT INTEL (AI BEHAVIOUR)", Color(1.0, 0.45, 0.45), fs)
 		if not alive:
 			_line(_body, "Defeated.", fs, UiTheme.COL_MUTED)
 		elif withdrawn:
 			_line(_body, "Withdrew through the escape boundary.", fs, UiTheme.COL_MUTED)
-		else:
+		elif not tight or intent.is_empty():
 			for act: Dictionary in intel:
 				var act_col: Color = act.get("color", Color.WHITE)
 				var desc: String = str(act.get("desc", ""))
 				_line(_body, str(act.get("name", "")) + ((" - " + desc) if not desc.is_empty() else ""), fs, act_col)
 			if intel.is_empty():
 				_line(_body, "Hostiles plan in secret; their commands show as blocks resolve.", fs, UiTheme.COL_MUTED)
-		if not versus_lines.is_empty():
+		if not intent.is_empty() and alive and not withdrawn:   # INTENT1-U: this round's tell
+			_section("INTENT", Color(1.0, 0.45, 0.45), fs)
+			_line(_body, str(intent.get("first", "")), fs, Color(1.0, 0.8, 0.6))
+			var plan_head: String = str(intent.get("head", ""))
+			if not plan_head.is_empty():
+				_line(_body, plan_head, fs, Color(0.55, 0.9, 1.0))
+				for text: Variant in DictUtil.array_of(intent.get("lines", [])):
+					_line(_body, str(text), fs, Color(0.85, 0.9, 0.95))
+		if not versus_lines.is_empty() and not tight:
 			_section("VERSUS YOUR HERO", Color(0.98, 0.78, 0.3), fs)
 			for text: String in versus_lines:
 				_line(_body, text, fs, Color(0.85, 0.9, 0.95))

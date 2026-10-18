@@ -8,7 +8,7 @@ extends RefCounted
 
 const LABELS: Dictionary = {
 	"audio/master": "Master volume", "audio/mute": "Mute", "audio/music": "Music volume", "audio/sfx": "Effects volume", "audio/ui": "Interface volume",
-	"anim/speed": "Animation speed", "anim/instant": "Skip animations", "ui/text_scale": "Text size",
+	"anim/speed": "Animation speed", "anim/instant": "Skip animations", "ui/text_scale": "Text size", "ui/intent_tells": "Show enemy tells",
 	"display/window_mode": "Window mode", "display/resolution": "Window size", "display/vsync": "Vertical sync", "display/max_fps": "Frame rate cap",
 }
 
