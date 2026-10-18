@@ -1,14 +1,16 @@
 # Project Aegis Engine
 
-This directory contains the source code for the **Aegis Engine**, a high-performance, modular, AI-native game engine written in Rust.
+This directory contains the source code for the **Aegis Engine**, an agent-native game engine written in Rust that runs in parallel with the Godot build and aims for feature parity with it.
 
-**Core Philosophy:** Structured Markdown (`.md`) is the native programming language of the engine. Existing `.gd` scripts in the parent directory serve as a reference implementation to be converted into canonical `.md` specs.
+**Current direction:** [docs/ENGINE_SPEC.md](docs/ENGINE_SPEC.md) (draft, 2026-10-18): headless deterministic sim, one command API shared by GUI and CLI, feel as data, golden-trace parity with Godot. All engine work stays under `engine/`; `.gdignore` keeps Godot from scanning it.
 
-* **Full Architecture Proposal:** [ENGINE_PROPOSAL.md](file:///c:/Users/tusha/OneDrive/Project/Godot/tactical-rpg/new-game-project/engine/ENGINE_PROPOSAL.md)
+* **Original proposal (Markdown-as-language, superseded by the spec):** [ENGINE_PROPOSAL.md](ENGINE_PROPOSAL.md)
 * **Active Branch:** `engine`
 * **Toolchain:** Rust (`stable-x86_64-pc-windows-gnu`)
 
 ## Workspace Structure
+
+Current crates as of commit `57a168d`. The spec (Section 7) lists which ones are kept, reworked or retired.
 
 * `crates/aegis_core/` — Core math, vectors (`IVec2`), Variants, Signals/event bus, and seeded PRNG.
 * `crates/aegis_vfs/` — Virtual file system (`res://`, `user://`), JSON serialization, and sandboxed I/O.

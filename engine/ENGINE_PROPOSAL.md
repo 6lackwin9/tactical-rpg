@@ -1,6 +1,8 @@
 # Project Aegis: AI-Native Modular Game Engine
 ## Architectural Proposal & Milestone Roadmap
 
+> **Superseded 2026-10-18** by [docs/ENGINE_SPEC.md](docs/ENGINE_SPEC.md). Reason: Markdown as a programming language was dropped. A custom language is the hardest part to build and the least natural one for agents. Logic is now plain Rust, content stays in data files, and rules stay in readable spec tables. This file is kept for history.
+
 **Branch:** `engine`  
 **Engine Language:** Rust (`stable-x86_64-pc-windows-gnu`, rustc 1.99.1+)  
 **Native Source Language:** **Structured Markdown (`.md`)**  
