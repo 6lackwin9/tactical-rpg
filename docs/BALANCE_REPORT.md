@@ -1,5 +1,68 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## BAL5-R (final) 2026-10-18
+
+Branch claude/bal5-r (develop 744f175: BAL5-AI, S2 support_attrition scenario and POTLEDGER, BAL5-L extra_grants, BAL5-A shield_wall fortify 4/6/8 and potion price 30, STATCRED1-L). Same commands and seeds as BAL5-R1b (level 5, boss phase on, jitter on; role 3 seeds, sweep and campaign 10). 0 PLAN FAIL and 0 METRIC FAIL in all 8 runs, including the potion arm (the POTLEDGER fix works). Wall about 47 min (4 processes in parallel). Logs: scratchpad `bal5r/`. STATCRED1-L moved the buffs columns (buff / debuff rounds per fight now credit the applier); no band uses them. Potion price is 30 now (it does not touch the sim pouch).
+
+Headline: every cell except the support role is identical to R1b to the digit (tank, AoE, both sweeps, the stand and both campaign arms), so the shield_wall fortify grant moved nothing (see the open question below). The support role moved only because S2 changed its foes: priest survivors 0.89 -> 0.61, priest down round 1.72 -> 1.22, surv vs brawler -0.61 -> -1.06, heal share still 2. The potion arm's METRIC FAIL went 1104 -> 0 (POTLEDGER). The R1b gaps stand.
+
+Before (R1b) / after:
+
+| Cell | R1b | Now | Band |
+| --- | --- | --- | --- |
+| tank (warrior row) clear | 89 [67..100] | 89 [67..100] | 50-85 |
+| tank allies hp_end won / all | 30 / 26 | 30 / 26 | >= 40 / >= 15 |
+| tank survival | 61 | 61 [33..100] | >= 35 (spec) |
+| priest heal share | 2 [0..14] | 2 [0..15] | >= 20 (interim 5) |
+| priest survivors / down round (S2 foes) | 0.89 / 1.72 | 0.61 / 1.22 | n/a |
+| priest down before round 3 | 83% | 83% (alive 17%) | alive >= 60% |
+| support priest clear | 50 | 50 | 30-85 |
+| AoE foes/cast brawler / mage | 0.79 / 1.74 | 0.79 / 1.74 | >= 1.5 / >= 1.0 (role table header says >= 2) |
+| AoE allies/cast brawler / mage | 0.10 / 0.38 | 0.10 / 0.38 | <= 0.3 (mage over) |
+| swarm clear brawler / mage | 61 / 83 | 61 / 83 | >= 70 |
+| boss sweep mean (best / worst trio) | 26 (50 / 10) | 26 (50 / 10) | 30-50 |
+| full L5 sweep mob / line / wave / elite / boss | 91 / 26 / 28 / 38 / 26 | 91 / 26 / 28 / 38 / 26 | 90 / 70-90 / 55-80 / 50-75 / 30-50 |
+| HEAL1 arms / gate, no potion | 63 / 97 | 63 / 97 | arms 30-55, gate >= 75 |
+| HEAL1 arms / gate, potion arm | 82 / 97 | 82 / 97 | same |
+| ashmaw stand mean | 73 | 73 | 30-50 |
+
+Band confirmation:
+
+| Band | Result | Pass |
+| --- | --- | --- |
+| tank allies hp_end won >= 40 | 30 | FAIL |
+| tank allies hp_end all >= 15 | 26 | PASS |
+| tank survival >= 35 | 61 | PASS |
+| tank clear 50-85 | 89 | FAIL (just over) |
+| support heal share >= 20 | 2 | FAIL |
+| support heal share interim >= 5 | 2 | FAIL |
+| priest alive at round 3 >= 60% | 17% | FAIL |
+| support priest clear 30-85 | 50 | PASS |
+| aoe brawler foes/cast >= 1.5 | 0.79 | FAIL |
+| aoe mage foes/cast >= 1.0 | 1.74 | PASS |
+| aoe allies/cast <= 0.3 | mage 0.38 | FAIL (mage) |
+| swarm clear >= 70 | brawler 61, mage 83 | brawler FAIL |
+| boss sweep 30-50 | 26 | FAIL (4 under) |
+| full sweep mob >= 90 | 91 | PASS |
+| line 70-90 / wave 55-80 / elite 50-75 | 26 / 28 / 38 | all FAIL |
+| HEAL1 arms 30-55 (no potion) | 63 | FAIL (8 over) |
+| HEAL1 gate >= 75 | 97 | PASS |
+| potion arm 0 METRIC FAIL | 0 | PASS |
+| stand 30-50 | 73 | FAIL (23 over) |
+
+Ashmaw stand per trio (clear of 10): ranger+priest 10, ranger+mage 10, ranger+rogue 9, ranger+brawler 9, brawler+mage 9, priest+mage 7, rogue+mage 7, brawler+rogue 6, priest+brawler 3, priest+rogue 3. Swap deltas ranger +36.7, mage +15.8, priest -25.8, rogue -17.5. HEAL1 arms per trio with potions: all 10 for ranger+brawler/rogue/mage, priest+mage, brawler+mage, rogue+mage; priest+rogue 1, priest+brawler 5, brawler+rogue 7, ranger+priest 9. Without potions: priest+rogue 1, priest+brawler 4, rogue+mage 4, brawler+mage 6.
+
+Open question (needs a probe before anything is tuned): the tank loadout includes shield_wall and BAL5-A gave it a fortify extra grant, yet tank hp_end, survival and clear did not move by a single point. Either the sim tank rarely casts shield_wall, or the extra grant does not reach the sim fight, or the effect is below the noise of the 3 seeds. A cast-count probe (`tools/fc.sh run`) would tell which.
+
+Remaining gaps and the spec's next step:
+
+- Tank won-fight allies hp_end 30 (target 40): BAL5_LEVERS T3 has now fired and not closed it; next step is T4 (bodyguard stance), which is an option-build for the design review.
+- Priest heal share 2 and down before round 3 in 83%: S2 fired; S3 goes to the design review (with the LEVERS1 priest Ward).
+- Brawler AoE 0.79 foes/cast and swarm clear 61: A2 missed; the AoE follow-up goes to the design review (LEVERS1 brawler spin). Mage allies/cast 0.38 is over 0.3.
+- Boss sweep 26 and line/wave/elite 26/28/38 far under band: B3 does not fire (it needs boss above 60); the line, wave and elite gaps are trio-era numbers that have no lever in BAL5_LEVERS, so they need a band recalibration or a new lever decision.
+- HEAL1 arms 63 without potions (above 55) and stand 73 (above 50): F2 fires; the spec's next lever is the stand magnitudes. Both ignore potion price 30 (the sim pouch is fixed).
+- priest+rogue arms 1 of 10 even with potions, priest+brawler stand 3: priest trios stay the worst.
+
 ## BAL5-R1b (BAL5-AI rerun) 2026-10-18
 
 Branch claude/bal5-ai-rerun (develop a8dcf23: BAL5-AI T2/S1/A2 AI levers 7ceddcb and the enemy re-draft fix f65f0bb). Same commands and seeds as BAL5-R1 (level 5, boss phase on, jitter on), plus the R1b additions (HEAL1 chain, potion arm, solo scouts). 0 PLAN FAIL everywhere; 0 METRIC FAIL except the potion arm (see below). Wall about 62 min (up to 4 processes in parallel). Logs: scratchpad `rerun/`. The stand was run as `sweep 5 10 size=3 lead=warrior world=ashlands enc=ashmaw_stand` (one row per trio, same cells as R1's party runs).
