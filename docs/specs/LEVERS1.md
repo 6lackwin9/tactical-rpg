@@ -1,7 +1,7 @@
 # LEVERS1: role-feel levers left open after BAL5-AI
 
-Status: proposed (spec 2026-10-18, task DR2-LEVERS; input: `docs/BALANCE_REPORT.md` section "BAL5-R1b (BAL5-AI rerun)", `docs/specs/BAL5_LEVERS.md` triggers, `docs/specs/DESIGN_REVIEW2.md` items 4 and 5, both answered B)
-Depends on: BAL5-L (shares `skill_fields.gd`, `SkillValidator`, the `StatusEffects` grant path); BAL5-A (shares `skills.json`); Questions for Tushar 1-3
+Status: approved (user 2026-10-18 14:26 "all recs": Q1 A, Q2 A, Q3 A; spec 2026-10-18, task DR2-LEVERS; input: `docs/BALANCE_REPORT.md` section "BAL5-R1b (BAL5-AI rerun)", `docs/specs/BAL5_LEVERS.md` triggers, `docs/specs/DESIGN_REVIEW2.md` items 4 and 5, both answered B)
+Depends on: BAL5-L (shares `skill_fields.gd`, `SkillValidator`, the `StatusEffects` grant path); BAL5-A (shares `skills.json`); Questions for Tushar 1-3 (answered: all A)
 Lane: logic, asset, UI, balance (split in section 6)
 Touches: see the task rows in section 6
 
@@ -127,12 +127,12 @@ One data step each if missed, then report and stop (DR1 (3)): priest alive at r3
 
 | Id | Title | Lane | Depends on | Status | Spec | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
-| LEVERS1-L1 | Self-centred area (`area_origin`): field, validation, cells, planner step, AI origin pick, tests | logic | BAL5-L, Q2 | spec | docs/specs/LEVERS1.md 2.1, 3.1 | scripts/content/skill_fields.gd, scripts/content/validators/skill_validator.gd, scripts/combat/planning/skill_def.gd, combat_plan.gd, scripts/combat/ai/tactical_ai.gd, ai_skills_tactics_test_suite, skill tests |
-| LEVERS1-L2 | Ward status: registry row, absorb after the formula, AI cast rule, `ward_absorbed` metric, sim priest loadout, tests | logic | LEVERS1-L1 (shares tactical_ai.gd), BAL5-L, Q1 | spec | docs/specs/LEVERS1.md 2.2, 3.2 | scripts/combat/status/*, damage application in scripts/combat/actions/*, scripts/content/validators/skill_validator.gd, tactical_ai.gd, scripts/combat/session/battle_metrics.gd, battle_report.gd, tools/sim/sim_roles.gd, status and AI test suites |
-| LEVERS1-A1 | Cyclone Kick becomes the spin | asset | LEVERS1-L1, BAL5-A | spec | docs/specs/LEVERS1.md 4.1 | data/catalog/skills.json, data/seeds/levers1.gd |
-| LEVERS1-A2 | Ward skill and priest path | asset | LEVERS1-L2, BAL5-A | spec | docs/specs/LEVERS1.md 4.2 | data/catalog/skills.json, data/catalog/classes.json, data/seeds/levers1.gd |
-| LEVERS1-U | Ward on the unit card and HP bar (shield segment), forecast line "Ward absorbs N", log line; spin preview around the caster | UI | LEVERS1-L2, LEVERS1-L1 | spec | docs/specs/LEVERS1.md 3.1 (3), 3.2 | scripts/ui/combat/*, scripts/ui/roster_panel_ui.gd |
-| LEVERS1-B | Measure both levers against section 5 | balance | LEVERS1-A1, LEVERS1-A2, BAL5-R, BAL5 S2 scenario | spec | docs/specs/LEVERS1.md 5 | docs/BALANCE_REPORT.md |
+| LEVERS1-L1 | Self-centred area (`area_origin`): field, validation, cells, planner step, AI origin pick, tests | logic | BAL5-L | approved | docs/specs/LEVERS1.md 2.1, 3.1 | scripts/content/skill_fields.gd, scripts/content/validators/skill_validator.gd, scripts/combat/planning/skill_def.gd, combat_plan.gd, scripts/combat/ai/tactical_ai.gd, ai_skills_tactics_test_suite, skill tests |
+| LEVERS1-L2 | Ward status: registry row, absorb after the formula, AI cast rule, `ward_absorbed` metric, sim priest loadout, tests | logic | LEVERS1-L1 (shares tactical_ai.gd), BAL5-L | approved | docs/specs/LEVERS1.md 2.2, 3.2 | scripts/combat/status/*, damage application in scripts/combat/actions/*, scripts/content/validators/skill_validator.gd, tactical_ai.gd, scripts/combat/session/battle_metrics.gd, battle_report.gd, tools/sim/sim_roles.gd, status and AI test suites |
+| LEVERS1-A1 | Cyclone Kick becomes the spin | asset | LEVERS1-L1, BAL5-A | approved | docs/specs/LEVERS1.md 4.1 | data/catalog/skills.json, data/seeds/levers1.gd |
+| LEVERS1-A2 | Ward skill and priest path | asset | LEVERS1-L2, BAL5-A | approved | docs/specs/LEVERS1.md 4.2 | data/catalog/skills.json, data/catalog/classes.json, data/seeds/levers1.gd |
+| LEVERS1-U | Ward on the unit card and HP bar (shield segment), forecast line "Ward absorbs N", log line; spin preview around the caster | UI | LEVERS1-L2, LEVERS1-L1 | approved | docs/specs/LEVERS1.md 3.1 (3), 3.2 | scripts/ui/combat/*, scripts/ui/roster_panel_ui.gd |
+| LEVERS1-B | Measure both levers against section 5 | balance | LEVERS1-A1, LEVERS1-A2, BAL5-R, BAL5 S2 scenario (Balance queue, after BAL5-L) | approved | docs/specs/LEVERS1.md 5 | docs/BALANCE_REPORT.md |
 
 ROADMAP row (proposed): "LEVERS1 role-feel levers: brawler spin, priest Ward (DR2 4B)", status `proposed`.
 
@@ -144,7 +144,7 @@ Bodyguard (T4) and boss acts twice (B4), until their re-entry triggers; heal pow
 
 ## Open questions
 
-Questions for Tushar (plain terms):
+Questions for Tushar (plain terms; answered 2026-10-18 14:26 "all recs": 1 A, 2 A, 3 A):
 
 1. **Priest Ward.** An earlier rule says the priest gets no protective buffs for allies (Aegis, an armor buff at level 6, already bends it). The data says priests still go down in the first two rounds in most fights. A: allow Ward, a shield she puts on herself or one ally that soaks the next hit. B: Ward only on herself. C: no Ward; move Aegis earlier to level 3 instead (data only, weaker). **Recommend A**: it is the one move you would plan around the enemy tells.
 2. **Who spins.** The design review named a mage burst around the caster, but the mage already hits enough enemies; the brawler does not. A: the brawler's Cyclone Kick becomes a spin that hits everyone next to him. B: keep Cyclone Kick and add the spin as a new brawler move. C: give it to the mage as first named. **Recommend A**: no extra skill to learn, and the name already says spin.
