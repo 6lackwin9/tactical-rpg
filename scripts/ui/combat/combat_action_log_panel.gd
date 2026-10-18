@@ -31,5 +31,5 @@ func _on_bound() -> void:
 func refresh() -> void:
 	if session == null:
 		return
-	dock.empty_text = "No actions yet: %s" % session.status_text if session.is_planning() and not session.status_text.is_empty() else "No actions yet"
+	dock.empty_text = "No actions yet"   # COMBAT-UI3: the status bar's hint carries the status line now
 	dock.update_active_cell(session.log_entries, session.active_log_index)

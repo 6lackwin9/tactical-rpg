@@ -50,3 +50,7 @@ Look the failure up here first. Only debug from scratch if nothing matches, then
 | An autowrapped Label inside a popup gets a huge minimum height and pushes the panel off screen | It is measured before layout, at zero width | Use one line with `clip_text` and an ellipsis, or give it a fixed minimum width (UIR-6 shop detail line) |
 | A game scene's bottom bar is drawn over by a menu-host hint (e.g. "Esc: menu") | Controls on the menu host's base canvas draw above the scene's own controls | Put overlay bars in their own CanvasLayer (UIR-6 dialogue bar, layer 1) |
 | Settings popup wider than 1280x720 at large text sizes after adding a Controls row | Controls tab labels don't wrap | Keep `ControlsList` action names short (about 30 characters) (UIR-6) |
+| A `top_level` panel with wrapped labels measures a huge height on its first pass | Wrapped labels are measured before the width is known | Size it at its fixed width, call `update_minimum_size()` on the labels, re-sort, then refit deferred (`StripQuestion.fit_now`, COMBAT-UI3) |
+| A script helper named `_set` misbehaves or warns | It clashes with the built-in `Object._set` | Rename it (COMBAT-UI3 used `_put`) |
+| A settings checkbox label widens the popup at large text | Checkbox text does not wrap in the grid column | Give the checkbox row word wrap (COMBAT-UI3) |
+| Headless HUD layout tests read old sizes after a resize | The first sort pass still uses the old board width | Sort several times after a resize before asserting (COMBAT-UI3) |

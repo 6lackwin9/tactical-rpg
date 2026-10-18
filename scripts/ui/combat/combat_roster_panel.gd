@@ -6,14 +6,14 @@ extends CombatPanel
 # One panel per side, each owning its own RosterPanelUI half. Enemy cards are
 # shown only for units taking part in the viewed round (session.enemies_in_view),
 # so mid-round reinforcements appear exactly when they enter the field.
+# COMBAT-UI3: hovering or focusing a card shows that unit in the selected-hero panel / the merged enemy card
+# (through session.set_hovered); a click selects it (an enemy stays on its card until another is picked).
 # ==============================================================================
 
 const ALLY_COLOR: Color = Color(0.2, 0.6, 1.0)
 const ENEMY_COLOR: Color = Color(0.9, 0.3, 0.3)
 
-signal unit_focused(c: Combatant)   # focus on a card: the grid shows the hover card at once
-signal unit_blurred()
-signal unit_clicked(c: Combatant)   # a click on a card also pins the hover card
+signal unit_clicked(c: Combatant)   # a click on a card (after it selected the unit)
 
 var is_party: bool = true
 var _roster: RosterPanelUI
@@ -35,7 +35,7 @@ static func create(p_is_party: bool) -> CombatRosterPanel:
 func _init() -> void:
 	super._init()
 	_roster = RosterPanelUI.new()
-	default_min_size = Vector2(CombatHudMetrics.SIDE_W, 120)
+	default_min_size = Vector2(CombatHudMetrics.LEFT_W, 120)
 
 func _on_bound() -> void:
 	_roster.token_fn = func(c: Combatant) -> Texture2D: return session.encounter.get_token_texture(c)
@@ -45,8 +45,8 @@ func _on_bound() -> void:
 		session.select_combatant(c)
 		unit_clicked.emit(c)
 	)
-	_roster.combatant_focused.connect(func(c: Combatant) -> void: unit_focused.emit(c))
-	_roster.combatant_blurred.connect(func() -> void: unit_blurred.emit())
+	_roster.combatant_focused.connect(func(c: Combatant) -> void: session.set_hovered(c))
+	_roster.combatant_blurred.connect(func() -> void: session.set_hovered(null))
 	_roster.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void: session.set_hovered(c))
 	_roster.combatant_unhovered.connect(func() -> void: session.set_hovered(null))
 	_rebuild()
@@ -63,18 +63,18 @@ func _rebuild() -> void:
 		for enemy: Combatant in session.enemies:
 			_roster.create_roster_card(enemy, ENEMY_COLOR, false, session.grid.get_position(enemy))
 
-# The hostile card's one behaviour line: "Next: <first action>" while planning (INTENT1-U), else AI role and strike power.
+# The hostile card's one line: "Next: <first action>" while planning (INTENT1-U); otherwise its AI role (no numbers).
 func _behaviour_line(c: Combatant) -> String:
 	var rec: Dictionary = session.intent_of(c)
 	if not rec.is_empty():
 		return IntentText.first_line(rec) if str(rec["kind"]) == IntentRules.ARRIVING or str(rec["kind"]) == IntentRules.IDLE else "Next: " + IntentText.first_line(rec)
-	var profile: AiProfile = session.encounter.profile_of(c)
-	return "%s - hit %d" % [AiProfile.role_name(profile.role), DamageCalculator.power_of(c, c.attack_range > 1)]
+	return AiProfile.role_name(session.encounter.profile_of(c).role)
 
-# New fitted sizes (CombatHudMetrics): fixed panel heights; the cards are rebuilt when their line count changed.
+# New fitted sizes (CombatHudMetrics): fixed panel heights; the cards are rebuilt when their sizes changed.
 func apply_metrics(m: CombatHudMetrics) -> void:
-	var changed: bool = m.party_rows != _roster.metrics.party_rows or m.hostile_rows != _roster.metrics.hostile_rows \
-		or m.fs != _roster.metrics.fs or m.party_slots != _roster.metrics.party_slots or m.hostile_slots != _roster.metrics.hostile_slots
+	var old: CombatHudMetrics = _roster.metrics
+	var changed: bool = m.fs != old.fs or m.party_slots != old.party_slots or m.hostile_slots != old.hostile_slots \
+		or m.left_w != old.left_w or m.right_w != old.right_w
 	_roster.set_metrics(m)
 	if changed or _roster.roster_cards.is_empty():
 		_rebuild()
@@ -93,14 +93,11 @@ func refresh() -> void:
 			var card: Control = _card_for(enemy)
 			if card != null:
 				card.visible = in_view.has(enemy)
-	if not is_party:
 		_refresh_tells()
 	_roster.update_highlights(session.selected_combatant, session.allies)
 	_roster.update_all_roster_cards(session.allies, session.grid, session.display_snapshot())
-	if is_party:
-		_tag_planning_state()
 
-# Hostile cards: the behaviour line follows the tell and a revealed foe wears the eye badge.
+# Hostile cards: the "Next:" line follows the tell and a revealed foe wears the eye badge.
 func _refresh_tells() -> void:
 	for enemy: Combatant in session.enemies:
 		var card: Control = _card_for(enemy)
@@ -114,30 +111,6 @@ func _refresh_tells() -> void:
 		if badge != null:
 			var rec: Dictionary = session.intent_of(enemy)
 			badge.visible = not rec.is_empty() and DictUtil.to_bool(rec["revealed"])
-
-# While planning, each party card shows whether the hero has a sequence yet; otherwise the AP bar alone.
-func _tag_planning_state() -> void:
-	for ally: Combatant in session.allies:
-		var card: Control = _card_for(ally)
-		if card == null or session.plan == null:
-			continue
-		var lbl: Label = card.find_child("PlanLabel", true, false) as Label
-		if lbl == null:
-			continue
-		if not ally.is_active() or not session.is_planning():
-			lbl.text = ""
-			continue
-		var steps: int = session.plan.steps_of(ally).size()
-		var st: CombatPlan.SimState = session.plan.compile(ally)
-		var short: bool = _roster.metrics.scale > 1.1
-		if steps == 0:
-			lbl.text = "No plan"
-			lbl.add_theme_color_override("font_color", UiTheme.COL_WARN)
-		else:
-			var bad: bool = st.error_index >= 0 or st.runs_dry()
-			var spent: int = ally.max_ap - st.ap_left
-			lbl.text = ("%s%d AP" if short else "%sPlan %d AP") % ["! " if bad else "", spent]
-			lbl.add_theme_color_override("font_color", UiTheme.COL_BAD if bad else UiTheme.COL_GOOD)
 
 func _card_for(c: Combatant) -> Control:
 	var raw: Variant = _roster.roster_cards.get(c, null)

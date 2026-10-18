@@ -185,9 +185,12 @@ tactical-rpg/
 │       │   ├── combat_presenter.gd       # All combat animation: owned tweens and temp nodes, instant mode, kill_all (S14-L2)
 │       │   ├── fx_presets.gd             # Tween recipes and timings, log entry -> presets mapping
 │       │   ├── fx_settings.gd            # Animation speed and instant mode (always on headless)
-│       │   ├── combat_hud_metrics.gd     # Layout C sizes: tile, column heights, card lines (pure math)
+│       │   ├── combat_hud_metrics.gd     # Layout A sizes (COMBAT-UI3): strip, columns, tile, cards per text size (pure math)
+│       │   ├── combat_hero_panel.gd      # Selected-hero panel under the party cards (COMBAT-UI3)
+│       │   ├── combat_enemy_card_panel.gd # Merged enemy card: state, stats, Next, your hero's deal/take, Can use (COMBAT-UI3)
+│       │   ├── plan_block_text.gd        # Planning-strip block kind, colour, label and hover text (COMBAT-UI3)
+│       │   ├── strip_question.gd         # Small non-blocking question popup (missing-actions warning)
 │       │   ├── combat_action_log_panel.gd # One-line log ticker dock
-│       │   ├── combat_forecast_panel.gd  # Tactical forecast
 │       │   ├── combat_playback_panel.gd  # Step / play / reset / round advance
 │       │   └── combat_timeline_panel.gd  # Block ruler & focused unit track (planning bar)
 │       ├── runner/                   # Scene Runner (main menu)
@@ -206,10 +209,8 @@ tactical-rpg/
 │       ├── plan_overlay.gd           # Planning ghosts on the grid: route, destination ghost, reach, target ring, cost hint
 │       ├── plan_action_popup.gd      # Small per-target popup of valid actions (AP/blocks, hover preview, 1-9/Enter)
 │       ├── roster_panel_ui.gd        # Party status (2x2) and hostile status (5x2) docks
-│       ├── unit_inspector_ui.gd      # The unit hover card (COMBAT-UI2-L2): portrait, gauges, stats, plan / AI intel; shown by combat_grid_panel.gd
-│       ├── tactical_forecast_ui.gd   # Right dock (range checks, damage forecast, arena intel)
 │       ├── playback_controls_ui.gd   # Step prev/next, Auto-Play, Reset, Round navigation
-│       ├── timeline_dock_ui.gd       # Top-row dock (block ruler sized to fit, unit track, control row: AP status / autoplay banner, Party and Hero Tactic dropdowns, Autoplay, Clear, Confirm; drag/remove steps; 14 px text floor)
+│       ├── timeline_dock_ui.gd       # COMBAT-UI3 planning strip: "<Hero> plan", continuous kind-coloured blocks with hover cards, Party/Hero tactics, Autoplay, Clear, Confirm round (warns about empty blocks unless Settings > Gameplay > Warn about missing actions is off). Before: top-row dock (block ruler sized to fit, unit track, control row: AP status / autoplay banner, Party and Hero Tactic dropdowns, Autoplay, Clear, Confirm; drag/remove steps; 14 px text floor)
 │       ├── action_log_dock_ui.gd     # Top action dock displaying active block resolution
 │       ├── combat_log_modal.gd       # Fullscreen expanded event stream modal with category filters
 │       ├── timeline_modal.gd         # Fullscreen synchronized multi-unit timeline modal
@@ -943,3 +944,5 @@ The following modular systems and capabilities are planned according to the mast
 - [ ] Faction reputation and relations affecting encounters, prices and quests (relations are authored already).
 - [ ] Conflict reporting when two parents define the same local id, and a graphical inheritance view in the World Forge.
 - [ ] World packs: export / import a world folder as a shareable module with its base-catalog dependencies listed.
+
+Combat HUD layout A (COMBAT-UI3, user 2026-10-18; layout a UI preference, the continuous colour-coded blocks and the confirm warning his decisions): a slim planning strip on top shows the selected hero's plan as continuous blocks coloured by action kind (hover a block for how it plays out) next to the Party / Hero tactic pickers, Autoplay, Clear and Confirm round. Confirm round confirms at once; when a living hero has empty blocks a small question asks first ("Ranger has empty actions. Confirm anyway?", Back / Confirm, Confirm focused; Enter confirms, Esc goes back), unless Settings > Gameplay > **Warn about missing actions** (`ui/warn_missing_actions`, default on) is off; autoplay never asks. Left: compact party cards (name, HP bar, HP and AP) and a selected-hero panel (state, speed, reach, AP left, gear, plan, empty blocks). Right: hostile cards (name, HP, Next) and one merged enemy card for the hovered or picked enemy (state, HP / Speed / Reach, Next, `Your <hero>: deals about X · takes about Y`, Can use); the old forecast dock and floating hover card are gone (HOVER1-U absorbed). Bottom: "Round n · Planning" with a hint and the log ticker; click it, Expand or L opens the full log. The grid takes the freed height. Tested in `combat_ui_framework_test_suite.gd` (no overlap at 1280x720 at every text size, and 1920x1080) and `settings_ui_test_suite.gd`.

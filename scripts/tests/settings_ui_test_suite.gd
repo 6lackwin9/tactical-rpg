@@ -296,6 +296,20 @@ static func _test_tabs(tree_parent: Node) -> bool:
 		var display_ok: bool = tab_node(view, 1, "Choice_display_window_mode") != null and tab_node(view, 1, "Levels_ui_text_scale") != null and tab_node(view, 1, "DisplayNow") != null and tab_node(view, 1, "Slider_audio_master") == null
 		var play_ok: bool = tab_node(view, 2, "Levels_anim_speed") != null and tab_node(view, 2, "Check_anim_instant") != null and tab_node(view, 2, "Levels_ui_text_scale") == null
 		checks["rows by tab"] = sound_ok and display_ok and play_ok
+		# COMBAT-UI3: "Warn about missing actions" is a Gameplay checkbox, ticked by default; Apply writes the key.
+		var warn: CheckBox = tab_node(view, 2, "Check_ui_warn_missing_actions") as CheckBox
+		checks["Gameplay: 'Warn about missing actions' checkbox, on by default"] = warn != null and warn.text == "Warn about missing actions" and warn.button_pressed \
+			and tab_node(view, 1, "Check_ui_warn_missing_actions") == null and SettingsFile.default_of("ui/warn_missing_actions") == true
+		if warn != null:
+			warn.button_pressed = false
+			var wm: SettingsModel = view.router.model() as SettingsModel
+			var draft_off: bool = wm.value("ui/warn_missing_actions") == false and SettingsFile.get_bool("ui/warn_missing_actions")
+			var _errs: Array[String] = wm.apply()
+			var cfg := ConfigFile.new()
+			var read_ok: bool = cfg.load(SettingsFile.path()) == OK and cfg.get_value("ui", "warn_missing_actions", true) == false
+			checks["Gameplay: unticking it is a draft until Apply, then the file holds false"] = draft_off and not SettingsFile.get_bool("ui/warn_missing_actions") and read_ok
+			SettingsFile.set_value("ui/warn_missing_actions", true)
+			var _saved: Error = SettingsFile.save()
 		var same: bool = true
 		for i: int in [1, 2, 0, 2]:
 			select_tab(view, i)

@@ -640,6 +640,33 @@ func plan_is_valid() -> bool:
 			return false
 	return true
 
+# COMBAT-UI3: the blocks of `actor`'s round with nothing planned: not covered by a planned command, not taken by a
+# status, and none after a planned withdrawal. Empty for a unit that is not an active party member on the grid.
+func plan_empty_blocks(actor: Combatant) -> Array[int]:
+	var out: Array[int] = []
+	if plan == null or actor == null or not is_ally(actor) or not actor.is_active() or not grid.has_combatant(actor):
+		return out
+	var st: CombatPlan.SimState = plan.compile(actor)
+	var covered: Dictionary = {}
+	var last_end: int = 0
+	for e: PlanEntry in st.entries:
+		for b: int in range(e.start_block, e.end_block() + 1):
+			covered[b] = true
+		last_end = maxi(last_end, e.end_block())
+	for b: int in range(1, total_blocks + 1):
+		if covered.has(b) or st.blocked_blocks.has(b) or (st.withdrawn and b > last_end):
+			continue
+		out.append(b)
+	return out
+
+# COMBAT-UI3: the living party members whose round still has empty blocks (the Confirm round warning names them).
+func heroes_with_empty_blocks() -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for a: Combatant in allies:
+		if not plan_empty_blocks(a).is_empty():
+			out.append(a)
+	return out
+
 # Locks the party's sequences, schedules them with the enemies' and starts resolving
 # (auto-play; `auto_play` false lets the caller step manually). Refused while any is invalid.
 # `source` "auto" marks a round confirmed by CombatAutoplay (kept in confirm_source; the playtest recorder stores it).

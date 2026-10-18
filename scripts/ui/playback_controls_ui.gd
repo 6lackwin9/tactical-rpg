@@ -4,6 +4,7 @@ extends HBoxContainer
 # ==============================================================================
 # Tactical RPG - Playback Controls Bar UI
 # One compact row (COMBAT-UI2-L1): replay stepping, autoplay, reset, popout, phase badge, round advance.
+# COMBAT-UI3: the bottom status bar: "Round 1 · Planning" and the hint (status line, plan warning or autoplay note).
 # No gear button: equipment is changed outside battle.
 # ==============================================================================
 
@@ -41,14 +42,21 @@ func _build_ui() -> void:
 	btn_reset_game = _btn("⟲", "Full reset: restart the whole battle from round 1", w, fs, func() -> void: reset_game_pressed.emit())
 	btn_popout = _btn("⛶", "Full-screen timeline [F / Tab]", w, fs, func() -> void: popout_pressed.emit())
 
-	phase_badge_lbl = UiTheme.label("PLANNING PHASE", fs, Color(0.95, 0.8, 0.35))
+	phase_badge_lbl = UiTheme.label("Round 1 · Planning", fs, Color(0.95, 0.8, 0.35))
 	phase_badge_lbl.name = "PhaseBadge"
 	phase_badge_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	add_child(phase_badge_lbl)
 
-	# The hint is not a second text in the strip: it is the badge's tooltip and the log ticker's empty line.
+	# COMBAT-UI3: the hint beside the phase (the status line, a plan warning or the autoplay pause reason).
 	status_label = UiTheme.label("Set party actions, then confirm the round.", fs, Color(0.7, 0.85, 0.95))
-	status_label.visible = false
+	status_label.name = "StatusHint"
+	var gap := Control.new()   # a little air between the phase and the hint
+	gap.custom_minimum_size = Vector2(6, 0)
+	add_child(gap)
+	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_label.clip_text = true
+	status_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	add_child(status_label)
 
 	btn_next_round = Button.new()
@@ -80,6 +88,7 @@ func set_phase_badge(text: String, col: Color = Color(0.95, 0.8, 0.35)) -> void:
 func set_status_text(text: String, col: Color = Color(0.7, 0.85, 0.95)) -> void:
 	if status_label != null:
 		status_label.text = text
+		status_label.tooltip_text = text
 		status_label.add_theme_color_override("font_color", col)
 		if phase_badge_lbl != null:
 			phase_badge_lbl.tooltip_text = text

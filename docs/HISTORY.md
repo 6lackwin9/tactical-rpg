@@ -37,6 +37,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-18 | Injuries and a defeat cost (design review 4.2: downed heroes get a temporary injury until the party rests) | rejected | Loss cost = lost time and the failed objective; full-heal revisit (HEAL1) gives fights their threat | A penalty for losing discourages taking risks (user 2026-10-18) |
 | 2026-10-18 | T4 Bodyguard for the warrior (DR2 4) | deferred | BAL5 T3 extra_grants and shield_wall fortify (BAL5-L, BAL5-A) | Same KPI as T3, not measured yet; returns if BAL5-R still shows won-fight allies hp_end below 40 (docs/specs/LEVERS1.md) |
 | 2026-10-18 | B4 boss acts twice (DR2 5) | not adopted | PACE1 enrage for the second-act feel | BAL5 boss trigger did not fire (L5 boss mean 26, trigger above 60; band 30-50), so a stronger boss goes the wrong way (docs/specs/LEVERS1.md) |
+| 2026-10-18 | Combat layout C: two-row timeline dock, separate tactical forecast dock, floating unit hover card (COMBAT-UI2, HOVER1-U) | replaced | COMBAT-UI3 layout A: slim planning strip, merged enemy card, selected-hero panel | User 10:05 feedback: the hover card covered a third of the grid and the timeline took two rows; he picked A at 11:51 (decisions/combat.md) |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 

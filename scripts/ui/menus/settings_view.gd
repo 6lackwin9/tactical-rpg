@@ -174,6 +174,7 @@ func _add_row(grid: GridContainer, host: MainMenuView, m: SettingsModel, key: St
 		box.button_pressed = DictUtil.to_bool(m.value(key))
 		box.focus_mode = Control.FOCUS_ALL
 		box.custom_minimum_size = Vector2(LABEL_W, 0)
+		box.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # a long label wraps inside the label column instead of widening the popup
 		box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		box.toggled.connect(func(on: bool) -> void:
 			var _e: Array[String] = m.set_value(key, on)

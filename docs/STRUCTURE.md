@@ -14,6 +14,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools (forge and world are read-only viewers since TOOLS-RO) | all | done |
 | `scripts/ui/combat/intent_overlay.gd`, `scripts/ui/combat/intent_text.gd` | enemy tell chips and arrows on the grid; tell wording for cards, hover card, timeline and forecast (INTENT1-U) | S16 | done |
 | `scripts/ui/combat/combat_hud_metrics.gd` | CombatHudMetrics: combat layout C sizes (column widths, tile size, card heights and dropped lines per text size) (COMBAT-UI2-L1) | S16 | done |
+| `scripts/ui/combat/{combat_hero_panel,combat_enemy_card_panel,plan_block_text,strip_question}.gd` | COMBAT-UI3 layout A: selected-hero panel, merged enemy card, planning-strip block text, missing-actions question; `unit_inspector_ui.gd`, `tactical_forecast_ui.gd` and `combat_forecast_panel.gd` removed | S16 | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
 | `scripts/tests/purse_test_suite.gd` | encounter purse schema and validation, both catalogs (PURSE1-L) | S13 | in-progress |
 | `scripts/tests/game_menu_test_suite.gd` | in-play game menu popup, busy rules, new game selection, load question, 1280x720 fit (UIR-2) | S13 | done |

@@ -28,6 +28,7 @@ const KEYS: Dictionary = {
 	"anim/instant": {"type": TYPE_BOOL, "default": false},
 	"ui/text_scale": {"type": TYPE_FLOAT, "default": 1.0, "levels": TEXT_LEVELS},
 	"ui/intent_tells": {"type": TYPE_BOOL, "default": true},   # INTENT1-U: enemy kind chips and arrows on the grid while planning (hotkey I)
+	"ui/warn_missing_actions": {"type": TYPE_BOOL, "default": true},   # COMBAT-UI3: Confirm round asks first when a hero has empty blocks
 	# DISPLAY1 (desktop only; the web build writes none): "choices" is the list of allowed values, anything else reads as the default.
 	"display/window_mode": {"type": TYPE_STRING, "default": "windowed", "choices": ["windowed", "borderless", "fullscreen"]},
 	"display/resolution": {"type": TYPE_STRING, "default": "1280x720", "choices": ["960x540", "1024x576", "1152x648", "1280x720", "1366x768", "1600x900", "1920x1080", "2560x1440"]},
