@@ -71,6 +71,10 @@ static func run(tree_parent: Node = null) -> bool:
 	tree_parent.add_child(runner)
 	ok = TestHelpers.report_ok(TAG, "With playtests off the runner has no PlaytestHub and no Playtests panel (zero hooks)", runner.hub == null and runner.browser == null) and ok
 
+	ok = TestHelpers.report_ok(TAG, "Note button exists, shows only with a recording hub",
+		runner.note_button != null and not runner.note_button.visible and SceneRunner.note_button_shown(true, true)
+		and not SceneRunner.note_button_shown(true, false) and not SceneRunner.note_button_shown(false, true)) and ok
+
 	# Launch the arena with a chosen catalog encounter; restart keeps it; menu frees it.
 	var launched: bool = runner.launch("res://scenes/combat_arena.tscn", "veterans_drill")
 	var arena: Node = runner.active_scene

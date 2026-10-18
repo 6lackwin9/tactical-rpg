@@ -71,6 +71,7 @@ var _output: RichTextLabel = null
 var _suite_thread: Thread = null
 var _leave_armed: bool = false
 var _pill_hint: Label = null
+var note_button: Button = null      # "✎ Note" in the pill, shown only while the hub is recording
 
 func _ready() -> void:
 	name = "SceneRunner"
@@ -510,8 +511,27 @@ func _build_pill() -> void:
 	row.add_child(UiTheme.button("☰ Menu", "Back to the Scene Runner (F10)", func() -> void: back_to_menu()))
 	row.add_child(UiTheme.button("↻", "Restart this scene (F6)", func() -> void: restart_scene()))
 	row.add_child(UiTheme.button("⟳", "Reload edited scripts and restart (F5)", func() -> void: reload_and_restart()))
+	note_button = UiTheme.button("✎ Note", "Add a playtest note with a screenshot (F8)", func() -> void: _open_note_from_pill())
+	note_button.visible = false
+	row.add_child(note_button)
 	_pill_hint = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_WARN)
 	row.add_child(_pill_hint)
+
+static func note_button_shown(has_hub: bool, recording: bool) -> bool:
+	return has_hub and recording
+
+func _process(_delta: float) -> void:
+	if note_button != null:
+		note_button.visible = note_button_shown(hub != null, hub != null and hub.is_recording())
+
+# The pill sits on a higher layer than the scene, so it is hidden for the frame the note screenshot needs.
+func _open_note_from_pill() -> void:
+	if hub == null or not hub.is_recording():
+		return
+	pill_layer.visible = false
+	await RenderingServer.frame_post_draw
+	hub.open_note()
+	pill_layer.visible = true
 
 func _flash_pill(text: String) -> void:
 	if _pill_hint != null:
