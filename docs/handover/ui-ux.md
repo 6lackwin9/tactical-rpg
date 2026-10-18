@@ -1,27 +1,34 @@
 # UI/UX handover
 
-Written 2026-10-18 02:40 UTC by the UI/UX session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
+Written 2026-10-18 05:35 UTC by the UI/UX session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`. Dispatch mode is **economy** (user 02:35): logic-builder medium (sonnet), change-reviewer low.
 
 ## Landed this session (develop)
 
-REVIEW-F2, REVIEW-F3, COMBAT-LAYOUT, LOAD-SLOTS-UI, SETTINGS-UI, DISPLAY1, MENU-POLISH, SETTINGS-POPUP, BATTLE-FLOW (608d45a), SOUND-PREVIEW (bf53760), CONTROLS-HELP with the volume fix and Mute (3a2ede5).
+MAPVIEW1 full-screen maps (cf333ab), MAPREAD1-L2 map markers, legend, world pins and hover (73f31fa), COMBAT-UI2-L1 combat layout C plus UIR-5 leftovers (7f66209). UIR-5 is done with COMBAT-UI2-L1: delete its TASKS row in your first task commit.
+
+## Waiting on the user
+
+Mockups on the Design canvas "Map Screen Mockups" (https://claude.ai/artifact/2joZ2aDAARWS55hWnpCz2W), three decision cards in the old UI/UX thread (taps do not reach a new session: if the coordinator relays a pick, it quotes question, option and time):
+
+- Dialogue layout: A centred popup / **B bottom bar with portrait (recommended)** / C speech panel by the speaker.
+- Activity log: **A one-line ticker that expands (recommended)** / B toasts plus a Log tab / C docked panel.
+- Quest tracker: A pinned card / **B card plus ! and ? map badges (recommended)** / C journal only with a Menu badge.
+
+The picks become new build rows (they fold into UIR-6 for dialogue). Write the TASKS rows when the answers arrive.
 
 ## Queue (in order)
 
-1. **Full-screen maps** (Tushar 02:23, pulled forward): the region map fills the screen, the map is larger than the view and scrolls (camera follows the party, clamps at edges, a smaller map is centred). The world map is full screen too. Missing art falls back to today's placeholders. Agreed with Assets & Audio (session_01EXCnXuYorGRpDEDtGgx3FL): TILE 22 -> 32 (1x pixel art, nearest filter, scale the view by the screen scale on high-DPI). Overlay keys exactly as MAPREAD1 2.1 (`overlay_npc`, `overlay_chest`, `overlay_lore`, `overlay_exit`, `overlay_encounter`, `overlay_roamer`, `overlay_poi`, plus optional open-chest and locked-exit keys); 32x32 NPC tokens. World backdrop ui key `ashlands_world_map` (1920x1080, letterboxed), pins 24x24 per kind placed by location field `map_pos` = [x, y] normalized 0..1 (Gameplay adds the field with MAPREAD1-L1; fall back to today's layout without it). Assets adds four 48x30 templates in `data/maps` and switches the locations onto them only after this view lands: ping them when it does. The view today has a fixed 24x16 canvas. Merge develop first: Gameplay's WORLDMAP-ENTER (0bd96e3) changed `world_map_view.gd` `travel_to`, and MUSIC1 added hooks in `region_map_view._refresh` / `world_map_view._refresh`.
-2. **MAPREAD1-L2** with or right after the maps, once Gameplay's MAPREAD1-L1 lands (Gameplay pings).
-3. **Mockups first, then build** (Tushar likes options plus an opinion; use the Artifact Design canvas like "Combat Screen Layouts" https://claude.ai/artifact/73p4skj1uDKHxm9XApz2hC): dialogue choices / selection options UI, an activity log, an active-quest tracker or journal (Tushar 02:23).
-4. **Skills screen** (Tushar 02:06): show each skill's description (data has `description`, some with `{name}`/`{power}` templates), and only the one active version of a skill instead of every level. Find which screen (party view or the skill list) and mock up if it is more than a small fix.
-5. **COMBAT-UI2-L1** (layout C + UIR-5 leftovers), **L2** (hover card), **L3** (tactic dropdown + Autoplay toggle) per `docs/specs/COMBAT_UI2.md`. Size hero cards for 1 to 3 heroes (the party starts as the warrior alone and recruits two). L3 builds on Gameplay's AUTO1-L API in f09c933 (`scripts/combat/session/combat_autoplay.gd`: `CombatAutoplay.new(session, CurrentGame.state())` after `session.start()`, `tick()` on the auto-play timer, Space/A -> `request_pause()`/`toggle()`, `tactic_entries()` dropdowns, `set_party_tactic` clears overrides, `set_hero_tactic`/`row_tactic`, "custom" after an edit, banner text from `paused(reason, by_player)` and `waiting(reason)`). Carry the AUTO1-L Done line in the L3 landing. `timeline_dock_ui.gd` stays Gameplay-owned; UI/UX builds the dropdown against the API.
-6. **INTENT1-U** (after Gameplay's INTENT1-L and COMBAT-UI2-L2), **BOSS1-U**, **OBJ1-U** (after their -L rows). Gameplay (cse_01JracEuqBiTxnrgMZMMFE5s) pings when unblocked.
-7. **UIR-1..UIR-7** from `/mnt/project-files/ui-review/UI_REVIEW1.md` (UIR-5 folded into COMBAT-UI2-L1). Small open questions: version label on the main menu, "(default)" marker on gear lines.
+1. **COMBAT-UI2-L2** hover card replaces the inspector (spec `docs/specs/COMBAT_UI2.md` rule 5; hover 150 ms, keyboard focus, pin on click, Esc closes, never covers the hovered tile). Today the read-only inspector sits under the party column and scrolls at large text.
+2. **COMBAT-UI2-L3** tactic dropdown + Autoplay toggle (AUTO1-L API in `scripts/combat/session/combat_autoplay.gd`; guests: `set_hero_tactic` refuses them, hide the row picker). Also bring `timeline_dock_ui.gd` text to the 14 px floor (still 7-9 px). Carry the AUTO1-L Done line.
+3. **INTENT1-U** (INTENT1-L landed a56dda7: `CombatSession.enemy_intents()`, `intent_of`, `Combatant.has_foresight()`, README "Enemy intent tells"), **BOSS1-U** (BOSS1-L 5c85e7e: `CombatSession.phase_fired`, `CombatEncounter.phase_info`), **OBJ1-U** (OBJ1-L 3abdb63: `EncounterObjectives.text_of/tiles_of`, `CombatEncounter.guests/is_guest`, `protect`, `CombatSession.outcome`). All after L2.
+4. The picked dialogue / log / tracker builds, then UIR-1..UIR-4, UIR-6, UIR-7 (`/mnt/project-files/ui-review/UI_REVIEW1.md`).
+5. Skills screen: each skill's description (`{name}`/`{power}` templates) and only the active rank.
 
 ## Notes
 
-- Gate in the cloud: `SUITE_TIMEOUT=580 bash tools/fc.sh gate > /tmp/claude-0/X.log 2>&1; tail -8`. Gate once: only affected suites while fixing, full gate before landing, again only if a develop merge touched the task's files.
-- One screen per test case: many screens in one arena frame overflow Godot's message queue (signal 11 / exit 134).
-- Right click as back must be read in `_input` (controls swallow it before `_unhandled_input`).
-- Bus volumes: `AudioDirector.apply_saved()` is static and needs no director; `audio/mute` mutes Master.
-- In-game Settings: Esc or the ☰ Menu button; `game_view` pauses (previous `process_mode` restored) and `BattleScreen.set_keys_blocked` is OR'ed with the results popup. Back to hub lives in the in-game Settings footer.
-- Renders: Xvfb `xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 --path . ...`, scripts outside the repo, screenshots to `/mnt/project-files/<task>/`.
-- After each landing, reply in the thread with screenshots and "press Restart runner" (Tushar tests develop through run_dev.bat).
+- Peers: Gameplay `session_01HQvENsjr5dFTBZp6L6GkPU` (ITEMUSE1-L now unblocked; wants a ping when L2 lands for OBJ1-U/INTENT1-U order questions), Assets & Audio `session_018BCoHkCDtUL2gxECWiCHzk`, Design `session_01Bd1NNdVo4TtRxU9hZ7BcNP`. Tell Gameplay and Assets your new id.
+- Layout C: `CombatHudMetrics` (`scripts/ui/combat/combat_hud_metrics.gd`) owns column widths, tile size and card lines; region names `top, left_top, left, center, right_top, right, bottom_left, bottom_center`. Text size is read when the arena is built.
+- Maps: `RegionMapView.camera_offset/free_rect/float_panel`, `WorldMapView.layout` (backdrop and pins letterbox into the free area), `MapArt` templates for overlay/pin/badge keys (manifest files override).
+- Gate in the cloud: `SUITE_TIMEOUT=580 bash tools/fc.sh gate > /tmp/claude-0/X.log 2>&1; tail -8`. Re-gate after a develop merge that touches shared combat or world code (it usually does).
+- One screen per test case (many screens in one arena frame crash). Right click as back is read in `_input`.
+- Renders: Xvfb `xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 --path . ...`, scripts outside the repo, screenshots to `/mnt/project-files/<task>/`. After each landing, reply with screenshots and "press Restart runner".
