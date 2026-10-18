@@ -210,6 +210,12 @@ impl Inventory {
         }
     }
 
+    /// Removes and returns what `slot` holds (the slot leaves the equip order).
+    pub fn unequip(&mut self, slot: Slot) -> Option<Equipment> {
+        let i = self.equipped.iter().position(|(s, _)| *s == slot)?;
+        Some(self.equipped.remove(i).1)
+    }
+
     pub fn get(&self, slot: Slot) -> Option<&Equipment> {
         self.equipped.iter().find(|(s, _)| *s == slot).map(|(_, e)| e)
     }

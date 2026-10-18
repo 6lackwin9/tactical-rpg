@@ -95,11 +95,23 @@ pub struct Session {
     pending: VecDeque<usize>,
 }
 
+/// A unit built outside the encounter (GameEncounter: a saved party member through PartyBuilder).
+pub struct Prebuilt {
+    pub unit: aegis_rules::Unit,
+    pub art: String,
+    pub profile: AiProfile,
+}
+
 impl Session {
     /// CatalogEncounter.build + CombatSession.start: spawn, deploy, begin round 1. `units` resolves roster ids.
     pub fn start(cat: Arc<Catalog>, def: EncounterDef, units: &IndexMap<String, UnitDef>) -> Self {
+        Self::start_with(cat, def, units, Vec::new())
+    }
+
+    /// `start` with `party` (non-empty) fighting instead of the encounter's own party roster (GameEncounter).
+    pub fn start_with(cat: Arc<Catalog>, def: EncounterDef, units: &IndexMap<String, UnitDef>, party: Vec<Prebuilt>) -> Self {
         let lookup = |id: &str| units.get(id).cloned().or_else(|| cat.units.get(id).cloned());
-        let party_ids: Vec<String> = def.party.iter().filter(|id| lookup(id).is_some()).cloned().collect();
+        let party_ids: Vec<String> = if party.is_empty() { def.party.iter().filter(|id| lookup(id).is_some()).cloned().collect() } else { Vec::new() };
         let enemy_ids: Vec<String> = def.enemies.iter().filter(|id| lookup(id).is_some()).cloned().collect();
         let wave_ids: Vec<String> = def.wave_units.iter().filter(|id| lookup(id).is_some()).cloned().collect();
         // _display_names: repeated base names get " 2", " 3" ...
@@ -114,14 +126,20 @@ impl Session {
         let mut built = Vec::new();
         let mut profiles = IndexMap::new();
         let mut art = Vec::new();
+        let n_prebuilt = party.len();
+        for p in party {
+            profiles.insert(built.len(), p.profile);
+            art.push(p.art);
+            built.push(p.unit);
+        }
         for (i, id) in party_ids.iter().chain(enemy_ids.iter()).chain(wave_ids.iter()).enumerate() {
             let mut e = lookup(id).unwrap();
             e.name = names[i].clone();
+            profiles.insert(built.len(), AiProfile::for_unit(&cat, &e));
             built.push(build_unit(&cat, &e, def.unit_ap));
-            profiles.insert(i, AiProfile::for_unit(&cat, &e));
             art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });
         }
-        let n_party = party_ids.len();
+        let n_party = n_prebuilt + party_ids.len();
         let n_deployed = n_party + enemy_ids.len();
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);

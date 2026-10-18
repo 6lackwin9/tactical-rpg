@@ -91,6 +91,8 @@ pub struct Unit {
     pub passive_status_potency: i32,
     pub passive_spell_reach: i32,
     pub foresight_source: String,
+    /// Passive ids applied (Passives.apply: each once).
+    pub passives: Vec<String>,
     /// Combat state (empty for a freshly built unit).
     pub st: StatusState,
     pub is_withdrawn: bool,
@@ -146,6 +148,7 @@ impl Unit {
             passive_status_potency: 0,
             passive_spell_reach: 0,
             foresight_source: String::new(),
+            passives: Vec::new(),
             st: StatusState::default(),
             is_withdrawn: false,
             active_target: None,
@@ -198,7 +201,7 @@ impl Unit {
     }
 
     /// Gear stat bonuses -> tier stat bonuses (read without tier modifiers) -> gear effects -> derived numbers.
-    fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
+    pub fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
         self.stats.remove_modifier("gear");
         let bonuses: Vec<(String, i32)> =
             self.inventory.gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
@@ -255,6 +258,16 @@ impl Unit {
         for (src, fx) in tier_fx {
             self.apply_effects(cat, &fx, &src, true);
         }
+    }
+
+    /// Passives.apply: once per id, then the path refresh (a KNOW bonus can open an advanced family earlier).
+    pub fn apply_passive(&mut self, cat: &Catalog, passive: &aegis_data::PassiveDef) {
+        if passive.id.is_empty() || self.passives.contains(&passive.id) {
+            return;
+        }
+        self.passives.push(passive.id.clone());
+        self.apply_effects(cat, &passive.effects, &format!("passive:{}", passive.id), false);
+        self.refresh_path_skills(cat);
     }
 
     /// Passives.apply_effects (item effects and passives share the grammar).
@@ -451,8 +464,13 @@ impl Unit {
     }
 
     pub fn learn_skill(&mut self, cat: &Catalog, skill_id: &str) {
+        self.learn_skill_checked(cat, skill_id, true);
+    }
+
+    /// Combatant.learn_skill(id, check_requires): a saved hero keeps what it learned (no requires check).
+    pub fn learn_skill_checked(&mut self, cat: &Catalog, skill_id: &str, check_requires: bool) {
         let fam = cat.family_of(skill_id).to_string();
-        if let Some(head) = cat.tier_one(&fam) {
+        if let Some(head) = cat.tier_one(&fam).filter(|_| check_requires) {
             if head.requires.iter().any(|r| !self.owns_skill(cat, r)) {
                 return;
             }
@@ -537,7 +555,7 @@ pub fn build_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     u
 }
 
-fn families_of(cat: &Catalog, ids: &[String]) -> Vec<String> {
+pub fn families_of(cat: &Catalog, ids: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for id in ids {
         let fam = cat.family_of(id).to_string();

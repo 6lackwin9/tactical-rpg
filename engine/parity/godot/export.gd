@@ -81,7 +81,7 @@ func _game_data() -> Dictionary:
 	for level: int in range(1, StatRules.MAX_LEVEL + 1):
 		xp.append(XpCurve.xp_for_level(level))
 	return {"maps": MapCatalog.entries(), "quests": QuestCatalog.entries(), "services": ServiceCatalog.entries(),
-		"xp_for_level": xp, "item_families": ContentCatalog.entries("item_families"), "playable_worlds": NewGame.playable_worlds()}
+		"xp_for_level": xp, "xp_curve": XpCurve.data(), "item_families": ContentCatalog.entries("item_families"), "playable_worlds": NewGame.playable_worlds()}
 
 # Seeded RandomNumberGenerator draws (the PCG32 port is checked against them).
 func _rng() -> Array:
