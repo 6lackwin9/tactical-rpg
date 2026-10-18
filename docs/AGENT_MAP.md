@@ -12,6 +12,688 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### USAGE: 2026-10-18 11:45 usage report, delta and efficiency (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Platform & Workflow thread, usage report | USAGE | none / - | done |
+
+### BAL5-AI: early taunt with walk-in, healer self-care, AoE friendly-fire tolerance (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BAL5-AI | 164k / 44 | done, arena 924/0 |
+| change-reviewer | BAL5-AI | 51k / 1 | clean, 4 nits |
+
+### UIR-2: game menu popup over the paused map (Party, Journal, Save, Load, Settings, Quit), new game, save/load fixes (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | UIR-2 | 424k / 54 | built + review fixes, gate clean |
+| change-reviewer | UIR-2 | 70k / 2 | 0 high, 3 medium, 4 nits |
+
+### HEAL1-B: campaign check passes (arms 46, gate 95) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| balance | HEAL1-B | 35k / 29 | pass: arms 46, gate 95 |
+
+### MAPKEYS1-U: WASD, held-key walking, smooth map movement, label fix (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MAPKEYS1-U | 116k / 58 | built, review fixes, gate clean |
+| change-reviewer | MAPKEYS1-U | 50k / 2 | 2 mediums, 5 lows |
+
+### BAL5-R1: trio re-measure; T2, S1 and A2 triggers fire (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| balance | BAL5-R1 | 48k / 124 | T2, S1, A2 fire; B3 no |
+
+### RUNNER-WINDOW: fullscreen toggle, minimize and exit in the Scene Runner (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Platform & Workflow thread, RUNNER-WINDOW | RUNNER-WINDOW | review:19k / - | done |
+
+### BREPORT1-L: battle report data (shared BattleMetrics collector, combo signal, BattleReport, results-model API) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BREPORT1-L | 221k / 31 | built, gate clean |
+| change-reviewer | BREPORT1-L | 74k / 2 | 0 high, 2 medium, 6 nits |
+
+### BOSS1-U: boss phase banner in combat (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BOSS1-U | 67k / 82 | built, gate clean |
+| change-reviewer | BOSS1-U | 28k / 1 | clean, 2 lows |
+
+### PILL-GAME: no Scene Runner pill over the real game (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | PILL-GAME | ~20k / 9 | done |
+| change-reviewer | PILL-GAME | ~14k / 1 | pass |
+
+### HEAL1-S: campaign sim keys heal=rally, rest=, extra= (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | HEAL1-S | 49k / 11 | done, arena 872/0 |
+| change-reviewer | HEAL1-S | 30k / 1 | clean, 3 nits |
+
+### HEAL1-L: between-battle healing rules (stored HP, rally, rest places, Make camp, defeat cost) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | HEAL1-L | ~184k / 99 | schema slice + rules + 2 review fixes |
+| change-reviewer | HEAL1-L | ~80k / 23 | schema clean; rules 2 medium (fixed) |
+
+### BAL5-SIM + BAL5-PH: trio sim tooling and generated boss phase (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | BAL5-SIM + BAL5-PH | 67k / 1 | clean, 4 nits |
+
+### HEAL1-A: rest places at warden_keep and slag_gate (message for 85ac473) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | HEAL1-A | 12k / 1 | clean |
+
+### INTENT1-U: enemy intent chips, arrows and tell lines in combat planning (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | INTENT1-U | ~210k / 55 | built, gate clean, review fixes |
+| change-reviewer | INTENT1-U | ~51k / 1 | 1 medium, 4 lows |
+
+### ITEMUSE1-A2: remove the free class pouch potions (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | ITEMUSE1-A2 | ~16k / 11 min | 4 class pouches emptied, seed |
+| change-reviewer | ITEMUSE1-A2 | ~28k / 1 min | clean, 2 logic-lane follow-ups |
+
+### UIR-1: shared screen frame, button width classes, selected style, No focus on destructive questions (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | UIR-1 | ~70k / 32 | ScreenFrame, width classes, selected style, destructive No focus |
+| change-reviewer | UIR-1 | ~40k / 11 | 0 high, 1 medium (to UIR-2), 3 low |
+
+### CLN-3b: drop legacy skill keys and version 1 skills loading (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| CLN-3b (Platform & Workflow): legacy skill keys and v1 skills loading removed; change-reviewer | CLN-3b | ~31k / - | done |
+
+### HEAL1 (spec approved): defeat cost per the user, decision row, build rows approved (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | HEAL1 spec + defeat rule update | ~160k / ~12 | spec approved with the user's defeat change |
+
+### HEAL1 (spec): between-battle healing spec from BAL4-ATTR v4, TASKS rows, waiting on the user (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | HEAL1 spec | ~ / ~12 | spec written, 5 open questions |
+
+### RECRUIT1-B, OBJ1-B, BOSS1-B: world-encounter probes; BAL4-ATTR v4 (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran logic-builder (sonnet, medium) for the sim path, balance (sonnet, low) for the runs, change-reviewer (low) | RECRUIT1-B, OBJ1-B, BOSS1-B | ~180k / - | done |
+
+### EXPWORLD: a child world survives a trip through a connected world (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | EXPWORLD | ~35k / 16 | home world kept across connects crossings |
+| change-reviewer | EXPWORLD | ~14k / 2 | 0 blockers, 3 minors (1 fixed) |
+
+### QUESTX: quests keep tracking across connected worlds (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | QUESTX | ~69k / 26 | cross-world quest scope + review fix |
+| change-reviewer | QUESTX | ~26k / 1 | 1 high (fixed), 3 nits |
+
+### ITEMUSE1-U: battle pouch section on the Gear screen (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | ITEMUSE1-U | ~47k / 3 | pouch section on the Gear screen, party suite 6 cases pass |
+| change-reviewer | ITEMUSE1-U | ~22k / 1 | clean, 4 nits |
+
+### COMBAT-UI2-L3: tactic dropdowns and Autoplay toggle in the timeline row (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | COMBAT-UI2-L3 | ~250k / 28 | dropdowns, Autoplay toggle, 14 px row, replay fix; arena 821/0 |
+| change-reviewer | COMBAT-UI2-L3 | ~29k / 1 | 1 high, 1 medium, 2 nits (all fixed) |
+
+### ITEMUSE1-L: use pouch items in battle as a planner step (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | ITEMUSE1-L | ~184k / 57 | item command, planning, undo, write-back, AI/sim, recordings |
+| change-reviewer | ITEMUSE1-L | ~52k / 1 | 1 medium (pending user), 2 nits |
+
+### COMBAT-UI2-L2: unit hover card replaces the combat inspector (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | COMBAT-UI2-L2 | ~167k / 32 | hover card built, arena 794/0 |
+| change-reviewer | COMBAT-UI2-L2 | ~17k / 1 | clean, 2 nits |
+
+### BAL4-ATTR: campaign attrition sim and report (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran logic-builder (sonnet, medium) for the sim mode, balance (sonnet, low) for the runs, change-reviewer (low) | BAL4-ATTR | ~210k / - | done |
+
+### ITEMUSE1-A: use_reach on the potion, focus elixir and fire bomb (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | ITEMUSE1-A | ~19k / 11 min | 3 use_reach rows, seed |
+| change-reviewer | ITEMUSE1-A | ~13k / 1 min | clean, 1 nit |
+
+### ITEMUSE1-L (schema): hero battle pouch, save v8, use_reach, item plan step (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | ITEMUSE1-L (schema) | ~131k / 30 | pouch, save v8, use_reach, ITEM step shape |
+| change-reviewer | ITEMUSE1-L (schema) | ~35k / 1 | clean, 2 mediums accepted |
+
+### ART2-A: Ashlands placeholder art pass 2 (intent and objective chips, ring tile, miss sound) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | ART2-A | ~90k / 25 min | 17 PNGs, miss.wav, generator group, seed |
+| change-reviewer | ART2-A | ~14k / 1 min | clean, 1 nit |
+
+### OBJ1-A: courtyard hold, wagon raid with Wenn Tallow, slay Grakka (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | OBJ1-A | ~31k / 1 | objectives data, wagon_raid, Wenn, text pass via seed |
+| logic-builder | OBJ1-A | ~17k / 0.6 | Wenn Tallow CHARACTERS row in gen_art.py, art and manifest |
+| change-reviewer | OBJ1-A | ~21k / 0.5 | 1 blocker (pyc) fixed |
+| asset-builder | OBJ1-A | ~27k / 4.7 | headless acceptance check (scratch, no repo change) |
+
+### COMBAT-UI2-L1: combat layout C (compact columns) plus UIR-5 leftovers (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet) | COMBAT-UI2-L1 | ~507k / 52 | layout C, cards, ticker, tile rule, gear path removed, party cap |
+| change-reviewer | COMBAT-UI2-L1 | ~19k / 1 | clean, 1 flag (fixed) |
+
+### OBJ1-L: battle objectives runtime, deployments, guests and verdict (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | OBJ1-L | ~197k / 40 | runtime, deployments, guests, verdict + 2 review fixes |
+| change-reviewer | OBJ1-L | ~50k / 1 | 2 mediums (fixed), 3 nits |
+
+### BOSS1-A: Crown of Nails phase on Grakka's stands (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | BOSS1-A | ~23k / 1 | phases on both Grakka stands via seed |
+| change-reviewer | BOSS1-A | ~23k / 0.4 | clean, 2 nits |
+
+### INTENT1-A: Warden's Eye passive on Bryn (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | INTENT1-A | ~23k / 1 | wardens_eye passive and bryn_hale grant via seed; origin fix by thread |
+| change-reviewer | INTENT1-A | ~14k / 0.2 | clean, 1 nit |
+
+### MAPREAD1-L2: map marker icons, labels, legend, badges, world pins and hover (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet) | MAPREAD1-L2 | ~363k / 65 | markers, labels, legend, world pins and hover, review fixes |
+| change-reviewer | MAPREAD1-L2 | ~26k / 1 | clean, 3 nits (fixed) |
+
+### RECRUIT1-A: Bryn and five story recruits, Toller muster, priest/brawler units, trio sizing (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | RECRUIT1-A | ~56k / 16 min | characters, muster, units, sizing, art |
+| logic-builder | RECRUIT1-A tests | ~36k / 8 min | three tests derived from data |
+| change-reviewer | RECRUIT1-A | ~30k / 1 min | clean, 3 nits |
+
+### OBJ1-L (schema): encounter objective, deployment and guest fields (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | OBJ1-L (schema) | ~109k / 19 | objective schema + validation + preview |
+| change-reviewer | OBJ1-L (schema) | ~36k / 1 | clean, 6 nits |
+
+### BAL3-R + CAMP1-B: final BAL3 rerun, band proposal, Ashmaw finale sim (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran balance (sonnet, medium) for BAL3-R and CAMP1-B, change-reviewer (low) | BAL3-R + CAMP1-B | ~136k / - | done |
+
+### BOSS1-L: boss phases fire in battle (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BOSS1-L | ~150k / 17 | phase runtime, 8 test groups |
+| change-reviewer | BOSS1-L | ~34k / 2 | clean, 3 nits |
+
+### MAPREAD1-A: Ashlands marker labels, world-map pins, 48x30 maps (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | MAPREAD1-A | ~27k / 8 min | labels, map_pos, map switch |
+| change-reviewer | MAPREAD1-A | ~20k / 1 min | clean, 2 nits |
+
+### BAL5 (spec): lever options for the BAL3-R balance gaps, TASKS rows, review candidates (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | BAL5 lever spec | ~113k / ~7 | spec written, 6 open questions |
+
+### ART1-A: Ashlands placeholder art (characters, classes, icons, tiles, maps, backdrops) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | ART1-A | ~350k / 45 min | ~260 PNGs, generator, seed, 4 map templates |
+| logic-builder | ART1-A tests | ~65k / 28 min | world + asset test fixes and new resolve checks |
+| change-reviewer | ART1-A | ~23k / 1 min | 2 high, 3 medium, 3 nits |
+
+### BOSS1-L (schema): encounter phases field and validation (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | BOSS1-L (schema) | ~90k / 13 | phases schema + validation |
+| change-reviewer | BOSS1-L (schema) | ~38k / 1 | clean, 3 nits |
+
+### MAPVIEW1: full-screen region and world maps (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MAPVIEW1 | ~144k / 34 | full-screen maps, camera, backdrop, map_pos pins, tests |
+| change-reviewer | MAPVIEW1 | ~26k / 1 | clean, 2 nits |
+
+### MAPREAD1-L1: marker labels and notes, marker_view, location map_pos, world-map node extras (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | MAPREAD1-L1 | ~95k / 27 | marker_view, map_pos, node extras; 1 review fix |
+| change-reviewer | MAPREAD1-L1 | ~27k / 1 | 1 high fixed, 1 rejected, 3 nits |
+
+### INTENT1-L: enemy intent read-out and the foresight passive effect (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | INTENT1-L | ~120k / 15 | intents + foresight, 7 checks |
+| change-reviewer | INTENT1-L | ~20k / 1 | clean, 2 nits |
+
+### OPTLAUNCH1: run.bat opt opens a design option branch in its own folder (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | OPTLAUNCH1 | ~34k / 12 | done, review fix applied |
+| change-reviewer | OPTLAUNCH1 | ~19k / 1 | pass, 3 minor |
+
+### BREPORT1 (spec): battle report spec and TASKS rows, waiting on the user (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | BREPORT1 spec | ~ / ~12 | spec written, 4 open questions |
+
+### RECRUIT1-L: recruiting, hero names and the runtime party cap (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | RECRUIT1-L | ~75k / 12 | behaviour + recruit suite |
+| change-reviewer | RECRUIT1-L | ~39k / 1 | clean, 3 nits |
+
+### CONTROLS-HELP: Controls tab, Settings during play, volume fix and Mute (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | CONTROLS-HELP: Controls tab, ControlsList, in-game Settings, volume fix, Mute, tests, renders | ~159k / 57 | gate green |
+| change-reviewer (low) | CONTROLS-HELP | ~18k / 4 | clean |
+
+### RECRUIT1-L (schema): manifest party_max, party characters in start_party, recruit effect validation (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | RECRUIT1-L (schema) | ~88k / 22 | schema + validation, 3 checks |
+| change-reviewer | RECRUIT1-L (schema) | ~17k / 3 | clean, 3 nits |
+
+### MUSIC2-A + MUSIC2-L: town, danger, shop, travel and boss music, wired by location kind (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | MUSIC2-A | ~15k / 1 | five manifest rows, loop=true imports |
+| logic-builder | MUSIC2-L | ~44k / 13 | kind table, shop override, tests |
+| change-reviewer | MUSIC2 | ~37k / 1 | 0 blockers, 2 mediums handled |
+
+### WORLDMAP-ENTER: click the party's own pin on the world map to enter its location (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | WORLDMAP-ENTER | ~23k / 6 | fixed, check added |
+| change-reviewer | WORLDMAP-ENTER | ~13k / 1 | clean, 3 nits |
+
+### SOUND-PREVIEW: volume sliders play a sample at the new level (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | SOUND-PREVIEW: slider samples, throttle, revert, tests | ~96k / 57 | gate green |
+| change-reviewer (low) | SOUND-PREVIEW | ~16k / 3 | 1 high fixed |
+
+### MUSIC1-A + MUSIC1-L: five generated music loops and a context-based music player (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | MUSIC1-A | ~15k / 3 | manifest rows + seed, loop=true imports |
+| logic-builder | MUSIC1-L | ~140k / 20 | MusicDirector, contexts, hooks, audio tests |
+| change-reviewer | MUSIC1 | ~65k / 3 | clean, 1 medium accepted |
+
+### POI-FIX: region map shows how to use chests, people and lore, and a click works too (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | POI-FIX | ~139k / 29 | done |
+| change-reviewer | POI-FIX | ~20k / 1 | clean |
+
+### AUTO1-L (logic): battle autoplay loop, party and hero tactics, safety stops, save v7 (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | AUTO1-L (logic) | ~166k / 27 | done |
+| change-reviewer | AUTO1-L (logic) | ~35k / 1 | clean |
+
+### NOTE-BUTTON: "✎ Note" in the in-scene pill opens the playtest note box (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | NOTE-BUTTON | ~30k / 8 | done |
+| change-reviewer | NOTE-BUTTON | ~14k / 1 | pass, 2 minor |
+
+### BAL3-A: data levers (sweep_kick), elite power 1.0, sim tank loadout (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran asset-builder (sonnet, medium) for BAL3-A, logic-builder (sonnet, medium) for the code half, change-reviewer (low) | BAL3-A | ~150k / - | done |
+
+### BATTLE-FLOW: combat transition, victory popup with XP bars, rewards, minimise and replay; COMBAT-UI2 approved (layout C) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | BATTLE-FLOW: intro transition, results popup, xp_bar, replay, guards, tests, renders | ~150k / 60 | gate green |
+| change-reviewer (low) | BATTLE-FLOW | ~25k / 6 | 2 medium fixed |
+
+### TRAV2-A: Ashlands supply sources and start supplies (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | TRAV2-A | ~48k / 1.5 | data built, checks 1-4 pass |
+| change-reviewer | TRAV2-A | ~27k / 3.5 | clean, README delta |
+
+### TRAV2-L: travel supplies are spent on the road, bought in shops and found in chests (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | TRAV2-L (behaviour) | ~75k / 25 | done |
+| change-reviewer | TRAV2-L (behaviour) | ~26k / 1 | clean |
+
+### AUTO1 (spec): battle autoplay with a tactic dropdown per timeline row (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | AUTO1 (spec) | 22k / 0.3 | clean, 3 nits |
+
+### CAMP1-A1 + CAMP1-A2: Ashlands campaign "The Long Dry" (boss unit and story data) (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | CAMP1-A1 + CAMP1-A2 | ~146k / 23 | data built, checks 1-6 pass |
+| change-reviewer | CAMP1-A1 + CAMP1-A2 | ~47k / 1.5 | clean, README high fixed |
+
+### SETTINGS-POPUP: Settings as a tabbed popup, window changes on select, right-click back fixed (2026-10-18, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | SETTINGS-POPUP: popup panel, tabs, select-to-apply, right-click via _input, tests, renders | ~126k / 54 | gate green |
+| design-brainstorm (medium) | UI-REVIEW1: review of every menu and HUD screen, options Q1-Q6, task split | 78k / 33 | approved by user |
+| change-reviewer (low) | SETTINGS-POPUP + UI-REVIEW1 docs | 24k / 5 | clean |
+
+### TRAV2-L (schema): travel supplies field, save v6, shop and chest supply fields (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | TRAV2 specs (TRAV2_L, TRAV2_A) | ~111k / 5 | done |
+| logic-builder | TRAV2-L (schema) | ~93k / 8 | done |
+| change-reviewer | TRAV2-L (schema) | ~32k / 1 | clean |
+
+### CAMP1: record the user's approval of the Ashlands story spec (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | CAMP1 approval | 17k / 1 | clean |
+
+### CAMP1 (spec): Ashlands campaign story "The Long Dry" (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| design-brainstorm | CAMP1 | 135k / 9 | spec written |
+| change-reviewer | CAMP1 | 25k / 1 | 0 high, 2 nits fixed |
+
+### BAL3-AI: AI pressure levers and minion skill ceiling (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran logic-builder (high) for BAL3-AI plus its review fixes, change-reviewer (medium) | BAL3-AI | ~330k / - | done |
+
+### FORGE-VIEW: display-only Content Forge with an in-game skill preview per rank (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | FORGE-VIEW | ~259k / 42 | done |
+| change-reviewer | FORGE-VIEW | ~22k / 1 | pass, 2 low nits |
+
+### MENU-POLISH + DISPLAY1-FIX: menu layout and sliders; DPI-scaled window sizes (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | MENU-POLISH + DISPLAY1-FIX: menu layout, sliders, restore defaults, right-click back, DPI-scaled sizes, In use row, ui_trail fix | ~122k / 76 | gate green |
+| change-reviewer (low) | MENU-POLISH + DISPLAY1-FIX | 26k / 5 | 1 medium fixed |
+
+### REP1-L: reputation runtime, shop bands, panels, world warnings (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (opus, medium) | REP1-L commit 2 (runtime) + commit-1 review lows | ~221k / 11 | done, gate green |
+| change-reviewer (sonnet, low) | REP1-L behaviour review | ~50k / 1 | PASS, 4 optional lows |
+
+### REP1-A: reputation deltas, Hest spare stores, ember_patrol quest (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | REP1-A | 24599 / 6 | seeded quest reputation, Hest choice and ember_patrol; check 1 passed |
+| change-reviewer | REP1-A | 21010 / 1 | clean, 1 style nit |
+
+### REP1-L (schema): condition operators, rep flags, add_flag, quest reputation field (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (opus, medium) | REP1-L commit 1 (schema) | ~140k / 16 | done, gate green |
+| change-reviewer (sonnet, low) | REP1-L schema review | ~28k / 1 | clean, 2 lows deferred |
+
+### TRAV1-A: Ashlands and Iron Reaches roads, world-map exits (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | TRAV1-A | 42215 / 14 | seeded 3 routes and 2 world-map exits, acceptance 1-6 checked |
+| change-reviewer | TRAV1-A | 23314 / 1 | 1 medium (README blank lines, fixed) |
+
+### DISPLAY1: display settings (window mode, window size, vsync, frame-rate cap; web Fullscreen) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | DISPLAY1: display settings, backend, countdown, web fullscreen, display suite, renders | ~92k / 43 | gate green |
+| change-reviewer (low) | DISPLAY1 | 24k / 3 | 1 minor fixed |
+
+### PULL-RESTART: Restart runner pulls the latest code for its folder, then restarts (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | PULL-RESTART | ~30k / 18 | done, review fix applied |
+| change-reviewer | PULL-RESTART | ~17k / 1 | pass, 2 minor |
+
+### SAVE-COMPAT: sample saves for every save version, loaded by the gate (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | SAVE-COMPAT fixtures, suite, generator + review fix | ~46k / 19 | done, gate green |
+| change-reviewer (sonnet, low) | SAVE-COMPAT branch review | ~24k / 1 | PASS, 2 lows |
+
+### S12C-A: first combo skills (feint, crushing_blow, opportunist) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder | S12C-A | 28037 / 17 | seeded 3 combo families, acceptance 1-5 checked |
+| change-reviewer | S12C-A | 22351 / 1 | clean, 1 low (spec text) |
+
+### SETTINGS-UI: fixed speed and text-size levels, centred settings, real checkbox, bordered menu buttons (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | SETTINGS-UI: fixed levels, centred grid, checkbox, MenuStyle, layout suite, renders | ~106k / 64 | gate green |
+| design-brainstorm (medium) | DISPLAY1 spec (window mode, size, vsync, fps cap; web fullscreen) | 27k / 6 | approved by user |
+| change-reviewer (low) | SETTINGS-UI + DISPLAY1 docs | 37k / 5 | clean |
+
+### GATE-ONCE: area threads run the full gate once per task (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | GATE-ONCE | ~19k / 1 | pass, 1 fixed, 1 noted |
+
+### SPLIT-LANDING: large logic tasks can land as a schema commit, then a behaviour commit (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | SPLIT-LANDING | ~16k / 1 | 3 medium, 2 low, fixed |
+
+### TRAV1-L: world map, routes, road encounters and the world clock (S10) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (opus, medium) | TRAV1-L: routes schema, travel runtime and save v5, debug world map in 3 commits | ~280k / ~65 | gate green |
+| change-reviewer (low) | TRAV1-L whole branch | 22k / 1 | clean |
+
+### BAL3-S: sim levers (start jitter, role scenario scale, encounter archetypes) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran logic-builder (medium) for BAL3-S, change-reviewer (medium), logic-builder (sonnet, medium) for review fixes | BAL3-S | ~213k / - | done |
+
+### PLATFORM-HANDOVER: fresh-session rule for area threads; Platform handover (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | PLATFORM-HANDOVER | ~17k / <1 | 1 medium fixed |
+
+### SAVE-BACKUP: run.bat backs up saves before an update; SAVE-COMPAT queued (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | SAVE-BACKUP | ~15k / <1 | 1 medium fixed |
+
+### DEV-USERDATA: dev game keeps its own saves and settings (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | DEV-USERDATA | ~15k / <1 | clean |
+
+### PULL-ON-LAUNCH: run.bat pulls the latest code before opening the game; run_dev.bat for develop (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | PULL-ON-LAUNCH | ~53k / 2 | 1 blocker + 3 mediums fixed |
+
+### WEB-PAUSE: pause web deploys until a playable build (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | WEB-PAUSE | ~19k / <1 | 2 mediums fixed |
+
+### LOAD-SLOTS-UI: Load / Save game slot list scrolls, Back always on screen (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | LOAD-SLOTS-UI: scrolling slot list, fixed Back, follow_focus, tests, renders | ~45k / 26 | gate green |
+| change-reviewer (low) | LOAD-SLOTS-UI | 15k / 5 | 1 medium fixed |
+
+### DEPLOY-AFTER-RELEASE: start the web deploy after each release merge (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| change-reviewer | DEPLOY-AFTER-RELEASE | ~19k / <1 | 2 mediums fixed |
+
+### S12C-L: combos (flow moves, stance break, exploit) with previews and AI (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (opus, medium) | S12C-L: combo schema, rules, AI in 3 commits plus chip fix | ~238k / ~57 | gate green, sim unchanged |
+| change-reviewer (low) | S12C-L whole branch | 43k / 1 | clean, 3 lows (1 fixed) |
+
+### SIM-IMPORT: fc.sh rebuilds a stale class cache first, loud timeouts, sim startup watchdog (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | SIM-IMPORT | ~26k / 8 | done; per-process sim files added by the thread |
+| change-reviewer | SIM-IMPORT | ~16k / <1 | 0 blockers, 4 nits |
+
+### BAL3-R0: baseline balance rerun after the 12x9 grid and S12S-L (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| Balance thread ran balance (sonnet, medium) for BAL3-R0, change-reviewer (medium) | BAL3-R0 | ~126k / - | done |
+
+### S12T-A: 17 terrain rows (move cost, cover, hazards) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| asset-builder (sonnet, low) | S12T-A: 17 terrain rows via seed | ~23k / ~4 | rows valid, 1 test broke |
+| logic-builder (opus, medium) | S12T-A: terrain test independent of shipped rows | ~7k / ~12 | gate green, sim unchanged |
+| change-reviewer (low) | S12T-A whole branch | 22k / 1 | clean |
+
+### REVIEW-F5: GameState.of replaces Variant casts, small cleanups (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder | REVIEW-F5 | ~70k / 17 | done |
+| change-reviewer | REVIEW-F5 | ~19k / 1 | 0 blockers, 1 medium accepted |
+
+### S12T-L: terrain rules (catalog kind, cost-weighted paths, cover, hazards, AI) (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (opus, medium) | S12T-L: terrain schema, rules, AI in 3 commits plus review fixes | ~250k / ~57 | gate green, sim unchanged |
+| change-reviewer (low) | S12T-L whole branch | 42k / 1 | 1 medium, 3 lows, all fixed |
+
+### REVIEW-F3: fx_played only for applied presets, load_file rename, miss preset (2026-10-17, cloud)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| logic-builder (sonnet, medium) | REVIEW-F3 remainder: fx_played for applied presets, load_file rename, miss preset | ~50k / 42 | gate green |
+| change-reviewer (low) | REVIEW-F3 remainder | 21k / 3 | clean |
+
 ### TOOLS-RO: creation tools become read-only viewers; content edit process documented (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
