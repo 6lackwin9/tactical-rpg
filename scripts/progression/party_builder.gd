@@ -9,7 +9,8 @@ extends RefCounted
 # (the party screen's preview shows only confirmed and drafted points, UI2-L).
 # ==============================================================================
 
-# ITEMUSE1 (open question): the shipped warrior / ranger / priest / mage class rows carry a default pouch (a heal potion).
+# ITEMUSE1 (open question): shipped classes carry no default pouch ("No free class potion"); this flag only matters if a class
+# or unit row declares one.
 # false (spec reading "each hero carries a small pouch filled before the fight"): a hero's battle pouch is only its saved
 # pouch, so no free potion each battle. true: the saved pouch is added after the class default (the planner's "adds").
 const HERO_KEEPS_CLASS_POUCH: bool = false

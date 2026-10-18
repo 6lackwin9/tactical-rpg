@@ -247,15 +247,20 @@ static func _test_no_item_slots() -> bool:
 
 static func _test_no_item_pouch() -> bool:
 	var checks: Dictionary = {}
-	var class_pouch: Array[String] = ContentFactory._strings(ContentCatalog.get_entry("classes", "priest").get("pouch", []))
-	var empty_pouch: Combatant = ContentFactory.unit(_unit_entry("bal2_t_pouch_none", "priest", {"pouch": [ContentSchema.NO_ITEM]}))
-	var inherit_pouch: Combatant = ContentFactory.unit(_unit_entry("bal2_t_pouch_inherit", "priest", {"pouch": []}))
-	var expected: Array[String] = []
-	for id: String in class_pouch:
-		if ContentCatalog.has("items", id) and str(ContentCatalog.get_entry("items", id).get("item_type", "")) == "CONSUMABLE":
-			expected.append(id)
-	checks["pouch ['none']: battle pouch empty"] = empty_pouch.inventory.battle_pouch.is_empty()
-	checks["pouch []: the class pouch (%d items)" % expected.size()] = _pouch_ids(inherit_pouch) == expected
+	# Shipped classes carry no pouch, so a sandbox priest gets one consumable (picked by rule) as the fixture.
+	var forked: bool = TestHelpers.fork(SANDBOX)
+	checks["sandbox fork"] = forked
+	if forked:
+		var consumable: String = _first_item(func(e: Dictionary) -> bool: return str(e.get("item_type", "")) == "CONSUMABLE")
+		var cls: Dictionary = ContentCatalog.get_entry("classes", "priest").duplicate(true)
+		cls["pouch"] = [consumable]
+		var errors: Array[String] = ContentCatalog.upsert("classes", cls)
+		checks["fixture class pouch accepted %s" % str(errors)] = consumable != "" and errors.is_empty()
+		var empty_pouch: Combatant = ContentFactory.unit(_unit_entry("bal2_t_pouch_none", "priest", {"pouch": [ContentSchema.NO_ITEM]}))
+		var inherit_pouch: Combatant = ContentFactory.unit(_unit_entry("bal2_t_pouch_inherit", "priest", {"pouch": []}))
+		checks["pouch ['none']: battle pouch empty"] = empty_pouch.inventory.battle_pouch.is_empty()
+		checks["pouch []: the class pouch [%s]" % consumable] = _pouch_ids(inherit_pouch) == [consumable]
+	TestHelpers.cleanup(SANDBOX)
 	return TestHelpers.report(TAG, "Unit pouch ['none'] is empty; [] inherits the class pouch", checks)
 
 static func _test_no_item_validation() -> bool:

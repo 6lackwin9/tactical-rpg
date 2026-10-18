@@ -229,7 +229,7 @@ static func run(_tree_parent: Node = null) -> bool:
 	var has_rest: bool = false
 	for o: PlanOption in self_opts:
 		if o.step.mode == PlanStep.Mode.ITEM:
-			continue   # ITEMUSE1: pouch items (class default pouches) are offered on the unit too
+			continue   # ITEMUSE1: pouch items, if the unit carries any, are offered on the unit too
 		targets_ok = targets_ok and o.step.mode == PlanStep.Mode.SELF
 		if o.step.skill.kind == SkillDef.Kind.REST:
 			has_rest = true
