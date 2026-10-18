@@ -7,7 +7,8 @@ Every commit on a design option branch, so the user can pick whole options or mi
 | Review | Report | Reviewed at (`develop`) | Option set | Status |
 | --- | --- | --- | --- | --- |
 | DESIGN_REVIEW1 (2026-10-18) | `docs/specs/DESIGN_REVIEW1.md` | before the cycle existed (no option builds) | - | closed (answered 2026-10-18 01:34) |
-| next | - | - | - | due when RECRUIT1-L, INTENT1-L, MAPREAD1-L1, ITEMUSE1-L and MAPREAD1-L2 are on `develop` |
+| DESIGN_REVIEW2 (2026-10-18) | `docs/specs/DESIGN_REVIEW2.md` | a499b3f | none (option builds paused 08:29) | closed (answered 2026-10-18 08:37, all recs) |
+| next | - | - | - | rule 1 counts from a499b3f |
 
 ## Candidates for the next review
 

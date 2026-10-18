@@ -47,6 +47,7 @@ Through the "Launch game on your PC" thread: the user says "launch option A" (or
 
 ## Approval and landing
 
+- UI options the user approves are preferences, not final decisions, unless the UI choice comes from the user (decision "UI choices are preferences", user 2026-10-18 08:37 UTC). Mark such TASKS rows "UI preference, not final"; his later UI review may change them.
 - Report items the user approves that need no option build become TASKS rows (`approved`) for their area thread, built through the normal flow; already-approved work keeps landing on `develop` as usual.
 - Option work reaches `develop` only after the user picks it, by option (`pick A`) or by ledger id (`A1, B3, C2`). The Design thread then:
   1. records the pick as a decision row in the matching `docs/decisions/<system>.md`;
