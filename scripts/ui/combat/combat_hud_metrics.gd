@@ -9,7 +9,8 @@ extends RefCounted
 #   centre row   party column (SIDE_W) | grid (the biggest tile that fits) | hostile + forecast column (SIDE_W)
 #   bottom row   playback buttons + the one-line log ticker, fixed `bottom_h`
 # Panel heights are fixed per text size. As text grows, cards drop lines in the order the spec gives:
-# speed/reach, effects, the hostile behaviour line (all of them stay in the inspector / hover card).
+# speed/reach, effects, the hostile behaviour line (all of them stay in the hover card).
+# The party column takes the whole centre-row height (the old inspector region is gone, COMBAT-UI2-L2).
 # ==============================================================================
 
 const SIDE_W: int = 220
@@ -29,7 +30,6 @@ const PARTY_ROWS_MAX: int = 6   # name, stance + plan, HP, AP, effects, speed + 
 const PARTY_ROWS_MIN: int = 4
 const HOSTILE_ROWS_MAX: int = 3 # name + stance, HP, behaviour
 const HOSTILE_ROWS_MIN: int = 2
-const INSPECTOR_MIN: int = 130
 const FORECAST_LINES: int = 5   # the forecast scrolls when its text needs more
 
 const PANEL_PAD: int = 4
@@ -57,7 +57,6 @@ var hostile_card_h: int = 0
 var hostile_panel_h: int = 0
 var hostile_scroll: bool = false   # more hostiles than the column holds even at the fewest lines
 var forecast_h: int = 0
-var inspector_h: int = 0
 
 # The biggest tile for a grid area (frame excluded): floor(min(h / 9, w / 12)), never below MIN_TILE.
 static func tile_for(area: Vector2) -> int:
@@ -84,21 +83,20 @@ static func compute(p_view: Vector2, p_scale: float, party_n: int, hostile_n: in
 	m._size_hostile(hostile_n)
 	return m
 
-# Party column: as many lines per card as fit above the inspector's minimum height.
+# Party column: as many lines per card as fit in the centre-row height; the panel fills the column.
 func _size_party(party_n: int, party_cap: int) -> void:
 	party_slots = maxi(party_cap if party_cap >= 1 else PARTY_SLOTS, party_n)
 	var filled: int = party_n
 	var empty: int = party_slots - filled
 	party_slim_h = card_height(2, lh)
-	var budget: int = area_h - INSPECTOR_MIN - COL_GAP
+	var budget: int = area_h
 	party_rows = PARTY_ROWS_MIN
 	for r: int in range(PARTY_ROWS_MAX, PARTY_ROWS_MIN - 1, -1):
 		if _party_panel_h(r, filled, empty) <= budget:
 			party_rows = r
 			break
 	party_card_h = card_height(party_rows, lh)
-	party_panel_h = _party_panel_h(party_rows, filled, empty)
-	inspector_h = maxi(0, area_h - party_panel_h - COL_GAP)
+	party_panel_h = area_h   # the freed inspector space goes back to the party column
 
 func _party_panel_h(rows: int, filled: int, empty: int) -> int:
 	return 2 * PANEL_PAD + lh + (filled + empty) * CARD_GAP + filled * card_height(rows, lh) + empty * party_slim_h

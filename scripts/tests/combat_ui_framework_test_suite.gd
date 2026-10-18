@@ -20,7 +20,7 @@ static func run(tree_parent: Node = null) -> bool:
 	# 1. Every panel is mounted in its dock region of the default layout
 	var expected_regions: Dictionary = {
 		"party": "left_top", "timeline": "top", "enemies": "right_top",
-		"inspector": "left", "grid": "center", "forecast": "right",
+		"grid": "center", "forecast": "right",
 		"playback": "bottom_left", "action_log": "bottom_center",
 	}
 	var docks_ok: bool = host.log_modal != null and host.timeline_modal != null
@@ -39,12 +39,13 @@ static func run(tree_parent: Node = null) -> bool:
 		and enemy_panel.visible_card_count() == 2
 	)
 
-	# 3. Selecting a unit updates the Unit Inspector
-	var inspector_panel: CombatInspectorPanel = host.get_panel("inspector") as CombatInspectorPanel
-	session.select_combatant(session.find_combatant("Enemy Brawler"))
-	var enemy_shown: bool = inspector_panel.inspector.inspector_name_lbl.text == "Enemy Brawler"
-	session.select_combatant(warrior)
-	var inspector_ok: bool = enemy_shown and inspector_panel.inspector.inspector_name_lbl.text == "Warrior"
+	# 3. The unit hover card replaces the Unit Inspector: pinning a unit shows that unit's card
+	var brawler_unit: Combatant = session.find_combatant("Enemy Brawler")
+	grid_panel.pin_card(brawler_unit)
+	var enemy_shown: bool = grid_panel.hover_card.visible and grid_panel.hover_card.name_lbl.text == brawler_unit.name
+	grid_panel.pin_card(warrior)
+	var inspector_ok: bool = enemy_shown and grid_panel.hover_card.name_lbl.text == warrior.name and host.get_panel("inspector") == null
+	grid_panel.close_card()
 
 	# 3b. The side panels and the grid keep their rects whichever unit is selected (hero or enemy)
 	var layout_stable: bool = true
@@ -90,7 +91,7 @@ static func run(tree_parent: Node = null) -> bool:
 	var floating: bool = host.is_undocked("forecast") and host.region_of("forecast") == "right"
 	host.dock("forecast")
 	host.apply_layout("Mirrored")
-	var mirrored: bool = host.region_of("inspector") == "right" and host.region_of("forecast") == "left"
+	var mirrored: bool = host.region_of("party") == "right_top" and host.region_of("forecast") == "left"
 	host.apply_layout("Standard")
 	if tree_parent != null:
 		var brawler: Combatant = session.find_combatant("Enemy Brawler")
@@ -103,9 +104,9 @@ static func run(tree_parent: Node = null) -> bool:
 	print("\n=======================================================")
 	print("=== COMBAT UI FRAMEWORK TEST ASSERTIONS             ===")
 	print("=======================================================")
-	print("  [UI] All 8 combat panels mounted in their dock regions: %s" % ("PASS" if docks_ok else "FAIL"))
+	print("  [UI] All 7 combat panels mounted in their dock regions: %s" % ("PASS" if docks_ok else "FAIL"))
 	print("  [UI] Tokens & roster bound to the simulated combatants: %s" % ("PASS" if tokens_ok else "FAIL"))
-	print("  [UI] Combatant selection & Unit Inspector synced: %s" % ("PASS" if inspector_ok else "FAIL"))
+	print("  [UI] Unit hover card shows the pinned unit (the inspector panel is gone): %s" % ("PASS" if inspector_ok else "FAIL"))
 	print("  [UI] Side panels and grid keep their size for hero and enemy selection, inside the viewport: %s" % ("PASS" if layout_stable else "FAIL"))
 	print("  [UI] Tactical forecast computed & rendered: %s" % ("PASS" if forecast_ok else "FAIL"))
 	print("  [UI] Action Log Modal toggle & entry view lifecycle: %s" % ("PASS" if log_modal_ok else "FAIL"))
@@ -129,7 +130,7 @@ static func run(tree_parent: Node = null) -> bool:
 static func _dock_rects(host: CombatDockHost) -> Array[Vector2]:
 	_sort_now(host)
 	var rects: Array[Vector2] = []
-	for id: String in ["inspector", "grid", "forecast"]:
+	for id: String in ["party", "grid", "forecast"]:
 		var r: Rect2 = host.get_panel(id).get_global_rect()
 		rects.append(Vector2(r.position.x, r.size.x))
 	return rects
@@ -164,16 +165,16 @@ static func _hud_checks(tree_parent: Node) -> bool:
 				var m: CombatHudMetrics = CombatHudMetrics.compute(view, scale, party_n, 5)
 				var expect: int = maxi(48, floori(minf(float(m.area_h - CombatHudMetrics.FRAME) / 9.0, float(m.area_w - CombatHudMetrics.FRAME) / 12.0)))
 				tile_ok = tile_ok and m.tile == expect and m.tile >= 48
-				heights_ok = heights_ok and m.party_panel_h + m.inspector_h + CombatHudMetrics.COL_GAP == m.area_h
+				heights_ok = heights_ok and m.party_panel_h == m.area_h
 				heights_ok = heights_ok and m.hostile_panel_h + m.forecast_h + CombatHudMetrics.COL_GAP == m.area_h and not m.hostile_scroll
-				heights_ok = heights_ok and m.inspector_h > 0 and m.forecast_h > 0
+				heights_ok = heights_ok and m.forecast_h > 0
 				if party_n == 3:
 					rows_ok = rows_ok and m.party_rows <= last_party_rows and m.hostile_rows <= last_hostile_rows
 					last_party_rows = m.party_rows
 					last_hostile_rows = m.hostile_rows
 				rows_ok = rows_ok and m.party_rows >= CombatHudMetrics.PARTY_ROWS_MIN and m.hostile_rows >= CombatHudMetrics.HOSTILE_ROWS_MIN
 	checks["tile = floor(min(h/9, w/12)), at least 48, at 3 window sizes x 4 text sizes"] = tile_ok
-	checks["column panel heights are fixed and add up to the centre row, no hostile scroll"] = heights_ok
+	checks["party panel fills the centre row (inspector space handed back); hostile + forecast add up to it, no hostile scroll"] = heights_ok
 	checks["cards only drop lines as text grows (never below the minimum rows)"] = rows_ok
 	checks["tile_for: a short area is height-bound, a narrow one width-bound, tiny floors at 48"] = (
 		CombatHudMetrics.tile_for(Vector2(2000, 540)) == 60 and CombatHudMetrics.tile_for(Vector2(600, 2000)) == 50
@@ -244,7 +245,7 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		checks["no gear button and no equipment modal path in the battle scene"] = (
 			gear_buttons == 0 and host.find_children("*", "CharacterEquipmentModal", true, false).is_empty()
 			and not ("btn_gear" in (host.get_panel("playback") as CombatPlaybackPanel).controls)
-			and not ("btn_gear_modal" in (host.get_panel("inspector") as CombatInspectorPanel).inspector))
+			and not ("btn_gear_modal" in grid.hover_card) and _card_buttons_ok(grid))
 
 		# The log is a one-line ticker; Expand opens the log modal.
 		var ticker: ActionLogDockUI = (host.get_panel("action_log") as CombatActionLogPanel).dock
@@ -270,13 +271,14 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		var xl_foes: CombatRosterPanel = xl_host.get_panel("enemies") as CombatRosterPanel
 		var xl_ok: bool = xl_host.metrics.fs == roundi(14.0 * 1.3) and xl_host.metrics.tile >= 48
 		xl_ok = xl_ok and xl_party.visible_card_count() == xl_session.allies.size() and xl_foes.visible_card_count() == xl_session.enemies_in_view().size()
-		xl_ok = xl_ok and xl_party.content_fits() and xl_foes.content_fits() and xl_host.metrics.party_panel_h + xl_host.metrics.inspector_h + CombatHudMetrics.COL_GAP == xl_host.metrics.area_h
+		xl_ok = xl_ok and xl_party.content_fits() and xl_foes.content_fits() and xl_host.metrics.party_panel_h == xl_host.metrics.area_h
 		checks["Extra large text: cards still show, grid >= 48, cards fit their fixed heights"] = xl_ok
 		tree_parent.remove_child(xl_host)
 		xl_host.free()
 		xl_session.dispose()
 		SettingsFile.set_value("ui/text_scale", saved_scale)
 
+	_hover_card_checks(tree_parent, checks)
 	checks["party slots follow the cap, never fewer than the heroes, fallback 3 when unknown"] = (
 		CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 2).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 4).party_slots == 4
 		and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 1).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 1, 5).party_slots == CombatHudMetrics.PARTY_SLOTS)
@@ -306,3 +308,146 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		all_ok = all_ok and ok
 		print("  [UI] %s: %s" % [label, "PASS" if ok else "FAIL"])
 	return all_ok
+
+
+# ------------------------------------------------------------------------------
+# COMBAT-UI2-L2: the unit hover card (one screen per case: many screens in one arena frame crash)
+# ------------------------------------------------------------------------------
+
+# The only button on a card is Pin / Unpin: nothing on it opens the equipment modal.
+static func _card_buttons_ok(grid: CombatGridPanel) -> bool:
+	grid.pin_card(grid.session.allies[0])
+	var ok: bool = true
+	for node: Node in grid.hover_card.find_children("*", "Button", true, false):
+		var btn: Button = node as Button
+		ok = ok and btn.name == "PinButton" and (btn.text == "Pin" or btn.text == "Unpin")
+	grid.close_card()
+	return ok
+
+static func _card_host(tree_parent: Node, view: Vector2, scale: float) -> CombatDockHost:
+	SettingsFile.set_value("ui/text_scale", scale)
+	var session := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+	var host := CombatDockHost.new()
+	tree_parent.add_child(host)
+	host.size = view
+	host.setup(session)
+	session.start()
+	host._fit()
+	_sort_now(host)
+	return host
+
+static func _card_free(tree_parent: Node, host: CombatDockHost, saved_scale: Variant) -> void:
+	var session: CombatSession = host.session
+	tree_parent.remove_child(host)
+	host.free()
+	session.dispose()
+	SettingsFile.set_value("ui/text_scale", saved_scale)
+
+static func _units_in_view(session: CombatSession) -> Array[Combatant]:
+	var units: Array[Combatant] = []
+	units.append_array(session.allies)
+	units.append_array(session.enemies_in_view())
+	return units
+
+# For every unit in view: the card opens, stays inside the viewport, never overlaps the unit's tile or token and
+# holds all its content (nothing clipped).
+static func _card_geometry_ok(host: CombatDockHost, view: Vector2) -> bool:
+	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+	var session: CombatSession = host.session
+	var ok: bool = true
+	var viewport := Rect2(Vector2.ZERO, view)
+	for c: Combatant in _units_in_view(session):
+		grid.pin_card(c)
+		_sort_now(host)
+		grid._place_card()
+		var rect: Rect2 = grid.hover_card.get_global_rect()
+		var token: Control = grid.grid_view.get_token_for(c)
+		ok = ok and grid.hover_card.visible and grid.card_unit == c and grid.hover_card.name_lbl.text == c.name
+		ok = ok and viewport.encloses(rect) and not rect.intersects(grid.unit_tile_rect(c)) and token != null and not rect.intersects(token.get_global_rect())
+		ok = ok and grid.hover_card.content_fits()
+		if not ok:
+			print("    card geometry failed for %s: card %s tile %s view %s fits %s" % [c.name, str(rect), str(grid.unit_tile_rect(c)), str(view), str(grid.hover_card.content_fits())])
+			break
+	grid.close_card()
+	return ok
+
+static func _hover_card_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+
+	# Delay: hovering only schedules the card; it appears when the delay is over, and shows the hovered unit.
+	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
+	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+	var foe: Combatant = host.session.enemies_in_view()[0]
+	host.session.set_hovered(foe)
+	var waiting: bool = not grid.card_is_open() and grid._pending == foe and is_equal_approx(grid._hover_timer.wait_time, CombatGridPanel.HOVER_DELAY) and CombatGridPanel.HOVER_DELAY == 0.15
+	grid._on_hover_delay()
+	checks["hover card: appears only after the 150 ms hover delay, for the hovered unit"] = waiting and grid.card_is_open() and grid.card_unit == foe
+	# Unpinned: leaving closes it (after the grace), pinned: leaving keeps it, Esc closes it.
+	host.session.set_hovered(null)
+	grid._on_close_grace()
+	var closed_on_exit: bool = not grid.card_is_open()
+	host.session.set_hovered(foe)
+	grid._on_hover_delay()
+	grid.hover_card.pin_btn.pressed.emit()
+	host.session.set_hovered(null)
+	grid._on_close_grace()
+	var kept: bool = grid.card_is_open() and grid.hover_card.is_pinned
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	host._unhandled_input(esc)
+	checks["hover card: an unpinned card closes when the pointer leaves; Pin keeps it on exit; Esc closes it"] = closed_on_exit and kept and not grid.card_is_open() and not grid.hover_card.is_pinned
+	# Click on the card pins it; a click elsewhere closes it.
+	grid.open_card(foe)
+	var card_click := InputEventMouseButton.new()
+	card_click.button_index = MOUSE_BUTTON_LEFT
+	card_click.pressed = true
+	grid.hover_card.gui_input.emit(card_click)
+	var pinned_by_click: bool = grid.hover_card.is_pinned
+	var away := InputEventMouseButton.new()
+	away.button_index = MOUSE_BUTTON_LEFT
+	away.pressed = true
+	away.global_position = Vector2(-50, -50)
+	grid._input(away)
+	checks["hover card: a click on the card pins it; a click elsewhere closes it"] = pinned_by_click and not grid.card_is_open()
+	# Right click (back, read in _input) closes a pinned card; an unpinned one lets the click through.
+	grid.open_card(foe)
+	var right := InputEventMouseButton.new()
+	right.button_index = MOUSE_BUTTON_RIGHT
+	right.pressed = true
+	grid._input(right)
+	var unpinned_stays: bool = grid.card_is_open()
+	grid.pin_card(foe)
+	grid._input(right)
+	checks["hover card: right click closes a pinned card only"] = unpinned_stays and not grid.card_is_open()
+	# Focus on a card opens it at once, losing focus closes an unpinned one.
+	var foes: CombatRosterPanel = host.get_panel("enemies") as CombatRosterPanel
+	foes._card_for(foe).focus_entered.emit()
+	var focus_open: bool = grid.card_is_open() and grid.card_unit == foe
+	foes._card_for(foe).focus_exited.emit()
+	checks["hover card: keyboard / controller focus on a card opens it, blur closes it"] = focus_open and not grid.card_is_open()
+	# A card click pins that unit's card.
+	foes._card_for(foe).gui_input.emit(card_click)
+	checks["hover card: clicking a hostile card pins its hover card"] = grid.card_is_open() and grid.hover_card.is_pinned and grid.card_unit == foe
+	grid.close_card()
+	checks["hover card: only a Pin button, no gear / equipment modal path"] = _card_buttons_ok(grid) and host.find_children("*", "CharacterEquipmentModal", true, false).is_empty()
+	_card_free(tree_parent, host, saved)
+
+	# Geometry at the three window sizes (Normal text), then at all four text sizes (1280x720).
+	var views_ok: bool = true
+	for view: Vector2 in VIEWS:
+		var view_host: CombatDockHost = _card_host(tree_parent, view, 1.0)
+		views_ok = views_ok and _card_geometry_ok(view_host, view)
+		_card_free(tree_parent, view_host, saved)
+	checks["hover card: never overlaps the hovered tile, stays in the viewport at 1280x720, 1280x800, 1680x720"] = views_ok
+	var scales_ok: bool = true
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var scale_host: CombatDockHost = _card_host(tree_parent, VIEWS[0], scale)
+		scales_ok = scales_ok and _card_geometry_ok(scale_host, VIEWS[0])
+		var scale_grid: CombatGridPanel = scale_host.get_panel("grid") as CombatGridPanel
+		scale_grid.pin_card(scale_host.session.allies[0])
+		scales_ok = scales_ok and scale_grid.hover_card.size.y <= float(scale_host.metrics.tile * CombatHudMetrics.GRID_ROWS)
+		_card_free(tree_parent, scale_host, saved)
+	checks["hover card: fits its content (no clipping) inside the board at all four text sizes"] = scales_ok

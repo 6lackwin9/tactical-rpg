@@ -12,6 +12,8 @@ extends RefCounted
 signal combatant_selected(combatant: Combatant)
 signal combatant_hovered(combatant: Combatant, card_node: Control)
 signal combatant_unhovered()
+signal combatant_focused(combatant: Combatant)   # keyboard / controller focus lands on a card (hover card opens)
+signal combatant_blurred()
 
 const ALLY_COLOR: Color = Color(0.2, 0.6, 1.0)
 const ENEMY_COLOR: Color = Color(0.9, 0.3, 0.3)
@@ -204,7 +206,12 @@ func create_roster_card(combatant: Combatant, team_color: Color, is_ally: bool, 
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			combatant_selected.emit(combatant)
+		elif event.is_action_pressed("ui_accept"):
+			combatant_selected.emit(combatant)
 	)
+	card.focus_mode = Control.FOCUS_ALL
+	card.focus_entered.connect(func() -> void: combatant_focused.emit(combatant))
+	card.focus_exited.connect(func() -> void: combatant_blurred.emit())
 	card.mouse_entered.connect(func() -> void: combatant_hovered.emit(combatant, card))
 	card.mouse_exited.connect(func() -> void: combatant_unhovered.emit())
 	target.add_child(card)

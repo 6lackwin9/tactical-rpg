@@ -11,6 +11,10 @@ extends CombatPanel
 const ALLY_COLOR: Color = Color(0.2, 0.6, 1.0)
 const ENEMY_COLOR: Color = Color(0.9, 0.3, 0.3)
 
+signal unit_focused(c: Combatant)   # focus on a card: the grid shows the hover card at once
+signal unit_blurred()
+signal unit_clicked(c: Combatant)   # a click on a card also pins the hover card
+
 var is_party: bool = true
 var _roster: RosterPanelUI
 
@@ -37,7 +41,12 @@ func _on_bound() -> void:
 	_roster.token_fn = func(c: Combatant) -> Texture2D: return session.encounter.get_token_texture(c)
 	_roster.behaviour_fn = _behaviour_line
 	session.mounted.connect(_rebuild)
-	_roster.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
+	_roster.combatant_selected.connect(func(c: Combatant) -> void:
+		session.select_combatant(c)
+		unit_clicked.emit(c)
+	)
+	_roster.combatant_focused.connect(func(c: Combatant) -> void: unit_focused.emit(c))
+	_roster.combatant_blurred.connect(func() -> void: unit_blurred.emit())
 	_roster.combatant_hovered.connect(func(c: Combatant, _card: Control) -> void: session.set_hovered(c))
 	_roster.combatant_unhovered.connect(func() -> void: session.set_hovered(null))
 	_rebuild()

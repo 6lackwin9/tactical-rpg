@@ -3,9 +3,10 @@ extends Control
 
 # ==============================================================================
 # Tactical RPG - Combat Dock Host (production combat UI layout)
-# COMBAT-UI2-L1 layout C: timeline row on top, a slim party column (+ inspector) left, the biggest grid in the
+# COMBAT-UI2-L1 layout C: timeline row on top, a slim party column (the whole height) left, the biggest grid in the
 # middle, a slim hostile column (+ forecast) right, playback buttons and the one-line log ticker at the bottom;
-# every size comes from CombatHudMetrics (_fit). No gear button or equipment modal in battle.
+# every size comes from CombatHudMetrics (_fit). No gear button or equipment modal in battle. The unit hover card
+# (COMBAT-UI2-L2) floats inside the grid panel; Esc closes a pinned card before anything else.
 # Static dock regions filled from data-driven layout presets. The game UI stays
 # fixed; a layout edit mode (⚙ / F9) lets any panel be undocked into a floating
 # UiWindow - its region keeps a same-size placeholder so nothing reflows - and
@@ -20,12 +21,12 @@ const DEFAULT_LAYOUT: String = "Standard"
 const LAYOUTS: Dictionary = {
 	"Standard": {
 		"top": ["timeline"],
-		"left_top": ["party"], "left": ["inspector"], "center": ["grid"], "right_top": ["enemies"], "right": ["forecast"],
+		"left_top": ["party"], "left": [], "center": ["grid"], "right_top": ["enemies"], "right": ["forecast"],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 	"Mirrored": {
 		"top": ["timeline"],
-		"left_top": ["enemies"], "left": ["forecast"], "center": ["grid"], "right_top": ["party"], "right": ["inspector"],
+		"left_top": ["enemies"], "left": ["forecast"], "center": ["grid"], "right_top": ["party"], "right": [],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 }
@@ -135,7 +136,7 @@ func _row(parent: Control, separation: int) -> HBoxContainer:
 	parent.add_child(row)
 	return row
 
-# A fixed-width column holding two stacked regions (party / inspector, hostiles / forecast).
+# A fixed-width column holding two stacked regions (party alone, or hostiles / forecast).
 func _column(parent: Control) -> VBoxContainer:
 	var col := VBoxContainer.new()
 	col.custom_minimum_size = Vector2(CombatHudMetrics.SIDE_W, 0)
@@ -169,7 +170,6 @@ func setup(p_session: CombatSession) -> void:
 		CombatRosterPanel.create(true),
 		CombatRosterPanel.create(false),
 		CombatActionLogPanel.new(),
-		CombatInspectorPanel.new(),
 		CombatGridPanel.new(),
 		CombatForecastPanel.new(),
 		CombatPlaybackPanel.new(),
@@ -181,6 +181,7 @@ func setup(p_session: CombatSession) -> void:
 		panel.modal_requested.connect(open_modal)
 		_overlay_layer.host_panel(panel)
 		panel.bind(session)
+	_wire_hover_card()
 
 	log_modal.cell_clicked.connect(func(e: ActionLogEntry) -> void: session.select_log_entry(e))
 	timeline_modal.action_lookup_fn = session.find_recorded_action
@@ -196,6 +197,17 @@ func setup(p_session: CombatSession) -> void:
 	session.mounted.connect(_fit)
 	_fit()
 
+# Roster cards drive the grid's hover card: focus opens it at once, a click pins it.
+func _wire_hover_card() -> void:
+	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
+	for id: String in ["party", "enemies"]:
+		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
+		if roster == null or grid == null:
+			continue
+		roster.unit_focused.connect(grid.open_card)
+		roster.unit_blurred.connect(grid.focus_lost)
+		roster.unit_clicked.connect(grid.pin_card)
+
 # Sizes the whole screen from CombatHudMetrics: the grid's tile, the columns' fixed panel heights, the strips.
 func _fit() -> void:
 	if session == null or _panels.is_empty():
@@ -206,7 +218,6 @@ func _fit() -> void:
 	_bottom_panel.custom_minimum_size = Vector2(0, metrics.bottom_h)
 	_set_slot_height("party", metrics.party_panel_h)
 	_set_slot_height("enemies", metrics.hostile_panel_h)
-	_set_slot_height("inspector", metrics.inspector_h)
 	_set_slot_height("forecast", metrics.forecast_h)
 	for id: String in ["party", "enemies"]:
 		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
@@ -324,6 +335,9 @@ func apply_layout(layout_name: String) -> void:
 				continue
 			_apply_region_flags(slot, region)
 			_region(region).add_child(slot)
+	for region_id: String in REGIONS:   # an empty region takes no room (its column separator would eat height)
+		var box: BoxContainer = _region(region_id)
+		box.visible = box.get_child_count() > 0
 	if _layout_option != null:
 		for i: int in range(_layout_option.item_count):
 			if _layout_option.get_item_text(i) == layout_name:
@@ -509,6 +523,14 @@ func close_modals() -> bool:
 		return true
 	return false
 
+# Esc closes the unit hover card (true when one was open).
+func close_hover_card() -> bool:
+	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
+	if grid == null or not grid.card_is_open():
+		return false
+	grid.close_card()
+	return true
+
 func _refresh_timeline_modal() -> void:
 	timeline_modal.set_total_blocks(session.total_blocks)
 	timeline_modal.update_view(
@@ -533,7 +555,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var handled: bool = true
 	match key.keycode:
 		KEY_ESCAPE:
-			handled = close_modals()
+			handled = close_modals() or close_hover_card()
 		KEY_L:
 			if log_modal.visible:
 				log_modal.close_modal()
