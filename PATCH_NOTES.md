@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 3fa4cea -->
+<!-- last: b9fcc80 -->
 
 ## 2026-10-18
 
@@ -31,6 +31,7 @@ In the game:
 
 Every change that touched the game:
 
+- BAL5-S2 + POTLEDGER: support_attrition scenario and potion heals in the sim ledger (b9fcc80)
 - STATCRED1-L: battle report credits each status to the unit that applied it (3fa4cea)
 - UIR-3: Character popup with Stats, Level up, Skills and Gear tabs (3878540)
 - BAL5-R1b: re-measure under the re-draft fix and BAL5-AI (a990fb7)
@@ -111,6 +112,7 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- PATCH-NOTES: STATCRED1-L (f38bc19)
 - PATCH-NOTES: UIR-3, LEVERS1 spec (c8073e9)
 - LEVERS1 spec: brawler spin and priest Ward (DR2-LEVERS) (8e414c0)
 - PATCH-NOTES: BAL5-R1b, PLATFORM-HANDOVER (d241191)
