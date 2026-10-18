@@ -28,6 +28,8 @@ A routine bound to the Design session fires at 12:20 and 18:20 UTC, after the 11
 
 ## Option builds (up to 3)
 
+**Paused (user 2026-10-18 08:29 UTC, project chat):** "limit design agent to propose ideas for now and have me review and approve those choices". Until the user lifts the pause, the Design thread builds no option branches: each review ends with proposals (approval list, 2-3 options each with a recommendation) and the user approves them before any build; approved items become TASKS rows for their area threads. The intent (Design explores ideas on its own branches) is paused, not dropped; the steps below apply again when resumed.
+
 1. Pick the report items that are easier to judge by playing than by reading (feel, pacing, layout). Group them into at most **3 options**, each a coherent direction (for example A: faster battles, B: more tactical battles, C: a middle path). Fewer is fine.
    Building option branches needs the rotating build slot (`cloud.md` "Usage caps"): ask the coordinator for it before step 3 and hand it back when the set is built; the report itself is spec work and needs no slot. Reviews and specs run in standard mode.
 2. Each option gets a branch cut from the `develop` commit the review covered: `claude/design-opt-<YYYYMMDD>-a`, `-b`, `-c`. The date keeps sets from different reviews apart.
