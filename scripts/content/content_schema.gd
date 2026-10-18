@@ -149,6 +149,15 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10, "help": "The wave enters before this block resolves."}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
 		_f("phases", "Phases", "json", [], {"help": "[{\"id\", \"name\", \"trigger\": {\"kind\": \"hp_below\", \"unit\", \"pct\": 50} or {\"kind\": \"round\", \"round\": 3}, \"effects\": [{\"type\": \"line\", \"text\"}, {\"type\": \"wave\", \"units\": [], \"label\"}, {\"type\": \"status\", \"unit\", \"status\": \"fortify\", \"rounds\": 2, \"magnitude\": 5}, {\"type\": \"ai\", \"unit\", \"reckless\": true}], \"pause_autoplay\": true}], at most 4 (BOSS1; EncounterPhases)."}),
+		_f("objective", "Objective", "enum", "rout", {"options": ["rout", "hold", "escape", "slay"], "help": "rout: defeat every enemy; hold: keep the objective tiles; escape: get heroes out by an exit; slay: defeat one unit (OBJ1)."}),
+		_f("objective_tiles", "Objective tiles", "json", [], {"when": {"key": "objective", "in": ["hold"]}, "help": "[[x, y], ...] walkable, not exits; [] = the ring [[5, 4], [6, 4]]."}),
+		_f("objective_rounds", "Hold rounds", "int", 3, {"min": 1, "max": 30, "when": {"key": "objective", "in": ["hold"]}, "help": "Round ends held to win (1..max rounds)."}),
+		_f("objective_unit", "Slay target", "string", "", {"when": {"key": "objective", "in": ["slay"]}, "help": "A unit id from Enemies."}),
+		_f("objective_count", "Heroes out", "int", 1, {"min": 1, "max": 4, "when": {"key": "objective", "in": ["escape"]}, "help": "Heroes that must leave by an exit."}),
+		_f("objective_text", "Objective text", "string", "", {"help": "At most 80 characters; empty = generated from the objective."}),
+		_f("deployment", "Deployment", "enum", "standard", {"options": ["standard", "ambush", "centre"], "help": "standard: side against side; ambush: enemies on both sides; centre: the party holds the middle."}),
+		_f("guests", "Guests", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}, "help": "At most 2 extra party-side units; no XP, never saved."}),
+		_f("protect", "Protect", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}, "help": "Guests that must survive (each must be in Guests)."}),
 	]
 
 # ------------------------------------------------------------------------------

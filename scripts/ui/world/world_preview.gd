@@ -188,6 +188,11 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 		text += _line("Wave (R%d B%d)" % [DictUtil.to_int(e["wave_round"]), DictUtil.to_int(e["wave_block"])], _names_of(world_id, "characters", e["wave_units"]))
 	for phase_line: String in EncounterPhases.summary_lines(e.get("phases", []), func(ref: String) -> String: return _name_of(world_id, "characters", ref)):
 		text += _esc(phase_line) + "\n"   # BOSS1 rule 9
+	if not DictUtil.array_of(e.get("guests", [])).is_empty():
+		text += _line("Guests", _names_of(world_id, "characters", e["guests"]))
+	var name_of: Callable = func(ref: String) -> String: return _name_of(world_id, "characters", ref)
+	text += _line("Objective", _esc(EncounterObjectives.text_of(e, name_of)))   # OBJ1 rule 12
+	text += _line("Deployment", str(e.get("deployment", EncounterObjectives.STANDARD)))
 	if not DictUtil.array_of(e["party"]).is_empty() and not DictUtil.array_of(e["enemies"]).is_empty():
 		var enc := WorldEncounter.new(world_id, "")
 		enc.apply_definition(e)
@@ -195,7 +200,7 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 		var placed: Array[String] = []
 		for c: Combatant in enc.allies + enc.enemies:
 			placed.append("%s %s" % [c.name, str(enc.grid.get_position(c)) if enc.grid.has_combatant(c) else ("[color=#f87171](off-field until its phase)[/color]" if enc.is_reserved(c) else "[color=#f87171](off-field until the wave)[/color]")])
-		text += _line("Deployment", ", ".join(placed))
+		text += _line("Start tiles", ", ".join(placed))
 	text += "\n" + _esc(str(e["description"]))
 	if not str(e["intro"]).is_empty():
 		text += "\n\n[i]" + _esc(str(e["intro"])) + "[/i]"

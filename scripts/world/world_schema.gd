@@ -332,6 +332,15 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
 		_f("phases", "Phases", "json", [], {"help": "Boss phases (BOSS1): same shape as catalog encounters; refs are character refs (EncounterPhases)."}),
+		_f("objective", "Objective", "enum", "rout", {"options": ["rout", "hold", "escape", "slay"], "help": "rout, hold, escape or slay (OBJ1; EncounterObjectives)."}),
+		_f("objective_tiles", "Objective tiles", "json", [], {"help": "[[x, y], ...] walkable, not exits; [] = the ring [[5, 4], [6, 4]]."}),
+		_f("objective_rounds", "Hold rounds", "int", 3, {"min": 1, "max": 30, "help": "Hold only: round ends held to win (1..max rounds)."}),
+		_f("objective_unit", "Slay target", "string", "", {"help": "A ref from Enemies."}),
+		_f("objective_count", "Heroes out", "int", 1, {"min": 1, "max": 4, "help": "Escape only: heroes that must leave by an exit."}),
+		_f("objective_text", "Objective text", "string", "", {"help": "At most 80 characters; empty = generated from the objective."}),
+		_f("deployment", "Deployment", "enum", "standard", {"options": ["standard", "ambush", "centre"]}),
+		_f("guests", "Guests", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "At most 2 party-side extras: party characters, or npcs whose base unit has side party."}),
+		_f("protect", "Protect", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "Guests that must survive (each must be in Guests)."}),
 	]
 
 # ------------------------------------------------------------------------------

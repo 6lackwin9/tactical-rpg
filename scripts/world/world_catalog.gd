@@ -1156,6 +1156,7 @@ static func _encounter_errors(world_id: String, e: Dictionary) -> Array[String]:
 	var wave_field: Dictionary = WorldSchema.field("encounters", "wave_units")
 	errors.append_array(EncounterPhases.problems(e, func(ref: String) -> bool:
 		return _check_ref(world_id, wave_field, "characters", ref).is_empty()))
+	errors.append_array(EncounterObjectives.problems(e, func(ref: String) -> bool: return guest_ok(world_id, ref)))
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		for x: Variant in DictUtil.array_of(exits):
@@ -1168,6 +1169,14 @@ static func _encounter_errors(world_id: String, e: Dictionary) -> Array[String]:
 	else:
 		errors.append("Exit tiles must be a list of [x, y] pairs.")
 	return errors
+
+# OBJ1 guest rule: false only for a character that resolves but does not fight on the party side (role party, or an
+# npc whose base unit has side party); unknown refs and enemies are left to the generic ref check (role filter).
+static func guest_ok(world_id: String, ref: String) -> bool:
+	var c: Dictionary = resolve(world_id, "characters", ref)
+	if c.is_empty() or str(c.get("role", "")) != "npc":
+		return true
+	return str(ContentCatalog.get_entry("units", str(c.get("base_unit", ""))).get("side", "")) == "party"
 
 # Problems with a world's manifest.
 static func manifest_errors(world_id: String) -> Array[String]:
