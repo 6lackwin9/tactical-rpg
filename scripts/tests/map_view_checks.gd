@@ -89,6 +89,7 @@ static func run_region(view: RegionMapView) -> bool:
 	var t: Dictionary = ExploreRunner.template_of(ExploreRunner.location(gs)) if gs != null else {}
 	checks["the game stands on a mapped location"] = not t.is_empty() and not view.busy()
 	var canvas: Control = view._canvas
+	view.snap_focus()   # MAPKEYS1-U: the earlier steps leave the camera gliding; the checks below move gs.position directly
 	view.size = VIEW   # the arena parent may have no size; the full-rect layout follows the view
 	var free: Rect2 = RegionMapView.free_rect(canvas.size, view._top, view._side)
 	checks["the canvas fills the view, the panels float over it"] = canvas.size == view.size and free.size.x > 0.0 and free.size.y > 0.0 and view._side.get_parent() == canvas.get_parent()

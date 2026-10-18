@@ -31,7 +31,7 @@ const INPUT_ACTIONS: Array[Array] = [
 # Hard-coded keys: {group, action (plain words), keys (shown text), src (script that handles it), tokens (strings that must appear in src)}.
 const HARD_CODED: Array[Dictionary] = [
 	{"group": GROUP_MENUS, "action": "Back / close (mouse)", "keys": "Right click", "src": "res://scripts/ui/menus/main_menu_view.gd", "tokens": ["MOUSE_BUTTON_RIGHT"]},
-	{"group": GROUP_MAPS, "action": "Move the party", "keys": "Arrow keys", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT"]},
+	{"group": GROUP_MAPS, "action": "Move the party", "keys": "Arrow keys, W A S D (hold to keep walking)", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_W", "KEY_A", "KEY_S", "KEY_D"]},
 	{"group": GROUP_MAPS, "action": "Interact (talk, open, read)", "keys": "E", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["KEY_E"]},
 	{"group": GROUP_MAPS, "action": "Interact with a marker next to the party", "keys": "Left click", "src": "res://scripts/ui/overworld/region_map_view.gd", "tokens": ["MOUSE_BUTTON_LEFT"]},
 	{"group": GROUP_MAPS, "action": "Open Settings (from any scene)", "keys": "Esc, the Menu button", "src": "res://scripts/ui/menus/main_menu_view.gd", "tokens": ["ui_cancel"]},

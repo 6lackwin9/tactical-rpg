@@ -4,7 +4,7 @@ extends Control
 # ==============================================================================
 # Tactical RPG - Region map debug view (S9, spec EXP1-L commit 3)
 # Thin: renders the GameState's location map (tiles, zone tint, markers, roamers, token) and forwards input to
-# ExploreRunner / BattleBridge. Arrow keys = step, E = interact in the facing direction. A fight opens the real combat
+# ExploreRunner / BattleBridge. Arrow keys / WASD = step (hold to keep walking), E = interact in the facing direction. A fight opens the real combat
 # arena with the saved party (BattleScreen, BATTLE1-L); its outcome (won / fled / lost) settles through
 # ExploreRunner.after_fight. If the battle cannot start, the fight panel offers Start battle again and the debug
 # outcomes; `dev_outcomes` (off by default) always shows the debug outcome buttons.
@@ -59,7 +59,18 @@ const SPENT_NOTE: String = "Nothing more here."
 const COL_LABEL: Color = Color(0.96, 0.97, 1.0)
 const COL_LABEL_EDGE: Color = Color(0.02, 0.03, 0.06, 0.95)
 const COL_PULSE: Color = Color(1.0, 0.92, 0.45)
-const HINT: String = "Arrows: move   E: interact   Click: interact with a marker next to you"
+const HINT: String = "Arrows / WASD: move   E: interact   Click: interact with a marker next to you"
+# MAPKEYS1-U: held-key walking and the glide. First step on press, then every REPEAT_INTERVAL after REPEAT_DELAY (driven from
+# _process, not OS key echo). The drawn party position (and the camera that follows it) eases toward the party tile at
+# GLIDE_TILES_PER_SEC, faster than the repeat rate so no lag builds up; farther than GLIDE_SNAP_TILES it snaps.
+const KEY_DIRS: Dictionary = {KEY_UP: Vector2i(0, -1), KEY_DOWN: Vector2i(0, 1), KEY_LEFT: Vector2i(-1, 0), KEY_RIGHT: Vector2i(1, 0), KEY_W: Vector2i(0, -1), KEY_S: Vector2i(0, 1), KEY_A: Vector2i(-1, 0), KEY_D: Vector2i(1, 0)}
+const REPEAT_DELAY: float = 0.25
+const REPEAT_INTERVAL: float = 0.11
+const GLIDE_TILES_PER_SEC: float = 14.0
+const GLIDE_SNAP_TILES: float = 3.0
+# Name placement: a label hidden because it would overlap another (shown while its marker is hovered).
+const NO_LABEL: Vector2 = Vector2(-1.0e9, -1.0e9)
+const LABEL_PAD: float = 2.0
 const NOTHING_NOTE: String = "Nothing to interact with there."
 const FAR_NOTE: String = "Walk next to it first (arrow keys), then press E or click it."
 const BUMP_NOTES: Dictionary = {"npc": "Someone is in the way: press E to talk.", "chest": "A chest: press E to open it.", "lore": "Something to read: press E."}
@@ -95,6 +106,11 @@ var _legend_tile: Vector2i = NO_TILE   # the tile of the legend row under the po
 var _legend_box: VBoxContainer = null
 var _clock: float = 0.0
 var _animated: bool = false   # a roamer is drawn or a legend row is hovered: redraw every frame
+var _vis: Vector2 = Vector2.ZERO   # drawn party centre in tile units (eases toward gs.position + 0.5); the camera follows it
+var _gliding: bool = false   # the drawn position is on its way to the party tile (otherwise the camera sits on the tile)
+var _vis_loc: String = ""
+var _held_keys: Array[int] = []   # direction keys currently held (arrows and WASD), oldest first
+var _repeat_left: float = 0.0
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -245,8 +261,33 @@ func map_origin() -> Vector2:
 		return Vector2.ZERO
 	var px: float = tile_px()
 	var view: Rect2 = free_rect(_canvas.size, _top, _side)
-	var focus: Vector2 = (Vector2(gs.position) + Vector2(0.5, 0.5)) * px
+	var focus: Vector2 = party_focus() * px
 	return view.position + camera_offset(Vector2(MapRules.size_of(t)) * px, view.size, focus)
+
+# The party centre in tile units as drawn: the eased position while it glides, else the party tile.
+func party_focus() -> Vector2:
+	if gs == null:
+		return Vector2.ZERO
+	return _vis if _gliding else Vector2(gs.position) + Vector2(0.5, 0.5)
+
+# Puts the drawn party position on the party tile at once (a new location, a new game).
+func snap_focus() -> void:
+	_gliding = false
+	if gs != null:
+		_vis = Vector2(gs.position) + Vector2(0.5, 0.5)
+		_vis_loc = gs.location_id
+
+# Eases the drawn position toward the party tile; true while it is still moving.
+func glide(delta: float) -> bool:
+	if gs == null or not _gliding:
+		return false
+	var target: Vector2 = Vector2(gs.position) + Vector2(0.5, 0.5)
+	if _vis.distance_to(target) > GLIDE_SNAP_TILES:
+		_vis = target
+	else:
+		_vis = _vis.move_toward(target, GLIDE_TILES_PER_SEC * delta)
+	_gliding = _vis != target
+	return true
 
 # The map tile under canvas point `p` (camera offset and zoom applied).
 func tile_at_point(p: Vector2) -> Vector2i:
@@ -283,15 +324,58 @@ static func pulse_alpha(clock: float) -> float:
 static func hint_line(v: Dictionary) -> String:
 	return "%s · %s" % [str(v.get("label", "")), str(v.get("verb", ""))]
 
-# Where the baseline-left corner of a name of `text_size` goes so it stands centred above a tile at `tile_pos` (`tile_px`
-# wide) and stays inside `bounds`; below the tile when there is no room above.
+# Where the baseline-left corner of a name of `text_size` goes next to its own tile at `tile_pos` (`tile_size` wide):
+# centred above it, or below when there is no room above `bounds`. Near the left / right edge it hangs to the right / left of
+# the tile's edge instead of being clamped (it stays attached to its marker).
 static func label_origin(tile_pos: Vector2, tile_size: float, text_size: Vector2, ascent: float, bounds: Rect2) -> Vector2:
 	var x: float = tile_pos.x + (tile_size - text_size.x) / 2.0
-	x = maxf(minf(x, bounds.end.x - text_size.x - 2.0), bounds.position.x + 2.0)
+	if x + text_size.x > bounds.end.x:
+		x = tile_pos.x + tile_size - text_size.x
+	if x < bounds.position.x:
+		x = tile_pos.x
 	var y: float = tile_pos.y - 3.0
 	if y - ascent < bounds.position.y:
 		y = tile_pos.y + tile_size + ascent + 1.0
 	return Vector2(x, y)
+
+# The ink rectangle of a name whose baseline-left corner is `at`.
+static func label_rect(at: Vector2, text_size: Vector2, ascent: float) -> Rect2:
+	return Rect2(at - Vector2(0.0, ascent), text_size).grow(LABEL_PAD)
+
+# Places name labels without overlap (pure). `items`: [{tile_pos (canvas px, tile top-left), size (text size)}] in priority
+# order. Each label tries above its tile, below it, then one line farther above / below; the first spot inside `bounds` that
+# overlaps no label placed before wins. Returns one baseline-left origin per item (NO_LABEL = hidden, too crowded or the
+# tile is outside `bounds`).
+static func place_labels(items: Array[Dictionary], tile_size: float, ascent: float, bounds: Rect2) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	var taken: Array[Rect2] = []
+	for it: Dictionary in items:
+		var tile_pos: Vector2 = it["tile_pos"]
+		var size: Vector2 = it["size"]
+		var chosen: Vector2 = NO_LABEL
+		if bounds.intersects(Rect2(tile_pos, Vector2(tile_size, tile_size))):
+			var line: float = size.y + LABEL_PAD
+			var above: float = tile_pos.y - 3.0
+			var below: float = tile_pos.y + tile_size + ascent + 1.0
+			# sideways: centred, hanging left of the tile's right edge, hanging right of its left edge (all stay on the tile)
+			var xs: Array[float] = [tile_pos.x + (tile_size - size.x) / 2.0, tile_pos.x + tile_size - size.x, tile_pos.x]
+			var found: bool = false
+			for y: float in [above, below, above - line, below + line]:
+				for x: float in xs:
+					var at: Vector2 = Vector2(x, y)
+					var r: Rect2 = label_rect(at, size, ascent)
+					if x < bounds.position.x or x + size.x > bounds.end.x or r.position.y < bounds.position.y or r.end.y > bounds.end.y:
+						continue
+					if taken.any(func(o: Rect2) -> bool: return o.intersects(r)):
+						continue
+					chosen = at
+					taken.append(r)
+					found = true
+					break
+				if found:
+					break
+		out.append(chosen)
+	return out
 
 # Legend sort key: kind order, then label.
 static func legend_less(a: Dictionary, b: Dictionary) -> bool:
@@ -375,6 +459,8 @@ func _set_hover(tile: Vector2i) -> void:
 	if tile == hover_tile:
 		return
 	hover_tile = tile
+	if _canvas != null:
+		_canvas.queue_redraw()   # a crowded name shows while its marker is hovered
 	if hint != null:
 		hint.text = hint_text()
 
@@ -428,7 +514,9 @@ func _rebuild_legend() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
-	if _animated and _canvas != null and _canvas.visible:
+	_tick_repeat(delta)
+	var moved: bool = glide(delta)
+	if (_animated or moved) and _canvas != null and _canvas.visible:
 		_canvas.queue_redraw()
 
 func _on_new_game() -> void:
@@ -456,6 +544,8 @@ func start_game(world_id: String, p_seed: int = DEBUG_SEED) -> Array[String]:
 		_note("New game refused: no game state returned")
 		return errors
 	gs = state
+	_held_keys.clear()
+	snap_focus()
 	pending_fight = {}
 	_close_battle()
 	_close_panels()
@@ -471,20 +561,62 @@ func play_state(state: GameState) -> void:
 	_close_battle()
 	_close_panels()
 	close_world_map()
+	_held_keys.clear()
+	snap_focus()
 	_handle(ExploreRunner.begin(gs) if gs.location_id.is_empty() else ExploreRunner.resume(gs))
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventKey) or not event.is_pressed() or event.is_echo():
+	if not (event is InputEventKey) or not event.is_pressed():
 		return
 	var key: InputEventKey = event
-	var dirs: Dictionary = {KEY_UP: Vector2i(0, -1), KEY_DOWN: Vector2i(0, 1), KEY_LEFT: Vector2i(-1, 0), KEY_RIGHT: Vector2i(1, 0)}
-	if dirs.has(key.keycode):
-		var dir: Vector2i = dirs[key.keycode]
-		do_step(dir)
+	if KEY_DIRS.has(key.keycode):
+		if not key.is_echo():   # held keys repeat from _process, not from OS key echo
+			_press_dir(key.keycode)
 		accept_event()
-	elif key.keycode == KEY_E:
+	elif not key.is_echo() and key.keycode == KEY_E:
 		do_interact()
 		accept_event()
+
+# A direction key went down: the first step now, the held-key repeat after REPEAT_DELAY.
+func _press_dir(keycode: int) -> void:
+	if _input_blocked():
+		return
+	_held_keys.erase(keycode)
+	_held_keys.append(keycode)
+	_repeat_left = REPEAT_DELAY
+	var dir: Vector2i = KEY_DIRS[keycode]
+	do_step(dir)
+	if _input_blocked():
+		_held_keys.clear()
+
+# Releases arrive here (before the GUI can eat them) so a held key always stops.
+func _input(event: InputEvent) -> void:
+	var key: InputEventKey = event as InputEventKey
+	if key != null and not key.pressed and _held_keys.has(key.keycode):
+		_held_keys.erase(key.keycode)
+		_repeat_left = REPEAT_DELAY
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_VISIBILITY_CHANGED:
+		_held_keys.clear()
+
+# Held-key walking: one step per REPEAT_INTERVAL after REPEAT_DELAY, in the direction of the newest held key; stops when
+# input is blocked (fight, dialogue, shop, world map).
+func _tick_repeat(delta: float) -> void:
+	if _held_keys.is_empty():
+		return
+	if _input_blocked():
+		_held_keys.clear()
+		return
+	_repeat_left -= delta
+	if _repeat_left > 0.0:
+		return
+	_repeat_left = REPEAT_INTERVAL
+	var newest: int = _held_keys[-1]
+	var dir: Vector2i = KEY_DIRS[newest]
+	do_step(dir)
+	if _input_blocked():
+		_held_keys.clear()
 
 # True while a fight (map, dialogue or road), conversation or shop waits for the player (saving is refused).
 func busy() -> bool:
@@ -501,7 +633,12 @@ func do_step(dir: Vector2i) -> void:
 	var target: Vector2i = gs.position + dir
 	var from_loc: String = gs.location_id
 	var onto: Dictionary = marker_at(target)
+	var from_pos: Vector2i = gs.position
+	var from_focus: Vector2 = party_focus()
 	_handle(ExploreRunner.step(gs, dir))
+	if gs.location_id == from_loc and gs.position != from_pos:
+		_vis = from_focus   # glide from where the token is drawn now (mid-glide steps keep going)
+		_gliding = true
 	if not onto.is_empty() and str(DictUtil.dict_of(onto["view"])["kind"]) == "point" and gs.location_id == from_loc and gs.position == target:
 		_note(point_note(DictUtil.dict_of(onto["view"]), DictUtil.dict_of(onto["marker"])))
 		_refresh()
@@ -785,6 +922,8 @@ func _exit_tree() -> void:
 
 func _refresh() -> void:
 	_sync_busy()
+	if gs != null and _vis_loc != gs.location_id:
+		snap_focus()
 	if world_map != null:
 		MusicDirector.release(self)   # MUSIC1: the embedded world map's travel request plays
 	else:
@@ -856,26 +995,42 @@ func _draw_map() -> void:
 		var ring := Rect2(Vector2(_legend_tile.x * TILE, _legend_tile.y * TILE), Vector2(TILE, TILE)).grow(2.0)
 		_canvas.draw_rect(ring, Color(COL_PULSE, pulse_alpha(_clock)), false, 3.0)
 	_animated = animated
-	var c: Vector2 = Vector2(gs.position.x * TILE + TILE / 2.0, gs.position.y * TILE + TILE / 2.0)
+	var c: Vector2 = party_focus() * TILE
 	_canvas.draw_circle(c, TILE * 0.35, Color(0.95, 0.85, 0.30))
 	_canvas.draw_line(c, c + Vector2(facing) * TILE * 0.45, Color.BLACK, 2.0)
 	_canvas.draw_set_transform(Vector2.ZERO)
 	_draw_names(rows)
 
-# Names of the npc and exit markers above their tiles (screen scale, clear of the floating panels and the map view edges).
+# Names of the npc and exit markers next to their tiles (screen scale; place_labels keeps them apart and attached; a
+# hidden crowded name shows while its marker is hovered).
 func _draw_names(rows: Array[Dictionary]) -> void:
 	var font: Font = get_theme_default_font()
 	var fs: int = label_font_size()
 	var bounds: Rect2 = free_rect(_canvas.size, _top, _side)
 	var origin: Vector2 = map_origin()
 	var px: float = tile_px()
+	var named: Array[Dictionary] = []
+	var items: Array[Dictionary] = []
 	for row: Dictionary in rows:
 		var v: Dictionary = DictUtil.dict_of(row["view"])
 		if not ALWAYS_NAMED.has(str(v["kind"])):
 			continue
 		var text: String = str(v["label"])
-		var size: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 		var tile: Vector2i = row["pos"]
-		var at: Vector2 = label_origin(origin + Vector2(tile) * px, px, size, font.get_ascent(fs), bounds)
-		_canvas.draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, COL_LABEL_EDGE)
-		_canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COL_LABEL)
+		named.append({"text": text, "tile": tile})
+		items.append({"tile_pos": origin + Vector2(tile) * px, "size": font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)})
+	var spots: Array[Vector2] = place_labels(items, px, font.get_ascent(fs), bounds)
+	for i: int in range(named.size()):
+		var at: Vector2 = spots[i]
+		var tile_here: Vector2i = named[i]["tile"]
+		var tile_pos: Vector2 = items[i]["tile_pos"]
+		if at == NO_LABEL:
+			if tile_here != hover_tile or not bounds.intersects(Rect2(tile_pos, Vector2(px, px))):
+				continue
+			var alone: Array[Dictionary] = [items[i]]
+			at = place_labels(alone, px, font.get_ascent(fs), bounds)[0]
+			if at == NO_LABEL:
+				continue
+		var text_here: String = named[i]["text"]
+		_canvas.draw_string_outline(font, at, text_here, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, COL_LABEL_EDGE)
+		_canvas.draw_string(font, at, text_here, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COL_LABEL)

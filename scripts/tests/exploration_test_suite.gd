@@ -189,6 +189,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_debug_scene(tree_parent) and ok
 			ok = MapViewChecks.run_pure() and ok   # MAPVIEW1: camera and world layout (pure)
 			ok = MapReadChecks.run_pure() and ok   # MAPREAD1-L2: icon keys, placement rules (pure)
+			ok = MapKeysChecks.run_pure() and ok   # MAPKEYS1-U: crowded name placement (pure)
 		else:
 			ok = false
 		SaveGame.reset_base_dir()
@@ -1025,7 +1026,9 @@ static func _test_map_read(tree_parent: Node) -> bool:
 	var ok: bool = MapReadChecks.run_region(view)
 	view.play_state(_in_field(2, 4))
 	ok = MapReadChecks.run_notes(view, "mark", "plain", "box") and ok
+	ok = MapKeysChecks.run_dialogue(view, _in_field, "sage") and ok   # MAPKEYS1-U: holding stops at a conversation
 	ok = _set_field([]) and ok
+	ok = MapKeysChecks.run_region(view, _in_field) and ok   # MAPKEYS1-U: WASD, held-key walking, glide
 	tree_parent.remove_child(view)
 	view.free()
 	return ok

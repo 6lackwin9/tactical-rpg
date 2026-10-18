@@ -86,7 +86,7 @@ static func _test_pure_layout() -> bool:
 		legend_in = legend_in and bounds.encloses(legend)
 		var size: Vector2 = font.get_string_size("A marker name of about thirty-two ch", HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 		for corner: Vector2 in [bounds.position, bounds.end, Vector2(bounds.end.x, bounds.position.y), Vector2(bounds.position.x, bounds.end.y), bounds.get_center()]:
-			var tile_pos: Vector2 = corner - Vector2(16, 16)
+			var tile_pos: Vector2 = Vector2(clampf(corner.x - 16.0, bounds.position.x, bounds.end.x - 32.0), clampf(corner.y - 16.0, bounds.position.y, bounds.end.y - 32.0))   # a tile inside the view
 			var at: Vector2 = RegionMapView.label_origin(tile_pos, 32.0, size, font.get_ascent(fs), bounds)
 			names_in = names_in and bounds.encloses(Rect2(at - Vector2(0, font.get_ascent(fs)), size))
 			var pin_at: Vector2 = WorldMapView.name_origin(corner, size, font.get_ascent(fs), bounds)
@@ -166,8 +166,15 @@ static func run_region(view: RegionMapView) -> bool:
 		for row: Dictionary in view.visible_markers():
 			var v: Dictionary = DictUtil.dict_of(row["view"])
 			var label_size: Vector2 = font.get_string_size(str(v["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-			var at: Vector2 = RegionMapView.label_origin(origin + Vector2(row["pos"]) * view.tile_px(), view.tile_px(), label_size, font.get_ascent(fs), free)
-			names_fit = names_fit and free.encloses(Rect2(at - Vector2(0, font.get_ascent(fs)), label_size))
+			var tile_pos: Vector2 = origin + Vector2(row["pos"]) * view.tile_px()
+			# MAPKEYS1-U: every named tile, also partly visible ones: a name that is placed lies inside the free view; a tile fully in view always gets one
+			var alone: Array[Dictionary] = [{"tile_pos": tile_pos, "size": label_size}]
+			var spot: Vector2 = RegionMapView.place_labels(alone, view.tile_px(), font.get_ascent(fs), free)[0]
+			var whole: bool = free.encloses(Rect2(tile_pos, Vector2(view.tile_px(), view.tile_px())))
+			if spot != RegionMapView.NO_LABEL:
+				names_fit = names_fit and free.encloses(Rect2(spot - Vector2(0, font.get_ascent(fs)), label_size))
+			elif whole:
+				names_fit = false
 			hint_fit = hint_fit and font.get_string_size(RegionMapView.hint_line(v), HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.FONT_MD).x <= view.size.x - 16.0
 		# the legend lines wrap inside the side column: their total height stays inside the column
 		var avail: float = RegionMapView.SIDE_WIDTH - 16.0 - (fs + 8.0) - 8.0
