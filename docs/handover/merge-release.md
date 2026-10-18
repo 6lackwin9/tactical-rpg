@@ -4,7 +4,7 @@ Wind-down into interactive mode (user 2026-10-18 16:28 UTC, decision "Interactiv
 
 ## State
 
-- Last release: PR #40 (evening batch 2026-10-18, develop cd55474) into `main` with a merge commit. Previous: #39 midday (e4f9289).
+- Last release: PR #40 (evening batch 2026-10-18, develop cd55474) merged into `main` as 7fa10da at 17:58 UTC; split gate green in ~3 min. Develop commits after cd55474 (this handover, e7773cf) wait for the next requested release. Previous: #39 midday (e4f9289).
 - `PATCH_NOTES.md` marker: `<!-- last: c5d9544 -->`, covering everything through the evening batch. Write it per release and on request only, never per landing (decision "Patch notes per release", 16:10 UTC).
 - Shared logs (AGENT_MAP, TASKS_DONE, TASK_LOG with Bottlenecks) are written through the evening batch (02785bb).
 
