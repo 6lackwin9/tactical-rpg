@@ -15,11 +15,11 @@ Every screen is a headless `RefCounted` model plus a thin view (spec `docs/specs
 | (style) | - | `menu_style.gd` (`MenuStyle.theme()`: bordered Button states and a visible CheckBox, set on the menu column and the question overlay only, never on combat UI; UIR-1: `MenuStyle.selected_box()` / `mark_selected(button, on)` / `is_selected(button)`: a filled box with a gold edge marks the selected row, the label never changes) |
 | (frame) | - | `screen_frame.gd` (UIR-1, `ScreenFrame.make(title, back, primary, extras)`: centred title, a scrolling `FrameColumn` of at most 1000 px, an `ActionBar` pinned below the scroll with Back first and the primary action last on the right; screens adopt it in UIR-2/3/4/6; `tools/frame_shot.gd` renders a sample, `xvfb-run godot -s tools/frame_shot.gd -- --scale=1.0 --out=<png>`) |
 | `play` | - (UIR-2: the game scene; the bottom of the stack during play; Esc / ☰ Menu pushes `hub`) | - |
-| `hub` | `hub_model.gd` (UIR-2: the game menu, a popup over the paused map; screens without a ScreenFrame scroll in it via `UNFRAMED_POPUP`) | `hub_view.gd` |
-| `party` | `party_model.gd` (+ `stats_model.gd`, `party_preview.gd`) | `party_view.gd` |
-| `level_up` | `level_up_model.gd` | `level_up_view.gd` |
-| `loadout` | `loadout_model.gd` | `loadout_view.gd` |
-| `gear` | `gear_model.gd` (+ `party_gear_bridge.gd` for `CharacterEquipmentModal`) | `gear_view.gd` |
+| `hub` | `hub_model.gd` (UIR-2: the game menu, a popup over the paused map; the journal, without a ScreenFrame, scrolls in it via `UNFRAMED_POPUP`) | `hub_view.gd` |
+| `party` | `party_model.gd` (UIR-3: the Character popup's model: selected member, open tab, the per-tab draft models, one "Discard your changes?" rule on a tab or member switch; + `stats_model.gd`, `party_preview.gd`); args `{member, tab}` | `character_view.gd` (`CharacterView`: ScreenFrame with an X in the header, a member strip (Q / E switch), the tabs Stats / Level up / Skills / Gear, the tab body, a fixed `DetailPane` for the focused item and the action bar with the primary Confirm; the static helpers `frame()`, `new_detail()`, `show_on_focus()`, `derived_grid()` are shared) |
+| `level_up` | `level_up_model.gd` | `level_up_view.gd` (`parts()` = the Level up tab: Stat / Now / Added / New rows with - / +, Auto and Revert beside them, Confirm primary; `build()` shows it alone for the battle results) |
+| `loadout` | `loadout_model.gd` (rows also carry `active_tier`, `description`, `next_unlock`) | `loadout_view.gd` (`parts()` = the Skills tab: chips, one row per family with only its active rank and description) |
+| `gear` | `gear_model.gd` (+ `party_gear_bridge.gd` for `CharacterEquipmentModal`) | `gear_view.gd` (`parts()` = the Gear tab: slots, stash, battle pouch; Gear board and Reset in the bar) |
 | `results` | `battle_results_model.gd` | `battle_results_view.gd` |
 | `journal` | `journal_model.gd` (read only over `QuestRunner`) | `journal_view.gd` |
 

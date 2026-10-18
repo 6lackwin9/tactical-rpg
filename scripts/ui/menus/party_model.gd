@@ -9,14 +9,94 @@ extends RefCounted
 const MAX_ACTIVE: String = "The active party holds at most %d."
 const KEEP_ONE: String = "Keep at least one active member."
 
+const TAB_STATS: String = "stats"
+const TAB_LEVEL_UP: String = "level_up"
+const TAB_SKILLS: String = "skills"
+const TAB_GEAR: String = "gear"
+const TABS: Array[String] = [TAB_STATS, TAB_LEVEL_UP, TAB_SKILLS, TAB_GEAR]
+const TAB_LABELS: Dictionary = {TAB_STATS: "Stats", TAB_LEVEL_UP: "Level up", TAB_SKILLS: "Skills", TAB_GEAR: "Gear"}
+
 var router: MenuRouter = null
 var selected: String = ""
+var tab: String = TAB_STATS
+var _subs: Dictionary = {}   # tab -> the draft model of the selected member (LevelUpModel, LoadoutModel, GearModel); dropped on a member or tab switch
 
-func _init(p_router: MenuRouter) -> void:
+# UIR-3 (UI-REVIEW1 Q2 B): the Character popup. `p_member` / `p_tab` pick the first member and tab ("" = the first member, Stats).
+func _init(p_router: MenuRouter, p_member: String = "", p_tab: String = "") -> void:
 	router = p_router
 	var gs: GameState = CurrentGame.state()
 	if gs != null and not gs.party.members.is_empty():
 		selected = gs.party.members[0].id
+		if not p_member.is_empty() and gs.party.member(p_member) != null:
+			selected = p_member
+	if TABS.has(p_tab):
+		tab = p_tab
+
+# The draft models of the selected member, built on first use so each tab starts from the live state.
+func level_model() -> LevelUpModel:
+	var found: Variant = _subs.get(TAB_LEVEL_UP)
+	if found is LevelUpModel:
+		return found
+	var made := LevelUpModel.new(selected)
+	_subs[TAB_LEVEL_UP] = made
+	return made
+
+func loadout_model() -> LoadoutModel:
+	var found: Variant = _subs.get(TAB_SKILLS)
+	if found is LoadoutModel:
+		return found
+	var made := LoadoutModel.new(selected)
+	_subs[TAB_SKILLS] = made
+	return made
+
+func gear_model() -> GearModel:
+	var found: Variant = _subs.get(TAB_GEAR)
+	if found is GearModel:
+		return found
+	var made := GearModel.new(selected)
+	_subs[TAB_GEAR] = made
+	return made
+
+# True while the open tab holds an uncommitted draft (the router asks before Back / X / right click leaves it).
+func has_draft() -> bool:
+	var sub: Variant = _subs.get(tab)
+	return sub is RefCounted and DictUtil.to_bool((sub as RefCounted).call("has_draft"))
+
+# The one discard rule: a tab or member switch with a draft open asks first; Yes drops the draft and switches.
+func switch_tab(id: String) -> Array[String]:
+	var errors: Array[String] = []
+	if not TABS.has(id):
+		errors.append("Unknown tab '%s'." % id)
+	elif id != tab:
+		_guarded(_apply_tab.bind(id))
+	return errors
+
+func _apply_tab(id: String) -> void:
+	_subs.clear()
+	tab = id
+	_changed()
+
+func _guarded(action: Callable) -> void:
+	if has_draft() and router != null:
+		router.ask(MenuRouter.DISCARD_QUESTION, action)
+	else:
+		action.call()
+
+func _changed() -> void:
+	if router != null:
+		router.changed.emit()
+
+# Q / E: the previous (-1) or next (+1) member, wrapping.
+func cycle_member(step: int) -> Array[String]:
+	var ids: Array[String] = _party().member_ids()
+	if ids.size() < 2:
+		return [] as Array[String]
+	var at: int = maxi(0, ids.find(selected))
+	return select(ids[posmod(at + step, ids.size())])
+
+func unspent() -> int:
+	var m: UnitState = _party().member(selected)
+	return m.unspent() if m != null else 0
 
 func _party() -> PartyState:
 	return CurrentGame.state().party
@@ -50,9 +130,14 @@ func select(id: String) -> Array[String]:
 	var errors: Array[String] = []
 	if _party().member(id) == null:
 		errors.append("No party member '%s'." % id)
-	else:
-		selected = id
+	elif id != selected:
+		_guarded(_apply_member.bind(id))
 	return errors
+
+func _apply_member(id: String) -> void:
+	_subs.clear()
+	selected = id
+	_changed()
 
 func toggle_active(id: String) -> Array[String]:
 	var errors: Array[String] = []
@@ -86,13 +171,14 @@ func passives() -> Array[Dictionary]:
 		out.append({"id": p, "name": str(ContentCatalog.get_entry("passives", p).get("name", p)), "source": "-"})
 	return out
 
-# Opens level-up, loadout or gear for the selected member.
+# Opens the Level up, Skills (LOADOUT) or Gear tab for the selected member (the old screen ids still work as callers).
 func open(id: String) -> Array[String]:
 	var errors: Array[String] = []
-	if not [MenuRouter.LEVEL_UP, MenuRouter.LOADOUT, MenuRouter.GEAR].has(id):
+	var tabs: Dictionary = {MenuRouter.LEVEL_UP: TAB_LEVEL_UP, MenuRouter.LOADOUT: TAB_SKILLS, MenuRouter.GEAR: TAB_GEAR}
+	if not tabs.has(id):
 		errors.append("Unknown party screen '%s'." % id)
 	elif _party().member(selected) == null:
 		errors.append("Pick a party member first.")
 	else:
-		router.push(id, {"member": selected})
+		errors = switch_tab(str(tabs[id]))
 	return errors

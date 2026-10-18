@@ -50,7 +50,7 @@ func draft_loadout() -> Dictionary:
 func has_draft() -> bool:
 	return not JsonUtil.deep_equal(draft_loadout(), {"class": JsonUtil.strings(_original.get("class", [])), "extra": JsonUtil.strings(_original.get("extra", []))})
 
-# Owned non-basic families: {"class": [...], "extra": [...]} rows {family, name, grade, tiers: [{tier, name, unlock_level, castable}]}.
+# Owned non-basic families: {"class": [...], "extra": [...]} rows {family, name, grade, tiers: [{tier, name, unlock_level, castable}], active_tier, description, next_unlock}.
 func families() -> Dictionary:
 	var out: Dictionary = {"class": [] as Array[Dictionary], "extra": [] as Array[Dictionary]}
 	var m: UnitState = _member()
@@ -63,9 +63,17 @@ func families() -> Dictionary:
 			continue
 		var t1: SkillDef = SkillCatalog.tier_one(fam)
 		var tiers: Array[Dictionary] = []
+		var active: SkillDef = null   # UIR-3: the highest rank castable now; the Skills tab shows only its text
+		var next_unlock: int = 0
 		for sk: SkillDef in SkillCatalog.family_tiers(fam):
-			tiers.append({"tier": sk.tier, "name": sk.display_name, "unlock_level": c.skill_unlock_level(sk), "castable": c.tier_unlocked(sk)})
-		var row: Dictionary = {"family": fam, "name": SkillCatalog.family_name(fam), "grade": str(SkillDef.Grade.keys()[t1.grade]).capitalize() if t1 != null else "", "tiers": tiers}
+			var castable: bool = c.tier_unlocked(sk)
+			tiers.append({"tier": sk.tier, "name": sk.display_name, "unlock_level": c.skill_unlock_level(sk), "castable": castable})
+			if castable:
+				active = sk
+			elif next_unlock == 0:
+				next_unlock = c.skill_unlock_level(sk)
+		var row: Dictionary = {"family": fam, "name": SkillCatalog.family_name(fam), "grade": str(SkillDef.Grade.keys()[t1.grade]).capitalize() if t1 != null else "", "tiers": tiers,
+			"active_tier": active.tier if active != null else 0, "description": active.description if active != null else "", "next_unlock": next_unlock}
 		var group: Array[Dictionary] = out["class" if path.has(fam) else "extra"]
 		group.append(row)
 	return out

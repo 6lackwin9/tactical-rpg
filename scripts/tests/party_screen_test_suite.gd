@@ -38,6 +38,8 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _fresh() and _test_review_f2() and ok
 		if tree_parent != null:
 			ok = _test_pouch_screen(tree_parent) and ok
+			ok = _fresh() and _test_character_popup(tree_parent) and ok
+			ok = _fresh() and _test_character_fit(tree_parent) and ok
 	CurrentGame.end()
 	SaveGame.reset_base_dir()
 	TestHelpers.remove_sandbox(SANDBOX)
@@ -320,13 +322,13 @@ static func _test_router() -> bool:
 	var pm: PartyModel = router.model() as PartyModel
 	_leave_unspent(_first(), 1)
 	checks["badge"] = pm.badge()
-	checks["open level-up"] = pm.open(MenuRouter.LEVEL_UP).is_empty() and router.top() == MenuRouter.LEVEL_UP
-	var lm: LevelUpModel = router.model() as LevelUpModel
+	checks["open level-up is a tab"] = pm.open(MenuRouter.LEVEL_UP).is_empty() and router.top() == MenuRouter.PARTY and pm.tab == PartyModel.TAB_LEVEL_UP
+	var lm: LevelUpModel = pm.level_model()
 	var _a: Array[String] = lm.add("STR")
 	router.pop()
-	checks["draft asks"] = router.is_asking() and router.top() == MenuRouter.LEVEL_UP
+	checks["draft asks"] = router.is_asking() and router.top() == MenuRouter.PARTY and router.pending_message == MenuRouter.DISCARD_QUESTION
 	router.confirm()
-	checks["discarded"] = router.top() == MenuRouter.PARTY and _first().unspent() == 1
+	checks["discarded"] = router.top() == MenuRouter.HUB and _first().unspent() == 1
 	CurrentGame.end()
 	checks["no game, no party"] = router.make_model(MenuRouter.PARTY) == null and router.make_model(MenuRouter.GEAR, {"member": "x"}) == null
 	return _report("Router and hub wiring", checks)
@@ -479,7 +481,7 @@ static func _test_pouch_screen(tree_parent: Node) -> bool:
 		var tag: String = "text %.2f" % scale
 		var area := Rect2(Vector2.ZERO, VIEW)
 		var body: Control = host.find_child("GearBody", true, false) as Control
-		var scroll: ScrollContainer = host.find_child("GearScroll", true, false) as ScrollContainer
+		var scroll: ScrollContainer = host.find_child("FrameScroll", true, false) as ScrollContainer
 		var section: Control = host.find_child("PouchSection", true, false) as Control
 		c[tag + ": section built"] = body != null and scroll != null and section != null
 		if body != null and scroll != null and section != null:
@@ -488,10 +490,280 @@ static func _test_pouch_screen(tree_parent: Node) -> bool:
 		var shown: Array[String] = []
 		for n: Node in host.find_children("*", "Button", true, false):
 			var b: Button = n as Button
-			if b.is_visible_in_tree() and (b.text == "Confirm" or b.text == "Back") and not area.encloses(b.get_global_rect()):
+			if b.is_visible_in_tree() and (b.text == "Confirm" or b.name == "CloseButton") and not area.encloses(b.get_global_rect()):
 				shown.append(b.text)
 		c[tag + ": Confirm and Back inside 1280x720"] = shown.is_empty() and _btn(host, add_name) != null
 		_drop_host(f)
 	SettingsFile.set_value("ui/text_scale", 1.0)
 	all_ok = _report("ITEMUSE1-U: pouch section fits at every text size", c) and all_ok
 	return all_ok
+
+# ------------------------------------------------------------------------------
+# UIR-3: the Character popup (tabs, member strip, level-up table, skills text, gear pouch, close routes)
+# ------------------------------------------------------------------------------
+
+# A host on the Character screen (PARTY) for `tab`; members.size() >= 2 by the fixture.
+static func _char_host(tree_parent: Node, tab: String) -> Dictionary:
+	var holder := SubViewport.new()
+	holder.size = Vector2i(VIEW)
+	tree_parent.add_child(holder)
+	var host: MainMenuView = (load("res://scenes/main_menu.tscn") as PackedScene).instantiate() as MainMenuView
+	holder.add_child(host)
+	host.router.push(MenuRouter.PARTY, {"member": _first().id, "tab": tab})
+	SettingsUiTestSuite.layout(host)
+	return {"holder": holder, "host": host}
+
+static func _key(code: Key) -> InputEventKey:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.pressed = true
+	return ev
+
+static func _right_click() -> InputEventMouseButton:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_RIGHT
+	ev.pressed = true
+	return ev
+
+static func _test_character_popup(tree_parent: Node) -> bool:
+	var all_ok: bool = true
+	SettingsFile.set_value("ui/text_scale", 1.0)
+	var m0: UnitState = _first()
+	_leave_unspent(m0, 2)
+
+	# Tabs exist, switch, and the selected one is marked by style, not by text.
+	var f: Dictionary = _char_host(tree_parent, "")
+	var host: MainMenuView = f["host"] as MainMenuView
+	var pm: PartyModel = host.router.model() as PartyModel
+	var c: Dictionary = {}
+	var tabs_ok: bool = true
+	for id: String in PartyModel.TABS:
+		tabs_ok = tabs_ok and _btn(host, "Tab_" + id) != null
+	c["four tabs"] = tabs_ok and pm.tab == PartyModel.TAB_STATS
+	c["selected tab styled"] = MenuStyle.is_selected(_btn(host, "Tab_" + PartyModel.TAB_STATS)) and not MenuStyle.is_selected(_btn(host, "Tab_" + PartyModel.TAB_GEAR))
+	for id: String in PartyModel.TABS:
+		_press(host, _btn(host, "Tab_" + id))
+		c["switch to " + id] = pm.tab == id and MenuStyle.is_selected(_btn(host, "Tab_" + id))
+	c["no Back button, an X"] = _btn(host, "BackButton") == null and _btn(host, "CloseButton") != null
+	# Member strip and Q / E.
+	var ids: Array[String] = CurrentGame.state().party.member_ids()
+	c["strip per member"] = host.find_children("Member_*", "Button", true, false).size() == ids.size()
+	_press(host, _btn(host, "Member_" + ids[1]))
+	c["member pick"] = pm.selected == ids[1] and MenuStyle.is_selected(_btn(host, "Member_" + ids[1])) and not MenuStyle.is_selected(_btn(host, "Member_" + ids[0]))
+	_view(host)._unhandled_input(_key(KEY_E))
+	SettingsUiTestSuite.layout(host)
+	c["E: next member"] = pm.selected == ids[2 % ids.size()]
+	_view(host)._unhandled_input(_key(KEY_Q))
+	_view(host)._unhandled_input(_key(KEY_Q))
+	c["Q twice: back to the first"] = pm.selected == ids[0]
+	_view(host)._unhandled_input(_key(KEY_Q))
+	c["Q wraps to the last"] = pm.selected == ids[-1]
+	all_ok = _report("UIR-3: tabs, member strip, Q / E", c) and all_ok
+	_drop_host(f)
+
+	# Level up: now / added / new, Revert, the one discard rule, Confirm apart from Auto / Revert.
+	f = _char_host(tree_parent, PartyModel.TAB_LEVEL_UP)
+	host = f["host"] as MainMenuView
+	pm = host.router.model() as PartyModel
+	c = {}
+	var stat: String = StatRules.STATS[0]
+	var at: int = StatRules.STATS.find(stat)
+	var now: int = DictUtil.to_int(DictUtil.dict_of(StatsModel.new(m0.id).stats()[stat])["total"])
+	_press(host, _btn(host, "Plus_" + stat))
+	var cells: Array[String] = _grid_texts(host, "AllocationGrid")
+	var row: int = 6 * (1 + at)
+	c["row shows now / added / new"] = cells.size() >= row + 4 and cells[row] == stat and cells[row + 1] == str(now) and cells[row + 2] == "+1" and cells[row + 3] == str(now + 1)
+	c["draft in the model"] = pm.level_model().has_draft() and pm.has_draft()
+	var auto: Button = _btn(host, "AutoButton")
+	var revert: Button = _btn(host, "RevertButton")
+	var confirm: Button = _btn(host, "PrimaryButton")
+	c["Auto and Revert beside the rows"] = auto != null and revert != null and host.find_child("LevelUpRow", true, false).is_ancestor_of(auto) and host.find_child("LevelUpRow", true, false).is_ancestor_of(revert)
+	c["Confirm is the bar's primary"] = confirm != null and confirm.text == "Confirm" and host.find_child("ActionBar", true, false).is_ancestor_of(confirm) and not confirm.disabled
+	c["Auto and Revert are not in the bar"] = not host.find_child("ActionBar", true, false).is_ancestor_of(auto)
+	_press(host, _btn(host, "Tab_" + PartyModel.TAB_STATS))
+	c["tab switch asks first"] = host.router.is_asking() and host.router.pending_message == MenuRouter.DISCARD_QUESTION and pm.tab == PartyModel.TAB_LEVEL_UP
+	host.answer(false)
+	c["No keeps the draft and the tab"] = pm.tab == PartyModel.TAB_LEVEL_UP and pm.level_model().has_draft()
+	_press(host, _btn(host, "RevertButton"))
+	c["Revert clears the draft"] = not pm.level_model().has_draft() and _btn(host, "RevertButton").disabled and _btn(host, "PrimaryButton").disabled
+	_press(host, _btn(host, "Plus_" + stat))
+	_press(host, _btn(host, "Tab_" + PartyModel.TAB_GEAR))
+	host.answer(true)
+	SettingsUiTestSuite.layout(host)
+	c["Yes switches and drops the draft"] = pm.tab == PartyModel.TAB_GEAR and not pm.has_draft() and m0.unspent() == 2
+	_press(host, _btn(host, "Tab_" + PartyModel.TAB_LEVEL_UP))
+	c["no question without a draft"] = not host.router.is_asking() and pm.tab == PartyModel.TAB_LEVEL_UP
+	# A member switch with a draft open asks too; the Gear board blocks Q / E.
+	_press(host, _btn(host, "Plus_" + stat))
+	var ids2: Array[String] = CurrentGame.state().party.member_ids()
+	_press(host, _btn(host, "Member_" + ids2[1]))
+	c["member switch with a draft asks"] = host.router.is_asking() and pm.selected == ids2[0]
+	host.answer(false)
+	_view(host)._unhandled_input(_key(KEY_E))
+	c["Q / E with a draft asks"] = host.router.is_asking() and pm.selected == ids2[0]
+	host.answer(true)
+	c["Yes switches the member, no draft"] = pm.selected == ids2[1] and not pm.has_draft()
+	var blocker := Control.new()
+	host.modal_parent().add_child(blocker)
+	_view(host)._unhandled_input(_key(KEY_E))
+	c["Q / E ignored while a modal is open"] = pm.selected == ids2[1]
+	blocker.free()
+	all_ok = _report("UIR-3: level-up table, Revert, discard rule", c) and all_ok
+
+	# Close routes: X and right click, both through the discard question while a draft is open.
+	c = {}
+	_press(host, _btn(host, "Plus_" + stat))
+	_press(host, _btn(host, "CloseButton"))
+	c["X with a draft asks"] = host.router.is_asking() and host.router.top() == MenuRouter.PARTY
+	host.answer(false)
+	host._input(_right_click())
+	c["right click with a draft asks"] = host.router.is_asking() and host.router.top() == MenuRouter.PARTY
+	host.answer(true)
+	c["Yes closes, nothing spent"] = host.router.top() != MenuRouter.PARTY and m0.unspent() == 2
+	host.router.push(MenuRouter.PARTY)
+	SettingsUiTestSuite.layout(host)
+	_press(host, _btn(host, "CloseButton"))
+	c["X closes"] = host.router.top() != MenuRouter.PARTY
+	host.router.push(MenuRouter.PARTY)
+	SettingsUiTestSuite.layout(host)
+	host._input(_right_click())
+	c["right click closes"] = host.router.top() != MenuRouter.PARTY
+	all_ok = _report("UIR-3: X and right click close", c) and all_ok
+	_drop_host(f)
+
+	# Confirm spends (after the question) and the table follows.
+	f = _char_host(tree_parent, PartyModel.TAB_LEVEL_UP)
+	host = f["host"] as MainMenuView
+	pm = host.router.model() as PartyModel
+	c = {}
+	var before: int = DictUtil.to_int(m0.spend.get(stat, 0))
+	_press(host, _btn(host, "Plus_" + stat))
+	_press(host, _btn(host, "PrimaryButton"))
+	c["Confirm asks"] = host.router.is_asking() and host.router.pending_message == LevelUpModel.SPEND_QUESTION
+	host.answer(true)
+	SettingsUiTestSuite.layout(host)
+	c["spent"] = DictUtil.to_int(m0.spend.get(stat, 0)) == before + 1 and m0.unspent() == 1
+	all_ok = _report("UIR-3: Confirm in the Level up tab", c) and all_ok
+	_drop_host(f)
+
+	# Skills: every row shows its description and only its active rank.
+	f = _char_host(tree_parent, PartyModel.TAB_SKILLS)
+	host = f["host"] as MainMenuView
+	c = {}
+	var lo := LoadoutModel.new(m0.id)
+	var rows: Array[Dictionary] = []
+	for group: String in ["class", "extra"]:
+		for raw: Variant in DictUtil.array_of(lo.families()[group]):
+			rows.append(DictUtil.dict_of(raw))
+	c["fixture has skills"] = not rows.is_empty()
+	var text_ok: bool = true
+	var rank_ok: bool = true
+	var slot_ok: bool = true
+	for r: Dictionary in rows:
+		var fam: String = str(r["family"])
+		var line: Node = host.find_child("Family_" + fam, true, false)
+		var desc: Label = host.find_child("Desc_" + fam, true, false) as Label
+		text_ok = text_ok and desc != null and desc.text == str(r["description"])
+		var shown: String = ""
+		if line != null:
+			for l: Node in line.find_children("*", "Label", true, false):
+				shown += (l as Label).text + "\n"
+		for t: Variant in DictUtil.array_of(r["tiers"]):
+			var tier: int = DictUtil.to_int(DictUtil.dict_of(t)["tier"])
+			var marker: String = "Rank " + SkillCatalog.roman(tier)
+			rank_ok = rank_ok and (shown.contains(marker + " ") or shown.contains(marker + "\n")) == (tier == DictUtil.to_int(r["active_tier"]))
+		var slot_btn: Button = _btn(host, "Slot_" + fam)
+		slot_ok = slot_ok and slot_btn != null and slot_btn.text in ["Slotted", "Add", "Full"]
+	# A Skills draft gets the question on a tab switch.
+	var pm2: PartyModel = host.router.model() as PartyModel
+	var free_row: Button = null
+	for n: Node in host.find_children("Slot_*", "Button", true, false):
+		if not (n as Button).disabled and free_row == null:
+			free_row = n as Button
+	var chip: Button = null
+	for n: Node in host.find_children("Chips_class", "HFlowContainer", true, false):
+		for ch: Node in n.get_children():
+			if chip == null and ch is Button:
+				chip = ch as Button
+	if chip != null:
+		_press(host, chip)
+		_press(host, _btn(host, "Tab_" + PartyModel.TAB_STATS))
+		c["skills draft: tab switch asks"] = pm2.loadout_model().has_draft() and host.router.is_asking() and pm2.tab == PartyModel.TAB_SKILLS
+		host.answer(true)
+		c["skills draft dropped by Yes"] = pm2.tab == PartyModel.TAB_STATS and not pm2.has_draft()
+		_press(host, _btn(host, "Tab_" + PartyModel.TAB_SKILLS))
+	else:
+		c["skills fixture has a chip"] = false
+	c["description per row"] = text_ok
+	c["only the active rank"] = rank_ok
+	c["slot buttons read Slotted / Add / Full"] = slot_ok
+	var default_btn: Button = _btn(host, "DefaultButton")
+	c["Use default and Reset in the bar, Confirm primary"] = default_btn != null and _btn(host, "ResetButton") != null and _btn(host, "PrimaryButton").text == "Confirm" and host.find_child("ActionBar", true, false).is_ancestor_of(default_btn)
+	all_ok = _report("UIR-3: Skills tab text", c) and all_ok
+	_drop_host(f)
+
+	# Gear: the pouch section stays.
+	f = _char_host(tree_parent, PartyModel.TAB_GEAR)
+	host = f["host"] as MainMenuView
+	c = {}
+	c["pouch section"] = host.find_child("PouchSection", true, false) != null and host.find_children("PouchSlot*", "HBoxContainer", true, false).size() == UnitState.POUCH_MAX
+	var pm3: PartyModel = host.router.model() as PartyModel
+	var gm: GearModel = pm3.gear_model()
+	var pouch: String = _pouch_item(_first())
+	if not pouch.is_empty():
+		gm.stash[pouch] = 1
+		var _e: Array[String] = gm.pouch_add(pouch)
+		host.render()
+		SettingsUiTestSuite.layout(host)
+		_press(host, _btn(host, "Tab_" + PartyModel.TAB_STATS))
+		c["gear draft: tab switch asks"] = host.router.is_asking() and pm3.tab == PartyModel.TAB_GEAR
+		host.answer(false)
+	else:
+		c["gear fixture consumable"] = false
+	c["board and Reset in the bar"] = _btn(host, "BoardButton") != null and _btn(host, "ResetButton") != null
+	c["no default tag on slots"] = host.find_children("*", "Label", true, false).all(func(n: Node) -> bool: return not (n as Label).text.contains("(default)"))
+	all_ok = _report("UIR-3: Gear tab keeps the pouch", c) and all_ok
+	_drop_host(f)
+	return all_ok
+
+static func _view(host: MainMenuView) -> CharacterView:
+	return host.find_children("*", "VBoxContainer", true, false).filter(func(n: Node) -> bool: return n is CharacterView)[0] as CharacterView
+
+# The texts of a grid's children in order ("" for non-labels).
+static func _grid_texts(host: Node, grid_name: String) -> Array[String]:
+	var out: Array[String] = []
+	var grid: Node = host.find_child(grid_name, true, false)
+	if grid != null:
+		for n: Node in grid.get_children():
+			out.append((n as Label).text if n is Label else "")
+	return out
+
+# 1280x720 at every text size: each tab keeps its close button, detail pane and action bar on screen, bar buttons apart.
+static func _test_character_fit(tree_parent: Node) -> bool:
+	var c: Dictionary = {}
+	_leave_unspent(_first(), 2)
+	var area := Rect2(Vector2.ZERO, VIEW)
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		SettingsFile.set_value("ui/text_scale", scale)
+		for tab: String in PartyModel.TABS:
+			var f: Dictionary = _char_host(tree_parent, tab)
+			var host: MainMenuView = f["host"] as MainMenuView
+			var tag: String = "text %.2f %s" % [scale, tab]
+			var bar: Control = host.find_child("ActionBar", true, false) as Control
+			var detail: Control = host.find_child("DetailPane", true, false) as Control
+			var close: Control = host.find_child("CloseButton", true, false) as Control
+			c[tag + ": bar, detail, X on screen"] = bar != null and detail != null and close != null and area.encloses(bar.get_global_rect()) and area.encloses(detail.get_global_rect()) and area.encloses(close.get_global_rect())
+			var rects: Array[Rect2] = []
+			if bar != null:
+				for n: Node in bar.get_children():
+					var b: Button = n as Button
+					if b != null and b.is_visible_in_tree():
+						rects.append(b.get_global_rect())
+			var apart: bool = true
+			for i: int in range(rects.size()):
+				for j: int in range(i + 1, rects.size()):
+					apart = apart and not rects[i].intersects(rects[j])
+			c[tag + ": bar buttons do not overlap"] = apart
+			_drop_host(f)
+	SettingsFile.set_value("ui/text_scale", 1.0)
+	return _report("UIR-3: every tab fits at four text sizes", c)
