@@ -6,6 +6,7 @@ members = [
     "crates/aegis_rules",
     "crates/aegis_battle",
     "crates/aegis_cli",
+    "crates/aegis_host",
     "crates/aegis_app",
 ]
 

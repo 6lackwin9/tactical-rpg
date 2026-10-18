@@ -17,7 +17,8 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
 | `crates/aegis_rules/` | Pure rules: stats, gear, unit building, damage, statuses, Godot RNG and sort |
 | `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
-| `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>` |
+| `crates/aegis_host/` | The command API (JSON request in, JSON reply out): state, skills, plan, preset, confirm, step, resolve, advance, autoplay, history |
+| `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout) |
 | `crates/aegis_app/` | Old egui demo, kept until the GUI rework (spec E5) |
 | `crates/aegis_core/` | Old shared types (used by `aegis_app` only) |
 
@@ -34,3 +35,17 @@ cargo run --release -p aegis_cli -- sim duel 1 20   # the balance-sim duel table
 ```
 
 Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
+
+## Driving a battle from the CLI (agents)
+
+`aegis serve` reads one JSON request per line and answers one JSON line each (full list in
+`crates/aegis_host/src/lib.rs`):
+
+```bash
+printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \
+  '{"cmd":"plan","unit":"Warrior","steps":[{"mode":"engage","skill":"strike","target":"Goblin Brawler"}]}' \
+  '{"cmd":"preset","unit":"Ranger","preset":"focus_weakest"}' '{"cmd":"resolve"}' | aegis serve
+```
+
+Every mutating request is recorded; `{"cmd":"history"}` returns them, and feeding them to a fresh `serve` replays the
+battle exactly.

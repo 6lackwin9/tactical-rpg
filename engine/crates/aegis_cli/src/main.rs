@@ -190,9 +190,32 @@ fn main() -> Result<()> {
     match (args.pos(0), args.pos(1)) {
         (Some("sim"), Some("duel")) => sim_duel(&args),
         (Some("battle"), Some(_)) => battle(&args),
+        (Some("serve"), _) => serve(&args),
         _ => {
-            println!("aegis sim duel [level] [seeds] [preset=balanced] [jitter=on|off] [json]\naegis battle <encounter id> [seed=N] [preset=balanced] [log]");
+            println!("aegis sim duel [level] [seeds] [preset=balanced] [jitter=on|off] [json]\naegis battle <encounter id> [seed=N] [preset=balanced] [log]
+aegis serve   (JSON lines on stdin / stdout; see crates/aegis_host)");
             Ok(())
         }
     }
+}
+
+/// `aegis serve`: the command API over stdin / stdout, one JSON request per line, one JSON reply per line.
+fn serve(args: &Args) -> Result<()> {
+    use std::io::{BufRead, Write};
+    let mut host = aegis_host::Host::new(load_catalog(args)?);
+    let stdin = std::io::stdin();
+    let mut out = std::io::stdout();
+    for line in stdin.lock().lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let reply = match serde_json::from_str::<serde_json::Value>(&line) {
+            Ok(req) => host.handle(&req),
+            Err(e) => json!({"ok": false, "error": format!("bad JSON: {e}")}),
+        };
+        writeln!(out, "{reply}")?;
+        out.flush()?;
+    }
+    Ok(())
 }

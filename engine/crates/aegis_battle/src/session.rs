@@ -334,3 +334,14 @@ impl Session {
         true
     }
 }
+
+impl Session {
+    /// plan_apply_preset: replaces one ally's steps with an AI draft for `preset`.
+    pub fn plan_apply_preset(&mut self, actor: UnitId, preset: &str) {
+        if self.phase != Phase::Planning || !self.w.units[actor].is_active() {
+            return;
+        }
+        let p = self.w.profile_of(actor).with_preset(preset);
+        ai::build_steps(&self.w, &mut self.plan, actor, &p);
+    }
+}
