@@ -45,6 +45,7 @@ static func create(p_world_id: String, p_party: PartyState) -> GameState:
 	var g := GameState.new()
 	g.world_id = p_world_id
 	g.party = p_party
+	g.party.apply_cap(WorldCatalog.party_max(p_world_id))   # RECRUIT1-L 1.3
 	return g
 
 # Checked cast from a Variant (e.g. a result dict's "state"): the GameState, or null for anything else.
@@ -109,6 +110,7 @@ static func from_dict(d: Dictionary) -> GameState:
 	g.world_id = str(d.get("world_id", ""))
 	g.location_id = str(d.get("location_id", ""))
 	g.party = PartyState.from_dict(DictUtil.dict_of(d.get("party", {})))
+	g.party.apply_cap(WorldCatalog.party_max(g.world_id))   # RECRUIT1-L 1.3: a longer active_ids keeps its first ids
 	var raw_flags: Dictionary = DictUtil.dict_of(JsonUtil.normalize(d.get("flags", {})))
 	for key: Variant in raw_flags:
 		g.flags[str(key)] = raw_flags[key]

@@ -614,6 +614,25 @@ static func is_gone(gs: GameState, character_ref: String) -> bool:
 			return true
 	return false
 
+# True when the character `character_ref` resolves and is already a party member (RECRUIT1-L: member id = the
+# character's unqualified id, or a member plays it through lore_ref).
+static func is_member(gs: GameState, character_ref: String) -> bool:
+	var c: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", character_ref) if not character_ref.is_empty() else {}
+	if c.is_empty():
+		return false
+	for m: UnitState in gs.party.members:
+		if m.id == str(c.get("id", "")) or m.lore_ref == str(c.get("_qid", "")):
+			return true
+	return false
+
+# True when choice `choice` recruits a character who is already a member (RECRUIT1-L rule 6: such a choice is hidden).
+static func recruits_member(gs: GameState, choice: Dictionary) -> bool:
+	for raw: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("effects", []))):
+		var fx: Dictionary = DictUtil.dict_of(raw)
+		if str(fx.get("effect", "")) == "recruit" and is_member(gs, str(fx.get("character", ""))):
+			return true
+	return false
+
 # The resolved character's qualified id ("" when the ref is empty or unknown).
 static func character_qid(gs: GameState, ref: String) -> String:
 	return str(WorldCatalog.resolve(gs.world_id, "characters", ref).get("_qid", "")) if not ref.is_empty() else ""

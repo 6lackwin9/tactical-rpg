@@ -2,7 +2,8 @@ class_name NewGame
 extends RefCounted
 
 # ==============================================================================
-# Tactical RPG - New game (S13): a fresh GameState from a world and base party units.
+# Tactical RPG - New game (S13): a fresh GameState from a world and base party units or world party characters
+# (RECRUIT1-L rule 3: a character entry becomes a hero by hero_from_character, at its base unit's level).
 # Members start at the base unit's authored level (XP = that level's threshold), empty spend
 # (= automatic), default gear. Unknown units or worlds are refused.
 # ==============================================================================
@@ -17,6 +18,15 @@ static func create(world_id: String, base_unit_ids: Array[String], p_seed: int =
 		errors.append("A new game needs at least one party unit.")
 	var party := PartyState.new()
 	for unit_id: String in base_unit_ids:
+		if not ContentCatalog.has("units", unit_id) and not WorldCatalog.resolve(world_id, "characters", unit_id).is_empty():
+			var hero: UnitState = hero_from_character(world_id, unit_id)
+			if hero == null:
+				errors.append("Character '%s' can't join the party." % unit_id)
+			elif party.member(hero.id) != null:
+				errors.append("Character '%s' is listed twice." % unit_id)
+			else:
+				party.add_member(hero)
+			continue
 		if not ContentCatalog.has("units", unit_id):
 			errors.append("Unknown unit '%s'." % unit_id)
 			continue
@@ -37,6 +47,21 @@ static func create(world_id: String, base_unit_ids: Array[String], p_seed: int =
 	if not errors.is_empty():
 		return {"state": null, "errors": errors}
 	return {"state": state, "errors": errors}
+
+# A party member from world character `character_ref` (RECRUIT1-L rule 1): id = the character's unqualified id,
+# base_unit = its base unit, lore_ref = its qualified id, passives = WorldFactory.character_passives (its own plus faction
+# grants), empty spend, default gear, XP = the threshold of the base unit's authored level. null when the character
+# does not resolve or WorldCatalog.party_character_errors refuses it.
+static func hero_from_character(world_id: String, character_ref: String) -> UnitState:
+	var c: Dictionary = WorldCatalog.resolve(world_id, "characters", character_ref)
+	if c.is_empty() or not WorldCatalog.party_character_errors(world_id, character_ref).is_empty():
+		return null
+	var base_unit: String = str(c.get("base_unit", ""))
+	var level: int = DictUtil.to_int(ContentCatalog.get_entry("units", base_unit).get("level", 1), 1)
+	var hero: UnitState = UnitState.at_level(base_unit, level, str(c.get("id", "")))
+	hero.lore_ref = str(c.get("_qid", ""))
+	hero.passives = WorldFactory.character_passives(c, world_id)
+	return hero
 
 # Problems that keep `world_id` from starting a new game (UI1-L): a world is PLAYABLE when its resolved `start_party`
 # and its resolved `start_location` (EXP1-L) are both non-empty. Empty = playable.

@@ -10,7 +10,7 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	var m: PartyModel = model as PartyModel
 	add_theme_constant_override("separation", 10)
 	add_child(MainMenuView.title("Party"))
-	add_child(MainMenuView.text("Active %d / %d   ·   Gold %d" % [m.active_count(), PartyState.PARTY_MAX, m.gold()], UiTheme.COL_MUTED, false))
+	add_child(MainMenuView.text("Active %d / %d   ·   Gold %d" % [m.active_count(), m.max_active(), m.gold()], UiTheme.COL_MUTED, false))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 24)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL

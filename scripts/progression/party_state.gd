@@ -4,6 +4,8 @@ extends RefCounted
 # ==============================================================================
 # Tactical RPG - Party State (S7): the roster, who is active in a fight, the shared stash.
 # The roster may be larger than PARTY_MAX; only PARTY_MAX members take the field and earn XP.
+# RECRUIT1-L 1.3: `max_active` (not saved; GameState.create / from_dict set it from WorldCatalog.party_max) is the
+# world's cap on active members, at most PARTY_MAX.
 # S11 (DLG1-L, save v4): party gold 0..GOLD_MAX from quests, chests, selling and dialogue gifts.
 # S10 (TRAV2-L, save v6): travel supplies 0..SUPPLIES_MAX; a party counter, not a stash item.
 # ==============================================================================
@@ -14,7 +16,8 @@ const SUPPLIES_MAX: int = 99
 const SUPPLIES_START: int = 10        # new-game fallback and the v5 -> v6 migration value
 
 var members: Array[UnitState] = []
-var active_ids: Array[String] = []     # subset of member ids; empty = the first PARTY_MAX members
+var active_ids: Array[String] = []     # subset of member ids; empty = the first max_active members
+var max_active: int = PARTY_MAX        # RECRUIT1-L: the world's party cap (never saved)
 var stash: Dictionary = {}             # item id -> count (>= 1)
 var gold: int = 0                      # a non-whole saved value loads as -1 so validate() refuses it
 var supplies: int = 0                  # same load rule as gold
@@ -36,11 +39,11 @@ func active_members() -> Array[UnitState]:
 	var out: Array[UnitState] = []
 	if active_ids.is_empty():
 		for m: UnitState in members:
-			if out.size() < PARTY_MAX:
+			if out.size() < max_active:
 				out.append(m)
 		return out
 	for m: UnitState in members:
-		if active_ids.has(m.id) and out.size() < PARTY_MAX:
+		if active_ids.has(m.id) and out.size() < max_active:
 			out.append(m)
 	return out
 
@@ -98,6 +101,13 @@ static func from_dict(d: Dictionary) -> PartyState:
 	p.supplies = DictUtil.to_int(raw_supplies) if raw_supplies is int else -1
 	return p
 
+# Sets the active cap (clamped to 1..PARTY_MAX) and keeps the first `cap` ids of a longer active_ids; the rest stay
+# in the roster as reserve (RECRUIT1-L 1.3, rule 7).
+func apply_cap(cap: int) -> void:
+	max_active = clampi(cap, 1, PARTY_MAX)
+	if active_ids.size() > max_active:
+		active_ids = active_ids.slice(0, max_active)
+
 func equals(other: PartyState) -> bool:
 	return other != null and JsonUtil.deep_equal(to_dict(), other.to_dict())
 
@@ -111,8 +121,8 @@ func validate() -> Array[String]:
 			errors.append("Duplicate member id '%s'." % m.id)
 		seen.append(m.id)
 		errors.append_array(m.validate())
-	if active_ids.size() > PARTY_MAX:
-		errors.append("At most %d active members (got %d)." % [PARTY_MAX, active_ids.size()])
+	if active_ids.size() > max_active:
+		errors.append("At most %d active members (got %d)." % [max_active, active_ids.size()])
 	var listed: Array[String] = []
 	for a: String in active_ids:
 		if not seen.has(a):

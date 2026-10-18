@@ -13,6 +13,8 @@ extends RefCounted
 # cap is an authoring limit). choose(index) pre-checks every effect first (all-or-nothing); a turn_in waits for
 # confirm_turn_in / cancel; open_shop waits for close_shop; fight closes the conversation and hands the fight back.
 # Nodes with `next` (and end nodes) move on through advance().
+# RECRUIT1-L: recruit adds a world party character to the roster (refused when already a member or the roster is
+# full); a choice recruiting a member is hidden.
 # REP1-L: add_flag adds to an int flag (a non-int flag refuses the choice; on a node it is skipped); view() carries the
 # character's faction and its reputation band, and choices gated on a rep bound get the "[Faction band] " prefix.
 # ==============================================================================
@@ -123,6 +125,8 @@ func _service_choices() -> Array[Dictionary]:
 func _visible() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for c: Dictionary in _choices_of(node_id):
+		if DialogueRules.recruits_member(gs, c):
+			continue   # RECRUIT1-L rule 6: hidden like a gone character's choice
 		var is_open: bool = DialogueRules.choice_open(gs, c)
 		if is_open or DictUtil.to_bool(c.get("show_locked", false)):
 			var v: Dictionary = c.duplicate(true)
@@ -282,6 +286,15 @@ func _precheck(effects: Array) -> Array[String]:
 			"fight":
 				if WorldCatalog.resolve(gs.world_id, "encounters", str(fx.get("encounter", ""))).is_empty():
 					out.append("Unknown encounter '%s'." % str(fx.get("encounter", "")))
+			"recruit":
+				var who: String = str(fx.get("character", ""))
+				var cap: int = WorldCatalog.party_max(gs.world_id)
+				if NewGame.hero_from_character(gs.world_id, who) == null:
+					out.append("'%s' can't join the party." % who)
+				elif DialogueRules.is_member(gs, who):
+					out.append("%s is already with you." % _name_of(who))
+				elif gs.party.members.size() >= cap:
+					out.append("The party is full (%d of %d)." % [gs.party.members.size(), cap])
 	for id: Variant in take_items:
 		if DictUtil.to_int(gs.party.stash.get(str(id), 0)) < DictUtil.to_int(take_items[id]):
 			out.append("Not enough %s." % str(ContentCatalog.get_entry("items", str(id)).get("name", id)))
@@ -292,7 +305,7 @@ func _precheck(effects: Array) -> Array[String]:
 func _name_of(qid: String) -> String:
 	return str(WorldCatalog.resolve(gs.world_id, "characters", qid).get("name", qid))
 
-# Applies effects in order (pre-checked): set_flag, add_flag, start_quest, give, take. open_shop / fight move, they change nothing.
+# Applies effects in order (pre-checked): set_flag, add_flag, start_quest, give, take, recruit. open_shop / fight move, they change nothing.
 func _apply(effects: Array) -> void:
 	for raw: Variant in effects:
 		var fx: Dictionary = DictUtil.dict_of(raw)
@@ -309,6 +322,21 @@ func _apply(effects: Array) -> void:
 					notes.append(str(n))   # e.g. the gold-cap note (decision "DLG1 open items" (1))
 			"take":
 				var _taken: Array[String] = RewardGrant.take(gs, DictUtil.dict_of(fx.get("items", {})), DictUtil.to_int(fx.get("gold", 0)))
+			"recruit":
+				_recruit(str(fx.get("character", "")))
+
+# RECRUIT1-L rule 5 (pre-checked): the hero joins with total_xp = max(its base level's threshold, the highest active
+# total_xp), is appended to an explicit active_ids, and the event note "%s joins the party." is added.
+func _recruit(who: String) -> void:
+	var hero: UnitState = NewGame.hero_from_character(gs.world_id, who)
+	if hero == null:
+		return
+	for m: UnitState in gs.party.active_members():
+		hero.total_xp = maxi(hero.total_xp, m.total_xp)
+	gs.party.add_member(hero)
+	if not gs.party.active_ids.is_empty():
+		gs.party.active_ids.append(hero.id)
+	notes.append("%s joins the party." % PartyBuilder.display_name(hero))
 
 # ------------------------------------------------------------------------------
 # Turn-in, shop, moving on, fights

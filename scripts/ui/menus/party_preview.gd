@@ -27,7 +27,7 @@ static func derived(state: UnitState) -> Dictionary:
 
 # The member's display name (base unit name, else its id).
 static func name_of(m: UnitState) -> String:
-	return str(ContentCatalog.get_entry("units", m.base_unit).get("name", m.id))
+	return PartyBuilder.display_name(m)   # RECRUIT1-L rule 2: a named hero shows its character name
 
 static func class_name_of(m: UnitState) -> String:
 	var cls: Dictionary = ContentCatalog.get_entry("classes", m.class_id())

@@ -85,7 +85,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## Progression and saves (M3)
 
-- `PartyState` / `UnitState` (scripts/progression/): level derives from `total_xp` (`XpCurve`, data/progression/xp_curve.json); `LevelUp.award_encounter` gives full XP to every active member; `PartyBuilder.build` turns a state into a Combatant (same `ContentFactory.unit` path as catalog units). `PARTY_MAX` = 4 active, roster unbounded.
+- `PartyState` / `UnitState` (scripts/progression/): level derives from `total_xp` (`XpCurve`, data/progression/xp_curve.json); `LevelUp.award_encounter` gives full XP to every active member; `PartyBuilder.build` turns a state into a Combatant (same `ContentFactory.unit` path as catalog units). `PARTY_MAX` = 4 active, roster unbounded. RECRUIT1: `PartyState.max_active` (not saved) = `WorldCatalog.party_max`, set by `GameState.create` / `from_dict` (a longer `active_ids` keeps its first ids); `NewGame.hero_from_character` (id = character id, `lore_ref` = qid, passives = `WorldFactory.character_passives`); `PartyBuilder.display_name` (character name, else the unit name) used by `Combatant.name` and `PartyPreview.name_of`.
 - `GameState` + `SaveGame` (scripts/game_state/): single slot file `user://saves/slot_<n>.json`, envelope `SaveGame.VERSION` = 1, migrations in `save_migrations.gd`; `NewGame.create` builds a starting state.
 
 ## AI skill use (AI1)
@@ -130,7 +130,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 
 ## Dialogue and shops (DLG1)
 
-- World kinds `dialogues` and `shops` (validated by `DialogueRules`, `ShopRules` in `scripts/dialogue/`); base service lines in `ServiceCatalog` (`data/dialogue/services.json`). Character `dialogue` and `gone_flags`; manifest `start_gold`, `service_lines`. Quest rewards: xp, items, passives, skills, gold (cap 5000, soft 200); chest gold 0..9999. Node effects are only `set_flag` and `give`; choice-only effect `recruit` {character} (at most one per choice; a party character, RECRUIT1); a turn-in effect comes first in its choice. Runtime: `DialogueRunner` (open, view, choose all-or-nothing, confirm_turn_in, close_shop, advance, after_fight); `ShopRules` prices are integers (buy ceil, sell floor) with stock counted in `GameState.shops`; party gold `PartyState.gold` (cap 9999999). Save version 4 (party gold, shops).
+- World kinds `dialogues` and `shops` (validated by `DialogueRules`, `ShopRules` in `scripts/dialogue/`); base service lines in `ServiceCatalog` (`data/dialogue/services.json`). Character `dialogue` and `gone_flags`; manifest `start_gold`, `service_lines`. Quest rewards: xp, items, passives, skills, gold (cap 5000, soft 200); chest gold 0..9999. Node effects are only `set_flag` and `give`; choice-only effect `recruit` {character} (at most one per choice; a party character; refused when already a member or the roster holds `party_max`; joins at max(its base level's XP, the highest active XP); a choice recruiting a member is hidden; RECRUIT1); a turn-in effect comes first in its choice. Runtime: `DialogueRunner` (open, view, choose all-or-nothing, confirm_turn_in, close_shop, advance, after_fight); `ShopRules` prices are integers (buy ceil, sell floor) with stock counted in `GameState.shops`; party gold `PartyState.gold` (cap 9999999). Save version 4 (party gold, shops).
 
 ## Menus and save slots (UI1)
 

@@ -23,7 +23,7 @@ static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionar
 	entry["spend"] = work.spend.duplicate()
 	if not auto_spend:
 		entry[ContentFactory.NO_AUTO_SPEND] = true   # an all-unspent state must not be auto-spent by the factory either
-	var c: Combatant = ContentFactory.unit(entry)
+	var c: Combatant = ContentFactory.unit(entry, display_name(work))   # RECRUIT1-L rule 2: a named hero keeps its name
 	c.lore_ref = work.lore_ref
 	ContentFactory.apply_passives(c, work.passives)
 	for sk: String in work.learned_skills:
@@ -49,6 +49,25 @@ static func build_report(state: UnitState, auto_spend: bool = true) -> Dictionar
 		if not err.is_empty():
 			warnings.append("Unit '%s': stored loadout ignored (%s)." % [work.id, err])
 	return {"combatant": c, "warnings": warnings, "errors": errors}
+
+# The world character a member plays (RECRUIT1-L): `lore_ref` is its qualified id; {} when empty or unresolved.
+static func character_of(state: UnitState) -> Dictionary:
+	if state == null or state.lore_ref.is_empty():
+		return {}
+	var parts: Array[String] = WorldCatalog.split_qid(state.lore_ref)
+	if parts.size() != 2 or not WorldCatalog.has_world(parts[0]):
+		return {}
+	return WorldCatalog.resolve(parts[0], "characters", state.lore_ref)
+
+# The name shown for a member (RECRUIT1-L rule 2): its character's name when `lore_ref` resolves, else the base
+# unit's name (else the member id). Party, results, level-up, loadout, gear and new-game screens use it.
+static func display_name(state: UnitState) -> String:
+	var character: Dictionary = character_of(state)
+	if not character.is_empty() and not str(character.get("name", "")).is_empty():
+		return str(character["name"])
+	if state == null:
+		return ""
+	return str(ContentCatalog.get_entry("units", state.base_unit).get("name", state.id))
 
 # The Combatant of `state`, or null when the state is invalid.
 static func build(state: UnitState, auto_spend: bool = true) -> Combatant:

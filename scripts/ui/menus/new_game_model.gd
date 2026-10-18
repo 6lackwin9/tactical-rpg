@@ -19,9 +19,16 @@ func worlds() -> Array[Dictionary]:
 		var m: Dictionary = WorldCatalog.manifest(w)
 		var party: Array[Dictionary] = []
 		for unit_id: String in WorldCatalog.start_party(w):
-			var e: Dictionary = ContentCatalog.get_entry("units", unit_id)
+			var base_id: String = unit_id
+			var shown: String = ""
+			if not ContentCatalog.has("units", unit_id):   # a world party character (RECRUIT1-L rule 2: its name)
+				var hero: UnitState = NewGame.hero_from_character(w, unit_id)
+				if hero != null:
+					base_id = hero.base_unit
+					shown = PartyBuilder.display_name(hero)
+			var e: Dictionary = ContentCatalog.get_entry("units", base_id)
 			var cls: Dictionary = ContentCatalog.get_entry("classes", str(e.get("class_id", "")))
-			party.append({"unit": unit_id, "name": str(e.get("name", unit_id)), "class": str(cls.get("name", e.get("class_id", ""))), "level": DictUtil.to_int(e.get("level", 1), 1)})
+			party.append({"unit": unit_id, "name": shown if not shown.is_empty() else str(e.get("name", unit_id)), "class": str(cls.get("name", e.get("class_id", ""))), "level": DictUtil.to_int(e.get("level", 1), 1)})
 		out.append({"id": w, "name": str(m.get("name", w)), "tagline": str(m.get("tagline", "")), "party": party})
 	return out
 

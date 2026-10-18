@@ -1191,6 +1191,7 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	if not (cap is int) or (DictUtil.to_int(cap) != -1 and (DictUtil.to_int(cap) < 1 or DictUtil.to_int(cap) > PartyState.PARTY_MAX)):
 		errors.append("Party max must be -1 (inherited) or 1..%d." % PartyState.PARTY_MAX)
 	var resolved: Array[String] = start_party(world_id)
+	# Skipped above PARTY_MAX: start_party_errors already reports "at most 4" for that list (one message per problem).
 	if resolved.size() <= PartyState.PARTY_MAX and resolved.size() > party_max(world_id):
 		errors.append("Start party has %d heroes; party max is %d." % [resolved.size(), party_max(world_id)])
 	var gold: Variant = m.get("start_gold", -1)

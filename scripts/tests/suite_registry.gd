@@ -66,6 +66,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(TravelTestSuite.run(tree_parent))
 	results.append(ReputationTestSuite.run(tree_parent))
 	results.append(MenusTestSuite.run(tree_parent))
+	results.append(RecruitTestSuite.run())
 	results.append(SettingsUiTestSuite.run(tree_parent))
 	results.append(ControlsHelpTestSuite.run(tree_parent))
 	results.append(AudioSettingsTestSuite.run(tree_parent))

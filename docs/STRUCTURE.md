@@ -16,6 +16,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | done |
 | `scripts/tests/status_expansion_effects_test_suite.gd` | slow tiles, expose/fortify armor rating, round-end order and logs, poison stacking, granted magnitudes and sources, Forge magnitude range (S12S-L commit 2) | S12 | done |
 | `scripts/tests/status_expansion_ai_test_suite.gd` | AI use of the new statuses and sim metrics regen_received / dot_dealt on a fixture fight (S12S-L commit 3) | S12, S4, S15 | done |
+| `scripts/tests/recruit_test_suite.gd` | runtime party cap, heroes from characters, names, recruit effect, old four-hero saves (RECRUIT1-L) | S7, S11, S13 | done |
 | `scripts/tests/weaken_test_suite.gd` | weaken status, zero-power attacks, riposte data models (D1-L) | S12 | done |
 | `scripts/tests/progression_test_suite.gd`, `save_test_suite.gd` | progression and save suites (M3) | S7, S13 | done |
 | `scripts/tests/reputation_test_suite.gd` | reputation: condition operators, rep values, add_flag, quest reputation, runtime, shop bands, panels, world warnings (REP1-L) | S11 | done |

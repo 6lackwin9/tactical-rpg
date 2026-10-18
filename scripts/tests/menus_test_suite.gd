@@ -164,6 +164,12 @@ static func _test_start_characters(units: Array[String]) -> bool:
 	var errors: Array[String] = []
 	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_hero", "name": "Mn Hero", "role": "party", "base_unit": u}))
 	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_tuned", "name": "Mn Tuned", "role": "party", "base_unit": u, "tuning": {"power": 1}}))
+	var weapon: String = ""
+	for row: Dictionary in ContentCatalog.entries("items"):
+		if str(row.get("item_type", "")) == "WEAPON" and weapon.is_empty():
+			weapon = str(row["id"])
+	errors.append_array(WorldCatalog.upsert(BARE, "items", {"id": "mn_blade", "name": "Mn Blade", "base_item": weapon}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_armed", "name": "Mn Armed", "role": "party", "base_unit": u, "named_items": ["mn_blade"]}))
 	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_npc", "name": "Mn Npc", "role": "npc", "base_unit": u}))
 	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": u, "name": "Mn Twin", "role": "party", "base_unit": u}))
 	checks["fixtures stored"] = errors.is_empty()
@@ -172,11 +178,13 @@ static func _test_start_characters(units: Array[String]) -> bool:
 	checks["character entry"] = _party_errs(["mn_hero"]).is_empty()
 	checks["mixed unit and character"] = _party_errs([units[1], "mn_hero"]).is_empty()
 	checks["both unit and character"] = _party_errs([u]) == ["'%s' is both a unit and a character." % u]
+	checks["named-item hero"] = _party_errs(["mn_armed"]) == ["Party hero 'mn_armed' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
 	checks["tuned hero"] = _party_errs(["mn_tuned"]) == ["Party hero 'mn_tuned' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
 	checks["npc role"] = _party_errs(["mn_npc"]) == WorldCatalog.party_character_errors(BARE, "mn_npc") and _party_errs(["mn_npc"]).size() == 1
 	checks["unknown id"] = _party_errs(["mn_nobody"]) == ["Start party unit 'mn_nobody' is not a known unit."]
-	for id: String in ["mn_hero", "mn_tuned", "mn_npc", u]:
+	for id: String in ["mn_hero", "mn_tuned", "mn_armed", "mn_npc", u]:
 		var _gone: String = WorldCatalog.remove(BARE, "characters", id)
+	var _gone_item: String = WorldCatalog.remove(BARE, "items", "mn_blade")
 	checks["bare clean again"] = WorldCatalog.manifest_errors(BARE).is_empty() and WorldCatalog.own_ids(BARE, "characters").is_empty()
 	return _report("Check 1c: start_party world characters (RECRUIT1-L 1.2)", checks)
 
