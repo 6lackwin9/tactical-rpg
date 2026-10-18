@@ -103,10 +103,10 @@ The user hits the 5-hour and weekly usage limits, so usage is spread out:
 
 Goal (user 2026-10-17): see where time goes, mainly idle time and dependence between steps; tokens are secondary. Each area thread notes timestamps as it works (`date -u +%H:%M` at each step) and puts two lines in the task's squash commit body:
 
-- `Timing: start=<HH:MM>Z landed=<HH:MM>Z work=<min> (build <min>, review <min>, rework <min>, conflicts <min>) wait=<min> (approval <min>, dependency <min>, ci <min>, merge <min>) gates=<count> mode=<dispatch mode> agents=<agents run> tokens=<subagent total, from the agents' reports>`
+- `Timing: start=<HH:MM>Z landed=<HH:MM>Z work=<min> (build <min>, review <min>, rework <min>, conflicts <min>) wait=<min> (approval <min>, dependency <min>, ci <min>, merge <min>) gates=<count> mode=<dispatch mode> agents=<agents run> type=<logic|ui|asset|sim|spec|docs|tool> tokens=<agent>:<k>,...` (one entry per agent kind, summed over its runs, from each Agent result's `subagent_tokens`, for example `tokens=logic:120k,asset:40k,review:20k`; user 2026-10-18: isolates which task types and agents drive token use)
 - `Blocked-by: <task id, "user approval HH:MM-HH:MM", "merge of <id>", or none>`
 
-Work is time the thread is building, reviewing, gating or fixing; wait is time the task is ready or blocked and nobody works on it, by cause. Estimates are marked `~`. The Merge & Release thread adds the release wait and compiles the lines into `docs/metrics/TASK_LOG.md` at each batch.
+Work is time the thread is building, reviewing, gating or fixing; wait is time the task is ready or blocked and nobody works on it, by cause. Estimates are marked `~`. The Platform & Workflow thread compares these lines with the user's project usage reports (thread totals minus agent tokens = the thread's own residual) in `/mnt/project-files/metrics/EFFICIENCY_<date>.md`. The Merge & Release thread adds the release wait and compiles the lines into `docs/metrics/TASK_LOG.md` at each batch.
 
 ## Branch cleanup
 
