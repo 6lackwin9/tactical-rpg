@@ -67,18 +67,37 @@ static func _test_standalone(tree_parent: Node, packed: PackedScene) -> bool:
 	pins = view.pin_positions()
 	var fx_at: Vector2 = Vector2(float(FX_POS[0]), float(FX_POS[1]))
 	var plain: Rect2 = view.layout_rect()
-	checks["no backdrop: the layout rect is the whole canvas"] = view.backdrop == null and plain == Rect2(Vector2.ZERO, view._canvas.size)
-	checks["map_pos pin in the canvas rect"] = pins.has(_q("fx")) and MapViewChecks._near(pins[_q("fx")], plain.position + fx_at * plain.size)
+	var free: Rect2 = RegionMapView.free_rect(view._canvas.size, view._top, view._side)
+	checks["no backdrop: the layout rect is the free area the panels leave"] = view.backdrop == null and plain == free and free.size.x < view._canvas.size.x
+	checks["map_pos pin in the layout rect"] = pins.has(_q("fx")) and MapViewChecks._near(pins[_q("fx")], plain.position + fx_at * plain.size)
 	var img: Image = Image.create(192, 108, false, Image.FORMAT_RGB8)
 	view.backdrop = ImageTexture.create_from_image(img)
 	var box: Rect2 = WorldMapView.letterbox(Vector2(192, 108), plain)
 	var lb: Dictionary = view.pin_positions()
 	checks["backdrop: letterboxed rect, map_pos pin inside it"] = view.layout_rect() == box and MapViewChecks._near(lb.get(_q("fx"), Vector2.INF), box.position + fx_at * box.size)
 	checks["backdrop: a pin without map_pos keeps its circle slot around the backdrop"] = MapViewChecks._near(lb.get(_q("m1"), Vector2.INF), WorldMapView.layout(TravelRules.nodes(R), TravelRules.known(view.gs), {}, box).get(_q("m1"), Vector2.ZERO))
+	var clear: bool = true
+	for k: Variant in lb:
+		clear = clear and free.has_point(lb[k])
+	checks["with a backdrop no pin sits under a panel"] = clear and not lb.is_empty()
 	view.backdrop = null
+	# MAPREAD1-L2: hovering a pin opens its card (name, trip cost from here); leaving closes it
+	var hover := InputEventMouseMotion.new()
+	hover.position = pins.get(_q("m1"), Vector2.ZERO)
+	view._on_canvas_input(hover)
+	var trip: Dictionary = TravelRules.trip(view.gs, view.gs.location_id, _q("m1"))
+	var lines: Array[String] = view.card_lines(_q("m1"))
+	var card_rect: Rect2 = Rect2(view._card.position, view._card.get_combined_minimum_size())
+	checks["hover card: name, trip time and supplies from the party's node"] = view.hover_node == _q("m1") and view._card.visible and lines.size() >= 3 and lines.has("Trip: time %d, supplies %d" % [DictUtil.to_int(trip["time"]), DictUtil.to_int(trip["supplies"])]) and trip["ok"] == true
+	checks["hover card stays inside the canvas"] = Rect2(Vector2.ZERO, view._canvas.size).encloses(card_rect)
+	checks["the party's own node says 'You are here'"] = view.card_lines(view.gs.location_id).has(WorldMapView.HERE_TEXT)
+	view._canvas.mouse_exited.emit()
+	checks["leaving the pin hides the card"] = view.hover_node.is_empty() and not view._card.visible
 	var t0: int = view.gs.time
+	var s0: int = view.gs.party.supplies
 	view.travel_to(_q("m1"))
 	checks["click = travel; the clock advances"] = view.gs.location_id == _q("m1") and view.gs.time == t0 + TravelRuntimeChecks.M01_TIME
+	checks["trip() matches the real travel: same time and supplies spent"] = view.gs.time - t0 == DictUtil.to_int(trip["time"]) and s0 - view.gs.party.supplies == DictUtil.to_int(trip["supplies"])
 	checks["debug game never writes the autosave"] = not SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
 	tree_parent.remove_child(view)
 	view.free()

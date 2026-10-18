@@ -181,11 +181,13 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_exits() and ok
 			ok = _test_chest() and ok
 			ok = _test_marker_view() and ok
+			ok = _test_map_read(tree_parent) and ok   # MAPREAD1-L2: icons, hint, legend, notes on the marker_view fixture
 			ok = _test_flag_markers() and ok
 			ok = _test_bridge() and ok
 			ok = _test_save_v3() and ok
 			ok = _test_debug_scene(tree_parent) and ok
 			ok = MapViewChecks.run_pure() and ok   # MAPVIEW1: camera and world layout (pure)
+			ok = MapReadChecks.run_pure() and ok   # MAPREAD1-L2: icon keys, placement rules (pure)
 		else:
 			ok = false
 		SaveGame.reset_base_dir()
@@ -973,6 +975,35 @@ static func _test_exits() -> bool:
 	checks["take_exit refuses a target not in exits"] = _refused_unchanged(town, func(g: GameState) -> Dictionary: return ExploreRunner.take_exit(g, "nowhere"))
 	return _report("Check 16: exits (to_anchor, connected world crossing, inherited location, world_map hand-over)", checks)
 
+# MAPREAD1-L2: the region view on the marker_view fixture (a marker of every kind; `mark` has a note and sets a flag).
+static func _test_map_read(tree_parent: Node) -> bool:
+	var packed: PackedScene = load(DEBUG_SCENE) as PackedScene
+	if packed == null or tree_parent == null:
+		return _report("Map read-out (headless without a tree: skipped)", {"scene loads": packed != null})
+	var markers: Array = [
+		{"id": "sage", "kind": "npc", "anchor": "a_npc", "character": "sage"},
+		{"id": "box", "kind": "chest", "anchor": "a_chest", "items": {str(_rx["item0"]): 1}},
+		{"id": "stone", "kind": "lore", "anchor": "a_lore", "lore": "stone"},
+		{"id": "to_town", "kind": "exit", "anchor": "a_exit", "to": "town"},
+		{"id": "gate", "kind": "exit", "anchor": "a_lock", "to": "town", "requires_flags": [{"key": "xr.key"}], "locked_text": "Gate barred."},
+		{"id": "ambush", "kind": "encounter", "anchor": "a_touch", "encounter": "enc_a"},
+		{"id": "patrol", "kind": "roamer", "encounter": "elite_a", "path": "p4"},
+		{"id": "mark", "kind": "point", "anchor": "a_point", "sets_flags": [{"key": "xr.marked"}], "label": "Signal", "note": "You look."},
+		{"id": "plain", "kind": "point", "anchor": "a_far"},
+	]
+	if not _set_field(markers):
+		return _report("Map read-out", {"fixture": false})
+	var view: RegionMapView = packed.instantiate() as RegionMapView
+	tree_parent.add_child(view)
+	view.play_state(_in_field(2, 4))
+	var ok: bool = MapReadChecks.run_region(view)
+	view.play_state(_in_field(2, 4))
+	ok = MapReadChecks.run_notes(view, "mark", "plain", "box") and ok
+	ok = _set_field([]) and ok
+	tree_parent.remove_child(view)
+	view.free()
+	return ok
+
 # ------------------------------------------------------------------------------
 # Checks 17 and 18: chests, flag markers
 # ------------------------------------------------------------------------------
@@ -1038,7 +1069,9 @@ static func _test_marker_view() -> bool:
 	var goto_errs: Array[String] = WorldCatalog.upsert(RUN, "quests", {"id": "q_goto", "name": "Goto", "template": "t_reach", "steps": [{"text": "Go", "location": "keep"}]})
 	var goto_started: Array[String] = QuestRunner.start(gs, "q_goto")
 	checks["quest flag while the step targets the node"] = goto_errs.is_empty() and goto_started.is_empty() and TravelRules.quest_nodes(gs).has(_q("keep")) and _node_of(TravelRules.view(gs), _q("keep")).get("quest", false) == true
+	checks["quest_steps_at: the step text at its node, not at another"] = TravelRules.quest_steps_at(gs, _q("keep")).size() == 1 and TravelRules.quest_steps_at(gs, _q("keep")).has("Go") and not TravelRules.quest_steps_at(gs, _q("field")).has("Go")
 	var _abandoned: Array[String] = QuestRunner.abandon(gs, "q_goto")
+	checks["quest_steps_at is empty once the quest is gone"] = TravelRules.quest_steps_at(gs, _q("keep")).is_empty()
 	checks["quest flag clears when the quest is gone"] = _node_of(TravelRules.view(gs), _q("keep")).get("quest", true) == false
 	checks["keep restored"] = WorldCatalog.upsert(RUN, "locations", {"id": "keep", "name": "Keep", "map": "m_danger", "exits": [{"to": "field"}], "zone_bindings": _default_bindings()}).is_empty()
 	checks["cleanup"] = WorldCatalog.remove(RUN, "quests", "q_offer").is_empty() and WorldCatalog.remove(RUN, "quests", "q_goto").is_empty() and WorldCatalog.remove(RUN, "regions", "reg_x").is_empty()

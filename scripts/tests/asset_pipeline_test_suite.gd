@@ -109,7 +109,7 @@ static func _test_key_lists() -> bool:
 	for key: String in ItemArt.UNIQUE_ICONS.keys():
 		items_ok = items_ok and AssetRegistry.has_key("item", key)
 	c["unique icons are item keys"] = items_ok and AssetRegistry.has_key("item", "weapon")
-	c["no templates for sound and ui"] = AssetRegistry.template_keys("sfx").is_empty() and AssetRegistry.template_keys("music").is_empty() and AssetRegistry.template_keys("ui").is_empty()
+	c["no templates for sound; ui templates are the map pins and badges (MapArt)"] = AssetRegistry.template_keys("sfx").is_empty() and AssetRegistry.template_keys("music").is_empty() and AssetRegistry.template_keys("ui") == MapArt.UI_KEYS
 	c["keys sorted"] = AssetRegistry.keys("unit") == _sorted(AssetRegistry.keys("unit"))
 	c["art options == keys(unit)"] = ContentSchema.options_of({"options_from": "art"}) == AssetRegistry.keys("unit")
 	var inherit: Array[String] = [""]

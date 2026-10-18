@@ -76,9 +76,13 @@ func add_supplies(n: int) -> int:
 	supplies = clampi(supplies + maxi(n, 0), 0, SUPPLIES_MAX)
 	return maxi(supplies - before, 0)
 
+# What paying `n` supplies costs a party carrying `have` (never more than it carries).
+static func supplies_cost(have: int, n: int) -> int:
+	return mini(maxi(n, 0), maxi(have, 0))
+
 # Spends up to `n` supplies (never below 0); returns the amount actually spent.
 func spend_supplies(n: int) -> int:
-	var spent: int = mini(maxi(n, 0), maxi(supplies, 0))
+	var spent: int = supplies_cost(supplies, n)
 	supplies -= spent
 	return spent
 

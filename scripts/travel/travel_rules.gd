@@ -340,6 +340,24 @@ static func route_in(world_id: String, route_qid: String) -> Dictionary:
 # of its encounter (the encounter's own `location`).
 static func quest_nodes(gs: GameState) -> Array[String]:
 	var out: Array[String] = []
+	for row: Dictionary in _quest_targets(gs):
+		var node: String = str(row["node"])
+		if not out.has(node):
+			out.append(node)
+	return out
+
+# MAPREAD1-L2: the texts of the active quest steps that point at location `node_qid` (the world map hover card), in quest order.
+static func quest_steps_at(gs: GameState, node_qid: String) -> Array[String]:
+	var out: Array[String] = []
+	for row: Dictionary in _quest_targets(gs):
+		var text: String = str(row["text"])
+		if str(row["node"]) == node_qid and not text.is_empty() and not out.has(text):
+			out.append(text)
+	return out
+
+# [{node, text}] for each active quest's current step and each location it points at.
+static func _quest_targets(gs: GameState) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
 	for qid: String in QuestRunner.quests_with(gs, "active"):
 		var obj: Dictionary = QuestRunner.current_objective(gs, qid)
 		if obj.is_empty():
@@ -359,9 +377,26 @@ static func quest_nodes(gs: GameState) -> Array[String]:
 			if ref.is_empty():
 				continue
 			var hit: String = str(ExploreRunner.resolve_location(gs, ref).get("_qid", ""))
-			if not hit.is_empty() and not out.has(hit):
-				out.append(hit)
+			if not hit.is_empty():
+				out.append({"node": hit, "text": str(obj.get("text", ""))})
 	return out
+
+# MAPREAD1-L2: the trip from `from_qid` to `to_qid` over the best known path: {ok, time (sum of the route times), supplies
+# (what travel would spend now, leg by leg through PartyState.supplies_cost)}; ok false when there is no way.
+static func trip(gs: GameState, from_qid: String, to_qid: String) -> Dictionary:
+	var routes: Array[String] = path(gs, from_qid, to_qid)
+	if routes.is_empty():
+		return {"ok": false, "time": 0, "supplies": 0}
+	var time: int = 0
+	var spent: int = 0
+	var have: int = gs.party.supplies
+	for rq: String in routes:   # leg by leg, like TravelRunner.travel (PartyState.supplies_cost is the shared rule)
+		var leg: int = DictUtil.to_int(route_in(gs.world_id, rq).get("time", 0))
+		var paid: int = PartyState.supplies_cost(have, leg)
+		have -= paid
+		spent += paid
+		time += leg
+	return {"ok": true, "time": time, "supplies": spent}
 
 # What the world map draws: {current, supplies (TRAV2-L), nodes: [{qid, name, visited, kind, region, quest, map_pos}], routes: [{qid, from, to, two_way, open, time}]}
 # for known nodes only; a closed route is listed only when both its endpoints are known, an open one when both are.

@@ -30,7 +30,7 @@ const DEFAULT_SIZES: Dictionary = {
 }
 const TOKEN_SIZE: Vector2i = Vector2i(128, 128)
 const TOKEN_INNER: Rect2i = Rect2i(12, 12, 104, 104)
-const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_poi"]
+const TILE_OVERLAY_KEYS: Array[String] = ["overlay_exit", "overlay_poi", "overlay_npc", "overlay_chest", "overlay_chest_open", "overlay_lore", "overlay_exit_locked", "overlay_encounter", "overlay_roamer"]   # the last seven: MapArt (MAPREAD1-L2)
 
 # Ids that already logged their "failed to load" warning this session, and how many warnings were logged.
 static var _warned: Dictionary = {}
@@ -89,7 +89,7 @@ static func pattern_text(ns: String, key: String, variant: String) -> String:
 # Keys
 # ------------------------------------------------------------------------------
 
-# Keys with a generated template (empty for sfx, music, ui). Fallback keys are drawn even when not listed.
+# Keys with a generated template (empty for sfx, music; ui has the MapArt pins and badges). Fallback keys are drawn even when not listed.
 static func template_keys(ns: String) -> Array[String]:
 	var out: Array[String] = []
 	match ns:
@@ -105,6 +105,8 @@ static func template_keys(ns: String) -> Array[String]:
 			out = skill_family_ids()
 		"status":
 			out = StatusRegistry.ids()
+		"ui":
+			out.assign(MapArt.UI_KEYS)   # MAPREAD1-L2: world map pins and npc badges (icon variant)
 	return out
 
 # Every skill family (head) id of the content catalog, in file order. Cached per catalog root and row count; while the
@@ -301,6 +303,9 @@ static func _template_texture(ns: String, key: String, variant: String, team: in
 			return SkillArt.template(key)
 		"status":
 			return StatusArt.template(key)
+		"ui":
+			if variant == "icon" and MapArt.has_ui(key):
+				return SvgRaster.texture("ui|%s" % key, MapArt.ui_svg(key), TEMPLATE_SCALE)
 	return _blank()
 
 static func _blank() -> Texture2D:
@@ -400,6 +405,8 @@ static func template_svg(ns: String, key: String, variant: String, team: int = -
 			return SkillArt.icon_svg(k)
 		"status":
 			return StatusArt.icon_svg(k)
+		"ui":
+			return MapArt.ui_svg(k) if variant == "icon" else ""
 	return ""
 
 static func _team_of(team: int) -> UnitArt.Team:

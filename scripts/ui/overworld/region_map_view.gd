@@ -18,6 +18,11 @@ extends Control
 # the map scrolls: a camera keeps the party centred in the free part of the view, clamped at the map edges, and a map
 # smaller than the view is centred (camera_offset, pure). TILE px per tile times `zoom`; on a high-DPI screen the
 # project's canvas_items stretch (DisplaySettings sizes the window in physical pixels) already scales the whole view.
+# MAPREAD1-L2: every present / locked / spent marker draws its icon (MapArt overlay keys through AssetRegistry; an npc
+# with an `art` key shows its unit token; spent = 40% opacity, a roamer pulses every second) and npc / exit names are
+# always drawn above their tile; hovering a marker tile or facing one shows `label . verb` in the hint line; quest and
+# ready badges sit on the npc icon; the side column lists the location's markers ("Here" legend: icon, label, state; hovering
+# a row pulses its tile); walking onto a point logs its note (POINT_LOOK_NOTE without one, SPENT_NOTE once used up).
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) only for the main menu's game (CurrentGame.state()); the standalone debug game writes nothing
 # (refused while a fight is pending). A world picker starts a new game. busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
 # A world_map exit (marker or menu entry, TRAV1-L commit 3) opens the WorldMapView over the map; it hands back on
@@ -28,7 +33,7 @@ signal fight_settled(res: Dictionary)   # UI2-L: the main menu host shows battle
 
 const TILE: int = 32   # MAPVIEW1: 1x pixel art, drawn with the nearest filter
 const SIDE_WIDTH: float = 280.0
-const GLYPH_SIZE: int = 20
+const NO_TILE: Vector2i = Vector2i(-1, -1)
 const COL_FLOAT_BG: Color = Color(0.04, 0.05, 0.08, 0.72)   # the floating panels over the map
 const COL_MAP_BG: Color = Color(0.07, 0.08, 0.10)   # around a map smaller than the view
 # Region tile art (ui namespace, variant "icon", 32x32; MAPVIEW1 contract with Assets): template char -> key base;
@@ -40,7 +45,20 @@ const DEBUG_SEED: int = 7
 const COL_TILES: Dictionary = {".": Color(0.22, 0.22, 0.24), "#": Color(0.45, 0.38, 0.30), "~": Color(0.18, 0.32, 0.55)}
 const COL_DANGER: Color = Color(0.85, 0.20, 0.15, 0.28)
 const COL_SAFE: Color = Color(0.20, 0.75, 0.30, 0.18)
-const MARKER_GLYPHS: Dictionary = {"exit": "⇨", "encounter": "!", "roamer": "R", "npc": "N", "chest": "C", "lore": "L", "point": "•"}
+const SPENT_ALPHA: float = 0.4   # a used-up marker keeps its icon at 40% opacity
+const PULSE_PERIOD: float = 1.0   # seconds: the roamer icon and a legend-hovered tile
+const BADGE_KEYS: Dictionary = {"quest": "badge_quest", "ready": "badge_ready"}   # ui icon keys (gold "!" / "?")
+const ALWAYS_NAMED: Array[String] = ["npc", "exit"]   # kinds whose label is drawn above the tile at all times
+const LEGEND_ORDER: Array[String] = ["npc", "exit", "chest", "lore", "point", "encounter", "roamer"]
+const LEGEND_MAX: int = 12
+const LEGEND_TITLE: String = "Here"
+const STATE_WORDS: Dictionary = {"locked": "locked", "spent": "used up"}
+const BADGE_WORDS: Dictionary = {"quest": "has a quest", "ready": "quest done"}
+const POINT_LOOK_NOTE: String = "You look around."
+const SPENT_NOTE: String = "Nothing more here."
+const COL_LABEL: Color = Color(0.96, 0.97, 1.0)
+const COL_LABEL_EDGE: Color = Color(0.02, 0.03, 0.06, 0.95)
+const COL_PULSE: Color = Color(1.0, 0.92, 0.45)
 const HINT: String = "Arrows: move   E: interact   Click: interact with a marker next to you"
 const NOTHING_NOTE: String = "Nothing to interact with there."
 const FAR_NOTE: String = "Walk next to it first (arrow keys), then press E or click it."
@@ -72,6 +90,11 @@ var _root: Control = null   # the canvas and the floating panels (hidden while t
 var _top: PanelContainer = null
 var _side: PanelContainer = null
 var _tile_cache: Dictionary = {}   # region tile key -> Texture2D or null (no file)
+var hover_tile: Vector2i = NO_TILE   # the map tile under the pointer
+var _legend_tile: Vector2i = NO_TILE   # the tile of the legend row under the pointer (pulses)
+var _legend_box: VBoxContainer = null
+var _clock: float = 0.0
+var _animated: bool = false   # a roamer is drawn or a legend row is hovered: redraw every frame
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -82,6 +105,7 @@ func _ready() -> void:
 	_canvas = map_canvas(_root)
 	_canvas.draw.connect(_draw_map)
 	_canvas.gui_input.connect(_on_canvas_input)
+	_canvas.mouse_exited.connect(_on_canvas_exit)
 	var top_box := VBoxContainer.new()
 	_top = float_panel(_root, top_box, false)
 	var bar := HBoxContainer.new()
@@ -99,6 +123,8 @@ func _ready() -> void:
 	_side = float_panel(_root, side, true)
 	_menu_box = VBoxContainer.new()
 	side.add_child(_menu_box)
+	_legend_box = VBoxContainer.new()
+	side.add_child(_legend_box)
 	_fight_panel = PanelContainer.new()
 	var fight_box := VBoxContainer.new()
 	_fight_panel.add_child(fight_box)
@@ -231,6 +257,180 @@ func tile_at_point(p: Vector2) -> Vector2i:
 func tile_centre(tile: Vector2i) -> Vector2:
 	return map_origin() + (Vector2(tile) + Vector2(0.5, 0.5)) * tile_px()
 
+# ------------------------------------------------------------------------------
+# Marker read-out (MAPREAD1-L2): icons, names, hint line, legend
+# ------------------------------------------------------------------------------
+
+# The tile asset key of a marker view (ExploreRunner.marker_view): a used-up chest shows the open one, a locked exit the padlock.
+static func icon_key(v: Dictionary) -> String:
+	if str(v.get("kind", "")) == "chest" and str(v.get("state", "")) == "spent":
+		return "overlay_chest_open"
+	if str(v.get("kind", "")) == "exit" and str(v.get("state", "")) == "locked":
+		return "overlay_exit_locked"
+	return str(v.get("icon", "overlay_poi"))
+
+# Opacity of a marker icon: SPENT_ALPHA once used up; a roamer pulses with `clock` seconds.
+static func icon_alpha(v: Dictionary, clock: float) -> float:
+	if str(v.get("state", "")) == "spent":
+		return SPENT_ALPHA
+	return pulse_alpha(clock) if str(v.get("kind", "")) == "roamer" else 1.0
+
+# 0.55..1.0, one full beat per PULSE_PERIOD.
+static func pulse_alpha(clock: float) -> float:
+	return 0.775 + 0.225 * cos(TAU * clock / PULSE_PERIOD)
+
+# "label . verb" (the hint line while a marker is hovered or faced).
+static func hint_line(v: Dictionary) -> String:
+	return "%s · %s" % [str(v.get("label", "")), str(v.get("verb", ""))]
+
+# Where the baseline-left corner of a name of `text_size` goes so it stands centred above a tile at `tile_pos` (`tile_px`
+# wide) and stays inside `bounds`; below the tile when there is no room above.
+static func label_origin(tile_pos: Vector2, tile_size: float, text_size: Vector2, ascent: float, bounds: Rect2) -> Vector2:
+	var x: float = tile_pos.x + (tile_size - text_size.x) / 2.0
+	x = maxf(minf(x, bounds.end.x - text_size.x - 2.0), bounds.position.x + 2.0)
+	var y: float = tile_pos.y - 3.0
+	if y - ascent < bounds.position.y:
+		y = tile_pos.y + tile_size + ascent + 1.0
+	return Vector2(x, y)
+
+# Legend sort key: kind order, then label.
+static func legend_less(a: Dictionary, b: Dictionary) -> bool:
+	var ra: int = LEGEND_ORDER.find(str(a["kind"]))
+	var rb: int = LEGEND_ORDER.find(str(b["kind"]))
+	if ra != rb:
+		return ra < rb
+	return str(a["label"]) < str(b["label"])
+
+# "Mara Voss: has a quest" / "Chest: used up" / "To Keep" (the legend row text).
+static func legend_text(v: Dictionary) -> String:
+	var extras: Array[String] = []
+	if BADGE_WORDS.has(str(v.get("badge", ""))):
+		extras.append(str(BADGE_WORDS[str(v["badge"])]))
+	if STATE_WORDS.has(str(v.get("state", ""))):
+		extras.append(str(STATE_WORDS[str(v["state"])]))
+	return str(v.get("label", "")) if extras.is_empty() else "%s (%s)" % [str(v["label"]), ", ".join(PackedStringArray(extras))]
+
+# Font size of names and legend rows: follows the theme's text size (the Text size setting).
+func label_font_size() -> int:
+	return name_font_size(get_theme_default_font_size())
+
+# Map name size for a theme text size (also the world map).
+static func name_font_size(theme_size: int) -> int:
+	return clampi(roundi(theme_size * 0.75), 10, 30)
+
+# Every visible (present, locked or spent) marker of the current location: [{id, pos (tile), view (marker_view)}].
+func visible_markers() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if gs == null:
+		return out
+	var loc: Dictionary = ExploreRunner.location(gs)
+	var t: Dictionary = ExploreRunner.template_of(loc)
+	if t.is_empty():
+		return out
+	var loc_steps: int = DictUtil.to_int(gs.explore.get("loc_steps", 0))
+	for m: Dictionary in ExploreRunner.markers_of(loc):
+		var v: Dictionary = ExploreRunner.marker_view(gs, loc, m)
+		if str(v["state"]) == "absent":
+			continue
+		out.append({"id": str(m.get("id", "")), "pos": ExploreRunner.marker_pos(t, m, loc_steps), "view": v, "marker": m})
+	return out
+
+# The visible marker standing on `tile` ({} = none; the first one when several share it).
+func marker_at(tile: Vector2i) -> Dictionary:
+	for row: Dictionary in visible_markers():
+		if row["pos"] == tile:
+			return row
+	return {}
+
+# Legend rows (npcs first, then exits, chests, lore, points, fights): [{kind, label, state, badge, icon, pos, text}].
+func legend_rows() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for row: Dictionary in visible_markers():
+		var v: Dictionary = DictUtil.dict_of(row["view"])
+		rows.append({"kind": v["kind"], "label": v["label"], "state": v["state"], "badge": v["badge"], "icon": icon_key(v), "pos": row["pos"], "text": legend_text(v), "marker": row["marker"]})
+	rows.sort_custom(legend_less)
+	return rows
+
+# The hint line under the top bar: the hovered marker's `label . verb`, else the faced neighbour's, else HINT.
+func hint_text() -> String:
+	var row: Dictionary = marker_at(hover_tile) if hover_tile != NO_TILE else {}
+	if row.is_empty() and gs != null:
+		row = marker_at(gs.position + facing)
+	return hint_line(DictUtil.dict_of(row["view"])) if not row.is_empty() else HINT
+
+# The texture drawn for a marker row: an npc with a known `art` key shows its unit token, else the kind icon.
+func marker_texture(row: Dictionary) -> Texture2D:
+	var v: Dictionary = DictUtil.dict_of(row["view"])
+	if str(v["kind"]) == "npc" and gs != null:
+		var who: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", str(DictUtil.dict_of(row["marker"]).get("character", "")))
+		var art: String = str(who.get("art", ""))
+		if not art.is_empty() and AssetRegistry.has_key("unit", art):
+			return UnitArt.token(art, UnitArt.Team.NEUTRAL)
+	return AssetRegistry.texture("tile", icon_key(v), "v0")
+
+func _on_canvas_exit() -> void:
+	_set_hover(NO_TILE)
+
+func _set_hover(tile: Vector2i) -> void:
+	if tile == hover_tile:
+		return
+	hover_tile = tile
+	if hint != null:
+		hint.text = hint_text()
+
+func _on_legend_enter(tile: Vector2i) -> void:
+	_legend_tile = tile
+	_animated = true
+	_canvas.queue_redraw()
+
+func _on_legend_exit() -> void:
+	_legend_tile = NO_TILE
+	_canvas.queue_redraw()
+
+# Rebuilds the "Here" legend (hidden while a conversation, shop or fight is open).
+func _rebuild_legend() -> void:
+	_legend_tile = NO_TILE
+	for c: Node in _legend_box.get_children():
+		_legend_box.remove_child(c)
+		c.queue_free()
+	var rows: Array[Dictionary] = []
+	if not _input_blocked():
+		rows.assign(legend_rows())
+	_legend_box.visible = not rows.is_empty()
+	if rows.is_empty():
+		return
+	var fs: int = label_font_size()
+	var title: Label = UiTheme.label(LEGEND_TITLE, fs, UiTheme.COL_HEADER)
+	_legend_box.add_child(title)
+	for i: int in range(mini(rows.size(), LEGEND_MAX)):
+		var r: Dictionary = rows[i]
+		var line := HBoxContainer.new()
+		line.mouse_filter = Control.MOUSE_FILTER_STOP
+		var icon := TextureRect.new()
+		icon.texture = AssetRegistry.texture("tile", str(r["icon"]), "v0")
+		icon.custom_minimum_size = Vector2(fs + 8, fs + 8)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.modulate.a = SPENT_ALPHA if str(r["state"]) == "spent" else 1.0
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_child(icon)
+		var text: Label = UiTheme.label(str(r["text"]), fs, UiTheme.COL_TEXT if str(r["state"]) != "spent" else UiTheme.COL_MUTED)
+		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text.custom_minimum_size = Vector2(120, 0)
+		text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_child(text)
+		line.mouse_entered.connect(_on_legend_enter.bind(r["pos"]))
+		line.mouse_exited.connect(_on_legend_exit)
+		_legend_box.add_child(line)
+	if rows.size() > LEGEND_MAX:
+		_legend_box.add_child(UiTheme.label("+%d more" % (rows.size() - LEGEND_MAX), fs, UiTheme.COL_MUTED))
+
+func _process(delta: float) -> void:
+	_clock += delta
+	if _animated and _canvas != null and _canvas.visible:
+		_canvas.queue_redraw()
+
 func _on_new_game() -> void:
 	if _world_pick != null and _world_pick.item_count > 0:
 		start_game(_world_pick.get_item_text(_world_pick.selected))
@@ -298,7 +498,20 @@ func do_step(dir: Vector2i) -> void:
 	if _input_blocked():
 		return
 	facing = dir
+	var target: Vector2i = gs.position + dir
+	var from_loc: String = gs.location_id
+	var onto: Dictionary = marker_at(target)
 	_handle(ExploreRunner.step(gs, dir))
+	if not onto.is_empty() and str(DictUtil.dict_of(onto["view"])["kind"]) == "point" and gs.location_id == from_loc and gs.position == target:
+		_note(point_note(DictUtil.dict_of(onto["view"]), DictUtil.dict_of(onto["marker"])))
+		_refresh()
+
+# What walking onto a point logs: its `note` (POINT_LOOK_NOTE without one), SPENT_NOTE once it is used up.
+static func point_note(v: Dictionary, marker: Dictionary) -> String:
+	if str(v.get("state", "")) == "spent":
+		return SPENT_NOTE
+	var note: String = str(marker.get("note", "")).strip_edges()
+	return note if not note.is_empty() else POINT_LOOK_NOTE
 
 func do_interact() -> void:
 	if _input_blocked():
@@ -326,6 +539,10 @@ func do_interact() -> void:
 
 # A left click on the map: the tile under the pointer (click_tile).
 func _on_canvas_input(event: InputEvent) -> void:
+	var motion: InputEventMouseMotion = event as InputEventMouseMotion
+	if motion != null:
+		_set_hover(tile_at_point(motion.position))
+		return
 	var mb: InputEventMouseButton = event as InputEventMouseButton
 	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
@@ -514,6 +731,8 @@ func _event(e: Dictionary) -> void:
 			if not bump.is_empty() and (log_lines.is_empty() or log_lines[-1] != bump):
 				_note(bump)
 		"flags_set":
+			if _is_point(str(e.get("marker", ""))):
+				return   # MAPREAD1-L2: a point logs its note instead of the raw flag list
 			_note("Flags set: %s" % str(e["flags"]))
 		"exit":
 			if str(e["to"]) == MapRules.WORLD_MAP:
@@ -525,6 +744,15 @@ func _event(e: Dictionary) -> void:
 			_sync_busy()
 			_note("Fight! %s (%s%s)" % [str(e["encounter"]), str(e["source"]), ", elite" if DictUtil.to_bool(e["elite"]) else ""])
 			launch_battle.call_deferred()
+
+# True when `marker_id` is a point marker of the current location.
+func _is_point(marker_id: String) -> bool:
+	if gs == null or marker_id.is_empty():
+		return false
+	for m: Dictionary in ExploreRunner.markers_of(ExploreRunner.location(gs)):
+		if str(m.get("id", "")) == marker_id:
+			return str(m.get("kind", "")) == "point"
+	return false
 
 func _autosave() -> void:
 	if gs == null or not pending_fight.is_empty():
@@ -577,6 +805,9 @@ func _refresh() -> void:
 		_fight_label.text += "\nBattle refused: %s" % "; ".join(PackedStringArray(launch_errors))
 	_dev_box.visible = dev_outcomes or not launch_errors.is_empty()
 	_canvas.visible = battle == null
+	_rebuild_legend()
+	if hint != null:
+		hint.text = hint_text()
 	if _root != null:
 		_root.visible = world_map == null
 	_log.text = "\n".join(PackedStringArray(log_lines))
@@ -607,20 +838,42 @@ func _draw_map() -> void:
 			var zone: String = MapRules.zone_at(t, x, y)
 			if not zone.is_empty():
 				_canvas.draw_rect(r, COL_DANGER if MapRules.zone_kind(t, zone) == "danger" else COL_SAFE)
-	var font: Font = get_theme_default_font()
-	var loc_steps: int = DictUtil.to_int(gs.explore["loc_steps"])
-	for m: Dictionary in ExploreRunner.markers_of(loc):
-		var state: String = ExploreRunner.presence(gs, str(loc["_qid"]), m)
-		if state == "absent":
-			continue
-		var p: Vector2i = ExploreRunner.marker_pos(t, m, loc_steps)
-		var glyph: String = str(MARKER_GLYPHS.get(str(m["kind"]), "?"))
-		var col: Color = Color.ORANGE if state == "locked" else Color.WHITE
-		if str(m["kind"]) == "point":   # points of interest use the ring icon (the old combat centre marker)
-			_canvas.draw_texture_rect(TileArt.overlay("poi"), Rect2(Vector2(p.x * TILE, p.y * TILE), Vector2(TILE, TILE)), false, col)
-			continue
-		_canvas.draw_string(font, Vector2(p.x * TILE, p.y * TILE + TILE * 0.72), glyph, HORIZONTAL_ALIGNMENT_CENTER, TILE, GLYPH_SIZE, col)
+	var rows: Array[Dictionary] = visible_markers()
+	var animated: bool = _legend_tile != NO_TILE
+	for row: Dictionary in rows:
+		var v: Dictionary = DictUtil.dict_of(row["view"])
+		var p: Vector2i = row["pos"]
+		var at := Rect2(Vector2(p.x * TILE, p.y * TILE), Vector2(TILE, TILE))
+		var tex: Texture2D = marker_texture(row)
+		_canvas.draw_texture_rect(tex, at, false, Color(1, 1, 1, icon_alpha(v, _clock)))
+		animated = animated or str(v["kind"]) == "roamer"
+		var badge_key: String = str(BADGE_KEYS.get(str(v["badge"]), ""))
+		if not badge_key.is_empty():
+			_canvas.draw_texture_rect(AssetRegistry.texture("ui", badge_key, "icon"), Rect2(at.position + Vector2(TILE * 0.5, -TILE * 0.2), Vector2(TILE, TILE) * 0.6), false)
+	if _legend_tile != NO_TILE:
+		var ring := Rect2(Vector2(_legend_tile.x * TILE, _legend_tile.y * TILE), Vector2(TILE, TILE)).grow(2.0)
+		_canvas.draw_rect(ring, Color(COL_PULSE, pulse_alpha(_clock)), false, 3.0)
+	_animated = animated
 	var c: Vector2 = Vector2(gs.position.x * TILE + TILE / 2.0, gs.position.y * TILE + TILE / 2.0)
 	_canvas.draw_circle(c, TILE * 0.35, Color(0.95, 0.85, 0.30))
 	_canvas.draw_line(c, c + Vector2(facing) * TILE * 0.45, Color.BLACK, 2.0)
 	_canvas.draw_set_transform(Vector2.ZERO)
+	_draw_names(rows)
+
+# Names of the npc and exit markers above their tiles (screen scale, clear of the floating panels and the map view edges).
+func _draw_names(rows: Array[Dictionary]) -> void:
+	var font: Font = get_theme_default_font()
+	var fs: int = label_font_size()
+	var bounds: Rect2 = free_rect(_canvas.size, _top, _side)
+	var origin: Vector2 = map_origin()
+	var px: float = tile_px()
+	for row: Dictionary in rows:
+		var v: Dictionary = DictUtil.dict_of(row["view"])
+		if not ALWAYS_NAMED.has(str(v["kind"])):
+			continue
+		var text: String = str(v["label"])
+		var size: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		var tile: Vector2i = row["pos"]
+		var at: Vector2 = label_origin(origin + Vector2(tile) * px, px, size, font.get_ascent(fs), bounds)
+		_canvas.draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, COL_LABEL_EDGE)
+		_canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COL_LABEL)

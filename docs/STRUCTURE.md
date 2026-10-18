@@ -31,7 +31,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/asset_pipeline_test_suite.gd` | asset manifest, key resolution, team overlay, skill and status icons, safe remove (S14-L1) | S14 | done |
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, key-field rule, seed; model and read-only Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
-| `scripts/tests/exploration_test_suite.gd` (+ `map_view_checks.gd`: full-screen map views, MAPVIEW1) | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
+| `scripts/tests/exploration_test_suite.gd` (+ `map_view_checks.gd`: full-screen map views, MAPVIEW1; `map_read_checks.gd`: icons, hint, legend, notes, MAPREAD1-L2) | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
 | `scripts/tests/dialogue_test_suite.gd` | dialogue trees, shops, service lines, gone-NPC lint, gold fields, ref scans (DLG1) | S11 | done |
 | `scripts/tests/plan_claims_test_suite.gd` | preset plans always confirmable: approach tile claims, tie order, party redraft (PLAN1) | S1, S4 | done |
 | `scripts/tests/intent_test_suite.gd` | enemy intent records, reveal rule and the foresight effect (INTENT1-L) | S1, S4 | done |
@@ -61,7 +61,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/content/{skill,item,class_unit}_fields.gd` | per-kind field tables of ContentSchema (CLN-9b) | S5 | done |
 | `scripts/ui/forge/{skill_form_model,skill_filter,skill_ranks_panel,skill_showcase}.gd` | Forge skill tab logic, read-only ranks panel and in-game preview per rank (SKILL1; TOOLS-RO; FORGE-VIEW) | S5 | done |
 | `scripts/ui/forge/{item_form_model,item_tables}.gd` | Forge item and item-family tabs: ItemFormModel (sections, options, limits, problems, modifier and tier tables, filters) and ItemTables (read-only widgets) (ITEM1; TOOLS-RO) | S5 | done |
-| `scripts/art/` | SvgRaster, UnitArt, ItemArt, TileArt, SkillArt, StatusArt (generated placeholders); AssetRegistry (key to manifest file, template, fallback; team overlay) and AssetCatalog (manifest store) (S14-L1) | S14 | done |
+| `scripts/art/` | SvgRaster, UnitArt, ItemArt, TileArt, SkillArt, StatusArt, MapArt (generated placeholders; MapArt = region marker overlays, world pins and badges, MAPREAD1-L2); AssetRegistry (key to manifest file, template, fallback; team overlay) and AssetCatalog (manifest store) (S14-L1) | S14 | done |
 | `data/assets/` | manifest.json: art and sound file overrides and aliases (AssetCatalog; empty until S14-A1) | S14 | in progress |
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |

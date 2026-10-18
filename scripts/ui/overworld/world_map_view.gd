@@ -13,15 +13,29 @@ extends Control
 # (CurrentGame.state()); busy() (a fight is pending) is mirrored to CurrentGame.set_busy.
 # MAPVIEW1: the canvas fills the view, the top strip and the side column float over it (RegionMapView.float_panel). When
 # the asset registry serves ui key "<world>_world_map" (ashlands_world_map, 1920x1080) from a file, it is drawn
-# letterboxed behind routes and pins; a location's `map_pos` [x, y] (0..1) places its pin in that rect (the canvas rect
+# letterboxed (into the part of the canvas the floating panels leave free) behind routes and pins; a location's `map_pos` [x, y] (0..1) places its pin in that rect (the free area
 # without a backdrop); locations without it keep the circle layout (layout, pure).
+# MAPREAD1-L2: pins use the kind icons (ui keys pin_<kind>, MapArt placeholders; the current location is ringed gold with
+# "You are here"); a gold "!" badge marks a pin a quest step points at; hovering a pin opens a card (name, kind, region,
+# visited or not, route time and supply cost from here, the quest steps pointing there); a legend in the bottom-left
+# corner lists the pin kinds and route styles. Text sizes follow the theme's text size.
 # ==============================================================================
 
 signal arrived(location_qid: String)
 signal closed
 signal fight_settled(res: Dictionary)
 
-const PIN_RADIUS: float = 12.0   # placeholder circle; the art contract is a 24x24 pin per kind
+const PIN_RADIUS: float = 12.0   # the art contract is a 24x24 pin per kind
+const PIN_SIZE: float = 24.0
+const HERE_SIZE: float = 36.0   # the gold ring under the party's pin
+const BADGE_SIZE: float = 16.0
+const CARD_WIDTH: float = 250.0
+const HERE_TEXT: String = "You are here"
+const COL_UNVISITED: Color = Color(0.68, 0.74, 0.80)
+const COL_LEGEND_BG: Color = Color(0.04, 0.05, 0.08, 0.78)
+const LEGEND_PAD: float = 8.0
+const ROUTE_SAMPLE: float = 30.0   # width of the line sample in the legend
+const ROUTE_STYLES: Array[Dictionary] = [{"text": "Open road", "style": "open"}, {"text": "Closed road", "style": "closed"}, {"text": "One-way road", "style": "oneway"}]
 const CLICK_RADIUS: float = 20.0
 const LAYOUT_FRACTION: float = 0.38
 const BACKDROP_SUFFIX: String = "_world_map"   # ui key "<world id>_world_map" (ashlands_world_map), variant "background"
@@ -57,6 +71,9 @@ var _fight_panel: PanelContainer = null
 var _fight_label: Label = null
 var _dev_box: VBoxContainer = null
 var _log: Label = null
+var hover_node: String = ""   # the known node under the pointer (its card shows)
+var _card: PanelContainer = null
+var _card_label: Label = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -100,6 +117,17 @@ func _ready() -> void:
 	_log.custom_minimum_size = Vector2(260, 0)
 	side.add_child(_log)
 	_top.resized.connect(func() -> void: RegionMapView.dock_below(_top, _side))
+	_canvas.mouse_exited.connect(func() -> void: _set_hover(""))
+	_card = PanelContainer.new()
+	_card.add_theme_stylebox_override("panel", UiTheme.box(Color(0.06, 0.07, 0.11, 0.94), COL_CURRENT, 1, 8, 6, 0))
+	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card_label = UiTheme.label("")
+	_card_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_card_label.custom_minimum_size = Vector2(CARD_WIDTH, 0)
+	_card_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card.add_child(_card_label)
+	_card.visible = false
+	_root.add_child(_card)
 	_refresh()
 
 func _on_new_game() -> void:
@@ -184,13 +212,15 @@ static func layout(all: Array[String], known: Array[String], map_pos: Dictionary
 		out[all[i]] = center + Vector2(cos(angle), sin(angle)) * radius
 	return out
 
-# The rect pins are placed in: the letterboxed backdrop, else the whole canvas.
+# The rect pins are placed in: the part of the canvas the floating panels leave free (no pin sits under a panel), with the
+# backdrop letterboxed into it when there is one.
 func layout_rect() -> Rect2:
-	var area: Rect2 = Rect2(Vector2.ZERO, _canvas.size if _canvas != null and _canvas.size.x > 0.0 else Vector2(520, 360))
+	var canvas: Vector2 = _canvas.size if _canvas != null and _canvas.size.x > 0.0 else Vector2(520, 360)
+	var area: Rect2 = RegionMapView.free_rect(canvas, _top, _side)
 	return letterbox(backdrop.get_size(), area) if backdrop != null else area
 
-# Known node qid -> pin centre (layout over the graph nodes, their locations' `map_pos` and layout_rect(); without a
-# backdrop the circle fallback stays in the part of the canvas the floating panels leave free).
+# Known node qid -> pin centre (layout over the graph nodes, their locations' `map_pos` and layout_rect(); the circle
+# fallback sits in the same rect).
 func pin_positions() -> Dictionary:
 	if gs == null:
 		return {}
@@ -200,9 +230,7 @@ func pin_positions() -> Dictionary:
 		var raw: Variant = ExploreRunner.resolve_location(gs, q).get("map_pos", null)
 		if raw != null:
 			map_pos[q] = raw
-	var rect: Rect2 = layout_rect()
-	var ring: Rect2 = rect if backdrop != null else RegionMapView.free_rect(rect.size, _top, _side)   # plain: clear of the panels
-	return layout(all, TravelRules.known(gs), map_pos, rect, ring)
+	return layout(all, TravelRules.known(gs), map_pos, layout_rect())
 
 # The known node under canvas point `p` ("" = none).
 func node_at(p: Vector2) -> String:
@@ -218,12 +246,111 @@ func node_at(p: Vector2) -> String:
 	return best
 
 func _on_canvas_input(event: InputEvent) -> void:
+	var motion: InputEventMouseMotion = event as InputEventMouseMotion
+	if motion != null:
+		_set_hover(node_at(motion.position))
+		return
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 			var q: String = node_at(mb.position)
 			if not q.is_empty():
 				travel_to(q)
+
+# ------------------------------------------------------------------------------
+# Hover card and text (MAPREAD1-L2)
+# ------------------------------------------------------------------------------
+
+func label_font_size() -> int:
+	return RegionMapView.name_font_size(get_theme_default_font_size())
+
+# The card lines of known node `qid`: name, "Kind, Region", visited or not, the trip from the party's location (time and
+# supplies) or "You are here", and the active quest steps pointing there.
+func card_lines(qid: String) -> Array[String]:
+	var out: Array[String] = []
+	if gs == null:
+		return out
+	var info: Dictionary = {}
+	for n: Variant in DictUtil.array_of(TravelRules.view(gs)["nodes"]):
+		if str(DictUtil.dict_of(n).get("qid", "")) == qid:
+			info = DictUtil.dict_of(n)
+	if info.is_empty():
+		return out
+	out.append(str(info["name"]))
+	var where: Array[String] = []
+	if not str(info["kind"]).is_empty():
+		where.append(str(info["kind"]).capitalize())
+	if not str(info["region"]).is_empty():
+		where.append(str(info["region"]))
+	if not where.is_empty():
+		out.append(", ".join(PackedStringArray(where)))
+	out.append("Visited" if DictUtil.to_bool(info["visited"]) else "Not visited yet")
+	if qid == gs.location_id:
+		out.append(HERE_TEXT)
+	else:
+		var trip: Dictionary = TravelRules.trip(gs, TravelRunner.current_node(gs), qid)
+		out.append("Trip: time %d, supplies %d" % [DictUtil.to_int(trip["time"]), DictUtil.to_int(trip["supplies"])] if DictUtil.to_bool(trip["ok"]) else "No known way from here")
+	for step: String in TravelRules.quest_steps_at(gs, qid):
+		out.append("Quest: %s" % step)
+	return out
+
+func _set_hover(qid: String) -> void:
+	if qid == hover_node:
+		return
+	hover_node = qid
+	_update_card()
+
+# Shows the card of the hovered pin next to it, kept inside the canvas.
+func _update_card() -> void:
+	if _card == null:
+		return
+	var lines: Array[String] = []
+	if not hover_node.is_empty():
+		lines.assign(card_lines(hover_node))
+	_card.visible = not lines.is_empty() and battle == null
+	if lines.is_empty():
+		return
+	_card_label.text = "\n".join(PackedStringArray(lines))
+	_card_label.add_theme_font_size_override("font_size", label_font_size())
+	_card.reset_size()
+	var pin: Vector2 = pin_positions().get(hover_node, Vector2.ZERO)
+	_card.position = card_origin(pin, _card.get_combined_minimum_size(), RegionMapView.free_rect(_canvas.size, _top, _side))
+
+# Card position (pure): right of the pin, left when it would leave `bounds`, then clamped inside them.
+static func card_origin(pin: Vector2, card: Vector2, bounds: Rect2) -> Vector2:
+	var x: float = pin.x + PIN_RADIUS + 10.0
+	if x + card.x > bounds.end.x:
+		x = pin.x - PIN_RADIUS - 10.0 - card.x
+	var y: float = pin.y - card.y / 2.0
+	return Vector2(maxf(minf(x, bounds.end.x - card.x), bounds.position.x), maxf(minf(y, bounds.end.y - card.y), bounds.position.y))
+
+# Baseline-left origin of a pin's name (pure): right of the pin, left of it when it would leave `bounds`.
+static func name_origin(pin: Vector2, text_size: Vector2, ascent: float, bounds: Rect2) -> Vector2:
+	var x: float = pin.x + PIN_RADIUS + 4.0
+	if x + text_size.x > bounds.end.x:
+		x = pin.x - PIN_RADIUS - 4.0 - text_size.x
+	return Vector2(maxf(x, bounds.position.x + 2.0), pin.y + ascent * 0.35)
+
+# Legend rows: pin kinds, then the route styles: [{text, pin (ui key or ""), style ("" or open / closed / oneway)}].
+static func legend_entries() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for kind: String in MapArt.PIN_KINDS:
+		out.append({"text": kind.capitalize(), "pin": MapArt.pin_key(kind), "style": ""})
+	for r: Dictionary in ROUTE_STYLES:
+		out.append({"text": str(r["text"]), "pin": "", "style": str(r["style"])})
+	return out
+
+# The legend box in the bottom-left corner of `bounds` for text of size `fs`.
+static func legend_rect(font: Font, fs: int, bounds: Rect2) -> Rect2:
+	var widest: float = 0.0
+	for e: Dictionary in legend_entries():
+		widest = maxf(widest, font.get_string_size(str(e["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	var row: float = legend_row_height(fs)
+	var size := Vector2(LEGEND_PAD * 2.0 + ROUTE_SAMPLE + 8.0 + widest, LEGEND_PAD * 2.0 + row * legend_entries().size())
+	return Rect2(Vector2(bounds.position.x + 8.0, bounds.end.y - size.y - 8.0), size)
+
+static func legend_row_height(fs: int) -> float:
+	return maxf(float(fs) + 6.0, PIN_SIZE + 2.0)
 
 # ------------------------------------------------------------------------------
 # Travel and fights
@@ -367,6 +494,7 @@ func _refresh() -> void:
 		_fight_label.text += "\nBattle refused: %s" % "; ".join(PackedStringArray(launch_errors))
 	_dev_box.visible = dev_outcomes or not launch_errors.is_empty()
 	_root.visible = battle == null
+	_update_card()
 	_log.text = "\n".join(PackedStringArray(log_lines))
 	_canvas.queue_redraw()
 
@@ -378,6 +506,8 @@ func _draw_map() -> void:
 	var view: Dictionary = TravelRules.view(gs)
 	var pins: Dictionary = pin_positions()
 	var font: Font = get_theme_default_font()
+	var fs: int = label_font_size()
+	var area: Rect2 = RegionMapView.free_rect(_canvas.size, _top, _side)
 	for r: Variant in DictUtil.array_of(view["routes"]):
 		var route: Dictionary = DictUtil.dict_of(r)
 		if not pins.has(route["from"]) or not pins.has(route["to"]):
@@ -389,7 +519,7 @@ func _draw_map() -> void:
 			continue
 		_canvas.draw_line(a, b, COL_ROUTE, 2.0)
 		var mid: Vector2 = (a + b) / 2.0
-		_canvas.draw_string(font, mid + Vector2(4, -4), str(route["time"]), HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.FONT_SM, COL_ROUTE)
+		_canvas.draw_string(font, mid + Vector2(4, -4), str(route["time"]), HORIZONTAL_ALIGNMENT_LEFT, -1, maxi(fs - 1, 9), COL_ROUTE)
 		if not DictUtil.to_bool(route["two_way"]):
 			var dir: Vector2 = (b - a).normalized()
 			var tip: Vector2 = b - dir * PIN_RADIUS
@@ -401,6 +531,49 @@ func _draw_map() -> void:
 		if not pins.has(q):
 			continue
 		var p: Vector2 = pins[q]
-		var col: Color = COL_CURRENT if q == gs.location_id else (COL_VISITED if DictUtil.to_bool(node["visited"]) else COL_KNOWN)
-		_canvas.draw_circle(p, PIN_RADIUS, col)
-		_canvas.draw_string(font, p + Vector2(PIN_RADIUS + 3, 4), str(node["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.FONT_MD, col)
+		var here: bool = q == gs.location_id
+		var visited: bool = DictUtil.to_bool(node["visited"])
+		var col: Color = COL_CURRENT if here else (COL_VISITED if visited else COL_KNOWN)
+		if here:
+			_canvas.draw_texture_rect(AssetRegistry.texture("ui", "pin_here", "icon"), Rect2(p - Vector2(HERE_SIZE, HERE_SIZE) / 2.0, Vector2(HERE_SIZE, HERE_SIZE)), false)
+		var key: String = MapArt.pin_key(str(node["kind"]))
+		if key.is_empty():
+			_canvas.draw_circle(p, PIN_RADIUS, col)
+		else:
+			_canvas.draw_texture_rect(AssetRegistry.texture("ui", key, "icon"), Rect2(p - Vector2(PIN_SIZE, PIN_SIZE) / 2.0, Vector2(PIN_SIZE, PIN_SIZE)), false, Color.WHITE if visited or here else COL_UNVISITED)
+		if DictUtil.to_bool(node["quest"]):
+			_canvas.draw_texture_rect(AssetRegistry.texture("ui", "badge_quest", "icon"), Rect2(p + Vector2(PIN_RADIUS - 6.0, -PIN_RADIUS - BADGE_SIZE + 6.0), Vector2(BADGE_SIZE, BADGE_SIZE)), false)
+		var name_text: String = str(node["name"])
+		var tsize: Vector2 = font.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		var at: Vector2 = name_origin(p, tsize, font.get_ascent(fs), area)
+		_canvas.draw_string_outline(font, at, name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, RegionMapView.COL_LABEL_EDGE)
+		_canvas.draw_string(font, at, name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		if here:
+			var hat: Vector2 = Vector2(at.x, at.y + fs + 2.0)
+			_canvas.draw_string_outline(font, hat, HERE_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, RegionMapView.COL_LABEL_EDGE)
+			_canvas.draw_string(font, hat, HERE_TEXT, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COL_CURRENT)
+	_draw_legend(font, fs, area)
+
+# The pin kinds and road styles in the bottom-left corner.
+func _draw_legend(font: Font, fs: int, area: Rect2) -> void:
+	var box: Rect2 = legend_rect(font, fs, area)
+	_canvas.draw_rect(box, COL_LEGEND_BG)
+	var row: float = legend_row_height(fs)
+	var y: float = box.position.y + LEGEND_PAD
+	for e: Dictionary in legend_entries():
+		var mid: float = y + row / 2.0
+		var x0: float = box.position.x + LEGEND_PAD
+		match str(e["style"]):
+			"":
+				_canvas.draw_texture_rect(AssetRegistry.texture("ui", str(e["pin"]), "icon"), Rect2(Vector2(x0 + (ROUTE_SAMPLE - PIN_SIZE) / 2.0, mid - PIN_SIZE / 2.0), Vector2(PIN_SIZE, PIN_SIZE)), false)
+			"open":
+				_canvas.draw_line(Vector2(x0, mid), Vector2(x0 + ROUTE_SAMPLE, mid), COL_ROUTE, 2.0)
+			"closed":
+				_canvas.draw_dashed_line(Vector2(x0, mid), Vector2(x0 + ROUTE_SAMPLE, mid), COL_CLOSED, 2.0, DASH)
+			"oneway":
+				var tip: Vector2 = Vector2(x0 + ROUTE_SAMPLE, mid)
+				_canvas.draw_line(Vector2(x0, mid), tip, COL_ROUTE, 2.0)
+				var side: Vector2 = Vector2(0.0, ARROW_SIZE * 0.5)
+				_canvas.draw_colored_polygon(PackedVector2Array([tip, tip - Vector2(ARROW_SIZE, 0.0) + side, tip - Vector2(ARROW_SIZE, 0.0) - side]), COL_ROUTE)
+		_canvas.draw_string(font, Vector2(x0 + ROUTE_SAMPLE + 8.0, mid + fs * 0.35), str(e["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, RegionMapView.COL_LABEL)
+		y += row
