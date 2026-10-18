@@ -1,16 +1,16 @@
 # Gameplay handover
 
-Updated 2026-10-18 07:10 UTC by Gameplay session session_01HQvENsjr5dFTBZp6L6GkPU ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`. Dispatch mode: economy (user 02:35).
+Updated 2026-10-18 07:45 UTC (rotation) by Gameplay session session_01HQvENsjr5dFTBZp6L6GkPU ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`. Dispatch mode: economy (user 02:35).
 
 ## Queue
 
-Empty: OBJ1-L and ITEMUSE1-L are done. Take the next approved Gameplay task from `docs/TASKS.md` or the daily dispatch.
+Empty: OBJ1-L, ITEMUSE1-L and QUESTX are done. No approved Gameplay logic row is open; take the next one from the coordinator or the daily dispatch.
 
 Open user card (Gameplay thread): "Give each hero their class's free potion in every battle?" (rec No free potion). Built with `PartyBuilder.HERO_KEEPS_CLASS_POUCH = false`. On "No free potion": ask Assets to remove the `pouch` rows from the warrior, ranger, priest and mage classes and add a decisions row. On "Free potion": set the flag true (heroes add their saved pouch after the class potion; overflow ids are kept on write-back) and add the decisions row.
 
 ## Landed on `develop` (session 01HQvENs)
 
-OBJ1-L schema (2c9bc80) and behaviour (3abdb63): objectives, deployments, guests, verdict, `CombatSession.outcome`; also fixed `_restore_snapshot` losing `reinforcements_spawned`. ITEMUSE1-L schema (ad83b98: pouch, save v8, `use_reach`, ITEM step) and behaviour (e5653ac: ItemCommand, undo/reset, write-back skipping guests, GearModel pouch API, AI/sim `pouch=`, recordings store `pouches`). Hand-offs sent: OBJ1-U and the Gear tab pouch buttons (UIR-3) to UI/UX, OBJ1-A and ITEMUSE1-A (both landed) to Assets, OBJ1-B to Balance.
+OBJ1-L schema (2c9bc80) and behaviour (3abdb63): objectives, deployments, guests, verdict, `CombatSession.outcome`; also fixed `_restore_snapshot` losing `reinforcements_spawned`. QUESTX (2d9db38): accepted quests keep tracking in `connects` worlds, so `iron_reaches:iron_for_embers` can finish from the Ashlands; offering it still needs CAMP1 data (Orsa's `services: false`, the Slag Gate flag stand-in), an Assets/Design question. ITEMUSE1-L schema (ad83b98: pouch, save v8, `use_reach`, ITEM step) and behaviour (e5653ac: ItemCommand, undo/reset, write-back skipping guests, GearModel pouch API, AI/sim `pouch=`, recordings store `pouches`). Hand-offs sent: OBJ1-U to UI/UX (Gear tab pouch landed as ITEMUSE1-U 069ac28), OBJ1-A and ITEMUSE1-A (both landed) to Assets, OBJ1-B to Balance.
 
 ## Landed on `develop` (previous session)
 
@@ -18,7 +18,7 @@ WORLDMAP-ENTER (0bd96e3, Tushar's bug: click your own pin to enter the town), RE
 
 ## Sessions to ping
 
-Assets & Audio session_01UywiZpBegbdrmR76smao3d, UI/UX session_01EFGiKxfL6TjsoGEDnQG5hc, Balance session_012hWXrrHGj1VxCBHAEN59mo, coordinator session_015sTvb6o2FYckV681cWHXtS (check the project's thread list if these rotated).
+Assets & Audio session_01UywiZpBegbdrmR76smao3d, UI/UX session_01Rs6SLjohzJBiLs4ezyKKBN, Balance session_012hWXrrHGj1VxCBHAEN59mo, coordinator session_015sTvb6o2FYckV681cWHXtS (check the project's thread list if these rotated).
 
 ## Follow-ups (not task rows; ask before building unless it is a plain bug)
 
@@ -33,4 +33,4 @@ Assets & Audio session_01UywiZpBegbdrmR76smao3d, UI/UX session_01EFGiKxfL6TjsoGE
 - After a schema landing, merge `origin/develop` back into the task branch at once; a later merge shows self-conflicts with the squash commit (keep the branch side).
 - Two worktrees in parallel (one per task, absolute paths in the builder prompt) worked well: RECRUIT/MAPREAD in the main checkout, INTENT/BOSS in `/home/user/wt-intent`.
 - The arena suite needs `SUITE_TIMEOUT=900`. A fresh container's first `godot --headless --import` can abort with "free(): invalid pointer"; run it again.
-- Branches to delete at the next cleanup: `claude/obj1-l-objectives`, `claude/itemuse1-l-items`, `claude/worldmap-enter-here`, `claude/recruit1-l-recruits`, `claude/intent1-l-enemy-intent`, `claude/mapread1-l1-markers`, `claude/boss1-l-phases`.
+- Branches to delete at the next cleanup: `claude/obj1-l-objectives`, `claude/itemuse1-l-items`, `claude/questx-cross-world`, `claude/worldmap-enter-here`, `claude/recruit1-l-recruits`, `claude/intent1-l-enemy-intent`, `claude/mapread1-l1-markers`, `claude/boss1-l-phases`.
