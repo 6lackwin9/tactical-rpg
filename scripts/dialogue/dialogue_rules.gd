@@ -717,6 +717,46 @@ static func choice_open(gs: GameState, choice: Dictionary) -> bool:
 			return false
 	return true
 
+# UIR-6: why a choice is locked, for the player ("" when it is open): the first failing `requires` condition
+# ("Needs 1 Fire Bomb", "Needs 5 gold", "Needs KNOW 14", "Needs Main (active)", "Needs Wardens friendly"; a reputation
+# ceiling reads "Needs Wardens below friendly" for < and "at most" for <=), a plain story
+# flag reads LOCKED_TEXT (no spoiler), a holding `unless` condition NOT_NOW_TEXT.
+const LOCKED_TEXT: String = "Locked"
+const NOT_NOW_TEXT: String = "Not now"
+
+static func lock_reason(gs: GameState, choice: Dictionary) -> String:
+	for c: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("requires", []))):
+		var cond: Dictionary = DictUtil.dict_of(c)
+		if not condition_holds(gs, cond):
+			return _needs_text(gs, cond)
+	for c: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("unless", []))):
+		if condition_holds(gs, DictUtil.dict_of(c)):
+			return NOT_NOW_TEXT
+	return ""
+
+static func _needs_text(gs: GameState, cond: Dictionary) -> String:
+	match str(cond.get("kind", "flag")):
+		"items":
+			var item: String = str(cond.get("item", ""))
+			return "Needs %d %s" % [DictUtil.to_int(cond.get("count", 1), 1), str(ContentCatalog.get_entry("items", item).get("name", item))]
+		"gold":
+			return "Needs %d gold" % DictUtil.to_int(cond.get("min", 0))
+		"stat":
+			return "Needs %s %d" % [str(cond.get("stat", "")), DictUtil.to_int(cond.get("min", 0))]
+		"quest":
+			var q: String = str(cond.get("quest", ""))
+			return "Needs %s (%s)" % [str(QuestRunner.resolved(gs, q).get("name", q)), str(cond.get("status", ""))]
+		"flag":
+			var k: String = str(cond.get("key", ""))
+			if RepRules.is_rep_key(k) and QuestRules.ORDER_OPS.has(str(cond.get("op", "=="))):
+				var faction: Dictionary = WorldCatalog.resolve(gs.world_id, "factions", RepRules.faction_qid_of(k))
+				var who: String = str(faction.get("name", k)) if not faction.is_empty() else k
+				var band: String = RepRules.band(DictUtil.to_int(cond.get("value", 0)))
+				if str(cond.get("op", "==")) in ["<", "<="]:
+					return "Needs %s below %s" % [who, band] if str(cond["op"]) == "<" else "Needs %s at most %s" % [who, band]   # a ceiling, not a minimum
+				return "Needs %s %s" % [who, band]
+	return LOCKED_TEXT
+
 # The generated "[STAT min] " prefix of a choice: one tag per stat condition in `requires`, in order.
 static func stat_prefix(choice: Dictionary) -> String:
 	var out: String = ""

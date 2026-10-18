@@ -19,6 +19,7 @@ static func run(tree_parent: Node) -> bool:
 	ok = _test_followups() and ok
 	ok = _test_panels(tree_parent) and ok
 	ok = _test_map_input(tree_parent) and ok
+	ok = DialogueBarChecks.run(tree_parent) and ok   # UIR-6: dialogue bar and shop popup
 	return ok
 
 static func _q(local: String) -> String:

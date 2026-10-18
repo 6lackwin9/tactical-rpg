@@ -143,6 +143,7 @@ See `docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (index) plus `doc
 ## Dialogue and shops (DLG1)
 
 - World kinds `dialogues` and `shops` (validated by `DialogueRules`, `ShopRules` in `scripts/dialogue/`); base service lines in `ServiceCatalog` (`data/dialogue/services.json`). Character `dialogue` and `gone_flags`; manifest `start_gold`, `service_lines`. Quest rewards: xp, items, passives, skills, gold (cap 5000, soft 200); chest gold 0..9999. Node effects are only `set_flag` and `give`; choice-only effect `recruit` {character} (at most one per choice; a party character; refused when already a member or the roster holds `party_max`; joins at max(its base level's XP, the highest active XP); a choice recruiting a member is hidden; RECRUIT1); a turn-in effect comes first in its choice. Runtime: `DialogueRunner` (open, view, choose all-or-nothing, confirm_turn_in, close_shop, advance, after_fight); `ShopRules` prices are integers (buy ceil, sell floor) with stock counted in `GameState.shops`; party gold `PartyState.gold` (cap 9999999). Save version 4 (party gold, shops).
+- UI (UIR-6): dialogue bar `scripts/ui/overworld/dialogue_panel.gd` (canvas layer 1), shop popup `shop_panel.gd` (layer 31); lock reasons `DialogueRules.lock_reason`.
 
 ## Menus and save slots (UI1)
 

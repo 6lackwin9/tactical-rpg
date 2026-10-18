@@ -144,7 +144,8 @@ func _tokens(extra: Dictionary) -> Dictionary:
 		values["shop"] = str(ShopRules.shop_of(gs, sqid).get("name", sqid))
 	return values
 
-# {speaker (qid), speaker_name, node, text, choices: [{text, locked}], end, next, shop, pending, faction (the talked-to
+# {speaker (qid), speaker_name, node, text, choices: [{text, locked, reason (why a locked one is locked, UIR-6), service
+# ("offer" / "turn_in" / "shop" / "farewell" for generated service choices, else "")}], end, next, shop, pending, faction (the talked-to
 # character's faction qid, "" = none), faction_name, band (its reputation band, "" without a faction)}. `end`: the
 # conversation is over or the node is an end node; `next`: the node moves on through advance().
 func view() -> Dictionary:
@@ -156,7 +157,9 @@ func view() -> Dictionary:
 	var choices: Array[Dictionary] = []
 	if not closed:
 		for c: Dictionary in _visible():
-			choices.append({"text": DialogueRules.rep_prefix(gs, c) + DialogueRules.stat_prefix(c) + DialogueRules.fill(str(c.get("text", "")), _tokens(c)), "locked": DictUtil.to_bool(c["_locked"])})
+			var locked: bool = DictUtil.to_bool(c["_locked"])
+			choices.append({"text": DialogueRules.rep_prefix(gs, c) + DialogueRules.stat_prefix(c) + DialogueRules.fill(str(c.get("text", "")), _tokens(c)), "locked": locked,
+				"reason": DialogueRules.lock_reason(gs, c) if locked else "", "service": str(c.get("_service", ""))})
 	return {
 		"speaker": speaker, "speaker_name": str(WorldCatalog.resolve(gs.world_id, "characters", speaker).get("name", "")),
 		"node": node_id, "text": DialogueRules.fill(str(node.get("text", "")), _tokens(node)), "choices": choices,

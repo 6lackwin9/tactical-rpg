@@ -9,7 +9,9 @@ extends Control
 # ExploreRunner.after_fight. If the battle cannot start, the fight panel offers Start battle again and the debug
 # outcomes; `dev_outcomes` (off by default) always shows the debug outcome buttons.
 # E on an npc opens its conversation (DialoguePanel over DialogueRunner); an open_shop choice swaps in the ShopPanel and
-# its Close returns to the dialogue; a dialogue fight uses the same battle (DialogueRunner.after_fight).
+# its Close returns to the dialogue; a dialogue fight uses the same battle (DialogueRunner.after_fight). UIR-6: the
+# dialogue is a full-width bar over the bottom of the map (the camera keeps the party above it), the shop a popup in the
+# settings popup's canvas layer.
 # Moving and interacting are ignored while a conversation, shop or fight is open.
 # POI-FIX (discoverability): a hint line under the bar names the keys (HINT); bumping a solid npc / chest / lore marker
 # notes "press E"; E on an empty tile notes NOTHING_NOTE; a left click on a marker tile next to the party faces it and
@@ -108,6 +110,7 @@ var _dev_box: VBoxContainer = null
 var _log: Label = null
 var dialogue_panel: DialoguePanel = null
 var shop_panel: ShopPanel = null
+var _shop_layer: CanvasLayer = null   # UIR-6: the shop popup's layer (MainMenuView.SETTINGS_LAYER)
 var world_map: WorldMapView = null   # open while the party is on the world map (TRAV1-L)
 var zoom: float = 1.0   # extra map scale (1 = TILE px); high-DPI already scales the whole canvas (canvas_items stretch)
 var _root: Control = null   # the canvas and the floating panels (hidden while the world map is open)
@@ -173,22 +176,38 @@ func _ready() -> void:
 		_dev_box.add_child(UiTheme.button("Dev: " + result, "Settle the fight as %s without a battle (ExploreRunner.after_fight)" % result, settle.bind(result)))
 	_fight_panel.visible = false
 	side.add_child(_fight_panel)
-	dialogue_panel = DialoguePanel.new()
-	dialogue_panel.shop_opened.connect(_on_shop_opened)
-	dialogue_panel.fight_started.connect(_on_dialogue_fight)
-	dialogue_panel.finished.connect(_refresh)
-	dialogue_panel.noted.connect(_on_noted)
-	side.add_child(dialogue_panel)
-	shop_panel = ShopPanel.new()
-	shop_panel.closed.connect(_on_shop_closed)
-	shop_panel.noted.connect(_on_noted)
-	side.add_child(shop_panel)
 	_log = UiTheme.label("")
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_log.custom_minimum_size = Vector2(260, 0)
 	side.add_child(_log)
 	_top.resized.connect(func() -> void: dock_below(_top, _side))
+	# UIR-6: the dialogue is a full-width bar over the bottom of the map in its own canvas layer (above the side column);
+	# the shop is a popup in the settings popup's canvas layer (its dim covers the Menu pill, so nothing opens over it).
+	dialogue_panel = DialoguePanel.new()
+	dialogue_panel.shop_opened.connect(_on_shop_opened)
+	dialogue_panel.fight_started.connect(_on_dialogue_fight)
+	dialogue_panel.finished.connect(_refresh)
+	dialogue_panel.noted.connect(_on_noted)
+	var bar_layer := CanvasLayer.new()
+	bar_layer.layer = DialoguePanel.LAYER
+	add_child(bar_layer)
+	bar_layer.add_child(dialogue_panel)   # a Control straight under a canvas layer anchors to the viewport
+	dialogue_panel.dock(get_viewport_rect().size)
+	resized.connect(_fit_dialogue)
+	dialogue_panel.visibility_changed.connect(func() -> void: _canvas.queue_redraw())
+	_shop_layer = CanvasLayer.new()
+	_shop_layer.layer = MainMenuView.SETTINGS_LAYER
+	add_child(_shop_layer)
+	shop_panel = ShopPanel.new()
+	shop_panel.closed.connect(_on_shop_closed)
+	shop_panel.noted.connect(_on_noted)
+	_shop_layer.add_child(shop_panel)   # a Control straight under a canvas layer anchors to the viewport
 	_refresh()
+
+# UIR-6: the dialogue bar follows the view size (it sits in its own canvas layer, so the viewport's size).
+func _fit_dialogue() -> void:
+	if dialogue_panel != null:
+		dialogue_panel.fit(get_viewport_rect().size)
 
 # ------------------------------------------------------------------------------
 # Full-screen layout (MAPVIEW1): the map canvas fills the view; the top strip and the side column float over it
@@ -228,11 +247,13 @@ static func dock_below(top: Control, side: Control) -> void:
 	if top != null and side != null:
 		side.offset_top = top.position.y + top.size.y
 
-# The part of `canvas_size` not covered by the floating panels (the camera keeps the party and the map edges in it).
-static func free_rect(canvas_size: Vector2, top: Control, side: Control) -> Rect2:
+# The part of `canvas_size` not covered by the floating panels (the camera keeps the party and the map edges in it);
+# `bottom` (UIR-6: the open dialogue bar) also takes its height off the bottom.
+static func free_rect(canvas_size: Vector2, top: Control, side: Control, bottom: Control = null) -> Rect2:
 	var top_h: float = top.size.y if top != null and top.visible else 0.0
 	var side_w: float = side.size.x if side != null and side.visible else 0.0
-	return Rect2(Vector2(0.0, top_h), Vector2(maxf(canvas_size.x - side_w, 0.0), maxf(canvas_size.y - top_h, 0.0)))
+	var bottom_h: float = bottom.size.y if bottom != null and bottom.visible else 0.0
+	return Rect2(Vector2(0.0, top_h), Vector2(maxf(canvas_size.x - side_w, 0.0), maxf(canvas_size.y - top_h - bottom_h, 0.0)))
 
 # Camera (pure): where the map's top-left corner goes inside a view of size `view` so that `focus_px` (a point in map
 # pixels, the party) is centred, clamped so no space shows past a map edge; a map axis smaller than the view is centred.
@@ -280,7 +301,7 @@ func map_origin() -> Vector2:
 	if t.is_empty():
 		return Vector2.ZERO
 	var px: float = tile_px()
-	var view: Rect2 = free_rect(_canvas.size, _top, _side)
+	var view: Rect2 = free_rect(_canvas.size, _top, _side, dialogue_panel)   # the talked-to npc stays above the dialogue bar
 	var focus: Vector2 = party_focus() * px
 	return view.position + camera_offset(Vector2(MapRules.size_of(t)) * px, view.size, focus)
 
@@ -1073,7 +1094,7 @@ func _draw_map() -> void:
 func _draw_names(rows: Array[Dictionary]) -> void:
 	var font: Font = get_theme_default_font()
 	var fs: int = label_font_size()
-	var bounds: Rect2 = free_rect(_canvas.size, _top, _side)
+	var bounds: Rect2 = free_rect(_canvas.size, _top, _side, dialogue_panel)
 	var origin: Vector2 = map_origin()
 	var px: float = tile_px()
 	var named: Array[Dictionary] = []
