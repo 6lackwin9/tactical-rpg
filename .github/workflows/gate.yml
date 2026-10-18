@@ -49,4 +49,7 @@ jobs:
         run: bash tools/fc.sh docs
 
       - name: Fast gate
+        # arena grew to ~930 tests, ~10 min on the runner (2026-10-18); fc.sh default is 290 s per suite
+        env:
+          SUITE_TIMEOUT: 900
         run: bash tools/fc.sh gate
