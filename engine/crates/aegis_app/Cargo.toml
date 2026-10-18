@@ -1,0 +1,15 @@
+[package]
+name = "aegis_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aegis_core = { path = "../aegis_core" }
+aegis_vfs = { path = "../aegis_vfs" }
+aegis_vm = { path = "../aegis_vm" }
+winit = "0.30"
+wgpu = "22.0"
+taffy = "0.5"
+pollster = "0.3"
+bytemuck = { version = "1.16", features = ["derive"] }
+anyhow = { workspace = true }

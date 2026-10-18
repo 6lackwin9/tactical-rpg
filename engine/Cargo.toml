@@ -6,6 +6,7 @@ members = [
     "crates/aegis_md_parser",
     "crates/aegis_gd_bridge",
     "crates/aegis_vm", "crates/aegis_sim", "crates/aegis_bench", "crates/aegis_game",
+    "crates/aegis_app",
 ]
 
 [workspace.package]

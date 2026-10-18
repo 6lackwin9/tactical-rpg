@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Aegis — Tactical Combat Engine</title>
+  <meta name="description" content="AI-native, high-performance tactical RPG game engine. Interactive 12x9 combat grid and live simulation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation & Control Bar -->
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-logo">🛡️</div>
+        <div class="brand-text">
+          <h1>PROJECT AEGIS</h1>
+          <span class="engine-badge">RUST CORE v0.1 • 2D TACTICAL RUNTIME</span>
+        </div>
+      </div>
+
+      <div class="encounter-controls">
+        <label for="encounter-select" class="control-label">Encounter:</label>
+        <select id="encounter-select" class="cyber-select">
+          <option value="goblin_skirmish">Goblin Skirmish (Ruined Courtyard)</option>
+          <option value="veterans_drill">Veterans' Drill (Stone Arena)</option>
+          <option value="goblin_ambush">Goblin Ambush (Forest Clearing)</option>
+        </select>
+      </div>
+
+      <div class="battle-status-pill">
+        <span class="pill-label">ROUND</span>
+        <span id="round-display" class="pill-val">1 / 6</span>
+        <span id="verdict-display" class="pill-status ongoing">ONGOING</span>
+      </div>
+
+      <div class="action-buttons">
+        <button id="btn-advance" class="btn btn-primary" title="Advance to next tactical block/round">
+          <span class="btn-icon">⚔️</span> Advance Round
+        </button>
+        <button id="btn-autoplay" class="btn btn-secondary" title="Toggle automatic step execution">
+          <span class="btn-icon">▶</span> Auto-Play
+        </button>
+        <button id="btn-reset" class="btn btn-outline" title="Reset current encounter">
+          <span class="btn-icon">↺</span> Reset
+        </button>
+        <button id="btn-save" class="btn btn-outline" title="Save state to local slot">
+          <span class="btn-icon">💾</span> Save
+        </button>
+        <button id="btn-audio" class="btn btn-icon-only" title="Toggle sound effects">
+          🔊
+        </button>
+      </div>
+    </header>
+
+    <!-- Main 3-Column Tactical Workspace -->
+    <main class="tactical-workspace">
+      <!-- Left Column: Allied Party -->
+      <aside class="panel party-panel">
+        <div class="panel-header">
+          <h2>HERO PARTY</h2>
+          <span id="party-count" class="count-badge">3 ALIVE</span>
+        </div>
+        <div id="allies-roster" class="roster-list">
+          <!-- Dynamically populated party cards -->
+        </div>
+      </aside>
+
+      <!-- Center Column: 12x9 Tactical Battlefield Canvas -->
+      <section class="arena-section">
+        <div class="arena-header">
+          <div class="arena-title">
+            <span class="arena-location-icon">📍</span>
+            <span id="arena-name">World: Ashlands • Zone: Ruined Courtyard</span>
+          </div>
+          <div class="arena-coords" id="cursor-coords">Tile: [—, —]</div>
+        </div>
+
+        <div class="canvas-wrapper">
+          <canvas id="battlefield-canvas" width="840" height="630"></canvas>
+          <div id="combat-overlay" class="combat-overlay"></div>
+        </div>
+
+        <div class="arena-legend">
+          <div class="legend-item"><span class="legend-swatch ally-swatch"></span> Party Deployment (Col 5)</div>
+          <div class="legend-item"><span class="legend-swatch enemy-swatch"></span> Horde Deployment (Col 7)</div>
+          <div class="legend-item"><span class="legend-swatch range-swatch"></span> Attack Reach</div>
+          <div class="legend-tip">💡 Click any unit or grid tile to inspect & plan actions</div>
+        </div>
+      </section>
+
+      <!-- Right Column: Hostile Horde & Unit Inspector -->
+      <aside class="panel inspector-panel">
+        <div class="panel-header">
+          <h2>HOSTILE HORDE</h2>
+          <span id="enemy-count" class="count-badge enemy-count">5 ALIVE</span>
+        </div>
+        <div id="enemies-roster" class="roster-list enemy-roster-list">
+          <!-- Dynamically populated enemy cards -->
+        </div>
+
+        <div class="inspector-card" id="unit-inspector">
+          <div class="inspector-header">
+            <div id="inspect-avatar" class="inspect-avatar">🛡️</div>
+            <div class="inspect-title-group">
+              <h3 id="inspect-name">Select a Unit</h3>
+              <span id="inspect-class" class="inspect-badge">No Selection</span>
+            </div>
+          </div>
+          <div class="inspect-stats-grid">
+            <div class="stat-box">
+              <span class="stat-name">HP</span>
+              <span id="inspect-hp" class="stat-val">— / —</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-name">ATK</span>
+              <span id="inspect-atk" class="stat-val">—</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-name">ARMOR</span>
+              <span id="inspect-arm" class="stat-val">—</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-name">SPEED</span>
+              <span id="inspect-spd" class="stat-val">—</span>
+            </div>
+          </div>
+          <div class="inspect-details">
+            <div class="detail-row">
+              <span class="detail-label">Position:</span>
+              <span id="inspect-pos" class="detail-val">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">AI Role:</span>
+              <span id="inspect-role" class="detail-val">—</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Target Pref:</span>
+              <span id="inspect-pref" class="detail-val">—</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Bottom Narrative Combat Log -->
+    <footer class="log-panel">
+      <div class="log-header">
+        <div class="log-title">
+          <span class="log-icon">📜</span>
+          <h3>COMBAT NARRATIVE LOG</h3>
+          <span class="log-sub">Deterministic Action Feed</span>
+        </div>
+        <div class="log-actions">
+          <button id="btn-clear-log" class="btn-text">Clear</button>
+        </div>
+      </div>
+      <div id="combat-log" class="log-content">
+        <!-- Log entries populated here -->
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
