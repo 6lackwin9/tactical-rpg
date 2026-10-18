@@ -5,7 +5,7 @@ members = [
     "crates/aegis_vfs",
     "crates/aegis_md_parser",
     "crates/aegis_gd_bridge",
-    "crates/aegis_vm", "crates/aegis_sim",
+    "crates/aegis_vm", "crates/aegis_sim", "crates/aegis_bench",
 ]
 
 [workspace.package]
