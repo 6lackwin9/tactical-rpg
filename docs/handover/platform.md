@@ -20,7 +20,7 @@ Wind-down into interactive mode (user 16:28 UTC, decision "Interactive mode"). R
 - CLN-17, CLN-18 approved (cleanup lane).
 - Arena trim proposed in `docs/EFFICIENCY.md` (Playtest, CombatUiFramework, Bal2Rules, Planning are 42% of the arena): ask first.
 - Forge tab fixes: his list (17:11) was already built by FORGE-VIEW (2026-10-17; screenshots `/mnt/project-files/forge-viewer/now_skills*.png`). Leftover: remove the Validate All button (approved by Tushar 18:47, ON HOLD until he says resume). CLN-18 (disabled widgets to labels, dead edit code) is approved but invisible; only on request.
-- `branch-cleanup.yml` skips `engine` once the next release reaches main; 40 squash-merged branches are kept because their content cannot be proven on develop (`/mnt/project-files/platform/deleted_branches_2026-10-18.txt` lists the 32 deleted).
+- Branches: all merged task branches deleted (32 at 14:55, the remaining 43 at 19:20 on the user's "delete all 43"); only main, develop, engine, the release branch and live thread branches remain. Restore list with shas: `/mnt/project-files/platform/deleted_branches_2026-10-18.txt`. `branch-cleanup.yml` skips `engine` once the next release reaches main.
 
 ## Landed this session
 
