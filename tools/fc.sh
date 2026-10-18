@@ -15,6 +15,10 @@
 #   tools/fc.sh docs            warn when an agent-facing doc passes 300 lines / 25 KB
 #   tools/fc.sh all              parse + arena + dojo (same as check_project.ps1 without per-file parse of unchanged files)
 #   tools/fc.sh gate             the commit gate, same steps as check_project.ps1 -Fast -Quiet (class cache, parse-all, arena, dojo); no PowerShell needed
+#   tools/fc.sh gate <systems>   the same, with arena limited to those systems (comma list: rules,ai,combat_ui,balance,world,party_save,content,menus;
+#        GATE-SPLIT); `auto` picks them from the files changed against origin/develop, falling back to every system (none: docs/CI/tool-only change, arena skipped)
+#   tools/fc.sh systems          print the systems `auto` would pick for the current change
+#   SYSTEMS=<list> tools/fc.sh arena   arena for those systems only (log: arena-<list>.out)
 #   Godot binary: $GODOT, else godot / godot4 on PATH, else the default Windows install
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   balance simulation (tools/balance_sim.gd, BAL2_SIM.md;
 #        timeout ${SIM_TIMEOUT:-900} s, prints TIMEOUT and exits 1 on expiry; startup watchdog ${SIM_STARTUP_TIMEOUT:-120} s without output; script errors are shown)
@@ -87,9 +91,39 @@ parse() {
   [ $bad -eq 0 ] && echo "[parse] changed files OK" || status=1
 }
 
-suite() {  # $1 = scene, $2 = label, $3 = optional pattern
+# Systems for the change (GATE-SPLIT): changed paths -> SuiteRegistry systems; any path it cannot place means every system.
+ALL_SYSTEMS=rules,ai,combat_ui,balance,world,party_save,content,menus
+systems_for_change() {
+  local f picked="" all=0
+  for f in $( { git diff --name-only origin/develop...HEAD 2>/dev/null; git status --short -uall | awk '{print $NF}'; } | sort -u); do
+    case "$f" in
+      *.md|docs/*|*.uid|.github/*|tools/sim/*|tools/*.py) ;;
+      scripts/tests/*_test_suite.gd)
+        local cls; cls=$(grep -m1 '^class_name' "$f" 2>/dev/null | awk '{print $2}')
+        local sys; sys=$(grep -o "_on(\"[a-z_]*\"): results.append($cls\." scripts/tests/suite_registry.gd | sed 's/_on("\([a-z_]*\)").*/\1/')
+        if [ -n "$sys" ]; then picked+="$sys,"; else all=1; fi ;;
+      scripts/combat/ai/*|scripts/combat/planning/*) picked+="ai,rules,combat_ui," ;;
+      scripts/combat/*) picked+="rules,ai,combat_ui,balance,world," ;;
+      scripts/ui/combat*|scripts/ui/battle*) picked+="combat_ui," ;;
+      scripts/ui/menus/*|scripts/ui/runner/*|scripts/playtest/*|scripts/audio/*|assets/audio/*) picked+="menus," ;;
+      scripts/world/*|scripts/exploration/*|scripts/quests/*|scripts/dialogue/*|scripts/travel/*) picked+="world," ;;
+      data/worlds/*|data/maps/*|data/quests/*|data/dialogue/*) picked+="world,balance," ;;
+      scripts/game_state/*|scripts/progression/*|data/progression/*) picked+="party_save,world," ;;
+      scripts/art/*|data/assets/*|assets/*) picked+="content," ;;
+      *) all=1 ;;
+    esac
+  done
+  if [ $all -eq 1 ]; then echo "$ALL_SYSTEMS"; return; fi
+  picked=$(echo "$picked" | tr ',' '\n' | grep -v '^$' | sort -u | paste -sd, -)
+  [ "$(echo "$picked" | tr ',' '\n' | grep -c .)" -eq 8 ] && picked=$ALL_SYSTEMS
+  echo "${picked:-none}"   # none: only docs / CI / tool files changed, no arena system to run
+}
+
+suite() {  # $1 = scene, $2 = label, $3 = optional pattern; $SYSTEMS limits the arena to those systems
   local limit=290; [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && limit=900   # cloud box: arena ~9.5 min (2026-10-18)
-  timeout "${SUITE_TIMEOUT:-$limit}" "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1   # SUITE_TIMEOUT overrides
+  local args=()
+  if [ -n "${SYSTEMS:-}" ] && [ "$2" = arena ]; then args=(-- "--systems=$SYSTEMS"); set -- "$1" "arena-${SYSTEMS//,/-}" "$3"; fi
+  timeout "${SUITE_TIMEOUT:-$limit}" "$GODOT" --headless "$1" "${args[@]}" > "$OUT/$2.out" 2>&1   # SUITE_TIMEOUT overrides
   local code=$? pass fail
   pass=$(grep -c "PASS" "$OUT/$2.out"); fail=$(grep "FAIL" "$OUT/$2.out" | grep -vc ": PASS")
   echo "[$2] PASS $pass  FAIL $fail   (full log: $OUT/$2.out)"
@@ -122,14 +156,18 @@ parse_all() {
   echo "$res" | grep -Eq "SCRIPT ERROR|Parse Error|Compile Error|FAIL" && status=1
 }
 
-gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step
+gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step; $1 = systems (comma list or auto), default all
+  if [ "${1:-}" = auto ]; then SYSTEMS=$(systems_for_change); else SYSTEMS=${1:-}; fi
+  [ "$SYSTEMS" = "$ALL_SYSTEMS" ] && SYSTEMS=""
+  local skip_arena=0; [ "$SYSTEMS" = none ] && { skip_arena=1; SYSTEMS=""; echo "[gate] systems: none (no arena system touched; parse-all and dojo only)"; }
+  if [ -n "$SYSTEMS" ]; then echo "[gate] systems: $SYSTEMS (the release PR runs every system)"; elif [ "${1:-}" = auto ]; then echo "[gate] systems: all"; fi
   if [ ! -x "$GODOT" ] && ! command -v "$GODOT" >/dev/null; then echo "[gate] FAIL Godot not found: set GODOT or put godot / godot4 on PATH"; status=1; return; fi
   if ! timeout 300 "$GODOT" --headless --import > "$OUT/editor.out" 2>&1; then
     echo "[gate] FAIL class cache / import scan (full log: $OUT/editor.out)"; status=1; return
   fi
   echo "[gate] class cache and imports up to date"
   parse_all; [ $status -ne 0 ] && return
-  suite res://scenes/test_arena.tscn arena; [ $status -ne 0 ] && return
+  if [ $skip_arena -eq 0 ]; then suite res://scenes/test_arena.tscn arena; [ $status -ne 0 ] && return; fi
   suite res://scenes/gear_dojo.tscn dojo; [ $status -ne 0 ] && return
   echo "[gate] ALL CHECKS PASSED"
 }
@@ -148,7 +186,8 @@ case "$1" in
   sim) sim "${@:2}" ;;
   docs) docs_check ;;
   safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" 120 ;;
-  gate) gate ;;
+  gate) gate "$2" ;;
+  systems) systems_for_change ;;
   replay) timeout "${REPLAY_TIMEOUT:-600}" "$GODOT" --headless --path . -s tools/replay.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" "${REPLAY_TIMEOUT:-600}" ;;
   export_placeholder) timeout 120 "$GODOT" --headless --path . -s tools/export_placeholder.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" 120 ;;
   gen_sfx) timeout 120 "$GODOT" --headless --path . -s tools/gen_placeholder_sfx.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" 120 ;;

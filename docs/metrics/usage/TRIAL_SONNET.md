@@ -11,6 +11,7 @@ User 2026-10-18 12:15 UTC: the Assets & Audio thread (session `cse_01V6GmFsz2ESn
 
 | Landed (UTC) | Task | Kind | Model | Commit |
 |---|---|---|---|---|
+| 2026-10-18 12:17 | ITEMPOW1-A | data (seed) | mixed: started 11:45 on Opus, landed on Sonnet; excluded from the comparison | 02c6bf4 |
 
 ## Report deltas
 

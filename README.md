@@ -750,6 +750,8 @@ On Linux or macOS (bash only, or `pwsh ./check_project.ps1 -Fast -Quiet` if Powe
 GODOT=/path/to/Godot_v4.7-stable_linux.x86_64 tools/fc.sh gate
 ```
 
+**Per-system gates** (user 2026-10-18): the arena suites are tagged with 8 systems (`SuiteRegistry.SYSTEMS`: rules, ai, combat_ui, balance, world, party_save, content, menus). `tools/fc.sh gate auto` runs the gate with only the systems the change touches (`tools/fc.sh systems` shows the pick; a path it cannot place means every system, and a docs, CI or tool-only change skips the arena), `tools/fc.sh gate rules,ai` names them, and plain `tools/fc.sh gate` runs everything. CI runs every system as its own parallel job on the release PR, so a red job names the broken system; the `gate` check passes only when all of them pass. A new suite gets one `if _on("<system>"): results.append(...)` line in `scripts/tests/suite_registry.gd`.
+
 ### Run the Game (Scene Runner)
 
 One launcher for everything:

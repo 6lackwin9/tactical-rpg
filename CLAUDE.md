@@ -29,7 +29,7 @@ Read these instead of crawling the code:
 
 ## Standing rules
 
-Strict static typing; README is updated with every change (builders report a docs delta, the planner applies it); commit/push only when `check_project.ps1 -Fast -Quiet` is clean (desktop ~32 s, cloud ~3-4 min; the plain script takes ~3 min on desktop; `tools/fc.sh gate` runs the same steps without PowerShell) and `tools/fc.sh docs` is clean; on desktop also the IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/godot_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content through `ContentCatalog.upsert`, never raw JSON; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
+Strict static typing; README is updated with every change (builders report a docs delta, the planner applies it); commit/push only when `check_project.ps1 -Fast -Quiet` is clean (desktop ~32 s; cloud: `tools/fc.sh gate auto`, the per-system gate; the plain script takes ~3 min on desktop; `tools/fc.sh gate` runs the same steps without PowerShell) and `tools/fc.sh docs` is clean; on desktop also the IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/godot_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content through `ContentCatalog.upsert`, never raw JSON; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
 
 ## Feedback rule
 
