@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: a8f2444 -->
+<!-- last: e1662da -->
 
 ## 2026-10-18
 
@@ -105,6 +105,12 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- PURSE1: approved (purse all recs), decision and task rows (e1662da)
+- DR3-ANSWERS: design review 3 approved (all recs) (bd6f885)
+- DESIGN-LEDGER: design review 3 sent (reviewed at 8e2530a) (c337595)
+- RELEASE: midday release to main, PR #39 at develop 8e2530a (e4f9289)
+- PURSE1-SPEC: encounter purse, authored fight gold (proposed) (8e2530a)
+- PATCH-NOTES: ITEMPOW1-A, FC-TIMEOUT, TRIAL-SONNET (a8dcf23)
 - TRIAL-SONNET: restart the Sonnet vs Opus trial on Assets & Audio (e1bedb0)
 - FC-TIMEOUT: fc.sh suite timeout 900 s in the cloud, 290 s on desktop (182f9bb)
 - PATCH-NOTES: INTENT1-U follow-up, POUCH-TIDY, prefs files, GATE-TIMEOUT (922c8d0)
