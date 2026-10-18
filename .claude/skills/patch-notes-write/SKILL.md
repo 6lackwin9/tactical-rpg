@@ -1,6 +1,6 @@
 ---
 name: patch-notes-write
-description: Add the newest develop commits to PATCH_NOTES.md (Merge & Release thread, on a "landed" message or at each release batch).
+description: Add the newest develop commits to PATCH_NOTES.md (Merge & Release thread, at each release batch or when the user asks; not per landing).
 ---
 
 # Write patch notes
@@ -13,4 +13,4 @@ description: Add the newest develop commits to PATCH_NOTES.md (Merge & Release t
    - "Every change that touched the game" and "Under the hood": paste the script's lines as they are.
 3. Replace the marker with the new one the script printed.
 4. Run `bash tools/fc.sh docs`, commit `PATCH-NOTES: <task ids>` (docs-only, `Review: none (patch notes)`, `Gate: fc.sh docs passed (docs-only)`), and push `develop`. If the push is rejected, fetch, rerun the script and repeat.
-5. Several `landed` messages that arrive close together share one commit.
+5. Run it once per release batch (11:52 and 17:52 UTC) and on request, never per landing (decision "Patch notes per release", user 2026-10-18 16:10 UTC).

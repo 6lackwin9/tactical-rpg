@@ -2,7 +2,7 @@
 
 A modular, simultaneous-execution tactical RPG engine built in **Godot 4** (GDScript). Every unit plans a **6-block round** (AP-costed skills, one move, AI-planned enemies) that resolves simultaneously on a **12x9 spatial grid**, featuring rock-paper-scissors **stance dynamics**, tactical targeting, perimeter escape/withdrawal, and deterministic state scrubbing.
 
-What changed lately: [PATCH_NOTES.md](PATCH_NOTES.md) lists every change on `develop`, newest first, with plain-language lines for what you can see in the game.
+What changed lately: [PATCH_NOTES.md](PATCH_NOTES.md) lists every change on `develop` (updated at each release, 11:52 and 17:52 UTC), newest first, with plain-language lines for what you can see in the game.
 
 ---
 
