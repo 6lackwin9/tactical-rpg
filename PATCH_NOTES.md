@@ -2,12 +2,13 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: c2de328 -->
+<!-- last: 69c82e0 -->
 
 ## 2026-10-18
 
 In the game:
 
+- In the Ashlands, the ash scouts and ash raiders now lose heart as the fight turns against them. Kill half of them, or the raiders' smokecaller, and the rest throw down their arms and surrender, which counts as a win.
 - Talking to people now opens a bar across the bottom of the map with their portrait and numbered choices (press 1-9). Locked choices say why. The shop is now a popup with Buy and Sell tabs, and shows who in your party can use each item. Both follow the text size setting.
 - **Map screens**: the region and world maps no longer show debug tools in the real game; the top bar shows the place name and your supplies, and chest notes name the items inside.
 - **Balance**: Shield Wall now also fortifies the user (4/6/8 by rank) alongside its taunt, and the healing potion costs 30 in the Hest shop (was 15).
@@ -34,6 +35,7 @@ In the game:
 
 Every change that touched the game:
 
+- MORALE1-A: enemy morale on ash_scouts and ash_raiders (69c82e0)
 - UIR-6: dialogue as a full-width bottom bar, shop as a popup, text scale (c2de328)
 - PACE1-L (schema): boss enrage phase, empower status, encounter pace and start_status fields; no combat effect until the behaviour commit (39daec9)
 - MORALE1-S: world sims carry the five morale fields (f70e79a)
@@ -122,6 +124,9 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- LEVERS1: Shield Wall guard rule and default-kit slot decided (L3, A3) (e0f1ae5)
+- GAMEPLAY-HANDOVER: add LEVERS1-L3 to the queue (b0fda75)
+- BALANCE-HANDOVER: rotation after BAL5 close-out (233dd98)
 - BAL5-R (probe): Shield Wall barely gets cast in sims (not in the default loadout; AI uses it only below 40% HP), so the tank gap went to Design (7740b0e)
 - BAL5-R: final balance rerun; Shield Wall fortify moved nothing, remaining gaps listed in the balance report (d4ab083)
 - ENGINE-HOLD: keep threads off the engine branch; branch cleanup skips it (15c3a03)
