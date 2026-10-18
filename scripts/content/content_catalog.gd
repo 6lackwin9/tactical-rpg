@@ -17,7 +17,7 @@ extends RefCounted
 const DEFAULT_ROOT: String = "res://data/catalog"
 const VERSION: int = 1
 # File format version per kind (default VERSION). skills.json is version 2: ranked entries on disk, flat rows in memory
-# (SkillRanks). The loader decides by the file's own version, so a version 1 skills file still loads.
+# (SkillRanks). A skills file below version 2 (or with no version) is a load error and blocks saving (CLN-3b).
 # items.json is version 2 (FORGE1_ITEMS 8): stored entries are family + modifiers (ItemModifiers), flat resolved rows in
 # memory. Until ITEM1-A migrates the shipped data, a catalog without item families keeps the version 1 flat file (legacy
 # mode: items_inherit() is false, saving writes version 1); a version 1 file loaded next to families collapses on load.
@@ -150,7 +150,9 @@ static func _read_kind(kind: String) -> Array:
 	if kind == "skills" and file_version >= 2:
 		return _read_ranked_skills(list, path)
 	if kind == "skills":
-		push_warning("ContentCatalog: %s is a version %d skills file (flat rows); version 1 is deprecated, saving writes version 2 (CLN-3b removes v1 loading)" % [path, file_version])
+		_error_list().append("%s: version %d skills files (flat rows) are no longer read; write version 2 (ranked entries)." % [path, file_version])
+		_block_save(kind)
+		return found
 	if kind == "items":
 		return _read_items(list, path, file_version)
 	for item: Variant in list:

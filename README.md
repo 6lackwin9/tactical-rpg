@@ -544,7 +544,7 @@ Placeholder art (CLN-15, seed `data/seeds/cln15_art.gd`): goblin units now set t
 
 ### Cleanup batch 1 (CLN-3, 6, 7, 9)
 
-Refactor only, no behaviour change: per-kind validation moved out of `content_catalog.gd` (1416 -> 993 lines) into `scripts/content/validators/` (`SkillValidator`, `ItemValidator`, `ClassUnitValidator`); the legacy `SkillDef.offhand` / `advanced` shims are gone (`is_off_hand()`, `grade`), and old skill keys or a version 1 skills file still load but print a deprecation warning; the second power formula `CharacterStats.get_melee_power` and other dead helpers were removed, so attack power comes only from `DamageCalculator`.
+Refactor only, no behaviour change: per-kind validation moved out of `content_catalog.gd` (1416 -> 993 lines) into `scripts/content/validators/` (`SkillValidator`, `ItemValidator`, `ClassUnitValidator`); the legacy `SkillDef.offhand` / `advanced` shims are gone (`is_off_hand()`, `grade`), and old skill keys or a version 1 skills file still load but print a deprecation warning (CLN-3b later removed both: the old keys are no longer translated, and a version 1 skills file is a load error that blocks saving); the second power formula `CharacterStats.get_melee_power` and other dead helpers were removed, so attack power comes only from `DamageCalculator`.
 
 ### Cleanup batch 2 (CLN-8, 9b, 14)
 

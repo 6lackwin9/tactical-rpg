@@ -57,7 +57,7 @@ Archive executed seeds. Status: confirmed (user 2026-10-17).
 
 ### CLN-3
 
-SKILL1 legacy shims. Status: confirmed (user 2026-10-17).
+SKILL1 legacy shims. Status: confirmed (user 2026-10-17); CLN-3 done, CLN-3b done 2026-10-18 (no warning hit in the gate or shipped data).
 
 - What and where: `ContentSchema._legacy_skill` (`scripts/content/content_schema.gd:369,379-392`, comment "accepted for one release"); derived properties `SkillDef.offhand` (`scripts/combat/planning/skill_def.gd:72-77`) and `SkillDef.advanced` (`:101-106`); their readers `tactical_ai.gd:168,171`, `plan_entry.gd:62`, `skill_catalog.gd:90`, `damage_calculator.gd:196`, `dojo_session.gd:458-459,513,618,621,630`, `forge_preview.gd:224`, `combatant.gd:284,299`, `class_rules_test_suite.gd:175`; tests of the removed behaviour `skill_model_test_suite.gd:147-151,160,254`; `content_test_suite.gd:115` still feeds the old `"advanced": true` key.
 - Why bloat: HISTORY 2026-10-16 rows (bool `advanced` / `evolves_from`, off-hand categories) and DECISIONS "Strict hand typing" / "round 4". Shipped data is clean: `skills.json` is version 2 with no `advanced`, `offhand` or `evolves_from` keys (the 11 hits are `"grade": "advanced"`), no world file has them, `evolves_from` is already gone from code.

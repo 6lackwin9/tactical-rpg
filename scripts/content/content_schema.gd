@@ -242,9 +242,7 @@ static func defaults(kind: String) -> Dictionary:
 # at the end (so hand-added data survives a round trip through the Forge).
 static func normalize(kind: String, entry: Dictionary) -> Dictionary:
 	var src: Dictionary = entry
-	if kind == "skills":
-		src = _legacy_skill(entry)
-	elif kind == "classes":
+	if kind == "classes":
 		src = _legacy_class(entry)
 	var out: Dictionary = {}
 	for f: Dictionary in fields(kind):
@@ -253,23 +251,6 @@ static func normalize(kind: String, entry: Dictionary) -> Dictionary:
 	for key: Variant in src:
 		if not out.has(key):
 			out[key] = _copy(src[key])
-	return out
-
-# Pre-FORGE1 skill keys, deprecated (warn on use; CLN-3b drops this normaliser once logs show no hit):
-# advanced: true -> grade advanced, offhand: true -> weapon_hand off.
-static func _legacy_skill(entry: Dictionary) -> Dictionary:
-	if not entry.has("advanced") and not entry.has("offhand"):
-		return entry
-	push_warning("ContentSchema: skill '%s' uses the deprecated key(s) advanced / offhand; write grade / weapon_hand instead (CLN-3b removes them)" % str(entry.get("id", "")))
-	var out: Dictionary = entry.duplicate()
-	if out.has("advanced"):
-		if DictUtil.to_bool(out["advanced"]) and not out.has("grade"):
-			out["grade"] = "advanced"
-		out.erase("advanced")
-	if out.has("offhand"):
-		if DictUtil.to_bool(out["offhand"]) and not out.has("weapon_hand"):
-			out["weapon_hand"] = "off"
-		out.erase("offhand")
 	return out
 
 # Pre-CLASS1 class path, accepted for one release (FORGE1_CLASSES 3.5): a list [{level, skill}] becomes the dict
