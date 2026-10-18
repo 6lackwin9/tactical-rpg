@@ -64,12 +64,13 @@ static func hp_pct(state: Dictionary) -> float:
 	return hp / maxf(1.0, max_hp) * 100.0
 
 # One run of party `ids` through `fights` ([{"enc": encounter dict, "label"}]) with seed `seed_value`:
-# {"wins", "fell_at" (1-based battle, 0 = none), "hp": [party HP % after each fought battle, before the heal],
+# {"wins", "fell_at" (1-based story battle, 0 = none), "fell_fight" (0-based index into `fights` of the lost fight, extras included; -1 = none), "hp": [party HP % after each fought battle, before the heal],
 #  "alive": [heroes up after each battle]}; plus "skipped" (1-based battle) when a jitter PLAN SKIP (K6) dropped the run.
 func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary:
 	var state: Dictionary = {}
 	var wins: int = 0
 	var fell_at: int = 0
+	var fell_fight: int = -1
 	var hp_after: Array[float] = []
 	var alive_after: Array[int] = []
 	var story_no: int = 0   # story battles started so far (an extra fight belongs to the battle it precedes)
@@ -95,9 +96,10 @@ func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary
 		runner.start_hp = {}
 		runner.rounds_override = 0
 		if DictUtil.to_bool(res.get("skipped", false)):
-			return {"wins": wins, "fell_at": 0, "hp": hp_after, "alive": alive_after, "skipped": i + 1}
+			return {"wins": wins, "fell_at": 0, "fell_fight": -1, "hp": hp_after, "alive": alive_after, "skipped": i + 1}
 		if not DictUtil.to_bool(res.get("ok", false)):
 			fell_at = this_no
+			fell_fight = i
 			break
 		var end_hp: Dictionary = DictUtil.dict_of(res["party_hp"])
 		var end_max: Dictionary = DictUtil.dict_of(res["party_max"])
@@ -115,11 +117,12 @@ func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary
 			alive_after.append(n_alive)
 		if not DictUtil.to_bool(res.get("won", res["cleared"])) or n_alive == 0:
 			fell_at = this_no
+			fell_fight = i
 			break
 		if not is_extra:
 			wins += 1
 		apply_heal(state, args.heal)
-	return {"wins": wins, "fell_at": fell_at, "hp": hp_after, "alive": alive_after}
+	return {"wins": wins, "fell_at": fell_at, "fell_fight": fell_fight, "hp": hp_after, "alive": alive_after}
 
 # True when fight `i` is the first entry of its story battle (the extras before a story fight come first): rest is taken once, before them.
 static func _first_of_story(fights: Array, i: int) -> bool:
@@ -190,7 +193,7 @@ func campaign_mode() -> void:
 				else:
 					fell[fell_at] = DictUtil.to_int(fell.get(fell_at, 0)) + 1
 				out("  %s steel %s seed %d: survived %d/%d, %s, party hp%% after each battle [%s]" % [",".join(comp), steel, s, DictUtil.to_int(r["wins"]), total,
-					"cleared the campaign" if fell_at == 0 else "fell at battle %d (%s)" % [fell_at, str(DictUtil.dict_of(fights[fell_at - 1])["label"])], ", ".join(hp_text)])
+					"cleared the campaign" if fell_at == 0 else "fell at battle %d (%s)" % [fell_at, str(DictUtil.dict_of(fights[DictUtil.to_int(r["fell_fight"])])["label"])], ", ".join(hp_text)])
 			var avg_hp: Array[String] = []
 			for k: int in range(hp_sum.size()):
 				avg_hp.append("%d" % roundi(hp_sum[k] / float(maxi(1, hp_n[k]))))

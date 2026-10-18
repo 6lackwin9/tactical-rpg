@@ -304,15 +304,19 @@ static func _test_runs() -> bool:
 		var wall_extra: Array = [weak, wall.merged({"extra": true}), weak]
 		var extra_loss: Dictionary = camp.run_party(ids, wall_extra, seed_value)
 		checks["extra: a loss in the extra fight is a fall at the story battle after it"] = DictUtil.to_int(extra_loss["fell_at"]) == 2 and DictUtil.to_int(extra_loss["wins"]) == 1
+		checks["extra: the lost fight is the extra (fell_fight 1)"] = DictUtil.to_int(extra_loss["fell_fight"]) == 1
+		# CAMPLABEL1-S: a loss in the story battle after an extra names that battle, not the extra before it.
+		var wall_after_extra: Dictionary = camp.run_party(ids, [mid, weak.merged({"extra": true}), wall], seed_value)
+		checks["label: loss after an extra is story battle 2 at fight index 2"] = DictUtil.to_int(wall_after_extra["fell_at"]) == 2 and DictUtil.to_int(wall_after_extra["fell_fight"]) == 2
 		args.heal = "none"
 		# A run stops at the first loss: wall in the middle ends the run, the third fight never starts.
 		obs.starts.clear()
 		var lost: Dictionary = camp.run_party(ids, [weak, wall, weak], seed_value)
-		checks["loss: fell at battle 2"] = DictUtil.to_int(lost["fell_at"]) == 2
+		checks["loss: fell at battle 2"] = DictUtil.to_int(lost["fell_at"]) == 2 and DictUtil.to_int(lost["fell_fight"]) == 1
 		checks["loss: survived 1 battle"] = DictUtil.to_int(lost["wins"]) == 1
 		checks["loss: no third battle (%d fights)" % obs.starts.size()] = obs.starts.size() == 2 and DictUtil.array_of(lost["hp"]).size() == 2
 		var clean: Dictionary = camp.run_party(ids, [weak, weak], seed_value)
-		checks["no loss: fell_at 0, every battle survived"] = DictUtil.to_int(clean["fell_at"]) == 0 and DictUtil.to_int(clean["wins"]) == 2
+		checks["no loss: fell_at 0, every battle survived"] = DictUtil.to_int(clean["fell_at"]) == 0 and DictUtil.to_int(clean["fell_fight"]) == -1 and DictUtil.to_int(clean["wins"]) == 2
 		checks["fight records carry party_hp"] = runner.fights > 0
 	TestHelpers.cleanup(SANDBOX)
 	return TestHelpers.report(TAG, "Campaign runs: HP carry-over, heal=full, stop at the first loss", checks)
