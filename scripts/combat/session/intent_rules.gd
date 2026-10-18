@@ -19,10 +19,12 @@ extends RefCounted
 #   cell      Vector2i          area: the aimed tile; move or flee without a target: the goal; else NO_CELL
 #   blocks    Vector2i          (start_block, end_block) of the first action; (0, 0) when arriving or idle
 #   skill     String            display name of the first action ("" when arriving or idle)
-#   revealed  bool              a foresight holder is targeted by any of the enemy's actions this round (reveals)
+#   revealed  bool              a foresight holder is targeted by any of the enemy's actions this round, or the
+#                               enemy is enraged (PACE1 Q2 A: its whole plan is shown to everyone)
+#   enraged   bool              PACE1: the enemy is enraged this round (CombatEncounter.is_enraged)
 #   readers   Array[Combatant]  the foresight holders it targets (empty unless revealed); their
 #                               Combatant.foresight_source names the passive (hover card "Read by ...")
-#   plan      Array[Dictionary] revealed: every scheduled action in block order as
+#   plan      Array[Dictionary] revealed (foresight or enraged): every scheduled action in block order as
 #                               {kind, target, cell, blocks, skill}; else []
 # ==============================================================================
 
@@ -126,28 +128,30 @@ static func readers_of(actions: Array[CombatResolver.ScheduledAction], party: Ar
 	return out
 
 # The record of one enemy (see the header for the keys).
-static func intent_of(unit: Combatant, party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid, on_grid_at_schedule: Array[Combatant] = []) -> Dictionary:
+static func intent_of(unit: Combatant, party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid, on_grid_at_schedule: Array[Combatant] = [], enraged: bool = false) -> Dictionary:
 	var actions: Array[CombatResolver.ScheduledAction] = actions_of(unit, scheduled)
 	var plan: Array[Dictionary] = []
 	var readers: Array[Combatant] = []
 	if actions.is_empty():
 		var empty_kind: String = IDLE if on_grid_at_schedule.has(unit) else ARRIVING
-		return {"unit": unit, "kind": empty_kind, "target": null, "cell": NO_CELL, "blocks": Vector2i.ZERO, "skill": "", "revealed": false, "readers": readers, "plan": plan}
+		return {"unit": unit, "kind": empty_kind, "target": null, "cell": NO_CELL, "blocks": Vector2i.ZERO, "skill": "", "revealed": enraged, "readers": readers, "plan": plan, "enraged": enraged}
 	var record: Dictionary = action_record(actions[0])
 	readers = readers_of(actions, party, grid)
-	if not readers.is_empty():
+	if not readers.is_empty() or enraged:
 		for a: CombatResolver.ScheduledAction in actions:
 			plan.append(action_record(a))
 	record["unit"] = unit
-	record["revealed"] = not readers.is_empty()
+	record["revealed"] = not readers.is_empty() or enraged
 	record["readers"] = readers
 	record["plan"] = plan
+	record["enraged"] = enraged
 	return record
 
 # One record per active enemy on the grid, in `enemies` order.
-static func intents(enemies: Array[Combatant], party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid, on_grid_at_schedule: Array[Combatant] = []) -> Array[Dictionary]:
+# `enraged_units`: the enemies enraged this round (PACE1; CombatEncounter.is_enraged).
+static func intents(enemies: Array[Combatant], party: Array[Combatant], scheduled: Array[CombatResolver.ScheduledAction], grid: CombatGrid, on_grid_at_schedule: Array[Combatant] = [], enraged_units: Array[Combatant] = []) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for e: Combatant in enemies:
 		if e.is_active() and grid != null and grid.has_combatant(e):
-			out.append(intent_of(e, party, scheduled, grid, on_grid_at_schedule))
+			out.append(intent_of(e, party, scheduled, grid, on_grid_at_schedule, enraged_units.has(e)))
 	return out

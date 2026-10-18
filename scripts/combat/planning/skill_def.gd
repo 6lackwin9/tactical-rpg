@@ -129,10 +129,11 @@ func family_id() -> String:
 	return id if family.is_empty() else family
 
 # power_mult as `user` applies it: the skill's multiplier x the user's family potency (Combatant.potency_for)
-# x the user's weaken factor (Combatant.weaken_factor, 1.0 when not weakened).
-# This is the ONLY place potency and weaken enter attack damage (the value fed to DamageCalculator as skill_mult).
+# x the user's weaken factor (Combatant.weaken_factor, 1.0 when not weakened) x its empower factor (PACE1,
+# Combatant.empower_factor, 1.0 when not empowered).
+# This is the ONLY place potency, weaken and empower enter attack damage (the value fed to DamageCalculator as skill_mult).
 func power_for(user: Combatant) -> float:
-	return power_mult if user == null else power_mult * user.potency_for_skill(self) * user.weaken_factor()
+	return power_mult if user == null else power_mult * user.potency_for_skill(self) * user.weaken_factor() * user.empower_factor()
 
 # False for a zero-power ATTACK (a debuff-only attack): it deals no damage and is never a hit for reactions.
 func deals_damage() -> bool:

@@ -455,12 +455,16 @@ func is_planning() -> bool:
 
 # Enemy intent tells (INTENT1): one record per active enemy on the grid, read from the enemies' scheduled actions
 # (the party plan is not scheduled until confirm, so editing it never changes these). Keys and rules: IntentRules
-# (unit, kind, target, cell, blocks, skill, revealed, readers, plan). Read-only; empty outside is_planning().
+# (unit, kind, target, cell, blocks, skill, revealed, readers, plan, enraged). Read-only; empty outside is_planning().
 func enemy_intents() -> Array[Dictionary]:
 	if not is_planning() or resolver == null:
 		var none: Array[Dictionary] = []
 		return none
-	var records: Array[Dictionary] = IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule)
+	var enraged: Array[Combatant] = []   # PACE1 3.6: an enraged enemy shows its whole plan to everyone
+	for foe: Combatant in enemies:
+		if encounter.is_enraged(foe):
+			enraged.append(foe)
+	var records: Array[Dictionary] = IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule, enraged)
 	for record: Dictionary in records:   # MORALE1 rule 13: the state word and group, never the value or flee ratio
 		var unit: Combatant = record["unit"]
 		record["morale_state"] = encounter.morale_state_of(unit)

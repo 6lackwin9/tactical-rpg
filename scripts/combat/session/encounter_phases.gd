@@ -22,7 +22,7 @@ extends RefCounted
 #   name            String  1..40 chars (required)
 #   trigger         Dict    {"kind": "hp_below", "unit": ref, "pct": 1..99, "or_round": 0 | 2..max_rounds} or
 #                           {"kind": "round", "round": 2..max_rounds}; or_round (PACE1, default 0 = none): also due at
-#                           that round's start when not yet fired (validated and parsed; the firing is PACE1-L stage 2)
+#                           that round's start when not yet fired (mark_round)
 #   effects         Array   1..5 of:
 #     {"type": "line", "text": 1..160 chars}                                 at most one per phase
 #     {"type": "wave", "units": [refs], "label": ""}                         at most one per phase
@@ -173,13 +173,36 @@ func check_block_end(unit_of: Callable) -> void:
 		elif c.hp * 100 <= DictUtil.to_int(trigger["pct"]) * c.max_hp:
 			due.append(id)
 
-# Rule 1: round phases are due at the start of their round.
+# Rule 1: round phases are due at the start of their round; PACE1 3.2: so is an unfired, undropped hp_below phase at
+# the start of its or_round (whichever of HP and round comes first).
 func mark_round(round_num: int) -> void:
 	for p: Dictionary in phases:
 		var id: String = str(p["id"])
 		var trigger: Dictionary = p["trigger"]
-		if str(trigger["kind"]) == TRIGGER_ROUND and DictUtil.to_int(trigger["round"]) == round_num and not fired.has(id) and not dropped.has(id) and not due.has(id):
+		if fired.has(id) or dropped.has(id) or due.has(id):
+			continue
+		var kind: String = str(trigger["kind"])
+		if kind == TRIGGER_ROUND and DictUtil.to_int(trigger["round"]) == round_num:
 			due.append(id)
+		elif kind == TRIGGER_HP_BELOW and DictUtil.to_int(trigger.get(OR_ROUND, 0)) == round_num:
+			due.append(id)
+
+# PACE1 3.3: the roster refs enraged for planning round `round_num`: every enrage unit of a phase fired before that
+# round or at its start (the same "from the next planning phase" rule as the AI changes). Read from `fired`, so a
+# reset or a replay rebuilds it with no snapshot key of its own.
+func enraged_refs(round_num: int) -> Array[String]:
+	var out: Array[String] = []
+	for id: Variant in fired:
+		var at: Array = fired[id]
+		var r: int = DictUtil.to_int(at[0])
+		if r < round_num or (r == round_num and DictUtil.to_int(at[1]) == 0):
+			for fx: Dictionary in effects_of(phase(str(id)), EFFECT_ENRAGE):
+				if not out.has(str(fx["unit"])):
+					out.append(str(fx["unit"]))
+	return out
+
+func enraged(ref: String, round_num: int) -> bool:
+	return enraged_refs(round_num).has(ref)
 
 # The first due phase in list order ("" = none).
 func next_due() -> String:
@@ -207,7 +230,7 @@ func round_start_entries(round_num: int) -> Array[ActionLogEntry]:
 			out.append(entry)
 	return out
 
-# {id, name, actor, line, pause_autoplay} of a phase EVENT entry ({} for any other entry).
+# {id, name, actor, line, pause_autoplay, enrage (power, 0 = none)} of a phase EVENT entry ({} for any other entry).
 func info(entry: ActionLogEntry) -> Dictionary:
 	if entry == null or not _entry_ids.has(entry):
 		return {}
@@ -216,7 +239,10 @@ func info(entry: ActionLogEntry) -> Dictionary:
 	var line: String = ""
 	for fx: Dictionary in effects_of(p, EFFECT_LINE):
 		line = str(fx["text"])
-	return {"id": id, "name": str(p.get("name", "")), "actor": entry.actor_name, "line": line, "pause_autoplay": DictUtil.to_bool(p.get("pause_autoplay", true), true)}
+	var enrage: int = 0   # PACE1: the enrage power of this phase (0 = none; the banner's second line)
+	for fx: Dictionary in effects_of(p, EFFECT_ENRAGE):
+		enrage = DictUtil.to_int(fx["power"])
+	return {"id": id, "name": str(p.get("name", "")), "actor": entry.actor_name, "line": line, "pause_autoplay": DictUtil.to_bool(p.get("pause_autoplay", true), true), "enrage": enrage}
 
 # Rule 5: every unit an ai effect names gets its live profile = base + the ai settings of every phase fired before
 # `round_num` (or at its start), in fire order. `units_of_ref(ref) -> Array` of Combatants. Units no phase touches keep
@@ -616,6 +642,17 @@ static func pace_of(entry: Dictionary, tier_of: Callable) -> String:
 			return PACE_BOSS
 		elite = elite or tier == PACE_ELITE
 	return PACE_ELITE if elite else PACE_MOB
+
+# PACE1 3.5 soft warning (warnings_for, never blocking): a fight whose pace resolves to boss and has no enrage phase.
+static func pace_warnings(entry: Dictionary, tier_of: Callable) -> Array[String]:
+	var out: Array[String] = []
+	if pace_of(entry, tier_of) != PACE_BOSS:
+		return out
+	for p: Dictionary in parse(entry.get("phases", [])):
+		if not effects_of(p, EFFECT_ENRAGE).is_empty():
+			return out
+	out.append("Boss fight '%s' has no enrage phase (PACE1)." % str(entry.get("id", "")))
+	return out
 
 # ------------------------------------------------------------------------------
 # PACE1 3.4: start buffs (world encounter field `start_status`; validated by WorldCatalog._encounter_errors)

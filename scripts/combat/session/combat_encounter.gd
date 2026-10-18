@@ -134,9 +134,13 @@ func phase_state() -> Dictionary:
 func restore_phase_state(_state: Dictionary, _round_num: int) -> void:
 	pass
 
-# {id, name, actor, line, pause_autoplay} when `entry` is a phase EVENT entry of this battle, else {}.
+# {id, name, actor, line, pause_autoplay, enrage} when `entry` is a phase EVENT entry of this battle, else {}.
 func phase_info(_entry: ActionLogEntry) -> Dictionary:
 	return {}
+
+# PACE1: true when `c` is enraged in the round being planned (its whole plan is shown; CatalogEncounter).
+func is_enraged(_c: Combatant) -> bool:
+	return false
 
 # Narration when a round concludes: {"phase": String, "status": String, "log": String}
 func round_summary(_round_num: int, _combat_over: bool) -> Dictionary:

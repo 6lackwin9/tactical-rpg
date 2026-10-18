@@ -1297,8 +1297,8 @@ static func validate_world(world_id: String) -> Dictionary:
 				problems["%s/%s:%s" % [world_id, kind, id]] = errs
 	return problems
 
-# Soft warnings of one world (never blocking): map, route, dialogue, gone-NPC, quest link / reward budget and
-# reputation key lints, each line prefixed with the entry qid. Lints over merged entries also report inherited ones.
+# Soft warnings of one world (never blocking): map, route, dialogue, gone-NPC, quest link / reward budget,
+# reputation key and boss-without-enrage (PACE1) lints, each line prefixed with the entry qid. Lints over merged entries also report inherited ones.
 static func world_warnings(world_id: String) -> Array[String]:
 	var out: Array[String] = []
 	out.append_array(MapRules.warnings(world_id))
@@ -1308,6 +1308,18 @@ static func world_warnings(world_id: String) -> Array[String]:
 	out.append_array(QuestRules.link_warnings(world_id))
 	out.append_array(QuestRules.reward_warnings(world_id))
 	out.append_array(RepRules.key_warnings(world_id))
+	out.append_array(encounter_warnings(world_id))
+	return out
+
+# PACE1 3.5: "<qid>: Boss fight '<id>' has no enrage phase (PACE1)." for each own encounter of the world whose pace
+# resolves to boss (tiers from the characters' base units, as in this world) without an enrage phase.
+static func encounter_warnings(world_id: String) -> Array[String]:
+	var out: Array[String] = []
+	var tier_of: Callable = func(ref: String) -> String:
+		return str(ContentSchema.normalize("units", WorldFactory.unit_entry(resolve(world_id, "characters", ref))).get("tier", ""))
+	for e: Dictionary in own_entries(world_id, "encounters"):
+		for w: String in EncounterPhases.pace_warnings(e, tier_of):
+			out.append("%s:%s: %s" % [world_id, str(e.get("id", "")), w])
 	return out
 
 # {world id: [warnings]} for every world with at least one warning.

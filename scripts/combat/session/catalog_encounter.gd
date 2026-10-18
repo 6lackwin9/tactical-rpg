@@ -26,6 +26,7 @@ var _unit_keys: Dictionary = {}        # MORALE1: enemy Combatant -> "<ref>#<n>"
 var _units_by_key: Dictionary = {}     # MORALE1: "<ref>#<n>" -> enemy Combatant
 var _unit_tiers: Dictionary = {}       # MORALE1: enemy Combatant -> roster tier (rule 5)
 var _authored_profiles: Dictionary = {}   # MORALE1: enemy Combatant -> its spawned AiProfile (live profiles are rebuilt from it)
+var _planning_round: int = 1   # PACE1: the round prepare_round last set up (is_enraged reads it)
 const FLED_TEXT: String = "The party withdrew."
 const PHASE_SOURCE: String = "phase:"   # status source prefix of a phase's status grants ("phase:<id>"; BattleMetrics credits the enemy recipient)
 
@@ -459,12 +460,40 @@ func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
 				granted = true
 		if granted:
 			parts.append(StatusEffects.display_name(status))
+	for fx: Dictionary in EncounterPhases.effects_of(p, EncounterPhases.EFFECT_ENRAGE):
+		if _apply_enrage(id, fx, block_num):
+			parts.append("Enraged")
 	if not EncounterPhases.effects_of(p, EncounterPhases.EFFECT_AI).is_empty():
 		parts.append("new tactics from the next round" if block_num > 0 else "new tactics")
 	var entry: ActionLogEntry = CombatEncounter.make_event_entry(round_num, block_num, actor, false, str(p["name"]), EncounterPhases.SUBTYPE,
 		EncounterPhases.OUTCOME, detail, ", ".join(parts))
 	phase_runtime.mark_fired(id, round_num, block_num, entry)
 	return entry
+
+# PACE1 rule 4 / 3.3: the enrage unit gets empower at `power` % for the rest of the battle (rounds max_rounds + 1, so it
+# never ticks out). The power is queued: mid-round (block > 0) it waits in the pending statuses until the next round
+# start, so blocks planned before the phase keep their damage; at a round start (block 0, before the enemy draft and
+# the party plan) it is active at once. True when a unit got it.
+func _apply_enrage(id: String, fx: Dictionary, block_num: int) -> bool:
+	var granted: bool = false
+	for c: Combatant in units_of_ref(str(fx["unit"])):
+		if not c.is_active() or not grid.has_combatant(c) or is_reserved(c):
+			continue
+		if block_num > 0:
+			StatusEffects.queue(c, StatusEffects.EMPOWER, max_rounds + 1, DictUtil.to_int(fx["power"]), PHASE_SOURCE + id)
+		else:
+			StatusEffects.grant_now(c, StatusEffects.EMPOWER, max_rounds + 1, DictUtil.to_int(fx["power"]), PHASE_SOURCE + id)
+		granted = true
+	return granted
+
+# PACE1 3.6: enraged in the planning round (an enrage phase fired before it or at its start).
+func is_enraged(c: Combatant) -> bool:
+	if c == null:
+		return false
+	for ref: String in phase_runtime.enraged_refs(_planning_round):
+		if units_of_ref(ref).has(c):
+			return true
+	return false
 
 # ------------------------------------------------------------------------------
 # Round flow & narration
@@ -474,6 +503,7 @@ func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
 # of this round and phases met at the end of the last round fire (list order) before the enemy draft; the live AI
 # profiles are rebuilt for this round's draft. They come back under "entries".
 func prepare_round(round_num: int) -> Dictionary:
+	_planning_round = round_num
 	var info: Dictionary = _intro(round_num)
 	var entries: Array[ActionLogEntry] = phase_runtime.round_start_entries(round_num)
 	phase_runtime.mark_round(round_num)

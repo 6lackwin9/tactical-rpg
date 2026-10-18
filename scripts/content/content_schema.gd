@@ -185,9 +185,11 @@ static func options_of(f: Dictionary) -> Array[String]:
 			out.append("")
 			out.append_array(StatusEffects.debuffs())
 			return out
-		"status_buff":
+		"status_buff":   # buffs a skill can grant (registry grant support / defend; empower, grant "", is left out: PACE1)
 			out.append("")
-			out.append_array(StatusEffects.buffs())
+			for s: String in StatusEffects.buffs():
+				if not str(StatusRegistry.row(s).get("grant", "")).is_empty():
+					out.append(s)
 			return out
 		"weapon_types":
 			return SkillDef.weapon_type_tokens()

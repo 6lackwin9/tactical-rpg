@@ -25,7 +25,7 @@ static func encounter_for(gs: GameState, encounter_qid: String, zone: String = "
 		return {"ok": false, "errors": errors, "encounter": null}
 	var hit_world: String = str(hit["_world"])
 	var world: String = gs.world_id if WorldCatalog.lineage(gs.world_id).has(hit_world) else hit_world
-	var enc := GameEncounter.new(world, str(hit["id"]), gs.party, zone)
+	var enc := GameEncounter.new(world, str(hit["id"]), gs.party, zone, gs)   # PACE1: gs.flags gate start_status
 	return {"ok": true, "errors": errors, "encounter": enc}
 
 # The session's verdict when the battle ended (OBJ1 rule 3: objectives, guests, protect); else today's rule: won (combat

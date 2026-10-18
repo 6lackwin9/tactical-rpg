@@ -154,6 +154,8 @@ static func _test_empower_row() -> bool:
 	checks["no skill grants empower (grant \"\")"] = str(r.get("grant", "x")).is_empty() and not StatusEffects.support_buffs().has(StatusEffects.EMPOWER) and not StatusEffects.defend_buffs().has(StatusEffects.EMPOWER)
 	var skill_errors: Array[String] = ContentCatalog.validate_entry("skills", {"id": "t_reg_emp", "name": "E", "kind": "SUPPORT", "grant_status": StatusEffects.EMPOWER})
 	checks["a SUPPORT skill granting empower is refused (%s)" % "; ".join(skill_errors)] = TestHelpers.any_contains(skill_errors, "'empower' is not a support buff")
+	var grant_opts: Array[String] = ContentSchema.options_of({"options_from": "status_buff"})
+	checks["the skill grant_status options leave empower out, keep the skill-granted buffs"] = not grant_opts.has(StatusEffects.EMPOWER) and StatusEffects.support_buffs().all(func(b: String) -> bool: return grant_opts.has(b)) and StatusEffects.defend_buffs().all(func(b: String) -> bool: return grant_opts.has(b))
 	var base: Dictionary = StatusRegistry.row(StatusEffects.EMPOWER).duplicate()
 	var debuff_support: Dictionary = base.duplicate()
 	debuff_support["kind"] = StatusRegistry.KIND_DEBUFF

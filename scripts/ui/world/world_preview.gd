@@ -201,6 +201,8 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 		text += _line("Morale", _esc(morale))   # MORALE1 rule 16
 	var pace_set: String = str(e.get("pace", EncounterPhases.PACE_AUTO))
 	text += _line("Pace", EncounterPhases.pace_of(e, tier_of) + (" (auto)" if pace_set == EncounterPhases.PACE_AUTO else ""))   # PACE1 3.5
+	for pace_warning: String in EncounterPhases.pace_warnings(e, tier_of):
+		text += "[color=#fde047]%s[/color]\n" % _esc(pace_warning)
 	text += _line("Deployment", str(e.get("deployment", EncounterObjectives.STANDARD)))
 	if not DictUtil.array_of(e["party"]).is_empty() and not DictUtil.array_of(e["enemies"]).is_empty():
 		var enc := WorldEncounter.new(world_id, "")

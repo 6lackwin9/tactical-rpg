@@ -9,7 +9,7 @@ extends RefCounted
 #   - the attacker stands adjacent (distance 1) to the defender when the hit lands
 #   - the defender survived the hit and the attacker is still on the field
 # The counter is a normal DamageCalculator.compute hit with skill_mult = COUNTER_MULT
-# (50% of the defender's attack power, times its weaken factor; Focus, stance matchup, crit, guard and armor apply
+# (50% of the defender's attack power, times its weaken and empower factors; Focus, stance matchup, crit, guard and armor apply
 # as always). Riposte is removed by any stance change (Combatant.set_stance).
 # Order inside one hit (S12C-L rule 5): the hit (with exploit) -> the skill's status roll -> this counter -> stance
 # break -> exploit consume. So a stance-break hit is countered once, then the break ends the riposte. The counter
@@ -36,7 +36,7 @@ static func counter(attacker: Combatant, defender: Combatant, grid: CombatGrid, 
 	if not can_counter(attacker, defender, grid, ranged):
 		return {}
 	defender.riposted[attacker] = true
-	var res: Dictionary = DamageCalculator.compute(defender, attacker, false, false, COUNTER_MULT * defender.weaken_factor(), false, rng)
+	var res: Dictionary = DamageCalculator.compute(defender, attacker, false, false, COUNTER_MULT * defender.weaken_factor() * defender.empower_factor(), false, rng)
 	var taken: int = attacker.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 	var crit: bool = DictUtil.to_bool(res["is_crit"])
 	var defeated: bool = not attacker.is_alive()

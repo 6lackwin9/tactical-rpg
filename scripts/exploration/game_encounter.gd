@@ -6,6 +6,7 @@ extends WorldEncounter
 # The authored `party` roster is replaced by the active members of a PartyState (PartyBuilder: level, spend, gear,
 # loadout), deployed by the normal ally placement for that many allies. `zone_override` (non-empty) replaces the
 # authored arena zone (TRAV1 route biome). Enemies, waves and rules stay the authored ones.
+# PACE1: the game state from BattleBridge.encounter_for gates the encounter's start_status (WorldEncounter.game_state).
 # HEAL1-L: each member starts at its stored HP (HealRules.start_hp from hp_lost; PartyBuilder itself stays full HP) and
 # write_back_hp stores the after-battle HP (rule 3.2) once, for won and fled; lost is settled by ExploreRunner.wake.
 # ==============================================================================
@@ -21,10 +22,12 @@ var _own_pouch: Dictionary = {}    # Combatant -> Array[Consumable]: battle_pouc
 var _unloaded: Dictionary = {}     # Combatant -> Array[String]: saved pouch ids that found no battle slot (kept on write-back)
 var _hp_written: bool = false      # write_back_hp stores once per build (a results Replay never writes again)
 
-func _init(p_world_id: String = "", p_local_id: String = "", p_party: PartyState = null, p_zone: String = "") -> void:
+# `p_game_state` (PACE1 rule 7): the game whose flags gate the encounter's start buffs (null = none granted).
+func _init(p_world_id: String = "", p_local_id: String = "", p_party: PartyState = null, p_zone: String = "", p_game_state: GameState = null) -> void:
 	super(p_world_id, p_local_id)
 	party_state = p_party
 	zone_override = p_zone
+	game_state = p_game_state
 	load_definition()
 
 func load_definition() -> void:

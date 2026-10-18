@@ -590,6 +590,8 @@ func _applier(actor: Combatant, source: String, recipient: Combatant) -> Combata
 		return actor
 	if source.begins_with(CatalogEncounter.PHASE_SOURCE):
 		return recipient if _ally.has(recipient) and not DictUtil.to_bool(_ally[recipient]) else null
+	if source.begins_with(WorldEncounter.START_SOURCE):   # PACE1: a story-reward start buff is nobody's buff
+		return null
 	var unit: Combatant = _unit(source)
 	return unit if unit != null else actor   # a source not seen at the start (summon, reinforcement): the entry's actor
 

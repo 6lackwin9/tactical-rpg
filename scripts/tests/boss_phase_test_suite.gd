@@ -34,6 +34,10 @@ static func run() -> bool:
 	ok = _test_reset_and_redo() and ok
 	ok = _test_autoplay_pause() and ok
 	ok = _test_recorded_replay() and ok
+	ok = _test_pace1_enrage_mid_round() and ok
+	ok = _test_pace1_or_round() and ok
+	ok = _test_pace1_boss_warning() and ok
+	ok = _test_pace1_start_buffs() and ok
 	return ok
 
 # ------------------------------------------------------------------------------
@@ -800,7 +804,7 @@ static func _test_recorded_replay() -> bool:
 	var b_ref: String = str(refs["b"])
 	var phases: Array = [
 		{"id": "hurt", "name": "Hurt", "trigger": {"kind": "hp_below", "unit": a_ref, "pct": 99},
-			"effects": [{"type": "line", "text": "Hurt."}, {"type": "status", "unit": a_ref, "status": ranged, "rounds": 2, "magnitude": StatusRegistry.magnitude_min(ranged)}, {"type": "ai", "unit": a_ref, "reckless": true}]},
+			"effects": [{"type": "line", "text": "Hurt."}, {"type": "status", "unit": a_ref, "status": ranged, "rounds": 2, "magnitude": StatusRegistry.magnitude_min(ranged)}, {"type": "ai", "unit": a_ref, "reckless": true}, {"type": "enrage", "unit": a_ref, "power": 20}]},   # PACE1: the replay covers the enrage
 		{"id": "horn", "name": "Horn", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "wave", "units": [b_ref]}]},
 	]
 	var errors: Array[String] = ContentCatalog.upsert("encounters", _rt_entry(refs, phases, [a_ref, b_ref], "phase_rec"))
@@ -818,6 +822,7 @@ static func _test_recorded_replay() -> bool:
 			break
 		s.advance_round()
 	checks["the recording fired phases"] = not _phase_entries(s).is_empty()
+	checks["the recording enraged the boss (PACE1)"] = StatusEffects.has_any(s.enemies[0], StatusEffects.EMPOWER)
 	rec.flush()
 	rec.detach()
 	s.dispose()
@@ -831,3 +836,304 @@ static func _test_recorded_replay() -> bool:
 	PlaytestStore.use_root(PlaytestStore.USER_ROOT)
 	TestHelpers.cleanup(path)
 	return TestHelpers.report(TAG, "A recorded battle with phases replays with identical round outcomes", checks)
+
+# ------------------------------------------------------------------------------
+# PACE1-L runtime (spec docs/specs/PACE1.md section 6)
+# ------------------------------------------------------------------------------
+
+const ENRAGE_POWER: int = 20
+
+static func _enrage_phase(a_ref: String, extra_trigger: Dictionary = {}) -> Array:
+	var trigger: Dictionary = {"kind": "hp_below", "unit": a_ref, "pct": 50}
+	trigger.merge(extra_trigger, true)
+	return [{"id": "crown", "name": "Crown", "trigger": trigger,
+		"effects": [{"type": "line", "text": "Enraged!"}, {"type": "enrage", "unit": a_ref, "power": ENRAGE_POWER}]}]
+
+# skill_mult of `c`'s scheduled attacks this round, in schedule order.
+static func _attack_mults(s: CombatSession, c: Combatant) -> Array[float]:
+	var out: Array[float] = []
+	for a: CombatResolver.ScheduledAction in s.resolver.scheduled_actions:
+		if a.combatant == c and a.command is AttackCommand:
+			var cmd: AttackCommand = a.command
+			out.append(cmd.skill_mult)
+	return out
+
+# A comparable read of the planning intents: [name, kind, enraged, revealed, plan size] per record.
+static func _intent_summary(s: CombatSession) -> Array:
+	var out: Array = []
+	for r: Dictionary in s.enemy_intents():
+		var u: Combatant = r["unit"]
+		out.append([u.name, str(r["kind"]), DictUtil.to_bool(r.get("enraged", false)), DictUtil.to_bool(r["revealed"]), DictUtil.array_of(r["plan"]).size()])
+	return out
+
+static func _intent_for(s: CombatSession, c: Combatant) -> Dictionary:
+	return s.intent_of(c)
+
+static func _any_hero_has(s: CombatSession, status: String) -> bool:
+	for c: Combatant in s.allies:
+		if c.statuses.has(status) or c.pending_statuses.has(status):
+			return true
+	return false
+
+# Enrage fired mid-round: this round's remaining actions keep their power; from the next planning phase the boss
+# hits at x1.20, its intent is enraged and revealed without foresight, and no hero gains a status. reset_round keeps it.
+static func _test_pace1_enrage_mid_round() -> bool:
+	var checks: Dictionary = {}
+	var refs: Dictionary = _rt_refs()
+	if refs.is_empty():
+		return TestHelpers.report_ok(TAG, "PACE1 enrage", false, "fewer than two enemy units")
+	var a_ref: String = str(refs["a"])
+	var b_ref: String = str(refs["b"])
+	var s: CombatSession = _session(_rt_entry(refs, _enrage_phase(a_ref), [a_ref, b_ref]))
+	var got: Array = _count_signals(s)
+	var a: Combatant = _enc(s).unit(a_ref, 0)
+	var b: Combatant = _enc(s).unit(b_ref, 0)
+	var strike: SkillDef = SkillCatalog.find("strike")
+	var base_power: float = strike.power_for(a)
+	a.hp = a.max_hp / 2
+	var r1_a: Dictionary = _intent_for(s, a)
+	checks["round 1: not enraged yet"] = not DictUtil.to_bool(r1_a.get("enraged", true)) and not _enc(s).is_enraged(a)
+	checks["plan confirmed"] = _confirm(s)
+	var mults_before: Array[float] = _attack_mults(s, a)
+	_run_block(s)
+	s.step_next()
+	checks["fired mid-round at [1, 2]"] = _fired_at(s, "crown") == [1, 2]
+	checks["empower queued (pending, not active), power %d, rounds max_rounds + 1, source phase:crown" % ENRAGE_POWER] = a.pending_statuses.has(StatusEffects.EMPOWER) and not a.statuses.has(StatusEffects.EMPOWER) and DictUtil.int_of(a.pending_status_magnitudes, StatusEffects.EMPOWER) == ENRAGE_POWER and DictUtil.int_of(a.pending_status_rounds, StatusEffects.EMPOWER) == RUNTIME_ROUNDS + 1 and str(a.pending_status_sources.get(StatusEffects.EMPOWER, "")) == "phase:crown"
+	checks["the rest of round 1 keeps its power (factor 1.0, same attack multipliers)"] = is_equal_approx(a.empower_factor(), 1.0) and _attack_mults(s, a) == mults_before and is_equal_approx(strike.power_for(a), base_power)
+	var info: Dictionary = DictUtil.dict_of(got[0]) if got.size() == 1 else {}
+	checks["one phase_fired signal carrying enrage %d" % ENRAGE_POWER] = got.size() == 1 and DictUtil.to_int(info.get("enrage", 0)) == ENRAGE_POWER
+	var events: Array[ActionLogEntry] = _phase_entries(s, 1)
+	checks["the phase EVENT says Enraged"] = events.size() == 1 and events[0].status_text.contains("Enraged")
+	checks["no hero gains a status from the phase"] = not _any_hero_has(s, StatusEffects.EMPOWER)
+	TestHelpers.resolve_until_replay(s, MAX_STEPS)
+	s.advance_round()
+	checks["round 2: empower active at %d" % ENRAGE_POWER] = a.statuses.has(StatusEffects.EMPOWER) and DictUtil.int_of(a.status_magnitudes, StatusEffects.EMPOWER) == ENRAGE_POWER
+	checks["round 2: the boss's power_for is x1.20"] = is_equal_approx(strike.power_for(a), base_power * (1.0 + float(ENRAGE_POWER) / 100.0))
+	var r2_a: Dictionary = _intent_for(s, a)
+	var actions: int = IntentRules.actions_of(a, s.resolver.scheduled_actions).size()
+	checks["round 2: the boss intent is enraged, revealed, full plan (%d actions)" % actions] = DictUtil.to_bool(r2_a.get("enraged", false)) and DictUtil.to_bool(r2_a.get("revealed", false)) and DictUtil.array_of(r2_a.get("plan", [])).size() == actions
+	var r2_b: Dictionary = _intent_for(s, b)
+	checks["round 2: the other enemy is not enraged"] = not r2_b.is_empty() and not DictUtil.to_bool(r2_b.get("enraged", true)) and DictUtil.to_bool(r2_b["revealed"]) == not DictUtil.array_of(r2_b["readers"]).is_empty()
+	checks["round 2: still no hero status from the phase"] = not _any_hero_has(s, StatusEffects.EMPOWER)
+	var before: Array = _intent_summary(s)
+	var rounds_before: int = DictUtil.int_of(a.status_rounds_left, StatusEffects.EMPOWER)
+	s.reset_round()
+	checks["reset_round: identical intents (%s)" % str(before)] = _intent_summary(s) == before
+	checks["reset_round: empower kept with the same rounds"] = a.statuses.has(StatusEffects.EMPOWER) and DictUtil.int_of(a.status_rounds_left, StatusEffects.EMPOWER) == rounds_before and _enc(s).is_enraged(a)
+	s.dispose()
+	return TestHelpers.report(TAG, "PACE1 enrage mid-round: queued power, x1.20 from the next planning phase, enraged intents, reset keeps it", checks)
+
+# or_round: the boss stays at 80% -> the phase fires in the or_round intro (empower active at once); below 50% in
+# round 3 -> it fires there and never again.
+static func _test_pace1_or_round() -> bool:
+	var checks: Dictionary = {}
+	var refs: Dictionary = _rt_refs()
+	if refs.is_empty():
+		return TestHelpers.report_ok(TAG, "PACE1 or_round", false, "fewer than two enemy units")
+	var a_ref: String = str(refs["a"])
+	var phases: Array = _enrage_phase(a_ref, {"or_round": RUNTIME_ROUNDS})
+	var s: CombatSession = _session(_rt_entry(refs, phases, [a_ref]))
+	var a: Combatant = _enc(s).unit(a_ref, 0)
+	var early: bool = false
+	for r: int in range(1, RUNTIME_ROUNDS):
+		a.hp = (a.max_hp * 4) / 5
+		if not _play_round(s):
+			break
+		early = early or not _fired_at(s, "crown").is_empty()
+		s.advance_round()
+	checks["not fired in rounds 1..%d at 80%%" % (RUNTIME_ROUNDS - 1)] = not early and s.current_round == RUNTIME_ROUNDS
+	var intro: Array[ActionLogEntry] = _phase_entries(s, RUNTIME_ROUNDS)
+	checks["fired in round %d's intro [%d, 0]" % [RUNTIME_ROUNDS, RUNTIME_ROUNDS]] = _fired_at(s, "crown") == [RUNTIME_ROUNDS, 0] and intro.size() == 1 and intro[0].block_num == 0
+	checks["fired at a round start: empower active for this planning phase, intent enraged"] = a.statuses.has(StatusEffects.EMPOWER) and DictUtil.to_bool(_intent_for(s, a).get("enraged", false))
+	s.dispose()
+	var s2: CombatSession = _session(_rt_entry(refs, phases, [a_ref]))
+	var a2: Combatant = _enc(s2).unit(a_ref, 0)
+	for r: int in range(1, RUNTIME_ROUNDS):
+		if s2.current_round == 3:
+			a2.hp = (a2.max_hp * 2) / 5   # below 50%: due after block 1
+		elif _fired_at(s2, "crown").is_empty():
+			a2.hp = (a2.max_hp * 4) / 5
+		if not _play_round(s2):
+			break
+		s2.advance_round()
+	var at: Array = _fired_at(s2, "crown")
+	checks["below 50%% in round 3: fired in round 3 (%s)" % str(at)] = at.size() == 2 and DictUtil.to_int(at[0]) == 3
+	checks["...and never again (one phase entry by round %d, nothing due)" % RUNTIME_ROUNDS] = _phase_entries(s2).size() == 1 and _enc(s2).phase_runtime.due.is_empty() and s2.current_round == RUNTIME_ROUNDS
+	s2.dispose()
+	return TestHelpers.report(TAG, "PACE1 or_round: due at its round start unless hp_below came first; fires once", checks)
+
+# Spec 3.5 warning: a boss fight without an enrage phase warns (catalog warnings_for, world encounter_warnings).
+static func _test_pace1_boss_warning() -> bool:
+	var checks: Dictionary = {}
+	var refs: Dictionary = _catalog_refs()
+	var boss: String = ""
+	var plain: String = ""
+	for u: Dictionary in ContentCatalog.entries("units"):
+		if str(u.get("side", "")) != "enemy":
+			continue
+		var tier: String = str(ContentSchema.normalize("units", u).get("tier", ""))
+		if tier == EncounterPhases.PACE_BOSS and boss.is_empty():
+			boss = str(u["id"])
+		elif tier != EncounterPhases.PACE_BOSS and tier != EncounterPhases.PACE_ELITE and plain.is_empty():
+			plain = str(u["id"])
+	if refs.is_empty() or boss.is_empty() or plain.is_empty():
+		return TestHelpers.report_ok(TAG, "PACE1 boss warning", false, "no boss-tier and plain enemy units")
+	var needle: String = "Boss fight 'pace1_warn' has no enrage phase (PACE1)."
+	var bare: Dictionary = _rt_entry(refs, [], [boss], "pace1_warn")
+	checks["boss fight without enrage warns"] = ContentCatalog.warnings_for("encounters", bare).has(needle)
+	checks["the Forge preview shows Pace boss and the warning"] = ForgePreview.describe("encounters", bare).contains("Pace:[/color] boss (auto)") and ForgePreview.describe("encounters", bare).contains(needle)
+	checks["boss fight with an enrage phase is clean"] = ContentCatalog.warnings_for("encounters", _rt_entry(refs, _enrage_phase(boss), [boss], "pace1_warn")).is_empty()
+	var as_mob: Dictionary = bare.duplicate(true)
+	as_mob["pace"] = EncounterPhases.PACE_MOB
+	checks["a boss fight set to pace mob does not warn"] = ContentCatalog.warnings_for("encounters", as_mob).is_empty()
+	checks["a plain fight does not warn"] = ContentCatalog.warnings_for("encounters", _rt_entry(refs, [], [plain], "pace1_warn")).is_empty()
+	var phase_boss: Array = [{"id": "w", "name": "W", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "wave", "units": [boss]}]}]
+	checks["a boss in a phase wave makes it a boss fight"] = ContentCatalog.warnings_for("encounters", _rt_entry(refs, phase_boss, [plain], "pace1_warn")).has(needle)
+	# World: a character whose base unit is boss tier, in a sandbox fork.
+	var wrefs: Dictionary = _world_refs()
+	var wpath: String = TestHelpers.sandbox("pace1_warn_world")
+	if not wrefs.is_empty() and TestHelpers.fork_worlds(wpath):
+		var world: String = str(wrefs["world"])
+		var made: Array[String] = WorldCatalog.upsert(world, "characters", {"id": "pace1_warlord", "name": "Pace Warlord", "role": "enemy", "base_unit": boss})
+		var stored: Array[String] = WorldCatalog.upsert(world, "encounters", _entry(wrefs, [], ["pace1_warlord"]).merged({"id": "pace1_warn"}, true))
+		checks["world fixtures stored (%s | %s)" % ["; ".join(made), "; ".join(stored)]] = made.is_empty() and stored.is_empty()
+		checks["world encounter_warnings lists it with its qid"] = WorldCatalog.encounter_warnings(world).has("%s:pace1_warn: %s" % [world, needle])
+		checks["world warnings_all carries it"] = TestHelpers.any_contains(JsonUtil.strings(WorldCatalog.warnings_all().get(world, [])), needle)
+	else:
+		checks["world fork"] = false
+	TestHelpers.cleanup_worlds(wpath)
+	return TestHelpers.report(TAG, "PACE1 boss warning: boss fights (waves included) without an enrage phase warn in both catalogs", checks)
+
+const START_FLAG: String = "pace1.test_saved"
+const START_TEXT: String = "A friend rides ahead. The Wardens strike first."
+const START_MAG: int = 10
+const START_ROUNDS: int = 2
+
+static func _start_entries(s: CombatSession) -> Array[ActionLogEntry]:
+	var out: Array[ActionLogEntry] = []
+	for e: ActionLogEntry in s.log_entries:
+		if e.skill_subtype == WorldEncounter.START_SUBTYPE:
+			out.append(e)
+	return out
+
+# Every ally (heroes and guests) of `s` has an active empower at START_MAG from the start source.
+static func _all_allies_empowered(s: CombatSession, source: String) -> bool:
+	if s.allies.is_empty():
+		return false
+	for c: Combatant in s.allies:
+		if not c.statuses.has(StatusEffects.EMPOWER) or DictUtil.int_of(c.status_magnitudes, StatusEffects.EMPOWER) != START_MAG or str(c.status_sources.get(StatusEffects.EMPOWER, "")) != source:
+			return false
+	return true
+
+static func _no_one_empowered(s: CombatSession) -> bool:
+	for c: Combatant in s.allies + s.enemies:
+		if StatusEffects.has_any(c, StatusEffects.EMPOWER):
+			return false
+	return true
+
+# A started session over a GameEncounter of `gs`, HP boosted.
+static func _game_session(gs: GameState, qid: String) -> CombatSession:
+	var built: Dictionary = BattleBridge.encounter_for(gs, qid)
+	var raw: Variant = built.get("encounter", null)
+	if not (raw is GameEncounter):
+		return null
+	var enc: GameEncounter = raw
+	var s := CombatSession.new(enc)
+	s.start()
+	for c: Combatant in s.allies + s.enemies:
+		c.max_hp *= HP_BOOST
+		c.hp = c.max_hp
+	return s
+
+# Rule 7: a start buff with its flag set empowers every hero and guest in round 1 planning (one EVENT with the text)
+# and ends after its rounds; with the flag unset, or without a game state, nobody is. Reset and a re-run match.
+static func _test_pace1_start_buffs() -> bool:
+	var checks: Dictionary = {}
+	var crefs: Dictionary = _catalog_refs()
+	var wrefs: Dictionary = _world_refs()
+	if crefs.is_empty() or wrefs.is_empty():
+		return TestHelpers.report_ok(TAG, "PACE1 start buffs", false, "no fixture refs")
+	var world: String = str(wrefs["world"])
+	var path: String = TestHelpers.sandbox("pace1_start_game")
+	if not TestHelpers.fork_worlds(path):
+		TestHelpers.cleanup_worlds(path)
+		return TestHelpers.report_ok(TAG, "PACE1 start buffs", false, "world fork failed")
+	var helper: Array[String] = WorldCatalog.upsert(world, "characters", {"id": "pace1_helper", "name": "Pace Helper", "role": "npc", "base_unit": crefs["party"]})
+	var entry: Dictionary = _entry(wrefs, [])
+	entry["id"] = "pace1_start"
+	entry["max_rounds"] = MAX_ROUNDS
+	entry["guests"] = ["pace1_helper"]
+	entry["start_status"] = [{"status": StatusEffects.EMPOWER, "rounds": START_ROUNDS, "magnitude": START_MAG, "requires_flags": [{"key": START_FLAG, "value": true}], "text": START_TEXT}]
+	var stored: Array[String] = WorldCatalog.upsert(world, "encounters", entry)
+	checks["fixtures stored (%s | %s)" % ["; ".join(helper), "; ".join(stored)]] = helper.is_empty() and stored.is_empty()
+	var made: Dictionary = NewGame.create(world, [str(crefs["party"])], 1)
+	var gs: GameState = GameState.of(made.get("state", null))
+	var source: String = WorldEncounter.START_SOURCE + "pace1_start"
+	if gs == null:
+		checks["game created (%s)" % str(made.get("errors", []))] = false
+		TestHelpers.cleanup_worlds(path)
+		return TestHelpers.report(TAG, "PACE1 start buffs", checks)
+	# Flag unset: nobody.
+	var unset: CombatSession = _game_session(gs, "pace1_start")
+	checks["flag unset: nobody is empowered, no start entry"] = unset != null and _no_one_empowered(unset) and _start_entries(unset).is_empty()
+	if unset != null:
+		unset.dispose()
+	# No game state (a WorldEncounter, as the Forge and the sim default): nobody.
+	var bare := CombatSession.new(WorldEncounter.new(world, "pace1_start"))
+	bare.start()
+	checks["no game state: nobody is empowered"] = _no_one_empowered(bare) and _start_entries(bare).is_empty()
+	bare.dispose()
+	# Flag set: every hero and the guest, in round 1 planning.
+	gs.set_flag(START_FLAG, true)
+	var s: CombatSession = _game_session(gs, "pace1_start")
+	if s == null:
+		checks["game encounter built"] = false
+		TestHelpers.cleanup_worlds(path)
+		return TestHelpers.report(TAG, "PACE1 start buffs", checks)
+	var enc: GameEncounter = s.encounter as GameEncounter
+	checks["the battle has a guest"] = enc.guests.size() == 1 and s.allies.has(enc.guests[0])
+	checks["flag set: every hero and guest is Empowered %d in round 1 planning" % START_MAG] = s.is_planning() and s.current_round == 1 and _all_allies_empowered(s, source)
+	checks["no enemy is empowered"] = s.enemies.all(func(c: Combatant) -> bool: return not StatusEffects.has_any(c, StatusEffects.EMPOWER))
+	var starts: Array[ActionLogEntry] = _start_entries(s)
+	checks["one EVENT entry carries the text"] = starts.size() == 1 and starts[0].detail_text == START_TEXT and starts[0].round_num == 1 and starts[0].block_num == 0
+	checks["its rounds count round 1 (%d left)" % START_ROUNDS] = DictUtil.int_of(s.allies[0].status_rounds_left, StatusEffects.EMPOWER) == START_ROUNDS
+	var r1_intents: Array = _intent_summary(s)
+	s.reset_round()   # round 1: a full restart (a fresh build, so HP is boosted again)
+	for c: Combatant in s.allies + s.enemies:
+		c.max_hp *= HP_BOOST
+		c.hp = c.max_hp
+	checks["round 1 reset: granted again once, same intents"] = _all_allies_empowered(s, source) and _start_entries(s).size() == 1 and _intent_summary(s) == r1_intents
+	var played: bool = _play_round(s)
+	s.advance_round()
+	checks["round 2: still empowered"] = played and _all_allies_empowered(s, source)
+	var r2_intents: Array = _intent_summary(s)
+	s.reset_round()
+	checks["round 2 reset: still empowered, same intents"] = _all_allies_empowered(s, source) and _intent_summary(s) == r2_intents
+	played = _play_round(s)
+	s.advance_round()
+	checks["round 3: the start buff has ended"] = played and s.allies.all(func(c: Combatant) -> bool: return not c.statuses.has(StatusEffects.EMPOWER))
+	s.dispose()
+	# A re-run with the same game state and plans gives the same round records (start buff included).
+	var run_a: Array = _two_round_record(gs)
+	var run_b: Array = _two_round_record(gs)
+	checks["a re-run gives identical log and status records"] = not run_a.is_empty() and run_a == run_b
+	TestHelpers.cleanup_worlds(path)
+	return TestHelpers.report(TAG, "PACE1 start buffs: flag-gated, every hero and guest, one EVENT, ends after its rounds; reset and re-run match", checks)
+
+# [actor, skill, outcome, value] per log entry plus each ally's empower rounds, over two played rounds.
+static func _two_round_record(gs: GameState) -> Array:
+	var s: CombatSession = _game_session(gs, "pace1_start")
+	if s == null:
+		return []
+	var out: Array = []
+	for r: int in range(2):
+		if not _play_round(s):
+			break
+		for c: Combatant in s.allies:
+			out.append([c.name, DictUtil.int_of(c.status_rounds_left, StatusEffects.EMPOWER)])
+		if s.can_advance_round():
+			s.advance_round()
+	for e: ActionLogEntry in s.log_entries:
+		out.append([e.round_num, e.block_num, e.actor_name, e.skill_name, e.outcome_tag, e.value_num])
+	s.dispose()
+	return out
