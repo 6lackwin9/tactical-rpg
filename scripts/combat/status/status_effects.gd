@@ -23,6 +23,7 @@ extends RefCounted
 #   POISON   (debuff, stack_potency: magnitudes add up to the cap) loses the magnitude in HP at round end
 #   BURN     (debuff) loses magnitude % of max HP at round end (minimum 1)
 #   REGEN    (buff) regains magnitude % of max HP at round end (minimum 1, capped at missing HP)
+#   EMPOWER  (buff, PACE1) no skill grants it (registry grant ""): only an enrage phase effect or a start_status entry
 #   Round end order per unit (CombatResolver.apply_round_end_effects): bleed -> poison -> burn -> regen.
 # Magnitudes: a status carries one when its registry row has magnitude_max > 0 (has_magnitude).
 # Sources: Combatant.status_sources / pending_status_sources hold the unit name of the last applier.
@@ -48,6 +49,7 @@ const FORTIFY: String = "fortify"
 const REGEN: String = "regen"
 const POISON: String = "poison"
 const BURN: String = "burn"
+const EMPOWER: String = "empower"
 
 const BLEED_PCT: float = 0.06    # of max HP per round while bleeding (minimum 1)
 const HASTE_TILES: int = 1       # extra tiles per move block while hasted

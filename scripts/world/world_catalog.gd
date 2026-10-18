@@ -1158,6 +1158,7 @@ static func _encounter_errors(world_id: String, e: Dictionary) -> Array[String]:
 		return _check_ref(world_id, wave_field, "characters", ref).is_empty()))
 	errors.append_array(EncounterObjectives.problems(e, func(ref: String) -> bool: return guest_ok(world_id, ref)))
 	errors.append_array(EncounterMorale.problems(e))   # MORALE1 spec 1.1
+	errors.append_array(EncounterPhases.start_status_problems(e.get("start_status", [])))   # PACE1 spec 3.4
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		for x: Variant in DictUtil.array_of(exits):

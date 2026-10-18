@@ -20,6 +20,7 @@ extends RefCounted
 #   cap            0 = no cap. extend_duration: max rounds; every other rule: max potency
 #   display        player-facing name
 #   grant          buffs only: "support" (queued by a SUPPORT skill) or "defend" (active now, DEFEND skill); "" for debuffs
+#                  and for buffs no skill grants (empower, PACE1: only an enrage phase effect or a start_status entry)
 #   magnitude_min  0..100: lowest magnitude a skill may give the status (S12S-L)
 #   magnitude_max  >= magnitude_min; 0 (with min 0) = the status carries no magnitude
 #   magnitude_unit "pct" (weaken: % of outgoing power), "flat" (expose / fortify armor points, poison HP per round)
@@ -63,6 +64,7 @@ const ROWS: Array[Dictionary] = [
 	{"id": "regen", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 10, "display": "Regenerating", "grant": "support", "magnitude_min": 1, "magnitude_max": 10, "magnitude_unit": UNIT_PCT_MAX_HP},
 	{"id": "poison", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 3, "stacking": STACK_POTENCY, "cap": 30, "display": "Poisoned", "grant": "", "magnitude_min": 1, "magnitude_max": 15, "magnitude_unit": UNIT_FLAT},
 	{"id": "burn", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 10, "display": "Burning", "grant": "", "magnitude_min": 1, "magnitude_max": 10, "magnitude_unit": UNIT_PCT_MAX_HP},
+	{"id": "empower", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 25, "display": "Empowered", "grant": "", "magnitude_min": 1, "magnitude_max": 25, "magnitude_unit": UNIT_PCT},
 ]
 
 # The row for `status`, or {} when unknown.
@@ -145,8 +147,9 @@ static func errors_of(rows: Array[Dictionary]) -> Array[String]:
 		if str(r.get("display", "")).is_empty():
 			errors.append("%s: needs a display name." % id)
 		var grant: String = str(r.get("grant", ""))
-		if (str(r.get("kind", "")) == KIND_BUFF) != (grant == "support" or grant == "defend"):
-			errors.append("%s: buffs need grant support|defend, debuffs none." % id)
+		var skill_grant: bool = grant == "support" or grant == "defend"
+		if (str(r.get("kind", "")) != KIND_BUFF and skill_grant) or not (skill_grant or grant.is_empty()):
+			errors.append("%s: buffs need grant support, defend or \"\" (no skill grants it), debuffs none." % id)
 		var mag_min: int = DictUtil.to_int(r.get("magnitude_min", 0))
 		var mag_max: int = DictUtil.to_int(r.get("magnitude_max", 0))
 		if mag_min < 0 or mag_min > 100:

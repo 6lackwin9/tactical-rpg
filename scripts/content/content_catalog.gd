@@ -1213,6 +1213,8 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 	# OBJ1: guests are party-side units; the generic ref check already refuses others, so every guest passes here.
 	errors.append_array(EncounterObjectives.problems(e, func(_ref: String) -> bool: return true))
 	errors.append_array(EncounterMorale.problems(e))   # MORALE1 spec 1.1
+	if e.has("start_status"):
+		errors.append("Start buffs (start_status) are for world encounters only.")   # PACE1 spec 3.4: not a catalog field
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		var exit_list: Array = exits

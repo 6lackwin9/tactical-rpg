@@ -23,6 +23,9 @@ static func run() -> bool:
 	ok = _test_world_validation() and ok
 	ok = _test_shipped_clean() and ok
 	ok = _test_accepted_and_ignored() and ok
+	ok = _test_pace1_phase_schema() and ok
+	ok = _test_pace1_pace() and ok
+	ok = _test_pace1_start_status() and ok
 	ok = _test_reserved_music() and ok
 	ok = _test_mid_round() and ok
 	ok = _test_last_block() and ok
@@ -178,6 +181,17 @@ static func _bad_cases(refs: Dictionary) -> Dictionary:
 		"ai reckless not bool": [_fx(refs, [{"type": "ai", "unit": a, "reckless": "yes"}]), "reckless must be true or false"],
 		"ai ratio out of range": [_fx(refs, [{"type": "ai", "unit": a, "flee_ratio": 1.5}]), "flee_ratio must be 0.0..1.0"],
 		"ai unit unknown": [_fx(refs, [{"type": "ai", "unit": refs["party"], "reckless": true}]), "effect unit '%s' is not in this encounter" % str(refs["party"])],
+		# PACE1 3.2 / 3.3 / rule 5
+		"or_round on a round trigger": [[_phase(refs, {"trigger": {"kind": "round", "round": 2, "or_round": 3}})], "Phase 'p': or_round needs an hp_below trigger."],
+		"or_round 1": [[_phase(refs, {"trigger": {"kind": "hp_below", "unit": a, "pct": 50, "or_round": 1}})], "Phase 'p': or_round must be 2..%d." % MAX_ROUNDS],
+		"or_round past max_rounds": [[_phase(refs, {"trigger": {"kind": "hp_below", "unit": a, "pct": 50, "or_round": MAX_ROUNDS + 1}})], "Phase 'p': or_round must be 2..%d." % MAX_ROUNDS],
+		"enrage unit not in enemies": [_fx(refs, [{"type": "enrage", "unit": refs["party"]}]), "Phase 'p': enrage unit '%s' is not in enemies." % str(refs["party"])],
+		"enrage power 0": [_fx(refs, [{"type": "enrage", "unit": a, "power": 0}]), "Phase 'p': enrage power must be 1..25."],
+		"enrage power 26": [_fx(refs, [{"type": "enrage", "unit": a, "power": EncounterPhases.ENRAGE_POWER_MAX + 1}]), "Phase 'p': enrage power must be 1..25."],
+		"enrage unknown key": [_fx(refs, [{"type": "enrage", "unit": a, "rounds": 3}]), "unknown enrage key 'rounds'"],
+		"two enrages": [[_phase(refs, {"id": "e1", "effects": [{"type": "enrage", "unit": a}]}), _phase(refs, {"id": "e2", "effects": [{"type": "enrage", "unit": a}]})], "An encounter holds at most one enrage."],
+		"enrage phase without pause": [[_phase(refs, {"pause_autoplay": false, "effects": [{"type": "enrage", "unit": a}]})], "Phase 'p': an enrage phase must pause autoplay."],
+		"phase status empower": [_fx(refs, [{"type": "status", "unit": a, "status": StatusEffects.EMPOWER, "magnitude": 10}]), "Phase 'p': empower comes only from an enrage effect."],
 	}
 
 static func _has(errors: Array[String], needle: String) -> bool:
@@ -314,6 +328,168 @@ static func _test_accepted_and_ignored() -> bool:
 		checks["world fork with fixture refs"] = false
 	TestHelpers.cleanup_worlds(wpath)
 	return TestHelpers.report(TAG, "A valid phases field is stored by both catalogs; the build reserves phase waves; XP and preview read phases", checks)
+
+# ------------------------------------------------------------------------------
+# PACE1-L schema slice (spec docs/specs/PACE1.md 3.1 to 3.5; the bad cases above cover 3.2 / 3.3)
+# ------------------------------------------------------------------------------
+
+# The PACE1 Crown of Nails shape over refs a (boss) and b (helper): hp_below a 50 or round MAX_ROUNDS; line, enrage, ai.
+static func _pace1_phases(refs: Dictionary) -> Array:
+	return [{
+		"id": "crown_of_nails", "name": "Crown of Nails", "pause_autoplay": true,
+		"trigger": {"kind": "hp_below", "unit": refs["a"], "pct": 50, "or_round": MAX_ROUNDS},
+		"effects": [
+			{"type": "line", "text": "He tears off the crown, enraged."},
+			{"type": "enrage", "unit": refs["a"], "power": EncounterPhases.DEFAULT_ENRAGE_POWER},
+			{"type": "ai", "unit": refs["a"], "reckless": true, "target_pref": "WEAKEST"},
+			{"type": "ai", "unit": refs["b"], "heal_below": 0.9},
+		],
+	}]
+
+static func _test_pace1_phase_schema() -> bool:
+	var checks: Dictionary = {}
+	var crefs: Dictionary = _catalog_refs()
+	var wrefs: Dictionary = _world_refs()
+	if crefs.is_empty() or wrefs.is_empty():
+		return TestHelpers.report_ok(TAG, "PACE1 phase schema", false, "no fixture refs")
+	var c_errors: Array[String] = ContentCatalog.validate_entry("encounters", _entry(crefs, _pace1_phases(crefs), [crefs["a"], crefs["b"]]))
+	checks["catalog: the PACE1 Crown of Nails is clean (%s)" % "; ".join(c_errors)] = c_errors.is_empty()
+	var world: String = str(wrefs["world"])
+	var w_errors: Array[String] = WorldCatalog.validate_entry(world, "encounters", _entry(wrefs, _pace1_phases(wrefs), [wrefs["a"], wrefs["b"]]))
+	checks["world: the PACE1 Crown of Nails is clean (%s)" % "; ".join(w_errors)] = w_errors.is_empty()
+	var parsed: Array[Dictionary] = EncounterPhases.parse([
+		{"id": "p", "name": "P", "trigger": {"kind": "hp_below", "unit": "u", "pct": 50}, "effects": [{"type": "enrage", "unit": "u"}]},
+		{"id": "q", "name": "Q", "trigger": {"kind": "hp_below", "unit": "u", "pct": 50, "or_round": 6.0}, "effects": [{"type": "enrage", "unit": "u", "power": 15.0}]},
+	])
+	var t0: Dictionary = DictUtil.dict_of(parsed[0].get("trigger", {}))
+	var t1: Dictionary = DictUtil.dict_of(parsed[1].get("trigger", {}))
+	checks["parse: or_round defaults to 0, kept as int"] = DictUtil.to_int(t0.get(EncounterPhases.OR_ROUND, -1)) == 0 and t1.get(EncounterPhases.OR_ROUND, null) is int and DictUtil.to_int(t1[EncounterPhases.OR_ROUND]) == 6
+	var e0: Array[Dictionary] = EncounterPhases.effects_of(parsed[0], EncounterPhases.EFFECT_ENRAGE)
+	var e1: Array[Dictionary] = EncounterPhases.effects_of(parsed[1], EncounterPhases.EFFECT_ENRAGE)
+	checks["parse: enrage power defaults to 20, kept as int"] = e0.size() == 1 and DictUtil.to_int(e0[0].get("power", -1)) == EncounterPhases.DEFAULT_ENRAGE_POWER and e1.size() == 1 and e1[0].get("power", null) is int and DictUtil.to_int(e1[0]["power"]) == 15
+	var lines: Array[String] = EncounterPhases.summary_lines(_pace1_phases(crefs), func(ref: String) -> String: return ref)
+	checks["summary: 'or round N' and the enrage effect (%s)" % "; ".join(lines)] = lines.size() == 1 and lines[0].contains("at 50%% HP or round %d" % MAX_ROUNDS) and lines[0].contains("-> line, enrage, ai, ai")
+	checks["the enrage power cap equals the empower row's cap"] = EncounterPhases.ENRAGE_POWER_MAX == StatusRegistry.cap_of(StatusEffects.EMPOWER) and EncounterPhases.ENRAGE_POWER_MAX == StatusRegistry.magnitude_max(StatusEffects.EMPOWER)
+	return TestHelpers.report(TAG, "PACE1: or_round and enrage validate and parse in both catalogs; the preview line shows them", checks)
+
+static func _test_pace1_pace() -> bool:
+	var checks: Dictionary = {}
+	for schema: String in ["catalog", "world"]:
+		var f: Dictionary = ContentSchema.field("encounters", "pace") if schema == "catalog" else WorldSchema.field("encounters", "pace")
+		var opts: Array[String] = []
+		for o: Variant in DictUtil.array_of(f.get("options", [])):
+			opts.append(str(o))
+		checks["%s field pace: enum, default auto, options auto/mob/elite/boss" % schema] = str(f.get("type", "")) == "enum" and str(f.get("default", "")) == EncounterPhases.PACE_AUTO and opts == EncounterPhases.PACES
+	var tiers: Dictionary = {"m": "standard", "n": "minion", "e": "elite", "b": "boss"}
+	var tier_of: Callable = func(ref: String) -> String: return str(tiers.get(ref, ""))
+	checks["auto: no elite or boss -> mob"] = EncounterPhases.pace_of({"enemies": ["m", "n"]}, tier_of) == EncounterPhases.PACE_MOB
+	checks["auto: an elite -> elite"] = EncounterPhases.pace_of({"enemies": ["m", "e"]}, tier_of) == EncounterPhases.PACE_ELITE
+	checks["auto: a boss beats an elite -> boss"] = EncounterPhases.pace_of({"enemies": ["e", "b", "m"]}, tier_of) == EncounterPhases.PACE_BOSS
+	checks["auto: a boss in wave_units counts"] = EncounterPhases.pace_of({"enemies": ["m"], "wave_units": ["b"]}, tier_of) == EncounterPhases.PACE_BOSS
+	var wave_phase: Array = [{"id": "w", "name": "W", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "wave", "units": ["e"]}]}]
+	checks["auto: an elite in a phase wave counts"] = EncounterPhases.pace_of({"enemies": ["m"], "phases": wave_phase}, tier_of) == EncounterPhases.PACE_ELITE
+	checks["a set pace wins over the tiers"] = EncounterPhases.pace_of({"enemies": ["b"], "pace": "elite"}, tier_of) == EncounterPhases.PACE_ELITE and EncounterPhases.pace_of({"enemies": ["m"], "pace": "boss"}, tier_of) == EncounterPhases.PACE_BOSS
+	checks["pace auto spelled out = unset"] = EncounterPhases.pace_of({"enemies": ["e"], "pace": "auto"}, tier_of) == EncounterPhases.pace_of({"enemies": ["e"]}, tier_of)
+	var crefs: Dictionary = _catalog_refs()
+	if not crefs.is_empty():
+		var ok_entry: Dictionary = _entry(crefs, [])
+		ok_entry["pace"] = EncounterPhases.PACE_ELITE
+		var bad_entry: Dictionary = _entry(crefs, [])
+		bad_entry["pace"] = "epic"
+		var ok_errors: Array[String] = ContentCatalog.validate_entry("encounters", ok_entry)
+		checks["catalog accepts pace elite (%s)" % "; ".join(ok_errors)] = ok_errors.is_empty()
+		checks["catalog refuses an unknown pace"] = ContentCatalog.validate_entry("encounters", bad_entry).size() > ok_errors.size()
+	var wrefs: Dictionary = _world_refs()
+	if not wrefs.is_empty():
+		var w_bad: Dictionary = _entry(wrefs, [])
+		w_bad["pace"] = "epic"
+		var w_ok: Dictionary = _entry(wrefs, [])
+		w_ok["pace"] = EncounterPhases.PACE_BOSS
+		var w_ok_errors: Array[String] = WorldCatalog.validate_entry(str(wrefs["world"]), "encounters", w_ok)
+		checks["world accepts pace boss (%s)" % "; ".join(w_ok_errors)] = w_ok_errors.is_empty()
+		checks["world refuses an unknown pace"] = WorldCatalog.validate_entry(str(wrefs["world"]), "encounters", w_bad).size() > w_ok_errors.size()
+	return TestHelpers.report(TAG, "PACE1: pace field in both schemas; pace_of resolves mob / elite / boss (waves included), a set pace wins", checks)
+
+# A valid start buff (empower with a flag) and a valid plain one (a buff without magnitude, no flags).
+static func _start_ok() -> Dictionary:
+	return {"status": StatusEffects.EMPOWER, "rounds": 2, "magnitude": 10, "requires_flags": [{"key": "pace1.test_saved", "value": true}], "text": "A friend rides ahead. The Wardens strike first."}
+
+static func _start_bad_cases() -> Dictionary:
+	var plain: String = _plain_buff()
+	var ok: Dictionary = _start_ok()
+	var one: Callable = func(changes: Dictionary) -> Array:
+		var sb: Dictionary = ok.duplicate(true)
+		sb.merge(changes, true)
+		return [sb]
+	var emp: String = StatusEffects.EMPOWER
+	var lo: int = StatusRegistry.magnitude_min(emp)
+	var hi: int = StatusRegistry.magnitude_max(emp)
+	return {
+		"not a list": [{"status": emp}, "Start buffs must be a list of objects."],
+		"three entries": [[ok, ok, ok], "An encounter holds at most 2 start buffs."],
+		"not an object": [["empower"], "Start buff: each entry must be an object."],
+		"unknown key": [one.call({"unit": "x"}), "Start buff: unknown key 'unit'."],
+		"taunt": [one.call({"status": StatusEffects.TAUNT, "magnitude": 0}), "Start buff 'taunt' must be a buff other than taunt or riposte."],
+		"riposte": [one.call({"status": StatusEffects.RIPOSTE, "magnitude": 0}), "Start buff 'riposte' must be a buff other than taunt or riposte."],
+		"a debuff": [one.call({"status": _debuff(), "magnitude": 0}), "Start buff '%s' must be a buff other than taunt or riposte." % _debuff()],
+		"rounds 0": [one.call({"rounds": 0}), "Start buff '%s': rounds must be 1..5." % emp],
+		"rounds 6": [one.call({"rounds": 6}), "Start buff '%s': rounds must be 1..5." % emp],
+		"magnitude 0 on a range": [one.call({"magnitude": 0}), "Start buff '%s': magnitude must be %d..%d." % [emp, lo, hi]],
+		"magnitude over the range": [one.call({"magnitude": hi + 1}), "Start buff '%s': magnitude must be %d..%d." % [emp, lo, hi]],
+		"magnitude without a range": [one.call({"status": plain, "magnitude": 3}), "Start buff '%s': magnitude must be 0..0." % plain],
+		"bad flag key": [one.call({"requires_flags": [{"key": "Bad Key", "value": true}]}), "Start buff flags 1: flag key 'Bad Key'"],
+		"flags not a list": [one.call({"requires_flags": "x"}), "Start buff flags must be a list"],
+		"no text": [one.call({"text": "  "}), "Start buff '%s' needs a text." % emp],
+		"long text": [one.call({"text": "x".repeat(EncounterPhases.START_TEXT_MAX + 1)}), "Start buff '%s' needs a text." % emp],
+	}
+
+static func _test_pace1_start_status() -> bool:
+	var checks: Dictionary = {}
+	var wf: Dictionary = WorldSchema.field("encounters", "start_status")
+	checks["world field start_status is json, default []"] = str(wf.get("type", "")) == "json" and wf.get("default", null) is Array and DictUtil.array_of(wf["default"]).is_empty()
+	checks["the catalog encounter schema has no start_status field"] = ContentSchema.field("encounters", "start_status").is_empty()
+	var crefs: Dictionary = _catalog_refs()
+	var wrefs: Dictionary = _world_refs()
+	if crefs.is_empty() or wrefs.is_empty():
+		return TestHelpers.report_ok(TAG, "PACE1 start_status", false, "no fixture refs")
+	var c_entry: Dictionary = _entry(crefs, [])
+	c_entry["start_status"] = [_start_ok()]
+	checks["catalog: start_status is refused (world encounters only)"] = _has(ContentCatalog.validate_entry("encounters", c_entry), "Start buffs (start_status) are for world encounters only.")
+	var world: String = str(wrefs["world"])
+	var plain_ok: Dictionary = {"status": _plain_buff(), "text": "Fresh legs."}
+	var good: Dictionary = _entry(wrefs, [])
+	good["start_status"] = [_start_ok(), plain_ok]
+	var good_errors: Array[String] = WorldCatalog.validate_entry(world, "encounters", good)
+	checks["world: two valid start buffs are clean (%s)" % "; ".join(good_errors)] = good_errors.is_empty()
+	var none: Dictionary = _entry(wrefs, [])
+	checks["world: no start_status is clean"] = WorldCatalog.validate_entry(world, "encounters", none).is_empty()
+	var bad: Dictionary = _start_bad_cases()
+	for label: Variant in bad:
+		var pair: Array = bad[label]
+		var e: Dictionary = _entry(wrefs, [])
+		e["start_status"] = pair[0]
+		var errors: Array[String] = WorldCatalog.validate_entry(world, "encounters", e)
+		checks["start %s -> '%s' (%s)" % [str(label), str(pair[1]), "; ".join(errors)]] = _has(errors, str(pair[1]))
+	var parsed: Array[Dictionary] = EncounterPhases.parse_start_status([{"status": StatusEffects.EMPOWER, "magnitude": 10.0, "text": "t"}, "skip"])
+	checks["parse: rounds 2, magnitude as int, requires_flags [] ; non-objects skipped"] = parsed.size() == 1 and DictUtil.to_int(parsed[0]["rounds"]) == EncounterPhases.DEFAULT_STATUS_ROUNDS and parsed[0]["magnitude"] is int and DictUtil.array_of(parsed[0]["requires_flags"]).is_empty()
+	var lines: Array[String] = EncounterPhases.start_status_lines([_start_ok(), plain_ok])
+	checks["preview lines (%s)" % "; ".join(lines)] = lines.size() == 2 and lines[0] == "Start: %s 10, 2 rounds if pace1.test_saved = true" % StatusEffects.display_name(StatusEffects.EMPOWER) and lines[1] == "Start: %s, %d rounds (always)" % [StatusEffects.display_name(_plain_buff()), EncounterPhases.DEFAULT_STATUS_ROUNDS]
+	# Upsert round trip in a sandbox world fork; the World Forge preview shows the start buff and the pace.
+	var wpath: String = TestHelpers.sandbox("pace1_start_world")
+	if TestHelpers.fork_worlds(wpath):
+		var stored_entry: Dictionary = _entry(wrefs, [])
+		stored_entry["id"] = "pace1_probe"
+		stored_entry["start_status"] = [_start_ok()]
+		var up_errors: Array[String] = WorldCatalog.upsert(world, "encounters", stored_entry)
+		checks["world upsert accepts start_status (%s)" % "; ".join(up_errors)] = up_errors.is_empty()
+		var stored: Dictionary = WorldCatalog.get_own(world, "encounters", "pace1_probe")
+		checks["world keeps the start buff"] = DictUtil.array_of(stored.get("start_status", [])).size() == 1
+		var preview: String = WorldPreview.describe(world, "encounters", stored)
+		checks["preview shows the start buff and the pace"] = preview.contains("Start: %s 10, 2 rounds if pace1.test_saved = true" % StatusEffects.display_name(StatusEffects.EMPOWER)) and preview.contains("Pace")
+	else:
+		checks["world fork"] = false
+	TestHelpers.cleanup_worlds(wpath)
+	return TestHelpers.report(TAG, "PACE1: start_status on world encounters only; every 3.4 message fires; parse and preview", checks)
 
 # ------------------------------------------------------------------------------
 # Runtime fixtures

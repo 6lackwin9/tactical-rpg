@@ -188,6 +188,8 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 		text += _line("Wave (R%d B%d)" % [DictUtil.to_int(e["wave_round"]), DictUtil.to_int(e["wave_block"])], _names_of(world_id, "characters", e["wave_units"]))
 	for phase_line: String in EncounterPhases.summary_lines(e.get("phases", []), func(ref: String) -> String: return _name_of(world_id, "characters", ref)):
 		text += _esc(phase_line) + "\n"   # BOSS1 rule 9
+	for start_line: String in EncounterPhases.start_status_lines(e.get("start_status", [])):
+		text += _esc(start_line) + "\n"   # PACE1 3.6
 	if not DictUtil.array_of(e.get("guests", [])).is_empty():
 		text += _line("Guests", _names_of(world_id, "characters", e["guests"]))
 	var name_of: Callable = func(ref: String) -> String: return _name_of(world_id, "characters", ref)
@@ -197,6 +199,8 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 	var morale: String = EncounterMorale.summary(e, name_of, tier_of)
 	if not morale.is_empty():
 		text += _line("Morale", _esc(morale))   # MORALE1 rule 16
+	var pace_set: String = str(e.get("pace", EncounterPhases.PACE_AUTO))
+	text += _line("Pace", EncounterPhases.pace_of(e, tier_of) + (" (auto)" if pace_set == EncounterPhases.PACE_AUTO else ""))   # PACE1 3.5
 	text += _line("Deployment", str(e.get("deployment", EncounterObjectives.STANDARD)))
 	if not DictUtil.array_of(e["party"]).is_empty() and not DictUtil.array_of(e["enemies"]).is_empty():
 		var enc := WorldEncounter.new(world_id, "")

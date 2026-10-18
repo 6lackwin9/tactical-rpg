@@ -334,6 +334,8 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
 		_f("phases", "Phases", "json", [], {"help": "Boss phases (BOSS1): same shape as catalog encounters; refs are character refs (EncounterPhases)."}),
+		_f("pace", "Pace", "enum", "auto", {"options": ["auto", "mob", "elite", "boss"], "help": "Round target tier (PACE1): auto = boss / elite / mob from the enemy tiers (EncounterPhases.pace_of)."}),
+		_f("start_status", "Start buffs", "json", [], {"help": "[{\"status\", \"rounds\": 2, \"magnitude\": 0, \"requires_flags\": [{\"key\", \"value\"}], \"text\"}], at most 2 (PACE1 story rewards): a buff (not taunt or riposte) for every hero and guest at round 1 when the flags hold."}),
 		_f("objective", "Objective", "enum", "rout", {"options": ["rout", "hold", "escape", "slay"], "help": "rout, hold, escape or slay (OBJ1; EncounterObjectives)."}),
 		_f("objective_tiles", "Objective tiles", "json", [], {"help": "[[x, y], ...] walkable, not exits; [] = the ring [[5, 4], [6, 4]]."}),
 		_f("objective_rounds", "Hold rounds", "int", 3, {"min": 1, "max": 30, "help": "Hold only: round ends held to win (1..max rounds)."}),

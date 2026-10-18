@@ -30,6 +30,8 @@ const GLYPHS: Dictionary = {
 	"regen": "M14 7 H18 V14 H25 V18 H18 V25 H14 V18 H7 V14 H14 Z",
 	"poison": "M16 6 C20.4 6 24 9.2 24 13.2 C24 16 22.3 18.3 20 19.4 V23 H12 V19.4 C9.7 18.3 8 16 8 13.2 C8 9.2 11.6 6 16 6 Z M12.5 12 V15 H15 V12 Z M17 12 V15 H19.5 V12 Z",
 	"burn": "M16 5 C20 10 24 14 23 20 C22 25 19 27 16 27 C12 27 9 24 9 20 C9 16 12 14 13 10 C14 13 15 14 16 15 C17 12 17 9 16 5 Z",
+	# PACE1 placeholder glyph (a raised blade; the art pass may replace it).
+	"empower": "M16 4 L19 9 V19 H23 V22 H18 V27 H14 V22 H9 V19 H13 V9 Z",
 }
 const ARROW_UP: String = "M16 6 L25 16 H19.5 V26 H12.5 V16 H7 Z"
 const ARROW_DOWN: String = "M16 26 L25 16 H19.5 V6 H12.5 V16 H7 Z"

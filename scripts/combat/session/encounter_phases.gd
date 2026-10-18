@@ -20,14 +20,19 @@ extends RefCounted
 # Phase object:
 #   id              String  snake_case, unique in the encounter (required)
 #   name            String  1..40 chars (required)
-#   trigger         Dict    {"kind": "hp_below", "unit": ref, "pct": 1..99} or {"kind": "round", "round": 2..max_rounds}
+#   trigger         Dict    {"kind": "hp_below", "unit": ref, "pct": 1..99, "or_round": 0 | 2..max_rounds} or
+#                           {"kind": "round", "round": 2..max_rounds}; or_round (PACE1, default 0 = none): also due at
+#                           that round's start when not yet fired (validated and parsed; the firing is PACE1-L stage 2)
 #   effects         Array   1..5 of:
 #     {"type": "line", "text": 1..160 chars}                                 at most one per phase
 #     {"type": "wave", "units": [refs], "label": ""}                         at most one per phase
-#     {"type": "status", "unit": ref, "status": buff, "rounds": 2, "magnitude": 0}
+#     {"type": "status", "unit": ref, "status": buff, "rounds": 2, "magnitude": 0}   (not empower)
 #     {"type": "ai", "unit": ref, role / target_pref / reckless / flee_ratio / defend_below / heal_below}
+#     {"type": "enrage", "unit": enemies ref, "power": 1..25 (20)}          PACE1: one per encounter, phase pauses autoplay
 #   pause_autoplay  bool    default true
 # Refs are ids as written in the encounter's lists (catalog unit ids or world character refs).
+# PACE1 also keeps here the encounter `pace` resolver (pace_of) and the world-only `start_status` entries
+# (parse_start_status / start_status_problems; spec docs/specs/PACE1.md 3.4, 3.5).
 # ==============================================================================
 
 const MAX_PHASES: int = 4
@@ -50,11 +55,17 @@ const EFFECT_LINE: String = "line"
 const EFFECT_WAVE: String = "wave"
 const EFFECT_STATUS: String = "status"
 const EFFECT_AI: String = "ai"
-const EFFECTS: Array[String] = [EFFECT_LINE, EFFECT_WAVE, EFFECT_STATUS, EFFECT_AI]
+const EFFECT_ENRAGE: String = "enrage"
+const EFFECTS: Array[String] = [EFFECT_LINE, EFFECT_WAVE, EFFECT_STATUS, EFFECT_AI, EFFECT_ENRAGE]
+
+const OR_ROUND: String = "or_round"
+const ENRAGE_POWER_MIN: int = 1
+const ENRAGE_POWER_MAX: int = 25
+const DEFAULT_ENRAGE_POWER: int = 20
 
 const PHASE_KEYS: Array[String] = ["id", "name", "trigger", "effects", "pause_autoplay"]
 const TRIGGER_KEYS: Dictionary = {
-	TRIGGER_HP_BELOW: ["kind", "unit", "pct"],
+	TRIGGER_HP_BELOW: ["kind", "unit", "pct", OR_ROUND],
 	TRIGGER_ROUND: ["kind", "round"],
 }
 const AI_ROLES: Array[String] = ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"]
@@ -66,7 +77,21 @@ const EFFECT_KEYS: Dictionary = {
 	EFFECT_WAVE: ["type", "units", "label"],
 	EFFECT_STATUS: ["type", "unit", "status", "rounds", "magnitude"],
 	EFFECT_AI: ["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"],
+	EFFECT_ENRAGE: ["type", "unit", "power"],
 }
+
+# PACE1 3.5: encounter `pace` (catalog and world encounters).
+const PACE_AUTO: String = "auto"
+const PACE_MOB: String = "mob"
+const PACE_ELITE: String = "elite"
+const PACE_BOSS: String = "boss"
+const PACES: Array[String] = [PACE_AUTO, PACE_MOB, PACE_ELITE, PACE_BOSS]
+
+# PACE1 3.4: world encounter `start_status` (story-reward start buffs).
+const START_MAX: int = 2
+const START_TEXT_MAX: int = 120
+const START_KEYS: Array[String] = ["status", "rounds", "magnitude", "requires_flags", "text"]
+const START_FLAGS_LABEL: String = "Start buff flags"
 
 const SUBTYPE: String = "Phase"     # EVENT entry skill_subtype of a phase
 const OUTCOME: String = "PHASE"
@@ -260,6 +285,8 @@ static func summary_lines(raw: Variant, name_of: Callable) -> Array[String]:
 		var when: String = ""
 		if str(trigger["kind"]) == TRIGGER_HP_BELOW:
 			when = "%s at %d%% HP" % [str(name_of.call(str(trigger["unit"]))), DictUtil.to_int(trigger["pct"])]
+			if DictUtil.to_int(trigger.get(OR_ROUND, 0)) > 0:
+				when += " or round %d" % DictUtil.to_int(trigger[OR_ROUND])   # PACE1 3.6
 		else:
 			when = "round %d" % DictUtil.to_int(trigger.get("round", 0))
 		var types: Array[String] = []
@@ -296,7 +323,7 @@ static func parse(raw: Variant) -> Array[Dictionary]:
 static func _parse_trigger(t: Dictionary) -> Dictionary:
 	var kind: String = str(t.get("kind", ""))
 	if kind == TRIGGER_HP_BELOW:
-		return {"kind": kind, "unit": str(t.get("unit", "")), "pct": DictUtil.to_int(t.get("pct", 0))}
+		return {"kind": kind, "unit": str(t.get("unit", "")), "pct": DictUtil.to_int(t.get("pct", 0)), OR_ROUND: DictUtil.to_int(t.get(OR_ROUND, 0))}
 	if kind == TRIGGER_ROUND:
 		return {"kind": kind, "round": DictUtil.to_int(t.get("round", 0))}
 	return {"kind": kind}
@@ -328,6 +355,8 @@ static func _parse_effect(fx: Dictionary) -> Dictionary:
 				else:
 					out[key] = str(fx[key])
 			return out
+		EFFECT_ENRAGE:
+			return {"type": type, "unit": str(fx.get("unit", "")), "power": DictUtil.to_int(fx.get("power", DEFAULT_ENRAGE_POWER), DEFAULT_ENRAGE_POWER)}
 	return {"type": type}
 
 # The wave units of one parsed phase (every wave effect, in order).
@@ -376,10 +405,14 @@ static func problems(entry: Dictionary, ref_ok: Callable) -> Array[String]:
 	if enemies.size() + waves.size() + phase_units > MAX_UNITS:
 		errors.append("Encounter enemies, waves and phase waves hold at most %d units." % MAX_UNITS)
 	var seen: Dictionary = {}
+	var enrages: int = 0
 	for p: Variant in list:
 		if not (p is Dictionary):
 			errors.append("Each phase must be an object.")
 			continue
+		for fx: Dictionary in _dicts(DictUtil.dict_of(p).get("effects", [])):
+			if str(fx.get("type", "")) == EFFECT_ENRAGE:
+				enrages += 1
 		var phase: Dictionary = p
 		var id: String = str(phase.get("id", ""))
 		var tag: String = id if not id.is_empty() else "?"
@@ -400,6 +433,9 @@ static func problems(entry: Dictionary, ref_ok: Callable) -> Array[String]:
 			errors.append("Phase '%s': pause_autoplay must be true or false." % tag)
 		errors.append_array(_trigger_errors(tag, phase.get("trigger", null), enemies, max_rounds))
 		errors.append_array(_effects_errors(tag, phase.get("effects", null), known, ref_ok))
+		errors.append_array(_enrage_errors(tag, phase, enemies))
+	if enrages > 1:
+		errors.append("An encounter holds at most one enrage.")   # PACE1 rule 6
 	return errors
 
 static func _trigger_errors(tag: String, raw: Variant, enemies: Array[String], max_rounds: int) -> Array[String]:
@@ -414,7 +450,9 @@ static func _trigger_errors(tag: String, raw: Variant, enemies: Array[String], m
 		return errors
 	var allowed: Array = TRIGGER_KEYS[kind]
 	for key: Variant in t:
-		if not allowed.has(str(key)):
+		if str(key) == OR_ROUND and kind != TRIGGER_HP_BELOW:
+			errors.append("Phase '%s': or_round needs an hp_below trigger." % tag)   # PACE1 3.2
+		elif not allowed.has(str(key)):
 			errors.append("Phase '%s': unknown trigger key '%s'." % [tag, str(key)])
 	if kind == TRIGGER_HP_BELOW:
 		var unit_ref: String = str(t.get("unit", ""))
@@ -423,6 +461,10 @@ static func _trigger_errors(tag: String, raw: Variant, enemies: Array[String], m
 		var pct: Variant = t.get("pct", null)
 		if not _is_whole(pct) or DictUtil.to_int(pct) < PCT_MIN or DictUtil.to_int(pct) > PCT_MAX:
 			errors.append("Phase '%s': pct must be %d..%d." % [tag, PCT_MIN, PCT_MAX])
+		var or_round: Variant = t.get(OR_ROUND, 0)
+		var or_num: int = DictUtil.to_int(or_round)
+		if not _is_whole(or_round) or (or_num != 0 and (or_num < ROUND_MIN or or_num > max_rounds)):
+			errors.append("Phase '%s': or_round must be %d..%d." % [tag, ROUND_MIN, max_rounds])
 	else:
 		var r: Variant = t.get("round", null)
 		if not _is_whole(r) or DictUtil.to_int(r) < ROUND_MIN or DictUtil.to_int(r) > max_rounds:
@@ -495,6 +537,9 @@ static func _status_errors(tag: String, fx: Dictionary, known: Array[String]) ->
 	if not StatusEffects.buffs().has(status):
 		errors.append("Phase '%s': '%s' is not a buff." % [tag, status])
 		return errors
+	if status == StatusEffects.EMPOWER:
+		errors.append("Phase '%s': empower comes only from an enrage effect." % tag)   # PACE1 rule 5
+		return errors
 	var rounds: Variant = fx.get("rounds", DEFAULT_STATUS_ROUNDS)
 	if not _is_whole(rounds) or DictUtil.to_int(rounds) < STATUS_ROUNDS_MIN or DictUtil.to_int(rounds) > STATUS_ROUNDS_MAX:
 		errors.append("Phase '%s': rounds must be %d..%d." % [tag, STATUS_ROUNDS_MIN, STATUS_ROUNDS_MAX])
@@ -507,6 +552,24 @@ static func _status_errors(tag: String, fx: Dictionary, known: Array[String]) ->
 			errors.append("Phase '%s': %s magnitude must be %d..%d." % [tag, status, lo, hi])
 	elif not _is_whole(magnitude) or mag != 0:
 		errors.append("Phase '%s': %s takes no magnitude (0)." % [tag, status])
+	return errors
+
+# PACE1 3.3: every enrage effect of one phase names a unit in `enemies` with power 1..25, and the phase pauses autoplay.
+static func _enrage_errors(tag: String, phase: Dictionary, enemies: Array[String]) -> Array[String]:
+	var errors: Array[String] = []
+	var any: bool = false
+	for fx: Dictionary in _dicts(phase.get("effects", [])):
+		if str(fx.get("type", "")) != EFFECT_ENRAGE:
+			continue
+		any = true
+		var ref: String = str(fx.get("unit", ""))
+		if not enemies.has(ref):
+			errors.append("Phase '%s': enrage unit '%s' is not in enemies." % [tag, ref])
+		var power: Variant = fx.get("power", DEFAULT_ENRAGE_POWER)
+		if not _is_whole(power) or DictUtil.to_int(power) < ENRAGE_POWER_MIN or DictUtil.to_int(power) > ENRAGE_POWER_MAX:
+			errors.append("Phase '%s': enrage power must be %d..%d." % [tag, ENRAGE_POWER_MIN, ENRAGE_POWER_MAX])
+	if any and not DictUtil.to_bool(phase.get("pause_autoplay", true), true):
+		errors.append("Phase '%s': an enrage phase must pause autoplay." % tag)
 	return errors
 
 static func _ai_errors(tag: String, fx: Dictionary, known: Array[String]) -> Array[String]:
@@ -530,6 +593,108 @@ static func _ai_errors(tag: String, fx: Dictionary, known: Array[String]) -> Arr
 		var v: Variant = fx[key]
 		if not (v is int or v is float) or DictUtil.to_float(v) < 0.0 or DictUtil.to_float(v) > 1.0:
 			errors.append("Phase '%s': %s must be 0.0..1.0." % [tag, key])
+	return errors
+
+# ------------------------------------------------------------------------------
+# PACE1 3.5: pace tier
+# ------------------------------------------------------------------------------
+
+# The fight's pace tier (mob, elite or boss), the one resolver for validator, sim and preview. A set `pace` wins;
+# auto = boss when any enemy (enemies, wave_units, phase waves) is tier boss, else elite when any is tier elite, else mob.
+# `tier_of(ref) -> String` = the unit tier of an encounter ref.
+static func pace_of(entry: Dictionary, tier_of: Callable) -> String:
+	var pace: String = str(entry.get("pace", PACE_AUTO))
+	if PACES.has(pace) and pace != PACE_AUTO:
+		return pace
+	var refs: Array[String] = _strings(entry.get("enemies", []))
+	refs.append_array(_strings(entry.get("wave_units", [])))
+	refs.append_array(reserved_refs(entry))
+	var elite: bool = false
+	for ref: String in refs:
+		var tier: String = str(tier_of.call(ref))
+		if tier == PACE_BOSS:
+			return PACE_BOSS
+		elite = elite or tier == PACE_ELITE
+	return PACE_ELITE if elite else PACE_MOB
+
+# ------------------------------------------------------------------------------
+# PACE1 3.4: start buffs (world encounter field `start_status`; validated by WorldCatalog._encounter_errors)
+# ------------------------------------------------------------------------------
+
+# The entries with defaults: {status, rounds (2), magnitude (0), requires_flags ([]), text}. Non-objects are skipped.
+static func parse_start_status(raw: Variant) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for item: Variant in DictUtil.array_of(raw):
+		if not (item is Dictionary):
+			continue
+		var src: Dictionary = item
+		out.append({
+			"status": str(src.get("status", "")),
+			"rounds": DictUtil.to_int(src.get("rounds", DEFAULT_STATUS_ROUNDS), DEFAULT_STATUS_ROUNDS),
+			"magnitude": DictUtil.to_int(src.get("magnitude", 0)),
+			"requires_flags": DictUtil.array_of(src.get("requires_flags", [])).duplicate(true),
+			"text": str(src.get("text", "")),
+		})
+	return out
+
+# One preview line per entry (PACE1 3.6): "Start: <status>[ <magnitude>], <rounds> rounds if <flags>" ("(always)" with no flags).
+static func start_status_lines(raw: Variant) -> Array[String]:
+	var out: Array[String] = []
+	for sb: Dictionary in parse_start_status(raw):
+		var conds: Array[String] = []
+		for c: Variant in DictUtil.array_of(sb["requires_flags"]):
+			var cond: Dictionary = DictUtil.dict_of(c)
+			var op: String = str(cond.get("op", "=="))
+			conds.append("%s %s %s" % [str(cond.get("key", "")), "=" if op == "==" else op, str(JsonUtil.normalize(cond.get("value", true)))])
+		var mag: int = DictUtil.to_int(sb["magnitude"])
+		out.append("Start: %s%s, %d rounds %s" % [StatusEffects.display_name(str(sb["status"])), (" %d" % mag) if mag > 0 else "",
+			DictUtil.to_int(sb["rounds"]), ("if " + " and ".join(conds)) if not conds.is_empty() else "(always)"])
+	return out
+
+# Buffs a start_status entry may grant: every buff but taunt and riposte (empower included).
+static func start_buffs() -> Array[String]:
+	var out: Array[String] = []
+	for s: String in StatusEffects.buffs():
+		if s != StatusEffects.TAUNT and s != StatusEffects.RIPOSTE:
+			out.append(s)
+	return out
+
+# Problems with an encounter's `start_status` value (spec 3.4 messages).
+static func start_status_problems(raw: Variant) -> Array[String]:
+	var errors: Array[String] = []
+	if not (raw is Array):
+		errors.append("Start buffs must be a list of objects.")
+		return errors
+	var list: Array = raw
+	if list.size() > START_MAX:
+		errors.append("An encounter holds at most %d start buffs." % START_MAX)
+	var allowed: Array[String] = start_buffs()
+	for item: Variant in list:
+		if not (item is Dictionary):
+			errors.append("Start buff: each entry must be an object.")
+			continue
+		var sb: Dictionary = item
+		for key: Variant in sb:
+			if not START_KEYS.has(str(key)):
+				errors.append("Start buff: unknown key '%s'." % str(key))
+		var status: String = str(sb.get("status", ""))
+		if not (sb.get("status", null) is String) or not allowed.has(status):
+			errors.append("Start buff '%s' must be a buff other than taunt or riposte." % status)
+			continue
+		var rounds: Variant = sb.get("rounds", DEFAULT_STATUS_ROUNDS)
+		if not _is_whole(rounds) or DictUtil.to_int(rounds) < STATUS_ROUNDS_MIN or DictUtil.to_int(rounds) > STATUS_ROUNDS_MAX:
+			errors.append("Start buff '%s': rounds must be %d..%d." % [status, STATUS_ROUNDS_MIN, STATUS_ROUNDS_MAX])
+		var magnitude: Variant = sb.get("magnitude", 0)
+		var mag: int = DictUtil.to_int(magnitude)
+		var lo: int = StatusRegistry.magnitude_min(status) if StatusEffects.has_magnitude(status) else 0
+		var hi: int = StatusRegistry.magnitude_max(status) if StatusEffects.has_magnitude(status) else 0
+		if not _is_whole(magnitude) or mag < lo or mag > hi:
+			errors.append("Start buff '%s': magnitude must be %d..%d." % [status, lo, hi])
+		errors.append_array(QuestRules.condition_errors(sb.get("requires_flags", []), START_FLAGS_LABEL))
+		var text: Variant = sb.get("text", "")
+		var stripped: String = str(text).strip_edges() if text is String else ""
+		if stripped.is_empty() or stripped.length() > START_TEXT_MAX:
+			errors.append("Start buff '%s' needs a text." % status)
 	return errors
 
 # ------------------------------------------------------------------------------
