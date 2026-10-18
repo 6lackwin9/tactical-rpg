@@ -66,9 +66,7 @@
 			"body": "arm_plate",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion"
-			]
+			"pouch": []
 		},
 		{
 			"id": "ranger",
@@ -132,10 +130,7 @@
 			"body": "arm_leather",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion",
-				"con_focus_elixir"
-			]
+			"pouch": []
 		},
 		{
 			"id": "brawler",
@@ -276,9 +271,7 @@
 			"body": "arm_cleric_vestment",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion"
-			]
+			"pouch": []
 		},
 		{
 			"id": "rogue",
@@ -407,9 +400,7 @@
 			"body": "arm_mage_robe",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion"
-			]
+			"pouch": []
 		}
 	]
 }
