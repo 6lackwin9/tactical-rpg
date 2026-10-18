@@ -441,7 +441,8 @@ func _refresh() -> void:
 	if world_map != null:
 		MusicDirector.release(self)   # MUSIC1: the embedded world map's travel request plays
 	else:
-		MusicDirector.request_game(self, MusicDirector.field_context(gs), gs)   # unchanged requests are no-ops
+		var shop_open: bool = shop_panel != null and shop_panel.is_open()
+		MusicDirector.request_game(self, MusicDirector.region_context(gs, shop_open), gs)   # unchanged requests are no-ops
 	if _status == null:
 		return
 	if gs == null:

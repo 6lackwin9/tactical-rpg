@@ -401,8 +401,148 @@ def combat() -> np.ndarray:
     return tr.render(1.8)
 
 
+def walk_melody(tr: Track, prog: list, bars_per_chord: int, scale: list, inst, patterns: list, pan: float = 0.2,
+                gain: float = 1.0, send: float = 0.35, start_pos: int = 4, rest_every: int = 0) -> None:
+    # A seeded walk on `scale`; the first note of each bar lands on a chord tone. prog: [(root midi, quality)].
+    pos = start_pos
+    for i, (r, q) in enumerate(prog):
+        pcs = [t % 12 for t in chord_tones(r, q)]
+        for b in range(bars_per_chord):
+            bar = i * bars_per_chord + b
+            if rest_every and bar % rest_every == rest_every - 1:
+                pattern = [(0, tr.bpb - 1)]
+            else:
+                pattern = patterns[int(tr.rng.integers(0, len(patterns)))]
+            for beat, length in pattern:
+                pos = int(np.clip(pos + tr.rng.integers(-2, 3), 0, len(scale) - 1))
+                m = scale[pos]
+                if beat == 0:
+                    while m % 12 not in pcs:
+                        m -= 1
+                tr.add(inst(m, length * tr.beat), tr.at(bar, beat), pan, gain, send)
+
+
+def town() -> np.ndarray:
+    # 88 BPM, 4/4, 24 bars (65 s). Warm C major: lute arpeggios, whistle tune, light drum.
+    tr = Track(88, 4, 24, seed=101)
+    prog = [(midi(n), q) for n, q in (("C2", "M"), ("G1", "M"), ("A1", "m"), ("F1", "M"), ("C2", "M"), ("F1", "M"),
+                                      ("G1", "M"), ("C2", "M"), ("A1", "m"), ("E1", "m"), ("F1", "M"), ("G1", "M"))]
+    for i, (r, q) in enumerate(prog):
+        tones = chord_tones(r + 24, q)
+        tr.add(pad(tones, 8 * tr.beat, 0.8, 1.2, 6, 0.08), tr.at(2 * i), 0.0, 0.5, 0.45)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            tr.add(bass(r + 12, 1.8 * tr.beat, 0.1), tr.at(b0, 0), -0.1, 0.45, 0.2)
+            tr.add(bass(r + 19, 1.8 * tr.beat, 0.1), tr.at(b0, 2), -0.1, 0.35, 0.2)
+            for e in range(8):
+                m = tones[[0, 1, 2, 1, 0, 1, 2, 3 % len(tones)][e] % len(tones)] + 12
+                tr.add(pluck(m, 0.5 * tr.beat, 0.7, 2.4), tr.at(b0, e * 0.5), -0.35, 0.22, 0.35)
+            tr.add(drum(100, 0.12, 0.6, tr.rng), tr.at(b0, 0), 0.0, 0.25, 0.2)
+            tr.add(drum(140, 0.07, 0.8, tr.rng), tr.at(b0, 2), 0.1, 0.15, 0.2)
+    scale = [midi(n) for n in ("G4", "A4", "C5", "D5", "E5", "G5", "A5")]
+    wl = lambda m, d: whistle(m, d, tr.rng)
+    walk_melody(tr, prog, 2, scale, wl, [[(0, 1.5), (1.5, 0.5), (2, 2)], [(0, 1), (1, 1), (2, 2)], [(0, 2), (2, 1), (3, 1)]],
+                0.2, 0.9, 0.35, 3, 4)
+    return tr.render(2.4)
+
+
+def danger() -> np.ndarray:
+    # 70 BPM, 4/4, 16 bars (55 s). B minor with a flat second: drone, heartbeat drum, sparse high plucks, wind.
+    tr = Track(70, 4, 16, seed=131)
+    roots = ["B1", "C2", "B1", "G1", "B1", "C2", "F#1", "F#1"]
+    for i, root in enumerate(roots):
+        r = midi(root)
+        tr.add(pad([r + 24, r + 27, r + 31], 8 * tr.beat, 2.5, 2.0, 5, 0.18), tr.at(2 * i), 0.0, 0.6, 0.55)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            tr.add(drum(48, 0.3, 0.2, tr.rng, 1.0), tr.at(b0, 0), 0.0, 0.7, 0.2)
+            tr.add(drum(48, 0.25, 0.2, tr.rng, 1.0), tr.at(b0, 0.4), 0.0, 0.45, 0.2)
+            tr.add(bass(r, 3 * tr.beat, 0.4), tr.at(b0, 0), 0.0, 0.35, 0.2)
+            if (i + bar) % 2 == 1:
+                hi = [midi("B5"), midi("C6"), midi("F#5"), midi("D6")][int(tr.rng.integers(0, 4))]
+                tr.add(pluck(hi, tr.beat, 1.0, 0.9), tr.at(b0, 2.5), 0.5 - bar, 0.35, 0.7)
+        if i % 2 == 1:
+            tr.add(anvil(midi("F5"), tr.rng), tr.at(2 * i + 1, 3), -0.4, 0.25, 0.8)
+    drone(tr, [midi("B0"), midi("F#1"), midi("C2")], 0.2, 3)
+    wash(tr, 200, 1600, 4, 0.08)
+    return tr.render(4.0)
+
+
+def shop() -> np.ndarray:
+    # 100 BPM waltz, 3/4, 32 bars (58 s). Cosy F major: oom-pah bass, plucked chords, whistle tune.
+    tr = Track(100, 3, 32, seed=151)
+    prog = [(midi(n), q) for n, q in (("F1", "M"), ("C2", "M"), ("D2", "m"), ("Bb1", "M"), ("F1", "M"), ("Bb1", "M"),
+                                      ("C2", "7"), ("F1", "M"))]
+    for i, (r, q) in enumerate(prog):
+        tones = chord_tones(r + 24, q)
+        for bar in range(4):
+            b0 = 4 * i + bar
+            tr.add(bass(r + 12 + (7 if bar % 2 else 0), 0.9 * tr.beat, 0.2), tr.at(b0, 0), -0.1, 0.5, 0.15)
+            for beat in (1, 2):
+                for k, m in enumerate(tones[:3]):
+                    tr.add(pluck(m + 12, 0.5 * tr.beat, 0.6, 4.0), tr.at(b0, beat), (k - 1) * 0.3, 0.12, 0.25)
+            tr.add(drum(150, 0.06, 0.9, tr.rng), tr.at(b0, 0), 0.2, 0.15, 0.2)
+    scale = [midi(n) for n in ("F4", "G4", "A4", "Bb4", "C5", "D5", "E5", "F5")]
+    wl = lambda m, d: whistle(m, d, tr.rng)
+    walk_melody(tr, prog, 4, scale, wl, [[(0, 2), (2, 1)], [(0, 1), (1, 1), (2, 1)], [(0, 3)]], 0.15, 0.85, 0.3, 4)
+    return tr.render(1.8)
+
+
+def travel() -> np.ndarray:
+    # 92 BPM, 4/4, 24 bars (63 s). Open D mixolydian: marching snare, horn tune, broad pads.
+    tr = Track(92, 4, 24, seed=171)
+    prog = [(midi(n), q) for n, q in (("D2", "M"), ("C2", "M"), ("G1", "M"), ("D2", "M"), ("B1", "m"), ("G1", "M"),
+                                      ("A1", "M"), ("D2", "M"), ("D2", "M"), ("C2", "M"), ("G1", "M"), ("A1", "sus"))]
+    for i, (r, q) in enumerate(prog):
+        tones = chord_tones(r + 24, q)
+        tr.add(pad(tones, 8 * tr.beat, 0.6, 1.0, 7, 0.1), tr.at(2 * i), 0.0, 0.6, 0.45)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            for beat in (0, 1, 2, 3):
+                tr.add(bass(r + 12 + (7 if beat == 2 else 0), 0.8 * tr.beat, 0.25), tr.at(b0, beat), 0.0, 0.4, 0.15)
+            tr.add(drum(65, 0.25, 0.3, tr.rng, 1.5), tr.at(b0, 0), 0.0, 0.6, 0.2)
+            tr.add(drum(65, 0.25, 0.3, tr.rng, 1.5), tr.at(b0, 2), 0.0, 0.45, 0.2)
+            for beat in (1, 3, 3.5) if bar else (1, 3):
+                tr.add(snare(tr.rng), tr.at(b0, beat), 0.1, 0.35, 0.3)
+    scale = [midi(n) for n in ("D4", "E4", "F#4", "G4", "A4", "B4", "C5", "D5", "E5")]
+    walk_melody(tr, prog, 2, scale, horn, [[(0, 1.5), (1.5, 0.5), (2, 2)], [(0, 2), (2, 1), (3, 1)], [(0, 1), (1, 1), (2, 2)]],
+                0.15, 1.5, 0.4, 4, 4)
+    return tr.render(2.4)
+
+
+def boss() -> np.ndarray:
+    # 140 BPM, 4/4, 32 bars (55 s). D minor: heavy toms, anvil hits, eighth-note bass, horn calls.
+    tr = Track(140, 4, 32, seed=191)
+    prog = [("D1", "m"), ("Bb0", "M"), ("C1", "M"), ("A0", "M")] * 4
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        second_half = i >= 8
+        tr.add(pad(tones, 8 * tr.beat, 0.3, 0.5, 8, 0.2), tr.at(2 * i), 0.0, 0.5, 0.35)
+        for b in range(16):
+            tr.add(bass(r + (12 if b % 8 == 7 else 0), 0.45 * tr.beat, 0.8), tr.at(2 * i, b * 0.5), 0.0, 0.6, 0.1)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            for beat in (0, 0.5, 2, 2.75):
+                tr.add(drum(50, 0.25, 0.5, tr.rng, 3.0), tr.at(b0, beat), 0.0, 0.85, 0.1)
+            for beat in (1, 3):
+                tr.add(snare(tr.rng), tr.at(b0, beat), 0.05, 0.85, 0.25)
+            for e in range(8):
+                tr.add(hat(tr.rng), tr.at(b0, e * 0.5), 0.3, 0.6, 0.1)
+            tr.add(anvil(midi("D5"), tr.rng), tr.at(b0, 1), 0.5, 0.4, 0.3)
+            if second_half:
+                tr.add(drum(95, 0.2, 0.4, tr.rng, 1.2), tr.at(b0, 3.5), -0.4, 0.5, 0.3)
+                tr.add(drum(75, 0.25, 0.4, tr.rng, 1.2), tr.at(b0, 3.75), 0.4, 0.5, 0.3)
+        call = [(0, tones[0], 1.5), (1.5, tones[1], 0.5), (2, tones[2], 2), (4, tones[0] + 12, 3)]
+        if second_half or i % 2 == 0:
+            melody(tr, [(b, m + (12 if second_half else 0), d) for b, m, d in call], 2 * i, horn, 0.1, 1.7, 0.35)
+    drone(tr, [midi("D1")], 0.1, 8)
+    return tr.render(1.6)
+
+
 TRACKS = {"menu_theme": menu_theme, "ashlands": ashlands, "iron_reaches": iron_reaches,
-          "tidewrack": tidewrack, "combat": combat}
+          "tidewrack": tidewrack, "combat": combat,
+          "town": town, "danger": danger, "shop": shop, "travel": travel, "boss": boss}
 
 
 def write_ogg(stereo: np.ndarray, path: str) -> None:

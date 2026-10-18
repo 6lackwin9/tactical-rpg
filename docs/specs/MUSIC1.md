@@ -2,7 +2,7 @@
 
 Approved by the user 2026-10-18 01:02 UTC ("Approve" on the five-track card in the Assets & Audio thread). Replaces the code-built menu placeholder UI/UX planned. Extends S14 (`docs/specs/S14_RULES.md`): music was the "later" slice of the first audio decision.
 
-## 1. Tracks (MUSIC1-A)
+## 1. Tracks (MUSIC1-A, MUSIC2-A)
 
 Original loops synthesized from notes by `tools/gen_music.py` (numpy + ffmpeg, no samples), Ogg Vorbis q5, 44.1 kHz stereo, in `res://assets/audio/music/<key>.ogg`, one manifest row each (`music/<key>/stream`, `origin: user`, note `generated loop (MUSIC1)`). Each track renders as one circular buffer, so the loop has no seam.
 
@@ -13,6 +13,11 @@ Original loops synthesized from notes by `tools/gen_music.py` (numpy + ffmpeg, n
 | `iron_reaches` | Iron Reaches maps | heavy E minor, anvil strikes, low toms, horn pads | 72 s |
 | `tidewrack` | Tidewrack Coast maps | 6/8 G mixolydian whistle tune, sea-swell bed | 72 s |
 | `combat` | every battle | 120 BPM A minor, drums, pulsing bass, riff | 48 s |
+| `town` | towns and fortresses (MUSIC2) | warm C major, lute arpeggios, whistle tune | 65 s |
+| `danger` | camps, ruins, dungeons (MUSIC2) | 70 BPM B minor, drone, heartbeat drum, wind | 55 s |
+| `shop` | while a shop is open (MUSIC2) | cosy F major waltz | 58 s |
+| `travel` | world map (MUSIC2) | D mixolydian march, horn tune | 63 s |
+| `boss` | fights with a boss-tier unit (MUSIC2) | 140 BPM D minor, toms, anvil, horn calls | 55 s |
 
 ## 2. Rules (MUSIC1-L)
 
@@ -36,4 +41,5 @@ Original loops synthesized from notes by `tools/gen_music.py` (numpy + ffmpeg, n
    | `encounter` | COMBAT 2 | `combat` | none |
    | `boss` | COMBAT 2 | `combat` | none |
 
-   Key chain for a context, most specific first: the scopes of rule 3 (region id, its parent chain, the world id, the lineage nearest first) each as `<scope>_<context>`, then for `field` the plain scope keys, then `<context>` alone, then for `menu` `menu_theme`; if none resolves, repeat with the parent context. A generic `field` row therefore never overrides `ashlands` and the other plain keys. Examples: a boss fight in the Ashlands with only `combat` shipped plays `combat`; a row `ashlands_boss` would win. Wired today: the main menu requests `menu`; the region map `town` when the current location's kind is `town`, else `field`, and releases its request while its embedded world map is open (so `travel` plays); the world map `travel`; `BattleScreen.open` `boss` when an enemy or wave unit has the `boss` tier, else `combat`. `shop`, `danger` and `encounter` have no caller yet. Decided 2026-10-18 (coordinator): field order as above; the game world (not the location's world) stays the world scope for connected-world locations.
+   Key chain for a context, most specific first: the scopes of rule 3 (region id, its parent chain, the world id, the lineage nearest first) each as `<scope>_<context>`, then for `field` the plain scope keys, then `<context>` alone, then for `menu` `menu_theme`; if none resolves, repeat with the parent context. A generic `field` row therefore never overrides `ashlands` and the other plain keys. Examples: a boss fight in the Ashlands with only `combat` shipped plays `combat`; a row `ashlands_boss` would win. Wired today: the main menu requests `menu`; the region map `shop` while its shop panel is open, else its location's context by kind (rule 8), and releases its request while its embedded world map is open (so `travel` plays); the world map `travel`; `BattleScreen.open` `boss` when an enemy or wave unit has the `boss` tier, else `combat`. `encounter` has no caller yet. Decided 2026-10-18 (coordinator): field order as above; the game world (not the location's world) stays the world scope for connected-world locations.
+8. Kind table (MUSIC2-L, user 2026-10-18 "make them"): `MusicDirector.KIND_CONTEXT` maps the current location's `kind` to the region map context: `town` and `fortress` -> `town`; `ruin`, `camp` and `dungeon` -> `danger`; any other kind (`gate`, `wild`, none) -> `field` (`kind_context(kind)`, `field_context(gs)`). `region_context(gs, shop_open)` returns `shop` while the shop panel is open (shop -> town -> field), else the kind context; the region map's `_refresh` runs on shop open and close. A new kind or remap is one table row.

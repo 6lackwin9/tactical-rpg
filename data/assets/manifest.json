@@ -301,6 +301,66 @@
 			"frames": 1,
 			"origin": "user",
 			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/town/stream",
+			"namespace": "music",
+			"key": "town",
+			"variant": "stream",
+			"path": "res://assets/audio/music/town.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/danger/stream",
+			"namespace": "music",
+			"key": "danger",
+			"variant": "stream",
+			"path": "res://assets/audio/music/danger.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/shop/stream",
+			"namespace": "music",
+			"key": "shop",
+			"variant": "stream",
+			"path": "res://assets/audio/music/shop.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/travel/stream",
+			"namespace": "music",
+			"key": "travel",
+			"variant": "stream",
+			"path": "res://assets/audio/music/travel.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/boss/stream",
+			"namespace": "music",
+			"key": "boss",
+			"variant": "stream",
+			"path": "res://assets/audio/music/boss.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
 		}
 	]
 }

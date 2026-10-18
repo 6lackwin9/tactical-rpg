@@ -248,12 +248,26 @@ static func _region(world_id: String, home: String, ref: String) -> Dictionary:
 		hit = WorldCatalog.resolve(home, "regions", ref)
 	return hit
 
-# The region map's context for `gs`'s location: town when the location's kind is "town", else field.
+# MUSIC2-L: location kind -> region map context; any other kind (gate, wild, none) plays field.
+const KIND_CONTEXT: Dictionary = {
+	"town": CTX_TOWN, "fortress": CTX_TOWN,
+	"ruin": CTX_DANGER, "camp": CTX_DANGER, "dungeon": CTX_DANGER,
+}
+
+# The context for a location kind through KIND_CONTEXT (field when the kind is not listed).
+static func kind_context(kind: String) -> String:
+	return str(KIND_CONTEXT.get(kind, CTX_FIELD))
+
+# The region map's context for `gs`'s location: its kind through KIND_CONTEXT, else field.
 static func field_context(gs: GameState) -> String:
 	if gs == null or gs.location_id.is_empty():
 		return CTX_FIELD
 	var loc: Dictionary = WorldCatalog.resolve(gs.world_id, "locations", gs.location_id)
-	return CTX_TOWN if str(loc.get("kind", "")) == "town" else CTX_FIELD
+	return kind_context(str(loc.get("kind", "")))
+
+# The region map's request: shop while its shop panel is open, else the location's field context.
+static func region_context(gs: GameState, shop_open: bool) -> String:
+	return CTX_SHOP if shop_open else field_context(gs)
 
 # The battle context for `enc`: boss when any enemy (or wave) unit has the boss tier, else combat.
 static func combat_context(enc: CombatEncounter) -> String:

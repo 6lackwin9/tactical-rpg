@@ -1,8 +1,8 @@
 extends SceneTree
-# MUSIC1-A asset seed (idempotent): one manifest row per generated music loop (files made by tools/gen_music.py).
+# MUSIC1-A / MUSIC2-A asset seed (idempotent; MUSIC2 added town, danger, shop, travel, boss): one manifest row per generated music loop (files made by tools/gen_music.py).
 # Run: tools/fc.sh run data/seeds/music1_a.gd
 
-const KEYS: Array[String] = ["menu_theme", "ashlands", "iron_reaches", "tidewrack", "combat"]
+const KEYS: Array[String] = ["menu_theme", "ashlands", "iron_reaches", "tidewrack", "combat", "town", "danger", "shop", "travel", "boss"]
 
 func _init() -> void:
 	AssetCatalog.reload_from_disk()
