@@ -60,6 +60,12 @@ static func _test_args() -> bool:
 	checks["campaign mode parses, heal none, no comp"] = d.error.is_empty() and d.heal == "none" and not d.comp_set
 	checks["heal=full"] = _parse(["campaign", "heal=full"]).heal == "full"
 	checks["heal=40%"] = _parse(["campaign", "heal=40%"]).heal == "40"
+	checks["heal=rally"] = _parse(["campaign", "heal=rally"]).heal == "rally"
+	var ra: SimArgs = _parse(["campaign", "rest=3,5", "extra=4:ash_raiders,4:ash_raiders"])
+	checks["rest= and extra= parse"] = ra.error.is_empty() and ra.rest.size() == 2 and ra.rest[0] == 3 and ra.rest[1] == 5 and DictUtil.array_of(ra.extra.get(4, [])).size() == 2
+	checks["rest / extra default empty"] = d.rest.is_empty() and d.extra.is_empty()
+	checks["rest=0 refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "rest=0"]))
+	checks["extra= unknown encounter refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "extra=4:no_such_enc"]))
 	checks["heal=150 refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "heal=150"]))
 	checks["heal=lots refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "heal=lots"]))
 	var c: SimArgs = _parse(["campaign", "comp=warrior,ranger,priest"])
@@ -206,6 +212,11 @@ static func _test_heal() -> bool:
 	var over: Dictionary = {"a": {"hp": 90, "max": 100}}
 	SimCampaign.apply_heal(over, "50")
 	checks["percent heal caps at max"] = DictUtil.to_int(DictUtil.dict_of(over["a"])["hp"]) == 100
+	var rally: Dictionary = {"a": {"hp": 10, "max": 100}, "b": {"hp": 0, "max": 80}, "c": {"hp": 95, "max": 100}}
+	SimCampaign.apply_heal(rally, "rally")
+	checks["rally: +RALLY_PCT of max"] = DictUtil.to_int(DictUtil.dict_of(rally["a"])["hp"]) == 10 + ceili(100.0 * HealRules.RALLY_PCT / 100.0)
+	checks["rally: a downed hero gets up at the rally"] = DictUtil.to_int(DictUtil.dict_of(rally["b"])["hp"]) == ceili(80.0 * HealRules.RALLY_PCT / 100.0)
+	checks["rally caps at max"] = DictUtil.to_int(DictUtil.dict_of(rally["c"])["hp"]) == 100
 	checks["party hp percent"] = is_equal_approx(SimCampaign.hp_pct(base), 10.0 / 180.0 * 100.0)
 	return TestHelpers.report(TAG, "Between-battle heal: none, full, percent", checks)
 
@@ -250,6 +261,33 @@ static func _test_runs() -> bool:
 		checks["heal=full: ran both battles"] = DictUtil.array_of(healed["hp"]).size() == 2 and obs.starts.size() == 2
 		if obs.starts.size() == 2:
 			checks["heal=full: battle 2 starts at the battle 1 start HP (restored)"] = obs.starts[1] == obs.starts[0]
+		args.heal = "none"
+		# heal=rally: battle 2 starts higher than with heal=none (rally restores some, not all); same seed, same battle 1.
+		obs.starts.clear()
+		args.heal = "rally"
+		var rallied: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
+		checks["heal=rally: ran both battles"] = DictUtil.array_of(rallied["hp"]).size() == 2 and obs.starts.size() == 2
+		if obs.starts.size() == 2 and hp_list.size() == 2:
+			var full_start: int = obs.starts[0]
+			checks["heal=rally: battle 2 starts above the unhealed carry-over (not vacuous)"] = obs.starts[1] > roundi(DictUtil.to_float(hp_list[0]) / 100.0 * float(full_start))
+			checks["heal=rally: battle 2 starts below full (not a full heal)"] = obs.starts[1] < full_start
+		# rest=2: battle 2 starts at the battle 1 start HP, like heal=full.
+		obs.starts.clear()
+		args.heal = "none"
+		args.rest = [2] as Array[int]
+		var rested: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
+		checks["rest=2: battle 2 starts at full"] = obs.starts.size() == 2 and obs.starts[1] == obs.starts[0] and DictUtil.array_of(rested["hp"]).size() == 2
+		# extra=2:<fight>: an extra fight before story battle 2 (3 fights played, 2 story battles counted).
+		obs.starts.clear()
+		args.rest = [] as Array[int]
+		var padded: Array = [mid, weak.merged({"extra": true}), weak]
+		var extra_run: Dictionary = camp.run_party(ids, padded, seed_value)
+		checks["extra: three fights played"] = obs.starts.size() == 3
+		checks["extra: only story battles are counted"] = DictUtil.to_int(extra_run["wins"]) == 2 and DictUtil.array_of(extra_run["hp"]).size() == 2
+		obs.starts.clear()
+		var wall_extra: Array = [weak, wall.merged({"extra": true}), weak]
+		var extra_loss: Dictionary = camp.run_party(ids, wall_extra, seed_value)
+		checks["extra: a loss in the extra fight is a fall at the story battle after it"] = DictUtil.to_int(extra_loss["fell_at"]) == 2 and DictUtil.to_int(extra_loss["wins"]) == 1
 		args.heal = "none"
 		# A run stops at the first loss: wall in the middle ends the run, the third fight never starts.
 		obs.starts.clear()

@@ -6,7 +6,10 @@ extends RefCounted
 # to battle; statuses reset (every fight is a new session). A hero at 0 stays down and sits out the
 # later fights; the run ends at the first battle that is not cleared (a loss or the round limit, which
 # is the encounter's authored max_rounds). Between battles `heal` applies: none (default), full
-# (everyone, a downed hero revives: the M3 baseline) or a percent of max HP for heroes still up.
+# (everyone, a downed hero revives: the M3 baseline), rally (HealRules.hp_after "won" per hero, a downed hero
+# gets up; HEAL1-S) or a percent of max HP for heroes still up. rest=<b,b> fully restores everyone before those
+# story battles; extra=<b>:<enc> plays a filler fight before story battle b (a fight entry with "extra": true;
+# not counted in wins, totals or the HP columns; a loss there is a fall at b).
 # Spend / preset are the defaults (class, balanced). Loaded with preload (no class_name).
 
 const SimArgs = preload("res://tools/sim/sim_args.gd")
@@ -44,6 +47,8 @@ static func apply_heal(state: Dictionary, mode: String) -> void:
 		var max_hp: int = DictUtil.to_int(s["max"])
 		if mode == "full":
 			hp = max_hp
+		elif mode == "rally":
+			hp = HealRules.hp_after(hp, max_hp, "won")
 		elif mode != "none" and hp > 0:
 			hp = mini(max_hp, hp + ceili(float(max_hp) * float(int(mode)) / 100.0))
 		s["hp"] = hp
@@ -67,8 +72,15 @@ func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary
 	var fell_at: int = 0
 	var hp_after: Array[float] = []
 	var alive_after: Array[int] = []
+	var story_no: int = 0   # story battles started so far (an extra fight belongs to the battle it precedes)
 	for i: int in range(fights.size()):
 		var enc: Dictionary = DictUtil.dict_of(fights[i])
+		var is_extra: bool = DictUtil.to_bool(enc.get("extra", false))
+		if not is_extra:
+			story_no += 1
+		var this_no: int = story_no + 1 if is_extra else story_no   # an extra fight belongs to the story battle after it
+		if args.rest.has(this_no) and _first_of_story(fights, i):
+			apply_heal(state, "full")
 		var up: Array[String] = []
 		runner.start_hp = {}
 		for id: String in ids:
@@ -85,7 +97,7 @@ func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary
 		if DictUtil.to_bool(res.get("skipped", false)):
 			return {"wins": wins, "fell_at": 0, "hp": hp_after, "alive": alive_after, "skipped": i + 1}
 		if not DictUtil.to_bool(res.get("ok", false)):
-			fell_at = i + 1
+			fell_at = this_no
 			break
 		var end_hp: Dictionary = DictUtil.dict_of(res["party_hp"])
 		var end_max: Dictionary = DictUtil.dict_of(res["party_max"])
@@ -94,26 +106,40 @@ func run_party(ids: Array[String], fights: Array, seed_value: int) -> Dictionary
 		for id: String in ids:   # fix the max of heroes that never fought yet (all fight battle 1, so none)
 			if not state.has(id):
 				state[id] = {"hp": 0, "max": 1}
-		hp_after.append(hp_pct(state))
 		var n_alive: int = 0
 		for id: Variant in state:
 			if DictUtil.to_int(DictUtil.dict_of(state[id])["hp"]) > 0:
 				n_alive += 1
-		alive_after.append(n_alive)
+		if not is_extra:
+			hp_after.append(hp_pct(state))
+			alive_after.append(n_alive)
 		if not DictUtil.to_bool(res.get("won", res["cleared"])) or n_alive == 0:
-			fell_at = i + 1
+			fell_at = this_no
 			break
-		wins += 1
+		if not is_extra:
+			wins += 1
 		apply_heal(state, args.heal)
 	return {"wins": wins, "fell_at": fell_at, "hp": hp_after, "alive": alive_after}
+
+# True when fight `i` is the first entry of its story battle (the extras before a story fight come first): rest is taken once, before them.
+static func _first_of_story(fights: Array, i: int) -> bool:
+	return i == 0 or not DictUtil.to_bool(DictUtil.dict_of(fights[i - 1]).get("extra", false))
 
 func fights_for(steel: String) -> Array:
 	var out: Array = []
 	var foe_level: int = clampi(args.level + args.elevel, 1, StatRules.MAX_LEVEL)
+	var story_no: int = 0
 	for f: Dictionary in SimWorld.story_fights(steel == "gate"):
 		var enc: Dictionary = SimWorld.encounter(runner, str(f["encounter"]), foe_level, args.elevel_set, SimWorld.WORLD, true)
-		if not enc.is_empty():
-			out.append(enc)
+		if enc.is_empty():
+			continue
+		story_no += 1
+		for extra_id: Variant in DictUtil.array_of(args.extra.get(story_no, [])):
+			var filler: Dictionary = SimWorld.encounter(runner, str(extra_id), foe_level, args.elevel_set, SimWorld.WORLD, true)
+			if not filler.is_empty():
+				filler["extra"] = true
+				out.append(filler)
+		out.append(enc)
 	return out
 
 func campaign_mode() -> void:

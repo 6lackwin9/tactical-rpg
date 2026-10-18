@@ -43,7 +43,9 @@ var band_hi: int = 70
 # Commit 1b: party / role / sweep
 var comp: Array[String] = DEFAULT_COMP.duplicate()
 var comp_set: bool = false       # campaign: comp= picks one party instead of all 10 trios
-var heal: String = "none"        # campaign: between-battle healing "none", "full" or a percent of max HP (the number)
+var heal: String = "none"        # campaign: between-battle healing "none", "full", "rally" (HealRules.hp_after won) or a percent of max HP (the number)
+var rest: Array[int] = []        # HEAL1-S: campaign story battles (1-based) that start after a full rest
+var extra: Dictionary = {}       # HEAL1-S: campaign story battle (int) -> Array[String] encounters fought just before it
 var encounters: Array[String] = GENERATED.duplicate()
 var elevel: int = 0              # generated enemies at party level + elevel
 var elevel_set: bool = false     # true: catalog encounters use party level + elevel too
@@ -182,12 +184,33 @@ func _parse_key(key: String, value: String) -> bool:
 			comp_set = true
 		"heal":
 			var pct_text: String = value.trim_suffix("%")
-			if value == "none" or value == "full":
+			if value == "none" or value == "full" or value == "rally":
 				heal = value
 			elif pct_text.is_valid_int() and int(pct_text) >= 0 and int(pct_text) <= 100:
 				heal = str(int(pct_text))
 			else:
-				return _fail("heal must be none, full or a percent 0..100 (got '%s')" % value)
+				return _fail("heal must be none, full, rally or a percent 0..100 (got '%s')" % value)
+		"rest":
+			var picked_rest: Array[int] = []
+			if value != "none":
+				for part: String in _list(value):
+					if not part.is_valid_int() or int(part) < 1:
+						return _fail("rest must be none or story battle numbers >= 1, e.g. rest=3 (got '%s')" % value)
+					picked_rest.append(int(part))
+			rest = picked_rest
+		"extra":
+			var picked_extra: Dictionary = {}
+			if value != "none":
+				for part: String in _list(value):
+					var at: String = part.get_slice(":", 0)
+					var enc_id: String = part.substr(at.length() + 1)
+					if not at.is_valid_int() or int(at) < 1 or enc_id.is_empty() or not has_encounter(DEFAULT_WORLD, enc_id):
+						return _fail("extra must be <battle>:<%s encounter>[,..], e.g. extra=4:ash_raiders (got '%s')" % [DEFAULT_WORLD, part])
+					var list: Array[String] = []
+					list.assign(DictUtil.array_of(picked_extra.get(int(at), [])))
+					list.append(enc_id)
+					picked_extra[int(at)] = list
+			extra = picked_extra
 		"enc":
 			var picked_enc: Array[String] = []
 			for e: String in _list(value):
@@ -381,6 +404,13 @@ func header() -> String:
 				text += ", size %d, lead %s, dupes %s, sample %s" % [comp_size, lead if not lead.is_empty() else "none", "on" if dupes else "off", str(sample) if sample > 0 else "all"]
 		"campaign":
 			text += ", comp %s, heal %s" % [",".join(comp) if comp_set else "all trios (warrior + 2 of ranger,priest,brawler,rogue,mage)", heal]
+			if not rest.is_empty():
+				text += ", rest %s" % ",".join(rest.map(func(b: int) -> String: return str(b)))
+			if not extra.is_empty():
+				var extra_parts: Array[String] = []
+				for b: Variant in extra:
+					extra_parts.append("%d:%s" % [int(b), ",".join(DictUtil.array_of(extra[b]))])
+				text += ", extra %s" % " ".join(extra_parts)
 		"role":
 			text += ", role %s, class %s" % [",".join(roles), ",".join(classes)]
 			if s2:
@@ -410,7 +440,8 @@ static func usage() -> Array[String]:
 		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
 		"       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
 		"       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
-		"       heal=none|full|<pct> (none; campaign: between-battle healing, full also revives)  comp=.. picks one campaign party",
+		"       heal=none|full|rally|<pct> (none; campaign: between-battle healing, full also revives, rally = HealRules 25% after a win, a downed hero gets up)  comp=.. picks one campaign party",
+		"       rest=<b,b> (none): campaign story battles that start after a full rest  extra=<b>:<enc>[,..] (none): campaign extra fight(s) before story battle b (a loss there is a fall at b)",
 		"       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
 		"       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
 		"       world=<id> (ashlands): bare enc= ids also find that world's encounters (story characters with their extras and tuning)",
