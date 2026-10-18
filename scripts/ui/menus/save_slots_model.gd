@@ -85,7 +85,7 @@ func save(slot: int) -> Array[String]:
 	elif not SaveGame.MANUAL_SLOTS.has(slot):
 		last_errors.append(MANUAL_ONLY)
 	elif SaveGame.exists(slot):
-		router.ask("Overwrite slot %d?" % slot, _save_now.bind(slot))
+		router.ask("Overwrite slot %d?" % slot, _save_now.bind(slot), true)
 	else:
 		_save_now(slot)
 	return last_errors
@@ -113,7 +113,7 @@ func import_file(path: String, slot: int) -> Array[String]:
 	if not SaveGame.MANUAL_SLOTS.has(slot):
 		last_errors.append(MANUAL_ONLY)
 	elif SaveGame.exists(slot):
-		router.ask("Replace slot %d with the imported save?" % slot, _import_now.bind(path, slot))
+		router.ask("Replace slot %d with the imported save?" % slot, _import_now.bind(path, slot), true)
 	else:
 		_import_now(path, slot)
 	return last_errors
@@ -132,7 +132,7 @@ func delete(slot: int) -> Array[String]:
 	if not SaveGame.exists(slot):
 		last_errors.append("Slot %d is empty." % slot)
 	else:
-		router.ask("Delete the save in slot %d?" % slot, _delete_now.bind(slot))
+		router.ask("Delete the save in slot %d?" % slot, _delete_now.bind(slot), true)
 	return last_errors
 
 func _delete_now(slot: int) -> void:

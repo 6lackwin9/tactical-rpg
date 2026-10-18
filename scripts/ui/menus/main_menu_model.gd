@@ -34,7 +34,7 @@ func open(id: String) -> void:
 # Quit asks when the game in progress has unsaved changes (rule 7).
 func quit_requested() -> Array[String]:
 	if CurrentGame.is_dirty():
-		router.ask("Quit without saving?", router.quit_requested.emit)
+		router.ask("Quit without saving?", router.quit_requested.emit, true)
 	else:
 		router.quit_requested.emit()
 	var none: Array[String] = []

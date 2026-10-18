@@ -31,6 +31,7 @@ const JOURNAL: String = "journal"      # UI3-L
 var stack: Array[String] = []
 var models: Dictionary = {}        # screen id on the stack -> its model
 var pending_message: String = ""
+var pending_destructive: bool = false   # the open question is destructive: No gets the focus
 var _pending: Callable = Callable()
 
 func _init(start: String = MAIN) -> void:
@@ -117,8 +118,10 @@ func clear_to(id: String) -> void:
 	push(id)
 
 # Asks a yes / no question; `action` runs on confirm().
-func ask(message: String, action: Callable) -> void:
+# `destructive` (overwrite, delete, quit without saving) makes the host focus No instead of Yes (UIR-1, X6).
+func ask(message: String, action: Callable, destructive: bool = false) -> void:
 	pending_message = message
+	pending_destructive = destructive
 	_pending = action
 	confirm_needed.emit(message)
 
@@ -129,12 +132,14 @@ func confirm() -> void:
 	var action: Callable = _pending
 	_pending = Callable()
 	pending_message = ""
+	pending_destructive = false
 	if action.is_valid():
 		action.call()
 
 func decline() -> void:
 	_pending = Callable()
 	pending_message = ""
+	pending_destructive = false
 
 # Starts playing `gs`: shows `warnings` once, opens the hub and tells the host.
 func enter_game(gs: GameState, warnings: Array[String] = []) -> void:

@@ -49,7 +49,7 @@ func open(id: String) -> Array[String]:
 
 func quit_to_menu() -> Array[String]:
 	if CurrentGame.is_dirty():
-		router.ask("Quit without saving?", _quit_now)
+		router.ask("Quit without saving?", _quit_now, true)
 	else:
 		_quit_now()
 	var none: Array[String] = []

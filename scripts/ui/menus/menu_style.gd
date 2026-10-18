@@ -10,7 +10,27 @@ const COL_BTN: Color = Color(0.14, 0.19, 0.27, 1.0)
 const COL_BTN_HOVER: Color = Color(0.20, 0.28, 0.40, 1.0)
 const COL_BTN_PRESSED: Color = Color(0.09, 0.13, 0.19, 1.0)
 const COL_EDGE: Color = Color(0.45, 0.6, 0.8, 1.0)
+const COL_SELECTED: Color = Color(0.30, 0.25, 0.08, 1.0)   # UIR-1 (X5): the filled gold-edged box of a selected row
+const COL_SELECTED_HOVER: Color = Color(0.38, 0.32, 0.12, 1.0)
 const BOX_PX: int = 24
+
+# The `selected` style (X5): gold edge, filled. A selected button keeps its label; only this box tells it apart.
+static func selected_box(hover: bool = false) -> StyleBoxFlat:
+	return UiTheme.box(COL_SELECTED_HOVER if hover else COL_SELECTED, UiTheme.COL_TITLE, 4, 12, 6, 3)
+
+# Marks `b` selected (or clears the mark); never touches b.text.
+static func mark_selected(b: Button, on: bool) -> void:
+	if on:
+		b.add_theme_stylebox_override("normal", selected_box())
+		b.add_theme_stylebox_override("hover", selected_box(true))
+		b.add_theme_stylebox_override("pressed", selected_box())
+	else:
+		for state: String in ["normal", "hover", "pressed"]:
+			b.remove_theme_stylebox_override(state)
+	b.set_meta("selected", on)
+
+static func is_selected(b: Button) -> bool:
+	return bool(b.get_meta("selected", false))
 
 static func theme() -> Theme:
 	var t := Theme.new()

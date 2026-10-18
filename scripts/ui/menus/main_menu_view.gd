@@ -11,6 +11,9 @@ extends Control
 const GAME_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
 const RUNNER_SCENE: String = "res://scenes/scene_runner.tscn"
 const BASE_FONT: int = 18
+const W_WIDE: int = 260   # UIR-1 (X2) button width classes: wide (menu entries), row (row actions), step (- / + and icons)
+const W_ROW: int = 140
+const W_STEP: int = 48
 const FOCUS_META: StringName = &"focus_target"
 const COL_BG: Color = Color(0.05, 0.07, 0.10, 1.0)
 const POPUP_MAX: Vector2 = Vector2(900, 620)   # the settings popup's largest size; it shrinks to fit the viewport
@@ -25,6 +28,7 @@ var router: MenuRouter = null
 var game_view: Node = null
 var problems: Array[String] = []
 
+var _overlay_default: Button = null
 var _menu: Control = null
 var _screen: Control = null
 var _game_hint: Label = null
@@ -376,16 +380,20 @@ static func button(label: String, callback: Callable, enabled: bool = true) -> B
 	b.text = label
 	b.focus_mode = Control.FOCUS_ALL
 	b.disabled = not enabled
-	b.custom_minimum_size = Vector2(260, 0)
-	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(W_WIDE, 0)
+	b.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	b.pressed.connect(callback)
 	return b
 
-# A compact button for rows and toolbars (`width` 0 = fit the text).
+# A compact button for rows and toolbars: `width` 0 = the row class (W_ROW), never fit-to-text among peers; a longer label still grows it.
 static func small(b: Button, width: int = 0) -> Button:
-	b.custom_minimum_size = Vector2(width, 0)
+	b.custom_minimum_size = Vector2(width if width > 0 else W_ROW, 0)
 	return b
+
+# A step button (- / + / icon) at the step class width.
+static func step(b: Button) -> Button:
+	return small(b, W_STEP)
 
 static func focus_first(root: Node) -> void:
 	if root.has_meta(FOCUS_META):   # a view may name the control to focus (the journal's selected quest)
@@ -436,10 +444,16 @@ func _open_overlay(message: String, buttons: Array[Button], focus_index: int = 0
 	_overlay.visible = true
 	_overlay.reset_size()
 	_overlay.position = (size - _overlay.size) / 2.0
+	_overlay_default = buttons[focus_index]
 	MainMenuView._focus.call_deferred(buttons[focus_index])
 
+# The button of the open question that takes the focus (No for a destructive one); null when no question is open.
+func overlay_default_button() -> Button:
+	return _overlay_default if is_overlay_open() else null
+
 func _on_confirm_needed(message: String) -> void:
-	_open_overlay(message, [button("Yes", answer.bind(true)), button("No", answer.bind(false))] as Array[Button])
+	# X6: a destructive question (overwrite, delete, quit without saving) opens with No focused
+	_open_overlay(message, [button("Yes", answer.bind(true)), button("No", answer.bind(false))] as Array[Button], 1 if router.pending_destructive else 0)
 
 # DISPLAY1 rule 6: the "Keep these display settings?" box with a visible countdown; Revert has focus.
 func begin_display_confirm(m: SettingsModel) -> void:

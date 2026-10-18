@@ -13,6 +13,7 @@ extends RefCounted
 
 const TAG: String = "Menus"
 static var SANDBOX: String = TestHelpers.sandbox("menus")
+const SCREEN: Vector2 = Vector2(1280, 720)
 const BASE: String = "mn_base"
 const KID: String = "mn_kid"
 const BARE: String = "mn_bare"
@@ -369,7 +370,87 @@ static func _test_part_b(tree_parent: Node) -> bool:
 	ok = _test_hub_model() and ok
 	ok = _test_main_menu_and_settings_model() and ok
 	ok = _test_scene(tree_parent) and ok
+	ok = _test_screen_frame(tree_parent) and ok
+	ok = _test_button_defaults_and_selected() and ok
 	return ok
+
+# UIR-1: sizes `root` and runs the container layout now (the tests do not await a frame): top-down so parents size children first.
+static func _settle(root: Control) -> void:
+	root.size = SCREEN
+	var todo: Array[Node] = [root]
+	while not todo.is_empty():
+		var n: Node = todo.pop_front()
+		if n is Container:
+			(n as Container).notification(Container.NOTIFICATION_SORT_CHILDREN)
+		todo.append_array(n.get_children())
+
+# UIR-1 (X1, X3, X7): ScreenFrame at 1280x720 for every text size.
+static func _test_screen_frame(tree_parent: Node) -> bool:
+	var checks: Dictionary = {}
+	if tree_parent == null:
+		return _report("UIR-1 ScreenFrame (headless without a tree: skipped)", {"skipped": true})
+	var scales: Array = SettingsModel.levels("ui/text_scale")
+	checks["four text sizes"] = scales.size() == 4
+	for sc: Variant in scales:
+		var host := Control.new()
+		var th := Theme.new()
+		th.default_font_size = roundi(MainMenuView.BASE_FONT * DictUtil.to_float(sc, 1.0))
+		host.theme = th
+		tree_parent.add_child(host)
+		var back: Button = MainMenuView.button("Back", func() -> void: pass)
+		var primary: Button = MainMenuView.button("Start", func() -> void: pass)
+		var extra: Button = MainMenuView.button("Reset", func() -> void: pass)
+		var f: ScreenFrame = ScreenFrame.make("Frame test", back, primary, [extra] as Array[Button])
+		host.add_child(f)
+		for i: int in 40:
+			f.column.add_child(MainMenuView.text("Row %d with some words so it has a height" % i))
+		_settle(host)
+		var tag: String = "x%s" % str(sc)
+		var bar_rect: Rect2 = f.bar.get_global_rect()
+		checks["%s: action bar on screen" % tag] = bar_rect.size.y > 0.0 and bar_rect.end.y <= SCREEN.y and bar_rect.position.y >= f.scroll.get_global_rect().end.y - 0.5
+		checks["%s: content taller than the scroll (it scrolls)" % tag] = f.column.get_combined_minimum_size().y > f.scroll.size.y
+		checks["%s: bar outside the scroll" % tag] = not f.scroll.is_ancestor_of(f.bar) and f.scroll.is_ancestor_of(f.column)
+		checks["%s: Back first, primary last" % tag] = f.bar.get_child(0) == back and f.bar.get_child(f.bar.get_child_count() - 1) == primary and f.bar.get_child(1) == extra
+		checks["%s: back left of primary" % tag] = back.get_global_rect().end.x <= primary.get_global_rect().position.x
+		checks["%s: title centred" % tag] = f.title_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER and absf(f.title_label.get_global_rect().get_center().x - SCREEN.x / 2.0) < 1.0
+		checks["%s: column capped and centred" % tag] = f.column.size.x <= ScreenFrame.COLUMN_MAX + 0.5 and f.column.size.x >= ScreenFrame.COLUMN_MAX - 0.5 and absf(f.column.get_global_rect().get_center().x - SCREEN.x / 2.0) < 14.0
+		tree_parent.remove_child(host)
+		host.free()
+	# Narrow window: the column follows the width instead of the cap.
+	var host2 := Control.new()
+	tree_parent.add_child(host2)
+	var f2: ScreenFrame = ScreenFrame.make("Narrow", MainMenuView.button("Back", func() -> void: pass))
+	host2.add_child(f2)
+	host2.size = Vector2(600, 400)
+	f2.size = Vector2(600, 400)
+	checks["narrow: column below the cap"] = f2.column.custom_minimum_size.x < ScreenFrame.COLUMN_MAX and f2.column.custom_minimum_size.x > 0.0
+	tree_parent.remove_child(host2)
+	host2.free()
+	return _report("UIR-1: ScreenFrame (title, scrolling column, pinned bar, text sizes)", checks)
+
+# UIR-1 (X2, X5): width classes, centred text, the selected style leaves the label alone.
+static func _test_button_defaults_and_selected() -> bool:
+	var checks: Dictionary = {}
+	var wide: Button = MainMenuView.button("A", func() -> void: pass)
+	var row_a: Button = MainMenuView.small(MainMenuView.button("Export", func() -> void: pass))
+	var row_b: Button = MainMenuView.small(MainMenuView.button("Delete everything", func() -> void: pass))
+	var step: Button = MainMenuView.step(MainMenuView.button("+", func() -> void: pass))
+	checks["centred text"] = wide.alignment == HORIZONTAL_ALIGNMENT_CENTER and row_a.alignment == HORIZONTAL_ALIGNMENT_CENTER
+	checks["wide class"] = int(wide.custom_minimum_size.x) == MainMenuView.W_WIDE
+	checks["row class for small()"] = int(row_a.custom_minimum_size.x) == MainMenuView.W_ROW and int(row_b.custom_minimum_size.x) == MainMenuView.W_ROW
+	checks["step class"] = int(step.custom_minimum_size.x) == MainMenuView.W_STEP
+	checks["classes ordered"] = MainMenuView.W_STEP < MainMenuView.W_ROW and MainMenuView.W_ROW < MainMenuView.W_WIDE
+	var b: Button = MainMenuView.button("Warden", func() -> void: pass)
+	var before: String = b.text
+	MenuStyle.mark_selected(b, true)
+	checks["selected: label unchanged"] = b.text == before and MenuStyle.is_selected(b)
+	var box: StyleBoxFlat = b.get_theme_stylebox("normal") as StyleBoxFlat
+	checks["selected: gold edge, filled"] = box != null and box.border_color == UiTheme.COL_TITLE and box.bg_color == MenuStyle.COL_SELECTED and box.bg_color.a == 1.0
+	MenuStyle.mark_selected(b, false)
+	checks["cleared: label unchanged, style back"] = b.text == before and not MenuStyle.is_selected(b) and not b.has_theme_stylebox_override("normal")
+	for w: Button in [wide, row_a, row_b, step, b]:
+		w.free()
+	return _report("UIR-1: button width classes, centred text, selected style", checks)
 
 # Commit 3: scenes/main_menu.tscn renders every screen and drives the models (thin view).
 static func _test_scene(tree_parent: Node) -> bool:
@@ -418,7 +499,11 @@ static func _test_scene(tree_parent: Node) -> bool:
 	CurrentGame.state().party.gold += 2
 	view.act((r.model() as HubModel).quit_to_menu)
 	checks["dirty quit shows the question"] = view.is_overlay_open() and r.is_asking()
+	checks["destructive question focuses No"] = view.overlay_default_button() != null and view.overlay_default_button().text == "No"
 	view.answer(true)
+	r.ask("Harmless question?", func() -> void: pass)
+	checks["harmless question focuses Yes"] = view.overlay_default_button() != null and view.overlay_default_button().text == "Yes" and not r.pending_destructive
+	view.answer(false)
 	checks["confirmed: main menu with Continue"] = not CurrentGame.has_game() and r.top() == MenuRouter.MAIN and _has_button(view, "Continue")
 	tree_parent.remove_child(view)
 	view.free()
@@ -534,6 +619,7 @@ static func _test_save_slots_model() -> bool:
 	checks["empty slot saves at once"] = m.save(2).is_empty() and p.asked.is_empty() and SaveGame.exists(2) and CurrentGame.slot() == 2
 	CurrentGame.state().party.gold += 1
 	checks["existing slot asks"] = m.save(2).is_empty() and p.asked == ["Overwrite slot 2?"] and CurrentGame.is_dirty()
+	checks["overwrite question is destructive (No focused)"] = r.pending_destructive
 	r.confirm()
 	checks["confirmed overwrite saved"] = m.last_errors.is_empty() and not CurrentGame.is_dirty()
 	CurrentGame.set_busy(true)
