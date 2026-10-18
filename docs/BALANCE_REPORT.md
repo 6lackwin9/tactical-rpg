@@ -1,6 +1,6 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
-## Proposed trio bands 2026-10-18 (awaiting approval)
+## Trio bands 2026-10-18 (approved 17:06)
 
 Tushar chose "Re-set targets" (17:03): new clear bands for the generated L5 trio sweep (warrior + two, 10 comps, 10 seeds), set from BAL5-R, with no game change. They replace only the sweep clear bands of "BAL2 role answers" (2); story bands (stand, HEAL1 arms and gate), role KPIs and the PACE1 round bands stay as they are. Each band is centred on today's mean and wide enough that a small lever moves a cell in or out.
 
