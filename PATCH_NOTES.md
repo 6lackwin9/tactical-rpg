@@ -15,7 +15,7 @@ In the game:
 - **Boss phases**: Grakka changes phase mid-fight (Crown of Nails), with a phase banner in combat.
 - **Battle objectives**: fights can be about more than defeat: hold the courtyard, the wagon raid with Wenn Tallow, slay Grakka.
 - **Recruiting**: Bryn and five story recruits join through the campaign, with the Toller muster and new priest and brawler units.
-- **Battle pouch**: carry potions and bombs into battle (Gear screen) and use them as a planned step; the free class potions are gone.
+- **Battle pouch**: carry potions and bombs into battle (Gear screen) and use them as a planned step; the free class potions are gone; a Healing Draught now heals 90 (was 25), a Fire Bomb hits for 45 (was 20), and the Ashlands start with 100 gold (was 50).
 - **Combat screen**: compact layout, a hover card for units instead of the inspector, tactic dropdowns and an Autoplay toggle on the timeline row.
 - **Battle autoplay**: let the party fight on its own using tactics, with safety stops.
 - **Maps**: full-screen region and world maps with marker icons, labels, a legend and hover info; click your own pin on the world map to enter; the world map opened over a region map draws again.
@@ -30,6 +30,7 @@ In the game:
 
 Every change that touched the game:
 
+- ITEMPOW1-A: battle items worth using (potion 90, bomb 45, start gold 100) (02c6bf4)
 - POUCH-TIDY: meaningful no-pouch test and stale pouch comments (8c1494c)
 - INTENT1-U follow-up: enemies no longer skip their turn; "Holding" tell (f65f0bb)
 - BAL5-AI: early taunt with walk-in, healer self-care, AoE friendly-fire tolerance (7ceddcb)
@@ -104,6 +105,9 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- TRIAL-SONNET: restart the Sonnet vs Opus trial on Assets & Audio (e1bedb0)
+- FC-TIMEOUT: fc.sh suite timeout 900 s in the cloud, 290 s on desktop (182f9bb)
+- PATCH-NOTES: INTENT1-U follow-up, POUCH-TIDY, prefs files, GATE-TIMEOUT (922c8d0)
 - GATE-TIMEOUT: CI gate allows 900 s per suite; the arena suite now takes ~10 min (a8f2444)
 - PREFS-ASSETS-SPLIT: split asset preferences into content and world files (d80d9ed)
 - DESIGN-PREFS: four preferences from today's Design answers (3a317ef)
