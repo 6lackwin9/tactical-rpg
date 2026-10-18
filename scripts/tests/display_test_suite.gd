@@ -33,6 +33,7 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_web_model() and ok
 	if tree_parent != null:
 		ok = _test_web_view(tree_parent) and ok
+		ok = _test_select_applies(tree_parent) and ok
 		for logical: Vector2 in LOGICAL_SIZES:
 			ok = _test_layout(tree_parent, logical) and ok
 	DisplaySettings.use_backend()
@@ -278,6 +279,58 @@ static func _menu(host: Control) -> MainMenuView:
 	host.add_child(view)
 	return view
 
+# The named controls of tab `i` (a row's name, in order), for the rows that carry one.
+static func _tab_names(view: MainMenuView, i: int) -> Array[String]:
+	var out: Array[String] = []
+	for n: Node in SettingsUiTestSuite.tabs_of(view).get_tab_control(i).find_children("*", "Control", true, false):
+		if n is CheckBox or n is HSlider or n is OptionButton:
+			out.append(str(n.name))
+	return out
+
+# SETTINGS-POPUP: picking a window mode or size applies it at once and opens the countdown; nothing is written until Keep; Apply has no window change left to do.
+static func _test_select_applies(tree_parent: Node) -> bool:
+	var b: DisplaySettings.Backend = _fresh()
+	CurrentGame.end()
+	var host: Control = _host(tree_parent, Vector2(1280, 720))
+	var view: MainMenuView = _menu(host)
+	if view == null:
+		return TestHelpers.report(TAG, "Select applies", {"scene loads": false})
+	SettingsUiTestSuite._open(view, MenuRouter.SETTINGS)
+	var pick: OptionButton = SettingsUiTestSuite.tab_node(view, 1, "Choice_display_window_mode") as OptionButton
+	var checks: Dictionary = {"mode picker exists": pick != null}
+	if pick != null:
+		var m: SettingsModel = view.router.model() as SettingsModel
+		var saved: Variant = SettingsFile.get_value("display/window_mode")
+		var target: int = -1
+		for i: int in pick.item_count:
+			if SettingsModel.choices("display/window_mode")[i] != saved:
+				target = i
+		b.calls.clear()
+		pick.select(target)
+		pick.item_selected.emit(target)
+		checks["the window call is made on select"] = not b.calls.is_empty()
+		checks["the countdown opens"] = view.is_confirming() and view.is_overlay_open() and m.confirming()
+		checks["nothing is written yet"] = not _file_has("display/window_mode") and SettingsFile.get_value("display/window_mode") == saved
+		checks["Keep and Revert offered"] = SettingsUiTestSuite._button(view, "Keep") != null and SettingsUiTestSuite._button(view, "Revert") != null
+		view._end_confirm(true)
+		checks["Keep writes the key"] = SettingsFile.get_value("display/window_mode") != saved and _file_has("display/window_mode") and not m.confirming()
+		# Revert: pick back, then Revert restores and writes nothing.
+		var m2: SettingsModel = view.router.model() as SettingsModel
+		var pick2: OptionButton = SettingsUiTestSuite.tab_node(view, 1, "Choice_display_window_mode") as OptionButton
+		var kept: Variant = SettingsFile.get_value("display/window_mode")
+		var back_to: int = -1
+		for i: int in pick2.item_count:
+			if SettingsModel.choices("display/window_mode")[i] != kept:
+				back_to = i
+		pick2.select(back_to)
+		pick2.item_selected.emit(back_to)
+		checks["second pick opens the countdown"] = m2.confirming() and view.is_confirming()
+		view.cancel_pressed()
+		checks["Esc reverts, the saved mode stays"] = not m2.confirming() and SettingsFile.get_value("display/window_mode") == kept
+	b.calls.clear()
+	host.queue_free()
+	return TestHelpers.report(TAG, "Window mode / size apply on select and wait for Keep", checks)
+
 static func _test_web_view(tree_parent: Node) -> bool:
 	var b: DisplaySettings.Backend = _fresh()
 	DisplaySettings.web_override = 1
@@ -298,6 +351,7 @@ static func _test_web_view(tree_parent: Node) -> bool:
 		"no frame cap row": view.find_child("Choice_display_max_fps", true, false) == null,
 		"other rows stay": view.find_child("Slider_audio_master", true, false) != null and view.find_child("Check_anim_instant", true, false) != null,
 		"rows line up": SettingsUiTestSuite._rows_ok(view),
+		"Display tab: Fullscreen + text size only": _tab_names(view, 1) == ["Check_display_fullscreen", "Levels_ui_text_scale"],
 	}
 	if box != null:
 		checks["starts unchecked in a window"] = not box.button_pressed
@@ -328,6 +382,15 @@ static func _problems(view: Control, area: Rect2) -> Array[String]:
 			out.append("%s outside the viewport %s" % [c.name, r])
 	return out
 
+# Every tab of the open Settings popup in turn.
+static func _settings_problems(view: MainMenuView, area: Rect2) -> Array[String]:
+	var out: Array[String] = []
+	for i: int in SettingsUiTestSuite.tabs_of(view).get_tab_count():
+		SettingsUiTestSuite.select_tab(view, i)
+		out.append_array(_problems(view, area))
+	SettingsUiTestSuite.select_tab(view, 0)
+	return out
+
 static func _test_layout(tree_parent: Node, logical: Vector2) -> bool:
 	var b: DisplaySettings.Backend = _fresh()
 	CurrentGame.end()
@@ -346,10 +409,11 @@ static func _test_layout(tree_parent: Node, logical: Vector2) -> bool:
 		SettingsUiTestSuite._open(view, MenuRouter.MAIN)
 		checks[tag + " main menu fits"] = _problems(view, area).is_empty()
 		SettingsUiTestSuite._open(view, MenuRouter.SETTINGS)
-		var problems: Array[String] = _problems(view, area)
+		var problems: Array[String] = _settings_problems(view, area)
 		if not problems.is_empty():
 			print("  ", tag, " settings -> ", problems)
 		checks[tag + " settings fits"] = problems.is_empty()
+		checks[tag + " settings popup centred, inside, cross + backdrop"] = SettingsUiTestSuite.popup_ok(view, logical)
 		checks[tag + " settings rows line up"] = SettingsUiTestSuite._rows_ok(view)
 		checks[tag + " display rows present"] = view.find_child("Choice_display_window_mode", true, false) != null and view.find_child("Choice_display_resolution", true, false) != null and view.find_child("Check_display_vsync", true, false) != null and view.find_child("Choice_display_max_fps", true, false) != null
 		var size_pick: OptionButton = view.find_child("Choice_display_resolution", true, false) as OptionButton
@@ -358,7 +422,7 @@ static func _test_layout(tree_parent: Node, logical: Vector2) -> bool:
 		SettingsUiTestSuite._open(view, MenuRouter.SETTINGS)
 		size_pick = view.find_child("Choice_display_resolution", true, false) as OptionButton
 		var hint: Label = view.find_child("SizeHint", true, false) as Label
-		problems = _problems(view, area)
+		problems = _settings_problems(view, area)
 		if not problems.is_empty():
 			print("  ", tag, " settings (fullscreen) -> ", problems)
 		checks[tag + " fullscreen settings fits"] = problems.is_empty()

@@ -30,6 +30,7 @@ const LEVEL_NAMES: Dictionary = {
 
 var draft: Dictionary = {}
 var confirm_left: float = 0.0   # seconds left to keep a changed window mode / size (0 = no question open)
+var tab: int = 0   # the settings tab on show (kept across re-renders)
 var _previous: Dictionary = {}   # the saved mode and size to go back to
 
 func _init() -> void:
@@ -101,12 +102,25 @@ func apply() -> Array[String]:
 		return errors
 	DisplaySettings.apply_vsync_cap(DictUtil.to_bool(draft[DisplaySettings.KEY_VSYNC]), DictUtil.to_int(draft[DisplaySettings.KEY_FPS]))
 	if changed:
-		_previous = {}
-		for key: String in CONFIRM_KEYS:
-			_previous[key] = SettingsFile.get_value(key)
-		DisplaySettings.apply_mode_size(str(draft[DisplaySettings.KEY_MODE]), str(draft[DisplaySettings.KEY_SIZE]))
-		confirm_left = CONFIRM_SECONDS
+		var _started: bool = start_display_change()
 	return errors
+
+# Picking a window mode or size applies it live at once (SETTINGS-POPUP); true when a countdown now waits for Keep / Revert.
+# Nothing is written until keep_display(); false when nothing differs from the saved values, on web, or while one already waits.
+func start_display_change() -> bool:
+	if DisplaySettings.is_web() or confirming():
+		return false
+	var differs: bool = false
+	for key: String in CONFIRM_KEYS:
+		differs = differs or draft[key] != SettingsFile.get_value(key)
+	if not differs:
+		return false
+	_previous = {}
+	for key: String in CONFIRM_KEYS:
+		_previous[key] = SettingsFile.get_value(key)
+	DisplaySettings.apply_mode_size(str(draft[DisplaySettings.KEY_MODE]), str(draft[DisplaySettings.KEY_SIZE]))
+	confirm_left = CONFIRM_SECONDS
+	return true
 
 # DISPLAY1 rule 6: a changed window mode / size is live but unsaved until Keep; Revert, Esc and the timeout go back.
 func confirming() -> bool:

@@ -320,7 +320,7 @@ static func _test_scene(tree_parent: Node) -> bool:
 	checks["main screen"] = r.top() == MenuRouter.MAIN and _has_button(view, "New game") and not _has_button(view, "Continue")
 	for id: String in [MenuRouter.LOAD, MenuRouter.SETTINGS, MenuRouter.NEW_GAME]:
 		r.push(id)
-		checks["%s renders" % id] = view.get_child_count() > 0 and _has_button(view, "Back")
+		checks["%s renders" % id] = view.get_child_count() > 0 and (view.find_child("SettingsClose", true, false) != null if id == MenuRouter.SETTINGS else _has_button(view, "Back"))   # settings is a popup with a cross instead of Back
 	# LOAD-SLOTS-UI: the slot list scrolls (every slot reachable at any size) and Back stays outside it and pops.
 	for id: String in [MenuRouter.LOAD, MenuRouter.SAVE]:
 		while r.top() != MenuRouter.MAIN:

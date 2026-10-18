@@ -3,142 +3,195 @@ extends VBoxContainer
 
 # ==============================================================================
 # Tactical RPG - Settings view (UI1-L): one slider (volumes), level picker (animation speed, text size) or checkbox per SettingsFile key on the model's draft; Apply writes
-# the file (and rescales the menu text), Restore defaults sets the draft to the defaults, Back asks when the draft changed.
+# the file (and rescales the menu text), Restore defaults sets the draft to the defaults, the close cross (also Esc, right click) asks when the draft changed.
 # MENU-POLISH: animation speed and text size are notched sliders (text size previews live, with a sample), the Skip animations box sits on the speed row
-# (the speed slider greys out while it is ticked), and Apply / Restore defaults / Back are a bar below the scrolling rows.
+# (the speed slider greys out while it is ticked).
+# SETTINGS-POPUP: the host shows this view inside a centred popup panel over a dimmed backdrop: header (title left, close cross right), the scrolling
+# rows, then small Apply / Restore defaults buttons at the bottom right (no Back button).
 # ==============================================================================
 
-const MAX_WIDTH: int = 840   # three 260 px buttons and their gaps fit
 const LABEL_W: int = 240
 const CONTROL_W: int = 300
 const VALUE_W: int = 230   # fits "Extra large (1.30x)" and "Skip animations" at the largest text
 
+const TAB_SOUND: String = "Sound"
+const TAB_DISPLAY: String = "Display"
+const TAB_GAMEPLAY: String = "Gameplay"
+const SOUND_KEYS: Array[String] = ["audio/master", "audio/music", "audio/sfx", "audio/ui"]
+const DISPLAY_ORDER: Array[String] = ["display/window_mode", "display/resolution", "display/vsync", "display/max_fps", "ui/text_scale"]
+
 func build(host: MainMenuView, model: RefCounted) -> void:
 	var m: SettingsModel = model as SettingsModel
-	add_theme_constant_override("separation", 14)
-	size_flags_horizontal = Control.SIZE_SHRINK_CENTER   # a centred column (SETTINGS-UI)
-	custom_minimum_size = Vector2(MAX_WIDTH, 0)
+	add_theme_constant_override("separation", 12)
+	var header := HBoxContainer.new()
+	header.name = "SettingsHeader"
+	add_child(header)
 	var head: Label = MainMenuView.title("Settings")
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(head)
-	var grid := GridContainer.new()
-	grid.name = "SettingsGrid"
-	grid.columns = 3   # label | control | value
-	grid.add_theme_constant_override("h_separation", 20)
-	grid.add_theme_constant_override("v_separation", 10)
-	var scroll := ScrollContainer.new()   # the rows scroll when the text is large and the window short; Apply / Revert / Back stay in view
-	scroll.name = "SettingsScroll"
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	add_child(scroll)
-	scroll.add_child(grid)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(head)
+	var close := Button.new()   # same path as Esc and right click: asks first when the draft changed
+	close.name = "SettingsClose"
+	close.text = "✕"
+	close.tooltip_text = "Close (Esc)"
+	close.focus_mode = Control.FOCUS_ALL
+	close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(host.cancel_pressed)
+	header.add_child(close)
+	var tabs := TabContainer.new()   # the panel keeps one size whichever tab shows; each tab scrolls on its own
+	tabs.name = "SettingsTabs"
+	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs.focus_mode = Control.FOCUS_ALL
+	add_child(tabs)
 	var refs: Dictionary = {}   # the window size row's controls, which follow the window mode picker
 	var web: bool = DisplaySettings.is_web()
+	var sound: Array[String] = []
+	var display: Array[String] = []
+	var gameplay: Array[String] = []
 	for key: String in m.keys():
-		if web and SettingsModel.DISPLAY_KEYS.has(key):
-			continue   # the browser owns the canvas size and the frame rate
-		if key == "anim/instant":
-			continue   # lives on the animation speed row
-		var spec: Dictionary = DictUtil.dict_of(SettingsFile.KEYS[key])
-		if DictUtil.to_int(spec["type"]) == TYPE_BOOL:
-			var box := CheckBox.new()
-			box.name = "Check_" + key.replace("/", "_")
-			box.text = str(SettingsModel.LABELS.get(key, key))
-			box.button_pressed = DictUtil.to_bool(m.value(key))
-			box.focus_mode = Control.FOCUS_ALL
-			box.custom_minimum_size = Vector2(LABEL_W, 0)
-			box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			box.toggled.connect(func(on: bool) -> void:
-				var _e: Array[String] = m.set_value(key, on))
-			grid.add_child(box)
-			grid.add_child(_gap(CONTROL_W))
-			grid.add_child(_gap(VALUE_W))
-			continue
-		var label: Label = MainMenuView.text(str(SettingsModel.LABELS.get(key, key)), UiTheme.COL_TEXT, false)
-		label.custom_minimum_size = Vector2(LABEL_W, 0)
-		label.size_flags_vertical = Control.SIZE_FILL
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		grid.add_child(label)
-		if not SettingsModel.levels(key).is_empty():
-			_level_row(grid, host, m, key)
-			continue
-		if not SettingsModel.choices(key).is_empty():
-			var pick: OptionButton = _choice_picker(m, key, refs)
-			grid.add_child(pick)
-			if key == DisplaySettings.KEY_SIZE:
-				var hint: Label = MainMenuView.text("", UiTheme.COL_MUTED, false)
-				hint.name = "SizeHint"
-				hint.size_flags_vertical = Control.SIZE_FILL
-				hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				refs["hint"] = hint
-				refs["size_pick"] = pick
-				grid.add_child(hint)
-				_sync_size_row(m, refs)
-			else:
-				grid.add_child(_gap(VALUE_W))
-			continue
-		var slider := HSlider.new()
-		slider.name = "Slider_" + key.replace("/", "_")
-		slider.min_value = DictUtil.to_float(spec["min"])
-		slider.max_value = DictUtil.to_float(spec["max"])
-		slider.step = 0.05
-		slider.value = DictUtil.to_float(m.value(key))
-		slider.custom_minimum_size = Vector2(CONTROL_W, 0)
-		slider.size_flags_vertical = Control.SIZE_FILL   # fills the row, the grabber centres in it
-		slider.focus_mode = Control.FOCUS_ALL
-		var shown: Label = MainMenuView.text("%d%%" % roundi(slider.value * 100.0), UiTheme.COL_MUTED, false)
-		shown.custom_minimum_size = Vector2(VALUE_W, 0)
-		shown.size_flags_vertical = Control.SIZE_FILL
-		shown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		slider.value_changed.connect(func(v: float) -> void:
-			var _e: Array[String] = m.set_value(key, v)
-			shown.text = "%d%%" % roundi(v * 100.0))
-		grid.add_child(slider)
-		grid.add_child(shown)
-	if not web:
-		grid.add_child(_now_label("In use"))
-		var now: Label = MainMenuView.text(DisplaySettings.now_text(), UiTheme.COL_MUTED, false)   # read back from the window, so Apply visibly worked
-		now.name = "DisplayNow"
-		now.size_flags_vertical = Control.SIZE_FILL
-		now.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		grid.add_child(now)
-		grid.add_child(_gap(VALUE_W))
-		var root: Window = grid.get_tree().root if grid.is_inside_tree() else null
-		if root != null:
-			var refresh: Callable = func() -> void:
-				if is_instance_valid(now):
-					now.text = DisplaySettings.now_text()
-			root.size_changed.connect(refresh)
-			now.tree_exiting.connect(func() -> void:
-				if root.size_changed.is_connected(refresh):
-					root.size_changed.disconnect(refresh))
+		if key == "anim/instant" or (web and SettingsModel.DISPLAY_KEYS.has(key)):
+			continue   # the Skip box lives on the animation speed row; the browser owns the canvas size and the frame rate
+		if SOUND_KEYS.has(key):
+			sound.append(key)
+		elif DISPLAY_ORDER.has(key):
+			display.append(key)
+		else:
+			gameplay.append(key)
+	display.sort_custom(func(x: String, y: String) -> bool: return DISPLAY_ORDER.find(x) < DISPLAY_ORDER.find(y))
+	var sound_grid: GridContainer = _tab(tabs, TAB_SOUND)
+	for key: String in sound:
+		_add_row(sound_grid, host, m, key, refs)
+	var display_grid: GridContainer = _tab(tabs, TAB_DISPLAY)
 	if web:
-		grid.add_child(_fullscreen_row(grid))
-		grid.add_child(_gap(CONTROL_W))
-		grid.add_child(_gap(VALUE_W))
+		display_grid.add_child(_fullscreen_row(display_grid))
+		display_grid.add_child(_gap(CONTROL_W))
+		display_grid.add_child(_gap(VALUE_W))
+	for key: String in display:
+		_add_row(display_grid, host, m, key, refs)
+		if key == DisplaySettings.KEY_SIZE and not web:
+			_in_use_row(display_grid)
+	var play_grid: GridContainer = _tab(tabs, TAB_GAMEPLAY)
+	for key: String in gameplay:
+		_add_row(play_grid, host, m, key, refs)
+	tabs.current_tab = clampi(m.tab, 0, tabs.get_tab_count() - 1)
+	tabs.tab_changed.connect(func(i: int) -> void:
+		m.tab = i)
 	# The text size shown is the draft's (an unsaved preview); every other render shows the saved one.
 	host.apply_text_scale(SettingsFile.snap("ui/text_scale", DictUtil.to_float(m.value("ui/text_scale"))))
-	var bar := PanelContainer.new()   # fixed below the scrolling rows
-	bar.name = "SettingsBar"
-	bar.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, UiTheme.COL_BORDER, 6, 14, 10, 2))
-	add_child(bar)
-	var buttons := HBoxContainer.new()
-	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons.add_theme_constant_override("separation", 14)
-	bar.add_child(buttons)
-	buttons.add_child(MainMenuView.small(MainMenuView.button("Apply", func() -> void:
+	var footer := HBoxContainer.new()   # outside the scroll, bottom right
+	footer.name = "SettingsFooter"
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("separation", 10)
+	add_child(footer)
+	var restore: Button = MainMenuView.small(MainMenuView.button("Restore defaults", func() -> void:
+		m.restore_defaults()
+		host.render()))
+	restore.flat = true   # low emphasis: text only, no frame until hovered
+	restore.tooltip_text = "Resets every tab (Sound, Display, Gameplay) to the defaults"
+	restore.add_theme_color_override("font_color", UiTheme.COL_MUTED)
+	footer.add_child(restore)
+	footer.add_child(MainMenuView.small(MainMenuView.button("Apply", func() -> void:
 		host.act(m.apply)
 		host.apply_text_scale()
 		if m.confirming():
-			host.begin_display_confirm(m)), 180))
-	buttons.add_child(MainMenuView.small(MainMenuView.button("Restore defaults", func() -> void:
-		m.restore_defaults()
-		host.render()), 180))
-	buttons.add_child(MainMenuView.small(MainMenuView.button("Back", host.router.pop), 180))
+			host.begin_display_confirm(m))))
+	var cur: Control = tabs.get_current_tab_control()
+	var first: Array[Node] = cur.find_children("*", "HSlider", true, false) if cur != null else []
+	if not first.is_empty():
+		set_meta(MainMenuView.FOCUS_META, first[0])   # focus a setting, not the close cross
+
+# One tab page: a scroll area (named like the tab) holding a label | control | value grid.
+func _tab(tabs: TabContainer, title: String) -> GridContainer:
+	var scroll := ScrollContainer.new()
+	scroll.name = title
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	tabs.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.name = "SettingsGrid_" + title
+	grid.columns = 3   # label | control | value
+	grid.add_theme_constant_override("h_separation", 20)
+	grid.add_theme_constant_override("v_separation", 10)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
+	return grid
+
+func _in_use_row(grid: GridContainer) -> void:
+	grid.add_child(_now_label("In use"))
+	var now: Label = MainMenuView.text(DisplaySettings.now_text(), UiTheme.COL_MUTED, false)   # read back from the window, so a change visibly worked
+	now.name = "DisplayNow"
+	now.size_flags_vertical = Control.SIZE_FILL
+	now.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grid.add_child(now)
+	grid.add_child(_gap(VALUE_W))
+	var root: Window = grid.get_tree().root if grid.is_inside_tree() else null
+	if root != null:
+		var refresh: Callable = func() -> void:
+			if is_instance_valid(now):
+				now.text = DisplaySettings.now_text()
+		root.size_changed.connect(refresh)
+		now.tree_exiting.connect(func() -> void:
+			if root.size_changed.is_connected(refresh):
+				root.size_changed.disconnect(refresh))
+
+func _add_row(grid: GridContainer, host: MainMenuView, m: SettingsModel, key: String, refs: Dictionary) -> void:
+	var spec: Dictionary = DictUtil.dict_of(SettingsFile.KEYS[key])
+	if DictUtil.to_int(spec["type"]) == TYPE_BOOL:
+		var box := CheckBox.new()
+		box.name = "Check_" + key.replace("/", "_")
+		box.text = str(SettingsModel.LABELS.get(key, key))
+		box.button_pressed = DictUtil.to_bool(m.value(key))
+		box.focus_mode = Control.FOCUS_ALL
+		box.custom_minimum_size = Vector2(LABEL_W, 0)
+		box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		box.toggled.connect(func(on: bool) -> void:
+			var _e: Array[String] = m.set_value(key, on))
+		grid.add_child(box)
+		grid.add_child(_gap(CONTROL_W))
+		grid.add_child(_gap(VALUE_W))
+		return
+	var label: Label = MainMenuView.text(str(SettingsModel.LABELS.get(key, key)), UiTheme.COL_TEXT, false)
+	label.custom_minimum_size = Vector2(LABEL_W, 0)
+	label.size_flags_vertical = Control.SIZE_FILL
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grid.add_child(label)
+	if not SettingsModel.levels(key).is_empty():
+		_level_row(grid, host, m, key)
+		return
+	if not SettingsModel.choices(key).is_empty():
+		var pick: OptionButton = _choice_picker(host, m, key, refs)
+		grid.add_child(pick)
+		if key == DisplaySettings.KEY_SIZE:
+			var hint: Label = MainMenuView.text("", UiTheme.COL_MUTED, false)
+			hint.name = "SizeHint"
+			hint.size_flags_vertical = Control.SIZE_FILL
+			hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			refs["hint"] = hint
+			refs["size_pick"] = pick
+			grid.add_child(hint)
+			_sync_size_row(m, refs)
+		else:
+			grid.add_child(_gap(VALUE_W))
+		return
+	var slider := HSlider.new()
+	slider.name = "Slider_" + key.replace("/", "_")
+	slider.min_value = DictUtil.to_float(spec["min"])
+	slider.max_value = DictUtil.to_float(spec["max"])
+	slider.step = 0.05
+	slider.value = DictUtil.to_float(m.value(key))
+	slider.custom_minimum_size = Vector2(CONTROL_W, 0)
+	slider.size_flags_vertical = Control.SIZE_FILL   # fills the row, the grabber centres in it
+	slider.focus_mode = Control.FOCUS_ALL
+	var shown: Label = MainMenuView.text("%d%%" % roundi(slider.value * 100.0), UiTheme.COL_MUTED, false)
+	shown.custom_minimum_size = Vector2(VALUE_W, 0)
+	shown.size_flags_vertical = Control.SIZE_FILL
+	shown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	slider.value_changed.connect(func(v: float) -> void:
+		var _e: Array[String] = m.set_value(key, v)
+		shown.text = "%d%%" % roundi(v * 100.0))
+	grid.add_child(slider)
+	grid.add_child(shown)
 
 # A notched slider over the key's fixed levels (value = level index, one notch per level, the draft always holds a level).
-# Row cells: label | slider with the level name under it | the speed row's Skip box, or the text size row's live sample.
+# Row cells: label | slider with the level name under it | the speed row's Skip box, (the text size row has none: the whole menu is its preview).
 func _level_row(grid: GridContainer, host: MainMenuView, m: SettingsModel, key: String) -> void:
 	var lv: Array[float] = SettingsModel.levels(key)
 	var current: float = SettingsFile.snap(key, DictUtil.to_float(m.value(key)))
@@ -171,15 +224,9 @@ func _level_row(grid: GridContainer, host: MainMenuView, m: SettingsModel, key: 
 	if key == "anim/speed":
 		extra = _skip_box(m, cell)
 	elif key == "ui/text_scale":
-		var sample: Label = MainMenuView.text("Sample text", UiTheme.COL_TEXT, false)
-		sample.name = "TextSample"
-		sample.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		sample.add_theme_font_size_override("font_size", roundi(MainMenuView.BASE_FONT * lv[index]))
-		extra = sample
+		extra = _gap(VALUE_W)
 		slider.value_changed.connect(func(v: float) -> void:
-			var text_scale: float = lv[clampi(roundi(v), 0, lv.size() - 1)]
-			sample.add_theme_font_size_override("font_size", roundi(MainMenuView.BASE_FONT * text_scale))
-			host.apply_text_scale(text_scale))   # the menu rescales at once; Apply saves it, Back / a re-render restores the saved size
+			host.apply_text_scale(lv[clampi(roundi(v), 0, lv.size() - 1)]))   # the whole menu rescales at once; Apply saves it, closing without Apply / a re-render restores the saved size
 	else:
 		extra = _gap(VALUE_W)
 	grid.add_child(extra)
@@ -209,7 +256,7 @@ func _skip_box(m: SettingsModel, speed_cell: Control) -> CheckBox:
 	return box
 
 # A dropdown of a key's listed values (window mode, window size, frame-rate cap).
-func _choice_picker(m: SettingsModel, key: String, refs: Dictionary) -> OptionButton:
+func _choice_picker(host: MainMenuView, m: SettingsModel, key: String, refs: Dictionary) -> OptionButton:
 	var pick := OptionButton.new()
 	pick.name = "Choice_" + key.replace("/", "_")
 	pick.focus_mode = Control.FOCUS_ALL
@@ -226,7 +273,9 @@ func _choice_picker(m: SettingsModel, key: String, refs: Dictionary) -> OptionBu
 	pick.item_selected.connect(func(i: int) -> void:
 		var _e: Array[String] = m.set_value(key, list[i])
 		if key == DisplaySettings.KEY_MODE:
-			_sync_size_row(m, refs))
+			_sync_size_row(m, refs)
+		if SettingsModel.CONFIRM_KEYS.has(key) and m.start_display_change():
+			host.begin_display_confirm(m))   # a window mode / size applies on select and waits for Keep (10 s, then it reverts)
 	return pick
 
 # Fullscreen / borderless leave the window size unused: the row is disabled and says so (the saved size is kept).

@@ -13,6 +13,9 @@ const RUNNER_SCENE: String = "res://scenes/scene_runner.tscn"
 const BASE_FONT: int = 18
 const FOCUS_META: StringName = &"focus_target"
 const COL_BG: Color = Color(0.05, 0.07, 0.10, 1.0)
+const POPUP_MAX: Vector2 = Vector2(900, 620)   # the settings popup's largest size; it shrinks to fit the viewport
+const POPUP_MARGIN: float = 32.0
+const POPUP_DIM: Color = Color(0, 0, 0, 0.5)
 
 var router: MenuRouter = null
 var game_view: Node = null
@@ -22,6 +25,8 @@ var _menu: Control = null
 var _screen: Control = null
 var _game_hint: Label = null
 var _problems: Label = null
+var _popup: Control = null         # SETTINGS-POPUP: the popup layer (dimmed backdrop + panel) over the screen below
+var _popup_panel: PanelContainer = null
 var _overlay: PanelContainer = null
 var _overlay_text: Label = null
 var _overlay_buttons: HBoxContainer = null
@@ -62,6 +67,7 @@ func _ready() -> void:
 	_game_hint.offset_bottom = -12
 	_game_hint.visible = false
 	add_child(_game_hint)
+	_build_popup()
 	_build_overlay()
 	apply_text_scale()
 	router = MenuRouter.new()
@@ -88,39 +94,89 @@ func render() -> void:
 	if _screen == null:
 		return
 	UiTheme.clear_children(_screen)
+	UiTheme.clear_children(_popup_panel)
 	apply_text_scale()   # the saved size (the settings screen previews its draft in its build)
 	var id: String = router.top()
-	var view: Control = null
-	match id:
-		MenuRouter.MAIN:
-			view = MainScreenView.new()
-		MenuRouter.NEW_GAME:
-			view = NewGameView.new()
-		MenuRouter.LOAD, MenuRouter.SAVE:
-			view = SaveSlotsView.new()
-		MenuRouter.SETTINGS:
-			view = SettingsView.new()
-		MenuRouter.HUB:
-			view = HubView.new()
-		MenuRouter.PARTY:
-			view = PartyView.new()
-		MenuRouter.LEVEL_UP:
-			view = LevelUpView.new()
-		MenuRouter.LOADOUT:
-			view = LoadoutView.new()
-		MenuRouter.GEAR:
-			view = GearView.new()
-		MenuRouter.RESULTS:
-			view = BattleResultsView.new()
-		MenuRouter.JOURNAL:
-			view = JournalView.new()
+	var popup: bool = id == MenuRouter.SETTINGS
+	_popup.visible = popup
+	if popup and router.stack.size() > 1:
+		# The screen below stays visible behind the dim; it is only a backdrop, so nothing in it takes focus.
+		var below: String = router.stack[-2]
+		var under: Control = _make_view(below)
+		if under != null:
+			under.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			_screen.add_child(under)
+			under.call("build", self, router.model(below))
+			for n: Node in under.find_children("*", "Control", true, false):
+				(n as Control).focus_mode = Control.FOCUS_NONE
+	var view: Control = _make_view(id)
 	if view == null:
 		return
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_screen.add_child(view)
+	if popup:
+		_popup_panel.add_child(view)
+	else:
+		_screen.add_child(view)
 	view.call("build", self, router.model())
+	if popup:
+		_layout_popup()
 	_show_problems()
 	focus_first(view)
+
+func _make_view(id: String) -> Control:
+	match id:
+		MenuRouter.MAIN:
+			return MainScreenView.new()
+		MenuRouter.NEW_GAME:
+			return NewGameView.new()
+		MenuRouter.LOAD, MenuRouter.SAVE:
+			return SaveSlotsView.new()
+		MenuRouter.SETTINGS:
+			return SettingsView.new()
+		MenuRouter.HUB:
+			return HubView.new()
+		MenuRouter.PARTY:
+			return PartyView.new()
+		MenuRouter.LEVEL_UP:
+			return LevelUpView.new()
+		MenuRouter.LOADOUT:
+			return LoadoutView.new()
+		MenuRouter.GEAR:
+			return GearView.new()
+		MenuRouter.RESULTS:
+			return BattleResultsView.new()
+		MenuRouter.JOURNAL:
+			return JournalView.new()
+	return null
+
+# SETTINGS-POPUP: a dimmed full-screen backdrop that swallows clicks (a left click on it does nothing; a right click anywhere is Back, see _input) and a centred panel.
+func _build_popup() -> void:
+	_popup = Control.new()
+	_popup.name = "PopupLayer"
+	_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_popup.theme = MenuStyle.theme()
+	_popup.visible = false
+	add_child(_popup)
+	var dim := ColorRect.new()
+	dim.name = "PopupBackdrop"
+	dim.color = POPUP_DIM
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_popup.add_child(dim)
+	_popup_panel = PanelContainer.new()
+	_popup_panel.name = "SettingsPanel"
+	_popup_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.COL_PANEL_BG, 1.0), UiTheme.COL_HEADER, 8, 18, 14, 2))   # opaque: the screen below must not show through
+	_popup.add_child(_popup_panel)
+	_popup.resized.connect(_layout_popup)
+
+# The panel is POPUP_MAX, or the viewport minus a margin when that is smaller, and centred.
+func _layout_popup() -> void:
+	if _popup == null or _popup_panel == null or not _popup.visible:
+		return
+	var target := Vector2(minf(POPUP_MAX.x, _popup.size.x - 2.0 * POPUP_MARGIN), minf(POPUP_MAX.y, _popup.size.y - 2.0 * POPUP_MARGIN))
+	_popup_panel.custom_minimum_size = target
+	_popup_panel.size = target
+	_popup_panel.position = ((_popup.size - target) / 2.0).floor()
 
 func show_problems(list: Array[String]) -> void:
 	problems = list
@@ -347,14 +403,18 @@ func _on_quit() -> void:
 	else:
 		get_tree().quit()
 
-func _unhandled_input(event: InputEvent) -> void:
+# Right click = Back, same path as Esc. It is taken in _input, before the GUI: panels, buttons and scroll areas use
+# MOUSE_FILTER_STOP and would swallow the click before _unhandled_input (the question and countdown boxes treat it as No / Revert).
+func _input(event: InputEvent) -> void:
 	var mouse: InputEventMouseButton = event as InputEventMouseButton
-	if mouse != null and mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
-		if game_view != null and game_view.visible:
-			return   # the map and the fights own the right button
-		cancel_pressed()   # right click = Back, same path as Esc (the question and countdown boxes treat it as No / Revert)
-		accept_event()
+	if mouse == null or not mouse.pressed or mouse.button_index != MOUSE_BUTTON_RIGHT or not is_visible_in_tree():
 		return
+	if game_view != null and game_view.visible:
+		return   # the map and the fights own the right button
+	cancel_pressed()
+	get_viewport().set_input_as_handled()
+
+func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	cancel_pressed()
