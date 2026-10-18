@@ -2,7 +2,7 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 15c3a03 -->
+<!-- last: d4ab083 -->
 
 ## 2026-10-18
 
@@ -119,6 +119,7 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- BAL5-R: final balance rerun; Shield Wall fortify moved nothing, remaining gaps listed in the balance report (d4ab083)
 - ENGINE-HOLD: keep threads off the engine branch; branch cleanup skips it (15c3a03)
 - UI-UX-HANDOVER: queue and notes for the next UI/UX session (8d12e98)
 - PATCH-NOTES: MAPDEV1-U, Gameplay handover (5a11e86)
