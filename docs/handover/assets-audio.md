@@ -1,18 +1,20 @@
 # Assets & Audio handover
 
-Written 2026-10-17 22:06 UTC by the first Assets & Audio session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
+Written 2026-10-18 00:42 UTC by the third Assets & Audio session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
 
 ## Queue (in order)
 
-1. Empty. Take the next approved `-A` task whose logic is on `develop` (BAL3-A belongs to the Balance thread).
+1. Empty. Take the next approved `-A` task whose logic is on `develop`.
 
-## Update 2026-10-17 22:20 UTC (second session)
+## Landed on `develop` (this session)
 
-REP1-A checks 2-5 passed headlessly against the REP1-L runtime (0717392), no data fix needed: new game neutral 0, spare choice shown locked, `ember_patrol` locked; courtyard 10 (friendly), spare choice opens once (+2 potions) then locks, Hest prices 15/24/29/38, bombs 40; gate watch 20 and Horde -10; oath 35 and `ember_patrol` offered at Hest; an `ash_raiders` win makes it ready, completion 40 and `ashlands.ruins_swept`. After use the spare choice stays visible as locked (`show_locked` with `unless`), as specced. A new class (`RepRules`) needs `godot --headless --import` before a `-s` script sees it.
+- CAMP1-A1 + CAMP1-A2 (793d456): goblin_warlord and the whole Ashlands story; spec section 7 checks 1-6 pass headlessly.
+- TRAV2-A (ba415d6): start supplies 10, Hest 2 gold, chests 4/6/6; checks 1-4 pass.
 
-## Landed today on `develop` (this session)
+## Handed off
 
-S12C-A (802c487), TRAV1-A (53b20ac), REP1-A (b8845b1).
+- CAMP1-B (balance sim of the Ashmaw fights) went to the Balance thread through the coordinator; it runs once CAMP1 is on `main`.
+- goblin_warlord landed in `units.json` ahead of BAL3-A (its branch did not touch that file); if BAL3-A conflicts there, re-run the seeds.
 
 ## Waiting on the user
 
@@ -20,8 +22,8 @@ S12C-A (802c487), TRAV1-A (53b20ac), REP1-A (b8845b1).
 
 ## Notes for the next session
 
-- Economy mode: asset-builder sonnet low, change-reviewer low; run the reviewer while the full gate runs in the background (data-only diffs need no gate inside the review).
-- `save_world` re-normalises the whole world (schema defaults, empty kind files); expected, no behaviour change.
-- Combo and status families ship with `learned_only: true` (S12S-A and S12C-A specs marked); keep that for new class-path families.
-- `tools/fc.sh arena <pattern>` runs the whole arena suite; the pattern only filters output.
-- Branches to delete at the next cleanup (all landed): `claude/assets-audio-uiyic2`, `claude/TRAV1-A-roads`, `claude/REP1-A-reputation`.
+- A catalog unit seed must wrap `ContentCatalog.upsert` in `begin_system_edit()` / `end_system_edit()`, or the row gets `origin: user` and the Origin arena test fails.
+- Run the gate with `SUITE_TIMEOUT=600 tools/fc.sh gate`: the arena suite now passes 290 s on the cloud box and the default limit exits 124.
+- Never `pkill -f godot`: the shell's own command line contains the Godot path and the shell dies (exit 144). Kill by pid.
+- `save_world` writes new schema defaults (for example `start_supplies: -1`) after a schema lands; expected.
+- Branches to delete at the next cleanup (landed): `claude/assets-audio-zspfs7`, `claude/TRAV2-A-supplies`.
