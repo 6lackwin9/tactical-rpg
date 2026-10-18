@@ -179,12 +179,17 @@ func _on_canvas_input(event: InputEvent) -> void:
 # Travel and fights
 # ------------------------------------------------------------------------------
 
-# A click on a pin: TravelRunner.travel towards `location_qid` (ignored while a fight is pending).
+# A click on a pin: TravelRunner.travel towards `location_qid` (ignored while a fight is pending). A click on the
+# party's own location enters it (`arrived`).
 func travel_to(location_qid: String) -> void:
 	if gs == null or busy():
 		return
 	if location_qid == gs.location_id:
-		_note("The party is already at %s." % location_qid)
+		if TravelRunner.current_node(gs).is_empty():
+			_note("%s is not on the world map (no route)." % location_qid)
+		else:
+			_note("Entering %s." % location_qid)
+			arrived.emit(gs.location_id)
 		_refresh()
 		return
 	var res: Dictionary = TravelRunner.travel(gs, location_qid)

@@ -117,6 +117,11 @@ static func _test_region_hand_over(tree_parent: Node, packed: PackedScene) -> bo
 	if view.world_map != null:
 		view.world_map.back()
 	checks["Back closes it"] = view.world_map == null and view.gs.location_id == _q("gate")
+	# Clicking the pin of the current location enters it (no travel needed).
+	view.take_exit(MapRules.WORLD_MAP)
+	if view.world_map != null:
+		view.world_map.travel_to(view.gs.location_id)
+	checks["clicking the current node enters it and closes the world map"] = view.world_map == null and view.gs.location_id == _q("gate")
 	view.fight_settled.disconnect(on_settled)
 	CurrentGame.end()
 	tree_parent.remove_child(view)

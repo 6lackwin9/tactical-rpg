@@ -45,7 +45,7 @@ on map-less nodes.
 
 `scenes/overworld/world_map_debug.tscn` + `scripts/ui/overworld/world_map_view.gd` (`WorldMapView`): known nodes as
 pins on an automatic circle layout (graph node order), routes as lines (closed dashed, one-way with an arrow, the
-travel time at the middle), click a pin = `TravelRunner.travel`, the road fight panel (real arena, debug outcomes as a
+travel time at the middle), click a pin = `TravelRunner.travel` (a click on the party's own location pin enters it via `arrived`), the road fight panel (real arena, debug outcomes as a
 fallback) and the clock. The region map (`RegionMapView`) opens it on a `world_map` exit (marker or menu entry) and
 gets it back on arrival, after a lost road fight, or on Back. A `world_map` exit marker's `sets_flags` apply when the
 party steps onto it.
