@@ -1,5 +1,19 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## Proposed trio bands 2026-10-18 (awaiting approval)
+
+Tushar chose "Re-set targets" (17:03): new clear bands for the generated L5 trio sweep (warrior + two, 10 comps, 10 seeds), set from BAL5-R, with no game change. They replace only the sweep clear bands of "BAL2 role answers" (2); story bands (stand, HEAL1 arms and gate), role KPIs and the PACE1 round bands stay as they are. Each band is centred on today's mean and wide enough that a small lever moves a cell in or out.
+
+| Tier | Old band (4 heroes) | Today (trio mean) | Proposed trio band |
+| --- | --- | --- | --- |
+| mob | >= 90 | 91 | >= 85 |
+| line | 70-90 | 26 | 20-45 |
+| wave | 55-80 | 28 | 20-45 |
+| elite | 50-75 | 38 | 30-55 |
+| boss | 30-50 | 26 (best 50, worst 10) | 20-40 |
+
+Sweep limits stay (swap delta within +-10, every class in >= 2 of the top 5), except "no composition below 50% on line", which becomes "no trio below 10% on line". With these bands every tier mean passes today, so no lever fires (the per-trio line minimum is checked at the next sweep); B3 (boss HP) keeps its own triggers (boss above 60, or PACE1 boss median under 7 rounds).
+
 ## MORALE1-B 2026-10-18
 
 Measured build: cloud branch claude/project-thread-6a605c = develop 69c82e0 (MORALE1-A morale data on `ash_scouts` and `ash_raiders`, MORALE1-S sim mapping). Level 5, boss phase on, jitter on, 10 seeds. "Before" for the party rows is the same sim on the parent 233dd98 (no morale data, same code otherwise), run in a throwaway worktree, so only the morale rows differ. All 31 party runs: 0 PLAN FAIL, 0 METRIC FAIL. Party wall about 6 min (4 processes). Logs: scratchpad `morale1b/`.

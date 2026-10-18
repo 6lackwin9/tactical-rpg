@@ -16,10 +16,10 @@ Updated 2026-10-18 16:35 UTC (project wind-down to interactive mode) by Balance 
 2. MORALE1-B follow-ups (proposals, need Tushar's approval as tasks): sim morale counters (`fled_shaken`, `fled_wavering`, `surrendered`, `break_by_crit_only`, `break_round`); campaign rerun with a higher SIM_TIMEOUT (both arms timed out at 900 s with 7 of 10 trios) or `comp=` per trio; question whether trios at 1.1-1.7 rounds vs ash_raiders are fine or want `morale_break` 40.
 3. LEVERS1-B: waits on LEVERS1-A1/A2/A3. BAL5-R is "before"; also check warrior-row won-fight allies hp_end >= 40 at L5/L7 after LEVERS1-L3 and A3.
 
-## Open questions for Tushar (asked in the Balance thread, no answer yet)
+## Open questions for Tushar
 
-- Walk-in taunt (BAL5-AI T2): built on "Advance, then taunt" (still strikes if one fits). Close it with that option if he answers in words.
-- Trio difficulty targets: "Re-set targets" (recommended: propose trio bands from today's numbers, no game change) / "Make fights easier" / "Leave as is". On "Re-set targets": write proposed bands into the report and ask for approval.
+- Walk-in taunt: answered 17:03 ("Advance, then taunt", decision row in `docs/decisions/balance.md`).
+- Trio targets: he chose "Re-set targets" (17:03). Proposed trio bands are at the top of `docs/BALANCE_REPORT.md`, asked in the Balance thread; on approval add a balance decision row that replaces "BAL2 role answers" (2) sweep bands (append-only, note the superseded part).
 
 ## Gotchas
 
