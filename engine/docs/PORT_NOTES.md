@@ -40,8 +40,12 @@ because the RNG is bit-exact.
 ## Parity status (2026-10-19)
 
 - Unit snapshots: 102 rows exact. Damage: 18,216 cases exact. RNG: 180 draws exact.
-- Battle traces: 360 balance-sim duels (6 classes, levels 1 / 5 / 10, 2 seeds, both sides, jitter on) replay
-  step for step (HP, AP, tile, stance, active and pending statuses after every step; every round's schedule).
-  44 distinct skills appear; statuses seen: stagger, weaken, root, bleed, riposte.
-- Not covered yet: group / party fights (taunt, area attacks, fortify, regen, haste, poison, burn, expose), battle
-  items, reinforcement waves, boss phases, morale, hold / escape / slay objectives, other deployments.
+- Battle traces: 488 balance-sim fights replay step for step: 360 duels (6 classes, levels 1 / 5 / 10, 2 seeds,
+  both sides, jitter on), 72 group fights (hero vs 3 minion / standard units) and 56 team fights (mixed trios).
+  Compared after every step: HP, AP, tile, stance, active and pending statuses; and every round's schedule.
+  About 80 distinct skills appear (dashes, disengages, areas, heals, cleanses, taunts, buffs, Focus, riposte);
+  statuses seen: stagger, stun, root, bleed, weaken, haste, taunt, riposte.
+- Not covered yet: statuses expose, fortify, regen, poison, burn, empower, slow (the shipped classes rarely use
+  them in these fights), battle items, reinforcement waves, boss phases, morale, hold / escape / slay objectives,
+  ambush and centre deployments, terrain zones other than the stone arena.
+- Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` (about 6 s).

@@ -46,9 +46,20 @@ fn first_divergence(g: &Value, r: &Value) -> Option<String> {
 }
 
 #[test]
-fn duels_replay_godot_step_for_step() {
+fn battles_replay_godot_step_for_step() {
     let cat = Arc::new(Catalog::from_value(&load("catalog.json")));
-    let t = load("traces.json");
+    let mut files: Vec<String> = std::fs::read_dir(out_dir()).expect("missing engine/parity/out").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("traces") && n.ends_with(".json")).collect();
+    files.sort();
+    assert!(!files.is_empty(), "no traces*.json - run engine/parity/trace.sh");
+    let mut total = 0;
+    for name in files {
+        total += replay_file(&cat, &name);
+    }
+    eprintln!("{total} fights match Godot step for step");
+}
+
+fn replay_file(cat: &Arc<Catalog>, name: &str) -> usize {
+    let t = load(name);
     let units: IndexMap<String, UnitDef> = t["units"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), UnitDef::from_obj(v.as_object().unwrap()))).collect();
     let jitter = t["jitter"].as_str() == Some("on");
     let fights = t["fights"].as_array().unwrap();
@@ -62,7 +73,8 @@ fn duels_replay_godot_step_for_step() {
         }
     }
     if !failures.is_empty() {
-        panic!("{} of {} fights diverge; first:\n{}", failures.len(), fights.len(), failures[0]);
+        panic!("{name}: {} of {} fights diverge; first:\n{}", failures.len(), fights.len(), failures[0]);
     }
-    eprintln!("{} fights match Godot step for step", fights.len());
+    eprintln!("{name}: {} fights", fights.len());
+    fights.len()
 }
