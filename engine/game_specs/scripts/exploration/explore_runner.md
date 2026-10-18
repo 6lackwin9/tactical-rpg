@@ -1,0 +1,557 @@
+---
+class: ExploreRunner
+extends: RefCounted
+description: "Tactical RPG - Explore runner (S9, spec EXP1-L section 2): walking a location's region map over GameState. Stateless: everything lives in the GameState (location_id, position, explore, flags, rolls). Refs resolve from gs.world_id (child overrides apply). Every call returns {ok, errors, events...}; errors change nothing. Flags go through QuestRunner.set_flag (so quests refresh). The caller starts a battle at once on a `fight` event and calls after_fight with the BattleBridge outcome; it writes the save on `autosave` (the runner does no I/O)."
+---
+
+# Properties
+* `DIRS`: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)] (const)
+* `out`: Array[Dictionary] = []
+* `keys`: Array[String] = []
+* `cond`: Dictionary = DictUtil.dict_of(c)
+* `key`: String = str(cond.get("key", ""))
+* `out`: Array[Dictionary] = []
+* `loc`: Dictionary = location(gs)
+* `ex`: Dictionary = DictUtil.dict_of(x)
+
+# Methods
+
+### `static location(gs: GameState) -> Dictionary`
+```logic
+if gs.location_id.is_empty():
+	return {}
+return WorldCatalog.resolve(gs.world_id, "locations", gs.location_id)
+```
+
+### `static template_of(loc: Dictionary) -> Dictionary`
+```logic
+var map_id: String = str(loc.get("map", ""))
+return MapCatalog.get_entry(map_id) if not map_id.is_empty() else {}
+```
+
+### `static _conditions_hold(gs: GameState, raw: Variant) -> bool`
+```logic
+for c: Variant in DictUtil.array_of(JsonUtil.normalize(raw)):
+	if not QuestRules.condition_met(gs, DictUtil.dict_of(c)):
+		return false
+return true
+```
+
+### `static _any_holds(gs: GameState, raw: Variant) -> bool`
+```logic
+for c: Variant in DictUtil.array_of(JsonUtil.normalize(raw)):
+	if QuestRules.condition_met(gs, DictUtil.dict_of(c)):
+		return true
+return false
+```
+
+### `static _is_done(gs: GameState, loc_qid: String, m: Dictionary) -> bool`
+```logic
+return gs.get_flag(MapRules.done_flag(loc_qid, str(m["id"])), false) == true
+```
+
+### `static presence(gs: GameState, loc_qid: String, m: Dictionary) -> String`
+```logic
+var req_ok: bool = _conditions_hold(gs, m.get("requires_flags", []))
+var unless_ok: bool = not _any_holds(gs, m.get("unless_flags", []))
+var kind: String = str(m.get("kind", ""))
+if (kind == "encounter" or kind == "roamer") and DictUtil.to_bool(m.get("once", true)) and _is_done(gs, loc_qid, m):
+	return "absent"
+if kind == "exit" and not req_ok and unless_ok:
+	return "locked"
+if kind == "npc" and DialogueRules.is_gone(gs, str(m.get("character", ""))):
+	return "absent"   # DLG1-L 2.1: a gone character's npc markers are absent
+return "present" if req_ok and unless_ok else "absent"
+```
+
+### `static marker_view(gs: GameState, loc: Dictionary, m: Dictionary) -> Dictionary`
+```logic
+var mk: Dictionary = MapRules.marker_full(m)
+var kind: String = str(mk["kind"])
+var loc_qid: String = str(loc.get("_qid", ""))
+var state: String = presence(gs, loc_qid, mk)
+if state == "present" and _is_spent(gs, loc_qid, mk):
+	state = "spent"
+var spent: bool = state == "spent"
+var label: String = str(mk.get("label", "")).strip_edges()
+var badge: String = ""
+var verb: String = ""
+var default_label: String = ""
+match kind:
+	"npc":
+		var who: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", str(mk.get("character", "")))
+		default_label = str(who.get("name", "Someone"))
+		verb = "Talk"
+		badge = _npc_badge(gs, str(who.get("_qid", "")))
+	"chest":
+		default_label = "Chest"
+		verb = "Empty" if spent else "Open"
+	"lore":
+		default_label = str(WorldCatalog.resolve(gs.world_id, "lore", str(mk.get("lore", ""))).get("name", "Lore"))
+		verb = "Read"
+	"exit":
+		var to: String = str(mk.get("to", ""))
+		if to == MapRules.WORLD_MAP:
+			default_label = "World map"
+		else:
+			default_label = "To %s" % str(resolve_location(gs, to).get("name", to))
+		verb = "Locked: %s" % str(mk.get("locked_text", "")) if state == "locked" else "Walk onto it"
+	"encounter", "roamer":
+		default_label = str(WorldCatalog.resolve(gs.world_id, "encounters", str(mk.get("encounter", ""))).get("name", "Enemies"))
+		verb = "Fight" if kind == "encounter" else "Patrol: fight on contact"
+	_:
+		default_label = "Something here"
+		verb = "Nothing more here" if spent else "Look"
+return {"kind": kind, "state": state, "label": label if not label.is_empty() else default_label, "verb": verb, "badge": badge, "icon": "overlay_%s" % ("poi" if kind == "point" else kind)}
+```
+
+### `static _is_spent(gs: GameState, loc_qid: String, m: Dictionary) -> bool`
+```logic
+match str(m.get("kind", "")):
+	"chest":
+		return _is_done(gs, loc_qid, m)
+	"point":
+		var sets: Array = DictUtil.array_of(JsonUtil.normalize(m.get("sets_flags", [])))
+		return not sets.is_empty() and _conditions_hold(gs, sets)
+return false
+```
+
+### `static _npc_badge(gs: GameState, character_qid: String) -> String`
+```logic
+if character_qid.is_empty():
+	return ""
+for qid: String in QuestRunner.quests_with(gs, "ready"):
+	if DialogueRules.turn_in_qid(gs, QuestRunner.resolved(gs, qid)) == character_qid:
+		return "ready"
+for qid: String in QuestRunner.quests_with(gs, "available"):
+	if DialogueRules.giver_qid(gs, QuestRunner.resolved(gs, qid)) == character_qid:
+		return "quest"
+return ""
+```
+
+### `static marker_pos(t: Dictionary, m: Dictionary, loc_steps: int) -> Vector2i`
+```logic
+if str(m.get("kind", "")) == "roamer":
+	var pts: Array[Vector2i] = MapRules.path_points(t, str(m.get("path", "")))
+	return pts[MapRules.roamer_index(pts.size(), loc_steps)] if not pts.is_empty() else GameState.NO_POSITION
+return MapRules.anchor_pos(t, str(m.get("anchor", "")))
+```
+
+### `static _solid(state: String, m: Dictionary) -> bool`
+```logic
+return state == "locked" or (state == "present" and MapRules.SOLID_KINDS.has(str(m.get("kind", ""))))
+```
+
+### `static tile_safe(t: Dictionary, p: Vector2i) -> bool`
+```logic
+return t.is_empty() or MapRules.zone_kind(t, MapRules.zone_at(t, p.x, p.y)) != "danger"
+```
+
+### `static binding_at(loc: Dictionary, t: Dictionary, p: Vector2i) -> Dictionary`
+```logic
+var zone: String = MapRules.zone_at(t, p.x, p.y)
+if zone.is_empty() or MapRules.zone_kind(t, zone) != "danger":
+	return {}
+var bindings: Dictionary = DictUtil.dict_of(loc.get("zone_bindings", {}))
+return MapRules.binding_full(DictUtil.dict_of(bindings[zone])) if bindings.has(zone) else {}
+```
+
+### `static _encounter_qid(gs: GameState, ref: String) -> String`
+```logic
+return str(WorldCatalog.resolve(gs.world_id, "encounters", ref).get("_qid", ""))
+```
+
+### `static _pos_array(p: Vector2i) -> Array`
+```logic
+return [p.x, p.y]
+```
+
+### `static _result(ok: bool, errors: Array[String], events: Array[Dictionary]) -> Dictionary`
+```logic
+return {"ok": ok, "errors": errors, "events": events}
+```
+
+### `static _fail(message: String) -> Dictionary`
+```logic
+var errors: Array[String] = [message]
+var events: Array[Dictionary] = []
+return _result(false, errors, events)
+```
+
+### `static resolve_location(gs: GameState, ref: String) -> Dictionary`
+```logic
+var hit: Dictionary = WorldCatalog.resolve(gs.world_id, "locations", ref)
+if hit.is_empty() and ref.contains(":"):
+	var parts: Array[String] = WorldCatalog.split_qid(ref)
+	if parts.size() == 2 and WorldCatalog.has_world(parts[0]):
+		hit = WorldCatalog.resolve(parts[0], "locations", parts[1])
+return hit
+```
+
+### `static entry_problem(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> String`
+```logic
+var loc: Dictionary = resolve_location(gs, location_ref)
+if loc.is_empty():
+	return "Unknown location '%s'." % location_ref
+var t: Dictionary = template_of(loc)
+if not str(loc.get("map", "")).is_empty() and t.is_empty():
+	return "Location '%s' names an unknown map '%s'." % [str(loc["_qid"]), str(loc.get("map", ""))]
+if not t.is_empty() and MapRules.anchor_pos(t, anchor) == GameState.NO_POSITION:
+	return "Map '%s' has no anchor '%s'." % [str(t["id"]), anchor]
+return ""
+```
+
+### `static enter(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> Dictionary`
+```logic
+var problem: String = entry_problem(gs, location_ref, anchor)
+if not problem.is_empty():
+	return _fail(problem)
+var loc: Dictionary = resolve_location(gs, location_ref)
+var t: Dictionary = template_of(loc)
+var pos: Vector2i = MapRules.anchor_pos(t, anchor) if not t.is_empty() else GameState.NO_POSITION
+var loc_world: String = str(loc["_world"])
+# A `connects` crossing remembers the world left in explore["home_world"]; coming back into that world's lineage
+# restores it (so a child world's overrides survive a trip through a connected world).
+var home: String = str(gs.explore.get(GameState.HOME_WORLD_KEY, ""))
+if not home.is_empty() and WorldCatalog.lineage(home).has(loc_world):
+	gs.world_id = home
+	var _gone: bool = gs.explore.erase(GameState.HOME_WORLD_KEY)
+elif not WorldCatalog.lineage(gs.world_id).has(loc_world):
+	if home.is_empty():
+		gs.explore[GameState.HOME_WORLD_KEY] = gs.world_id
+	gs.world_id = loc_world
+var qid: String = str(loc["_qid"])
+gs.location_id = qid
+gs.position = pos
+gs.explore["loc_steps"] = 0
+var _visited: String = QuestRunner.set_flag(gs, MapRules.visited_flag(qid), true)
+if t.is_empty() or tile_safe(t, MapRules.anchor_pos(t, MapRules.SPAWN)):
+	gs.explore["last_safe"] = qid
+# HEAL1 rule 3.3.1: a rest place (`rest: true`) rests the whole roster for free and becomes explore.last_rest (even
+# with nobody hurt); idempotent, so re-entering is harmless.
+var restored: int = 0
+if DictUtil.to_bool(loc.get("rest", false)):
+	gs.explore["last_rest"] = qid
+	restored = HealRules.rest(gs.party)
+QuestRunner.refresh(gs)
+var advanced: Array[String] = QuestRunner.on_location_reached(gs, qid)
+var errors: Array[String] = []
+var events: Array[Dictionary] = [{"kind": "entered", "location": qid, "advanced": advanced}]
+if restored > 0:
+	events.append({"kind": "rested", "location": qid, "restored": restored})
+events.append({"kind": "autosave"})
+return _result(true, errors, events)
+```
+
+### `static begin(gs: GameState) -> Dictionary`
+```logic
+var start: String = MapRules.start_location(gs.world_id)
+if start.is_empty():
+	return _fail("World '%s' has no start location." % gs.world_id)
+return enter(gs, start)
+```
+
+### `static resume(gs: GameState) -> Dictionary`
+```logic
+var errors: Array[String] = []
+var events: Array[Dictionary] = []
+if gs.location_id.is_empty():
+	return begin(gs)   # a save from before exploration (or a cleared location): start over at the start location
+var loc: Dictionary = location(gs)
+if loc.is_empty():
+	return _fail("Unknown location '%s'." % gs.location_id)
+var t: Dictionary = template_of(loc)
+if t.is_empty():
+	gs.position = GameState.NO_POSITION
+elif not MapRules.is_open(t, gs.position.x, gs.position.y):
+	gs.position = MapRules.anchor_pos(t, MapRules.SPAWN)
+	events.append({"kind": "moved", "from": [], "to": _pos_array(gs.position)})
+return _result(true, errors, events)
+```
+
+### `static take_exit(gs: GameState, to: String, anchor: String = MapRules.SPAWN) -> Dictionary`
+```logic
+var loc: Dictionary = location(gs)
+if not MapRules.exit_targets(loc).has(to) and to != MapRules.WORLD_MAP:
+	return _fail("No exit to '%s' here." % to)
+if to == MapRules.WORLD_MAP:
+	var errors: Array[String] = []
+	var events: Array[Dictionary] = [{"kind": "exit", "to": MapRules.WORLD_MAP}]
+	return _result(true, errors, events)
+return enter(gs, to, anchor)
+```
+
+### `static wake(gs: GameState, at: String = "") -> Dictionary`
+```logic
+var target_ref: String = at if not at.is_empty() else gs.location_id
+var loc: Dictionary = resolve_location(gs, target_ref)
+var t: Dictionary = template_of(loc)
+var checkpoint: String = ""
+if not loc.is_empty() and (t.is_empty() or tile_safe(t, MapRules.anchor_pos(t, MapRules.SPAWN))):
+	checkpoint = str(loc["_qid"])
+else:
+	checkpoint = str(gs.explore.get("last_safe", ""))
+# The target is checked before anything is settled: a refused wake keeps the HP and the supplies.
+var defeat: Dictionary = HealRules.defeat_plan(gs, checkpoint)
+var to: String = str(defeat["to"])
+if to.is_empty():
+	to = MapRules.start_location(gs.world_id)
+	if to.is_empty():
+		return _fail("World '%s' has no start location." % gs.world_id)
+var problem: String = entry_problem(gs, to)
+if not problem.is_empty():
+	return _fail(problem)
+HealRules.settle_defeat(gs, defeat)
+var woke: Dictionary = enter(gs, to)
+if DictUtil.to_bool(woke.get("ok", false)):
+	var events: Array[Dictionary] = []
+	for e: Variant in DictUtil.array_of(woke.get("events", [])):
+		events.append(DictUtil.dict_of(e))
+	events.append({"kind": "defeat", "mode": str(defeat["mode"]), "spent": DictUtil.to_int(defeat["spent"]), "location": gs.location_id})
+	woke["events"] = events
+return woke
+```
+
+### `static step(gs: GameState, dir: Vector2i) -> Dictionary`
+```logic
+if not DIRS.has(dir):
+	return _fail("A step is one tile up, down, left or right.")
+var loc: Dictionary = location(gs)
+var t: Dictionary = template_of(loc)
+if t.is_empty():
+	return _fail("This location has no map to walk.")
+var errors: Array[String] = []
+var events: Array[Dictionary] = []
+var loc_qid: String = str(loc["_qid"])
+var markers: Array[Dictionary] = markers_of(loc)
+var loc_steps: int = DictUtil.to_int(gs.explore.get("loc_steps", 0))
+var from: Vector2i = gs.position
+var target: Vector2i = from + dir
+# 1. blocked / locked: nothing else changes
+if not MapRules.is_open(t, target.x, target.y):
+	events.append({"kind": "blocked", "at": _pos_array(target)})
+	return _result(true, errors, events)
+for m: Dictionary in markers:
+	var state: String = presence(gs, loc_qid, m)
+	if _solid(state, m) and marker_pos(t, m, loc_steps) == target:
+		if state == "locked":
+			events.append({"kind": "locked", "marker": str(m["id"]), "text": str(m.get("locked_text", ""))})
+		else:
+			events.append({"kind": "blocked", "at": _pos_array(target), "marker": str(m["id"])})
+		return _result(true, errors, events)
+# A world_map exit hands over to the world map (TRAV1) without moving; only its sets_flags apply (TRAV1-L commit 3).
+for m: Dictionary in markers:
+	if str(m["kind"]) == "exit" and str(m.get("to", "")) == MapRules.WORLD_MAP and presence(gs, loc_qid, m) == "present" and marker_pos(t, m, loc_steps) == target:
+		var wm_keys: Array[String] = _apply_sets(gs, m)
+		if not wm_keys.is_empty():
+			events.append({"kind": "flags_set", "marker": str(m["id"]), "flags": wm_keys})
+		events.append({"kind": "exit", "to": MapRules.WORLD_MAP, "marker": str(m["id"])})
+		return _result(true, errors, events)
+# An exit on the tile whose target can't be entered refuses the step before anything changes (dry run on a copy).
+for m: Dictionary in markers:
+	if str(m["kind"]) == "exit" and presence(gs, loc_qid, m) == "present" and marker_pos(t, m, loc_steps) == target:
+		var probe: Dictionary = enter(GameState.from_dict(gs.to_dict()), str(m.get("to", "")), str(m.get("to_anchor", MapRules.SPAWN)))
+		if not DictUtil.to_bool(probe["ok"]):
+			errors.assign(DictUtil.array_of(probe["errors"]))
+			return _result(false, errors, events)
+# 2. move; points and exits on the tile
+gs.position = target
+events.append({"kind": "moved", "from": _pos_array(from), "to": _pos_array(target)})
+for m: Dictionary in markers:
+	if marker_pos(t, m, loc_steps) != target or presence(gs, loc_qid, m) != "present":
+		continue
+	match str(m["kind"]):
+		"point":
+			var keys: Array[String] = _apply_sets(gs, m)
+			if not keys.is_empty():
+				events.append({"kind": "flags_set", "marker": str(m["id"]), "flags": keys})
+		"exit":
+			var exit_keys: Array[String] = _apply_sets(gs, m)
+			if not exit_keys.is_empty():
+				events.append({"kind": "flags_set", "marker": str(m["id"]), "flags": exit_keys})
+			var to: String = str(m.get("to", ""))
+			var left: Dictionary = enter(gs, to, str(m.get("to_anchor", MapRules.SPAWN)))
+			if not DictUtil.to_bool(left["ok"]):
+				errors.assign(DictUtil.array_of(left["errors"]))
+				return _result(false, errors, events)
+			events.append({"kind": "exit", "to": to, "marker": str(m["id"]), "events": left["events"]})
+			return _result(true, errors, events)
+# 3. counters
+loc_steps += 1
+gs.explore["loc_steps"] = loc_steps
+var binding: Dictionary = binding_at(loc, t, target)
+if not binding.is_empty():
+	gs.explore["steps"] = DictUtil.to_int(gs.explore.get("steps", 0)) + 1
+# 4. roamers take their position for the new loc_steps (marker_pos below); 5. triggers, first match only
+var fight: Dictionary = _trigger(gs, loc, t, markers, target, loc_steps, binding)
+if not fight.is_empty():
+	fight["from"] = _pos_array(from)
+	fight["location"] = loc_qid
+	events.append(fight)
+# 6. interaction hints
+for m: Dictionary in markers:
+	if not ["npc", "chest", "lore"].has(str(m["kind"])) or presence(gs, loc_qid, m) != "present":
+		continue
+	var at: Vector2i = marker_pos(t, m, loc_steps)
+	for d: Vector2i in DIRS:
+		if target + d == at:
+			events.append({"kind": "interact_hint", "marker": str(m["id"]), "marker_kind": str(m["kind"]), "dir": _pos_array(d)})
+return _result(true, errors, events)
+```
+
+### `static _manhattan(a: Vector2i, b: Vector2i) -> int`
+```logic
+return absi(a.x - b.x) + absi(a.y - b.y)
+```
+
+### `static _fight(gs: GameState, source: String, ref: String, marker: String, elite: bool) -> Dictionary`
+```logic
+return {"kind": "fight", "source": source, "encounter": _encounter_qid(gs, ref), "marker": marker, "elite": elite}
+```
+
+### `static _trigger(gs: GameState, loc: Dictionary, t: Dictionary, markers: Array[Dictionary], at: Vector2i, loc_steps: int, binding: Dictionary) -> Dictionary`
+```logic
+var loc_qid: String = str(loc["_qid"])
+for m: Dictionary in markers:
+	if str(m["kind"]) == "encounter" and str(m.get("trigger", "")) == "touch" and presence(gs, loc_qid, m) == "present" and marker_pos(t, m, loc_steps) == at:
+		return _fight(gs, "marker", str(m["encounter"]), str(m["id"]), false)
+for m: Dictionary in markers:
+	if str(m["kind"]) == "roamer" and presence(gs, loc_qid, m) == "present":
+		var rp: Vector2i = marker_pos(t, m, loc_steps)
+		if rp != GameState.NO_POSITION and _manhattan(rp, at) <= DictUtil.to_int(m.get("radius", 0)):
+			return _fight(gs, "roamer", str(m["encounter"]), str(m["id"]), false)
+for m: Dictionary in markers:
+	if str(m["kind"]) == "encounter" and str(m.get("trigger", "")) == "proximity" and presence(gs, loc_qid, m) == "present":
+		if _manhattan(marker_pos(t, m, loc_steps), at) <= DictUtil.to_int(m.get("radius", 1)):
+			return _fight(gs, "marker", str(m["encounter"]), str(m["id"]), false)
+if binding.is_empty() or DictUtil.to_int(gs.explore.get("steps", 0)) < DictUtil.to_int(gs.explore.get("next_at", 1)):
+	return {}
+return _counter_pick(gs, binding)
+```
+
+### `static _counter_pick(gs: GameState, binding: Dictionary) -> Dictionary`
+```logic
+var normal: Array = DictUtil.array_of(binding.get("encounters", []))
+var elites: Array = DictUtil.array_of(binding.get("elites", []))
+var elite: bool = false
+if not elites.is_empty() and not normal.is_empty():
+	elite = GameRolls.chance(gs, GameRolls.EXPLORE, DictUtil.to_int(binding.get("elite_pct", MapRules.DEFAULT_ELITE_PCT)))
+elif not elites.is_empty():
+	elite = true
+var ref: String = GameRolls.pick(gs, GameRolls.EXPLORE, elites if elite else normal)
+if ref.is_empty():
+	return {}
+return _fight(gs, "counter", ref, "", elite)
+```
+
+### `static reset_counter(gs: GameState) -> void`
+```logic
+var loc: Dictionary = location(gs)
+var t: Dictionary = template_of(loc)
+var binding: Dictionary = binding_at(loc, t, gs.position) if not t.is_empty() else {}
+var lo: int = DictUtil.to_int(binding.get("steps_min", MapRules.DEFAULT_STEPS_MIN))
+var hi: int = DictUtil.to_int(binding.get("steps_max", MapRules.DEFAULT_STEPS_MAX))
+gs.explore["steps"] = 0
+gs.explore["next_at"] = GameRolls.range_i(gs, GameRolls.EXPLORE, lo, hi)
+```
+
+### `static after_fight(gs: GameState, fight: Dictionary, result: String) -> Dictionary`
+```logic
+var applied: Dictionary = BattleBridge.apply(gs, str(fight.get("encounter", "")), result)
+var errors: Array[String] = []
+var events: Array[Dictionary] = []
+if not DictUtil.to_bool(applied["ok"]):
+	errors.assign(DictUtil.array_of(applied["errors"]))
+	return {"ok": false, "errors": errors, "events": events, "xp": {}, "advanced": [] as Array[String]}
+var marker_id: String = str(fight.get("marker", ""))
+match result:
+	"won":
+		if not marker_id.is_empty():
+			var loc: Dictionary = location(gs)
+			for m: Dictionary in markers_of(loc):
+				if str(m["id"]) != marker_id:
+					continue
+				if DictUtil.to_bool(m.get("once", true)):
+					var _done: String = QuestRunner.set_flag(gs, MapRules.done_flag(str(loc["_qid"]), marker_id), true)
+				var keys: Array[String] = _apply_sets(gs, m)
+				if not keys.is_empty():
+					events.append({"kind": "flags_set", "marker": marker_id, "flags": keys})
+	"fled":
+		var from: Array = DictUtil.array_of(fight.get("from", []))
+		if from.size() == 2:
+			gs.position = Vector2i(DictUtil.to_int(from[0]), DictUtil.to_int(from[1]))
+	"lost":
+		var woke: Dictionary = wake(gs)
+		events.append_array(DictUtil.array_of(woke.get("events", [])))
+reset_counter(gs)
+return {"ok": true, "errors": errors, "events": events, "xp": applied["xp"], "advanced": applied["advanced"]}
+```
+
+### `static interact(gs: GameState, dir: Vector2i) -> Dictionary`
+```logic
+var errors: Array[String] = []
+if not DIRS.has(dir):
+	errors.append("Interact faces up, down, left or right.")
+	return {"ok": false, "errors": errors, "kind": ""}
+var loc: Dictionary = location(gs)
+var t: Dictionary = template_of(loc)
+if t.is_empty():
+	errors.append("This location has no map.")
+	return {"ok": false, "errors": errors, "kind": ""}
+var loc_qid: String = str(loc["_qid"])
+var at: Vector2i = gs.position + dir
+var loc_steps: int = DictUtil.to_int(gs.explore.get("loc_steps", 0))
+for m: Dictionary in markers_of(loc):
+	var kind: String = str(m["kind"])
+	if not ["npc", "chest", "lore"].has(kind) or presence(gs, loc_qid, m) != "present" or marker_pos(t, m, loc_steps) != at:
+		continue
+	var out: Dictionary = {"ok": true, "errors": errors, "kind": kind, "marker": str(m["id"])}
+	match kind:
+		"npc":
+			out["character"] = str(WorldCatalog.resolve(gs.world_id, "characters", str(m["character"])).get("_qid", ""))
+		"lore":
+			var lore: Dictionary = WorldCatalog.resolve(gs.world_id, "lore", str(m["lore"]))
+			out["lore"] = str(lore.get("_qid", ""))
+			out["name"] = str(lore.get("name", ""))
+			out["text"] = str(lore.get("text", ""))
+		"chest":
+			if _is_done(gs, loc_qid, m):
+				out["empty"] = true
+				return out
+			var opened: Dictionary = _open_chest(gs, loc_qid, m)
+			if not DictUtil.to_bool(opened["ok"]):
+				return opened
+			out.merge(opened, true)
+	out["flags"] = _apply_sets(gs, m)
+	return out
+return {"ok": true, "errors": errors, "kind": ""}
+```
+
+### `static _open_chest(gs: GameState, loc_qid: String, m: Dictionary) -> Dictionary`
+```logic
+var items: Dictionary = JsonUtil.ints(m.get("items", {}))
+var loot_qid: String = ""
+var loot_ref: String = str(m.get("loot", ""))
+if not loot_ref.is_empty():
+	var loot: Dictionary = WorldCatalog.resolve(gs.world_id, "loot", loot_ref)
+	var lqid: String = str(loot.get("_qid", ""))
+	if not lqid.is_empty() and not gs.loot_claimed.has(lqid) and _conditions_hold(gs, loot.get("requires_flags", [])):
+		var ref: String = str(loot.get("ref", ""))
+		items[ref] = DictUtil.to_int(items.get(ref, 0)) + DictUtil.to_int(loot.get("count", 1), 1)
+		loot_qid = lqid
+var gold: int = maxi(DictUtil.to_int(m.get("gold", 0)), 0)
+var granted: Dictionary = RewardGrant.apply(gs, {"items": items, "gold": gold}, "")
+if not DictUtil.to_bool(granted["ok"]):
+	return {"ok": false, "errors": granted["errors"], "kind": "chest"}
+if not loot_qid.is_empty():
+	var _claim: String = RewardGrant.claim_loot(gs, loot_qid)
+# TRAV2-L 2.4: supplies after the grant (not a reward key); above the cap they are lost with a note.
+var want: int = maxi(DictUtil.to_int(m.get("supplies", 0)), 0)
+var added: int = gs.party.add_supplies(want)
+var _done: String = QuestRunner.set_flag(gs, MapRules.done_flag(loc_qid, str(m["id"])), true)
+var out: Dictionary = {"ok": true, "empty": false, "items": items, "loot": loot_qid, "gold": DictUtil.to_int(DictUtil.dict_of(granted["granted"]).get("gold", 0)), "supplies": added}
+if added < want:
+	out["notes"] = ["Supplies are capped at %d (%d left behind)." % [PartyState.SUPPLIES_MAX, want - added]] as Array[String]
+return out
+```
+

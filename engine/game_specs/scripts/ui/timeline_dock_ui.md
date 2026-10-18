@@ -1,0 +1,682 @@
+---
+class: TimelineDockUI
+extends: Control
+description: "Tactical RPG - Timeline Dock UI Top timeline row (COMBAT-UI2-L3): round arrows, the block ruler, the focused unit's action track and the control row: plan info / autoplay banner, party and hero Tactic dropdowns (AUTO1; the old Draft menu is gone), the Autoplay toggle, Clear and Confirm. All text follows UiTheme.text_scale() (14 px floor at Normal); the row keeps its fixed height (CombatHudMetrics.TOP_H) at every text size by dropping the clip subtitle and abbreviating labels, never by clipping."
+---
+
+# Properties
+* `BLOCK_GAP`: int = 4 (const)
+* `BANNER_TEXT`: String = "🔒 Hostiles plan in secret; see Threat Intel on their card." (const)
+* `TRACK_WIDTH`: int = 830   # block widths scale so a round always fills this width (const)
+* `btn_prev_round`: Button
+* `btn_next_round_arrow`: Button
+* `tracks_container`: VBoxContainer
+* `tracks_ruler_row`: HBoxContainer
+* `total_blocks`: int = 10
+* `block_w`: int = 80
+* `ruler_tick_nodes`: Array[PanelContainer] = []
+* `ruler_tick_labels`: Array[Label] = []
+* `single_track_row`: HBoxContainer
+* `plan_row`: HBoxContainer
+* `plan_info_lbl`: Label
+* `party_option`: OptionButton
+* `hero_option`: OptionButton
+* `party_caption`: Label
+* `hero_caption`: Label
+* `autoplay_btn`: Button
+* `confirm_row`: HBoxContainer
+* `confirm_lbl`: Label
+* `confirm_yes_btn`: Button
+* `confirm_no_btn`: Button
+* `autoplay_state`: Dictionary = {}
+* `autoplay_enabled`: bool = true   # false in replay / playback arenas: no tactic dropdowns, no Autoplay toggle
+* `_m`: Dictionary = {}              # row_metrics() of the current rebuild (computed once per rebuild)
+* `_pending`: Dictionary = {}       # a tactic pick waiting for the discard confirmation: {party: bool, id: String}
+* `clear_btn`: Button
+* `confirm_btn`: Button
+* `planning`: bool = false
+* `plan_step_fn`: Callable
+* `track_clips_hbox`: HBoxContainer
+* `enemy_classified_banner`: PanelContainer
+* `banner_lbl`: Label
+* `action_lookup_fn`: Callable
+* `read_only`: bool = false   # INTENT1-U: the shown track is a read enemy plan: no drag, no remove
+* `panel`: PanelContainer = ruler_tick_nodes[i]
+* `lbl`: Label = ruler_tick_labels[i]
+* `b_num`: int = i + 1
+* `style`: Variant
+* `b`: int = 1
+* `act`: CombatResolver.ScheduledAction = null
+* `lookup`: Callable = track_lookup if track_lookup.is_valid() else action_lookup_fn
+* `found`: Variant = lookup.call(target_unit, b)
+* `cost`: int = act.end_block - act.start_block + 1
+* `clip_w`: int = cost * block_w + (cost - 1) * BLOCK_GAP
+* `clip`: Variant
+* `idle_slot`: Variant
+
+# Signals
+* `round_nav_requested(delta: int)`
+* `block_selected(block: int)`
+* `combatant_selected(c: Combatant)`
+* `hero_view_requested()`
+* `party_tactic_requested(tactic_id: String)`
+* `hero_tactic_requested(tactic_id: String)`
+* `autoplay_toggled(on: bool)`
+* `clear_requested()`
+* `confirm_requested()`
+* `step_remove_requested(step_index: int)`
+* `step_reorder_requested(from_step: int, to_step: int)`
+* `fit_changed()`
+
+# Methods
+
+### `_init() -> void`
+```logic
+name = "TimelineDockUI"
+resized.connect(func() -> void:
+	if _fit_blocks():
+		fit_changed.emit()
+)
+size_flags_horizontal = Control.SIZE_EXPAND_FILL
+size_flags_vertical = Control.SIZE_EXPAND_FILL
+_build_ui()
+```
+
+### `row_metrics() -> Dictionary`
+```logic
+var fs: int = UiTheme.hud_font()
+var lh: int = CombatHudMetrics.line_height(fs)
+var tick_h: int = lh + 2
+var btn_h: int = lh + 4
+var two_line: bool = tick_h + 2 + (2 * lh + 4) + 2 + btn_h <= CombatHudMetrics.TOP_H - 4   # the clip subtitle drops first
+return {"fs": fs, "lh": lh, "tick_h": tick_h, "btn_h": btn_h, "two_line": two_line, "clip_h": (2 if two_line else 1) * lh + 4,
+	"short": UiTheme.text_scale() > 1.1}
+```
+
+### `static _btn_style(bg: Color, border: Color) -> StyleBoxFlat`
+```logic
+return UiTheme.box(bg, border, 4, 6, 2)
+```
+
+### `_style_button(btn: Button, fs: int, accent: Color = Color(0.38, 0.5, 0.68, 0.9)) -> void`
+```logic
+btn.focus_mode = Control.FOCUS_NONE
+btn.add_theme_font_size_override("font_size", fs)
+btn.add_theme_stylebox_override("normal", _btn_style(Color(0.10, 0.14, 0.20, 0.95), accent))
+btn.add_theme_stylebox_override("hover", _btn_style(Color(0.16, 0.22, 0.32, 0.95), Color(0.55, 0.75, 1.0)))
+btn.add_theme_stylebox_override("pressed", _btn_style(Color(0.12, 0.30, 0.20, 0.95), UiTheme.COL_GOOD))
+btn.add_theme_stylebox_override("disabled", _btn_style(Color(0.08, 0.10, 0.14, 0.7), Color(0.2, 0.26, 0.34, 0.6)))
+btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+```
+
+### `_make_option(tip: String, with_custom: bool, fs: int) -> OptionButton`
+```logic
+var opt := OptionButton.new()
+opt.tooltip_text = tip
+opt.clip_text = true
+opt.fit_to_longest_item = false
+opt.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+opt.custom_minimum_size = Vector2(fs * 11, 0)
+_style_button(opt, fs)
+opt.get_popup().add_theme_font_size_override("font_size", fs)
+for entry: Dictionary in CombatAutoplay.tactic_entries(with_custom):
+	opt.add_item(str(entry["label"]))
+	var idx: int = opt.item_count - 1
+	opt.set_item_metadata(idx, str(entry["id"]))
+	opt.set_item_tooltip(idx, str(entry["description"]))
+return opt
+```
+
+### `_build_ui() -> void`
+```logic
+_m = row_metrics()
+var m: Dictionary = _m
+var fs: int = int(m["fs"])
+var timeline_flank_hbox := HBoxContainer.new()
+timeline_flank_hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+timeline_flank_hbox.add_theme_constant_override("separation", 4)
+add_child(timeline_flank_hbox)
+
+# 1. Left Round Traversal Arrow [ ◀ ] (Spans vertical height of ruler + action track)
+btn_prev_round = Button.new()
+btn_prev_round.text = "◀"
+btn_prev_round.tooltip_text = "Previous Round Timeline"
+btn_prev_round.custom_minimum_size = Vector2(22, 54)
+btn_prev_round.size_flags_vertical = Control.SIZE_EXPAND_FILL
+_style_button(btn_prev_round, fs)
+btn_prev_round.pressed.connect(func() -> void: round_nav_requested.emit(-1))
+timeline_flank_hbox.add_child(btn_prev_round)
+
+# 2. Center Timeline Container: BLK Button tray on top, Action Timeline on bottom
+tracks_container = VBoxContainer.new()
+tracks_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+tracks_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+tracks_container.add_theme_constant_override("separation", 2)
+timeline_flank_hbox.add_child(tracks_container)
+
+# Row 1: BLK Button Tray (Time Ruler Ticks BLK 01 .. BLK 10)
+tracks_ruler_row = HBoxContainer.new()
+tracks_ruler_row.add_theme_constant_override("separation", BLOCK_GAP)
+tracks_container.add_child(tracks_ruler_row)
+
+_build_ruler()
+
+# Row 2: Action Timeline (Selected Unit's Continuous Action Track Row)
+single_track_row = HBoxContainer.new()
+single_track_row.add_theme_constant_override("separation", BLOCK_GAP)
+tracks_container.add_child(single_track_row)
+
+track_clips_hbox = HBoxContainer.new()
+track_clips_hbox.name = "ClipsHBox"
+track_clips_hbox.add_theme_constant_override("separation", BLOCK_GAP)
+single_track_row.add_child(track_clips_hbox)
+
+# Control row: info / autoplay banner, tactic dropdowns, Autoplay, Clear, Confirm
+plan_row = HBoxContainer.new()
+plan_row.name = "ControlRow"
+plan_row.add_theme_constant_override("separation", 6)
+tracks_container.add_child(plan_row)
+plan_info_lbl = Label.new()
+plan_info_lbl.add_theme_font_size_override("font_size", fs)
+plan_info_lbl.add_theme_color_override("font_color", Color(0.98, 0.78, 0.3))
+plan_info_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+plan_info_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+plan_info_lbl.clip_text = true
+plan_row.add_child(plan_info_lbl)
+
+confirm_row = HBoxContainer.new()
+confirm_row.name = "RedraftConfirm"
+confirm_row.visible = false
+confirm_row.add_theme_constant_override("separation", 6)
+confirm_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+confirm_lbl = UiTheme.label("Redrafting throws away your edits.", fs, UiTheme.COL_WARN)
+confirm_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+confirm_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+confirm_lbl.clip_text = true
+confirm_row.add_child(confirm_lbl)
+confirm_yes_btn = Button.new()
+confirm_yes_btn.text = "Redraft"
+_style_button(confirm_yes_btn, fs, UiTheme.COL_WARN)
+confirm_yes_btn.pressed.connect(func() -> void: resolve_redraft(true))
+confirm_row.add_child(confirm_yes_btn)
+confirm_no_btn = Button.new()
+confirm_no_btn.text = "Keep"
+_style_button(confirm_no_btn, fs)
+confirm_no_btn.pressed.connect(func() -> void: resolve_redraft(false))
+confirm_row.add_child(confirm_no_btn)
+plan_row.add_child(confirm_row)
+
+party_caption = UiTheme.label("Party", fs, UiTheme.COL_MUTED)
+plan_row.add_child(party_caption)
+party_option = _make_option("Party tactic: every hero drafts with it (clears the hero overrides)", false, fs)
+party_option.item_selected.connect(func(index: int) -> void: _on_option_picked(true, str(party_option.get_item_metadata(index))))
+plan_row.add_child(party_option)
+hero_caption = UiTheme.label("Hero", fs, UiTheme.COL_MUTED)
+plan_row.add_child(hero_caption)
+hero_option = _make_option("This hero's tactic (the hero whose track is shown). Editing the row shows Custom (edited).", true, fs)
+hero_option.item_selected.connect(func(index: int) -> void: _on_option_picked(false, str(hero_option.get_item_metadata(index))))
+plan_row.add_child(hero_option)
+autoplay_btn = Button.new()
+autoplay_btn.toggle_mode = true
+autoplay_btn.tooltip_text = "Autoplay: the party drafts, confirms and plays every round on its own [A]. Space pauses it."
+_style_button(autoplay_btn, fs)
+autoplay_btn.toggled.connect(func(on: bool) -> void:
+	if DictUtil.to_bool(autoplay_state.get("on", false)) != on:
+		autoplay_toggled.emit(on)
+)
+plan_row.add_child(autoplay_btn)
+clear_btn = Button.new()
+clear_btn.tooltip_text = "Remove this hero's whole sequence"
+_style_button(clear_btn, fs)
+clear_btn.pressed.connect(func() -> void: clear_requested.emit())
+plan_row.add_child(clear_btn)
+confirm_btn = Button.new()
+confirm_btn.tooltip_text = "Lock every hero's sequence and start the round [Enter]. Right-click the grid or press Backspace to undo the last step."
+_style_button(confirm_btn, fs, UiTheme.COL_WARN)
+confirm_btn.pressed.connect(func() -> void: confirm_requested.emit())
+plan_row.add_child(confirm_btn)
+_apply_labels()
+
+# 3. Right Round Traversal Arrow [ ▶ ] (Spans vertical height of ruler + action track)
+btn_next_round_arrow = Button.new()
+btn_next_round_arrow.text = "▶"
+btn_next_round_arrow.tooltip_text = "Next Round Timeline"
+btn_next_round_arrow.custom_minimum_size = Vector2(22, 54)
+btn_next_round_arrow.size_flags_vertical = Control.SIZE_EXPAND_FILL
+_style_button(btn_next_round_arrow, fs)
+btn_next_round_arrow.pressed.connect(func() -> void: round_nav_requested.emit(1))
+timeline_flank_hbox.add_child(btn_next_round_arrow)
+
+# Hostile timeline mask: one line in the track row's place.
+enemy_classified_banner = PanelContainer.new()
+enemy_classified_banner.visible = false
+enemy_classified_banner.add_theme_stylebox_override("panel", UiTheme.box(Color(0.12, 0.08, 0.10, 0.95), Color(0.65, 0.25, 0.25, 0.8), 6, 8, 1))
+enemy_classified_banner.custom_minimum_size = Vector2(0, int(m["clip_h"]))
+tracks_container.add_child(enemy_classified_banner)
+tracks_container.move_child(enemy_classified_banner, single_track_row.get_index() + 1)
+
+var banner_hbox := HBoxContainer.new()
+banner_hbox.add_theme_constant_override("separation", 10)
+enemy_classified_banner.add_child(banner_hbox)
+
+banner_lbl = UiTheme.label(BANNER_TEXT, fs, Color(1.0, 0.45, 0.45))
+banner_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+banner_lbl.clip_text = true
+banner_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+banner_hbox.add_child(banner_lbl)
+
+var btn_view_party := Button.new()
+btn_view_party.text = "View Hero Track"
+_style_button(btn_view_party, fs)
+btn_view_party.pressed.connect(func() -> void: hero_view_requested.emit())
+banner_hbox.add_child(btn_view_party)
+_apply_heights()
+```
+
+### `_apply_labels() -> void`
+```logic
+var short: bool = DictUtil.to_bool(_m["short"])
+clear_btn.text = "Clear" if short else "🗑 Clear"
+confirm_btn.text = "✔ Confirm" if short else "✔ CONFIRM ROUND"
+party_caption.visible = not short
+hero_caption.visible = not short
+var on: bool = DictUtil.to_bool(autoplay_state.get("on", false))
+autoplay_btn.text = ("⏸ Auto" if on else "▶ Auto") if short else ("⏸ Autoplay" if on else "▶ Autoplay")
+```
+
+### `_apply_heights() -> void`
+```logic
+_m = row_metrics()
+var m: Dictionary = _m
+enemy_classified_banner.custom_minimum_size = Vector2(0, int(m["clip_h"]))
+for tick: PanelContainer in ruler_tick_nodes:
+	tick.custom_minimum_size.y = int(m["tick_h"])
+```
+
+### `_build_ruler() -> void`
+```logic
+_m = row_metrics()
+for child: Node in tracks_ruler_row.get_children():
+	tracks_ruler_row.remove_child(child)
+	child.queue_free()
+ruler_tick_nodes.clear()
+ruler_tick_labels.clear()
+for b: int in range(1, total_blocks + 1):
+	var tick_panel := PanelContainer.new()
+	tick_panel.custom_minimum_size = Vector2(block_w, int(_m["tick_h"]))
+	tick_panel.clip_contents = true
+	var tick_style := StyleBoxFlat.new()
+	tick_style.bg_color = Color(0.10, 0.13, 0.18, 0.8)
+	tick_style.border_color = Color(0.2, 0.28, 0.38, 0.8)
+	tick_style.set_border_width_all(1)
+	tick_style.set_corner_radius_all(3)
+	tick_style.content_margin_left = 2
+	tick_style.content_margin_right = 2
+	tick_style.content_margin_top = 1
+	tick_style.content_margin_bottom = 1
+	tick_panel.add_theme_stylebox_override("panel", tick_style)
+
+	var tick_lbl := Label.new()
+	tick_lbl.text = "BLK %02d" % b
+	tick_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tick_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
+	tick_lbl.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+	tick_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	tick_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tick_panel.add_child(tick_lbl)
+
+	var cur_b: int = b
+	tick_panel.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event != null and mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			block_selected.emit(cur_b)
+	)
+
+	tracks_ruler_row.add_child(tick_panel)
+	ruler_tick_nodes.append(tick_panel)
+	ruler_tick_labels.append(tick_lbl)
+```
+
+### `set_total_blocks(n: int) -> void`
+```logic
+if n == total_blocks:
+	return
+total_blocks = n
+if not _fit_blocks():
+	block_w = int(float(TRACK_WIDTH - (n - 1) * BLOCK_GAP) / float(n))
+	_build_ruler()
+```
+
+### `_fit_blocks() -> bool`
+```logic
+var avail: float = size.x - 60.0   # round arrows + spacing
+if avail <= 0.0:
+	return false
+var w: int = clampi(int((avail - float((total_blocks - 1) * BLOCK_GAP)) / float(total_blocks)), 36, 140)
+if w == block_w:
+	return false
+block_w = w
+_build_ruler()
+return true
+```
+
+### `set_planning(info: Dictionary, step_fn: Callable) -> void`
+```logic
+_m = row_metrics()
+planning = DictUtil.to_bool(info.get("planning", false))
+plan_step_fn = step_fn
+for node: Control in [party_caption, party_option, hero_caption, hero_option, clear_btn, confirm_btn]:
+	var tactic_control: bool = node == party_caption or node == party_option or node == hero_caption or node == hero_option
+	node.visible = planning and not (node is Label and DictUtil.to_bool(_m["short"])) and (autoplay_enabled or not tactic_control)
+autoplay_btn.visible = autoplay_enabled
+if not planning:
+	_cancel_redraft()
+var warn: bool = DictUtil.to_bool(info.get("warn", false))
+plan_info_lbl.text = str(info.get("text", "")) if planning else ""
+plan_info_lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.4) if warn else Color(0.98, 0.78, 0.3))
+if planning:
+	confirm_btn.disabled = not DictUtil.to_bool(info.get("can_confirm", false))
+_show_note()
+```
+
+### `set_autoplay_state(state: Dictionary) -> void`
+```logic
+autoplay_state = state
+var on: bool = DictUtil.to_bool(state.get("on", false))
+autoplay_btn.set_pressed_no_signal(on)
+_apply_labels()
+_select_id(party_option, str(state.get("party", PlanPresets.DEFAULT_TACTIC)))
+var edited: bool = DictUtil.to_bool(state.get("edited", false))
+var custom_idx: int = _index_of(hero_option, PlanPresets.CUSTOM)
+if custom_idx >= 0:
+	hero_option.set_item_text(custom_idx, PlanPresets.label(PlanPresets.CUSTOM) + (" (edited)" if edited else ""))
+_select_id(hero_option, str(state.get("row", PlanPresets.DEFAULT_TACTIC)))
+var guest: bool = DictUtil.to_bool(state.get("guest", false))
+var has_hero: bool = DictUtil.to_bool(state.get("has_hero", false))
+hero_option.disabled = guest or not has_hero
+hero_option.tooltip_text = "Guests always play Balanced." if guest else "This hero's tactic (the hero whose track is shown). Editing the row shows Custom (edited)."
+_show_note()
+```
+
+### `set_autoplay_enabled(enabled: bool) -> void`
+```logic
+autoplay_enabled = enabled
+autoplay_btn.visible = enabled
+if not enabled:
+	autoplay_state = {}
+	_cancel_redraft()
+```
+
+### `_show_note() -> void`
+```logic
+var note: String = str(autoplay_state.get("note", ""))
+if note.is_empty():
+	plan_info_lbl.tooltip_text = plan_info_lbl.text
+	return
+plan_info_lbl.text = note
+plan_info_lbl.tooltip_text = note
+plan_info_lbl.add_theme_color_override("font_color", UiTheme.COL_WARN if DictUtil.to_bool(autoplay_state.get("note_warn", true)) else UiTheme.COL_INFO)
+```
+
+### `_index_of(opt: OptionButton, id: String) -> int`
+```logic
+for i: int in range(opt.item_count):
+	if str(opt.get_item_metadata(i)) == id:
+		return i
+return -1
+```
+
+### `_select_id(opt: OptionButton, id: String) -> void`
+```logic
+var idx: int = _index_of(opt, id)
+if idx >= 0:
+	opt.select(idx)
+```
+
+### `_on_option_picked(whole_party: bool, id: String) -> void`
+```logic
+var discards: bool = DictUtil.to_bool(autoplay_state.get("any_edited" if whole_party else "edited", false))
+if discards:
+	_pending = {"party": whole_party, "id": id}
+	confirm_lbl.text = "Redraft with %s? Your edits are thrown away." % PlanPresets.label(id)
+	confirm_row.visible = true
+	plan_info_lbl.visible = false
+	set_autoplay_state(autoplay_state)   # the dropdown goes back to what is still in force
+	return
+_apply_pick(whole_party, id)
+```
+
+### `_apply_pick(whole_party: bool, id: String) -> void`
+```logic
+if whole_party:
+	party_tactic_requested.emit(id)
+else:
+	hero_tactic_requested.emit(id)
+```
+
+### `resolve_redraft(accept: bool) -> void`
+```logic
+var pending: Dictionary = _pending
+_cancel_redraft()
+if accept and not pending.is_empty():
+	_apply_pick(DictUtil.to_bool(pending.get("party", false)), str(pending.get("id", "")))
+```
+
+### `_cancel_redraft() -> void`
+```logic
+_pending = {}
+if confirm_row != null:
+	confirm_row.visible = false
+	plan_info_lbl.visible = true
+```
+
+### `redraft_pending() -> bool`
+```logic
+return not _pending.is_empty()
+```
+
+### `update_round_arrows(can_go_prev: bool, can_go_next: bool) -> void`
+```logic
+if btn_prev_round != null:
+	btn_prev_round.disabled = not can_go_prev
+if btn_next_round_arrow != null:
+	btn_next_round_arrow.disabled = not can_go_next
+```
+
+### `_create_action_clip_widget(act: CombatResolver.ScheduledAction, width: int, cost: int) -> PanelContainer`
+```logic
+var clip := PanelContainer.new()
+clip.custom_minimum_size = Vector2(width, int(_m["clip_h"]))
+clip.clip_contents = true
+clip.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+
+var clip_style := StyleBoxFlat.new()
+clip_style.set_corner_radius_all(4)
+clip_style.content_margin_left = 4
+clip_style.content_margin_right = 4
+clip_style.content_margin_top = 1
+clip_style.content_margin_bottom = 1
+clip_style.set_border_width_all(1)
+
+var icon_str: String = "⚔"
+var subtitle: String = ""
+var cmd_display_name: String = act.command.command_name
+
+if act.command is AttackCommand:
+	clip_style.bg_color = Color(0.45, 0.12, 0.14, 0.95)
+	clip_style.border_color = Color(0.9, 0.3, 0.3, 1.0)
+	icon_str = "⚔"
+	var atk: AttackCommand = act.command as AttackCommand
+	subtitle = "🎯 %s" % atk.target.name if atk != null and atk.target != null else "🎯 Strike"
+	if atk != null and act.command.est_damage > 0:
+		subtitle += " ~%d dmg" % act.command.est_damage
+elif act.command is DefendCommand:
+	clip_style.bg_color = Color(0.12, 0.25, 0.48, 0.95)
+	clip_style.border_color = Color(0.3, 0.6, 0.95, 1.0)
+	icon_str = "🛡"
+	subtitle = "Guard -%d%%" % roundi((act.command as DefendCommand).mitigation_ratio * 100.0)
+elif act.command is FocusCommand:
+	clip_style.bg_color = Color(0.32, 0.14, 0.48, 0.95)
+	clip_style.border_color = Color(0.75, 0.4, 0.95, 1.0)
+	icon_str = "✦"
+	subtitle = "x%.2f ATK (%d rds)" % [(act.command as FocusCommand).boost_multiplier, (act.command as FocusCommand).duration_rounds]
+elif act.command is WalkCommand:
+	clip_style.bg_color = Color(0.08, 0.32, 0.44, 0.95)
+	clip_style.border_color = Color(0.2, 0.8, 0.95, 1.0)
+	icon_str = "➜"
+	var walk_cmd: WalkCommand = act.command as WalkCommand
+	var tiles: int = walk_cmd.path.size()
+	if walk_cmd.approach_target != null:
+		subtitle = "→ %s (%d)" % [walk_cmd.approach_target.name, tiles]
+	else:
+		subtitle = "%s %d tile%s" % [PlanEntry.dir_arrow(walk_cmd.direction()), tiles, "" if tiles == 1 else "s"]
+elif act.command is SupportCommand:
+	clip_style.bg_color = Color(0.1, 0.34, 0.2, 0.95)
+	clip_style.border_color = Color(0.35, 0.9, 0.5, 1.0)
+	icon_str = "+"
+	var support_cmd: SupportCommand = act.command as SupportCommand
+	subtitle = "→ %s" % support_cmd.target.name if support_cmd.target != null else "Support"
+	if support_cmd.est_heal > 0:
+		subtitle += " ~+%d HP" % support_cmd.est_heal
+	elif support_cmd.skill != null and not support_cmd.skill.grant_status.is_empty():
+		subtitle += " %s" % StatusEffects.display_name(support_cmd.skill.grant_status)
+elif act.command is StatusBlockCommand:
+	clip_style.bg_color = Color(0.25, 0.08, 0.08, 0.95)
+	clip_style.border_color = Color(0.7, 0.25, 0.25, 1.0)
+	icon_str = "✖"
+	subtitle = "block lost"
+elif act.command is AreaAttackCommand:
+	clip_style.bg_color = Color(0.45, 0.2, 0.08, 0.95)
+	clip_style.border_color = Color(1.0, 0.55, 0.2, 1.0)
+	icon_str = "✸"
+	subtitle = "%d tiles" % (act.command as AreaAttackCommand).cells.size()
+elif act.command is RestCommand:
+	clip_style.bg_color = Color(0.1, 0.3, 0.2, 0.95)
+	clip_style.border_color = Color(0.3, 0.85, 0.5, 1.0)
+	icon_str = "💤"
+	subtitle = "+AP, Tactical"
+elif act.command is TargetCommand:
+	clip_style.bg_color = Color(0.08, 0.38, 0.24, 0.95)
+	clip_style.border_color = Color(0.25, 0.85, 0.5, 1.0)
+	icon_str = "🎯"
+	subtitle = "Focus Lock"
+else:
+	clip_style.bg_color = Color(0.22, 0.26, 0.34, 0.95)
+	clip_style.border_color = Color(0.5, 0.6, 0.7, 1.0)
+	icon_str = "·"
+	subtitle = "Action"
+
+clip.add_theme_stylebox_override("panel", clip_style)
+
+var vbox := VBoxContainer.new()
+vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+vbox.add_theme_constant_override("separation", 0)
+vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+clip.add_child(vbox)
+
+var title_hbox := HBoxContainer.new()
+title_hbox.add_theme_constant_override("separation", 2)
+title_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+vbox.add_child(title_hbox)
+
+var name_lbl := Label.new()
+name_lbl.text = "%s %s" % [icon_str, cmd_display_name]
+name_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
+name_lbl.add_theme_color_override("font_color", Color.WHITE)
+name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+title_hbox.add_child(name_lbl)
+
+var cost_lbl := Label.new()
+cost_lbl.text = "[%db · %dAP]" % [cost, act.command.ap_cost + act.command.stance_switch_cost]
+cost_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
+cost_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5))
+title_hbox.add_child(cost_lbl)
+
+var sub_lbl := Label.new()
+sub_lbl.text = subtitle
+sub_lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
+sub_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.9))
+sub_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+sub_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+sub_lbl.visible = DictUtil.to_bool(_m["two_line"])   # the first line to drop as text grows
+vbox.add_child(sub_lbl)
+
+var cur_c: Combatant = act.combatant
+var start_b: int = act.start_block
+clip.gui_input.connect(func(event: InputEvent) -> void:
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event == null or not mouse_event.pressed:
+		return
+	if planning and not read_only and mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+		var step_idx: int = _step_at(start_b)
+		if step_idx >= 0:
+			step_remove_requested.emit(step_idx)
+	elif mouse_event.button_index == MOUSE_BUTTON_LEFT:
+		combatant_selected.emit(cur_c)
+)
+if planning and not read_only:
+	clip.tooltip_text = "%s%s\nAP %d • drag onto another command to reorder • right-click to remove" % [cmd_display_name, ("\nExpected hit ~%d damage" % act.command.est_damage) if act.command.est_damage > 0 else "", act.command.ap_cost + act.command.stance_switch_cost]
+	clip.set_drag_forwarding(
+		func(_pos: Vector2) -> Variant:
+			var from_step: int = _step_at(start_b)
+			if from_step < 0:
+				return null
+			var preview := Label.new()
+			preview.text = "  ↕ %s" % cmd_display_name
+			clip.set_drag_preview(preview)
+			return {"timeline_step": from_step},
+		func(_pos: Vector2, data: Variant) -> bool:
+			if not (data is Dictionary):
+				return false
+			var d: Dictionary = data
+			return DictUtil.int_of(d, "timeline_step", -1) >= 0 and DictUtil.int_of(d, "timeline_step", -1) != _step_at(start_b),
+		func(_pos: Vector2, data: Variant) -> void:
+			if data is Dictionary:
+				var d: Dictionary = data
+				step_reorder_requested.emit(DictUtil.int_of(d, "timeline_step", -1), _step_at(start_b))
+	)
+
+return clip
+```
+
+### `_create_idle_clip_widget(is_playhead: bool, width: int = -1) -> PanelContainer`
+```logic
+var slot_w: int = width if width > 0 else block_w
+var slot := PanelContainer.new()
+slot.custom_minimum_size = Vector2(slot_w, int(_m["clip_h"]))
+slot.clip_contents = true
+
+var slot_style := StyleBoxFlat.new()
+slot_style.set_corner_radius_all(3)
+if is_playhead:
+	slot_style.bg_color = Color(0.15, 0.22, 0.32, 0.85)
+	slot_style.border_color = Color(0.4, 0.7, 0.95, 0.9)
+	slot_style.set_border_width_all(1)
+else:
+	slot_style.bg_color = Color(0.08, 0.10, 0.14, 0.6)
+	slot_style.border_color = Color(0.18, 0.24, 0.32, 0.5)
+	slot_style.set_border_width_all(1)
+slot.add_theme_stylebox_override("panel", slot_style)
+
+var lbl := Label.new()
+lbl.text = "· Idle"
+lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+lbl.add_theme_font_size_override("font_size", UiTheme.hud_font())
+lbl.add_theme_color_override("font_color", Color(0.4, 0.5, 0.6))
+lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+slot.add_child(lbl)
+
+return slot
+```
+
+### `_step_at(block: int) -> int`
+```logic
+if not plan_step_fn.is_valid():
+	return -1
+var raw: Variant = plan_step_fn.call(block)
+return raw if raw is int else -1
+```
+

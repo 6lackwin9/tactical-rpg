@@ -1,0 +1,430 @@
+---
+class: Bal4CampaignTestSuite
+extends: RefCounted
+description: "Tactical RPG - BAL4-ATTR campaign sim test suite (docs/specs/DESIGN_REVIEW1.md 3.3) tools/sim/sim_world.gd and sim_campaign.gd: the story fight order against the quest data, HP carried between battles, the between-battle heal options and the run stopping at the first loss. BAL5-SIM K1: `world=<id>` (bare enc= ids find that world's encounters) and story characters with extras spawning through WorldFactory (as WorldEncounter does). Fixtures are sandbox units by class / level / tier; expectations derive from the rules and the world data."
+---
+
+# Properties
+* `SimArgs`: Variant = preload("res://tools/sim/sim_args.gd") (const)
+* `SimRunner`: Variant = preload("res://tools/sim/sim_runner.gd") (const)
+* `SimScenarios`: Variant = preload("res://tools/sim/sim_scenarios.gd") (const)
+* `SimWorld`: Variant = preload("res://tools/sim/sim_world.gd") (const)
+* `SimParty`: Variant = preload("res://tools/sim/sim_party.gd") (const)
+* `SimMetrics`: Variant = preload("res://tools/sim/sim_metrics.gd") (const)
+* `SimCampaign`: Variant = preload("res://tools/sim/sim_campaign.gd") (const)
+* `starts`: Array[int] = []
+* `heroes`: Array[Dictionary] = []   # per battle start: hero name -> Vector2i(hp, max_hp) (never cleared)
+* `TAG`: String = "BAL4" (const)
+* `TEST_LEVEL`: int = 5 (const)
+* `out`: Array[Dictionary] = []
+* `ch`: Dictionary = WorldCatalog.resolve(w, "characters", str(ref))
+* `spawned`: Dictionary = {}
+
+# Methods
+
+### `on_start(session: CombatSession) -> void`
+```logic
+	var sum: int = 0
+	var each: Dictionary = {}
+	for c: Combatant in session.allies:
+		sum += c.hp
+		each[c.name] = Vector2i(c.hp, c.max_hp)
+	starts.append(sum)
+	heroes.append(each)
+```
+
+### `static run() -> bool`
+```logic
+print("\n=======================================================")
+print("=== STARTING BAL4 CAMPAIGN SIM TEST (BAL4-ATTR)      ===")
+print("=======================================================")
+ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+var ok: bool = true
+ok = _test_args() and ok
+ok = _test_story_order() and ok
+ok = _test_world_enc() and ok
+ok = _test_world_key() and ok
+ok = _test_world_characters() and ok
+ok = _test_trios() and ok
+ok = _test_heal() and ok
+ok = _test_runs() and ok
+ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
+return ok
+```
+
+### `static _parse(tokens: Array[String]) -> SimArgs`
+```logic
+var a := SimArgs.new()
+a.parse(PackedStringArray(tokens))
+return a
+```
+
+### `static _test_args() -> bool`
+```logic
+var checks: Dictionary = {}
+var d: SimArgs = _parse(["campaign"])
+checks["campaign mode parses, heal none, no comp"] = d.error.is_empty() and d.heal == "none" and not d.comp_set
+checks["heal=full"] = _parse(["campaign", "heal=full"]).heal == "full"
+checks["heal=40%"] = _parse(["campaign", "heal=40%"]).heal == "40"
+checks["heal=rally"] = _parse(["campaign", "heal=rally"]).heal == "rally"
+var ra: SimArgs = _parse(["campaign", "rest=3,5", "extra=4:ash_raiders,4:ash_raiders"])
+checks["rest= and extra= parse"] = ra.error.is_empty() and ra.rest.size() == 2 and ra.rest[0] == 3 and ra.rest[1] == 5 and DictUtil.array_of(ra.extra.get(4, [])).size() == 2
+checks["rest / extra default empty"] = d.rest.is_empty() and d.extra.is_empty()
+checks["rest=0 refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "rest=0"]))
+checks["extra= unknown encounter refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "extra=4:no_such_enc"]))
+checks["heal=150 refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "heal=150"]))
+checks["heal=lots refused"] = not SimArgs.new().parse(PackedStringArray(["campaign", "heal=lots"]))
+var c: SimArgs = _parse(["campaign", "comp=warrior,ranger,priest"])
+checks["comp= picks one party"] = c.comp_set and c.comp.size() == 3
+var w: SimArgs = _parse(["party", "comp=warrior", "enc=world:courtyard_skirmish,world:ashlands/ashmaw_stand"])
+checks["enc=world: parses (default world and world/id), comp of 1"] = w.error.is_empty() and w.encounters.size() == 2 and w.comp.size() == 1
+checks["enc=world:<unknown> refused"] = not SimArgs.new().parse(PackedStringArray(["party", "enc=world:no_such_fight"]))
+checks["parse_ref maps to [world, id]"] = SimArgs.parse_ref("world:x") == (["ashlands", "x"] as Array[String]) and SimArgs.parse_ref("world:w/x") == (["w", "x"] as Array[String]) and SimArgs.parse_ref("x").is_empty()
+return TestHelpers.report(TAG, "campaign arguments: mode, heal, comp, world encounters", checks)
+```
+
+### `static _test_story_order() -> bool`
+```logic
+var checks: Dictionary = {}
+var arms: Array[Dictionary] = SimWorld.story_fights(false)
+var gate: Array[Dictionary] = SimWorld.story_fights(true)
+checks["story has fights"] = arms.size() > 1 and arms.size() == gate.size()
+var story: Array[Dictionary] = SimWorld.story_quests()
+var pos_of: Dictionary = {}   # quest id -> index in the story order
+for i: int in range(story.size()):
+	pos_of[str(story[i]["id"])] = i
+var in_order: bool = true
+var last_pos: int = -1
+var seen_quest_pos: Dictionary = {}
+for f: Dictionary in arms:
+	var qid: String = str(f["quest"])
+	var p: int = DictUtil.to_int(pos_of.get(qid, -1))
+	in_order = in_order and p >= 0 and p >= last_pos
+	last_pos = p
+	seen_quest_pos[qid] = p
+checks["fights follow the quest order"] = in_order
+var requires_ok: bool = true
+for q: Dictionary in story:
+	for r: Variant in DictUtil.array_of(q.get("requires", [])):
+		requires_ok = requires_ok and DictUtil.to_int(pos_of.get(str(r), 99)) < DictUtil.to_int(pos_of[str(q["id"])])
+checks["every quest comes after the quests it requires"] = requires_ok
+var step_encounters: Array[String] = []
+for q: Dictionary in story:
+	for raw: Variant in DictUtil.array_of(q.get("steps", [])):
+		var e: String = str(DictUtil.dict_of(raw).get("encounter", ""))
+		if not e.is_empty():
+			step_encounters.append(e)
+var listed: Array[String] = []
+for f: Dictionary in arms:
+	listed.append(str(f["encounter"]))
+var all_there: bool = true
+for e: String in step_encounters:
+	all_there = all_there and listed.has(e)
+checks["every story step encounter is a fight"] = all_there
+var side: bool = true
+var world_enc: Array[String] = []
+for e: Dictionary in WorldCatalog.own_entries(SimWorld.WORLD, "encounters"):
+	world_enc.append(str(e["id"]))
+for id: String in listed:
+	side = side and world_enc.has(id)
+checks["every fight is an Ashlands world encounter"] = side
+var differ: Array[int] = []
+for i: int in range(arms.size()):
+	if str(arms[i]["encounter"]) != str(gate[i]["encounter"]):
+		differ.append(i)
+checks["the steel choice changes exactly the last fight"] = differ == ([arms.size() - 1] as Array[int])
+checks["barred finale named by the variant"] = str(gate[arms.size() - 1]["encounter"]).ends_with("_barred") or str(gate[arms.size() - 1]["encounter"]) != str(arms[arms.size() - 1]["encounter"])
+var scripted: int = 0
+for f: Dictionary in arms:
+	if DictUtil.to_bool(f["scripted"]):
+		scripted += 1
+checks["the road raid is a scripted fight before the finale"] = scripted >= 1 and not DictUtil.to_bool(arms[arms.size() - 1]["scripted"])
+var forked: bool = TestHelpers.fork(SANDBOX)
+checks["sandbox fork"] = forked
+if forked:
+	var runner := SimRunner.new(_parse(["campaign"]))
+	var mapped: bool = true
+	var any_foes: bool = true
+	for id: String in listed:
+		var enc: Dictionary = SimWorld.encounter(runner, id, TEST_LEVEL, false)
+		var foes: Array = DictUtil.array_of(enc.get("enemies", []))
+		any_foes = any_foes and not foes.is_empty()
+		for u: Variant in foes + DictUtil.array_of(DictUtil.dict_of(enc.get("base", {})).get("wave_units", [])):
+			mapped = mapped and ContentCatalog.has("units", str(u))
+	checks["every foe maps to a catalog unit"] = mapped and any_foes
+TestHelpers.cleanup(SANDBOX)
+return TestHelpers.report(TAG, "Story fight order from the quest data, scripted raid, steel choice", checks)
+```
+
+### `static _test_world_enc() -> bool`
+```logic
+var checks: Dictionary = {}
+var forked: bool = TestHelpers.fork(SANDBOX)
+checks["sandbox fork"] = forked
+if forked:
+	var args: SimArgs = _parse(["party", "comp=warrior"])
+	var runner := SimRunner.new(args)
+	var party := SimParty.new(args, runner, SimMetrics.new())
+	var same: bool = true
+	var objective_ok: bool = true
+	var rounds_ok: bool = true
+	var guests_ok: bool = true
+	var checked: int = 0
+	for e: Dictionary in WorldCatalog.own_entries(SimWorld.WORLD, "encounters"):
+		var id: String = str(e["id"])
+		var via_party: Dictionary = party.world_encounter("world:%s" % id)
+		var via_campaign: Dictionary = SimWorld.encounter(runner, id, TEST_LEVEL, false)
+		same = same and DictUtil.array_of(via_party.get("enemies", [])) == DictUtil.array_of(via_campaign.get("enemies", []))
+		var base: Dictionary = DictUtil.dict_of(via_party.get("base", {}))
+		objective_ok = objective_ok and str(base.get("objective", "")) == str(e.get("objective", ""))
+		rounds_ok = rounds_ok and DictUtil.to_int(via_party.get("max_rounds", -1)) == DictUtil.to_int(e.get("max_rounds", 0))
+		guests_ok = guests_ok and DictUtil.array_of(base.get("guests", [])).size() == DictUtil.array_of(e.get("guests", [])).size()
+		checked += 1
+	checks["world encounters checked"] = checked > 0
+	checks["world encounter foes equal the campaign's"] = same
+	checks["objective copied"] = objective_ok
+	checks["max_rounds is the authored one"] = rounds_ok
+	checks["guests kept"] = guests_ok
+	checks["non-world id is not a world encounter"] = party.world_encounter("mob").is_empty()
+TestHelpers.cleanup(SANDBOX)
+return TestHelpers.report(TAG, "World encounters in party mode resolve like the campaign's", checks)
+```
+
+### `static _test_trios() -> bool`
+```logic
+var checks: Dictionary = {}
+var t: Array = SimCampaign.trios()
+var others: int = SimArgs.CLASSES.size() - 1
+checks["trios = pairs of the other classes (%d)" % (others * (others - 1) / 2)] = t.size() == others * (others - 1) / 2
+var distinct: Dictionary = {}
+var warrior_first: bool = true
+for raw: Variant in t:
+	var trio: Array = DictUtil.array_of(raw)
+	warrior_first = warrior_first and trio.size() == 3 and str(trio[0]) == "warrior" and str(trio[1]) != str(trio[2])
+	distinct[",".join(PackedStringArray(trio))] = true
+checks["every trio is warrior + two different recruits, all distinct"] = warrior_first and distinct.size() == t.size()
+return TestHelpers.report(TAG, "Campaign trios", checks)
+```
+
+### `static _test_heal() -> bool`
+```logic
+var checks: Dictionary = {}
+var base: Dictionary = {"a": {"hp": 10, "max": 100}, "b": {"hp": 0, "max": 80}}
+var none: Dictionary = base.duplicate(true)
+SimCampaign.apply_heal(none, "none")
+checks["none changes nothing"] = none == base
+var full: Dictionary = base.duplicate(true)
+SimCampaign.apply_heal(full, "full")
+checks["full restores everyone, a downed hero too"] = DictUtil.to_int(DictUtil.dict_of(full["a"])["hp"]) == 100 and DictUtil.to_int(DictUtil.dict_of(full["b"])["hp"]) == 80
+var pct: Dictionary = base.duplicate(true)
+SimCampaign.apply_heal(pct, "50")
+checks["50 percent adds half the max HP, capped"] = DictUtil.to_int(DictUtil.dict_of(pct["a"])["hp"]) == 60
+checks["percent heal leaves a downed hero down"] = DictUtil.to_int(DictUtil.dict_of(pct["b"])["hp"]) == 0
+var over: Dictionary = {"a": {"hp": 90, "max": 100}}
+SimCampaign.apply_heal(over, "50")
+checks["percent heal caps at max"] = DictUtil.to_int(DictUtil.dict_of(over["a"])["hp"]) == 100
+var rally: Dictionary = {"a": {"hp": 10, "max": 100}, "b": {"hp": 0, "max": 80}, "c": {"hp": 95, "max": 100}}
+SimCampaign.apply_heal(rally, "rally")
+checks["rally: +RALLY_PCT of max"] = DictUtil.to_int(DictUtil.dict_of(rally["a"])["hp"]) == 10 + ceili(100.0 * HealRules.RALLY_PCT / 100.0)
+checks["rally: a downed hero gets up at the rally"] = DictUtil.to_int(DictUtil.dict_of(rally["b"])["hp"]) == ceili(80.0 * HealRules.RALLY_PCT / 100.0)
+checks["rally caps at max"] = DictUtil.to_int(DictUtil.dict_of(rally["c"])["hp"]) == 100
+checks["party hp percent"] = is_equal_approx(SimCampaign.hp_pct(base), 10.0 / 180.0 * 100.0)
+return TestHelpers.report(TAG, "Between-battle heal: none, full, percent", checks)
+```
+
+### `static _fixture(runner: SimRunner, tag: String, class_id: String, tier: String, level: int, count: int) -> Dictionary`
+```logic
+var ids: Array[String] = []
+for i: int in range(count):
+	var id: String = "bal4_%s_%d" % [tag, i]
+	runner.define(id, class_id, level, tier, false)
+	ids.append(id)
+return {"enemies": ids, "base": {}, "label": tag, "max_rounds": 0}
+```
+
+### `static _test_runs() -> bool`
+```logic
+var checks: Dictionary = {}
+var forked: bool = TestHelpers.fork(SANDBOX)
+checks["sandbox fork"] = forked
+if forked:
+	var comp: Array[String] = ["warrior", "ranger", "priest"]
+	var args: SimArgs = _parse(["campaign", str(TEST_LEVEL), "1", "heal=none"])
+	var runner := SimRunner.new(args)
+	var obs := StartHpObserver.new()
+	runner.observer = obs
+	var camp := SimCampaign.new(args, runner)
+	var ids: Array[String] = SimScenarios.define_party(runner, comp, TEST_LEVEL)
+	var mid: Dictionary = _fixture(runner, "mid", "rogue", "standard", TEST_LEVEL, 3)
+	var weak: Dictionary = _fixture(runner, "weak", "rogue", "minion", 1, 1)
+	var wall: Dictionary = _fixture(runner, "wall", "warrior", "boss", StatRules.MAX_LEVEL, 4)
+	var seed_value: int = args.seeds()[0]
+	# HP carries over: battle 2 starts with the HP battle 1 ended with (heal none).
+	var carry: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
+	var hp_list: Array = DictUtil.array_of(carry["hp"])
+	var carry_second: Dictionary = obs.heroes[obs.heroes.size() - 1] if not obs.heroes.is_empty() else {}
+	checks["carry run fought both battles"] = hp_list.size() == 2 and obs.starts.size() == 2
+	if hp_list.size() == 2 and obs.starts.size() == 2:
+		var max_total: float = float(obs.starts[0])   # battle 1 starts at full HP
+		checks["battle 1 started at full HP"] = max_total > 0.0
+		checks["battle 1 cost some HP (the test is not vacuous)"] = DictUtil.to_float(hp_list[0]) < 100.0
+		checks["battle 2 started with the HP left after battle 1 (HP carries over)"] = absf(float(obs.starts[1]) / max_total * 100.0 - DictUtil.to_float(hp_list[0])) < 0.6
+	# heal=full: the next battle starts at full HP again.
+	obs.starts.clear()
+	args.heal = "full"
+	var healed: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
+	checks["heal=full: ran both battles"] = DictUtil.array_of(healed["hp"]).size() == 2 and obs.starts.size() == 2
+	if obs.starts.size() == 2:
+		checks["heal=full: battle 2 starts at the battle 1 start HP (restored)"] = obs.starts[1] == obs.starts[0]
+	args.heal = "none"
+	# heal=rally: battle 2 starts higher than with heal=none (rally restores some, not all); same seed, same battle 1.
+	obs.starts.clear()
+	args.heal = "rally"
+	var rallied: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
+	checks["heal=rally: ran both battles"] = DictUtil.array_of(rallied["hp"]).size() == 2 and obs.starts.size() == 2
+	if obs.starts.size() == 2 and hp_list.size() == 2:
+		var full_start: int = obs.starts[0]
+		checks["heal=rally: battle 2 starts above the unhealed carry-over (not vacuous)"] = obs.starts[1] > roundi(DictUtil.to_float(hp_list[0]) / 100.0 * float(full_start))
+		# Rule (HealRules.hp_after "won"): each hero starts battle 2 at its carried HP plus rally(max), capped at max
+		# (a downed hero at rally(max)); so it is below full exactly when some hero carried a loss above its rally.
+		var rally_second: Dictionary = obs.heroes[obs.heroes.size() - 1]
+		var per_hero: bool = rally_second.size() > 0
+		var some_short: bool = false
+		for hero_name: Variant in rally_second:
+			var got: Vector2i = rally_second[hero_name]
+			var carried: Vector2i = carry_second.get(hero_name, Vector2i(0, got.y))
+			per_hero = per_hero and got.x == HealRules.hp_after(carried.x, got.y, "won")
+			some_short = some_short or carried.x > 0 and got.y - carried.x > HealRules.rally(got.y)
+		checks["heal=rally: each hero starts battle 2 at carried HP + rally, capped at max (HealRules)"] = per_hero
+		checks["heal=rally: below full whenever a hero carried a loss above its rally (not a full heal)"] = obs.starts[1] < full_start or not some_short
+	# rest=2: battle 2 starts at the battle 1 start HP, like heal=full.
+	obs.starts.clear()
+	args.heal = "none"
+	args.rest = [2] as Array[int]
+	var rested: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
+	checks["rest=2: battle 2 starts at full"] = obs.starts.size() == 2 and obs.starts[1] == obs.starts[0] and DictUtil.array_of(rested["hp"]).size() == 2
+	# extra=2:<fight>: an extra fight before story battle 2 (3 fights played, 2 story battles counted).
+	obs.starts.clear()
+	args.rest = [] as Array[int]
+	var padded: Array = [mid, weak.merged({"extra": true}), weak]
+	var extra_run: Dictionary = camp.run_party(ids, padded, seed_value)
+	checks["extra: three fights played"] = obs.starts.size() == 3
+	checks["extra: only story battles are counted"] = DictUtil.to_int(extra_run["wins"]) == 2 and DictUtil.array_of(extra_run["hp"]).size() == 2
+	obs.starts.clear()
+	var wall_extra: Array = [weak, wall.merged({"extra": true}), weak]
+	var extra_loss: Dictionary = camp.run_party(ids, wall_extra, seed_value)
+	checks["extra: a loss in the extra fight is a fall at the story battle after it"] = DictUtil.to_int(extra_loss["fell_at"]) == 2 and DictUtil.to_int(extra_loss["wins"]) == 1
+	args.heal = "none"
+	# A run stops at the first loss: wall in the middle ends the run, the third fight never starts.
+	obs.starts.clear()
+	var lost: Dictionary = camp.run_party(ids, [weak, wall, weak], seed_value)
+	checks["loss: fell at battle 2"] = DictUtil.to_int(lost["fell_at"]) == 2
+	checks["loss: survived 1 battle"] = DictUtil.to_int(lost["wins"]) == 1
+	checks["loss: no third battle (%d fights)" % obs.starts.size()] = obs.starts.size() == 2 and DictUtil.array_of(lost["hp"]).size() == 2
+	var clean: Dictionary = camp.run_party(ids, [weak, weak], seed_value)
+	checks["no loss: fell_at 0, every battle survived"] = DictUtil.to_int(clean["fell_at"]) == 0 and DictUtil.to_int(clean["wins"]) == 2
+	checks["fight records carry party_hp"] = runner.fights > 0
+TestHelpers.cleanup(SANDBOX)
+return TestHelpers.report(TAG, "Campaign runs: HP carry-over, heal=full, stop at the first loss", checks)
+```
+
+### `static _test_world_key() -> bool`
+```logic
+var checks: Dictionary = {}
+var enc_id: String = ""
+for e: Dictionary in WorldCatalog.own_entries(SimWorld.WORLD, "encounters"):
+	if not ContentCatalog.has("encounters", str(e["id"])) and not SimArgs.GENERATED.has(str(e["id"])):
+		enc_id = str(e["id"])
+		break
+checks["a world encounter id that is not a catalog or generated id exists"] = not enc_id.is_empty()
+if enc_id.is_empty():
+	return TestHelpers.report(TAG, "world= key", checks)
+var want: String = "%s%s/%s" % [SimArgs.REF_PREFIX, SimWorld.WORLD, enc_id]
+var before: SimArgs = _parse(["party", "world=%s" % SimWorld.WORLD, "enc=%s,boss" % enc_id])
+var after: SimArgs = _parse(["party", "enc=%s,boss" % enc_id, "world=%s" % SimWorld.WORLD])
+checks["world= then enc=: %s" % str(before.encounters)] = before.error.is_empty() and before.encounters == ([want, "boss"] as Array[String])
+checks["enc= then world=: same"] = after.error.is_empty() and after.encounters == before.encounters
+checks["without world= a bare world id is refused"] = not SimArgs.new().parse(PackedStringArray(["party", "enc=%s" % enc_id]))
+checks["world=<unknown> refused"] = not SimArgs.new().parse(PackedStringArray(["party", "world=no_such_world"]))
+checks["enc=world:<id> still parses"] = _parse(["party", "enc=world:%s" % enc_id]).error.is_empty()
+checks["header shows the world"] = before.header().contains("world %s" % SimWorld.WORLD)
+# A child world sees its parent's encounters (inherited): world=<child> enc=<parent id>.
+var child: String = ""
+for w: String in WorldCatalog.world_ids():
+	if w != SimWorld.WORLD and WorldCatalog.lineage(w).has(SimWorld.WORLD) and WorldCatalog.has_entry(w, "encounters", enc_id):
+		child = w
+		break
+if not child.is_empty():
+	var c: SimArgs = _parse(["party", "world=%s" % child, "enc=%s" % enc_id])
+	checks["child world %s sees inherited %s" % [child, enc_id]] = c.error.is_empty() and c.encounters == (["%s%s/%s" % [SimArgs.REF_PREFIX, child, enc_id]] as Array[String])
+	checks["parse_ref uses the given default world"] = SimArgs.parse_ref("world:x", child) == ([child, "x"] as Array[String])
+return TestHelpers.report(TAG, "BAL5-SIM K1 world= key", checks)
+```
+
+### `on_start(session: CombatSession) -> void`
+```logic
+	spawned = {}
+	for c: Combatant in session.allies + session.enemies:
+		spawned[c.lore_ref] = Bal4CampaignTestSuite._vitals(c)
+```
+
+### `static _vitals(c: Combatant) -> Dictionary`
+```logic
+return {"max_hp": c.max_hp, "speed": c.speed, "max_ap": c.max_ap, "power": DamageCalculator.power_of(c, c.attack_range > 1)}
+```
+
+### `static _test_world_characters() -> bool`
+```logic
+var checks: Dictionary = {}
+var plain: Dictionary = {}
+var extra: Dictionary = {}
+for r: Dictionary in _story_refs():
+	var ch: Dictionary = r["character"]
+	var div: String = WorldFactory.divergence(ch, str(r["world"]))
+	if div.is_empty() and plain.is_empty():
+		plain = r
+	elif not div.is_empty() and not DictUtil.dict_of(ch.get("tuning", {})).is_empty() and extra.is_empty():
+		extra = r
+checks["a plain story foe exists"] = not plain.is_empty()
+var forked: bool = TestHelpers.fork(SANDBOX)
+checks["sandbox fork"] = forked
+if forked and not plain.is_empty():
+	var runner := SimRunner.new(_parse(["party"]))
+	var enc: Dictionary = SimWorld.encounter(runner, str(plain["encounter"]), TEST_LEVEL, false, str(plain["world"]))
+	var base_id: String = str(DictUtil.dict_of(plain["character"])["base_unit"])
+	checks["plain %s plays as its base unit %s" % [str(plain["ref"]), base_id]] = DictUtil.array_of(enc.get("enemies", [])).has(base_id) or DictUtil.array_of(DictUtil.dict_of(enc.get("base", {})).get("wave_units", [])).has(base_id)
+if forked and not extra.is_empty():
+	var w: String = str(extra["world"])
+	var ch_e: Dictionary = extra["character"]
+	var args: SimArgs = _parse(["party", str(TEST_LEVEL), "1", "cap=1", "comp=warrior", "jitter=off", "world=%s" % w])
+	var runner_e := SimRunner.new(args)
+	var obs := SpawnObserver.new()
+	runner_e.observer = obs
+	var enc_e: Dictionary = SimWorld.encounter(runner_e, str(extra["encounter"]), TEST_LEVEL, false, w, true)
+	var foes: Array[String] = []
+	foes.assign(DictUtil.array_of(enc_e["enemies"]))
+	var copy: String = "simw_%s" % str(ch_e["_qid"]).replace(":", "_")
+	checks["%s (tuning %s) plays as the copy %s" % [str(extra["ref"]), str(ch_e["tuning"]), copy]] = foes.has(copy) or DictUtil.array_of(DictUtil.dict_of(enc_e["base"]).get("wave_units", [])).has(copy)
+	var party: Array[String] = SimScenarios.define_party(runner_e, args.comp, TEST_LEVEL)
+	runner_e.fight(party, foes, args.seeds()[0], DictUtil.dict_of(enc_e["base"]))
+	var game := WorldEncounter.new(w, str(extra["encounter"]))
+	game.build()
+	var expect: Dictionary = {}
+	var plain_v: Dictionary = {}
+	for c: Combatant in game.allies + game.enemies + game.wave:
+		if c.lore_ref == str(ch_e["_qid"]):
+			expect = _vitals(c)
+			var base_c: Combatant = ContentFactory.unit(WorldFactory.unit_entry(ch_e), "", game.unit_ap)
+			plain_v = _vitals(base_c)
+	var found: Dictionary = DictUtil.dict_of(obs.spawned.get(str(ch_e["_qid"]), {}))
+	checks["the copy spawned with the character applied (lore_ref)"] = not found.is_empty()
+	checks["the game's WorldEncounter spawns the character"] = not expect.is_empty()
+	if not found.is_empty() and not expect.is_empty():
+		checks["vitals %s = WorldEncounter's %s" % [str(found), str(expect)]] = found == expect
+		checks["the extras change the unit vs its base %s (not vacuous)" % str(plain_v)] = found != plain_v
+elif forked:
+	checks["no tuned story foe in the world data (K1 tuning path not exercised)"] = true
+TestHelpers.cleanup(SANDBOX)
+return TestHelpers.report(TAG, "BAL5-SIM K1 story characters: base units, extras through WorldFactory", checks)
+```
+

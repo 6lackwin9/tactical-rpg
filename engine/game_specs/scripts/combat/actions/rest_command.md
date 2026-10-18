@@ -1,0 +1,27 @@
+---
+class: RestCommand
+extends: BattleCommand
+description: "Tactical RPG - Rest Command (an idle block that recovers AP) Costs no AP, puts the unit in Tactical stance for free (set on start by the planner) and restores recover_ap when the block resolves."
+---
+
+# Properties
+* `recover_ap`: int = 2
+
+# Methods
+
+### `_init(p_source: Combatant, p_recover_ap: int = 2, p_block_cost: int = 1) -> void`
+```logic
+super(p_source, 0, p_block_cost)
+recover_ap = p_recover_ap
+command_name = "Rest"
+```
+
+### `execute() -> void`
+```logic
+if not source.is_alive():
+	return
+var before: int = source.ap
+source.ap = mini(source.max_ap, source.ap + recover_ap)
+execution_log = "[Rest] %s catches their breath (+%d AP, now %d/%d)" % [source.name, source.ap - before, source.ap, source.max_ap]
+```
+

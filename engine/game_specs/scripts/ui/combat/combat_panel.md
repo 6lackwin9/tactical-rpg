@@ -1,0 +1,26 @@
+---
+class: CombatPanel
+extends: UiPanel
+description: "Tactical RPG - Combat Panel Base UiPanel with a strongly-typed CombatSession. Each combat panel wraps one view component (grid, roster, inspector...), pushes session state into it in refresh(), and turns its input signals into session actions. Panels never reference each other; requests the host must fulfil (full-screen modals) go through `modal_requested`."
+---
+
+# Properties
+* `session`: CombatSession = null
+
+# Signals
+* `modal_requested(kind: String)`
+
+# Methods
+
+### `_init() -> void`
+```logic
+super._init()
+for side: String in ["left", "right", "top", "bottom"]:
+	add_theme_constant_override("margin_%s" % side, 0)
+```
+
+### `_bind_session(p_session: RefCounted) -> void`
+```logic
+session = p_session as CombatSession
+```
+

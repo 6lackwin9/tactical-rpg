@@ -1,0 +1,327 @@
+---
+class: ForgePreview
+extends: RefCounted
+description: "Tactical RPG - Forge Preview (what a catalog entry turns into in the engine) Builds the engine object from a draft entry and describes it as BBCode, plus an icon / portrait texture. Pure functions: the Forge viewer and tests both use them."
+---
+
+# Properties
+* `users`: Array[String] = ContentCatalog.references_to(kind, str(e.get("id", "")))
+
+# Methods
+
+### `static texture_for(kind: String, entry: Dictionary) -> Texture2D`
+```logic
+match kind:
+	"items":
+		return ItemArt.icon(ContentFactory.item(entry))
+	"units":
+		var team: UnitArt.Team = UnitArt.Team.FRIENDLY
+		match str(entry.get("side", "")):
+			"enemy":
+				team = UnitArt.Team.HOSTILE
+			"neutral":
+				team = UnitArt.Team.NEUTRAL
+		return UnitArt.portrait(ContentFactory.art_of(entry), team)
+return null
+```
+
+### `static describe(kind: String, entry: Dictionary, ranked: bool = false) -> String`
+```logic
+var e: Dictionary = ContentSchema.normalize(kind, entry)
+var text: String = ""
+match kind:
+	"skills":
+		text = _skill_ranked(entry) if ranked else _skill(e)
+	"items":
+		text = _item(e)
+	"passives":
+		text = "[b]%s[/b]
+```
+
+### `static _line(label: String, value: String) -> String`
+```logic
+return "[color=#8ba3b8]%s:[/color] %s\n" % [label, value]
+```
+
+### `static _skill_ranked(entry: Dictionary) -> String`
+```logic
+var rows: Array[Dictionary] = SkillRanks.expand(entry)
+var t: String = _skill(rows[0], true)
+var base: Dictionary = rows[0]
+t += _line("Grade", str(base["grade"]))
+var requires: Array[String] = ContentFactory._strings(base["requires"])
+if not requires.is_empty():
+	var names: Array[String] = []
+	for r: String in requires:
+		names.append(str(ContentCatalog.get_entry("skills", r).get("name", r)))
+	t += _line("Requires", ", ".join(names))
+t += _line("Origin", str(base["origin"]))
+if rows.size() > 1:
+	t += "\n[b]Ranks[/b]\n"
+	for row: Dictionary in rows:
+		var s: SkillDef = ContentFactory.skill(row)
+		t += _line(str(row["name"]), "%d AP, %d block%s, unlocks +%d levels after the family. %s" % [s.ap_cost(), s.blocks, "" if s.blocks == 1 else "s", s.tier_offset(), str(row["description"])])
+return t
+```
+
+### `static _skill(e: Dictionary, ranked: bool = false) -> String`
+```logic
+var s: SkillDef = ContentFactory.skill(e)
+var t: String = "[b]%s[/b]  %s\n" % [s.label(), "[color=#fbbf24](system)[/color]" if s.system else ""]
+t += _line("Cost", "%d AP%s, %d block%s" % [s.ap_cost(), " per tile" if s.kind == SkillDef.Kind.MOVE else "", s.blocks, "" if s.blocks == 1 else "s"])
+t += _line("Stance", CombatTypes.stance_to_string(s.stance()) if s.kind != SkillDef.Kind.MOVE else "keeps the current stance")
+if not ranked:
+	var siblings: Array[String] = []
+	for sib: Dictionary in ContentCatalog.entries("skills"):
+		var sib_family: String = str(sib.get("family", "")) if not str(sib.get("family", "")).is_empty() else str(sib.get("id", ""))
+		if sib_family == s.family_id() and str(sib.get("id", "")) != s.id:
+			siblings.append("%s (tier %d)" % [str(sib.get("name", "")), DictUtil.to_int(sib.get("tier", 1), 1)])
+	t += _line("Family", "%s, tier %d%s%s" % [s.family_id(), s.tier, " (basic)" if s.basic else "", (", with " + ", ".join(siblings)) if not siblings.is_empty() else ""])
+if SkillKinds.gate_kinds().has(s.kind_name()) and (not s.weapon_types.is_empty() or s.min_proficiency > 0):
+	var wanted: String = "/".join(s.weapon_types) if not s.weapon_types.is_empty() else "any weapon"
+	var hand_note: String = ""
+	match s.weapon_hand:
+		SkillDef.WeaponHand.OFF:
+			hand_note = " in the off hand"
+		SkillDef.WeaponHand.BOTH:
+			hand_note = " in both hands"
+	var unarmed_note: String = " (unarmed = no weapon in that hand, trained by the class's fist level)" if s.weapon_types.has(SkillDef.UNARMED_TOKEN) else ""
+	t += _line("Needs", "%s%s%s, training %d+" % [wanted, hand_note, unarmed_note, s.min_proficiency])
+match s.kind:
+	SkillDef.Kind.ATTACK:
+		var melee := Combatant.new("melee", 50, 12, 1)
+		var ranged := Combatant.new("ranged", 50, 12, 3)
+		var mb: Vector2i = s.reach_for(melee)
+		var rb: Vector2i = s.reach_for(ranged)
+		t += _line("Reach", "melee unit %d-%d, ranged unit %d-%d" % [mb.x, mb.y, rb.x, rb.y])
+		t += _line("Damage", "attack power x %.2f  (~%d at power 20, ~%d at power 40; then stance, crit, guard, armor)" % [s.power_mult, roundi(20.0 * s.power_mult), roundi(40.0 * s.power_mult)])
+		if s.is_area():
+			var aim: Vector2i = Vector2i(5, 5) if s.area == SkillDef.Area.SWEEP else Vector2i(4, 5)
+			t += _line("Area", "%s: %d tiles, hits allies too" % [SkillDef.Area.keys()[s.area], s.area_cells(Vector2i(4, 6), aim).size()])
+		if not s.status_effect.is_empty():
+			t += _line("Status", "%s on hit (potency %d%%), next round" % [StatusEffects.display_name(s.status_effect), s.status_potency])
+		if s.dash_tiles > 0:
+			t += _line("Gap-close", "dashes up to %d tiles into reach when the target is out of reach (the unit's move; one per round)" % s.dash_tiles)
+		if s.weapon_hand == SkillDef.WeaponHand.OFF:
+			t += _line("Off-hand", "melee strike with the off-hand weapon, or bare hands when it holds a shield, orb, tome or nothing (only offered when the unit's range is 2+)")
+		elif s.weapon_hand == SkillDef.WeaponHand.BOTH:
+			t += _line("Both hands", "dual strike with both weapons (engine pending)")
+	SkillDef.Kind.DEFEND:
+		t += _line("Guard", "-%d%% damage from its first block" % roundi(s.mitigation * 100.0))
+	SkillDef.Kind.FOCUS:
+		t += _line("Boost", "x%.2f attack for %d rounds" % [s.boost, s.boost_rounds])
+	SkillDef.Kind.REST:
+		t += _line("Recover", "+%d AP, Tactical stance" % s.recover_ap)
+	SkillDef.Kind.DISENGAGE:
+		t += _line("Jump", "up to %d tiles away from the nearest (or a chosen) enemy; leaps over units, not walls; the unit's move for the round (first, refused when rooted); AP = level, keeps the stance" % s.jump_tiles)
+	SkillDef.Kind.SUPPORT:
+		var band: Vector2i = s.support_reach(Combatant.new("caster", 50, 12, 1))
+		t += _line("Targets", "%s, reach %d-%d" % [SkillDef.TargetMode.keys()[s.target_mode], band.x, band.y])
+		if s.heals():
+			t += _line("Heal", "%d + %s x %.2f (SupportRules, never the damage formula)" % [s.heal_base, s.heal_stat if not s.heal_stat.is_empty() else "-", s.heal_mult])
+		if s.cleanses():
+			var names: Array[String] = []
+			for status: String in s.cleanse_list():
+				names.append(StatusEffects.display_name(status))
+			t += _line("Cleanses", "%s from the target, active and pending (never buffs)" % ", ".join(names))
+		if not s.grant_status.is_empty():
+			t += _line("Grants", "%s next round, %d round%s" % [StatusEffects.display_name(s.grant_status), s.status_rounds, "" if s.status_rounds == 1 else "s"])
+t += "\n%s\n" % s.description
+return t
+```
+
+### `static _item(e: Dictionary) -> String`
+```logic
+var it: Item = ContentFactory.item(e)
+var col: String = UiTheme.rarity_color(it.rarity).to_html(false)
+var t: String = "[b][color=#%s]%s[/color][/b]\n" % [col, it.name]
+t += _line("Type", "%s, %s" % [Item.type_to_string(it.item_type), str(Item.ItemRarity.keys()[it.rarity]).capitalize()])
+if it is Equipment:
+	var eq: Equipment = it
+	t += _line("Slot", Equipment.slot_display_name(eq.slot) + (" (two-handed)" if eq.is_two_handed else ""))
+	if not eq.hand().is_empty():
+		t += _line("Hand", "%s (derived: %s)" % [Equipment.hand_display_name(eq.hand()), eq.hand()])
+	var summary: String = UiTheme.equipment_summary(eq, CharacterStats.new())
+	t += _line("Stats", summary if not summary.is_empty() else "-")
+	if not eq.required_stats.is_empty():
+		t += _line("Requires", str(eq.required_stats))
+	for tier: Dictionary in eq.threshold_tiers:
+		t += _line("Tier", "%s+: %s" % [eq.tier_criterion_text(tier), str(tier.get("desc", ""))])
+	var potential: float = GearBudget.tier_potential(e)
+	if potential > 0.0:
+		t += _line("Tier potential", "%.1f (informational, not in the gear value)" % potential)
+	var users: Array[String] = []
+	for c: Dictionary in ContentCatalog.entries("classes"):
+		if ContentFactory.class_archetype(c).can_equip_gear(eq):
+			users.append(str(c.get("name", "")))
+	t += _line("Classes", ", ".join(users) if not users.is_empty() else "none")
+	t += _line("Gear value", "%.1f%s" % [GearBudget.item_value(e), "  [color=#fbbf24]SPECIAL[/color]: " + (str(e.get("special_note", "")) if not str(e.get("special_note", "")).strip_edges().is_empty() else "[color=#f87171]no note[/color]") if GearBudget.is_special(e) else ""])
+elif it is Consumable:
+	var con: Consumable = it
+	t += _line("Effect", "%s %s, %d block" % [UiTheme.consumable_icon(con), UiTheme.consumable_effect_text(con), con.block_cost])
+t += _line("Weight / value", "%.1f / %d g" % [it.weight, it.value_gold])
+t += _line("Starter stash", "yes" if DictUtil.to_bool(e.get("starter_stash", false)) else "no")
+t += "\n%s\n" % it.description
+return t
+```
+
+### `static _class(e: Dictionary) -> String`
+```logic
+var arch: ClassArchetype = ContentFactory.class_archetype(e)
+var t: String = "[b]%s[/b]\n" % arch.display_name
+for lvl: int in [1, 5, 10]:
+	var st := CharacterStats.new(arch, lvl)
+	var parts: Array[String] = []
+	for key: String in ContentSchema.STAT_KEYS:
+		parts.append("%s %d" % [key, st.get_base_stat(key)])
+	t += _line("Level %d" % lvl, "%s  •  HP %d, speed %d" % [" ".join(parts), st.get_max_hp({}), st.get_initiative_speed(0, {})])
+var base_total: int = StatRules.total_of(arch.base_stats)
+t += _line("Budget", "%d / %d (growth %d / %d per level)%s" % [base_total, StatRules.CLASS_BUDGET, StatRules.total_of(arch.growth_per_level), StatRules.GROWTH_TOTAL, "" if base_total == StatRules.CLASS_BUDGET else " [color=#f87171](off budget)[/color]"])
+var prof: Proficiency = arch.make_proficiency()
+var trained: Array[String] = []
+for key: Variant in prof.entries:
+	trained.append("%s %d (x%.2f)" % [str(key), prof.level_of(str(key)), prof.scaling_of(str(key))])
+t += _line("Proficiency", ", ".join(trained) if not trained.is_empty() else "none")
+var path_parts: Array[String] = []
+for step: Dictionary in arch.path_steps():
+	path_parts.append("Lv%d %s" % [DictUtil.to_int(step.get("level", 1)), str(ContentCatalog.get_entry("skills", str(step.get("skill", ""))).get("name", step.get("skill", "")))])
+t += _line("Skill path", ", ".join(path_parts) if not path_parts.is_empty() else "none")
+var kit: Array[String] = []
+for slot: String in ContentSchema.LOADOUT_SLOTS:
+	if arch.loadout.has(slot):
+		kit.append(str(ContentCatalog.get_entry("items", str(arch.loadout[slot])).get("name", arch.loadout[slot])))
+t += _line("Default gear", ", ".join(kit) if not kit.is_empty() else "none")
+var slot_parts: Array[String] = []
+var specials: Array[String] = []
+for row: Dictionary in GearBudget.loadout_breakdown(e):
+	slot_parts.append("%s %.1f" % [str(row["slot"]), DictUtil.to_float(row["value"])])
+	if DictUtil.to_bool(row["special"]):
+		specials.append("%s %.1f" % [str(row["name"]), DictUtil.to_float(row["value"])])
+if not slot_parts.is_empty():
+	var total: float = GearBudget.loadout_value(e)
+	var flag: String = "" if GearBudget.in_band(total) else " [color=#f87171](out of band)[/color]"
+	t += _line("Gear budget", "%.1f / %.1f (+-%d%%)%s" % [total, GearBudget.TARGET_BUDGET, roundi(GearBudget.TOLERANCE * 100.0), flag])
+	t += _line("Slot values", ", ".join(slot_parts))
+	if not specials.is_empty():
+		t += _line("Special items", ", ".join(specials))
+t += "\n%s\n" % str(e.get("description", ""))
+return t
+```
+
+### `static class_panels(entry: Dictionary) -> String`
+```logic
+var e: Dictionary = ContentSchema.normalize("classes", entry)
+var t: String = "[b]Stats[/b]\n"
+var stats: Dictionary = ClassForgeModel.stat_panel(e)
+var base_ok: bool = DictUtil.to_int(stats["base_total"]) == DictUtil.to_int(stats["budget"])
+var growth_ok: bool = DictUtil.to_int(stats["growth_total"]) == DictUtil.to_int(stats["growth_budget"])
+t += _line("Totals", "base [color=%s]%d / %d[/color], growth [color=%s]%d / %d[/color] per level" % ["#4ade80" if base_ok else "#f87171", DictUtil.to_int(stats["base_total"]), DictUtil.to_int(stats["budget"]), "#4ade80" if growth_ok else "#f87171", DictUtil.to_int(stats["growth_total"]), DictUtil.to_int(stats["growth_budget"])])
+var parts: Array[String] = []
+for raw: Variant in DictUtil.array_of(stats["rows"]):
+	var row: Dictionary = DictUtil.dict_of(raw)
+	var bad: String = str(row["bad"])
+	parts.append("%s%s %d +%d (Lv5 %d, Lv10 %d)%s" % ["[color=#f87171]" if not bad.is_empty() else "", str(row["stat"]), DictUtil.to_int(row["base"]), DictUtil.to_int(row["growth"]), DictUtil.to_int(row["lv5"]), DictUtil.to_int(row["lv10"]), " " + bad + "[/color]" if not bad.is_empty() else ""])
+t += _line("Per stat", ", ".join(parts))
+var vitals: Array[String] = []
+for raw: Variant in DictUtil.array_of(stats["vitals"]):
+	var v: Dictionary = DictUtil.dict_of(raw)
+	vitals.append("Lv%d HP %d speed %d" % [DictUtil.to_int(v["level"]), DictUtil.to_int(v["hp"]), DictUtil.to_int(v["speed"])])
+t += _line("Vitals", ", ".join(vitals))
+t += "[color=#8ba3b8]%s[/color]\n" % str(stats["note"])
+var budget: Dictionary = ClassForgeModel.budget_panel(e)
+t += "\n[b]Gear budget[/b] (soft)\n"
+var slot_parts: Array[String] = []
+for raw: Variant in DictUtil.array_of(budget["rows"]):
+	var row: Dictionary = DictUtil.dict_of(raw)
+	slot_parts.append("%s %s %.1f" % [str(row["slot"]), str(row["name"]), DictUtil.to_float(row["value"])])
+t += _line("Slots", ", ".join(slot_parts) if not slot_parts.is_empty() else "no gear (unjudged)")
+var band: String = "in band" if DictUtil.to_bool(budget["in_band"]) else ("over the band, excused by a documented special item" if DictUtil.to_bool(budget["excused"]) else "out of band")
+t += _line("Total", "%.1f / %.1f (band %.1f-%.1f): %s; bare hands count %.1f" % [DictUtil.to_float(budget["total"]), DictUtil.to_float(budget["target"]), DictUtil.to_float(budget["low"]), DictUtil.to_float(budget["high"]), band, DictUtil.to_float(budget["unarmed_value"])])
+var specials: Array = DictUtil.array_of(budget["specials"])
+if not specials.is_empty():
+	t += _line("Special items", ", ".join(PackedStringArray(specials)))
+t += "\n[b]Proficiency coverage[/b]\n"
+var cov: Array[Dictionary] = ClassForgeModel.coverage(e)
+if cov.is_empty():
+	t += "[color=#4ade80]Every trained type is used; nothing to report.[/color]\n"
+for row: Dictionary in cov:
+	var col: String = {"error": "#f87171", "warning": "#fbbf24"}.get(str(row["severity"]), "#8ba3b8")
+	t += "[color=%s]• %s[/color]\n" % [col, str(row["text"])]
+t += "\n[b]Skill path[/b]  %s\n" % ClassForgeModel.path_counter(e)
+for lvl: int in [1, 5, StatRules.MAX_LEVEL]:
+	var names: Array[String] = []
+	for fam: String in ClassForgeModel.default_loadout(e, lvl):
+		names.append(SkillCatalog.family_name(fam))
+	t += _line("Default loadout Lv%d" % lvl, ", ".join(names) if not names.is_empty() else "none")
+var warnings: Array[Dictionary] = ClassUnitValidator.class_warnings(e)
+if not warnings.is_empty():
+	t += "\n[b]Warnings[/b] (never block Save)\n"
+	for w: Dictionary in warnings:
+		t += "[color=#fbbf24]• %s: %s[/color]\n" % [str(ClassForgeModel.SECTION_TITLES.get(str(w["section"]), str(w["section"]))), str(w["text"])]
+return t
+```
+
+### `static _unit(e: Dictionary) -> String`
+```logic
+var c: Combatant = ContentFactory.unit(e, "", 12)
+var profile: AiProfile = ContentFactory.ai_profile(e, c)
+var t: String = "[b]%s[/b]  (%s)\n" % [c.name, str(e["side"])]
+if str(e["stat_mode"]) == "derived" and not str(e["class_id"]).is_empty():
+	var spend: Dictionary = ContentFactory._ints(e["spend"])
+	t += _line("Build", "%s level %d, %s tier (HP x%.1f, power x%.1f), %s" % [str(e["class_id"]).capitalize(), DictUtil.to_int(e["level"], 1), str(e["tier"]), c.hp_scale, c.power_scale, ("spend " + str(spend)) if not spend.is_empty() else "spend follows the class"])
+t += _line("Vitals", "HP %d, speed %d (%d tiles / block), range %d, AP %d" % [c.max_hp, c.speed, c.move_per_block(), c.attack_range, c.max_ap])
+var power_res: Dictionary = DamageCalculator.attack_power(c, c.attack_range > 1)
+var power_parts: String = "authored" if DictUtil.to_bool(power_res["authored"]) else "weapon %.0f + unit %.0f (%s)" % [DictUtil.to_float(power_res["weapon_power"]), DictUtil.to_float(power_res["unit_power"]), str(power_res["stat_name"])]
+t += _line("Attack power", "%d (%s)" % [DictUtil.to_int(power_res["attack_power"]), power_parts])
+var rating: int = DamageCalculator.armor_rating(c)
+t += _line("Defence", "armor %d (-%d%% damage), crit %.0f%% x%.1f" % [rating, roundi(DamageCalculator.armor_reduction(rating) * 100.0), DamageCalculator.crit_chance(c), DamageCalculator.CRIT_MULT])
+t += _line("AI", "%s, targets %s, flees at %d%% HP" % [AiProfile.role_name(profile.role), str(AiProfile.TargetPref.keys()[profile.target_pref]).to_lower(), roundi(profile.flee_ratio * 100.0)])
+var known: Array[String] = []
+for s: SkillDef in SkillCatalog.all():
+	if not s.system and s.level <= profile.skill_cap and c.can_use(s) and not (s.is_off_hand() and c.attack_range <= 1):
+		known.append(s.display_name if s.basic or c.path_levels.is_empty() else "%s (from Lv%d)" % [s.display_name, c.skill_unlock_level(s)])
+t += _line("Skills", ", ".join(known) if not known.is_empty() else "none")
+if not c.active_families.is_empty():
+	t += _line("Loadout", "class %d/%d: %s; extra %d/%d: %s" % [c.active_class_families.size(), StatRules.MAX_CLASS_SLOTS, ", ".join(c.active_class_families), c.active_extra_families.size(), StatRules.MAX_EXTRA_SLOTS, ", ".join(c.active_extra_families) if not c.active_extra_families.is_empty() else "none"])
+var gear: Array[String] = []
+for eq: Equipment in c.inventory._iter_equipped_gear():
+	gear.append(eq.name)
+t += _line("Gear", ", ".join(gear) if not gear.is_empty() else "none")
+var pouch: Array[String] = []
+for con: Consumable in c.inventory.battle_pouch:
+	pouch.append(con.name)
+if not pouch.is_empty():
+	t += _line("Pouch", ", ".join(pouch))
+if not c.status_resist.is_empty():
+	t += _line("Resists", str(c.status_resist))
+t += "\n%s\n" % str(e.get("description", ""))
+return t
+```
+
+### `static _encounter(e: Dictionary) -> String`
+```logic
+var t: String = "[b]%s[/b]\n" % str(e["name"])
+t += _line("Zone", "%s (%s arena)" % [CombatZones.zone_name(str(e["zone"])), str(e["arena"]).to_lower()])
+t += _line("Rules", "%d rounds max, %d blocks / round, %d AP (+%d / round)" % [DictUtil.to_int(e["max_rounds"]), DictUtil.to_int(e["total_blocks"]), DictUtil.to_int(e["unit_ap"]), DictUtil.to_int(e["ap_regen"])])
+t += deployment_report(str(e["id"]), e)
+t += "\n%s\n" % str(e.get("description", ""))
+return t
+```
+
+### `static deployment_report(encounter_id: String, entry: Dictionary) -> String`
+```logic
+var probe: Dictionary = entry.duplicate(true)
+probe["id"] = encounter_id
+var enc: CatalogEncounter = CatalogEncounter.from_entry(probe)
+enc.build()
+var t: String = ""
+for side: String in ["party", "enemies"]:
+	var units: Array[Combatant] = enc.allies if side == "party" else enc.enemies
+	var parts: Array[String] = []
+	for c: Combatant in units:
+		var placed: bool = enc.grid.has_combatant(c)
+		parts.append("%s %s" % [c.name, str(enc.grid.get_position(c)) if placed else "[color=#f87171](no room!)[/color]"])
+	t += _line(side.capitalize(), ", ".join(parts) if not parts.is_empty() else "[color=#f87171]none[/color]")
+return t
+```
+
