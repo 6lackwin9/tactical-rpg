@@ -41,15 +41,24 @@ static func run() -> bool:
 	TestHelpers.remove_sandbox(SANDBOX)
 	return ok
 
-# A new Ashlands game (four active members) plus a benched level-5 copy of the first member, as CurrentGame.
+# A new Ashlands game topped up with filler members to the world's party cap (all active), plus a benched level-5
+# copy of the first member, as CurrentGame.
 static func _fresh() -> bool:
 	var res: Dictionary = NewGame.create_for_world("ashlands", 11)
 	var gs: GameState = GameState.of(res["state"])
-	if gs == null or gs.party.members.size() != PartyState.PARTY_MAX:
+	if gs == null or gs.party.members.is_empty() or gs.party.members.size() > _cap():
 		return _report("Fixture game", {"ashlands start party": false})
+	var fill: int = 0
+	while gs.party.members.size() < _cap():
+		fill += 1
+		gs.party.add_member(UnitState.at_level(gs.party.members[0].base_unit, 1, "ps_fill_%d" % fill))
 	gs.party.add_member(UnitState.at_level(gs.party.members[0].base_unit, 5, BENCH))
 	CurrentGame.start(gs)
 	return true
+
+# The world's active cap (the shipped Ashlands party_max).
+static func _cap() -> int:
+	return WorldCatalog.party_max("ashlands")
 
 static func _first() -> UnitState:
 	return CurrentGame.state().party.members[0]
@@ -111,15 +120,15 @@ static func _test_auto() -> bool:
 	var drafted: UnitState = lm.drafted_state()
 	return _report("Check 4: auto matches LevelUp.auto_for", {"same spend": JsonUtil.deep_equal(drafted.spend, copy.spend), "points used": lm.points_left() == 0})
 
-# Check 5: the active four (rule 2).
+# Check 5: the active party, capped at the world's party_max (rule 2).
 static func _test_active() -> bool:
 	var checks: Dictionary = {}
 	var party: PartyState = CurrentGame.state().party
 	var pm := PartyModel.new(null)
-	checks["implicit four"] = party.active_ids.is_empty() and pm.active_count() == 4
-	checks["fifth refused"] = pm.toggle_active(BENCH) == [PartyModel.MAX_ACTIVE % PartyState.PARTY_MAX]
-	checks["first edit writes the four"] = party.active_ids == party.member_ids().slice(0, PartyState.PARTY_MAX)
-	for id: String in party.member_ids().slice(1, PartyState.PARTY_MAX):
+	checks["implicit full party"] = party.active_ids.is_empty() and pm.active_count() == _cap() and pm.max_active() == _cap()
+	checks["beyond the cap refused"] = pm.toggle_active(BENCH) == [PartyModel.MAX_ACTIVE % _cap()]
+	checks["first edit writes the active ids"] = party.active_ids == party.member_ids().slice(0, _cap())
+	for id: String in party.member_ids().slice(1, _cap()):
 		var _e: Array[String] = pm.toggle_active(id)
 	checks["last one kept"] = pm.toggle_active(party.members[0].id) == [PartyModel.KEEP_ONE] and pm.active_count() == 1
 	checks["bench joins"] = pm.toggle_active(BENCH).is_empty() and pm.active_count() == 2

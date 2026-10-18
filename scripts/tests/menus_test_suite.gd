@@ -74,11 +74,12 @@ static func _test_shipped_start() -> bool:
 	var checks: Dictionary = {}
 	var res: Dictionary = NewGame.create_for_world("ashlands")
 	var gs: GameState = GameState.of(res["state"])
-	var levels_ok: bool = gs != null and gs.party.members.size() == 4
+	var start_ids: Array[String] = WorldCatalog.start_party("ashlands")
+	var levels_ok: bool = gs != null and not start_ids.is_empty() and gs.party.members.size() == start_ids.size() and gs.party.members.size() <= WorldCatalog.party_max("ashlands")
 	if gs != null:
 		for m: UnitState in gs.party.members:
 			levels_ok = levels_ok and XpCurve.level_for(m.total_xp) == DictUtil.to_int(ContentCatalog.get_entry("units", m.base_unit).get("level", 1), 1)
-	checks["ashlands: four members at authored levels"] = levels_ok and gs.validate().is_empty()
+	checks["ashlands: the authored start party at authored levels"] = levels_ok and gs.validate().is_empty()
 	checks["tidewrack inherits"] = WorldCatalog.start_party("tidewrack") == WorldCatalog.start_party("ashlands") and not WorldCatalog.start_party("ashlands").is_empty()
 	var own_cap: int = DictUtil.to_int(WorldCatalog.manifest("ashlands").get("party_max", -1), -1)
 	var ash_cap: int = own_cap if own_cap >= 1 else PartyState.PARTY_MAX

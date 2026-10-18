@@ -29,6 +29,10 @@
 				{
 					"key": "ashlands.courtyard_held",
 					"value": true
+				},
+				{
+					"key": "ashlands.muster_1",
+					"value": true
 				}
 			],
 			"auto_start": true,
@@ -81,7 +85,7 @@
 		{
 			"id": "cinder_gate_watch",
 			"name": "Watch at the Cinder Gate",
-			"description": "Mara suspects the warband left scouts in the pass. Find them before they find the keep.",
+			"description": "Mara suspects the warband left scouts in the pass. Find them before they find the keep. Take someone from Toller's roll first; the pass is no place to walk alone.",
 			"giver": "mara_voss",
 			"faction": "ember_wardens",
 			"region": "cinder_pass",
@@ -182,6 +186,10 @@
 			"complete_flags": [
 				{
 					"key": "ashlands.oath_sworn",
+					"value": true
+				},
+				{
+					"key": "ashlands.muster_2",
 					"value": true
 				}
 			],

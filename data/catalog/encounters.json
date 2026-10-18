@@ -33,7 +33,8 @@
 			"wave_units": [],
 			"wave_round": 1,
 			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!"
+			"wave_label": "Reinforcements arrive!",
+			"phases": []
 		},
 		{
 			"id": "veterans_drill",
@@ -64,7 +65,8 @@
 			"wave_units": [],
 			"wave_round": 1,
 			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!"
+			"wave_label": "Reinforcements arrive!",
+			"phases": []
 		},
 		{
 			"id": "goblin_ambush",
@@ -99,7 +101,8 @@
 			],
 			"wave_round": 1,
 			"wave_block": 4,
-			"wave_label": "Ambush! The goblin pack"
+			"wave_label": "Ambush! The goblin pack",
+			"phases": []
 		}
 	]
 }

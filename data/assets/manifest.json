@@ -4222,6 +4222,216 @@
 			"frames": 1,
 			"origin": "user",
 			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/alda_wren/portrait",
+			"namespace": "unit",
+			"key": "alda_wren",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/alda_wren_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/alda_wren/token",
+			"namespace": "unit",
+			"key": "alda_wren",
+			"variant": "token",
+			"path": "res://assets/art/unit/alda_wren_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/brask_toller/portrait",
+			"namespace": "unit",
+			"key": "brask_toller",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/brask_toller_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/brask_toller/token",
+			"namespace": "unit",
+			"key": "brask_toller",
+			"variant": "token",
+			"path": "res://assets/art/unit/brask_toller_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/bryn_hale/portrait",
+			"namespace": "unit",
+			"key": "bryn_hale",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/bryn_hale_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/bryn_hale/token",
+			"namespace": "unit",
+			"key": "bryn_hale",
+			"variant": "token",
+			"path": "res://assets/art/unit/bryn_hale_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/dagny_coal/portrait",
+			"namespace": "unit",
+			"key": "dagny_coal",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/dagny_coal_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/dagny_coal/token",
+			"namespace": "unit",
+			"key": "dagny_coal",
+			"variant": "token",
+			"path": "res://assets/art/unit/dagny_coal_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/kit_vane/portrait",
+			"namespace": "unit",
+			"key": "kit_vane",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/kit_vane_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/kit_vane/token",
+			"namespace": "unit",
+			"key": "kit_vane",
+			"variant": "token",
+			"path": "res://assets/art/unit/kit_vane_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/oren_dusk/portrait",
+			"namespace": "unit",
+			"key": "oren_dusk",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/oren_dusk_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/oren_dusk/token",
+			"namespace": "unit",
+			"key": "oren_dusk",
+			"variant": "token",
+			"path": "res://assets/art/unit/oren_dusk_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/sella_marsh/portrait",
+			"namespace": "unit",
+			"key": "sella_marsh",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/sella_marsh_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/sella_marsh/token",
+			"namespace": "unit",
+			"key": "sella_marsh",
+			"variant": "token",
+			"path": "res://assets/art/unit/sella_marsh_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
 		}
 	]
 }

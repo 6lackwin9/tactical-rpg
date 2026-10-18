@@ -5,8 +5,8 @@
 		{
 			"id": "courtyard_skirmish",
 			"name": "Holding the Courtyard",
-			"description": "Mara and Tev against a five-goblin warband in the Ruined Courtyard.",
-			"intro": "The Horde has come early this year. Mara plants her feet on the cobbles; Tev nocks an arrow.",
+			"description": "Bryn against two Horde raiders in the Ruined Courtyard.",
+			"intro": "The Horde has come early this year. Two raiders drop from the Courtyard wall, blades out.",
 			"location": "ruined_courtyard",
 			"zone": "ruined_courtyard",
 			"arena": "CLOSED",
@@ -27,10 +27,7 @@
 			],
 			"enemies": [
 				"skarn_ironjaw",
-				"vex_cutpurse",
-				"nok_flamebow",
-				"gruk_smokecaller",
-				"bolg_redhand"
+				"vex_cutpurse"
 			],
 			"wave_units": [],
 			"wave_round": 1,
@@ -42,7 +39,7 @@
 		{
 			"id": "pass_ambush",
 			"name": "Ambush at the Cinder Gate",
-			"description": "A brawler and a skirmisher bait the party; at Round 1 Block 4 the rest of the warband falls on them.",
+			"description": "A brawler and a skirmisher bait the party; at Round 1 Block 4 an archer and a smokecaller fall on them.",
 			"intro": "Too quiet. Tev raises a hand: smoke, upwind, much too close.",
 			"location": "cinder_gate",
 			"zone": "forest_clearing",
@@ -68,8 +65,7 @@
 			],
 			"wave_units": [
 				"nok_flamebow",
-				"gruk_smokecaller",
-				"bolg_redhand"
+				"gruk_smokecaller"
 			],
 			"wave_round": 1,
 			"wave_block": 4,
@@ -250,6 +246,39 @@
 			"wave_units": [],
 			"wave_round": 2,
 			"wave_block": 1,
+			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"tags": []
+		},
+		{
+			"id": "ash_straggler",
+			"name": "A Horde Straggler",
+			"description": "A lone Horde brawler cut off from his warband.",
+			"intro": "A straggler lurches out of the rubble.",
+			"location": "ruined_courtyard",
+			"zone": "ruined_courtyard",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"mara_voss",
+				"tev_quill"
+			],
+			"enemies": [
+				"ash_brawler"
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"tags": []

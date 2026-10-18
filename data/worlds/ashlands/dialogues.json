@@ -483,6 +483,146 @@
 			],
 			"services": false,
 			"tags": []
+		},
+		{
+			"id": "muster_talk",
+			"name": "Toller at the duty roll",
+			"speaker": "brask_toller",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Toller runs a thumb down the duty roll. \"The keep can spare a blade or two, Warden. No more.\"",
+					"choices": [
+						{
+							"text": "Who can ride with me?",
+							"to": "roll",
+							"requires": [
+								{
+									"key": "ashlands.muster_1",
+									"value": true
+								},
+								{
+									"key": "ashlands.recruits",
+									"op": "<",
+									"value": 1
+								}
+							]
+						},
+						{
+							"text": "The oath is sworn. Who else?",
+							"to": "roll",
+							"requires": [
+								{
+									"key": "ashlands.muster_2",
+									"value": true
+								},
+								{
+									"key": "ashlands.recruits",
+									"op": "<",
+									"value": 2
+								}
+							]
+						},
+						{
+							"text": "Farewell.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "roll",
+					"text": "Toller nods at the yard. \"Pick one. The rest stay on the wall.\"",
+					"choices": [
+						{
+							"text": "Sella Marsh, the archer on the north wall.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "sella_marsh"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Kit Vane, the cutpurse who took the oath.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "kit_vane"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Oren Dusk, the hedge-mage by the forge.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "oren_dusk"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Sister Alda Wren, the hearth-keeper.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "alda_wren"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Dagny Coal, the pit fighter from Slag Gate.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "dagny_coal"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Not yet.",
+							"to": "hello"
+						}
+					]
+				},
+				{
+					"id": "joined",
+					"text": "Toller strikes a line through a name. \"Bring them back.\"",
+					"next": "hello"
+				}
+			],
+			"services": false,
+			"tags": []
 		}
 	]
 }

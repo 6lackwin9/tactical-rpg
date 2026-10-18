@@ -92,6 +92,15 @@
 					"unless_flags": [],
 					"sets_flags": [],
 					"label": "World map: the roads"
+				},
+				{
+					"id": "muster",
+					"kind": "npc",
+					"anchor": "npc_d",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "brask_toller"
 				}
 			],
 			"map_pos": [
@@ -120,7 +129,8 @@
 				"courtyard_skirmish",
 				"ash_scouts",
 				"ash_raiders",
-				"ash_patrol"
+				"ash_patrol",
+				"ash_straggler"
 			],
 			"map": "ashlands_ruined_courtyard",
 			"zone_bindings": {
@@ -128,20 +138,15 @@
 					"encounters": [
 						[
 							"ash_scouts",
-							3
+							2
 						],
 						[
-							"ash_raiders",
-							2
+							"ash_straggler",
+							3
 						]
 					],
-					"elites": [
-						[
-							"ash_patrol",
-							1
-						]
-					],
-					"elite_pct": 10,
+					"elites": [],
+					"elite_pct": 0,
 					"steps_min": 12,
 					"steps_max": 20
 				}
@@ -197,7 +202,12 @@
 				{
 					"id": "patrol",
 					"kind": "roamer",
-					"requires_flags": [],
+					"requires_flags": [
+						{
+							"key": "ashlands.pass_cleared",
+							"value": true
+						}
+					],
 					"unless_flags": [],
 					"sets_flags": [],
 					"encounter": "ash_patrol",

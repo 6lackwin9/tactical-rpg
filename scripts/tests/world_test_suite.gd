@@ -164,7 +164,7 @@ static func _test_same_base_different_lore() -> bool:
 	ash.build()
 	tide.build()
 	var checks: Dictionary = {}
-	checks["same roster size"] = ash.allies.size() == tide.allies.size() and ash.enemies.size() == tide.enemies.size() and ash.enemies.size() == 5
+	checks["same roster size"] = ash.allies.size() == tide.allies.size() and ash.enemies.size() == tide.enemies.size() and not ash.enemies.is_empty() and ash.enemies.size() == _roster_size(ash, "enemies")
 	var names_differ: bool = true
 	var stats_same: bool = true
 	var same_base: bool = true
@@ -215,20 +215,34 @@ static func _test_same_base_different_lore() -> bool:
 	checks["same AI plan length"] = plans_same
 	return TestHelpers.report_ok(TAG, "Same base, different lore: names differ, every stat/class/skill/AI matches (only the tuned boss differs)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not TestHelpers.failed(checks).is_empty() else "")
 
+# How many ids the encounter's own definition lists under `key` ("party" / "enemies").
+static func _roster_size(enc: WorldEncounter, key: String) -> int:
+	var raw: Variant = enc.definition.get(key, [])
+	var list: Array = raw if raw is Array else []
+	return list.size()
+
+# A combatant for `character_id` as `world_id` resolves it (null when the character is unknown).
+static func _world_character(world_id: String, character_id: String) -> Combatant:
+	var character: Dictionary = WorldCatalog.resolve(world_id, "characters", character_id)
+	if character.is_empty():
+		return null
+	var c: Combatant = ContentFactory.unit(WorldFactory.unit_entry(character), "", 12)
+	WorldFactory.apply_character(c, character, world_id)
+	return c
+
 static func _test_tuning_items_disciplines() -> bool:
 	var checks: Dictionary = {}
-	var tide := WorldEncounter.new("tidewrack", "courtyard_skirmish")
-	tide.build()
 	var ash := WorldEncounter.new("ashlands", "courtyard_skirmish")
 	ash.build()
-	# Tuning deltas vs the base goblin berserker (Dredge is tidewrack's override of Bolg).
-	var dredge: Combatant = tide.unit("bolg_redhand")
+	# Tuning deltas vs the base goblin berserker (Dredge is tidewrack's override of Bolg). Built straight from the
+	# character entries, so the check does not depend on which characters a shipped encounter fields.
+	var dredge: Combatant = _world_character("tidewrack", "bolg_redhand")
 	var base_unit: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "goblin_berserker"), "", 12)
 	checks["dredge hp +20%"] = dredge != null and dredge.max_hp == roundi(float(base_unit.max_hp) * 1.2) and dredge.hp == dredge.max_hp
 	checks["dredge power +2"] = DamageCalculator.power_of(dredge) == DamageCalculator.power_of(base_unit) + 2
 	checks["dredge armor +1"] = DamageCalculator.armor_rating(dredge) == DamageCalculator.armor_rating(base_unit) + 1
-	var bolg: Combatant = ash.unit("bolg_redhand")
-	checks["untuned twin identical"] = bolg.max_hp == base_unit.max_hp and DamageCalculator.power_of(bolg) == DamageCalculator.power_of(base_unit)
+	var bolg: Combatant = _world_character("ashlands", "bolg_redhand")
+	checks["untuned twin identical"] = bolg != null and bolg.max_hp == base_unit.max_hp and DamageCalculator.power_of(bolg) == DamageCalculator.power_of(base_unit)
 	var info: String = WorldFactory.divergence(WorldCatalog.resolve("tidewrack", "characters", "captain_dredge"), "tidewrack")
 	checks["divergence text"] = info.contains("hp +20%") and info.contains("power +2") and WorldFactory.divergence(WorldCatalog.resolve("ashlands", "characters", "skarn_ironjaw"), "ashlands").is_empty()
 	# Named item: the base brigandine + 2 mitigation, worn by Mara; vitals untouched (fixed unit).
