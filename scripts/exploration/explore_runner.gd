@@ -59,6 +59,69 @@ static func presence(gs: GameState, loc_qid: String, m: Dictionary) -> String:
 		return "absent"   # DLG1-L 2.1: a gone character's npc markers are absent
 	return "present" if req_ok and unless_ok else "absent"
 
+# MAPREAD1-L1: what a marker shows, read-only. {kind, state (present|locked|spent|absent), label, verb, badge (npc:
+# quest|ready|""), icon}. `loc` is the location entry (its `_qid` keys the done flags); `m` a marker (full or raw).
+static func marker_view(gs: GameState, loc: Dictionary, m: Dictionary) -> Dictionary:
+	var mk: Dictionary = MapRules.marker_full(m)
+	var kind: String = str(mk["kind"])
+	var loc_qid: String = str(loc.get("_qid", ""))
+	var state: String = presence(gs, loc_qid, mk)
+	if state == "present" and _is_spent(gs, loc_qid, mk):
+		state = "spent"
+	var spent: bool = state == "spent"
+	var label: String = str(mk.get("label", "")).strip_edges()
+	var badge: String = ""
+	var verb: String = ""
+	var default_label: String = ""
+	match kind:
+		"npc":
+			var who: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", str(mk.get("character", "")))
+			default_label = str(who.get("name", "Someone"))
+			verb = "Talk"
+			badge = _npc_badge(gs, str(who.get("_qid", "")))
+		"chest":
+			default_label = "Chest"
+			verb = "Empty" if spent else "Open"
+		"lore":
+			default_label = str(WorldCatalog.resolve(gs.world_id, "lore", str(mk.get("lore", ""))).get("name", "Lore"))
+			verb = "Read"
+		"exit":
+			var to: String = str(mk.get("to", ""))
+			if to == MapRules.WORLD_MAP:
+				default_label = "World map"
+			else:
+				default_label = "To %s" % str(resolve_location(gs, to).get("name", to))
+			verb = "Locked: %s" % str(mk.get("locked_text", "")) if state == "locked" else "Walk onto it"
+		"encounter", "roamer":
+			default_label = str(WorldCatalog.resolve(gs.world_id, "encounters", str(mk.get("encounter", ""))).get("name", "Enemies"))
+			verb = "Fight" if kind == "encounter" else "Patrol: fight on contact"
+		_:
+			default_label = "Something here"
+			verb = "Nothing more here" if spent else "Look"
+	return {"kind": kind, "state": state, "label": label if not label.is_empty() else default_label, "verb": verb, "badge": badge, "icon": "overlay_%s" % ("poi" if kind == "point" else kind)}
+
+# A chest whose done flag is set, or a point whose sets_flags all already hold.
+static func _is_spent(gs: GameState, loc_qid: String, m: Dictionary) -> bool:
+	match str(m.get("kind", "")):
+		"chest":
+			return _is_done(gs, loc_qid, m)
+		"point":
+			var sets: Array = DictUtil.array_of(JsonUtil.normalize(m.get("sets_flags", [])))
+			return not sets.is_empty() and _conditions_hold(gs, sets)
+	return false
+
+# "quest" when the character gives an available quest, "ready" when a ready quest is turned in to them.
+static func _npc_badge(gs: GameState, character_qid: String) -> String:
+	if character_qid.is_empty():
+		return ""
+	for qid: String in QuestRunner.quests_with(gs, "ready"):
+		if DialogueRules.turn_in_qid(gs, QuestRunner.resolved(gs, qid)) == character_qid:
+			return "ready"
+	for qid: String in QuestRunner.quests_with(gs, "available"):
+		if DialogueRules.giver_qid(gs, QuestRunner.resolved(gs, qid)) == character_qid:
+			return "quest"
+	return ""
+
 # Where a marker stands for `loc_steps` (roamers walk their path; others sit on their anchor). (-1, -1) = nowhere.
 static func marker_pos(t: Dictionary, m: Dictionary, loc_steps: int) -> Vector2i:
 	if str(m.get("kind", "")) == "roamer":

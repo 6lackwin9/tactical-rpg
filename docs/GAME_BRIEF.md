@@ -38,6 +38,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 - Enemy intent tells (INTENT1): `scripts/combat/session/intent_rules.gd`, `CombatSession.enemy_intents`; passive effect `foresight` (no params, passives only) reveals the whole round plan of every enemy targeting the holder.
 - Change damage: `damage_calculator.gd` only. Planner estimate and dojo already share it.
 - Change a class: `data/catalog/classes.json` via upsert; rules in `stat_rules.gd`.
+- Map marker read-out (label, verb, icon, state, badge): `ExploreRunner.marker_view`; world-map node extras (kind, region, quest, `map_pos`): `TravelRules.view` (MAPREAD1).
 - World data/inheritance: `world_catalog.gd`; character spawn: `world_factory.gd`.
 - Music choice and fallback chain: `scripts/audio/music_director.gd`; spec `docs/specs/MUSIC1.md` rules 1-8; tracks via `tools/gen_music.py`. Location kind -> music context: `MusicDirector.KIND_CONTEXT`.
 - Playtest recordings and replay: `scripts/playtest/` (PlaytestRecorder, PlaytestReplayer.run_file, TrailReport), tool `tools/fc.sh replay`; UI (hub, trail, F8 notes, browser, playback banner): `scripts/ui/playtest/`; arena playback fields (`playtest`, `battle`, `take_over`, `battle_seed`): `scenes/combat_arena.gd`.

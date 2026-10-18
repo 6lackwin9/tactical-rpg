@@ -158,7 +158,9 @@ static func _location_fields() -> Array[Dictionary]:
 		# Region map binding (EXP1-L, S9); MapRules.location_errors validates them.
 		_f("map", "Map template", "string", "", {"help": "MapCatalog template id (data/maps). Empty = a menu location with no walkable map."}),
 		_f("zone_bindings", "Zone bindings", "json", {}, {"help": "{\"zone_id\": {\"encounters\": [[\"enc\", 3]], \"elites\": [], \"elite_pct\": 10, \"steps_min\": 12, \"steps_max\": 20}} for DANGER zones of the map."}),
-		_f("markers", "Markers", "json", [], {"help": "[{\"id\", \"kind\": exit|encounter|roamer|npc|chest|lore|point, \"anchor\", ...}] placed on the map's anchors (a roamer walks a path instead)."}),
+		_f("markers", "Markers", "json", [], {"help": "[{\"id\", \"kind\": exit|encounter|roamer|npc|chest|lore|point, \"anchor\", \"label\" (max 32), \"note\" (points only, max 160), ...}] placed on the map's anchors (a roamer walks a path instead)."}),
+		# World-map position (MAPREAD1-L1): [] = automatic layout, else [x, y] in 0..1.
+		_f("map_pos", "World-map position", "json", [], {"help": "[] = automatic layout, or [x, y] with each number 0..1 (0,0 top-left of the world map)."}),
 	]
 
 static func _faction_fields() -> Array[Dictionary]:

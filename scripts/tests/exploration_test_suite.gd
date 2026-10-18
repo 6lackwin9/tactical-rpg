@@ -161,6 +161,7 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _build_worlds(fx) and ok
 		ok = _test_bindings(fx) and ok
 		ok = _test_markers(fx) and ok
+		ok = _test_marker_text(fx) and ok
 		ok = _test_start_location() and ok
 		ok = _test_ref_scans() and ok
 		ok = _test_start_refs_and_used_by() and ok
@@ -179,6 +180,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_entry() and ok
 			ok = _test_exits() and ok
 			ok = _test_chest() and ok
+			ok = _test_marker_view() and ok
 			ok = _test_flag_markers() and ok
 			ok = _test_bridge() and ok
 			ok = _test_save_v3() and ok
@@ -199,7 +201,34 @@ static func _test_shipped() -> bool:
 	var d: Dictionary = WorldSchema.defaults("locations")
 	checks["location defaults = menu location"] = str(d["map"]).is_empty() and DictUtil.dict_of(d["zone_bindings"]).is_empty() and DictUtil.array_of(d["markers"]).is_empty()
 	checks["world default start_location empty"] = str(WorldSchema.defaults("world")["start_location"]).is_empty()
+	checks["marker label/note and map_pos defaults"] = MapRules.marker_full({"kind": "point"}).get("label", null) == "" and MapRules.marker_full({"kind": "point"}).get("note", null) == "" and DictUtil.array_of(d["map_pos"]).is_empty()
+	checks["shipped marker views all have a label, verb and icon"] = _shipped_views_ok()
 	return _report("Shipped data validates (maps file, worlds with the new location and manifest fields)", checks)
+
+# MAPREAD1-L1: every marker of every shipped world has a non-empty label, verb and icon; a point whose sets_flags
+# all hold reports spent (a fresh throwaway GameState per point; shipped data has at least one such point).
+static func _shipped_views_ok() -> bool:
+	var ok: bool = true
+	var spent_seen: bool = false
+	for w: String in WorldCatalog.world_ids():
+		var gs: GameState = GameState.new()
+		gs.world_id = w
+		for loc: Dictionary in WorldCatalog.merged_entries(w, "locations"):
+			for m: Dictionary in ExploreRunner.markers_of(loc):
+				var v: Dictionary = ExploreRunner.marker_view(gs, loc, m)
+				if str(v["label"]).is_empty() or str(v["verb"]).is_empty() or str(v["icon"]).is_empty():
+					print("      empty marker view: %s %s" % [str(loc.get("_qid", "")), str(m["id"])])
+					ok = false
+				if str(m["kind"]) == "point" and not DictUtil.array_of(m["sets_flags"]).is_empty():
+					var fresh: GameState = GameState.new()   # flags set here must not leak into other markers
+					fresh.world_id = w
+					var before: String = str(ExploreRunner.marker_view(fresh, loc, m)["state"])
+					for c: Variant in DictUtil.array_of(m["sets_flags"]):
+						var cond: Dictionary = DictUtil.dict_of(c)
+						fresh.flags[str(cond["key"])] = cond.get("value", true)
+					if before == "present" and str(ExploreRunner.marker_view(fresh, loc, m)["state"]) == "spent":
+						spent_seen = true
+	return ok and spent_seen
 
 static func _test_helpers() -> bool:
 	var checks: Dictionary = {}
@@ -347,6 +376,27 @@ static func _test_markers(fx: Dictionary) -> bool:
 	DictUtil.array_of(no_marker["markers"]).remove_at(_marker_index(no_marker, "to_town"))
 	checks["exit without a marker: warning only"] = _loc_errs(no_marker).is_empty() and TestHelpers.any_contains(MapRules.location_warnings(no_marker), "Exit to 'town' has no marker on the map.")
 	return _report("Check 3: markers (one error per broken rule; map-less locations hold none)", checks)
+
+# MAPREAD1-L1: marker label / note and location map_pos validation.
+static func _test_marker_text(fx: Dictionary) -> bool:
+	var checks: Dictionary = {}
+	var loc: Dictionary = _field(fx)
+	var long_label: String = "x".repeat(MapRules.LABEL_MAX + 1)
+	checks["label of max length is fine"] = _loc_errs(_with_marker(loc, "mark", {"label": "x".repeat(MapRules.LABEL_MAX), "note": "n".repeat(MapRules.NOTE_MAX)})).is_empty()
+	checks["33-character label"] = _one(_loc_errs(_with_marker(loc, "mark", {"label": long_label})), "Marker 'mark': label is at most %d characters." % MapRules.LABEL_MAX)
+	checks["note too long"] = _one(_loc_errs(_with_marker(loc, "mark", {"note": "n".repeat(MapRules.NOTE_MAX + 1)})), "Marker 'mark': note is at most %d characters." % MapRules.NOTE_MAX)
+	checks["note on a chest"] = _one(_loc_errs(_with_marker(loc, "box", {"note": "Hi"})), "Marker 'box': only points take a note.")
+	checks["label on a chest is fine"] = _loc_errs(_with_marker(loc, "box", {"label": "Old box"})).is_empty()
+	checks["non-text label"] = _one(_loc_errs(_with_marker(loc, "mark", {"label": 5})), "label must be text")
+	checks["defaults filled"] = str(MapRules.marker_full({"kind": "chest"}).get("label", "x")).is_empty() and str(MapRules.marker_full({"kind": "chest"}).get("note", "x")).is_empty()
+	var good: Array = [[], [0, 1], [0.25, 0.75], [1.0, 0.0]]
+	for p: Variant in good:
+		checks["map_pos %s ok" % str(p)] = _loc_errs(loc.merged({"map_pos": p}, true)).is_empty()
+	var bad: Array = [[0.5], [0.1, 0.2, 0.3], [1.2, 0.5], [-0.1, 0.5], ["a", "b"], {"x": 1}]
+	for p: Variant in bad:
+		checks["map_pos %s rejected" % str(p)] = _one(_loc_errs(loc.merged({"map_pos": p}, true)), "Map position must be empty or two numbers [x, y] between 0 and 1.")
+	checks["map-less location may carry map_pos"] = _loc_errs({"id": "town", "name": "Town", "exits": [{"to": "field"}], "map_pos": [0.5, 0.5]}).is_empty()
+	return _report("MAPREAD1-L1: marker label / note and location map_pos validation", checks)
 
 # ------------------------------------------------------------------------------
 # Check 4: start_location
@@ -925,6 +975,80 @@ static func _test_exits() -> bool:
 # ------------------------------------------------------------------------------
 # Checks 17 and 18: chests, flag markers
 # ------------------------------------------------------------------------------
+
+# MAPREAD1-L1: marker_view labels / verbs / states / badges and the TravelRules.view node extras.
+static func _test_marker_view() -> bool:
+	var checks: Dictionary = {}
+	var item0: String = str(_rx["item0"])
+	var errors: Array[String] = WorldCatalog.upsert(RUN, "regions", {"id": "reg_x", "name": "Region X"})
+	var markers: Array = [
+		{"id": "sage", "kind": "npc", "anchor": "a_npc", "character": "sage"},
+		{"id": "box", "kind": "chest", "anchor": "a_chest", "items": {item0: 1}},
+		{"id": "stone", "kind": "lore", "anchor": "a_lore", "lore": "stone"},
+		{"id": "to_town", "kind": "exit", "anchor": "a_exit", "to": "town"},
+		{"id": "to_map", "kind": "exit", "anchor": "a_wm", "to": MapRules.WORLD_MAP},
+		{"id": "gate", "kind": "exit", "anchor": "a_lock", "to": "town", "requires_flags": [{"key": "xr.key"}], "locked_text": "Gate barred."},
+		{"id": "ambush", "kind": "encounter", "anchor": "a_touch", "encounter": "enc_a"},
+		{"id": "patrol", "kind": "roamer", "encounter": "elite_a", "path": "p4"},
+		{"id": "mark", "kind": "point", "anchor": "a_point", "sets_flags": [{"key": "xr.marked"}], "label": "Signal", "note": "You look."},
+		{"id": "plain", "kind": "point", "anchor": "a_far"},
+	]
+	checks["fixtures"] = errors.is_empty() and _set_field(markers)
+	var gs: GameState = _in_field(2, 4)
+	var loc: Dictionary = ExploreRunner.location(gs)
+	var views: Dictionary = {}
+	for m: Dictionary in ExploreRunner.markers_of(loc):
+		views[str(m["id"])] = ExploreRunner.marker_view(gs, loc, m)
+	checks["every label, verb and icon is non-empty"] = views.values().all(func(v: Variant) -> bool: return not str(DictUtil.dict_of(v)["label"]).is_empty() and not str(DictUtil.dict_of(v)["verb"]).is_empty() and not str(DictUtil.dict_of(v)["icon"]).is_empty())
+	checks["npc: character name, Talk, no badge"] = views["sage"]["label"] == "Sage XR" and views["sage"]["verb"] == "Talk" and views["sage"]["badge"] == "" and views["sage"]["state"] == "present"
+	checks["chest: Chest / Open"] = views["box"]["label"] == "Chest" and views["box"]["verb"] == "Open"
+	checks["lore: lore name / Read"] = views["stone"]["label"] == "Old Stone" and views["stone"]["verb"] == "Read"
+	checks["exit: To <location name>, world map"] = views["to_town"]["label"] == "To Town" and views["to_town"]["verb"] == "Walk onto it" and views["to_map"]["label"] == "World map"
+	checks["locked exit: state and verb"] = views["gate"]["state"] == "locked" and views["gate"]["verb"] == "Locked: Gate barred."
+	checks["encounter and roamer: encounter name"] = views["ambush"]["label"] == "enc_a" and views["ambush"]["verb"] == "Fight" and views["patrol"]["label"] == "elite_a" and views["patrol"]["verb"] == "Patrol: fight on contact"
+	checks["point: own label wins, default otherwise"] = views["mark"]["label"] == "Signal" and views["plain"]["label"] == "Something here" and views["plain"]["verb"] == "Look"
+	checks["icons"] = views["sage"]["icon"] == "overlay_npc" and views["box"]["icon"] == "overlay_chest" and views["mark"]["icon"] == "overlay_poi" and views["to_town"]["icon"] == "overlay_exit" and views["patrol"]["icon"] == "overlay_roamer"
+	# Spent: an opened chest; a point whose sets_flags all hold. A point without sets_flags never spends.
+	var _opened: Dictionary = ExploreRunner.interact(gs, D)
+	var box: Dictionary = ExploreRunner.marker_view(gs, loc, ExploreRunner.markers_of(loc)[1])
+	checks["opened chest: spent, Empty"] = box["state"] == "spent" and box["verb"] == "Empty"
+	var mark: Dictionary = DictUtil.dict_of(ExploreRunner.markers_of(loc)[8])
+	checks["point not yet used: present"] = ExploreRunner.marker_view(gs, loc, mark)["state"] == "present"
+	var _flagged: String = QuestRunner.set_flag(gs, "xr.marked", true)
+	var used: Dictionary = ExploreRunner.marker_view(gs, loc, mark)
+	checks["used point: spent, Nothing more here"] = used["state"] == "spent" and used["verb"] == "Nothing more here"
+	checks["point without sets_flags never spends"] = ExploreRunner.marker_view(gs, loc, DictUtil.dict_of(ExploreRunner.markers_of(loc)[9]))["state"] == "present"
+	# Badges: quest offer, then ready turn-in.
+	var q_errs: Array[String] = WorldCatalog.upsert(RUN, "quests", {"id": "q_offer", "name": "Offer", "template": "t_flag", "giver": "sage", "steps": [{"text": "Mark", "flag": "xr.offer"}]})
+	checks["offer fixture"] = q_errs.is_empty()
+	var sage: Dictionary = DictUtil.dict_of(ExploreRunner.markers_of(loc)[0])
+	checks["badge quest while an offer is open"] = QuestRunner.status(gs, "q_offer") == "available" and ExploreRunner.marker_view(gs, loc, sage)["badge"] == "quest"
+	var started: Array[String] = QuestRunner.start(gs, "q_offer")
+	checks["no badge while the quest runs"] = started.is_empty() and ExploreRunner.marker_view(gs, loc, sage)["badge"] == ""
+	var _done: String = QuestRunner.set_flag(gs, "xr.offer", true)
+	checks["badge ready when it can be turned in"] = QuestRunner.status(gs, "q_offer") == "ready" and ExploreRunner.marker_view(gs, loc, sage)["badge"] == "ready"
+	# TravelRules.view node extras on the route node `keep` (kind fortress, region, map_pos), quest flag per active step.
+	var keep_errs: Array[String] = WorldCatalog.upsert(RUN, "locations", {"id": "keep", "name": "Keep", "kind": "fortress", "region": "reg_x", "map_pos": [0.25, 0.5], "map": "m_danger", "exits": [{"to": "field"}], "zone_bindings": _default_bindings()})
+	checks["keep fixture"] = keep_errs.is_empty()
+	var keep_before: Dictionary = _node_of(TravelRules.view(gs), _q("keep"))
+	checks["node: kind, region name, map_pos, quest false"] = str(keep_before.get("kind", "")) == "fortress" and keep_before.get("region", "") == "Region X" and keep_before.get("map_pos", []) == [0.25, 0.5] and keep_before.get("quest", true) == false
+	var field_node: Dictionary = _node_of(TravelRules.view(gs), _q("field"))
+	checks["node defaults: kind wild, region '', map_pos []"] = field_node.get("kind", "") == "wild" and field_node.get("region", "x") == "" and DictUtil.array_of(field_node.get("map_pos", [1])).is_empty()
+	var goto_errs: Array[String] = WorldCatalog.upsert(RUN, "quests", {"id": "q_goto", "name": "Goto", "template": "t_reach", "steps": [{"text": "Go", "location": "keep"}]})
+	var goto_started: Array[String] = QuestRunner.start(gs, "q_goto")
+	checks["quest flag while the step targets the node"] = goto_errs.is_empty() and goto_started.is_empty() and TravelRules.quest_nodes(gs).has(_q("keep")) and _node_of(TravelRules.view(gs), _q("keep")).get("quest", false) == true
+	var _abandoned: Array[String] = QuestRunner.abandon(gs, "q_goto")
+	checks["quest flag clears when the quest is gone"] = _node_of(TravelRules.view(gs), _q("keep")).get("quest", true) == false
+	checks["keep restored"] = WorldCatalog.upsert(RUN, "locations", {"id": "keep", "name": "Keep", "map": "m_danger", "exits": [{"to": "field"}], "zone_bindings": _default_bindings()}).is_empty()
+	checks["cleanup"] = WorldCatalog.remove(RUN, "quests", "q_offer").is_empty() and WorldCatalog.remove(RUN, "quests", "q_goto").is_empty() and WorldCatalog.remove(RUN, "regions", "reg_x").is_empty()
+	checks["field restored"] = _set_field([])
+	return _report("MAPREAD1-L1: marker_view and TravelRules.view node extras", checks)
+
+static func _node_of(view: Dictionary, qid: String) -> Dictionary:
+	for n: Variant in DictUtil.array_of(view.get("nodes", [])):
+		if str(DictUtil.dict_of(n).get("qid", "")) == qid:
+			return DictUtil.dict_of(n)
+	return {}
 
 static func _test_chest() -> bool:
 	var checks: Dictionary = {}

@@ -38,7 +38,9 @@ const CHEST_SUPPLIES_MAX: int = 99   # TRAV2-L (S10)
 
 const TEMPLATE_FIELDS: Array[String] = ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "tags"]
 const BINDING_KEYS: Array[String] = ["encounters", "elites", "elite_pct", "steps_min", "steps_max"]
-const MARKER_COMMON: Array[String] = ["id", "kind", "anchor", "requires_flags", "unless_flags", "sets_flags"]
+const MARKER_COMMON: Array[String] = ["id", "kind", "anchor", "requires_flags", "unless_flags", "sets_flags", "label", "note"]
+const LABEL_MAX: int = 32   # MAPREAD1-L1
+const NOTE_MAX: int = 160
 const FLAG_KEYS: Array[String] = ["requires_flags", "unless_flags", "sets_flags"]
 const TRIGGERS: Array[String] = ["touch", "proximity"]
 # Kind -> its own keys with defaults (the common keys are MARKER_COMMON; a roamer takes no anchor).
@@ -350,7 +352,7 @@ static func template_warnings(entry: Dictionary) -> Array[String]:
 
 # A marker with its kind's defaults filled (unknown keys kept).
 static func marker_full(m: Dictionary) -> Dictionary:
-	var out: Dictionary = {"id": "", "kind": "", "requires_flags": [], "unless_flags": [], "sets_flags": []}
+	var out: Dictionary = {"id": "", "kind": "", "requires_flags": [], "unless_flags": [], "sets_flags": [], "label": "", "note": ""}
 	var kind: String = str(m.get("kind", ""))
 	if kind != "roamer":
 		out["anchor"] = ""
@@ -367,6 +369,7 @@ static func binding_full(b: Dictionary) -> Dictionary:
 # Every map-binding problem of a (normalised) location entry of `world_id`.
 static func location_errors(world_id: String, e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
+	errors.append_array(map_pos_errors(e.get("map_pos", [])))
 	var map_id: String = str(e.get("map", ""))
 	var bindings_raw: Variant = e.get("zone_bindings", {})
 	var markers_raw: Variant = e.get("markers", [])
@@ -394,6 +397,24 @@ static func location_errors(world_id: String, e: Dictionary) -> Array[String]:
 	var markers: Array = markers_raw
 	errors.append_array(markers_errors(world_id, e, t, markers))
 	errors.append_array(world_map_exit_errors(world_id, e))
+	return errors
+
+# MAPREAD1-L1: `map_pos` is [] (automatic layout) or [x, y], both numbers in 0..1.
+static func map_pos_errors(raw: Variant) -> Array[String]:
+	var errors: Array[String] = []
+	if not (raw is Array):
+		errors.append("Map position must be empty or two numbers [x, y] between 0 and 1.")
+		return errors
+	var list: Array = raw
+	if list.is_empty():
+		return errors
+	var ok: bool = list.size() == 2
+	if ok:
+		for v: Variant in list:
+			if not (v is int or v is float) or float(v) < 0.0 or float(v) > 1.0:
+				ok = false
+	if not ok:
+		errors.append("Map position must be empty or two numbers [x, y] between 0 and 1.")
 	return errors
 
 # TRAV1-L: a location with a world_map exit marker must be a node of its world's route graph (TravelRules.nodes).
@@ -516,7 +537,24 @@ static func markers_errors(world_id: String, e: Dictionary, t: Dictionary, list:
 				anchors_taken[anchor] = mid
 		for fk: String in FLAG_KEYS:
 			errors.append_array(QuestRules.flag_list_errors(m[fk], "Marker '%s' %s" % [mid, fk], fk))
+		errors.append_array(_marker_text_errors(mid, kind, m))
 		errors.append_array(_marker_kind_errors(world_id, e, t, mid, kind, m))
+	return errors
+
+# MAPREAD1-L1: label (0..LABEL_MAX characters) and note (0..NOTE_MAX, points only).
+static func _marker_text_errors(mid: String, kind: String, m: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	if not (m["label"] is String):
+		errors.append("Marker '%s': label must be text." % mid)
+	elif str(m["label"]).length() > LABEL_MAX:
+		errors.append("Marker '%s': label is at most %d characters." % [mid, LABEL_MAX])
+	if not (m["note"] is String):
+		errors.append("Marker '%s': note must be text." % mid)
+	elif not str(m["note"]).is_empty():
+		if kind != "point":
+			errors.append("Marker '%s': only points take a note." % mid)
+		elif str(m["note"]).length() > NOTE_MAX:
+			errors.append("Marker '%s': note is at most %d characters." % [mid, NOTE_MAX])
 	return errors
 
 static func _marker_kind_errors(world_id: String, e: Dictionary, t: Dictionary, mid: String, kind: String, m: Dictionary) -> Array[String]:

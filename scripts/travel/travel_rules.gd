@@ -336,14 +336,45 @@ static func route_in(world_id: String, route_qid: String) -> Dictionary:
 			return r
 	return {}
 
-# What the world map draws: {current, supplies (TRAV2-L), nodes: [{qid, name, visited}], routes: [{qid, from, to, two_way, open, time}]}
+# MAPREAD1-L1: qids of the locations an active quest's current step points at: the step's location, or the location
+# of its encounter (the encounter's own `location`).
+static func quest_nodes(gs: GameState) -> Array[String]:
+	var out: Array[String] = []
+	for qid: String in QuestRunner.quests_with(gs, "active"):
+		var obj: Dictionary = QuestRunner.current_objective(gs, qid)
+		if obj.is_empty():
+			continue
+		var steps: Array = DictUtil.array_of(QuestRunner.resolved(gs, qid).get("steps", []))
+		var index: int = DictUtil.to_int(obj.get("index", -1))
+		var step: Dictionary = DictUtil.dict_of(steps[index]) if index >= 0 and index < steps.size() else {}
+		var refs: Array[String] = []
+		match str(obj.get("kind", "")):
+			"reach_location":
+				refs.append(str(step.get("location", "")))
+			"win_encounter":
+				refs.append(str(step.get("location", "")))
+				var enc: Dictionary = WorldCatalog.resolve(gs.world_id, "encounters", str(step.get("encounter", "")))
+				refs.append(str(enc.get("location", "")))
+		for ref: String in refs:
+			if ref.is_empty():
+				continue
+			var hit: String = str(ExploreRunner.resolve_location(gs, ref).get("_qid", ""))
+			if not hit.is_empty() and not out.has(hit):
+				out.append(hit)
+	return out
+
+# What the world map draws: {current, supplies (TRAV2-L), nodes: [{qid, name, visited, kind, region, quest, map_pos}], routes: [{qid, from, to, two_way, open, time}]}
 # for known nodes only; a closed route is listed only when both its endpoints are known, an open one when both are.
 static func view(gs: GameState) -> Dictionary:
 	var known_nodes: Array[String] = known(gs)
 	var node_list: Array = []
+	var quest_at: Array[String] = quest_nodes(gs)
 	for q: String in known_nodes:
 		var loc: Dictionary = ExploreRunner.resolve_location(gs, q)
-		node_list.append({"qid": q, "name": str(loc.get("name", q)), "visited": is_visited(gs, q)})
+		var region_ref: String = str(loc.get("region", ""))
+		var region: Dictionary = WorldCatalog.resolve(str(loc.get("_world", gs.world_id)), "regions", region_ref) if not region_ref.is_empty() else {}
+		var pos: Array = DictUtil.array_of(loc.get("map_pos", []))
+		node_list.append({"qid": q, "name": str(loc.get("name", q)), "visited": is_visited(gs, q), "kind": str(loc.get("kind", "")), "region": str(region.get("name", "")), "quest": quest_at.has(q), "map_pos": pos.duplicate()})
 	var route_list: Array = []
 	for r: Dictionary in graph(gs.world_id):
 		var a: String = str(r["_from"])
