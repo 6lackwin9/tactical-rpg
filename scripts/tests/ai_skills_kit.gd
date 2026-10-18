@@ -21,6 +21,7 @@ static func rows() -> Array[Dictionary]:
 		{"id": "ai1_taunt", "name": "Ai1 Taunt", "kind": "SUPPORT", "level": 1, "blocks": 1, "target_mode": "SELF", "grant_status": "taunt", "status_rounds": 2},
 		{"id": "ai1_haste", "name": "Ai1 Haste", "kind": "SUPPORT", "level": 1, "blocks": 1, "target_mode": "ALLY", "grant_status": "haste", "status_rounds": 1},
 		{"id": "ai1_heal", "name": "Ai1 Heal", "kind": "SUPPORT", "level": 1, "blocks": 1, "target_mode": "ALLY_OR_SELF", "heal_base": 20},
+		{"id": "ai1_heal_big", "name": "Ai1 Heal Big", "kind": "SUPPORT", "level": 2, "blocks": 1, "target_mode": "ALLY_OR_SELF", "heal_base": 40},
 		{"id": "ai1_intim", "name": "Ai1 Intimidate", "kind": "ATTACK", "level": 3, "blocks": 1, "power_mult": 0.0, "stance": "DEFENSIVE", "status_effect": "weaken", "status_potency": 70, "status_magnitude": 15, "status_rounds": 2},
 		{"id": "ai1_guard", "name": "Ai1 Guard", "kind": "DEFEND", "level": 2, "blocks": 2, "mitigation": 0.5},
 		{"id": "ai1_rip", "name": "Ai1 Riposte", "kind": "DEFEND", "level": 2, "blocks": 2, "mitigation": 0.15, "grant_status": "riposte", "status_rounds": 2},

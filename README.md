@@ -599,6 +599,9 @@ Region map data (EXP1-A, seed `data/seeds/exp1a.gd`): maps `walled_town` and `go
 - **Faster tier**: a unit expected to take at least its HP this round takes the highest-damage option that resolves by block 2 (`FAST_BLOCK`). Applies to every unit; the pick is by damage, so under pressure it may override the combo order.
 - **Heal reservation**: a SUPPORT unit with no heal in its draft appends its lowest affordable heal tier, last in the round, on the friend projected lowest at or below `heal_below` (0.7) by round end; recomputed every round; it never adds a move.
 - **Taunt pull**: a unit whose top target is a taunter it can strike or reach within this round's move commits to it: the taunter is its only target (it walks to it when the strike does not fit), and a hurt skirmisher's disengage and the low-HP guard while the taunter is out of reach (both would cost the move) are skipped.
+- **Early taunt (BAL5-AI T2)**: a taunter also casts taunt when any foe would pick an ally this round (`_likely_target`), besides the 3-tile rule; when the taunt cannot go up in place, it walks toward the nearest diver and taunts after the walk (and still strikes if a strike fits there).
+- **Healer self-care (BAL5-AI S1)**: a SUPPORT unit expecting at least 50% of its current HP as damage this round heals itself first with its lowest fitting heal tier (counts toward `MAX_HEALS`); at full HP or with no fitting self-heal it steps back one tile.
+- **Friendly-fire tolerance (BAL5-AI A2)**: an area cast may hit one ally when it hits at least 3 foes and costs that ally under 25% of its current HP; on equal damage, fewer allies hit ranks first.
 - **Minion skill ceiling**: minion-tier units without an explicit `skill_cap` use AP ceiling `StatRules.MINION_SKILL_CAP` (2, tiers I-II).
 - Tested in `ai_skills_test_suite.gd`, `ai_skills_tactics_test_suite.gd` and `planning_ai_extra_test_suite.gd`.
 

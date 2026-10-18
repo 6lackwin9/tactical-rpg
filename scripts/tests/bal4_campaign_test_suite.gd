@@ -21,11 +21,15 @@ const SimCampaign = preload("res://tools/sim/sim_campaign.gd")
 # Records the allies' HP sum at the start of every fight.
 class StartHpObserver extends "res://tools/sim/sim_observer.gd":
 	var starts: Array[int] = []
+	var heroes: Array[Dictionary] = []   # per battle start: hero name -> Vector2i(hp, max_hp) (never cleared)
 	func on_start(session: CombatSession) -> void:
 		var sum: int = 0
+		var each: Dictionary = {}
 		for c: Combatant in session.allies:
 			sum += c.hp
+			each[c.name] = Vector2i(c.hp, c.max_hp)
 		starts.append(sum)
+		heroes.append(each)
 
 const TAG: String = "BAL4"
 const TEST_LEVEL: int = 5
@@ -248,6 +252,7 @@ static func _test_runs() -> bool:
 		# HP carries over: battle 2 starts with the HP battle 1 ended with (heal none).
 		var carry: Dictionary = camp.run_party(ids, [mid, weak], seed_value)
 		var hp_list: Array = DictUtil.array_of(carry["hp"])
+		var carry_second: Dictionary = obs.heroes[obs.heroes.size() - 1] if not obs.heroes.is_empty() else {}
 		checks["carry run fought both battles"] = hp_list.size() == 2 and obs.starts.size() == 2
 		if hp_list.size() == 2 and obs.starts.size() == 2:
 			var max_total: float = float(obs.starts[0])   # battle 1 starts at full HP
@@ -270,7 +275,18 @@ static func _test_runs() -> bool:
 		if obs.starts.size() == 2 and hp_list.size() == 2:
 			var full_start: int = obs.starts[0]
 			checks["heal=rally: battle 2 starts above the unhealed carry-over (not vacuous)"] = obs.starts[1] > roundi(DictUtil.to_float(hp_list[0]) / 100.0 * float(full_start))
-			checks["heal=rally: battle 2 starts below full (not a full heal)"] = obs.starts[1] < full_start
+			# Rule (HealRules.hp_after "won"): each hero starts battle 2 at its carried HP plus rally(max), capped at max
+			# (a downed hero at rally(max)); so it is below full exactly when some hero carried a loss above its rally.
+			var rally_second: Dictionary = obs.heroes[obs.heroes.size() - 1]
+			var per_hero: bool = rally_second.size() > 0
+			var some_short: bool = false
+			for hero_name: Variant in rally_second:
+				var got: Vector2i = rally_second[hero_name]
+				var carried: Vector2i = carry_second.get(hero_name, Vector2i(0, got.y))
+				per_hero = per_hero and got.x == HealRules.hp_after(carried.x, got.y, "won")
+				some_short = some_short or carried.x > 0 and got.y - carried.x > HealRules.rally(got.y)
+			checks["heal=rally: each hero starts battle 2 at carried HP + rally, capped at max (HealRules)"] = per_hero
+			checks["heal=rally: below full whenever a hero carried a loss above its rally (not a full heal)"] = obs.starts[1] < full_start or not some_short
 		# rest=2: battle 2 starts at the battle 1 start HP, like heal=full.
 		obs.starts.clear()
 		args.heal = "none"

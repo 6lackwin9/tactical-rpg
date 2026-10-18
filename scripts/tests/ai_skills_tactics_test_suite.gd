@@ -5,7 +5,8 @@ extends RefCounted
 # Tactical RPG - AI Skills: taunt, ally buffs, debuff attacks, riposte and 50 seeded 3v3 rounds
 # (slice AI1; split from AiSkillsTestSuite by CLN-12). Fixtures and helpers: AiSkillsKit. Every
 # expectation is derived from the rules, not from shipped skill numbers. BAL3-AI: heal reservation and
-# taunt pull (docs/specs/BAL3.md section 4).
+# taunt pull (docs/specs/BAL3.md section 4). BAL5-AI: early taunt (T2), healer self-care (S1) and
+# friendly-fire tolerance (A2) (docs/specs/BAL5_LEVERS.md sections 2-4).
 # ==============================================================================
 
 const TAG: String = "AI1"
@@ -22,6 +23,9 @@ static func run() -> bool:
 		ok = _test_riposte() and ok
 		ok = _test_heal_reservation() and ok
 		ok = _test_taunt_pull() and ok
+		ok = _test_early_taunt() and ok
+		ok = _test_self_care() and ok
+		ok = _test_friendly_fire() and ok
 		ok = _test_simulation() and ok
 	AiSkillsKit.teardown()
 	return ok
@@ -316,6 +320,195 @@ static func _engages(steps: Array[PlanStep], unit: Combatant) -> bool:
 		if step.mode == PlanStep.Mode.ENGAGE and step.target == unit:
 			return true
 	return false
+
+# ------------------------------------------------------------------------------
+# BAL5-AI: early taunt (T2), healer self-care (S1), friendly-fire tolerance (A2)
+# ------------------------------------------------------------------------------
+
+# T2 board: the taunter next to a diving skirmisher (it prefers the weakest; the taunt is a precast, so the strike must
+# still fit in place), the mage 4 tiles from it (outside the old 3-tile rule); `mage_hp` decides whom the diver picks.
+static func _early_taunt_scene(mage_hp: int) -> Dictionary:
+	var s: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(7, 4), ["ai1_taunt"], [Vector2i(8, 4)], [Vector2i(4, 4)])
+	var ctx: PlanContext = s["ctx"]
+	var diver: Combatant = AiSkillsKit.unit_of(s, "foes", 0)
+	ctx.profiles[diver] = AiSkillsKit.ai_profile(AiProfile.Role.SKIRMISHER)
+	AiSkillsKit.unit_of(s, "allies", 1).hp = mage_hp
+	return s
+
+static func _test_early_taunt() -> bool:
+	var checks: Dictionary = {}
+	var s: Dictionary = _early_taunt_scene(100)
+	var ctx: PlanContext = s["ctx"]
+	var diver: Combatant = AiSkillsKit.unit_of(s, "foes", 0)
+	var mage: Combatant = AiSkillsKit.unit_of(s, "allies", 1)
+	var actor: Combatant = s["actor"]
+	var dist: int = ctx.grid.get_distance(ctx.grid.get_position(diver), ctx.grid.get_position(mage))
+	var threat: int = CombatPlan.new(ctx).max_move_tiles(diver) + SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(diver).y
+	checks["fixture: the mage is beyond the 3-tile rule but within the diver's move + reach"] = dist > 3 and dist <= threat
+	checks["fixture: the diver would pick the mage this round"] = TacticalAI.incoming_damage(CombatPlan.new(ctx), mage, ctx.total_blocks, ctx.grid.get_position(mage)) > 0 and TacticalAI.incoming_damage(CombatPlan.new(ctx), actor, ctx.total_blocks, ctx.grid.get_position(actor)) == 0
+	var steps: Array[PlanStep] = AiSkillsKit.plan_steps(s)
+	checks["a foe would pick an ally this round: the warrior drafts one taunt"] = AiSkillsKit.count_of(steps, "ai1_taunt") == 1 and AiSkillsKit.valid(s, steps)
+	var calm: Dictionary = _early_taunt_scene(AiSkillsKit.unit_of(s, "allies", 1).max_hp)
+	var calm_ctx: PlanContext = calm["ctx"]
+	var calm_mage: Combatant = AiSkillsKit.unit_of(calm, "allies", 1)
+	checks["fixture: a healthy mage is not the diver's pick (the warrior is)"] = TacticalAI.incoming_damage(CombatPlan.new(calm_ctx), calm_mage, calm_ctx.total_blocks, calm_ctx.grid.get_position(calm_mage)) == 0
+	checks["no foe would pick an ally and none within 3 tiles: no taunt"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(calm), "ai1_taunt") == 0
+	# Walk-in: the warrior stands out of strike reach of the diver (no taunt in place before a strike is possible).
+	var walk: Dictionary = _walk_in_scene(4)
+	var walk_ctx: PlanContext = walk["ctx"]
+	var walk_actor: Combatant = walk["actor"]
+	var walk_diver: Combatant = AiSkillsKit.unit_of(walk, "foes", 0)
+	var walk_mage: Combatant = AiSkillsKit.unit_of(walk, "allies", 1)
+	var start_gap: int = walk_ctx.grid.get_distance(walk_ctx.grid.get_position(walk_actor), walk_ctx.grid.get_position(walk_diver))
+	checks["fixture (walk-in): the warrior is beyond its strike reach of the diver, which would pick the mage"] = start_gap > SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(walk_actor).y and TacticalAI.incoming_damage(CombatPlan.new(walk_ctx), walk_mage, walk_ctx.total_blocks, walk_ctx.grid.get_position(walk_mage)) > 0
+	var walk_steps: Array[PlanStep] = AiSkillsKit.plan_steps(walk)
+	var walk_plan := CombatPlan.new(walk_ctx)
+	walk_plan.set_steps(walk_actor, walk_steps)
+	var end_gap: int = walk_ctx.grid.get_distance(walk_plan.compile(walk_actor).pos, walk_ctx.grid.get_position(walk_diver))
+	var opens_walk: bool = walk_steps.size() >= 2 and (walk_steps[0].mode == PlanStep.Mode.GOTO or walk_steps[0].mode == PlanStep.Mode.MOVE)
+	checks["walk-in: it walks toward the diver first, then taunts (plan valid)"] = opens_walk and walk_steps[1].skill.id == "ai1_taunt" and end_gap < start_gap and AiSkillsKit.valid(walk, walk_steps)
+	var walk_threat: int = CombatPlan.new(walk_ctx).max_move_tiles(walk_diver) + SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(walk_diver).y
+	var safe: Dictionary = _walk_in_scene(walk_threat + 1)
+	var safe_ctx: PlanContext = safe["ctx"]
+	var safe_mage: Combatant = AiSkillsKit.unit_of(safe, "allies", 1)
+	checks["fixture (counter): the mage is beyond the diver's move + reach and more than 3 tiles away"] = walk_threat + 1 > 3 and 8 - walk_threat - 1 >= 0 and TacticalAI.incoming_damage(CombatPlan.new(safe_ctx), safe_mage, safe_ctx.total_blocks, safe_ctx.grid.get_position(safe_mage)) == 0
+	var safe_steps: Array[PlanStep] = AiSkillsKit.plan_steps(safe)
+	var safe_actor: Combatant = safe["actor"]
+	var safe_plan := CombatPlan.new(safe_ctx)
+	safe_plan.set_steps(safe_actor, safe_steps)
+	var safe_diver_at: Vector2i = safe_ctx.grid.get_position(AiSkillsKit.unit_of(safe, "foes", 0))
+	var safe_walks: bool = safe_ctx.grid.get_distance(safe_plan.compile(safe_actor).pos, safe_diver_at) < safe_ctx.grid.get_distance(safe_ctx.grid.get_position(safe_actor), safe_diver_at)
+	checks["no foe would pick the mage: the warrior still advances but does not taunt"] = safe_walks and AiSkillsKit.count_of(safe_steps, "ai1_taunt") == 0
+	return TestHelpers.report(TAG, "BAL5-AI lever T2: early taunt", checks)
+
+# T2 walk-in board: the diver (a skirmisher) at (8, 4), the weak mage `mage_gap` tiles west of it, the warrior at (6, 1)
+# (5 tiles from the diver, out of strike reach).
+static func _walk_in_scene(mage_gap: int) -> Dictionary:
+	var s: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(6, 1), ["ai1_taunt"], [Vector2i(8, 4)], [Vector2i(8 - mage_gap, 4)])
+	var ctx: PlanContext = s["ctx"]
+	ctx.profiles[AiSkillsKit.unit_of(s, "foes", 0)] = AiSkillsKit.ai_profile(AiProfile.Role.SKIRMISHER)
+	AiSkillsKit.unit_of(s, "allies", 1).hp = 100
+	return s
+
+# S1 heal board: a wounded SUPPORT healer (90% HP, above heal_below) next to a melee foe; the foe's power is raised in
+# steps of 5 until the healer's incoming damage this round reaches `share` of its current HP (share 0 = power 1).
+static func _care_scene(kit: Array[String], foe_cells: Array[Vector2i], share: float, actor_hp_ratio: float) -> Dictionary:
+	var power: int = 1
+	var s: Dictionary = {}
+	while power < 2000:
+		s = AiSkillsKit.new_scene(AiProfile.Role.SUPPORT, Vector2i(4, 4), kit, foe_cells, [], 3)
+		var actor: Combatant = s["actor"]
+		actor.hp = floori(actor_hp_ratio * float(actor.max_hp))
+		var foes: Array[Combatant] = s["foes"]
+		for foe: Combatant in foes:
+			foe.power_override = 1
+		AiSkillsKit.unit_of(s, "foes", 0).power_override = power
+		if share <= 0.0 or _incoming_share(s) >= share:
+			break
+		power += 5
+	return s
+
+static func _incoming_share(s: Dictionary) -> float:
+	var ctx: PlanContext = s["ctx"]
+	var actor: Combatant = s["actor"]
+	return float(TacticalAI.incoming_damage(CombatPlan.new(ctx), actor, ctx.total_blocks, ctx.grid.get_position(actor))) / float(maxi(1, actor.hp))
+
+static func _test_self_care() -> bool:
+	var checks: Dictionary = {}
+	var kit: Array[String] = ["ai1_heal", "ai1_heal_big"]
+	var adjacent: Array[Vector2i] = [Vector2i(5, 4)]
+	var hot: Dictionary = _care_scene(kit, adjacent, 0.6, 0.9)
+	var hot_actor: Combatant = hot["actor"]
+	var hot_profile: AiProfile = hot["profile"]
+	checks["fixture: the healer is above heal_below and projected to lose >= 60% of its HP"] = float(hot_actor.hp) / float(hot_actor.max_hp) > hot_profile.heal_below and _incoming_share(hot) >= 0.6 and hot_actor.hp < hot_actor.max_hp
+	var hot_steps: Array[PlanStep] = AiSkillsKit.plan_steps(hot)
+	var opener: PlanStep = hot_steps[0] if not hot_steps.is_empty() else null
+	checks["under pressure: it heals itself first, with the lowest heal tier"] = opener != null and opener.mode == PlanStep.Mode.SELF and opener.skill.id == "ai1_heal"
+	checks["one self-heal only and the plan is valid"] = AiSkillsKit.count_of(hot_steps, "ai1_heal") + AiSkillsKit.count_of(hot_steps, "ai1_heal_big") == 1 and AiSkillsKit.valid(hot, hot_steps)
+	var calm: Dictionary = _care_scene(kit, adjacent, 0.0, 0.9)
+	checks["fixture: calm board, incoming below half its HP"] = _incoming_share(calm) < TacticalAI.SELF_CARE_RATIO
+	checks["calm: no self-heal (it is above heal_below)"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(calm), "ai1_heal") + AiSkillsKit.count_of(AiSkillsKit.plan_steps(calm), "ai1_heal_big") == 0
+	var sniper: Dictionary = _care_scene(kit, adjacent, 0.6, 0.9)
+	var sniper_actor: Combatant = sniper["actor"]
+	var sniper_ctx: PlanContext = sniper["ctx"]
+	checks["only the SUPPORT role self-cares"] = AiSkillsKit.count_of(TacticalAI.build_steps(sniper_actor, sniper_ctx, AiSkillsKit.ai_profile(AiProfile.Role.SNIPER)), "ai1_heal") == 0
+	# No self-heal: a strong melee threat adjacent east, a weak target 3 tiles west-north (at the basic ranged reach, so
+	# a calm healer neither kites nor walks); under pressure it steps one tile away from the threat first.
+	var threat_cells: Array[Vector2i] = [Vector2i(5, 4), Vector2i(2, 3)]
+	var no_kit: Array[String] = []
+	var pressed: Dictionary = _care_scene(no_kit, threat_cells, 0.6, 1.0)
+	AiSkillsKit.unit_of(pressed, "foes", 1).hp = 50
+	var pressed_ctx: PlanContext = pressed["ctx"]
+	var pressed_actor: Combatant = pressed["actor"]
+	var threat: Combatant = AiSkillsKit.unit_of(pressed, "foes", 0)
+	checks["fixture: no heal known and pressed by >= 60% of its HP"] = _incoming_share(pressed) >= 0.6
+	var pressed_steps: Array[PlanStep] = AiSkillsKit.plan_steps(pressed)
+	var first: PlanStep = pressed_steps[0] if not pressed_steps.is_empty() else null
+	var moved_away: bool = false
+	if first != null and first.mode == PlanStep.Mode.MOVE and first.tiles == 1:
+		var after: Vector2i = pressed_ctx.grid.get_position(pressed_actor) + first.direction
+		moved_away = pressed_ctx.grid.get_distance(after, pressed_ctx.grid.get_position(threat)) > pressed_ctx.grid.get_distance(pressed_ctx.grid.get_position(pressed_actor), pressed_ctx.grid.get_position(threat))
+	checks["pressed with no self-heal: one step away from the threat first, plan valid"] = moved_away and AiSkillsKit.valid(pressed, pressed_steps)
+	var easy: Dictionary = _care_scene(no_kit, threat_cells, 0.0, 1.0)
+	AiSkillsKit.unit_of(easy, "foes", 1).hp = 50
+	var easy_moves: bool = false
+	for step: PlanStep in AiSkillsKit.plan_steps(easy):
+		easy_moves = easy_moves or step.mode == PlanStep.Mode.MOVE or step.mode == PlanStep.Mode.GOTO
+	checks["calm, same board: no step back"] = _incoming_share(easy) < TacticalAI.SELF_CARE_RATIO and not easy_moves
+	return TestHelpers.report(TAG, "BAL5-AI lever S1: healer self-care", checks)
+
+# A2 board: three foes around one ally so that every burst on two or more foes also covers the ally (the only 3x3 with
+# all three is centred on the ally, 4 tiles from the caster); `three` false drops the third foe.
+static func _ff_scene(three: bool) -> Dictionary:
+	var foe_cells: Array[Vector2i] = [Vector2i(4, 3), Vector2i(6, 3)]
+	if three:
+		foe_cells.append(Vector2i(5, 5))
+	return AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(1, 4), ["ai1_burst"], foe_cells, [Vector2i(5, 4)])
+
+# Per ai1_burst step of the scene actor: (foes, allies other than the actor) inside its area.
+static func _burst_hits(s: Dictionary, steps: Array[PlanStep]) -> Array[Vector2i]:
+	var ctx: PlanContext = s["ctx"]
+	var actor: Combatant = s["actor"]
+	var foes: Array[Combatant] = s["foes"]
+	var allies: Array[Combatant] = s["allies"]
+	var out: Array[Vector2i] = []
+	for step: PlanStep in steps:
+		if step.mode != PlanStep.Mode.AREA or step.skill.id != "ai1_burst":
+			continue
+		var hits := Vector2i.ZERO
+		var cells: Array[Vector2i] = step.skill.area_cells(ctx.grid.get_position(actor), step.cell)
+		for foe: Combatant in foes:
+			hits.x += 1 if cells.has(ctx.grid.get_position(foe)) else 0
+		for ally: Combatant in allies:
+			hits.y += 1 if ally != actor and cells.has(ctx.grid.get_position(ally)) else 0
+		out.append(hits)
+	return out
+
+# True when some burst in `hits` covers an ally.
+static func _ally_burned(hits: Array[Vector2i]) -> bool:
+	for h: Vector2i in hits:
+		if h.y > 0:
+			return true
+	return false
+
+static func _test_friendly_fire() -> bool:
+	var checks: Dictionary = {}
+	var probe: Dictionary = _ff_scene(true)
+	var probe_actor: Combatant = probe["actor"]
+	var probe_ally: Combatant = AiSkillsKit.unit_of(probe, "allies", 1)
+	var dmg: int = DamageCalculator.expected(probe_actor, probe_ally, SkillCatalog.find("ai1_burst"))
+	checks["fixture: the burst deals damage to the ally"] = dmg > 0
+	var ok_cast: Dictionary = _ff_scene(true)
+	AiSkillsKit.unit_of(ok_cast, "allies", 1).hp = dmg * 4 + 1   # the hit costs it just under 25% of its current HP
+	var ok_steps: Array[PlanStep] = AiSkillsKit.plan_steps(ok_cast)
+	var ok_hits: Array[Vector2i] = _burst_hits(ok_cast, ok_steps)
+	checks["3 foes and one ally losing < 25% of its HP: the burst is cast on all four"] = not ok_hits.is_empty() and ok_hits[0] == Vector2i(3, 1) and AiSkillsKit.valid(ok_cast, ok_steps)
+	var costly: Dictionary = _ff_scene(true)
+	AiSkillsKit.unit_of(costly, "allies", 1).hp = dmg * 4   # exactly 25%: not tolerated
+	checks["3 foes but the ally would lose >= 25% of its HP: no burst on the ally"] = not _ally_burned(_burst_hits(costly, AiSkillsKit.plan_steps(costly)))
+	var two: Dictionary = _ff_scene(false)
+	checks["2 foes and the ally (healthy): no burst on the ally"] = not _ally_burned(_burst_hits(two, AiSkillsKit.plan_steps(two)))
+	return TestHelpers.report(TAG, "BAL5-AI lever A2: friendly-fire tolerance", checks)
 
 # ------------------------------------------------------------------------------
 # 50 seeded rounds of a 3v3 with mixed kits

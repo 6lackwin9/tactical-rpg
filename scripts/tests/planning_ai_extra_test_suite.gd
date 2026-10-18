@@ -222,12 +222,15 @@ static func compute() -> Dictionary:
 		psession.plan_apply_preset(hero, preset_id)
 		presets_ok = presets_ok and psession.plan.is_valid(hero) and not psession.plan.compile(hero).runs_dry()
 	psession.plan_apply_preset(hero, "aggressive")
-	# AI1: the draft may open with a SUPPORT cast (taunt); everything else must be an attack
-	var aggressive_ok: bool = not psession.plan.steps_of(hero).is_empty()
+	# AI1: the draft may open with a SUPPORT cast (taunt), BAL5 T2: a walk-in move right before that taunt; everything else
+	# must be an attack
+	var aggressive_steps: Array[PlanStep] = psession.plan.steps_of(hero)
+	var aggressive_ok: bool = not aggressive_steps.is_empty()
 	var aggressive_engages: int = 0
-	for s: PlanStep in psession.plan.steps_of(hero):
+	for i: int in range(aggressive_steps.size()):
+		var s: PlanStep = aggressive_steps[i]
 		var support_cast: bool = s.skill != null and s.skill.kind == SkillDef.Kind.SUPPORT
-		aggressive_ok = aggressive_ok and (s.mode == PlanStep.Mode.ENGAGE or support_cast)
+		aggressive_ok = aggressive_ok and (s.mode == PlanStep.Mode.ENGAGE or support_cast or _taunt_walk_in(aggressive_steps, i))
 		aggressive_engages += 1 if s.mode == PlanStep.Mode.ENGAGE else 0
 	aggressive_ok = aggressive_ok and aggressive_engages >= 1
 	psession.plan_apply_preset(hero, "focus_weakest")
@@ -242,10 +245,13 @@ static func compute() -> Dictionary:
 	for s: PlanStep in psession.plan.steps_of(hero):
 		economy_ok = economy_ok and (s.skill == null or s.skill.level == 1)
 	psession.plan_apply_preset(hero, "defensive")
-	# AI1: SUPPORT casts (taunt) and zero-power debuff casts (intimidate) may precede the guard; the first other step is the guard
+	# AI1: SUPPORT casts (taunt) and zero-power debuff casts (intimidate) may precede the guard, BAL5 T2: so may a walk-in
+	# move right before a taunt; the first other step is the guard
 	var first_action: PlanStep = null
-	for s: PlanStep in psession.plan.steps_of(hero):
-		if first_action == null and s.skill != null and s.skill.kind != SkillDef.Kind.SUPPORT and (s.skill.kind != SkillDef.Kind.ATTACK or s.skill.deals_damage()):
+	var defensive_steps: Array[PlanStep] = psession.plan.steps_of(hero)
+	for i: int in range(defensive_steps.size()):
+		var s: PlanStep = defensive_steps[i]
+		if first_action == null and s.skill != null and s.skill.kind != SkillDef.Kind.SUPPORT and (s.skill.kind != SkillDef.Kind.ATTACK or s.skill.deals_damage()) and not _taunt_walk_in(defensive_steps, i):
 			first_action = s
 	var defensive_ok: bool = first_action != null and first_action.mode == PlanStep.Mode.SELF and first_action.skill.kind == SkillDef.Kind.DEFEND
 	psession.plan_apply_preset(hero, "withdraw")
@@ -447,3 +453,10 @@ static func compute() -> Dictionary:
 		reset_ok = start_hp == end_hp and start_pos == end_pos and rs.is_planning() and rs.current_round == 2 and start_ap == end_ap
 	rs.dispose()
 	return {"mechanics_ok": mechanics_ok, "preset_ok": preset_ok, "ai_ok": ai_ok, "zones_ok": zones_ok, "both_hurt": both_hurt, "reset_ok": reset_ok}
+
+# BAL5 lever T2 walk-in: steps[i] is a move directly followed by a taunt cast (TacticalAI._early_taunt_walk).
+static func _taunt_walk_in(steps: Array[PlanStep], i: int) -> bool:
+	if i + 1 >= steps.size() or (steps[i].mode != PlanStep.Mode.GOTO and steps[i].mode != PlanStep.Mode.MOVE):
+		return false
+	var next: SkillDef = steps[i + 1].skill
+	return next != null and next.kind == SkillDef.Kind.SUPPORT and next.grant_status == StatusEffects.TAUNT
