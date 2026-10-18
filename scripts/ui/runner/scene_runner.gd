@@ -278,6 +278,16 @@ func back_to_menu() -> bool:
 	_show_menu()
 	return true
 
+# Exit the game. Unsaved work needs a second press, as for Menu.
+func exit_game() -> bool:
+	if active_scene != null and active_scene.has_method("has_unsaved_changes") and DictUtil.to_bool(active_scene.call("has_unsaved_changes")) and not _leave_armed:
+		_leave_armed = true
+		_set_status("Unsaved changes in %s: press Exit again to discard them." % _scene_name(active_path), true)
+		_flash_pill("Unsaved changes: press Exit again to quit")
+		return false
+	get_tree().quit()
+	return true
+
 func is_running() -> bool:
 	return active_scene != null
 
@@ -310,6 +320,42 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_F5:
 			reload_and_restart()
 			get_viewport().set_input_as_handled()
+		KEY_F11:
+			toggle_fullscreen()
+			get_viewport().set_input_as_handled()
+
+# ------------------------------------------------------------------------------
+# Window controls (user 2026-10-18): fullscreen <-> windowed (F11), minimize and exit, so a fullscreen game never traps
+# the window. Runtime only (the saved Display setting is untouched); all calls go through DisplaySettings' backend.
+# ------------------------------------------------------------------------------
+
+static func is_fullscreen() -> bool:
+	var m: int = DisplaySettings.backend().current_mode()
+	return m == DisplayServer.WINDOW_MODE_FULLSCREEN or m == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+
+# Returns true when the window is now fullscreen.
+static func toggle_fullscreen() -> bool:
+	var b: DisplaySettings.Backend = DisplaySettings.backend()
+	if is_fullscreen():
+		b.set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		b.set_size(DisplaySettings.BASE_SIZE)
+		b.centre()
+		return false
+	b.set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	return true
+
+static func minimize_window() -> void:
+	DisplaySettings.backend().set_mode(DisplayServer.WINDOW_MODE_MINIMIZED)
+
+# Minimize and Exit only make sense for a desktop window (a browser tab has neither).
+static func window_buttons_shown() -> bool:
+	return not DisplaySettings.is_web()
+
+func _window_row(row: HBoxContainer) -> void:
+	row.add_child(UiTheme.button("Fullscreen", "Fullscreen / windowed (F11)", func() -> void: toggle_fullscreen()))
+	if window_buttons_shown():
+		row.add_child(UiTheme.button("Minimize", "Minimize the window", func() -> void: minimize_window()))
+		row.add_child(UiTheme.button("Exit", "Exit the game", func() -> void: exit_game()))
 
 # ------------------------------------------------------------------------------
 # Test suites (separate headless process, output shown in the menu)
@@ -381,7 +427,12 @@ func _build_menu() -> void:
 	root.offset_bottom = -14
 	root.add_theme_constant_override("separation", 10)
 	menu_layer.add_child(root)
-	root.add_child(UiTheme.label("⚔ TACTICAL RPG  ·  SCENE RUNNER", 20, UiTheme.COL_TITLE))
+	var title_row := HBoxContainer.new()
+	root.add_child(title_row)
+	var title: Label = UiTheme.label("⚔ TACTICAL RPG  ·  SCENE RUNNER", 20, UiTheme.COL_TITLE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(title)
+	_window_row(title_row)
 	root.add_child(UiTheme.label("Launch any scene; F10 returns here, F6 restarts the scene, F5 reloads edited scripts and restarts it.", UiTheme.FONT_MD, UiTheme.COL_MUTED))
 
 	var body := HBoxContainer.new()
@@ -514,6 +565,7 @@ func _build_pill() -> void:
 	note_button = UiTheme.button("✎ Note", "Add a playtest note with a screenshot (F8)", func() -> void: _open_note_from_pill())
 	note_button.visible = false
 	row.add_child(note_button)
+	_window_row(row)
 	_pill_hint = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_WARN)
 	row.add_child(_pill_hint)
 

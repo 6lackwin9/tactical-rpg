@@ -63,6 +63,18 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = TestHelpers.report_ok(TAG, "Pull summary: changed shows old -> new; equal or unknown old says up to date with a hint",
 		sum_diff == "Pulled abc1234 → def5678." and sum_same.begins_with("Already up to date (abc1234)") and sum_same.contains("offline") and sum_empty.begins_with("Restarted; could not read the commit") and SceneRunner.pull_summary("abc1234", "") == sum_empty, sum_same) and ok
 
+	var fake := DisplaySettings.Backend.new()
+	DisplaySettings.use_backend(fake)
+	var to_full: bool = SceneRunner.toggle_fullscreen() and SceneRunner.is_fullscreen()
+	var to_window: bool = not SceneRunner.toggle_fullscreen() and fake.mode == DisplayServer.WINDOW_MODE_WINDOWED and fake.size == DisplaySettings.BASE_SIZE
+	fake.mode = DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	var from_exclusive: bool = not SceneRunner.toggle_fullscreen() and fake.mode == DisplayServer.WINDOW_MODE_WINDOWED
+	SceneRunner.minimize_window()
+	var minimized: bool = fake.mode == DisplayServer.WINDOW_MODE_MINIMIZED
+	DisplaySettings.use_backend()
+	ok = TestHelpers.report_ok(TAG, "Window controls: F11 toggles fullscreen and windowed (from either fullscreen kind), Minimize minimizes",
+		to_full and to_window and from_exclusive and minimized and SceneRunner.window_buttons_shown() == not DisplaySettings.is_web(), str(fake.calls)) and ok
+
 	if tree_parent == null:
 		return TestHelpers.report_ok(TAG, "Launch / menu / reload (needs a scene tree)", true, "skipped") and ok
 	var saved_enabled: int = PlaytestStore.force_enabled

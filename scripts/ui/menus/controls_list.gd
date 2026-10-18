@@ -58,6 +58,7 @@ const HARD_CODED: Array[Dictionary] = [
 	{"group": GROUP_TESTING, "action": "Scene Runner: reload and restart", "keys": "F5", "src": "res://scripts/ui/runner/scene_runner.gd", "tokens": ["KEY_F5"]},
 	{"group": GROUP_TESTING, "action": "Scene Runner: restart the scene", "keys": "F6", "src": "res://scripts/ui/runner/scene_runner.gd", "tokens": ["KEY_F6"]},
 	{"group": GROUP_TESTING, "action": "Scene Runner: back to the menu", "keys": "F10", "src": "res://scripts/ui/runner/scene_runner.gd", "tokens": ["KEY_F10"]},
+	{"group": GROUP_TESTING, "action": "Scene Runner: fullscreen / windowed", "keys": "F11", "src": "res://scripts/ui/runner/scene_runner.gd", "tokens": ["KEY_F11"]},
 ]
 
 # The keys and mouse buttons bound to an InputMap action, as text ("Escape, Enter"); joypad events are left out.
