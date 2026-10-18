@@ -156,7 +156,7 @@ static func _key(vp: Viewport, code: Key) -> void:
 # A left click on `tile` of the map canvas, pushed through the viewport (the GUI picks the control under it).
 static func _click(vp: Viewport, view: RegionMapView, tile: Vector2i) -> void:
 	var canvas: Control = view._canvas
-	var at: Vector2 = canvas.get_global_rect().position + (Vector2(tile) + Vector2(0.5, 0.5)) * RegionMapView.TILE
+	var at: Vector2 = canvas.get_global_rect().position + view.tile_centre(tile)   # MAPVIEW1: camera offset applied
 	for down: bool in [true, false]:
 		var ev := InputEventMouseButton.new()
 		ev.button_index = MOUSE_BUTTON_LEFT

@@ -12,6 +12,7 @@ const WORLD_SCENE: String = "res://scenes/overworld/world_map_debug.tscn"
 const REGION_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
 const R: String = TravelRuntimeChecks.R
 const SEED: int = 6262
+const FX_POS: Array = [0.19, 0.75]   # MAPVIEW1: Fox Hollow's pin point (normalized); other nodes keep the circle
 
 static func _q(id: String) -> String:
 	return WorldCatalog.qid(R, id)
@@ -19,7 +20,7 @@ static func _q(id: String) -> String:
 static func _build() -> bool:
 	var errors: Array[String] = []
 	errors.append_array(WorldCatalog.update_manifest(R, {"start_location": "m0"}))
-	errors.append_array(WorldCatalog.upsert(R, "locations", {"id": "fx", "name": "Fox Hollow"}))
+	errors.append_array(WorldCatalog.upsert(R, "locations", {"id": "fx", "name": "Fox Hollow", "map_pos": FX_POS}))
 	errors.append_array(WorldCatalog.upsert(R, "locations", {"id": "gate", "name": "Gate", "map": "m_tv",
 		"markers": [{"id": "to_map", "kind": "exit", "anchor": "a_wm", "to": MapRules.WORLD_MAP, "sets_flags": [{"key": "tr.mapped"}]}]}))
 	errors.append_array(WorldCatalog.upsert(R, "routes", {"id": "r_gate", "name": "Gate road", "from": "m0", "to": "gate", "time": 1, "encounter_pct": 0}))
@@ -61,6 +62,20 @@ static func _test_standalone(tree_parent: Node, packed: PackedScene) -> bool:
 	checks["one pin per known node"] = pin_keys == known and not pin_keys.has(_q("m2"))
 	var m1_pin: Vector2 = pins.get(_q("m1"), Vector2(-1000, -1000))
 	checks["a click on a pin finds its node"] = view.node_at(m1_pin) == _q("m1") and view.node_at(Vector2(-500, -500)).is_empty()
+	# MAPVIEW1: map_pos places the pin in the canvas rect (no backdrop in the sandbox) or in the letterboxed backdrop
+	view.size = MapViewChecks.VIEW   # the arena parent may have no size; the full-rect canvas follows the view
+	pins = view.pin_positions()
+	var fx_at: Vector2 = Vector2(float(FX_POS[0]), float(FX_POS[1]))
+	var plain: Rect2 = view.layout_rect()
+	checks["no backdrop: the layout rect is the whole canvas"] = view.backdrop == null and plain == Rect2(Vector2.ZERO, view._canvas.size)
+	checks["map_pos pin in the canvas rect"] = pins.has(_q("fx")) and MapViewChecks._near(pins[_q("fx")], plain.position + fx_at * plain.size)
+	var img: Image = Image.create(192, 108, false, Image.FORMAT_RGB8)
+	view.backdrop = ImageTexture.create_from_image(img)
+	var box: Rect2 = WorldMapView.letterbox(Vector2(192, 108), plain)
+	var lb: Dictionary = view.pin_positions()
+	checks["backdrop: letterboxed rect, map_pos pin inside it"] = view.layout_rect() == box and MapViewChecks._near(lb.get(_q("fx"), Vector2.INF), box.position + fx_at * box.size)
+	checks["backdrop: a pin without map_pos keeps its circle slot around the backdrop"] = MapViewChecks._near(lb.get(_q("m1"), Vector2.INF), WorldMapView.layout(TravelRules.nodes(R), TravelRules.known(view.gs), {}, box).get(_q("m1"), Vector2.ZERO))
+	view.backdrop = null
 	var t0: int = view.gs.time
 	view.travel_to(_q("m1"))
 	checks["click = travel; the clock advances"] = view.gs.location_id == _q("m1") and view.gs.time == t0 + TravelRuntimeChecks.M01_TIME

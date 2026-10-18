@@ -11,15 +11,22 @@ extends Control
 # hands back to the region map, Back closes without travelling. Standalone (scenes/overworld/world_map_debug.tscn): a
 # world picker starts a debug game. REVIEW-F1: `autosave` events write slot 0 only for the main menu's game
 # (CurrentGame.state()); busy() (a fight is pending) is mirrored to CurrentGame.set_busy.
+# MAPVIEW1: the canvas fills the view, the top strip and the side column float over it (RegionMapView.float_panel). When
+# the asset registry serves ui key "<world>_world_map" (ashlands_world_map, 1920x1080) from a file, it is drawn
+# letterboxed behind routes and pins; a location's `map_pos` [x, y] (0..1) places its pin in that rect (the canvas rect
+# without a backdrop); locations without it keep the circle layout (layout, pure).
 # ==============================================================================
 
 signal arrived(location_qid: String)
 signal closed
 signal fight_settled(res: Dictionary)
 
-const PIN_RADIUS: float = 9.0
-const CLICK_RADIUS: float = 16.0
+const PIN_RADIUS: float = 12.0   # placeholder circle; the art contract is a 24x24 pin per kind
+const CLICK_RADIUS: float = 20.0
 const LAYOUT_FRACTION: float = 0.38
+const BACKDROP_SUFFIX: String = "_world_map"   # ui key "<world id>_world_map" (ashlands_world_map), variant "background"
+const BACKDROP_VARIANT: String = "background"
+const NO_POS: Vector2 = Vector2(-1.0, -1.0)
 const OUT_OF_SUPPLIES: String = "Out of supplies: road fights are more likely."   # TRAV2-L status warning at 0
 const ARROW_SIZE: float = 10.0
 const DASH: float = 6.0
@@ -38,7 +45,10 @@ var dev_outcomes: bool = false
 var launch_errors: Array[String] = []
 var log_lines: Array[String] = []
 
-var _root: VBoxContainer = null
+var backdrop: Texture2D = null   # MAPVIEW1: the world's backdrop (backdrop_for) or null (plain look); set by show_state
+var _root: Control = null   # the canvas and the floating panels (hidden while a battle runs)
+var _top: PanelContainer = null
+var _side: PanelContainer = null
 var _world_pick: OptionButton = null
 var _status: Label = null
 var _canvas: Control = null
@@ -50,11 +60,16 @@ var _log: Label = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root = VBoxContainer.new()
+	_root = Control.new()
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
+	_canvas = RegionMapView.map_canvas(_root)
+	_canvas.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # the painted backdrop is scaled, not pixel art
+	_canvas.draw.connect(_draw_map)
+	_canvas.gui_input.connect(_on_canvas_input)
 	var bar := HBoxContainer.new()
-	_root.add_child(bar)
+	_top = RegionMapView.float_panel(_root, bar, false)
 	if embedded:
 		_back = UiTheme.button("Back", "Close the world map without travelling", back)
 		bar.add_child(_back)
@@ -66,19 +81,8 @@ func _ready() -> void:
 		bar.add_child(UiTheme.button("New game", "NewGame.create with the first party units, then ExploreRunner.begin", _on_new_game))
 	_status = UiTheme.label("")
 	bar.add_child(_status)
-	var body := HBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_root.add_child(body)
-	_canvas = Control.new()
-	_canvas.custom_minimum_size = Vector2(520, 360)
-	_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_canvas.mouse_filter = Control.MOUSE_FILTER_STOP
-	_canvas.draw.connect(_draw_map)
-	_canvas.gui_input.connect(_on_canvas_input)
-	body.add_child(_canvas)
 	var side := VBoxContainer.new()
-	side.custom_minimum_size = Vector2(260, 0)
-	body.add_child(side)
+	_side = RegionMapView.float_panel(_root, side, true)
 	_fight_panel = PanelContainer.new()
 	var fight_box := VBoxContainer.new()
 	_fight_panel.add_child(fight_box)
@@ -95,6 +99,7 @@ func _ready() -> void:
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_log.custom_minimum_size = Vector2(260, 0)
 	side.add_child(_log)
+	_top.resized.connect(func() -> void: RegionMapView.dock_below(_top, _side))
 	_refresh()
 
 func _on_new_game() -> void:
@@ -117,6 +122,7 @@ func start_game(world_id: String, p_seed: int = RegionMapView.DEBUG_SEED) -> Arr
 # Shows the world map of `state` (the region map's game when embedded).
 func show_state(state: GameState) -> void:
 	gs = state
+	backdrop = backdrop_for(gs.world_id) if gs != null else null
 	pending_fight = {}
 	_close_battle()
 	if gs != null and TravelRunner.current_node(gs).is_empty():
@@ -136,23 +142,67 @@ func busy() -> bool:
 # Layout
 # ------------------------------------------------------------------------------
 
-# Known node qid -> pin centre: every graph node gets a fixed slot on a circle (graph node order), so pins keep their
-# place as the fog lifts; only known nodes are returned.
-func pin_positions() -> Dictionary:
+# The backdrop texture of `world_id` (ui key "<world_id>_world_map"), or null when no manifest file serves it (the
+# plain look; a missing key falls back silently).
+static func backdrop_for(world_id: String) -> Texture2D:
+	return RegionMapView.ui_file_texture(world_id + BACKDROP_SUFFIX, BACKDROP_VARIANT)
+
+# The rect of a `tex_size` picture fitted into `area` with its aspect kept, centred (letterboxed).
+static func letterbox(tex_size: Vector2, area: Rect2) -> Rect2:
+	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
+		return area
+	var s: float = minf(area.size.x / tex_size.x, area.size.y / tex_size.y)
+	var fit: Vector2 = tex_size * s
+	return Rect2(area.position + (area.size - fit) / 2.0, fit)
+
+# A location's `map_pos` ([x, y], each 0..1, clamped) or NO_POS when missing or malformed.
+static func norm_pos(raw: Variant) -> Vector2:
+	var arr: Array = DictUtil.array_of(raw)
+	if arr.size() != 2:
+		return NO_POS
+	for v: Variant in arr:
+		if not (v is int or v is float):
+			return NO_POS
+	return Vector2(clampf(DictUtil.to_float(arr[0]), 0.0, 1.0), clampf(DictUtil.to_float(arr[1]), 0.0, 1.0))
+
+# Pin layout (pure): known node qid -> pin centre inside `rect`. A node with a valid `map_pos` (qid -> raw value) sits
+# at that point of the rect; any other gets its fixed slot on a circle (graph node order in `all`), so pins keep their
+# place as the fog lifts; the circle sits in `circle` (default: `rect`). Only known nodes are returned.
+static func layout(all: Array[String], known: Array[String], map_pos: Dictionary, rect: Rect2, circle: Rect2 = Rect2()) -> Dictionary:
 	var out: Dictionary = {}
-	if gs == null:
-		return out
-	var all: Array[String] = TravelRules.nodes(gs.world_id)
-	var known: Array[String] = TravelRules.known(gs)
-	var area: Vector2 = _canvas.size if _canvas != null and _canvas.size.x > 0.0 else Vector2(520, 360)
-	var center: Vector2 = area / 2.0
-	var radius: float = minf(area.x, area.y) * LAYOUT_FRACTION
+	var ring: Rect2 = circle if circle.has_area() else rect
+	var center: Vector2 = ring.get_center()
+	var radius: float = minf(ring.size.x, ring.size.y) * LAYOUT_FRACTION
 	for i: int in range(all.size()):
 		if not known.has(all[i]):
+			continue
+		var at: Vector2 = norm_pos(map_pos.get(all[i], null))
+		if at != NO_POS:
+			out[all[i]] = rect.position + at * rect.size
 			continue
 		var angle: float = TAU * float(i) / float(all.size()) - PI / 2.0
 		out[all[i]] = center + Vector2(cos(angle), sin(angle)) * radius
 	return out
+
+# The rect pins are placed in: the letterboxed backdrop, else the whole canvas.
+func layout_rect() -> Rect2:
+	var area: Rect2 = Rect2(Vector2.ZERO, _canvas.size if _canvas != null and _canvas.size.x > 0.0 else Vector2(520, 360))
+	return letterbox(backdrop.get_size(), area) if backdrop != null else area
+
+# Known node qid -> pin centre (layout over the graph nodes, their locations' `map_pos` and layout_rect(); without a
+# backdrop the circle fallback stays in the part of the canvas the floating panels leave free).
+func pin_positions() -> Dictionary:
+	if gs == null:
+		return {}
+	var all: Array[String] = TravelRules.nodes(gs.world_id)
+	var map_pos: Dictionary = {}
+	for q: String in all:
+		var raw: Variant = ExploreRunner.resolve_location(gs, q).get("map_pos", null)
+		if raw != null:
+			map_pos[q] = raw
+	var rect: Rect2 = layout_rect()
+	var ring: Rect2 = rect if backdrop != null else RegionMapView.free_rect(rect.size, _top, _side)   # plain: clear of the panels
+	return layout(all, TravelRules.known(gs), map_pos, rect, ring)
 
 # The known node under canvas point `p` ("" = none).
 func node_at(p: Vector2) -> String:
@@ -323,6 +373,8 @@ func _refresh() -> void:
 func _draw_map() -> void:
 	if gs == null:
 		return
+	if backdrop != null:
+		_canvas.draw_texture_rect(backdrop, layout_rect(), false)
 	var view: Dictionary = TravelRules.view(gs)
 	var pins: Dictionary = pin_positions()
 	var font: Font = get_theme_default_font()

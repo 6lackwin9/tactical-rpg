@@ -31,7 +31,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/asset_pipeline_test_suite.gd` | asset manifest, key resolution, team overlay, skill and status icons, safe remove (S14-L1) | S14 | done |
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, key-field rule, seed; model and read-only Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
-| `scripts/tests/exploration_test_suite.gd` | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
+| `scripts/tests/exploration_test_suite.gd` (+ `map_view_checks.gd`: full-screen map views, MAPVIEW1) | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
 | `scripts/tests/dialogue_test_suite.gd` | dialogue trees, shops, service lines, gone-NPC lint, gold fields, ref scans (DLG1) | S11 | done |
 | `scripts/tests/plan_claims_test_suite.gd` | preset plans always confirmable: approach tile claims, tie order, party redraft (PLAN1) | S1, S4 | done |
 | `scripts/tests/intent_test_suite.gd` | enemy intent records, reveal rule and the foresight effect (INTENT1-L) | S1, S4 | done |

@@ -185,6 +185,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_bridge() and ok
 			ok = _test_save_v3() and ok
 			ok = _test_debug_scene(tree_parent) and ok
+			ok = MapViewChecks.run_pure() and ok   # MAPVIEW1: camera and world layout (pure)
 		else:
 			ok = false
 		SaveGame.reset_base_dir()
@@ -1303,6 +1304,7 @@ static func _test_debug_scene(tree_parent: Node) -> bool:
 	checks["fled button settles through after_fight"] = view.pending_fight.is_empty() and view.gs.position == Vector2i(4, 2) and _steps(view.gs) == 0
 	checks["not busy after the fight settles: save works"] = not CurrentGame.busy() and model.save(2).is_empty() and SaveGame.exists(2)
 	CurrentGame.end()
+	var map_ok: bool = MapViewChecks.run_region(view)   # MAPVIEW1: full-screen canvas, camera, click with offset
 	tree_parent.remove_child(view)
 	view.free()
-	return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 0)", checks)
+	return _report("Debug scene (new game, menu exit, fight panel, debug outcome, autosave slot 0)", checks) and map_ok

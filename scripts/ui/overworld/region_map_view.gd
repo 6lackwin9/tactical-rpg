@@ -14,6 +14,10 @@ extends Control
 # POI-FIX (discoverability): a hint line under the bar names the keys (HINT); bumping a solid npc / chest / lore marker
 # notes "press E"; E on an empty tile notes NOTHING_NOTE; a left click on a marker tile next to the party faces it and
 # interacts (click_tile), a click on one further away notes FAR_NOTE.
+# MAPVIEW1: the map canvas fills the view behind the top strip and the side column (semi-transparent floating panels);
+# the map scrolls: a camera keeps the party centred in the free part of the view, clamped at the map edges, and a map
+# smaller than the view is centred (camera_offset, pure). TILE px per tile times `zoom`; on a high-DPI screen the
+# project's canvas_items stretch (DisplaySettings sizes the window in physical pixels) already scales the whole view.
 # `autosave` events write the autosave slot 0 (SaveGame.autosave, UI1-L) only for the main menu's game (CurrentGame.state()); the standalone debug game writes nothing
 # (refused while a fight is pending). A world picker starts a new game. busy() is mirrored to CurrentGame.set_busy so saving is refused mid-fight / mid-talk.
 # A world_map exit (marker or menu entry, TRAV1-L commit 3) opens the WorldMapView over the map; it hands back on
@@ -22,7 +26,16 @@ extends Control
 
 signal fight_settled(res: Dictionary)   # UI2-L: the main menu host shows battle results on it
 
-const TILE: int = 22
+const TILE: int = 32   # MAPVIEW1: 1x pixel art, drawn with the nearest filter
+const SIDE_WIDTH: float = 280.0
+const GLYPH_SIZE: int = 20
+const COL_FLOAT_BG: Color = Color(0.04, 0.05, 0.08, 0.72)   # the floating panels over the map
+const COL_MAP_BG: Color = Color(0.07, 0.08, 0.10)   # around a map smaller than the view
+# Region tile art (ui namespace, variant "icon", 32x32; MAPVIEW1 contract with Assets): template char -> key base;
+# drawn when a manifest file serves it, else the COL_TILES colour.
+const REGION_TILE_KEYS: Dictionary = {".": "region_ash_floor", "#": "region_basalt_wall", "~": "region_water"}
+const REGION_TILE_VARIANTS: int = 3
+const TILE_HASH_SALT: int = 11
 const DEBUG_SEED: int = 7
 const COL_TILES: Dictionary = {".": Color(0.22, 0.22, 0.24), "#": Color(0.45, 0.38, 0.30), "~": Color(0.18, 0.32, 0.55)}
 const COL_DANGER: Color = Color(0.85, 0.20, 0.15, 0.28)
@@ -54,16 +67,25 @@ var _log: Label = null
 var dialogue_panel: DialoguePanel = null
 var shop_panel: ShopPanel = null
 var world_map: WorldMapView = null   # open while the party is on the world map (TRAV1-L)
-var _root: VBoxContainer = null
+var zoom: float = 1.0   # extra map scale (1 = TILE px); high-DPI already scales the whole canvas (canvas_items stretch)
+var _root: Control = null   # the canvas and the floating panels (hidden while the world map is open)
+var _top: PanelContainer = null
+var _side: PanelContainer = null
+var _tile_cache: Dictionary = {}   # region tile key -> Texture2D or null (no file)
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-	_root = root
+	_root = Control.new()
+	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_root)
+	_canvas = map_canvas(_root)
+	_canvas.draw.connect(_draw_map)
+	_canvas.gui_input.connect(_on_canvas_input)
+	var top_box := VBoxContainer.new()
+	_top = float_panel(_root, top_box, false)
 	var bar := HBoxContainer.new()
-	root.add_child(bar)
+	top_box.add_child(bar)
 	_world_pick = OptionButton.new()
 	for w: String in WorldCatalog.world_ids():
 		_world_pick.add_item(w)
@@ -72,18 +94,9 @@ func _ready() -> void:
 	_status = UiTheme.label("Pick a world and start a new game.")
 	bar.add_child(_status)
 	hint = UiTheme.label(HINT, UiTheme.FONT_MD, UiTheme.COL_MUTED)
-	root.add_child(hint)
-	var body := HBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(body)
-	_canvas = Control.new()
-	_canvas.custom_minimum_size = Vector2(TILE * 24, TILE * 16)
-	_canvas.draw.connect(_draw_map)
-	_canvas.gui_input.connect(_on_canvas_input)
-	body.add_child(_canvas)
+	top_box.add_child(hint)
 	var side := VBoxContainer.new()
-	side.custom_minimum_size = Vector2(260, 0)
-	body.add_child(side)
+	_side = float_panel(_root, side, true)
 	_menu_box = VBoxContainer.new()
 	side.add_child(_menu_box)
 	_fight_panel = PanelContainer.new()
@@ -112,7 +125,111 @@ func _ready() -> void:
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_log.custom_minimum_size = Vector2(260, 0)
 	side.add_child(_log)
+	_top.resized.connect(func() -> void: dock_below(_top, _side))
 	_refresh()
+
+# ------------------------------------------------------------------------------
+# Full-screen layout (MAPVIEW1): the map canvas fills the view; the top strip and the side column float over it
+# ------------------------------------------------------------------------------
+
+# A full-rect canvas under `parent` (first child, so it draws behind the panels); textures use the nearest filter (1x pixel art).
+static func map_canvas(parent: Control) -> Control:
+	var canvas := Control.new()
+	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas.mouse_filter = Control.MOUSE_FILTER_STOP
+	canvas.clip_contents = true
+	canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	parent.add_child(canvas)
+	return canvas
+
+# A semi-transparent dark panel over the map holding `content`: the top strip across the top (`side` false) or the side
+# column anchored right (`side` true, SIDE_WIDTH wide, from under the top strip to the bottom; see dock_below).
+static func float_panel(parent: Control, content: Control, side: bool) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UiTheme.box(COL_FLOAT_BG, Color(0, 0, 0, 0), 0, 8, 4, 0))
+	panel.add_child(content)
+	parent.add_child(panel)
+	if side:
+		panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+		panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	else:
+		panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	# explicit offsets: the preset keeps the old rect when the parent is not laid out yet
+	panel.offset_left = -SIDE_WIDTH if side else 0.0
+	panel.offset_right = 0.0
+	panel.offset_top = 0.0
+	panel.offset_bottom = 0.0
+	return panel
+
+# Starts the side column just under the top strip.
+static func dock_below(top: Control, side: Control) -> void:
+	if top != null and side != null:
+		side.offset_top = top.position.y + top.size.y
+
+# The part of `canvas_size` not covered by the floating panels (the camera keeps the party and the map edges in it).
+static func free_rect(canvas_size: Vector2, top: Control, side: Control) -> Rect2:
+	var top_h: float = top.size.y if top != null and top.visible else 0.0
+	var side_w: float = side.size.x if side != null and side.visible else 0.0
+	return Rect2(Vector2(0.0, top_h), Vector2(maxf(canvas_size.x - side_w, 0.0), maxf(canvas_size.y - top_h, 0.0)))
+
+# Camera (pure): where the map's top-left corner goes inside a view of size `view` so that `focus_px` (a point in map
+# pixels, the party) is centred, clamped so no space shows past a map edge; a map axis smaller than the view is centred.
+static func camera_offset(map_px: Vector2, view: Vector2, focus_px: Vector2) -> Vector2:
+	var out: Vector2 = Vector2.ZERO
+	for axis: int in [Vector2.AXIS_X, Vector2.AXIS_Y]:
+		if map_px[axis] <= view[axis]:
+			out[axis] = (view[axis] - map_px[axis]) / 2.0
+		else:
+			out[axis] = clampf(view[axis] / 2.0 - focus_px[axis], view[axis] - map_px[axis], 0.0)
+	return out
+
+# The ui texture key/variant when a manifest file serves it, else null (callers keep their placeholder; no warning
+# for a key that has no row).
+static func ui_file_texture(key: String, variant: String) -> Texture2D:
+	if not AssetRegistry.has_key("ui", key) or str(AssetRegistry.resolve("ui", key, variant).get("source", "")) != "file":
+		return null
+	return AssetRegistry.texture("ui", key, variant)
+
+# The ui icon key of template tile `ch` at (x, y): REGION_TILE_KEYS base + "_" + a variant 0..REGION_TILE_VARIANTS-1
+# picked by a stable hash of the coordinate ("" for a tile without art keys).
+static func region_tile_key(ch: String, x: int, y: int) -> String:
+	var base: String = str(REGION_TILE_KEYS.get(ch, ""))
+	if base.is_empty():
+		return ""
+	return "%s_%d" % [base, int(SvgRaster.hash01(x, y, TILE_HASH_SALT) * REGION_TILE_VARIANTS) % REGION_TILE_VARIANTS]
+
+# The region tile texture of `key` (cached per view; null = draw the placeholder colour).
+func _tile_texture(key: String) -> Texture2D:
+	if key.is_empty():
+		return null
+	if not _tile_cache.has(key):
+		_tile_cache[key] = ui_file_texture(key, "icon")
+	return _tile_cache[key] as Texture2D
+
+# Pixels per tile on screen: TILE times `zoom` (high-DPI scaling is the project's canvas_items stretch, see the header).
+func tile_px() -> float:
+	return TILE * zoom
+
+# Canvas position of the map's tile (0, 0) for the current game (Vector2.ZERO without a map).
+func map_origin() -> Vector2:
+	if gs == null or _canvas == null:
+		return Vector2.ZERO
+	var t: Dictionary = ExploreRunner.template_of(ExploreRunner.location(gs))
+	if t.is_empty():
+		return Vector2.ZERO
+	var px: float = tile_px()
+	var view: Rect2 = free_rect(_canvas.size, _top, _side)
+	var focus: Vector2 = (Vector2(gs.position) + Vector2(0.5, 0.5)) * px
+	return view.position + camera_offset(Vector2(MapRules.size_of(t)) * px, view.size, focus)
+
+# The map tile under canvas point `p` (camera offset and zoom applied).
+func tile_at_point(p: Vector2) -> Vector2i:
+	var local: Vector2 = (p - map_origin()) / tile_px()
+	return Vector2i(floori(local.x), floori(local.y))
+
+# The canvas point at the centre of map tile `tile` (tests click there).
+func tile_centre(tile: Vector2i) -> Vector2:
+	return map_origin() + (Vector2(tile) + Vector2(0.5, 0.5)) * tile_px()
 
 func _on_new_game() -> void:
 	if _world_pick != null and _world_pick.item_count > 0:
@@ -212,7 +329,7 @@ func _on_canvas_input(event: InputEvent) -> void:
 	var mb: InputEventMouseButton = event as InputEventMouseButton
 	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
-	if click_tile(Vector2i(floori(mb.position.x / TILE), floori(mb.position.y / TILE))):
+	if click_tile(tile_at_point(mb.position)):
 		_canvas.accept_event()
 
 # A click on `tile`: next to the party it faces the tile and interacts (true); a present npc / chest / lore marker
@@ -466,19 +583,27 @@ func _refresh() -> void:
 	_canvas.queue_redraw()
 
 func _draw_map() -> void:
+	_canvas.draw_rect(Rect2(Vector2.ZERO, _canvas.size), COL_MAP_BG)
 	if gs == null:
 		return
 	var loc: Dictionary = ExploreRunner.location(gs)
 	var t: Dictionary = ExploreRunner.template_of(loc)
 	if t.is_empty():
-		_canvas.draw_string(get_theme_default_font(), Vector2(8, 24), "%s (no map: use the exits on the right)" % str(loc.get("name", gs.location_id)))
+		var at: Vector2 = free_rect(_canvas.size, _top, _side).position + Vector2(8, 24)
+		_canvas.draw_string(get_theme_default_font(), at, "%s (no map: use the exits on the right)" % str(loc.get("name", gs.location_id)))
 		return
+	_canvas.draw_set_transform(map_origin(), 0.0, Vector2(zoom, zoom))   # map pixels from here on (camera + zoom)
 	var size: Vector2i = MapRules.size_of(t)
 	for y: int in range(size.y):
 		for x: int in range(size.x):
+			var ch: String = MapRules.tile(t, x, y)
+			var tex: Texture2D = _tile_texture(region_tile_key(ch, x, y))
 			var r := Rect2(Vector2(x * TILE, y * TILE), Vector2(TILE - 1, TILE - 1))
-			var tile_col: Color = COL_TILES.get(MapRules.tile(t, x, y), Color.BLACK)
-			_canvas.draw_rect(r, tile_col)
+			if tex != null:
+				r.size = Vector2(TILE, TILE)   # art tiles butt together; placeholder colours keep the 1 px grid
+				_canvas.draw_texture_rect(tex, r, false)
+			else:
+				_canvas.draw_rect(r, COL_TILES.get(ch, Color.BLACK))
 			var zone: String = MapRules.zone_at(t, x, y)
 			if not zone.is_empty():
 				_canvas.draw_rect(r, COL_DANGER if MapRules.zone_kind(t, zone) == "danger" else COL_SAFE)
@@ -494,7 +619,8 @@ func _draw_map() -> void:
 		if str(m["kind"]) == "point":   # points of interest use the ring icon (the old combat centre marker)
 			_canvas.draw_texture_rect(TileArt.overlay("poi"), Rect2(Vector2(p.x * TILE, p.y * TILE), Vector2(TILE, TILE)), false, col)
 			continue
-		_canvas.draw_string(font, Vector2(p.x * TILE + 6, p.y * TILE + 16), glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
+		_canvas.draw_string(font, Vector2(p.x * TILE, p.y * TILE + TILE * 0.72), glyph, HORIZONTAL_ALIGNMENT_CENTER, TILE, GLYPH_SIZE, col)
 	var c: Vector2 = Vector2(gs.position.x * TILE + TILE / 2.0, gs.position.y * TILE + TILE / 2.0)
 	_canvas.draw_circle(c, TILE * 0.35, Color(0.95, 0.85, 0.30))
 	_canvas.draw_line(c, c + Vector2(facing) * TILE * 0.45, Color.BLACK, 2.0)
+	_canvas.draw_set_transform(Vector2.ZERO)
