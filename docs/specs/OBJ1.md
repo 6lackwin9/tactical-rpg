@@ -63,7 +63,7 @@ Within a group, melee takes the front column first and ranged the back column fi
    - c. The objective's own rule (2.4 to 2.7).
    - d. No hero is active on the field and at least one withdrew (today's "party left"): fled.
 4. **rout.** No extra rule: rule 3 b is today's win.
-5. **hold.** At the end of each round (after the last block): if at least one active hero or guest stands on an objective tile and no active enemy stands on any objective tile, `held` += 1 (Q1 A: rounds count in total, not in a row). When `held` reaches `objective_rounds`: won. A hold win on the last round beats the round-limit fled.
+5. **hold.** Only who stands on the objective tiles at the end of each round (after the last block) matters (user 2026-10-18 02:10). If at least one active hero or guest stands on an objective tile and no active enemy does, `held` += 1. If at least one active enemy stands on one and no hero or guest does, `held` -= 1 (never below 0). If nobody stands on the ring, or both sides do, `held` does not change (both sides: planner default). Rounds count in total, not in a row. When `held` reaches `objective_rounds`: won. A hold win on the last round beats the round-limit fled.
 6. **escape.** A hero or guest who steps on an exit tile withdraws (as today). Won when at least `objective_count` heroes have withdrawn, no hero is still active on the field, and every `protect` guest has withdrawn. If heroes are left down on the field the escape still counts (they wake with the party).
 7. **slay.** Won when the objective unit (`CatalogEncounter.unit(id, 0)`) is down. If it withdraws through an exit: fled ("%s got away.").
 8. **Rewards.** A won objective gives the full encounter XP (every listed enemy and wave unit, as today) and the quest hook; nothing else changes. Lost and fled cost only time and the objective (DR1 (2)).
@@ -77,7 +77,7 @@ Acceptance (tests, `objective_test_suite`):
 - Every validation message in 1.1 fires for a bad entry; a full valid entry is clean in both catalogs; old entries (no new keys) normalise to rout, standard, no guests.
 - Standard deployment places every unit on the same tiles as before (snapshot of today's positions for the shipped encounters).
 - Ambush with 4 enemies: two on x 7 or 8, two on x 1 or 2; centre with a melee and a ranged hero puts them on (5, 4) and (6, 4).
-- Hold 3: a hero on (5, 4) with no enemy on the ring for three round ends wins at the third; an enemy on (6, 4) at one round end does not count that round; counts in total across a gap; `reset_round` restores `held`.
+- Hold 3: a hero on (5, 4) with no enemy on the ring for three round ends wins at the third; an enemy alone on (6, 4) at a round end lowers `held` by 1 (not below 0); an empty ring or both sides on it leaves `held` unchanged; standing on the ring mid-round but off it at the round end does not count; `reset_round` restores `held`.
 - Escape 1: one hero on the exit with the others down is won; a protect guest left on the field is not.
 - Slay: the unit down with others standing is won; the unit withdrawing is fled.
 - A protect guest down with heroes standing is lost; guests get no XP and are not in `PartyState`.
@@ -128,6 +128,7 @@ Objective-aware AI or autoplay presets, timed objectives other than `max_rounds`
 
 1. How are hold rounds counted?
    - (rec) A: in total: every round end with a hero on the ring and no enemy on it counts. Forgiving, easy to read as "Held 2 / 3".
+   - Answered (user 2026-10-18 02:10): in total, but an enemy holding the ring at a round end lowers the count by 1; an empty ring changes nothing; only the round end counts.
    - B: in a row: an enemy on the ring resets the count to 0. Tenser, but one bad round can make the hold feel hopeless.
    - C: only the last round counts (be on the ring when time runs out). Simple, but the middle rounds stop mattering.
 2. Who plans a guest such as Wenn the carter?

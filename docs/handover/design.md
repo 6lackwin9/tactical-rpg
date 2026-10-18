@@ -14,3 +14,4 @@ Written 2026-10-18 01:10 UTC (updated; first written 00:25) by the Design sessio
 - The player AI drafting already existed (`PlanPresets` + `TacticalAI`, the Draft menu); AUTO1 is the loop and the dropdown UI around it. Check for an existing preset or AI hook before speccing new AI features.
 - A short spec written directly by the thread (no design-brainstorm run) was enough for a UI-loop feature; keep brainstorm runs for new systems.
 - 2026-10-18 01:55: RECRUIT1, ITEMUSE1, INTENT1, MAPREAD1 specs approved (all recs, decision world-campaign "DR1 specs approved"); 11 build rows approved and handed to the coordinator for Gameplay, UI/UX and Assets. Next design specs: HEAL1 (after BAL4-ATTR), BOSS1, OBJ1, then the rest of the DR1 rows.
+- 2026-10-18 02:10: BOSS1 and OBJ1 approved (decision combat "BOSS1 and OBJ1"; OBJ1 hold count changed by the user). Build rows approved. Next specs: HEAL1 waits on BAL4-ATTR; then MORALE1 (on OBJ1 slay), BREPORT1, the rest of DR1.
