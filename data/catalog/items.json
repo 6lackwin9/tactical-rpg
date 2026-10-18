@@ -484,6 +484,7 @@
 			"buff_pct": 0.0,
 			"duration": 0,
 			"use_blocks": 1,
+			"use_reach": 1,
 			"max_stack": 5
 		},
 		{
@@ -504,6 +505,7 @@
 			"buff_pct": 0.5,
 			"duration": 2,
 			"use_blocks": 1,
+			"use_reach": 0,
 			"max_stack": 5
 		},
 		{
@@ -524,6 +526,7 @@
 			"buff_pct": 0.0,
 			"duration": 0,
 			"use_blocks": 1,
+			"use_reach": 3,
 			"max_stack": 5
 		},
 		{

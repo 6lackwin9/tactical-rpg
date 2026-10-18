@@ -43,3 +43,4 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | `camp1_story.gd` | CAMP1-A2 (Ashlands story: steel_for_the_gate, keep_one_fire_lit, Ashmaw Camp, wastes_track, wagon raid, Grakka and Orsa dialogues, steel choice, epilogue) |
 | `trav2a.gd` | TRAV2-A (Ashlands supplies: manifest start_supplies 10, hest_stores supply_price 2, chest supplies on stores / ruin_cache / camp_cache) |
 | `art2_a.gd` | ART2-A (manifest rows for intent chips, badge_foresight, chip_slay, chip_guest, overlay_objective_v0, sfx miss; run `tools/gen_art.py chips overlays` first) |
+| `itemuse1_a.gd` | ITEMUSE1-A (use_reach: con_heal_potion 1, con_focus_elixir 0, con_fire_bomb 3) |
