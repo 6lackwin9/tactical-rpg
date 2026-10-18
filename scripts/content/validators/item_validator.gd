@@ -279,6 +279,11 @@ static func _consumable_problems(e: Dictionary) -> Array[Dictionary]:
 static func item_warnings(e: Dictionary, family: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	out.append_array(ItemText.warnings(str(e.get("description", "")), e))
+	if str(e.get("item_type", "")) == "CONSUMABLE":
+		var con_type: String = str(e.get("consumable_type", ""))
+		var type_index: int = Consumable.ConsumableType.keys().find(con_type)
+		if type_index >= 0 and not Consumable.offered_in_battle(type_index as Consumable.ConsumableType):
+			out.append("Consumable type %s is not offered in battle (no battle use yet)." % con_type)
 	if family.is_empty() or GearBudget.is_special(e):
 		return out   # special items may break the budget rules by design (their note is GearBudget.check_item's warning)
 	var hand: String = str(e.get("hand", ""))

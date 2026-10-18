@@ -28,6 +28,7 @@ signal round_concluded(round_num: int, over: bool)
 signal round_reset(round_num: int)            # start of reset_round, before the round is rewound
 signal plan_refused(round_num: int, reason: String)   # confirm_plan refused an invalid plan (reason = status_text)
 signal plan_edited(kind: String, actor: Combatant)   # add, remove, move, undo, clear, preset, preset_all (actor null)
+signal phase_fired(entry: ActionLogEntry, info: Dictionary)   # BOSS1: a phase fired live (never on a reset re-log); info = CombatEncounter.phase_info
 
 enum Phase { PLANNING, RESOLVING, REPLAY }
 
@@ -55,6 +56,7 @@ var replay_cursor: int = -1         # replay: index into log_entries whose resul
 var entry_snapshots: Dictionary = {} # ActionLogEntry -> BlockSnapshot (state right after that log point)
 var phase: Phase = Phase.PLANNING
 var combat_over: bool = false
+var outcome: String = ""            # OBJ1: "" while the battle goes on, then the encounter's verdict (won, lost or fled)
 var is_auto_playing: bool = false
 
 # Multi-round timeline archive
@@ -80,7 +82,9 @@ var next_round_label: String = ""    # empty = no round advance available
 # Planning: the party's plan for the live round.
 var plan: CombatPlan = null               # per-unit command sequences (rebuilt each round)
 var plan_confirmed: bool = false         # sequences locked and scheduled
+var confirm_source: String = "player"     # who confirmed the live round's plan: "player" or "auto" (AUTO1 autoplay; recorded per round)
 var preview_step: PlanStep = null         # hovered option being previewed on the grid
+var _enemies_on_grid_at_schedule: Array[Combatant] = []   # active enemies on the grid when this round's enemies were scheduled (IntentRules idle vs arriving)
 
 var _pending_actions: Array[CombatResolver.ScheduledAction] = []
 
@@ -95,6 +99,7 @@ func start() -> void:
 	dispose()
 	is_auto_playing = false
 	combat_over = false
+	outcome = ""
 	max_unlocked_round = 1
 	round_actions.clear()
 	round_snapshots.clear()
@@ -159,12 +164,23 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	if raw_entry is ActionLogEntry:
 		var intro_entry: ActionLogEntry = raw_entry
 		_append_entry(intro_entry, false)
+	var fired_now: Array[ActionLogEntry] = []
+	for raw_phase: Variant in DictUtil.array_of(intro.get("entries", [])):
+		if raw_phase is ActionLogEntry:
+			var phase_entry: ActionLogEntry = raw_phase
+			_append_entry(phase_entry, false)
+			fired_now.append(phase_entry)
 	_set_phase(str(intro.get("phase", "ROUND %d: PLANNING PHASE" % round_num)), COL_PLANNING)
 	status_text = str(intro.get("status", "Round %d: plan actions, then resolve." % round_num))
 	_log_text(str(intro.get("log", "")))
 
 	plan = CombatPlan.new(encounter.plan_context())
 	plan_confirmed = false
+	confirm_source = "player"
+	_enemies_on_grid_at_schedule = []
+	for foe: Combatant in enemies:
+		if foe.is_active() and grid.has_combatant(foe):
+			_enemies_on_grid_at_schedule.append(foe)
 	encounter.schedule_round(resolver, round_num)
 	_refresh_archive()
 
@@ -176,7 +192,15 @@ func _begin_round(round_num: int, roll_over: bool = true) -> void:
 	focused_hero = first_active
 	selected_combatant = first_active
 	_notify()
+	if roll_over:   # after a reset the round-start phases are only re-logged (they fired before)
+		for phase_entry: ActionLogEntry in fired_now:
+			_emit_phase(phase_entry)
 	round_started.emit(round_num)
+
+func _emit_phase(entry: ActionLogEntry) -> void:
+	var info: Dictionary = encounter.phase_info(entry)
+	if not info.is_empty():
+		phase_fired.emit(entry, info)
 
 # The active skill loadout can only change outside combat: locked from start() until dispose().
 func _set_loadouts_locked(locked: bool) -> void:
@@ -208,6 +232,7 @@ func reset_round() -> void:
 		return
 	_truncate_log_from_round(current_round)
 	combat_over = false
+	outcome = ""
 	# Rounds carry state over, so rewind to how this round started.
 	var start_snap: BlockSnapshot = snapshot_at(current_round, 0)
 	if start_snap != null:
@@ -264,6 +289,7 @@ func _step_resolution() -> void:
 			_append_entry(trigger, true)
 			status_text = "%s - Block %d" % [trigger.skill_name, current_block]
 			_notify()
+			_emit_phase(trigger)
 			return
 		_log_text("[color=#fde047][b]━━━ BLOCK %d RESOLUTION (ROUND %d) ━━━[/b][/color]" % [current_block, current_round])
 		_pending_actions = resolver.prepare_block(current_block)
@@ -277,11 +303,14 @@ func _step_resolution() -> void:
 
 	if _pending_actions.is_empty():
 		resolver.block_completed.emit(current_block)
-		if current_block >= total_blocks:
+		var end_of_round: bool = current_block >= total_blocks
+		if end_of_round:
 			resolver.apply_round_end_effects()   # bleeding lands before the round is judged
+		encounter.on_block_end(current_round, current_block)
+		outcome = encounter.verdict(current_round, current_block, end_of_round)   # OBJ1 rule 3 (reserved units do not count)
 		_capture_snapshot(current_block)
-		var over: bool = resolver.is_combat_resolved(allies, enemies)
-		if over or current_block >= total_blocks:
+		var over: bool = not outcome.is_empty()
+		if over or end_of_round:
 			_conclude_round(over)
 			return
 		current_block += 1
@@ -423,6 +452,22 @@ func find_recorded_action(combatant: Combatant, block: int) -> CombatResolver.Sc
 func is_planning() -> bool:
 	return phase == Phase.PLANNING and is_live_view() and not combat_over and not plan_confirmed
 
+# Enemy intent tells (INTENT1): one record per active enemy on the grid, read from the enemies' scheduled actions
+# (the party plan is not scheduled until confirm, so editing it never changes these). Keys and rules: IntentRules
+# (unit, kind, target, cell, blocks, skill, revealed, readers, plan). Read-only; empty outside is_planning().
+func enemy_intents() -> Array[Dictionary]:
+	if not is_planning() or resolver == null:
+		var none: Array[Dictionary] = []
+		return none
+	return IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule)
+
+# The intent record of one enemy ({} when it has none: not planning, not an active enemy on the grid).
+func intent_of(enemy: Combatant) -> Dictionary:
+	for record: Dictionary in enemy_intents():
+		if record["unit"] == enemy:
+			return record
+	return {}
+
 # Next inputs for `actor`, each probed against the sequence so far (valid or why not).
 func plan_options(actor: Combatant) -> Array[PlanOption]:
 	return plan.options(actor) if is_planning() and actor != null else []
@@ -562,7 +607,7 @@ func plan_apply_preset_all(preset_id: String) -> void:
 		return
 	for a: Combatant in allies:
 		if a.is_active():
-			encounter.draft_steps(a, preset_id, plan)
+			encounter.draft_steps(a, encounter.party_preset_for(a, preset_id), plan)   # OBJ1 rule 2: guests Balanced
 	# A later ally's draft can still break an earlier one (its move lands on the earlier
 	# ally's route, so the approach detours and later steps no longer fit): re-draft those
 	# against the claims now on the board, in planning order (bounded, one pass per ally).
@@ -570,7 +615,7 @@ func plan_apply_preset_all(preset_id: String) -> void:
 		var redrafted: bool = false
 		for a: Combatant in allies:
 			if a.is_active() and not plan.is_valid(a):
-				encounter.draft_steps(a, preset_id, plan)
+				encounter.draft_steps(a, encounter.party_preset_for(a, preset_id), plan)
 				redrafted = true
 		if not redrafted:
 			break
@@ -587,7 +632,8 @@ func plan_is_valid() -> bool:
 
 # Locks the party's sequences, schedules them with the enemies' and starts resolving
 # (auto-play; `auto_play` false lets the caller step manually). Refused while any is invalid.
-func confirm_plan(auto_play: bool = true) -> bool:
+# `source` "auto" marks a round confirmed by CombatAutoplay (kept in confirm_source; the playtest recorder stores it).
+func confirm_plan(auto_play: bool = true, source: String = "player") -> bool:
 	if not is_planning():
 		return false
 	if not plan_is_valid():
@@ -597,6 +643,7 @@ func confirm_plan(auto_play: bool = true) -> bool:
 		return false
 	plan.commit(resolver)
 	plan_confirmed = true
+	confirm_source = source
 	_refresh_archive(false)
 	status_text = "Plan confirmed: resolving the round (Step to go block by block)."
 	if auto_play:
@@ -634,11 +681,19 @@ func _restore_snapshot(snap: BlockSnapshot) -> void:
 		c.status_sources = _dict_of(snap.status_sources, c)
 		c.pending_status_sources = _dict_of(snap.pending_status_sources, c)
 		c.riposted.clear()
+		var pouch_raw: Variant = snap.pouches.get(c, null)
+		if pouch_raw is Array and c.inventory != null:
+			var pouch_list: Array = pouch_raw
+			c.inventory.battle_pouch.assign(pouch_list)   # ITEMUSE1 rule 6: items used after the snapshot come back
 		var pos_raw: Variant = snap.positions.get(c, NO_POSITION)
 		if pos_raw is Vector2i and pos_raw != NO_POSITION:
 			grid.combatant_positions[c] = pos_raw
 		else:
 			grid.combatant_positions.erase(c)
+	encounter.reinforcements_spawned = snap.reinforcements_spawned   # a reset round re-runs its wave
+	encounter.restore_objective_state(snap.objective_state)           # OBJ1: hold rounds counted
+	encounter.restore_phase_state(snap.phase_state, snap.round_num)   # BOSS1: fired / due / dropped and live AI profiles
+
 # Timeline copy of the live round's commands. While planning it also includes
 # the party's unsent plan so the timeline shows it.
 func _refresh_archive(with_plan: bool = true) -> void:
@@ -702,6 +757,8 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 	snap.block_index = block_idx
 	snap.round_num = current_round
 	snap.reinforcements_spawned = encounter.reinforcements_spawned
+	snap.phase_state = encounter.phase_state()
+	snap.objective_state = encounter.objective_state()
 	for c: Combatant in resolver.registered_combatants:
 		snap.positions[c] = grid.get_position(c)
 		snap.hps[c] = c.hp
@@ -720,6 +777,8 @@ func _make_snapshot(block_idx: int) -> BlockSnapshot:
 		snap.pending_status_magnitudes[c] = c.pending_status_magnitudes.duplicate()
 		snap.status_sources[c] = c.status_sources.duplicate()
 		snap.pending_status_sources[c] = c.pending_status_sources.duplicate()
+		if c.inventory != null:
+			snap.pouches[c] = c.inventory.battle_pouch.duplicate()   # same Consumable objects (GameEncounter write-back tracks them)
 	return snap
 
 # A copy of the per-unit dictionary stored in a snapshot (empty when missing).

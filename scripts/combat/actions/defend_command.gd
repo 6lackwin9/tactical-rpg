@@ -23,8 +23,16 @@ func on_start() -> String:
 	StatusEffects.queue(source, grant_status, status_rounds, status_magnitude, source.name)
 	return "[%s] %s will be %s next round (%d round%s)" % [grant_status.capitalize(), source.name, StatusEffects.display_name(grant_status).to_lower(), status_rounds, "" if status_rounds == 1 else "s"]
 
+# Set by the resolver when a stance-break hit lands on this unit (S12C-L): the guard is not re-applied for the
+# remaining blocks.
+var guard_broken: bool = false
+
 func execute() -> void:
 	if not source.is_alive():
+		failed = true
+		return
+	if guard_broken:
+		execution_log = "[Defend] %s's guard was broken (no mitigation)" % source.name
 		return
 	source.defense_mitigation_ratio = mitigation_ratio
 	var mit_pct: int = int(mitigation_ratio * 100.0)

@@ -551,7 +551,7 @@ static func references_to(world_id: String, kind: String, local: String) -> Arra
 				out.append_array(_json_refs_to(w, k2, e, kind, target))
 	return out
 
-# References held inside json fields: location exits, quest steps, faction relations, and the quest runtime fields
+# References held inside json fields: location exits, quest steps, faction relations, route encounters, and the quest runtime fields
 # (links, loot_pool, variant `set` values). The quest ones carry a "path" (keys/indexes from the entry root) that
 # _rewrite_ref follows.
 static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, target: String) -> Array[Dictionary]:
@@ -573,6 +573,8 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 		var for_sale: Array = DictUtil.array_of(e.get("loot", null))
 		for i: int in range(for_sale.size()):
 			_ref_at(w, DictUtil.dict_of(for_sale[i]), "loot", ["loot", i], kind, target, base, out)
+	if k2 == "routes" and kind == "encounters":
+		out.append_array(_route_json_refs(w, e, kind, target, base))
 	if k2 == "quests" and e.get("steps", null) is Array and (kind == "locations" or kind == "encounters"):
 		var steps: Array = e["steps"]
 		var sub: String = "location" if kind == "locations" else "encounter"
@@ -587,10 +589,16 @@ static func _json_refs_to(w: String, k2: String, e: Dictionary, kind: String, ta
 				out.append(base.merged({"key": "relations", "index": -1, "sub": str(other)}))
 	return out
 
-# Quest links, loot pool and variant set refs to `kind`/`target` (path-addressed matches).
+# Quest links, loot pool and variant set refs to `kind`/`target` (path-addressed matches), and the faction keys of
+# `reputation` (REP1-L; keyed matches renamed like relation keys).
 static func _quest_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	_links_refs(w, DictUtil.dict_of(e.get("links", null)), ["links"], kind, target, base, out)
+	if kind == "factions":   # REP1-L: reputation keys are faction refs (renamed like relation keys)
+		var rep: Dictionary = DictUtil.dict_of(e.get("reputation", null))
+		for ref: Variant in rep:
+			if _points_at(w, "factions", str(ref), target):
+				out.append(base.merged({"key": "reputation", "index": -1, "sub": str(ref)}))
 	if kind == "loot":
 		_list_refs(w, e.get("loot_pool", null), ["loot_pool"], "loot", target, base, out)
 	var variants: Array = DictUtil.array_of(e.get("variants", null))
@@ -638,6 +646,20 @@ static func _map_json_refs(w: String, e: Dictionary, kind: String, target: Strin
 				continue
 			if _points_at(w, kind, ref, target):
 				out.append(base.merged({"key": "markers", "index": i, "path": ["markers", i, key], "value": ref}))
+	return out
+
+# Route encounter refs (TRAV1-L): [ref, weight] pairs in `encounters` / `elites` and each `scripted` entry's encounter.
+static func _route_json_refs(w: String, e: Dictionary, kind: String, target: String, base: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for list_key: String in ["encounters", "elites"]:
+		var pairs: Array = DictUtil.array_of(e.get(list_key, null))
+		for i: int in range(pairs.size()):
+			var pair: Array = DictUtil.array_of(pairs[i])
+			if not pair.is_empty() and pair[0] is String and _points_at(w, kind, str(pair[0]), target):
+				out.append(base.merged({"key": list_key, "index": i, "path": [list_key, i, 0], "value": str(pair[0])}))
+	var scripted: Array = DictUtil.array_of(e.get("scripted", null))
+	for i: int in range(scripted.size()):
+		_ref_at(w, DictUtil.dict_of(scripted[i]), "encounter", ["scripted", i], kind, target, base, out)
 	return out
 
 # Dialogue tree refs (DLG1-L): node speakers, quest refs of choice conditions, and the quest / shop / encounter refs of
@@ -719,11 +741,12 @@ static func _rewrite_ref(match_info: Dictionary, new_target: Dictionary, old_qid
 		var sub: String = str(match_info.get("sub", ""))
 		if match_info.has("path"):
 			_set_at_path(e, DictUtil.array_of(match_info["path"]), str(match_info.get("value", "")), replacement)
-		elif key == "relations":
+		elif key == "relations" or key == "reputation":   # a dictionary keyed by faction refs
 			var rel: Dictionary = e[key]
-			var stance: Variant = rel.get(sub, "neutral")
-			rel.erase(sub)
-			rel[replacement] = stance
+			if rel.has(sub):
+				var held: Variant = rel[sub]
+				rel.erase(sub)
+				rel[replacement] = held
 		elif not sub.is_empty():
 			var items: Array = e[key]
 			var item: Dictionary = items[idx]
@@ -810,6 +833,8 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 		"locations":
 			if not (e["exits"] is Array):
 				errors.append("Exits must be a list of {\"to\", \"label\"} objects.")
+		"routes":
+			errors.append_array(TravelRules.shape_errors(e))
 		"factions":
 			if not (e["relations"] is Dictionary):
 				errors.append("Relations must be an object {faction: stance}.")
@@ -825,6 +850,8 @@ static func _shape_errors(kind: String, e: Dictionary) -> Array[String]:
 					errors.append("%s must be a list." % str(WorldSchema.field("quests", key)["label"]))
 			if not (e["links"] is Dictionary):
 				errors.append("Links must be an object.")
+			if not (e["reputation"] is Dictionary):
+				errors.append("Reputation must be an object {faction: delta}.")
 		"loot":
 			if not (e["requires_flags"] is Array):
 				errors.append("Requires flags must be a list.")
@@ -884,6 +911,8 @@ static func validate_entry(world_id: String, kind: String, entry: Dictionary, cu
 			errors.append_array(DialogueRules.tree_errors(world_id, e))
 		"shops":
 			errors.append_array(ShopRules.shop_errors(world_id, e))
+		"routes":
+			errors.append_array(TravelRules.route_errors(world_id, e))
 	return errors
 
 # Is a qualified ref's world visible from `world_id` (itself, an ancestor, or connected)?
@@ -1109,7 +1138,7 @@ static func _quest_errors(world_id: String, e: Dictionary) -> Array[String]:
 static func _loot_errors(e: Dictionary) -> Array[String]:
 	return QuestRules.loot_entry_errors(e)
 
-static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]:
+static func _encounter_errors(world_id: String, e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	var party: Array = e["party"]
 	if party.is_empty():
@@ -1124,6 +1153,10 @@ static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]
 			errors.append("The wave block is past the end of the round (%d blocks)." % DictUtil.to_int(e["total_blocks"]))
 		if DictUtil.to_int(e["wave_round"]) > DictUtil.to_int(e["max_rounds"]):
 			errors.append("The wave round is after the last round.")
+	var wave_field: Dictionary = WorldSchema.field("encounters", "wave_units")
+	errors.append_array(EncounterPhases.problems(e, func(ref: String) -> bool:
+		return _check_ref(world_id, wave_field, "characters", ref).is_empty()))
+	errors.append_array(EncounterObjectives.problems(e, func(ref: String) -> bool: return guest_ok(world_id, ref)))
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		for x: Variant in DictUtil.array_of(exits):
@@ -1136,6 +1169,14 @@ static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]
 	else:
 		errors.append("Exit tiles must be a list of [x, y] pairs.")
 	return errors
+
+# OBJ1 guest rule: false only for a character that resolves but does not fight on the party side (role party, or an
+# npc whose base unit has side party); unknown refs and enemies are left to the generic ref check (role filter).
+static func guest_ok(world_id: String, ref: String) -> bool:
+	var c: Dictionary = resolve(world_id, "characters", ref)
+	if c.is_empty() or str(c.get("role", "")) != "npc":
+		return true
+	return str(ContentCatalog.get_entry("units", str(c.get("base_unit", ""))).get("side", "")) == "party"
 
 # Problems with a world's manifest.
 static func manifest_errors(world_id: String) -> Array[String]:
@@ -1157,16 +1198,26 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	var start: String = str(m.get("start_location", ""))
 	if not start.is_empty() and resolve(world_id, "locations", start).is_empty():
 		errors.append("Start location '%s' is unknown." % start)
-	errors.append_array(start_party_errors(m.get("start_party", [])))
+	errors.append_array(start_party_errors(world_id, m.get("start_party", [])))
+	var cap: Variant = m.get("party_max", -1)
+	if not (cap is int) or (DictUtil.to_int(cap) != -1 and (DictUtil.to_int(cap) < 1 or DictUtil.to_int(cap) > PartyState.PARTY_MAX)):
+		errors.append("Party max must be -1 (inherited) or 1..%d." % PartyState.PARTY_MAX)
+	var resolved: Array[String] = start_party(world_id)
+	# Skipped above PARTY_MAX: start_party_errors already reports "at most 4" for that list (one message per problem).
+	if resolved.size() <= PartyState.PARTY_MAX and resolved.size() > party_max(world_id):
+		errors.append("Start party has %d heroes; party max is %d." % [resolved.size(), party_max(world_id)])
 	var gold: Variant = m.get("start_gold", -1)
 	if not (gold is int) or DictUtil.to_int(gold) < -1 or DictUtil.to_int(gold) > 99999:
 		errors.append("Start gold must be -1 (inherited) or 0..99999.")
+	var supplies: Variant = m.get("start_supplies", -1)
+	if not (supplies is int) or DictUtil.to_int(supplies) < -1 or DictUtil.to_int(supplies) > PartyState.SUPPLIES_MAX:
+		errors.append("Start supplies must be -1 (inherited) or 0..99.")
 	errors.append_array(DialogueRules.service_lines_errors(m.get("service_lines", {}), "Service lines"))
 	return errors
 
-# Problems with a manifest `start_party` value (UI1-L): known party-side catalog units, at most PartyState.PARTY_MAX,
-# no duplicates.
-static func start_party_errors(raw: Variant) -> Array[String]:
+# Problems with a manifest `start_party` value (UI1-L, RECRUIT1-L 1.2): each entry is a party-side catalog unit or a
+# party character of `world_id` (party_character_errors); never both; at most PartyState.PARTY_MAX, no duplicates.
+static func start_party_errors(world_id: String, raw: Variant) -> Array[String]:
 	var errors: Array[String] = []
 	var ids: Array[String] = _strings(raw)
 	var seen: Dictionary = {}
@@ -1176,13 +1227,47 @@ static func start_party_errors(raw: Variant) -> Array[String]:
 			continue
 		seen[id] = true
 		var unit: Dictionary = ContentCatalog.get_entry("units", id)
-		if unit.is_empty():
+		var character: Dictionary = resolve(world_id, "characters", id)
+		if not unit.is_empty() and not character.is_empty():
+			errors.append("'%s' is both a unit and a character." % id)
+		elif not character.is_empty():
+			errors.append_array(party_character_errors(world_id, id))
+		elif unit.is_empty():
 			errors.append("Start party unit '%s' is not a known unit." % id)
 		elif str(unit.get("side", "enemy")) != "party":
 			errors.append("Start party unit '%s' is not a party unit." % id)
 	if ids.size() > PartyState.PARTY_MAX:
 		errors.append("A start party holds at most 4 units.")
 	return errors
+
+# Problems that keep world character `id` from joining the party (RECRUIT1-L 1.2; start_party and the dialogue
+# effect `recruit`): role party, a party-side base unit, no named items, disciplines or tuning (passives are fine).
+static func party_character_errors(world_id: String, id: String) -> Array[String]:
+	var errors: Array[String] = []
+	var c: Dictionary = resolve(world_id, "characters", id)
+	if c.is_empty():
+		errors.append("'%s' is not a known character." % id)
+		return errors
+	if str(c.get("role", "npc")) != "party":
+		errors.append("Party hero '%s' needs role party (has %s)." % [id, str(c.get("role", "npc"))])
+	var base_id: String = str(c.get("base_unit", ""))
+	var base: Dictionary = ContentCatalog.get_entry("units", base_id)
+	if base.is_empty() or str(base.get("side", "enemy")) != "party":
+		errors.append("Party hero '%s' must play as a party unit (base unit '%s')." % [id, base_id])
+	if not _strings(c.get("named_items", [])).is_empty() or not _strings(c.get("disciplines", [])).is_empty() or not DictUtil.dict_of(c.get("tuning", {})).is_empty():
+		errors.append("Party hero '%s' may not carry named items, disciplines or tuning yet (RECRUIT1)." % id)
+	return errors
+
+# The resolved party cap of `world_id` (RECRUIT1-L 1.1): the nearest manifest in the lineage with `party_max` >= 1,
+# else PartyState.PARTY_MAX.
+static func party_max(world_id: String) -> int:
+	var chain: Array[String] = lineage(world_id)
+	chain.reverse()
+	for w: String in chain:
+		var cap: Variant = manifest(w).get("party_max", -1)
+		if cap is int and DictUtil.to_int(cap) >= 1:
+			return mini(DictUtil.to_int(cap), PartyState.PARTY_MAX)
+	return PartyState.PARTY_MAX
 
 # The resolved start party of `world_id`: its own non-empty `start_party`, else the nearest ancestor's (lineage order,
 # the same rule as `start_location`). [] when none.
@@ -1209,6 +1294,28 @@ static func validate_world(world_id: String) -> Dictionary:
 			if not errs.is_empty():
 				problems["%s/%s:%s" % [world_id, kind, id]] = errs
 	return problems
+
+# Soft warnings of one world (never blocking): map, route, dialogue, gone-NPC, quest link / reward budget and
+# reputation key lints, each line prefixed with the entry qid. Lints over merged entries also report inherited ones.
+static func world_warnings(world_id: String) -> Array[String]:
+	var out: Array[String] = []
+	out.append_array(MapRules.warnings(world_id))
+	out.append_array(TravelRules.warnings(world_id))
+	out.append_array(DialogueRules.dialogue_warnings(world_id))
+	out.append_array(DialogueRules.quest_warnings(world_id))
+	out.append_array(QuestRules.link_warnings(world_id))
+	out.append_array(QuestRules.reward_warnings(world_id))
+	out.append_array(RepRules.key_warnings(world_id))
+	return out
+
+# {world id: [warnings]} for every world with at least one warning.
+static func warnings_all() -> Dictionary:
+	var out: Dictionary = {}
+	for w: String in world_ids():
+		var warns: Array[String] = world_warnings(w)
+		if not warns.is_empty():
+			out[w] = warns
+	return out
 
 static func validate_all() -> Dictionary:
 	var problems: Dictionary = {}

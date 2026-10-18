@@ -27,6 +27,6 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 ## Tools only on desktop
 
 - Godot: `C:/Program Files/Godot/godot.exe` (or `$GODOT`).
-- Scene Runner: `run.bat` opens the GUI from the checkout (merged work only); from PowerShell `Start-Process .\run.bat`. Never kill other `godot` processes (`Stop-Process -Name godot` stops other agents' suites and sims).
+- Scene Runner: `run.bat` pulls the latest `main` and opens the GUI (`run_dev.bat` or `run.bat dev`: latest `develop` from the sibling worktree `<checkout>-dev`, created on first use; it never switches branches; it launches without pulling when the checkout has local changes or is offline); from PowerShell `Start-Process .\run.bat`. Never kill other `godot` processes (`Stop-Process -Name godot` stops other agents' suites and sims).
 - IDE language server: stale diagnostics after new `class_name` files clear after `godot --headless --import`; in a worktree, trust `tools/fc.sh parse` over the IDE.
 - Measured costs: 3 builders plus a reviewer on one machine slowed the gate to ~10 min (`docs/EFFICIENCY.md`); parallel full-suite runs can collide on `user://` sandbox names.

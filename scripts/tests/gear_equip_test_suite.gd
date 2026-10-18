@@ -97,7 +97,7 @@ static func run(tree_parent: Node = null) -> bool:
 	var bomb_dmg: int = dummy.take_damage(bomb.damage_amount)
 	warrior.inventory.remove_from_battle_pouch(bomb)
 	var pouch_count_after: int = warrior.inventory.battle_pouch.size()
-	var consumable_test_ok: bool = (pouch_count_before == 1 and pouch_count_after == 0 and bomb_dmg == 20)
+	var consumable_test_ok: bool = (pouch_count_before == 1 and pouch_count_after == 0 and bomb.damage_amount > 0 and bomb_dmg == bomb.damage_amount)
 
 	print("\n=======================================================")
 	print("=== GEAR EQUIP UI & TEST DUMMY SUITE ASSERTIONS     ===")

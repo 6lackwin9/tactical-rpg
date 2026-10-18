@@ -7,7 +7,7 @@ extends RefCounted
 #   mounted          a new battle entry (a round-1 redo, which restarts the battle, keeps the entry)
 #   round_started    a round entry with the RNG state the round starts from (a redo re-reads it)
 #   plan_edited      edit count + trail event
-#   round_confirmed  the confirmed plans (PlanCodec), plan time
+#   round_confirmed  the confirmed plans (PlanCodec), plan time, source (player / auto: CombatSession.confirm_source)
 #   round_reset      the attempt's plans move to `discarded`, attempts + 1
 #   round_concluded  outcome (RoundOutcome) and battle end, then the file is flushed
 # Also holds the RefCounted parts of the UI trail and notes (capped trail, key filter, note stamps).
@@ -155,6 +155,7 @@ func _on_mounted() -> void:
 	b["seed"] = session.encounter.rng_seed
 	b["seed_source"] = seed_source
 	b["roster"] = PlanCodec.roster(session)
+	b["pouches"] = PlanCodec.pouches(session)   # ITEMUSE1: replays rebuild the heroes' pouches from this
 	battles.append(b)
 	data["battles"] = battles
 	battle_index = battles.size() - 1
@@ -175,6 +176,7 @@ func _on_round_started(round_num: int) -> void:
 	r["outcome"] = {}
 	r["edits"] = 0
 	r["plan_ms"] = 0
+	r["source"] = "player"
 	_redo_round = -1
 	_edits = 0
 	_confirmed = false
@@ -192,6 +194,7 @@ func _on_plan_confirmed(round_num: int) -> void:
 		return
 	r["plans"] = PlanCodec.encode_plan(session, session.plan)
 	r["edits"] = _edits
+	r["source"] = session.confirm_source
 	r["plan_ms"] = maxi(0, Time.get_ticks_msec() - _round_start_ms - _paused_total())
 	_confirmed = true
 	add_trail("confirm", {"ok": true, "reason": "", "round": round_num})

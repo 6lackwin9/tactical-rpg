@@ -18,6 +18,11 @@ const RANK_KEYS: Array[String] = [
 	"cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap",
 ]
 
+# Combo fields (S12C-L) set on the family only: one value for all ranks; a rank modifier that sets one is refused
+# with FAMILY_KEY_MESSAGE.
+const FAMILY_KEYS: Array[String] = ["ends_in_stance", "disrupt", "exploit", "exploit_consume"]
+const FAMILY_KEY_MESSAGE: String = "%s is set on the family, not per rank."
+
 # Keys of a flat row that a ranked entry does not store per rank.
 const DERIVED_KEYS: Array[String] = ["id", "family", "tier", "name", "description", "template"]
 

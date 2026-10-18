@@ -21,6 +21,9 @@ signal block_started(block: int)
 signal block_completed(block: int)
 signal log_emitted(message: String)
 signal action_note(action: ScheduledAction, message: String)   # something happened as a command started (e.g. a chase)
+# BREPORT1 1.3: one combo of a resolved command (kind exploit, break or flow; a flow's target is the actor, status "").
+# Emitted in _apply_combo for what it applies or logs; changes nothing.
+signal combo_resolved(kind: String, actor: Combatant, target: Combatant, status: String, skill: String, killed: bool)
 
 var scheduled_actions: Array[ScheduledAction] = []
 var registered_combatants: Array[Combatant] = []
@@ -81,6 +84,7 @@ var last_round_end_steps: Array[Dictionary] = []
 #   2. poison loses the stacked magnitude
 #   3. burn   loses magnitude % of max HP (min 1)
 #   4. regen  regains magnitude % of max HP (min 1, capped at missing HP; Combatant.heal like SupportRules)
+#   then every active unit on a round-end hazard tile rolls its status (HazardRules, S12T-L)
 # Damage steps ignore guard and armor. Each step is skipped once the unit is no longer active, so a unit
 # defeated by steps 1-3 does not regenerate. Returns Combatant -> damage dealt (bleed + poison + burn).
 func apply_round_end_effects() -> Dictionary:
@@ -111,6 +115,9 @@ func apply_round_end_effects() -> Dictionary:
 				last_round_end_heals[c] = healed
 				last_round_end_steps.append({"unit": c, "status": StatusEffects.REGEN, "amount": healed, "source": str(c.status_sources.get(StatusEffects.REGEN, ""))})
 				_emit_round_end("[Regen] %s regenerates %d HP (HP %d/%d)" % [c.name, healed, c.hp, c.max_hp])
+	# 5. Terrain hazards (S12T-L): units standing on a round-end hazard tile roll its status (starts next round).
+	for line: String in HazardRules.at_round_end(grid, registered_combatants, rng):
+		_emit_round_end(line)
 	return dealt
 
 # `amount` is the step's damage (as logged and returned, like bleed always was); the step row records `lost`,
@@ -184,7 +191,9 @@ func prepare_block(block: int) -> Array[ScheduledAction]:
 		if not action.is_cancelled and action.combatant.is_active():
 			if block >= action.start_block and block <= action.end_block:
 				if action.command is DefendCommand:
-					action.combatant.defense_mitigation_ratio = (action.command as DefendCommand).mitigation_ratio
+					var defend: DefendCommand = action.command as DefendCommand
+					if not defend.guard_broken:   # a stance break ended this guard for its remaining blocks (S12C-L)
+						action.combatant.defense_mitigation_ratio = defend.mitigation_ratio
 
 	# 2b. Notify when multi-block actions begin executing on this block
 	for action in scheduled_actions:
@@ -237,6 +246,7 @@ func _begin_actions(block: int) -> void:
 				c.set_stance(new_stance)
 				if cmd.stance_switch_cost > 0:
 					log_emitted.emit("[Stance] %s shifts to %s stance (+%d AP)" % [c.name, CombatTypes.stance_to_string(new_stance), cmd.stance_switch_cost])
+		cmd.rng = rng   # a dash entering a hazard tile rolls its status when the attack starts (S12T-L)
 		var start_msg: String = cmd.on_start()
 		if not start_msg.is_empty():
 			log_emitted.emit(start_msg)
@@ -260,11 +270,41 @@ func execute_single_action(action: ScheduledAction) -> void:
 		log_emitted.emit(action.command.execution_log)
 	for reaction: Dictionary in action.command.reactions:
 		log_emitted.emit(str(reaction["log"]))
+	_apply_combo(action)
 
 	# Check for knockouts or withdrawals and cancel future actions
 	for c: Combatant in registered_combatants:
 		if not c.is_active():
 			_cancel_actions_for(c)
+
+# Combo results of a command that just resolved (S12C-L): stance breaks end the broken units' running guards (their
+# DefendCommands stop re-applying mitigation), then a flow move puts the unit in its end stance for free (not when the
+# command failed or the unit is no longer active). set_stance side effects stay (leaving Defensive ends riposte).
+func _apply_combo(action: ScheduledAction) -> void:
+	var cmd: BattleCommand = action.command
+	for broken: Combatant in cmd.broken_targets:
+		for other: ScheduledAction in scheduled_actions:
+			var running: bool = other.start_block <= action.end_block and other.end_block >= action.end_block
+			if other.combatant == broken and running and not other.is_cancelled and other.command is DefendCommand:
+				(other.command as DefendCommand).guard_broken = true
+	for note: String in cmd.combo_notes:
+		print(note)
+		log_emitted.emit(note)
+	var c: Combatant = action.combatant
+	for row: Dictionary in cmd.exploited:
+		var raw: Variant = row["target"]
+		if raw is Combatant:
+			var victim: Combatant = raw
+			combo_resolved.emit("exploit", c, victim, str(row["status"]), cmd.command_name, not victim.is_alive())
+	for broken: Combatant in cmd.broken_targets:
+		combo_resolved.emit("break", c, broken, "", cmd.command_name, not broken.is_alive())
+	if cmd.stance_on_end >= 0 and not cmd.failed and c.is_active():
+		var end_stance: CombatTypes.StanceType = cmd.stance_on_end as CombatTypes.StanceType
+		combo_resolved.emit("flow", c, c, "", cmd.command_name, not c.is_alive())
+		c.set_stance(end_stance)
+		var msg: String = "[Flow] %s flows into %s stance" % [c.name, CombatTypes.stance_to_string(end_stance)]
+		print(msg)
+		log_emitted.emit(msg)
 
 func _resolve_block(block: int) -> void:
 	var resolving := prepare_block(block)

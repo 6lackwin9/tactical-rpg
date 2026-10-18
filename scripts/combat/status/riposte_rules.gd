@@ -11,6 +11,9 @@ extends RefCounted
 # The counter is a normal DamageCalculator.compute hit with skill_mult = COUNTER_MULT
 # (50% of the defender's attack power, times its weaken factor; Focus, stance matchup, crit, guard and armor apply
 # as always). Riposte is removed by any stance change (Combatant.set_stance).
+# Order inside one hit (S12C-L rule 5): the hit (with exploit) -> the skill's status roll -> this counter -> stance
+# break -> exploit consume. So a stance-break hit is countered once, then the break ends the riposte. The counter
+# itself never applies exploit.
 # ==============================================================================
 
 const COUNTER_MULT: float = 0.5   # the only riposte constant: AP (level), mitigation and rounds live in the skill rows

@@ -3,7 +3,9 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Battle bridge (S9, spec EXP1-L 2.6): the shared way into and out of a battle from the game state.
-# Exploration-agnostic (ExploreRunner, TRAV1 road fights and DLG1 use it). Full heal is implicit: M3 stores no HP.
+# Exploration-agnostic (ExploreRunner, TRAV1 road fights and DLG1 use it). HEAL1-L: HP carries over (UnitState.hp_lost):
+# GameEncounter starts each member at its stored HP and BattleScreen writes it back (write_back_hp, won / fled); a loss
+# heals the roster through ExploreRunner.wake (HealRules.on_defeat).
 # Outcomes: won | lost | fled. X1 (user 2026-10-17): a battle that reaches its round limit with both sides
 # standing counts as fled; so does a battle the whole party left by withdrawing (alive, off the field).
 # ==============================================================================
@@ -26,9 +28,12 @@ static func encounter_for(gs: GameState, encounter_qid: String, zone: String = "
 	var enc := GameEncounter.new(world, str(hit["id"]), gs.party, zone)
 	return {"ok": true, "errors": errors, "encounter": enc}
 
-# won (combat over, a party member stands), lost (over, every party member down), fled (round limit reached with
-# both sides standing, or the party withdrew); "" while the battle can still go on.
+# The session's verdict when the battle ended (OBJ1 rule 3: objectives, guests, protect); else today's rule: won (combat
+# over, a party member stands), lost (over, every party member down), fled (round limit reached with both sides
+# standing, or the party withdrew); "" while the battle can still go on.
 static func outcome(session: CombatSession) -> String:
+	if not session.outcome.is_empty():
+		return session.outcome
 	var standing: bool = false
 	var alive: bool = false
 	for c: Combatant in session.allies:
@@ -41,12 +46,14 @@ static func outcome(session: CombatSession) -> String:
 	var at_limit: bool = session.phase == CombatSession.Phase.REPLAY and session.current_round >= session.encounter.max_rounds
 	return "fled" if at_limit else ""
 
-# [{level, tier}] of the encounter's enemies and reinforcements (the XP inputs), seen from `world_id`.
+# [{level, tier}] of the encounter's enemies, reinforcements and phase waves (the XP inputs, whether or not they
+# arrived), seen from `world_id`.
 static func enemy_levels(world_id: String, encounter_qid: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var enc: Dictionary = WorldCatalog.resolve(world_id, "encounters", encounter_qid)
 	var refs: Array[String] = JsonUtil.strings(enc.get("enemies", []))
 	refs.append_array(JsonUtil.strings(enc.get("wave_units", [])))
+	refs.append_array(EncounterPhases.reserved_refs(enc))   # BOSS1 rule 8
 	for ref: String in refs:
 		var entry: Dictionary = WorldFactory.unit_entry(WorldCatalog.resolve(world_id, "characters", ref))
 		if entry.is_empty():
@@ -56,7 +63,7 @@ static func enemy_levels(world_id: String, encounter_qid: String) -> Array[Dicti
 	return out
 
 # {ok, errors, xp: member id -> LevelUp result, advanced: quest qids}. won: XP to every active member, then the quest
-# hook; lost / fled change nothing here.
+# hook; lost / fled change nothing here. Guests (OBJ1) are not party members: no XP, nothing written back.
 static func apply(gs: GameState, encounter_qid: String, result: String) -> Dictionary:
 	var errors: Array[String] = []
 	var advanced: Array[String] = []

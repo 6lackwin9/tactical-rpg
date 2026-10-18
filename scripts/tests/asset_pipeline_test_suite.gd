@@ -104,13 +104,12 @@ static func _test_key_lists() -> bool:
 	for fam: String in AssetRegistry.skill_family_ids():
 		family_ok = family_ok and AssetRegistry.has_key("skill", fam)
 	c["every skill family is a skill key"] = family_ok
-	ContentCatalog.reload_from_disk()
-	c["content reload drops the skill family cache"] = AssetRegistry._family_stamp.is_empty() and AssetRegistry.skill_family_ids() == AssetRegistry._family_list
+	_check_family_reload(c)
 	var items_ok: bool = true
 	for key: String in ItemArt.UNIQUE_ICONS.keys():
 		items_ok = items_ok and AssetRegistry.has_key("item", key)
 	c["unique icons are item keys"] = items_ok and AssetRegistry.has_key("item", "weapon")
-	c["no templates for sound and ui"] = AssetRegistry.template_keys("sfx").is_empty() and AssetRegistry.template_keys("music").is_empty() and AssetRegistry.template_keys("ui").is_empty()
+	c["no templates for sound; ui templates are the map pins and badges (MapArt)"] = AssetRegistry.template_keys("sfx").is_empty() and AssetRegistry.template_keys("music").is_empty() and AssetRegistry.template_keys("ui") == MapArt.UI_KEYS
 	c["keys sorted"] = AssetRegistry.keys("unit") == _sorted(AssetRegistry.keys("unit"))
 	c["art options == keys(unit)"] = ContentSchema.options_of({"options_from": "art"}) == AssetRegistry.keys("unit")
 	var inherit: Array[String] = [""]
@@ -119,6 +118,31 @@ static func _test_key_lists() -> bool:
 	c["world art_inherit options == '' + keys(unit)"] = WorldSchema.options_of({"options_from": "art_inherit"}) == inherit
 	c["default sizes"] = AssetRegistry.default_size("unit", "token") == AssetRegistry.TOKEN_INNER.size and AssetRegistry.default_size("tile", "v3") == AssetRegistry.default_size("tile", "v0") and AssetRegistry.default_size("ui", "icon") == Vector2i.ZERO
 	return _report("Key lists, option lists and default sizes read the registry", c)
+
+# A content reload (same root) drops the skill family cache: a planted stale entry is gone after the reload, the
+# rebuilt list equals a fresh computation from the catalog, and a second reload empties and re-sets the stamp again.
+static func _check_family_reload(c: Dictionary) -> void:
+	var before: Array[String] = AssetRegistry.skill_family_ids()
+	AssetRegistry._family_list.append("__stale_family__")   # a stale cache would keep this
+	ContentCatalog.reload_from_disk()
+	var cleared: bool = AssetRegistry._family_stamp.is_empty()
+	var rebuilt: Array[String] = AssetRegistry.skill_family_ids()
+	c["content reload drops the skill family cache (stamp cleared)"] = cleared
+	c["rebuilt family list == fresh catalog heads == list before"] = rebuilt == _catalog_families() and rebuilt == before and not rebuilt.has("__stale_family__")
+	var stamped: bool = not AssetRegistry._family_stamp.is_empty()
+	ContentCatalog.reload_from_disk()
+	var cleared_again: bool = AssetRegistry._family_stamp.is_empty()
+	var again: Array[String] = AssetRegistry.skill_family_ids()
+	c["second reload, same root: cache cleared then rebuilt (stamp set again)"] = stamped and cleared_again and not AssetRegistry._family_stamp.is_empty() and again == _catalog_families()
+
+# Skill family heads computed straight from the catalog rows (file order, first occurrence).
+static func _catalog_families() -> Array[String]:
+	var out: Array[String] = []
+	for row: Dictionary in ContentCatalog.entries("skills"):
+		var head: String = SkillRanks.head_of(row)
+		if not out.has(head):
+			out.append(head)
+	return out
 
 static func _sorted(list: Array[String]) -> Array[String]:
 	var out: Array[String] = list.duplicate()
@@ -347,7 +371,12 @@ static func _test_delegation() -> bool:
 	c["normalize_class unknown -> unit"] = UnitArt.normalize_class("no_such_key") == "unit"
 	c["normalize_class keeps every class key"] = UnitArt.CLASS_KEYS.all(func(k: String) -> bool: return UnitArt.normalize_class(k) == k)
 	c["tile == template"] = TileArt.tile(Terrain.Type.GRASS, 1) == TileArt.template_tile(Terrain.Type.GRASS, 1) or AssetCatalog.keys_of("tile").has("grass")
-	c["overlays == templates"] = TileArt.overlay("exit") == TileArt.template_overlay("exit") and TileArt.overlay("poi") == TileArt.template_overlay("poi")
+	var tile_keys: Array = AssetCatalog.keys_of("tile")
+	for kind: String in ["exit", "poi"]:
+		if tile_keys.has("overlay_" + kind):
+			var res: Dictionary = AssetRegistry.resolve("tile", "overlay_" + kind, "v0")
+			c["overlay_%s row: file, not the template" % kind] = str(res["source"]) == "file" and TileArt.overlay(kind) != TileArt.template_overlay(kind) and AssetRegistry.file_exists(str(res["path"]))
+	c["overlays == templates"] = (TileArt.overlay("exit") == TileArt.template_overlay("exit") or tile_keys.has("overlay_exit")) and (TileArt.overlay("poi") == TileArt.template_overlay("poi") or tile_keys.has("overlay_poi"))
 	var t1: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
 	var t2: Texture2D = UnitArt.token("warrior", UnitArt.Team.FRIENDLY)
 	SvgRaster.clear_cache()

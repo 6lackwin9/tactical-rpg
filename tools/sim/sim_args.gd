@@ -5,13 +5,17 @@ extends RefCounted
 
 const SimTargets = preload("res://tools/sim/sim_targets.gd")
 
-const MODES: Array[String] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep"]
+const MODES: Array[String] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign"]
 const CLASSES: Array[String] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"]
 const SPENDS: Array[String] = ["class", "cons", "primary", "mixed"]
 const LOADOUTS: Array[String] = ["default", "newest", "role"]
 const SCORES: Array[String] = ["both", "hp", "binary"]
 const ON_OFF: Array[String] = ["on", "off"]
 const GENERATED: Array[String] = ["mob", "line", "wave", "elite", "boss"]
+const REF_PREFIX: String = "world:"   # `enc=world:<id>` / `enc=world:<world>/<id>` (party mode, default world: the `world=` key, else ashlands)
+const DEFAULT_WORLD: String = "ashlands"
+const PARTY_SEEDS: int = 10      # BAL5-SIM K2: party / sweep cells default to 10 seeds (other modes keep 3)
+const MIRROR: String = "mirror"  # tier_foe default: each hero fights its own class
 const ROLES: Array[String] = ["tank", "ranged", "aoe", "support", "striker"]
 const CAP_MIN: int = 1
 const CAP_MAX: int = 30
@@ -38,6 +42,10 @@ var band_lo: int = 30            # duel diagnostic band (alias of target duel:lo
 var band_hi: int = 70
 # Commit 1b: party / role / sweep
 var comp: Array[String] = DEFAULT_COMP.duplicate()
+var comp_set: bool = false       # campaign: comp= picks one party instead of all 10 trios
+var heal: String = "none"        # campaign: between-battle healing "none", "full", "rally" (HealRules.hp_after won) or a percent of max HP (the number)
+var rest: Array[int] = []        # HEAL1-S: campaign story battles (1-based) that start after a full rest
+var extra: Dictionary = {}       # HEAL1-S: campaign story battle (int) -> Array[String] encounters fought just before it
 var encounters: Array[String] = GENERATED.duplicate()
 var elevel: int = 0              # generated enemies at party level + elevel
 var elevel_set: bool = false     # true: catalog encounters use party level + elevel too
@@ -47,16 +55,31 @@ var roles: Array[String] = ROLES.duplicate()
 var classes: Array[String] = CLASSES.duplicate()
 var dupes: bool = false
 var sample: int = 0              # sweep dupes=on: draw this many multisets (0 = all)
+var jitter: bool = true          # BAL3 3.1: seeded start jitter and party order (off = the standard deployment)
 var targets: Dictionary = SimTargets.defaults()
+var pouch: Array[String] = []    # ITEMUSE1 rule 9: pouch=<id,id,id> gives every party unit this battle pouch and use_items (empty = off)
+# BAL5-SIM (docs/specs/BAL5_LEVERS.md section 8)
+var world: String = DEFAULT_WORLD   # K1: `world=<id>`: bare `enc=` ids also find this world's encounters (own or inherited)
+var world_set: bool = false
+var comp_size: int = 4           # K2: sweep `size=` (composition size)
+var lead: String = ""            # K2: sweep `lead=<class>`: every composition holds this class (the rest drawn from the others)
+var seeds_set: bool = false      # K2: seeds given positionally (else PARTY_SEEDS in party / sweep)
+var tier_foe: String = MIRROR    # K4: tier mode foe class (mirror = the hero's own class)
+var boss_phase: bool = true      # K5 / B2: `phase=on|off`: the generated boss carries SimScenarios.BOSS_PHASE
+var s2: bool = false            # K5 / S2: `s2=on`: support_attrition uses SimScenarios.S2_ENEMIES (off until its trigger fires)
 var error: String = ""           # non-empty: print the usage and run nothing
 
 # Parses `args` (OS.get_cmdline_user_args()). False (and `error` set) on an unknown key or value.
 func parse(args: PackedStringArray) -> bool:
 	var positional: Array[String] = []
 	var metrics_set: bool = false
+	for raw: String in args:   # world= first: enc= ids resolve against it whatever the token order
+		var w: String = raw.strip_edges()
+		if w.begins_with("world=") and not _parse_key("world", w.trim_prefix("world=")):
+			return false
 	for raw: String in args:
 		var token: String = raw.strip_edges()
-		if token.is_empty():
+		if token.is_empty() or token.begins_with("world="):
 			continue
 		if token == "quick":
 			quick = true
@@ -87,6 +110,9 @@ func parse(args: PackedStringArray) -> bool:
 		if not positional[2].is_valid_int() or int(positional[2]) < 1:
 			return _fail("seeds must be a positive number (got '%s')" % positional[2])
 		seed_count = int(positional[2])
+		seeds_set = true
+	elif mode == "party" or mode == "sweep":
+		seed_count = PARTY_SEEDS
 	if positional.size() > 3:
 		return _fail("too many positional arguments")
 	if comp.size() > PartyState.PARTY_MAX:
@@ -155,6 +181,36 @@ func _parse_key(key: String, value: String) -> bool:
 				if not CLASSES.has(c):
 					return _fail("comp: unknown class '%s' (one of %s)" % [c, str(CLASSES)])
 			comp = picked
+			comp_set = true
+		"heal":
+			var pct_text: String = value.trim_suffix("%")
+			if value == "none" or value == "full" or value == "rally":
+				heal = value
+			elif pct_text.is_valid_int() and int(pct_text) >= 0 and int(pct_text) <= 100:
+				heal = str(int(pct_text))
+			else:
+				return _fail("heal must be none, full, rally or a percent 0..100 (got '%s')" % value)
+		"rest":
+			var picked_rest: Array[int] = []
+			if value != "none":
+				for part: String in _list(value):
+					if not part.is_valid_int() or int(part) < 1:
+						return _fail("rest must be none or story battle numbers >= 1, e.g. rest=3 (got '%s')" % value)
+					picked_rest.append(int(part))
+			rest = picked_rest
+		"extra":
+			var picked_extra: Dictionary = {}
+			if value != "none":
+				for part: String in _list(value):
+					var at: String = part.get_slice(":", 0)
+					var enc_id: String = part.substr(at.length() + 1)
+					if not at.is_valid_int() or int(at) < 1 or enc_id.is_empty() or not has_encounter(DEFAULT_WORLD, enc_id):
+						return _fail("extra must be <battle>:<%s encounter>[,..], e.g. extra=4:ash_raiders (got '%s')" % [DEFAULT_WORLD, part])
+					var list: Array[String] = []
+					list.assign(DictUtil.array_of(picked_extra.get(int(at), [])))
+					list.append(enc_id)
+					picked_extra[int(at)] = list
+			extra = picked_extra
 		"enc":
 			var picked_enc: Array[String] = []
 			for e: String in _list(value):
@@ -163,10 +219,19 @@ func _parse_key(key: String, value: String) -> bool:
 				elif e == "all":
 					picked_enc.append_array(GENERATED)
 					picked_enc.append_array(catalog_encounters())
-				elif GENERATED.has(e) or ContentCatalog.has("encounters", e):
+				elif e.begins_with(REF_PREFIX):
+					var ref: Array[String] = parse_ref(e, world)
+					if ref.is_empty() or not has_encounter(ref[0], ref[1]):
+						return _fail("enc: unknown world encounter '%s' (world:<id> in %s or world:<world>/<id>)" % [e, world])
+					picked_enc.append(e)
+				elif GENERATED.has(e):
+					picked_enc.append(e)
+				elif world_set and has_encounter(world, e):
+					picked_enc.append("%s%s/%s" % [REF_PREFIX, world, e])
+				elif ContentCatalog.has("encounters", e):
 					picked_enc.append(e)
 				else:
-					return _fail("enc: unknown encounter '%s' (generated ids %s, a catalog encounter id, generated or all)" % [e, str(GENERATED)])
+					return _fail("enc: unknown encounter '%s' (generated ids %s, a catalog encounter id, an encounter of world= %s, generated or all)" % [e, str(GENERATED), world])
 			if picked_enc.is_empty():
 				return _fail("enc needs at least one encounter")
 			encounters = picked_enc
@@ -204,6 +269,42 @@ func _parse_key(key: String, value: String) -> bool:
 			if not ON_OFF.has(value):
 				return _fail("dupes must be on or off (got '%s')" % value)
 			dupes = value == "on"
+		"jitter":
+			if not ON_OFF.has(value):
+				return _fail("jitter must be on or off (got '%s')" % value)
+			jitter = value == "on"
+		"pouch":
+			var ids: Array[String] = _list(value)
+			if ids.is_empty() or ids.size() > UnitState.POUCH_MAX:
+				return _fail("pouch must list 1..%d consumable ids (got '%s')" % [UnitState.POUCH_MAX, value])
+			for id: String in ids:
+				if str(ContentCatalog.get_entry("items", id).get("item_type", "")) != "CONSUMABLE":
+					return _fail("pouch: '%s' is not a consumable item" % id)
+			pouch = ids
+		"world":
+			if not WorldCatalog.world_ids().has(value):
+				return _fail("world must be one of %s (got '%s')" % [str(WorldCatalog.world_ids()), value])
+			world = value
+			world_set = true
+		"size":
+			if not value.is_valid_int() or int(value) < 1 or int(value) > PartyState.PARTY_MAX:
+				return _fail("size must be 1..%d (got '%s')" % [PartyState.PARTY_MAX, value])
+			comp_size = int(value)
+		"lead":
+			if not CLASSES.has(value):
+				return _fail("lead must be a class id of %s (got '%s')" % [str(CLASSES), value])
+			lead = value
+		"tier_foe":
+			if value != MIRROR and not CLASSES.has(value):
+				return _fail("tier_foe must be %s or a class id of %s (got '%s')" % [MIRROR, str(CLASSES), value])
+			tier_foe = value
+		"phase", "s2":
+			if not ON_OFF.has(value):
+				return _fail("%s must be on or off (got '%s')" % [key, value])
+			if key == "phase":
+				boss_phase = value == "on"
+			else:
+				s2 = value == "on"
 		"sample":
 			if not value.is_valid_int() or int(value) < 1:
 				return _fail("sample must be a positive number (got '%s')" % value)
@@ -211,6 +312,25 @@ func _parse_key(key: String, value: String) -> bool:
 		_:
 			return _fail("unknown key '%s'" % key)
 	return true
+
+# `enc=world:<id>` or `world:<world>/<id>` -> [world, id] ([] when `text` is not a world reference);
+# a bare id is looked up in `default_world` (the `world=` key).
+static func parse_ref(text: String, default_world: String = DEFAULT_WORLD) -> Array[String]:
+	var out: Array[String] = []
+	if not text.begins_with(REF_PREFIX):
+		return out
+	var parts: PackedStringArray = text.trim_prefix(REF_PREFIX).split("/", false)
+	if parts.size() == 1:
+		out.append_array([default_world, parts[0]])
+	elif parts.size() == 2:
+		out.append_array([parts[0], parts[1]])
+	return out
+
+# True when `world` sees encounter `enc_id` (its own or inherited, overrides followed: WorldCatalog.resolve).
+static func has_encounter(world_id: String, enc_id: String) -> bool:
+	if not WorldCatalog.world_ids().has(world_id):
+		return false
+	return WorldCatalog.has_entry(world_id, "encounters", enc_id)
 
 # Every encounter in the current catalog (`enc=all` adds them after the generated five).
 static func catalog_encounters() -> Array[String]:
@@ -233,6 +353,10 @@ func seeds() -> Array[int]:
 	for i: int in range(seed_count):
 		out.append(11 + 12 * i)
 	return out
+
+# K4: the tier-mode foe class for hero class `hero_class` (its own class under `mirror`).
+func tier_foe_for(hero_class: String) -> String:
+	return hero_class if tier_foe == MIRROR else tier_foe
 
 # The spend variants a matchup averages over (`all` = class, cons, primary; `quick` keeps the first).
 func spend_variants() -> Array[String]:
@@ -265,36 +389,63 @@ func show_binary() -> bool:
 # One line echoing the effective arguments (every table starts with it).
 func header() -> String:
 	var lvl: String = "all" if all_levels else str(level)
-	var text: String = "ARGS mode %s, level %s, seeds %d, cap %d, loadout %s, spend %s, preset %s, distance %s, score %s, quick %s, metrics %s, band %d-%d" % [
+	var text: String = "ARGS mode %s, level %s, seeds %d, cap %d, loadout %s, spend %s, preset %s, distance %s, score %s, quick %s, metrics %s, band %d-%d, jitter %s" % [
 		mode, lvl, seed_count, cap, loadout, spend, preset,
-		"default" if distance == 0 else str(distance), score, "on" if quick else "off", "on" if metrics else "off", band_lo, band_hi]
+		"default" if distance == 0 else str(distance), score, "on" if quick else "off", "on" if metrics else "off", band_lo, band_hi, "on" if jitter else "off"]
 	match mode:
 		"party", "sweep":
 			text += ", enc %s, elevel %s, elite %s, boss %s" % [",".join(encounters), ("%+d" % elevel) if elevel_set else "+0 (catalog authored)", elite_class, boss_class]
+			text += ", phase %s" % ("on" if boss_phase else "off")
+			if world_set:
+				text += ", world %s" % world
 			if mode == "party":
 				text += ", comp %s" % ",".join(comp)
 			else:
-				text += ", dupes %s, sample %s" % ["on" if dupes else "off", str(sample) if sample > 0 else "all"]
+				text += ", size %d, lead %s, dupes %s, sample %s" % [comp_size, lead if not lead.is_empty() else "none", "on" if dupes else "off", str(sample) if sample > 0 else "all"]
+		"campaign":
+			text += ", comp %s, heal %s" % [",".join(comp) if comp_set else "all trios (warrior + 2 of ranger,priest,brawler,rogue,mage)", heal]
+			if not rest.is_empty():
+				text += ", rest %s" % ",".join(rest.map(func(b: int) -> String: return str(b)))
+			if not extra.is_empty():
+				var extra_parts: Array[String] = []
+				for b: Variant in extra:
+					extra_parts.append("%d:%s" % [int(b), ",".join(DictUtil.array_of(extra[b]))])
+				text += ", extra %s" % " ".join(extra_parts)
 		"role":
 			text += ", role %s, class %s" % [",".join(roles), ",".join(classes)]
+			if s2:
+				text += ", s2 on"
+		"tier":
+			text += ", tier_foe %s" % tier_foe
+	if not pouch.is_empty():
+		text += ", pouch %s" % ",".join(pouch)   # shown only when set: default runs print the same header
 	return text
 
 static func usage() -> Array[String]:
 	return [
-		"usage: tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   (seed i = 11 + 12 i; level default 5, seeds 3)",
+		"usage: tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   (seed i = 11 + 12 i; level default 5, seeds 3; party / sweep 10)",
 		"modes: duel [level]       class round robin, hero vs hero (bin/hp matrix, row averages)",
-		"       tier [level]       hero vs its class at minion/standard/elite/boss, 1v1 and 1v3",
+		"       tier [level]       hero vs its class (or tier_foe=) at minion/standard/elite/boss, 1v1 and 1v3",
 		"       levels             class at L vs L+2 for L = 1, 3, 5, 7",
 		"       group [level]      hero L vs 3 minions at L-2, 3 standard at L-2, 3 minions at L",
 		"       stats [level|all]  no fights: HP, armor, EHP, power, range, speed, crit, active families",
 		"       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
 		"       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
-		"       sweep [level]      every 4-class composition vs enc: ranking, swap delta, top-5 appearances",
+		"       sweep [level]      every size-class composition (size=4; lead= fixes one class) vs enc: ranking, swap delta, top-5 appearances",
+		"       campaign [level]   Ashlands story fights in quest order, HP carried over (level = party level, default 5): all 10 trios, both steel choices",
 		"keys:  cap=1..30 (10)  loadout=default|newest|role (default; party side)",
 		"       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
 		"       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
 		"       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
-		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all (generated)  elevel=+n|-n|catalog (+0)",
+		"       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
 		"       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
 		"       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
+		"       heal=none|full|rally|<pct> (none; campaign: between-battle healing, full also revives, rally = HealRules 25% after a win, a downed hero gets up)  comp=.. picks one campaign party",
+		"       rest=<b,b> (none): campaign story battles that start after a full rest  extra=<b>:<enc>[,..] (none): campaign extra fight(s) before story battle b (a loss there is a fall at b)",
+		"       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
+		"       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
+		"       world=<id> (ashlands): bare enc= ids also find that world's encounters (story characters with their extras and tuning)",
+		"       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
+		"       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes",
+		"       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
 	]

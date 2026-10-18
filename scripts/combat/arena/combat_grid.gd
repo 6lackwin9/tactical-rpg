@@ -10,6 +10,14 @@ const PARTY_BACK_X: int = 4
 const ENEMY_FRONT_X: int = 7
 const ENEMY_BACK_X: int = 8
 const DEPLOY_ROWS: Array[int] = [4, 3, 5, 2, 6, 1, 7]
+const DEPLOY_ANCHOR_Y: int = 4   # ambush / centre arrivals take the free tile nearest (group front, this row)
+# Deployment table (OBJ1 1.2): [front x, back x] of the party and of enemy groups A and B ([] = no group B: every
+# enemy is in A). Ambush and centre split the enemy roster by order: even index to A, odd to B.
+const DEPLOYMENTS: Dictionary = {
+	"standard": {"party": [PARTY_FRONT_X, PARTY_BACK_X], "a": [ENEMY_FRONT_X, ENEMY_BACK_X], "b": []},
+	"ambush": {"party": [5, 4], "a": [7, 8], "b": [2, 1]},
+	"centre": {"party": [5, 6], "a": [8, 9], "b": [3, 2]},
+}
 
 enum ArenaType {
 	OPEN,
@@ -62,6 +70,21 @@ func get_terrain(coord: Vector2i) -> Terrain.Type:
 
 func is_walkable(coord: Vector2i) -> bool:
 	return is_valid_coord(coord) and Terrain.is_walkable(get_terrain(coord))
+
+# Cost of entering `coord` (Terrain.move_cost of its type; S12T-L).
+func move_cost(coord: Vector2i) -> int:
+	return Terrain.move_cost(get_terrain(coord))
+
+# Guard share a ranged hit loses on `coord` (or behind it when it blocks movement).
+func cover_guard(coord: Vector2i) -> float:
+	return Terrain.cover_guard(get_terrain(coord)) if is_valid_coord(coord) else 0.0
+
+func has_hazard(coord: Vector2i) -> bool:
+	return is_valid_coord(coord) and Terrain.has_hazard(get_terrain(coord))
+
+# The hazard of the tile at `coord` (Terrain.hazard: {} when none).
+func hazard_at(coord: Vector2i) -> Dictionary:
+	return Terrain.hazard(get_terrain(coord)) if is_valid_coord(coord) else {}
 
 func apply_zone(zone_id: String) -> void:
 	terrain = CombatZones.terrain_map(zone_id)
@@ -164,26 +187,92 @@ func jump_combatant(combatant: Combatant, coord: Vector2i) -> bool:
 	print("[%s] jumped from %s to %s." % [combatant.name, str(from_pos), str(coord)])
 	return true
 
-## Standard deployment: the party lines up on the left, enemies on the right. Melee units
+## Deployment (DEPLOYMENTS; standard: the party lines up on the left, enemies on the right). Melee units
 ## (attack_range 1) take the front column, ranged units the back column, rows filled from
 ## the middle out (DEPLOY_ROWS); a full or blocked column spills into the other one, then
-## further back. Units that still don't fit stay off the grid (CatalogEncounter places them).
-func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant]) -> void:
-	_deploy_side(allies, PARTY_FRONT_X, PARTY_BACK_X, -1)
-	_deploy_side(enemies, ENEMY_FRONT_X, ENEMY_BACK_X, 1)
+## further away from the middle. Units that still don't fit stay off the grid (CatalogEncounter places them).
+## `allies` lists the heroes first, then the guests (same party rule).
+func deploy_combatants(allies: Array[Combatant], enemies: Array[Combatant], deployment: String = "standard") -> void:
+	var party: Array[int] = layout_columns(deployment, "party")
+	_deploy_side(allies, party[0], party[1])
+	var groups: Array[Array] = [[], []]
+	for i: int in range(enemies.size()):
+		groups[group_of(i, deployment)].append(enemies[i])
+	for g: int in range(2):
+		var cols: Array[int] = layout_columns(deployment, "a" if g == 0 else "b")
+		var units: Array[Combatant] = []
+		units.assign(groups[g])
+		if cols.size() == 2 and not units.is_empty():
+			_deploy_side(units, cols[0], cols[1])
 
-func _deploy_side(units: Array[Combatant], front_x: int, back_x: int, back_dir: int) -> void:
+# [front x, back x] of `side` ("party", "a" or "b") in `deployment` (unknown ids read as standard; [] = none).
+static func layout_columns(deployment: String, side: String) -> Array[int]:
+	var layout: Dictionary = DictUtil.dict_of(DEPLOYMENTS.get(deployment, DEPLOYMENTS["standard"]))
+	var out: Array[int] = []
+	for v: Variant in DictUtil.array_of(layout.get(side, [])):
+		out.append(DictUtil.to_int(v))
+	return out
+
+# Enemy group of the `index`-th enemy of the roster: 0 = A, 1 = B (standard: always A).
+static func group_of(index: int, deployment: String) -> int:
+	return 0 if layout_columns(deployment, "b").is_empty() else index % 2
+
+# Columns after front and back when both are full: away from the middle on the same half (GRID12 rule); a side
+# split across the middle (centre party) spills outwards from both columns in turn.
+static func spill_columns(front_x: int, back_x: int) -> Array[int]:
+	var out: Array[int] = []
+	var probe := Vector2i(front_x, 0)
+	if is_party_half(probe) == is_party_half(Vector2i(back_x, 0)):
+		var dir: int = signi(back_x - front_x)
+		var x: int = back_x + dir
+		while x >= 0 and x < GRID_W and is_party_half(Vector2i(x, 0)) == is_party_half(probe):
+			out.append(x)
+			x += dir
+		return out
+	var lo: int = mini(front_x, back_x) - 1
+	var hi: int = maxi(front_x, back_x) + 1
+	while lo >= 0 or hi < GRID_W:
+		if lo >= 0:
+			out.append(lo)
+		if hi < GRID_W:
+			out.append(hi)
+		lo -= 1
+		hi += 1
+	return out
+
+func _deploy_side(units: Array[Combatant], front_x: int, back_x: int) -> void:
+	var spill: Array[int] = spill_columns(front_x, back_x)
 	for c: Combatant in units:
 		var columns: Array[int] = [front_x, back_x]
 		if c.attack_range > 1:
 			columns = [back_x, front_x]
-		var x: int = back_x + back_dir
-		while is_valid_coord(Vector2i(x, 0)) and is_party_half(Vector2i(x, 0)) == is_party_half(Vector2i(front_x, 0)):
-			columns.append(x)
-			x += back_dir
+		columns.append_array(spill)
 		for col: int in columns:
 			if _place_in_column(c, col):
 				break
+
+# Ambush / centre arrivals (leftovers, waves, phase waves): the free walkable, non-exit tile nearest
+# (front_x, DEPLOY_ANCHOR_Y) by grid distance; ties by DEPLOY_ROWS order, then the column away from the middle.
+# False (nothing placed) when no tile is free.
+func place_near_front(c: Combatant, front_x: int) -> bool:
+	var anchor := Vector2i(front_x, DEPLOY_ANCHOR_Y)
+	var right: bool = not is_party_half(anchor)
+	var best := Vector2i(-1, -1)
+	var best_score: int = 1 << 30
+	for y: int in range(GRID_H):
+		var rank: int = DEPLOY_ROWS.find(y)
+		if rank < 0:
+			rank = DEPLOY_ROWS.size()
+		for x: int in range(GRID_W):
+			var cell := Vector2i(x, y)
+			if not is_walkable(cell) or is_exit_tile(cell) or is_occupied(cell):
+				continue
+			var outward: int = (GRID_W - 1 - x) if right else x
+			var score: int = get_distance(cell, anchor) * 10000 + rank * 100 + outward
+			if score < best_score:
+				best_score = score
+				best = cell
+	return best != Vector2i(-1, -1) and place_combatant(c, best)
 
 func _place_in_column(c: Combatant, x: int) -> bool:
 	for y: int in DEPLOY_ROWS:

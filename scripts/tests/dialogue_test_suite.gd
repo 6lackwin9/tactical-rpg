@@ -83,6 +83,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_trees(fx) and ok
 			ok = _test_conditions(fx) and ok
 			ok = _test_effects(fx) and ok
+			ok = _test_recruit(fx) and ok
 			ok = _test_shops(fx) and ok
 			ok = _test_gold_gone_services(fx) and ok
 			ok = _test_lint() and ok
@@ -259,7 +260,7 @@ static func _test_trees(fx: Dictionary) -> bool:
 	checks["text too long"] = _one(_errs("dialogues", t), "longer than")
 	t = _tree(fx)
 	DictUtil.array_of(_node(t, "info")["effects"]).append({"effect": "take", "gold": 1})
-	checks["node effect take"] = _one(_errs("dialogues", t), "Node effects may only be set_flag or give.")
+	checks["node effect take"] = _one(_errs("dialogues", t), "Node effects may only be set_flag, add_flag or give.")
 	t = _tree(fx)
 	t["start"] = "bye"
 	checks["services on, end start node"] = _one(_errs("dialogues", t), "With services on, the start node needs choices.")
@@ -329,7 +330,7 @@ static func _test_effects(fx: Dictionary) -> bool:
 		"open_shop not last": [[shop, flag], "open_shop must be the last effect"],
 		"fight + turn_in": [[turn, fight], "fight can't share a choice with turn_in or open_shop"],
 		"fight + open_shop": [[shop, fight], "fight can't share a choice"],
-		"turn_in second": [[flag, turn], "turn_in must come first; only set_flag or give may follow."],
+		"turn_in second": [[flag, turn], "turn_in must come first; only set_flag, add_flag or give may follow."],
 		"take after turn_in": [[turn, {"effect": "take", "gold": 1}], "turn_in must come first"],
 		"give with nothing": [[{"effect": "give"}], "needs items or gold"],
 		"count 100": [[{"effect": "give", "items": {item0: QuestRules.ITEM_COUNT_MAX + 1}}], "count of '%s'" % item0],
@@ -350,8 +351,78 @@ static func _test_effects(fx: Dictionary) -> bool:
 	checks["9 effects"] = _one(DialogueRules.effects_errors(W, nine, "Choice", false), "at most %d effects" % DialogueRules.MAX_EFFECTS)
 	checks["turn_in then set_flag and give ok"] = DialogueRules.effects_errors(W, [turn, flag, {"effect": "give", "gold": 3}], "Choice", false).is_empty()
 	checks["flag then shop ok"] = DialogueRules.effects_errors(W, [flag, shop], "Choice", false).is_empty()
-	checks["node level refuses start_quest"] = _one(DialogueRules.effects_errors(W, [{"effect": "start_quest", "quest": "q_main"}], "Node 'x'", true), "Node effects may only be set_flag or give.")
+	checks["node level refuses start_quest"] = _one(DialogueRules.effects_errors(W, [{"effect": "start_quest", "quest": "q_main"}], "Node 'x'", true), "Node effects may only be set_flag, add_flag or give.")
 	return _report("Check 3: effects (unknown, order rules, give/take bounds, refs: errors)", checks)
+
+# A party-side and an enemy-side catalog unit, picked by rule (read-only).
+static func _unit_of_side(side: String) -> String:
+	for row: Dictionary in ContentCatalog.entries("units"):
+		if str(row.get("side", "enemy")) == side:
+			return str(row["id"])
+	return ""
+
+# Check 3b (RECRUIT1-L 1.4): effect `recruit` validation (keys, choices only, at most one per choice, ref, party
+# character rules) and its `character` ref in reference scans and renames. Test-only characters, removed afterwards.
+static func _test_recruit(fx: Dictionary) -> bool:
+	var checks: Dictionary = {}
+	var party_unit: String = _unit_of_side("party")
+	var enemy_unit: String = _unit_of_side("enemy")
+	var item_qid: String = ""
+	var errors: Array[String] = []
+	errors.append_array(WorldCatalog.upsert(W, "items", {"id": "rc_blade", "name": "Recruit blade", "base_item": JsonUtil.strings(fx["items"])[0]}))
+	if WorldCatalog.get_own(W, "items", "rc_blade").is_empty():
+		errors.clear()   # the item fixture is optional; the named-item case falls back to tuning
+	else:
+		item_qid = "rc_blade"
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_hero", "name": "Rc Hero", "role": "party", "base_unit": party_unit, "passives": [str(fx["passive"])]}))
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_npc", "name": "Rc Npc", "role": "npc", "base_unit": party_unit}))
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_foe_unit", "name": "Rc Foe Unit", "role": "party", "base_unit": enemy_unit}))
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_tuned", "name": "Rc Tuned", "role": "party", "base_unit": party_unit, "tuning": {"power": 1}}))
+	checks["fixtures stored"] = errors.is_empty() and not party_unit.is_empty() and not enemy_unit.is_empty()
+	if not errors.is_empty():
+		print("      [%s] recruit fixtures: %s" % [TAG, str(errors)])
+	var rc: Dictionary = {"effect": "recruit", "character": "rc_hero"}
+	var flag: Dictionary = {"effect": "set_flag", "key": "dg.rc"}
+	checks["known effect"] = DialogueRules.EFFECTS.has("recruit") and str(DialogueRules.EFFECT_REF_KEYS.get("character", "")) == "characters"
+	checks["valid recruit (passives allowed)"] = DialogueRules.effects_errors(W, [rc, flag], "Choice", false).is_empty()
+	checks["party_character_errors clean"] = WorldCatalog.party_character_errors(W, "rc_hero").is_empty()
+	var bad: Dictionary = {
+		"unknown character": [[{"effect": "recruit", "character": "rc_nobody"}], "Recruit: unknown character 'rc_nobody'."],
+		"no character": [[{"effect": "recruit"}], "choose a character"],
+		"extra key": [[{"effect": "recruit", "character": "rc_hero", "who": 1}], "unknown key 'who'"],
+		"two recruits": [[rc, {"effect": "recruit", "character": "rc_hero"}], "at most one recruit per choice."],
+		"not role party": [[{"effect": "recruit", "character": "rc_npc"}], "Party hero 'rc_npc' needs role party"],
+		"enemy base unit": [[{"effect": "recruit", "character": "rc_foe_unit"}], "Party hero 'rc_foe_unit' must play as a party unit"],
+		"tuning": [[{"effect": "recruit", "character": "rc_tuned"}], "Party hero 'rc_tuned' may not carry named items, disciplines or tuning yet (RECRUIT1)."],
+	}
+	for label: Variant in bad:
+		var pair: Array = DictUtil.array_of(bad[label])
+		checks[str(label)] = _one(DialogueRules.effects_errors(W, pair[0], "Choice", false), str(pair[1]))
+	if not item_qid.is_empty():
+		var armed_errs: Array[String] = WorldCatalog.upsert(W, "characters", {"id": "rc_armed", "name": "Rc Armed", "role": "party", "base_unit": party_unit, "named_items": [item_qid]})
+		checks["named item"] = armed_errs.is_empty() and WorldCatalog.party_character_errors(W, "rc_armed") == ["Party hero 'rc_armed' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
+		var _gone_armed: String = WorldCatalog.remove(W, "characters", "rc_armed")
+	checks["node level refuses recruit"] = _one(DialogueRules.effects_errors(W, [rc], "Node 'x'", true), "Node effects may only be set_flag, add_flag or give.")
+	# A stored tree: the recruit ref is found by reference scans and follows a rename.
+	var tree: Dictionary = {"id": "d_rc", "name": "Recruit talk", "speaker": "mara", "start": "hello", "services": false, "nodes": [
+		{"id": "hello", "text": "Join?", "choices": [{"text": "Join me", "to": "", "effects": [rc, flag]}, {"text": "Bye", "to": ""}]}]}
+	var stored: Array[String] = WorldCatalog.upsert(W, "dialogues", tree)
+	checks["tree stored"] = stored.is_empty()
+	if not stored.is_empty():
+		print("      [%s] recruit tree: %s" % [TAG, str(stored)])
+	checks["recruit ref scanned"] = _keys_from(WorldCatalog.references_to(W, "characters", "rc_hero"), "dialogues", "d_rc") == ["nodes"]
+	var hero: Dictionary = WorldCatalog.get_own(W, "characters", "rc_hero")
+	hero["id"] = "rc_hero2"
+	var renamed: bool = WorldCatalog.upsert(W, "characters", hero, "rc_hero").is_empty()
+	var after: Dictionary = WorldCatalog.get_own(W, "dialogues", "d_rc")
+	checks["recruit ref renamed"] = renamed and str(DictUtil.dict_of(DictUtil.array_of(DictUtil.dict_of(_choices(after, "hello")[0])["effects"])[0])["character"]) == "rc_hero2"
+	var _gone_tree: String = WorldCatalog.remove(W, "dialogues", "d_rc")
+	for id: String in ["rc_hero2", "rc_npc", "rc_foe_unit", "rc_tuned"]:
+		var _gone: String = WorldCatalog.remove(W, "characters", id)
+	if not item_qid.is_empty():
+		var _gone_item: String = WorldCatalog.remove(W, "items", item_qid)
+	checks["fixture world still validates"] = WorldCatalog.validate_world(W).is_empty()
+	return _report("Check 3b: recruit effect (RECRUIT1-L 1.4: keys, choices only, one per choice, ref, party hero rules, scans)", checks)
 
 # ------------------------------------------------------------------------------
 # Check 4: shops
@@ -757,7 +828,7 @@ static func _build_runtime(rx: Dictionary) -> bool:
 
 # A new game in R with both units; only the low-KNOW one active (the other is benched).
 static func _gs() -> GameState:
-	var gs: GameState = NewGame.create(R, [str(_rx["lo"]), str(_rx["hi"])] as Array[String], 7)["state"] as GameState
+	var gs: GameState = GameState.of(NewGame.create(R, [str(_rx["lo"]), str(_rx["hi"])] as Array[String], 7)["state"])
 	gs.party.active_ids = [str(_rx["lo"])] as Array[String]
 	return gs
 
@@ -1061,10 +1132,10 @@ static func _test_gold() -> bool:
 	var checks: Dictionary = {}
 	var gs: GameState = _gs()
 	checks["NewGame uses start_gold"] = gs.party.gold == START_GOLD and DialogueRules.start_gold(R) == START_GOLD
-	var kid: GameState = NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"] as GameState
+	var kid: GameState = GameState.of(NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"])
 	checks["NewGame inherits start_gold"] = kid != null and kid.party.gold == START_GOLD
 	var _m: Array[String] = WorldCatalog.update_manifest(KID, {"start_gold": 0})
-	var kid0: GameState = NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"] as GameState
+	var kid0: GameState = GameState.of(NewGame.create(KID, [str(_rx["lo"])] as Array[String], 7)["state"])
 	checks["a child's own start_gold wins"] = kid0 != null and kid0.party.gold == 0
 	var _m2: Array[String] = WorldCatalog.update_manifest(KID, {"start_gold": -1})
 	var entered: Dictionary = ExploreRunner.enter(gs, "yard")
@@ -1126,11 +1197,11 @@ static func _test_save_v4() -> bool:
 	DictUtil.dict_of(v3["party"]).erase("gold")
 	_write_raw(1, JSON.stringify({"format": SaveGame.FORMAT, "version": 3, "saved_at": 0, "game_state": v3}))
 	var read: Dictionary = SaveGame.read(1)
-	var st: GameState = read["state"] as GameState
+	var st: GameState = GameState.of(read["state"])
 	checks["v3 migrates to gold 0 and shops {}"] = DictUtil.to_bool(read["ok"]) and st != null and st.party.gold == 0 and st.shops.is_empty() and JsonUtil.strings(read["warnings"]).is_empty()
 	var written: bool = SaveGame.write(gs, 2).is_empty()
-	var back: GameState = SaveGame.read(2)["state"] as GameState
-	checks["v4 round trip"] = written and back != null and back.equals(gs) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(2))))["version"]) == SaveGame.VERSION and SaveGame.VERSION == 4
+	var back: GameState = GameState.of(SaveGame.read(2)["state"])
+	checks["v4 round trip"] = written and back != null and back.equals(gs) and DictUtil.to_int(DictUtil.dict_of(JSON.parse_string(FileAccess.get_file_as_string(SaveGame.path_for(2))))["version"]) == SaveGame.VERSION and SaveGame.VERSION >= 4   # 5 since TRAV1-L
 	var negative: GameState = GameState.from_dict(gs.to_dict())
 	negative.party.gold = -1
 	var zero: GameState = GameState.from_dict(gs.to_dict())
@@ -1144,7 +1215,7 @@ static func _test_save_v4() -> bool:
 	raw_shops["shops"] = [1]
 	var not_object: GameState = GameState.from_dict(raw_shops)
 	for pair: Array in [["negative gold", negative], ["sold count 0", zero], ["unqualified shop id", bad_qid], ["gold not whole", not_whole], ["shops not an object", not_object]]:
-		var g: GameState = pair[1] as GameState
+		var g: GameState = GameState.of(pair[1])
 		checks["%s fails validate and write" % str(pair[0])] = not g.validate().is_empty() and not SaveGame.write(g, 3).is_empty()
 	checks["nothing written for refusals"] = not SaveGame.exists(3)
 	return _report("Check 20: save v4 (v3 migrates; bad gold / shops fail validate and write)", checks)

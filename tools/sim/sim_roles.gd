@@ -15,7 +15,7 @@ const SECONDARY: Dictionary = {"warrior": ["support"], "ranger": ["aoe"], "pries
 
 # 6.3 role loadouts at L5; L7_SWAPS replace one family from level 7 on.
 const LOADOUTS: Dictionary = {
-	"warrior": {"tank": ["taunt_shout", "shield_bash", "riposte", "intimidate", "shield_wall"],
+	"warrior": {"tank": ["taunt_shout", "shield_bash", "intimidate", "shield_wall"],
 		"support": ["taunt_shout", "intimidate", "shield_bash", "sunder", "riposte"]},
 	"ranger": {"ranged": ["aimed_shot", "pinning_shot", "leap_back", "barbed_arrow", "deadeye"],
 		"aoe": ["aimed_shot", "pinning_shot", "leap_back", "volley", "deadeye"]},
@@ -84,7 +84,8 @@ static func owned_families(class_id: String, level: int) -> Array[String]:
 
 # ------------------------------------------------------------------------------
 # KPIs (6.1) and bands (8.1). A variant record `v` holds: test, party, refs (SimMetrics accumulators),
-# fights, cleared, rounds_sum, rounds_cleared_sum, survivors_sum, prio_by5, prio_round_sum, baseline_survivors.
+# fights, cleared, rounds_sum, rounds_cleared_sum, survivors_sum, prio_by5, prio_round_sum, baseline_survivors;
+# BAL5 K3: refs_won (the refs over cleared fights only).
 # Each KPI: {"id", "label", "band" (SimTargets key or ""), "pct" (prints as integer percent), "lower" (lower ranks better)}.
 # The first KPI of a role is its ranking KPI.
 # ------------------------------------------------------------------------------
@@ -96,7 +97,8 @@ static func kpis(role: String) -> Array[Dictionary]:
 			out.append(_k("taken_share", "dmg_taken share%", "tank_taken_share", true))
 			out.append(_k("attacks_share", "atk_rcv share%", "tank_attacks_share", true))
 			out.append(_k("taunt_frac", "taunt/alive%", "", true))
-			out.append(_k("ally_hp", "allies hp_end%", "tank_ally_hp", true))
+			out.append(_k("ally_hp_won", "allies hp_end won%", "tank_ally_hp", true))   # BAL5 T1: the band is read on won fights
+			out.append(_k("ally_hp", "allies hp_end%", "tank_ally_hp_all", true))
 			out.append(_k("hold_frac", "hold/alive%", "", true))
 			out.append(_k("survival", "survival%", "tank_survival", true))
 		"ranged":
@@ -118,6 +120,9 @@ static func kpis(role: String) -> Array[Dictionary]:
 			out.append(_k("buff_rounds", "buff rds/fight", "", false))
 			out.append(_k("debuff_rounds", "debuff rds/f", "", false))
 			out.append(_k("survivor_gain", "surv vs brawler", "support_survivor_gain", false))
+			out.append(_k("heal_casts", "heal casts/f", "", false))     # BAL5 K3: S1 trigger inputs
+			out.append(_k("down_early", "down<r%d%%" % SimMetrics.EARLY_DOWN_ROUND, "", true))
+			out.append(_k("down_round", "down rnd", "", false))
 		"striker":
 			var k: Dictionary = _k("down_round", "prio down rnd", "", false)
 			k["lower"] = true
@@ -147,6 +152,14 @@ static func kpi_value(id: String, v: Dictionary) -> float:
 			return SimMetrics.ratio(t, "taunt_blocks", "blocks_alive") * 100.0
 		"ally_hp":
 			return SimMetrics.per_fight(refs, "hp_end_frac") * 100.0
+		"ally_hp_won":
+			return SimMetrics.per_fight(DictUtil.dict_of(v.get("refs_won", {})), "hp_end_frac") * 100.0
+		"heal_casts":
+			return SimMetrics.per_fight(t, "heal_casts")
+		"down_early":
+			return SimMetrics.per_fight(t, "down_early") * 100.0
+		"down_round":
+			return SimMetrics.ratio(t, "down_round", "downed")
 		"hold_frac":
 			return SimMetrics.ratio(t, "hold_blocks", "blocks_alive") * 100.0
 		"survival":

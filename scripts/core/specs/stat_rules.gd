@@ -56,12 +56,17 @@ const KNOW_UNLOCK_BASE: int = 12
 const KNOW_UNLOCK_STEP: int = 4
 const MAX_UNLOCK_OFFSET: int = 8      # largest explicit skill unlock_offset
 
-# tier -> {hp, power}: multipliers on the class-derived HP and attack power.
+# BAL3 section 5 "Minion skill ceiling": the AI AP ceiling (AiProfile.skill_cap) of a minion-tier, class-derived unit
+# whose entry sets no explicit skill_cap (2 = tiers I-II of a level-1 family). 0 would turn the lever off.
+const MINION_SKILL_CAP: int = 2
+
+# tier -> {hp, power, skill_cap}: multipliers on the class-derived HP and attack power; skill_cap = the default AI AP
+# ceiling of a class-derived unit of that tier without an explicit skill_cap (0 or absent = no ceiling).
 const TIERS: Dictionary = {
 	"hero": {"hp": 1.0, "power": 1.0, "label": "Hero"},
-	"minion": {"hp": 0.4, "power": 0.6, "label": "Minion"},
+	"minion": {"hp": 0.4, "power": 0.6, "label": "Minion", "skill_cap": MINION_SKILL_CAP},
 	"standard": {"hp": 0.7, "power": 0.8, "label": "Standard"},
-	"elite": {"hp": 1.25, "power": 1.1, "label": "Elite"},   # BAL2 answers (user 2026-10-17)
+	"elite": {"hp": 1.25, "power": 1.0, "label": "Elite"},   # BAL3 Q3 (user 2026-10-17); hp 1.25 from BAL2
 	"boss": {"hp": 1.5, "power": 1.1, "label": "Boss"},
 }
 
@@ -76,6 +81,10 @@ static func tier_hp(tier: String) -> float:
 
 static func tier_power(tier: String) -> float:
 	return DictUtil.to_float(DictUtil.dict_of(TIERS.get(tier, TIERS["hero"])).get("power", 1.0), 1.0)
+
+# Default AI AP ceiling of a class-derived unit of `tier` without an explicit skill_cap (0 = none; BAL3 section 5).
+static func tier_skill_cap(tier: String) -> int:
+	return maxi(0, DictUtil.to_int(DictUtil.dict_of(TIERS.get(tier, TIERS["hero"])).get("skill_cap", 0)))
 
 # Free points a unit of `level` has to spend.
 static func spend_pool(level: int) -> int:

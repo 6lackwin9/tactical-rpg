@@ -12,7 +12,8 @@ extends RefCounted
 #
 #   .  floor     ,  grass     :  dirt      o  cobble    s  sand     *  snow
 #   ~  shallow   W  deep water m  mud      L  lava      #  wall     T  tree
-#   =  bridge    r  rubble
+#   =  bridge    r  rubble    f  burning ground (hazard)   p  toxic bog (hazard)   i  ice (hazard)
+# Hazard tiles (S12T-L) sit outside the core and the exit lane: lava_cavern f, swamp_bog p, frozen_pass i.
 # ==============================================================================
 
 const ZONES: Dictionary = {
@@ -38,15 +39,15 @@ const ZONES: Dictionary = {
 	},
 	"frozen_pass": {
 		"name": "Frozen Pass", "biome": "Mountains",
-		"rows": ["###**TT**###", "#**********#", "T***r*******", "*****::*****", "************", "*****::**rr*", "T**********#", "#*******T**#", "###******###"],
+		"rows": ["###**TT**###", "#**********#", "Ti**r*******", "*****::**i**", "************", "*****::**rri", "T**********#", "#*******T**#", "###******###"],
 	},
 	"lava_cavern": {
 		"name": "Lava Cavern", "biome": "Volcanic",
-		"rows": ["############", "#LLL....LLL#", "#LL......rr#", "#....rr....#", "#...........", "#rr........#", "#LL......LL#", "#LLL.rr.LLL#", "############"],
+		"rows": ["############", "#LLLf...LLL#", "#LL......rr#", "#f...rr....#", "#...........", "#rr........#", "#LL......LL#", "#LLL.rrfLLL#", "############"],
 	},
 	"swamp_bog": {
 		"name": "Swamp Bog", "biome": "Swamp",
-		"rows": ["TmmmT~~~mmmT", "mmm,,,,~~mmm", "~mm,,mm,,,,m", "~~~,,,,,m,,,", "m,,,,,,,,,,,", ",,,m,,,,,mm~", "T,,,,,,m,~~~", "mmm~~,,,,mmT", "TTT~~mmmmTTT"],
+		"rows": ["TmmmT~~~mmmT", "mmm,,,,~~mmm", "~mm,,mm,,,,m", "~~~,,,,,m,,,", "m,,,,,,,,,,,", "p,,m,,,,,pm~", "T,,,,,,m,~~~", "mmm~~,,,,mmT", "TTT~~mmmmTTT"],
 	},
 }
 

@@ -12,7 +12,7 @@ Give each new status of the first slice except burn one shipped carrier, so the 
 ## Authoring rules used
 
 - New families sit on the class path at level 6, after every level-5 family, so the default loadout rule (first five path families) and every explicit unit loadout stay as they are; nothing is slotted. Unlock: tier 1 at 6, tier 2 at 8, tier 3 at 10 (SK2 offsets 0/2/4).
-- Grade `novice`, no `requires`, not `learned_only`, origin `user`.
+- Grade `novice`, no `requires`, ~~not `learned_only`~~ `learned_only: true` (as built, S12C-A review 2026-10-17: keeps hand-built units' skill lists and the sim baseline unchanged; class units still get the family from the path), origin `user`.
 - Existing families are NOT edited (BAL2 just ran; swaps such as sunder to expose, firebomb plus burn or renewal haste to regen are balance-pass candidates, listed in out of scope).
 
 ## Assets

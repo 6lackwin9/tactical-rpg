@@ -6,6 +6,8 @@ extends RefCounted
 # default) and of the party stash. equip() moves a stash item onto the member and the replaced explicit item back to the
 # stash; unequip() returns the explicit item and falls back to the class default (the "none" item is not offered). Each
 # equip is checked by UnitState.validate (gear messages verbatim); confirm() writes both drafts back.
+# ITEMUSE1 rule 1: the battle pouch drafts the same way: pouch_add() moves one consumable from the stash into the next
+# pouch slot, pouch_remove() returns a slot's item to the stash; confirm() writes the pouch with the gear.
 # ==============================================================================
 
 var member_id: String = ""
@@ -93,12 +95,67 @@ func unequip(slot: String) -> Array[String]:
 	work.equipment.erase(slot)
 	return errors
 
+# [{index, item, name}]: the draft pouch in slot order.
+func pouch_rows() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if work == null:
+		return out
+	for i: int in range(work.pouch.size()):
+		out.append({"index": i, "item": work.pouch[i], "name": item_name(work.pouch[i])})
+	return out
+
+# [{item, name, count}]: stash consumables that may go into the pouch (types offered in battle).
+func pouch_candidates() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for row: Dictionary in stash_rows():
+		if _pouch_problem(str(row["item"])).is_empty():
+			out.append({"item": row["item"], "name": row["name"], "count": row["count"]})
+	return out
+
+func _pouch_problem(item_id: String) -> String:
+	var entry: Dictionary = ContentCatalog.get_entry("items", item_id)
+	if str(entry.get("item_type", "")) != "CONSUMABLE":
+		return "'%s' is not a consumable." % item_name(item_id)
+	var built: Item = ContentFactory.item(entry)
+	if not (built is Consumable) or not ItemCommand.offered(built as Consumable):
+		return "%s can't be used in battle." % item_name(item_id)
+	return ""
+
+func pouch_add(item_id: String) -> Array[String]:
+	var errors: Array[String] = []
+	if work == null:
+		errors.append("No member.")
+		return errors
+	if DictUtil.to_int(stash.get(item_id, 0)) <= 0:
+		errors.append("'%s' is not in the stash." % item_name(item_id))
+		return errors
+	var problem: String = _pouch_problem(item_id)
+	if not problem.is_empty():
+		errors.append(problem)
+		return errors
+	if work.pouch.size() >= UnitState.POUCH_MAX:
+		errors.append("The pouch holds at most %d items." % UnitState.POUCH_MAX)
+		return errors
+	work.pouch.append(item_id)
+	_from_stash(item_id)
+	return errors
+
+func pouch_remove(index: int) -> Array[String]:
+	var errors: Array[String] = []
+	if work == null or index < 0 or index >= work.pouch.size():
+		errors.append("No item in pouch slot %d." % (index + 1))
+		return errors
+	_to_stash(work.pouch[index])
+	work.pouch.remove_at(index)
+	return errors
+
 func confirm() -> Array[String]:
 	var errors: Array[String] = _gear_errors(work)
 	if not errors.is_empty():
 		return errors
 	var m: UnitState = _member()
 	m.equipment = work.equipment.duplicate()
+	m.pouch = work.pouch.duplicate()
 	CurrentGame.state().party.stash = stash.duplicate()
 	return errors
 

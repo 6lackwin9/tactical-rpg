@@ -20,17 +20,20 @@ const NEW_GAME: String = "new_game"
 const LOAD: String = "load"
 const SAVE: String = "save"
 const SETTINGS: String = "settings"
-const HUB: String = "hub"
+const HUB: String = "hub"             # UIR-2 (Q1 B): the game menu; during play a popup over the paused map
+const PLAY: String = "play"           # UIR-2: the game scene itself (no model, no view); the bottom of the stack during play
 const PARTY: String = "party"          # UI2-L: roster, stats, passives
 const LEVEL_UP: String = "level_up"    # UI2-L: args {member}
 const LOADOUT: String = "loadout"      # UI2-L: args {member}
 const GEAR: String = "gear"            # UI2-L: args {member}
-const RESULTS: String = "results"      # UI2-L: args {award, advanced, outcome (BATTLE1-L)}
+const RESULTS: String = "results"      # UI2-L: args {award, advanced, outcome (BATTLE1-L), rewards (BATTLE-FLOW, non-XP), report (BREPORT1-L, optional)}
 const JOURNAL: String = "journal"      # UI3-L
 
 var stack: Array[String] = []
 var models: Dictionary = {}        # screen id on the stack -> its model
+var play_scene: bool = true   # the host has a game scene to show (false: enter_game opens the full-screen hub instead of PLAY)
 var pending_message: String = ""
+var pending_destructive: bool = false   # the open question is destructive: No gets the focus
 var _pending: Callable = Callable()
 
 func _init(start: String = MAIN) -> void:
@@ -76,7 +79,7 @@ func make_model(id: String, args: Dictionary = {}) -> RefCounted:
 		JOURNAL:
 			return JournalModel.new() if CurrentGame.has_game() else null
 		RESULTS:
-			return BattleResultsModel.new(self, DictUtil.dict_of(args.get("award", {})), JsonUtil.strings(args.get("advanced", [])), str(args.get("outcome", "won"))) if CurrentGame.has_game() else null
+			return BattleResultsModel.new(self, DictUtil.dict_of(args.get("award", {})), JsonUtil.strings(args.get("advanced", [])), str(args.get("outcome", "won")), DictUtil.dict_of(args.get("rewards", {})), DictUtil.dict_of(args.get("report", {}))) if CurrentGame.has_game() else null
 	return null
 
 func push(id: String, args: Dictionary = {}) -> void:
@@ -117,8 +120,10 @@ func clear_to(id: String) -> void:
 	push(id)
 
 # Asks a yes / no question; `action` runs on confirm().
-func ask(message: String, action: Callable) -> void:
+# `destructive` (overwrite, delete, quit without saving) makes the host focus No instead of Yes (UIR-1, X6).
+func ask(message: String, action: Callable, destructive: bool = false) -> void:
 	pending_message = message
+	pending_destructive = destructive
 	_pending = action
 	confirm_needed.emit(message)
 
@@ -129,16 +134,23 @@ func confirm() -> void:
 	var action: Callable = _pending
 	_pending = Callable()
 	pending_message = ""
+	pending_destructive = false
 	if action.is_valid():
 		action.call()
 
 func decline() -> void:
 	_pending = Callable()
 	pending_message = ""
+	pending_destructive = false
 
-# Starts playing `gs`: shows `warnings` once, opens the hub and tells the host.
+# True while a game is being played (the game scene is the bottom of the stack).
+func in_play() -> bool:
+	return stack.has(PLAY)
+
+# Starts playing `gs`: shows `warnings` once, puts the game scene (PLAY) at the bottom of the stack and tells the host
+# (UIR-2: the hub is no longer a screen of its own; Esc / the Menu button push it as a popup over the paused map).
 func enter_game(gs: GameState, warnings: Array[String] = []) -> void:
 	if not warnings.is_empty():
 		notice.emit(warnings)
-	clear_to(HUB)
+	clear_to(PLAY if play_scene else HUB)   # decided before clearing: one stack change, no PLAY then HUB
 	game_started.emit(gs)

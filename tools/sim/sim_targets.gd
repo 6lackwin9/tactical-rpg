@@ -24,7 +24,8 @@ const DEFAULTS: Dictionary = {
 	"tank_taken_share": [40.0, 65.0],
 	"tank_attacks_share": [45.0, 100.0],
 	"tank_survival": [60.0, 100.0],
-	"tank_ally_hp": [40.0, 100.0],
+	"tank_ally_hp": [40.0, 100.0],      # BAL5 T1: allies hp_end on won fights
+	"tank_ally_hp_all": [15.0, 100.0],  # BAL5 T1: allies hp_end over all fights (floor from BAL3-R)
 	"ranged_dist": [2.5, OPEN_HIGH],
 	"ranged_share": [70.0, 100.0],
 	"ranged_attacks_per_round": [0.0, 1.0],

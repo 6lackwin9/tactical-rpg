@@ -3,13 +3,13 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Plan Codec (PLAYTEST1 section D: PlanStep <-> JSON)
-# Step: {mode, skill, target, dir, tiles, cell}; unit ref: {side: ally | enemy, i, name}.
+# Step: {mode, skill, target, dir, tiles, cell[, item]} (item: ITEM steps only, ITEMUSE1); unit ref: {side: ally | enemy, i, name}.
 # FIELDS maps every PlanStep script property to its JSON key; the playtest suite fails when PlanStep
 # gains a property without an entry here, so new step fields cannot be dropped silently.
 # Decode errors name the round, unit and step (1-based); a name mismatch alone is a warning.
 # ==============================================================================
 
-const FIELDS: Dictionary = {"mode": "mode", "skill": "skill", "target": "target", "direction": "dir", "tiles": "tiles", "cell": "cell"}
+const FIELDS: Dictionary = {"mode": "mode", "skill": "skill", "target": "target", "direction": "dir", "tiles": "tiles", "cell": "cell", "item_id": "item"}
 const NO_CELL: Array = [-1, -1]
 
 # ------------------------------------------------------------------------------
@@ -60,12 +60,43 @@ static func roster(session: CombatSession) -> Array:
 		out.append({"ref": unit_ref(session, c), "catalog_id": catalog_id(session, c), "name": c.name})
 	return out
 
+# ITEMUSE1: every ally's battle pouch (item ids in slot order) as [{ref, items}], recorded at battle start.
+static func pouches(session: CombatSession) -> Array:
+	var out: Array = []
+	for c: Combatant in session.allies:
+		out.append({"ref": unit_ref(session, c), "items": ItemCommand.pouch_ids_all(c)})
+	return out
+
+# Rebuilds the recorded pouches on the live allies (catalog consumables; unknown ids and refs are warnings) and on the
+# round-start snapshot, so reset_round keeps them. An empty list (older recordings) changes nothing.
+static func apply_pouches(session: CombatSession, entries: Array, warnings: Array[String]) -> void:
+	if entries.is_empty():
+		return
+	for raw: Variant in entries:
+		var entry: Dictionary = DictUtil.dict_of(raw)
+		var c: Combatant = resolve_ref(session, DictUtil.dict_of(entry.get("ref", {})))
+		if c == null or c.inventory == null:
+			warnings.append("Pouch for unit %s: no such unit in this build." % ref_text(DictUtil.dict_of(entry.get("ref", {}))))
+			continue
+		c.inventory.battle_pouch.clear()
+		for id: String in JsonUtil.strings(entry.get("items", [])):
+			var item_entry: Dictionary = ContentCatalog.get_entry("items", id)
+			var built: Item = ContentFactory.item(item_entry) if not item_entry.is_empty() else null
+			if built is Consumable:
+				var _added: bool = c.inventory.add_to_battle_pouch(built as Consumable)
+			else:
+				warnings.append("Pouch for %s: '%s' is not a catalog consumable." % [c.name, id])
+	var snap: BlockSnapshot = session.snapshot_at(session.current_round, 0)
+	if snap != null:
+		for c: Combatant in session.allies:
+			snap.pouches[c] = c.inventory.battle_pouch.duplicate()
+
 # ------------------------------------------------------------------------------
 # Encode
 # ------------------------------------------------------------------------------
 
 static func encode_step(session: CombatSession, step: PlanStep) -> Dictionary:
-	return {
+	var out: Dictionary = {
 		"mode": mode_name(step.mode),
 		"skill": step.skill.id if step.skill != null else "",
 		"target": unit_ref(session, step.target),
@@ -73,6 +104,9 @@ static func encode_step(session: CombatSession, step: PlanStep) -> Dictionary:
 		"tiles": step.tiles,
 		"cell": [step.cell.x, step.cell.y],
 	}
+	if not step.item_id.is_empty():
+		out["item"] = step.item_id   # only ITEM steps carry it, so older recordings encode unchanged
+	return out
 
 static func encode_steps(session: CombatSession, steps: Array[PlanStep]) -> Array:
 	var out: Array = []
@@ -111,6 +145,8 @@ static func mode_of(name_text: String) -> PlanStep.Mode:
 			return PlanStep.Mode.WITHDRAW
 		"ALLY":
 			return PlanStep.Mode.ALLY
+		"ITEM":
+			return PlanStep.Mode.ITEM   # ITEMUSE1: item id in "item", target as a unit ref
 	return PlanStep.Mode.SELF
 
 # The key name of a PlanStep.Mode value.
@@ -166,6 +202,10 @@ static func decode_step(session: CombatSession, actor: Combatant, d: Dictionary,
 	step.direction = _vec(d.get("dir", [0, 0]), Vector2i.ZERO)
 	step.tiles = DictUtil.to_int(d.get("tiles", 1), 1)
 	step.cell = _vec(d.get("cell", NO_CELL), Vector2i(-1, -1))
+	step.item_id = str(d.get("item", ""))
+	if step.mode == PlanStep.Mode.ITEM and ItemCommand.pouch_count(actor, step.item_id) <= 0:   # ITEMUSE1: the item must be in the pouch
+		errors.append("%s: %s has no '%s' in the battle pouch." % [where, actor.name, step.item_id])
+		return null
 	return step
 
 # Puts decoded plans on the session's live plan, in recorded order.

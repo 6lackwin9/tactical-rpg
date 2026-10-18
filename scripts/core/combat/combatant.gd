@@ -69,6 +69,7 @@ var gear_status_potency: int = 0           # +points of hit chance on statuses i
 var gear_spell_reach: int = 0              # raw sum of gear spell_reach (read through spell_reach_bonus, which clamps it)
 var passive_status_potency: int = 0        # the same from passives
 var passive_spell_reach: int = 0
+var foresight_source: String = ""          # id of the first applied passive with the `foresight` effect ("" = none; INTENT1)
 var hp_scale: float = 1.0               # tier multiplier on class-derived HP
 var power_scale: float = 1.0            # tier multiplier on attack power (DamageCalculator)
 var tier: String = "hero"               # StatRules.TIERS key
@@ -186,6 +187,11 @@ func status_potency_bonus() -> int:
 # Extra maximum reach of spell skills: gear is clamped to Passives.GEAR_REACH_CAP, passives add on top.
 func spell_reach_bonus() -> int:
 	return mini(gear_spell_reach, Passives.GEAR_REACH_CAP) + passive_spell_reach
+
+# True when an applied passive carries the `foresight` effect: enemies targeting this unit show their whole round plan
+# (IntentRules.reveals, CombatSession.enemy_intents). Display only; never read by planning or resolution.
+func has_foresight() -> bool:
+	return not foresight_source.is_empty()
 
 # Resistance % to `status` from passives and gear (100 = immune).
 func resist_for(status: String) -> int:

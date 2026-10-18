@@ -10,7 +10,49 @@ extends RefCounted
 # ==============================================================================
 
 static func _entry(gs: GameState, ref: String) -> Dictionary:
-	return WorldCatalog.resolve(gs.world_id, "quests", ref)
+	return _entry_from(gs, gs.world_id, ref)
+
+# Resolves `ref` as written in `world_id`; {} when the quest's world is neither extended nor connected to the party's.
+static func _entry_from(gs: GameState, world_id: String, ref: String) -> Dictionary:
+	var found: Dictionary = WorldCatalog.resolve(world_id, "quests", ref)
+	if found.is_empty() or not world_visible(gs.world_id, str(found.get("_world", world_id))):
+		return {}
+	return found
+
+# QUESTX: is a quest of `quest_world` readable while the party is in `current`? Its own lineage, a world `current` (or an
+# ancestor) connects to, or a world whose lineage connects to `current` (connections are followed both ways, one hop).
+static func world_visible(current: String, quest_world: String) -> bool:
+	if WorldCatalog.can_reach_world(current, quest_world):
+		return true
+	var here: Array[String] = WorldCatalog.lineage(current)
+	for w: String in WorldCatalog.lineage(quest_world):
+		for target: String in JsonUtil.strings(WorldCatalog.manifest(w).get("connects", [])):
+			if here.has(target):
+				return true
+	return false
+
+# The quests this runner tracks now: the world's merged quests, then stored quests of connected worlds (QUESTX), so a
+# quest accepted in one world keeps progressing in a connected one. Offers (available / locked) stay per world.
+static func _scope(gs: GameState) -> Array[Dictionary]:
+	var out: Array[Dictionary] = WorldCatalog.merged_entries(gs.world_id, "quests")
+	var seen: Dictionary = {}
+	for e: Dictionary in out:
+		seen[str(e["_qid"])] = true
+	for key: Variant in gs.quests:
+		var qid: String = str(key)
+		if seen.has(qid):
+			continue
+		var extra: Dictionary = _entry(gs, qid)
+		if _runnable(extra) and str(extra.get("_qid", "")) == qid:
+			out.append(extra)
+			seen[qid] = true
+	return out
+
+# Base world for refs written in a quest: the party's world for its own lineage (so child overrides apply), else the
+# quest's own world (connected-world quests only).
+static func _world_of(gs: GameState, entry: Dictionary) -> String:
+	var w: String = str(entry.get("_world", gs.world_id))
+	return gs.world_id if WorldCatalog.lineage(gs.world_id).has(w) else w
 
 static func _runnable(entry: Dictionary) -> bool:
 	var template_id: String = str(entry.get("template", ""))
@@ -46,7 +88,7 @@ static func status(gs: GameState, ref: String) -> String:
 	if not available:
 		return "unavailable"
 	for req: String in JsonUtil.strings(entry.get("requires", [])):
-		var other: Dictionary = _entry(gs, req)
+		var other: Dictionary = _entry_from(gs, _world_of(gs, entry), req)
 		if other.is_empty() or str(_stored(gs, str(other["_qid"])).get("state", "")) != "completed":
 			return "locked"
 	for c: Variant in DictUtil.array_of(entry.get("requires_flags", [])):
@@ -62,7 +104,7 @@ static func resolved(gs: GameState, ref: String) -> Dictionary:
 # Qids of the world's merged quests in `wanted` status, catalog order.
 static func quests_with(gs: GameState, wanted: String) -> Array[String]:
 	var out: Array[String] = []
-	for e: Dictionary in WorldCatalog.merged_entries(gs.world_id, "quests"):
+	for e: Dictionary in _scope(gs):
 		if status(gs, str(e["_qid"])) == wanted:
 			out.append(str(e["_qid"]))
 	return out
@@ -72,6 +114,7 @@ static func current_objective(gs: GameState, ref: String) -> Dictionary:
 	if status(gs, ref) != "active":
 		return {}
 	var entry: Dictionary = _entry(gs, ref)
+	var home: String = _world_of(gs, entry)
 	var q: Dictionary = QuestRules.resolve(gs, entry)
 	var index: int = DictUtil.to_int(_stored(gs, str(entry["_qid"])).get("objective", 0))
 	var objectives: Array = DictUtil.array_of(q.get("objectives", []))
@@ -83,9 +126,9 @@ static func current_objective(gs: GameState, ref: String) -> Dictionary:
 	var target: String = ""
 	match kind:
 		"reach_location":
-			target = str(WorldCatalog.resolve(gs.world_id, "locations", str(step.get("location", ""))).get("_qid", ""))
+			target = str(WorldCatalog.resolve(home, "locations", str(step.get("location", ""))).get("_qid", ""))
 		"win_encounter":
-			target = str(WorldCatalog.resolve(gs.world_id, "encounters", str(step.get("encounter", ""))).get("_qid", ""))
+			target = str(WorldCatalog.resolve(home, "encounters", str(step.get("encounter", ""))).get("_qid", ""))
 		"flag":
 			target = str(step.get("flag", ""))
 	return {"index": index, "kind": kind, "text": str(step.get("text", "")), "target": target, "value": step.get("value", true)}
@@ -96,7 +139,7 @@ static func offers(gs: GameState, ref: String) -> Array[String]:
 	var out: Array[String] = []
 	var q: Dictionary = resolved(gs, ref)
 	for lref: String in JsonUtil.strings(q.get("loot_pool", [])):
-		var loot: Dictionary = WorldCatalog.resolve(gs.world_id, "loot", lref)
+		var loot: Dictionary = WorldCatalog.resolve(_world_of(gs, q), "loot", lref)
 		if loot.is_empty():
 			continue
 		var lqid: String = str(loot["_qid"])
@@ -126,7 +169,9 @@ static func check(gs: GameState) -> Array[String]:
 		if index > count:
 			out.append("Quest '%s' is at objective %d but its template has %d." % [qid, index, count])
 	for lqid: String in gs.loot_claimed:
-		if str(WorldCatalog.resolve(gs.world_id, "loot", lqid).get("_qid", "")) != lqid:
+		var lworld: String = WorldCatalog.split_qid(lqid)[0] if lqid.contains(":") and WorldCatalog.split_qid(lqid).size() == 2 else gs.world_id
+		var base: String = gs.world_id if WorldCatalog.lineage(gs.world_id).has(lworld) else lworld
+		if str(WorldCatalog.resolve(base, "loot", lqid).get("_qid", "")) != lqid:
 			out.append("Unknown claimed loot '%s' in the save." % lqid)
 	return out
 
@@ -178,18 +223,26 @@ static func _advance(gs: GameState, qid: String) -> void:
 	var stored: Dictionary = _stored(gs, qid)
 	gs.quests[qid] = {"state": "active", "objective": DictUtil.to_int(stored.get("objective", 0)) + 1}
 
-# Error text as GameState.set_flag ("" = set, then refresh).
+# Error text matches GameState.set_flag ("" = set, then refresh).
 static func set_flag(gs: GameState, key: String, value: Variant) -> String:
 	var err: String = gs.set_flag(key, value)
 	if err.is_empty():
 		refresh(gs)
 	return err
 
+# add_flag (REP1-L 2.2): adds `delta` to an int flag (missing = 0), clamped to `lo` / `hi` when ints and to
+# RepRules.MIN..MAX for `rep.` keys, then refresh. "" = done; a non-int flag changes nothing ("Flag '%s' is not a number.").
+static func add_flag(gs: GameState, key: String, delta: int, lo: Variant = null, hi: Variant = null) -> String:
+	var res: Dictionary = QuestRules.added_flag(gs, key, delta, lo, hi)
+	if not str(res["error"]).is_empty():
+		return str(res["error"])
+	return set_flag(gs, key, res["value"])
+
 # Repeats until nothing changes: met flag objectives advance, quests at their objective count become ready, available
 # auto_start quests start. Returns the qids that changed. Bounded (variants change no stored data, so no loop).
 static func refresh(gs: GameState) -> Array[String]:
 	var changed: Array[String] = []
-	var quests: Array[Dictionary] = WorldCatalog.merged_entries(gs.world_id, "quests")
+	var quests: Array[Dictionary] = _scope(gs)
 	var passes: int = quests.size() * (QuestRules.MAX_OBJECTIVES + 1) + 1
 	for _pass: int in range(passes):
 		var any: bool = false
@@ -223,8 +276,10 @@ static func refresh(gs: GameState) -> Array[String]:
 	return changed
 
 # Only from ready. `picks`: unique, each in offers(), 0..picks_allowed(). Grants the resolved generic rewards plus the
-# picked loot (RewardGrant), claims the picks, sets complete_flags in order, stores completed, then refresh.
-# All-or-nothing. Returns {ok, errors, granted, notes}.
+# picked loot (RewardGrant), claims the picks, sets complete_flags in order, applies `reputation` (REP1-L 2.2: per key
+# in order, an add_flag on RepRules.key(faction qid) with the rep clamp), stores completed, then ONE refresh.
+# All-or-nothing (a rep flag that is not a number refuses). Returns {ok, errors, granted, notes}; granted.reputation =
+# {faction qid: the change actually applied after the clamp}.
 static func complete(gs: GameState, ref: String, recipient_id: String = "", picks: Array[String] = []) -> Dictionary:
 	var errors: Array[String] = []
 	var fail: Dictionary = {"ok": false, "errors": errors, "granted": {}, "notes": [] as Array[String]}
@@ -247,7 +302,7 @@ static func complete(gs: GameState, ref: String, recipient_id: String = "", pick
 		if not offered.has(p):
 			errors.append("Loot '%s' is not offered by this quest." % p)
 		else:
-			loot.append(WorldCatalog.resolve(gs.world_id, "loot", p))
+			loot.append(WorldCatalog.resolve(_world_of(gs, entry), "loot", p))
 	var flags_to_set: Array[Dictionary] = []
 	for c: Variant in DictUtil.array_of(q.get("complete_flags", [])):
 		var cond: Dictionary = DictUtil.dict_of(c)
@@ -256,6 +311,20 @@ static func complete(gs: GameState, ref: String, recipient_id: String = "", pick
 		if not GameState.flag_key_ok(key) or not GameState.flag_value_ok(value):
 			errors.append("Complete flag '%s' is invalid." % key)
 		flags_to_set.append({"key": key, "value": value})
+	var rep_keys: Array[Dictionary] = []   # [{faction, key, delta}]
+	var rep: Dictionary = DictUtil.dict_of(JsonUtil.normalize(entry.get("reputation", {})))
+	for fref: Variant in rep:
+		var faction: Dictionary = WorldCatalog.resolve(str(entry.get("_world", gs.world_id)), "factions", str(fref))
+		if faction.is_empty() or not (rep[fref] is int):
+			continue   # validation reports it; an unknown faction never blocks the turn-in
+		var rkey: String = RepRules.key(str(faction["_qid"]))
+		var after: Variant = gs.get_flag(rkey, 0)
+		for f: Dictionary in flags_to_set:
+			if str(f["key"]) == rkey:
+				after = f["value"]
+		if not (after is int):
+			errors.append("Flag '%s' is not a number." % rkey)
+		rep_keys.append({"faction": str(faction["_qid"]), "key": rkey, "delta": DictUtil.to_int(rep[fref])})
 	if not errors.is_empty():
 		return fail
 	var result: Dictionary = RewardGrant.apply(gs, DictUtil.dict_of(q.get("rewards", {})), recipient_id, loot)
@@ -266,6 +335,16 @@ static func complete(gs: GameState, ref: String, recipient_id: String = "", pick
 		gs.loot_claimed.append(p)
 	for f: Dictionary in flags_to_set:
 		gs.set_flag(str(f["key"]), f["value"])
+	var applied: Dictionary = {}
+	for r: Dictionary in rep_keys:
+		var rkey: String = str(r["key"])
+		var before: int = DictUtil.to_int(gs.get_flag(rkey, 0))
+		var added: Dictionary = QuestRules.added_flag(gs, rkey, DictUtil.to_int(r["delta"]))
+		if str(added["error"]).is_empty():
+			gs.set_flag(rkey, added["value"])
+			applied[str(r["faction"])] = DictUtil.to_int(applied.get(str(r["faction"]), 0)) + DictUtil.to_int(added["value"]) - before
 	gs.quests[qid] = {"state": "completed", "objective": _count(q)}
 	refresh(gs)
-	return {"ok": true, "errors": errors, "granted": result["granted"], "notes": result["notes"]}
+	var granted: Dictionary = DictUtil.dict_of(result["granted"])
+	granted["reputation"] = applied
+	return {"ok": true, "errors": errors, "granted": granted, "notes": result["notes"]}

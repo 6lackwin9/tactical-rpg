@@ -26,11 +26,13 @@ extends RefCounted
 #                StatRules.MAX_UNLOCK_REDUCTION. Passives only, not items.
 #   status_potency {"value": 5}   +5 points of hit chance for every status the unit inflicts with an attack skill (1..25)
 #   spell_reach   {"value": 1}    +1 maximum reach for spell skills (1..2; total gear bonus is clamped to GEAR_REACH_CAP)
+#   foresight     {}              no params: the holder reads the whole round plan of every enemy that targets it
+#                (Combatant.has_foresight; read by IntentRules / CombatSession.enemy_intents; INTENT1). Passives only.
 # Equipment carries the same grammar in its `effects` list, but only ITEM_TYPES are allowed there; item
 # effects apply while equipped and are rebuilt on every equip change (apply_effects with `gear` = true).
 # ==============================================================================
 
-const TYPES: Array[String] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock"]
+const TYPES: Array[String] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock", "foresight"]
 const UNLOCK_LEVELS_MAX: int = 2
 const ITEM_TYPES: Array[String] = ["skill_potency", "status_potency", "spell_reach", "resist"]
 const GROUPS: Array[String] = ["spell", "heal"]
@@ -75,6 +77,7 @@ static func effect_specs(items_only: bool = false) -> Array[Dictionary]:
 			{"key": "family", "kind": "skill", "choice": "target"},
 			{"key": "group", "kind": "enum", "options": GROUPS.duplicate(), "choice": "target"},
 			{"key": "levels", "kind": "int", "min": 1, "max": UNLOCK_LEVELS_MAX, "step": 1}]},
+		{"type": "foresight", "label": "Foresight (reads enemy plans)", "params": []},
 	]
 	var out: Array[Dictionary] = []
 	for spec: Dictionary in all:
@@ -165,6 +168,8 @@ static func validate_effects(effects: Variant, skill_exists: Callable, allow_emp
 				var sr: int = DictUtil.to_int(e.get("value", 0))
 				if sr < SPELL_REACH_MIN or sr > SPELL_REACH_MAX:
 					errors.append("%s: spell reach is %d-%d tiles." % [at, SPELL_REACH_MIN, SPELL_REACH_MAX])
+			"foresight":
+				pass   # no params
 			_:
 				errors.append("%s: unknown effect type '%s' (use %s)." % [at, type, ", ".join(ITEM_TYPES if items_only else TYPES)])
 	return errors
@@ -232,6 +237,9 @@ static func apply_effects(c: Combatant, effects: Array, source: String, gear: bo
 					var key: String = u_group if not u_group.is_empty() else str(e.get("family", ""))
 					bonus[key] = maxi(DictUtil.int_of(bonus, key), levels)
 					c.refresh_path_skills()
+			"foresight":
+				if not gear and c.foresight_source.is_empty():
+					c.foresight_source = id
 
 # One-line summary of what a passive does.
 static func describe(passive: Dictionary) -> String:
@@ -263,4 +271,6 @@ static func describe(passive: Dictionary) -> String:
 			"unlock":
 				var u_label: String = str(e.get("group", "")) + " group" if not str(e.get("group", "")).is_empty() else str(e.get("family", ""))
 				parts.append("opens %s %d levels earlier" % [u_label, DictUtil.to_int(e.get("levels", 0))])
+			"foresight":
+				parts.append("reads the round plan of foes targeting it")
 	return "; ".join(parts) if not parts.is_empty() else "no effects"

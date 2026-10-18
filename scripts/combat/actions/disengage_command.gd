@@ -7,6 +7,7 @@ extends BattleCommand
 # command's block. It leaps over units but not walls: the landing tile must still be
 # a free, walkable tile at most `max_tiles` away. A rooted unit can't jump. The unit
 # keeps its stance. AP = the skill's level (charged by the resolver at start).
+# The jump ignores move cost; the landing tile's enter hazard applies (HazardRules, S12T-L).
 # ==============================================================================
 
 var grid: CombatGrid = null
@@ -47,3 +48,6 @@ func execute() -> void:
 	landed = true
 	moved_tiles = dist
 	execution_log = "[Disengage] %s jumped %d tile%s from %s to %s" % [source.name, dist, "" if dist == 1 else "s", str(from), str(dest)]
+	var landing: Array[Vector2i] = [dest]
+	for note: String in HazardRules.on_enter(grid, source, landing, rng):
+		execution_log += " " + note

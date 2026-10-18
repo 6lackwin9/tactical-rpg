@@ -20,9 +20,11 @@ static func tile(terrain_type: Terrain.Type, variant: int = 0) -> Texture2D:
 	return AssetRegistry.texture("tile", AssetRegistry.tile_key(terrain_type), "v%d" % variant)
 
 # Overlay keys are "overlay_exit" (combat exit tiles) and "overlay_poi" (any other kind: the point-of-interest
-# ring, drawn on region map point markers; it was the 9x9 centre-ring landmark until the 12x9 grid).
+# ring, drawn on region map point markers; it was the 9x9 centre-ring landmark until the 12x9 grid). MAPREAD1-L2: the other
+# region map marker icons (npc, chest, chest_open, lore, exit_locked, encounter, roamer) are MapArt overlays.
 static func overlay(kind: String) -> Texture2D:
-	return AssetRegistry.texture("tile", "overlay_exit" if kind == "exit" else "overlay_poi", "v0")
+	var key: String = "overlay_%s" % kind
+	return AssetRegistry.texture("tile", key if AssetRegistry.TILE_OVERLAY_KEYS.has(key) else "overlay_poi", "v0")
 
 # The generated tile / overlay (cached "tile|<type>|<variant>" / "overlay|<kind>"); used by AssetRegistry.
 static func template_tile(terrain_type: Terrain.Type, variant: int) -> Texture2D:
@@ -101,6 +103,18 @@ static func tile_svg(t: Terrain.Type, v: int) -> String:
 			return _wrap(_base("#2b3445", "#1e2533") + _scatter(v, 5, 90, func(x: float, y: float, s: float) -> String:
 				var r: float = 2.5 + s * 3.5
 				return '<path d="M%.1f %.1f l%.1f -%.1f l%.1f %.1f l-%.1f %.1f Z" fill="#6b7280" stroke="#374151" stroke-width="1"/>' % [x, y, r, r, r, r * 0.6, r * 1.4, r * 0.4]))
+		Terrain.Type.BURNING_GROUND:   # S12T-L hazard: dark soil, orange ember dots
+			return _wrap(_base("#3a2a1f", "#241912") + _scatter(v, 7, 110, func(x: float, y: float, s: float) -> String:
+				return '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/><circle cx="%.1f" cy="%.1f" r="%.1f" fill="#fb923c" opacity="0.25"/>' % [x, y, 0.9 + s * 1.3, "#fdba74" if s > 0.6 else "#f97316", x, y, 2.5 + s * 2.0]))
+		Terrain.Type.TOXIC_BOG:   # S12T-L hazard: green-grey mud, purple bubbles
+			return _wrap(_base("#4a5544", "#353f31") + _scatter(v, 3, 120, func(x: float, y: float, s: float) -> String:
+				return '<ellipse cx="%.1f" cy="%.1f" rx="%.1f" ry="%.1f" fill="#2c3428"/>' % [x, y, 4.0 + s * 3.0, 2.0 + s * 1.5]) +
+				_scatter(v, 5, 125, func(x: float, y: float, s: float) -> String:
+					return '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="#a855f7" fill-opacity="0.55" stroke="#d8b4fe" stroke-width="0.7"/>' % [x, y, 1.0 + s * 2.2]))
+		Terrain.Type.ICE:   # S12T-L hazard: pale blue, white cracks
+			return _wrap(_base("#cfe8f5", "#a7d0e8") + _scatter(v, 3, 130, func(x: float, y: float, s: float) -> String:
+				return '<path d="M%.1f %.1f l%.1f 5 l-3 6 M%.1f %.1f l6 -2" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.9"/>' % [x, y, 3.0 + s * 4.0, x + 2.0, y + 3.0]) +
+				'<path d="M8 10 L20 8" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.6"/>')
 	# FLOOR (default arena tile)
 	return _wrap(_base("#1f2937", "#18202d") + '<rect x="3" y="3" width="48" height="48" rx="3" fill="none" stroke="#2c3a4f" stroke-width="1"/>' +
 		_scatter(v, 1, 99, func(x: float, y: float, _s: float) -> String:
@@ -130,6 +144,8 @@ static func overlay_svg(kind: String) -> String:
 		return ('<svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" viewBox="0 0 54 54">' +
 			'<rect x="2" y="2" width="50" height="50" rx="4" fill="#f59e0b" fill-opacity="0.18" stroke="#f59e0b" stroke-width="2.5"/>' +
 			'<path d="M17 32 L27 22 L37 32 M17 40 L27 30 L37 40" fill="none" stroke="#fbbf24" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+	if MapArt.has_overlay(kind):
+		return MapArt.overlay_svg(kind)
 	# point-of-interest ring
 	return ('<svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" viewBox="0 0 54 54">' +
 		'<circle cx="27" cy="27" r="18" fill="#22d3ee" fill-opacity="0.08" stroke="#22d3ee" stroke-width="2" stroke-opacity="0.8"/>' +

@@ -120,6 +120,27 @@ static func from_action(act: CombatResolver.ScheduledAction, round_num: int, blo
 		entry.target_name = "%d tiles" % area.cells.size()
 		entry.detail_text = area.execution_log.trim_prefix("[Attack] ")
 
+	elif act.command is ItemCommand:
+		var item_cmd: ItemCommand = act.command as ItemCommand
+		entry.category = "ATTACK" if item_cmd.last_damage > 0 else "BUFF"
+		entry.skill_name = item_cmd.command_name
+		entry.skill_subtype = "Item"
+		entry.value_num = item_cmd.last_damage if item_cmd.last_damage > 0 else item_cmd.last_heal
+		entry.damage = item_cmd.last_damage
+		if item_cmd.target != null:
+			entry.target_name = item_cmd.target.name
+			entry.target_is_ally = allies.has(item_cmd.target)
+			entry.status_text = "HP %d/%d" % [item_cmd.target.hp, item_cmd.target.max_hp]
+		if not item_cmd.used:
+			entry.outcome_tag = "NOT USED"
+		elif item_cmd.last_damage > 0:
+			entry.outcome_tag = "DEFEATED" if item_cmd.target != null and not item_cmd.target.is_alive() else "%d DMG" % item_cmd.last_damage
+		elif item_cmd.last_boost > 0.0:
+			entry.outcome_tag = "+%d%% ATK" % roundi((item_cmd.last_boost - 1.0) * 100.0)
+		else:
+			entry.outcome_tag = "+%d HP" % item_cmd.last_heal
+		entry.detail_text = item_cmd.execution_log.trim_prefix("[Item] ")
+
 	elif act.command is SupportCommand:
 		var support: SupportCommand = act.command as SupportCommand
 		entry.category = "BUFF"

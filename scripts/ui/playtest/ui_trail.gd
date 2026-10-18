@@ -267,7 +267,7 @@ func _on_button_pressed(btn: BaseButton) -> void:
 func describe(node: Node) -> Dictionary:
 	if node == null or not is_instance_valid(node):
 		return {}
-	var path_text: String = str(node.get_path())
+	var path_text: String = str(node.get_path()) if node.is_inside_tree() else str(node.name)   # a button freed or detached by its own press has no path
 	if scene_root != null and is_instance_valid(scene_root) and scene_root.is_ancestor_of(node):
 		path_text = str(scene_root.get_path_to(node))
 	var text: String = ""

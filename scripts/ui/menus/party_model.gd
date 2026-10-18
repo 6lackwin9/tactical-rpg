@@ -2,7 +2,7 @@ class_name PartyModel
 extends RefCounted
 
 # ==============================================================================
-# Tactical RPG - Party model (UI2-L): the roster with the active four, the selected member, gold, and the doors to
+# Tactical RPG - Party model (UI2-L): the roster with the active members (at most max_active, RECRUIT1-L), the selected member, gold, and the doors to
 # level-up, loadout and gear. Toggling active edits PartyState.active_ids directly (rule 2).
 # ==============================================================================
 
@@ -32,6 +32,10 @@ func members() -> Array[Dictionary]:
 func active_count() -> int:
 	return _party().active_members().size()
 
+# The world's active cap (RECRUIT1-L 1.3: WorldCatalog.party_max via PartyState.max_active).
+func max_active() -> int:
+	return _party().max_active
+
 # True when any member has unspent level-up points.
 func badge() -> bool:
 	for m: UnitState in _party().members:
@@ -57,14 +61,14 @@ func toggle_active(id: String) -> Array[String]:
 		errors.append("No party member '%s'." % id)
 		return errors
 	if party.active_ids.is_empty():   # the implicit first four become explicit on the first edit
-		party.active_ids = party.member_ids().slice(0, PartyState.PARTY_MAX)
+		party.active_ids = party.member_ids().slice(0, party.max_active)
 	if party.active_ids.has(id):
 		if party.active_ids.size() <= 1:
 			errors.append(KEEP_ONE)
 		else:
 			party.active_ids.erase(id)
-	elif party.active_ids.size() >= PartyState.PARTY_MAX:
-		errors.append(MAX_ACTIVE % PartyState.PARTY_MAX)
+	elif party.active_ids.size() >= party.max_active:
+		errors.append(MAX_ACTIVE % party.max_active)
 	else:
 		party.active_ids.append(id)
 	return errors

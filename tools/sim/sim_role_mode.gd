@@ -35,7 +35,7 @@ func presets() -> Array[String]:
 # Variant records of `class_id` in `scenario_id` (one per spend x preset). `plain`: the test slot is
 # a reference unit (class spend, default loadout; the support baseline).
 func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Array[Dictionary]:
-	var sc: Dictionary = SimScenarios.scenario(runner, scenario_id, class_id, args.level, plain)
+	var sc: Dictionary = SimScenarios.scenario(runner, scenario_id, class_id, args.level, plain, args.s2)
 	var party: Array[String] = []
 	party.assign(DictUtil.array_of(sc["party"]))
 	var foes: Array[String] = []
@@ -43,6 +43,7 @@ func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Ar
 	var refs: Array[String] = []
 	refs.assign(DictUtil.array_of(sc["refs"]))
 	var variants: Array[Dictionary] = []
+	runner.enemy_block = SimScenarios.scenario_block(scenario_id)
 	for sv: String in spends():
 		runner.spend_variant = sv
 		for pv: String in presets():
@@ -55,10 +56,12 @@ func run_class(scenario_id: String, class_id: String, plain: bool = false) -> Ar
 			acc["test"] = SimScenarios.sum_units(acc, test_names)
 			acc["party"] = SimScenarios.sum_units(acc, party)
 			acc["refs"] = SimScenarios.sum_units(acc, refs)
+			acc["refs_won"] = SimScenarios.sum_units(acc, refs, "units_won")
 			acc["cap"] = args.cap
 			variants.append(acc)
 	runner.spend_variant = "class"
 	runner.preset = "balanced"
+	runner.enemy_block = Vector2i.ZERO
 	return variants
 
 func role_mode() -> void:
@@ -104,6 +107,9 @@ func role_mode() -> void:
 				line += " %-22s" % SimRoles.cell(k, SimRoles.spread(str(k["id"]), runs_c), args.targets, primary)
 			out(line + " " + str(ranks.get(class_id, "")))
 		out("loadouts: " + _loadouts_line(role))
+	out("block misses: %d" % runner.block_misses)
+	if runner.block_misses > 0:
+		out("BLOCK MISS: %d fights where the enemy block found no room (enemies stayed put); results may be skewed" % runner.block_misses)
 
 func _bands_line(ks: Array[Dictionary]) -> String:
 	var parts: Array[String] = []

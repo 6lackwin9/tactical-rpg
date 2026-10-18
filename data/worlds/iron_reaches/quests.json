@@ -47,6 +47,9 @@
 			"variants": [],
 			"loot_pool": [],
 			"loot_picks": 1,
+			"reputation": {
+				"forge_guild": 10
+			},
 			"tags": []
 		}
 	]

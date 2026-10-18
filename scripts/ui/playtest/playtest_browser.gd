@@ -46,6 +46,7 @@ func _init() -> void:
 	record_box.toggled.connect(func(on: bool) -> void: record_toggled.emit(on))
 	top.add_child(record_box)
 	top.add_child(UiTheme.button("⟳ Refresh", "List the recordings again", func() -> void: refresh(true), UiTheme.FONT_SM))
+	top.add_child(UiTheme.label("F8 or ✎ Note in a running scene adds a note", UiTheme.FONT_SM, UiTheme.COL_MUTED))
 	var folder_row := HBoxContainer.new()
 	add_child(folder_row)
 	folder_text = LineEdit.new()

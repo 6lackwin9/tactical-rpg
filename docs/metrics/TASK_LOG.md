@@ -6,6 +6,14 @@ Work is time a thread is actively building, reviewing, gating or fixing. Wait is
 
 ## Bottlenecks (updated each batch; newest first)
 
+### 2026-10-18 midday release (124 task commits, first release since #37)
+
+1. **Release wait dominated: up to ~18 h.** Nothing reached `main` between release #37 (2026-10-17 17:57) and this batch, so the overnight landings (S12C-L, TRAV1-L, REP1, AUTO1-L, CAMP1, MUSIC1/2, RECRUIT1, OBJ1, BOSS1, INTENT1, HEAL1, ...) waited 1-18 h on `develop`. The user tests on `develop`, so this cost no playtest time; it only delays `main` (PC `run.bat` and balance runs on `main`). Decouple: none needed while testing stays on `develop`; ask for "release now" before a balance run needs fresh code.
+2. **Approval waits are the only long in-task waits:** BREPORT1 spec ~312 min and BAL5 spec ~265 min (user away overnight). Everything else waited 0-25 min. Decouple: keep queuing approvals as project-chat cards early (already the rule), and keep threads busy on approved rows meanwhile.
+3. **Merges with `develop` are the main work-time leak:** UIR-2 spent 14 min on conflicts (+13 min merge wait, 4 gates), TRAV1-L 8 min (4 gates), S12C-L 6 min (6 gates), S12T-L 5 min (5 gates). These are large UI/logic tasks touching shared screens while other threads land. Decouple: land a schema or shared-file slice first (SPLIT-LANDING), and merge `develop` once right before the final gate instead of after each landing.
+4. **Outside stalls:** OBJ1-L ~17 min (rate limit), COMBAT-UI2-L1 ~15 min (usage limit), INTENT1-A ~10 min (API error). Not dependency-driven; the USAGE-CAPS rules (building slots, background sims) target them.
+5. **Tokens (rows with the new `tokens=` field):** logic-builder ~1.2M, change-reviewer ~0.4M, design ~0.24M, balance ~0.08M; by type ui ~755k over 3 tasks and logic ~774k over 4. UIR-2 alone was ~494k (logic 424k after 15 min of rework). Format drift: several commits used free text in `AgentMap:`/`Done:` (Balance BAL3/BAL4 rows, CLN-3b, RUNNER-WINDOW); they are logged here with minimal rows.
+
 ### 2026-10-17 release #37 (10 tasks)
 
 1. **Waits are now near zero.** Eight of ten tasks report wait 0; area threads landed on `develop` 6-34 min after starting, with no PR or CI step in between.
@@ -41,6 +49,130 @@ Times are UTC. Start = the thread's first visible work for the task (backfill: t
 
 | Task | Area | Start | Landed | Work | Wait (cause) | Runs | Blocked by | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| USAGE | Platform | - | 10-18 11:49 (develop), release midday 2026-10-18 | - | - | gate - | - | type docs, tokens none |
+| BAL5-AI | Balance | 10:48 | 10-18 11:44 (develop), release midday 2026-10-18 | ~50 (build ~44, review 2, rework ~4, conflicts 0) | ~5 (approval 0, dependency 0, ci 0, merge ~5) | gate 1 | BAL5-R1 (landed f3d8ac2) | mode economy, type logic, tokens logic:164k,review:51k |
+| UIR-2 | Gameplay | 10:17 | 10-18 11:40 (develop), release midday 2026-10-18 | 70 (build 39, review 2, rework 15, conflicts 14) | 13 (approval 0, dependency 0, ci 0, merge 13) | gate 4 | - | mode economy, type ui, tokens logic:424k,review:70k |
+| HEAL1-B | Balance | 10:48 | 10-18 11:20 (develop), release midday 2026-10-18 | ~30 (build ~29, review 0, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | HEAL1-S (landed 47ef3b4) | mode economy, type sim, tokens balance:35k |
+| MAPKEYS1-U | UI/UX | 09:53 | 10-18 11:05 (develop), release midday 2026-10-18 | ~68 (build 40, review 3, rework 20, conflicts 5) | ~4 (approval 0, dependency 0, ci 0, merge 4) | gate 2 | - | mode economy, type ui, tokens logic:116k,review:50k |
+| BAL5-R1 | Balance | 08:43 | 10-18 10:42 (develop), release midday 2026-10-18 | ~120 (build ~120, review 0, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | BAL5-SIM (landed c78b8ba) | mode economy, type sim, tokens balance:48k |
+| RUNNER-WINDOW | Platform | - | 10-18 10:20 (develop), release midday 2026-10-18 | - | - | gate - | - | type tool, tokens review:19k |
+| BREPORT1-L | Gameplay | 09:05 | 10-18 10:17 (develop), release midday 2026-10-18 | 58 (build 31, review 2, rework 3, conflicts 0, gates 22) | 14 (approval 0, dependency 0, ci 0, merge 14) | gate 3 | - | mode economy, type logic, tokens logic:221k,review:74k |
+| WMAP-BLANK | Gameplay | 09:53 | 10-18 10:06 (develop), release midday 2026-10-18 | 13 (build 13, review 0, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, type logic, tokens none |
+| BOSS1-U | UI/UX | 08:42 | 10-18 10:18 (develop), release midday 2026-10-18 | ~85 (build 80, review 1, rework 0, conflicts 4) | ~10 (approval 0, dependency 0, ci 0, merge 10) | gate 1 | - | mode economy, type ui, tokens logic:67k,review:28k |
+| PACE1 | Design | 09:40 | 10-18 09:42 (develop), release midday 2026-10-18 | ~2 | 0 | gate 0 | - | mode standard, type spec |
+| PACE1 | Design | 09:35 | 10-18 09:46 (develop), release midday 2026-10-18 | ~11 | 0 | gate 0 | - | mode standard, type spec |
+| PACE1 | Design | 09:25 | 10-18 09:40 (develop), release midday 2026-10-18 | ~15 | ~5 (approval 5) | gate 0 | user approval 09:31-09:33 | mode standard, type spec, tokens design:112k |
+| PILL-GAME | Platform | 09:15 | 10-18 09:45 (develop), release midday 2026-10-18 | ~20 (build ~9, review ~1, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~34k |
+| PACE1-SPEC | Design | 09:25 | 10-18 09:36 (develop), release midday 2026-10-18 | ~11 | 0 | gate 0 | - | mode standard, type spec |
+| HEAL1-S | Balance | 09:05 | 10-18 09:27 (develop), release midday 2026-10-18 | ~22 (build 11, review 1, rework 0, conflicts 0) | ~5 (approval 0, dependency 0, ci 0, merge ~5) | gate 1 | HEAL1-L (landed 0832b03) | mode economy, type sim, tokens logic:49k,review:30k |
+| USAGE-TRACKING fix | Platform | 09:06 | 10-18 09:07 (develop), release midday 2026-10-18 | ~1 | 0 | gate 0 | - | mode standard, type tool, tokens none |
+| MORALE1 | Design | 08:42 | 10-18 09:10 (develop), release midday 2026-10-18 | ~20 | ~8 (approval 8) | gate 0 | user approval 08:58-09:03 | mode standard, type spec, tokens design:123k |
+| HEAL1-L | Gameplay | 08:13 | 10-18 09:12 (develop), release midday 2026-10-18 | ~59 (build 41, review 4, rework 10, conflicts 1) | 0 | gate 3 | - | mode standard->economy, type logic, tokens logic:184k,review:80k |
+| USAGE-TRACKING | Platform | 08:48 | 10-18 08:56 (develop), release midday 2026-10-18 | ~8 | 0 | gate 0 | - | mode standard, type docs, tokens none |
+| MORALE1-APPROVE | Design | 08:42 | 10-18 08:58 (develop), release midday 2026-10-18 | ~16 | 0 | gate 0 | - | mode standard |
+| TOKENS-PER-AGENT | Platform | 08:46 | 10-18 08:48 (develop), release midday 2026-10-18 | ~2 | 0 | gate 0 | - | mode standard, type docs, tokens none |
+| BAL5-SIM + BAL5-PH | Balance | ~07:55 | 10-18 08:43 (develop), release midday 2026-10-18 | ~40 (build ~30, review 1, rework 1, conflicts 0) | ~8 (approval 0, dependency 0, ci 0, merge ~8) | gate 2 | - | mode economy, tokens ~67k (reviewer; builder in previous session) |
+| DR2-ANSWERS | Design | 08:38 | 10-18 08:46 (develop), release midday 2026-10-18 | ~8 | 0 | gate 0 | - | mode standard |
+| HEAL1-A | Assets | 08:29 | 10-18 08:45 (develop), release midday 2026-10-18 | ~12 (build 3, review 1, rework 0, conflicts 0) | ~3 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens 12k, squash 85ac473 mistitled "Merge develop" |
+| MORALE1-SPEC | Design | 08:24 | 10-18 08:40 (develop), release midday 2026-10-18 | ~16 | 0 | gate 0 | - | mode standard |
+| DESIGN-PAUSE | Design | 08:29 | 10-18 08:31 (develop), release midday 2026-10-18 | ~2 | 0 | gate 0 | - | mode standard |
+| INTENT1-U | UI/UX | 07:31 | 10-18 08:40 (develop), release midday 2026-10-18 | ~65 (build 40, review 2, rework 15, conflicts 3) | ~4 (approval 0, dependency 0, ci 0, merge 4) | gate 1 | - | mode economy, tokens ~261k |
+| ASSETS-HANDOVER | Assets | 08:44 | 10-18 08:46 (develop), release midday 2026-10-18 | - | - | gate - | - |  |
+| ITEMUSE1-A2 | Assets | - | 10-18 08:27 (develop), release midday 2026-10-18 | - | - | gate - | user decision (potion card) |  |
+| SONNET-TRIAL | Platform | 08:22 | 10-18 08:23 (develop), release midday 2026-10-18 | ~1 | 0 | gate 0 | - | mode standard |
+| USAGE-CAPS | Platform | 08:20 | 10-18 08:27 (develop), release midday 2026-10-18 | ~7 | 0 | gate 0 | - | mode standard |
+| UIR-1 | Gameplay | 07:45 | 10-18 08:25 (develop), release midday 2026-10-18 | ~40 (build 25, review 2, rework 3, conflicts 0) | 0 | gate 1 | - | mode economy->standard, tokens ~125k |
+| CLN-3b | Platform | 07:55 | 10-18 08:12 (develop), release midday 2026-10-18 | ~17 (build 5, review 1, rework 1, conflicts 0, gates 2 baseline+final) | 0 | gate 2 | - | mode standard, tokens ~31k |
+| HEAL1 (spec approved) | Design | 07:56 | 10-18 08:12 (develop), release midday 2026-10-18 | ~16 (build ~12, rework ~4) | ~4 (approval 4) | gate 2 | user approval 08:04-08:08 | mode standard, tokens ~160k |
+| HEAL1 (spec) | Design | 07:56 | 10-18 08:04 (develop), release midday 2026-10-18 | ~12 (build ~12) | 0 | gate 1 | BAL4-ATTR v4 (landed 07:51) | mode standard, tokens ~ |
+| MODE-STANDARD | Platform | 07:54 | 10-18 07:56 (develop), release midday 2026-10-18 | ~2 | 0 | gate 0 | - | mode standard |
+| BAL5 (spec approved) + Orsa quest answer | Design | 03:23 | 10-18 07:53 (develop), release midday 2026-10-18 | ~10 | ~265 (approval 265) | gate 1 | user approval 03:33-07:53 | mode standard, tokens ~113k |
+| BREPORT1 (spec approved) | Design | 02:37 | 10-18 07:51 (develop), release midday 2026-10-18 | ~14 | ~312 (approval 312) | gate 1 | user approval 02:44-07:51 | mode standard, tokens ~104k |
+| RECRUIT1-B, OBJ1-B, BOSS1-B | Balance | 06:25 | 10-18 07:51 (develop), release midday 2026-10-18 | ~80 (build ~19, review 1, rework 2, conflicts 2, sims ~55) | ~5 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | none (run from develop instead of waiting for main) | mode economy, tokens ~180k |
+| EXPWORLD | Gameplay | 07:33 | 10-18 07:45 (develop), release midday 2026-10-18 | ~12 (build 10, review 1, rework 1, conflicts 0) | 0 | gate 1 | - | mode economy, tokens ~50k |
+| QUESTX | Gameplay | 07:03 | 10-18 07:31 (develop), release midday 2026-10-18 | ~29 (build 18, review 1, rework 8, conflicts 0) | 0 | gate 2 | - | mode economy, tokens ~95k |
+| ITEMUSE1-U | UI/UX | 07:18 | 10-18 07:30 (develop), release midday 2026-10-18 | 12 (build 3, review 1, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~69k |
+| COMBAT-UI2-L3 | UI/UX | 06:30 | 10-18 07:17 (develop), release midday 2026-10-18 | 47 (build 14, review 1, rework 11, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~279k |
+| ITEMUSE1-L | Gameplay | 06:07 | 10-18 07:02 (develop), release midday 2026-10-18 | ~62 (build 45, review 1, rework 12, conflicts 4) | 0 | gate 3 | - | mode economy, tokens ~236k |
+| COMBAT-UI2-L2 | UI/UX | 05:37 | 10-18 06:28 (develop), release midday 2026-10-18 | 51 (build 32, review 1, rework 0, conflicts 1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~184k |
+| BAL4-ATTR | Balance | 03:54 | 10-18 06:24 (develop), release midday 2026-10-18 | ~120 (build ~25, review 1, rework ~10, conflicts 0, sims ~85) | ~25 (approval 0, dependency 25, ci 0, merge 0) | gate 3 | develop data changes mid-run (RECRUIT1-A, OBJ1-A, BOSS1-A) forced two reruns | mode economy, tokens ~210k |
+| ITEMUSE1-A | Assets | - | 10-18 06:19 (develop), release midday 2026-10-18 | - | - | gate - | ITEMUSE1-L schema (ad83b98) |  |
+| ITEMUSE1-L (schema) | Gameplay | 05:35 | 10-18 06:07 (develop), release midday 2026-10-18 | 32 (build 30, review 1, rework 0, conflicts 1) | 0 | gate 1 | COMBAT-UI2-L1 | mode economy, tokens ~165k |
+| ART2-A | Assets | - | 10-18 06:03 (develop), release midday 2026-10-18 | - | - | gate - | - |  |
+| PLATFORM-HANDOVER | Platform | 05:38 | 10-18 05:41 (develop), release midday 2026-10-18 | ~3 | 0 | gate 0 | - | mode economy |
+| OBJ1-A | Assets | 05:03 | 10-18 05:36 (develop), release midday 2026-10-18 | ~33 (build 3, review 1, rework 10, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | - | mode economy, tokens ~95k |
+| COMBAT-UI2-L1 | UI/UX | 04:30 | 10-18 05:32 (develop), release midday 2026-10-18 | ~45 (build 37, review 1, rework 14, conflicts 1) | ~15 (approval 0, dependency 0, ci 0, merge 0, usage limit 15) | gate 3 | usage limit 04:35-04:50 | mode economy, tokens ~525k |
+| OBJ1-L | Gameplay | 04:08 | 10-18 05:16 (develop), release midday 2026-10-18 | ~38 (build 31, review 1, rework 9, conflicts 0) | ~17 (approval 0, dependency 0, ci 0, merge 0, rate limit ~17) | gate 4 | - | mode economy, tokens ~247k |
+| BOSS1-A | Assets | 04:53 | 10-18 05:03 (develop), release midday 2026-10-18 | ~10 (build 1, review 0.5, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~45k |
+| INTENT1-A | Assets | 04:21 | 10-18 04:56 (develop), release midday 2026-10-18 | ~25 (build 5, review 1, rework 8, conflicts 2) | ~10 (approval 0, dependency 0, ci 0, merge 0, api error ~10) | gate 2 | - | mode economy, tokens ~37k |
+| MAPREAD1-L2 | UI/UX | 03:16 | 10-18 04:33 (develop), release midday 2026-10-18 | ~60 (build 40, review 1, rework 25, conflicts 2) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | - | mode economy, tokens ~390k |
+| RECRUIT1-A | Assets | - | 10-18 04:20 (develop), release midday 2026-10-18 | - | - | gate - | RECRUIT1-L behaviour (0d6a3ae) |  |
+| OBJ1-L (schema) | Gameplay | 03:46 | 10-18 04:08 (develop), release midday 2026-10-18 | 22 (build 19, review 1, rework 0, conflicts 0) | 0 | gate 1 | - | mode economy, tokens ~145k |
+| BAL3-R + CAMP1-B | Balance | 01:00 | 10-18 03:53 (develop), release midday 2026-10-18 | ~165 (build ~150, review 1, rework 0, conflicts 0) | ~10 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode standard->economy, tokens ~136k |
+| BOSS1-L | Gameplay | 03:20 | 10-18 03:45 (develop), release midday 2026-10-18 | 25 (build 17, review 2, rework 0, conflicts 1) | 0 | gate 2 | - | mode economy, tokens ~185k |
+| MAPREAD1-A | Assets | - | 10-18 03:40 (develop), release midday 2026-10-18 | - | - | gate - | MAPREAD1-L1 (bf162bb), MAPVIEW1 (cf333ab), ART1-A (98d6da5) |  |
+| BAL5 (spec) | Design | 03:23 | 10-18 03:30 (develop), release midday 2026-10-18 | ~8 (build ~8) | 0 | gate 1 | - | mode economy, tokens ~113k |
+| ART1-A | Assets | - | 10-18 03:24 (develop), release midday 2026-10-18 | - | - | gate - | - |  |
+| BOSS1-L (schema) | Gameplay | 02:58 | 10-18 03:20 (develop), release midday 2026-10-18 | 22 (build 13, review 1, rework 0, conflicts 2) | 0 | gate 2 | - | mode economy, tokens ~128k |
+| MAPVIEW1 | UI/UX | 02:34 | 10-18 03:22 (develop), release midday 2026-10-18 | 48 (build 34, review 1, rework 0, conflicts 1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode standard->economy, tokens ~170k |
+| MAPREAD1-L1 | Gameplay | 02:42 | 10-18 03:10 (develop), release midday 2026-10-18 | 28 (build 21, review 1, rework 6, conflicts 0) | 0 | gate 1 | - | mode economy, tokens ~122k |
+| INTENT1-L | Gameplay | 02:33 | 10-18 02:57 (develop), release midday 2026-10-18 | 24 (build 15, review 1, rework 0, conflicts 0) | 0 | gate 2 | - | mode economy, tokens ~140k |
+| OPTLAUNCH1 | Platform | 02:36 | 10-18 03:00 (develop), release midday 2026-10-18 | ~24 (build ~12, review ~1, rework ~2, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~53k |
+| BREPORT1 (spec) | Design | 02:37 | 10-18 02:42 (develop), release midday 2026-10-18 | ~12 (build ~12) | 0 | gate 1 | - | mode standard, tokens ~ |
+| RECRUIT1-L | Gameplay | 02:20 | 10-18 02:41 (develop), release midday 2026-10-18 | 21 (build 12, review 1, rework 0, conflicts 3) | 0 | gate 1 | - | mode economy, tokens ~114k |
+| MODE-ECONOMY | Platform | 02:37 | 10-18 02:39 (develop), release midday 2026-10-18 | ~2 | 0 | gate 0 | - | mode economy |
+| DESIGN-REVIEW-CYCLE | Design | 02:33 | 10-18 02:36 (develop), release midday 2026-10-18 | 4 (build 4, review 0, rework 0, conflicts 0) | 0 | gate 1 | - | mode standard, tokens 0 |
+| CONTROLS-HELP | UI/UX | 01:50 | 10-18 02:38 (develop), release midday 2026-10-18 | ~45 (build ~38, review ~1, rework ~4, conflicts ~1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~180k |
+| RECRUIT1-L (schema) | Gameplay | 01:56 | 10-18 02:42 (develop), release midday 2026-10-18 | 46 (build 22, review 3, rework 0, conflicts 0) | 0 | gate 1 | - | mode economy, tokens ~105k |
+| MUSIC2-A + MUSIC2-L | Assets | 01:45 | 10-18 02:13 (develop), release midday 2026-10-18 | 28 (build 18, review 2, rework 3, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode standard, tokens ~90k |
+| WORLDMAP-ENTER | Gameplay | 02:03 | 10-18 02:22 (develop), release midday 2026-10-18 | 19 (build 6, review 1, rework 0, conflicts 0) | 0 | gate 1 | - | mode economy, tokens ~36k |
+| SOUND-PREVIEW | UI/UX | 00:58 | 10-18 01:50 (develop), release midday 2026-10-18 | ~35 (build ~22, review ~1, rework ~6, conflicts ~1, regate ~5) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~115k |
+| MUSIC1-A + MUSIC1-L | Assets | 00:59 | 10-18 01:44 (develop), release midday 2026-10-18 | 45 (build 25, review 4, rework 8, conflicts 0) | 3 (approval 3, dependency 0, ci 0, merge 0) | gate 2 | - | mode standard, tokens ~260k |
+| POI-FIX | Gameplay | 00:45 | 10-18 01:35 (develop), release midday 2026-10-18 | ~42 (build 29, review 1, rework 0, conflicts 4) | ~8 (approval 0, dependency 0, ci 0, merge 8) | gate 2 | - | mode economy, tokens ~158k |
+| AUTO1-L (logic) | Gameplay | 00:36 | 10-18 01:22 (develop), release midday 2026-10-18 | ~44 (build 27, review 1, rework 4, conflicts 2) | ~2 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~201k |
+| NOTE-BUTTON | Platform | 00:59 | 10-18 01:15 (develop), release midday 2026-10-18 | ~16 (build ~8, review ~1, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~44k |
+| BAL3-A | Balance | 22:41 | 10-18 02:10 (develop), release midday 2026-10-18 | ~205 (build ~190, review 2, rework ~10, conflicts 2) | ~5 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode standard, tokens ~150k |
+| BATTLE-FLOW | UI/UX | 00:03 | 10-18 00:58 (develop), release midday 2026-10-18 | ~50 (build ~30, review ~3, rework ~12, conflicts ~1, regate ~4) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~190k |
+| TRAV2-A | Assets | 00:14 | 10-18 00:40 (develop), release midday 2026-10-18 | 12 (build 3, review 4, rework 1, conflicts 0) | 16 (approval 0, dependency 16, ci 0, merge 0) | gate 1 | merge of TRAV2-L commit 2 | mode standard, tokens ~75k |
+| TRAV2-L | Gameplay | 23:58 | 10-18 00:36 (develop), release midday 2026-10-18 | ~38 (build 25, review 1, rework 0, conflicts 1) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~101k |
+| AUTO1 (spec) | Design | - | 10-18 00:19 (develop), release midday 2026-10-18 | - | - | gate - | user approval 00:12-00:17 |  |
+| CAMP1-A1 + CAMP1-A2 | Assets | 23:39 | 10-18 00:13 (develop), release midday 2026-10-18 | 34 (build 18, review 2, rework 0, conflicts 2) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode standard, tokens ~194k |
+| SETTINGS-POPUP | UI/UX | 23:33 | 10-18 00:05 (develop), release midday 2026-10-18 | ~31 (build ~29, review ~1, rework 0, conflicts ~1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~255k |
+| TRAV2-L (schema) | Gameplay | 23:26 | 10-17 23:56 (develop), release midday 2026-10-18 | ~26 (build ~14, review 1, rework 0, conflicts 1) | ~4 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~235k |
+| CAMP1 | Design | - | 10-17 23:40 (develop), release midday 2026-10-18 | - | - | gate - | user approval (spec posted ~23:36, approved 23:39 UTC) |  |
+| CAMP1 (spec) | Design | - | 10-17 23:37 (develop), release midday 2026-10-18 | - | - | gate - | - |  |
+| BAL3-AI | Balance | 20:36 | 10-17 22:40 (develop), release midday 2026-10-18 | ~118 (build ~83, review 2, rework ~15, conflicts 0) | ~6 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | none (user card on lever C scope open since 21:58; landed on the recommended option) | mode standard, tokens ~330k |
+| FORGE-VIEW | Platform | 21:28 | 10-17 22:19 (develop), release midday 2026-10-18 | ~51 (build ~42, review ~1, rework 0, conflicts ~1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~280k |
+| MENU-POLISH + DISPLAY1-FIX | UI/UX | 21:43 | 10-17 22:14 (develop), release midday 2026-10-18 | ~30 (build ~24, review ~1, rework ~5, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~150k |
+| REP1-L | Gameplay | 21:52 | 10-17 22:10 (develop), release midday 2026-10-18 | 18 (build 11, review 1, rework 0, conflicts 2, gate 3) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens ~271k |
+| REP1-A | Assets | 21:49 | 10-17 22:05 (develop), release midday 2026-10-18 | 16 (build 6, review 1, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | REP1-L (schema) landed 21:49 | mode economy, tokens 45609 |
+| REP1-L (schema) | Gameplay | 21:23 | 10-17 21:52 (develop), release midday 2026-10-18 | 29 (build 16, review 1, rework 0, conflicts 2, gate 9) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | - | mode economy, tokens ~168k |
+| TRAV1-A | Assets | 21:16 | 10-17 21:45 (develop), release midday 2026-10-18 | 29 (build 14, review 1, rework 1, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | - | mode economy, tokens 65529 |
+| DISPLAY1 | UI/UX | 21:00 | 10-17 21:48 (develop), release midday 2026-10-18 | ~44 (build ~29, review ~1, rework ~7, conflicts ~1) | ~6 (approval 0, dependency 0, ci 0, merge ~6) | gate 3 | SETTINGS-UI (level mechanism), landed 21:00; user approval 19:58-20:28 | mode economy, tokens ~115k |
+| PULL-RESTART | Platform | 20:58 | 10-17 21:27 (develop), release midday 2026-10-18 | ~29 (build ~18, review ~2, rework ~4, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~77k |
+| SAVE-COMPAT | Gameplay | 20:53 | 10-17 21:23 (develop), release midday 2026-10-18 | 30 (build 19, review 1, rework 2, conflicts 0, gate 4) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | - | mode economy, tokens ~70k |
+| S12C-A | Assets | 20:53 | 10-17 21:17 (develop), release midday 2026-10-18 | 24 (build 17, review 1, rework 1, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens 50388 |
+| SETTINGS-UI | UI/UX | 20:09 | 10-17 21:00 (develop), release midday 2026-10-18 | ~45 (build ~40, review ~1, rework 0, conflicts ~1) | ~6 (approval 0, dependency 0, ci 0, merge ~6) | gate 2 | LOAD-SLOTS-UI (shared menu files), landed 20:08 | mode economy, tokens ~170k |
+| GATE-ONCE | Platform | 20:53 | 10-17 21:02 (develop), release midday 2026-10-18 | ~7 (build ~3, review ~1, rework ~2, conflicts 0) | ~2 (approval ~2 user word 20:53-20:55, dependency 0, ci 0, merge 0) | gate 0 | user's own word for the decision row (20:53-20:55) | mode economy, tokens ~19k |
+| SPLIT-LANDING | Platform | 20:52 | 10-17 21:00 (develop), release midday 2026-10-18 | ~8 (build ~4, review ~1, rework ~3, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 0 | - | mode economy, tokens ~16k |
+| HANDOVER-GAMEPLAY | Gameplay | 20:53 | 10-17 20:56 (develop), release midday 2026-10-18 | ~3 (build ~3, review 0, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens 0 |
+| TRAV1-L | Gameplay | 19:43 | 10-17 20:52 (develop), release midday 2026-10-18 | ~69 (build ~60, review ~1, rework 0, conflicts ~8) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 4 | - | mode economy, tokens ~302k |
+| BAL3-S | Balance | 18:53 | 10-17 20:35 (develop), release midday 2026-10-18 | ~95 (build ~76, review 2, rework ~10, conflicts 0) | ~7 (approval ~7, dependency 0, ci 0, merge 0) | gate 3 | user decision card (ranged_dive) 19:50-20:29, work continued on the recommended option | mode standard, tokens ~213k |
+| PLATFORM-HANDOVER | Platform | 20:21 | 10-17 20:42 (develop), release midday 2026-10-18 | (~8) | (approval | gate 0 | - | mode economy, tokens ~20k |
+| SAVE-BACKUP | Platform | 20:21 | 10-17 20:36 (develop), release midday 2026-10-18 | (~12) | (approval | gate 1 | - | mode economy, tokens ~25k |
+| DEV-USERDATA | Platform | 20:15 | 10-17 20:24 (develop), release midday 2026-10-18 | (~6) | (approval | gate 1 | - | mode economy, tokens ~20k |
+| PULL-ON-LAUNCH | Platform | 20:01 | 10-17 20:15 (develop), release midday 2026-10-18 | (~12) | (approval | gate 1 | user choice on one or two folders (20:06-20:08) | mode economy, tokens ~60k |
+| WEB-PAUSE | Platform | 19:58 | 10-17 20:06 (develop), release midday 2026-10-18 | (~8) | (approval | gate 1 | - | mode economy, tokens ~25k |
+| LOAD-SLOTS-UI | UI/UX | 19:47 | 10-17 20:08 (develop), release midday 2026-10-18 | ~16 (build ~6, review ~1, rework ~8, conflicts 0) | ~5 (approval 0, dependency 0, ci 0, merge ~5) | gate 2 | - | mode economy, tokens ~65k |
+| DEPLOY-AFTER-RELEASE | Platform | 19:32 | 10-17 20:00 (develop), release midday 2026-10-18 | (~12) | (approval | gate 1 | user choice on the deploy trigger (19:32-19:43) | mode economy, tokens ~25k |
+| RELEASE-2X | Merge & Release | 19:43 | 10-17 19:47 (develop), release midday 2026-10-18 | 4 | 0 | gate 0 | - | mode economy |
+| S12C-L | Gameplay | 18:40 | 10-17 19:42 (develop), release midday 2026-10-18 | ~62 (build ~50, review ~1, rework ~5, conflicts ~6) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 6 | S12T-L (landed 18:18Z) | mode economy, tokens ~281k |
+| SIM-IMPORT | Platform | 18:54 | 10-17 19:07 (develop), release midday 2026-10-18 | (~13) | (approval | gate 1 | - | mode economy, tokens ~45k |
+| BAL3-R0 | Balance | 17:00 | 10-17 18:53 (develop), release midday 2026-10-18 | ~113 (build ~110, review 2, rework 1, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | none (40 min of the build was a stale class cache hang) | mode standard, tokens ~126k |
+| S12T-A | Gameplay | 18:18 | 10-17 18:40 (develop), release midday 2026-10-18 | ~22 (build ~5, review ~1, rework ~12, conflicts ~4) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | S12T-L (landed 18:18Z) | mode economy, tokens ~65k |
+| REVIEW-F5 | Platform | 17:59 | 10-17 18:25 (develop), release midday 2026-10-18 | (~22) | (approval | gate 2 | REVIEW-F1, REVIEW-F2, REVIEW-F3 (landed 17:58) | mode standard, tokens ~70k |
+| S12T-L | Gameplay | 17:14 | 10-17 18:18 (develop), release midday 2026-10-18 | ~64 (build ~45, review ~2, rework ~10, conflicts ~5) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 5 | - | mode economy, tokens ~292k |
+| REVIEW-F3 | UI/UX | 17:47 | 10-17 17:58 (develop), release midday 2026-10-18 | ~11 (build ~8, review ~1, rework 0, conflicts ~1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 2 | REVIEW-F2 (shared menus_test_suite), landed 17:21 | mode economy, tokens ~75k |
 | TOOLS-RO | Gameplay | 17:16 | 17:50 (develop), release #37 | ~30 | approval 0, dependency 0, ci 0, merge ~2 | gate 1 | - | mode standard, tokens ~325k |
 | COMBAT-LAYOUT | Gameplay | 17:21 | 17:47 (develop), release #37 | ~26 (build ~23, review ~1, rework ~1, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, tokens ~96k |
 | REVIEW-F4 | Platform | 17:05 | 17:31 (develop), release #37 | ~35 incl. part 1 | approval ~10 butler choice, dependency 0, ci ~3 probes, merge 0 | gate 2 | user choice on the Butler pin (17:06-17:17) | mode economy, tokens ~65k |

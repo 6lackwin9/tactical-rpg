@@ -7,153 +7,61 @@ extends PanelContainer
 # stance matchup multipliers, estimated damage, and arena landmark intel.
 # ==============================================================================
 
-const PANEL_WIDTH: float = 270.0
+const PANEL_WIDTH: float = 220.0
 
 var forecast_target_lbl: Label
 var forecast_dist_lbl: Label
 var forecast_range_badge: Label
 var forecast_stance_lbl: Label
 var forecast_dmg_lbl: Label
-var intel_exit_lbl: Label
 var intel_turn_lbl: Label
+var forecast_threat_lbl: Label   # INTENT1-U: "Targets you in B1" when the hovered foe's tell aims at the planning hero
 
 func _init() -> void:
 	name = "TacticalForecastUI"
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	custom_minimum_size = Vector2(PANEL_WIDTH, 468)
-	clip_contents = true   # the width is fixed: long text wraps, it never widens the panel
-
-	var right_style := StyleBoxFlat.new()
-	right_style.bg_color = Color(0.08, 0.10, 0.15, 0.95)
-	right_style.border_color = Color(0.2, 0.28, 0.42, 0.8)
-	right_style.set_border_width_all(1)
-	right_style.set_corner_radius_all(6)
-	right_style.content_margin_left = 8
-	right_style.content_margin_right = 8
-	right_style.content_margin_top = 6
-	right_style.content_margin_bottom = 6
-	add_theme_stylebox_override("panel", right_style)
-
+	size_flags_vertical = Control.SIZE_EXPAND_FILL
+	custom_minimum_size = Vector2(0, 0)
+	clip_contents = true   # the width is fixed: long text wraps (a scroll takes over when it is too tall), it never widens the panel
+	add_theme_stylebox_override("panel", UiTheme.box(Color(0.08, 0.10, 0.15, 0.95), Color(0.2, 0.28, 0.42, 0.8), 6, 6, CombatHudMetrics.PANEL_PAD))
 	_build_ui()
 
 func _build_ui() -> void:
-	var right_vbox := VBoxContainer.new()
-	right_vbox.add_theme_constant_override("separation", 6)
-	add_child(right_vbox)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(scroll)
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", CombatHudMetrics.CARD_GAP)
+	scroll.add_child(box)
+	var fs: int = UiTheme.hud_font()
+	box.add_child(_line("FORECAST", fs, Color(0.65, 0.8, 1.0)))
+	forecast_target_lbl = _line("Target: none", fs, Color(1.0, 0.85, 0.4))
+	forecast_dist_lbl = _line("Distance: -", fs, Color(0.8, 0.9, 1.0))
+	forecast_range_badge = _line("", fs, Color(0.4, 0.9, 0.4))
+	forecast_stance_lbl = _line("Stance: -", fs, Color(0.7, 0.8, 0.9))
+	forecast_dmg_lbl = _line("Strike: -", fs, Color(0.95, 0.5, 0.5))
+	intel_turn_lbl = _line("", fs, Color(0.6, 0.8, 1.0))   # the one arena rules line
+	forecast_threat_lbl = _line("", fs, Color(1.0, 0.5, 0.45))
+	forecast_threat_lbl.visible = false
+	for lbl: Label in [forecast_target_lbl, forecast_dist_lbl, forecast_range_badge, forecast_stance_lbl, forecast_dmg_lbl, forecast_threat_lbl, intel_turn_lbl]:
+		box.add_child(lbl)
 
-	var forecast_hdr := Label.new()
-	forecast_hdr.text = "TACTICAL FORECAST & ARENA INTEL"
-	forecast_hdr.add_theme_font_size_override("font_size", 11)
-	forecast_hdr.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
-	_wrap(forecast_hdr)
-	right_vbox.add_child(forecast_hdr)
+func _line(text: String, fs: int, color: Color) -> Label:
+	var lbl: Label = UiTheme.label(text, fs, color)
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return lbl
 
-	# Tactical Forecast Box
-	var forecast_box := PanelContainer.new()
-	var fc_style := StyleBoxFlat.new()
-	fc_style.bg_color = Color(0.12, 0.15, 0.22, 0.8)
-	fc_style.border_color = Color(0.3, 0.4, 0.55, 0.6)
-	fc_style.set_border_width_all(1)
-	fc_style.set_corner_radius_all(6)
-	fc_style.content_margin_left = 8
-	fc_style.content_margin_right = 8
-	fc_style.content_margin_top = 6
-	fc_style.content_margin_bottom = 6
-	forecast_box.add_theme_stylebox_override("panel", fc_style)
-	right_vbox.add_child(forecast_box)
-
-	var fc_vbox := VBoxContainer.new()
-	fc_vbox.add_theme_constant_override("separation", 4)
-	forecast_box.add_child(fc_vbox)
-
-	forecast_target_lbl = Label.new()
-	forecast_target_lbl.text = "Target: Enemy Brawler"
-	forecast_target_lbl.add_theme_font_size_override("font_size", 11)
-	forecast_target_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
-	_wrap(forecast_target_lbl)
-	fc_vbox.add_child(forecast_target_lbl)
-
-	forecast_dist_lbl = Label.new()
-	forecast_dist_lbl.text = "Distance: 1 Tile"
-	forecast_dist_lbl.add_theme_font_size_override("font_size", 10)
-	forecast_dist_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-	_wrap(forecast_dist_lbl)
-	fc_vbox.add_child(forecast_dist_lbl)
-
-	forecast_range_badge = Label.new()
-	forecast_range_badge.text = "✓ IN ATTACK RANGE"
-	forecast_range_badge.add_theme_font_size_override("font_size", 10)
-	forecast_range_badge.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
-	_wrap(forecast_range_badge)
-	fc_vbox.add_child(forecast_range_badge)
-
-	forecast_stance_lbl = Label.new()
-	forecast_stance_lbl.text = "Stance Matchup: Neutral vs Defensive"
-	forecast_stance_lbl.add_theme_font_size_override("font_size", 10)
-	forecast_stance_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	_wrap(forecast_stance_lbl)
-	fc_vbox.add_child(forecast_stance_lbl)
-
-	forecast_dmg_lbl = Label.new()
-	forecast_dmg_lbl.text = "Estimated Strike: ~12 dmg (Defending)"
-	forecast_dmg_lbl.add_theme_font_size_override("font_size", 10)
-	forecast_dmg_lbl.add_theme_color_override("font_color", Color(0.95, 0.5, 0.5))
-	_wrap(forecast_dmg_lbl)
-	fc_vbox.add_child(forecast_dmg_lbl)
-
-	# Arena Rules / Objectives
-	var arena_hdr := Label.new()
-	arena_hdr.text = "ARENA RULES & OBJECTIVES"
-	arena_hdr.add_theme_font_size_override("font_size", 10)
-	arena_hdr.add_theme_color_override("font_color", Color(0.85, 0.8, 0.55))
-	_wrap(arena_hdr)
-	right_vbox.add_child(arena_hdr)
-
-	var arena_card := PanelContainer.new()
-	var ar_style := StyleBoxFlat.new()
-	ar_style.bg_color = Color(0.10, 0.13, 0.18, 0.8)
-	ar_style.border_color = Color(0.22, 0.3, 0.42, 0.6)
-	ar_style.set_border_width_all(1)
-	ar_style.set_corner_radius_all(6)
-	ar_style.content_margin_left = 8
-	ar_style.content_margin_right = 8
-	ar_style.content_margin_top = 6
-	ar_style.content_margin_bottom = 6
-	arena_card.add_theme_stylebox_override("panel", ar_style)
-	right_vbox.add_child(arena_card)
-
-	var ar_vbox := VBoxContainer.new()
-	ar_vbox.add_theme_constant_override("separation", 3)
-	arena_card.add_child(ar_vbox)
-
-	intel_exit_lbl = Label.new()
-	intel_exit_lbl.text = "🚪 Exit tile: allows safe withdrawal"
-	intel_exit_lbl.add_theme_font_size_override("font_size", 9)
-	intel_exit_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
-	_wrap(intel_exit_lbl)
-	ar_vbox.add_child(intel_exit_lbl)
-
-	intel_turn_lbl = Label.new()
-	intel_turn_lbl.text = "⏱ Blocks / Round"
-	intel_turn_lbl.add_theme_font_size_override("font_size", 9)
-	intel_turn_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-	_wrap(intel_turn_lbl)
-	ar_vbox.add_child(intel_turn_lbl)
-
-	var right_hint := Label.new()
-	right_hint.text = "💡 Click any enemy unit to inspect their threat level."
-	right_hint.add_theme_font_size_override("font_size", 8)
-	right_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	_wrap(right_hint)
-	right_vbox.add_child(right_hint)
+# The hovered foe's tell against the planning hero ("" hides the line).
+func set_threat(text: String) -> void:
+	forecast_threat_lbl.text = text
+	forecast_threat_lbl.visible = not text.is_empty()
 
 # Arena rules line: blocks per round, AP pool and recovery, exits.
 func set_arena_intel(total_blocks: int, unit_ap: int, ap_regen: int, exits: Array[Vector2i]) -> void:
-	intel_turn_lbl.text = "⏱ %d Blocks / Round • %d AP pool, %s each round" % [total_blocks, unit_ap, ("+%d" % ap_regen) if ap_regen >= 0 else "refilled"]
-	var exit_names: Array[String] = []
-	for e: Vector2i in exits:
-		exit_names.append(str(e))
-	intel_exit_lbl.text = ("🚪 Exit %s: withdraw to leave the battle" % ", ".join(exit_names)) if not exit_names.is_empty() else "🚪 No exit: fight to the end"
+	var regen: String = ("+%d" % ap_regen) if ap_regen >= 0 else "refill"
+	intel_turn_lbl.text = "%d blocks - %d AP %s - %s" % [total_blocks, unit_ap, regen, ("exit " + str(exits[0])) if not exits.is_empty() else "no exit"]
 
 # `expected_hit`: DamageCalculator.expected for the basic attack (stance, armor, no crit/guard);
 # `band`: its reach (min, max).
@@ -162,12 +70,12 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 		return
 
 	if target == null:
-		forecast_target_lbl.text = "Target: None"
-		forecast_dist_lbl.text = "Distance: N/A"
-		forecast_range_badge.text = "Status: No Target"
+		forecast_target_lbl.text = "Target: none"
+		forecast_dist_lbl.text = "Distance: -"
+		forecast_range_badge.text = "No target"
 		forecast_range_badge.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-		forecast_stance_lbl.text = "Stance: N/A"
-		forecast_dmg_lbl.text = "Est. Strike: N/A"
+		forecast_stance_lbl.text = "Stance: -"
+		forecast_dmg_lbl.text = "Strike: -"
 		return
 
 	forecast_target_lbl.text = "Target: %s" % target.name
@@ -175,20 +83,20 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 		var p1: Vector2i = grid.get_position(selected_combatant)
 		var p2: Vector2i = grid.get_position(target)
 		var dist: int = grid.get_distance(p1, p2)
-		forecast_dist_lbl.text = "Distance: %d tile%s (Manhattan)" % [dist, "s" if dist != 1 else ""]
+		forecast_dist_lbl.text = "Distance %d, reach %d-%d" % [dist, band.x, band.y]
 
 		if dist >= band.x and dist <= band.y:
-			forecast_range_badge.text = "✓ IN REACH (distance %d, reach %d-%d)" % [dist, band.x, band.y]
+			forecast_range_badge.text = "In reach"
 			forecast_range_badge.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
 		elif dist < band.x:
-			forecast_range_badge.text = "✗ TOO CLOSE (reach %d-%d): back off or off-hand jab" % [band.x, band.y]
+			forecast_range_badge.text = "Too close: back off"
 			forecast_range_badge.add_theme_color_override("font_color", Color(0.98, 0.7, 0.3))
 		else:
-			forecast_range_badge.text = "✗ OUT OF REACH (+%d tiles): Engage moves in" % (dist - band.y)
+			forecast_range_badge.text = "Out of reach (+%d tiles)" % (dist - band.y)
 			forecast_range_badge.add_theme_color_override("font_color", Color(0.95, 0.4, 0.4))
 
 		var mult: float = CombatTypes.get_matchup_multiplier(selected_combatant.current_stance, target.current_stance)
-		forecast_stance_lbl.text = "Stance: %s vs %s (%.2fx)" % [
+		forecast_stance_lbl.text = "Stance %s vs %s %.2fx" % [
 			CombatTypes.stance_to_string(selected_combatant.current_stance),
 			CombatTypes.stance_to_string(target.current_stance),
 			mult
@@ -196,13 +104,10 @@ func update_forecast(selected_combatant: Combatant, target: Combatant, grid: Com
 
 		var est_dmg: int = maxi(1, roundi(float(expected_hit) * (1.0 - target.defense_mitigation_ratio)))
 		var mit_note: String = " (-%d%% guard)" % roundi(target.defense_mitigation_ratio * 100.0) if target.defense_mitigation_ratio > 0 else ""
-		forecast_dmg_lbl.text = "Est. Strike: ~%d dmg%s • crit %.0f%% x%.1f" % [est_dmg, mit_note, DamageCalculator.crit_chance(selected_combatant), DamageCalculator.CRIT_MULT]
+		forecast_dmg_lbl.text = "Strike ~%d%s, crit %.0f%%" % [est_dmg, mit_note, DamageCalculator.crit_chance(selected_combatant)]
 	else:
-		forecast_dist_lbl.text = "Distance: Inactive combatant"
-		forecast_range_badge.text = "Status: Off Active Grid"
+		forecast_dist_lbl.text = "Distance: -"
+		forecast_range_badge.text = "Off the grid"
 		forecast_range_badge.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-		forecast_stance_lbl.text = "Stance: N/A"
-		forecast_dmg_lbl.text = "Est. Strike: N/A"
-
-func _wrap(lbl: Label) -> void:
-	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		forecast_stance_lbl.text = "Stance: -"
+		forecast_dmg_lbl.text = "Strike: -"

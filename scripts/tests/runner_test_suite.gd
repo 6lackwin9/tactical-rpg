@@ -51,6 +51,30 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = TestHelpers.report_ok(TAG, "Browser build starts in the main menu; desktop keeps the runner", web_entry == "res://scenes/main_menu.tscn" and ResourceLoader.exists(web_entry) and str(ProjectSettings.get_setting("application/run/main_scene")) == SceneRunner.SELF_SCENE, web_entry) and ok
 	ok = TestHelpers.report_ok(TAG, "Web fallback fonts cover the runner's icon glyphs", missing.is_empty() and added == WebFonts.FALLBACKS.size(), "missing '%s', added %d" % [missing, added]) and ok
 
+	var pr_ok: bool = SceneRunner.restart_pulls_blocker("Windows", false, true, true).is_empty()
+	var pr_web: bool = not SceneRunner.restart_pulls_blocker("Windows", true, true, true).is_empty()
+	var pr_linux: bool = not SceneRunner.restart_pulls_blocker("Linux", false, true, true).is_empty()
+	var pr_bat: bool = not SceneRunner.restart_pulls_blocker("Windows", false, false, true).is_empty()
+	var pr_git: bool = not SceneRunner.restart_pulls_blocker("Windows", false, true, false).is_empty()
+	ok = TestHelpers.report_ok(TAG, "Restart runner pulls only on Windows desktop with run.bat and .git", pr_ok and pr_web and pr_linux and pr_bat and pr_git) and ok
+	var sum_diff: String = SceneRunner.pull_summary("abc1234", "def5678")
+	var sum_same: String = SceneRunner.pull_summary("abc1234", "abc1234")
+	var sum_empty: String = SceneRunner.pull_summary("", "def5678")
+	ok = TestHelpers.report_ok(TAG, "Pull summary: changed shows old -> new; equal or unknown old says up to date with a hint",
+		sum_diff == "Pulled abc1234 → def5678." and sum_same.begins_with("Already up to date (abc1234)") and sum_same.contains("offline") and sum_empty.begins_with("Restarted; could not read the commit") and SceneRunner.pull_summary("abc1234", "") == sum_empty, sum_same) and ok
+
+	var fake := DisplaySettings.Backend.new()
+	DisplaySettings.use_backend(fake)
+	var to_full: bool = SceneRunner.toggle_fullscreen() and SceneRunner.is_fullscreen()
+	var to_window: bool = not SceneRunner.toggle_fullscreen() and fake.mode == DisplayServer.WINDOW_MODE_WINDOWED and fake.size == DisplaySettings.BASE_SIZE
+	fake.mode = DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	var from_exclusive: bool = not SceneRunner.toggle_fullscreen() and fake.mode == DisplayServer.WINDOW_MODE_WINDOWED
+	SceneRunner.minimize_window()
+	var minimized: bool = fake.mode == DisplayServer.WINDOW_MODE_MINIMIZED
+	DisplaySettings.use_backend()
+	ok = TestHelpers.report_ok(TAG, "Window controls: F11 toggles fullscreen and windowed (from either fullscreen kind), Minimize minimizes",
+		to_full and to_window and from_exclusive and minimized and SceneRunner.window_buttons_shown() == not DisplaySettings.is_web(), str(fake.calls)) and ok
+
 	if tree_parent == null:
 		return TestHelpers.report_ok(TAG, "Launch / menu / reload (needs a scene tree)", true, "skipped") and ok
 	var saved_enabled: int = PlaytestStore.force_enabled
@@ -58,6 +82,13 @@ static func run(tree_parent: Node = null) -> bool:
 	var runner: SceneRunner = (load("res://scenes/scene_runner.tscn") as PackedScene).instantiate() as SceneRunner
 	tree_parent.add_child(runner)
 	ok = TestHelpers.report_ok(TAG, "With playtests off the runner has no PlaytestHub and no Playtests panel (zero hooks)", runner.hub == null and runner.browser == null) and ok
+
+	ok = TestHelpers.report_ok(TAG, "Note button exists, shows only with a recording hub",
+		runner.note_button != null and not runner.note_button.visible and SceneRunner.note_button_shown(true, true)
+		and not SceneRunner.note_button_shown(true, false) and not SceneRunner.note_button_shown(false, true)) and ok
+
+	ok = TestHelpers.report_ok(TAG, "Pill hidden for the real game (main menu), shown for test scenes",
+		not SceneRunner.pill_shown_for("res://scenes/main_menu.tscn") and SceneRunner.pill_shown_for("res://scenes/combat_arena.tscn")) and ok
 
 	# Launch the arena with a chosen catalog encounter; restart keeps it; menu frees it.
 	var launched: bool = runner.launch("res://scenes/combat_arena.tscn", "veterans_drill")

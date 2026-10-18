@@ -83,7 +83,7 @@ New `GameState.time` int (default 0) if Q5 = A. Nothing else: the current node i
 
 ### 2.6 Later slice: supplies (sketch only, reduced per DECISIONS "Travel supplies")
 
-Single counter `PartyState.supplies` (0..99); each leg costs `route.time` supplies; supplies come from shops (S11) and chests (S9). No fail state: travel is never refused. See Q6 for the effect at 0. Not part of TRAV1.
+Single counter `PartyState.supplies` (0..99); each leg costs `route.time` supplies; supplies come from shops (S11) and chests (S9). No fail state: travel is never refused. See Q6 for the effect at 0. Not part of TRAV1. Build specs: `docs/specs/TRAV2_L.md` (logic, Q6 A) and `docs/specs/TRAV2_A.md` (data).
 
 ### 2.7 Acceptance-check themes (the TRAV1 spec turns these into rule-derived checks)
 

@@ -17,6 +17,8 @@
 			"passives": [],
 			"named_items": [],
 			"tuning": {},
+			"dialogue": "orsa_talk",
+			"gone_flags": [],
 			"tags": []
 		}
 	]

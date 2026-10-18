@@ -7,10 +7,13 @@ extends RefCounted
 # 0..5 / autosave / peek / newest_slot, CurrentGame, SettingsFile. Part B (models): router, main menu, new game, save
 # slots, settings and hub models. Fixtures: hand-built worlds in an EMPTY sandbox world root, saves and the settings
 # file in the sandbox; the shipped catalog is only read (units picked by rule), shipped data is never written.
+# Ownership: the logic lane owns every test here, including _test_shipped_start (added by the asset task UI1-A; asset
+# tasks propose tests, logic tasks write them).
 # ==============================================================================
 
 const TAG: String = "Menus"
 static var SANDBOX: String = TestHelpers.sandbox("menus")
+const SCREEN: Vector2 = Vector2(1280, 720)
 const BASE: String = "mn_base"
 const KID: String = "mn_kid"
 const BARE: String = "mn_bare"
@@ -50,6 +53,8 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _report("Content fixtures picked by rule", {"two party units": units.size() >= 2, "an enemy unit": not _enemy_unit().is_empty()}) and ok
 	if sandboxed and units.size() >= 2 and _build_worlds(units):
 		ok = _test_start_party(units) and ok
+		ok = _test_party_max(units) and ok
+		ok = _test_start_characters(units) and ok
 		ok = _test_create_for_world(units) and ok
 		ok = _test_slots() and ok
 		ok = _test_peek() and ok
@@ -65,17 +70,21 @@ static func run(tree_parent: Node = null) -> bool:
 	TestHelpers.cleanup_worlds(SANDBOX)
 	return ok
 
-# UI1-A: the shipped campaign world starts with its fixed party; a child inherits it; a world without one is refused.
+# UI1-A (logic lane owns this test): the shipped campaign world starts with its fixed party; a child inherits it; a world without one is refused.
 static func _test_shipped_start() -> bool:
 	var checks: Dictionary = {}
 	var res: Dictionary = NewGame.create_for_world("ashlands")
-	var gs: GameState = res["state"] as GameState
-	var levels_ok: bool = gs != null and gs.party.members.size() == 4
+	var gs: GameState = GameState.of(res["state"])
+	var start_ids: Array[String] = WorldCatalog.start_party("ashlands")
+	var levels_ok: bool = gs != null and not start_ids.is_empty() and gs.party.members.size() == start_ids.size() and gs.party.members.size() <= WorldCatalog.party_max("ashlands")
 	if gs != null:
 		for m: UnitState in gs.party.members:
 			levels_ok = levels_ok and XpCurve.level_for(m.total_xp) == DictUtil.to_int(ContentCatalog.get_entry("units", m.base_unit).get("level", 1), 1)
-	checks["ashlands: four members at authored levels"] = levels_ok and gs.validate().is_empty()
+	checks["ashlands: the authored start party at authored levels"] = levels_ok and gs.validate().is_empty()
 	checks["tidewrack inherits"] = WorldCatalog.start_party("tidewrack") == WorldCatalog.start_party("ashlands") and not WorldCatalog.start_party("ashlands").is_empty()
+	var own_cap: int = DictUtil.to_int(WorldCatalog.manifest("ashlands").get("party_max", -1), -1)
+	var ash_cap: int = own_cap if own_cap >= 1 else PartyState.PARTY_MAX
+	checks["tidewrack inherits party_max (RECRUIT1-L)"] = WorldCatalog.party_max("ashlands") == ash_cap and WorldCatalog.party_max("tidewrack") == ash_cap and DictUtil.to_int(WorldCatalog.manifest("tidewrack").get("party_max", -1), -1) < 1
 	checks["iron_reaches not playable"] = JsonUtil.strings(NewGame.create_for_world("iron_reaches")["errors"]).has("World 'iron_reaches' is not playable (no start party).")
 	return _report("UI1-A: shipped start party", checks)
 
@@ -122,11 +131,70 @@ static func _test_start_party(units: Array[String]) -> bool:
 	checks["playable worlds"] = NewGame.playable_worlds() == [BASE, KID]
 	return _report("Check 1: start_party validation and inheritance", checks)
 
+static func _manifest_set(world_id: String, changes: Dictionary) -> Array[String]:
+	var stored: Array[String] = WorldCatalog.update_manifest(world_id, changes)
+	if not stored.is_empty():
+		print("      [%s] update_manifest %s: %s" % [TAG, world_id, str(stored)])
+	return WorldCatalog.manifest_errors(world_id)
+
+# Check 1b (RECRUIT1-L 1.1): manifest party_max range, the lineage resolver and the start-party-longer-than-cap error.
+static func _test_party_max(units: Array[String]) -> bool:
+	var checks: Dictionary = {}
+	var msg: String = "Party max must be -1 (inherited) or 1..%d." % PartyState.PARTY_MAX
+	checks["default -1"] = DictUtil.to_int(WorldSchema.defaults("world").get("party_max", 0)) == -1
+	checks["unset = PARTY_MAX"] = WorldCatalog.party_max(BARE) == PartyState.PARTY_MAX and WorldCatalog.party_max(KID) == PartyState.PARTY_MAX
+	checks["0 refused"] = _manifest_set(BASE, {"party_max": 0}) == [msg]
+	checks["above PARTY_MAX refused"] = _manifest_set(BASE, {"party_max": PartyState.PARTY_MAX + 1}) == [msg]
+	checks["-2 refused"] = _manifest_set(BASE, {"party_max": -2}) == [msg]
+	checks["PARTY_MAX valid"] = _manifest_set(BASE, {"party_max": PartyState.PARTY_MAX}).is_empty() and WorldCatalog.party_max(BASE) == PartyState.PARTY_MAX
+	var two: int = WorldCatalog.start_party(BASE).size()
+	var cap: int = two - 1
+	var long_msg: String = "Start party has %d heroes; party max is %d." % [two, cap]
+	checks["start party longer than cap"] = cap >= 1 and _manifest_set(BASE, {"party_max": cap}) == [long_msg]
+	checks["child inherits cap"] = WorldCatalog.party_max(KID) == cap and WorldCatalog.manifest_errors(KID) == [long_msg]
+	checks["child own cap wins"] = _manifest_set(KID, {"party_max": two}).is_empty() and WorldCatalog.party_max(KID) == two
+	checks["child -1 inherits again"] = _manifest_set(KID, {"party_max": -1}) == [long_msg]
+	checks["short own list clears it"] = _manifest_set(KID, {"start_party": [units[0]]}).is_empty()
+	var _undo_kid: Array[String] = WorldCatalog.update_manifest(KID, {"start_party": [], "party_max": -1})
+	checks["back to inherited"] = _manifest_set(BASE, {"party_max": -1}).is_empty() and WorldCatalog.party_max(KID) == PartyState.PARTY_MAX
+	return _report("Check 1b: party_max range, lineage resolver, start party vs cap (RECRUIT1-L 1.1)", checks)
+
+# Check 1c (RECRUIT1-L 1.2): start_party takes world party characters; both-unit-and-character and party-hero errors.
+static func _test_start_characters(units: Array[String]) -> bool:
+	var checks: Dictionary = {}
+	var u: String = units[0]
+	var errors: Array[String] = []
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_hero", "name": "Mn Hero", "role": "party", "base_unit": u}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_tuned", "name": "Mn Tuned", "role": "party", "base_unit": u, "tuning": {"power": 1}}))
+	var weapon: String = ""
+	for row: Dictionary in ContentCatalog.entries("items"):
+		if str(row.get("item_type", "")) == "WEAPON" and weapon.is_empty():
+			weapon = str(row["id"])
+	errors.append_array(WorldCatalog.upsert(BARE, "items", {"id": "mn_blade", "name": "Mn Blade", "base_item": weapon}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_armed", "name": "Mn Armed", "role": "party", "base_unit": u, "named_items": ["mn_blade"]}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_npc", "name": "Mn Npc", "role": "npc", "base_unit": u}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": u, "name": "Mn Twin", "role": "party", "base_unit": u}))
+	checks["fixtures stored"] = errors.is_empty()
+	if not errors.is_empty():
+		print("      [%s] character fixtures: %s" % [TAG, str(errors)])
+	checks["character entry"] = _party_errs(["mn_hero"]).is_empty()
+	checks["mixed unit and character"] = _party_errs([units[1], "mn_hero"]).is_empty()
+	checks["both unit and character"] = _party_errs([u]) == ["'%s' is both a unit and a character." % u]
+	checks["named-item hero"] = _party_errs(["mn_armed"]) == ["Party hero 'mn_armed' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
+	checks["tuned hero"] = _party_errs(["mn_tuned"]) == ["Party hero 'mn_tuned' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
+	checks["npc role"] = _party_errs(["mn_npc"]) == WorldCatalog.party_character_errors(BARE, "mn_npc") and _party_errs(["mn_npc"]).size() == 1
+	checks["unknown id"] = _party_errs(["mn_nobody"]) == ["Start party unit 'mn_nobody' is not a known unit."]
+	for id: String in ["mn_hero", "mn_tuned", "mn_armed", "mn_npc", u]:
+		var _gone: String = WorldCatalog.remove(BARE, "characters", id)
+	var _gone_item: String = WorldCatalog.remove(BARE, "items", "mn_blade")
+	checks["bare clean again"] = WorldCatalog.manifest_errors(BARE).is_empty() and WorldCatalog.own_ids(BARE, "characters").is_empty()
+	return _report("Check 1c: start_party world characters (RECRUIT1-L 1.2)", checks)
+
 # Check 2: create_for_world on a playable world; the exact error on a world without a start party.
 static func _test_create_for_world(units: Array[String]) -> bool:
 	var checks: Dictionary = {}
 	var res: Dictionary = NewGame.create_for_world(KID, 5)
-	var gs: GameState = res["state"] as GameState
+	var gs: GameState = GameState.of(res["state"])
 	checks["state valid"] = gs != null and gs.validate().is_empty() and gs.world_id == KID
 	if gs != null:
 		var ids: Array[String] = []
@@ -145,7 +213,7 @@ static func _test_create_for_world(units: Array[String]) -> bool:
 	return _report("Check 2: NewGame.create_for_world", checks)
 
 static func _new_state() -> GameState:
-	return NewGame.create_for_world(BASE, 3)["state"] as GameState
+	return GameState.of(NewGame.create_for_world(BASE, 3)["state"])
 
 static func _write_raw(slot: int, text: String) -> void:
 	DirAccess.make_dir_recursive_absolute(SaveGame.base_dir())
@@ -165,11 +233,11 @@ static func _test_slots() -> bool:
 	checks["slot 6 refused"] = SaveGame.write(gs, 6) == ["Save slot must be 0-5."]
 	checks["slot -1 refused"] = SaveGame.write(gs, -1) == ["Save slot must be 0-5."]
 	checks["autosave writes slot 0"] = SaveGame.autosave(gs).is_empty() and SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
-	var back: GameState = SaveGame.read(0)["state"] as GameState
+	var back: GameState = GameState.of(SaveGame.read(0)["state"])
 	checks["slot 0 reads back equal"] = back != null and back.equals(gs)
 	for slot: int in [4, 5]:
 		var written: bool = SaveGame.write(gs, slot).is_empty()
-		var round_trip: GameState = SaveGame.read(slot)["state"] as GameState
+		var round_trip: GameState = GameState.of(SaveGame.read(slot)["state"])
 		checks["slot %d round trip" % slot] = written and round_trip != null and round_trip.equals(gs) and JsonUtil.deep_equal(round_trip.to_dict(), gs.to_dict())
 	checks["constants"] = SaveGame.AUTOSAVE_SLOT == 0 and SaveGame.MANUAL_SLOTS == [1, 2, 3, 4, 5]
 	return _report("Check 3: save slots 0-5 and autosave", checks)
@@ -213,7 +281,7 @@ static func _test_peek() -> bool:
 # World, location (unless `local_location`: v2 keeps it local, read qualifies it) and party levels of peek equal read.
 static func _peek_matches(slot: int, local_location: bool = false) -> bool:
 	var head: Dictionary = SaveGame.peek(slot)
-	var gs: GameState = SaveGame.read(slot)["state"] as GameState
+	var gs: GameState = GameState.of(SaveGame.read(slot)["state"])
 	if gs == null or not DictUtil.to_bool(head["ok"]):
 		return false
 	var ok: bool = str(head["world_id"]) == gs.world_id
@@ -263,11 +331,11 @@ static func _test_current_game() -> bool:
 static func _test_settings() -> bool:
 	var checks: Dictionary = {}
 	var _gone: Error = DirAccess.remove_absolute(SettingsFile.path())
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["missing file = defaults"] = SettingsFile.get_value("anim/speed") == 1.0
 	var cases: Array[Array] = [
 		["audio/master", 1.5, 1.0, 1.0], ["audio/music", -0.5, 0.0, 0.8], ["audio/sfx", 0.25, 0.25, 0.8], ["audio/ui", 2, 1.0, 0.8],
-		["anim/speed", 10.0, 4.0, 1.0], ["anim/instant", true, true, false], ["ui/text_scale", 0.1, 0.8, 1.0],
+		["anim/speed", 10.0, 2.0, 1.0], ["anim/instant", true, true, false], ["ui/text_scale", 0.1, 0.85, 1.0],
 	]
 	for c: Array in cases:
 		var key: String = str(c[0])
@@ -275,15 +343,15 @@ static func _test_settings() -> bool:
 		SettingsFile.set_value(key, c[1])
 		checks["%s clamped" % key] = SettingsFile.get_value(key) == c[2]
 	checks["saved"] = SettingsFile.save() == OK
-	SettingsFile.set_value("anim/speed", 2.0)
-	SettingsFile.load()
-	checks["reload restores the file"] = SettingsFile.get_value("anim/speed") == 4.0 and SettingsFile.get_value("anim/instant") == true
+	SettingsFile.set_value("anim/speed", 0.5)
+	SettingsFile.load_file()
+	checks["reload restores the file"] = SettingsFile.get_value("anim/speed") == 2.0 and SettingsFile.get_value("anim/instant") == true
 	SettingsFile.set_value("anim/instant", "yes")
 	checks["wrong type = default"] = SettingsFile.get_value("anim/instant") == false and SettingsFile.checked("anim/speed", "fast") == 1.0
 	var cfg := ConfigFile.new()
 	cfg.set_value("ui", "text_scale", "big")
 	checks["file written"] = cfg.save(SettingsFile.path()) == OK
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["wrong type on disk = default"] = SettingsFile.get_value("ui/text_scale") == 1.0
 	var before: String = FileAccess.get_file_as_string(SettingsFile.path())
 	var gs: GameState = _new_state()
@@ -302,7 +370,87 @@ static func _test_part_b(tree_parent: Node) -> bool:
 	ok = _test_hub_model() and ok
 	ok = _test_main_menu_and_settings_model() and ok
 	ok = _test_scene(tree_parent) and ok
+	ok = _test_screen_frame(tree_parent) and ok
+	ok = _test_button_defaults_and_selected() and ok
 	return ok
+
+# UIR-1: sizes `root` and runs the container layout now (the tests do not await a frame): top-down so parents size children first.
+static func _settle(root: Control) -> void:
+	root.size = SCREEN
+	var todo: Array[Node] = [root]
+	while not todo.is_empty():
+		var n: Node = todo.pop_front()
+		if n is Container:
+			(n as Container).notification(Container.NOTIFICATION_SORT_CHILDREN)
+		todo.append_array(n.get_children())
+
+# UIR-1 (X1, X3, X7): ScreenFrame at 1280x720 for every text size.
+static func _test_screen_frame(tree_parent: Node) -> bool:
+	var checks: Dictionary = {}
+	if tree_parent == null:
+		return _report("UIR-1 ScreenFrame (headless without a tree: skipped)", {"skipped": true})
+	var scales: Array = SettingsModel.levels("ui/text_scale")
+	checks["four text sizes"] = scales.size() == 4
+	for sc: Variant in scales:
+		var host := Control.new()
+		var th := Theme.new()
+		th.default_font_size = roundi(MainMenuView.BASE_FONT * DictUtil.to_float(sc, 1.0))
+		host.theme = th
+		tree_parent.add_child(host)
+		var back: Button = MainMenuView.button("Back", func() -> void: pass)
+		var primary: Button = MainMenuView.button("Start", func() -> void: pass)
+		var extra: Button = MainMenuView.button("Reset", func() -> void: pass)
+		var f: ScreenFrame = ScreenFrame.make("Frame test", back, primary, [extra] as Array[Button])
+		host.add_child(f)
+		for i: int in 40:
+			f.column.add_child(MainMenuView.text("Row %d with some words so it has a height" % i))
+		_settle(host)
+		var tag: String = "x%s" % str(sc)
+		var bar_rect: Rect2 = f.bar.get_global_rect()
+		checks["%s: action bar on screen" % tag] = bar_rect.size.y > 0.0 and bar_rect.end.y <= SCREEN.y and bar_rect.position.y >= f.scroll.get_global_rect().end.y - 0.5
+		checks["%s: content taller than the scroll (it scrolls)" % tag] = f.column.get_combined_minimum_size().y > f.scroll.size.y
+		checks["%s: bar outside the scroll" % tag] = not f.scroll.is_ancestor_of(f.bar) and f.scroll.is_ancestor_of(f.column)
+		checks["%s: Back first, primary last" % tag] = f.bar.get_child(0) == back and f.bar.get_child(f.bar.get_child_count() - 1) == primary and f.bar.get_child(1) == extra
+		checks["%s: back left of primary" % tag] = back.get_global_rect().end.x <= primary.get_global_rect().position.x
+		checks["%s: title centred" % tag] = f.title_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER and absf(f.title_label.get_global_rect().get_center().x - SCREEN.x / 2.0) < 1.0
+		checks["%s: column capped and centred" % tag] = f.column.size.x <= ScreenFrame.COLUMN_MAX + 0.5 and f.column.size.x >= ScreenFrame.COLUMN_MAX - 0.5 and absf(f.column.get_global_rect().get_center().x - SCREEN.x / 2.0) < 14.0
+		tree_parent.remove_child(host)
+		host.free()
+	# Narrow window: the column follows the width instead of the cap.
+	var host2 := Control.new()
+	tree_parent.add_child(host2)
+	var f2: ScreenFrame = ScreenFrame.make("Narrow", MainMenuView.button("Back", func() -> void: pass))
+	host2.add_child(f2)
+	host2.size = Vector2(600, 400)
+	f2.size = Vector2(600, 400)
+	checks["narrow: column below the cap"] = f2.column.custom_minimum_size.x < ScreenFrame.COLUMN_MAX and f2.column.custom_minimum_size.x > 0.0
+	tree_parent.remove_child(host2)
+	host2.free()
+	return _report("UIR-1: ScreenFrame (title, scrolling column, pinned bar, text sizes)", checks)
+
+# UIR-1 (X2, X5): width classes, centred text, the selected style leaves the label alone.
+static func _test_button_defaults_and_selected() -> bool:
+	var checks: Dictionary = {}
+	var wide: Button = MainMenuView.button("A", func() -> void: pass)
+	var row_a: Button = MainMenuView.small(MainMenuView.button("Export", func() -> void: pass))
+	var row_b: Button = MainMenuView.small(MainMenuView.button("Delete everything", func() -> void: pass))
+	var step: Button = MainMenuView.step(MainMenuView.button("+", func() -> void: pass))
+	checks["centred text"] = wide.alignment == HORIZONTAL_ALIGNMENT_CENTER and row_a.alignment == HORIZONTAL_ALIGNMENT_CENTER
+	checks["wide class"] = int(wide.custom_minimum_size.x) == MainMenuView.W_WIDE
+	checks["row class for small()"] = int(row_a.custom_minimum_size.x) == MainMenuView.W_ROW and int(row_b.custom_minimum_size.x) == MainMenuView.W_ROW
+	checks["step class"] = int(step.custom_minimum_size.x) == MainMenuView.W_STEP
+	checks["classes ordered"] = MainMenuView.W_STEP < MainMenuView.W_ROW and MainMenuView.W_ROW < MainMenuView.W_WIDE
+	var b: Button = MainMenuView.button("Warden", func() -> void: pass)
+	var before: String = b.text
+	MenuStyle.mark_selected(b, true)
+	checks["selected: label unchanged"] = b.text == before and MenuStyle.is_selected(b)
+	var box: StyleBoxFlat = b.get_theme_stylebox("normal") as StyleBoxFlat
+	checks["selected: gold edge, filled"] = box != null and box.border_color == UiTheme.COL_TITLE and box.bg_color == MenuStyle.COL_SELECTED and box.bg_color.a == 1.0
+	MenuStyle.mark_selected(b, false)
+	checks["cleared: label unchanged, style back"] = b.text == before and not MenuStyle.is_selected(b) and not b.has_theme_stylebox_override("normal")
+	for w: Button in [wide, row_a, row_b, step, b]:
+		w.free()
+	return _report("UIR-1: button width classes, centred text, selected style", checks)
 
 # Commit 3: scenes/main_menu.tscn renders every screen and drives the models (thin view).
 static func _test_scene(tree_parent: Node) -> bool:
@@ -318,10 +466,27 @@ static func _test_scene(tree_parent: Node) -> bool:
 	checks["main screen"] = r.top() == MenuRouter.MAIN and _has_button(view, "New game") and not _has_button(view, "Continue")
 	for id: String in [MenuRouter.LOAD, MenuRouter.SETTINGS, MenuRouter.NEW_GAME]:
 		r.push(id)
-		checks["%s renders" % id] = view.get_child_count() > 0 and _has_button(view, "Back")
-	checks["new game lists the world"] = _has_button(view, "Start in MN Base")
+		checks["%s renders" % id] = view.get_child_count() > 0 and (view.find_child("SettingsClose", true, false) != null if id == MenuRouter.SETTINGS else _has_button(view, "Back"))   # settings is a popup with a cross instead of Back
+	# LOAD-SLOTS-UI: the slot list scrolls (every slot reachable at any size) and Back stays outside it and pops.
+	for id: String in [MenuRouter.LOAD, MenuRouter.SAVE]:
+		while r.top() != MenuRouter.MAIN:
+			r.pop()
+		r.push(id)
+		var scroll: ScrollContainer = view.find_child("SlotScroll", true, false) as ScrollContainer
+		var back: Button = view.find_child("BackButton", true, false) as Button
+		var last_label: Label = null
+		for n: Node in view.find_children("*", "Label", true, false):
+			if (n as Label).text.begins_with("Slot 5"):
+				last_label = n as Label
+		checks["%s: last slot inside the scroll" % id] = scroll != null and last_label != null and scroll.is_ancestor_of(last_label) and scroll.size_flags_vertical == Control.SIZE_EXPAND_FILL and scroll.follow_focus
+		checks["%s: Back outside the scroll" % id] = back != null and scroll != null and not scroll.is_ancestor_of(back)
+		if back != null:
+			back.pressed.emit()
+		checks["%s: Back pops" % id] = r.top() == MenuRouter.MAIN
+	r.push(MenuRouter.NEW_GAME)
+	checks["new game lists the world as a selectable card, one Start"] = view.find_child("WorldCard_" + BASE, true, false) is Button and _has_button(view, "Start")
 	view.act((r.model() as NewGameModel).choose.bind(BASE, 4))
-	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.top() == MenuRouter.HUB
+	checks["game scene opened"] = view.game_view != null and CurrentGame.has_game() and r.stack == [MenuRouter.PLAY]
 	# REVIEW-F2: Esc on the results screen is Continue (autosave, results_done, map back, no RESULTS left)
 	var done: Array[int] = [0]
 	r.results_done.connect(func() -> void: done[0] += 1)
@@ -329,13 +494,18 @@ static func _test_scene(tree_parent: Node) -> bool:
 	view._on_fight_settled({"xp": {}, "advanced": [] as Array[String], "outcome": "won"})
 	checks["results shown over the hidden map"] = r.top() == MenuRouter.RESULTS and not view.game_view.visible
 	view.cancel_pressed()
-	checks["Esc on results: autosave written, map back"] = SaveGame.exists(SaveGame.AUTOSAVE_SLOT) and done[0] == 1 and view.game_view.visible and not r.stack.has(MenuRouter.RESULTS) and r.top() == MenuRouter.HUB
-	checks["back to the hub"] = view.leave_game() and view.game_view == null and _has_button(view, "Quit to main menu") and _has_button(view, "Explore")
+	checks["Esc on results: autosave written, map back"] = SaveGame.exists(SaveGame.AUTOSAVE_SLOT) and done[0] == 1 and view.game_view.visible and not r.stack.has(MenuRouter.RESULTS) and r.top() == MenuRouter.PLAY
+	view.cancel_pressed()
+	checks["Esc opens the game menu over the map"] = r.top() == MenuRouter.HUB and view.game_view.visible and _has_button(view, "Quit to main menu") and _has_button(view, "Return to map")
 	CurrentGame.state().party.gold += 2
 	view.act((r.model() as HubModel).quit_to_menu)
 	checks["dirty quit shows the question"] = view.is_overlay_open() and r.is_asking()
+	checks["destructive question focuses No"] = view.overlay_default_button() != null and view.overlay_default_button().text == "No"
 	view.answer(true)
-	checks["confirmed: main menu with Continue"] = not CurrentGame.has_game() and r.top() == MenuRouter.MAIN and _has_button(view, "Continue")
+	r.ask("Harmless question?", func() -> void: pass)
+	checks["harmless question focuses Yes"] = view.overlay_default_button() != null and view.overlay_default_button().text == "Yes" and not r.pending_destructive
+	view.answer(false)
+	checks["confirmed: main menu with Continue, game scene gone"] = not CurrentGame.has_game() and r.top() == MenuRouter.MAIN and _has_button(view, "Continue") and view.game_view == null
 	tree_parent.remove_child(view)
 	view.free()
 	CurrentGame.end()
@@ -414,24 +584,25 @@ static func _test_new_game_model() -> bool:
 	checks["no autosave: no question"] = not r.is_asking() and not SaveGame.exists(SaveGame.AUTOSAVE_SLOT)
 	checks["choose"] = m.choose(BASE, 11).is_empty() and not r.is_asking()
 	checks["current game set"] = CurrentGame.has_game() and CurrentGame.state().world_id == BASE and not CurrentGame.is_dirty()
-	var back: GameState = SaveGame.read(SaveGame.AUTOSAVE_SLOT)["state"] as GameState
+	var back: GameState = GameState.of(SaveGame.read(SaveGame.AUTOSAVE_SLOT)["state"])
 	checks["slot 0 written"] = back != null and back.equals(CurrentGame.state()) and CurrentGame.slot() == 0
-	checks["hub on top"] = r.stack == [MenuRouter.HUB] and p.started == 1
+	checks["the game scene (PLAY) is the stack"] = r.stack == [MenuRouter.PLAY] and p.started == 1
 	# Q1: a readable autosave is asked about first
 	var r2: MenuRouter = MenuRouter.new(MenuRouter.NEW_GAME)
 	var m2: NewGameModel = r2.model() as NewGameModel
 	var old_autosave: GameState = CurrentGame.state()
 	var asked_ok: bool = m2.choose(BASE, 12).is_empty() and r2.is_asking() and r2.pending_message.begins_with("Starting a new game replaces your autosave (") and r2.pending_message.ends_with("). Continue?")
 	checks["Q1 asks over a readable autosave"] = asked_ok and CurrentGame.state() == old_autosave
+	checks["UIR-2: the autosave question is destructive (No focused)"] = r2.pending_destructive
 	r2.decline()
 	checks["declined: nothing replaced"] = CurrentGame.state() == old_autosave and r2.top() == MenuRouter.NEW_GAME
 	checks["unplayable world: error, no question"] = m2.choose(BARE) == ["World '%s' is not playable (no start party)." % BARE] and not r2.is_asking()
 	var _again: Array[String] = m2.choose(BASE, 12)
 	r2.confirm()
-	checks["accepted: new game replaces it"] = CurrentGame.state() != old_autosave and r2.top() == MenuRouter.HUB
+	checks["accepted: new game replaces it"] = CurrentGame.state() != old_autosave and r2.top() == MenuRouter.PLAY
 	_write_raw(SaveGame.AUTOSAVE_SLOT, "not json")
 	var r3: MenuRouter = MenuRouter.new(MenuRouter.NEW_GAME)
-	checks["unreadable autosave: no question"] = (r3.model() as NewGameModel).choose(BASE, 13).is_empty() and not r3.is_asking() and r3.top() == MenuRouter.HUB
+	checks["unreadable autosave: no question"] = (r3.model() as NewGameModel).choose(BASE, 13).is_empty() and not r3.is_asking() and r3.top() == MenuRouter.PLAY
 	return _report("Check 6: NewGameModel.choose", checks)
 
 # Check 7: save(0) refused; overwrite asks; busy refuses; load enters the game and shows warnings once.
@@ -449,18 +620,19 @@ static func _test_save_slots_model() -> bool:
 	var _gone: bool = SaveGame.delete(2)
 	checks["empty slot saves at once"] = m.save(2).is_empty() and p.asked.is_empty() and SaveGame.exists(2) and CurrentGame.slot() == 2
 	CurrentGame.state().party.gold += 1
-	checks["existing slot asks"] = m.save(2).is_empty() and p.asked == ["Overwrite slot 2?"] and CurrentGame.is_dirty()
+	checks["existing slot asks, naming what is lost"] = m.save(2).is_empty() and p.asked == ["Overwrite slot 2: %s?" % SaveSlotsModel.describe(2)] and CurrentGame.is_dirty() and SaveSlotsModel.describe(2).begins_with("MN Base")
+	checks["overwrite question is destructive (No focused)"] = r.pending_destructive
 	r.confirm()
 	checks["confirmed overwrite saved"] = m.last_errors.is_empty() and not CurrentGame.is_dirty()
 	CurrentGame.set_busy(true)
-	checks["busy refused"] = m.save(3) == ["You can't save during a battle or a conversation."] and not SaveGame.exists(3)
+	checks["busy refused (says why)"] = m.save(3) == [SaveSlotsModel.BUSY] and SaveSlotsModel.BUSY.contains("battle") and SaveSlotsModel.BUSY.contains("shop") and not SaveGame.exists(3)
 	CurrentGame.set_busy(false)
 	var rows: Array[Dictionary] = m.rows()
 	checks["rows 0..5"] = rows.size() == SaveGame.LAST_SLOT + 1 and str(rows[0]["label"]) == "Autosave" and str(rows[2]["status"]) == "ok" and not DictUtil.to_bool(rows[0]["can_save"]) and DictUtil.to_bool(rows[2]["can_save"])
 	_write_raw(3, "{bad")
 	rows = m.rows()
 	checks["unreadable row: delete only"] = str(rows[3]["status"]) == "unreadable" and DictUtil.to_bool(rows[3]["can_delete"]) and not DictUtil.to_bool(SaveSlotsModel.new(r, false).rows()[3]["can_load"])
-	checks["delete asks"] = m.delete(3).is_empty() and p.asked.back() == "Delete the save in slot 3?" and SaveGame.exists(3)
+	checks["delete asks"] = m.delete(3).is_empty() and p.asked.back() == "Delete the save in slot 3?" and SaveGame.exists(3) and SaveSlotsModel.describe(3).is_empty()
 	r.confirm()
 	checks["deleted on confirm"] = not SaveGame.exists(3)
 	checks["delete empty refused"] = m.delete(3) == ["Slot 3 is empty."]
@@ -474,7 +646,7 @@ static func _test_save_slots_model() -> bool:
 	CurrentGame.end()
 	var loader := SaveSlotsModel.new(r, false)
 	checks["corrupt load keeps the screen"] = not loader.load(3).is_empty() and not CurrentGame.has_game() and p.started == 0
-	checks["load enters the game"] = loader.load(1).is_empty() and CurrentGame.has_game() and CurrentGame.slot() == 1 and r.top() == MenuRouter.HUB and p.started == 1
+	checks["load enters the game"] = loader.load(1).is_empty() and CurrentGame.has_game() and CurrentGame.slot() == 1 and r.top() == MenuRouter.PLAY and p.started == 1
 	checks["warnings shown once"] = p.notices == ["cleared unresolved location_id 'nowhere'"]
 	_wipe_saves()
 	return _report("Check 7: SaveSlotsModel save / load / delete", checks)
@@ -490,11 +662,14 @@ static func _test_hub_model() -> bool:
 	var checks: Dictionary = {"names": hub.world_name() == "MN Base" and hub.party().size() == 2}
 	checks["save opens"] = hub.open(MenuRouter.SAVE).is_empty() and r.top() == MenuRouter.SAVE
 	r.pop()
-	checks["journal opens (UI3-L)"] = hub.open(MenuRouter.JOURNAL).is_empty() and r.top() == MenuRouter.JOURNAL
-	r.pop()
+	if JournalModel.new().shown().is_empty():
+		checks["journal without quests says why (UIR-2)"] = hub.open(MenuRouter.JOURNAL) == [HubModel.NO_QUESTS] and r.top() == MenuRouter.HUB
+	else:
+		checks["journal opens (UI3-L)"] = hub.open(MenuRouter.JOURNAL).is_empty() and r.top() == MenuRouter.JOURNAL
+		r.pop()
 	checks["unknown entry refused"] = hub.open("nope") == ["Unknown hub entry 'nope'."] and r.top() == MenuRouter.HUB
 	CurrentGame.state().party.gold += 3
-	checks["dirty asks"] = hub.quit_to_menu().is_empty() and p.asked == ["Quit without saving?"] and CurrentGame.has_game()
+	checks["dirty asks"] = hub.quit_to_menu().is_empty() and p.asked.size() == 1 and p.asked[0].begins_with("Quit to the main menu without saving?") and r.pending_destructive and CurrentGame.has_game()
 	r.decline()
 	CurrentGame.mark_saved(1)
 	checks["clean quits at once"] = hub.quit_to_menu().is_empty() and p.asked.size() == 1 and not CurrentGame.has_game() and r.stack == [MenuRouter.MAIN]
@@ -520,13 +695,13 @@ static func _test_main_menu_and_settings_model() -> bool:
 	var sm := SettingsModel.new()
 	checks["unknown key refused"] = sm.set_value("nope", 1) == ["Unknown setting 'nope'."]
 	var _s: Array[String] = sm.set_value("ui/text_scale", 9.0)
-	checks["draft clamped, file untouched"] = sm.value("ui/text_scale") == 1.5 and SettingsFile.get_value("ui/text_scale") != 1.5
+	checks["draft clamped, file untouched"] = sm.value("ui/text_scale") == 1.3 and SettingsFile.get_value("ui/text_scale") != 1.3
 	var applied: bool = sm.apply().is_empty() and not sm.has_draft()
-	SettingsFile.load()
-	checks["apply writes"] = applied and SettingsFile.get_value("ui/text_scale") == 1.5
+	SettingsFile.load_file()
+	checks["apply writes"] = applied and SettingsFile.get_value("ui/text_scale") == 1.3
 	var _t: Array[String] = sm.set_value("ui/text_scale", 1.0)
 	sm.revert()
-	checks["revert"] = sm.value("ui/text_scale") == 1.5 and not sm.has_draft()
+	checks["revert"] = sm.value("ui/text_scale") == 1.3 and not sm.has_draft()
 	CurrentGame.end()
 	_wipe_saves()
 	return _report("Main menu continue / quit, SettingsModel draft / apply / revert", checks)

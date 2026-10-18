@@ -8,8 +8,9 @@ extends RefCounted
 # lint, plus the pure runtime reads (presence `is_gone`, conditions, best stat, start gold, service lines, the journal
 # turn-in rule) that DialogueRunner, ExploreRunner and ShopRules use. No state, no RNG.
 # A tree is {id, name, speaker, start, nodes, services}; a node has exactly one of non-empty `choices`, a `next`
-# node id or `end: true`. Node effects are set_flag / give only; choice effects are all-or-nothing at runtime.
-# Markers, quests, loot, routes and `gone_flags` keep the M4 flag-only condition grammar (QuestRules).
+# node id or `end: true`. Node effects are set_flag / add_flag / give only; choice effects are all-or-nothing at runtime.
+# Markers, quests, loot, routes and `gone_flags` keep the M4 flag-only condition grammar (QuestRules), with the REP1
+# operators (`op`); dialogue flag conditions delegate to it. `add_flag` (REP1-L) adds a delta to an int flag.
 # ==============================================================================
 
 const MAX_NODES: int = 64
@@ -22,7 +23,7 @@ const CHOICE_KEYS: Array[String] = ["text", "to", "requires", "unless", "effects
 
 # Condition kind -> its keys besides `kind`, with defaults (a missing required key reads as its default and fails).
 const CONDITION_KINDS: Dictionary = {
-	"flag": {"key": "", "value": true},
+	"flag": {"key": "", "value": true, "op": "=="},
 	"quest": {"quest": "", "status": ""},
 	"items": {"item": "", "count": 1},
 	"gold": {"min": null},
@@ -37,19 +38,22 @@ const STAT_MAX: int = 30
 # Effect -> its keys besides `effect`, with defaults.
 const EFFECTS: Dictionary = {
 	"set_flag": {"key": "", "value": true},
+	"add_flag": {"key": "", "delta": null, "min": null, "max": null},
 	"start_quest": {"quest": ""},
 	"turn_in": {"quest": ""},
 	"give": {"items": {}, "gold": 0},
 	"take": {"items": {}, "gold": 0},
 	"open_shop": {"shop": ""},
 	"fight": {"encounter": ""},
+	"recruit": {"character": ""},   # RECRUIT1-L 1.4: choices only, at most one per choice
 }
-const NODE_EFFECTS: Array[String] = ["set_flag", "give"]
+const NODE_EFFECTS: Array[String] = ["set_flag", "add_flag", "give"]
 const EFFECT_GOLD_MAX: int = 99999
+const ADD_DELTA_MAX: int = 100   # |delta| of add_flag (REP1-L 1.3)
 
 # Json ref keys (WorldCatalog reference scans and renames): condition / effect key -> the world kind it names.
 const CONDITION_REF_KEYS: Dictionary = {"quest": "quests"}
-const EFFECT_REF_KEYS: Dictionary = {"quest": "quests", "shop": "shops", "encounter": "encounters"}
+const EFFECT_REF_KEYS: Dictionary = {"quest": "quests", "shop": "shops", "encounter": "encounters", "character": "characters"}
 
 # Base service lines (data/dialogue/services.json ids, in service order) and the fallback the runtime uses for a
 # missing one. Lore-free; tokens are replaced when a node is shown.
@@ -322,6 +326,7 @@ static func _condition_errors(world_id: String, kind: String, cond: Dictionary, 
 				errors.append("%s: flag key '%s' must be non-empty [a-z0-9_.]." % [cl, str(key)])
 			if cond.has("value") and not QuestRules.flag_value_ok(cond["value"]):
 				errors.append("%s: value must be a bool, a whole number or a String." % cl)
+			errors.append_array(QuestRules.op_errors(cond, cl))
 		"quest":
 			errors.append_array(_ref_value_errors(world_id, cond.get("quest", ""), "quests", cl + " quest"))
 			var status: Variant = cond.get("status", "")
@@ -382,7 +387,7 @@ static func effects_errors(world_id: String, raw: Variant, label: String, node_l
 		names.append(effect)
 		var el: String = "%s effect %d (%s)" % [label, k + 1, effect]
 		if node_level and not NODE_EFFECTS.has(effect):
-			errors.append("%s: Node effects may only be set_flag or give." % el)
+			errors.append("%s: Node effects may only be set_flag, add_flag or give." % el)
 		var allowed: Dictionary = EFFECTS[effect]
 		for key: Variant in fx:
 			if str(key) != "effect" and not allowed.has(str(key)):
@@ -390,6 +395,8 @@ static func effects_errors(world_id: String, raw: Variant, label: String, node_l
 		errors.append_array(_effect_errors(world_id, effect, fx, el))
 	if not node_level:
 		errors.append_array(_order_errors(names, label))
+		if names.count("recruit") > 1:
+			errors.append("%s: at most one recruit per choice." % label)
 	return errors
 
 static func _effect_errors(world_id: String, effect: String, fx: Dictionary, el: String) -> Array[String]:
@@ -401,6 +408,11 @@ static func _effect_errors(world_id: String, effect: String, fx: Dictionary, el:
 				errors.append("%s: flag key '%s' must be non-empty [a-z0-9_.]." % [el, str(key)])
 			if fx.has("value") and not QuestRules.flag_value_ok(fx["value"]):
 				errors.append("%s: value must be a bool, a whole number or a String." % el)
+			var why: String = RepRules.value_error(str(key), fx.get("value", true))
+			if not why.is_empty():
+				errors.append("%s: %s" % [el, why])
+		"add_flag":
+			errors.append_array(_add_flag_errors(fx, el))
 		"start_quest", "turn_in":
 			var ref_errs: Array[String] = _ref_value_errors(world_id, fx.get("quest", ""), "quests", el + " quest")
 			errors.append_array(ref_errs)
@@ -412,6 +424,42 @@ static func _effect_errors(world_id: String, effect: String, fx: Dictionary, el:
 			errors.append_array(_ref_value_errors(world_id, fx.get("shop", ""), "shops", el + " shop"))
 		"fight":
 			errors.append_array(_ref_value_errors(world_id, fx.get("encounter", ""), "encounters", el + " encounter"))
+		"recruit":
+			errors.append_array(_recruit_errors(world_id, fx.get("character", ""), el))
+	return errors
+
+# recruit (RECRUIT1-L 1.4): a world character that resolves and may join the party (WorldCatalog.party_character_errors).
+static func _recruit_errors(world_id: String, raw: Variant, el: String) -> Array[String]:
+	var errors: Array[String] = []
+	if not (raw is String) or str(raw).is_empty():
+		errors.append("%s: choose a character." % el)
+		return errors
+	var id: String = str(raw)
+	if WorldCatalog.resolve(world_id, "characters", id).is_empty():
+		errors.append("%s: Recruit: unknown character '%s'." % [el, id])
+		return errors
+	for why: String in WorldCatalog.party_character_errors(world_id, id):
+		errors.append("%s: %s" % [el, why])
+	return errors
+
+# add_flag (REP1-L 1.3): a valid key, delta a whole number in -ADD_DELTA_MAX..ADD_DELTA_MAX and not 0, optional
+# whole-number min / max with min <= max when both are given.
+static func _add_flag_errors(fx: Dictionary, el: String) -> Array[String]:
+	var errors: Array[String] = []
+	var key: Variant = fx.get("key", "")
+	if not (key is String) or not GameState.flag_key_ok(str(key)):
+		errors.append("%s: flag key '%s' must be non-empty [a-z0-9_.]." % [el, str(key)])
+	var delta: Variant = fx.get("delta", null)
+	if not (delta is int) or DictUtil.to_int(delta) == 0 or absi(DictUtil.to_int(delta)) > ADD_DELTA_MAX:
+		errors.append("%s: delta must be a whole number from -%d to %d, not 0." % [el, ADD_DELTA_MAX, ADD_DELTA_MAX])
+	for bound: String in ["min", "max"]:
+		var b: Variant = fx.get(bound, null)
+		if b != null and not (b is int):
+			errors.append("%s: %s must be a whole number." % [el, bound])
+	var lo: Variant = fx.get("min", null)
+	var hi: Variant = fx.get("max", null)
+	if lo is int and hi is int and DictUtil.to_int(lo) > DictUtil.to_int(hi):
+		errors.append("%s: min must not be above max." % el)
 	return errors
 
 # give / take: items {base id: 1..99} (at most MAX_ITEM_KEYS keys), gold 0..EFFECT_GOLD_MAX, not both empty.
@@ -451,7 +499,7 @@ static func _order_errors(names: Array[String], label: String) -> Array[String]:
 			if not names[k].is_empty() and not NODE_EFFECTS.has(names[k]) and not (share and movers.has(names[k])):
 				bad = true
 		if bad:
-			errors.append("%s: turn_in must come first; only set_flag or give may follow." % label)
+			errors.append("%s: turn_in must come first; only set_flag, add_flag or give may follow." % label)
 	if share:
 		errors.append("%s: fight can't share a choice with turn_in or open_shop." % label)
 		return errors
@@ -540,14 +588,16 @@ static func _rerouted(variants: Array, cond: Dictionary, field: String) -> bool:
 				return true
 	return false
 
-# Same flag key and same value (value defaults to true; strict type equality as QuestRules.condition_met).
+# Same flag key, same op (default "=="; a set_flag effect has none) and same value (value defaults to true; strict
+# type equality as QuestRules.condition_met).
 static func _same_condition(a: Dictionary, b: Dictionary) -> bool:
 	var va: Variant = JsonUtil.normalize(a.get("value", true))
 	var vb: Variant = JsonUtil.normalize(b.get("value", true))
-	return str(a.get("key", "")) == str(b.get("key", "")) and typeof(va) == typeof(vb) and va == vb
+	return str(a.get("key", "")) == str(b.get("key", "")) and str(a.get("op", "==")) == str(b.get("op", "==")) and typeof(va) == typeof(vb) and va == vb
 
 static func _condition_text(cond: Dictionary) -> String:
-	return "%s = %s" % [str(cond.get("key", "")), str(JsonUtil.normalize(cond.get("value", true)))]
+	var op: String = str(cond.get("op", "=="))
+	return "%s %s %s" % [str(cond.get("key", "")), "=" if op == "==" else op, str(JsonUtil.normalize(cond.get("value", true)))]
 
 # ------------------------------------------------------------------------------
 # Runtime reads (pure over GameState + the catalogs; DialogueRunner, ExploreRunner presence, ShopRules use them)
@@ -564,9 +614,38 @@ static func is_gone(gs: GameState, character_ref: String) -> bool:
 			return true
 	return false
 
+# True when the character `character_ref` resolves and is already a party member (RECRUIT1-L: member id = the
+# character's unqualified id, or a member plays it through lore_ref).
+static func is_member(gs: GameState, character_ref: String) -> bool:
+	var c: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", character_ref) if not character_ref.is_empty() else {}
+	if c.is_empty():
+		return false
+	for m: UnitState in gs.party.members:
+		if m.id == str(c.get("id", "")) or m.lore_ref == str(c.get("_qid", "")):
+			return true
+	return false
+
+# True when choice `choice` recruits a character who is already a member (RECRUIT1-L rule 6: such a choice is hidden).
+static func recruits_member(gs: GameState, choice: Dictionary) -> bool:
+	for raw: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("effects", []))):
+		var fx: Dictionary = DictUtil.dict_of(raw)
+		if str(fx.get("effect", "")) == "recruit" and is_member(gs, str(fx.get("character", ""))):
+			return true
+	return false
+
 # The resolved character's qualified id ("" when the ref is empty or unknown).
 static func character_qid(gs: GameState, ref: String) -> String:
 	return str(WorldCatalog.resolve(gs.world_id, "characters", ref).get("_qid", "")) if not ref.is_empty() else ""
+
+# The resolved faction qid of a character ("" when the ref is empty or unknown, or it has no faction that resolves).
+static func faction_qid(gs: GameState, character_ref: String) -> String:
+	if character_ref.is_empty():
+		return ""
+	var c: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", character_ref)
+	var fref: String = str(c.get("faction", ""))
+	if c.is_empty() or fref.is_empty():
+		return ""
+	return str(WorldCatalog.resolve(str(c.get("_world", gs.world_id)), "factions", fref).get("_qid", ""))
 
 # The resolved quest's giver / effective turn-in (QuestRules.resolve already falls back to the giver) as qids.
 static func giver_qid(gs: GameState, resolved_quest: Dictionary) -> String:
@@ -645,6 +724,20 @@ static func stat_prefix(choice: Dictionary) -> String:
 		var cond: Dictionary = DictUtil.dict_of(c)
 		if str(cond.get("kind", "flag")) == "stat":
 			out += "[%s %d] " % [str(cond.get("stat", "")), DictUtil.to_int(cond.get("min", 0))]
+	return out
+
+# The generated "[<Faction name> <band>] " prefix of a choice (REP1-L 2.4): one tag per `requires` flag condition on a
+# `rep.` key with an ordering op, the band being the band of the bound. A key naming no faction shows the key.
+static func rep_prefix(gs: GameState, choice: Dictionary) -> String:
+	var out: String = ""
+	for c: Variant in DictUtil.array_of(JsonUtil.normalize(choice.get("requires", []))):
+		var cond: Dictionary = DictUtil.dict_of(c)
+		var k: String = str(cond.get("key", ""))
+		if str(cond.get("kind", "flag")) != "flag" or not RepRules.is_rep_key(k) or not QuestRules.ORDER_OPS.has(str(cond.get("op", "=="))):
+			continue
+		var faction: Dictionary = WorldCatalog.resolve(gs.world_id, "factions", RepRules.faction_qid_of(k))
+		var label: String = str(faction.get("name", k)) if not faction.is_empty() else k
+		out += "[%s %s] " % [label, RepRules.band(DictUtil.to_int(cond.get("value", 0)))]
 	return out
 
 # Completes a ready quest from the journal (no NPC): only when its giver and effective turn-in both resolve to no

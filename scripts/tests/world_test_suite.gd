@@ -27,6 +27,7 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_shipped_save_checks() and ok
 	ok = _test_inheritance() and ok
 	ok = _test_same_base_different_lore() and ok
+	ok = _test_ashlands_art_resolves() and ok
 	ok = _test_tuning_items_disciplines() and ok
 	ok = _test_encounters_play() and ok
 	var forked: bool = TestHelpers.fork_worlds(SANDBOX)
@@ -90,13 +91,14 @@ static func _test_shipped_worlds() -> bool:
 	checks["lineage"] = WorldCatalog.lineage("tidewrack") == ["ashlands", "tidewrack"] and WorldCatalog.lineage("ashlands") == ["ashlands"]
 	checks["descendants"] = WorldCatalog.descendants("ashlands") == ["tidewrack"]
 	var kinds_filled: bool = true
-	# Every schema kind but the S11 ones (dialogues, shops: filled by DLG1-A; DialogueTestSuite covers them until then).
+	# Every schema kind but the S11 ones (dialogues, shops: filled by DLG1-A; DialogueTestSuite covers them until then)
+	# and the S10 routes (filled by TRAV1-A; TravelTestSuite covers them until then).
 	var filled_kinds: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot"]
 	for kind: String in filled_kinds:
 		kinds_filled = kinds_filled and not WorldCatalog.own_entries("ashlands", kind).is_empty()
 	checks["every kind used by ashlands"] = kinds_filled
 	var listed: Array[String] = filled_kinds.duplicate()
-	listed.append_array(["dialogues", "shops"])
+	listed.append_array(["dialogues", "shops", "routes"])
 	checks["kind list matches the schema"] = listed == WorldSchema.KINDS
 	return TestHelpers.report_ok(TAG, "Shipped worlds load and validate (every element kind, lineage, descendants)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not problems.is_empty() else str(ids))
 
@@ -139,6 +141,22 @@ static func _test_inheritance() -> bool:
 	checks["unknown parent rejected"] = not WorldCatalog.update_manifest("ashlands", {"extends": ["nowhere"]}).is_empty()
 	return TestHelpers.report_ok(TAG, "Inheritance: namespaced entries, overrides replace for the child only, old ids redirect, cycles rejected", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
+# Every Ashlands character's art key resolves to a file for token and portrait; the Ember Brigandine's icon to its file.
+static func _test_ashlands_art_resolves() -> bool:
+	var bad: Array[String] = []
+	var count: int = 0
+	for e: Dictionary in WorldCatalog.own_entries("ashlands", "characters"):
+		var art: String = str(e.get("art", ""))
+		count += 1
+		for variant: String in ["token", "portrait"]:
+			if art.is_empty() or str(AssetRegistry.resolve("unit", art, variant)["source"]) != "file":
+				bad.append("%s/%s" % [str(e.get("id", "")), variant])
+	var item: Dictionary = WorldCatalog.get_own("ashlands", "items", "ember_brigandine")
+	var icon: Dictionary = AssetRegistry.resolve("item", str(item.get("icon_id", "")), "icon")
+	if item.is_empty() or str(icon["source"]) != "file":
+		bad.append("ember_brigandine/icon")
+	return TestHelpers.report_ok(TAG, "Ashlands characters' art keys and the Ember Brigandine icon resolve to files (%d characters)" % count, bad.is_empty() and count > 0, str(bad))
+
 # Same base units in two worlds, different lore: they play the same (tuning deltas aside).
 static func _test_same_base_different_lore() -> bool:
 	var ash := WorldEncounter.new("ashlands", "courtyard_skirmish")
@@ -146,9 +164,11 @@ static func _test_same_base_different_lore() -> bool:
 	ash.build()
 	tide.build()
 	var checks: Dictionary = {}
-	checks["same roster size"] = ash.allies.size() == tide.allies.size() and ash.enemies.size() == tide.enemies.size() and ash.enemies.size() == 5
+	checks["same roster size"] = ash.allies.size() == tide.allies.size() and ash.enemies.size() == tide.enemies.size() and not ash.enemies.is_empty() and ash.enemies.size() == _roster_size(ash, "enemies")
 	var names_differ: bool = true
 	var stats_same: bool = true
+	var same_base: bool = true
+	var art_ok: bool = true
 	var detail: Array[String] = []
 	var all_ash: Array[Combatant] = ash.allies + ash.enemies
 	var all_tide: Array[Combatant] = tide.allies + tide.enemies
@@ -156,14 +176,24 @@ static func _test_same_base_different_lore() -> bool:
 		var a: Combatant = all_ash[i]
 		var b: Combatant = all_tide[i]
 		names_differ = names_differ and a.name != b.name
+		var char_a: Dictionary = WorldCatalog.resolve("ashlands", "characters", a.lore_ref)
+		var char_b: Dictionary = WorldCatalog.resolve("tidewrack", "characters", b.lore_ref)
+		var base_a: Dictionary = ContentCatalog.get_entry("units", str(char_a.get("base_unit", "")))
+		var base_b: Dictionary = ContentCatalog.get_entry("units", str(char_b.get("base_unit", "")))
+		same_base = same_base and not base_a.is_empty() and str(char_a.get("base_unit", "")) == str(char_b.get("base_unit", ""))
+		# A unit's art key is its character's own `art`, or the base unit's art when that is "".
+		art_ok = art_ok and ash.class_of(a) == (str(char_a.get("art", "")) if not str(char_a.get("art", "")).is_empty() else ContentFactory.art_of(base_a))
+		art_ok = art_ok and tide.class_of(b) == (str(char_b.get("art", "")) if not str(char_b.get("art", "")).is_empty() else ContentFactory.art_of(base_b))
 		var same: bool = (a.max_hp == b.max_hp and a.speed == b.speed and a.attack_range == b.attack_range and a.max_ap == b.max_ap
 			and DamageCalculator.power_of(a, a.attack_range > 1) == DamageCalculator.power_of(b, b.attack_range > 1)
-			and DamageCalculator.armor_rating(a) == DamageCalculator.armor_rating(b) and ash.class_of(a) == tide.class_of(b)
+			and DamageCalculator.armor_rating(a) == DamageCalculator.armor_rating(b)
 			and a.known_skills == b.known_skills)
 		if not same:
 			detail.append("%s/%s" % [a.name, b.name])
 		stats_same = stats_same and (same or b.lore_ref == "tidewrack:captain_dredge")   # the tuned boss differs on purpose
 	checks["lore names differ"] = names_differ
+	checks["same base unit in both worlds"] = same_base
+	checks["art key = the character's own art, else the base unit's"] = art_ok
 	checks["gameplay identical except the tuned boss"] = stats_same
 	# Behaviour is the base unit's: identical damage and the same AI plan.
 	var skarn: Combatant = ash.unit("skarn_ironjaw")
@@ -185,20 +215,34 @@ static func _test_same_base_different_lore() -> bool:
 	checks["same AI plan length"] = plans_same
 	return TestHelpers.report_ok(TAG, "Same base, different lore: names differ, every stat/class/skill/AI matches (only the tuned boss differs)", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks) if not TestHelpers.failed(checks).is_empty() else "")
 
+# How many ids the encounter's own definition lists under `key` ("party" / "enemies").
+static func _roster_size(enc: WorldEncounter, key: String) -> int:
+	var raw: Variant = enc.definition.get(key, [])
+	var list: Array = raw if raw is Array else []
+	return list.size()
+
+# A combatant for `character_id` as `world_id` resolves it (null when the character is unknown).
+static func _world_character(world_id: String, character_id: String) -> Combatant:
+	var character: Dictionary = WorldCatalog.resolve(world_id, "characters", character_id)
+	if character.is_empty():
+		return null
+	var c: Combatant = ContentFactory.unit(WorldFactory.unit_entry(character), "", 12)
+	WorldFactory.apply_character(c, character, world_id)
+	return c
+
 static func _test_tuning_items_disciplines() -> bool:
 	var checks: Dictionary = {}
-	var tide := WorldEncounter.new("tidewrack", "courtyard_skirmish")
-	tide.build()
 	var ash := WorldEncounter.new("ashlands", "courtyard_skirmish")
 	ash.build()
-	# Tuning deltas vs the base goblin berserker (Dredge is tidewrack's override of Bolg).
-	var dredge: Combatant = tide.unit("bolg_redhand")
+	# Tuning deltas vs the base goblin berserker (Dredge is tidewrack's override of Bolg). Built straight from the
+	# character entries, so the check does not depend on which characters a shipped encounter fields.
+	var dredge: Combatant = _world_character("tidewrack", "bolg_redhand")
 	var base_unit: Combatant = ContentFactory.unit(ContentCatalog.get_entry("units", "goblin_berserker"), "", 12)
 	checks["dredge hp +20%"] = dredge != null and dredge.max_hp == roundi(float(base_unit.max_hp) * 1.2) and dredge.hp == dredge.max_hp
 	checks["dredge power +2"] = DamageCalculator.power_of(dredge) == DamageCalculator.power_of(base_unit) + 2
 	checks["dredge armor +1"] = DamageCalculator.armor_rating(dredge) == DamageCalculator.armor_rating(base_unit) + 1
-	var bolg: Combatant = ash.unit("bolg_redhand")
-	checks["untuned twin identical"] = bolg.max_hp == base_unit.max_hp and DamageCalculator.power_of(bolg) == DamageCalculator.power_of(base_unit)
+	var bolg: Combatant = _world_character("ashlands", "bolg_redhand")
+	checks["untuned twin identical"] = bolg != null and bolg.max_hp == base_unit.max_hp and DamageCalculator.power_of(bolg) == DamageCalculator.power_of(base_unit)
 	var info: String = WorldFactory.divergence(WorldCatalog.resolve("tidewrack", "characters", "captain_dredge"), "tidewrack")
 	checks["divergence text"] = info.contains("hp +20%") and info.contains("power +2") and WorldFactory.divergence(WorldCatalog.resolve("ashlands", "characters", "skarn_ironjaw"), "ashlands").is_empty()
 	# Named item: the base brigandine + 2 mitigation, worn by Mara; vitals untouched (fixed unit).

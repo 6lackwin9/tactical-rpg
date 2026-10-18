@@ -319,22 +319,20 @@ static func _test_forge_ui(tree_parent: Node) -> bool:
 	var system: Dictionary = ContentCatalog.get_entry("classes", id)
 	checks["a class opens with the derived panels"] = forge.selected_id == id and forge.class_panels_text().contains("Gear budget") and forge.class_panels_text().contains("Proficiency coverage")
 	var stats_box: Control = forge.form.field_control("base_stats")
-	var spin: SpinBox = stats_box.find_child("Stat_" + StatRules.STATS[0], true, false) as SpinBox if stats_box != null else null
-	checks["base stats: read-only spinners, ranges from StatRules"] = spin != null and not spin.editable and is_equal_approx(spin.min_value, StatRules.STAT_FLOOR) and is_equal_approx(spin.max_value, StatRules.STAT_CEILING)
-	var name_edit: LineEdit = forge.form.field_control("name") as LineEdit
-	checks["the name is shown read-only"] = name_edit != null and not name_edit.editable and name_edit.text == str(system["name"])
+	var stat_lbl: Label = stats_box.find_child("Stat_" + StatRules.STATS[0], true, false) as Label if stats_box != null else null
+	var base_value: int = DictUtil.int_of(DictUtil.dict_of(system["base_stats"]), StatRules.STATS[0], StatRules.STAT_FLOOR)
+	checks["base stats: shown as values (no spinners)"] = stat_lbl != null and stat_lbl.text == str(base_value)
+	var name_lbl: Label = forge.form.field_control("name") as Label
+	checks["the name is shown as a label"] = name_lbl != null and name_lbl.text == str(system["name"])
 	var path_box: Control = forge.form.field_control("skill_path")
 	var rows: Node = path_box.find_child("Rows", true, false) if path_box != null else null
 	checks["the path table shows one row per entry"] = rows != null and rows.get_child_count() == DictUtil.dict_of(system["skill_path"]).size()
 	var prof_box: Control = forge.form.field_control("proficiency")
 	checks["the proficiency rows show one row per trained type"] = prof_box != null and prof_box.get_child_count() == DictUtil.dict_of(system["proficiency"]).size()
-	var main_opt: OptionButton = forge.form.field_control("main_hand") as OptionButton
-	var separators: int = 0
-	if main_opt != null:
-		for i: int in range(main_opt.item_count):
-			if main_opt.is_item_separator(i):
-				separators += 1
-	checks["the main hand picker is grouped by item family and disabled"] = separators > 1 and main_opt.disabled
+	var main_lbl: Label = forge.form.field_control("main_hand") as Label
+	var main_id: String = str(system.get("main_hand", ""))
+	var main_name: String = str(ContentCatalog.get_entry("items", main_id).get("name", "(empty)")) if not main_id.is_empty() else "(empty)"
+	checks["the main hand shows the equipped item's name"] = main_lbl != null and main_lbl.text.contains(main_name)
 	var live: Array[String] = TestHelpers.live_controls(forge.form)
 	checks["no control of the class form can edit or act (%s)" % ", ".join(live)] = live.is_empty()
 	checks["no lock icon in the form"] = not forge.form.find_children("*", "Label", true, false).any(func(n: Node) -> bool: return (n as Label).text.contains("🔒"))

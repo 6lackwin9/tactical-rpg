@@ -16,6 +16,8 @@ signal fx_played(preset_id: String, entry: ActionLogEntry)   # once per preset (
 
 const TILE_SIZE: int = CombatGridView.TILE_SIZE
 
+var tile_px: int = TILE_SIZE   # the grid panel sets the fitted tile size
+
 # One live tween and the end state kill_all restores on its node.
 class Run:
 	var tween: Tween
@@ -57,7 +59,7 @@ func play(entry: ActionLogEntry, actor: Control, target: Control, target_px: Vec
 		return
 	var distance: int = -1
 	if actor != null and (target != null or entry.category == "MOVE"):
-		var d: Vector2 = (target_px - actor.position) / float(TILE_SIZE)
+		var d: Vector2 = (target_px - actor.position) / float(tile_px)
 		distance = roundi(absf(d.x) + absf(d.y))
 	var presets: Array[String] = FxPresets.for_entry(entry, distance)
 	var planned: int = 0
@@ -66,8 +68,8 @@ func play(entry: ActionLogEntry, actor: Control, target: Control, target_px: Vec
 	if live_count() + planned > FxPresets.MAX_LIVE:
 		kill_all()
 	for id: String in presets:
-		_apply(id, entry, actor, target, target_px)
-		fx_played.emit(id, entry)
+		if _apply(id, entry, actor, target, target_px):
+			fx_played.emit(id, entry)
 
 # Slides a token to `to_px` (refresh after a step). A live tween already heading there is kept.
 func slide(token: Control, to_px: Vector2) -> void:
@@ -97,56 +99,76 @@ func kill_all() -> void:
 func _instant() -> bool:
 	return FxSettings.instant or not is_inside_tree()
 
-func _apply(id: String, entry: ActionLogEntry, actor: Control, target: Control, target_px: Vector2) -> void:
+# Runs one preset; false when the node it needs is missing (nothing ran, so no fx_played).
+# A step skipped by instant mode still counts as applied.
+func _apply(id: String, entry: ActionLogEntry, actor: Control, target: Control, target_px: Vector2) -> bool:
 	var on: Control = target if target != null else actor   # target-side presets fall back to the actor (self buffs)
 	match id:
 		"move":
-			if actor != null:
-				_tween_position(actor, [target_px], [FxPresets.duration("move")], target_px, true)
+			if actor == null:
+				return false
+			_tween_position(actor, [target_px], [FxPresets.duration("move")], target_px, true)
 		"attack_melee":
-			if actor != null:
-				_settle(actor)
-				var orig: Vector2 = actor.position
-				if (target_px - orig).length() >= 0.1:
-					var bump: Vector2 = orig + (target_px - orig) * FxPresets.MELEE_BUMP
-					_tween_position(actor, [bump, orig], FxPresets.durations("attack_melee"), orig, false)
+			if actor == null:
+				return false
+			_settle(actor)
+			var orig: Vector2 = actor.position
+			if (target_px - orig).length() >= 0.1:
+				var bump: Vector2 = orig + (target_px - orig) * FxPresets.MELEE_BUMP
+				_tween_position(actor, [bump, orig], FxPresets.durations("attack_melee"), orig, false)
 		"attack_ranged":
-			if actor != null:
-				_pulse(actor, FxPresets.team_accent(entry.actor_is_ally), FxPresets.duration(id))
+			if actor == null:
+				return false
+			_pulse(actor, FxPresets.team_accent(entry.actor_is_ally), FxPresets.duration(id))
 		"hit", "mitigated":
-			if target != null:
-				_settle(target)
-				var base: Vector2 = target.position
-				var points: Array[Vector2] = []
-				for offset: Vector2 in FxPresets.SHAKE_OFFSETS:
-					points.append(base + offset)
-				_tween_position(target, points, FxPresets.durations(id).slice(0, 4), base, false)
-				_pulse(target, FxPresets.color(id), FxPresets.duration(id, 4))
+			if target == null:
+				return false
+			_settle(target)
+			var base: Vector2 = target.position
+			var points: Array[Vector2] = []
+			for offset: Vector2 in FxPresets.SHAKE_OFFSETS:
+				points.append(base + offset)
+			_tween_position(target, points, FxPresets.durations(id).slice(0, 4), base, false)
+			_pulse(target, FxPresets.color(id), FxPresets.duration(id, 4))
+		"miss":
+			if target == null:
+				return false
+			_settle(target)
+			var home: Vector2 = target.position
+			_tween_position(target, [home + FxPresets.MISS_SIDESTEP, home], FxPresets.durations(id), home, false)
 		"heal", "buff":
-			if on != null:
-				_pulse(on, FxPresets.color(id), FxPresets.duration(id))
+			if on == null:
+				return false
+			_pulse(on, FxPresets.color(id), FxPresets.duration(id))
 		"defend":
-			if actor != null:
-				_pulse(actor, FxPresets.color(id), FxPresets.duration(id))
+			if actor == null:
+				return false
+			_pulse(actor, FxPresets.color(id), FxPresets.duration(id))
 		"status":
-			if on != null and not _instant():
+			if on == null:
+				return false
+			if not _instant():
 				_status_pop(on, FxPresets.status_id_of(entry))
 		"float_text":
 			if not _instant():
 				var anchor: Vector2 = FxPresets.AMBUSH_TEXT_PX if on == null else on.position
 				_float_label(anchor, FxPresets.float_text(entry), FxPresets.float_color(entry))
 		"defeat":
-			if on != null:
-				_settle(on)
-				var faded: Color = Color(on.modulate, 0.0)
-				if _instant():
-					on.modulate = faded
-				else:
-					var run: Run = _track(on)
-					run.has_mod = true
-					run.end_mod = faded
-					run.tween.tween_property(on, "modulate:a", 0.0, FxSettings.scaled(FxPresets.duration(id)))
-					_close(run)
+			if on == null:
+				return false
+			_settle(on)
+			var faded: Color = Color(on.modulate, 0.0)
+			if _instant():
+				on.modulate = faded
+			else:
+				var run: Run = _track(on)
+				run.has_mod = true
+				run.end_mod = faded
+				run.tween.tween_property(on, "modulate:a", 0.0, FxSettings.scaled(FxPresets.duration(id)))
+				_close(run)
+		_:
+			return false
+	return true
 
 # Position steps through `points`; kill_all leaves the node at `end_px`.
 func _tween_position(node: Control, points: Array[Vector2], times: Array[float], end_px: Vector2, eased: bool) -> void:
@@ -186,7 +208,7 @@ func _status_pop(on: Control, status_id: String) -> void:
 	icon.custom_minimum_size = Vector2(FxPresets.STATUS_ICON_PX, FxPresets.STATUS_ICON_PX)
 	icon.size = icon.custom_minimum_size
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var start: Vector2 = on.position + Vector2((TILE_SIZE - FxPresets.STATUS_ICON_PX) / 2.0, -FxPresets.STATUS_ICON_PX / 2.0)
+	var start: Vector2 = on.position + Vector2((tile_px - FxPresets.STATUS_ICON_PX) / 2.0, -FxPresets.STATUS_ICON_PX / 2.0)
 	icon.position = start
 	_add_temp(icon)
 	var run: Run = _track(icon)

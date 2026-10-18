@@ -66,9 +66,7 @@
 			"body": "arm_plate",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion"
-			]
+			"pouch": []
 		},
 		{
 			"id": "ranger",
@@ -132,10 +130,7 @@
 			"body": "arm_leather",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion",
-				"con_focus_elixir"
-			]
+			"pouch": []
 		},
 		{
 			"id": "brawler",
@@ -197,7 +192,8 @@
 				"hamstring": 4,
 				"haymaker": 5,
 				"charge_in": 5,
-				"cyclone_kick": 5
+				"cyclone_kick": 5,
+				"crushing_blow": 6
 			},
 			"main_hand": "",
 			"off_hand": "",
@@ -275,9 +271,7 @@
 			"body": "arm_cleric_vestment",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion"
-			]
+			"pouch": []
 		},
 		{
 			"id": "rogue",
@@ -333,7 +327,9 @@
 				"hamstring": 5,
 				"lacerate": 5,
 				"assassinate": 7,
-				"envenom": 6
+				"envenom": 6,
+				"feint": 6,
+				"opportunist": 7
 			},
 			"main_hand": "wpn_stiletto",
 			"off_hand": "",
@@ -404,9 +400,7 @@
 			"body": "arm_mage_robe",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": [
-				"con_heal_potion"
-			]
+			"pouch": []
 		}
 	]
 }

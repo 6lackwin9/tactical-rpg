@@ -29,8 +29,19 @@ Example: `git show 11ffe67:data/seeds/c1a1.gd`
 | --- | --- |
 | `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |
 | `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
+| `trav1a.gd` | TRAV1-A (Ashlands old/high road, Iron Reaches south road, two world_map exit markers) |
 | `dlg1a.gd` | DLG1-A (service lines, Ashlands dialogues, keep shop, gold) |
+| `rep1a.gd` | REP1-A (quest reputation deltas, Hest rep-gated choice, ashlands:ember_patrol) |
 | `s14_a1.gd` | S14-A1 (first manifest rows: goblin_brawler alias, four sample file overrides; goblin_brawler art key) |
 | `ui1_start_party.gd` | UI1-A (Ashlands start party: warrior, ranger, rogue, mage; tidewrack inherits it) |
 | `s14_a2.gd` | S14-A2 (13 placeholder SFX blips + their manifest rows) |
+| `s12t.gd` | S12T-A (the 17 terrain rows) |
 | `s12s.gd` | S12S-A (crippling_shot, rend_armor, envenom, aegis, rejuvenate on class paths at level 6) |
+| `s12c.gd` | S12C-A (feint, opportunist on the rogue path at levels 6-7; crushing_blow on the brawler path at level 6) |
+| `bal3.gd` | BAL3-A (data levers: sweep_kick power 0.8/1.0/1.15; other levers gated off) |
+| `camp1_unit.gd` | CAMP1-A1 (goblin_warlord boss unit for the Ashlands finale; run before camp1_story) |
+| `camp1_story.gd` | CAMP1-A2 (Ashlands story: steel_for_the_gate, keep_one_fire_lit, Ashmaw Camp, wastes_track, wagon raid, Grakka and Orsa dialogues, steel choice, epilogue) |
+| `trav2a.gd` | TRAV2-A (Ashlands supplies: manifest start_supplies 10, hest_stores supply_price 2, chest supplies on stores / ruin_cache / camp_cache) |
+| `art2_a.gd` | ART2-A (manifest rows for intent chips, badge_foresight, chip_slay, chip_guest, overlay_objective_v0, sfx miss; run `tools/gen_art.py chips overlays` first) |
+| `itemuse1_a.gd` | ITEMUSE1-A (use_reach: con_heal_potion 1, con_focus_elixir 0, con_fire_bomb 3) |
+| `itemuse1_a2.gd` | ITEMUSE1-A2 (empty `pouch` on warrior, ranger, priest, mage classes; no free class potion) |

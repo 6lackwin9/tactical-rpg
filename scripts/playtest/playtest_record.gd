@@ -6,8 +6,10 @@ extends RefCounted
 # A recording is plain JSON-shaped data (docs/specs/PLAYTEST1_L.md, sections A-I):
 #   recording {format, version, id, origin, created, engine, source_rev, scenario, parent,
 #              content, battles, trail, trail_dropped, asset_templates, notes}
-#   battle    {index, encounter, seed, seed_source, roster, rounds, end}
-#   round     {round, rng_state, plans, attempts, discarded, plan_ms, edits, outcome}
+#   battle    {index, encounter, seed, seed_source, roster, pouches, rounds, end} (pouches: ITEMUSE1, [{ref, items}] per ally at
+#             battle start; [] in older recordings = units keep the pouch they are built with)
+#   round     {round, rng_state, plans, attempts, discarded, plan_ms, edits, outcome, source}
+#             source: who confirmed the plans, "player" or "auto" (AUTO1 battle autoplay); older files default to player
 #   note      {n, t, origin, scene, battle, round, block, phase, mouse, viewport, ctl, tags, text, image}
 # Unknown keys are kept and ignored; missing keys take the defaults below. RNG states are decimal strings.
 # ==============================================================================
@@ -20,6 +22,7 @@ const VARIANT_FORMAT: String = "playtest_variant"
 const ORIGINS: Array[String] = ["user", "agent"]
 const SEED_SOURCES: Array[String] = ["encounter", "scenario", "branch", "tool"]
 const END_RESULTS: Array[String] = ["won", "lost", "fled", "timeout", "abandoned"]
+const PLAN_SOURCES: Array[String] = ["player", "auto"]
 const NOTE_TAGS: Array[String] = ["mechanic", "ui", "ux", "bug"]
 const NOTE_PHASES: Array[String] = ["planning", "resolving", "replay", ""]
 const TRAIL_MAX: int = 20000
@@ -34,10 +37,10 @@ static func recording_defaults() -> Dictionary:
 		"scenario": "", "parent": null, "content": {}, "battles": [], "trail": [], "trail_dropped": 0, "asset_templates": 0, "notes": []}
 
 static func battle_defaults() -> Dictionary:
-	return {"index": 0, "encounter": "", "seed": 0, "seed_source": "encounter", "roster": [], "rounds": [], "end": end_entry("abandoned", 0)}
+	return {"index": 0, "encounter": "", "seed": 0, "seed_source": "encounter", "roster": [], "pouches": [], "rounds": [], "end": end_entry("abandoned", 0)}
 
 static func round_defaults() -> Dictionary:
-	return {"round": 1, "rng_state": "0", "plans": [], "attempts": 1, "discarded": [], "plan_ms": 0, "edits": 0, "outcome": {}}
+	return {"round": 1, "rng_state": "0", "plans": [], "attempts": 1, "discarded": [], "plan_ms": 0, "edits": 0, "outcome": {}, "source": "player"}
 
 static func note_defaults() -> Dictionary:
 	return {"n": 1, "t": 0, "origin": "user", "scene": "", "battle": -1, "round": 0, "block": 0, "phase": "", "mouse": [0, 0],
@@ -178,6 +181,8 @@ static func battle_errors(battle: Dictionary) -> Array[String]:
 		var state: String = str(r.get("rng_state", ""))
 		if not state.is_valid_int():
 			out.append("%s round %d: rng_state '%s' is not a decimal integer." % [where, num, state])
+		if not PLAN_SOURCES.has(str(r.get("source", "player"))):
+			out.append("%s round %d: unknown source '%s'." % [where, num, str(r.get("source", ""))])
 		expected += 1
 	return out
 
@@ -202,9 +207,11 @@ static func scenario_errors(s: Dictionary) -> Array[String]:
 # Battle end (shared by the recorder and the replayer)
 # ------------------------------------------------------------------------------
 
-# won / lost / fled from BattleBridge.outcome once the battle is over; timeout when the last round
+# won / lost / fled from the session's outcome (OBJ1 rule 11) once the battle is over; timeout when the last round
 # concluded with both sides standing; abandoned otherwise (the battle was left first).
 static func end_of(session: CombatSession, rounds_done: int) -> Dictionary:
+	if not session.outcome.is_empty():
+		return end_entry(session.outcome, rounds_done)
 	if session.combat_over:
 		return end_entry(BattleBridge.outcome(session), rounds_done)
 	if session.phase == CombatSession.Phase.REPLAY and session.current_round >= session.encounter.max_rounds:

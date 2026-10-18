@@ -10,7 +10,7 @@ extends UiPanel
 # through `modal_requested`.
 # ==============================================================================
 
-signal modal_requested(kind: String) # "log" | "timeline" | "gear"
+signal modal_requested(kind: String) # "log" | "timeline"
 
 var session: CombatSession = null
 

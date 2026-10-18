@@ -59,6 +59,69 @@ static func presence(gs: GameState, loc_qid: String, m: Dictionary) -> String:
 		return "absent"   # DLG1-L 2.1: a gone character's npc markers are absent
 	return "present" if req_ok and unless_ok else "absent"
 
+# MAPREAD1-L1: what a marker shows, read-only. {kind, state (present|locked|spent|absent), label, verb, badge (npc:
+# quest|ready|""), icon}. `loc` is the location entry (its `_qid` keys the done flags); `m` a marker (full or raw).
+static func marker_view(gs: GameState, loc: Dictionary, m: Dictionary) -> Dictionary:
+	var mk: Dictionary = MapRules.marker_full(m)
+	var kind: String = str(mk["kind"])
+	var loc_qid: String = str(loc.get("_qid", ""))
+	var state: String = presence(gs, loc_qid, mk)
+	if state == "present" and _is_spent(gs, loc_qid, mk):
+		state = "spent"
+	var spent: bool = state == "spent"
+	var label: String = str(mk.get("label", "")).strip_edges()
+	var badge: String = ""
+	var verb: String = ""
+	var default_label: String = ""
+	match kind:
+		"npc":
+			var who: Dictionary = WorldCatalog.resolve(gs.world_id, "characters", str(mk.get("character", "")))
+			default_label = str(who.get("name", "Someone"))
+			verb = "Talk"
+			badge = _npc_badge(gs, str(who.get("_qid", "")))
+		"chest":
+			default_label = "Chest"
+			verb = "Empty" if spent else "Open"
+		"lore":
+			default_label = str(WorldCatalog.resolve(gs.world_id, "lore", str(mk.get("lore", ""))).get("name", "Lore"))
+			verb = "Read"
+		"exit":
+			var to: String = str(mk.get("to", ""))
+			if to == MapRules.WORLD_MAP:
+				default_label = "World map"
+			else:
+				default_label = "To %s" % str(resolve_location(gs, to).get("name", to))
+			verb = "Locked: %s" % str(mk.get("locked_text", "")) if state == "locked" else "Walk onto it"
+		"encounter", "roamer":
+			default_label = str(WorldCatalog.resolve(gs.world_id, "encounters", str(mk.get("encounter", ""))).get("name", "Enemies"))
+			verb = "Fight" if kind == "encounter" else "Patrol: fight on contact"
+		_:
+			default_label = "Something here"
+			verb = "Nothing more here" if spent else "Look"
+	return {"kind": kind, "state": state, "label": label if not label.is_empty() else default_label, "verb": verb, "badge": badge, "icon": "overlay_%s" % ("poi" if kind == "point" else kind)}
+
+# A chest whose done flag is set, or a point whose sets_flags all already hold.
+static func _is_spent(gs: GameState, loc_qid: String, m: Dictionary) -> bool:
+	match str(m.get("kind", "")):
+		"chest":
+			return _is_done(gs, loc_qid, m)
+		"point":
+			var sets: Array = DictUtil.array_of(JsonUtil.normalize(m.get("sets_flags", [])))
+			return not sets.is_empty() and _conditions_hold(gs, sets)
+	return false
+
+# "quest" when the character gives an available quest, "ready" when a ready quest is turned in to them.
+static func _npc_badge(gs: GameState, character_qid: String) -> String:
+	if character_qid.is_empty():
+		return ""
+	for qid: String in QuestRunner.quests_with(gs, "ready"):
+		if DialogueRules.turn_in_qid(gs, QuestRunner.resolved(gs, qid)) == character_qid:
+			return "ready"
+	for qid: String in QuestRunner.quests_with(gs, "available"):
+		if DialogueRules.giver_qid(gs, QuestRunner.resolved(gs, qid)) == character_qid:
+			return "quest"
+	return ""
+
 # Where a marker stands for `loc_steps` (roamers walk their path; others sit on their anchor). (-1, -1) = nowhere.
 static func marker_pos(t: Dictionary, m: Dictionary, loc_steps: int) -> Vector2i:
 	if str(m.get("kind", "")) == "roamer":
@@ -119,21 +182,36 @@ static func resolve_location(gs: GameState, ref: String) -> Dictionary:
 			hit = WorldCatalog.resolve(parts[0], "locations", parts[1])
 	return hit
 
-static func enter(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> Dictionary:
+# Why enter(gs, location_ref, anchor) would be refused ("" = it can enter); changes nothing.
+static func entry_problem(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> String:
 	var loc: Dictionary = resolve_location(gs, location_ref)
 	if loc.is_empty():
-		return _fail("Unknown location '%s'." % location_ref)
+		return "Unknown location '%s'." % location_ref
 	var t: Dictionary = template_of(loc)
 	if not str(loc.get("map", "")).is_empty() and t.is_empty():
-		return _fail("Location '%s' names an unknown map '%s'." % [str(loc["_qid"]), str(loc.get("map", ""))])
-	var pos: Vector2i = GameState.NO_POSITION
-	if not t.is_empty():
-		pos = MapRules.anchor_pos(t, anchor)
-		if pos == GameState.NO_POSITION:
-			return _fail("Map '%s' has no anchor '%s'." % [str(t["id"]), anchor])
+		return "Location '%s' names an unknown map '%s'." % [str(loc["_qid"]), str(loc.get("map", ""))]
+	if not t.is_empty() and MapRules.anchor_pos(t, anchor) == GameState.NO_POSITION:
+		return "Map '%s' has no anchor '%s'." % [str(t["id"]), anchor]
+	return ""
+
+static func enter(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> Dictionary:
+	var problem: String = entry_problem(gs, location_ref, anchor)
+	if not problem.is_empty():
+		return _fail(problem)
+	var loc: Dictionary = resolve_location(gs, location_ref)
+	var t: Dictionary = template_of(loc)
+	var pos: Vector2i = MapRules.anchor_pos(t, anchor) if not t.is_empty() else GameState.NO_POSITION
 	var loc_world: String = str(loc["_world"])
-	if not WorldCatalog.lineage(gs.world_id).has(loc_world):
-		gs.world_id = loc_world   # a `connects` crossing
+	# A `connects` crossing remembers the world left in explore["home_world"]; coming back into that world's lineage
+	# restores it (so a child world's overrides survive a trip through a connected world).
+	var home: String = str(gs.explore.get(GameState.HOME_WORLD_KEY, ""))
+	if not home.is_empty() and WorldCatalog.lineage(home).has(loc_world):
+		gs.world_id = home
+		var _gone: bool = gs.explore.erase(GameState.HOME_WORLD_KEY)
+	elif not WorldCatalog.lineage(gs.world_id).has(loc_world):
+		if home.is_empty():
+			gs.explore[GameState.HOME_WORLD_KEY] = gs.world_id
+		gs.world_id = loc_world
 	var qid: String = str(loc["_qid"])
 	gs.location_id = qid
 	gs.position = pos
@@ -141,10 +219,19 @@ static func enter(gs: GameState, location_ref: String, anchor: String = MapRules
 	var _visited: String = QuestRunner.set_flag(gs, MapRules.visited_flag(qid), true)
 	if t.is_empty() or tile_safe(t, MapRules.anchor_pos(t, MapRules.SPAWN)):
 		gs.explore["last_safe"] = qid
+	# HEAL1 rule 3.3.1: a rest place (`rest: true`) rests the whole roster for free and becomes explore.last_rest (even
+	# with nobody hurt); idempotent, so re-entering is harmless.
+	var restored: int = 0
+	if DictUtil.to_bool(loc.get("rest", false)):
+		gs.explore["last_rest"] = qid
+		restored = HealRules.rest(gs.party)
 	QuestRunner.refresh(gs)
 	var advanced: Array[String] = QuestRunner.on_location_reached(gs, qid)
 	var errors: Array[String] = []
-	var events: Array[Dictionary] = [{"kind": "entered", "location": qid, "advanced": advanced}, {"kind": "autosave"}]
+	var events: Array[Dictionary] = [{"kind": "entered", "location": qid, "advanced": advanced}]
+	if restored > 0:
+		events.append({"kind": "rested", "location": qid, "restored": restored})
+	events.append({"kind": "autosave"})
 	return _result(true, errors, events)
 
 # Enters the world's resolved start location at its spawn.
@@ -183,7 +270,8 @@ static func take_exit(gs: GameState, to: String, anchor: String = MapRules.SPAWN
 		return _result(true, errors, events)
 	return enter(gs, to, anchor)
 
-# {to, label} of the exits of a map-less location ([] with a map).
+# {to, label} of the exits of a map-less location ([] with a map), plus {to: "world_map"} when the location is a world
+# map node (TRAV1-L 2.6).
 static func menu(gs: GameState) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var loc: Dictionary = location(gs)
@@ -192,20 +280,43 @@ static func menu(gs: GameState) -> Array[Dictionary]:
 	for x: Variant in DictUtil.array_of(loc.get("exits", [])):
 		var ex: Dictionary = DictUtil.dict_of(x)
 		out.append({"to": str(ex.get("to", "")), "label": str(ex.get("label", ex.get("to", "")))})
+	if TravelRules.nodes(gs.world_id).has(str(loc["_qid"])):
+		out.append({"to": MapRules.WORLD_MAP, "label": "World map"})
 	return out
 
-# The defeat rule (also TRAV1, DLG1): wake at `at` (or the current location) when it has no map or a SAFE spawn,
-# else at explore.last_safe, else at the start location. Fully healed (no HP is stored); nothing else is lost.
+# The defeat rule (also TRAV1, DLG1; the single defeat entry): the checkpoint is `at` (or the current location) when it
+# has no map or a SAFE spawn, else explore.last_safe, else the start location. HEAL1 rule 3.3.3 (HealRules.on_defeat):
+# every roster member is fully healed; a checkpoint that is a rest place costs nothing, else CAMP_COST supplies are
+# spent as a forced rest, else (fewer supplies, kept) the party wakes at explore.last_rest ("" = the start location).
+# Adds {"kind": "defeat", mode, spent, location} (the location woken at). XP, gold, items, flags and quests are kept.
 static func wake(gs: GameState, at: String = "") -> Dictionary:
 	var target_ref: String = at if not at.is_empty() else gs.location_id
 	var loc: Dictionary = resolve_location(gs, target_ref)
 	var t: Dictionary = template_of(loc)
+	var checkpoint: String = ""
 	if not loc.is_empty() and (t.is_empty() or tile_safe(t, MapRules.anchor_pos(t, MapRules.SPAWN))):
-		return enter(gs, str(loc["_qid"]))
-	var last_safe: String = str(gs.explore.get("last_safe", ""))
-	if not last_safe.is_empty():
-		return enter(gs, last_safe)
-	return begin(gs)
+		checkpoint = str(loc["_qid"])
+	else:
+		checkpoint = str(gs.explore.get("last_safe", ""))
+	# The target is checked before anything is settled: a refused wake keeps the HP and the supplies.
+	var defeat: Dictionary = HealRules.defeat_plan(gs, checkpoint)
+	var to: String = str(defeat["to"])
+	if to.is_empty():
+		to = MapRules.start_location(gs.world_id)
+		if to.is_empty():
+			return _fail("World '%s' has no start location." % gs.world_id)
+	var problem: String = entry_problem(gs, to)
+	if not problem.is_empty():
+		return _fail(problem)
+	HealRules.settle_defeat(gs, defeat)
+	var woke: Dictionary = enter(gs, to)
+	if DictUtil.to_bool(woke.get("ok", false)):
+		var events: Array[Dictionary] = []
+		for e: Variant in DictUtil.array_of(woke.get("events", [])):
+			events.append(DictUtil.dict_of(e))
+		events.append({"kind": "defeat", "mode": str(defeat["mode"]), "spent": DictUtil.to_int(defeat["spent"]), "location": gs.location_id})
+		woke["events"] = events
+	return woke
 
 # ------------------------------------------------------------------------------
 # Stepping (EXP1-L 2.2)
@@ -237,9 +348,12 @@ static func step(gs: GameState, dir: Vector2i) -> Dictionary:
 			else:
 				events.append({"kind": "blocked", "at": _pos_array(target), "marker": str(m["id"])})
 			return _result(true, errors, events)
-	# A world_map exit hands over to the world map (TRAV1) without moving or changing anything.
+	# A world_map exit hands over to the world map (TRAV1) without moving; only its sets_flags apply (TRAV1-L commit 3).
 	for m: Dictionary in markers:
 		if str(m["kind"]) == "exit" and str(m.get("to", "")) == MapRules.WORLD_MAP and presence(gs, loc_qid, m) == "present" and marker_pos(t, m, loc_steps) == target:
+			var wm_keys: Array[String] = _apply_sets(gs, m)
+			if not wm_keys.is_empty():
+				events.append({"kind": "flags_set", "marker": str(m["id"]), "flags": wm_keys})
 			events.append({"kind": "exit", "to": MapRules.WORLD_MAP, "marker": str(m["id"])})
 			return _result(true, errors, events)
 	# An exit on the tile whose target can't be entered refuses the step before anything changes (dry run on a copy).
@@ -435,5 +549,11 @@ static func _open_chest(gs: GameState, loc_qid: String, m: Dictionary) -> Dictio
 		return {"ok": false, "errors": granted["errors"], "kind": "chest"}
 	if not loot_qid.is_empty():
 		var _claim: String = RewardGrant.claim_loot(gs, loot_qid)
+	# TRAV2-L 2.4: supplies after the grant (not a reward key); above the cap they are lost with a note.
+	var want: int = maxi(DictUtil.to_int(m.get("supplies", 0)), 0)
+	var added: int = gs.party.add_supplies(want)
 	var _done: String = QuestRunner.set_flag(gs, MapRules.done_flag(loc_qid, str(m["id"])), true)
-	return {"ok": true, "empty": false, "items": items, "loot": loot_qid, "gold": DictUtil.to_int(DictUtil.dict_of(granted["granted"]).get("gold", 0))}
+	var out: Dictionary = {"ok": true, "empty": false, "items": items, "loot": loot_qid, "gold": DictUtil.to_int(DictUtil.dict_of(granted["granted"]).get("gold", 0)), "supplies": added}
+	if added < want:
+		out["notes"] = ["Supplies are capped at %d (%d left behind)." % [PartyState.SUPPLIES_MAX, want - added]] as Array[String]
+	return out

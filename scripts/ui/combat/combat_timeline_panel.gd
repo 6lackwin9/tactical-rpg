@@ -3,12 +3,13 @@ extends CombatPanel
 
 # ==============================================================================
 # Tactical RPG - Timeline Dock Panel
-# 10-block ruler plus the focused unit's action track for the viewed round.
+# Block ruler plus the focused unit's action track for the viewed round, the Tactic dropdowns and the Autoplay toggle.
 # Enemy tracks stay masked during the live round. ◀ ▶ traverse rounds; clicking
 # a block inspects that block's state.
 # ==============================================================================
 
 var dock: TimelineDockUI
+var autoplay: CombatAutoplay = null   # AUTO1 tactics and the Autoplay loop (the dock host owns it and binds it here)
 
 func _init() -> void:
 	super._init()
@@ -28,20 +29,74 @@ func _on_bound() -> void:
 	dock.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
 	dock.hero_view_requested.connect(func() -> void: session.focus_first_hero())
 	dock.fit_changed.connect(refresh)
-	dock.draft_requested.connect(func(preset_id: String, whole_party: bool) -> void:
-		if whole_party:
-			session.plan_apply_preset_all(preset_id)
-		else:
-			session.plan_apply_preset(session.focused_hero, preset_id)
-	)
 	dock.clear_requested.connect(func() -> void: session.plan_clear(session.focused_hero))
 	dock.confirm_requested.connect(func() -> void: session.confirm_plan())
 	dock.step_remove_requested.connect(func(i: int) -> void: session.plan_remove_step(session.focused_hero, i))
 	dock.step_reorder_requested.connect(func(from_i: int, to_i: int) -> void: session.plan_move_step(session.focused_hero, from_i, to_i))
 
+# Binds the autoplay state to the controls: dropdowns, toggle and banner follow it; their picks go back to it.
+func bind_autoplay(p_autoplay: CombatAutoplay) -> void:
+	autoplay = p_autoplay
+	autoplay.state_changed.connect(refresh)
+	dock.party_tactic_requested.connect(func(id: String) -> void: autoplay.set_party_tactic(id))
+	dock.hero_tactic_requested.connect(func(id: String) -> void:
+		var hero: Combatant = session.focused_hero
+		if hero != null:
+			autoplay.set_hero_tactic(hero, id)
+	)
+	dock.autoplay_toggled.connect(func(on: bool) -> void: autoplay.set_autoplay(on))
+	refresh()
+
+# What the controls show: the shown hero's dropdown value (Custom (edited) after a manual edit), the party tactic,
+# the Autoplay switch and the pause / wait reason.
+func autoplay_state() -> Dictionary:
+	var state: Dictionary = {"party": autoplay.get_party_tactic(), "on": autoplay.is_on(), "has_hero": false, "guest": false,
+		"row": autoplay.get_party_tactic(), "edited": false, "any_edited": false, "note": "", "note_warn": true}
+	var hero: Combatant = session.focused_hero
+	if hero != null and session.is_ally(hero):
+		state["has_hero"] = true
+		state["guest"] = session.encounter.is_guest(hero)
+		state["row"] = autoplay.row_tactic(hero)
+		state["edited"] = autoplay.is_edited(hero)
+	for ally: Combatant in session.allies:
+		if autoplay.is_edited(ally):
+			state["any_edited"] = true
+	if not autoplay.wait_reason().is_empty():
+		state["note"] = autoplay.wait_reason()
+	elif not autoplay.is_on():
+		state["note"] = autoplay.pause_reason()
+	return state
+
+# Playback / replay arenas: no autoplay controls at all.
+func disable_autoplay() -> void:
+	dock.set_autoplay_enabled(false)
+	refresh()
+
 func refresh() -> void:
 	if session == null:
 		return
 	dock.set_total_blocks(session.total_blocks)
-	dock.set_planning(session.plan_info(), session.plan_step_index_at)
-	dock.update_view(session.timeline_unit(), session.playhead(), session.is_timeline_masked(), session.can_view_prev_round(), session.can_view_next_round())
+	if autoplay != null:
+		dock.set_autoplay_state(autoplay_state())
+	dock.set_planning(session.plan_info(), session.plan_step_index_at)   # shows the autoplay note in place of the info line
+	var unit: Combatant = session.timeline_unit()
+	var masked: bool = session.is_timeline_masked()
+	var tell: Dictionary = {}
+	var lookup: Callable = Callable()
+	var foe: Combatant = session.selected_combatant
+	if masked and foe != null:
+		var rec: Dictionary = session.intent_of(foe)   # {} outside planning: the plain banner
+		if not rec.is_empty():
+			tell = {"name": foe.name, "line": IntentText.first_line(rec)}
+			if DictUtil.to_bool(rec["revealed"]):   # a read foe: its whole track, unmasked and read-only
+				masked = false
+				unit = foe
+				lookup = _planned_action_of
+	dock.update_view(unit, session.playhead(), masked, session.can_view_prev_round(), session.can_view_next_round(), tell, lookup)
+
+# The scheduled (not yet resolved) action `unit` starts at `block` this round (the revealed enemy track).
+func _planned_action_of(unit: Combatant, block: int) -> CombatResolver.ScheduledAction:
+	for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
+		if a.combatant == unit and a.start_block == block and not a.is_cancelled:
+			return a
+	return null

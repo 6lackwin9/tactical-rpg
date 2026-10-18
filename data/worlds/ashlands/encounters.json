@@ -5,8 +5,8 @@
 		{
 			"id": "courtyard_skirmish",
 			"name": "Holding the Courtyard",
-			"description": "Mara and Tev against a five-goblin warband in the Ruined Courtyard.",
-			"intro": "The Horde has come early this year. Mara plants her feet on the cobbles; Tev nocks an arrow.",
+			"description": "Bryn against two Horde raiders in the Ruined Courtyard.",
+			"intro": "The Horde has come early this year. Two raiders drop from the Courtyard wall, blades out.",
 			"location": "ruined_courtyard",
 			"zone": "ruined_courtyard",
 			"arena": "CLOSED",
@@ -27,22 +27,29 @@
 			],
 			"enemies": [
 				"skarn_ironjaw",
-				"vex_cutpurse",
-				"nok_flamebow",
-				"gruk_smokecaller",
-				"bolg_redhand"
+				"vex_cutpurse"
 			],
 			"wave_units": [],
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "hold",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "Hold the Courtyard: keep the ring for 3 rounds, or drive them off.",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
 			"tags": []
 		},
 		{
 			"id": "pass_ambush",
 			"name": "Ambush at the Cinder Gate",
-			"description": "A brawler and a skirmisher bait the party; at Round 1 Block 4 the rest of the warband falls on them.",
-			"intro": "Too quiet. Tev raises a hand: smoke, upwind, much too close.",
+			"description": "A brawler and a skirmisher bait the party; at Round 1 Block 4 an archer and a smokecaller fall on them.",
+			"intro": "Too quiet. Bryn raises a hand: smoke, upwind, much too close.",
 			"location": "cinder_gate",
 			"zone": "forest_clearing",
 			"arena": "CLOSED",
@@ -67,12 +74,21 @@
 			],
 			"wave_units": [
 				"nok_flamebow",
-				"gruk_smokecaller",
-				"bolg_redhand"
+				"gruk_smokecaller"
 			],
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "The warband springs the ambush!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
 			"tags": []
 		},
 		{
@@ -106,6 +122,16 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
 			"tags": []
 		},
 		{
@@ -140,6 +166,16 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
 			"tags": []
 		},
 		{
@@ -173,6 +209,297 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "ashmaw_stand",
+			"name": "Stand at the Ashmaw Camp",
+			"description": "Grakka and his guard make a stand; the flankers pour out of the gorge at Round 2; at half strength Grakka throws off his crown.",
+			"intro": "Grakka rises from the fire, nail-crown glinting.",
+			"location": "ashmaw_camp",
+			"zone": "desert_outpost",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"mara_voss",
+				"tev_quill"
+			],
+			"enemies": [
+				"grakka_ashmaw",
+				"ash_shaman",
+				"ash_archer"
+			],
+			"wave_units": [
+				"ash_berserker",
+				"ash_brawler",
+				"ash_skirmisher"
+			],
+			"wave_round": 2,
+			"wave_block": 1,
+			"wave_label": "The flankers pour out of the gorge!",
+			"phases": [
+				{
+					"id": "crown_of_nails",
+					"name": "Crown of Nails",
+					"trigger": {
+						"kind": "hp_below",
+						"unit": "grakka_ashmaw",
+						"pct": 50
+					},
+					"effects": [
+						{
+							"type": "line",
+							"text": "Grakka tears the nail-crown from his head and hurls it into the fire. The smokecallers begin to chant."
+						},
+						{
+							"type": "status",
+							"unit": "grakka_ashmaw",
+							"status": "fortify",
+							"rounds": 3,
+							"magnitude": 5
+						},
+						{
+							"type": "status",
+							"unit": "grakka_ashmaw",
+							"status": "regen",
+							"rounds": 3,
+							"magnitude": 4
+						},
+						{
+							"type": "ai",
+							"unit": "grakka_ashmaw",
+							"reckless": true,
+							"target_pref": "WEAKEST"
+						},
+						{
+							"type": "ai",
+							"unit": "ash_shaman",
+							"heal_below": 0.9
+						}
+					],
+					"pause_autoplay": true
+				}
+			],
+			"objective": "slay",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "grakka_ashmaw",
+			"objective_count": 1,
+			"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "ashmaw_stand_barred",
+			"name": "Stand at the Ashmaw Camp (barred gate)",
+			"description": "Grakka and his guard stand alone; the barred gate cut off the flankers; at half strength Grakka throws off his crown.",
+			"intro": "Grakka looks past you to the gorge. Nobody comes.",
+			"location": "ashmaw_camp",
+			"zone": "desert_outpost",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"mara_voss",
+				"tev_quill"
+			],
+			"enemies": [
+				"grakka_ashmaw",
+				"ash_shaman",
+				"ash_archer"
+			],
+			"wave_units": [],
+			"wave_round": 2,
+			"wave_block": 1,
+			"wave_label": "Reinforcements arrive!",
+			"phases": [
+				{
+					"id": "crown_of_nails",
+					"name": "Crown of Nails",
+					"trigger": {
+						"kind": "hp_below",
+						"unit": "grakka_ashmaw",
+						"pct": 50
+					},
+					"effects": [
+						{
+							"type": "line",
+							"text": "Grakka tears the nail-crown from his head and hurls it into the fire. The smokecallers begin to chant."
+						},
+						{
+							"type": "status",
+							"unit": "grakka_ashmaw",
+							"status": "fortify",
+							"rounds": 3,
+							"magnitude": 5
+						},
+						{
+							"type": "status",
+							"unit": "grakka_ashmaw",
+							"status": "regen",
+							"rounds": 3,
+							"magnitude": 4
+						},
+						{
+							"type": "ai",
+							"unit": "grakka_ashmaw",
+							"reckless": true,
+							"target_pref": "WEAKEST"
+						},
+						{
+							"type": "ai",
+							"unit": "ash_shaman",
+							"heal_below": 0.9
+						}
+					],
+					"pause_autoplay": true
+				},
+				{
+					"id": "empty_gorge",
+					"name": "The Empty Gorge",
+					"trigger": {
+						"kind": "round",
+						"round": 4
+					},
+					"effects": [
+						{
+							"type": "line",
+							"text": "Grakka bellows at the gorge. Nothing answers."
+						}
+					],
+					"pause_autoplay": false
+				}
+			],
+			"objective": "slay",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "grakka_ashmaw",
+			"objective_count": 1,
+			"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "ash_straggler",
+			"name": "A Horde Straggler",
+			"description": "A lone Horde brawler cut off from his warband.",
+			"intro": "A straggler lurches out of the rubble.",
+			"location": "ruined_courtyard",
+			"zone": "ruined_courtyard",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"mara_voss",
+				"tev_quill"
+			],
+			"enemies": [
+				"ash_brawler"
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "standard",
+			"guests": [],
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "wagon_raid",
+			"name": "Raid on the Steel Wagon",
+			"description": "Raiders hit Orsa's wagon on the south road; Wenn must live to drive it home.",
+			"intro": "The wagon lurches. Goblins come out of the ditch on both sides.",
+			"location": "ruined_courtyard",
+			"zone": "ruined_courtyard",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"mara_voss",
+				"tev_quill"
+			],
+			"enemies": [
+				"ash_brawler",
+				"ash_skirmisher",
+				"ash_shaman"
+			],
+			"wave_units": [],
+			"wave_round": 1,
+			"wave_block": 4,
+			"wave_label": "Reinforcements arrive!",
+			"phases": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"deployment": "ambush",
+			"guests": [
+				"wenn_tallow"
+			],
+			"protect": [
+				"wenn_tallow"
+			],
 			"tags": []
 		}
 	]

@@ -86,7 +86,8 @@ func on_start() -> String:
 	return "[Chase] %s %s %s: %s to %s (1 AP)" % [source.name, verb, effective_target.name, str(from), str(to)]
 
 # Gap-close: path (around units and terrain) to the nearest tile in reach of the target,
-# at most dash_tiles long. Returns the log line ("" when no dash was needed).
+# within a cost budget of dash_tiles (its first tile always fits; S12T-L). Hazard tiles entered
+# roll their status. Returns the log line ("" when no dash was needed).
 func _dash() -> String:
 	var effective_target: Combatant = _get_effective_target()
 	if grid == null or effective_target == null or not effective_target.is_active() or not source.is_active() or in_reach(effective_target):
@@ -110,15 +111,20 @@ func _dash() -> String:
 			if d >= reach_min() and d <= hi and grid.is_valid_coord(cell) and grid.is_walkable(cell) and not grid.is_exit_tile(cell) and not blocked.has(cell):
 				goals[cell] = true
 	var path: Array[Vector2i] = GridPath.find_path(grid, from, goals, blocked, false)
-	if path.is_empty() or path.size() > dash_tiles:
-		return "[Dash Blocked] %s can't reach %s (%s)." % [source.name, effective_target.name, "no route" if path.is_empty() else ("%d tiles, dash covers %d" % [path.size(), dash_tiles])]
+	if path.is_empty() or not CombatPlan.dash_fits(grid, from, path, dash_tiles):
+		return "[Dash Blocked] %s can't reach %s (%s)." % [source.name, effective_target.name, "no route" if path.is_empty() else ("%d tiles, move cost %d, dash covers %d" % [path.size(), GridPath.path_cost(grid, from, path), dash_tiles])]
+	var entered: Array[Vector2i] = []
 	for dir: Vector2i in path:
 		if not grid.move_combatant(source, dir):
 			break
+		entered.append(grid.get_position(source))
 	var to: Vector2i = grid.get_position(source)
 	if to == from:
 		return "[Dash Blocked] %s couldn't move toward %s." % [source.name, effective_target.name]
-	return "[Dash] %s dashes at %s: %s to %s" % [source.name, effective_target.name, str(from), str(to)]
+	var line: String = "[Dash] %s dashes at %s: %s to %s" % [source.name, effective_target.name, str(from), str(to)]
+	for note: String in HazardRules.on_enter(grid, source, entered, rng):
+		line += " " + note
+	return line
 
 # Steps toward a target that moved out of range, paying 1 AP per tile.
 func _follow(effective_target: Combatant) -> void:
@@ -148,19 +154,26 @@ func execute() -> void:
 	last_breakdown = ""
 	last_crit = false
 	reactions.clear()
+	broken_targets.clear()
+	combo_notes.clear()
+	exploited.clear()
+	failed = false
 	if not source.is_active():
+		failed = true
 		print("[%s] cannot act (defeated or withdrawn)." % source.name)
 		execution_log = "[Action Failed] %s cannot act (unit is inactive)." % source.name
 		return
 
 	var effective_target: Combatant = _get_effective_target()
 	if effective_target == null or not effective_target.is_active():
+		failed = true
 		var target_name: String = effective_target.name if effective_target != null else "None"
 		print("[%s] targeted [%s], but they are no longer in active combat." % [source.name, target_name])
 		execution_log = "[Attack Miss] %s targeted %s, but target is no longer in active combat." % [source.name, target_name]
 		return
 
 	if grid != null and not in_reach(effective_target):
+		failed = true
 		var dist: int = grid.get_distance(grid.get_position(source), grid.get_position(effective_target))
 		print("[%s] cannot reach [%s] (range %d-%d vs dist %d)!" % [source.name, effective_target.name, reach_min(), reach_max(), dist])
 		if dist < reach_min():
@@ -175,9 +188,12 @@ func execute() -> void:
 
 	var details: Array[String] = []
 	var damaging: bool = skill_mult > 0.0   # a zero-power attack (intimidate) only rolls its status: no damage, no crit, no reaction
+	var matched: Dictionary = exploit_against(effective_target) if damaging else {"status": "", "mult": 1.0}   # active statuses at the hit (S12C-L)
 	if damaging:
 		# The one damage formula: attack power x Focus x skill x stance x crit, then guard and armor.
-		var res: Dictionary = DamageCalculator.compute(source, effective_target, source.attack_range > 1 and not use_offhand, use_offhand, skill_mult, false, rng)
+		var is_ranged: bool = source.attack_range > 1 and not use_offhand
+		var cover: float = CoverRules.cover_between(grid, source, effective_target, is_ranged)   # terrain cover (S12T-L)
+		var res: Dictionary = DamageCalculator.compute(source, effective_target, is_ranged, use_offhand, skill_mult * DictUtil.to_float(matched["mult"], 1.0), false, rng, -1, true, cover)
 		var taken_now: int = effective_target.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage = taken_now
 		last_crit = DictUtil.to_bool(res["is_crit"])
@@ -194,6 +210,8 @@ func execute() -> void:
 			details.append("CRIT x%.1f" % DictUtil.to_float(res["crit_dmg_mult"]))
 		if DictUtil.to_float(res["mit_ratio"]) > 0.0:
 			details.append("-%d%% Guard" % roundi(DictUtil.to_float(res["mit_ratio"]) * 100.0))
+		if DictUtil.to_float(res["cover_ratio"]) > 0.0:
+			details.append("-%d%% Cover" % roundi(DictUtil.to_float(res["cover_ratio"]) * 100.0))
 		if DictUtil.to_int(res["armor_rating"]) > 0:
 			details.append("-%d%% Armor" % roundi(DictUtil.to_float(res["armor_ratio"]) * 100.0))
 	var taken: int = last_damage
@@ -215,12 +233,16 @@ func execute() -> void:
 	var counter: Dictionary = RiposteRules.counter(source, effective_target, grid, source.attack_range > 1 and not use_offhand, rng)
 	if not counter.is_empty():
 		reactions.append(counter)
+	# Then the combo effects of this hit (S12C-L rule 5): stance break, consume.
+	after_hit(effective_target, taken, matched)
+	note_exploit(effective_target, matched)
+	var exploit_suffix: String = exploit_note(matched)
 
 	if not effective_target.is_alive():
-		execution_log = "[Attack] %s struck %s for %d damage%s -> %s DEFEATED!" % [
-			source.name, effective_target.name, taken, detail_suffix, effective_target.name
+		execution_log = "[Attack] %s struck %s for %d damage%s -> %s DEFEATED!%s" % [
+			source.name, effective_target.name, taken, detail_suffix, effective_target.name, exploit_suffix
 		]
 	else:
-		execution_log = "[Attack] %s struck %s for %d damage%s (Target HP: %d/%d)" % [
-			source.name, effective_target.name, taken, detail_suffix, effective_target.hp, effective_target.max_hp
+		execution_log = "[Attack] %s struck %s for %d damage%s (Target HP: %d/%d)%s" % [
+			source.name, effective_target.name, taken, detail_suffix, effective_target.hp, effective_target.max_hp, exploit_suffix
 		]

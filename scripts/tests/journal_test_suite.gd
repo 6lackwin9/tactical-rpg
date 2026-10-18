@@ -35,7 +35,7 @@ static func run() -> bool:
 	return ok
 
 static func _fresh() -> GameState:
-	var gs: GameState = NewGame.create_for_world("ashlands", 5)["state"] as GameState
+	var gs: GameState = GameState.of(NewGame.create_for_world("ashlands", 5)["state"])
 	CurrentGame.start(gs)
 	return gs
 

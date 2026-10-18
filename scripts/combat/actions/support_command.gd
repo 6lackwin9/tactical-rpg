@@ -17,7 +17,7 @@ var est_heal: int = 0           # planner's expected heal (clamped to missing HP
 var last_heal: int = 0
 var last_status: String = ""
 var last_cleansed: Array[String] = []
-var failed: bool = false
+# `failed` (BattleCommand): no target or out of reach; a failed support does not flow (S12C-L).
 
 func _init(p_source: Combatant, p_target: Combatant, p_skill: SkillDef, p_grid: CombatGrid, p_block_cost: int = 1) -> void:
 	super(p_source, 0, p_block_cost)

@@ -60,3 +60,7 @@ func prepare_round(round_num: int) -> Dictionary:
 			text += "\n[i]%s[/i]" % intro_text.replace("[", "[lb]")
 		info["log"] = text
 	return info
+
+# The world's party cap (WorldCatalog.party_max), so the HUD shows that many party slots.
+func party_slots() -> int:
+	return WorldCatalog.party_max(world_id) if not world_id.is_empty() else party_cap

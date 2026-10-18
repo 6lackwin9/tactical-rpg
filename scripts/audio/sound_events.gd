@@ -10,6 +10,7 @@ extends RefCounted
 # key -> what fires it
 const KEYS: Dictionary = {
 	"hit": "presenter preset hit",
+	"miss": "preset miss (no asset yet: silent)",
 	"crit": "preset hit when the outcome tag has CRIT (replaces hit)",
 	"mitigated": "preset mitigated",
 	"heal": "preset heal",
@@ -30,6 +31,7 @@ const FOR_PRESET: Dictionary = {
 	"attack_ranged": "",
 	"hit": "hit",
 	"mitigated": "mitigated",
+	"miss": "miss",
 	"heal": "heal",
 	"buff": "buff",
 	"defend": "defend",

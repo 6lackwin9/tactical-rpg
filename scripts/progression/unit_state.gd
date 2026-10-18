@@ -17,6 +17,14 @@ var passives: Array[String] = []           # permanent passives
 var loadout: Dictionary = {"class": [], "extra": []}   # family ids; empty = default loadout
 var equipment: Dictionary = {}             # slot name (ContentSchema.LOADOUT_SLOTS) -> item id; unlisted = class default
 var carried: Array[String] = []            # item ids in the unit's own carry
+var pouch: Array[String] = []              # ITEMUSE1: consumable ids in battle-pouch slot order (max POUCH_MAX, repeats allowed)
+# HEAL1 (save v9): HP missing (0 = full). Current HP = clampi(max_hp - hp_lost, 1, max_hp), max_hp derived from stats and
+# gear (HealRules); storing what is missing keeps a wound the same size through a level-up or a gear change.
+var hp_lost: int = 0
+
+# Must equal Inventory.max_pouch_slots (the battle pouch a hero fills before a fight); guarded by
+# ItemUseTestSuite "unit pouch" check "POUCH_MAX = the inventory pouch".
+const POUCH_MAX: int = 3
 
 static func create(p_id: String, p_base_unit: String) -> UnitState:
 	var s := UnitState.new()
@@ -72,8 +80,21 @@ func to_dict() -> Dictionary:
 		"id": id, "base_unit": base_unit, "lore_ref": lore_ref, "total_xp": total_xp,
 		"spend": clean_spend, "learned_skills": learned_skills.duplicate(), "passives": passives.duplicate(),
 		"loadout": {"class": JsonUtil.strings(loadout.get("class", [])), "extra": JsonUtil.strings(loadout.get("extra", []))},
-		"equipment": equipment.duplicate(), "carried": carried.duplicate(),
+		"equipment": equipment.duplicate(), "carried": carried.duplicate(), "pouch": pouch.duplicate(), "hp_lost": hp_lost,
 	}
+
+# HEAL1 4.1: missing (v8 and older) reads 0; a whole number (int or whole float) loads as itself; anything else
+# (non-whole, text, ...) loads as -1 so validate() refuses it.
+static func _hp_lost_of(raw: Variant) -> int:
+	if raw == null:
+		return 0
+	if raw is int:
+		return DictUtil.to_int(raw)
+	if raw is float:
+		var x: float = raw
+		if is_finite(x) and x == floorf(x):
+			return int(x)
+	return -1
 
 static func from_dict(d: Dictionary) -> UnitState:
 	var s := UnitState.new()
@@ -91,6 +112,8 @@ static func from_dict(d: Dictionary) -> UnitState:
 		gear[str(key)] = str(DictUtil.dict_of(d.get("equipment", {}))[key])
 	s.equipment = gear
 	s.carried = JsonUtil.strings(d.get("carried", []))
+	s.pouch = JsonUtil.strings(d.get("pouch", []))   # missing (v7 and older) = empty
+	s.hp_lost = _hp_lost_of(d.get("hp_lost", null))
 	return s
 
 func duplicate_state() -> UnitState:
@@ -120,6 +143,8 @@ func validate() -> Array[String]:
 		return errors
 	if total_xp < 0:
 		errors.append("%s: total_xp can't be negative." % at)
+	if hp_lost < 0:
+		errors.append("%s: hp_lost must be 0 or more." % at)
 	for key: Variant in spend:
 		if not StatRules.STATS.has(str(key)):
 			errors.append("%s: spend has unknown stat '%s'." % [at, str(key)])
@@ -138,6 +163,17 @@ func validate() -> Array[String]:
 	for item_id: String in carried:
 		if not ContentCatalog.has("items", item_id):
 			errors.append("%s: unknown carried item '%s'." % [at, item_id])
+	errors.append_array(_pouch_errors(at))
+	return errors
+
+# ITEMUSE1 1.1: every pouch id is a catalog consumable; at most POUCH_MAX ids.
+func _pouch_errors(at: String) -> Array[String]:
+	var errors: Array[String] = []
+	if pouch.size() > POUCH_MAX:
+		errors.append("%s: Pouch holds at most %d items." % [at, POUCH_MAX])
+	for item_id: String in pouch:
+		if str(ContentCatalog.get_entry("items", item_id).get("item_type", "")) != "CONSUMABLE":
+			errors.append("%s: Pouch: '%s' is not a consumable." % [at, item_id])
 	return errors
 
 # validate() split by source without parsing text: {"loadout": [...], "other": [...]} (REVIEW-F2).

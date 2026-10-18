@@ -13,6 +13,7 @@ extends Node
 # Developer tools: hot-reload scripts edited on disk (ScriptReloader), restart
 # the whole runner process (for new files / class_names), and run the headless
 # test suites in a background process with their PASS / FAIL output shown here.
+# Restart runner on Windows with run.bat + git runs run.bat (fetch + fast-forward, then relaunch) and reports old -> new commit.
 # Playtests (PLAYTEST1, debug builds): the PlaytestHub child records the run while the
 # `record_playtests` pref is on; the PLAYTESTS column lists recordings (Open, Notes, Take over,
 # Copy to repo) and scenarios (each launched with its seed).
@@ -20,6 +21,8 @@ extends Node
 
 const SELF_SCENE: String = "res://scenes/scene_runner.tscn"
 const PREFS_PATH: String = "user://scene_runner.cfg"
+const RESTART_TIP: String = "Pull the latest code for this folder (backs up saves), then start a fresh runner"
+const PULL_PATH: String = "user://pull_restart.cfg"
 const ARENA_SCENE: String = "res://scenes/combat_arena.tscn"
 const RIGHT_WIDTH: int = 470
 const PLAYTESTS_STRETCH: float = 1.6   # share of the right column's height (DEVELOPER = 1)
@@ -39,6 +42,8 @@ const SCENES: Array[Dictionary] = [
 		"desc": "Equip heroes, allocate stats and benchmark damage against a training dummy."},
 	{"path": "res://scenes/overworld/region_map_debug.tscn", "name": "Region Map (debug)", "icon": "🗺",
 		"desc": "Walk a world's region maps: step-counter fights, markers, chests and exits, with Won / Fled / Lost buttons instead of real battles (a game started from the main menu autosaves to slot 0; the standalone debug game writes nothing)."},
+	{"path": "res://scenes/overworld/world_map_debug.tscn", "name": "World Map (debug)", "icon": "🧭",
+		"desc": "Travel a world's route graph: known locations as pins, click one to auto-path there, road fights in the arena (or debug outcomes), the world clock. The region map opens it on a world map exit."},
 ]
 const HIDDEN_SCENES: Array[String] = ["res://scenes/scene_runner.tscn", "res://scenes/test_arena.tscn"]
 
@@ -66,6 +71,7 @@ var _output: RichTextLabel = null
 var _suite_thread: Thread = null
 var _leave_armed: bool = false
 var _pill_hint: Label = null
+var note_button: Button = null      # "✎ Note" in the pill, shown only while the hub is recording
 
 func _ready() -> void:
 	name = "SceneRunner"
@@ -83,6 +89,7 @@ func _ready() -> void:
 	_build_pill()
 	_load_prefs()
 	_show_menu()
+	_report_pull()
 
 func _exit_tree() -> void:
 	if _suite_thread != null and _suite_thread.is_started():
@@ -137,7 +144,7 @@ func launch(path: String, encounter_id: String = "", opts: Dictionary = {}) -> b
 		hub.scene_changed(path, scene)   # before the scene enters the tree: its battle is followed from start()
 	add_child(scene)
 	menu_layer.visible = false
-	pill_layer.visible = true
+	pill_layer.visible = pill_shown_for(path)
 	_leave_armed = false
 	_save_prefs()
 	return true
@@ -198,9 +205,65 @@ func reload_scripts(only: Array[String] = []) -> Dictionary:
 
 # Starts a fresh runner process (picks up new files and class_names), then quits this one.
 func restart_runner() -> void:
+	if _pull_blocker().is_empty():
+		pull_and_restart()
+		return
 	var args: PackedStringArray = ["--path", ProjectSettings.globalize_path("res://"), SELF_SCENE]
 	OS.create_process(OS.get_executable_path(), args)
 	get_tree().quit()
+
+# "" = Restart runner pulls via run.bat; otherwise the reason it is not (tooltip text).
+static func restart_pulls_blocker(os_name: String, is_web: bool, has_run_bat: bool, has_git: bool) -> String:
+	if is_web:
+		return "Not available in the browser build"
+	if os_name != "Windows":
+		return "Needs Windows (run.bat does the pull)"
+	if not has_run_bat:
+		return "run.bat not found in the project folder"
+	if not has_git:
+		return "This folder is not a git checkout"
+	return ""
+
+static func pull_summary(old_sha: String, new_sha: String) -> String:
+	if old_sha.is_empty() or new_sha.is_empty():
+		return "Restarted; could not read the commit (is git on PATH?)."
+	if old_sha == new_sha:
+		return "Already up to date (%s). Local edits, another branch or being offline skip the pull; see the console." % new_sha
+	return "Pulled %s → %s." % [old_sha, new_sha]
+
+static func _head_sha(project_dir: String) -> String:
+	var out: Array = []
+	if OS.execute("git", ["-C", project_dir, "rev-parse", "--short", "HEAD"], out) != 0 or out.is_empty():
+		return ""
+	return str(out[0]).strip_edges()
+
+func _pull_blocker() -> String:
+	var dir: String = ProjectSettings.globalize_path("res://")
+	var has_git: bool = DirAccess.dir_exists_absolute(dir.path_join(".git")) or FileAccess.file_exists(dir.path_join(".git"))
+	return restart_pulls_blocker(OS.get_name(), OS.has_feature("web"), FileAccess.file_exists("res://run.bat"), has_git)
+
+# Records the current commit, runs run.bat (fetch + fast-forward + launch) and quits.
+func pull_and_restart() -> void:
+	var dir: String = ProjectSettings.globalize_path("res://")
+	var cfg := ConfigFile.new()
+	cfg.set_value("pull", "old_sha", _head_sha(dir))
+	cfg.set_value("pull", "time", Time.get_datetime_string_from_system())
+	cfg.save(PULL_PATH)
+	OS.create_process("cmd.exe", ["/c", ProjectSettings.globalize_path("res://run.bat")], true)
+	get_tree().quit()
+
+func _report_pull() -> void:
+	if not FileAccess.file_exists(PULL_PATH):
+		return
+	var cfg := ConfigFile.new()
+	var old_sha: String = ""
+	if cfg.load(PULL_PATH) == OK:
+		old_sha = str(cfg.get_value("pull", "old_sha", ""))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PULL_PATH))
+	var text: String = pull_summary(old_sha, _head_sha(ProjectSettings.globalize_path("res://")))
+	_set_status(text, false)
+	if _output != null:
+		_output.text = text
 
 # Back to the menu. A scene with unsaved work (has_unsaved_changes()) needs a second press.
 func back_to_menu() -> bool:
@@ -213,6 +276,16 @@ func back_to_menu() -> bool:
 	if hub != null:
 		hub.scene_changed(SELF_SCENE, null)
 	_show_menu()
+	return true
+
+# Exit the game. Unsaved work needs a second press, as for Menu.
+func exit_game() -> bool:
+	if active_scene != null and active_scene.has_method("has_unsaved_changes") and DictUtil.to_bool(active_scene.call("has_unsaved_changes")) and not _leave_armed:
+		_leave_armed = true
+		_set_status("Unsaved changes in %s: press Exit again to discard them." % _scene_name(active_path), true)
+		_flash_pill("Unsaved changes: press Exit again to quit")
+		return false
+	get_tree().quit()
 	return true
 
 func is_running() -> bool:
@@ -247,6 +320,42 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_F5:
 			reload_and_restart()
 			get_viewport().set_input_as_handled()
+		KEY_F11:
+			toggle_fullscreen()
+			get_viewport().set_input_as_handled()
+
+# ------------------------------------------------------------------------------
+# Window controls (user 2026-10-18): fullscreen <-> windowed (F11), minimize and exit, so a fullscreen game never traps
+# the window. Runtime only (the saved Display setting is untouched); all calls go through DisplaySettings' backend.
+# ------------------------------------------------------------------------------
+
+static func is_fullscreen() -> bool:
+	var m: int = DisplaySettings.backend().current_mode()
+	return m == DisplayServer.WINDOW_MODE_FULLSCREEN or m == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+
+# Returns true when the window is now fullscreen.
+static func toggle_fullscreen() -> bool:
+	var b: DisplaySettings.Backend = DisplaySettings.backend()
+	if is_fullscreen():
+		b.set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		b.set_size(DisplaySettings.BASE_SIZE)
+		b.centre()
+		return false
+	b.set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	return true
+
+static func minimize_window() -> void:
+	DisplaySettings.backend().set_mode(DisplayServer.WINDOW_MODE_MINIMIZED)
+
+# Minimize and Exit only make sense for a desktop window (a browser tab has neither).
+static func window_buttons_shown() -> bool:
+	return not DisplaySettings.is_web()
+
+func _window_row(row: HBoxContainer) -> void:
+	row.add_child(UiTheme.button("Fullscreen", "Fullscreen / windowed (F11)", func() -> void: toggle_fullscreen()))
+	if window_buttons_shown():
+		row.add_child(UiTheme.button("Minimize", "Minimize the window", func() -> void: minimize_window()))
+		row.add_child(UiTheme.button("Exit", "Exit the game", func() -> void: exit_game()))
 
 # ------------------------------------------------------------------------------
 # Test suites (separate headless process, output shown in the menu)
@@ -318,7 +427,12 @@ func _build_menu() -> void:
 	root.offset_bottom = -14
 	root.add_theme_constant_override("separation", 10)
 	menu_layer.add_child(root)
-	root.add_child(UiTheme.label("⚔ TACTICAL RPG  ·  SCENE RUNNER", 20, UiTheme.COL_TITLE))
+	var title_row := HBoxContainer.new()
+	root.add_child(title_row)
+	var title: Label = UiTheme.label("⚔ TACTICAL RPG  ·  SCENE RUNNER", 20, UiTheme.COL_TITLE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(title)
+	_window_row(title_row)
 	root.add_child(UiTheme.label("Launch any scene; F10 returns here, F6 restarts the scene, F5 reloads edited scripts and restarts it.", UiTheme.FONT_MD, UiTheme.COL_MUTED))
 
 	var body := HBoxContainer.new()
@@ -339,7 +453,7 @@ func _build_menu() -> void:
 	var reload_row := HBoxContainer.new()
 	dev_col.add_child(reload_row)
 	reload_row.add_child(UiTheme.button("⟳ Reload scripts", "Recompile scripts edited on disk (F5 also restarts the running scene)", func() -> void: reload_scripts(), UiTheme.FONT_MD))
-	reload_row.add_child(UiTheme.button("⏻ Restart runner", "Start a fresh runner process: needed for new files / class_names", func() -> void: restart_runner(), UiTheme.FONT_MD))
+	reload_row.add_child(UiTheme.button("⏻ Restart runner", RESTART_TIP if _pull_blocker().is_empty() else "Start a fresh runner process: needed for new files / class_names", func() -> void: restart_runner(), UiTheme.FONT_MD))
 	_pending_label = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_MUTED)
 	_pending_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dev_col.add_child(_pending_label)
@@ -448,8 +562,32 @@ func _build_pill() -> void:
 	row.add_child(UiTheme.button("☰ Menu", "Back to the Scene Runner (F10)", func() -> void: back_to_menu()))
 	row.add_child(UiTheme.button("↻", "Restart this scene (F6)", func() -> void: restart_scene()))
 	row.add_child(UiTheme.button("⟳", "Reload edited scripts and restart (F5)", func() -> void: reload_and_restart()))
+	note_button = UiTheme.button("✎ Note", "Add a playtest note with a screenshot (F8)", func() -> void: _open_note_from_pill())
+	note_button.visible = false
+	row.add_child(note_button)
+	_window_row(row)
 	_pill_hint = UiTheme.label("", UiTheme.FONT_SM, UiTheme.COL_WARN)
 	row.add_child(_pill_hint)
+
+# The pill is a test-environment aid: hidden in the real game (main menu and what it runs); hotkeys still work.
+static func pill_shown_for(path: String) -> bool:
+	return path != "res://scenes/main_menu.tscn"
+
+static func note_button_shown(has_hub: bool, recording: bool) -> bool:
+	return has_hub and recording
+
+func _process(_delta: float) -> void:
+	if note_button != null:
+		note_button.visible = note_button_shown(hub != null, hub != null and hub.is_recording())
+
+# The pill sits on a higher layer than the scene, so it is hidden for the frame the note screenshot needs.
+func _open_note_from_pill() -> void:
+	if hub == null or not hub.is_recording():
+		return
+	pill_layer.visible = false
+	await RenderingServer.frame_post_draw
+	hub.open_note()
+	pill_layer.visible = pill_shown_for(active_path)
 
 func _flash_pill(text: String) -> void:
 	if _pill_hint != null:

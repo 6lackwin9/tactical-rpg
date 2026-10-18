@@ -9,10 +9,17 @@ extends RefCounted
 # S9 (EXP1-L, save v3): location_id is a QUALIFIED location id (world:id) or ""; position is the token tile on the
 # location's map ([-1, -1] = no map); explore holds the step counter; rng_seed + rolls drive GameRolls.
 # S11 (DLG1-L, save v4): party.gold (PartyState) and shops = {shop qid: {item id: sold count >= 1}} (limited stock sold).
+# S10 (TRAV1-L, save v5): time = the world clock (int >= 0), advanced by travel legs.
+# AUTO1-L (save v7): autoplay = {on: bool, party: tactic id, heroes: {party member id: tactic id or "custom"}}, the
+# remembered battle-autoplay choice (PlanPresets.AUTO_IDS; off in a new game). CombatAutoplay reads and writes it.
+# HEAL1-L (save v9): explore.last_rest = qualified id of the last rest place entered ("" = the start location; an id
+# that no longer resolves is read as "" by the runtime, never a load error); party members store hp_lost (UnitState).
 # ==============================================================================
 
-const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops"]
-const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe"]
+const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay"]
+const AUTOPLAY_KEYS: Array[String] = ["on", "party", "heroes"]
+const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe", "last_rest"]
+const HOME_WORLD_KEY: String = "home_world"   # optional extra explore key: the world a `connects` crossing left (absent = none)
 const NO_POSITION: Vector2i = Vector2i(-1, -1)
 const SEED_MAX: int = 2147483647
 
@@ -27,16 +34,28 @@ var explore: Dictionary = default_explore()
 var rng_seed: int = 0
 var rolls: Dictionary = {}   # stream id -> rolls drawn (int >= 0)
 var shops: Dictionary = {}   # shop qid -> {item id: sold count >= 1}
+var time: int = 0   # world clock (TRAV1-L)
+var autoplay: Dictionary = default_autoplay()   # AUTO1-L remembered autoplay choice
 var load_problems: Array[String] = []   # raw type problems found by from_dict (not saved; validate() reports them)
 
 static func default_explore() -> Dictionary:
-	return {"steps": 0, "next_at": 16, "loc_steps": 0, "last_safe": ""}
+	return {"steps": 0, "next_at": 16, "loc_steps": 0, "last_safe": "", "last_rest": ""}
+
+static func default_autoplay() -> Dictionary:
+	return {"on": false, "party": PlanPresets.DEFAULT_TACTIC, "heroes": {}}
 
 static func create(p_world_id: String, p_party: PartyState) -> GameState:
 	var g := GameState.new()
 	g.world_id = p_world_id
 	g.party = p_party
+	g.party.apply_cap(WorldCatalog.party_max(p_world_id))   # RECRUIT1-L 1.3
 	return g
+
+# Checked cast from a Variant (e.g. a result dict's "state"): the GameState, or null for anything else.
+static func of(v: Variant) -> GameState:
+	if v is GameState:
+		return v
+	return null
 
 # ------------------------------------------------------------------------------
 # Flags
@@ -81,7 +100,7 @@ func to_dict() -> Dictionary:
 		"world_id": world_id, "location_id": location_id, "party": party.to_dict(),
 		"flags": flags.duplicate(true), "quests": quests.duplicate(true), "loot_claimed": _sorted(loot_claimed),
 		"position": [position.x, position.y], "explore": explore.duplicate(true), "rng_seed": rng_seed, "rolls": rolls.duplicate(true),
-		"shops": shops.duplicate(true),
+		"shops": shops.duplicate(true), "time": time, "autoplay": autoplay.duplicate(true),
 	}
 
 static func _sorted(list: Array[String]) -> Array[String]:
@@ -94,6 +113,7 @@ static func from_dict(d: Dictionary) -> GameState:
 	g.world_id = str(d.get("world_id", ""))
 	g.location_id = str(d.get("location_id", ""))
 	g.party = PartyState.from_dict(DictUtil.dict_of(d.get("party", {})))
+	g.party.apply_cap(WorldCatalog.party_max(g.world_id))   # RECRUIT1-L 1.3: a longer active_ids keeps its first ids
 	var raw_flags: Dictionary = DictUtil.dict_of(JsonUtil.normalize(d.get("flags", {})))
 	for key: Variant in raw_flags:
 		g.flags[str(key)] = raw_flags[key]
@@ -119,7 +139,7 @@ static func from_dict(d: Dictionary) -> GameState:
 		g.position = Vector2i(DictUtil.to_int(pos[0]), DictUtil.to_int(pos[1]))
 	var raw_explore: Variant = JsonUtil.normalize(d.get("explore", default_explore()))
 	if not (raw_explore is Dictionary):
-		g.load_problems.append("explore must be {steps, next_at, loc_steps, last_safe}.")
+		g.load_problems.append("explore must be {steps, next_at, loc_steps, last_safe, last_rest}.")
 	else:
 		g.explore = raw_explore
 	var raw_seed: Variant = JsonUtil.normalize(d.get("rng_seed", 0))
@@ -137,6 +157,16 @@ static func from_dict(d: Dictionary) -> GameState:
 		g.load_problems.append("shops must be an object {shop qid: {item id: sold count}}.")
 	else:
 		g.shops = raw_shops
+	var raw_time: Variant = JsonUtil.normalize(d.get("time", 0))
+	if not (raw_time is int):
+		g.load_problems.append("time must be a whole number >= 0.")
+	else:
+		g.time = DictUtil.to_int(raw_time)
+	var raw_auto: Variant = JsonUtil.normalize(d.get("autoplay", default_autoplay()))
+	if not (raw_auto is Dictionary):
+		g.load_problems.append("autoplay must be {on, party, heroes}.")
+	else:
+		g.autoplay = raw_auto
 	return g
 
 func equals(other: GameState) -> bool:
@@ -171,6 +201,31 @@ func validate() -> Array[String]:
 		if not (key is String) or not JsonUtil.id_ok(str(key)) or not (rolls[key] is int) or DictUtil.to_int(rolls[key]) < 0:
 			errors.append("rolls: '%s' must be a stream id with a count >= 0." % str(key))
 	errors.append_array(shops_errors(shops))
+	if time < 0:
+		errors.append("time must be a whole number >= 0.")
+	errors.append_array(autoplay_errors(autoplay))
+	return errors
+
+# {on: bool, party: one of PlanPresets.AUTO_IDS, heroes: {non-empty key: AUTO_IDS id or "custom"}}, nothing else.
+static func autoplay_errors(a: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var ok: bool = a.size() == AUTOPLAY_KEYS.size()
+	for key: String in AUTOPLAY_KEYS:
+		ok = ok and a.has(key)
+	if not ok:
+		errors.append("autoplay must be {on, party, heroes}.")
+		return errors
+	if not (a["on"] is bool):
+		errors.append("autoplay.on must be true or false.")
+	if not (a["party"] is String) or not PlanPresets.AUTO_IDS.has(str(a["party"])):
+		errors.append("autoplay.party '%s' must be one of %s." % [str(a["party"]), ", ".join(PlanPresets.AUTO_IDS)])
+	if not (a["heroes"] is Dictionary):
+		errors.append("autoplay.heroes must be an object {hero id: tactic}.")
+		return errors
+	var heroes: Dictionary = a["heroes"]
+	for key: Variant in heroes:
+		if not (key is String) or str(key).is_empty() or not (heroes[key] is String) or not PlanPresets.is_tactic(str(heroes[key])):
+			errors.append("autoplay.heroes: '%s' must map a hero id to a tactic (%s)." % [str(key), ", ".join(PlanPresets.tactic_ids())])
 	return errors
 
 static func shops_errors(blob: Dictionary) -> Array[String]:
@@ -189,13 +244,16 @@ static func shops_errors(blob: Dictionary) -> Array[String]:
 
 static func explore_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
-	var ok: bool = e.size() == EXPLORE_KEYS.size()
+	var has_home: bool = e.has(HOME_WORLD_KEY)
+	var ok: bool = e.size() == EXPLORE_KEYS.size() + (1 if has_home else 0)
+	ok = ok and (not has_home or (e[HOME_WORLD_KEY] is String and JsonUtil.id_ok(str(e[HOME_WORLD_KEY]))))
 	for key: String in EXPLORE_KEYS:
 		ok = ok and e.has(key)
 	if ok:
 		ok = e["steps"] is int and DictUtil.to_int(e["steps"]) >= 0 and e["loc_steps"] is int and DictUtil.to_int(e["loc_steps"]) >= 0
 		ok = ok and e["next_at"] is int and DictUtil.to_int(e["next_at"]) >= 1 and DictUtil.to_int(e["next_at"]) <= 99
 		ok = ok and e["last_safe"] is String and (str(e["last_safe"]).is_empty() or QuestRules.blob_key_ok(str(e["last_safe"])))
+		ok = ok and e["last_rest"] is String and (str(e["last_rest"]).is_empty() or QuestRules.blob_key_ok(str(e["last_rest"])))
 	if not ok:
-		errors.append("explore must be {steps, next_at, loc_steps, last_safe}.")
+		errors.append("explore must be {steps, next_at, loc_steps, last_safe, last_rest}.")
 	return errors

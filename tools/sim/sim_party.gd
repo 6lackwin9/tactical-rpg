@@ -9,10 +9,11 @@ const SimRunner = preload("res://tools/sim/sim_runner.gd")
 const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimScenarios = preload("res://tools/sim/sim_scenarios.gd")
 const SimTargets = preload("res://tools/sim/sim_targets.gd")
+const SimWorld = preload("res://tools/sim/sim_world.gd")
 
 const SAMPLE_SEED: int = 7   # sweep dupes=on sample=n draw
 const TOP_N: int = 5
-const COMP_SIZE: int = 4
+const COMP_SIZE: int = 4   # the default `size=` (SimArgs.comp_size)
 
 var args: SimArgs
 var runner: SimRunner
@@ -26,7 +27,12 @@ func _init(p_args: SimArgs, p_runner: SimRunner, p_metrics: SimMetrics) -> void:
 # One composition against one encounter over every spend variant, preset and seed.
 func run_comp(comp: Array[String], enc_id: String) -> Dictionary:
 	var party: Array[String] = SimScenarios.define_party(runner, comp, args.level)
-	var enc: Dictionary = SimScenarios.encounter(runner, enc_id, args.level, args.elevel, args.elevel_set, args.elite_class, args.boss_class)
+	var enc: Dictionary = world_encounter(enc_id)
+	var is_world: bool = not enc.is_empty()
+	if not is_world:
+		enc = SimScenarios.encounter(runner, enc_id, args.level, args.elevel, args.elevel_set, args.elite_class, args.boss_class, args.boss_phase)
+	runner.objective_wins = is_world
+	runner.rounds_override = DictUtil.to_int(enc.get("max_rounds", 0))
 	var acc: Dictionary = SimScenarios.empty_set()
 	var foes: Array[String] = []
 	foes.assign(DictUtil.array_of(enc["enemies"]))
@@ -37,8 +43,19 @@ func run_comp(comp: Array[String], enc_id: String) -> Dictionary:
 			SimScenarios.run_seeds(runner, metrics, party, foes, DictUtil.dict_of(enc["base"]), args.seeds(), "", acc)
 	runner.spend_variant = "class"
 	runner.preset = "balanced"
+	runner.objective_wins = false
+	runner.rounds_override = 0
 	acc["party_ids"] = party
 	return acc
+
+# The world encounter of `enc=world:...` id `enc_id` (authored foes/levels unless elevel was given, the full
+# objective / deployment / phases / guests, its own max_rounds); {} for any other id.
+func world_encounter(enc_id: String) -> Dictionary:
+	var ref: Array[String] = SimArgs.parse_ref(enc_id, args.world)
+	if ref.is_empty():
+		return {}
+	var foe_level: int = clampi(args.level + args.elevel, 1, StatRules.MAX_LEVEL)
+	return SimWorld.encounter(runner, ref[1], foe_level, args.elevel_set, ref[0], true)
 
 # "" or " X" for a clear % against the encounter's band (generated encounters only).
 func clear_mark(enc_id: String, pct: float) -> String:
@@ -65,6 +82,8 @@ func party_mode() -> void:
 		var rounds: String = "%.1f" % (DictUtil.to_float(acc["rounds_cleared_sum"]) / cleared) if cleared > 0.0 else "-"
 		out("%-16s %8s %7s %7s %10s %9.2f %9.2f" % [enc_id, "%d%s" % [roundi(pct), clear_mark(enc_id, pct)], band_of(enc_id), rounds,
 			"%.1f/%d" % [SimScenarios.mean(acc, "survivors_sum"), args.comp.size()], SimScenarios.mean(acc, "party_hp_sum"), SimScenarios.mean(acc, "hp_sum")])
+		if DictUtil.to_float(acc["skipped"]) > 0.0:
+			out("  %s: %d fights skipped (PLAN SKIP, jitter); the cell is over %d fights" % [enc_id, roundi(DictUtil.to_float(acc["skipped"])), roundi(DictUtil.to_float(acc["fights"]))])
 		if args.metrics:
 			print_units(acc)
 
@@ -82,10 +101,19 @@ func print_units(acc: Dictionary) -> void:
 # sweep
 # ------------------------------------------------------------------------------
 
-# 4-class compositions: the 15 distinct ones, or with dupes the 126 multisets (sample = n drawn, seed 7).
+# `size`-class compositions (default 4: the 15 distinct ones, or with dupes the 126 multisets; sample = n
+# drawn, seed 7). BAL5-SIM K2 `lead=<class>`: the lead first, the rest drawn from the other classes
+# (with dupes from every class), so `size=3 lead=warrior` gives the 10 warrior trios.
 func compositions() -> Array:
 	var comps: Array = []
-	_combine(SimArgs.CLASSES, COMP_SIZE, 0, [], args.dupes, comps)
+	if args.lead.is_empty():
+		_combine(SimArgs.CLASSES, args.comp_size, 0, [], args.dupes, comps)
+	else:
+		var pool: Array[String] = []
+		for c: String in SimArgs.CLASSES:
+			if args.dupes or c != args.lead:
+				pool.append(c)
+		_combine(pool, args.comp_size, 0, [args.lead], args.dupes, comps)
 	if args.dupes and args.sample > 0 and args.sample < comps.size():
 		var rng := RandomNumberGenerator.new()
 		rng.seed = SAMPLE_SEED
@@ -105,6 +133,7 @@ func compositions() -> Array:
 		comps = picked
 	return comps
 
+# Appends to `found` every extension of `current` to `k` classes drawn from `pool` (index order from `start`).
 static func _combine(pool: Array[String], k: int, start: int, current: Array, dupes: bool, found: Array) -> void:
 	if current.size() == k:
 		var comp: Array[String] = []

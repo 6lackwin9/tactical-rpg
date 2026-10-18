@@ -4,16 +4,20 @@ extends Control
 # ==============================================================================
 # Tactical RPG - Content Forge (read-only asset viewer for the content catalog; TOOLS-RO)
 # Browse and inspect skills, items, item families, passives, classes, units and encounters; preview what each entry
-# becomes in the engine; list its validation problems and warnings; and playtest an encounter (or a unit in a sandbox
-# fight) in the real combat arena. The Forge never writes: content is edited through ContentCatalog.upsert seed scripts,
+# becomes in the engine (skills: how each rank looks in the game's own UI, SkillShowcase); and playtest an encounter
+# (or a unit in a sandbox fight) in the real combat arena. The Forge never writes: content is edited through ContentCatalog.upsert seed scripts,
 # and every check the old editor ran on Apply / Save runs in the test suites over all shipped data.
 #
 #   [Skills|Items|Classes|Units|Encounters]                          Reload  Validate All
-#   ┌ list ─────────┐ ┌ fields (read-only, ContentSchema) ─┐ ┌ preview ───────────────┐
-#   │ search / side │ │ sections, tables, derived panels   │ │ icon, engine summary,  │
-#   │ filters       │ │                                    │ │ problems, ▶ Playtest   │
-#   └───────────────┘ └────────────────────────────────────┘ └────────────────────────┘
+#   ┌ list ─────────┐ ┌ fields (display only, ContentSchema) ┐ ┌ preview ───────────────┐
+#   │ search / side │ │ sections, label: value rows, tables, │ │ skills: rank bar + the │
+#   │ filters       │ │ derived panels                       │ │ in-game elements;      │
+#   │ (names only)  │ │                                      │ │ others: engine summary │
+#   └───────────────┘ └──────────────────────────────────────┘ └────────────────────────┘
 #
+# FORGE-VIEW: list rows show names only; no problem marks or problems box (the validators run as tests over all shipped
+# data; Validate All reports to the status line). Skill filters: kind, grade (basic = basic skills and engine rows, a view
+# grouping), stance, learn only; sorts: name, kind, AP.
 # Skills (FORGE1): the list shows skill FAMILIES; the form shows the ranked entry (SkillFormModel sections, SkillRanksPanel).
 # Classes (CLASS1): ClassForgeModel sections and the live derived panels (ForgePreview.class_panels) under the form. Units
 # use the same hooks for their groups. Items and item families (ITEM1): ItemFormModel sections and options, ItemTables
@@ -39,7 +43,8 @@ var _title: Label = null
 var _status: Label = null
 var _preview_icon: TextureRect = null
 var _preview: RichTextLabel = null
-var _problems: RichTextLabel = null
+var _showcase: SkillShowcase = null
+var _stance_opt: OptionButton = null
 var _playtest_btn: Button = null
 var _class_panels: RichTextLabel = null   # the live derived panels under the class form (footer)
 var _item_bar: VBoxContainer = null
@@ -127,24 +132,29 @@ func _build() -> void:
 	form.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(form)
 
-	# Right: preview & problems
-	var right: VBoxContainer = _column(body, 340)
+	# Right: preview (skills: the in-game elements per rank; other kinds: icon and engine summary)
+	var right: VBoxContainer = _column(body, 400)
 	right.add_child(UiTheme.header("ENGINE PREVIEW"))
+	var right_scroll := ScrollContainer.new()
+	right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right.add_child(right_scroll)
+	var right_box := VBoxContainer.new()
+	right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_box.add_theme_constant_override("separation", 6)
+	right_scroll.add_child(right_box)
 	_preview_icon = UiTheme.icon_rect(null, 72)
-	right.add_child(_preview_icon)
+	right_box.add_child(_preview_icon)
+	_showcase = SkillShowcase.new()
+	right_box.add_child(_showcase)
 	_preview = RichTextLabel.new()
 	_preview.bbcode_enabled = true
-	_preview.fit_content = false
-	_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_preview.fit_content = true
+	_preview.scroll_active = false
+	_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_preview.add_theme_font_size_override("normal_font_size", UiTheme.FONT_MD)
 	_preview.add_theme_font_size_override("bold_font_size", UiTheme.FONT_LG)
-	right.add_child(_preview)
-	right.add_child(UiTheme.header("PROBLEMS"))
-	_problems = RichTextLabel.new()
-	_problems.bbcode_enabled = true
-	_problems.custom_minimum_size.y = 110
-	_problems.add_theme_font_size_override("normal_font_size", UiTheme.FONT_SM)
-	right.add_child(_problems)
+	right_box.add_child(_preview)
 	_playtest_btn = UiTheme.button("▶ Playtest in Arena", "Load this into the real combat engine", func() -> void: playtest(), UiTheme.FONT_MD)
 	right.add_child(_playtest_btn)
 
@@ -159,59 +169,58 @@ func _build_skill_bar(parent: VBoxContainer) -> void:
 	parent.add_child(_skill_bar)
 	var row1 := HBoxContainer.new()
 	_skill_bar.add_child(row1)
-	var kind_opt := OptionButton.new()
-	kind_opt.name = "KindFilter"
+	var kind_opt: OptionButton = _bar_option(row1, "KindFilter")
 	kind_opt.add_item("All kinds")
 	for k: String in SkillKinds.authorable():
 		kind_opt.add_item(SkillKinds.label_of(k))
 		kind_opt.set_item_metadata(kind_opt.item_count - 1, k)
 	kind_opt.item_selected.connect(func(i: int) -> void:
 		set_skill_filter("kinds", [] if i == 0 else [str(kind_opt.get_item_metadata(i))]))
-	kind_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row1.add_child(kind_opt)
-	var grade_opt := OptionButton.new()
-	grade_opt.name = "GradeFilter"
-	for g: String in ["any grade", "novice", "advanced", "expert"]:
-		grade_opt.add_item(g)
-	grade_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("grade", "any" if i == 0 else grade_opt.get_item_text(i)))
-	grade_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row1.add_child(grade_opt)
+	var grade_opt: OptionButton = _bar_option(row1, "GradeFilter")
+	for g: String in SkillFilter.grade_options():
+		grade_opt.add_item("any grade" if g == "any" else g)
+		grade_opt.set_item_metadata(grade_opt.item_count - 1, g)
+	grade_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("grade", str(grade_opt.get_item_metadata(i))))
 	var row2 := HBoxContainer.new()
 	_skill_bar.add_child(row2)
-	var sort_opt := OptionButton.new()
-	sort_opt.name = "SortBy"
-	for s: String in SkillFilter.SORTS:
-		sort_opt.add_item("sort: " + s)
+	var sort_opt: OptionButton = _bar_option(row2, "SortBy")
+	for sort_key: String in SkillFilter.SORTS:
+		sort_opt.add_item("sort: " + sort_key)
 	sort_opt.item_selected.connect(func(i: int) -> void:
 		skill_sort = SkillFilter.SORTS[i]
 		refresh_list())
-	sort_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row2.add_child(sort_opt)
-	var ranks_opt := OptionButton.new()
-	ranks_opt.name = "RankFilter"
-	for r: String in ["any ranks", "1 rank", "2 ranks", "3 ranks"]:
-		ranks_opt.add_item(r)
-	ranks_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("rank_count", i))
-	ranks_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row2.add_child(ranks_opt)
-	var row3 := HFlowContainer.new()
+	_stance_opt = _bar_option(row2, "StanceFilter")
+	_stance_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("stance", str(_stance_opt.get_item_metadata(i))))
+	_fill_stances()
+	var row3 := HBoxContainer.new()
 	_skill_bar.add_child(row3)
-	for spec: Array in [["Problems", "has_problems", "Only skills that have problems"], ["Engine rows", "show_system", "Show the engine skills (Move, Rest, ...)"]]:
-		var check := CheckBox.new()
-		check.text = str(spec[0])
-		check.tooltip_text = str(spec[2])
-		check.name = "Check_" + str(spec[1])
-		var key: String = str(spec[1])
-		check.toggled.connect(func(on: bool) -> void: set_skill_filter(key, on))
-		row3.add_child(check)
-	for spec: Array in [["Basic", "basic"], ["Learn only", "learned_only"]]:
-		var tri := OptionButton.new()
-		tri.name = "Tri_" + str(spec[1])
-		for t: String in ["%s: any" % str(spec[0]), "%s: yes" % str(spec[0]), "%s: no" % str(spec[0])]:
-			tri.add_item(t)
-		var tri_key: String = str(spec[1])
-		tri.item_selected.connect(func(i: int) -> void: set_skill_filter(tri_key, ["any", "yes", "no"][i]))
-		row3.add_child(tri)
+	var learn_opt: OptionButton = _bar_option(row3, "LearnFilter")
+	for t: String in ["any", "yes", "no"]:
+		learn_opt.add_item("Learn only: %s" % t)
+		learn_opt.set_item_metadata(learn_opt.item_count - 1, t)
+	learn_opt.item_selected.connect(func(i: int) -> void: set_skill_filter("learned_only", str(learn_opt.get_item_metadata(i))))
+
+func _bar_option(row: HBoxContainer, node_name: String) -> OptionButton:
+	var opt := OptionButton.new()
+	opt.name = node_name
+	opt.fit_to_longest_item = false
+	opt.clip_text = true
+	opt.custom_minimum_size.x = 80
+	opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(opt)
+	return opt
+
+# (Re)fills the stance choices from the catalog (any stance first), keeping the current choice.
+func _fill_stances() -> void:
+	var current: String = str(skill_filters.get("stance", "any"))
+	_stance_opt.clear()
+	var choices: Array[String] = ["any"]
+	choices.append_array(SkillFilter.stance_options(ContentCatalog.skill_entries()))
+	for stance: String in choices:
+		_stance_opt.add_item("any stance" if stance == "any" else stance)
+		_stance_opt.set_item_metadata(_stance_opt.item_count - 1, stance)
+		if stance == current:
+			_stance_opt.select(_stance_opt.item_count - 1)
 
 # Filter chips of the item list (matrix 6: family, hand, rarity, special, has tiers, has effects, origin, used by).
 func _build_item_bar(parent: VBoxContainer) -> void:
@@ -338,6 +347,8 @@ func show_kind(p_kind: String) -> void:
 	_sync_kind_buttons()
 	_side_filter.visible = kind == "units"
 	_skill_bar.visible = _skills()
+	if _skills():
+		_fill_stances()
 	_item_bar.visible = kind == "items"
 	if kind == "items":
 		_fill_item_bar()
@@ -379,15 +390,7 @@ func refresh_list() -> void:
 			continue
 		if kind == "units" and not side.is_empty() and str(e.get("side", "")) != side:
 			continue
-		var mark: String = "⚠ " if not ContentCatalog.validate_entry(kind, e, id).is_empty() else ""
-		var extra: String = ""
-		if kind == "units":
-			extra = "  · %s" % str(e.get("side", ""))
-		elif kind == "items":
-			extra = "  · %s" % (str(e.get("family", "")) if not str(e.get("family", "")).is_empty() else str(e.get("item_type", "")).to_lower())
-		elif kind == "item_families":
-			extra = "  · %s, %d items" % [str(e.get("item_type", "")).to_lower(), ContentCatalog.items_of_family(id).size()]
-		_list.add_item("%s%s%s" % [mark, label, extra])
+		_list.add_item(label)
 		_list.set_item_tooltip(_list.item_count - 1, id)
 		_list_ids.append(id)
 		if id == selected_id:
@@ -402,10 +405,7 @@ func skill_list_entries() -> Array[Dictionary]:
 func _refresh_skill_list() -> void:
 	for entry: Dictionary in skill_list_entries():
 		var id: String = str(entry["id"])
-		var base: Dictionary = SkillRanks.effective(entry, 1)
-		var mark: String = "⚠ " if ContentCatalog.family_has_problems(id) else ""
-		var ranks: int = SkillRanks.rank_count(entry)
-		_list.add_item("%s%s  · %s L%d%s" % [mark, str(base["name"]), str(base["kind"]).to_lower(), DictUtil.to_int(base["level"]), ("  · %d ranks" % ranks) if ranks > 1 else ""])
+		_list.add_item(str(SkillRanks.effective(entry, 1)["name"]))
 		_list.set_item_tooltip(_list.item_count - 1, id)
 		_list_ids.append(id)
 		if id == selected_id:
@@ -428,7 +428,7 @@ func _show_empty() -> void:
 	_title.text = "No %s in the catalog." % kind.replace("_", " ")
 	_preview_icon.visible = false
 	_preview.text = ""
-	_problems.text = ""
+	_showcase.show_entry({})
 
 func reload_all() -> void:
 	ContentCatalog.reload_from_disk()
@@ -441,16 +441,16 @@ func reload_all() -> void:
 func validate_all() -> Dictionary:
 	var problems: Dictionary = ContentCatalog.validate_all()
 	if problems.is_empty():
-		_problems.text = "[color=#4ade80]✔ Every entry and reference is valid.[/color]"
-		_set_status("Catalog valid: %d entries." % _entry_count())
+		_set_status("✔ Catalog valid: %d entries, every reference resolves." % _entry_count())
+		_status.tooltip_text = ""
 	else:
 		var lines: Array[String] = []
 		for key: Variant in problems:
 			var errs: Array = problems[key]
 			for err: Variant in errs:
-				lines.append("[color=#f87171]%s[/color]: %s" % [str(key), str(err)])
-		_problems.text = "\n".join(lines)
-		_set_status("%d entries have problems." % problems.size(), true)
+				lines.append("%s: %s" % [str(key), str(err)])
+		_set_status("%d entries have problems (hover for the list; the content tests fail on them too)." % problems.size(), true)
+		_status.tooltip_text = "\n".join(lines)
 	return problems
 
 func _entry_count() -> int:
@@ -531,7 +531,7 @@ func playtest() -> void:
 	if kind == "encounters":
 		var errors: Array[String] = ContentCatalog.validate_entry(kind, ContentCatalog.get_entry(kind, selected_id), selected_id)
 		if not errors.is_empty():
-			_show_problems(errors)
+			_set_status("Cannot playtest: %s" % "; ".join(errors), true)
 			return
 	_set_status("Playtesting %s..." % enc.encounter_name)
 	playtest_requested.emit(enc)
@@ -544,26 +544,24 @@ func _refresh_side_panels() -> void:
 	_title.text = "%s  [%s]" % [str(form.draft.get("name", "")), str(form.draft.get("id", ""))]
 	_preview_icon.texture = ForgePreview.texture_for(kind, form.draft)
 	_preview_icon.visible = _preview_icon.texture != null
-	_preview.text = ForgePreview.describe(kind, form.draft, _skills())
+	_showcase.visible = _skills()
+	_preview.visible = not _skills()
+	if _skills():
+		_showcase.show_entry(form.draft, 1)
+		_preview.text = ""
+	else:
+		_preview.text = ForgePreview.describe(kind, form.draft)
 	if kind == "classes" and _class_panels != null and is_instance_valid(_class_panels):
 		_class_panels.text = ForgePreview.class_panels(form.draft)
-	_show_problems(entry_problems())
 
-func _show_problems(errors: Array[String]) -> void:
-	var lines: Array[String] = []
-	if errors.is_empty():
-		lines.append("[color=#4ade80]✔ No problems.[/color]")
-	else:
-		lines.append("[color=#f87171]%d problem%s[/color]" % [errors.size(), "" if errors.size() == 1 else "s"])
-		for err: String in errors:
-			lines.append("[color=#f87171]•[/color] " + err)
-	for w: String in entry_warnings():
-		lines.append("[color=#fbbf24]•[/color] " + w)
-	_problems.text = "\n".join(lines)
+# Skills: the rank the preview shows (1-based, clamped; the screenshot helper and tests use it).
+func set_preview_rank(rank: int) -> void:
+	if _skills() and not selected_id.is_empty():
+		_showcase.set_rank(rank)
 
-# The problems bar text (tests read it).
-func problems_text() -> String:
-	return _problems.text
+# The skill preview control (tests read it).
+func showcase() -> SkillShowcase:
+	return _showcase
 
 func _set_status(text: String, bad: bool = false) -> void:
 	_status.text = text
@@ -572,6 +570,13 @@ func _set_status(text: String, bad: bool = false) -> void:
 # Status line text (tests read it).
 func status_text() -> String:
 	return _status.text
+
+# The texts of the entry list rows, in list order (tests read it).
+func list_texts() -> Array[String]:
+	var out: Array[String] = []
+	for i: int in range(_list.item_count):
+		out.append(_list.get_item_text(i))
+	return out
 
 # The ids the entry list shows, in list order (tests read it).
 func list_ids() -> Array[String]:

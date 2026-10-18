@@ -59,6 +59,9 @@ func run() -> bool:
 		recorder.attach(session, encounter_id, "tool")
 	session.start()
 	var roster_entries: Array = DictUtil.array_of(battle.get("roster", []))
+	PlanCodec.apply_pouches(session, DictUtil.array_of(battle.get("pouches", [])), warnings)   # ITEMUSE1 (older recordings: none)
+	if recorder != null and not DictUtil.array_of(battle.get("pouches", [])).is_empty():
+		recorder.battle()["pouches"] = PlanCodec.pouches(session)   # the replay's own recording keeps the rebuilt pouches
 	var live_roster: Array = PlanCodec.roster(session)
 	if live_roster.size() != roster_entries.size():
 		warnings.append("Roster has %d units in this build, %d in the recording." % [live_roster.size(), roster_entries.size()])

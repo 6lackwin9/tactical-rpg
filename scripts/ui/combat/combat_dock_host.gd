@@ -3,6 +3,10 @@ extends Control
 
 # ==============================================================================
 # Tactical RPG - Combat Dock Host (production combat UI layout)
+# COMBAT-UI2-L1 layout C: timeline row on top, a slim party column (the whole height) left, the biggest grid in the
+# middle, a slim hostile column (+ forecast) right, playback buttons and the one-line log ticker at the bottom;
+# every size comes from CombatHudMetrics (_fit). No gear button or equipment modal in battle. The unit hover card
+# (COMBAT-UI2-L2) floats inside the grid panel; Esc closes a pinned card before anything else.
 # Static dock regions filled from data-driven layout presets. The game UI stays
 # fixed; a layout edit mode (⚙ / F9) lets any panel be undocked into a floating
 # UiWindow - its region keeps a same-size placeholder so nothing reflows - and
@@ -12,27 +16,33 @@ extends Control
 
 signal layout_changed()
 
-const REGIONS: Array[String] = ["top_left", "top_center", "top_right", "left", "center", "right", "bottom_left", "bottom_center"]
+const REGIONS: Array[String] = ["top", "left_top", "left", "center", "right_top", "right", "bottom_left", "bottom_center"]
 const DEFAULT_LAYOUT: String = "Standard"
 const LAYOUTS: Dictionary = {
 	"Standard": {
-		"top_left": ["party"], "top_center": ["timeline"], "top_right": ["enemies"],
-		"left": ["inspector"], "center": ["grid"], "right": ["forecast"],
+		"top": ["timeline"],
+		"left_top": ["party"], "left": [], "center": ["grid"], "right_top": ["enemies"], "right": ["forecast"],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 	"Mirrored": {
-		"top_left": ["enemies"], "top_center": ["timeline"], "top_right": ["party"],
-		"left": ["forecast"], "center": ["grid"], "right": ["inspector"],
+		"top": ["timeline"],
+		"left_top": ["enemies"], "left": ["forecast"], "center": ["grid"], "right_top": ["party"], "right": [],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 }
+const CORE_COG_PX: int = 32   # the settings cog (UIR-5: 32 px bordered button)
 const AUTO_PLAY_INTERVAL: float = 0.55
+const AUTOPLAY_TICK: float = 0.3
+const PHASE_BANNER_SECONDS: float = 2.0   # BOSS1-U: how long the phase banner stays
+const PHASE_BANNER_WIDTH: float = 520.0   # its widest size; it shrinks to fit the viewport
 
 var session: CombatSession = null
+var keys_blocked: bool = false   # BATTLE-FLOW: set while the results popup covers the arena
 var current_layout: String = DEFAULT_LAYOUT
 var log_modal: CombatLogModal
 var timeline_modal: TimelineModal
-var gear_modal: CharacterEquipmentModal = null
+var metrics: CombatHudMetrics = null   # the sizes last applied by _fit()
+var autoplay: CombatAutoplay = null    # AUTO1 tactics + the Autoplay loop (the timeline row's controls bind to it)
 
 var _panels: Dictionary = {}    # String -> CombatPanel
 var _regions: Dictionary = {}   # String -> BoxContainer
@@ -40,11 +50,21 @@ var _slots: Dictionary = {}     # String -> MarginContainer (panel + placeholder
 var _windows: Dictionary = {}   # String -> UiWindow (undocked panels)
 var _float_layer: Control
 var _overlay_layer: UiOverlayLayer
+var _phase_banner: Control = null          # BOSS1-U: centred phase banner (name + line), the results popup's panel style
+var _phase_panel: PanelContainer = null
+var _phase_name: Label = null
+var _phase_line: Label = null
+var _phase_timer: Timer = null
 var _edit_bar: PanelContainer
 var _layout_option: OptionButton
 var _zone_option: OptionButton
 var _edit_mode: bool = false
 var _auto_timer: Timer
+var _autoplay_timer: Timer
+var _top_row: Control
+var _center_row: Control
+var _bottom_panel: PanelContainer
+var _columns: Array[Control] = []
 
 func _init() -> void:
 	name = "CombatDockHost"
@@ -59,37 +79,46 @@ func _init() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 4)
-	margin.add_theme_constant_override("margin_bottom", 4)
+	margin.add_theme_constant_override("margin_left", CombatHudMetrics.MARGIN_H)
+	margin.add_theme_constant_override("margin_right", CombatHudMetrics.MARGIN_H)
+	margin.add_theme_constant_override("margin_top", CombatHudMetrics.MARGIN_V)
+	margin.add_theme_constant_override("margin_bottom", CombatHudMetrics.MARGIN_V)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 4)
+	root.add_theme_constant_override("separation", CombatHudMetrics.ROW_SEP)
 	margin.add_child(root)
 
-	var top := _row(root, 8)
-	top.custom_minimum_size = Vector2(0, 96)
-	_add_region(top, "top_left", false)
-	_add_region(top, "top_center", true)
-	_add_region(top, "top_right", false)
+	# Top row: the timeline, with room at the right for the 32 px settings cog.
+	var top := _row(root, 4)
+	_top_row = top
+	top.custom_minimum_size = Vector2(0, CombatHudMetrics.TOP_H)
+	_add_region(top, "top", true, true)
+	var cog_gap := Control.new()
+	cog_gap.custom_minimum_size = Vector2(CORE_COG_PX + 4, 0)
+	top.add_child(cog_gap)
 
-	var center := _row(root, 10)
+	# Centre row: party column | grid | hostile column.
+	var center := _row(root, CombatHudMetrics.COL_SEP)
+	_center_row = center
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_add_region(center, "left", false)
-	_add_region(center, "center", true)
-	_add_region(center, "right", false)
+	var left_col := _column(center)
+	_add_region(left_col, "left_top", false, false)
+	_add_region(left_col, "left", false, true)
+	_add_region(center, "center", true, true)
+	var right_col := _column(center)
+	_add_region(right_col, "right_top", false, false)
+	_add_region(right_col, "right", false, true)
 
-	var bottom_panel := PanelContainer.new()
-	bottom_panel.custom_minimum_size = Vector2(0, 96)
-	bottom_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.07, 0.09, 0.14, 0.98), Color(0.22, 0.32, 0.46, 0.9), 6, 8, 3))
-	root.add_child(bottom_panel)
+	_bottom_panel = PanelContainer.new()
+	_bottom_panel.custom_minimum_size = Vector2(0, 36)
+	_bottom_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.07, 0.09, 0.14, 0.98), Color(0.22, 0.32, 0.46, 0.9), 6, 8, 2))
+	root.add_child(_bottom_panel)
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 10)
-	bottom_panel.add_child(bottom)
-	_add_region(bottom, "bottom_left", false)
-	_add_region(bottom, "bottom_center", true)
+	_bottom_panel.add_child(bottom)
+	_add_region(bottom, "bottom_left", false, true)
+	_add_region(bottom, "bottom_center", true, true)
 
 	_float_layer = Control.new()
 	_float_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -98,6 +127,7 @@ func _init() -> void:
 
 	_overlay_layer = UiOverlayLayer.new()
 	add_child(_overlay_layer)
+	_build_phase_banner()
 
 	_build_edit_controls()
 
@@ -117,12 +147,24 @@ func _row(parent: Control, separation: int) -> HBoxContainer:
 	parent.add_child(row)
 	return row
 
-func _add_region(parent: Control, region: String, expand: bool) -> void:
+# A fixed-width column holding two stacked regions (party alone, or hostiles / forecast).
+func _column(parent: Control) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(CombatHudMetrics.SIDE_W, 0)
+	col.add_theme_constant_override("separation", CombatHudMetrics.COL_GAP)
+	col.clip_contents = true
+	parent.add_child(col)
+	_columns.append(col)
+	return col
+
+func _add_region(parent: Control, region: String, expand_h: bool, expand_v: bool) -> void:
 	var box := VBoxContainer.new()
 	box.name = region
-	box.add_theme_constant_override("separation", 6)
-	if expand:
+	box.add_theme_constant_override("separation", CombatHudMetrics.COL_GAP)
+	if expand_h:
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if expand_v:
+		box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	if region == "center":
 		box.alignment = BoxContainer.ALIGNMENT_CENTER
 	parent.add_child(box)
@@ -132,14 +174,14 @@ func _add_region(parent: Control, region: String, expand: bool) -> void:
 # Setup
 # ------------------------------------------------------------------------------
 
-func setup(p_session: CombatSession) -> void:
+# `with_autoplay` false (replay / playback arenas): no CombatAutoplay, no tactic dropdowns, A and Space-pause do nothing.
+func setup(p_session: CombatSession, with_autoplay: bool = true) -> void:
 	session = p_session
 	_overlay_layer.set_session(session)
 	var panels: Array[CombatPanel] = [
 		CombatRosterPanel.create(true),
 		CombatRosterPanel.create(false),
 		CombatActionLogPanel.new(),
-		CombatInspectorPanel.new(),
 		CombatGridPanel.new(),
 		CombatForecastPanel.new(),
 		CombatPlaybackPanel.new(),
@@ -151,6 +193,15 @@ func setup(p_session: CombatSession) -> void:
 		panel.modal_requested.connect(open_modal)
 		_overlay_layer.host_panel(panel)
 		panel.bind(session)
+	_wire_hover_card()
+	var timeline: CombatTimelinePanel = get_panel("timeline") as CombatTimelinePanel
+	if with_autoplay:
+		autoplay = CombatAutoplay.new(session)
+		if timeline != null:
+			timeline.bind_autoplay(autoplay)
+		_start_autoplay_timer()
+	elif timeline != null:
+		timeline.disable_autoplay()
 
 	log_modal.cell_clicked.connect(func(e: ActionLogEntry) -> void: session.select_log_entry(e))
 	timeline_modal.action_lookup_fn = session.find_recorded_action
@@ -159,8 +210,76 @@ func setup(p_session: CombatSession) -> void:
 	timeline_modal.block_selected.connect(func(b: int) -> void: session.select_block(b))
 	timeline_modal.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
 	session.changed.connect(_on_session_changed)
+	session.phase_fired.connect(_on_phase_fired)
 	apply_layout(DEFAULT_LAYOUT)
 	_sync_zone_option()
+	resized.connect(_fit)
+	layout_changed.connect(_fit)
+	session.mounted.connect(_fit)
+	_fit()
+
+# Drives CombatAutoplay.tick() (draft, confirm, advance); stops itself when the battle is over.
+func _start_autoplay_timer() -> void:
+	_autoplay_timer = Timer.new()
+	_autoplay_timer.wait_time = AUTOPLAY_TICK
+	_autoplay_timer.timeout.connect(func() -> void:
+		if session == null or session.combat_over:
+			_autoplay_timer.stop()
+		elif autoplay != null and not keys_blocked:
+			autoplay.tick()
+	)
+	add_child(_autoplay_timer)
+	_autoplay_timer.start()
+	session.round_started.connect(func(_round_num: int) -> void:   # a reset battle starts ticking again
+		if _autoplay_timer.is_stopped() and _autoplay_timer.is_inside_tree():
+			_autoplay_timer.start()
+	)
+
+# A battle that belongs to a save remembers the tactics and the Autoplay switch in its GameState (AUTO1 rule 8).
+func bind_game_state(store: GameState) -> void:
+	if autoplay == null or store == null:
+		return
+	autoplay.store = store
+	autoplay.load_settings(store.autoplay)
+
+# Roster cards drive the grid's hover card: focus opens it at once, a click pins it.
+func _wire_hover_card() -> void:
+	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
+	for id: String in ["party", "enemies"]:
+		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
+		if roster == null or grid == null:
+			continue
+		roster.unit_focused.connect(grid.open_card)
+		roster.unit_blurred.connect(grid.focus_lost)
+		roster.unit_clicked.connect(grid.pin_card)
+
+# Sizes the whole screen from CombatHudMetrics: the grid's tile, the columns' fixed panel heights, the strips.
+func _fit() -> void:
+	if session == null or _panels.is_empty():
+		return
+	var view: Vector2 = size if size.x > 1.0 and size.y > 1.0 else Vector2(1280, 720)
+	metrics = CombatHudMetrics.compute(view, UiTheme.text_scale(), session.allies.size(), maxi(session.enemies.size(), CombatHudMetrics.HOSTILE_SLOTS), session.encounter.party_slots())
+	_top_row.custom_minimum_size = Vector2(0, CombatHudMetrics.TOP_H)
+	_bottom_panel.custom_minimum_size = Vector2(0, metrics.bottom_h)
+	_set_slot_height("party", metrics.party_panel_h)
+	_set_slot_height("enemies", metrics.hostile_panel_h)
+	_set_slot_height("forecast", metrics.forecast_h)
+	for id: String in ["party", "enemies"]:
+		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
+		if roster != null:
+			roster.apply_metrics(metrics)
+	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
+	if grid != null:
+		grid.set_tile_px(metrics.tile)
+		var board: int = metrics.tile * CombatGridView.GRID_W + CombatGridView.FRAME_PX
+		_set_slot_height("grid", metrics.tile * CombatGridView.GRID_H + CombatGridView.FRAME_PX)
+		_slot("grid").custom_minimum_size.x = board
+
+func _set_slot_height(panel_id: String, h: int) -> void:
+	var slot: MarginContainer = _slot(panel_id)
+	if slot != null:
+		slot.custom_minimum_size = Vector2(0, h)
+		slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
 func get_panel(panel_id: String) -> CombatPanel:
 	var raw: Variant = _panels.get(panel_id, null)
@@ -261,6 +380,9 @@ func apply_layout(layout_name: String) -> void:
 				continue
 			_apply_region_flags(slot, region)
 			_region(region).add_child(slot)
+	for region_id: String in REGIONS:   # an empty region takes no room (its column separator would eat height)
+		var box: BoxContainer = _region(region_id)
+		box.visible = box.get_child_count() > 0
 	if _layout_option != null:
 		for i: int in range(_layout_option.item_count):
 			if _layout_option.get_item_text(i) == layout_name:
@@ -269,10 +391,14 @@ func apply_layout(layout_name: String) -> void:
 
 func _apply_region_flags(slot: Control, region: String) -> void:
 	match region:
-		"top_center", "bottom_center":
+		"top", "bottom_center":
 			slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		"center":
 			slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		"left", "right":
+			slot.size_flags_horizontal = Control.SIZE_FILL
+			slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		_:
 			slot.size_flags_horizontal = Control.SIZE_FILL
 	var panel_raw: Variant = _panels.get(slot.name.trim_prefix("Slot_"), null)
@@ -341,16 +467,18 @@ func dock_all() -> void:
 
 func _build_edit_controls() -> void:
 	var corner := Button.new()
+	corner.name = "SettingsCog"
 	corner.text = "⚙"
 	corner.tooltip_text = "Layout edit mode [F9]: undock panels, switch layout presets"
 	corner.focus_mode = Control.FOCUS_NONE
-	corner.flat = true
-	corner.add_theme_font_size_override("font_size", 11)
+	corner.add_theme_font_size_override("font_size", UiTheme.hud_font(18))
+	corner.add_theme_stylebox_override("normal", UiTheme.box(Color(0.10, 0.14, 0.20, 0.95), Color(0.38, 0.5, 0.68, 0.9), 4, 2, 2))
+	corner.add_theme_stylebox_override("hover", UiTheme.box(Color(0.16, 0.22, 0.32, 0.95), Color(0.55, 0.75, 1.0, 1.0), 4, 2, 2))
 	corner.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	corner.offset_left = -26
-	corner.offset_right = -2
-	corner.offset_top = 0
-	corner.offset_bottom = 20
+	corner.offset_left = -(CombatHudMetrics.MARGIN_H + CORE_COG_PX) + 12
+	corner.offset_right = corner.offset_left + CORE_COG_PX
+	corner.offset_top = CombatHudMetrics.MARGIN_V
+	corner.offset_bottom = CombatHudMetrics.MARGIN_V + CORE_COG_PX
 	corner.pressed.connect(func() -> void: set_edit_mode(not _edit_mode))
 	add_child(corner)
 
@@ -430,8 +558,6 @@ func open_modal(kind: String) -> void:
 		"timeline":
 			timeline_modal.open_modal()
 			_refresh_timeline_modal()
-		"gear":
-			_open_gear_modal()
 
 func close_modals() -> bool:
 	if log_modal.visible:
@@ -441,6 +567,14 @@ func close_modals() -> bool:
 		timeline_modal.close_modal()
 		return true
 	return false
+
+# Esc closes the unit hover card (true when one was open).
+func close_hover_card() -> bool:
+	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
+	if grid == null or not grid.card_is_open():
+		return false
+	grid.close_card()
+	return true
 
 func _refresh_timeline_modal() -> void:
 	timeline_modal.set_total_blocks(session.total_blocks)
@@ -455,28 +589,82 @@ func _refresh_timeline_modal() -> void:
 		session.can_view_next_round()
 	)
 
-# The Party & Stash screen is built on first use (it syncs gear into unit stats).
-func _open_gear_modal() -> void:
-	if gear_modal == null:
-		gear_modal = CharacterEquipmentModal.new()
-		gear_modal.equipment_updated.connect(func(_c: Combatant) -> void: session.notify_external_change())
-		add_child(gear_modal)
-		gear_modal.setup_heroes(session.allies, session.encounter.party_stash)
-	var hero: Combatant = session.selected_combatant if session.is_ally(session.selected_combatant) else session.focused_hero
-	gear_modal.open_modal(hero)
-
 # ------------------------------------------------------------------------------
 # Keyboard shortcuts
 # ------------------------------------------------------------------------------
 
+# BOSS1-U: the banner uses the battle results popup's panel look (opaque panel, header-coloured border); no dim, no art.
+func _build_phase_banner() -> void:
+	_phase_banner = CenterContainer.new()
+	_phase_banner.name = "PhaseBanner"
+	_phase_banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_phase_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_phase_banner.visible = false
+	_phase_banner.z_index = 60   # above the intent arrows (z 1) and the hover card (z 50)
+	add_child(_phase_banner)
+	_phase_panel = PanelContainer.new()
+	_phase_panel.name = "PhasePanel"
+	_phase_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_phase_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.COL_PANEL_BG, 1.0), UiTheme.COL_HEADER, 8, 18, 14, 2))
+	_phase_banner.add_child(_phase_panel)
+	var col := VBoxContainer.new()
+	col.name = "PhaseColumn"
+	col.add_theme_constant_override("separation", 6)
+	_phase_panel.add_child(col)
+	_phase_name = UiTheme.header("")
+	_phase_name.name = "PhaseName"
+	_phase_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_phase_name)
+	_phase_line = UiTheme.label("", UiTheme.FONT_MD, UiTheme.COL_TEXT)
+	_phase_line.name = "PhaseLine"
+	_phase_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_phase_line)
+	_phase_timer = Timer.new()
+	_phase_timer.one_shot = true
+	_phase_timer.wait_time = PHASE_BANNER_SECONDS
+	_phase_timer.timeout.connect(hide_phase_banner)
+	add_child(_phase_timer)
+
+# A phase fired live: show its name and line. Never while a past round is viewed or a replay plays (scrubbing).
+func _on_phase_fired(_entry: ActionLogEntry, info: Dictionary) -> void:
+	if session == null or not session.is_live_view():
+		return
+	var title: String = str(info.get("name", ""))
+	var line: String = str(info.get("line", ""))
+	_phase_name.text = title
+	_phase_line.text = line
+	_phase_line.visible = not line.is_empty()
+	_phase_name.add_theme_font_size_override("font_size", UiTheme.hud_font(18))
+	_phase_line.add_theme_font_size_override("font_size", UiTheme.hud_font())
+	var width: float = minf(PHASE_BANNER_WIDTH, size.x - 64.0)
+	_phase_panel.custom_minimum_size = Vector2(width, 0)
+	_phase_name.custom_minimum_size = Vector2(width - 40.0, 0)   # wrapped labels need a width up front (the style margins are 18 px a side)
+	_phase_line.custom_minimum_size = Vector2(width - 40.0, 0)
+	_phase_banner.visible = true
+	if _phase_timer.is_inside_tree():
+		_phase_timer.start(PHASE_BANNER_SECONDS)
+
+func hide_phase_banner() -> void:
+	_phase_banner.visible = false
+	_phase_timer.stop()
+
+func is_phase_banner_visible() -> bool:
+	return _phase_banner.visible
+
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo or session == null:
+	if key == null or not key.pressed or key.echo or session == null or keys_blocked:
+		return
+	if _phase_banner.visible:   # any key skips the banner (and does nothing else)
+		hide_phase_banner()
+		get_viewport().set_input_as_handled()
 		return
 	var handled: bool = true
 	match key.keycode:
 		KEY_ESCAPE:
-			handled = close_modals()
+			handled = close_modals() or close_hover_card()
 		KEY_L:
 			if log_modal.visible:
 				log_modal.close_modal()
@@ -487,8 +675,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				timeline_modal.close_modal()
 			else:
 				open_modal("timeline")
-		KEY_G:
-			open_modal("gear")
 		KEY_BACKSPACE:
 			if session.is_planning():
 				session.plan_undo_last()
@@ -509,8 +695,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			session.select_block(session.playhead() - 1)
 		KEY_E, KEY_RIGHT:
 			session.select_block(session.playhead() + 1)
+		KEY_I:
+			var grid_panel: CombatGridPanel = get_panel("grid") as CombatGridPanel
+			if grid_panel != null:
+				grid_panel.toggle_tells()   # I: enemy tells (chips and arrows) on / off, remembered in the settings
+			else:
+				handled = false
+		KEY_A:
+			if autoplay != null:
+				autoplay.toggle()   # A: Autoplay on / off (off = the same pause as Space)
+			else:
+				handled = false
 		KEY_SPACE:
-			session.toggle_auto_play()
+			if autoplay != null and autoplay.is_on():
+				autoplay.request_pause()   # Space pauses autoplay: this round finishes, the next stops in planning
+			else:
+				session.toggle_auto_play()
 		_:
 			handled = false
 	if handled:

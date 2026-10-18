@@ -65,6 +65,10 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.grant_status = str(e["grant_status"])
 	s.cleanse_statuses = _strings(e["cleanse_statuses"])
 	s.jump_tiles = DictUtil.to_int(e["jump_tiles"])
+	s.ends_in_stance = -1 if str(e["ends_in_stance"]).is_empty() else _enum(CombatTypes.StanceType.keys(), str(e["ends_in_stance"]), -1)
+	s.disrupt = _enum(SkillDef.Disrupt.keys(), str(e["disrupt"]), SkillDef.Disrupt.NONE)
+	s.exploit = _exploit_rows(e["exploit"])
+	s.exploit_consume = DictUtil.to_bool(e["exploit_consume"])
 	s.learned_only = DictUtil.to_bool(e["learned_only"])
 	s.family = "" if str(e["family"]) == s.id else str(e["family"])
 	s.tier = DictUtil.to_int(e["tier"], 1)
@@ -76,6 +80,14 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.template = str(e["template"])
 	s.origin = str(e["origin"])
 	return s
+
+# The exploit list of a skill row as typed {"status": String, "power_mult": float} rows (S12C-L).
+static func _exploit_rows(raw: Variant) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for item: Variant in DictUtil.array_of(raw):
+		var row: Dictionary = DictUtil.dict_of(item)
+		out.append({"status": str(row.get("status", "")), "power_mult": DictUtil.to_float(row.get("power_mult", 1.0), 1.0)})
+	return out
 
 static func skill_to_entry(s: SkillDef) -> Dictionary:
 	return ContentSchema.normalize("skills", {
@@ -89,6 +101,8 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
 		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
 		"cleanse_statuses": s.cleanse_statuses, "jump_tiles": s.jump_tiles,
+		"ends_in_stance": "" if s.ends_in_stance < 0 else _name(CombatTypes.StanceType.keys(), s.ends_in_stance),
+		"disrupt": _name(SkillDef.Disrupt.keys(), s.disrupt), "exploit": s.exploit, "exploit_consume": s.exploit_consume,
 		"family": s.family, "tier": s.tier, "template": s.template, "origin": s.origin, "basic": s.basic, "grade": _name(SkillDef.Grade.keys(), s.grade).to_lower(), "requires": s.requires, "unlock_offset": s.unlock_offset,
 	})
 
@@ -107,6 +121,7 @@ static func item(entry: Dictionary) -> Item:
 			DictUtil.to_int(e["heal"]), DictUtil.to_int(e["damage"]), str(e["buff_stat"]), DictUtil.to_float(e["buff_pct"]), DictUtil.to_int(e["duration"]),
 			DictUtil.to_int(e["use_blocks"]), DictUtil.to_float(e["weight"]), DictUtil.to_int(e["value"]), rarity)
 		con.max_stack = DictUtil.to_int(e["max_stack"])
+		con.use_reach = DictUtil.to_int(e["use_reach"])
 		result = con
 	elif ContentSchema.EQUIP_TYPES.has(type):
 		var tiers: Array[Dictionary] = []
@@ -167,6 +182,7 @@ static func item_to_entry(it: Item, starter_stash: bool = false) -> Dictionary:
 			"consumable_type": _name(Consumable.ConsumableType.keys(), con.consumable_type),
 			"heal": con.heal_amount, "damage": con.damage_amount, "buff_stat": con.buff_stat,
 			"buff_pct": con.buff_percent, "duration": con.buff_duration_rounds, "use_blocks": con.block_cost,
+			"use_reach": con.use_reach,
 		})
 	return ContentSchema.normalize("items", e)
 
@@ -377,8 +393,11 @@ static func ai_profile(entry: Dictionary, _c: Combatant) -> AiProfile:
 	var role_name: String = str(e["ai_role"]) if not str(e["ai_role"]).is_empty() else (arch.ai_role if arch != null else "AGGRESSOR")
 	var role: AiProfile.Role = _enum(AiProfile.Role.keys(), role_name, 0) as AiProfile.Role
 	var cap: int = DictUtil.to_int(e["skill_cap"])
-	if cap <= 0:
-		cap = AiProfile.NO_CEILING if arch != null else 1   # class-derived: no AP ceiling, the unlock levels gate (Combatant.tier_unlocked)
+	if cap <= 0 and arch != null:
+		var tier_cap: int = StatRules.tier_skill_cap(str(e["tier"]))   # BAL3 section 5: minion-tier default ceiling
+		cap = tier_cap if tier_cap > 0 else AiProfile.NO_CEILING   # else no AP ceiling: the unlock levels gate (Combatant.tier_unlocked)
+	elif cap <= 0:
+		cap = 1
 	var profile: AiProfile = AiProfile.create(role, DictUtil.to_float(e["flee_ratio"]), cap)
 	profile.defend_below = DictUtil.to_float(e["defend_below"])
 	profile.prefer_level = DictUtil.to_int(e["prefer_level"])

@@ -23,6 +23,16 @@ var buff_duration_rounds: int = 0
 var block_cost: int = 1
 var is_combat_usable: bool = true
 var is_exploration_usable: bool = true
+var use_reach: int = REACH_TYPE_DEFAULT   # ITEMUSE1 1.2: -1 = reach_for(consumable_type); 0 = self only
+
+const REACH_TYPE_DEFAULT: int = -1
+const REACH_MAX: int = 4
+# Battle reach per type (ITEMUSE1 1.2). Types missing here (STAMINA_BREW, ANTIDOTE) are not offered in battle.
+const TYPE_REACH: Dictionary = {
+	ConsumableType.HEALTH_POTION: 1,    # self or an adjacent ally
+	ConsumableType.FOCUS_INCENSE: 0,    # self
+	ConsumableType.THROWABLE_BOMB: 3,   # one foe
+}
 
 func _init(
 	p_id: String = "",
@@ -46,6 +56,18 @@ func _init(
 	buff_percent = p_buff_pct
 	buff_duration_rounds = p_duration
 	block_cost = p_block_cost
+
+# The type's default battle reach; -1 when the type is not offered in battle.
+static func reach_for(p_type: ConsumableType) -> int:
+	return DictUtil.to_int(TYPE_REACH.get(p_type, REACH_TYPE_DEFAULT))
+
+# True when a consumable of `p_type` may be used in battle (ITEMUSE1 1.2).
+static func offered_in_battle(p_type: ConsumableType) -> bool:
+	return TYPE_REACH.has(p_type)
+
+# This item's battle reach: its own use_reach, else the type default (-1 = not usable in battle).
+func reach() -> int:
+	return use_reach if use_reach >= 0 else reach_for(consumable_type)
 
 func apply_to_combatant(target: Combatant) -> Dictionary:
 	var outcome: Dictionary = {

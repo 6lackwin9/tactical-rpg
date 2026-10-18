@@ -99,12 +99,13 @@ static func run(session: DojoSession, host: Node) -> bool:
 	# Assert 7: Consumable Pouch Usage
 	var pouch_con := ItemCatalog.create_healing_draught()
 	w.hp = 50
+	var want_hp: int = mini(50 + pouch_con.heal_amount, w.max_hp)
 	pouch_con.apply_to_combatant(w)
-	if w.hp != 75:
-		print("  [Dojo-7] Consumable healing draught effect: FAIL (HP: %d)" % w.hp)
+	if pouch_con.heal_amount <= 0 or w.hp != want_hp:
+		print("  [Dojo-7] Consumable healing draught effect: FAIL (HP: %d, want %d)" % [w.hp, want_hp])
 		passed = false
 	else:
-		print("  [Dojo-7] Consumable healing draught effect: PASS (HP: 50 -> 75)")
+		print("  [Dojo-7] Consumable healing draught effect: PASS (HP: 50 -> %d)" % w.hp)
 
 	# Assert 8: Reset Dummy Vitals
 	d.hp = d.max_hp

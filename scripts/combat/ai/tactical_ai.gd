@@ -14,6 +14,31 @@ extends RefCounted
 #      maximum range (ranged) / Engage (auto-moves + strike).
 #   5. No idle turns: when no target can be struck this round the unit still
 #      advances along its route; it only rests when AP is the problem.
+# Terrain (S12T-L rule 8): AI routes pay AI_HAZARD_PENALTY extra per hazard tile entered, and ranged
+# units prefer, among equally ranked firing / kiting cells, the one with the most cover against the
+# nearest ranged foe. Covered targets rank lower through the planner's estimate (it includes cover).
+# Combos (S12C-L rule 6): the strike order puts a stance-break skill first against a Defensive or riposting foe,
+# and an exploit skill first only when its status is active on the target (else after the plain strikes).
+# BAL3-AI levers (docs/specs/BAL3.md section 4), all on incoming_damage (the damage the foes that would pick a unit
+# are expected to deal it by a given block):
+#   B: Focus goes before a cast only while the damage expected before that cast resolves is below
+#      FOCUS_PRESSURE_RATIO of the unit's current HP (else the cast goes first).
+#   C: a unit expected to take at least its current HP this round takes the highest-damage option that resolves by
+#      FAST_BLOCK (a lower tier or the plain strike) over a slower higher tier (_fast_strike); the choice is by
+#      damage, so under pressure it may override the combo order above.
+#   Heal reservation: a SUPPORT unit whose draft has no heal keeps one heal (its lowest heal tier) open at the end of
+#      the round when a friend is projected at or below heal_below by the round's end (_reserve_heal).
+#   D taunt pull: a unit whose top target is a taunter it can strike or reach within its one move this round commits
+#      to it: the taunter is its only target (it walks to it when the strike does not fit), and two steps that would
+#      cost the move are skipped: a hurt skirmisher's disengage, and the low-HP guard while the taunter is out of reach.
+# BAL5 levers (docs/specs/BAL5_LEVERS.md sections 2-4; symmetric, enemies use them too):
+#   T2 early taunt: taunt also goes up when any foe would pick an ally this round (_likely_target), not only when an
+#      ally stands within 3 tiles of a foe; when it cannot go up in place before a strike, the unit walks toward the
+#      nearest such diver and taunts after the walk (_early_taunt_walk).
+#   S1 healer self-care: a SUPPORT unit expecting at least SELF_CARE_RATIO of its current HP as damage this round heals
+#      itself first (lowest heal tier that fits), else steps back one tile (_self_care).
+#   A2 friendly-fire tolerance: an area cast may hit one ally when it hits AREA_FF_MIN_FOES foes and costs that ally
+#      less than AREA_FF_HP_RATIO of its current HP (_friendly_fire_ok).
 # Targets may move, so plans can fizzle: that is the planning-phase gamble.
 # Used for enemies each round and for the player's AI presets (the player's own
 # planner is never forced: taunt only steers TacticalAI).
@@ -21,6 +46,16 @@ extends RefCounted
 
 const MAX_STEPS: int = 16
 const MAX_HEALS: int = 2
+const AI_HAZARD_PENALTY: int = 3   # PLACEHOLDER (S12T-L): extra route cost per hazard tile an AI move enters
+const FOCUS_PRESSURE_RATIO: float = 0.5   # BAL3-AI lever B: Focus first only while the pre-cast incoming damage is below this share of HP
+const FAST_BLOCK: int = 2                 # BAL3-AI lever C: a unit likely to die prefers options that resolve by this block
+const ITEM_HEAL_RATIO: float = 0.35       # ITEMUSE1 rule 9: drink a potion when the round would leave it at or below this HP share
+const SELF_CARE_RATIO: float = 0.5        # BAL5 lever S1: a SUPPORT unit expecting at least this share of its current HP as damage this round cares for itself first
+const SELF_CARE_NONE: int = 0             # _self_care results
+const SELF_CARE_HEALED: int = 1
+const SELF_CARE_RETREATED: int = 2
+const AREA_FF_MIN_FOES: int = 3          # BAL5 lever A2: an area cast may hit one ally only when it hits at least this many foes
+const AREA_FF_HP_RATIO: float = 0.25      # BAL5 lever A2: ... and the expected damage on that ally is below this share of its current HP
 
 # With shared, the draft is written into that plan (replacing the actor's steps), so it
 # sees - and avoids - the moves its friends have already planned there.
@@ -31,6 +66,16 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 	var foes: Array[Combatant] = ctx.foes_of(actor)
 	if actor == null or not actor.is_active() or not grid.has_combatant(actor):
 		return plan.steps_of(actor)
+	plan.path_penalties[actor] = hazard_penalty(grid)
+	plan.ai_pressure.erase(actor)
+	if incoming_damage(plan, actor, ctx.total_blocks, grid.get_position(actor)) >= actor.hp:
+		plan.ai_pressure[actor] = true   # lever C: likely to die this round
+	if actor.attack_range > 1:
+		var prefer: Callable = cover_preference(grid, foes)
+		if prefer.is_valid():
+			plan.goal_preferences[actor] = prefer
+	if profile.use_items:   # ITEMUSE1 rule 9 (sim only): at most one item step, first in the sequence
+		_try_item(plan, actor, ctx)
 	var cap: int = ctx.skill_cap_of(actor)
 	var guarded: bool = false
 	var focused: bool = false
@@ -42,6 +87,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 	var disengage_tried: bool = false
 	var precast_done: bool = false
 	var riposte_tried: bool = false
+	var self_care_tried: bool = false   # BAL5 lever S1: checked once, at the start of the draft
 	var basic: SkillDef = SkillCatalog.lowest(SkillDef.Kind.ATTACK)
 	var band: Vector2i = basic.reach_for(actor)
 	var reach: int = band.y
@@ -55,6 +101,15 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 		if profile.flee_ratio > 0.0 and not profile.reckless and hp_ratio <= profile.flee_ratio and not fled:
 			fled = true
 			if plan.add_step(actor, PlanStep.withdraw()).is_empty():
+				continue
+
+		# BAL5 lever S1: a SUPPORT unit under heavy pressure cares for itself first (a self-heal, else one step back).
+		if profile.role == AiProfile.Role.SUPPORT and not self_care_tried:
+			self_care_tried = true
+			var care: int = _self_care(plan, actor, profile, cap, st, foes, reach)
+			if care == SELF_CARE_HEALED:
+				healed.append(actor)
+			if care != SELF_CARE_NONE:
 				continue
 
 		# AI1: a cleanse-only skill goes first when an ally is locked down (stun / root).
@@ -78,6 +133,10 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 		var ranked: Array[Combatant] = _rank_targets(plan, actor, st, foes, grid, profile)
 		if ranked.is_empty():
 			break
+		var pulled: Combatant = _taunt_pull(plan, actor, st, ranked)
+		if pulled != null:
+			var only_taunter: Array[Combatant] = [pulled]
+			ranked = only_taunter   # lever D: the taunter is the only target this round
 		var target: Combatant = ranked[0]
 		var dist: int = grid.get_distance(st.pos, grid.get_position(target))
 		var low_hp: bool = hp_ratio <= profile.defend_below and not profile.reckless
@@ -90,7 +149,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 			var ranged_role: bool = profile.role == AiProfile.Role.SNIPER or profile.role == AiProfile.Role.SUPPORT
 			if adjacent and ranged_role and _try_disengage(plan, actor, cap, profile, ranked, true):
 				continue
-			if profile.role == AiProfile.Role.SKIRMISHER and hp_ratio <= profile.defend_below and dist <= 1 and _try_disengage(plan, actor, cap, profile, ranked, false):
+			if pulled == null and profile.role == AiProfile.Role.SKIRMISHER and hp_ratio <= profile.defend_below and dist <= 1 and _try_disengage(plan, actor, cap, profile, ranked, false):
 				continue
 
 		# AI1: once per round, taunt / ally buff / debuff attack before the strike (each only if the strike still fits).
@@ -106,7 +165,7 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 			if _can_strike_in_place(actor, cap, dist, profile) and _buff_then_engage(plan, actor, ranked, cap, profile):
 				continue
 
-		if low_hp and not guarded and dist <= reach + 1:
+		if low_hp and not guarded and dist <= reach + 1 and (pulled == null or dist <= reach):   # lever D: no guard that costs the move to the taunter
 			guarded = true
 			if _guard_smart(plan, actor, cap, profile, foes, st.pos):
 				continue
@@ -142,6 +201,9 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 				continue
 		break
 
+	if profile.role == AiProfile.Role.SUPPORT and healed.is_empty() and not plan.compile(actor).withdrawn:
+		_reserve_heal(plan, actor, profile, cap)
+	plan.ai_pressure.erase(actor)
 	return plan.steps_of(actor)
 
 # ------------------------------------------------------------------------------
@@ -150,7 +212,24 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 
 # Tries skills of `kind` in preference order; returns true when one was added.
 # `make_step` builds the step from a skill (default: a self step).
-static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable, filter: Callable = Callable()) -> bool:
+# `target` (attacks): the foe the strike is for; combo skills are ordered against it (S12C-L rule 6, _combo_ordered).
+static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, make_step: Callable, filter: Callable = Callable(), target: Combatant = null) -> bool:
+	for skill: SkillDef in _skill_order(plan, actor, kind, cap, profile, target):
+		if filter.is_valid() and not DictUtil.to_bool(filter.call(skill)):
+			continue
+		var step: PlanStep
+		if make_step.is_valid():
+			var raw: Variant = make_step.call(skill)
+			step = raw if raw is PlanStep else null
+		else:
+			step = PlanStep.self_skill(skill)
+		if step != null and plan.add_step(actor, step, false).is_empty():
+			return true
+	return false
+
+# The order _try_skills tries skills of `kind` in: highest level first (prefer_level overrides), the off-hand jab last,
+# attacks against `target` in combo order (_combo_ordered).
+static func _skill_order(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind, cap: int, profile: AiProfile, target: Combatant) -> Array[SkillDef]:
 	# Attacks: single-target ones (area attacks go through _try_area; ranged units add the off-hand jab).
 	var skills: Array[SkillDef] = _strikes(actor, cap) if kind == SkillDef.Kind.ATTACK else SkillCatalog.available(kind, cap, actor)
 	skills.reverse()  # highest level first
@@ -166,26 +245,48 @@ static func _try_skills(plan: CombatPlan, actor: Combatant, kind: SkillDef.Kind,
 	for skill: SkillDef in skills:
 		if skill.is_off_hand():
 			ordered.append(skill)
-	for skill: SkillDef in ordered:
-		if filter.is_valid() and not DictUtil.to_bool(filter.call(skill)):
-			continue
-		var step: PlanStep
-		if make_step.is_valid():
-			var raw: Variant = make_step.call(skill)
-			step = raw if raw is PlanStep else null
-		else:
-			step = PlanStep.self_skill(skill)
-		if step != null and plan.add_step(actor, step, false).is_empty():
-			return true
-	return false
+	if kind == SkillDef.Kind.ATTACK and target != null:
+		ordered = _combo_ordered(plan, ordered, target)
+	return ordered
 
 # Attacks the first target in `ranked` the unit can strike this round.
 static func _engage_any(plan: CombatPlan, actor: Combatant, ranked: Array[Combatant], cap: int, profile: AiProfile) -> bool:
+	if plan.ai_pressure.has(actor) and _fast_strike(plan, actor, ranked, cap, profile):
+		return true
 	if _try_area(plan, actor, cap, profile):
 		return true
 	for candidate: Combatant in ranked:
 		var engage: Callable = func(skill: SkillDef) -> PlanStep: return PlanStep.engage(skill, candidate)
-		if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage):
+		if _try_skills(plan, actor, SkillDef.Kind.ATTACK, cap, profile, engage, Callable(), candidate):
+			return true
+	return false
+
+# S12C-L rule 6: a stance-break skill goes first against a foe in Defensive stance or carrying riposte (active, or
+# planned in the shared plan); an exploit skill goes first when its multiplier applies to the target (an ACTIVE listed
+# status) and after the plain strikes when it does not. Otherwise the order is kept (stable). Affordability and reach
+# are still checked by add_step, so an unaffordable combo skill falls through to the next one.
+static func _combo_ordered(plan: CombatPlan, skills: Array[SkillDef], target: Combatant) -> Array[SkillDef]:
+	var guarded: bool = target.current_stance == CombatTypes.StanceType.DEFENSIVE or StatusEffects.has_any(target, StatusEffects.RIPOSTE) or _plans_riposte(plan, target)
+	var first: Array[SkillDef] = []
+	var middle: Array[SkillDef] = []
+	var last: Array[SkillDef] = []
+	for skill: SkillDef in skills:
+		var breaks: bool = guarded and skill.disrupt == SkillDef.Disrupt.STANCE_BREAK
+		var exploit_applies: bool = not str(SkillDef.exploit_match(skill.exploit, target)["status"]).is_empty()
+		if breaks or exploit_applies:
+			first.append(skill)
+		elif not skill.exploit.is_empty():
+			last.append(skill)
+		else:
+			middle.append(skill)
+	first.append_array(middle)
+	first.append_array(last)
+	return first
+
+# True when `foe`'s steps in the shared plan include a DEFEND skill that grants riposte.
+static func _plans_riposte(plan: CombatPlan, foe: Combatant) -> bool:
+	for step: PlanStep in plan.steps_of(foe):
+		if step.skill != null and step.skill.kind == SkillDef.Kind.DEFEND and step.skill.grant_status == StatusEffects.RIPOSTE:
 			return true
 	return false
 
@@ -214,13 +315,116 @@ static func _buff_then_engage(plan: CombatPlan, actor: Combatant, ranked: Array[
 		if not plan.add_step(actor, PlanStep.self_skill(buff), false).is_empty():
 			continue
 		if _engage_any(plan, actor, ranked, cap, profile):
-			return true
+			if _focus_safe(plan, actor):
+				return true
+			_truncate(plan, actor, mark)   # lever B: under pressure the cast goes first (the normal flow plans it)
+			continue
 		plan.remove_step(actor, mark)
 	return false
+
+# Lever B: true when the damage expected on `actor` before its last planned attack resolves (incoming_damage up to
+# that attack's end block, from where it is made) is below FOCUS_PRESSURE_RATIO of its current HP.
+static func _focus_safe(plan: CombatPlan, actor: Combatant) -> bool:
+	var cast: PlanEntry = _last_attack(plan.compile(actor))
+	if cast == null:
+		return true
+	var incoming: int = incoming_damage(plan, actor, cast.end_block(), cast.pos_before)
+	return float(incoming) < FOCUS_PRESSURE_RATIO * float(actor.hp)
+
+# The last attack entry of a compiled draft, or null.
+static func _last_attack(st: CombatPlan.SimState) -> PlanEntry:
+	for i: int in range(st.entries.size() - 1, -1, -1):
+		var entry: PlanEntry = st.entries[i]
+		if entry.skill != null and entry.skill.kind == SkillDef.Kind.ATTACK:
+			return entry
+	return null
+
+# Drops the actor's steps from index `mark` on.
+static func _truncate(plan: CombatPlan, actor: Combatant, mark: int) -> void:
+	var steps: Array[PlanStep] = plan.steps_of(actor)
+	if steps.size() > mark:
+		steps.resize(maxi(0, mark))
+		plan.set_steps(actor, steps)
+
+# Lever C: a unit likely to die this round (plan.ai_pressure) takes the highest-damage option that resolves by
+# FAST_BLOCK: the area attack _try_area would pick, or a strike on the first ranked target it can strike at all
+# (in _skill_order; ties keep that order, the area pick first). False when none resolves that early: the normal
+# order applies.
+static func _fast_strike(plan: CombatPlan, actor: Combatant, ranked: Array[Combatant], cap: int, profile: AiProfile) -> bool:
+	var mark: int = plan.steps_of(actor).size()
+	var best: PlanStep = null
+	var best_damage: int = -1
+	if _try_area(plan, actor, cap, profile):
+		var area_entry: PlanEntry = _last_attack(plan.compile(actor))
+		if area_entry != null and area_entry.end_block() <= FAST_BLOCK:
+			best = plan.steps_of(actor)[mark]
+			best_damage = area_entry.est_damage
+		_truncate(plan, actor, mark)
+	for candidate: Combatant in ranked:
+		var strikable: bool = false
+		for skill: SkillDef in _skill_order(plan, actor, SkillDef.Kind.ATTACK, cap, profile, candidate):
+			var step: PlanStep = PlanStep.engage(skill, candidate)
+			if not plan.add_step(actor, step, false).is_empty():
+				continue
+			strikable = true
+			var entry: PlanEntry = _last_attack(plan.compile(actor))
+			if entry != null and entry.end_block() <= FAST_BLOCK and entry.est_damage > best_damage:
+				best = step
+				best_damage = entry.est_damage
+			_truncate(plan, actor, mark)
+		if strikable:
+			break
+	if best == null:
+		return false
+	return plan.add_step(actor, best, false).is_empty()
 
 # SUPPORT: heals the most wounded friend (at or below profile.heal_below) with an
 # ally-target healing skill, highest level first. The caster itself is a candidate
 # when the skill allows self-targeting.
+# ITEMUSE1 rule 9: a heal potion on itself when the expected incoming damage leaves it at or below ITEM_HEAL_RATIO of max
+# HP by round end and no friend plans a heal on it; else a bomb on the weakest foe in the bomb's reach whose HP is at or
+# below the bomb's damage. Elixirs are never AI-used. True when a step was added.
+static func _try_item(plan: CombatPlan, actor: Combatant, ctx: PlanContext) -> bool:
+	var grid: CombatGrid = ctx.grid
+	var pos: Vector2i = grid.get_position(actor)
+	var potion: Consumable = null
+	var bomb: Consumable = null
+	for item_id: String in ItemCommand.pouch_ids(actor):
+		var con: Consumable = ItemCommand.pouch_item(actor, item_id)
+		if not ItemCommand.offered(con) or plan.items_left(actor, item_id) <= 0:
+			continue
+		if potion == null and con.heal_amount > 0 and not ItemCommand.aims_at_foes(con):
+			potion = con
+		elif bomb == null and ItemCommand.aims_at_foes(con):
+			bomb = con
+	if potion != null:
+		var after: int = actor.hp - incoming_damage(plan, actor, ctx.total_blocks, pos)
+		if float(after) <= ITEM_HEAL_RATIO * float(actor.max_hp) and not _heal_planned_on(plan, actor, ctx):
+			if plan.add_step(actor, PlanStep.use_item(potion.id, actor), false).is_empty():
+				return true
+	if bomb != null:
+		var best: Combatant = null
+		for foe: Combatant in ctx.foes_of(actor):
+			if not foe.is_active() or not grid.has_combatant(foe) or foe.hp > bomb.damage_amount:
+				continue
+			if grid.get_distance(pos, grid.get_position(foe)) > bomb.reach():
+				continue
+			if best == null or foe.hp < best.hp:
+				best = foe
+		if best != null and plan.add_step(actor, PlanStep.use_item(bomb.id, best), false).is_empty():
+			return true
+	return false
+
+# True when a friend of `actor` already plans a heal (support skill or heal item) on it this round.
+static func _heal_planned_on(plan: CombatPlan, actor: Combatant, ctx: PlanContext) -> bool:
+	for friend: Combatant in ctx.friends_of(actor):
+		if friend == actor:
+			continue
+		for e: PlanEntry in plan.entries_for(friend):
+			if e.target == actor and ((e.item != null and e.item.heal_amount > 0) or (e.item == null and e.skill != null and e.skill.heals())):
+				return true
+	return false
+
 static func _try_heal(plan: CombatPlan, actor: Combatant, profile: AiProfile, cap: int, already: Array[Combatant]) -> Combatant:
 	var skills: Array[SkillDef] = []
 	for s: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, actor):
@@ -255,6 +459,38 @@ static func _try_heal(plan: CombatPlan, actor: Combatant, profile: AiProfile, ca
 				return ally
 	return null
 
+# BAL5 lever S1 (healer self-care): when the damage expected on the unit this round (incoming_damage up to the last
+# block, from where it stands) is at least SELF_CARE_RATIO of its current HP, the unit heals itself with the lowest heal
+# tier that fits (by level, then tier, then id; it counts toward MAX_HEALS). A heal is only useful on a wounded unit, so
+# at full HP, or with no self-heal that fits, it steps back one tile instead (_retreat_dir: away from the nearest foe,
+# keeping its top-ranked target in basic reach). Returns SELF_CARE_NONE / _HEALED / _RETREATED.
+static func _self_care(plan: CombatPlan, actor: Combatant, profile: AiProfile, cap: int, st: CombatPlan.SimState, foes: Array[Combatant], reach: int) -> int:
+	if float(incoming_damage(plan, actor, plan.context.total_blocks, st.pos)) < SELF_CARE_RATIO * float(actor.hp):
+		return SELF_CARE_NONE
+	if actor.hp < actor.max_hp:
+		var heals: Array[SkillDef] = []
+		for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, actor):
+			if skill.heals() and skill.target_mode != SkillDef.TargetMode.ALLY:
+				heals.append(skill)
+		heals.sort_custom(func(a: SkillDef, b: SkillDef) -> bool:
+			if a.level != b.level:
+				return a.level < b.level
+			if a.tier != b.tier:
+				return a.tier < b.tier
+			return a.id < b.id
+		)
+		for skill: SkillDef in heals:
+			if plan.add_step(actor, PlanStep.self_skill(skill), false).is_empty():
+				return SELF_CARE_HEALED
+	var grid: CombatGrid = plan.context.grid
+	var ranked: Array[Combatant] = _rank_targets(plan, actor, st, foes, grid, profile)
+	if ranked.is_empty():
+		return SELF_CARE_NONE
+	var back: Vector2i = _retreat_dir(plan, actor, st.pos, foes, reach, grid.get_position(ranked[0]))
+	if back != Vector2i.ZERO and plan.add_step(actor, PlanStep.move(SkillCatalog.lowest(SkillDef.Kind.MOVE), back, 1), false).is_empty():
+		return SELF_CARE_RETREATED
+	return SELF_CARE_NONE
+
 # Ranged units: step back to the tile at maximum range from the target (or the farthest
 # tile of the band within one move that keeps clear of other foes), then strike from
 # there. The step is dropped again if no strike fits afterwards, so kiting never wastes the turn.
@@ -282,7 +518,7 @@ static func _kite_then_engage(plan: CombatPlan, actor: Combatant, st: CombatPlan
 				goals[cell] = true
 		if goals.is_empty():
 			continue
-		var path: Array[Vector2i] = GridPath.find_path(grid, st.pos, goals, blocked, false)
+		var path: Array[Vector2i] = GridPath.find_path(grid, st.pos, goals, blocked, false, hazard_penalty(grid), cover_preference(grid, foes))
 		if path.is_empty() or path.size() > limit:
 			continue
 		var dest: Vector2i = st.pos
@@ -301,6 +537,30 @@ static func _kite_then_engage(plan: CombatPlan, actor: Combatant, st: CombatPlan
 		plan.remove_step(actor, mark)
 	return false
 
+# AI route penalty (rule 8a): AI_HAZARD_PENALTY extra cost per hazard tile entered.
+static func hazard_penalty(grid: CombatGrid) -> Callable:
+	return func(cell: Vector2i) -> int: return AI_HAZARD_PENALTY if grid.has_hazard(cell) else 0
+
+# AI destination preference (rule 8b): the cover a cell gives against the ranged foe nearest to it (CoverRules).
+# Foes at equal distance from the cell: the first one in `foes` order wins (strict < below), so the choice is
+# deterministic. Invalid Callable when no active foe on the grid fights at range.
+static func cover_preference(grid: CombatGrid, foes: Array[Combatant]) -> Callable:
+	var shooters: Array[Combatant] = []
+	for f: Combatant in foes:
+		if f.is_active() and grid.has_combatant(f) and f.attack_range > 1:
+			shooters.append(f)
+	if shooters.is_empty():
+		return Callable()
+	return func(cell: Vector2i) -> float:
+		var nearest: Combatant = null
+		var best: int = 1 << 20
+		for f: Combatant in shooters:
+			var d: int = grid.get_distance(cell, grid.get_position(f))
+			if d < best:
+				best = d
+				nearest = f
+		return CoverRules.cover_for(grid, grid.get_position(nearest), cell, true)
+
 # Walks as far as the AP and the move allow along the route to the nearest reachable target.
 static func _advance_toward(plan: CombatPlan, actor: Combatant, st: CombatPlan.SimState, ranked: Array[Combatant]) -> bool:
 	var tiles: int = mini(plan.max_move_tiles(actor), maxi(0, st.ap_left))
@@ -310,9 +570,10 @@ static func _advance_toward(plan: CombatPlan, actor: Combatant, st: CombatPlan.S
 		var route: Array[Vector2i] = plan.approach_path(actor, st.pos, candidate)
 		if route.is_empty():
 			continue
+		var reachable: Array[Vector2i] = GridPath.fit_blocks(plan.context.grid, st.pos, route, actor.move_per_block(), CombatPlan.MAX_MOVE_BLOCKS)   # cost-chunked (S12T-L)
 		var dest: Vector2i = st.pos
-		for i: int in range(mini(route.size(), tiles)):
-			dest += route[i]
+		for i: int in range(mini(reachable.size(), tiles)):
+			dest += reachable[i]
 		if plan.add_step(actor, PlanStep.go_to(SkillCatalog.lowest(SkillDef.Kind.MOVE), dest), false).is_empty():
 			return true
 	return false
@@ -561,6 +822,7 @@ static func _precast(plan: CombatPlan, actor: Combatant, ranked: Array[Combatant
 				options = _buff_options(plan, actor, cap, profile)
 			_:
 				options = _debuff_options(plan, actor, cap, profile, ranked)
+		var kind_added: bool = false
 		for step: PlanStep in options:
 			var mark: int = plan.steps_of(actor).size()
 			if not plan.add_step(actor, step, false).is_empty():
@@ -568,27 +830,94 @@ static func _precast(plan: CombatPlan, actor: Combatant, ranked: Array[Combatant
 			if _engage_any(plan, actor, ranked, cap, profile):
 				plan.remove_step(actor, mark + 1)
 				added = true
+				kind_added = true
 				break
 			plan.remove_step(actor, mark)
+		if kind == 0 and not kind_added and not options.is_empty() and _early_taunt_walk(plan, actor, options):
+			added = true
 	return added
 
-# Taunt: when an ally (not the caster) stands within 3 tiles of a foe and the caster is not taunting.
+# Lever T2 walk-in: the taunt could not go up in place with a strike after it, but a foe would pick an ally this round
+# (_divers): the unit walks toward the diver nearest to it (as far along its approach route as the move allows, shorter
+# when the taunt does not fit after the full walk) and then taunts; it strikes this round only if a strike still fits
+# from where the walk leaves it (the normal flow decides). Not when the unit has already moved, acted or is rooted.
+static func _early_taunt_walk(plan: CombatPlan, actor: Combatant, taunts: Array[PlanStep]) -> bool:
+	var st: CombatPlan.SimState = plan.compile(actor)
+	if st.moved or st.acted or st.rooted:
+		return false
+	var grid: CombatGrid = plan.context.grid
+	var diver: Combatant = null
+	var best: int = 1 << 20
+	for foe: Combatant in _divers(plan, actor):
+		var d: int = grid.get_distance(st.pos, grid.get_position(foe))
+		if d < best:
+			best = d
+			diver = foe
+	if diver == null:
+		return false
+	var route: Array[Vector2i] = plan.approach_path(actor, st.pos, diver)
+	if route.is_empty():
+		return false
+	var reachable: Array[Vector2i] = GridPath.fit_blocks(grid, st.pos, route, actor.move_per_block(), CombatPlan.MAX_MOVE_BLOCKS)
+	var tiles: int = mini(reachable.size(), mini(plan.max_move_tiles(actor), maxi(0, st.ap_left)))
+	var move_skill: SkillDef = SkillCatalog.lowest(SkillDef.Kind.MOVE)
+	var mark: int = plan.steps_of(actor).size()
+	for n: int in range(tiles, 0, -1):
+		var dest: Vector2i = st.pos
+		for i: int in range(n):
+			dest += reachable[i]
+		if not plan.add_step(actor, PlanStep.go_to(move_skill, dest), false).is_empty():
+			continue
+		for taunt: PlanStep in taunts:
+			if plan.add_step(actor, taunt, false).is_empty():
+				return true
+		_truncate(plan, actor, mark)
+	return false
+
+# Lever T2: the active foes on the grid that would pick an ally (not `actor`) this round (_likely_target, where the
+# friends' plans take them), in foes_of order.
+static func _divers(plan: CombatPlan, actor: Combatant) -> Array[Combatant]:
+	var grid: CombatGrid = plan.context.grid
+	var where: Dictionary = plan.planned_positions(plan.context.friends_of(actor))
+	var out: Array[Combatant] = []
+	for foe: Combatant in plan.context.foes_of(actor):
+		if not foe.is_active() or not grid.has_combatant(foe):
+			continue
+		for ally: Combatant in plan.context.friends_of(actor):
+			if ally != actor and ally.is_active() and grid.has_combatant(ally) and _likely_target(plan, foe, ally, plan.planned_position(ally), where):
+				out.append(foe)
+				break
+	return out
+
+# Taunt: when the caster is not taunting and an ally (not the caster) stands within 3 tiles of a foe, or (BAL5 lever T2,
+# early taunt) any foe would pick that ally this round (_likely_target, where the friends' plans take them).
 static func _taunt_options(plan: CombatPlan, actor: Combatant, cap: int, profile: AiProfile) -> Array[PlanStep]:
 	var out: Array[PlanStep] = []
 	if StatusEffects.has_any(actor, StatusEffects.TAUNT):
 		return out
 	var grid: CombatGrid = plan.context.grid
 	var foes: Array[Combatant] = plan.context.foes_of(actor)
+	var where: Dictionary = plan.planned_positions(plan.context.friends_of(actor))
 	var exposed: bool = false
 	for ally: Combatant in plan.context.friends_of(actor):
-		if ally != actor and ally.is_active() and grid.has_combatant(ally) and _nearest_foe(grid, plan.planned_position(ally), foes) <= 3:
-			exposed = true
+		if exposed or ally == actor or not ally.is_active() or not grid.has_combatant(ally):
+			continue
+		var ally_at: Vector2i = plan.planned_position(ally)
+		exposed = _nearest_foe(grid, ally_at, foes) <= 3 or _picked_by_a_foe(plan, ally, ally_at, foes, where)
 	if not exposed:
 		return out
 	for skill: SkillDef in _ordered(_optional(SkillCatalog.granting(SkillDef.Kind.SUPPORT, StatusEffects.TAUNT, cap, actor), profile), profile):
 		if skill.target_mode != SkillDef.TargetMode.ALLY:
 			out.append(PlanStep.self_skill(skill))
 	return out
+
+# Lever T2: true when an active foe on the grid would pick `ally` (standing at `at`) this round (_likely_target).
+static func _picked_by_a_foe(plan: CombatPlan, ally: Combatant, at: Vector2i, foes: Array[Combatant], where: Dictionary) -> bool:
+	var grid: CombatGrid = plan.context.grid
+	for foe: Combatant in foes:
+		if foe.is_active() and grid.has_combatant(foe) and _likely_target(plan, foe, ally, at, where):
+			return true
+	return false
 
 # Ally buffs (haste...): the ally without the status that is farthest from the foes, but beyond
 # its attack reach + 1 (a buff on someone about to fight is wasted); the caster itself when allowed.
@@ -804,9 +1133,10 @@ static func _riposte_finisher(plan: CombatPlan, actor: Combatant, cap: int, prof
 			return true
 	return false
 
-# Area attack: chosen when it hits at least profile.area_threshold() foes and no ally (planned
-# positions, the shape code of SkillDef.area_cells that the planner and AreaAttackCommand use).
-# Highest expected damage (power x foes hit) first, then the higher tier.
+# Area attack: chosen when it hits at least profile.area_threshold() foes and no ally, or one ally within the
+# friendly-fire tolerance (lever A2, _friendly_fire_ok) (planned positions, the shape code of SkillDef.area_cells that
+# the planner and AreaAttackCommand use). Highest expected damage (power x foes hit) first, then fewer allies hit,
+# then the higher tier.
 static func _try_area(plan: CombatPlan, actor: Combatant, cap: int, profile: AiProfile) -> bool:
 	var skills: Array[SkillDef] = []
 	for skill: SkillDef in _optional(SkillCatalog.area_attacks(cap, actor), profile):
@@ -832,16 +1162,18 @@ static func _try_area(plan: CombatPlan, actor: Combatant, cap: int, profile: AiP
 			for foe: Combatant in foes:
 				if foe.is_active() and grid.has_combatant(foe) and DictUtil.int_of(st.est_hp, foe) > 0 and cells.has(grid.get_position(foe)):
 					foes_hit += 1
-			var allies_hit: int = 0
+			var hit_friends: Array[Combatant] = []
 			for friend: Combatant in friends:
 				if friend != actor and friend.is_active() and cells.has(plan.planned_position(friend)):
-					allies_hit += 1
-			if allies_hit > 0 or foes_hit < profile.area_threshold():
+					hit_friends.append(friend)
+			if foes_hit < profile.area_threshold() or not _friendly_fire_ok(actor, skill, hit_friends, foes_hit):
 				continue
-			cands.append({"skill": skill, "aim": aim, "dmg": skill.power_for(actor) * float(foes_hit)})
+			cands.append({"skill": skill, "aim": aim, "dmg": skill.power_for(actor) * float(foes_hit), "allies": hit_friends.size()})
 	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if not is_equal_approx(DictUtil.to_float(a["dmg"]), DictUtil.to_float(b["dmg"])):
 			return DictUtil.to_float(a["dmg"]) > DictUtil.to_float(b["dmg"])
+		if DictUtil.to_int(a["allies"]) != DictUtil.to_int(b["allies"]):
+			return DictUtil.to_int(a["allies"]) < DictUtil.to_int(b["allies"])
 		var sa: SkillDef = a["skill"]
 		var sb: SkillDef = b["skill"]
 		if sa.level != sb.level:
@@ -856,6 +1188,17 @@ static func _try_area(plan: CombatPlan, actor: Combatant, cap: int, profile: AiP
 		if plan.add_step(actor, PlanStep.area_at(chosen, aim_cell), false).is_empty():
 			return true
 	return false
+
+# Lever A2 (friendly-fire tolerance): no ally hit is always fine; one ally hit is tolerated when the cast hits at least
+# AREA_FF_MIN_FOES foes and the expected damage on that ally (DamageCalculator.expected, no cover) is below
+# AREA_FF_HP_RATIO of its current HP; two or more allies never.
+static func _friendly_fire_ok(actor: Combatant, skill: SkillDef, hit_friends: Array[Combatant], foes_hit: int) -> bool:
+	if hit_friends.is_empty():
+		return true
+	if hit_friends.size() > 1 or foes_hit < AREA_FF_MIN_FOES:
+		return false
+	var ally: Combatant = hit_friends[0]
+	return float(DamageCalculator.expected(actor, ally, skill)) < AREA_FF_HP_RATIO * float(ally.hp)
 
 # Tiles an area skill can be aimed at from `pos`: SWEEP the four diagonal neighbours, LINE the
 # four neighbours, PLUS / BURST every tile inside the skill's reach band.
@@ -878,3 +1221,169 @@ static func _aim_cells(grid: CombatGrid, pos: Vector2i, skill: SkillDef, band: V
 			if grid.is_valid_coord(cell) and d >= band.x and d <= band.y:
 				out.append(cell)
 	return out
+
+# ------------------------------------------------------------------------------
+# BAL3-AI: incoming damage, taunt pull, heal reservation
+# ------------------------------------------------------------------------------
+
+# Damage `target` (standing at `at`) is expected to take from its foes by the end of block `by_block` this round.
+# A foe counts when `target` is the unit it would pick (_likely_target) and adds its best strike chain on it
+# (_strike_chain). Area attacks, crits, guard, cover and the foes' status-locked blocks are left out.
+# `positions` (unit -> Vector2i, CombatPlan.planned_positions of the target's side) may be passed in when the caller
+# estimates several units of one draft state; empty = computed once here.
+static func incoming_damage(plan: CombatPlan, target: Combatant, by_block: int, at: Vector2i, positions: Dictionary = {}) -> int:
+	var grid: CombatGrid = plan.context.grid
+	var total: int = 0
+	if at == CombatPlan.NO_CELL:
+		return total
+	var where: Dictionary = positions if not positions.is_empty() else plan.planned_positions(plan.context.friends_of(target))
+	for foe: Combatant in plan.context.foes_of(target):
+		if foe.is_active() and grid.has_combatant(foe) and _likely_target(plan, foe, target, at, where):
+			total += _strike_chain(plan, foe, target, at, by_block)
+	return total
+
+# True when `foe` would pick `target` (at `at`): among its foes within one move plus its basic reach, a taunter
+# first, then by the foe's preference as in _rank_targets without routes (nearest: distance x 100 + HP; weakest:
+# HP + distance x 4). Ties count for every tied unit. Other units stand where their plans take them (`where`).
+static func _likely_target(plan: CombatPlan, foe: Combatant, target: Combatant, at: Vector2i, where: Dictionary) -> bool:
+	var grid: CombatGrid = plan.context.grid
+	var foe_pos: Vector2i = grid.get_position(foe)
+	var threat: int = plan.max_move_tiles(foe) + SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(foe).y
+	var foe_profile: AiProfile = plan.context.profile_of(foe)
+	var nearest_first: bool = foe_profile.reckless or foe_profile.target_pref == AiProfile.TargetPref.NEAREST
+	var best: float = INF
+	var mine: float = INF
+	for unit: Combatant in plan.context.foes_of(foe):
+		if not unit.is_active() or not grid.has_combatant(unit):
+			continue
+		var raw_pos: Variant = where.get(unit, CombatPlan.NO_CELL)
+		var pos: Vector2i = at if unit == target else (raw_pos if raw_pos is Vector2i else CombatPlan.NO_CELL)
+		if pos == CombatPlan.NO_CELL:
+			continue
+		var d: int = grid.get_distance(foe_pos, pos)
+		if d > threat:
+			continue
+		var score: float = float(d) * 100.0 + float(unit.hp) if nearest_first else float(unit.hp) + float(d) * 4.0
+		if unit.has_status(StatusEffects.TAUNT):
+			score -= 100000.0
+		best = minf(best, score)
+		if unit == target:
+			mine = score
+	return mine < INF and mine <= best
+
+# `foe`'s best single-target strike chain on `target` (at `at`) by block `by_block`: for each strike it may use, the
+# hits that fit after the move it needs (one move of up to CombatPlan.MAX_MOVE_BLOCKS blocks at move_per_block tiles,
+# 1 AP per tile) within `by_block` and its AP, times DamageCalculator.expected; the largest total.
+static func _strike_chain(plan: CombatPlan, foe: Combatant, target: Combatant, at: Vector2i, by_block: int) -> int:
+	var d: int = plan.context.grid.get_distance(plan.context.grid.get_position(foe), at)
+	var best: int = 0
+	for skill: SkillDef in _strikes(foe, plan.context.skill_cap_of(foe)):
+		var band: Vector2i = skill.reach_for(foe)
+		var tiles: int = 0
+		if d > band.y:
+			tiles = d - band.y
+		elif d < band.x:
+			tiles = band.x - d
+		var move_blocks: int = 0 if tiles == 0 else ceili(float(tiles) / float(maxi(1, foe.move_per_block())))
+		if move_blocks > CombatPlan.MAX_MOVE_BLOCKS:
+			continue
+		var hits: int = floori(float(by_block - move_blocks) / float(maxi(1, skill.blocks)))
+		var cost: int = skill.ap_cost(foe)
+		if cost > 0:
+			hits = mini(hits, floori(float(foe.ap - tiles) / float(cost)))
+		if hits > 0:
+			best = maxi(best, hits * DamageCalculator.expected(foe, target, skill))
+	return best
+
+# Lever D (taunt pull): ranked[0] when it is taunting and the unit can get at it this round: in basic reach, or
+# (not moved, acted or rooted yet) its approach route fits the unit's one move (CombatPlan.fits_move). Else null.
+static func _taunt_pull(plan: CombatPlan, actor: Combatant, st: CombatPlan.SimState, ranked: Array[Combatant]) -> Combatant:
+	if ranked.is_empty() or not ranked[0].has_status(StatusEffects.TAUNT):
+		return null
+	var taunter: Combatant = ranked[0]
+	var grid: CombatGrid = plan.context.grid
+	var band: Vector2i = SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(actor)
+	var d: int = grid.get_distance(st.pos, grid.get_position(taunter))
+	if d >= band.x and d <= band.y:
+		return taunter
+	if st.rooted or st.acted or st.moved:
+		return null
+	var route: Array[Vector2i] = plan.approach_path(actor, st.pos, taunter)
+	return taunter if not route.is_empty() and plan.fits_move(actor, st.pos, route) else null
+
+# Heal reservation (SUPPORT, no heal in the draft): the friends projected at or below heal_below by the round's end
+# (HP - incoming_damage over the whole round, where their plans take them), most projected-wounded first; the lowest
+# heal tier whose AP the unit has at round start goes last in the draft on the first of them it fits for, dropping
+# the draft's last steps until it fits (the draft is kept when it fits for none). The reserved heal never moves the
+# unit: the draft's move is kept and the heal is cast from where the draft leaves it (no approach walk to the front).
+# Returns the friend, or null.
+static func _reserve_heal(plan: CombatPlan, actor: Combatant, profile: AiProfile, cap: int) -> Combatant:
+	var heals: Array[SkillDef] = []
+	for skill: SkillDef in SkillCatalog.available(SkillDef.Kind.SUPPORT, cap, actor):
+		if skill.heals() and skill.ap_cost(actor) <= actor.ap:
+			heals.append(skill)
+	if heals.is_empty():
+		return null
+	heals.sort_custom(func(a: SkillDef, b: SkillDef) -> bool:
+		if a.level != b.level:
+			return a.level < b.level
+		if a.tier != b.tier:
+			return a.tier < b.tier
+		return a.id < b.id
+	)
+	var heal: SkillDef = heals[0]
+	var grid: CombatGrid = plan.context.grid
+	var cands: Array[Dictionary] = []
+	var index: int = 0
+	var where: Dictionary = plan.planned_positions(plan.context.friends_of(actor))   # one pass for every friend's estimate
+	for friend: Combatant in plan.context.friends_of(actor):
+		index += 1
+		if not friend.is_active() or not grid.has_combatant(friend):
+			continue
+		if (friend == actor and heal.target_mode == SkillDef.TargetMode.ALLY) or (friend != actor and not heal.targets_ally()):
+			continue
+		var raw_at: Variant = where.get(friend, CombatPlan.NO_CELL)
+		var friend_at: Vector2i = raw_at if raw_at is Vector2i else CombatPlan.NO_CELL
+		var projected: int = friend.hp - incoming_damage(plan, friend, plan.context.total_blocks, friend_at, where)
+		var ratio: float = float(projected) / float(maxi(1, friend.max_hp))
+		if ratio <= profile.heal_below:
+			cands.append({"unit": friend, "ratio": ratio, "idx": index})
+	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if not is_equal_approx(DictUtil.to_float(a["ratio"]), DictUtil.to_float(b["ratio"])):
+			return DictUtil.to_float(a["ratio"]) < DictUtil.to_float(b["ratio"])
+		return DictUtil.to_int(a["idx"]) < DictUtil.to_int(b["idx"])
+	)
+	var saved: Array[PlanStep] = plan.steps_of(actor)
+	var keep: int = _move_floor(plan.compile(actor))
+	for entry: Dictionary in cands:
+		var patient: Combatant = entry["unit"]
+		var steps: Array[PlanStep] = saved.duplicate()
+		while true:
+			var attempt: Array[PlanStep] = steps.duplicate()
+			plan.set_steps(actor, attempt)
+			var step: PlanStep = PlanStep.self_skill(heal) if patient == actor else PlanStep.ally(heal, patient)
+			if plan.add_step(actor, step, false).is_empty():
+				if not _step_moves(plan.compile(actor), steps.size()):
+					return patient
+				plan.set_steps(actor, steps.duplicate())
+			if steps.size() <= keep:
+				break
+			steps.pop_back()
+	plan.set_steps(actor, saved)
+	return null
+
+# Steps of a draft up to and including the last one that moves the unit (a move, an Engage approach, a disengage or
+# a withdraw entry); the heal reservation never drops them.
+static func _move_floor(st: CombatPlan.SimState) -> int:
+	var floor_steps: int = 0
+	for entry: PlanEntry in st.entries:
+		if entry.skill != null and entry.step_index >= 0 and (entry.skill.kind == SkillDef.Kind.MOVE or entry.skill.kind == SkillDef.Kind.DISENGAGE or entry.pos_after != entry.pos_before):
+			floor_steps = maxi(floor_steps, entry.step_index + 1)
+	return floor_steps
+
+# True when the step at `index` of a compiled draft produced a move entry (an approach walk).
+static func _step_moves(st: CombatPlan.SimState, index: int) -> bool:
+	for entry: PlanEntry in st.entries:
+		if entry.step_index == index and entry.skill != null and entry.skill.kind == SkillDef.Kind.MOVE:
+			return true
+	return false

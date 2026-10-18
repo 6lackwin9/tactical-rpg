@@ -2,7 +2,8 @@ extends SceneTree
 
 # Balance simulator: headless AI-vs-AI battles on a sandbox copy of the catalog (BAL2_SIM.md).
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]     (tools/fc.sh sim help: the usage)
-#   modes duel | tier | levels | group | stats | party | role | sweep; keys in tools/sim/sim_args.gd.
+#   modes duel | tier | levels | group | stats | party | role | sweep | campaign; keys in tools/sim/sim_args.gd
+#   (BAL5-SIM: world=, size= / lead=, tier_foe=, phase=, s2=; jitter reach refusals print PLAN SKIP).
 #   party / sweep: tools/sim/sim_party.gd; role: tools/sim/sim_role_mode.gd; per-unit metrics and
 #   conservation checks: tools/sim/sim_metrics.gd; targets (section 8, X marks): tools/sim/sim_targets.gd.
 # Scores per fight (left side): binary (KO, else the HP lead with a 0.02 band) and HP margin
@@ -16,6 +17,7 @@ const SimVariants = preload("res://tools/sim/sim_variants.gd")
 const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimParty = preload("res://tools/sim/sim_party.gd")
 const SimRoleMode = preload("res://tools/sim/sim_role_mode.gd")
+const SimCampaign = preload("res://tools/sim/sim_campaign.gd")
 
 const CLASSES: Array[String] = SimArgs.CLASSES
 const TIER_ORDER: Array[String] = ["minion", "standard", "elite", "boss"]
@@ -58,6 +60,8 @@ func _initialize() -> void:
 			SimParty.new(args, runner, metrics).sweep_mode()
 		"role":
 			SimRoleMode.new(args, runner, metrics).role_mode()
+		"campaign":
+			SimCampaign.new(args, runner).campaign_mode()
 	runner.distance_note()
 	if metrics.keep_totals and not metrics.totals.is_empty():
 		_out("METRICS per unit over every fight of this table (the left/party unit and its foes):")
@@ -67,6 +71,8 @@ func _initialize() -> void:
 	if runner.fights > 0:
 		_out("metric checks: %d over %d fights, %d METRIC FAIL" % [metrics.checks, runner.fights, metrics.fail_lines.size()])
 		_out("plan checks: %d PLAN FAIL over %d fights" % [runner.plan_fails, runner.fights])
+	if runner.plan_skips > 0 or runner.fights > 0:
+		_out("plan skips: %d PLAN SKIP fights (jitter, unreachable target; skipped, not failed)" % runner.plan_skips)
 	_clear_sandbox()
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	quit()
@@ -133,14 +139,17 @@ func _band_flag(results: Array[Dictionary]) -> String:
 		return "X HIGH (band %d-%d)" % [args.band_lo, args.band_hi]
 	return ""
 
+# BAL5-SIM K4: `tier_foe=<class>` fights every hero against that class at each tier (mirror: its own class).
 func _tier(level: int) -> void:
-	_out("TIER level %d: hero class vs its own class at a tier (score of the hero, %s)" % [level, _score_label()])
+	var mirror: bool = args.tier_foe == SimArgs.MIRROR
+	_out("TIER level %d: hero class vs %s at a tier (score of the hero, %s)" % [level, "its own class" if mirror else "a %s" % args.tier_foe, _score_label()])
 	for c: String in CLASSES:
 		runner.define("simp_%s" % c, c, level, "hero", true)
 		var line: String = "%-10s" % c
+		var foe_class: String = args.tier_foe_for(c)
 		for tier: String in TIER_ORDER:
-			var foe: String = "sime_%s_%s" % [c, tier]
-			runner.define(foe, c, level, tier, false)
+			var foe: String = "sime_%s_%s" % [foe_class, tier]
+			runner.define(foe, foe_class, level, tier, false)
 			var p: Array[String] = _ids("simp_%s" % c)
 			line += "%s 1v1 %s / 1v3 %s   " % [tier, runner.cell(runner.matchup(p, _ids(foe))), runner.cell(runner.matchup(p, _ids(foe, 3)))]
 		_out(line)

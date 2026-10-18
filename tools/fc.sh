@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fast check: compact, failure-first output. Usage:
-#   tools/fc.sh parse            refresh class cache if .gd files were added, then parse-check changed files
+#   (every Godot command except parse-all/docs/gate first runs godot --headless --import when the class cache is missing or older than any .gd; one import under flock)
+#   tools/fc.sh parse            parse-check changed files
 #   tools/fc.sh parse-all        parse EVERY .gd in one process (~seconds; check_project.ps1 launches Godot once per file)
 #   tools/fc.sh arena [pattern]  run the arena suite; print totals, FAIL/SCRIPT ERROR lines, and lines matching [pattern]
 #   tools/fc.sh dojo [pattern]   run the dojo suite the same way
@@ -16,12 +17,15 @@
 #   tools/fc.sh gate             the commit gate, same steps as check_project.ps1 -Fast -Quiet (class cache, parse-all, arena, dojo); no PowerShell needed
 #   Godot binary: $GODOT, else godot / godot4 on PATH, else the default Windows install
 #   tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   balance simulation (tools/balance_sim.gd, BAL2_SIM.md;
-#        timeout ${SIM_TIMEOUT:-900} s; script errors are shown)
+#        timeout ${SIM_TIMEOUT:-900} s, prints TIMEOUT and exits 1 on expiry; startup watchdog ${SIM_STARTUP_TIMEOUT:-120} s without output; script errors are shown)
 #     modes: duel [level] | tier [level] | levels | group [level] | stats [level|all] | party [level] | role [level] | sweep [level]
-#     keys:  cap=1..30 (10)  smart_skills=on|off  loadout=default|newest|role  spend=class|cons|primary|mixed|all
+#     keys:  cap=1..30 (10)  loadout=default|newest|role  spend=class|cons|primary|mixed|all
 #            preset=<PlanPresets id>|both  distance=default|2..6 (role: 4)  score=both|hp|binary  quick  metrics=on|off  band=lo-hi (30-70)
-#            comp=c1,..(<=4)  enc=<ids>|generated|all  elevel=+n|-n|catalog  elite=<class>  boss=<class>
-#            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>
+#            comp=c1,..(<=4)  enc=<ids>|generated|all|world:[<world>/]<id>  elevel=+n|-n|catalog  elite=<class>  boss=<class>
+#            role=tank|ranged|aoe|support|striker|all  class=<id>|all  dupes=on|off  sample=<n>  target=<key>:<lo>-<hi>  jitter=on|off (on)
+#            world=<id> (bare enc= ids find that world's encounters)  size=<n> lead=<class> (sweep; size=3 lead=warrior = the 10 trios)
+#            tier_foe=mirror|<class>  phase=on|off (generated boss phase, on)  s2=on|off (off); party / sweep default 10 seeds
+#     jitter refusals on an unreachable target print PLAN SKIP and are skipped fights, not PLAN FAIL (BAL5-SIM K6)
 #     full role/sweep runs take ~3 s per party fight: raise SIM_TIMEOUT or split by role= / level (one process each)
 # Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
@@ -32,11 +36,49 @@ status=0
 
 noise='^ERROR: .*leaked|^ERROR: Pages in use|^   at: (~|unref)|WARNING: A Thread|Please call wait_to_finish|^Godot Engine v|^$'
 
+import_stale() {  # class cache missing, or any .gd newer than it
+  local cache=.godot/global_script_class_cache.cfg
+  [ ! -f "$cache" ] || [ -n "$(find scripts tools scenes data/seeds -name '*.gd' -newer "$cache" 2>/dev/null | head -1)" ]
+}
+
+do_import() {
+  echo "[import] class cache stale: running godot --headless --import"
+  timeout 300 "$GODOT" --headless --import > "$OUT/import.out" 2>&1
+  local code=$?
+  if [ $code -ne 0 ]; then echo "[import] FAIL (exit $code, full log: $OUT/import.out)"; return 1; fi
+  touch .godot/global_script_class_cache.cfg
+}
+
+ensure_import() {  # one import for parallel runs: later callers wait on the lock, re-check, skip
+  import_stale || return 0
+  if command -v flock >/dev/null 2>&1; then
+    ( flock 9; import_stale || exit 0; do_import ) 9>"$OUT/import.lock"
+  else
+    do_import
+  fi || { status=1; return 1; }
+}
+
+godot_exit() {  # $1 = godot pipeline exit code, $2 = label, $3 = timeout seconds
+  if [ "$1" -eq 124 ]; then echo "[$2] TIMEOUT after $3 s (raise SIM_TIMEOUT / REPLAY_TIMEOUT or split the run)"; status=1
+  elif [ "$1" -ne 0 ]; then status=$1; fi  # keeps replay exit 2
+}
+
+sim() {  # raw output and watchdog flag are per process ($$), since parallel sims share $OUT
+  local tmo=${SIM_TIMEOUT:-900} stmo=${SIM_STARTUP_TIMEOUT:-120} raw="$OUT/sim.$$.raw" flag="$OUT/sim.$$.watchdog" pid wd code
+  rm -f "$flag"; : > "$raw"
+  timeout "$tmo" "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:1}" > "$raw" 2>&1 &
+  pid=$!
+  ( sleep "$stmo"; if ! grep -q '^§' "$raw" && kill -0 "$pid" 2>/dev/null; then touch "$flag"; kill "$pid" 2>/dev/null; fi ) &
+  wd=$!
+  wait "$pid"; code=$?
+  kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+  grep -E "^§|^SCRIPT ERROR|^   at: res://" "$raw" | sed "s/^§ //"
+  if [ -f "$flag" ]; then echo "[sim] no output after $stmo s: likely a stale class cache or a script error; run tools/fc.sh parse-all"; status=1; rm -f "$flag" "$raw"; return; fi
+  rm -f "$raw"
+  godot_exit "$code" sim "$tmo"
+}
+
 parse() {
-  if [ -n "$(git status --short -uall | grep -E '^\?\? .*\.gd$|^A .*\.gd$')" ]; then
-    echo "[parse] new .gd files: refreshing class cache"
-    timeout 150 "$GODOT" --headless --import >/dev/null 2>&1
-  fi
   local bad=0
   for f in $(git status --short -uall | grep -E '\.gd$' | grep -v '^ *D' | awk '{print $NF}'); do
     res=$(timeout 60 "$GODOT" --headless --path . --check-only -s "res://$f" 2>&1 | grep -E "SCRIPT ERROR|Parse Error|Compile Error" -A1 | head -6)
@@ -46,7 +88,8 @@ parse() {
 }
 
 suite() {  # $1 = scene, $2 = label, $3 = optional pattern
-  timeout 290 "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1
+  local limit=290; [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && limit=900   # cloud box: arena ~9.5 min (2026-10-18)
+  timeout "${SUITE_TIMEOUT:-$limit}" "$GODOT" --headless "$1" > "$OUT/$2.out" 2>&1   # SUITE_TIMEOUT overrides
   local code=$? pass fail
   pass=$(grep -c "PASS" "$OUT/$2.out"); fail=$(grep "FAIL" "$OUT/$2.out" | grep -vc ": PASS")
   echo "[$2] PASS $pass  FAIL $fail   (full log: $OUT/$2.out)"
@@ -68,7 +111,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
   local md=() out
-  for f in CLAUDE.md README.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md data/seeds/*.md .claude/agents/*.md .claude/skills/*/SKILL.md; do [ -f "$f" ] && md+=("$f"); done
+  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md docs/preferences/*.md data/seeds/*.md .claude/agents/*.md .claude/skills/*/SKILL.md; do [ -f "$f" ] && md+=("$f"); done
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }
 
@@ -92,18 +135,23 @@ gate() {  # check_project.ps1 -Fast -Quiet: stops at the first failing step
 }
 
 case "$1" in
+  run|sim|replay|safe_delete|export_placeholder|gen_sfx|arena|dojo|all|parse)
+    ensure_import || exit 1 ;;
+esac
+
+case "$1" in
   parse) parse ;;
   parse-all) parse_all ;;
   arena) suite res://scenes/test_arena.tscn arena "$2" ;;
   dojo) suite res://scenes/gear_dojo.tscn dojo "$2" ;;
-  run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise" ;;
-  sim) timeout "${SIM_TIMEOUT:-900}" "$GODOT" --headless --path . -s tools/balance_sim.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //" ;;
+  run) timeout 120 "$GODOT" --headless --path . -s "$2" 2>&1 | grep -Ev "$noise"; godot_exit "${PIPESTATUS[0]}" run 120 ;;
+  sim) sim "${@:2}" ;;
   docs) docs_check ;;
-  safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
+  safe_delete) timeout 120 "$GODOT" --headless --path . -s tools/safe_delete.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" 120 ;;
   gate) gate ;;
-  replay) timeout "${REPLAY_TIMEOUT:-600}" "$GODOT" --headless --path . -s tools/replay.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
-  export_placeholder) timeout 120 "$GODOT" --headless --path . -s tools/export_placeholder.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
-  gen_sfx) timeout 120 "$GODOT" --headless --path . -s tools/gen_placeholder_sfx.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; status=${PIPESTATUS[0]} ;;
+  replay) timeout "${REPLAY_TIMEOUT:-600}" "$GODOT" --headless --path . -s tools/replay.gd -- "${@:2}" 2>&1 | grep -E "^§|^SCRIPT ERROR|^   at: res://" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" "${REPLAY_TIMEOUT:-600}" ;;
+  export_placeholder) timeout 120 "$GODOT" --headless --path . -s tools/export_placeholder.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" 120 ;;
+  gen_sfx) timeout 120 "$GODOT" --headless --path . -s tools/gen_placeholder_sfx.gd -- "${@:2}" 2>&1 | grep "^§" | sed "s/^§ //"; godot_exit "${PIPESTATUS[0]}" "$1" 120 ;;
   all) parse; docs_check; suite res://scenes/test_arena.tscn arena; suite res://scenes/gear_dojo.tscn dojo ;;
   *) sed -n '2,/^# Exit code/p' "$0" ;;   # the whole usage block, however many lines it grows to
 esac

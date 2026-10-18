@@ -5,7 +5,7 @@ extends RefCounted
 # Tactical RPG - World Schema (the lore layer on top of the content catalog)
 # A world is a folder of lore entries: regions, locations, factions, characters,
 # named items, disciplines, quests, lore entries, encounters, loot (the world
-# loot table quests offer as special rewards), dialogue trees and shops. Entries never
+# loot table quests offer as special rewards), dialogue trees, shops and routes (the world map). Entries never
 # carry gameplay of their own: they REFERENCE base assets from the Content Forge
 # catalog (`base:units`, `base:items`...) and add lore (names, backgrounds, art,
 # factions), plus optional explicit tuning deltas.
@@ -20,7 +20,7 @@ extends RefCounted
 # Every kind has `override` (the qualified id of an ancestor entry it replaces) and `tags`.
 # ==============================================================================
 
-const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops"]
+const KINDS: Array[String] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"]
 
 # Deltas a character may apply to its base unit (flat unless _pct).
 const TUNING_KEYS: Array[String] = ["hp_pct", "power", "armor", "speed", "ap"]
@@ -63,6 +63,8 @@ static func kind_icon(kind: String) -> String:
 			return "💬"
 		"shops":
 			return "🛒"
+		"routes":
+			return "🛤"
 	return "•"
 
 static func _f(key: String, label: String, type: String, default: Variant, extra: Dictionary = {}) -> Dictionary:
@@ -99,6 +101,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = _dialogue_fields()
 		"shops":
 			list = _shop_fields()
+		"routes":
+			list = _route_fields()
 		_:
 			return list
 	if kind != "world":
@@ -122,9 +126,13 @@ static func _world_fields() -> Array[Dictionary]:
 		_f("connects", "Connects to", "refs", [], {"ref": "worlds", "help": "Worlds this one links to without inheriting (locations may exit into them)."}),
 		_f("start_location", "Start location", "ref", "", {"ref": "locations", "optional": true, "help": "Where a new game enters this world. Empty = the nearest parent world's."}),
 		# Starting party (UI1-L, S13): fixed per world; WorldCatalog.manifest_errors checks it, start_party() resolves it.
-		_f("start_party", "Start party", "refs", [], {"ref": "base:units", "ref_filter": {"side": "party"}, "help": "Party-side units a new game starts with (at most 4). Empty = the nearest parent world's."}),
+		_f("start_party", "Start party", "refs", [], {"ref": "base:units", "ref_filter": {"side": "party"}, "help": "Party-side units or party characters of this world (RECRUIT1) a new game starts with (at most the party max). Empty = the nearest parent world's."}),
+		# Party cap (RECRUIT1-L 1.1): WorldCatalog.party_max() resolves it, manifest_errors checks the range.
+		_f("party_max", "Party max", "int", -1, {"help": "Most heroes in the party (-1 = the nearest parent world's, else 4); 1..4."}),
 		# Dialogue and gold (DLG1-L, S11); ranges are checked by WorldCatalog.manifest_errors, not clamped here.
 		_f("start_gold", "Start gold", "int", -1, {"help": "Party gold of a new game (-1 = the nearest parent world's, else 0)."}),
+		# Travel supplies (TRAV2-L, S10); the range is checked by WorldCatalog.manifest_errors.
+		_f("start_supplies", "Start supplies", "int", -1, {"help": "Party supplies of a new game (-1 = the nearest parent world's, else 10); 0..99."}),
 		_f("service_lines", "Service lines", "json", {}, {"help": "{\"greeting\": \"{npc} nods.\"}: overrides of the base service lines (data/dialogue/services.json), merged along the lineage (nearest wins)."}),
 	]
 
@@ -150,7 +158,11 @@ static func _location_fields() -> Array[Dictionary]:
 		# Region map binding (EXP1-L, S9); MapRules.location_errors validates them.
 		_f("map", "Map template", "string", "", {"help": "MapCatalog template id (data/maps). Empty = a menu location with no walkable map."}),
 		_f("zone_bindings", "Zone bindings", "json", {}, {"help": "{\"zone_id\": {\"encounters\": [[\"enc\", 3]], \"elites\": [], \"elite_pct\": 10, \"steps_min\": 12, \"steps_max\": 20}} for DANGER zones of the map."}),
-		_f("markers", "Markers", "json", [], {"help": "[{\"id\", \"kind\": exit|encounter|roamer|npc|chest|lore|point, \"anchor\", ...}] placed on the map's anchors (a roamer walks a path instead)."}),
+		_f("markers", "Markers", "json", [], {"help": "[{\"id\", \"kind\": exit|encounter|roamer|npc|chest|lore|point, \"anchor\", \"label\" (max 32), \"note\" (points only, max 160), ...}] placed on the map's anchors (a roamer walks a path instead)."}),
+		# World-map position (MAPREAD1-L1): [] = automatic layout, else [x, y] in 0..1.
+		_f("map_pos", "World-map position", "json", [], {"help": "[] = automatic layout, or [x, y] with each number 0..1 (0,0 top-left of the world map)."}),
+		# Rest place (HEAL1-L 4.2): an explicit flag, not the kind (a gate can be a battlefield). Read by HealRules / ExploreRunner.
+		_f("rest", "Rest place", "bool", false, {"help": "The party rests here on arrival: everyone's HP is restored."}),
 	]
 
 static func _faction_fields() -> Array[Dictionary]:
@@ -229,6 +241,8 @@ static func _quest_fields() -> Array[Dictionary]:
 		_f("variants", "Variants", "json", [], {"help": "[{\"id\", \"when_flags\": [...], \"unless_flags\": [...], \"set\": {giver, turn_in, description, reward, rewards_from, steps, links, available, loot_pool, loot_picks}}], applied in order."}),
 		_f("loot_pool", "Loot pool", "json", [], {"help": "World loot refs offered as a pick on completion (on top of the generic rewards)."}),
 		_f("loot_picks", "Loot picks", "int", 1, {"help": "How many pool entries the player may take (0..3)."}),
+		# Reputation (REP1-L, S11): applied once on completion; not a variant field.
+		_f("reputation", "Reputation", "json", {}, {"help": "{\"faction\": 10}: reputation deltas (-50..50, not 0, at most 4 factions) applied when the quest completes (needs a template)."}),
 	]
 
 # World loot table: special rewards quests offer from their loot_pool; each is claimed once per save.
@@ -264,9 +278,30 @@ static func _shop_fields() -> Array[Dictionary]:
 		_f("stock", "Stock", "json", [], {"help": "[{\"item\": \"base item id\", \"count\": -1, \"price\": -1, \"requires_flags\": []}]; count -1 = unlimited, price -1 = derived from the item value."}),
 		_f("loot", "Loot for sale", "json", [], {"help": "[{\"loot\": \"world loot ref\", \"price\": 150}]; item loot only, sold once (claimed)."}),
 		_f("buy_mult", "Buy multiplier", "float", 1.0, {"help": "0.5..3.0: derived buy price = ceil(value x mult)."}),
+		_f("supply_price", "Supply price", "int", 0, {"help": "Gold per travel supply (fixed, unlimited, ignores multipliers and reputation); 0 = sells no supplies; 1..999."}),
 		_f("sell_mult", "Sell multiplier", "float", 0.5, {"help": "0.0..1.0: sell price = floor(value x mult); 0 = buys nothing."}),
 		_f("buys", "Buys types", "json", ShopRules.buy_types(), {"help": "Item types the shop buys (every item type but QUEST by default; never QUEST)."}),
 		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; the shop is closed while any fails."}),
+	]
+
+# World map routes (TRAV1-L, S10); TravelRules.route_errors validates them. Ranges are checked there, not clamped here.
+static func _route_fields() -> Array[Dictionary]:
+	return [
+		_f("id", "ID", "id", ""),
+		_f("name", "Name", "string", "New Route"),
+		_f("from", "From", "ref", "", {"ref": "locations", "help": "Where the route starts (a world map node)."}),
+		_f("to", "To", "ref", "", {"ref": "locations", "help": "Where it leads; may be world:id into a connected world."}),
+		_f("two_way", "Two way", "bool", true, {"help": "Off = travel only from -> to."}),
+		_f("time", "Travel time", "int", 3, {"help": "1..20 world clock units per leg."}),
+		_f("zone", "Fight zone", "string", "", {"help": "Combat zone of road fights (empty = each encounter's own)."}),
+		_f("encounter_pct", "Encounter chance %", "int", 20, {"help": "0..100 per leg on the first traversal."}),
+		_f("repeat_pct", "Repeat chance %", "int", -1, {"help": "-1 = half the encounter chance (rounded down); else 0..100 per leg once traversed."}),
+		_f("encounters", "Encounters", "json", [], {"help": "[[\"encounter\", weight 1..100]...], at most 8."}),
+		_f("elites", "Elites", "json", [], {"help": "Same shape; the elite chance picks from these."}),
+		_f("elite_pct", "Elite chance %", "int", 5, {"help": "0..100."}),
+		_f("scripted", "Scripted fights", "json", [], {"help": "[{\"id\", \"encounter\", \"requires_flags\", \"unless_flags\", \"sets_flags\"}], at most 4; one-shot, before the roll."}),
+		_f("requires_flags", "Open when", "json", [], {"help": "[{\"key\", \"value\"}]; any failing = the route is closed."}),
+		_f("unless_flags", "Closed when", "json", [], {"help": "[{\"key\", \"value\"}]; any holding = the route is closed."}),
 	]
 
 static func _lore_fields() -> Array[Dictionary]:
@@ -298,6 +333,16 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_round", "Wave round", "int", 1, {"min": 1, "max": 30}),
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
+		_f("phases", "Phases", "json", [], {"help": "Boss phases (BOSS1): same shape as catalog encounters; refs are character refs (EncounterPhases)."}),
+		_f("objective", "Objective", "enum", "rout", {"options": ["rout", "hold", "escape", "slay"], "help": "rout, hold, escape or slay (OBJ1; EncounterObjectives)."}),
+		_f("objective_tiles", "Objective tiles", "json", [], {"help": "[[x, y], ...] walkable, not exits; [] = the ring [[5, 4], [6, 4]]."}),
+		_f("objective_rounds", "Hold rounds", "int", 3, {"min": 1, "max": 30, "help": "Hold only: round ends held to win (1..max rounds)."}),
+		_f("objective_unit", "Slay target", "string", "", {"help": "A ref from Enemies."}),
+		_f("objective_count", "Heroes out", "int", 1, {"min": 1, "max": 4, "help": "Escape only: heroes that must leave by an exit."}),
+		_f("objective_text", "Objective text", "string", "", {"help": "At most 80 characters; empty = generated from the objective."}),
+		_f("deployment", "Deployment", "enum", "standard", {"options": ["standard", "ambush", "centre"]}),
+		_f("guests", "Guests", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "At most 2 party-side extras: party characters, or npcs whose base unit has side party."}),
+		_f("protect", "Protect", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "Guests that must survive (each must be in Guests)."}),
 	]
 
 # ------------------------------------------------------------------------------

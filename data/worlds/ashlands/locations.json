@@ -15,7 +15,7 @@
 				}
 			],
 			"encounters": [],
-			"map": "walled_town",
+			"map": "ashlands_warden_keep",
 			"zone_bindings": {},
 			"markers": [
 				{
@@ -65,7 +65,8 @@
 					"items": {
 						"con_heal_potion": 1
 					},
-					"gold": 10
+					"gold": 10,
+					"supplies": 4
 				},
 				{
 					"id": "hearth",
@@ -79,9 +80,34 @@
 							"value": true
 						}
 					],
-					"lore": "one_fire_lit"
+					"lore": "one_fire_lit",
+					"label": "The keep's hearth"
+				},
+				{
+					"id": "signpost",
+					"kind": "exit",
+					"anchor": "road",
+					"to": "world_map",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "World map: the roads"
+				},
+				{
+					"id": "muster",
+					"kind": "npc",
+					"anchor": "npc_d",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "brask_toller"
 				}
 			],
+			"map_pos": [
+				0.19,
+				0.65
+			],
+			"rest": true,
 			"tags": []
 		},
 		{
@@ -104,28 +130,24 @@
 				"courtyard_skirmish",
 				"ash_scouts",
 				"ash_raiders",
-				"ash_patrol"
+				"ash_patrol",
+				"ash_straggler"
 			],
-			"map": "gorge_ruins",
+			"map": "ashlands_ruined_courtyard",
 			"zone_bindings": {
 				"ruins": {
 					"encounters": [
 						[
 							"ash_scouts",
-							3
+							2
 						],
 						[
-							"ash_raiders",
-							2
+							"ash_straggler",
+							3
 						]
 					],
-					"elites": [
-						[
-							"ash_patrol",
-							1
-						]
-					],
-					"elite_pct": 10,
+					"elites": [],
+					"elite_pct": 0,
 					"steps_min": 12,
 					"steps_max": 20
 				}
@@ -181,7 +203,12 @@
 				{
 					"id": "patrol",
 					"kind": "roamer",
-					"requires_flags": [],
+					"requires_flags": [
+						{
+							"key": "ashlands.pass_cleared",
+							"value": true
+						}
+					],
 					"unless_flags": [],
 					"sets_flags": [],
 					"encounter": "ash_patrol",
@@ -200,7 +227,8 @@
 						"con_focus_elixir": 1
 					},
 					"loot": "keep_stores",
-					"gold": 25
+					"gold": 25,
+					"supplies": 6
 				},
 				{
 					"id": "old_stones",
@@ -212,6 +240,11 @@
 					"lore": "the_long_dry"
 				}
 			],
+			"map_pos": [
+				0.365,
+				0.55
+			],
+			"rest": false,
 			"tags": []
 		},
 		{
@@ -232,7 +265,7 @@
 				"ash_raiders",
 				"ash_patrol"
 			],
-			"map": "gorge_ruins",
+			"map": "ashlands_cinder_gate",
 			"zone_bindings": {
 				"ruins": {
 					"encounters": [
@@ -299,7 +332,9 @@
 							"key": "ashlands.gate_beacon_lit",
 							"value": true
 						}
-					]
+					],
+					"label": "Signal beacon",
+					"note": "You light the old Warden beacon. Smoke climbs over the pass."
 				},
 				{
 					"id": "camp_cache",
@@ -311,9 +346,132 @@
 					"items": {
 						"con_heal_potion": 1
 					},
-					"gold": 15
+					"gold": 15,
+					"supplies": 6
+				},
+				{
+					"id": "wastes_road",
+					"kind": "exit",
+					"anchor": "east",
+					"to": "world_map",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "World map: the wastes"
+				},
+				{
+					"id": "banner",
+					"kind": "lore",
+					"anchor": "ruin_lore",
+					"requires_flags": [
+						{
+							"key": "quest.ashlands.cinder_gate_watch.ready",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"lore": "ashmaw_banner"
 				}
 			],
+			"map_pos": [
+				0.58,
+				0.33
+			],
+			"rest": false,
+			"tags": []
+		},
+		{
+			"id": "ashmaw_camp",
+			"name": "The Ashmaw Camp",
+			"description": "A ring of hide tents in the wastes, smoke rising from a dozen fires.",
+			"kind": "camp",
+			"region": "cinder_pass",
+			"exits": [
+				{
+					"to": "cinder_gate",
+					"label": "back to the Cinder Gate"
+				}
+			],
+			"encounters": [
+				"ashmaw_stand",
+				"ashmaw_stand_barred",
+				"ash_raiders",
+				"ash_scouts",
+				"ash_patrol"
+			],
+			"map": "ashlands_ashmaw_camp",
+			"zone_bindings": {
+				"ruins": {
+					"encounters": [
+						[
+							"ash_raiders",
+							3
+						],
+						[
+							"ash_scouts",
+							1
+						]
+					],
+					"elites": [
+						[
+							"ash_patrol",
+							1
+						]
+					],
+					"elite_pct": 15,
+					"steps_min": 10,
+					"steps_max": 16
+				}
+			},
+			"markers": [
+				{
+					"id": "to_world",
+					"kind": "exit",
+					"anchor": "west",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map"
+				},
+				{
+					"id": "grakka",
+					"kind": "npc",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "grakka_ashmaw"
+				},
+				{
+					"id": "war_chest",
+					"kind": "chest",
+					"anchor": "ruin_chest",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"items": {
+						"con_heal_potion": 2
+					},
+					"gold": 40
+				},
+				{
+					"id": "patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "ash_patrol",
+					"path": "patrol",
+					"radius": 1,
+					"once": true
+				}
+			],
+			"map_pos": [
+				0.78,
+				0.28
+			],
+			"rest": false,
 			"tags": []
 		}
 	]

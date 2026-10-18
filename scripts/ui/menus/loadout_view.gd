@@ -24,18 +24,14 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 		for raw: Variant in rows:
 			var f: Dictionary = DictUtil.dict_of(raw)
 			var fam: String = str(f["family"])
-			var tiers: PackedStringArray = PackedStringArray()
-			for t: Variant in DictUtil.array_of(f["tiers"]):
-				var td: Dictionary = DictUtil.dict_of(t)
-				tiers.append("T%d" % DictUtil.to_int(td["tier"]) if DictUtil.to_bool(td["castable"]) else "T%d (Lv %d)" % [DictUtil.to_int(td["tier"]), DictUtil.to_int(td["unlock_level"])])
 			var line := HBoxContainer.new()
 			add_child(line)
 			line.add_child(MainMenuView.small(MainMenuView.button("Slot", LevelUpView._redraw.bind(host, m.slot.bind(fam, group, list.size())), not list.has(fam)), 90))
-			line.add_child(MainMenuView.text("%s  [%s]  %s" % [str(f["name"]), str(f["grade"]), ", ".join(tiers)], UiTheme.COL_TEXT, false))
-	var basics: PackedStringArray = PackedStringArray()
+			line.add_child(MainMenuView.text(family_line(f), UiTheme.COL_TEXT, false))
+	var basics: Array[String] = []
 	for fam: String in m.basics():
 		basics.append(SkillCatalog.family_name(fam))
-	add_child(MainMenuView.text("Basics (always active): " + ", ".join(basics), UiTheme.COL_MUTED))
+	add_child(MainMenuView.text(basics_line(basics), UiTheme.COL_MUTED))
 	var buttons := HBoxContainer.new()
 	add_child(buttons)
 	buttons.add_child(MainMenuView.button("Use default", LevelUpView._redraw.bind(host, func() -> Array[String]:
@@ -46,3 +42,15 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 		m.cancel()
 		return [] as Array[String]), m.has_draft()))
 	buttons.add_child(MainMenuView.button("Back", host.router.pop))
+
+# One owned family row (LoadoutModel.families row): "Name  [Grade]  T1, T2 (Lv 5)" (locked tiers show their unlock level).
+static func family_line(f: Dictionary) -> String:
+	var tiers: PackedStringArray = PackedStringArray()
+	for t: Variant in DictUtil.array_of(f["tiers"]):
+		var td: Dictionary = DictUtil.dict_of(t)
+		tiers.append("T%d" % DictUtil.to_int(td["tier"]) if DictUtil.to_bool(td["castable"]) else "T%d (Lv %d)" % [DictUtil.to_int(td["tier"]), DictUtil.to_int(td["unlock_level"])])
+	return "%s  [%s]  %s" % [str(f["name"]), str(f["grade"]), ", ".join(tiers)]
+
+# The basics line under the slots.
+static func basics_line(names: Array[String]) -> String:
+	return "Basics (always active): " + ", ".join(PackedStringArray(names))

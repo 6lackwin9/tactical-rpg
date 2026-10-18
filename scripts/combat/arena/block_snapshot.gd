@@ -9,6 +9,8 @@ extends RefCounted
 var block_index: int = 0
 var round_num: int = 1
 var reinforcements_spawned: bool = false
+var phase_state: Dictionary = {}       # CombatEncounter.phase_state() copy (BOSS1: fired / due / dropped)
+var objective_state: Dictionary = {}   # CombatEncounter.objective_state() copy (OBJ1: hold rounds counted)
 var positions: Dictionary = {}         # Combatant -> Vector2i
 var hps: Dictionary = {}               # Combatant -> int
 var max_hps: Dictionary = {}           # Combatant -> int
@@ -26,3 +28,4 @@ var status_magnitudes: Dictionary = {} # Combatant -> Dictionary (magnitude per 
 var pending_status_magnitudes: Dictionary = {} # Combatant -> Dictionary (queued magnitude per status, copy)
 var status_sources: Dictionary = {}    # Combatant -> Dictionary (status -> applier unit name, copy)
 var pending_status_sources: Dictionary = {} # Combatant -> Dictionary (queued status -> applier unit name, copy)
+var pouches: Dictionary = {}           # Combatant -> Array[Consumable] (battle_pouch copy, ITEMUSE1 rule 6: undo / reset give items back)

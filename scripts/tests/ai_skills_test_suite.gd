@@ -8,6 +8,8 @@ extends RefCounted
 # here is an "ai1_*" row of a sandbox catalog fork (the shipped catalog is never touched) and
 # every expectation is derived from the rules, not from shipped skill numbers. Taunt, buffs, debuffs,
 # riposte and the seeded simulation: AiSkillsTacticsTestSuite; fixtures and helpers: AiSkillsKit (CLN-12).
+# BAL3-AI levers B (Focus under pressure), C (faster tier when likely to die), the incoming-damage estimate and
+# the minion skill ceiling are tested here; the heal reservation and taunt pull in AiSkillsTacticsTestSuite.
 # ==============================================================================
 
 const TAG: String = "AI1"
@@ -22,6 +24,10 @@ static func run() -> bool:
 		ok = _test_disengage() and ok
 		ok = _test_area() and ok
 		ok = _test_cleanse() and ok
+		ok = _test_incoming() and ok
+		ok = _test_focus_pressure() and ok
+		ok = _test_fast_tier() and ok
+		ok = _test_minion_ceiling() and ok
 	AiSkillsKit.teardown()
 	return ok
 
@@ -180,3 +186,131 @@ static func _test_cleanse() -> bool:
 	AiSkillsKit.unit_of(fighter, "allies", 1).statuses[StatusEffects.STUN] = true
 	checks["an aggressor that owns a cleanse uses it on a stunned ally"] = AiSkillsKit.count_of(AiSkillsKit.plan_steps(fighter), "ai1_clean_a") == 1
 	return TestHelpers.report(TAG, "Rule 4: cleanse-only skills", checks)
+
+# ------------------------------------------------------------------------------
+# BAL3-AI (docs/specs/BAL3.md sections 4-5)
+# ------------------------------------------------------------------------------
+
+# Expected incoming damage: only foes that would pick the unit count, at least the strike chain that fits the round.
+static func _test_incoming() -> bool:
+	var checks: Dictionary = {}
+	var strike: SkillDef = SkillCatalog.find(AiSkillsKit.STRIKE)
+	var s: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), [], [Vector2i(5, 4)])
+	var actor: Combatant = s["actor"]
+	var foe: Combatant = AiSkillsKit.unit_of(s, "foes", 0)
+	var ctx: PlanContext = s["ctx"]
+	var plan := CombatPlan.new(ctx)
+	var blocks: int = ctx.total_blocks
+	var hits: int = mini(floori(float(blocks) / float(strike.blocks)), floori(float(foe.ap) / float(maxi(1, strike.ap_cost(foe)))))
+	var incoming: int = TacticalAI.incoming_damage(plan, actor, blocks, ctx.grid.get_position(actor))
+	checks["an adjacent foe: at least its strikes that fit the round"] = incoming >= hits * DamageCalculator.expected(foe, actor, strike) and incoming > 0
+	checks["block 0: nothing lands yet"] = TacticalAI.incoming_damage(plan, actor, 0, ctx.grid.get_position(actor)) == 0
+	var far: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(0, 4), [], [Vector2i(CombatGrid.GRID_W - 1, 4)])
+	var far_actor: Combatant = far["actor"]
+	var far_ctx: PlanContext = far["ctx"]
+	checks["a foe beyond one move plus its reach: 0"] = TacticalAI.incoming_damage(CombatPlan.new(far_ctx), far_actor, far_ctx.total_blocks, far_ctx.grid.get_position(far_actor)) == 0
+	var shielded: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(2, 4), [], [Vector2i(5, 4)], [Vector2i(4, 4)])
+	var shielded_actor: Combatant = shielded["actor"]
+	var shielded_ctx: PlanContext = shielded["ctx"]
+	var front: Combatant = AiSkillsKit.unit_of(shielded, "allies", 1)
+	var shielded_plan := CombatPlan.new(shielded_ctx)
+	checks["a nearest-first foe next to another friend: it picks that friend, not the unit"] = TacticalAI.incoming_damage(shielded_plan, shielded_actor, shielded_ctx.total_blocks, shielded_ctx.grid.get_position(shielded_actor)) == 0 and TacticalAI.incoming_damage(shielded_plan, front, shielded_ctx.total_blocks, shielded_ctx.grid.get_position(front)) > 0
+	return TestHelpers.report(TAG, "BAL3-AI: incoming damage estimate", checks)
+
+# A ranged unit that can shoot in place with a ranged foe at the same distance; `foe_power` sets the pressure.
+static func _focus_scene(foe_power: int) -> Dictionary:
+	var s: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.SNIPER, Vector2i(2, 4), ["ai1_focus"], [Vector2i(5, 4)], [], 3, 3)
+	AiSkillsKit.unit_of(s, "foes", 0).power_override = foe_power
+	return s
+
+# Incoming damage on the actor by the end of a Focus-first cast (Focus blocks + strike blocks).
+static func _pre_cast_incoming(s: Dictionary) -> int:
+	var actor: Combatant = s["actor"]
+	var ctx: PlanContext = s["ctx"]
+	var cast_end: int = SkillCatalog.find("ai1_focus").blocks + SkillCatalog.find(AiSkillsKit.STRIKE).blocks
+	return TacticalAI.incoming_damage(CombatPlan.new(ctx), actor, cast_end, ctx.grid.get_position(actor))
+
+# Lever B: Focus first only while the damage expected before the cast resolves is below 50% of current HP.
+static func _test_focus_pressure() -> bool:
+	var checks: Dictionary = {}
+	var calm: Dictionary = _focus_scene(5)
+	var calm_actor: Combatant = calm["actor"]
+	checks["calm board: pre-cast incoming below the ratio"] = float(_pre_cast_incoming(calm)) < TacticalAI.FOCUS_PRESSURE_RATIO * float(calm_actor.hp)
+	var calm_steps: Array[PlanStep] = AiSkillsKit.plan_steps(calm)
+	checks["calm: Focus goes before the cast"] = AiSkillsKit.index_of(calm_steps, "ai1_focus") == 0 and AiSkillsKit.first_attack(calm, calm_steps) != null
+	# Pressure: the pre-cast hits reach the ratio, but the whole round stays below the HP (lever C is not involved).
+	var power: int = 5
+	var hot: Dictionary = _focus_scene(power)
+	var hot_actor: Combatant = hot["actor"]
+	while float(_pre_cast_incoming(hot)) < TacticalAI.FOCUS_PRESSURE_RATIO * float(hot_actor.hp) and power < 1000:
+		power += 5
+		hot = _focus_scene(power)
+		hot_actor = hot["actor"]
+	var hot_ctx: PlanContext = hot["ctx"]
+	checks["pressure board: pre-cast incoming reaches the ratio"] = float(_pre_cast_incoming(hot)) >= TacticalAI.FOCUS_PRESSURE_RATIO * float(hot_actor.hp)
+	checks["(and the whole round stays below the HP)"] = TacticalAI.incoming_damage(CombatPlan.new(hot_ctx), hot_actor, hot_ctx.total_blocks, hot_ctx.grid.get_position(hot_actor)) < hot_actor.hp
+	var hot_steps: Array[PlanStep] = AiSkillsKit.plan_steps(hot)
+	checks["pressure: no Focus, the cast goes first"] = AiSkillsKit.count_of(hot_steps, "ai1_focus") == 0 and not hot_steps.is_empty() and hot_steps[0].mode == PlanStep.Mode.ENGAGE
+	checks["both plans are valid"] = AiSkillsKit.valid(calm, calm_steps) and AiSkillsKit.valid(hot, hot_steps)
+	return TestHelpers.report(TAG, "BAL3-AI lever B: skip Focus under pressure", checks)
+
+# A melee unit next to a melee foe, owning a slower, harder tier (ai1_heavy); `foe_power` sets the pressure.
+static func _fast_scene(foe_power: int) -> Dictionary:
+	var s: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_heavy"], [Vector2i(5, 4)])
+	AiSkillsKit.unit_of(s, "foes", 0).power_override = foe_power
+	return s
+
+static func _round_incoming(s: Dictionary) -> int:
+	var actor: Combatant = s["actor"]
+	var ctx: PlanContext = s["ctx"]
+	return TacticalAI.incoming_damage(CombatPlan.new(ctx), actor, ctx.total_blocks, ctx.grid.get_position(actor))
+
+# Lever C: likely to die this round (incoming >= current HP): the highest-damage option resolving by block 2.
+static func _test_fast_tier() -> bool:
+	var checks: Dictionary = {}
+	var calm: Dictionary = _fast_scene(5)
+	var calm_actor: Combatant = calm["actor"]
+	var calm_foe: Combatant = AiSkillsKit.unit_of(calm, "foes", 0)
+	var heavy: SkillDef = SkillCatalog.find("ai1_heavy")
+	var strike: SkillDef = SkillCatalog.find(AiSkillsKit.STRIKE)
+	checks["fixture: the slow tier hits harder and resolves after block 2"] = DamageCalculator.expected(calm_actor, calm_foe, heavy) > DamageCalculator.expected(calm_actor, calm_foe, strike) and heavy.blocks > TacticalAI.FAST_BLOCK and strike.blocks <= TacticalAI.FAST_BLOCK
+	checks["calm board: incoming below the HP"] = _round_incoming(calm) < calm_actor.hp
+	var calm_first: PlanEntry = AiSkillsKit.first_attack(calm, AiSkillsKit.plan_steps(calm))
+	checks["calm: the harder, slower tier first"] = calm_first != null and calm_first.skill.id == "ai1_heavy"
+	var power: int = 5
+	var hot: Dictionary = _fast_scene(power)
+	var hot_actor: Combatant = hot["actor"]
+	while _round_incoming(hot) < hot_actor.hp and power < 2000:
+		power += 5
+		hot = _fast_scene(power)
+		hot_actor = hot["actor"]
+	checks["pressure board: incoming reaches the HP"] = _round_incoming(hot) >= hot_actor.hp
+	var hot_steps: Array[PlanStep] = AiSkillsKit.plan_steps(hot)
+	var hot_first: PlanEntry = AiSkillsKit.first_attack(hot, hot_steps)
+	checks["pressure: the first attack resolves by block 2 (the plain strike)"] = hot_first != null and hot_first.end_block() <= TacticalAI.FAST_BLOCK and hot_first.skill.id == AiSkillsKit.STRIKE
+	checks["the pressure plan is valid"] = AiSkillsKit.valid(hot, hot_steps)
+	# Nothing resolves by block 2 (the foe must be walked to first): the normal order applies.
+	var walk: Dictionary = AiSkillsKit.new_scene(AiProfile.Role.AGGRESSOR, Vector2i(4, 4), ["ai1_heavy"], [Vector2i(7, 4)])
+	var walk_actor: Combatant = walk["actor"]
+	walk_actor.hp = 1
+	var walk_profile: AiProfile = walk["profile"]
+	walk_profile.flee_ratio = 0.0
+	walk_profile.defend_below = 0.0
+	var walk_first: PlanEntry = AiSkillsKit.first_attack(walk, AiSkillsKit.plan_steps(walk))
+	checks["likely to die but a move first: the normal (highest) tier"] = _round_incoming(walk) >= walk_actor.hp and walk_first != null and walk_first.skill.id == "ai1_heavy"
+	return TestHelpers.report(TAG, "BAL3-AI lever C: faster tier when likely to die", checks)
+
+# Section 5: minion-tier, class-derived units without an explicit skill_cap get StatRules.tier_skill_cap("minion").
+static func _test_minion_ceiling() -> bool:
+	var checks: Dictionary = {}
+	var tier_cap: int = StatRules.tier_skill_cap("minion")
+	var expected_cap: int = tier_cap if tier_cap > 0 else AiProfile.NO_CEILING
+	checks["the minion tier default is the named constant"] = tier_cap == StatRules.MINION_SKILL_CAP
+	checks["a minion without skill_cap: the tier ceiling"] = ContentFactory.ai_profile({"class_id": "brawler", "level": 5, "tier": "minion"}, null).skill_cap == expected_cap
+	checks["an explicit skill_cap wins over the tier default"] = ContentFactory.ai_profile({"class_id": "brawler", "level": 5, "tier": "minion", "skill_cap": 3}, null).skill_cap == 3
+	var other_tiers: bool = true
+	for tier: String in StatRules.tier_names():
+		if tier != "minion" and StatRules.tier_skill_cap(tier) == 0:
+			other_tiers = other_tiers and ContentFactory.ai_profile({"class_id": "brawler", "level": 5, "tier": tier}, null).skill_cap == AiProfile.NO_CEILING
+	checks["tiers without a ceiling keep NO_CEILING"] = other_tiers
+	return TestHelpers.report(TAG, "BAL3 section 5: minion skill ceiling", checks)

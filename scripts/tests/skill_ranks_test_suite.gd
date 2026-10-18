@@ -193,14 +193,14 @@ static func _test_file_versions() -> bool:
 	var checks: Dictionary = {}
 	checks["sandbox fork"] = TestHelpers.fork(SANDBOX)
 	var path: String = ContentCatalog.path_for("skills", SANDBOX)
-	# Version 1: flat rows, as before.
+	# Version 1 (flat rows) is refused and blocks saving (CLN-3b).
 	var flat: Dictionary = {"kind": "skills", "version": 1, "entries": [
 		{"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 2, "basic": true},
 		{"id": "t_v1", "name": "V1", "kind": "ATTACK", "level": 1, "blocks": 1, "description": "One."},
 		{"id": "t_v1_2", "name": "V1 II", "kind": "ATTACK", "level": 2, "blocks": 1, "family": "t_v1", "tier": 2, "description": "Two."}]}
 	_write(path, flat)
 	ContentCatalog.reload_from_disk()
-	checks["a version 1 flat file loads"] = ContentCatalog.has("skills", "t_v1_2") and str(ContentCatalog.get_entry("skills", "t_v1_2")["family"]) == "t_v1" and ContentCatalog.load_errors().is_empty()
+	checks["a version 1 flat file is refused and blocks saving"] = not ContentCatalog.has("skills", "t_v1_2") and TestHelpers.any_contains(ContentCatalog.load_errors(), "version 1 skills files") and ContentCatalog.save_blocked("skills")
 	# Version 2: ranked entries expand.
 	var ranked: Dictionary = {"kind": "skills", "version": 2, "entries": [
 		{"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 2, "basic": true},

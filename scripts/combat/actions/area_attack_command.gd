@@ -10,6 +10,7 @@ extends BattleCommand
 
 var grid: CombatGrid = null
 var cells: Array[Vector2i] = []
+var aim_cell: Vector2i = Vector2i(-1, -1)   # the tile the area was aimed at (display only: intent tells; -1 = unknown)
 var skill_mult: float = 1.0
 var status_rounds: int = 1       # how long an inflicted status lasts once active
 
@@ -28,7 +29,12 @@ func execute() -> void:
 	last_damage = 0
 	last_hits = 0
 	reactions.clear()
+	broken_targets.clear()
+	combo_notes.clear()
+	exploited.clear()
+	failed = false
 	if not source.is_active():
+		failed = true
 		execution_log = "[Action Failed] %s cannot act (unit is inactive)." % source.name
 		return
 	var parts: Array[String] = []
@@ -39,16 +45,20 @@ func execute() -> void:
 			continue
 		if skill_mult <= 0.0:
 			continue   # a zero-power area attack never damages or provokes (schema rejects it; D1 rule kept)
-		var res: Dictionary = DamageCalculator.compute(source, victim, source.attack_range > 1, false, skill_mult, false, rng)
+		var cover: float = CoverRules.cover_for(grid, grid.get_position(source), cell, source.attack_range > 1)   # each hit unit's tile vs the caster (S12T-L)
+		var matched: Dictionary = exploit_against(victim)   # per unit hit: its active statuses (S12C-L)
+		var res: Dictionary = DamageCalculator.compute(source, victim, source.attack_range > 1, false, skill_mult * DictUtil.to_float(matched["mult"], 1.0), false, rng, -1, true, cover)
 		var taken: int = victim.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage += taken
 		last_hits += 1
 		var status_note: String = _roll_status(victim)   # one independent roll per unit hit
-		parts.append("%s %d%s%s%s" % [victim.name, taken, " CRIT" if DictUtil.to_bool(res["is_crit"]) else "", " DEFEATED" if not victim.is_alive() else "", status_note])
+		parts.append("%s %d%s%s%s%s" % [victim.name, taken, " CRIT" if DictUtil.to_bool(res["is_crit"]) else "", " DEFEATED" if not victim.is_alive() else "", status_note, exploit_note(matched)])
 		breakdowns.append("%s: %s" % [victim.name, DamageCalculator.describe(res)])
 		var counter: Dictionary = RiposteRules.counter(source, victim, grid, source.attack_range > 1, rng)
 		if not counter.is_empty():
 			reactions.append(counter)
+		after_hit(victim, taken, matched)   # stance break, then consume (S12C-L rule 5)
+		note_exploit(victim, matched)
 	last_breakdown = "\n".join(breakdowns)
 	if last_hits == 0:
 		execution_log = "[Area Miss] %s's %s hit nobody." % [source.name, command_name]

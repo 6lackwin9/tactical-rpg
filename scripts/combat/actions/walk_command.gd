@@ -9,6 +9,7 @@ extends BattleCommand
 # cut short), it re-paths toward the final destination around whoever stands
 # there now. A blocked step stops it short: the unit stays on the last free
 # tile, unused tiles are refunded as AP, and the log says what blocked it.
+# Hazard tiles entered roll their status once per status (HazardRules, S12T-L).
 # ==============================================================================
 
 const NONE: Vector2i = Vector2i(-1, -1)
@@ -23,6 +24,7 @@ var approach_target: Combatant = null  # set when this walk is an Engage's appro
 var moved_tiles: int = 0
 var cut_short: bool = false
 var blocked_by: String = ""
+var hazard_notes: Array[String] = []   # "[Hazard] ..." lines of the statuses the walk's tiles inflicted
 
 func _init(p_source: Combatant, p_grid: CombatGrid, p_path: Array[Vector2i], p_block_cost: int = 1) -> void:
 	super(p_source, 0, p_block_cost)
@@ -41,6 +43,7 @@ func execute() -> void:
 	moved_tiles = 0
 	cut_short = false
 	blocked_by = ""
+	hazard_notes = []
 	if not can_execute():
 		execution_log = "[Move Failed] %s could not execute movement (inactive or off grid)." % source.name
 		return
@@ -48,6 +51,7 @@ func execute() -> void:
 	var walk: Array[Vector2i] = path
 	if expected_start != NONE and goal != NONE and start_pos != expected_start:
 		walk = _repath(start_pos)
+	var entered: Array[Vector2i] = []
 	for dir: Vector2i in walk:
 		var next_cell: Vector2i = grid.get_position(source) + dir
 		if not source.is_active() or not grid.move_combatant(source, dir):
@@ -55,6 +59,9 @@ func execute() -> void:
 			blocked_by = _describe_blocker(next_cell)
 			break
 		moved_tiles += 1
+		if grid.has_combatant(source):
+			entered.append(next_cell)
+	hazard_notes = HazardRules.on_enter(grid, source, entered, rng)
 	if source.is_withdrawn:
 		execution_log = "[Withdrawal] %s moved from %s and safely WITHDREW through Exit!" % [source.name, str(start_pos)]
 		return
@@ -71,15 +78,21 @@ func execute() -> void:
 		execution_log = "[Move Cut Short] %s stopped at %s after %d of %d tiles (blocked by %s)." % [source.name, str(end_pos), moved_tiles, path.size(), blocked_by]
 	else:
 		execution_log = "[Move] %s moved %d tile%s from %s to %s" % [source.name, moved_tiles, "" if moved_tiles == 1 else "s", str(start_pos), str(end_pos)]
+	for note: String in hazard_notes:
+		execution_log += " " + note
 
-# Up to this walk's tile count toward `goal`, around current occupants.
+# This walk's block toward `goal`, around current occupants: the first cost chunk of the cheapest route within
+# this walk's planned cost (at least the unit's move budget; GridPath.chunk, S12T-L), at most its planned tile
+# count (the AP paid).
 func _repath(from: Vector2i) -> Array[Vector2i]:
 	var blocked: Dictionary = {}
 	for other: Variant in grid.combatant_positions:
 		if other != source and other is Combatant:
 			blocked[grid.combatant_positions[other]] = true
 	var route: Array[Vector2i] = GridPath.find_path(grid, from, {goal: true}, blocked, grid.is_exit_tile(goal))
-	return route.slice(0, path.size())
+	var budget: int = maxi(source.move_per_block(), GridPath.path_cost(grid, expected_start, path))   # this walk's planned cost
+	var first: Array[Vector2i] = GridPath.fit_blocks(grid, from, route, budget, 1)
+	return first.slice(0, path.size())
 
 func _describe_blocker(cell: Vector2i) -> String:
 	var occupant: Combatant = grid.get_combatant_at(cell)

@@ -211,7 +211,7 @@ static func run(_tree_parent: Node = null) -> bool:
 	var gfoe: Combatant = gsession.enemies[0]
 	var foe_opts: Array[PlanOption] = gsession.plan_target_options(gfoe)
 	var self_opts: Array[PlanOption] = gsession.plan_target_options(gh)
-	var ally_opts: Array[PlanOption] = gsession.plan_target_options(gsession.allies[1])
+	var ally_opts: Array[PlanOption] = gsession.plan_target_options(gsession.allies[1]).filter(func(o: PlanOption) -> bool: return o.step.mode != PlanStep.Mode.ITEM)   # ITEMUSE1: pouch items aside
 	var tile_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(3, 6))
 	var exit_opts: Array[PlanOption] = gsession.plan_cell_options(Vector2i(11, 4))
 	var occupied_opts: Array[PlanOption] = gsession.plan_cell_options(gsession.grid.get_position(gfoe))
@@ -228,6 +228,8 @@ static func run(_tree_parent: Node = null) -> bool:
 			targets_ok = targets_ok and o.step.target == gfoe and o.valid
 	var has_rest: bool = false
 	for o: PlanOption in self_opts:
+		if o.step.mode == PlanStep.Mode.ITEM:
+			continue   # ITEMUSE1: pouch items, if the unit carries any, are offered on the unit too
 		targets_ok = targets_ok and o.step.mode == PlanStep.Mode.SELF
 		if o.step.skill.kind == SkillDef.Kind.REST:
 			has_rest = true

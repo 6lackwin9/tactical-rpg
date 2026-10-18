@@ -32,3 +32,6 @@ test_*.txt
 
 # Agent run checkpoints (resumable runs)
 .agent/
+
+# run.bat opt: branch the -opt worktree was opened from
+.opt_branch

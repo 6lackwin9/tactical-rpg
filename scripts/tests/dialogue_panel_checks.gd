@@ -6,15 +6,19 @@ extends RefCounted
 # the shop return rule (user decision 2026-10-17: closing a shop back to its node does not re-run the node's effects)
 # and the debug panels in the region map scene (talk, locked choice, shop buy and close, turn-in step, dialogue fight).
 # DLG1-F: buy count cap, selling at the gold cap, the turn-in pre-check on confirm, gold-cap notes from dialogue give.
+# POI-FIX: real key and mouse events through the main-menu-hosted region map (hint, bump note, E on chest / npc /
+# nothing, click on a marker next to the party, click on a far one).
 # ==============================================================================
 
 const DEBUG_SCENE: String = "res://scenes/overworld/region_map_debug.tscn"
+const MENU_SCENE: String = "res://scenes/main_menu.tscn"
 const R: String = DialogueTestSuite.R
 
 static func run(tree_parent: Node) -> bool:
 	var ok: bool = _test_shop_return()
 	ok = _test_followups() and ok
 	ok = _test_panels(tree_parent) and ok
+	ok = _test_map_input(tree_parent) and ok
 	return ok
 
 static func _q(local: String) -> String:
@@ -139,3 +143,106 @@ static func _test_panels(tree_parent: Node) -> bool:
 	CurrentGame.end()
 	view.free()
 	return _report("Dialogue and shop panels (talk, locked choice, shop buy and close, turn-in step, dialogue fight)", checks)
+
+# A key press and release pushed through the viewport (_input, GUI, then _unhandled_input), not a direct handler call.
+static func _key(vp: Viewport, code: Key) -> void:
+	for down: bool in [true, false]:
+		var ev := InputEventKey.new()
+		ev.keycode = code
+		ev.physical_keycode = code
+		ev.pressed = down
+		vp.push_input(ev, true)
+
+# A left click on `tile` of the map canvas, pushed through the viewport (the GUI picks the control under it).
+static func _click(vp: Viewport, view: RegionMapView, tile: Vector2i) -> void:
+	var canvas: Control = view._canvas
+	var at: Vector2 = canvas.get_global_rect().position + view.tile_centre(tile)   # MAPVIEW1: camera offset applied
+	for down: bool in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = down
+		ev.position = at
+		ev.global_position = at
+		vp.push_input(ev, true)
+
+static func _last(view: RegionMapView) -> String:
+	return "" if view.log_lines.is_empty() else view.log_lines[-1]
+
+static func _farewell(dp: DialoguePanel) -> void:
+	if dp.runner != null:
+		var _bye: Dictionary = dp.pick(DialogueTestSuite._find(dp.runner.view(), DialogueTestSuite._line("farewell")))
+
+static func _test_map_input(tree_parent: Node) -> bool:
+	var label: String = "POI-FIX: map input through the main menu host (hint, bump note, E opens chest / npc / nothing, click next to / far)"
+	var checks: Dictionary = {}
+	if tree_parent == null:
+		checks["scene loads"] = load(MENU_SCENE) is PackedScene
+		return _report(label + " (headless without a tree: load only)", checks)
+	var layer := CanvasLayer.new()   # on top of anything earlier suites left in the arena, so clicks reach the map
+	layer.layer = 128
+	tree_parent.add_child(layer)
+	var host := Control.new()
+	host.size = SettingsUiTestSuite.VIEW
+	layer.add_child(host)
+	var mm: MainMenuView = (load(MENU_SCENE) as PackedScene).instantiate() as MainMenuView
+	host.add_child(mm)
+	var gs: GameState = DialogueTestSuite._gs()
+	var entered: Dictionary = ExploreRunner.enter(gs, "yard")   # the fixture world has no start location
+	CurrentGame.start(gs)
+	mm.open_game(gs)
+	var view: RegionMapView = mm.game_view as RegionMapView
+	checks["the main menu hosts the region map in the yard"] = DictUtil.to_bool(entered["ok"]) and view != null and view.gs == gs and gs.location_id == _q("yard")
+	if view == null:
+		CurrentGame.end()
+		tree_parent.remove_child(layer)
+		layer.free()
+		return _report(label, checks)
+	SettingsUiTestSuite.layout(mm)
+	var vp: Viewport = mm.get_viewport()
+	var dp: DialoguePanel = view.dialogue_panel
+	checks["a hint line names the keys"] = view.hint != null and view.hint.is_visible_in_tree() and view.hint.text == RegionMapView.HINT
+	var t: Dictionary = ExploreRunner.template_of(ExploreRunner.location(gs))
+	var chest: Vector2i = ExploreRunner.marker_pos(t, DialogueTestSuite._marker("box"), 0)
+	var mara: Vector2i = ExploreRunner.marker_pos(t, DialogueTestSuite._marker("npc_mara"), 0)
+	var hest: Vector2i = ExploreRunner.marker_pos(t, DialogueTestSuite._marker("npc_hest"), 0)
+	# chest: walk one step, bump it, E opens it, E again finds it empty
+	gs.position = chest + Vector2i(0, -2)
+	view._refresh()
+	_key(vp, KEY_DOWN)
+	checks["an arrow key steps"] = gs.position == chest + Vector2i(0, -1)
+	_key(vp, KEY_DOWN)
+	checks["bumping the chest: no move, faces it, notes press E"] = gs.position == chest + Vector2i(0, -1) and view.facing == Vector2i(0, 1) and _last(view) == str(RegionMapView.BUMP_NOTES["chest"])
+	var gold0: int = gs.party.gold
+	_key(vp, KEY_E)
+	checks["E opens the chest"] = gs.party.gold == gold0 + DialogueTestSuite.CHEST_GOLD and _last(view).begins_with("Opened")
+	_key(vp, KEY_E)
+	checks["E again: the chest is empty"] = _last(view) == "The chest is empty." and gs.party.gold == gold0 + DialogueTestSuite.CHEST_GOLD
+	# nothing: face away from the chest
+	_key(vp, KEY_UP)
+	_key(vp, KEY_UP)
+	_key(vp, KEY_E)
+	checks["E facing no marker notes it"] = view._marker_kind_at(gs.position + view.facing).is_empty() and _last(view) == RegionMapView.NOTHING_NOTE
+	# npc: bump, then E opens the conversation
+	gs.position = mara + Vector2i(0, 1)
+	view._refresh()
+	_key(vp, KEY_UP)
+	checks["bumping an npc notes press E"] = gs.position == mara + Vector2i(0, 1) and _last(view) == str(RegionMapView.BUMP_NOTES["npc"])
+	_key(vp, KEY_E)
+	checks["E opens the npc conversation"] = dp.is_open() and dp.runner != null and dp.runner.character_name == "Mara" and view.busy()
+	_farewell(dp)
+	checks["farewell frees the map"] = not dp.is_open() and not view.busy()
+	# click: a marker next to the party faces it and talks; a far one notes walk closer
+	gs.position = hest + Vector2i(-1, 0)
+	view.facing = Vector2i(0, 1)
+	view._refresh()
+	_click(vp, view, hest)
+	checks["a click on an npc next to the party faces it and talks"] = view.facing == Vector2i(1, 0) and dp.is_open() and dp.runner != null and dp.runner.character_name == "Hest"
+	_farewell(dp)
+	var far: Vector2i = mara if not ExploreRunner.DIRS.has(mara - gs.position) else chest
+	var pos0: Vector2i = gs.position
+	_click(vp, view, far)
+	checks["a click on a marker further away notes walk closer"] = not ExploreRunner.DIRS.has(far - pos0) and _last(view) == RegionMapView.FAR_NOTE and not dp.is_open() and gs.position == pos0
+	CurrentGame.end()
+	tree_parent.remove_child(layer)
+	layer.free()
+	return _report(label, checks)

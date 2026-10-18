@@ -644,15 +644,15 @@
 			"description": "{name}: {power} power. Sweep area, hits allies too. Aim at a diagonal neighbour to pick the quadrant. Bare hands or feet.",
 			"learned_only": true,
 			"area": "SWEEP",
-			"power_mult": 0.7,
+			"power_mult": 0.8,
 			"ranks": [
 				{
 					"level": 3,
-					"power_mult": 0.9
+					"power_mult": 1.0
 				},
 				{
 					"level": 4,
-					"power_mult": 1.05
+					"power_mult": 1.15
 				}
 			]
 		},
@@ -1310,6 +1310,90 @@
 					"level": 4,
 					"status_magnitude": 6,
 					"status_rounds": 3
+				}
+			]
+		},
+		{
+			"id": "feint",
+			"name": "Feint",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {flow}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"dagger"
+			],
+			"min_proficiency": 1,
+			"power_mult": 0.7,
+			"ends_in_stance": "DEFENSIVE",
+			"ranks": [
+				{
+					"level": 3,
+					"power_mult": 0.9
+				},
+				{
+					"level": 4,
+					"power_mult": 1.05
+				}
+			]
+		},
+		{
+			"id": "crushing_blow",
+			"name": "Crushing Blow",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {disrupt}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"unarmed",
+				"fist"
+			],
+			"min_proficiency": 1,
+			"disrupt": "STANCE_BREAK",
+			"ranks": [
+				{
+					"level": 3,
+					"power_mult": 1.25
+				},
+				{
+					"level": 4,
+					"power_mult": 1.5
+				}
+			]
+		},
+		{
+			"id": "opportunist",
+			"name": "Opportunist",
+			"kind": "ATTACK",
+			"level": 2,
+			"blocks": 1,
+			"description": "{name}: {power} power, {exploit}. Needs {weapons} training {proficiency}.",
+			"learned_only": true,
+			"weapon_types": [
+				"dagger"
+			],
+			"min_proficiency": 1,
+			"power_mult": 0.8,
+			"exploit": [
+				{
+					"status": "expose",
+					"power_mult": 1.3
+				},
+				{
+					"status": "slow",
+					"power_mult": 1.2
+				}
+			],
+			"ranks": [
+				{
+					"level": 3,
+					"power_mult": 1.0
+				},
+				{
+					"level": 4,
+					"power_mult": 1.2
 				}
 			]
 		}

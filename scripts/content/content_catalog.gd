@@ -17,7 +17,7 @@ extends RefCounted
 const DEFAULT_ROOT: String = "res://data/catalog"
 const VERSION: int = 1
 # File format version per kind (default VERSION). skills.json is version 2: ranked entries on disk, flat rows in memory
-# (SkillRanks). The loader decides by the file's own version, so a version 1 skills file still loads.
+# (SkillRanks). A skills file below version 2 (or with no version) is a load error and blocks saving (CLN-3b).
 # items.json is version 2 (FORGE1_ITEMS 8): stored entries are family + modifiers (ItemModifiers), flat resolved rows in
 # memory. Until ITEM1-A migrates the shipped data, a catalog without item families keeps the version 1 flat file (legacy
 # mode: items_inherit() is false, saving writes version 1); a version 1 file loaded next to families collapses on load.
@@ -97,6 +97,7 @@ static func reload_from_disk() -> void:
 		if kind != "item_families":
 			_data_map()[kind] = _read_kind(kind)
 	SkillCatalog.clear_cache()
+	Terrain.clear_cache()
 	AssetRegistry.clear_family_cache()   # skill family ids are art keys; a reload with the same root and row count must rebuild them
 
 static func _ensure_loaded() -> void:
@@ -149,7 +150,9 @@ static func _read_kind(kind: String) -> Array:
 	if kind == "skills" and file_version >= 2:
 		return _read_ranked_skills(list, path)
 	if kind == "skills":
-		push_warning("ContentCatalog: %s is a version %d skills file (flat rows); version 1 is deprecated, saving writes version 2 (CLN-3b removes v1 loading)" % [path, file_version])
+		_error_list().append("%s: version %d skills files (flat rows) are no longer read; write version 2 (ranked entries)." % [path, file_version])
+		_block_save(kind)
+		return found
 	if kind == "items":
 		return _read_items(list, path, file_version)
 	for item: Variant in list:
@@ -282,8 +285,8 @@ static func save(kind: String) -> Error:
 		if not item_errors.is_empty():
 			push_error("ContentCatalog.save(items) refused: " + "; ".join(PackedStringArray(item_errors)))
 			return ERR_INVALID_DATA
-	elif kind == "item_families" and entries(kind).is_empty() and not FileAccess.file_exists(path_for(kind)):
-		_dirty_map().erase(kind)   # legacy catalog (no families yet): never create an empty families file
+	elif (kind == "item_families" or kind == "terrain") and entries(kind).is_empty() and not FileAccess.file_exists(path_for(kind)):
+		_dirty_map().erase(kind)   # legacy catalog (no families / terrain rows yet): never create an empty file
 		return OK
 	else:
 		for entry: Dictionary in entries(kind):
@@ -314,6 +317,7 @@ static func is_dirty(kind: String = "") -> bool:
 static func clear_cache() -> void:
 	if Engine.has_meta(STATE_KEY):
 		Engine.remove_meta(STATE_KEY)
+	Terrain.clear_cache()
 
 # ------------------------------------------------------------------------------
 # Reading
@@ -413,6 +417,8 @@ static func _prepare(kind: String, raw: Dictionary, old: Dictionary) -> Dictiona
 			return ItemFamilies.derive(ContentSchema.normalize(kind, raw))
 		"items":
 			return _prepare_item(raw, old)
+		"terrain":
+			return TerrainFields.prepare(ContentSchema.normalize(kind, raw))
 	return ContentSchema.normalize(kind, raw)
 
 # Item shapes: a STORED entry (family, no flat numbers) resolves as is. A FLAT row (legacy fixture, get_entry copy) whose
@@ -739,6 +745,8 @@ static func _modifier_problems(kind: String, base: Dictionary, mods: Array[Dicti
 				continue
 			if key == "name":
 				out.append(_problem("name", rank, "Rank %d: rank names are derived (%s); a modifier cannot set the name." % [rank, SkillRanks.rank_name(str(base["name"]), rank)]))
+			elif SkillRanks.FAMILY_KEYS.has(key):
+				out.append(_problem(key, rank, SkillRanks.FAMILY_KEY_MESSAGE % key))
 			elif not SkillRanks.RANK_KEYS.has(key):
 				out.append(_problem(key, rank, "Rank %d: '%s' is base-only or unknown; a rank can only change %s." % [rank, key, ", ".join(SkillRanks.RANK_KEYS)]))
 			elif not allowed.has(key):
@@ -885,6 +893,8 @@ static func _touched(kind: String) -> void:
 	_dirty_map()[kind] = true
 	if kind == "skills":
 		SkillCatalog.clear_cache()
+	if kind == "terrain":
+		Terrain.clear_cache()
 	if kind == "item_families":
 		_reresolve_items()
 
@@ -1003,7 +1013,10 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 	var e: Dictionary = ContentSchema.normalize(kind, entry)
 	if kind == "items" or kind == "item_families":
 		e = _prepare(kind, entry, get_entry(kind, current_id if not current_id.is_empty() else str(entry.get("id", ""))))
-	var errors: Array[String] = ContentSchema.field_errors(kind, e)
+	# Terrain rows have no name and fixed ids (TerrainValidator owns every message).
+	var errors: Array[String] = []
+	if kind != "terrain":
+		errors = ContentSchema.field_errors(kind, e)
 	var id: String = str(e.get("id", ""))
 	if id != current_id and has(kind, id):
 		errors.append("ID '%s' is already used by another %s entry." % [id, kind.trim_suffix("s")])
@@ -1049,6 +1062,8 @@ static func validate_entry(kind: String, entry: Dictionary, current_id: String =
 			errors.append_array(ClassUnitValidator.unit_errors(e))
 		"encounters":
 			errors.append_array(_encounter_errors(e))
+		"terrain":
+			errors.append_array(TerrainValidator.entry_errors(e))
 	errors.append_array(_no_item_errors(kind, e))
 	return errors
 
@@ -1097,9 +1112,17 @@ static func validate_all() -> Dictionary:
 	var fold_errors: Array[String] = ContentFactory._strings(folded["errors"])
 	if not fold_errors.is_empty():
 		problems["skills:fold"] = fold_errors
+	if terrain_file_exists():
+		for id: String in TerrainValidator.missing_ids(entries("terrain")):
+			problems["terrain:missing"] = _append_problem(problems.get("terrain:missing", []), "No terrain row for '%s'." % id)
 	if not _error_list().is_empty():
 		problems["load"] = _error_list().duplicate()
 	return problems
+
+# True once terrain.json exists (S12T-A): missing terrain rows are errors then; before that warnings_all() lists them
+# and Terrain uses its code defaults.
+static func terrain_file_exists() -> bool:
+	return FileAccess.file_exists(path_for("terrain"))
 
 static func _append_problem(existing: Variant, message: String) -> Array[String]:
 	var out: Array[String] = ContentFactory._strings(existing)
@@ -1153,6 +1176,12 @@ static func warnings_all() -> Dictionary:
 		var skill_found: Array[String] = warnings_for("skills", ranked)
 		if not skill_found.is_empty():
 			out["skills:%s" % str(ranked.get("id", ""))] = skill_found
+	if not terrain_file_exists():
+		var missing: Array[String] = []
+		for id: String in TerrainValidator.missing_ids(entries("terrain")):
+			missing.append("No terrain row for '%s': the code defaults apply." % id)
+		if not missing.is_empty():
+			out["terrain:missing"] = missing
 	return out
 
 static func grade_rank(grade: String) -> int:
@@ -1177,6 +1206,12 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 			errors.append("The wave block is past the end of the round (%d blocks)." % DictUtil.to_int(e["total_blocks"]))
 		if DictUtil.to_int(e["wave_round"]) > DictUtil.to_int(e["max_rounds"]):
 			errors.append("The wave round is after the last round.")
+	var wave_field: Dictionary = ContentSchema.field("encounters", "wave_units")
+	errors.append_array(EncounterPhases.problems(e, func(ref: String) -> bool:
+		var target: Dictionary = get_entry("units", ref)
+		return not target.is_empty() and ContentSchema.passes_filter(wave_field, target)))
+	# OBJ1: guests are party-side units; the generic ref check already refuses others, so every guest passes here.
+	errors.append_array(EncounterObjectives.problems(e, func(_ref: String) -> bool: return true))
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		var exit_list: Array = exits

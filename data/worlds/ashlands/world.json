@@ -7,12 +7,11 @@
 	"connects": [],
 	"start_location": "warden_keep",
 	"start_party": [
-		"warrior",
-		"ranger",
-		"rogue",
-		"mage"
+		"bryn_hale"
 	],
-	"start_gold": 50,
+	"party_max": 3,
+	"start_gold": 100,
+	"start_supplies": 10,
 	"service_lines": {},
 	"version": 1
 }

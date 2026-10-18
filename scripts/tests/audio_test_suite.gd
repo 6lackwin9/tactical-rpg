@@ -6,7 +6,10 @@ extends RefCounted
 # Bus layout, SoundBank silent fallback and warn-once, the headless AudioDirector
 # (no voices), SettingsFile audio keys (defaults, clamp, round trip, untouched by save
 # slot deletes), a sandbox manifest row resolving to a generated wav, and the
-# preset -> sound key table. Fixtures: sandbox settings file, save dir and manifest.
+# preset -> sound key table; MUSIC1-L: the MusicDirector chooser (priority, ties, live owners,
+# unresolved contexts, release), the context fallback chain (region, parent, world,
+# lineage, parent context) and the shipped music rows. Fixtures: sandbox settings file,
+# save dir, manifest and worlds.
 # ==============================================================================
 
 const TAG: String = "Audio"
@@ -28,6 +31,12 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_settings() and ok
 	ok = _test_manifest_stream() and ok
 	ok = _test_event_table() and ok
+	ok = _test_music_choice(tree_parent) and ok
+	ok = _test_music_api(tree_parent) and ok
+	ok = _test_music_chain() and ok
+	ok = _test_music_shipped() and ok
+	MusicDirector.clear_requests()
+	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
 	SettingsFile.use_path()
 	SaveGame.reset_base_dir()
 	AssetCatalog.use_path(AssetCatalog.DEFAULT_PATH)
@@ -117,7 +126,7 @@ static func _test_settings() -> bool:
 	SettingsFile.set_value("audio/ui", 0.35)
 	checks["saved"] = SettingsFile.save() == OK and FileAccess.file_exists(cfg_path)
 	SettingsFile.use_path(cfg_path)   # drops the in-memory file
-	SettingsFile.load()
+	SettingsFile.load_file()
 	checks["round trip"] = is_equal_approx(SettingsFile.get_float("audio/ui"), 0.35) and is_equal_approx(SettingsFile.get_float("audio/sfx"), 1.0)
 	var bad := ConfigFile.new()
 	bad.set_value("audio", "master", "loud")
@@ -174,3 +183,244 @@ static func _test_event_table() -> bool:
 	checks["debuff status plays debuff"] = SoundEvents.key_for("status", stun) == "debuff"
 	checks["buff status is silent"] = SoundEvents.key_for("status", haste).is_empty()
 	return _report("Preset -> sound key table covers every preset", checks)
+
+# ------------------------------------------------------------------------------
+# MUSIC1-L
+# ------------------------------------------------------------------------------
+
+# A request row as MusicDirector stores it.
+static func _req(owner: Node, context: String, priority: int, seq: int) -> Dictionary:
+	return {"id": owner.get_instance_id(), "context": context, "priority": priority, "world": "", "location": "", "seq": seq}
+
+# Fake resolver: a context names its own track, except "nope" (resolves to nothing).
+static func _fake_track(context: String, _world: String, _location: String) -> String:
+	return "" if context == "nope" else context
+
+# Rule 2 (pure chooser over hand-built requests)
+static func _test_music_choice(tree_parent: Node) -> bool:
+	if tree_parent == null:
+		return TestHelpers.report_ok(TAG, "MusicDirector chooser (skipped: no tree)", true)
+	var fake: Callable = _fake_track
+	var menu := Control.new()
+	var field := Control.new()
+	var field2 := Control.new()
+	var hidden_map := Control.new()
+	var battle := Node.new()   # a BattleScreen is a plain Node
+	var hidden_ui := Control.new()
+	var loose := Node.new()    # never enters the tree
+	for n: Node in [menu, field, field2, hidden_map, hidden_ui]:
+		tree_parent.add_child(n)
+	hidden_map.add_child(battle)
+	hidden_map.visible = false
+	hidden_ui.visible = false
+	var base: Array[Dictionary] = [_req(menu, "m", MusicDirector.MENU, 1), _req(field, "f", MusicDirector.FIELD, 2)]
+	var checks: Dictionary = {"priority: field over menu": MusicDirector.choose(base, fake) == "f"}
+	var with_battle: Array[Dictionary] = base.duplicate()
+	with_battle.append(_req(battle, "c", MusicDirector.COMBAT, 3))
+	checks["plain Node under a hidden map counts"] = MusicDirector.choose(with_battle, fake) == "c"
+	var tie: Array[Dictionary] = base.duplicate()
+	tie.append(_req(field2, "f2", MusicDirector.FIELD, 4))
+	checks["tie: newest wins"] = MusicDirector.choose(tie, fake) == "f2"
+	tie[2]["seq"] = 0
+	checks["tie: older loses"] = MusicDirector.choose(tie, fake) == "f"
+	var hid: Array[Dictionary] = base.duplicate()
+	hid.append(_req(hidden_ui, "h", MusicDirector.COMBAT, 5))
+	checks["invisible CanvasItem ignored"] = MusicDirector.choose(hid, fake) == "f"
+	var out: Array[Dictionary] = base.duplicate()
+	out.append(_req(loose, "o", MusicDirector.COMBAT, 6))
+	checks["owner outside the tree ignored"] = MusicDirector.choose(out, fake) == "f"
+	var unres: Array[Dictionary] = base.duplicate()
+	unres.append(_req(field2, "nope", MusicDirector.COMBAT, 7))
+	checks["unresolved context ignored"] = MusicDirector.choose(unres, fake) == "f"
+	var empty: Array[Dictionary] = []
+	checks["no requests: silence"] = MusicDirector.choose(empty, fake).is_empty()
+	var gone := Control.new()
+	tree_parent.add_child(gone)
+	var freed: Array[Dictionary] = base.duplicate()
+	freed.append(_req(gone, "g", MusicDirector.COMBAT, 8))
+	checks["live before free"] = MusicDirector.choose(freed, fake) == "g"
+	tree_parent.remove_child(gone)
+	gone.free()
+	checks["freed owner ignored"] = MusicDirector.choose(freed, fake) == "f"
+	for n: Node in [menu, field, field2, hidden_map, hidden_ui]:
+		tree_parent.remove_child(n)
+		n.free()
+	checks["all owners gone: silence"] = MusicDirector.choose(with_battle, fake).is_empty()
+	loose.free()
+	return _report("MusicDirector chooser: priority, ties, live owners, unresolved", checks)
+
+# Rule 1 API on the shipped manifest (menu_theme / combat rows)
+static func _test_music_api(tree_parent: Node) -> bool:
+	if tree_parent == null:
+		return TestHelpers.report_ok(TAG, "MusicDirector request / release (skipped: no tree)", true)
+	MusicDirector.clear_requests()
+	var menu := Control.new()
+	var battle := Node.new()
+	tree_parent.add_child(menu)
+	tree_parent.add_child(battle)
+	MusicDirector.request(menu, MusicDirector.CTX_MENU, MusicDirector.MENU)
+	var checks: Dictionary = {"menu context plays the menu theme": MusicDirector.wanted_key() == MusicDirector.MENU_KEY}
+	MusicDirector.request(battle, MusicDirector.CTX_COMBAT, MusicDirector.COMBAT)
+	checks["combat over menu"] = MusicDirector.wanted_key() == "combat"
+	MusicDirector.request(battle, MusicDirector.CTX_BOSS, MusicDirector.COMBAT)
+	checks["same owner replaces"] = MusicDirector.requests().size() == 2
+	checks["boss plays boss, else combat"] = MusicDirector.wanted_key() == ("boss" if MusicDirector.has_track("boss") else "combat")
+	MusicDirector.release(battle)
+	checks["release falls back"] = MusicDirector.wanted_key() == MusicDirector.MENU_KEY and MusicDirector.requests().size() == 1
+	MusicDirector.request(battle, "no_such_context", MusicDirector.COMBAT)
+	checks["unknown context ignored"] = MusicDirector.wanted_key() == MusicDirector.MENU_KEY
+	tree_parent.remove_child(battle)
+	battle.free()
+	checks["freed owner pruned"] = MusicDirector.requests().size() == 1
+	tree_parent.remove_child(menu)
+	checks["no live owner: silence"] = MusicDirector.wanted_key().is_empty()
+	menu.free()
+	MusicDirector.clear_requests()
+	checks["clear_requests"] = MusicDirector.requests().is_empty()
+	checks["headless: no players"] = not AudioDirector.enabled()
+	return _report("MusicDirector request / release / wanted key", checks)
+
+# Rules 3 and 7 on sandbox worlds (base <- kid; region sub -> top) and a sandbox manifest
+static func _test_music_chain() -> bool:
+	DirAccess.make_dir_recursive_absolute(SANDBOX + "/worlds")
+	WorldCatalog.use_root(SANDBOX + "/worlds")
+	var errors: Array[String] = []
+	errors.append_array(WorldCatalog.create_world("mu_base", "Music Base"))
+	errors.append_array(WorldCatalog.create_world("mu_kid", "Music Kid", ["mu_base"]))
+	errors.append_array(WorldCatalog.upsert("mu_base", "regions", {"id": "mu_top", "name": "Top"}))
+	errors.append_array(WorldCatalog.upsert("mu_kid", "regions", {"id": "mu_sub", "name": "Sub", "parent": "mu_top"}))
+	errors.append_array(WorldCatalog.upsert("mu_kid", "locations", {"id": "mu_loc", "name": "Loc", "region": "mu_sub"}))
+	errors.append_array(WorldCatalog.upsert("mu_kid", "locations", {"id": "mu_bare", "name": "Bare", "kind": "town"}))
+	var loc: String = "mu_kid:mu_loc"
+	var sc: Array[String] = MusicDirector.scopes("mu_kid", loc)
+	var checks: Dictionary = {
+		"fixtures": errors.is_empty(),
+		"scopes: region, parent, world, lineage": sc == ["mu_sub", "mu_top", "mu_kid", "mu_base"],
+		"scopes without a region": MusicDirector.scopes("mu_kid", "mu_kid:mu_bare") == ["mu_kid", "mu_base"],
+		"scopes without a world": MusicDirector.scopes("", "").is_empty(),
+	}
+	var g := GameState.new()
+	g.world_id = "mu_kid"
+	g.location_id = "mu_kid:mu_bare"
+	checks["town location: town context"] = MusicDirector.field_context(g) == MusicDirector.CTX_TOWN
+	g.location_id = loc
+	checks["other location: field context"] = MusicDirector.field_context(g) == MusicDirector.CTX_FIELD
+	# MUSIC2-L: every listed kind maps through the table on a sandbox location; unlisted kinds play field
+	var kinds: Array[String] = WorldSchema.options_of(WorldSchema.field("locations", "kind"))
+	checks["schema kinds listed"] = not kinds.is_empty() and MusicDirector.KIND_CONTEXT.keys().all(func(k: Variant) -> bool: return kinds.has(str(k)))
+	checks["unknown kind -> field"] = MusicDirector.kind_context("mu_no_such_kind") == MusicDirector.CTX_FIELD
+	for kind: String in kinds:
+		var want_ctx: String = str(MusicDirector.KIND_CONTEXT.get(kind, MusicDirector.CTX_FIELD))
+		errors.append_array(WorldCatalog.upsert("mu_kid", "locations", {"id": "mu_k_" + kind, "name": kind, "kind": kind}))
+		g.location_id = "mu_kid:mu_k_" + kind
+		checks["kind %s -> %s" % [kind, want_ctx]] = MusicDirector.field_context(g) == want_ctx and MusicDirector.kind_context(kind) == want_ctx
+	checks["kind fixtures"] = errors.is_empty()
+	checks["kind table: town and fortress -> town; ruin and camp -> danger"] = MusicDirector.kind_context("town") == MusicDirector.CTX_TOWN \
+		and MusicDirector.kind_context("fortress") == MusicDirector.CTX_TOWN and MusicDirector.kind_context("ruin") == MusicDirector.CTX_DANGER \
+		and MusicDirector.kind_context("camp") == MusicDirector.CTX_DANGER and MusicDirector.kind_context("") == MusicDirector.CTX_FIELD
+	checks["table contexts are known contexts"] = MusicDirector.KIND_CONTEXT.values().all(func(c: Variant) -> bool: return MusicDirector.CONTEXTS.has(c))
+	# shop override: the open shop panel requests shop, closed falls back to the location's context
+	for loc_id: String in ["mu_kid:mu_bare", loc, "mu_kid:mu_k_ruin"]:
+		g.location_id = loc_id
+		checks["shop open at %s -> shop" % loc_id] = MusicDirector.region_context(g, true) == MusicDirector.CTX_SHOP
+		checks["shop closed at %s -> field context" % loc_id] = MusicDirector.region_context(g, false) == MusicDirector.field_context(g)
+	checks["no game, shop closed -> field"] = MusicDirector.region_context(null, false) == MusicDirector.CTX_FIELD
+	g.location_id = loc
+	var field: Array[String] = MusicDirector.candidates(MusicDirector.CTX_FIELD, "mu_kid", loc)
+	var want_field: Array[String] = []
+	for s: String in sc:
+		want_field.append(s + "_field")
+	want_field.append_array(sc)
+	want_field.append("field")
+	checks["field chain: scoped, plain scope keys, then field alone"] = field == want_field
+	var generic: Callable = func(k: String) -> bool: return k == "field" or k == "mu_top"
+	checks["a generic field row does not override a scope key"] = MusicDirector.track_for(MusicDirector.CTX_FIELD, "mu_kid", loc, generic) == "mu_top"
+	var town: Array[String] = MusicDirector.candidates(MusicDirector.CTX_TOWN, "mu_kid", loc)
+	checks["town falls back to the field chain"] = town[sc.size()] == "town" and town.slice(sc.size() + 1) == field
+	var boss: Array[String] = MusicDirector.candidates(MusicDirector.CTX_BOSS, "mu_kid", loc)
+	checks["boss chain falls back to combat"] = boss.size() == 2 * (sc.size() + 1) and boss[sc.size()] == "boss" and boss[boss.size() - 1] == "combat" and boss[0] == "mu_sub_boss"
+	var shop: Array[String] = MusicDirector.candidates(MusicDirector.CTX_SHOP, "mu_kid", loc)
+	checks["shop -> town -> field"] = shop.find("shop") < shop.find("town") and shop.find("town") < shop.find("field") and shop[shop.size() - 1] == "field"
+	checks["menu chain"] = MusicDirector.candidates(MusicDirector.CTX_MENU, "", "") == ["menu", MusicDirector.MENU_KEY]
+	for ctx: String in MusicDirector.PARENT_CONTEXT:
+		var parent: String = str(MusicDirector.PARENT_CONTEXT[ctx])
+		checks["%s keeps %s's priority band" % [ctx, parent]] = MusicDirector.priority_of(ctx) == MusicDirector.priority_of(parent)
+	# rule 3 fallback, one resolving key at a time
+	for key: String in sc:
+		var only: Callable = func(k: String) -> bool: return k == key
+		checks["field resolves %s alone" % key] = MusicDirector.track_for(MusicDirector.CTX_FIELD, "mu_kid", loc, only) == key
+	var two: Callable = func(k: String) -> bool: return k == "mu_top" or k == "mu_base"
+	checks["nearest scope first"] = MusicDirector.track_for(MusicDirector.CTX_FIELD, "mu_kid", loc, two) == "mu_top"
+	var none: Callable = func(_k: String) -> bool: return false
+	checks["nothing resolves: empty"] = MusicDirector.track_for(MusicDirector.CTX_FIELD, "mu_kid", loc, none).is_empty()
+	# real resolution through a sandbox manifest: combat only, then a world boss row wins
+	AssetCatalog.use_path(SANDBOX + "/music_manifest.json", SANDBOX + "/assets")
+	var row_errs: Array[String] = _sandbox_music_row("combat")
+	checks["sandbox combat row"] = row_errs.is_empty()
+	checks["boss with only combat -> combat"] = MusicDirector.track_for(MusicDirector.CTX_BOSS, "mu_kid", loc) == "combat"
+	row_errs = _sandbox_music_row("mu_kid_boss")
+	checks["sandbox world boss row"] = row_errs.is_empty()
+	checks["world boss row wins"] = MusicDirector.track_for(MusicDirector.CTX_BOSS, "mu_kid", loc) == "mu_kid_boss"
+	checks["encounter still -> combat"] = MusicDirector.track_for(MusicDirector.CTX_ENCOUNTER, "mu_kid", loc) == "combat"
+	checks["field with no field rows: silence"] = MusicDirector.track_for(MusicDirector.CTX_FIELD, "mu_kid", loc).is_empty()
+	checks["shop with no town or field rows: silence"] = MusicDirector.track_for(MusicDirector.CTX_SHOP, "mu_kid", loc).is_empty()
+	row_errs.append_array(_sandbox_music_row("town"))
+	checks["sandbox town row"] = row_errs.is_empty()
+	checks["shop falls back to town"] = MusicDirector.track_for(MusicDirector.CTX_SHOP, "mu_kid", loc) == "town"
+	checks["danger with only town: silence"] = MusicDirector.track_for(MusicDirector.CTX_DANGER, "mu_kid", loc).is_empty()
+	if not row_errs.is_empty() or not errors.is_empty():
+		print("      fixture errors: %s %s" % [str(errors), str(row_errs)])
+	AssetCatalog.use_path(AssetCatalog.DEFAULT_PATH)
+	WorldCatalog.use_root(WorldCatalog.DEFAULT_ROOT)
+	MusicDirector.clear_caches()
+	return _report("Music context chain: region, parent, world, lineage, parent context", checks)
+
+# A sandbox music row for `key`, its file a copy of a shipped music file (found by listing the folder).
+static func _sandbox_music_row(key: String) -> Array[String]:
+	var folder: String = AssetRegistry.folder_of("music")
+	var src: String = ""
+	for f: String in DirAccess.get_files_at(folder):
+		if f.get_extension() == "ogg":
+			src = folder.path_join(f)
+			break
+	var out: Array[String] = []
+	if src.is_empty():
+		out.append("no shipped .ogg to copy")
+		return out
+	var row_path: String = "%s/%s.ogg" % [folder, key]
+	var real: String = AssetCatalog.file_of(row_path)
+	DirAccess.make_dir_recursive_absolute(real.get_base_dir())
+	var fa := FileAccess.open(real, FileAccess.WRITE)
+	if fa == null:
+		out.append("cannot write %s" % real)
+		return out
+	fa.store_buffer(FileAccess.get_file_as_bytes(src))
+	fa.close()
+	return AssetCatalog.upsert({"namespace": "music", "key": key, "variant": "stream", "path": row_path, "alias_of": ""})
+
+# Rule 6: the ten MUSIC1 / MUSIC2 rows resolve to files; shipped worlds with their own track play it in the field; the
+# boss tier picks the boss context.
+static func _test_music_shipped() -> bool:
+	MusicDirector.clear_caches()
+	var checks: Dictionary = {}
+	for key: String in ["menu_theme", "ashlands", "iron_reaches", "tidewrack", "combat", "town", "danger", "shop", "travel", "boss"]:
+		checks["%s resolves to a file" % key] = MusicDirector.has_track(key) and AssetRegistry.stream("music", key) != null
+	for w: String in WorldCatalog.world_ids():
+		if not MusicDirector.has_track(w):
+			continue
+		for id: String in WorldCatalog.own_ids(w, "locations"):
+			var key: String = MusicDirector.track_for(MusicDirector.CTX_FIELD, w, WorldCatalog.qid(w, id))
+			checks["%s:%s has a field track" % [w, id]] = not key.is_empty() and MusicDirector.scopes(w, WorldCatalog.qid(w, id)).has(key)
+	var boss_id: String = ""
+	var plain_id: String = ""
+	for e: Dictionary in ContentCatalog.entries("units"):
+		var tier: String = str(e.get("tier", ""))
+		if tier == "boss" and boss_id.is_empty():
+			boss_id = str(e.get("id", ""))
+		elif tier != "boss" and tier != "hero" and plain_id.is_empty():
+			plain_id = str(e.get("id", ""))
+	if not plain_id.is_empty():
+		checks["non-boss enemies: combat"] = MusicDirector.combat_context(CatalogEncounter.from_entry({"id": "mu_plain", "enemies": [plain_id]})) == MusicDirector.CTX_COMBAT
+	if not boss_id.is_empty():
+		checks["a boss-tier enemy: boss"] = MusicDirector.combat_context(CatalogEncounter.from_entry({"id": "mu_boss", "enemies": [plain_id, boss_id]})) == MusicDirector.CTX_BOSS
+	return _report("Shipped music rows and field / boss contexts", checks)

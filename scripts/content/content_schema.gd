@@ -26,7 +26,8 @@ extends RefCounted
 # ==============================================================================
 
 # item_families (FORGE1_ITEMS 1) is the item template kind; ContentCatalog loads it before items (items resolve against it).
-const KINDS: Array[String] = ["skills", "items", "item_families", "passives", "classes", "units", "encounters"]
+# terrain (S12T-L): the numbers of each Terrain.Type (move cost, cover, hazard); TerrainFields / TerrainValidator.
+const KINDS: Array[String] = ["skills", "items", "item_families", "passives", "classes", "units", "encounters", "terrain"]
 const ORIGIN_SYSTEM: String = "system"
 const ORIGIN_USER: String = "user"
 
@@ -51,6 +52,8 @@ static func kind_label(kind: String) -> String:
 			return "Units"
 		"encounters":
 			return "Encounters"
+		"terrain":
+			return "Terrain"
 	return kind.capitalize()
 
 static func fields(kind: String) -> Array[Dictionary]:
@@ -70,6 +73,8 @@ static func fields(kind: String) -> Array[Dictionary]:
 			list = ClassUnitFields.unit_fields()
 		"encounters":
 			list = _encounter_fields()
+		"terrain":
+			list = TerrainFields.build()
 		_:
 			return list
 	var origin: Dictionary = origin_field()
@@ -143,6 +148,16 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_round", "Wave round", "int", 1, {"min": 1, "max": 30}),
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10, "help": "The wave enters before this block resolves."}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
+		_f("phases", "Phases", "json", [], {"help": "[{\"id\", \"name\", \"trigger\": {\"kind\": \"hp_below\", \"unit\", \"pct\": 50} or {\"kind\": \"round\", \"round\": 3}, \"effects\": [{\"type\": \"line\", \"text\"}, {\"type\": \"wave\", \"units\": [], \"label\"}, {\"type\": \"status\", \"unit\", \"status\": \"fortify\", \"rounds\": 2, \"magnitude\": 5}, {\"type\": \"ai\", \"unit\", \"reckless\": true}], \"pause_autoplay\": true}], at most 4 (BOSS1; EncounterPhases)."}),
+		_f("objective", "Objective", "enum", "rout", {"options": ["rout", "hold", "escape", "slay"], "help": "rout: defeat every enemy; hold: keep the objective tiles; escape: get heroes out by an exit; slay: defeat one unit (OBJ1)."}),
+		_f("objective_tiles", "Objective tiles", "json", [], {"when": {"key": "objective", "in": ["hold"]}, "help": "[[x, y], ...] walkable, not exits; [] = the ring [[5, 4], [6, 4]]."}),
+		_f("objective_rounds", "Hold rounds", "int", 3, {"min": 1, "max": 30, "when": {"key": "objective", "in": ["hold"]}, "help": "Round ends held to win (1..max rounds)."}),
+		_f("objective_unit", "Slay target", "string", "", {"when": {"key": "objective", "in": ["slay"]}, "help": "A unit id from Enemies."}),
+		_f("objective_count", "Heroes out", "int", 1, {"min": 1, "max": 4, "when": {"key": "objective", "in": ["escape"]}, "help": "Heroes that must leave by an exit."}),
+		_f("objective_text", "Objective text", "string", "", {"help": "At most 80 characters; empty = generated from the objective."}),
+		_f("deployment", "Deployment", "enum", "standard", {"options": ["standard", "ambush", "centre"], "help": "standard: side against side; ambush: enemies on both sides; centre: the party holds the middle."}),
+		_f("guests", "Guests", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}, "help": "At most 2 extra party-side units; no XP, never saved."}),
+		_f("protect", "Protect", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}, "help": "Guests that must survive (each must be in Guests)."}),
 	]
 
 # ------------------------------------------------------------------------------
@@ -227,9 +242,7 @@ static func defaults(kind: String) -> Dictionary:
 # at the end (so hand-added data survives a round trip through the Forge).
 static func normalize(kind: String, entry: Dictionary) -> Dictionary:
 	var src: Dictionary = entry
-	if kind == "skills":
-		src = _legacy_skill(entry)
-	elif kind == "classes":
+	if kind == "classes":
 		src = _legacy_class(entry)
 	var out: Dictionary = {}
 	for f: Dictionary in fields(kind):
@@ -238,23 +251,6 @@ static func normalize(kind: String, entry: Dictionary) -> Dictionary:
 	for key: Variant in src:
 		if not out.has(key):
 			out[key] = _copy(src[key])
-	return out
-
-# Pre-FORGE1 skill keys, deprecated (warn on use; CLN-3b drops this normaliser once logs show no hit):
-# advanced: true -> grade advanced, offhand: true -> weapon_hand off.
-static func _legacy_skill(entry: Dictionary) -> Dictionary:
-	if not entry.has("advanced") and not entry.has("offhand"):
-		return entry
-	push_warning("ContentSchema: skill '%s' uses the deprecated key(s) advanced / offhand; write grade / weapon_hand instead (CLN-3b removes them)" % str(entry.get("id", "")))
-	var out: Dictionary = entry.duplicate()
-	if out.has("advanced"):
-		if DictUtil.to_bool(out["advanced"]) and not out.has("grade"):
-			out["grade"] = "advanced"
-		out.erase("advanced")
-	if out.has("offhand"):
-		if DictUtil.to_bool(out["offhand"]) and not out.has("weapon_hand"):
-			out["weapon_hand"] = "off"
-		out.erase("offhand")
 	return out
 
 # Pre-CLASS1 class path, accepted for one release (FORGE1_CLASSES 3.5): a list [{level, skill}] becomes the dict

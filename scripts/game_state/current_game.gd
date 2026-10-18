@@ -19,7 +19,7 @@ static func _data() -> Dictionary:
 	return d
 
 static func state() -> GameState:
-	return _data()["state"] as GameState
+	return GameState.of(_data()["state"])
 
 static func slot() -> int:
 	return DictUtil.to_int(_data()["slot"], -1)

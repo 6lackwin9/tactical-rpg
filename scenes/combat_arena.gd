@@ -20,6 +20,7 @@ var encounter: CombatEncounter = null
 var session: CombatSession = null
 var host: CombatDockHost = null
 var audio: AudioDirector = null
+var autoplay_store: GameState = null   # a save-backed battle (BattleScreen) keeps the tactics and Autoplay switch here
 
 var playtest: String = ""          # recording to play back ("" = a live battle)
 var battle: int = 0                # battle index in the recording
@@ -50,6 +51,7 @@ func _ready() -> void:
 	host = CombatDockHost.new()
 	_canvas.add_child(host)
 	host.setup(session)
+	host.bind_game_state(autoplay_store)
 	audio = AudioDirector.new()
 	add_child(audio)
 	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
@@ -86,7 +88,7 @@ func _ready_playback() -> bool:
 	encounter = session.encounter
 	host = CombatDockHost.new()
 	_canvas.add_child(host)
-	host.setup(session)
+	host.setup(session, false)   # a recording plays back (or branches at its take-over round): no autoplay
 	var stale: bool = DictUtil.to_bool(ContentFingerprint.diff(DictUtil.dict_of(playback_data.get("content", {})), ContentFingerprint.compute())["stale"])
 	banner = PlaybackBanner.new()
 	_canvas.add_child(banner)

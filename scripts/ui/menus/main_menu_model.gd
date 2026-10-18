@@ -17,6 +17,14 @@ func can_continue() -> bool:
 func show_tools() -> bool:
 	return OS.is_debug_build()
 
+# UIR-2: the small label at the bottom right of the main menu, e.g. "Version dev · Godot 4.7.2 · debug". The
+# version is project setting application/config/version ("dev" while it is unset).
+static func version_text() -> String:
+	var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
+	var engine: Dictionary = Engine.get_version_info()
+	return "Version %s · Godot %s.%s.%s · %s" % [version if not version.is_empty() else "dev", str(engine.get("major", "")), str(engine.get("minor", "")),
+		str(engine.get("patch", "")), "debug" if OS.is_debug_build() else "release"]
+
 func show_quit() -> bool:
 	return not OS.has_feature("web")
 
@@ -34,7 +42,7 @@ func open(id: String) -> void:
 # Quit asks when the game in progress has unsaved changes (rule 7).
 func quit_requested() -> Array[String]:
 	if CurrentGame.is_dirty():
-		router.ask("Quit without saving?", router.quit_requested.emit)
+		router.ask("Quit without saving?", router.quit_requested.emit, true)
 	else:
 		router.quit_requested.emit()
 	var none: Array[String] = []

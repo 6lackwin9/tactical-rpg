@@ -1,0 +1,68 @@
+{
+	"kind": "dialogues",
+	"version": 1,
+	"entries": [
+		{
+			"id": "orsa_talk",
+			"name": "Orsa at the forge gate",
+			"speaker": "orsa_tallow",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Orsa wipes soot from her hands. \"Wardens. Thought you'd come.\"",
+					"choices": [
+						{
+							"text": "Why sell to the Wardens at cost?",
+							"to": "why"
+						},
+						{
+							"text": "Mara sent us for the steel.",
+							"to": "loaded",
+							"requires": [
+								{
+									"key": "ashlands.oath_sworn",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_loaded",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_loaded",
+									"value": true
+								},
+								{
+									"effect": "add_flag",
+									"key": "rep.iron_reaches.forge_guild",
+									"delta": 5
+								}
+							]
+						},
+						{
+							"text": "Farewell.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "why",
+					"text": "\"A Warden captain pulled me out of a slag fire. I pay the hearth, not the order.\"",
+					"next": "hello"
+				},
+				{
+					"id": "loaded",
+					"text": "\"Forty bars on one wagon. The Horde smells steel on a road, so ride hard.\"",
+					"next": "hello"
+				}
+			],
+			"services": false,
+			"tags": []
+		}
+	]
+}

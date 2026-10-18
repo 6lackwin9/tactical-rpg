@@ -5,7 +5,7 @@ extends RefCounted
 # Tactical RPG - Dialogue Runner (S11, spec DLG1-L 2.2-2.4): one conversation with one world character.
 # One instance per conversation, never saved. open() picks the character's tree (`dialogue`; "" = a generated root
 # with the `greeting` line and the service choices only). Showing a node runs its effects (every time it is shown),
-# except the return to the node a shop was opened from (user decision 2026-10-17, "DLG1 open items").
+# except the return to the node a shop was opened from (world-campaign.md "DLG1 shop return (user 2026-10-17)").
 # Visible choices: authored ones whose requires hold and unless don't; failing ones with show_locked appear locked;
 # the rest are hidden; then, on the start node with services on, the generated service choices in order: quest offers
 # (resolved giver = this character, status available), turn-ins (effective turn-in = this character, status ready),
@@ -13,6 +13,10 @@ extends RefCounted
 # cap is an authoring limit). choose(index) pre-checks every effect first (all-or-nothing); a turn_in waits for
 # confirm_turn_in / cancel; open_shop waits for close_shop; fight closes the conversation and hands the fight back.
 # Nodes with `next` (and end nodes) move on through advance().
+# RECRUIT1-L: recruit adds a world party character to the roster (refused when already a member or the roster is
+# full); a choice recruiting a member is hidden.
+# REP1-L: add_flag adds to an int flag (a non-int flag refuses the choice; on a node it is skipped); view() carries the
+# character's faction and its reputation band, and choices gated on a rep bound get the "[Faction band] " prefix.
 # ==============================================================================
 
 const ROOT: String = "$root"          # the generated root node of a character without a tree
@@ -121,6 +125,8 @@ func _service_choices() -> Array[Dictionary]:
 func _visible() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for c: Dictionary in _choices_of(node_id):
+		if DialogueRules.recruits_member(gs, c):
+			continue   # RECRUIT1-L rule 6: hidden like a gone character's choice
 		var is_open: bool = DialogueRules.choice_open(gs, c)
 		if is_open or DictUtil.to_bool(c.get("show_locked", false)):
 			var v: Dictionary = c.duplicate(true)
@@ -138,22 +144,26 @@ func _tokens(extra: Dictionary) -> Dictionary:
 		values["shop"] = str(ShopRules.shop_of(gs, sqid).get("name", sqid))
 	return values
 
-# {speaker (qid), speaker_name, node, text, choices: [{text, locked}], end, next, shop, pending}. `end`: the
+# {speaker (qid), speaker_name, node, text, choices: [{text, locked}], end, next, shop, pending, faction (the talked-to
+# character's faction qid, "" = none), faction_name, band (its reputation band, "" without a faction)}. `end`: the
 # conversation is over or the node is an end node; `next`: the node moves on through advance().
 func view() -> Dictionary:
 	var node: Dictionary = _node(node_id)
 	var speaker: String = DialogueRules.character_qid(gs, str(node.get("speaker", "")))
 	if speaker.is_empty():
 		speaker = _tree_speaker if not _tree_speaker.is_empty() else character_qid
+	var fq: String = DialogueRules.faction_qid(gs, character_qid)
 	var choices: Array[Dictionary] = []
 	if not closed:
 		for c: Dictionary in _visible():
-			choices.append({"text": DialogueRules.stat_prefix(c) + DialogueRules.fill(str(c.get("text", "")), _tokens(c)), "locked": DictUtil.to_bool(c["_locked"])})
+			choices.append({"text": DialogueRules.rep_prefix(gs, c) + DialogueRules.stat_prefix(c) + DialogueRules.fill(str(c.get("text", "")), _tokens(c)), "locked": DictUtil.to_bool(c["_locked"])})
 	return {
 		"speaker": speaker, "speaker_name": str(WorldCatalog.resolve(gs.world_id, "characters", speaker).get("name", "")),
 		"node": node_id, "text": DialogueRules.fill(str(node.get("text", "")), _tokens(node)), "choices": choices,
 		"end": closed or DictUtil.to_bool(node.get("end", false)), "next": not closed and not str(node.get("next", "")).is_empty(),
 		"shop": shop_qid, "pending": not _pending.is_empty(),
+		"faction": fq, "faction_name": str(WorldCatalog.resolve(gs.world_id, "factions", fq).get("name", "")) if not fq.is_empty() else "",
+		"band": RepRules.band(RepRules.standing(gs, fq)) if not fq.is_empty() else "",
 	}
 
 # ------------------------------------------------------------------------------
@@ -237,6 +247,12 @@ func _precheck(effects: Array) -> Array[String]:
 			"set_flag":
 				if not GameState.flag_key_ok(str(fx.get("key", ""))) or not GameState.flag_value_ok(fx.get("value", true)):
 					out.append("Flag '%s' can't be set." % str(fx.get("key", "")))
+			"add_flag":
+				var fkey: String = str(fx.get("key", ""))
+				if not GameState.flag_key_ok(fkey) or not (fx.get("delta", null) is int):
+					out.append("Flag '%s' can't be changed." % fkey)
+				elif not (gs.get_flag(fkey, 0) is int):
+					out.append("Flag '%s' is not a number." % fkey)
 			"start_quest":
 				var ref: String = str(fx.get("quest", ""))
 				var st: String = QuestRunner.status(gs, ref)
@@ -270,6 +286,15 @@ func _precheck(effects: Array) -> Array[String]:
 			"fight":
 				if WorldCatalog.resolve(gs.world_id, "encounters", str(fx.get("encounter", ""))).is_empty():
 					out.append("Unknown encounter '%s'." % str(fx.get("encounter", "")))
+			"recruit":
+				var who: String = str(fx.get("character", ""))
+				var cap: int = WorldCatalog.party_max(gs.world_id)
+				if NewGame.hero_from_character(gs.world_id, who) == null:
+					out.append("'%s' can't join the party." % who)
+				elif DialogueRules.is_member(gs, who):
+					out.append("%s is already with you." % _name_of(who))
+				elif gs.party.members.size() >= cap:
+					out.append("The party is full (%d of %d)." % [gs.party.members.size(), cap])
 	for id: Variant in take_items:
 		if DictUtil.to_int(gs.party.stash.get(str(id), 0)) < DictUtil.to_int(take_items[id]):
 			out.append("Not enough %s." % str(ContentCatalog.get_entry("items", str(id)).get("name", id)))
@@ -280,13 +305,15 @@ func _precheck(effects: Array) -> Array[String]:
 func _name_of(qid: String) -> String:
 	return str(WorldCatalog.resolve(gs.world_id, "characters", qid).get("name", qid))
 
-# Applies effects in order (pre-checked): set_flag, start_quest, give, take. open_shop / fight move, they change nothing.
+# Applies effects in order (pre-checked): set_flag, add_flag, start_quest, give, take, recruit. open_shop / fight move, they change nothing.
 func _apply(effects: Array) -> void:
 	for raw: Variant in effects:
 		var fx: Dictionary = DictUtil.dict_of(raw)
 		match str(fx.get("effect", "")):
 			"set_flag":
 				var _err: String = QuestRunner.set_flag(gs, str(fx.get("key", "")), fx.get("value", true))
+			"add_flag":
+				var _add_err: String = QuestRunner.add_flag(gs, str(fx.get("key", "")), DictUtil.to_int(fx.get("delta", 0)), fx.get("min", null), fx.get("max", null))
 			"start_quest":
 				var _started: Array[String] = QuestRunner.start(gs, str(fx.get("quest", "")))
 			"give":
@@ -295,6 +322,21 @@ func _apply(effects: Array) -> void:
 					notes.append(str(n))   # e.g. the gold-cap note (decision "DLG1 open items" (1))
 			"take":
 				var _taken: Array[String] = RewardGrant.take(gs, DictUtil.dict_of(fx.get("items", {})), DictUtil.to_int(fx.get("gold", 0)))
+			"recruit":
+				_recruit(str(fx.get("character", "")))
+
+# RECRUIT1-L rule 5 (pre-checked): the hero joins with total_xp = max(its base level's threshold, the highest active
+# total_xp), is appended to an explicit active_ids, and the event note "%s joins the party." is added.
+func _recruit(who: String) -> void:
+	var hero: UnitState = NewGame.hero_from_character(gs.world_id, who)
+	if hero == null:
+		return
+	for m: UnitState in gs.party.active_members():
+		hero.total_xp = maxi(hero.total_xp, m.total_xp)
+	gs.party.add_member(hero)
+	if not gs.party.active_ids.is_empty():
+		gs.party.active_ids.append(hero.id)
+	notes.append("%s joins the party." % PartyBuilder.display_name(hero))
 
 # ------------------------------------------------------------------------------
 # Turn-in, shop, moving on, fights

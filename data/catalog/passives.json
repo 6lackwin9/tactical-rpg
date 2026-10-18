@@ -151,6 +151,16 @@
 					"levels": 2
 				}
 			]
+		},
+		{
+			"id": "wardens_eye",
+			"name": "Warden's Eye",
+			"description": "Reads the foe coming for you: shows the whole round plan of every enemy that targets this hero.",
+			"effects": [
+				{
+					"type": "foresight"
+				}
+			]
 		}
 	]
 }

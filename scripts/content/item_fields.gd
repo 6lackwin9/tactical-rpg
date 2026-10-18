@@ -81,5 +81,6 @@ static func build() -> Array[Dictionary]:
 		_f("buff_pct", "Buff %", "float", 0.0, {"min": 0.0, "max": 5.0, "step": 0.05, "when": consumable}),
 		_f("duration", "Buff rounds", "int", 0, {"min": 0, "max": 10, "when": consumable}),
 		_f("use_blocks", "Use blocks", "int", 1, {"min": 1, "max": 6, "when": consumable}),
+		_f("use_reach", "Use reach", "int", Consumable.REACH_TYPE_DEFAULT, {"min": Consumable.REACH_TYPE_DEFAULT, "max": Consumable.REACH_MAX, "when": consumable, "help": "Tiles from the user's planned tile (like skill reach); 0 = self only, -1 = the type default (potion 1, elixir 0, bomb 3)."}),
 		_f("max_stack", "Max stack", "int", 1, {"min": 1, "max": 999, "when": {"key": "item_type", "in": ["CONSUMABLE", "MATERIAL", "QUEST"]}}),
 	]

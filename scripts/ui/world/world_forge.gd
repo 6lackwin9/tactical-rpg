@@ -317,6 +317,13 @@ func validate_all() -> Dictionary:
 				lines.append("[color=#f87171]%s[/color]: %s" % [str(key), str(err)])
 		_problems.text = "\n".join(lines)
 		_set_status("%d entries have problems." % problems.size(), true)
+	var warn_lines: Array[String] = []   # soft lints (REP1-L review: reputation keys among them), shown below
+	var warns: Dictionary = WorldCatalog.warnings_all()
+	for w: Variant in warns:
+		for line: Variant in DictUtil.array_of(warns[w]):
+			warn_lines.append("[color=#facc15]warning[/color] %s" % str(line))
+	if not warn_lines.is_empty():
+		_problems.text += "\n" + "\n".join(warn_lines)
 	return problems
 
 # Problems of the entry shown (its own world's validators; the manifest's for the overview).

@@ -10,7 +10,9 @@ extends RefCounted
 # Slots (UI1-L): 0 is the autosave, 1..5 the manual slots (one list shared by all worlds); peek() reads a slot header without migrating or loading.
 # ==============================================================================
 
-const VERSION: int = 4   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L)
+# A VERSION bump needs a new scripts/tests/fixtures/saves/save_v<N>.json in the same task (tools/gen_save_fixtures.gd);
+# a format-breaking change updates the fixtures too. SaveCompatTestSuite fails otherwise.
+const VERSION: int = 9   # 2: structured quests blob + loot_claimed (step 1 -> 2); 3: exploration keys (step 2 -> 3, EXP1-L); 4: party gold + shops (step 3 -> 4, DLG1-L); 5: world clock time (step 4 -> 5, TRAV1-L); 6: party supplies (step 5 -> 6, TRAV2-L); 7: battle autoplay choice (step 6 -> 7, AUTO1-L); 8: per-hero battle pouch (step 7 -> 8, ITEMUSE1-L); 9: stored hero HP hp_lost + explore.last_rest (step 8 -> 9, HEAL1-L)
 const FORMAT: String = "fc_save"
 const DEFAULT_DIR: String = "user://saves"
 const AUTOSAVE_SLOT: int = 0
@@ -201,7 +203,7 @@ static func import_from(path: String, slot: int) -> Dictionary:
 		out["errors"] = errors
 		return out
 	var stamp: int = mini(DictUtil.to_int(res["saved_at"]), int(Time.get_unix_time_from_system()))
-	errors = write(res["state"] as GameState, slot, stamp)
+	errors = write(GameState.of(res["state"]), slot, stamp)
 	out["errors"] = errors
 	out["ok"] = errors.is_empty()
 	return out
