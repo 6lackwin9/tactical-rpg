@@ -68,6 +68,10 @@ No new skill field: a ward skill is a SUPPORT skill with `grant_status` `ward` a
 6. Sim loadout: `tools/sim/sim_roles.gd` priest support loadout gains `ward` in place of its last family.
 7. Acceptance (tests): a 40-point ward takes a 30 hit (pool 10, HP unchanged), then a 25 hit (ward ends, HP -15); bleed at round end is not absorbed; a hit in the cast block is not absorbed; a bigger ward replaces a smaller one, a smaller one does not; undo restores the pool; an AI priest facing a projected 60%-of-HP hit on the mage wards the mage; a priest at full HP projected to lose 50% wards itself; `ward_absorbed` is credited to the caster.
 
+### 3.3 Shield Wall guard rule (L3; user card 2026-10-18 15:36 "Smarter Shield Wall")
+
+BAL5-R (d4ab083) showed T3 never got a chance: shield_wall is the warrior's 6th class-path skill, so it is outside the default loadout (`content_factory.gd` default skills, `StatRules.MAX_CLASS_SLOTS`), and `TacticalAI` casts plain DEFEND skills only through the low-HP guard (`_guard_smart`, actor at 40% HP or less). Rule: a unit whose loadout has a DEFEND skill that grants taunt (shield_wall) casts it in its first free block of the round when an ally adjacent to it is the target of at least one foe intent this round and the unit is not already taunting; it then plays its round as usual. Reckless units skip the rule; the low-HP guard is unchanged. Tells stay true: the rule reads foe intents already drafted, and taunt redirects only as today.
+
 ## 4. Assets (asset lane)
 
 Through `ContentCatalog.upsert`, seed `data/seeds/levers1.gd`, after BAL5-A has landed its `skills.json` rows.
@@ -104,7 +108,13 @@ Reason for the cut: 8 tiles instead of 3; per-foe power stays above Firebomb (0.
 
 Reference: an L5 enemy strike is about 49 (DR2 section 1), so rank III soaks one strike. Side effect: the priest's default loadout at L5 becomes smite, rally, mend, ward, purify (hex leaves the default five; the player can swap it back).
 
+### 4.3 Shield Wall in the default kit (A3)
+
+Move shield_wall into the warrior's first five class-path skills at its current unlock level, so the default loadout carries it (the skill that drops to 6th is the asset builder's pick, reported in the docs delta; prefer the one the BAL5 tank cells use least). No rank or number changes; the BAL5-A fortify 4 / 6 / 8 stays.
+
 ## 5. Order, interaction and acceptance (balance lane, LEVERS1-B)
+
+Tank (added with L3/A3): warrior-row won-fight allies hp_end >= 40 at L5 and L7, tank clear 50-85. If still below 40, Bodyguard (T4) comes back as a spec with Tushar.
 
 Order: BAL5-L, BAL5-A and BAL5-R first (T3 and the data levers measured alone); the BAL5 S2 scenario edit lands before the Ward is measured, so the support cells are read on the S2 scenario both before and after. Then L1 / L2, A1 / A2, and one -B run that records the BAL5-R numbers as "before".
 
@@ -132,6 +142,8 @@ One data step each if missed, then report and stop (DR1 (3)): priest alive at r3
 | LEVERS1-A1 | Cyclone Kick becomes the spin | asset | LEVERS1-L1, BAL5-A | approved | docs/specs/LEVERS1.md 4.1 | data/catalog/skills.json, data/seeds/levers1.gd |
 | LEVERS1-A2 | Ward skill and priest path | asset | LEVERS1-L2, BAL5-A | approved | docs/specs/LEVERS1.md 4.2 | data/catalog/skills.json, data/catalog/classes.json, data/seeds/levers1.gd |
 | LEVERS1-U | Ward on the unit card and HP bar (shield segment), forecast line "Ward absorbs N", log line; spin preview around the caster | UI | LEVERS1-L2, LEVERS1-L1 | approved | docs/specs/LEVERS1.md 3.1 (3), 3.2 | scripts/ui/combat/*, scripts/ui/roster_panel_ui.gd |
+| LEVERS1-L3 | Shield Wall guard rule: taunt DEFEND when foes target an adjacent ally, tests | logic | BAL5-L | approved | docs/specs/LEVERS1.md 3.3 | scripts/combat/ai/tactical_ai.gd, ai_skills_tactics_test_suite |
+| LEVERS1-A3 | Shield Wall into the warrior's default five | asset | LEVERS1-L3 | approved | docs/specs/LEVERS1.md 4.3 | data/catalog/classes.json |
 | LEVERS1-B | Measure both levers against section 5 | balance | LEVERS1-A1, LEVERS1-A2, BAL5-R, BAL5-S2 (done, b9fcc80) | approved | docs/specs/LEVERS1.md 5 | docs/BALANCE_REPORT.md |
 
 ROADMAP row (proposed): "LEVERS1 role-feel levers: brawler spin, priest Ward (DR2 4B)", status `proposed`.
