@@ -1,0 +1,4 @@
+# Build output lives outside OneDrive (user 2026-10-19): the multi-GB target folder must not sync.
+# Windows disk cleanup may empty it; the next build then rebuilds from scratch.
+[build]
+target-dir = "C:/Users/tusha/AppData/Local/Temp/aegis-target"

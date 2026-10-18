@@ -40,6 +40,10 @@ pub struct EncounterDef {
     pub enemies: Vec<String>,
     pub deployment: String,
     pub objective: String,
+    /// One reinforcement wave: off the field until it enters before `wave_block` of `wave_round`.
+    pub wave_units: Vec<String>,
+    pub wave_round: i32,
+    pub wave_block: i32,
 }
 
 impl EncounterDef {
@@ -65,6 +69,9 @@ impl EncounterDef {
             enemies: value::strings(o, "enemies"),
             deployment: if ["standard", "ambush", "centre"].contains(&deployment.as_str()) { deployment } else { "standard".into() },
             objective: value::string(o, "objective", "rout"),
+            wave_units: value::strings(o, "wave_units"),
+            wave_round: value::int(o, "wave_round", 1),
+            wave_block: value::int(o, "wave_block", 4),
         }
     }
 }
@@ -81,6 +88,8 @@ pub struct Session {
     /// "" while the battle goes on, then "won", "lost" or "fled".
     pub outcome: String,
     pub plan_confirmed: bool,
+    pub wave: Vec<UnitId>,
+    pub reinforcements_spawned: bool,
     pending: VecDeque<usize>,
 }
 
@@ -90,10 +99,11 @@ impl Session {
         let lookup = |id: &str| units.get(id).cloned().or_else(|| cat.units.get(id).cloned());
         let party_ids: Vec<String> = def.party.iter().filter(|id| lookup(id).is_some()).cloned().collect();
         let enemy_ids: Vec<String> = def.enemies.iter().filter(|id| lookup(id).is_some()).cloned().collect();
+        let wave_ids: Vec<String> = def.wave_units.iter().filter(|id| lookup(id).is_some()).cloned().collect();
         // _display_names: repeated base names get " 2", " 3" ...
         let mut seen: IndexMap<String, i32> = IndexMap::new();
         let mut names = Vec::new();
-        for id in party_ids.iter().chain(enemy_ids.iter()) {
+        for id in party_ids.iter().chain(enemy_ids.iter()).chain(wave_ids.iter()) {
             let base = lookup(id).map(|e| e.name).unwrap_or_else(|| id.clone());
             let n = seen.get(&base).copied().unwrap_or(0) + 1;
             seen.insert(base.clone(), n);
@@ -101,22 +111,25 @@ impl Session {
         }
         let mut built = Vec::new();
         let mut profiles = IndexMap::new();
-        for (i, id) in party_ids.iter().chain(enemy_ids.iter()).enumerate() {
+        for (i, id) in party_ids.iter().chain(enemy_ids.iter()).chain(wave_ids.iter()).enumerate() {
             let mut e = lookup(id).unwrap();
             e.name = names[i].clone();
             built.push(build_unit(&cat, &e, def.unit_ap));
             profiles.insert(i, AiProfile::for_unit(&cat, &e));
         }
         let n_party = party_ids.len();
+        let n_deployed = n_party + enemy_ids.len();
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_zone(&def.zone);
         let mut w = World { cat, units: built, grid, allies: (0..n_party).collect(), enemies: (n_party..count).collect(), profiles, total_blocks: def.total_blocks };
         let allies = w.allies.clone();
         let enemies = w.enemies.clone();
-        w.deploy(&allies, &enemies, &def.deployment);
+        let deployed: Vec<UnitId> = (n_party..n_deployed).collect();
+        let wave: Vec<UnitId> = (n_deployed..count).collect();
+        w.deploy(&allies, &deployed, &def.deployment);
         w.place_leftovers(&allies, true, &def.deployment);
-        w.place_leftovers(&enemies, false, &def.deployment);
+        w.place_leftovers(&deployed, false, &def.deployment);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);
@@ -124,7 +137,7 @@ impl Session {
         for u in w.units.iter_mut() {
             u.loadout_locked = true;
         }
-        let mut s = Session { def, w, resolver, plan: Plan::new(), current_round: 1, current_block: 1, phase: Phase::Planning, combat_over: false, outcome: String::new(), plan_confirmed: false, pending: VecDeque::new() };
+        let mut s = Session { def, w, resolver, plan: Plan::new(), current_round: 1, current_block: 1, phase: Phase::Planning, combat_over: false, outcome: String::new(), plan_confirmed: false, wave, reinforcements_spawned: false, pending: VecDeque::new() };
         s.begin_round(1);
         s
     }
@@ -243,6 +256,9 @@ impl Session {
             self.pending.clear();
         }
         if self.pending.is_empty() {
+            if self.on_block_start() {
+                return;
+            }
             self.pending = self.resolver.prepare_block(&mut self.w, self.current_block).into();
         }
         if let Some(idx) = self.pending.pop_front() {
@@ -300,4 +316,21 @@ fn draft_broken(w: &World, plan: &Plan, e: UnitId) -> bool {
     }
     let st = plan.compile(w, e);
     st.error_index >= 0 || st.entries.is_empty()
+}
+
+impl Session {
+    /// CatalogEncounter.on_block_start: the reinforcement wave enters before its block (that step does nothing else).
+    fn on_block_start(&mut self) -> bool {
+        if self.wave.is_empty() || self.reinforcements_spawned {
+            return false;
+        }
+        if self.current_round != self.def.wave_round || self.current_block != self.def.wave_block {
+            return false;
+        }
+        self.reinforcements_spawned = true;
+        let wave = self.wave.clone();
+        let deployment = self.def.deployment.clone();
+        self.w.place_leftovers(&wave, false, &deployment);
+        true
+    }
 }

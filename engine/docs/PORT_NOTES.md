@@ -46,6 +46,8 @@ because the RNG is bit-exact.
   About 80 distinct skills appear (dashes, disengages, areas, heals, cleanses, taunts, buffs, Focus, riposte);
   statuses seen: stagger, stun, root, bleed, weaken, haste, taunt, riposte.
 - Not covered yet: statuses expose, fortify, regen, poison, burn, empower, slow (the shipped classes rarely use
-  them in these fights), battle items, reinforcement waves, boss phases, morale, hold / escape / slay objectives,
+  them in these fights), battle items, boss phases, morale, hold / escape / slay objectives,
   ambush and centre deployments, terrain zones other than the stone arena.
-- Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` (about 6 s).
+- Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` (about 8 s).
+- Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
+  goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).

@@ -7,16 +7,30 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 * **Original proposal (Markdown-as-language, superseded by the spec):** [ENGINE_PROPOSAL.md](ENGINE_PROPOSAL.md)
 * **Active Branch:** `engine`
 * **Toolchain:** Rust `stable-x86_64-pc-windows-gnullvm`, pinned in `rust-toolchain.toml`. The MinGW on PATH is llvm-mingw, and the plain `gnu` toolchain fails to link against it (`unable to find library -lgcc_eh`).
+* **Build output:** `.cargo/config.toml` puts it in `C:/Users/tusha/AppData/Local/Temp/aegis-target`, outside OneDrive (the folder is several GB). Binaries: `.../aegis-target/release/aegis.exe`.
 * **Saves:** `user://` maps to `engine/`, so autosaves go to `engine/saves/` (ignored by git), never the Godot project root.
 
-## Workspace Structure
+## Workspace
 
-Current crates as of commit `57a168d`. The spec (Section 7) lists which ones are kept, reworked or retired.
+| Crate | Role |
+| :--- | :--- |
+| `crates/aegis_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
+| `crates/aegis_rules/` | Pure rules: stats, gear, unit building, damage, statuses, Godot RNG and sort |
+| `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
+| `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>` |
+| `crates/aegis_app/` | Old egui demo, kept until the GUI rework (spec E5) |
+| `crates/aegis_core/` | Old shared types (used by `aegis_app` only) |
 
-* `crates/aegis_core/` — Core math, vectors (`IVec2`), Variants, Signals/event bus, and seeded PRNG.
-* `crates/aegis_vfs/` — Virtual file system (`res://`, `user://`), JSON serialization, and sandboxed I/O.
-* `crates/aegis_md_parser/` — Native Markdown (`.md`) to Typed AST Parser.
-* `crates/aegis_gd_bridge/` — Tool to convert legacy Godot `.gd` scripts and `.tscn` scenes into canonical `.md` game files.
-* `crates/aegis_vm/` *(planned)* — AST execution engine and rules runtime.
-* `crates/aegis_sim/` *(planned)* — Headless test suite and Monte Carlo balance simulation runner.
-* `crates/aegis_app/` *(planned)* — WGPU 2D batch renderer, Taffy UI layout, and window presentation.
+## Parity with Godot
+
+The Godot game is the reference. `parity/` holds the tools that check the engine against it (new files only; no
+Godot file is edited):
+
+```bash
+engine/parity/export.sh                      # catalog, unit snapshots, damage cases, RNG draws (~4 s)
+engine/parity/trace.sh mode=duel level=5    # record Godot sim fights step by step (duel | group | teams | encounters)
+cargo test --workspace                       # exact parity: units, damage, RNG, every saved battle trace
+cargo run --release -p aegis_cli -- sim duel 1 20   # the balance-sim duel table
+```
+
+Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).

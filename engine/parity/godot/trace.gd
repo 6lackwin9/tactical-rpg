@@ -124,6 +124,13 @@ func _initialize() -> void:
 				for c: Variant in comp[0]:
 					e_swap.append("sime_%s" % str(c))
 				matchups.append([p_swap, e_swap])
+		"encounters":   # every catalog encounter as authored (zone, exits, waves...), its own party vs its enemies
+			for enc_id: String in ContentCatalog.ids("encounters"):
+				var enc: Dictionary = ContentCatalog.get_entry("encounters", enc_id)
+				var base: Dictionary = enc.duplicate(true)
+				for key: String in ["party", "enemies", "max_rounds", "rng_seed"]:
+					base.erase(key)
+				matchups.append([DictUtil.array_of(enc.get("party", [])), DictUtil.array_of(enc.get("enemies", [])), base])
 		_:   # duel: every ordered class pair, both sides
 			for c: String in classes:
 				runner.define("simp_%s" % c, c, level, "hero", true)
@@ -140,12 +147,16 @@ func _initialize() -> void:
 		var right: Array[String] = []
 		left.assign(DictUtil.array_of(m[0]))
 		right.assign(DictUtil.array_of(m[1]))
+		var base: Dictionary = DictUtil.dict_of(m[2]) if m.size() > 2 else {}
 		for s: int in args.seeds():
 			var before: int = recorder.fights.size()
-			runner.fight(left, right, s)
+			runner.fight(left, right, s, base)
 			if recorder.fights.size() > before:
-				meta.append({"left": left, "right": right, "seed": s, "preset": preset})
-		for id: String in left + right:
+				meta.append({"left": left, "right": right, "seed": s, "preset": preset, "base": base})
+		var roster: Array[String] = left + right
+		for raw: Variant in DictUtil.array_of(base.get("wave_units", [])) + DictUtil.array_of(base.get("guests", [])):
+			roster.append(str(raw))
+		for id: String in roster:
 			units[id] = ContentCatalog.get_entry("units", id)
 	var fights: Array = []
 	for i: int in range(recorder.fights.size()):

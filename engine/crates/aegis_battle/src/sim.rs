@@ -21,12 +21,16 @@ pub struct FightSpec {
     pub preset: String,
     pub cap: i32,
     pub jitter: bool,
+    /// Encounter fields that replace the sim defaults (zone, arena, exits, blocks, AP, waves...); None = the stone arena.
+    pub base: Option<serde_json::Map<String, Value>>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct FightResult {
     pub ok: bool,
     pub plan_fail: bool,
+    /// Jitter fight whose every plan refusal was a reach error (SimRunner._plan_skip): not counted.
+    pub skipped: bool,
     /// HP fractions of each side at the end.
     pub l: f64,
     pub r: f64,
@@ -134,11 +138,18 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         Some(r) => shuffled(&spec.left, r),
         None => spec.left.clone(),
     };
-    let entry = json!({
-        "id": "sim_fight", "name": "Sim", "zone": "stone_arena", "arena": "CLOSED", "total_blocks": 6, "unit_ap": 12, "ap_regen": 4,
-        "party": party, "enemies": spec.right, "max_rounds": spec.cap, "rng_seed": spec.seed,
-    });
-    let def = EncounterDef::from_obj(entry.as_object().unwrap());
+    let mut entry = json!({"id": "sim_fight", "name": "Sim", "zone": "stone_arena", "arena": "CLOSED", "total_blocks": 6, "unit_ap": 12, "ap_regen": 4});
+    let obj = entry.as_object_mut().unwrap();
+    if let Some(base) = &spec.base {
+        for (k, v) in base {
+            obj.insert(k.clone(), v.clone());
+        }
+    }
+    obj.insert("party".into(), json!(party));
+    obj.insert("enemies".into(), json!(spec.right));
+    obj.insert("max_rounds".into(), json!(spec.cap));
+    obj.insert("rng_seed".into(), json!(spec.seed));
+    let def = EncounterDef::from_obj(obj);
     let mut s = Session::start(cat, def, units);
     if let Some(r) = jitter_rng.as_mut() {
         jitter_start(&mut s.w, r);
@@ -152,6 +163,9 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         rounds = round + 1;
         s.plan_apply_preset_all(&spec.preset);
         if !s.confirm_plan() {
+            if spec.jitter && plan_skip(&s) {
+                return FightResult { skipped: true, ..FightResult::default() };
+            }
             plan_fail = true;
             break;
         }
@@ -184,6 +198,7 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
     FightResult {
         ok: true,
         plan_fail,
+        skipped: false,
         l,
         r,
         bin: if won { 1.0 } else { binary_score(l, r) },
@@ -192,4 +207,24 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         outcome: s.outcome.clone(),
         trace: record.then(|| json!({"start": start, "rounds": trace_rounds})),
     }
+}
+
+/// SimRunner.is_reach_error / _plan_skip: every invalid ally plan failed because its target is out of reach.
+fn plan_skip(s: &Session) -> bool {
+    let mut any = false;
+    for &a in &s.w.allies {
+        if !s.w.units[a].is_active() {
+            continue;
+        }
+        let st = s.plan.compile(&s.w, a);
+        if st.error_index < 0 {
+            continue;
+        }
+        let t = &st.error_text;
+        if !(t.starts_with("Too far") || t.starts_with("No path") || t.contains(" is too far for ")) {
+            return false;
+        }
+        any = true;
+    }
+    any
 }
