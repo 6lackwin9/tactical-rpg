@@ -1,7 +1,11 @@
 use std::time::{Duration, Instant};
 use egui::{Color32, FontId, Pos2, Rect, Rounding, Stroke, Vec2};
 use aegis_core::IVec2;
-use aegis_vm::Team;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Team {
+    Allies,
+    Enemies,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stance {

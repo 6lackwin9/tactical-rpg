@@ -5,10 +5,7 @@ members = [
     "crates/aegis_data",
     "crates/aegis_rules",
     "crates/aegis_battle",
-    "crates/aegis_vfs",
-    "crates/aegis_md_parser",
-    "crates/aegis_gd_bridge",
-    "crates/aegis_vm", "crates/aegis_sim", "crates/aegis_bench", "crates/aegis_game",
+    "crates/aegis_cli",
     "crates/aegis_app",
 ]
 
@@ -26,8 +23,6 @@ thiserror = "1.0"
 anyhow = "1.0"
 rand = "0.8"
 rand_pcg = "0.3"
-pulldown-cmark = "0.12"
-regex = "1.10"
 
 [profile.dev]
 opt-level = 1
