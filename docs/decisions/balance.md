@@ -20,5 +20,6 @@ Settled; do not re-litigate without asking the user. Scope: balance targets, sim
 
 ## Partly superseded rows (text unchanged; the newer row wins on the named part)
 
+- "BAL2 role answers (user 2026-10-17)" item (7) ("no new priest/brawler party units"): superseded by world-campaign "DR1 design review answers (user 2026-10-18)" (4), every class is a valid recruit (RECRUIT1).
 - "BAL2 answers (user 2026-10-17)" item (11), warrior judged in the 40-60 duel bracket, is replaced by "BAL2 role answers" (3): duels are a diagnostic with a 30-70 sanity band; party clear bands are the target.
 - "Small answers (user 2026-10-17)", trained-fists crit part (close the off-hand edge), is replaced by "Trained-fists crit kept (user 2026-10-17)".
