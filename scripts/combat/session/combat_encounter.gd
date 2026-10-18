@@ -196,6 +196,11 @@ func draft_steps(c: Combatant, preset_id: String = "balanced", shared: CombatPla
 	var ctx: PlanContext = shared.context if shared != null else plan_context()
 	return TacticalAI.build_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)), shared)
 
+# Fills the blocks c's draft left empty (TacticalAI.fill_steps); player-facing drafts only.
+func fill_steps(c: Combatant, preset_id: String, shared: CombatPlan) -> void:
+	var ctx: PlanContext = shared.context
+	TacticalAI.fill_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)), shared)
+
 # Plans every enemy on the field with the AI and schedules it on the resolver.
 func schedule_enemy_ai(resolver: CombatResolver) -> void:
 	var ctx: PlanContext = plan_context()

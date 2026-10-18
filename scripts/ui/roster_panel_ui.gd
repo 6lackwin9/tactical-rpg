@@ -175,7 +175,12 @@ func create_roster_card(combatant: Combatant, team_color: Color, is_ally: bool, 
 		eye.tooltip_text = "Its whole round plan is read"
 		eye.visible = false
 		name_row.add_child(eye)
-		name_row.add_child(_line_label("", "HpLabel", Color(0.88, 0.92, 0.96)))
+		# HP at the right end of the name row: never clipped (the name ellipsizes instead), so its width follows its text.
+		var hp_lbl: Label = _line_label("", "HpLabel", Color(0.88, 0.92, 0.96))
+		hp_lbl.clip_text = false
+		hp_lbl.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		hp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		name_row.add_child(hp_lbl)
 		var beh: Label = _line_label(behaviour_fn.call(combatant) if behaviour_fn.is_valid() else "", "BehaviourLabel", UiTheme.COL_WARN)
 		lines.add_child(beh)
 

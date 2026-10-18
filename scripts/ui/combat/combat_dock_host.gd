@@ -203,6 +203,7 @@ func setup(p_session: CombatSession, with_autoplay: bool = true) -> void:
 	var playback: CombatPlaybackPanel = get_panel("playback") as CombatPlaybackPanel
 	if with_autoplay:
 		autoplay = CombatAutoplay.new(session)
+		autoplay.fill_blocks = true   # the strip's pickers leave no empty block when an action fits
 		if timeline != null:
 			timeline.bind_autoplay(autoplay)
 			if playback != null:   # the status bar's hint shows the autoplay pause / wait reason

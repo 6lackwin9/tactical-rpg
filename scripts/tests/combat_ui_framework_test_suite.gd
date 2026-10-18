@@ -411,7 +411,7 @@ static func _blocks_match(host: CombatDockHost, dock: TimelineDockUI, unit: Comb
 			if act != null or cost != 1:
 				return false
 			empty.append(start)
-		elif act == null or PlanBlockText.kind_of(act.command) != kind or act.end_block - act.start_block + 1 != cost or not _has_text(block, act.command.command_name):
+		elif act == null or PlanBlockText.kind_of(act.command) != kind or act.end_block - act.start_block + 1 != cost or not (str(block.get_meta("form", "text")) == "symbol" or _has_text(block, act.command.command_name)):
 			return false
 		next += cost
 	return next == session.total_blocks + 1 and empty == session.plan_empty_blocks(unit)
@@ -704,8 +704,7 @@ static func _autoplay_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 			print("    strip at %.2fx needs %.1f px of %d (panel %s)" % [scale, need, fit_host.metrics.top_h, str(rect)])
 		var want_fs: int = UiTheme.hud_font()
 		var block_lbl: Label = dock.blocks()[0].get_child(0) as Label
-		for lbl: Label in [dock.title_lbl, block_lbl]:
-			floor_ok = floor_ok and lbl.get_theme_font_size("font_size") == want_fs
+		floor_ok = floor_ok and dock.title_lbl.get_theme_font_size("font_size") == want_fs and block_lbl.get_theme_font_size("font_size") == dock.block_font()   # block labels: the smaller block font
 		floor_ok = floor_ok and dock.confirm_btn.get_theme_font_size("font_size") == want_fs and dock.hero_option.get_theme_font_size("font_size") == want_fs
 		floor_ok = floor_ok and (scale != 1.0 or want_fs == 14)
 		floor_ok = floor_ok and dock.party_caption.visible == (scale <= CombatHudMetrics.SHORT_ABOVE)
@@ -968,6 +967,87 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 			attack_named = attack_named or (beh.text.begins_with("Next: ") and beh.text.contains(tgt.name) and beh.text.contains("(B%d" % blocks.x))
 	checks["hostile cards: the behaviour line reads 'Next: <skill> on <target> (B<n>)', a read foe wears the eye badge"] = next_ok and read_foes > 0 and attack_named
 	_card_free(tree_parent, host2, saved)
+
+	# Hostile card name row: HP right-aligned at its right end, readable (not clipped) at all four text sizes, "Next:" below.
+	var hp_ok: bool = true
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var hp_host: CombatDockHost = _intent_host(tree_parent, scale, false)
+		var hp_foes: CombatRosterPanel = hp_host.get_panel("enemies") as CombatRosterPanel
+		hp_foes.refresh()
+		_sort_now(hp_host)
+		var seen: int = 0
+		for foe: Combatant in hp_host.session.enemies_in_view():
+			var foe_card: Control = hp_foes._card_for(foe)
+			var hp_lbl: Label = foe_card.find_child("HpLabel", true, false) as Label
+			var name_lbl: Label = foe_card.find_child("NameLabel", true, false) as Label
+			var next_lbl: Label = foe_card.find_child("BehaviourLabel", true, false) as Label
+			if hp_lbl == null or name_lbl == null or next_lbl == null:
+				hp_ok = false
+				continue
+			seen += 1
+			var font: Font = hp_lbl.get_theme_font("font")
+			var text_w: float = font.get_string_size(hp_lbl.text, HORIZONTAL_ALIGNMENT_LEFT, -1, hp_lbl.get_theme_font_size("font_size")).x
+			hp_ok = hp_ok and hp_lbl.text == "%d/%d" % [foe.hp, foe.max_hp] and hp_lbl.size.x >= text_w - 0.5 and hp_lbl.size.x > 0.0
+			hp_ok = hp_ok and hp_lbl.get_global_rect().end.x <= foe_card.get_global_rect().end.x + 0.5 and hp_lbl.get_global_rect().position.x >= name_lbl.get_global_rect().end.x - 0.5
+			hp_ok = hp_ok and absf(hp_lbl.get_global_rect().position.y - name_lbl.get_global_rect().position.y) < 1.0 and next_lbl.get_global_rect().position.y >= name_lbl.get_global_rect().end.y - 0.5
+		hp_ok = hp_ok and seen > 0 and hp_foes.content_fits()
+		_card_free(tree_parent, hp_host, saved)
+	checks["hostile cards: HP 'x/y' sits right-aligned on the name row, unclipped, with the Next line below, at all four text sizes"] = hp_ok
+
+	# Tactic drafts fill the leftover blocks (the strip's pickers and autoplay pass fill_blocks; sims and enemies do not).
+	var fill_host: CombatDockHost = _intent_host(tree_parent, 1.0, false)
+	var fs: CombatSession = fill_host.session
+	fs.plan_apply_preset_all("balanced")
+	var bare_empty: int = fs.heroes_with_empty_blocks().size()
+	var bare_steps: Dictionary = {}
+	for hero: Combatant in fs.allies:
+		bare_steps[hero] = fs.plan.steps_of(hero).size()
+	var fill_ok: bool = true
+	for id: String in PlanPresets.AUTO_IDS:
+		fs.plan_apply_preset_all(id, true)
+		fill_ok = fill_ok and fs.plan_is_valid()
+		if id == "balanced":
+			fill_ok = fill_ok and fs.heroes_with_empty_blocks().is_empty()
+			for hero: Combatant in fs.allies:
+				fill_ok = fill_ok and fs.plan.steps_of(hero).size() >= int(bare_steps[hero])
+	fs.plan_apply_preset_all("balanced", true)
+	var hero_pick: Combatant = fs.allies[fs.allies.size() - 1]
+	fs.plan_clear(hero_pick)
+	fs.plan_apply_preset(hero_pick, "balanced", true)
+	fill_ok = fill_ok and fs.plan_empty_blocks(hero_pick).is_empty() and fs.plan.is_valid(hero_pick)
+	checks["tactic drafts with fill_blocks leave no empty block under Balanced (party and one hero), stay valid under every tactic, never lose steps (bare draft left %d hero(s) empty)" % bare_empty] = fill_ok
+	_card_free(tree_parent, fill_host, saved)
+
+	# Strip blocks: a smaller label font; a name that does not fit shows the kind symbol instead (never an ellipsis),
+	# every block keeps the same height; the symbol form has the name on the hover card.
+	var blk_ok: bool = true
+	var forms: Array[String] = []
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var bh: CombatDockHost = _intent_host(tree_parent, scale, false)
+		bh.session.plan_apply_preset_all("balanced", true)
+		var bdock: TimelineDockUI = _strip(bh)
+		var n_text: int = 0
+		var n_sym: int = 0
+		var h0: float = -1.0
+		for blk: Control in bdock.blocks():
+			var lbl: Label = blk.get_child(0) as Label
+			if lbl == null:
+				continue
+			blk_ok = blk_ok and lbl.get_theme_font_size("font_size") == bdock.block_font() and bdock.block_font() < bdock.fs()
+			h0 = blk.size.y if h0 < 0.0 else h0
+			blk_ok = blk_ok and is_equal_approx(blk.size.y, h0)
+			var form: String = str(blk.get_meta("form", "text"))
+			if form == "symbol":
+				n_sym += 1
+				blk_ok = blk_ok and lbl.text.length() <= 4
+			else:
+				n_text += 1
+				var font: Font = lbl.get_theme_font("font")
+				blk_ok = blk_ok and font.get_string_size(lbl.text, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl.get_theme_font_size("font_size")).x <= lbl.size.x + 0.5
+		forms.append("%.2f: %d text / %d symbol" % [scale, n_text, n_sym])
+		_card_free(tree_parent, bh, saved)
+	print("STRIP FORMS ", forms)
+	checks["strip blocks: small label font, uniform height, full text fits or the kind symbol replaces it (all four text sizes)"] = blk_ok
 
 	# Enemy card: "Next:" with the first action; a read foe lists its whole plan under "Read by ...".
 	var host3: CombatDockHost = _intent_host(tree_parent)

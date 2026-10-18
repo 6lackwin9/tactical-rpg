@@ -470,8 +470,21 @@ func _block_style(kind: String, lit: bool) -> StyleBoxFlat:
 	var style := UiTheme.box(PlanBlockText.bg(kind), UiTheme.COL_WARN if lit else PlanBlockText.border(kind), 4, 6, 1, 2 if lit else 1)
 	return style
 
+# Block labels use a smaller font than the controls (the hover card carries the details): ~80% of the HUD font, at least 9.
+func block_font() -> int:
+	return maxi(9, roundi(float(fs()) * 0.8))
+
+# The text a block shows in `width` px: "<n> <name>" when it fits at the block font; else the kind symbol "<n> <icon>"
+# (the name and description are on the hover card). A block records its form in meta "form" (text | symbol).
+func _fit_text(full: String, symbol_text: String, width: float) -> String:
+	var font: Font = get_theme_font("font", "Label")
+	var inner: float = width - 2.0 * 6.0 - 2.0
+	if font.get_string_size(full, HORIZONTAL_ALIGNMENT_LEFT, -1, block_font()).x <= inner:
+		return full
+	return symbol_text
+
 func _block_label(text: String, color: Color) -> Label:
-	var lbl: Label = UiTheme.label(text, fs(), color)
+	var lbl: Label = UiTheme.label(text, block_font(), color)
 	lbl.clip_text = true
 	lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -494,7 +507,10 @@ func _action_block(act: CombatResolver.ScheduledAction, cost: int) -> PanelConta
 	clip.set_meta("start", act.start_block)
 	clip.set_meta("blocks", cost)
 	clip.add_theme_stylebox_override("panel", _block_style(kind, active_playhead >= act.start_block and active_playhead <= act.end_block))
-	clip.add_child(_block_label(PlanBlockText.label(act), Color.WHITE))
+	var full_text: String = PlanBlockText.label(act)
+	var shown: String = _fit_text(full_text, "%d %s" % [act.start_block, PlanBlockText.icon(kind)], float(_block_width(cost)))
+	clip.set_meta("form", "text" if shown == full_text else "symbol")
+	clip.add_child(_block_label(shown, Color.WHITE))
 
 	var cur_c: Combatant = act.combatant
 	var start_b: int = act.start_block

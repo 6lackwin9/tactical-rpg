@@ -604,15 +604,18 @@ func plan_clear(actor: Combatant) -> void:
 		plan_edited.emit("clear", actor)
 
 # Replaces `actor`'s sequence with an AI draft (see PlanPresets); still editable.
-func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
+# fill_blocks (the strip's pickers and autoplay pass true): leftover empty blocks are filled (TacticalAI.fill_steps).
+func plan_apply_preset(actor: Combatant, preset_id: String, fill_blocks: bool = false) -> void:
 	if not is_planning() or actor == null or not actor.is_active():
 		return
 	encounter.draft_steps(actor, preset_id, plan)
+	if fill_blocks:
+		encounter.fill_steps(actor, preset_id, plan)
 	status_text = "%s: %s drafted %d step(s)." % [actor.name, PlanPresets.label(preset_id), plan.steps_of(actor).size()]
 	_after_plan_edit()
 	plan_edited.emit("preset", actor)
 
-func plan_apply_preset_all(preset_id: String) -> void:
+func plan_apply_preset_all(preset_id: String, fill_blocks: bool = false) -> void:
 	if not is_planning():
 		return
 	for a: Combatant in allies:
@@ -629,6 +632,10 @@ func plan_apply_preset_all(preset_id: String) -> void:
 				redrafted = true
 		if not redrafted:
 			break
+	if fill_blocks:
+		for a: Combatant in allies:
+			if a.is_active():
+				encounter.fill_steps(a, encounter.party_preset_for(a, preset_id), plan)
 	status_text = "Party: %s drafted. Review the sequences, then confirm." % PlanPresets.label(preset_id)
 	_after_plan_edit()
 	plan_edited.emit("preset_all", null)
