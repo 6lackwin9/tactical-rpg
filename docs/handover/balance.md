@@ -1,27 +1,31 @@
 # Balance handover
 
-Updated 2026-10-18 15:40 UTC (rotation by context size) by Balance session session_017JH6C5a2uwCQHAbGFH5whk. Read this first, then `docs/workflow/cloud.md` ("Usage caps", "Landing a task": after each landing send Merge & Release `landed <id> <sha>`). Agents: `balance` for runs, `logic-builder` for sim/tools, `asset-builder` for data, `change-reviewer` before each landing. Land with `bash tools/fc.sh gate auto` (per-system gate) plus `tools/fc.sh docs`.
+Updated 2026-10-18 16:35 UTC (project wind-down to interactive mode) by Balance session session_01Lc7tUeurRvdktR4Qtn5PQ9. Read this first, then `docs/workflow/cloud.md` ("Usage caps", "Landing a task") and `planner-ops` (interactive mode: work only on Tushar's request, one thing at a time). Agents: `balance` for runs, `logic-builder` for sim/tools, `asset-builder` for data, `change-reviewer` before each landing. Land with `bash tools/fc.sh gate auto` (per-system gate) plus `tools/fc.sh docs`.
 
 ## State
 
-- Build slot: released 15:30 (coordinator told). Ask the coordinator for it when a task below unblocks.
-- Nothing in flight. Landed this session: BAL5-SIM/PH, HEAL1-S, BAL5-R1, HEAL1-B, BAL5-AI, CAMPLABEL1-S, BAL5-R1b, BAL5-S2 + POTLEDGER, BAL5-L, BAL5-A, MORALE1-S, BAL5-R (+ probe 7740b0e). Numbers: top of `docs/BALANCE_REPORT.md`.
-- BAL5 is closed. Remaining gaps: tank won-fight allies hp 30 (< 40), priest heal share 2, brawler AoE 0.79, boss 26 / line 26 / wave 28 / elite 38 (trio era), HEAL1 arms 63, stand 73.
+- Build slot: released 16:35 (coordinator told). Nothing in flight.
+- Landed this session: MORALE1-B (7bda7b5). Numbers: top of `docs/BALANCE_REPORT.md`.
+- MORALE1-B headline: solo warrior vs ash_scouts 20 -> 100 clear (mob band met); ash_raiders 100 clear for every duo and trio, 0.7-1.9 rounds faster; trios 1.1-1.7 rounds. DR1 levers (`morale_leader` "", `morale_break` 40, `FLEE_WAVERING`) not triggered.
+- ASHPACE1 (Assets) said "first change ash_scouts one scout fewer unless MORALE1-B already lifts it to 90+": it did (100), so that change is not needed. Tell Assets/coordinator if they have not seen it.
+- Older gaps (BAL5): tank won-fight allies hp 30 (< 40), priest heal share 2, brawler AoE 0.79, boss 26 / line 26 / wave 28 / elite 38, HEAL1 arms 63, stand 73.
 
-## Queue (all blocked on others)
+## Queue (start only when Tushar asks)
 
-1. MORALE1-B (balance, report only; spec `docs/specs/MORALE1.md` 6): waits on MORALE1-A (Assets).
-2. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase) then PACE1-B: UNBLOCKED (PACE1-L on develop: schema 39daec9, behaviour a1ca665; ask the coordinator for the slot). Gameplay's hooks: `EncounterPhases.pace_of(entry, tier_of)` pace resolver; `WorldEncounter.grant_all_start` (default false) for the sim's start=on; enraged via `CatalogEncounter.is_enraged(c)` / `EncounterPhases.enraged_refs`; start buffs carry source "start:..." (BattleMetrics credits nobody); Empower = outgoing power x(1+mag/100) in power_for and riposte. PACE1 adds a B3 trigger: boss median under 7 rounds (sim prints no round count yet; PACE1-S adds it).
-3. LEVERS1-B (balance; Design's spec, approved 0525027 + "Smarter Shield Wall" e0f1ae5): BAL5-R is "before"; also check warrior-row won-fight allies hp_end >= 40 at L5/L7 after LEVERS1-L3 (AI guard rule) and A3 (shield_wall in the default five).
+1. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase): unblocked (PACE1-L landed, develop 6e72b3b; Gameplay's hooks are in its handover). Not started. Then PACE1-B. PACE1 adds a B3 trigger: boss median under 7 rounds.
+2. MORALE1-B follow-ups (proposals, need Tushar's approval as tasks): sim morale counters (`fled_shaken`, `fled_wavering`, `surrendered`, `break_by_crit_only`, `break_round`); campaign rerun with a higher SIM_TIMEOUT (both arms timed out at 900 s with 7 of 10 trios) or `comp=` per trio; question whether trios at 1.1-1.7 rounds vs ash_raiders are fine or want `morale_break` 40.
+3. LEVERS1-B: waits on LEVERS1-A1/A2/A3. BAL5-R is "before"; also check warrior-row won-fight allies hp_end >= 40 at L5/L7 after LEVERS1-L3 and A3.
 
-## Open cards in this thread (Tushar)
+## Open questions for Tushar (asked in the Balance thread, no answer yet)
 
-- Walk-in taunt (BAL5-AI T2): built on "Advance, then taunt" (and still strikes if one fits). Close it with that option if he answers in words.
+- Walk-in taunt (BAL5-AI T2): built on "Advance, then taunt" (still strikes if one fits). Close it with that option if he answers in words.
 - Trio difficulty targets: "Re-set targets" (recommended: propose trio bands from today's numbers, no game change) / "Make fights easier" / "Leave as is". On "Re-set targets": write proposed bands into the report and ask for approval.
 
 ## Gotchas
 
-- Balance agent reports can be wrong: BAL5-R first claimed every cell identical; check logs (`tail` summaries, diff against the previous run) before landing a report.
+- Balance agent reports can be wrong: check logs (summary lines, diff against the previous run) before landing a report. MORALE1-B's agent also left `until grep ...; sleep` loops waiting for a "PLAN FAIL" line that a timed-out campaign never prints: kill them, and give campaigns `timeout` above 900 s.
+- Long campaigns: `campaign 5 10` per heal arm exceeds the 900 s sim timeout on a cloud container; split by `comp=`.
 - Check TASKS for an owning thread before building a shared-code row (STATCRED1-L was built twice).
 - Write `landed=` in Timing from `date -u` at push time, not a guess.
 - The default sweep/campaign loadout is the first 5 class-path skills (`content_factory.gd:362`), not the role loadout.
+- No more `landed <id> <sha>` messages to Merge & Release (Tushar 16:10, f1db72d); patch notes are written per release.
