@@ -1,10 +1,13 @@
-# Asset preferences (content and world assets)
+# World asset preferences (sprites, maps, tiles, audio, art style)
 
-Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Format: preference (date, source).
+Shared art style: pixel retro, Style A (2026-10-18).
+16-bit look, 48 px sprites, 16-colour palette.
+Applies to every sprite, tile, icon and map.
+
+Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Content (items, units, stats, text): [assets-content.md](assets-content.md). Format: preference (date, source).
 
 ## Art style
 
-- Pixel retro, Style A: 16-bit look, 48 px sprites, 16-colour palette (2026-10-18).
 - The class sets the outfit and palette; the weapon type sets the animation (2026-10-18).
 - Offensive stances stand upright; defensive stances hunch (2026-10-18).
 
@@ -16,4 +19,4 @@ Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Format: preference 
 ## Process
 
 - Asset work starts as one heavy review session with Tushar; once the base is signed off, the rest runs as a background task (2026-10-18 12:00).
-- One world first: per-world assets wait until the Ashlands are complete (2026-10-18).
+- One world first: per-world art and audio wait until the Ashlands are complete (2026-10-18).
