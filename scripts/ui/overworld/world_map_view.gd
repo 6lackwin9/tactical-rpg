@@ -298,6 +298,7 @@ func status_text() -> String:
 
 func _refresh() -> void:
 	_sync_busy()
+	MusicDirector.request_game(self, MusicDirector.CTX_TRAVEL, gs)   # MUSIC1: travel falls back to field
 	if _status == null:
 		return
 	_status.text = "Pick a world and start a new game." if gs == null else "%s  time %d  supplies %d/%d  rolls %s" % [gs.location_id, gs.time, gs.party.supplies, PartyState.SUPPLIES_MAX, str(gs.rolls)]

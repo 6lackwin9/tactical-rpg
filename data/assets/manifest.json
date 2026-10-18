@@ -241,6 +241,66 @@
 			"frames": 1,
 			"origin": "user",
 			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "music/menu_theme/stream",
+			"namespace": "music",
+			"key": "menu_theme",
+			"variant": "stream",
+			"path": "res://assets/audio/music/menu_theme.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/ashlands/stream",
+			"namespace": "music",
+			"key": "ashlands",
+			"variant": "stream",
+			"path": "res://assets/audio/music/ashlands.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/iron_reaches/stream",
+			"namespace": "music",
+			"key": "iron_reaches",
+			"variant": "stream",
+			"path": "res://assets/audio/music/iron_reaches.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/tidewrack/stream",
+			"namespace": "music",
+			"key": "tidewrack",
+			"variant": "stream",
+			"path": "res://assets/audio/music/tidewrack.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/combat/stream",
+			"namespace": "music",
+			"key": "combat",
+			"variant": "stream",
+			"path": "res://assets/audio/music/combat.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
 		}
 	]
 }

@@ -438,6 +438,10 @@ func _exit_tree() -> void:
 
 func _refresh() -> void:
 	_sync_busy()
+	if world_map != null:
+		MusicDirector.release(self)   # MUSIC1: the embedded world map's travel request plays
+	else:
+		MusicDirector.request_game(self, MusicDirector.field_context(gs), gs)   # unchanged requests are no-ops
 	if _status == null:
 		return
 	if gs == null:

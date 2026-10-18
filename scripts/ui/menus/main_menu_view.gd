@@ -84,6 +84,7 @@ func _ready() -> void:
 	router.game_started.connect(open_game)
 	router.quit_requested.connect(_on_quit)
 	router.results_done.connect(_on_results_done)
+	MusicDirector.request(self, MusicDirector.CTX_MENU, MusicDirector.MENU)   # MUSIC1
 	render()
 
 # The theme's default font size follows the `ui/text_scale` setting.

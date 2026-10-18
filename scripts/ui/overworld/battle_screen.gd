@@ -73,6 +73,7 @@ static func open(parent: Node, gs: GameState, p_fight: Dictionary) -> Dictionary
 		screen.queue_free()
 		errors.append("The combat arena did not start a battle.")
 		return {"ok": false, "errors": errors, "screen": null}
+	MusicDirector.request(screen, MusicDirector.combat_context(enc), MusicDirector.COMBAT, gs.world_id, gs.location_id)   # MUSIC1
 	var info: Dictionary = WorldCatalog.resolve(gs.world_id, "encounters", str(p_fight.get("encounter", "")))
 	var label: String = str(info.get("name", str(p_fight.get("encounter", "")).replace("_", " ").capitalize()))
 	var ambush: bool = str(p_fight.get("marker", "")).is_empty() and str(p_fight.get("source", "")) != "dialogue"
