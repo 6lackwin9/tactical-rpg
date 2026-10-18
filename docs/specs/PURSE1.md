@@ -1,6 +1,6 @@
 # PURSE1: Encounter purse (authored fight gold)
 
-Status: proposed (direction approved: user 2026-10-18, DR1 item 21; spec picked 12:14 UTC)
+Status: approved (user 2026-10-18 12:28 UTC, "purse all recs": Q1 A, Q2 A, Q3 A; direction approved: user 2026-10-18, DR1 item 21; spec picked 12:14 UTC)
 Depends on: L: none on develop (sequence with other save bumps). A: PURSE1-L commit 1 (schema slice); not alongside MORALE1-A, PACE1-A or ASHPACE1 (same `encounters.json`). B: PURSE1-A and ITEMPOW1-A on main
 Lane: logic (PURSE1-L), asset (PURSE1-A), balance (PURSE1-B); no UI task (rule 1.6)
 Touches: L: new `scripts/exploration/purse_rules.gd`, `scripts/exploration/battle_bridge.gd`, `scripts/world/{world_schema,world_catalog}.gd` and `scripts/content/{content_schema,content_catalog}.gd` (where encounter fields are validated, as in MORALE1-L), `scripts/game_state/{game_state,save_migrations}.gd`, the three after-fight callers only if their result drops `gold` / `loot` (`ExploreRunner.after_fight`, `TravelRunner`, `DialogueRunner.after_fight`; the builder reports it), new `scripts/tests/purse_test_suite.gd`, `scripts/tests/suite_registry.gd`. A: `data/worlds/ashlands/{encounters,loot}.json` via new `data/seeds/purse1.gd`. B: `docs/BALANCE_REPORT.md`
