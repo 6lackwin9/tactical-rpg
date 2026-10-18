@@ -19,6 +19,7 @@ const TEXT_LEVELS: Array[float] = [0.85, 1.0, 1.15, 1.3]
 # key -> {"type": Variant.Type, "default": value, "min"/"max": clamp for floats, or "levels": snap list}. UI1-L appends its rows.
 const KEYS: Dictionary = {
 	"audio/master": {"type": TYPE_FLOAT, "default": 1.0, "min": 0.0, "max": 1.0},
+	"audio/mute": {"type": TYPE_BOOL, "default": false},   # CONTROLS-HELP: mutes the Master bus (the levels are kept)
 	"audio/music": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	"audio/sfx": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
 	"audio/ui": {"type": TYPE_FLOAT, "default": 0.8, "min": 0.0, "max": 1.0},
@@ -99,6 +100,9 @@ static func snap(key: String, value: float) -> float:
 
 static func get_float(key: String) -> float:
 	return DictUtil.to_float(get_value(key))
+
+static func get_bool(key: String) -> bool:
+	return DictUtil.to_bool(get_value(key))
 
 static func _file() -> ConfigFile:
 	if _cfg == null:

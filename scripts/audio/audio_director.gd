@@ -15,6 +15,8 @@ const UI_VOICES: int = 2
 const BUSES: Dictionary = {"Master": "audio/master", "Music": "audio/music", "SFX": "audio/sfx", "UI": "audio/ui"}
 
 static var _stack: Array[AudioDirector] = []
+static var mute_now: bool = false   # the Master bus is muted by the Mute setting (saved, or the settings popup's draft)
+static var _master_linear: float = 1.0
 
 # The most recently entered director still in the tree, or null.
 static var active: AudioDirector:
@@ -53,6 +55,7 @@ func _exit_tree() -> void:
 func _ready() -> void:
 	if not enabled():
 		return
+	apply_saved()   # a director coming up (the arena) puts the saved levels on the buses, whatever ran before
 	for i: int in SFX_VOICES:
 		_sfx.append(_voice("SFX"))
 	for i: int in UI_VOICES:
@@ -74,6 +77,8 @@ func _voice(bus: String) -> AudioStreamPlayer:
 # sample plays on its bus (the music slider plays a short sample on the Music bus). `now` is in seconds (the clock is injectable for tests).
 func preview(setting: String, linear: float, now: float = -1.0) -> bool:
 	set_bus_linear(setting, linear)
+	if mute_now:
+		return false   # muted: the sample stays silent
 	var t: float = now if now >= 0.0 else float(Time.get_ticks_msec()) / 1000.0
 	if not _throttle.allow(t):
 		return false
@@ -96,11 +101,7 @@ func reset_throttle() -> void:
 
 # One bus (by its SettingsFile key) to a linear level, without touching the saved settings.
 func set_bus_linear(setting: String, linear: float) -> void:
-	var idx: int = AudioServer.get_bus_index(VolumePreview.volume_bus_of(setting))
-	if idx < 0:
-		return
-	AudioServer.set_bus_mute(idx, linear <= 0.0)
-	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)))
+	AudioDirector.set_bus_level(VolumePreview.volume_bus_of(setting), linear)
 
 func voice_count() -> int:
 	return _sfx.size() + _ui.size()
@@ -122,13 +123,28 @@ func _on_fx_played(preset_id: String, entry: ActionLogEntry) -> void:
 
 # Sets the four bus volumes from SettingsFile (linear 0..1; 0 mutes the bus).
 func apply_volumes() -> void:
+	AudioDirector.apply_saved()
+
+# The saved levels and the saved Mute on the global buses; needs no director (the buses live in the AudioServer).
+static func apply_saved() -> void:
+	mute_now = SettingsFile.get_bool("audio/mute")
 	for bus: String in BUSES:
-		var idx: int = AudioServer.get_bus_index(bus)
-		if idx < 0:
-			continue
-		var linear: float = SettingsFile.get_float(str(BUSES[bus]))
-		AudioServer.set_bus_mute(idx, linear <= 0.0)
-		AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)))
+		set_bus_level(bus, SettingsFile.get_float(str(BUSES[bus])))
+
+# One bus to a linear level (0 mutes it; Master is also muted while mute_now). A missing bus is skipped.
+static func set_bus_level(bus: String, linear: float) -> void:
+	var idx: int = AudioServer.get_bus_index(bus)
+	if idx < 0:
+		return
+	if bus == "Master":
+		_master_linear = linear
+	AudioServer.set_bus_mute(idx, linear <= 0.0 or (bus == "Master" and mute_now))
+	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)))
+
+# The Mute draft (settings popup) or setting: Master goes silent or comes back at its level.
+static func set_mute(on: bool) -> void:
+	mute_now = on
+	set_bus_level("Master", _master_linear)
 
 # The first idle voice plays the stream; when all are busy the one that started earliest restarts with it.
 func _play(voices: Array[AudioStreamPlayer], key: String) -> void:

@@ -7,7 +7,7 @@ extends RefCounted
 # ==============================================================================
 
 const LABELS: Dictionary = {
-	"audio/master": "Master volume", "audio/music": "Music volume", "audio/sfx": "Effects volume", "audio/ui": "Interface volume",
+	"audio/master": "Master volume", "audio/mute": "Mute", "audio/music": "Music volume", "audio/sfx": "Effects volume", "audio/ui": "Interface volume",
 	"anim/speed": "Animation speed", "anim/instant": "Skip animations", "ui/text_scale": "Text size",
 	"display/window_mode": "Window mode", "display/resolution": "Window size", "display/vsync": "Vertical sync", "display/max_fps": "Frame rate cap",
 }
@@ -172,5 +172,4 @@ static func push_to_listeners() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SettingsFile.path()) == OK:
 		FxSettings.load_from(cfg)
-	if AudioDirector.active != null:
-		AudioDirector.active.apply_volumes()
+	AudioDirector.apply_saved()   # the buses are global: saved levels apply with or without a director in the tree (startup, Apply)

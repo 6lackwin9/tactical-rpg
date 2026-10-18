@@ -381,7 +381,7 @@ static func tab_node(view: Node, i: int, child: String) -> Control:
 
 static func _settings_controls_ok(view: MainMenuView, speed: float, scale: float) -> bool:
 	var tabs: TabContainer = tabs_of(view)
-	if tabs == null or tabs.get_tab_count() != 3 or tabs.get_tab_title(0) != "Sound" or tabs.get_tab_title(1) != "Display" or tabs.get_tab_title(2) != "Gameplay":
+	if tabs == null or tabs.get_tab_count() != 4 or tabs.get_tab_title(0) != "Sound" or tabs.get_tab_title(1) != "Display" or tabs.get_tab_title(2) != "Gameplay" or tabs.get_tab_title(3) != "Controls":
 		return false
 	var speed_pick: HSlider = tab_node(view, 2, "Levels_anim_speed") as HSlider
 	var text_pick: HSlider = tab_node(view, 1, "Levels_ui_text_scale") as HSlider

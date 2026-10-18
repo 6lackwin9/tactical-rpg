@@ -17,7 +17,10 @@ const VALUE_W: int = 230   # fits "Extra large (1.30x)" and "Skip animations" at
 const TAB_SOUND: String = "Sound"
 const TAB_DISPLAY: String = "Display"
 const TAB_GAMEPLAY: String = "Gameplay"
+const TAB_CONTROLS: String = "Controls"   # CONTROLS-HELP: read-only key list
+const CONTROLS_ACTION_W: int = 340
 const SOUND_KEYS: Array[String] = ["audio/master", "audio/music", "audio/sfx", "audio/ui"]
+const MUTE_KEY: String = "audio/mute"   # a checkbox row on top of the Sound tab, above Master
 const DISPLAY_ORDER: Array[String] = ["display/window_mode", "display/resolution", "display/vsync", "display/max_fps", "ui/text_scale"]
 
 func build(host: MainMenuView, model: RefCounted) -> void:
@@ -50,7 +53,9 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	for key: String in m.keys():
 		if key == "anim/instant" or (web and SettingsModel.DISPLAY_KEYS.has(key)):
 			continue   # the Skip box lives on the animation speed row; the browser owns the canvas size and the frame rate
-		if SOUND_KEYS.has(key):
+		if key == MUTE_KEY:
+			sound.push_front(key)
+		elif SOUND_KEYS.has(key):
 			sound.append(key)
 		elif DISPLAY_ORDER.has(key):
 			display.append(key)
@@ -72,6 +77,7 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	var play_grid: GridContainer = _tab(tabs, TAB_GAMEPLAY)
 	for key: String in gameplay:
 		_add_row(play_grid, host, m, key, refs)
+	_controls_tab(tabs)
 	tabs.current_tab = clampi(m.tab, 0, tabs.get_tab_count() - 1)
 	tabs.tab_changed.connect(func(i: int) -> void:
 		m.tab = i)
@@ -82,6 +88,14 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 	footer.alignment = BoxContainer.ALIGNMENT_END
 	footer.add_theme_constant_override("separation", 10)
 	add_child(footer)
+	if host.in_game():   # CONTROLS-HELP: opened during play; the way back to the hub lives here (Esc now opens this popup)
+		var hub: Button = MainMenuView.small(MainMenuView.button("Back to hub", host.leave_from_settings))
+		hub.name = "SettingsLeaveGame"
+		hub.tooltip_text = "Leave the game scene (refused while a fight, conversation or shop is open)"
+		footer.add_child(hub)
+		var spacer := Control.new()
+		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		footer.add_child(spacer)
 	var restore: Button = MainMenuView.small(MainMenuView.button("Restore defaults", func() -> void:
 		m.restore_defaults()
 		host.render()))
@@ -96,10 +110,34 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 			host.begin_display_confirm(m))))
 	for key: String in SOUND_KEYS:   # a re-render (Restore defaults) keeps the buses on the draft levels
 		host.sync_volume(key, DictUtil.to_float(m.value(key)))
+	if DictUtil.to_bool(m.value(MUTE_KEY)) != SettingsFile.get_bool(MUTE_KEY) or AudioDirector.mute_now != SettingsFile.get_bool(MUTE_KEY):
+		host.preview_mute(DictUtil.to_bool(m.value(MUTE_KEY)))   # a re-render keeps the draft Mute on the bus
 	var cur: Control = tabs.get_current_tab_control()
 	var first: Array[Node] = cur.find_children("*", "HSlider", true, false) if cur != null else []
 	if not first.is_empty():
 		set_meta(MainMenuView.FOCUS_META, first[0])   # focus a setting, not the close cross
+
+# CONTROLS-HELP: the Controls tab, grouped by context; the rows come from ControlsList (InputMap actions + the hard-coded keys).
+func _controls_tab(tabs: TabContainer) -> void:
+	var grid: GridContainer = _tab(tabs, TAB_CONTROLS)
+	for group: String in ControlsList.GROUPS:
+		var head: Label = MainMenuView.text(group, UiTheme.COL_TITLE, false)
+		head.name = "ControlsGroup_" + group
+		head.add_theme_font_size_override("font_size", 24)
+		grid.add_child(head)
+		grid.add_child(_gap(0))
+		grid.add_child(_gap(0))
+		for row: Dictionary in ControlsList.rows(group):
+			var id: String = str(row["id"])
+			var action: Label = MainMenuView.text(str(row["action"]), UiTheme.COL_TEXT, false)
+			action.name = "ControlRow_" + id
+			action.custom_minimum_size = Vector2(CONTROLS_ACTION_W, 0)
+			grid.add_child(action)
+			var keys: Label = MainMenuView.text(str(row["keys"]), UiTheme.COL_MUTED, false)
+			keys.name = "ControlKeys_" + id
+			keys.custom_minimum_size = Vector2(CONTROL_W, 0)
+			grid.add_child(keys)
+			grid.add_child(_gap(0))
 
 # One tab page: a scroll area (named like the tab) holding a label | control | value grid.
 func _tab(tabs: TabContainer, title: String) -> GridContainer:
@@ -145,7 +183,9 @@ func _add_row(grid: GridContainer, host: MainMenuView, m: SettingsModel, key: St
 		box.custom_minimum_size = Vector2(LABEL_W, 0)
 		box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		box.toggled.connect(func(on: bool) -> void:
-			var _e: Array[String] = m.set_value(key, on))
+			var _e: Array[String] = m.set_value(key, on)
+			if key == MUTE_KEY:
+				host.preview_mute(on))   # Master follows the draft at once; closing without Apply restores the saved state
 		grid.add_child(box)
 		grid.add_child(_gap(CONTROL_W))
 		grid.add_child(_gap(VALUE_W))

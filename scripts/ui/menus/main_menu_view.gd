@@ -18,6 +18,8 @@ const POPUP_MARGIN: float = 32.0
 const POPUP_DIM: Color = Color(0, 0, 0, 0.5)
 const RESULTS_DIM: Color = Color(0, 0, 0, 0.35)   # BATTLE-FLOW: lighter, the battle stays readable behind the results
 const POPUP_LAYER: int = 30   # above the arena's canvas layers, so the popup shows over a mounted battle
+const SETTINGS_LAYER: int = 31   # CONTROLS-HELP: the settings popup, above the results popup, so it opens over any game scene (map, dialogue, combat)
+const PILL_LAYER: int = 29   # the in-game Menu button, below both popups
 
 var router: MenuRouter = null
 var game_view: Node = null
@@ -29,6 +31,10 @@ var _game_hint: Label = null
 var _problems: Label = null
 var _popup: Control = null         # SETTINGS-POPUP: the popup layer (dimmed backdrop + panel) over the screen below
 var _popup_panel: PanelContainer = null
+var _slayer: CanvasLayer = null    # CONTROLS-HELP: holds the settings popup
+var _stheme: Theme = null
+var _game_mode: Node.ProcessMode = Node.PROCESS_MODE_INHERIT   # game_view's process_mode before the popup paused it
+var _menu_pill: Button = null      # CONTROLS-HELP: "☰ Menu" over the game scene; opens Settings
 var _rlayer: CanvasLayer = null    # BATTLE-FLOW: the battle results popup, in a canvas layer above the arena's (a Control in this view would sit below it)
 var _rtheme: Theme = null
 var _rpopup: Control = null
@@ -67,7 +73,7 @@ func _ready() -> void:
 	_problems.add_theme_color_override("font_color", UiTheme.COL_BAD)
 	_problems.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_problems)
-	_game_hint = text("Esc: back to the hub", UiTheme.COL_MUTED, false)
+	_game_hint = text("Esc: settings", UiTheme.COL_MUTED, false)
 	_game_hint.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_game_hint.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_game_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -95,6 +101,11 @@ func preview_volume(setting: String, linear: float) -> void:
 		_volumes_previewed = true
 		var _played: bool = audio.preview(setting, linear)
 
+# SOUND-MUTE: the Mute box of the popup was toggled; Master follows the draft (restored on close without Apply).
+func preview_mute(on: bool) -> void:
+	_volumes_previewed = true
+	AudioDirector.set_mute(on)
+
 # The newest director; `make` adds one to this view when none exists (the menu run on its own, as the web main scene).
 func _director(make: bool) -> AudioDirector:
 	var found: AudioDirector = AudioDirector.active
@@ -115,9 +126,7 @@ func sync_volume(setting: String, linear: float) -> void:
 # The saved bus volumes come back (the popup closed without Apply, or another screen is showing).
 func restore_volumes() -> void:
 	_volumes_previewed = false
-	var audio: AudioDirector = _director(false)
-	if audio != null:
-		audio.apply_volumes()
+	AudioDirector.apply_saved()
 
 # The theme's default font size follows the `ui/text_scale` setting.
 func apply_text_scale(preview: float = 0.0) -> void:
@@ -125,6 +134,8 @@ func apply_text_scale(preview: float = 0.0) -> void:
 	var t := Theme.new()
 	t.default_font_size = roundi(BASE_FONT * text_scale)
 	theme = t   # `preview` > 0 shows an unsaved size (the settings screen); every other render goes back to the saved one
+	if _stheme != null:
+		_stheme.default_font_size = t.default_font_size   # the settings popup sits in its own canvas layer too
 	if _rtheme != null:
 		_rtheme.default_font_size = t.default_font_size   # the results layer is not under this Control, so it gets the size itself
 
@@ -151,8 +162,11 @@ func render() -> void:
 	_rpopup.visible = in_results and not minimised
 	_results_pill.visible = minimised
 	var kept: BattleScreen = active_battle()
+	var over_game: bool = popup and game_view != null and game_view.visible
 	if kept != null:
-		kept.set_keys_blocked(in_results and not minimised)   # the arena ignores its shortcuts under the popup
+		kept.set_keys_blocked((in_results and not minimised) or over_game)   # the arena ignores its shortcuts under a popup
+	_block_game(over_game)
+	_place_popup(over_game)
 	if minimised:
 		_results_pill.text = "%s ▴" % (results_model.headline() if results_model != null else "Results")
 	_sync_game_visibility()
@@ -182,6 +196,7 @@ func render() -> void:
 	elif in_results:
 		_layout_panel(_rpopup, _rpanel)
 	_show_problems()
+	_sync_menu_pill()
 	focus_first(view)
 
 # BATTLE-FLOW: the results screen is a popup (not a full screen) while the settled fight's arena is still mounted.
@@ -237,7 +252,11 @@ func _make_view(id: String) -> Control:
 
 # SETTINGS-POPUP: a dimmed full-screen backdrop that swallows clicks (a left click on it does nothing; a right click anywhere is Back, see _input) and a centred panel.
 func _build_popup() -> void:
-	var parts: Array[Control] = _popup_parts(self, POPUP_DIM, MenuStyle.theme())
+	_slayer = CanvasLayer.new()   # the popup moves in here only while a game scene shows (see _place_popup); otherwise it is a plain child of this Control
+	_slayer.layer = SETTINGS_LAYER
+	add_child(_slayer)
+	_stheme = MenuStyle.theme()
+	var parts: Array[Control] = _popup_parts(self, POPUP_DIM, _stheme)
 	_popup = parts[0]
 	_popup_panel = parts[1] as PanelContainer
 	_popup.resized.connect(_layout_popup)
@@ -264,6 +283,22 @@ func _build_popup() -> void:
 	_results_pill.pressed.connect(_restore_results)
 	_results_pill.theme = _rtheme
 	_rlayer.add_child(_results_pill)   # a Control straight under a canvas layer anchors to the viewport
+	var pill_layer := CanvasLayer.new()
+	pill_layer.layer = PILL_LAYER
+	add_child(pill_layer)
+	_menu_pill = Button.new()
+	_menu_pill.name = "MenuPill"
+	_menu_pill.text = "☰ Menu"
+	_menu_pill.tooltip_text = "Settings and controls (Esc)"
+	_menu_pill.focus_mode = Control.FOCUS_NONE   # keyboard focus stays with the game; Esc is the keyboard route
+	_menu_pill.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_menu_pill.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_menu_pill.offset_right = -12
+	_menu_pill.offset_top = 8
+	_menu_pill.visible = false
+	_menu_pill.pressed.connect(open_settings_in_game)
+	_menu_pill.theme = _stheme
+	pill_layer.add_child(_menu_pill)
 
 # [popup root (hidden), panel]: the dimmed click-swallowing backdrop and the opaque bordered panel, under `parent`.
 func _popup_parts(parent: Node, dim_color: Color, popup_theme: Theme) -> Array[Control]:
@@ -485,6 +520,7 @@ func open_game(gs: GameState) -> void:
 	move_child(game_view, _game_hint.get_index())
 	_menu.visible = false
 	_game_hint.visible = true
+	_sync_menu_pill()
 	game_view.call("play_state", gs)
 
 # Back from the game scene to the hub (refused while a fight, conversation or shop waits).
@@ -542,6 +578,46 @@ func _on_results_done() -> void:
 	game_view.visible = true
 	_menu.visible = false
 	_game_hint.visible = true
+	_sync_menu_pill.call_deferred()   # RESULTS leaves the stack right after results_done
+
+# CONTROLS-HELP: true while the game scene (map, dialogue, shop, fight) is what the player sees.
+func in_game() -> bool:
+	return game_view != null and game_view.visible
+
+# Esc / the Menu button during play: the settings popup over the game (not over a results popup or another popup).
+func open_settings_in_game() -> void:
+	if not in_game() or router.stack.has(MenuRouter.RESULTS) or router.top() == MenuRouter.SETTINGS or is_overlay_open():
+		return
+	router.push(MenuRouter.SETTINGS)
+
+# The game under the settings popup stops: no timers, no key or mouse handling (combat also gets keys_blocked, set in render()).
+func _block_game(blocked: bool) -> void:
+	if game_view != null and is_instance_valid(game_view):
+		if blocked:
+			if game_view.process_mode != Node.PROCESS_MODE_DISABLED:
+				_game_mode = game_view.process_mode
+			game_view.process_mode = Node.PROCESS_MODE_DISABLED
+		elif game_view.process_mode == Node.PROCESS_MODE_DISABLED:
+			game_view.process_mode = _game_mode   # what it was before the popup, not a blanket INHERIT
+
+# Over a game scene the popup sits in a canvas layer above the arena's own layers; over a menu screen it stays a plain child (layout and tests stay in this Control's rect).
+func _place_popup(in_layer: bool) -> void:
+	var target: Node = _slayer if in_layer else self
+	if _popup != null and _popup.get_parent() != target:
+		_popup.reparent(target, false)
+
+func _sync_menu_pill() -> void:
+	if _menu_pill != null:
+		_menu_pill.visible = in_game() and router != null and router.top() != MenuRouter.SETTINGS and not router.stack.has(MenuRouter.RESULTS)
+
+# "Back to hub" in the in-game settings popup: closes the popup, then leaves the game scene (refused while busy).
+func leave_from_settings() -> void:
+	if game_view != null and game_view.has_method("busy") and DictUtil.to_bool(game_view.call("busy")):
+		show_problems(["Finish the fight or conversation first."] as Array[String])
+		return
+	router.pop()
+	if router.top() != MenuRouter.SETTINGS and not router.is_asking():
+		var _left: bool = leave_game()
 
 func open_tools() -> void:
 	var host: Node = get_parent()
@@ -563,7 +639,7 @@ func _input(event: InputEvent) -> void:
 	var mouse: InputEventMouseButton = event as InputEventMouseButton
 	if mouse == null or not mouse.pressed or mouse.button_index != MOUSE_BUTTON_RIGHT or not is_visible_in_tree():
 		return
-	if game_view != null and game_view.visible and not _results_over_battle():
+	if game_view != null and game_view.visible and not _results_over_battle() and router.top() != MenuRouter.SETTINGS:
 		return   # the map and the fights own the right button (not under the results popup: there it closes it)
 	cancel_pressed()
 	get_viewport().set_input_as_handled()
@@ -582,9 +658,9 @@ func cancel_pressed() -> void:
 		answer(false)
 	elif router.top() == MenuRouter.RESULTS and router.model() is BattleResultsModel:
 		act((router.model() as BattleResultsModel).continue_on)   # the popup's X: close = autosave, results_done
-	elif game_view != null and game_view.visible and game_view.get("battle") != null:
-		return   # BATTLE1-L: a battle covers the map; Esc stays with the arena (no hidden "finish the fight" overlay)
-	elif game_view != null and game_view.visible:
-		var _left: bool = leave_game()
+	elif router.top() == MenuRouter.SETTINGS:
+		router.pop()   # asks first when the draft changed; also the in-game popup (right click and the cross come here too)
+	elif in_game():
+		open_settings_in_game()   # CONTROLS-HELP: nothing above used Esc (a panel in the scene or the arena takes it first), so it opens Settings
 	else:
 		router.pop()
