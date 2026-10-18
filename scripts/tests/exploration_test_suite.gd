@@ -179,6 +179,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_flee_defeat() and ok
 			ok = _test_entry() and ok
 			ok = _test_exits() and ok
+			ok = _test_home_world() and ok
 			ok = _test_chest() and ok
 			ok = _test_marker_view() and ok
 			ok = _test_map_read(tree_parent) and ok   # MAPREAD1-L2: icons, hint, legend, notes on the marker_view fixture
@@ -974,6 +975,31 @@ static func _test_exits() -> bool:
 	checks["take_exit from a menu location"] = DictUtil.to_bool(ExploreRunner.take_exit(town, "field")["ok"]) and town.location_id == _q("field") and town.position == Vector2i(1, 1)
 	checks["take_exit refuses a target not in exits"] = _refused_unchanged(town, func(g: GameState) -> Dictionary: return ExploreRunner.take_exit(g, "nowhere"))
 	return _report("Check 16: exits (to_anchor, connected world crossing, inherited location, world_map hand-over)", checks)
+
+# EXPWORLD: a `connects` crossing remembers the world left; coming back into its lineage restores it.
+static func _test_home_world() -> bool:
+	var checks: Dictionary = {}
+	var kid: GameState = _in_field(1, 1, KID)
+	checks["child world: no home key before crossing"] = not kid.explore.has(GameState.HOME_WORLD_KEY)
+	var out: Dictionary = ExploreRunner.enter(kid, _q("dock", FAR))
+	checks["child -> connected world: world_id crosses, home remembered"] = DictUtil.to_bool(out["ok"]) and kid.world_id == FAR and str(kid.explore.get(GameState.HOME_WORLD_KEY, "")) == KID and kid.validate().is_empty()
+	var sealed: bool = SaveGame.write(kid, 1).is_empty()
+	var back: GameState = GameState.of(SaveGame.read(1)["state"])
+	checks["save/load mid-crossing keeps world_id and home"] = sealed and back != null and back.equals(kid) and back.world_id == FAR and str(back.explore.get(GameState.HOME_WORLD_KEY, "")) == KID
+	var home: Dictionary = ExploreRunner.enter(back if back != null else kid, _q("field"))
+	var rest: GameState = back if back != null else kid
+	checks["back to a location inherited from the parent: child world restored"] = DictUtil.to_bool(home["ok"]) and rest.world_id == KID and rest.location_id == _q("field") and not rest.explore.has(GameState.HOME_WORLD_KEY)
+	var base: GameState = _in_field(1, 1, RUN)
+	var _o: Dictionary = ExploreRunner.enter(base, _q("dock", FAR))
+	var _b: Dictionary = ExploreRunner.enter(base, _q("field"))
+	checks["base world round trip stays the base world"] = base.world_id == RUN and not base.explore.has(GameState.HOME_WORLD_KEY)
+	var legacy: GameState = _in_field(1, 1, KID)
+	var _l: Dictionary = ExploreRunner.enter(legacy, _q("field"))
+	checks["no home key and a location in lineage: unchanged"] = legacy.world_id == KID and legacy.validate().is_empty()
+	var bad: GameState = _in_field(1, 1, KID)
+	bad.explore[GameState.HOME_WORLD_KEY] = 5
+	checks["a non-string home key fails validate"] = not bad.validate().is_empty()
+	return _report("Check 16b: home world survives a connects crossing (EXPWORLD)", checks)
 
 # MAPREAD1-L2: the region view on the marker_view fixture (a marker of every kind; `mark` has a note and sets a flag).
 static func _test_map_read(tree_parent: Node) -> bool:

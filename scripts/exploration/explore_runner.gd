@@ -195,8 +195,16 @@ static func enter(gs: GameState, location_ref: String, anchor: String = MapRules
 		if pos == GameState.NO_POSITION:
 			return _fail("Map '%s' has no anchor '%s'." % [str(t["id"]), anchor])
 	var loc_world: String = str(loc["_world"])
-	if not WorldCatalog.lineage(gs.world_id).has(loc_world):
-		gs.world_id = loc_world   # a `connects` crossing
+	# A `connects` crossing remembers the world left in explore["home_world"]; coming back into that world's lineage
+	# restores it (so a child world's overrides survive a trip through a connected world).
+	var home: String = str(gs.explore.get(GameState.HOME_WORLD_KEY, ""))
+	if not home.is_empty() and WorldCatalog.lineage(home).has(loc_world):
+		gs.world_id = home
+		var _gone: bool = gs.explore.erase(GameState.HOME_WORLD_KEY)
+	elif not WorldCatalog.lineage(gs.world_id).has(loc_world):
+		if home.is_empty():
+			gs.explore[GameState.HOME_WORLD_KEY] = gs.world_id
+		gs.world_id = loc_world
 	var qid: String = str(loc["_qid"])
 	gs.location_id = qid
 	gs.position = pos

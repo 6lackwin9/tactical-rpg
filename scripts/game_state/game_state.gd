@@ -17,6 +17,7 @@ extends RefCounted
 const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay"]
 const AUTOPLAY_KEYS: Array[String] = ["on", "party", "heroes"]
 const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe"]
+const HOME_WORLD_KEY: String = "home_world"   # optional extra explore key: the world a `connects` crossing left (absent = none)
 const NO_POSITION: Vector2i = Vector2i(-1, -1)
 const SEED_MAX: int = 2147483647
 
@@ -241,7 +242,9 @@ static func shops_errors(blob: Dictionary) -> Array[String]:
 
 static func explore_errors(e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
-	var ok: bool = e.size() == EXPLORE_KEYS.size()
+	var has_home: bool = e.has(HOME_WORLD_KEY)
+	var ok: bool = e.size() == EXPLORE_KEYS.size() + (1 if has_home else 0)
+	ok = ok and (not has_home or (e[HOME_WORLD_KEY] is String and JsonUtil.id_ok(str(e[HOME_WORLD_KEY]))))
 	for key: String in EXPLORE_KEYS:
 		ok = ok and e.has(key)
 	if ok:
