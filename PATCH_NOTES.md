@@ -2,12 +2,20 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: a8f2444 -->
+<!-- last: c5d9544 -->
 
 ## 2026-10-18
 
 In the game:
 
+- New combat screen layout. A slim strip at the top shows your selected hero's plan as coloured blocks, next to the tactics pickers, Autoplay, Clear and Confirm round. Your party is on the left with a panel for the selected hero; enemies are on the right with one combined enemy card showing their state, stats, next move and what your hero would deal and take. The battle log runs along the bottom (click it or press L to expand).
+- Confirm round now asks first if a hero still has empty action blocks. You can turn this off in Settings > Gameplay > Warn about missing actions.
+- Picking a Party or Hero tactic fills any empty blocks for you (a basic strike in reach, otherwise Rest). Enemy HP now sits on the same line as their name.
+- In the Ashlands, the ash scouts and ash raiders now lose heart as the fight turns against them. Kill half of them, or the raiders' smokecaller, and the rest throw down their arms and surrender, which counts as a win.
+- Talking to people now opens a bar across the bottom of the map with their portrait and numbered choices (press 1-9). Locked choices say why. The shop is now a popup with Buy and Sell tabs, and shows who in your party can use each item. Both follow the text size setting.
+- **Map screens**: the region and world maps no longer show debug tools in the real game; the top bar shows the place name and your supplies, and chest notes name the items inside.
+- **Balance**: Shield Wall now also fortifies the user (4/6/8 by rank) alongside its taunt, and the healing potion costs 30 in the Hest shop (was 15).
+- **Character screen**: one Character popup with Stats, Level up, Skills and Gear tabs; questions and the Gear board no longer hide under other in-game popups.
 - **Map movement**: walk with WASD or the arrow keys, hold a key to keep walking, and the party slides smoothly between tiles.
 - **Game menu**: Esc on the map opens a menu over the paused map with Party, Journal, Save, Load, Settings and Quit; New Game and save/load fixes.
 - **Healing between battles**: HP now carries over between fights, you regain some after each win, and rest places and Make camp (3 supplies) heal fully. Rest places added at Warden Keep and Slag Gate.
@@ -30,6 +38,25 @@ In the game:
 
 Every change that touched the game:
 
+- COMBAT-UI3-F: drafts fill empty blocks, hostile HP beside name, compact strip labels (ce3c381)
+- PURSE1-L: encounter purses pay gold and loot on a win (save v10); no fight has a purse until PURSE1-A data (d0bcc9a)
+- COMBAT-UI3: combat HUD layout A (planning strip, merged enemy card, hero panel) (d2d1d64)
+- PURSE1-L (schema): encounter purse field and validation (02980d3)
+- PACE1-L: two-act boss behaviour (enrage by HP or round, empower buff, enraged intents shown, world start buffs, Forge warning); no boss uses it until PACE1-A data (a1ca665)
+- MORALE1-A: enemy morale on ash_scouts and ash_raiders (69c82e0)
+- UIR-6: dialogue as a full-width bottom bar, shop as a popup, text scale (c2de328)
+- PACE1-L (schema): boss enrage phase, empower status, encounter pace and start_status fields; no combat effect until the behaviour commit (39daec9)
+- MORALE1-S: world sims carry the five morale fields (f70e79a)
+- MAPDEV1-U: map debug tools only in debug scenes; play bars show place and supplies (7780fe0)
+- MORALE1-L: enemy morale in battle (losses, breaks, flee bonus, surrender, Fearless) (f344531)
+- BAL5-A: shield_wall fortify extra grant and potion price 30 (744f175)
+- BAL5-L: extra_grants skill field (second grant on DEFEND/SUPPORT skills) (49a8a70)
+- BAL5-S2 + POTLEDGER: support_attrition scenario and potion heals in the sim ledger (b9fcc80)
+- STATCRED1-L: battle report credits each status to the unit that applied it (3fa4cea)
+- UIR-3: Character popup with Stats, Level up, Skills and Gear tabs (3878540)
+- BAL5-R1b: re-measure under the re-draft fix and BAL5-AI (a990fb7)
+- MORALE1-L (schema): enemy morale encounter fields, validation and preview (6a473ad)
+- CAMPLABEL1-S: campaign sim fall label names the fight actually lost (c40a7dd)
 - ITEMPOW1-A: battle items worth using (potion 90, bomb 45, start gold 100) (02c6bf4)
 - POUCH-TIDY: meaningful no-pouch test and stale pouch comments (8c1494c)
 - INTENT1-U follow-up: enemies no longer skip their turn; "Holding" tell (f65f0bb)
@@ -105,6 +132,48 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- RELEASE-LOGS: shared logs for the evening batch
+- Wind-down handovers: UI/UX (c5d9544, 46133e3), Gameplay (f4133b6), Balance (7643049, d9d8dcb), Assets & Audio (6378713), Design (088910b)
+- INTERACTIVE: new interactive mode; work-starting routines paused (e6582f7)
+- BALANCE: trio sweep bands approved; walk-in taunt answer (a673f83, 8971de9)
+- MORALE1-B: morale balance probe report (7bda7b5)
+- PATCH-NOTES-BATCH: patch notes once per release, not per landing (f1db72d)
+- USAGE: 15:59 usage report and delta (fb133e2)
+- BALANCE-HANDOVER: PACE1-S unblocked (6e72b3b)
+- MODE-ECONOMY: economy dispatch window 15:45-18:45 UTC; mode-trial rows updated (6fb06ac)
+- LEVERS1: Shield Wall guard rule and default-kit slot decided (L3, A3) (e0f1ae5)
+- GAMEPLAY-HANDOVER: add LEVERS1-L3 to the queue (b0fda75)
+- BALANCE-HANDOVER: rotation after BAL5 close-out (233dd98)
+- BAL5-R (probe): Shield Wall barely gets cast in sims (not in the default loadout; AI uses it only below 40% HP), so the tank gap went to Design (7740b0e)
+- BAL5-R: final balance rerun; Shield Wall fortify moved nothing, remaining gaps listed in the balance report (d4ab083)
+- ENGINE-HOLD: keep threads off the engine branch; branch cleanup skips it (15c3a03)
+- UI-UX-HANDOVER: queue and notes for the next UI/UX session (8d12e98)
+- PATCH-NOTES: MAPDEV1-U, Gameplay handover (5a11e86)
+- GAMEPLAY-HANDOVER: rotation after MORALE1-L, STATCRED1-L, UIR-2 (c87d94d)
+- PATCH-NOTES: MORALE1-L, LEVERS1 approval (c23d235)
+- LEVERS1-B: point the S2 dependency at BAL5-S2 (b9fcc80) (6c01248)
+- LEVERS1 approved: priest Ward, brawler spin; task rows routed (0525027)
+- PATCH-NOTES: BAL5-A, MORALE1 spec rule 8 (b2ef357)
+- MORALE1 spec: flee bonus never lowers an authored ratio (rule 8) (c75bb11)
+- PATCH-NOTES: BAL5-L (26e90d7)
+- PATCH-NOTES: BAL5-S2 + POTLEDGER (5e034c6)
+- PATCH-NOTES: STATCRED1-L (f38bc19)
+- PATCH-NOTES: UIR-3, LEVERS1 spec (c8073e9)
+- LEVERS1 spec: brawler spin and priest Ward (DR2-LEVERS) (8e414c0)
+- PATCH-NOTES: BAL5-R1b, PLATFORM-HANDOVER (d241191)
+- PLATFORM-HANDOVER: rotation after GATE-SPLIT (context 278k) (d54daa9)
+- PATCH-NOTES: GATE-SPLIT (a817f3c)
+- GATE-SPLIT: per-system gates; area threads gate with `fc.sh gate auto`; CI runs the arena as 8 parallel jobs by system, so a red job names the broken system (bd932b2)
+- PATCH-NOTES: MORALE1-L (schema), ASSETS-PREFS (0c3869c)
+- ASSETS-PREFS: sprite animation notes in the world asset preferences (b7e5e1e)
+- PATCH-NOTES: CAMPLABEL1-S (c5c9ddf)
+- PATCH-NOTES: marker fix, PURSE1, DR3, release #39 (ff2247c)
+- PURSE1: approved (purse all recs), decision and task rows (e1662da)
+- DR3-ANSWERS: design review 3 approved (all recs) (bd6f885)
+- DESIGN-LEDGER: design review 3 sent (reviewed at 8e2530a) (c337595)
+- RELEASE: midday release to main, PR #39 at develop 8e2530a (e4f9289)
+- PURSE1-SPEC: encounter purse, authored fight gold (proposed) (8e2530a)
+- PATCH-NOTES: ITEMPOW1-A, FC-TIMEOUT, TRIAL-SONNET (a8dcf23)
 - TRIAL-SONNET: restart the Sonnet vs Opus trial on Assets & Audio (e1bedb0)
 - FC-TIMEOUT: fc.sh suite timeout 900 s in the cloud, 290 s on desktop (182f9bb)
 - PATCH-NOTES: INTENT1-U follow-up, POUCH-TIDY, prefs files, GATE-TIMEOUT (922c8d0)

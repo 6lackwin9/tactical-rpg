@@ -25,7 +25,7 @@ static func encounter_for(gs: GameState, encounter_qid: String, zone: String = "
 		return {"ok": false, "errors": errors, "encounter": null}
 	var hit_world: String = str(hit["_world"])
 	var world: String = gs.world_id if WorldCatalog.lineage(gs.world_id).has(hit_world) else hit_world
-	var enc := GameEncounter.new(world, str(hit["id"]), gs.party, zone)
+	var enc := GameEncounter.new(world, str(hit["id"]), gs.party, zone, gs)   # PACE1: gs.flags gate start_status
 	return {"ok": true, "errors": errors, "encounter": enc}
 
 # The session's verdict when the battle ended (OBJ1 rule 3: objectives, guests, protect); else today's rule: won (combat
@@ -63,7 +63,9 @@ static func enemy_levels(world_id: String, encounter_qid: String) -> Array[Dicti
 	return out
 
 # {ok, errors, xp: member id -> LevelUp result, advanced: quest qids}. won: XP to every active member, then the quest
-# hook; lost / fled change nothing here. Guests (OBJ1) are not party members: no XP, nothing written back.
+# hook, then the encounter purse (PURSE1 rule 1.1: PurseRules.pay; the result gains purse {gold, loot, notes} only
+# when the encounter has a purse); lost / fled change nothing here. Guests (OBJ1) are not party members: no XP,
+# nothing written back.
 static func apply(gs: GameState, encounter_qid: String, result: String) -> Dictionary:
 	var errors: Array[String] = []
 	var advanced: Array[String] = []
@@ -74,4 +76,8 @@ static func apply(gs: GameState, encounter_qid: String, result: String) -> Dicti
 		return {"ok": true, "errors": errors, "xp": {}, "advanced": advanced}
 	var xp: Dictionary = LevelUp.award_encounter(gs.party, enemy_levels(gs.world_id, encounter_qid))
 	advanced = QuestRunner.on_encounter_won(gs, encounter_qid)
-	return {"ok": true, "errors": errors, "xp": xp, "advanced": advanced}
+	var out: Dictionary = {"ok": true, "errors": errors, "xp": xp, "advanced": advanced}
+	var purse: Dictionary = PurseRules.pay(gs, encounter_qid)
+	if not purse.is_empty():
+		out["purse"] = purse
+	return out

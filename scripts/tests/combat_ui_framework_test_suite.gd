@@ -19,8 +19,8 @@ static func run(tree_parent: Node = null) -> bool:
 
 	# 1. Every panel is mounted in its dock region of the default layout
 	var expected_regions: Dictionary = {
-		"party": "left_top", "timeline": "top", "enemies": "right_top",
-		"grid": "center", "forecast": "right",
+		"party": "left_top", "hero": "left", "timeline": "top", "enemies": "right_top",
+		"grid": "center", "enemy_card": "right",
 		"playback": "bottom_left", "action_log": "bottom_center",
 	}
 	var docks_ok: bool = host.log_modal != null and host.timeline_modal != null
@@ -39,13 +39,23 @@ static func run(tree_parent: Node = null) -> bool:
 		and enemy_panel.visible_card_count() == 2
 	)
 
-	# 3. The unit hover card replaces the Unit Inspector: pinning a unit shows that unit's card
+	# 3. COMBAT-UI3: no floating hover card; the merged enemy card shows the hovered enemy, else the selected (pinned) one
 	var brawler_unit: Combatant = session.find_combatant("Enemy Brawler")
-	grid_panel.pin_card(brawler_unit)
-	var enemy_shown: bool = grid_panel.hover_card.visible and grid_panel.hover_card.name_lbl.text == brawler_unit.name
-	grid_panel.pin_card(warrior)
-	var inspector_ok: bool = enemy_shown and grid_panel.hover_card.name_lbl.text == warrior.name and host.get_panel("inspector") == null
-	grid_panel.close_card()
+	var enemy_card: CombatEnemyCardPanel = host.get_panel("enemy_card") as CombatEnemyCardPanel
+	session.select_combatant(brawler_unit)
+	var pinned_shown: bool = enemy_card.shown == brawler_unit and enemy_card.name_lbl.text == brawler_unit.name
+	var other_foe: Combatant = null
+	for foe: Combatant in session.enemies:
+		if foe != brawler_unit:
+			other_foe = foe
+			break
+	session.set_hovered(other_foe)
+	var hovered_shown: bool = enemy_card.shown == other_foe
+	session.set_hovered(null)
+	var back_to_pin: bool = enemy_card.shown == brawler_unit
+	session.select_combatant(warrior)
+	var inspector_ok: bool = pinned_shown and hovered_shown and back_to_pin and host.get_panel("inspector") == null and host.get_panel("forecast") == null \
+		and host.find_children("UnitHoverCard", "", true, false).is_empty()
 
 	# 3b. The side panels and the grid keep their rects whichever unit is selected (hero or enemy)
 	var layout_stable: bool = true
@@ -58,10 +68,10 @@ static func run(tree_parent: Node = null) -> bool:
 		session.select_combatant(warrior)
 		layout_stable = hero_rects == enemy_rects and hero_rects[2].x + hero_rects[2].y <= view_size.x and hero_rects[0].y > 0.0
 
-	# 4. Tactical forecast targets the selected unit's opponent
-	var forecast_panel: CombatForecastPanel = host.get_panel("forecast") as CombatForecastPanel
+	# 4. With nothing hovered or pinned the enemy card shows the planning hero's forecast target
 	var target: Combatant = session.forecast_target(warrior)
-	var forecast_ok: bool = target != null and target.name in forecast_panel.forecast.forecast_target_lbl.text
+	enemy_card.refresh()
+	var forecast_ok: bool = target != null and enemy_card.shown == target and enemy_card.name_lbl.text == target.name
 
 	# 5. Log modal opens with the session's entries and closes
 	for i: int in range(30):
@@ -87,11 +97,11 @@ static func run(tree_parent: Node = null) -> bool:
 	var signals_ok: bool = inspected and session.inspect_block == -1
 
 	# 8. Undock floats a panel (its region keeps a placeholder), dock returns it; FX dispatch is safe
-	host.undock("forecast")
-	var floating: bool = host.is_undocked("forecast") and host.region_of("forecast") == "right"
-	host.dock("forecast")
+	host.undock("enemy_card")
+	var floating: bool = host.is_undocked("enemy_card") and host.region_of("enemy_card") == "right"
+	host.dock("enemy_card")
 	host.apply_layout("Mirrored")
-	var mirrored: bool = host.region_of("party") == "right_top" and host.region_of("forecast") == "left"
+	var mirrored: bool = host.region_of("party") == "right_top" and host.region_of("enemy_card") == "left" and host.region_of("hero") == "right"
 	host.apply_layout("Standard")
 	if tree_parent != null:
 		var brawler: Combatant = session.find_combatant("Enemy Brawler")
@@ -99,16 +109,16 @@ static func run(tree_parent: Node = null) -> bool:
 		session.fx_requested.emit(ActionLogEntry.new(1, 1, "DEFEND", warrior.name, "", "50%", 50, "DEFEND"))
 		session.fx_requested.emit(ActionLogEntry.new(1, 1, "BUFF", warrior.name, "", "+50%", 50, "FOCUS"))
 		session.fx_requested.emit(ActionLogEntry.new(1, 1, "MOVE", warrior.name, "", "-> (4, 4)", 0, "MOVED", Vector2i(4, 5), Vector2i(4, 4)))
-	var layout_ok: bool = floating and not host.is_undocked("forecast") and host.region_of("forecast") == "right" and mirrored
+	var layout_ok: bool = floating and not host.is_undocked("enemy_card") and host.region_of("enemy_card") == "right" and mirrored
 
 	print("\n=======================================================")
 	print("=== COMBAT UI FRAMEWORK TEST ASSERTIONS             ===")
 	print("=======================================================")
-	print("  [UI] All 7 combat panels mounted in their dock regions: %s" % ("PASS" if docks_ok else "FAIL"))
+	print("  [UI] All 8 combat panels mounted in their dock regions: %s" % ("PASS" if docks_ok else "FAIL"))
 	print("  [UI] Tokens & roster bound to the simulated combatants: %s" % ("PASS" if tokens_ok else "FAIL"))
-	print("  [UI] Unit hover card shows the pinned unit (the inspector panel is gone): %s" % ("PASS" if inspector_ok else "FAIL"))
+	print("  [UI] Enemy card follows hover, else the pinned enemy; no floating hover card, inspector or forecast panel: %s" % ("PASS" if inspector_ok else "FAIL"))
 	print("  [UI] Side panels and grid keep their size for hero and enemy selection, inside the viewport: %s" % ("PASS" if layout_stable else "FAIL"))
-	print("  [UI] Tactical forecast computed & rendered: %s" % ("PASS" if forecast_ok else "FAIL"))
+	print("  [UI] Enemy card defaults to the planning hero's forecast target: %s" % ("PASS" if forecast_ok else "FAIL"))
 	print("  [UI] Action Log Modal toggle & entry view lifecycle: %s" % ("PASS" if log_modal_ok else "FAIL"))
 	print("  [UI] Timeline Modal toggle lifecycle: %s" % ("PASS" if timeline_modal_ok else "FAIL"))
 	print("  [UI] Timeline dock block selection inspects resolved block: %s" % ("PASS" if signals_ok else "FAIL"))
@@ -128,9 +138,10 @@ static func run(tree_parent: Node = null) -> bool:
 # Left panel, grid and right panel horizontal extents (x, width) after a synchronous layout pass;
 # heights are not compared: a one-shot pass leaves wrapped labels at a transient height.
 static func _dock_rects(host: CombatDockHost) -> Array[Vector2]:
-	_sort_now(host)
+	for _pass: int in range(3):   # a resize changes the tile: the first pass still sees the old board's minimum width
+		_sort_now(host)
 	var rects: Array[Vector2] = []
-	for id: String in ["party", "grid", "forecast"]:
+	for id: String in ["party", "grid", "enemy_card"]:
 		var r: Rect2 = host.get_panel(id).get_global_rect()
 		rects.append(Vector2(r.position.x, r.size.x))
 	return rects
@@ -144,41 +155,51 @@ static func _sort_now(node: Node) -> void:
 
 
 # ------------------------------------------------------------------------------
-# COMBAT-UI2-L1: layout C numbers (derived from the rules in CombatHudMetrics / the spec, not from shipped content)
+# COMBAT-UI3: layout A numbers (derived from the rules in CombatHudMetrics / the spec, not from shipped content)
 # ------------------------------------------------------------------------------
 
 const VIEWS: Array[Vector2] = [Vector2(1280, 720), Vector2(1280, 800), Vector2(1680, 720)]
+const VIEW_1080: Vector2 = Vector2(1920, 1080)
 
 static func _hud_checks(tree_parent: Node) -> bool:
 	var checks: Dictionary = {}
 	var saved_scale: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
 
-	# Pure metrics: the tile formula, minimum tile, fixed column heights, line dropping, at every size and text size.
+	# Pure metrics: the tile formula, minimum tile, fixed column heights, the strip height, at every size and text size.
 	var tile_ok: bool = true
 	var heights_ok: bool = true
-	var rows_ok: bool = true
-	for view: Vector2 in VIEWS:
-		var last_party_rows: int = 99
-		var last_hostile_rows: int = 99
+	var widths_ok: bool = true
+	var strip_ok: bool = true
+	var all_views: Array[Vector2] = []
+	all_views.append_array(VIEWS)
+	all_views.append(VIEW_1080)
+	for view: Vector2 in all_views:
+		var last_left: int = 0
+		var last_right: int = 0
 		for scale: float in SettingsFile.TEXT_LEVELS:
 			for party_n: int in [1, 3]:
 				var m: CombatHudMetrics = CombatHudMetrics.compute(view, scale, party_n, 5)
 				var expect: int = maxi(48, floori(minf(float(m.area_h - CombatHudMetrics.FRAME) / 9.0, float(m.area_w - CombatHudMetrics.FRAME) / 12.0)))
 				tile_ok = tile_ok and m.tile == expect and m.tile >= 48
-				heights_ok = heights_ok and m.party_panel_h == m.area_h
-				heights_ok = heights_ok and m.hostile_panel_h + m.forecast_h + CombatHudMetrics.COL_GAP == m.area_h and not m.hostile_scroll
-				heights_ok = heights_ok and m.forecast_h > 0
-				if party_n == 3:
-					rows_ok = rows_ok and m.party_rows <= last_party_rows and m.hostile_rows <= last_hostile_rows
-					last_party_rows = m.party_rows
-					last_hostile_rows = m.hostile_rows
-				rows_ok = rows_ok and m.party_rows >= CombatHudMetrics.PARTY_ROWS_MIN and m.hostile_rows >= CombatHudMetrics.HOSTILE_ROWS_MIN
-	checks["tile = floor(min(h/9, w/12)), at least 48, at 3 window sizes x 4 text sizes"] = tile_ok
-	checks["party panel fills the centre row (inspector space handed back); hostile + forecast add up to it, no hostile scroll"] = heights_ok
-	checks["cards only drop lines as text grows (never below the minimum rows)"] = rows_ok
+				heights_ok = heights_ok and m.party_panel_h + m.hero_panel_h + CombatHudMetrics.COL_GAP == m.area_h and m.hero_panel_h >= CombatHudMetrics.HERO_MIN_LINES * m.lh
+				heights_ok = heights_ok and m.hostile_panel_h + m.enemy_card_h + CombatHudMetrics.COL_GAP == m.area_h and not m.hostile_scroll
+				heights_ok = heights_ok and m.enemy_card_h >= CombatHudMetrics.ENEMY_MIN_LINES * m.lh
+				strip_ok = strip_ok and m.top_h >= CombatHudMetrics.STRIP_MIN_H and m.top_h >= m.ctrl_h + 2 * CombatHudMetrics.STRIP_PAD_V and m.ctrl_h > m.lh
+				strip_ok = strip_ok and m.area_h + m.top_h + m.bottom_h + 2 * CombatHudMetrics.ROW_SEP + 2 * CombatHudMetrics.MARGIN_V == int(view.y)
+			var mw: CombatHudMetrics = CombatHudMetrics.compute(view, scale, 2, 5)
+			widths_ok = widths_ok and mw.left_w >= last_left and mw.right_w >= last_right and mw.left_w >= CombatHudMetrics.LEFT_W and mw.right_w >= CombatHudMetrics.RIGHT_W
+			widths_ok = widths_ok and mw.left_w + mw.right_w + mw.area_w + 2 * CombatHudMetrics.COL_SEP + 2 * CombatHudMetrics.MARGIN_H == int(view.x)
+			last_left = mw.left_w
+			last_right = mw.right_w
+	checks["tile = floor(min(h/9, w/12)), at least 48, at 4 window sizes x 4 text sizes"] = tile_ok
+	checks["party cards + selected-hero panel and hostile cards + enemy card each fill the centre row; no hostile scroll at 5"] = heights_ok
+	checks["side columns grow with the text size, the grid takes the rest of the width"] = widths_ok
+	checks["the planning strip is one control line (>= 44 px) and the rows add up to the window height"] = strip_ok
 	checks["tile_for: a short area is height-bound, a narrow one width-bound, tiny floors at 48"] = (
 		CombatHudMetrics.tile_for(Vector2(2000, 540)) == 60 and CombatHudMetrics.tile_for(Vector2(600, 2000)) == 50
 		and CombatHudMetrics.tile_for(Vector2(100, 100)) == CombatHudMetrics.MIN_TILE)
+	var old_m: CombatHudMetrics = CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5)
+	checks["layout A gives the grid a bigger tile than layout C's 96 px timeline + 220 px columns did"] = old_m.tile > CombatHudMetrics.tile_for(Vector2(1280 - 28 - 440 - 20 - CombatHudMetrics.FRAME, 720 - 8 - 96 - 36 - 8 - CombatHudMetrics.FRAME))
 
 	# Text scale: the HUD font never drops below 14 px at Normal and follows the setting.
 	SettingsFile.set_value("ui/text_scale", 1.0)
@@ -213,23 +234,31 @@ static func _hud_checks(tree_parent: Node) -> bool:
 			_sort_now(host)
 			sizes_ok = sizes_ok and host.metrics.tile >= 48 and grid.grid_view.tile_px == host.metrics.tile
 			fixed_ok = fixed_ok and party.content_fits() and foes.content_fits() and host._slot("party").custom_minimum_size.y == host.metrics.party_panel_h and host._slot("enemies").custom_minimum_size.y == host.metrics.hostile_panel_h
-			for id: String in ["timeline", "party", "grid", "enemies", "forecast", "action_log"]:
+			fixed_ok = fixed_ok and host._slot("hero").custom_minimum_size.y == host.metrics.hero_panel_h and host._slot("enemy_card").custom_minimum_size.y == host.metrics.enemy_card_h
+			for id: String in ["timeline", "party", "hero", "grid", "enemies", "enemy_card", "action_log", "playback"]:
 				var r: Rect2 = host.get_panel(id).get_global_rect()
 				inside_ok = inside_ok and r.position.x >= -0.5 and r.end.x <= view.x + 0.5
 			session.select_combatant(session.enemies[0])   # selecting a hostile keeps the fixed heights
 			fixed_ok = fixed_ok and party.content_fits() and foes.content_fits() and host._slot("party").custom_minimum_size.y == host.metrics.party_panel_h
 			session.select_combatant(session.allies[0])
 		checks["grid tile fitted to the window (>= 48) at 1280x720, 1280x800, 1680x720"] = sizes_ok
-		checks["party and hostile panels keep their fixed heights; every panel inside the window"] = fixed_ok and inside_ok
+		checks["party, hero, hostile and enemy-card panels keep their fixed heights; every panel inside the window"] = fixed_ok and inside_ok
 
-		# A hero card click selects that hero for the timeline.
+		# A hero card click selects that hero for the strip and the selected-hero panel.
 		var second: Combatant = session.allies[1]
 		var card: Control = party._card_for(second)
 		var click := InputEventMouseButton.new()
 		click.button_index = MOUSE_BUTTON_LEFT
 		click.pressed = true
 		card.gui_input.emit(click)
-		checks["clicking a hero card selects the hero"] = session.selected_combatant == second and session.focused_hero == second
+		var hero_panel: CombatHeroPanel = host.get_panel("hero") as CombatHeroPanel
+		checks["clicking a hero card selects the hero (strip title and selected-hero panel follow)"] = (session.selected_combatant == second and session.focused_hero == second
+			and hero_panel.shown == second and (host.get_panel("timeline") as CombatTimelinePanel).dock.title_lbl.text == "%s plan" % second.name)
+		# Hovering (or focusing) another hero's card shows that hero in the panel; leaving shows the planned hero again.
+		party._card_for(session.allies[0]).mouse_entered.emit()
+		var hover_hero: bool = hero_panel.shown == session.allies[0]
+		party._card_for(session.allies[0]).mouse_exited.emit()
+		checks["the selected-hero panel shows a hovered hero, then the planned hero again"] = hover_hero and hero_panel.shown == second
 
 		# Rule 7: no gear button, no equipment modal path in battle.
 		var gear_buttons: int = 0
@@ -244,15 +273,27 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		host._unhandled_input(key)
 		checks["no gear button and no equipment modal path in the battle scene"] = (
 			gear_buttons == 0 and host.find_children("*", "CharacterEquipmentModal", true, false).is_empty()
-			and not ("btn_gear" in (host.get_panel("playback") as CombatPlaybackPanel).controls)
-			and not ("btn_gear_modal" in grid.hover_card) and _card_buttons_ok(grid))
+			and not ("btn_gear" in (host.get_panel("playback") as CombatPlaybackPanel).controls))
 
-		# The log is a one-line ticker; Expand opens the log modal.
+		# The log is a one-line ticker in the status bar; a click on it or Expand opens the log modal.
 		var ticker: ActionLogDockUI = (host.get_panel("action_log") as CombatActionLogPanel).dock
-		checks["log is a one-line ticker that expands into the log modal"] = ticker.ticker and ticker.ticker_lbl != null and not ticker.ticker_lbl.text.contains("\n")
+		var ticker_ok: bool = ticker.ticker and ticker.ticker_lbl != null and not ticker.ticker_lbl.text.contains("\n") and host.region_of("action_log") == "bottom_center"
 		ticker.btn_expand_log.pressed.emit()
-		checks["log is a one-line ticker that expands into the log modal"] = checks["log is a one-line ticker that expands into the log modal"] and host.log_modal.visible
+		ticker_ok = ticker_ok and host.log_modal.visible
 		host.close_modals()
+		var line_click := InputEventMouseButton.new()
+		line_click.button_index = MOUSE_BUTTON_LEFT
+		line_click.pressed = true
+		ticker.active_cell_dock.gui_input.emit(line_click)
+		checks["log is a one-line ticker in the status bar; a click on it or Expand opens the log modal"] = ticker_ok and host.log_modal.visible
+		host.close_modals()
+
+		# The status bar: "Round n · Planning" and the session's status line as the hint.
+		var bar: CombatPlaybackPanel = host.get_panel("playback") as CombatPlaybackPanel
+		bar.refresh()
+		checks["status bar reads 'Round n · Planning' with the status line as its hint"] = (
+			bar.controls.phase_badge_lbl.text == "Round %d · Planning" % session.current_round and bar.controls.status_label.text == session.status_text
+			and bar.controls.status_label.visible)
 
 		tree_parent.remove_child(host)
 		host.free()
@@ -271,14 +312,17 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		var xl_foes: CombatRosterPanel = xl_host.get_panel("enemies") as CombatRosterPanel
 		var xl_ok: bool = xl_host.metrics.fs == roundi(14.0 * 1.3) and xl_host.metrics.tile >= 48
 		xl_ok = xl_ok and xl_party.visible_card_count() == xl_session.allies.size() and xl_foes.visible_card_count() == xl_session.enemies_in_view().size()
-		xl_ok = xl_ok and xl_party.content_fits() and xl_foes.content_fits() and xl_host.metrics.party_panel_h == xl_host.metrics.area_h
+		xl_ok = xl_ok and xl_party.content_fits() and xl_foes.content_fits() and xl_host.metrics.party_panel_h + xl_host.metrics.hero_panel_h + CombatHudMetrics.COL_GAP == xl_host.metrics.area_h
 		checks["Extra large text: cards still show, grid >= 48, cards fit their fixed heights"] = xl_ok
 		tree_parent.remove_child(xl_host)
 		xl_host.free()
 		xl_session.dispose()
 		SettingsFile.set_value("ui/text_scale", saved_scale)
 
-	_hover_card_checks(tree_parent, checks)
+	_strip_checks(tree_parent, checks)
+	_confirm_checks(tree_parent, checks)
+	_enemy_card_checks(tree_parent, checks)
+	_overlap_checks(tree_parent, checks)
 	_autoplay_ui_checks(tree_parent, checks)
 	_intent_ui_checks(tree_parent, checks)
 	_phase_banner_checks(tree_parent, checks)
@@ -303,7 +347,7 @@ static func _hud_checks(tree_parent: Node) -> bool:
 		checks["a party cap of 2 shows 2 slots and a cap of 4 shows 4 (heroes + muted empty slots)"] = cap_ok
 
 	print("\n=======================================================")
-	print("=== COMBAT UI LAYOUT C (COMBAT-UI2-L1) ASSERTIONS   ===")
+	print("=== COMBAT UI LAYOUT A (COMBAT-UI3) ASSERTIONS      ===")
 	print("=======================================================")
 	var all_ok: bool = true
 	for label: String in checks:
@@ -314,18 +358,11 @@ static func _hud_checks(tree_parent: Node) -> bool:
 
 
 # ------------------------------------------------------------------------------
-# COMBAT-UI2-L2: the unit hover card (one screen per case: many screens in one arena frame crash)
+# COMBAT-UI3: the planning strip, Confirm round's missing-actions warning, the merged enemy card, no overlaps
+# (one screen per case: many screens in one arena frame crash)
 # ------------------------------------------------------------------------------
 
-# The only button on a card is Pin / Unpin: nothing on it opens the equipment modal.
-static func _card_buttons_ok(grid: CombatGridPanel) -> bool:
-	grid.pin_card(grid.session.allies[0])
-	var ok: bool = true
-	for node: Node in grid.hover_card.find_children("*", "Button", true, false):
-		var btn: Button = node as Button
-		ok = ok and btn.name == "PinButton" and (btn.text == "Pin" or btn.text == "Unpin")
-	grid.close_card()
-	return ok
+const WARN_KEY: String = "ui/warn_missing_actions"
 
 static func _card_host(tree_parent: Node, view: Vector2, scale: float) -> CombatDockHost:
 	SettingsFile.set_value("ui/text_scale", scale)
@@ -346,118 +383,287 @@ static func _card_free(tree_parent: Node, host: CombatDockHost, saved_scale: Var
 	session.dispose()
 	SettingsFile.set_value("ui/text_scale", saved_scale)
 
-static func _units_in_view(session: CombatSession) -> Array[Combatant]:
-	var units: Array[Combatant] = []
-	units.append_array(session.allies)
-	units.append_array(session.enemies_in_view())
-	return units
+# The strip of a host after a layout pass and a refresh (the blocks are rebuilt for the width they got).
+static func _strip(host: CombatDockHost) -> TimelineDockUI:
+	var panel: CombatTimelinePanel = host.get_panel("timeline") as CombatTimelinePanel
+	_sort_now(host)
+	panel.refresh()
+	_sort_now(host)
+	return panel.dock
 
-# For every unit in view: the card opens, stays inside the viewport, never overlaps the unit's tile or token and
-# holds all its content (nothing clipped).
-static func _card_geometry_ok(host: CombatDockHost, view: Vector2) -> bool:
-	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
+# For one unit: the strip's blocks cover the round once, in order; each action block is the session's action at its
+# start (kind and colour from PlanBlockText, width by blocks); the empty blocks are exactly the plan's empty blocks.
+static func _blocks_match(host: CombatDockHost, dock: TimelineDockUI, unit: Combatant) -> bool:
 	var session: CombatSession = host.session
-	var ok: bool = true
-	var viewport := Rect2(Vector2.ZERO, view)
-	for c: Combatant in _units_in_view(session):
-		grid.pin_card(c)
-		_sort_now(host)
-		grid._place_card()
-		var rect: Rect2 = grid.hover_card.get_global_rect()
-		var token: Control = grid.grid_view.get_token_for(c)
-		ok = ok and grid.hover_card.visible and grid.card_unit == c and grid.hover_card.name_lbl.text == c.name
-		ok = ok and viewport.encloses(rect) and not rect.intersects(grid.unit_tile_rect(c)) and token != null and not rect.intersects(token.get_global_rect())
-		ok = ok and grid.hover_card.content_fits()
-		if not ok:
-			print("    card geometry failed for %s: card %s tile %s view %s fits %s" % [c.name, str(rect), str(grid.unit_tile_rect(c)), str(view), str(grid.hover_card.content_fits())])
-			break
-	grid.close_card()
-	return ok
+	var next: int = 1
+	var empty: Array[int] = []
+	for block: Control in dock.blocks():
+		var start: int = int(block.get_meta("start"))
+		var cost: int = int(block.get_meta("blocks"))
+		var kind: String = str(block.get_meta("kind"))
+		var style: StyleBoxFlat = block.get_theme_stylebox("panel") as StyleBoxFlat
+		if start != next or style == null or style.bg_color != PlanBlockText.bg(kind):
+			return false
+		if block.custom_minimum_size.x != float(cost * dock.block_w + (cost - 1) * CombatHudMetrics.BLOCK_GAP):
+			return false
+		var act: CombatResolver.ScheduledAction = session.find_recorded_action(unit, start)
+		if kind == PlanBlockText.KIND_EMPTY:
+			if act != null or cost != 1:
+				return false
+			empty.append(start)
+		elif act == null or PlanBlockText.kind_of(act.command) != kind or act.end_block - act.start_block + 1 != cost or not (str(block.get_meta("form", "text")) == "symbol" or _has_text(block, act.command.command_name)):
+			return false
+		next += cost
+	return next == session.total_blocks + 1 and empty == session.plan_empty_blocks(unit)
 
-static func _hover_card_checks(tree_parent: Node, checks: Dictionary) -> void:
+static func _strip_checks(tree_parent: Node, checks: Dictionary) -> void:
 	if tree_parent == null:
 		return
 	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
-
-	# Delay: hovering only schedules the card; it appears when the delay is over, and shows the hovered unit.
 	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
-	var grid: CombatGridPanel = host.get_panel("grid") as CombatGridPanel
-	var foe: Combatant = host.session.enemies_in_view()[0]
-	host.session.set_hovered(foe)
-	var waiting: bool = not grid.card_is_open() and grid._pending == foe and is_equal_approx(grid._hover_timer.wait_time, CombatGridPanel.HOVER_DELAY) and CombatGridPanel.HOVER_DELAY == 0.15
-	grid._on_hover_delay()
-	checks["hover card: appears only after the 150 ms hover delay, for the hovered unit"] = waiting and grid.card_is_open() and grid.card_unit == foe
-	# Unpinned: leaving closes it (after the grace), pinned: leaving keeps it, Esc closes it.
-	host.session.set_hovered(null)
-	grid._on_close_grace()
-	var closed_on_exit: bool = not grid.card_is_open()
-	host.session.set_hovered(foe)
-	grid._on_hover_delay()
-	grid.hover_card.pin_btn.pressed.emit()
-	host.session.set_hovered(null)
-	grid._on_close_grace()
-	var kept: bool = grid.card_is_open() and grid.hover_card.is_pinned
-	var esc := InputEventKey.new()
-	esc.keycode = KEY_ESCAPE
-	esc.pressed = true
-	host._unhandled_input(esc)
-	checks["hover card: an unpinned card closes when the pointer leaves; Pin keeps it on exit; Esc closes it"] = closed_on_exit and kept and not grid.card_is_open() and not grid.hover_card.is_pinned
-	# Click on the card pins it; a click elsewhere closes it.
-	grid.open_card(foe)
-	var card_click := InputEventMouseButton.new()
-	card_click.button_index = MOUSE_BUTTON_LEFT
-	card_click.pressed = true
-	grid.hover_card.gui_input.emit(card_click)
-	var pinned_by_click: bool = grid.hover_card.is_pinned
-	var away := InputEventMouseButton.new()
-	away.button_index = MOUSE_BUTTON_LEFT
-	away.pressed = true
-	away.global_position = Vector2(-50, -50)
-	grid._input(away)
-	checks["hover card: a click on the card pins it; a click elsewhere closes it"] = pinned_by_click and not grid.card_is_open()
-	# Right click (back, read in _input) closes a pinned card; an unpinned one lets the click through.
-	grid.open_card(foe)
+	var session: CombatSession = host.session
+	var dock: TimelineDockUI = _strip(host)
+	var blank_ok: bool = true
+	for block: Control in dock.blocks():
+		blank_ok = blank_ok and str(block.get_meta("kind")) == PlanBlockText.KIND_EMPTY
+	blank_ok = blank_ok and dock.blocks().size() == session.total_blocks and session.plan_empty_blocks(session.focused_hero).size() == session.total_blocks
+	checks["strip: an unplanned hero shows one muted empty block per block of the round"] = blank_ok
+	session.plan_apply_preset_all(PlanPresets.DEFAULT_TACTIC)
+	var kinds_ok: bool = true
+	var kinds: Dictionary = {}
+	for hero: Combatant in session.allies:
+		session.select_combatant(hero)
+		dock = _strip(host)
+		kinds_ok = kinds_ok and dock.title_lbl.text == "%s plan" % hero.name and _blocks_match(host, dock, hero)
+		for block: Control in dock.blocks():
+			kinds[str(block.get_meta("kind"))] = true
+	checks["strip: the selected hero's plan as continuous blocks, width by blocks, colour by action kind, empty blocks muted"] = kinds_ok and kinds.size() >= 2
+	# Hover or focus on a block: the card says how the action plays out.
+	session.select_combatant(session.allies[0])
+	dock = _strip(host)
+	var first: Control = null
+	for block: Control in dock.blocks():
+		if str(block.get_meta("kind")) != PlanBlockText.KIND_EMPTY:
+			first = block
+			break
+	var card_ok: bool = first != null
+	if first != null:
+		var act: CombatResolver.ScheduledAction = session.find_recorded_action(session.allies[0], int(first.get_meta("start")))
+		first.mouse_entered.emit()
+		card_ok = dock.block_card.visible and dock.block_card_title.text == PlanBlockText.title(act) and dock.block_card_body.text == PlanBlockText.body(act) \
+			and dock.block_card_cost.text.begins_with(PlanBlockText.cost_line(act))
+		first.mouse_exited.emit()
+		card_ok = card_ok and not dock.block_card.visible
+		first.focus_entered.emit()
+		card_ok = card_ok and dock.block_card.visible
+		first.focus_exited.emit()
+	checks["strip: hover or focus on a block shows how it plays out (title, plain text, blocks and AP)"] = card_ok and not dock.block_card.visible
+	# A right click on a block removes its step; the controls sit right of the blocks.
+	var steps_before: int = session.plan.steps_of(session.allies[0]).size()
 	var right := InputEventMouseButton.new()
 	right.button_index = MOUSE_BUTTON_RIGHT
 	right.pressed = true
-	grid._input(right)
-	var unpinned_stays: bool = grid.card_is_open()
-	grid.pin_card(foe)
-	grid._input(right)
-	checks["hover card: right click closes a pinned card only"] = unpinned_stays and not grid.card_is_open()
-	# Focus on a card opens it at once, losing focus closes an unpinned one.
-	var foes: CombatRosterPanel = host.get_panel("enemies") as CombatRosterPanel
-	foes._card_for(foe).focus_entered.emit()
-	var focus_open: bool = grid.card_is_open() and grid.card_unit == foe
-	foes._card_for(foe).focus_exited.emit()
-	checks["hover card: keyboard / controller focus on a card opens it, blur closes it"] = focus_open and not grid.card_is_open()
-	# A card click pins that unit's card.
-	foes._card_for(foe).gui_input.emit(card_click)
-	checks["hover card: clicking a hostile card pins its hover card"] = grid.card_is_open() and grid.hover_card.is_pinned and grid.card_unit == foe
-	grid.close_card()
-	checks["hover card: only a Pin button, no gear / equipment modal path"] = _card_buttons_ok(grid) and host.find_children("*", "CharacterEquipmentModal", true, false).is_empty()
+	if first != null:
+		first.gui_input.emit(right)
+	checks["strip: right-click on a block removes its step"] = session.plan.steps_of(session.allies[0]).size() == steps_before - 1
+	dock = _strip(host)
+	checks["strip: the tactic controls sit right of the blocks (Party, Hero, Autoplay, Clear, Confirm round)"] = (
+		dock.controls_row.get_global_rect().position.x >= dock.blocks_area.get_global_rect().end.x - 0.5
+		and dock.controls_row.is_ancestor_of(dock.party_option) and dock.controls_row.is_ancestor_of(dock.hero_option)
+		and dock.controls_row.is_ancestor_of(dock.autoplay_btn) and dock.controls_row.is_ancestor_of(dock.clear_btn) and dock.controls_row.is_ancestor_of(dock.confirm_btn)
+		and dock.confirm_btn.text == "✔ Confirm round")
 	_card_free(tree_parent, host, saved)
 
-	# Geometry at the three window sizes (Normal text), then at all four text sizes (1280x720).
-	var views_ok: bool = true
-	for view: Vector2 in VIEWS:
-		var view_host: CombatDockHost = _card_host(tree_parent, view, 1.0)
-		views_ok = views_ok and _card_geometry_ok(view_host, view)
-		_card_free(tree_parent, view_host, saved)
-	checks["hover card: never overlaps the hovered tile, stays in the viewport at 1280x720, 1280x800, 1680x720"] = views_ok
-	var scales_ok: bool = true
+# Fills every empty block of every hero with self-targeted steps (whatever the hero may use on itself), so the
+# Confirm round warning has nobody to name. False when the fixture cannot fill them (the check then fails loudly).
+static func _fill_plans(session: CombatSession) -> bool:
+	for hero: Combatant in session.allies:
+		var guard: int = 0
+		while not session.plan_empty_blocks(hero).is_empty() and guard < 3 * session.total_blocks:
+			guard += 1
+			var added: bool = false
+			for option: PlanOption in session.plan.target_options(hero, hero):
+				if option.valid and session.plan_add_step(hero, option.step).is_empty():
+					added = true
+					break
+			if not added:
+				break
+	return session.heroes_with_empty_blocks().is_empty() and session.plan_is_valid()
+
+static func _confirm_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+	var saved_warn: Variant = SettingsFile.get_value(WARN_KEY)
+	checks["setting: 'Warn about missing actions' is a Gameplay checkbox key, on by default"] = (
+		SettingsFile.KEYS.has(WARN_KEY) and SettingsFile.default_of(WARN_KEY) == true and str(SettingsModel.LABELS.get(WARN_KEY, "")) == "Warn about missing actions")
+	SettingsFile.set_value(WARN_KEY, true)
+
+	# No empty blocks: Confirm round confirms at once.
+	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
+	var dock: TimelineDockUI = _strip(host)
+	host.session.plan_apply_preset_all(PlanPresets.DEFAULT_TACTIC)
+	var filled: bool = _fill_plans(host.session)
+	dock.confirm_btn.pressed.emit()
+	checks["Confirm round: with no empty blocks it confirms at once (no question)"] = filled and host.session.plan_confirmed and not dock.question_open()
+	_card_free(tree_parent, host, saved)
+
+	# Empty blocks: the question names the heroes; Back keeps planning, Confirm confirms; Enter and Esc take the same path.
+	host = _card_host(tree_parent, VIEWS[0], 1.0)
+	dock = _strip(host)
+	var session: CombatSession = host.session
+	session.plan_apply_preset_all(PlanPresets.DEFAULT_TACTIC)
+	session.plan_clear(session.allies[0])
+	var names: Array[String] = []
+	for hero: Combatant in session.heroes_with_empty_blocks():
+		names.append(hero.name)
+	dock.confirm_btn.pressed.emit()
+	var asks: bool = dock.question_open() and dock.question.kind == TimelineDockUI.Q_CONFIRM and dock.question.text_lbl.text == TimelineDockUI.missing_text(names) \
+		and names.has(session.allies[0].name) and not session.plan_confirmed and dock.confirm_yes_btn.text == "Confirm" and dock.confirm_no_btn.text == "Back"
+	var q_rect: Rect2 = dock.question.get_global_rect()
+	var placed: bool = Rect2(Vector2.ZERO, VIEWS[0]).encloses(q_rect) and q_rect.position.y >= dock.confirm_btn.get_global_rect().end.y - 0.5
+	dock.confirm_no_btn.pressed.emit()
+	var back_ok: bool = not dock.question_open() and not session.plan_confirmed and session.is_planning()
+	host._unhandled_input(_key_event(KEY_ENTER))
+	var enter_asks: bool = dock.question_open() and not session.plan_confirmed
+	host._unhandled_input(_key_event(KEY_ESCAPE))
+	var esc_closes: bool = not dock.question_open() and not session.plan_confirmed
+	dock.confirm_btn.pressed.emit()
+	dock.confirm_yes_btn.pressed.emit()
+	checks["Confirm round: with empty blocks a small question names the heroes (Confirm / Back), inside the window under the button"] = asks and placed
+	checks["Confirm round: Back keeps planning; Enter asks the same question; Esc closes it; Confirm confirms"] = back_ok and enter_asks and esc_closes and session.plan_confirmed and not dock.question_open()
+	checks["missing_text: one name 'has', more names 'A and B have', 'A, B and C have'"] = (
+		TimelineDockUI.missing_text(["Warrior"]) == "Warrior has empty actions. Confirm anyway?"
+		and TimelineDockUI.missing_text(["Warrior", "Ranger"]) == "Warrior and Ranger have empty actions. Confirm anyway?"
+		and TimelineDockUI.missing_text(["A", "B", "C"]) == "A, B and C have empty actions. Confirm anyway?")
+	_card_free(tree_parent, host, saved)
+
+	# Setting off: confirms at once even with empty blocks.
+	SettingsFile.set_value(WARN_KEY, false)
+	host = _card_host(tree_parent, VIEWS[0], 1.0)
+	dock = _strip(host)
+	host.session.plan_apply_preset_all(PlanPresets.DEFAULT_TACTIC)
+	host.session.plan_clear(host.session.allies[0])
+	var still_empty: bool = not host.session.heroes_with_empty_blocks().is_empty()
+	dock.confirm_btn.pressed.emit()
+	checks["Confirm round: with the setting off it confirms at once despite empty blocks"] = still_empty and host.session.plan_confirmed and not dock.question_open()
+	_card_free(tree_parent, host, saved)
+	SettingsFile.set_value(WARN_KEY, saved_warn)
+
+	# The rule behind the warning: empty = not covered by a planned action; none for a hero with a full round.
+	var s2 := CombatSession.new(CatalogEncounter.new("goblin_skirmish"))
+	s2.start()
+	var hero2: Combatant = s2.allies[0]
+	var all_empty: bool = s2.plan_empty_blocks(hero2).size() == s2.total_blocks
+	s2.plan_apply_preset_all(PlanPresets.DEFAULT_TACTIC)
+	var covered: Dictionary = {}
+	for e: PlanEntry in s2.plan.entries_for(hero2):
+		for b: int in range(e.start_block, e.end_block() + 1):
+			covered[b] = true
+	var rule_ok: bool = all_empty
+	for b: int in range(1, s2.total_blocks + 1):
+		rule_ok = rule_ok and s2.plan_empty_blocks(hero2).has(b) != covered.has(b)
+	checks["plan_empty_blocks: the blocks no planned action covers (all of them before planning)"] = rule_ok
+	s2.dispose()
+
+# Lines of the merged enemy card derived from the rules (the unit's own numbers, the session's intent and forecast).
+static func _enemy_card_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
+	var session: CombatSession = host.session
+	var card: CombatEnemyCardPanel = host.get_panel("enemy_card") as CombatEnemyCardPanel
+	var hero: Combatant = session.focused_hero
+	var ok: bool = true
+	var engine_free: bool = true
+	var checked: int = 0
+	for foe: Combatant in session.enemies_in_view():
+		session.set_hovered(foe)
+		var rec: Dictionary = session.intent_of(foe)
+		var band: Vector2i = SkillCatalog.lowest(SkillDef.Kind.ATTACK).reach_for(foe)
+		var reach: String = str(band.y) if band.x == band.y else "%d-%d" % [band.x, band.y]
+		ok = ok and card.shown == foe and card.name_lbl.text == foe.name and card.state_lbl.text == card.state_word(foe)
+		ok = ok and card.stats_lbl.text == "HP %d/%d · Speed %d · Reach %s" % [foe.hp, foe.max_hp, foe.speed, reach]
+		if not rec.is_empty() and str(rec["kind"]) != IntentRules.ARRIVING and str(rec["kind"]) != IntentRules.IDLE:
+			ok = ok and card.next_lbl.visible and card.next_lbl.text == "Next: " + IntentText.first_line(rec)
+			ok = ok and card.threat_lbl.visible == (rec.get("target", null) == hero)
+		var basic: SkillDef = SkillCatalog.lowest(SkillDef.Kind.ATTACK)
+		var deals: int = maxi(1, roundi(float(DamageCalculator.expected(hero, foe, basic, basic.stance())) * (1.0 - foe.defense_mitigation_ratio)))
+		var takes: int = maxi(1, roundi(float(DamageCalculator.expected(foe, hero, basic, basic.stance())) * (1.0 - hero.defense_mitigation_ratio)))
+		ok = ok and card.versus_lbl.text == "Your %s: deals about %d · takes about %d" % [hero.name, deals, takes]
+		var cap: int = session.encounter.profile_of(foe).skill_cap
+		var names: Array[String] = card.skill_names(foe)
+		ok = ok and card.skills_lbl.text.begins_with("Can use: ") and not names.is_empty() and names.size() <= CombatHudMetrics.SKILL_NAMES_MAX + 1
+		for skill_name: String in names:
+			if skill_name.begins_with("+"):
+				continue
+			var usable: bool = false
+			for s: SkillDef in SkillCatalog.all():
+				usable = usable or (s.display_name == skill_name and not s.system and s.level <= cap and foe.can_use(s))
+			ok = ok and usable
+		for line: String in card.lines():
+			for word: String in ["crit", "power", "THREAT", "Guards at", "Flees at", "x1.", "vs "]:
+				engine_free = engine_free and not line.contains(word)
+		checked += 1
+	session.set_hovered(null)
+	checks["enemy card: name + state word, HP · Speed · Reach, Next: <tell>, 'Your <hero>: deals about X · takes about Y', Can use: <usable skills>"] = ok and checked >= 1
+	checks["enemy card: no engine detail (no crit, power, stance multiplier, threat-intel lines)"] = engine_free
+	checks["enemy card: fits its fixed height at Normal text (no scrolling)"] = card.content_fits() and card.custom_minimum_size.y == float(host.metrics.enemy_card_h)
+	_card_free(tree_parent, host, saved)
+
+# Nothing overlaps: at 1280x720 in all four text sizes (and 1920x1080) the panels are pairwise disjoint inside the
+# window, the strip's controls sit inside the strip, the blocks' room and the controls do not overlap, and the
+# fixed-height cards fit.
+static func _overlap_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+	var cases: Array[Array] = []
 	for scale: float in SettingsFile.TEXT_LEVELS:
-		var scale_host: CombatDockHost = _card_host(tree_parent, VIEWS[0], scale)
-		scales_ok = scales_ok and _card_geometry_ok(scale_host, VIEWS[0])
-		var scale_grid: CombatGridPanel = scale_host.get_panel("grid") as CombatGridPanel
-		scale_grid.pin_card(scale_host.session.allies[0])
-		scales_ok = scales_ok and scale_grid.hover_card.size.y <= float(scale_host.metrics.tile * CombatHudMetrics.GRID_ROWS)
-		_card_free(tree_parent, scale_host, saved)
-	checks["hover card: fits its content (no clipping) inside the board at all four text sizes"] = scales_ok
+		cases.append([VIEWS[0], scale])
+	cases.append([VIEW_1080, 1.0])
+	for case: Array in cases:
+		var view: Vector2 = case[0]
+		var scale: float = case[1]
+		var host: CombatDockHost = _card_host(tree_parent, view, scale)
+		host.session.plan_apply_preset_all(PlanPresets.DEFAULT_TACTIC)
+		var dock: TimelineDockUI = _strip(host)
+		var ids: Array[String] = ["timeline", "party", "hero", "grid", "enemies", "enemy_card", "playback", "action_log"]
+		var rects: Array[Rect2] = []
+		var ok: bool = true
+		var bad: String = ""
+		for id: String in ids:
+			var r: Rect2 = host._slot(id).get_global_rect()
+			rects.append(r)
+			if not Rect2(Vector2.ZERO, view).grow(0.5).encloses(r):
+				ok = false
+				bad += " %s outside %s;" % [id, str(r)]
+		for i: int in range(rects.size()):
+			for j: int in range(i + 1, rects.size()):
+				if rects[i].grow(-0.5).intersects(rects[j].grow(-0.5)):
+					ok = false
+					bad += " %s overlaps %s;" % [ids[i], ids[j]]
+		var strip: Rect2 = (host.get_panel("timeline") as Control).get_global_rect()
+		ok = ok and strip.size.y <= float(host.metrics.top_h) + 0.5
+		for node: Node in dock.strip_row.find_children("*", "Control", true, false):
+			var ctrl: Control = node as Control
+			if ctrl.is_visible_in_tree() and ctrl.size.x > 0.0 and not dock.blocks_area.is_ancestor_of(ctrl):
+				if not strip.grow(0.5).encloses(ctrl.get_global_rect()):
+					ok = false
+					bad += " strip control %s %s;" % [str(ctrl.name), str(ctrl.get_global_rect())]
+		ok = ok and not dock.blocks_area.get_global_rect().grow(-0.5).intersects(dock.controls_row.get_global_rect().grow(-0.5))
+		var party: CombatRosterPanel = host.get_panel("party") as CombatRosterPanel
+		var foes: CombatRosterPanel = host.get_panel("enemies") as CombatRosterPanel
+		ok = ok and party.content_fits() and foes.content_fits() and not host.metrics.hostile_scroll and host.metrics.tile >= 48
+		if not ok:
+			print("    overlap at %s x%.2f:%s" % [str(view), scale, bad])
+		checks["no overlap: panels disjoint inside %dx%d at text size %.2f; strip controls inside the strip, cards fit" % [int(view.x), int(view.y), scale]] = ok
+		_card_free(tree_parent, host, saved)
 
 
 # ------------------------------------------------------------------------------
-# COMBAT-UI2-L3: the timeline row's Tactic dropdowns, Autoplay toggle and text sizes (one screen per case)
+# COMBAT-UI2-L3 (in the COMBAT-UI3 strip): the Tactic dropdowns, Autoplay toggle and text sizes (one screen per case)
 # ------------------------------------------------------------------------------
 
 static func _key_event(code: Key) -> InputEventKey:
@@ -478,33 +684,33 @@ static func _autoplay_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 		return
 	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
 
-	# Text sizes: the row keeps its fixed height and every control stays inside the dock; font >= 14 px at Normal.
+	# Text sizes: the strip keeps its one-line height and every control stays inside it; font >= 14 px at Normal.
 	var fits_ok: bool = true
 	var floor_ok: bool = true
 	for scale: float in SettingsFile.TEXT_LEVELS:
 		var fit_host: CombatDockHost = _card_host(tree_parent, VIEWS[0], scale)
 		var fit_panel: CombatTimelinePanel = fit_host.get_panel("timeline") as CombatTimelinePanel
-		var dock: TimelineDockUI = fit_panel.dock
-		_sort_now(fit_host)
-		var need: float = dock.tracks_container.get_combined_minimum_size().y
+		var dock: TimelineDockUI = _strip(fit_host)
+		var need: float = dock.strip_panel.get_combined_minimum_size().y
 		var rect: Rect2 = fit_panel.get_global_rect()
-		fits_ok = fits_ok and need <= float(CombatHudMetrics.TOP_H) + 0.5 and rect.size.y <= float(CombatHudMetrics.TOP_H) + 0.5
-		for node: Node in dock.find_children("*", "Control", true, false):
+		fits_ok = fits_ok and need <= float(fit_host.metrics.top_h) + 0.5 and rect.size.y <= float(fit_host.metrics.top_h) + 0.5
+		for node: Node in dock.strip_row.find_children("*", "Control", true, false):
 			var ctrl: Control = node as Control
 			if ctrl.is_visible_in_tree() and ctrl.size.x > 0.0:
 				if ctrl.get_global_rect().end.x > rect.end.x + 0.5:
-					print("    outside the dock at %.2fx: %s %s" % [scale, str(ctrl.get_path()), str(ctrl.get_global_rect())])
+					print("    outside the strip at %.2fx: %s %s" % [scale, str(ctrl.get_path()), str(ctrl.get_global_rect())])
 				fits_ok = fits_ok and ctrl.get_global_rect().end.x <= rect.end.x + 0.5
 		if not fits_ok:
-			print("    timeline row at %.2fx needs %.1f px of %d (panel %s)" % [scale, need, CombatHudMetrics.TOP_H, str(rect)])
+			print("    strip at %.2fx needs %.1f px of %d (panel %s)" % [scale, need, fit_host.metrics.top_h, str(rect)])
 		var want_fs: int = UiTheme.hud_font()
-		for lbl: Label in [dock.plan_info_lbl, dock.ruler_tick_labels[0]]:
-			floor_ok = floor_ok and lbl.get_theme_font_size("font_size") == want_fs
+		var block_lbl: Label = dock.blocks()[0].get_child(0) as Label
+		floor_ok = floor_ok and dock.title_lbl.get_theme_font_size("font_size") == want_fs and block_lbl.get_theme_font_size("font_size") == dock.block_font()   # block labels: the smaller block font
 		floor_ok = floor_ok and dock.confirm_btn.get_theme_font_size("font_size") == want_fs and dock.hero_option.get_theme_font_size("font_size") == want_fs
 		floor_ok = floor_ok and (scale != 1.0 or want_fs == 14)
+		floor_ok = floor_ok and dock.party_caption.visible == (scale <= CombatHudMetrics.SHORT_ABOVE)
 		_card_free(tree_parent, fit_host, saved)
-	checks["timeline row: fixed height, nothing clipped or outside the dock at all four text sizes"] = fits_ok
-	checks["timeline row: text uses UiTheme.text_scale() with the 14 px floor (ruler, info, buttons, dropdowns)"] = floor_ok
+	checks["strip: one-line height, nothing clipped or outside the strip at all four text sizes"] = fits_ok
+	checks["strip: text uses UiTheme.text_scale() with the 14 px floor (title, blocks, buttons, dropdowns); captions drop above Normal+"] = floor_ok
 
 	# Dropdown contents, Draft menu gone, Tactic picks drive CombatAutoplay.
 	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
@@ -569,23 +775,24 @@ static func _autoplay_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 	var panel2: CombatTimelinePanel = host2.get_panel("timeline") as CombatTimelinePanel
 	var dock2: TimelineDockUI = panel2.dock
 	var ap2: CombatAutoplay = host2.autoplay
+	var hint2: Label = (host2.get_panel("playback") as CombatPlaybackPanel).controls.status_label
 	var starts_off: bool = not ap2.is_on() and not dock2.autoplay_btn.button_pressed
 	dock2.autoplay_btn.button_pressed = true
 	var toggled_on: bool = ap2.is_on() and dock2.autoplay_btn.button_pressed
 	host2._unhandled_input(_key_event(KEY_SPACE))
 	var space_pauses: bool = not ap2.is_on() and not dock2.autoplay_btn.button_pressed and ap2.pause_reason() == "Autoplay paused."
-	var note_shown: bool = dock2.plan_info_lbl.text == ap2.pause_reason()
+	var note_shown: bool = hint2.text == ap2.pause_reason()
 	host2._unhandled_input(_key_event(KEY_A))
-	var a_on: bool = ap2.is_on() and dock2.autoplay_btn.button_pressed and dock2.plan_info_lbl.text != "Autoplay paused."
+	var a_on: bool = ap2.is_on() and dock2.autoplay_btn.button_pressed and hint2.text != "Autoplay paused."
 	host2._unhandled_input(_key_event(KEY_A))
 	var a_off: bool = not ap2.is_on()
-	checks["autoplay toggle: starts off, the button turns it on, Space pauses it (banner shows why), A toggles"] = starts_off and toggled_on and space_pauses and note_shown and a_on and a_off
+	checks["autoplay toggle: starts off, the button turns it on, Space pauses it (the status bar says why), A toggles"] = starts_off and toggled_on and space_pauses and note_shown and a_on and a_off
 	# Safety stop reason reaches the banner.
 	ap2.set_autoplay(true)
 	var hero2: Combatant = host2.session.allies[0]
 	host2.session.select_combatant(hero2)
 	ap2._pause("Autoplay paused: %s is at 22%% HP" % hero2.name, false)
-	checks["autoplay toggle: a safety stop's reason shows in the row"] = dock2.plan_info_lbl.text.contains("is at 22% HP") and not dock2.autoplay_btn.button_pressed
+	checks["autoplay toggle: a safety stop's reason shows in the status bar"] = hint2.text.contains("is at 22% HP") and not dock2.autoplay_btn.button_pressed
 	_card_free(tree_parent, host2, saved)
 
 	# Replay / playback hosts (setup without autoplay): A, Space and the toggle never draft or confirm a live round.
@@ -671,14 +878,21 @@ static func _span(a: CombatResolver.ScheduledAction) -> String:
 static func _first_scheduled(session: CombatSession, unit: Combatant) -> CombatResolver.ScheduledAction:
 	return IntentRules.actions_of(unit, session.resolver.scheduled_actions)[0]
 
-# The card's lines stacked (each line's own minimum height, the body gap, the style margins): the headless layout pass
-# leaves the container minimum stale within one frame, so the card's own size is not read here.
-static func _stacked_height(card: UnitInspectorUI) -> float:
-	var total: float = 14.0
-	var body: Control = card.get_child(0) as Control
-	for child: Node in body.get_children():
-		total += (child as Control).get_combined_minimum_size().y + 2.0
-	return total
+# The merged enemy card's lines after showing `foe` on it (pinned: selected).
+static func _enemy_lines(host: CombatDockHost, foe: Combatant) -> Array[String]:
+	var card: CombatEnemyCardPanel = host.get_panel("enemy_card") as CombatEnemyCardPanel
+	host.session.select_combatant(foe)
+	var out: Array[String] = []
+	for line: String in card.lines():
+		for part: String in line.split("\n"):
+			out.append(part)
+	return out
+
+static func _lines_have(lines: Array[String], part: String) -> bool:
+	for line: String in lines:
+		if line.contains(part):
+			return true
+	return false
 
 static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 	if tree_parent == null:
@@ -733,7 +947,7 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 		Passives.apply(ally, IntentTestSuite.EYE)
 	var foes: CombatRosterPanel = host2.get_panel("enemies") as CombatRosterPanel
 	foes.refresh()
-	var next_ok: bool = host2.metrics.hostile_rows >= 3
+	var next_ok: bool = CombatHudMetrics.HOSTILE_ROWS >= 2   # the "Next:" line is the card's second row
 	var read_foes: int = 0
 	var attack_named: bool = false
 	for rec: Dictionary in host2.session.enemy_intents():
@@ -754,30 +968,110 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 	checks["hostile cards: the behaviour line reads 'Next: <skill> on <target> (B<n>)', a read foe wears the eye badge"] = next_ok and read_foes > 0 and attack_named
 	_card_free(tree_parent, host2, saved)
 
-	# Hover card: Intent with the first action; a read foe lists its whole plan under "Read by ...".
+	# Hostile card name row: HP right-aligned at its right end, readable (not clipped) at all four text sizes, "Next:" below.
+	var hp_ok: bool = true
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var hp_host: CombatDockHost = _intent_host(tree_parent, scale, false)
+		var hp_foes: CombatRosterPanel = hp_host.get_panel("enemies") as CombatRosterPanel
+		hp_foes.refresh()
+		_sort_now(hp_host)
+		var seen: int = 0
+		for foe: Combatant in hp_host.session.enemies_in_view():
+			var foe_card: Control = hp_foes._card_for(foe)
+			var hp_lbl: Label = foe_card.find_child("HpLabel", true, false) as Label
+			var name_lbl: Label = foe_card.find_child("NameLabel", true, false) as Label
+			var next_lbl: Label = foe_card.find_child("BehaviourLabel", true, false) as Label
+			if hp_lbl == null or name_lbl == null or next_lbl == null:
+				hp_ok = false
+				continue
+			seen += 1
+			var font: Font = hp_lbl.get_theme_font("font")
+			var text_w: float = font.get_string_size(hp_lbl.text, HORIZONTAL_ALIGNMENT_LEFT, -1, hp_lbl.get_theme_font_size("font_size")).x
+			hp_ok = hp_ok and hp_lbl.text == "%d/%d" % [foe.hp, foe.max_hp] and hp_lbl.size.x >= text_w - 0.5 and hp_lbl.size.x > 0.0
+			hp_ok = hp_ok and hp_lbl.get_global_rect().end.x <= foe_card.get_global_rect().end.x + 0.5 and hp_lbl.get_global_rect().position.x >= name_lbl.get_global_rect().end.x - 0.5
+			hp_ok = hp_ok and absf(hp_lbl.get_global_rect().position.y - name_lbl.get_global_rect().position.y) < 1.0 and next_lbl.get_global_rect().position.y >= name_lbl.get_global_rect().end.y - 0.5
+		hp_ok = hp_ok and seen > 0 and hp_foes.content_fits()
+		_card_free(tree_parent, hp_host, saved)
+	checks["hostile cards: HP 'x/y' sits right-aligned on the name row, unclipped, with the Next line below, at all four text sizes"] = hp_ok
+
+	# Tactic drafts fill the leftover blocks (the strip's pickers and autoplay pass fill_blocks; sims and enemies do not).
+	var fill_host: CombatDockHost = _intent_host(tree_parent, 1.0, false)
+	var fs: CombatSession = fill_host.session
+	fs.plan_apply_preset_all("balanced")
+	var bare_empty: int = fs.heroes_with_empty_blocks().size()
+	var bare_steps: Dictionary = {}
+	for hero: Combatant in fs.allies:
+		bare_steps[hero] = fs.plan.steps_of(hero).size()
+	var fill_ok: bool = true
+	for id: String in PlanPresets.AUTO_IDS:
+		fs.plan_apply_preset_all(id, true)
+		fill_ok = fill_ok and fs.plan_is_valid()
+		if id == "balanced":
+			fill_ok = fill_ok and fs.heroes_with_empty_blocks().is_empty()
+			for hero: Combatant in fs.allies:
+				fill_ok = fill_ok and fs.plan.steps_of(hero).size() >= int(bare_steps[hero])
+	fs.plan_apply_preset_all("balanced", true)
+	var hero_pick: Combatant = fs.allies[fs.allies.size() - 1]
+	fs.plan_clear(hero_pick)
+	fs.plan_apply_preset(hero_pick, "balanced", true)
+	fill_ok = fill_ok and fs.plan_empty_blocks(hero_pick).is_empty() and fs.plan.is_valid(hero_pick)
+	checks["tactic drafts with fill_blocks leave no empty block under Balanced (party and one hero), stay valid under every tactic, never lose steps (bare draft left %d hero(s) empty)" % bare_empty] = fill_ok
+	_card_free(tree_parent, fill_host, saved)
+
+	# Strip blocks: a smaller label font; a name that does not fit shows the kind symbol instead (never an ellipsis),
+	# every block keeps the same height; the symbol form has the name on the hover card.
+	var blk_ok: bool = true
+	var forms: Array[String] = []
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		var bh: CombatDockHost = _intent_host(tree_parent, scale, false)
+		bh.session.plan_apply_preset_all("balanced", true)
+		var bdock: TimelineDockUI = _strip(bh)
+		var n_text: int = 0
+		var n_sym: int = 0
+		var h0: float = -1.0
+		for blk: Control in bdock.blocks():
+			var lbl: Label = blk.get_child(0) as Label
+			if lbl == null:
+				continue
+			blk_ok = blk_ok and lbl.get_theme_font_size("font_size") == bdock.block_font() and bdock.block_font() < bdock.fs()
+			h0 = blk.size.y if h0 < 0.0 else h0
+			blk_ok = blk_ok and is_equal_approx(blk.size.y, h0)
+			var form: String = str(blk.get_meta("form", "text"))
+			if form == "symbol":
+				n_sym += 1
+				blk_ok = blk_ok and lbl.text.length() <= 4
+			else:
+				n_text += 1
+				var font: Font = lbl.get_theme_font("font")
+				blk_ok = blk_ok and font.get_string_size(lbl.text, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl.get_theme_font_size("font_size")).x <= lbl.size.x + 0.5
+		forms.append("%.2f: %d text / %d symbol" % [scale, n_text, n_sym])
+		_card_free(tree_parent, bh, saved)
+	print("STRIP FORMS ", forms)
+	checks["strip blocks: small label font, uniform height, full text fits or the kind symbol replaces it (all four text sizes)"] = blk_ok
+
+	# Enemy card: "Next:" with the first action; a read foe lists its whole plan under "Read by ...".
 	var host3: CombatDockHost = _intent_host(tree_parent)
-	var grid3: CombatGridPanel = host3.get_panel("grid") as CombatGridPanel
 	var walker: Combatant = _unit(host3, "Walker")
-	grid3.pin_card(walker)
+	var walker_lines: Array[String] = _enemy_lines(host3, walker)
 	var acts: Array[CombatResolver.ScheduledAction] = IntentRules.actions_of(walker, host3.session.resolver.scheduled_actions)
 	var plan_re := RegEx.new()
 	plan_re.compile("^B\\d+(-\\d+)? ")
 	var plan_labels: int = 0
-	for text: String in _texts(grid3.hover_card):
+	for text: String in walker_lines:
 		if plan_re.search(text) != null:
 			plan_labels += 1
 	var plan_ok: bool = acts.size() >= 2 and plan_labels == acts.size()   # one line per scheduled action
 	for a: CombatResolver.ScheduledAction in acts:
 		if a.command is AttackCommand:
 			var atk: AttackCommand = a.command
-			plan_ok = plan_ok and _texts(grid3.hover_card).has("%s %s on %s" % [_span(a), atk.command_name, atk.target.name])
-	var read_ok: bool = _has_text(grid3.hover_card, "INTENT") and _has_text(grid3.hover_card, "Read by Bryn")
+			plan_ok = plan_ok and walker_lines.has("%s %s on %s" % [_span(a), atk.command_name, atk.target.name])
+	var read_ok: bool = _lines_have(walker_lines, "Next: ") and _lines_have(walker_lines, "Read by Bryn")
 	var first: Dictionary = host3.session.intent_of(walker)
 	var first_blocks: Vector2i = first["blocks"]
-	var first_ok: bool = _has_text(grid3.hover_card, "(B%d" % first_blocks.x)
-	grid3.pin_card(_unit(host3, "Cutter"))
-	var plain_ok: bool = _has_text(grid3.hover_card, "INTENT") and _has_text(grid3.hover_card, "on Sella (%s)" % _span(_first_scheduled(host3.session, _unit(host3, "Cutter")))) and not _has_text(grid3.hover_card, "Read by")
-	checks["hover card: a hostile shows Intent with its first action; a read foe lists its whole plan under 'Read by Bryn (...)'"] = read_ok and plan_ok and first_ok and plain_ok
+	var first_ok: bool = _lines_have(walker_lines, "(B%d" % first_blocks.x)
+	var cutter_lines: Array[String] = _enemy_lines(host3, _unit(host3, "Cutter"))
+	var plain_ok: bool = _lines_have(cutter_lines, "Next: ") and _lines_have(cutter_lines, "on Sella (%s)" % _span(_first_scheduled(host3.session, _unit(host3, "Cutter")))) and not _lines_have(cutter_lines, "Read by")
+	checks["enemy card: a hostile shows 'Next:' with its first action; a read foe lists its whole plan under 'Read by Bryn (...)'"] = read_ok and plan_ok and first_ok and plain_ok
 	_card_free(tree_parent, host3, saved)
 
 	# Timeline: a foe that is not read keeps the masked banner with its block 1 tell; a read foe's track shows unmasked and read-only.
@@ -786,7 +1080,7 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 	var cutter4: Combatant = _unit(host4, "Cutter")
 	host4.session.select_combatant(cutter4)
 	var rec4: Dictionary = host4.session.intent_of(cutter4)
-	var masked_ok: bool = dock.enemy_classified_banner.visible and not dock.single_track_row.visible and dock.banner_lbl.text.contains("plan in secret") and dock.banner_lbl.text.contains(IntentText.core(rec4)) and not DictUtil.to_bool(rec4["revealed"])
+	var masked_ok: bool = dock.enemy_classified_banner.visible and not dock.track_clips_hbox.visible and dock.banner_lbl.text.contains("plan in secret") and dock.banner_lbl.text.contains(IntentText.core(rec4)) and not DictUtil.to_bool(rec4["revealed"])
 	var stalker4: Combatant = _unit(host4, "Stalker")
 	host4.session.select_combatant(stalker4)
 	var action_clips: int = 0
@@ -794,20 +1088,20 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 		if _has_text(clip, "Attack"):
 			action_clips += 1
 	checks["timeline: a foe's masked banner shows its block 1 tell; a read foe's track is unmasked and read-only"] = (
-		masked_ok and not dock.enemy_classified_banner.visible and dock.single_track_row.visible and dock.read_only and action_clips == 1)
+		masked_ok and not dock.enemy_classified_banner.visible and dock.track_clips_hbox.visible and dock.read_only and action_clips == 1)
 	host4.session.select_combatant(host4.session.allies[0])
 	checks["timeline: selecting a hero again restores the editable track"] = not dock.read_only and not dock.enemy_classified_banner.visible
 	_card_free(tree_parent, host4, saved)
 
 	# Forecast: the planning hero is told when a hovered foe's tell aims at it.
 	var host5: CombatDockHost = _intent_host(tree_parent)
-	var fc: CombatForecastPanel = host5.get_panel("forecast") as CombatForecastPanel
+	var fc: CombatEnemyCardPanel = host5.get_panel("enemy_card") as CombatEnemyCardPanel
 	var bryn: Combatant = _unit(host5, "Bryn")
 	host5.session.select_combatant(bryn)
 	host5.session.set_hovered(_unit(host5, "Stalker"))
-	var told: bool = fc.forecast.forecast_threat_lbl.visible and fc.forecast.forecast_threat_lbl.text == "Targets you in %s" % _span(_first_scheduled(host5.session, _unit(host5, "Stalker")))
+	var told: bool = fc.threat_lbl.visible and fc.threat_lbl.text == "Targets you in %s" % _span(_first_scheduled(host5.session, _unit(host5, "Stalker")))
 	host5.session.set_hovered(_unit(host5, "Cutter"))   # aims at Sella
-	var quiet: bool = not fc.forecast.forecast_threat_lbl.visible
+	var quiet: bool = not fc.threat_lbl.visible
 	checks["forecast: 'Targets you in B<n>' only when the hovered foe's tell aims at the planning hero"] = told and quiet
 	_card_free(tree_parent, host5, saved)
 
@@ -832,8 +1126,7 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 		var grid7: CombatGridPanel = host7.get_panel("grid") as CombatGridPanel
 		var ov: IntentOverlay = grid7.grid_view.intent_overlay
 		var board: Rect2 = Rect2(Vector2.ZERO, Vector2(grid7.grid_view.tile_px * CombatGridView.GRID_W, grid7.grid_view.tile_px * CombatGridView.GRID_H))
-		layers_ok = layers_ok and ov.chip_count() > 0 and ov.get_parent() == grid7.hover_card.get_parent()
-		layers_ok = layers_ok and ov.z_index < grid7.hover_card.z_index and ov.get_index() < grid7.hover_card.get_index()
+		layers_ok = layers_ok and ov.chip_count() > 0
 		for chip_raw: Variant in ov.chips.values():
 			var chip7: TextureRect = chip_raw
 			layers_ok = layers_ok and board.encloses(Rect2(chip7.position, chip7.size)) and chip7.mouse_filter == Control.MOUSE_FILTER_IGNORE
@@ -842,7 +1135,7 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 			var to7: Vector2i = arrow7["to"]
 			layers_ok = layers_ok and board.has_point(ov._center(from7)) and board.has_point(ov._center(to7))
 		layers_ok = layers_ok and ov.mouse_filter == Control.MOUSE_FILTER_IGNORE
-		for ally7: Combatant in host7.session.allies:   # a read foe's card (the whole plan) still fits the board
+		for ally7: Combatant in host7.session.allies:   # a read foe's enemy card lists its whole plan
 			Passives.apply(ally7, IntentTestSuite.EYE)
 		host7.session.changed.emit()
 		var read7: int = 0
@@ -850,18 +1143,15 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 			if DictUtil.to_bool(rec7["revealed"]):
 				read7 += 1
 				var foe7: Combatant = rec7["unit"]
-				grid7.pin_card(foe7)
-				_sort_now(host7)
-				layers_ok = layers_ok and _stacked_height(grid7.hover_card) <= board.size.y and _has_text(grid7.hover_card, "Read by")
-
-		grid7.close_card()
+				layers_ok = layers_ok and _lines_have(_enemy_lines(host7, foe7), "Read by")
+		host7.session.select_combatant(host7.session.allies[0])
 		layers_ok = layers_ok and read7 > 0
 		var tile_before: int = host7.metrics.tile
 		grid7.set_tells(false, false)
 		layers_ok = layers_ok and host7.metrics.tile == tile_before   # the tells never change the layout
 		SettingsFile.set_value("ui/intent_tells", true)
 		_card_free(tree_parent, host7, saved)
-	checks["intent tells: chips and arrows stay on the board, under the hover card and off the layout, at all four text sizes"] = layers_ok
+	checks["intent tells: chips and arrows stay on the board and off the layout; a read foe's card lists its plan, at all four text sizes"] = layers_ok
 
 	SettingsFile.use_path(old_path)
 	DirAccess.remove_absolute(sandbox)

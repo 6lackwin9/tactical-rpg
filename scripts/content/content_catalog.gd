@@ -1143,7 +1143,8 @@ static func _required_skill_errors() -> Array[String]:
 			errors.append("'%s' is a basic or engine skill and must be origin system." % str(row.get("id", "")))
 	return errors
 
-# Soft problems of one entry (never block saving): gear budget rules (GearBudget), skill description / hand hints.
+# Soft problems of one entry (never block saving): gear budget rules (GearBudget), skill description / hand hints,
+# boss fights without an enrage phase (PACE1, EncounterPhases.pace_warnings).
 static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 	var e: Dictionary = ContentSchema.normalize(kind, entry)
 	match kind:
@@ -1159,6 +1160,10 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 			return ClassUnitValidator.warning_texts(ClassUnitValidator.unit_warnings(e))
 		"skills":
 			return SkillValidator.warnings(entry, e)
+		"encounters":   # PACE1 3.5: a boss fight without an enrage phase; PURSE1: purse soft cap, empty purse
+			var enc_found: Array[String] = EncounterPhases.pace_warnings(e, func(ref: String) -> String: return str(ContentSchema.normalize("units", get_entry("units", ref)).get("tier", "")))
+			enc_found.append_array(PurseRules.warnings(e))
+			return enc_found
 	var none: Array[String] = []
 	return none
 
@@ -1167,7 +1172,7 @@ static func warnings_for(kind: String, entry: Dictionary) -> Array[String]:
 # warnings are not repeated for every rank row.
 static func warnings_all() -> Dictionary:
 	var out: Dictionary = {}
-	for kind: String in ["items", "item_families", "classes", "units"]:
+	for kind: String in ["items", "item_families", "classes", "units", "encounters"]:
 		for e: Dictionary in entries(kind):
 			var found: Array[String] = warnings_for(kind, e)
 			if not found.is_empty():
@@ -1212,6 +1217,11 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 		return not target.is_empty() and ContentSchema.passes_filter(wave_field, target)))
 	# OBJ1: guests are party-side units; the generic ref check already refuses others, so every guest passes here.
 	errors.append_array(EncounterObjectives.problems(e, func(_ref: String) -> bool: return true))
+	errors.append_array(EncounterMorale.problems(e))   # MORALE1 spec 1.1
+	# PURSE1 spec 3: a catalog encounter has no world, so its loot must be a qualified world:id.
+	errors.append_array(PurseRules.problems(e, func(ref: String) -> String: return PurseRules.world_loot_check("", ref)))
+	if e.has("start_status"):
+		errors.append("Start buffs (start_status) are for world encounters only.")   # PACE1 spec 3.4: not a catalog field
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		var exit_list: Array = exits

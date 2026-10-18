@@ -66,7 +66,7 @@ var lead: String = ""            # K2: sweep `lead=<class>`: every composition h
 var seeds_set: bool = false      # K2: seeds given positionally (else PARTY_SEEDS in party / sweep)
 var tier_foe: String = MIRROR    # K4: tier mode foe class (mirror = the hero's own class)
 var boss_phase: bool = true      # K5 / B2: `phase=on|off`: the generated boss carries SimScenarios.BOSS_PHASE
-var s2: bool = false            # K5 / S2: `s2=on`: support_attrition uses SimScenarios.S2_ENEMIES (off until its trigger fires)
+var s2: bool = false            # K5 / S2: `s2=on`: support_attrition uses SimScenarios.S2_ENEMIES (now its authored foes: no change)
 var error: String = ""           # non-empty: print the usage and run nothing
 
 # Parses `args` (OS.get_cmdline_user_args()). False (and `error` set) on an unknown key or value.
@@ -446,6 +446,6 @@ static func usage() -> Array[String]:
 		"       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
 		"       world=<id> (ashlands): bare enc= ids also find that world's encounters (story characters with their extras and tuning)",
 		"       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
-		"       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes",
+		"       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes (authored since BAL5-R1b: no change)",
 		"       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
 	]

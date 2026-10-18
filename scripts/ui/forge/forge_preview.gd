@@ -301,6 +301,11 @@ static func _encounter(e: Dictionary) -> String:
 	t += _line("Zone", "%s (%s arena)" % [CombatZones.zone_name(str(e["zone"])), str(e["arena"]).to_lower()])
 	t += _line("Rules", "%d rounds max, %d blocks / round, %d AP (+%d / round)" % [DictUtil.to_int(e["max_rounds"]), DictUtil.to_int(e["total_blocks"]), DictUtil.to_int(e["unit_ap"]), DictUtil.to_int(e["ap_regen"])])
 	t += deployment_report(str(e["id"]), e)
+	var tier_of: Callable = func(ref: String) -> String: return str(ContentSchema.normalize("units", ContentCatalog.get_entry("units", ref)).get("tier", ""))
+	var pace_set: String = str(e.get("pace", EncounterPhases.PACE_AUTO))
+	t += _line("Pace", EncounterPhases.pace_of(e, tier_of) + (" (auto)" if pace_set == EncounterPhases.PACE_AUTO else ""))   # PACE1 3.5
+	for w: String in EncounterPhases.pace_warnings(e, tier_of):
+		t += "[color=#fde047]%s[/color]\n" % w
 	t += "\n%s\n" % str(e.get("description", ""))
 	return t
 

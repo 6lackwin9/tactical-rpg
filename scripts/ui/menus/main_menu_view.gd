@@ -21,12 +21,14 @@ const COL_BG: Color = Color(0.05, 0.07, 0.10, 1.0)
 const POPUP_MAX: Vector2 = Vector2(900, 620)   # the settings popup's (and game menu's) largest size; it shrinks to fit the viewport
 const POPUP_WIDE: Vector2 = Vector2(1216, 656)   # UIR-2: the in-play party / journal / save / load screens (1280x720 minus the margin)
 const POPUP_MARGIN: float = 32.0
-# UIR-2: in-play screens without their own ScreenFrame yet scroll inside the popup (UIR-3 / UIR-4 frame them and drop out of this list)
-const UNFRAMED_POPUP: Array[String] = [MenuRouter.PARTY, MenuRouter.LEVEL_UP, MenuRouter.LOADOUT, MenuRouter.GEAR, MenuRouter.JOURNAL]
+# UIR-2: in-play screens without their own ScreenFrame yet scroll inside the popup (UIR-4 frames the journal and drops out of this list)
+const UNFRAMED_POPUP: Array[String] = [MenuRouter.JOURNAL]
 const POPUP_DIM: Color = Color(0, 0, 0, 0.5)
 const RESULTS_DIM: Color = Color(0, 0, 0, 0.35)   # BATTLE-FLOW: lighter, the battle stays readable behind the results
 const POPUP_LAYER: int = 30   # above the arena's canvas layers, so the popup shows over a mounted battle
 const SETTINGS_LAYER: int = 31   # CONTROLS-HELP: the settings popup, above the results popup, so it opens over any game scene (map, dialogue, combat)
+const MODAL_LAYER: int = 32   # the Gear board, above every popup layer
+const QUESTION_LAYER: int = 33   # the question overlay, above the popup and the Gear board so it never hides under them
 const PILL_LAYER: int = 29   # the in-game Menu button, below both popups
 
 var router: MenuRouter = null
@@ -51,6 +53,8 @@ var _rpopup: Control = null
 var _rpanel: PanelContainer = null
 var _results_pill: Button = null   # "Victory ▴" restore tab while the results popup is minimised
 var _overlay: PanelContainer = null
+var _mlayer: CanvasLayer = null    # holds the Gear board while it is open
+var _qtheme: Theme = null
 var _overlay_text: Label = null
 var _overlay_buttons: HBoxContainer = null
 var _notice_lines: Array[String] = []
@@ -147,6 +151,8 @@ func apply_text_scale(preview: float = 0.0) -> void:
 	theme = t   # `preview` > 0 shows an unsaved size (the settings screen); every other render goes back to the saved one
 	if _stheme != null:
 		_stheme.default_font_size = t.default_font_size   # the settings popup sits in its own canvas layer too
+	if _qtheme != null:
+		_qtheme.default_font_size = t.default_font_size   # the question layer is not under this Control either
 	if _rtheme != null:
 		_rtheme.default_font_size = t.default_font_size   # the results layer is not under this Control, so it gets the size itself
 
@@ -267,7 +273,7 @@ func _make_view(id: String) -> Control:
 		MenuRouter.HUB:
 			return HubView.new()
 		MenuRouter.PARTY:
-			return PartyView.new()
+			return CharacterView.new()
 		MenuRouter.LEVEL_UP:
 			return LevelUpView.new()
 		MenuRouter.LOADOUT:
@@ -447,8 +453,15 @@ func _build_overlay() -> void:
 	_overlay.add_theme_stylebox_override("panel", UiTheme.box(UiTheme.COL_PANEL_BG, UiTheme.COL_TITLE, 6, 24, 18, 2))
 	_overlay.set_anchors_preset(Control.PRESET_CENTER)
 	_overlay.visible = false
-	_overlay.theme = MenuStyle.theme()
-	add_child(_overlay)
+	_qtheme = MenuStyle.theme()
+	_overlay.theme = _qtheme
+	_mlayer = CanvasLayer.new()
+	_mlayer.layer = MODAL_LAYER
+	add_child(_mlayer)
+	var qlayer := CanvasLayer.new()
+	qlayer.layer = QUESTION_LAYER
+	add_child(qlayer)
+	qlayer.add_child(_overlay)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	_overlay.add_child(v)
@@ -457,6 +470,13 @@ func _build_overlay() -> void:
 	v.add_child(_overlay_text)
 	_overlay_buttons = HBoxContainer.new()
 	v.add_child(_overlay_buttons)
+
+# The parent for full-screen modals (the Gear board): a layer above the popups, so it shows over the in-play popup.
+func modal_parent() -> Node:
+	return _mlayer
+
+func has_modal() -> bool:
+	return _mlayer != null and _mlayer.get_child_count() > 0
 
 func is_overlay_open() -> bool:
 	return _overlay != null and _overlay.visible
@@ -558,6 +578,8 @@ func open_game(gs: GameState) -> void:
 	if not router.in_play():
 		router.clear_to(MenuRouter.PLAY)   # the game scene is the bottom of the stack (also when a caller opens it directly)
 	game_view = node
+	if "debug_tools" in game_view:
+		game_view.set("debug_tools", false)   # MAPDEV1-U: the scene file is the debug scene; in play no world picker / New game / debug status
 	if "results_popup" in game_view:
 		game_view.set("results_popup", true)   # a won / lost / fled battle keeps its arena for the results popup
 	if game_view.has_signal("fight_settled"):

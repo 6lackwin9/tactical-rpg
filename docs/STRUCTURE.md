@@ -8,13 +8,15 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/core/specs/{item_families,item_modifiers,item_text}.gd` | item family templates, modifier resolve/collapse, description tokens (ITEM1) | S3, S5 | done |
 | `scripts/content/class_forge_model.gd` | ClassForgeModel: class tab view model (layout, path helpers, panels, grouped pickers, unit AI visibility) (CLASS1) | S5 | done |
 | `scripts/core/combat/`, `scripts/core/inventory/` | Combatant, DamageCalculator, equipment, inventory | S1, S3 | done |
-| `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses; session/battle_observer.gd, battle_metrics.gd (per-unit collector shared by the sim and the results screen), battle_report.gd (BREPORT1) | S1, S4 | done |
+| `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses; session/battle_observer.gd, battle_metrics.gd (per-unit collector shared by the sim and the results screen), battle_report.gd (BREPORT1), encounter_morale.gd (MORALE1) | S1, S4 | done |
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
 | `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools (forge and world are read-only viewers since TOOLS-RO) | all | done |
 | `scripts/ui/combat/intent_overlay.gd`, `scripts/ui/combat/intent_text.gd` | enemy tell chips and arrows on the grid; tell wording for cards, hover card, timeline and forecast (INTENT1-U) | S16 | done |
 | `scripts/ui/combat/combat_hud_metrics.gd` | CombatHudMetrics: combat layout C sizes (column widths, tile size, card heights and dropped lines per text size) (COMBAT-UI2-L1) | S16 | done |
+| `scripts/ui/combat/{combat_hero_panel,combat_enemy_card_panel,plan_block_text,strip_question}.gd` | COMBAT-UI3 layout A: selected-hero panel, merged enemy card, planning-strip block text, missing-actions question; `unit_inspector_ui.gd`, `tactical_forecast_ui.gd` and `combat_forecast_panel.gd` removed | S16 | done |
 | `scripts/tests/` (suite_registry.gd, test_helpers.gd, per-group suites), `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) | headless suites; shared fixtures of a suite family live in a `*_kit.gd` beside it (CLN-12); a suite = one file + one line in the registry (R1) | all | done |
+| `scripts/tests/purse_test_suite.gd` | encounter purse schema, validation, payout, once, loot, results (PURSE1-L) | S13 | done |
 | `scripts/tests/game_menu_test_suite.gd` | in-play game menu popup, busy rules, new game selection, load question, 1280x720 fit (UIR-2) | S13 | done |
 | `scripts/tests/status_expansion_test_suite.gd` | registry magnitude ranges, the six S12S statuses, magnitude validation, status sources (S12S-L) | S12 | done |
 | `scripts/tests/status_expansion_effects_test_suite.gd` | slow tiles, expose/fortify armor rating, round-end order and logs, poison stacking, granted magnitudes and sources, Forge magnitude range (S12S-L commit 2) | S12 | done |
@@ -35,7 +37,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/asset_pipeline_test_suite.gd` | asset manifest, key resolution, team overlay, skill and status icons, safe remove (S14-L1) | S14 | done |
 | `scripts/tests/{class_path,class_form_model}_test_suite.gd` | CLASS1 suites (path dict, converter, rules, warnings, key-field rule, seed; model and read-only Forge class tab) | S5 | done |
 | `scripts/tests/quest_test_suite.gd`, `quest_runtime_test_suite.gd` | quest schema; quest runtime and save v2 (M4) | S8, S13 | done |
-| `scripts/tests/exploration_test_suite.gd` (+ `map_view_checks.gd`: full-screen map views, MAPVIEW1; `map_read_checks.gd`: icons, hint, legend, notes, MAPREAD1-L2; `map_keys_checks.gd`: WASD, held-key walking, glide, label placement, MAPKEYS1-U) | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
+| `scripts/tests/exploration_test_suite.gd` (+ `map_view_checks.gd`: full-screen map views, MAPVIEW1; `map_read_checks.gd`: icons, hint, legend, notes, MAPREAD1-L2; `map_keys_checks.gd`: WASD, held-key walking, glide, label placement, MAPKEYS1-U; `map_dev_checks.gd`: debug controls only in the debug scenes, play bar and world map status, chest note, MAPDEV1-U, also called from `game_menu_test_suite.gd` and `world_map_checks.gd`) | region map schema, bindings, markers, start_location, ref scans (EXP1) | S9 | done |
 | `scripts/tests/dialogue_test_suite.gd` | dialogue trees, shops, service lines, gone-NPC lint, gold fields, ref scans (DLG1) | S11 | done |
 | `scripts/tests/plan_claims_test_suite.gd` | preset plans always confirmable: approach tile claims, tie order, party redraft (PLAN1) | S1, S4 | done |
 | `scripts/tests/intent_test_suite.gd` | enemy intent records, reveal rule and the foresight effect (INTENT1-L) | S1, S4 | done |
@@ -71,7 +73,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/tests/{skill_ranks,skill_text,skill_model,origin,skill_form_model}_test_suite.gd` | SKILL1 suites (shared fixtures now in `test_helpers.gd`, CLN-8) | S5 | done |
 | `scripts/progression/` | XpCurve, UnitState, PartyState, LevelUp, PartyBuilder (M3) | S7 | done |
 | `scripts/quests/` | quest_rules.gd (validation, `resolve` variants), quest_catalog.gd (templates), quest_runner.gd (status, events, offers, complete), reward_grant.gd (xp to all active, items to stash, passive/skill to one recipient, loot claims) | S8 | done |
-| `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter) | S9 | done |
+| `scripts/exploration/` | map_rules.gd (MapRules: templates, bindings, markers, start_location), map_catalog.gd (MapCatalog); explore_runner.gd (ExploreRunner), battle_bridge.gd (BattleBridge), game_encounter.gd (GameEncounter), purse_rules.gd (PurseRules: encounter purse validation, roll / pay / result_keys) | S9 | done |
 | `scripts/travel/` | TravelRules (route validation, graph, fog, path, view), TravelRunner (trips, road fights) | S10 | done (TRAV1-L) |
 | `scripts/dialogue/` | dialogue_rules.gd (DialogueRules), shop_rules.gd (ShopRules), service_catalog.gd (ServiceCatalog), rep_rules.gd (RepRules: rep flag keys and values, rep key lint, bands and price factors; REP1); dialogue_runner.gd (DialogueRunner); panels in DLG1-L commit 3 | S11 | in progress |
 | `scripts/game_state/` | GameState, SaveGame, SaveMigrations, NewGame, JsonUtil (M3; save v2 with structured quests, `loot_claimed`, built-in 1->2 migration, M4) | S13 | done |

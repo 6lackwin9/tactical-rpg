@@ -7,6 +7,7 @@ Owner: the Platform & Workflow thread (user 2026-10-18). Tushar pastes his proje
 - `DELTA_<date>.md`: per-thread deltas, cost weights and cutback proposals.
 - `EFFICIENCY_<date>.md`: report usage per thread session against its commits' `Timing:` lines (tasks, task type, tokens per agent kind); the residual is the thread's own use.
 - `sessions.json`: thread sessions (id, title, start, end); commits map to sessions through the `Claude-Session` trailer. `pins.json`: report rows pinned to sessions when titles repeat.
+- `MODE_TRIAL.md`: the standard vs economy baseline windows (2026-10-18).
 - `TRIAL_SONNET.md`: the Sonnet vs Opus trial on Assets & Audio (window, tasks, per-report deltas).
 - `efficiency.py`: `python3 docs/metrics/usage/efficiency.py . docs/metrics/usage/reports/<file>.csv <report time ISO>`.
 

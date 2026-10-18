@@ -11,6 +11,7 @@ extends RefCounted
 const TAG: String = "StatusRegistry"
 const ORIGINALS: Array[String] = ["stagger", "stun", "root", "bleed", "weaken", "haste", "taunt", "riposte"]
 const S12S: Array[String] = ["slow", "expose", "fortify", "regen", "poison", "burn"]
+const PACE1: Array[String] = ["empower"]
 
 static func run() -> bool:
 	print("\n=======================================================")
@@ -21,6 +22,7 @@ static func run() -> bool:
 	ok = _test_derived_lists() and ok
 	ok = _test_stacking_rules() and ok
 	ok = _test_stack_in_effects() and ok
+	ok = _test_empower_row() and ok
 	return ok
 
 # Every String constant of StatusEffects is a status id (the numeric ones are tuning values).
@@ -41,7 +43,7 @@ static func _test_registry_complete() -> bool:
 	var ids: Array[String] = StatusRegistry.ids()
 	var sorted_ids: Array[String] = ids.duplicate()
 	sorted_ids.sort()
-	checks["there are fourteen statuses (eight originals + six S12S-L)"] = consts.size() == ORIGINALS.size() + S12S.size() and ids.size() == consts.size()
+	checks["there are fifteen statuses (eight originals + six S12S-L + empower)"] = consts.size() == ORIGINALS.size() + S12S.size() + PACE1.size() and ids.size() == consts.size()
 	var covered: bool = true
 	for id: String in consts:
 		covered = covered and StatusRegistry.has(id)
@@ -50,7 +52,8 @@ static func _test_registry_complete() -> bool:
 	checks["the rows are well formed (kinds, rules, grants, names)"] = StatusRegistry.row_errors().is_empty()
 	var expected_ids: Array[String] = ORIGINALS.duplicate()
 	expected_ids.append_array(S12S)
-	checks["covers the eight originals, then slow, expose, fortify, regen, poison, burn"] = ids == expected_ids
+	expected_ids.append_array(PACE1)
+	checks["covers the eight originals, then slow, expose, fortify, regen, poison, burn, then empower"] = ids == expected_ids
 	var all_known_rules: bool = true
 	for id: String in ids:
 		all_known_rules = all_known_rules and StatusRegistry.RULES.has(StatusRegistry.stacking_of(id)) and StatusRegistry.default_rounds(id) >= 1
@@ -69,7 +72,7 @@ static func _test_derived_lists() -> bool:
 	var new_debuffs: Array[String] = [StatusEffects.SLOW, StatusEffects.EXPOSE, StatusEffects.POISON, StatusEffects.BURN]
 	old_debuffs.append_array(new_debuffs)
 	checks["debuffs() = the old four plus weaken, then the S12S-L debuffs"] = StatusEffects.debuffs() == old_debuffs
-	checks["buffs() = the old three, then fortify and regen"] = StatusEffects.buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.RIPOSTE, StatusEffects.FORTIFY, StatusEffects.REGEN]
+	checks["buffs() = the old three, then fortify, regen and empower"] = StatusEffects.buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.RIPOSTE, StatusEffects.FORTIFY, StatusEffects.REGEN, StatusEffects.EMPOWER]
 	checks["support_buffs() gains fortify and regen (registry grant)"] = StatusEffects.support_buffs() == [StatusEffects.HASTE, StatusEffects.TAUNT, StatusEffects.FORTIFY, StatusEffects.REGEN]
 	checks["defend_buffs() unchanged"] = StatusEffects.defend_buffs() == [StatusEffects.RIPOSTE]
 	checks["resistable() = debuffs"] = StatusEffects.resistable() == StatusEffects.debuffs()
@@ -140,3 +143,26 @@ static func _test_stack_in_effects() -> bool:
 	StatusEffects.grant_now(c, StatusEffects.RIPOSTE, 1)
 	checks["grant_now keeps the longer duration"] = DictUtil.int_of(c.status_rounds_left, StatusEffects.RIPOSTE) == 3 and c.statuses.has(StatusEffects.RIPOSTE)
 	return TestHelpers.report(TAG, "StatusEffects applies the registry's stacking rule", checks)
+
+# PACE1 3.1: the empower row (a buff no skill grants), and the relaxed grant rule that allows it.
+static func _test_empower_row() -> bool:
+	var checks: Dictionary = {}
+	var r: Dictionary = StatusRegistry.row(StatusEffects.EMPOWER)
+	checks["empower is a buff, not resistable"] = str(r.get("kind", "")) == StatusRegistry.KIND_BUFF and not DictUtil.to_bool(r.get("resistable", true))
+	checks["empower: 2 rounds, refresh_max_duration, cap 25, Empowered"] = StatusRegistry.default_rounds(StatusEffects.EMPOWER) == 2 and StatusRegistry.stacking_of(StatusEffects.EMPOWER) == StatusRegistry.REFRESH_MAX_DURATION and StatusRegistry.cap_of(StatusEffects.EMPOWER) == 25 and StatusEffects.display_name(StatusEffects.EMPOWER) == "Empowered"
+	checks["empower magnitude 1..25 pct"] = StatusRegistry.magnitude_min(StatusEffects.EMPOWER) == 1 and StatusRegistry.magnitude_max(StatusEffects.EMPOWER) == 25 and StatusRegistry.magnitude_unit(StatusEffects.EMPOWER) == StatusRegistry.UNIT_PCT and StatusEffects.has_magnitude(StatusEffects.EMPOWER)
+	checks["no skill grants empower (grant \"\")"] = str(r.get("grant", "x")).is_empty() and not StatusEffects.support_buffs().has(StatusEffects.EMPOWER) and not StatusEffects.defend_buffs().has(StatusEffects.EMPOWER)
+	var skill_errors: Array[String] = ContentCatalog.validate_entry("skills", {"id": "t_reg_emp", "name": "E", "kind": "SUPPORT", "grant_status": StatusEffects.EMPOWER})
+	checks["a SUPPORT skill granting empower is refused (%s)" % "; ".join(skill_errors)] = TestHelpers.any_contains(skill_errors, "'empower' is not a support buff")
+	var grant_opts: Array[String] = ContentSchema.options_of({"options_from": "status_buff"})
+	checks["the skill grant_status options leave empower out, keep the skill-granted buffs"] = not grant_opts.has(StatusEffects.EMPOWER) and StatusEffects.support_buffs().all(func(b: String) -> bool: return grant_opts.has(b)) and StatusEffects.defend_buffs().all(func(b: String) -> bool: return grant_opts.has(b))
+	var base: Dictionary = StatusRegistry.row(StatusEffects.EMPOWER).duplicate()
+	var debuff_support: Dictionary = base.duplicate()
+	debuff_support["kind"] = StatusRegistry.KIND_DEBUFF
+	debuff_support["grant"] = "support"
+	var buff_bogus: Dictionary = base.duplicate()
+	buff_bogus["grant"] = "potion"
+	checks["grant rule: a buff may have grant \"\""] = StatusRegistry.errors_of([base]).is_empty()
+	checks["grant rule: a debuff with a skill grant is an error"] = not StatusRegistry.errors_of([debuff_support]).is_empty()
+	checks["grant rule: an unknown grant is an error"] = not StatusRegistry.errors_of([buff_bogus]).is_empty()
+	return TestHelpers.report(TAG, "PACE1 empower row: buff, 1..25 pct, cap 25, no skill grant", checks)

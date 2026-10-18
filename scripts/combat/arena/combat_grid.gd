@@ -131,6 +131,18 @@ func place_combatant(combatant: Combatant, coord: Vector2i) -> bool:
 func remove_combatant(combatant: Combatant) -> void:
 	combatant_positions.erase(combatant)
 
+# MORALE1 rule 9: a unit leaves the field at its own tile with exit bookkeeping (no exit or route needed).
+func withdraw_in_place(combatant: Combatant) -> bool:
+	if not combatant.is_active() or not combatant_positions.has(combatant):
+		return false
+	var at: Vector2i = get_position(combatant)
+	combatant_positions.erase(combatant)
+	if not withdrawn_combatants.has(combatant):
+		withdrawn_combatants.append(combatant)
+	combatant.withdraw()
+	combatant_withdrawn.emit(combatant, at)
+	return true
+
 func can_target(source: Combatant, target: Combatant, max_range: int) -> bool:
 	if not has_combatant(source) or not has_combatant(target):
 		return false

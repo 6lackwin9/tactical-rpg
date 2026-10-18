@@ -37,6 +37,9 @@ var safety_stops: bool = true               # spec Q2: On
 
 var party_tactic: String = PlanPresets.DEFAULT_TACTIC
 var hero_tactics: Dictionary = {}           # hero key (String) -> tactic id (AUTO_IDS or CUSTOM), only overrides
+# The strip's tactic pickers also fill the blocks a draft leaves empty (UI host sets it; autoplay's own rounds, sims and
+# tests draft bare).
+var fill_blocks: bool = false
 var running: bool = false                   # the Autoplay switch for this battle
 var remembered_on: bool = false             # the switch as saved (player choices only)
 
@@ -102,7 +105,7 @@ func set_party_tactic(id: String) -> bool:
 	hero_tactics.clear()
 	_edited.clear()
 	if session.is_planning():
-		_draft_round()
+		_draft_round(fill_blocks)
 	_changed()
 	return true
 
@@ -136,7 +139,7 @@ func set_hero_tactic(hero: Combatant, id: String) -> bool:
 		if id == PlanPresets.CUSTOM:
 			session.plan_clear(hero)
 		else:
-			session.plan_apply_preset(hero, id)
+			session.plan_apply_preset(hero, id, fill_blocks)
 		_drafting = false
 	_changed()
 	return true
@@ -239,11 +242,11 @@ func tick() -> void:
 
 # Drafts the live round from the tactics: party preset, then each override (CUSTOM: emptied), then any row the
 # overrides broke is redrafted once with its own tactic; `_invalid` lists those still broken.
-func _draft_round() -> void:
+func _draft_round(fill: bool = false) -> void:
 	_drafting = true
 	_edited.clear()
 	_invalid.clear()
-	session.plan_apply_preset_all(party_tactic)
+	session.plan_apply_preset_all(party_tactic, fill)
 	var overridden: Array[Combatant] = []
 	for a: Combatant in session.allies:
 		if a.is_active() and has_override(a):
@@ -251,11 +254,11 @@ func _draft_round() -> void:
 			if tactic_of(a) == PlanPresets.CUSTOM:
 				session.plan_clear(a)
 			else:
-				session.plan_apply_preset(a, tactic_of(a))
+				session.plan_apply_preset(a, tactic_of(a), fill)
 	if not overridden.is_empty():
 		for a: Combatant in session.allies:
 			if a.is_active() and not session.plan.is_valid(a) and tactic_of(a) != PlanPresets.CUSTOM:
-				session.plan_apply_preset(a, session.encounter.party_preset_for(a, tactic_of(a)))   # OBJ1 rule 2: guests Balanced
+				session.plan_apply_preset(a, session.encounter.party_preset_for(a, tactic_of(a)), fill)   # OBJ1 rule 2: guests Balanced
 	for a: Combatant in session.allies:
 		if a.is_active() and not session.plan.is_valid(a):
 			_invalid.append(a)

@@ -87,7 +87,7 @@ static func _test_registry_rows() -> bool:
 	for id: String in StatusRegistry.ids():
 		derived = derived and StatusEffects.has_magnitude(id) == (StatusRegistry.magnitude_max(id) > 0) and StatusRegistry.UNITS.has(StatusRegistry.magnitude_unit(id))
 	checks["has_magnitude is magnitude_max > 0 for every row"] = derived and not StatusEffects.has_magnitude("mystery")
-	checks["magnitude_ids lists the ranged statuses in table order"] = StatusRegistry.magnitude_ids() == ["weaken", "expose", "fortify", "regen", "poison", "burn"]
+	checks["magnitude_ids lists the ranged statuses in table order"] = StatusRegistry.magnitude_ids() == ["weaken", "expose", "fortify", "regen", "poison", "burn", "empower"]
 	checks["fortify and regen join support_buffs; slow, expose, poison, burn join debuffs and resistable"] = StatusEffects.support_buffs().has(StatusEffects.FORTIFY) and StatusEffects.support_buffs().has(StatusEffects.REGEN) \
 		and [StatusEffects.SLOW, StatusEffects.EXPOSE, StatusEffects.POISON, StatusEffects.BURN].all(func(id: String) -> bool: return StatusEffects.debuffs().has(id) and StatusEffects.resistable().has(id))
 	return TestHelpers.report(TAG, "Registry rows and magnitude ranges (acceptance 1)", checks)

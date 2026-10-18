@@ -18,7 +18,7 @@ extends BattleObserver
 # block_completed have no entry (they fail the checks); HP lost after the last block_completed of a
 # round is the round-end damage (bleed, poison, burn: dot_taken, and dot_dealt of the status's source
 # from CombatResolver.last_round_end_steps); HP gained there by a unit with active regen is a heal
-# (heal_received + regen_received, heal_done of status_sources["regen"]; S12S-L rule 9). Statuses are diffed per entry, positions sampled per block. No engine
+# (heal_received + regen_received, heal_done of status_sources["regen"]; S12S-L rule 9). Statuses are diffed per entry and credited to their recorded source (STATCRED1-L), positions sampled per block. No engine
 # change: public signals and state only.
 # Self-checks print "METRIC FAIL <unit> <field>": the log's damage (capped at the victim's HP) must
 # equal the HP the victims lost, a heal entry's amount the HP gained, an area entry's hit count the
@@ -106,6 +106,7 @@ func on_start(session: CombatSession) -> void:
 		c.health_changed.connect(hook)
 		_hooks[c] = hook
 	session.log_appended.connect(_on_log)
+	session.round_concluded.connect(_on_round_closed)
 	_resolver = session.resolver
 	_resolver.block_completed.connect(_on_block_completed)
 	_resolver.combo_resolved.connect(_on_combo)
@@ -169,6 +170,8 @@ func _release() -> void:
 	if _session != null:
 		if _session.log_appended.is_connected(_on_log):
 			_session.log_appended.disconnect(_on_log)
+		if _session.round_concluded.is_connected(_on_round_closed):
+			_session.round_concluded.disconnect(_on_round_closed)
 	if _resolver != null:
 		if _resolver.block_completed.is_connected(_on_block_completed):
 			_resolver.block_completed.disconnect(_on_block_completed)
@@ -278,6 +281,15 @@ func _restore(round_num: int) -> void:
 		_steps_seen = _session.resolver.last_round_end_steps   # the undone round's end steps are never credited
 	for c: Combatant in _ally:
 		_last_hp[c] = c.hp
+		_remember_statuses(c)
+
+# The round is over (both modes; before the next round's roll-over resets the status baseline): statuses applied
+# after the round's last entry (end-of-block phases, late grants) are credited here, by source only (STATCRED1-L).
+func _on_round_closed(_round_num: int, _over: bool) -> void:
+	if _session == null or _rewinding:
+		return
+	for c: Combatant in _ally:
+		_credit_statuses(null, c)
 		_remember_statuses(c)
 
 func _on_block_completed(block: int) -> void:
@@ -412,11 +424,14 @@ func _riposte(defender: Combatant, attacker: Combatant, e: ActionLogEntry) -> vo
 	h["loss"] = left - take
 	_hold[attacker] = h
 
-# A support entry: gains are heals by `actor` (the target's must equal the logged heal).
+# A support entry: gains are heals by `actor` (the target's must equal the logged heal). An item entry (a pouch potion,
+# ITEMUSE1) balances the ledger as heal_received on its side only: it is no heal by the user (no heal_done, cast,
+# overheal or save), and the target's gain must equal the logged item heal.
 func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 	var target: Combatant = _unit(e.target_name)
 	var target_gain: int = 0
 	var heal_entry: bool = e.skill_subtype == "Support"
+	var item_entry: bool = e.skill_subtype == "Item"
 	for key: Variant in changed:
 		var c: Combatant = key
 		var b: Dictionary = changed[key]
@@ -424,6 +439,11 @@ func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 			_add(c, "other_loss", DictUtil.int_of(b, "loss"))
 		var gain: int = DictUtil.int_of(b, "gain")
 		if gain <= 0:
+			continue
+		if item_entry and not _foes(actor, c):
+			_add(c, "heal_received", gain)
+			if c == target:
+				target_gain = gain
 			continue
 		if not heal_entry or _foes(actor, c):
 			_add(c, "other_gain", gain)
@@ -441,6 +461,10 @@ func _support(actor: Combatant, e: ActionLogEntry, changed: Dictionary) -> void:
 			var saves: Array = DictUtil.array_of(_detail(actor).get("saves", []))
 			saves.append({"ally": c.name, "hp": before, "round": _session.current_round, "order": _order()})
 			_detail(actor)["saves"] = saves
+	if item_entry:
+		checks += 1
+		if target_gain != e.value_num:
+			_fail(actor.name, "log_item_heal %s: %d logged, %d HP gained" % [e.skill_name, e.value_num, target_gain])
 	if heal_entry:
 		_add(actor, "heal_casts", 1)
 		checks += 1
@@ -510,37 +534,66 @@ func _overheal(healer: Combatant, e: ActionLogEntry, gained: int, rec: Dictionar
 		return
 	rec["overheal"] = DictUtil.int_of(rec, "overheal") + maxi(0, amount - gained)
 
-# Statuses the entry's actor granted (buffs on its side) or inflicted (debuffs on foes), and debuffs
-# it removed from its side (cleanses). Re-applying an already queued status at the same length is not
-# visible and not counted.
+# Statuses `actor`'s entry granted or inflicted (see _credit_statuses), and debuffs it removed from its side with a
+# BUFF entry (cleanses).
 func _status_diff(actor: Combatant, e: ActionLogEntry, c: Combatant) -> void:
+	_credit_statuses(actor, c)
 	var old_pending: Dictionary = DictUtil.dict_of(_pending.get(c, {}))
 	var old_active: Dictionary = DictUtil.dict_of(_active.get(c, {}))
 	var new_pending: Dictionary = _status_rounds(c.pending_statuses, c.pending_status_rounds)
 	var new_active: Dictionary = _status_rounds(c.statuses, c.status_rounds_left)
-	var buffs: Array[String] = StatusEffects.buffs()
 	var debuffs: Array[String] = StatusEffects.debuffs()
-	for pair: Array in [[new_pending, old_pending], [new_active, old_active]]:
-		var now: Dictionary = pair[0]
-		var before: Dictionary = pair[1]
-		for s: Variant in now:
-			var rounds: int = DictUtil.int_of(now, s)
-			if before.has(s) and DictUtil.int_of(before, s) >= rounds:
-				continue
-			if buffs.has(str(s)) and not _foes(actor, c):
-				_add(actor, "buffs_applied", 1)
-				_add(actor, "buff_rounds", rounds)
-				_count_status(actor, str(s))
-			elif debuffs.has(str(s)) and _foes(actor, c):
-				_add(actor, "debuffs_applied", 1)
-				_add(actor, "debuff_rounds", rounds)
-				_count_status(actor, str(s))
 	if e.category == "BUFF" and not _foes(actor, c) and c.is_alive():
 		var had: Dictionary = old_pending.duplicate()
 		had.merge(old_active)
 		for s: Variant in had:
 			if debuffs.has(str(s)) and not new_pending.has(s) and not new_active.has(s):
 				_add(actor, "cleanses", 1)
+
+# Statuses that appeared on `c` since the last baseline, credited to their applier (STATCRED1-L): the unit named in
+# Combatant.pending_status_sources / status_sources (StatusEffects.queue / grant_now record it), so a guard's riposte
+# or a multi-block support buff that lands before another unit's entry still counts for the unit that applied it. An
+# empty source falls back to `actor` (the entry's actor; null = no one); a boss phase ("phase:<id>") counts for the
+# recipient when it is on the enemy side (a phase has no owning unit for every trigger kind), else for no one. Buffs
+# count on the applier's side, debuffs on its foes. Re-applying an already queued status at the same length is not
+# visible and not counted.
+func _credit_statuses(actor: Combatant, c: Combatant) -> void:
+	var old_pending: Dictionary = DictUtil.dict_of(_pending.get(c, {}))
+	var old_active: Dictionary = DictUtil.dict_of(_active.get(c, {}))
+	var new_pending: Dictionary = _status_rounds(c.pending_statuses, c.pending_status_rounds)
+	var new_active: Dictionary = _status_rounds(c.statuses, c.status_rounds_left)
+	var buffs: Array[String] = StatusEffects.buffs()
+	var debuffs: Array[String] = StatusEffects.debuffs()
+	for pair: Array in [[new_pending, old_pending, c.pending_status_sources], [new_active, old_active, c.status_sources]]:
+		var now: Dictionary = pair[0]
+		var before: Dictionary = pair[1]
+		var sources: Dictionary = pair[2]
+		for s: Variant in now:
+			var rounds: int = DictUtil.int_of(now, s)
+			if before.has(s) and DictUtil.int_of(before, s) >= rounds:
+				continue
+			var applier: Combatant = _applier(actor, str(sources.get(s, "")), c)
+			if applier == null:
+				continue
+			if buffs.has(str(s)) and not _foes(applier, c):
+				_add(applier, "buffs_applied", 1)
+				_add(applier, "buff_rounds", rounds)
+				_count_status(applier, str(s))
+			elif debuffs.has(str(s)) and _foes(applier, c):
+				_add(applier, "debuffs_applied", 1)
+				_add(applier, "debuff_rounds", rounds)
+				_count_status(applier, str(s))
+
+# The unit credited with a status on `recipient` whose recorded source is `source` (see _credit_statuses).
+func _applier(actor: Combatant, source: String, recipient: Combatant) -> Combatant:
+	if source.is_empty():
+		return actor
+	if source.begins_with(CatalogEncounter.PHASE_SOURCE):
+		return recipient if _ally.has(recipient) and not DictUtil.to_bool(_ally[recipient]) else null
+	if source.begins_with(WorldEncounter.START_SOURCE):   # PACE1: a story-reward start buff is nobody's buff
+		return null
+	var unit: Combatant = _unit(source)
+	return unit if unit != null else actor   # a source not seen at the start (summon, reinforcement): the entry's actor
 
 func _count_status(actor: Combatant, status: String) -> void:
 	var counts: Dictionary = DictUtil.dict_of(_detail(actor).get("status_counts", {}))

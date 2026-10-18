@@ -68,4 +68,6 @@ static func apply(caster: Combatant, target: Combatant, skill: SkillDef, rounds:
 	if not skill.grant_status.is_empty():
 		StatusEffects.queue(target, skill.grant_status, rounds, skill.status_magnitude, caster.name if caster != null else "")
 		granted = skill.grant_status
-	return {"healed": healed, "status": granted, "cleansed": cleansed}
+	# Extra grants (BAL5-L) go to the same target, queued like the main grant.
+	var extras: Array[String] = StatusEffects.grant_extras(target, skill.extra_grants, false, caster.name if caster != null else "")
+	return {"healed": healed, "status": granted, "cleansed": cleansed, "extras": extras}

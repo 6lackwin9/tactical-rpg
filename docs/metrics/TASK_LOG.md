@@ -6,6 +6,14 @@ Work is time a thread is actively building, reviewing, gating or fixing. Wait is
 
 ## Bottlenecks (updated each batch; newest first)
 
+### 2026-10-18 evening release (38 task commits; last scheduled batch before interactive mode)
+
+1. **Merge conflicts are still the main work-time leak:** COMBAT-UI3 waited 21 min on a merge and spent 4 min on conflicts; MAPDEV1-U lost 15 min to rework and 4 to conflicts; MORALE1-L 13 min rework + 4 conflicts + 7 min merge wait; STATCRED1-L 14 min rework. All touch shared UI or combat files while other threads land. Interactive mode (one task at a time) removes most of this.
+2. **Rework after review is the next cost:** UIR-3 ~31 min, BAL5-L ~15, MAPDEV1-U 15, STATCRED1-L 14, MORALE1-L 13. Reviews themselves stay short (1-12 min).
+3. **Approval and dependency waits were near zero** this batch (PURSE1 5 min, DR3 3 min; BAL5 chain ran back to back). Release wait was ~1-5 h (midday cut at 12:33, this batch 17:53); harmless while testing stays on `develop`.
+4. **Tokens:** COMBAT-UI3 ~450k logic alone is the outlier (UI layout rewrite); typical logic tasks 80-200k, reviews 16-80k, asset (Sonnet) MORALE1-A 19k + 16k review.
+5. **Timing-line drift:** BAL5-A, MORALE1-S and BAL5-R wrote `landed=` later than the real push (logged with the actual times: 14:20, 14:43, 15:11).
+
 ### 2026-10-18 midday release (124 task commits, first release since #37)
 
 1. **Release wait dominated: up to ~18 h.** Nothing reached `main` between release #37 (2026-10-17 17:57) and this batch, so the overnight landings (S12C-L, TRAV1-L, REP1, AUTO1-L, CAMP1, MUSIC1/2, RECRUIT1, OBJ1, BOSS1, INTENT1, HEAL1, ...) waited 1-18 h on `develop`. The user tests on `develop`, so this cost no playtest time; it only delays `main` (PC `run.bat` and balance runs on `main`). Decouple: none needed while testing stays on `develop`; ask for "release now" before a balance run needs fresh code.
@@ -49,6 +57,44 @@ Times are UTC. Start = the thread's first visible work for the task (backfill: t
 
 | Task | Area | Start | Landed | Work | Wait (cause) | Runs | Blocked by | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| COMBAT-UI3-F | UI/UX | 17:01 | 10-18 17:39 (develop), release evening 2026-10-18 | 38 (build 22, review 1, rework 0, conflicts 0) | 0 | gate 1 | - | mode interactive, type ui, tokens logic:90k,review:25k |
+| PURSE1-L | Gameplay | 16:24 | 10-18 16:58 (develop), release evening 2026-10-18 | 34 (build 33, review 1, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, type logic, tokens logic:82k,review:24k |
+| COMBAT-UI3 | UI/UX | 15:31 | 10-18 16:50 (develop), release evening 2026-10-18 | 79 (build 49, review 2, rework 3, conflicts 4) | 21 (dependency 0, merge 21) | gate 2 | - | mode standard/economy, type ui, tokens logic:~450k,review:29k |
+| MORALE1-B | Balance | - | 10-18 16:33 (develop), release evening 2026-10-18 | - | - | gate - | MORALE1-A (landed 15:42) |  |
+| INTERACTIVE | Platform | - | 10-18 16:30 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens none |
+| HANDOVER-ASSETS | Assets | - | 10-18 16:30 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens none |
+| Design handover at wind-down; review check routine disabled | Design | - | 10-18 16:29 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens thread:3 |
+| PURSE1-L (schema) | Gameplay | 15:56 | 10-18 16:23 (develop), release evening 2026-10-18 | 27 (build 26, review 1, rework 0, conflicts 0) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, type logic, tokens logic:81k,review:18k |
+| PATCH-NOTES-BATCH | Platform | - | 10-18 16:11 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens none |
+| USAGE | Platform | - | 10-18 16:01 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens none |
+| PACE1-L | Gameplay | 15:22 | 10-18 15:55 (develop), release evening 2026-10-18 | 33 (build 31, review 1, rework 0, conflicts 1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode standard, type logic, tokens logic:122k,review:32k |
+| MODE-ECONOMY | Platform | - | 10-18 15:45 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens thread:small |
+| MORALE1-A | Assets | 15:29 | 10-18 15:46 (develop), release evening 2026-10-18 | 17 (build 3, review 1, rework 0, conflicts 0, gate 9) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode standard, type asset, tokens asset:19k,review:16k |
+| LEVERS1 | Design | - | 10-18 15:37 (develop), release evening 2026-10-18 | - | - | gate - | - | type spec, tokens thread:4 |
+| UIR-6 | UI/UX | 14:42 | 10-18 15:30 (develop), release evening 2026-10-18 | 48 (build 24, review 3, rework 8, conflicts 1) | 0 | gate 1 | - | mode standard, type ui, tokens logic:196k,review:79k |
+| BAL5-R (probe) | Balance | 15:12 | 10-18 15:30 (develop), release evening 2026-10-18 | ~18 (build ~15, review 0, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | BAL5-R (landed d4ab083) | mode standard, type sim, tokens logic:60k |
+| PACE1-L (schema) | Gameplay | 14:37 | 10-18 15:21 (develop), release evening 2026-10-18 | 44 (build 39, review 2, rework 0, conflicts 1) | 0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode standard, type logic, tokens logic:165k,review:62k |
+| BAL5-R | Balance | 14:21 | 10-18 15:11 (develop), release evening 2026-10-18 | ~60 (build ~47, review ~8, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | BAL5-A (landed 744f175) | mode standard, type sim, tokens balance:43k |
+| ENGINE-HOLD | Platform | - | 10-18 14:58 (develop), release evening 2026-10-18 | - | - | gate - | - |  |
+| MORALE1-S | Balance | 14:37 | 10-18 14:43 (develop), release evening 2026-10-18 | ~13 (build ~6, review 1, rework 1, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | MORALE1-L (landed f344531) | mode standard, type sim, tokens logic:36k,review:29k |
+| MAPDEV1-U | UI/UX | 13:31 | 10-18 14:39 (develop), release evening 2026-10-18 | ~62 (build 41, review 2, rework 15, conflicts 4) | ~6 (approval 0, dependency 0, ci 0, merge 6) | gate 3 | - | mode standard, type ui, tokens logic:213k,review:53k |
+| MORALE1-L | Gameplay | 13:44 | 10-18 14:36 (develop), release evening 2026-10-18 | 45 (build 24, review 2, rework 13, conflicts 4, gate 2) | 7 (approval 0, dependency 0, ci 0, merge 7) | gate 3 | - | mode standard, type logic, tokens logic:149k,review:57k |
+| LEVERS1-B | Design | - | 10-18 14:28 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens thread:1 |
+| LEVERS1 approved | Design | - | 10-18 14:27 (develop), release evening 2026-10-18 | - | - | gate - | - | type spec, tokens design-brainstorm:98 |
+| BAL5-A | Balance | 13:58 | 10-18 14:20 (develop), release evening 2026-10-18 | ~20 (build ~13, review 1, rework 0, conflicts 0) | ~2 (approval 0, dependency 0, ci 0, merge ~2) | gate 1 | BAL5-L (landed 49a8a70) | mode standard, type asset, tokens asset:27k,review:18k |
+| MORALE1 spec | Design | - | 10-18 14:10 (develop), release evening 2026-10-18 | - | - | gate - | - | type spec, tokens thread:1 |
+| BAL5-L | Balance | 13:22 | 10-18 14:28 (develop), release evening 2026-10-18 | ~60 (build ~41, review 1, rework ~15, conflicts 0) | ~5 (approval 0, dependency 0, ci 0, merge ~5) | gate 2 | BAL5-R1b (landed a990fb7) | mode standard, type logic, tokens logic:96k,review:40k |
+| BAL5-S2 + POTLEDGER | Balance | 13:22 | 10-18 14:05 (develop), release evening 2026-10-18 | ~40 (build ~19, review 1, rework ~6, conflicts ~12) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 3 | BAL5-R1b (landed a990fb7) | mode standard, type sim, tokens logic:100k,review:30k |
+| STATCRED1-L | Gameplay | 12:51 | 10-18 13:44 (develop), release evening 2026-10-18 | 50 (build 26, review 2, rework 14, conflicts 3, gate 5) | 3 (approval 0, dependency 0, ci 0, merge 3) | gate 3 | - | mode standard, type logic, tokens logic:71k,review:35k |
+| UIR-3 | UI/UX | 12:11 | 10-18 13:29 (develop), release evening 2026-10-18 | ~74 (build 30, review 12, rework 31, conflicts 1) | ~4 (approval 0, dependency 0, ci 0, merge 4) | gate 3 | merge of UIR-2 | mode economy+standard, type ui, tokens logic:382k,review:119k |
+| LEVERS1 spec | Design | - | 10-18 13:26 (develop), release evening 2026-10-18 | - | - | gate - | - | type spec, tokens design-brainstorm:? |
+| BAL5-R1b | Balance | 12:17 | 10-18 13:25 (develop), release evening 2026-10-18 | ~65 (build ~62, review 0, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | BAL5-AI (landed 7ceddcb), UI/UX re-draft fix f65f0bb, build slot 11:44-12:17 | mode economy, type sim, tokens balance:50k |
+| GATE-SPLIT | Platform | - | 10-18 12:57 (develop), release evening 2026-10-18 | - | - | gate - | - | type tool, tokens review:30k |
+| MORALE1-L (schema) | Gameplay | 12:14 | 10-18 12:50 (develop), release evening 2026-10-18 | 33 (build 22, review 2, rework 0, conflicts 0, gate 9) | 3 (approval 0, dependency 0, ci 0, merge 3) | gate 1 | container restart 12:30 (builder run lost, work kept) | mode economy, type logic, tokens logic:82k+lost,review:39k |
+| ASSETS-PREFS | Assets | - | 10-18 12:43 (develop), release evening 2026-10-18 | - | - | gate - | - | type docs, tokens none |
+| CAMPLABEL1-S | Balance | 12:29 | 10-18 12:43 (develop), release evening 2026-10-18 | ~14 (build ~6, review 1, rework 0, conflicts 0) | ~0 (approval 0, dependency 0, ci 0, merge 0) | gate 1 | - | mode economy, type sim, tokens review:17k |
+| PURSE1 | Design | 12:15 | 10-18 12:34 (develop), release evening 2026-10-18 | ~14 | ~5 (approval 5) | gate 0 | user approval 12:27-12:28 | mode standard, type spec, tokens design:83k |
+| DR3-ANSWERS | Design | 12:20 | 10-18 12:31 (develop), release evening 2026-10-18 | ~11 | ~3 (approval 3) | gate 0 | - | mode standard, type spec, tokens design:98k |
 | USAGE | Platform | - | 10-18 11:49 (develop), release midday 2026-10-18 | - | - | gate - | - | type docs, tokens none |
 | BAL5-AI | Balance | 10:48 | 10-18 11:44 (develop), release midday 2026-10-18 | ~50 (build ~44, review 2, rework ~4, conflicts 0) | ~5 (approval 0, dependency 0, ci 0, merge ~5) | gate 1 | BAL5-R1 (landed f3d8ac2) | mode economy, type logic, tokens logic:164k,review:51k |
 | UIR-2 | Gameplay | 10:17 | 10-18 11:40 (develop), release midday 2026-10-18 | 70 (build 39, review 2, rework 15, conflicts 14) | 13 (approval 0, dependency 0, ci 0, merge 13) | gate 4 | - | mode economy, type ui, tokens logic:424k,review:70k |

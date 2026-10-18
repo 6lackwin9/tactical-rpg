@@ -206,6 +206,32 @@ static func build_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, 
 	plan.ai_pressure.erase(actor)
 	return plan.steps_of(actor)
 
+# COMBAT-UI3 follow-up: fills the blocks a draft left unplanned (so the Confirm round "missing actions" warning stays
+# rare). Appends, in order, the cheapest valid action that fits: a level-1 strike on a target in reach (_engage_any with
+# prefer_level 1), else a Rest (a real, free, 1-block action that recovers AP), else stops. Used only on a player-facing
+# draft (CombatSession.plan_apply_preset*, fill_blocks true); enemy planning and sims never call it. A draft that ended
+# in a deliberate guard / riposte stance, or a withdrawal, is left as it is.
+static func fill_steps(actor: Combatant, ctx: PlanContext, profile: AiProfile, shared: CombatPlan) -> void:
+	var grid: CombatGrid = ctx.grid
+	if actor == null or not actor.is_active() or not grid.has_combatant(actor):
+		return
+	var foes: Array[Combatant] = ctx.foes_of(actor)
+	var cheap: AiProfile = profile.duplicate_profile()
+	cheap.prefer_level = 1
+	var cap: int = ctx.skill_cap_of(actor)
+	var rest: SkillDef = SkillCatalog.find("rest")
+	for _i: int in range(MAX_STEPS):
+		var st: CombatPlan.SimState = shared.compile(actor)
+		if st.error_index >= 0 or st.withdrawn or st.blocks_left() < 1:
+			return
+		if not st.entries.is_empty() and st.entries[st.entries.size() - 1].skill.kind == SkillDef.Kind.DEFEND:
+			return
+		var ranked: Array[Combatant] = _rank_targets(shared, actor, st, foes, grid, cheap)
+		if not ranked.is_empty() and _engage_any(shared, actor, ranked, cap, cheap):
+			continue
+		if rest == null or not shared.add_step(actor, PlanStep.self_skill(rest)).is_empty():
+			return
+
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------

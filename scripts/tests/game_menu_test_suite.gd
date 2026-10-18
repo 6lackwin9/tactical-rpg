@@ -197,6 +197,8 @@ static func _test_in_play(tree_parent: Node) -> bool:
 	SettingsUiTestSuite.layout(host)
 	var first: Node = host.game_view
 	checks["playing: the stack is the game scene"] = r.stack == [MenuRouter.PLAY] and host.in_game() and not _popup_shown(host)
+	var play_ok: bool = MapDevChecks.run_play(first as RegionMapView, "main menu route") if first is RegionMapView else false   # MAPDEV1-U
+	checks["the main menu's game is a region map without debug controls"] = play_ok
 	host.cancel_pressed()
 	SettingsUiTestSuite.layout(host)
 	checks["Esc: game menu popup over the visible, paused map"] = r.top() == MenuRouter.HUB and _popup_shown(host) and host.game_view.visible and not host.game_view.can_process()
@@ -210,6 +212,12 @@ static func _test_in_play(tree_parent: Node) -> bool:
 	# Party, over the paused map in the wide popup; Esc back to the menu.
 	checks["Party opens in the popup"] = _press(host, "Hub_" + MenuRouter.PARTY) and r.top() == MenuRouter.PARTY and _popup_shown(host) and host.game_view.visible and not host.game_view.can_process()
 	checks["party screens get the wide popup"] = _panel(host).size.x > MainMenuView.POPUP_MAX.x
+	r.ask("Question over the popup?", func() -> void: pass)
+	SettingsUiTestSuite.layout(host)
+	var popup_layer: CanvasLayer = host._popup.get_parent() as CanvasLayer
+	var question_layer: CanvasLayer = host._overlay.get_parent() as CanvasLayer
+	checks["the question overlay sits in a layer above the in-play popup"] = host.is_overlay_open() and popup_layer != null and question_layer != null and question_layer.layer > popup_layer.layer and host._mlayer.layer > popup_layer.layer and host._mlayer.layer < question_layer.layer
+	host.answer(false)
 	host.cancel_pressed()
 	checks["Esc: back to the menu"] = r.top() == MenuRouter.HUB and _popup_shown(host)
 	# Save into slot 1, back, then the busy rule.
@@ -312,8 +320,7 @@ static func _test_fit(tree_parent: Node) -> bool:
 		host.cancel_pressed()
 		var _p: bool = _press(host, "Hub_" + MenuRouter.PARTY)
 		var party_panel: Rect2 = _panel(host).get_global_rect()
-		var party_scroll: Control = host.find_child("PopupScroll", true, false) as Control
-		checks["%s: party popup stays on screen (its content scrolls)" % tag] = r.top() == MenuRouter.PARTY and screen.encloses(party_panel) and party_scroll != null and party_panel.grow(0.5).encloses(party_scroll.get_global_rect())
+		checks["%s: party popup stays on screen, X and detail inside" % tag] = r.top() == MenuRouter.PARTY and screen.encloses(party_panel) and party_panel.grow(0.5).encloses((host.find_child("CloseButton", true, false) as Control).get_global_rect()) and party_panel.grow(0.5).encloses((host.find_child("DetailPane", true, false) as Control).get_global_rect())
 		_free(pair[0] as Node)
 		CurrentGame.end()
 	SettingsFile.set_value("ui/text_scale", 1.0)

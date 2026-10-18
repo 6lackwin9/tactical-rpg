@@ -87,6 +87,7 @@ var heal_stat: String = ""      # SUPPORT: stat the heal scales with ("INT" / "K
 var heal_base: int = 0          # SUPPORT: flat heal
 var heal_mult: float = 0.0      # SUPPORT: heal per point of heal_stat (see SupportRules.heal_amount)
 var grant_status: String = ""   # SUPPORT: buff status given to the target (StatusEffects.buffs())
+var extra_grants: Array[Dictionary] = []   # DEFEND / SUPPORT (BAL5-L): [{"status", "rounds", "magnitude"}] buffs granted with grant_status, same timing
 var cleanse_statuses: Array[String] = []   # SUPPORT: debuffs removed from the target, active and pending (CLEANSE_ALL = every debuff; empty = none)
 var jump_tiles: int = 0         # DISENGAGE: how many tiles the jump covers at most
 # Combos (S12C-L; family-level fields, ContentFactory builds them).
@@ -128,10 +129,11 @@ func family_id() -> String:
 	return id if family.is_empty() else family
 
 # power_mult as `user` applies it: the skill's multiplier x the user's family potency (Combatant.potency_for)
-# x the user's weaken factor (Combatant.weaken_factor, 1.0 when not weakened).
-# This is the ONLY place potency and weaken enter attack damage (the value fed to DamageCalculator as skill_mult).
+# x the user's weaken factor (Combatant.weaken_factor, 1.0 when not weakened) x its empower factor (PACE1,
+# Combatant.empower_factor, 1.0 when not empowered).
+# This is the ONLY place potency, weaken and empower enter attack damage (the value fed to DamageCalculator as skill_mult).
 func power_for(user: Combatant) -> float:
-	return power_mult if user == null else power_mult * user.potency_for_skill(self) * user.weaken_factor()
+	return power_mult if user == null else power_mult * user.potency_for_skill(self) * user.weaken_factor() * user.empower_factor()
 
 # False for a zero-power ATTACK (a debuff-only attack): it deals no damage and is never a hit for reactions.
 func deals_damage() -> bool:

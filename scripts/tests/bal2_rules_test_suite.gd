@@ -22,6 +22,7 @@ const SimParty = preload("res://tools/sim/sim_party.gd")
 const SimMetrics = preload("res://tools/sim/sim_metrics.gd")
 const SimRoles = preload("res://tools/sim/sim_roles.gd")
 const SimTargets = preload("res://tools/sim/sim_targets.gd")
+const SimWorld = preload("res://tools/sim/sim_world.gd")
 
 # Records every unit's tile (by name) when a sim fight starts (after the runner's placement).
 class StartObserver extends "res://tools/sim/sim_observer.gd":
@@ -98,6 +99,7 @@ static func run() -> bool:
 	ok = _test_won_split() and ok
 	ok = _test_heal_down_metrics() and ok
 	ok = _test_reach_skip() and ok
+	ok = _test_world_morale() and ok
 	ContentCatalog.use_root(ContentCatalog.DEFAULT_ROOT)
 	return ok
 
@@ -760,18 +762,21 @@ static func _test_trio_sweep() -> bool:
 	checks["size=2 lead=priest: priest + each other class (%d)" % others] = pairs.size() == others
 	return TestHelpers.report(TAG, "BAL5-SIM K2 trio sweep: size=3 lead=warrior", checks)
 
-# K5: A1 makes aoe_swarm a trio (warrior + priest refs); S2 (s2=on) turns one support_attrition ranger
-# into a brawler and touches no other scenario.
+# K5: A1 makes aoe_swarm a trio (warrior + priest refs); S2 (trigger fired in BAL5-R1b) is now the authored
+# support_attrition: one ranger of the BAL2 list (ranger, ranger, mage, rogue standard) turned into a brawler; s2=on adds
+# nothing and touches no other scenario.
 static func _test_scenario_edits() -> bool:
 	var checks: Dictionary = {}
 	var swarm_allies: Array = DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["aoe_swarm"])["allies"])
 	checks["A1: aoe_swarm refs warrior + priest (a trio with the test unit) %s" % str(swarm_allies)] = swarm_allies.size() == 2 and swarm_allies.has("warrior") and swarm_allies.has("priest")
+	var bal2: Array = [["ranger", "standard"], ["ranger", "standard"], ["mage", "standard"], ["rogue", "standard"]]
 	var plain: Array = SimScenarios.scenario_enemies("support_attrition", 5)
 	var s2: Array = SimScenarios.scenario_enemies("support_attrition", 5, true)
-	checks["S2 off: the authored enemies"] = plain == DictUtil.array_of(DictUtil.dict_of(SimScenarios.SCENARIOS["support_attrition"])["enemies"])
-	checks["S2 on: same size and tiers"] = s2.size() == plain.size() and _tiers(s2) == _tiers(plain)
-	checks["S2 on: one ranger fewer, one brawler more"] = _classes(s2).count("ranger") == _classes(plain).count("ranger") - 1 and _classes(s2).count("brawler") == _classes(plain).count("brawler") + 1
-	checks["S2 on: mage and rogue kept"] = _classes(s2).count("mage") == _classes(plain).count("mage") and _classes(s2).count("rogue") == _classes(plain).count("rogue")
+	checks["S2 authored: the scenario's enemies are S2_ENEMIES"] = plain == SimScenarios.S2_ENEMIES
+	checks["S2 authored: same size and tiers as BAL2"] = plain.size() == bal2.size() and _tiers(plain) == _tiers(bal2)
+	checks["S2 authored: one ranger fewer, one brawler more than BAL2"] = _classes(plain).count("ranger") == _classes(bal2).count("ranger") - 1 and _classes(plain).count("brawler") == _classes(bal2).count("brawler") + 1
+	checks["S2 authored: mage and rogue kept"] = _classes(plain).count("mage") == _classes(bal2).count("mage") and _classes(plain).count("rogue") == _classes(bal2).count("rogue")
+	checks["s2=on: no change"] = s2 == plain
 	checks["S2 leaves other scenarios alone"] = SimScenarios.scenario_enemies("tank_hold", 5, true) == SimScenarios.scenario_enemies("tank_hold", 5)
 	var forked: bool = TestHelpers.fork(SANDBOX)
 	checks["sandbox fork"] = forked
@@ -780,7 +785,7 @@ static func _test_scenario_edits() -> bool:
 		var sc: Dictionary = SimScenarios.scenario(runner, "aoe_swarm", "mage", 5)
 		checks["A1: aoe_swarm party of 3 (%d)" % DictUtil.array_of(sc["party"]).size()] = DictUtil.array_of(sc["party"]).size() == 3
 	TestHelpers.cleanup(SANDBOX)
-	return TestHelpers.report(TAG, "BAL5 K5 scenario edits: A1 trio swarm, S2 behind s2=on", checks)
+	return TestHelpers.report(TAG, "BAL5 K5 scenario edits: A1 trio swarm, S2 authored (s2=on no change)", checks)
 
 # B2 / BAL5-PH: the generated boss carries one valid phase on the boss unit (hp_below), phase=off and the
 # other archetypes carry none; in fights the phase fires with phase on and never with phase off.
@@ -941,3 +946,46 @@ static func _test_reach_skip() -> bool:
 	var r := SimRunner.new(_sim_args(["party"]))
 	checks["a new runner has no skips or fails"] = r.plan_skips == 0 and r.plan_fails == 0
 	return TestHelpers.report(TAG, "BAL5 K6 jitter PLAN SKIP: reach refusals are skipped fights", checks)
+
+# MORALE1-S: SimWorld.encounter(full) carries the five morale fields of a world encounter (leader mapped like a
+# roster ref) and none for an entry without them. Fixtures are sandbox copies of the first Ashlands encounter.
+static func _test_world_morale() -> bool:
+	var checks: Dictionary = {}
+	var path: String = TestHelpers.sandbox("bal2_world_morale")
+	var forked: bool = TestHelpers.fork_worlds(path)
+	checks["world sandbox fork"] = forked
+	if forked:
+		var src: Dictionary = {}
+		for e: Dictionary in WorldCatalog.own_entries(SimWorld.WORLD, "encounters"):
+			if not DictUtil.array_of(e.get("enemies", [])).is_empty() and not DictUtil.to_bool(e.get("morale", false)):
+				src = e.duplicate(true)
+				break
+		checks["a world encounter without morale exists"] = not src.is_empty()
+		if not src.is_empty():
+			var leader: String = str(DictUtil.array_of(src["enemies"])[0])
+			var plain: Dictionary = src.duplicate(true)
+			plain["id"] = "bal2_morale_plain"
+			var with: Dictionary = src.duplicate(true)
+			with["id"] = "bal2_morale_on"
+			with["morale"] = true
+			with["morale_break"] = 40
+			with["morale_leader"] = leader
+			with["morale_groups"] = [range(DictUtil.array_of(src["enemies"]).size())]
+			with["morale_text"] = "They run."
+			var p1: Array[String] = WorldCatalog.upsert(SimWorld.WORLD, "encounters", plain)
+			var p2: Array[String] = WorldCatalog.upsert(SimWorld.WORLD, "encounters", with)
+			checks["fixtures stored (%s %s)" % [str(p1), str(p2)]] = p1.is_empty() and p2.is_empty()
+			var runner := SimRunner.new(_sim_args(["party"]))
+			var off: Dictionary = DictUtil.dict_of(SimWorld.encounter(runner, "bal2_morale_plain", 1, false, SimWorld.WORLD, true).get("base", {}))
+			var on: Dictionary = DictUtil.dict_of(SimWorld.encounter(runner, "bal2_morale_on", 1, false, SimWorld.WORLD, true).get("base", {}))
+			var carried: bool = true
+			for key: String in SimWorld.MORALE_KEYS:
+				carried = carried and on.has(key)
+			# Stored entries are normalised, so the off copy holds the defaults: morale false (the rest is ignored).
+			checks["morale off in the copy without morale (%s)" % str(off.get("morale", "absent"))] = not DictUtil.to_bool(off.get("morale", false)) and str(off.get("morale_leader", "")).is_empty() and DictUtil.array_of(off.get("morale_groups", [])).is_empty()
+			checks["morale on in the copy with morale (not vacuous)"] = DictUtil.to_bool(on.get("morale", false))
+			checks["the sim copy carries all five fields"] = carried and on.size() > 0
+			checks["break, groups and text copied"] = DictUtil.to_int(on.get("morale_break", 0)) == 40 and str(on.get("morale_text", "")) == "They run." and DictUtil.array_of(on.get("morale_groups", [])).size() == 1
+			checks["the leader is a mapped unit ref (%s)" % str(on.get("morale_leader", ""))] = not str(on.get("morale_leader", "")).is_empty()
+	TestHelpers.cleanup_worlds(path)
+	return TestHelpers.report(TAG, "MORALE1-S sim world encounter carries the morale fields", checks)

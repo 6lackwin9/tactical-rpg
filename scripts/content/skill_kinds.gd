@@ -34,7 +34,7 @@ const SECTION_FIELDS: Dictionary = {
 	"reach": ["reach_min", "reach_max"],
 	"area": ["area"],
 	"support": ["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"],
-	"grant": ["grant_status", "status_magnitude", "status_rounds"],
+	"grant": ["grant_status", "status_magnitude", "status_rounds", "extra_grants"],
 	"guard": ["mitigation"],
 	"focus": ["boost", "boost_rounds"],
 	"jump": ["jump_tiles"],

@@ -85,6 +85,10 @@ static func _check_version(version: int) -> bool:
 			checks["hp_lost and last_rest"] = lost.has(37) and str(g.explore.get("last_rest", "")) == "ashlands:warden_keep"
 		else:
 			checks["hp_lost 0 and last_rest empty"] = lost.max() == 0 and lost.min() == 0 and str(g.explore.get("last_rest", "x")).is_empty()   # HEAL1-L: v8 -> v9
+		if version >= 10:
+			checks["purses"] = DictUtil.to_int(g.purses.get("ashlands:courtyard_skirmish", 0)) == 1
+		else:
+			checks["purses migrated empty"] = g.purses.is_empty()   # PURSE1-L: v9 -> v10
 		if version >= 6:
 			checks["supplies"] = g.party.supplies == 7
 			var again: Dictionary = SaveGame.decode(JSON.stringify({"format": SaveGame.FORMAT, "version": SaveGame.VERSION, "saved_at": 1, "game_state": g.to_dict()}))

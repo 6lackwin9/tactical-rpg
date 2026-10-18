@@ -27,6 +27,7 @@ static func run() -> bool:
 	ok = _test_migrations() and ok
 	ok = _test_peek_versions() and ok
 	ok = _test_heal1_schema() and ok
+	ok = _test_purse1_save() and ok
 	_wipe()
 	SaveGame.reset_base_dir()
 	SaveMigrations.reset()
@@ -327,3 +328,33 @@ static func _test_heal1_schema() -> bool:
 	checks["location rest is a bool field, default false"] = str(rest_field.get("type", "")) == "bool" and rest_field.get("default", null) == false
 	checks["normalize: missing rest = false, true kept"] = WorldSchema.normalize("locations", {"id": "a"}).get("rest", null) == false and WorldSchema.normalize("locations", {"id": "a", "rest": true}).get("rest", null) == true
 	return TestHelpers.report(TAG, "HEAL1 save v9 and location rest", checks)
+
+# PURSE1-L (spec 3, acceptance "Save"): GameState.purses round-trips through a slot, bad blobs are refused, and the
+# v9 -> v10 step adds purses {} and nothing else.
+static func _test_purse1_save() -> bool:
+	var checks: Dictionary = {}
+	var g: GameState = _rich_state()
+	checks["new state has no purse wins"] = g.purses.is_empty() and g.validate().is_empty()
+	g.purses = {"qa:fight_a": 2, "qa:fight_b": 0}
+	checks["purses valid"] = g.validate().is_empty()
+	var written: bool = SaveGame.write(g, 2).is_empty()
+	var read: Dictionary = SaveGame.read(2)
+	var back: GameState = GameState.of(read.get("state", null))
+	checks["purses round-trip through a slot"] = written and back != null and back.equals(g) and DictUtil.to_int(back.purses.get("qa:fight_a", 0)) == 2
+	for bad: Variant in [{"fight_a": 1}, {"qa:fight_a": -1}, {"qa:fight_a": "1"}, {"qa:fight_a": 1.5}]:
+		var b: GameState = GameState.from_dict(g.to_dict())
+		b.purses = DictUtil.dict_of(bad)
+		checks["purses %s refused" % str(bad)] = _joined(b.validate()).contains("purses: ")
+	var raw: Dictionary = g.to_dict()
+	raw["purses"] = [1]
+	checks["purses not an object refused"] = _joined(GameState.from_dict(raw).validate()).contains("purses must be an object")
+	var v9_state: Dictionary = g.to_dict()
+	v9_state.erase("purses")
+	var up: Dictionary = SaveMigrations.migrate({"version": 9, "game_state": v9_state}, 10)
+	var expect: Dictionary = v9_state.duplicate(true)
+	expect["purses"] = {}
+	var got: Dictionary = DictUtil.dict_of(DictUtil.dict_of(up["data"]).get("game_state", {}))
+	checks["v9_to_v10 adds purses {} only"] = DictUtil.to_bool(up["ok"]) and JsonUtil.deep_equal(got, expect) and DictUtil.array_of(up["warnings"]).is_empty()
+	checks["v9 save loads valid with no purse wins"] = GameState.from_dict(got).validate().is_empty() and GameState.from_dict(got).purses.is_empty()
+	checks["SaveGame.VERSION >= 10"] = SaveGame.VERSION >= 10
+	return TestHelpers.report(TAG, "PURSE1 save v10 (purses)", checks)

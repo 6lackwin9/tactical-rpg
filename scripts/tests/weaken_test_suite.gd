@@ -6,7 +6,8 @@ extends RefCounted
 # The weaken status (registry row, magnitude carried by the instance, cap and non-stacking),
 # the outgoing-power hook (SkillDef.power_for, planner estimate, AttackCommand, riposte counter),
 # zero-power debuff-only attacks, schema validation, cleanse, and the data-driven riposte tiers
-# (the reverse and the ascending model built in memory). Units are hand-built with a fixed strike
+# (the reverse and the ascending model built in memory); PACE1 empower (x(1 + m/100) at the same two sites,
+# multiplying with weaken; heals untouched). Units are hand-built with a fixed strike
 # power and no armor; every expectation is derived from DamageCalculator.compute and the rules.
 # ==============================================================================
 
@@ -33,6 +34,7 @@ static func run() -> bool:
 	ok = _test_cleanse() and ok
 	ok = _test_undo() and ok
 	ok = _test_riposte_data_models() and ok
+	ok = _test_empower() and ok
 	return ok
 
 # ------------------------------------------------------------------------------
@@ -385,3 +387,55 @@ static func _test_riposte_data_models() -> bool:
 		checks["a sandbox intimidate-style row (power 0, weaken) is accepted"] = ContentCatalog.upsert("skills", {"id": "t_intim", "name": "Intimidate", "kind": "ATTACK", "power_mult": 0.0, "stance": "DEFENSIVE", "status_effect": "weaken", "status_potency": 70, "status_magnitude": 15, "status_rounds": 2, "learned_only": true}).is_empty()
 	TestHelpers.cleanup(SANDBOX)
 	return TestHelpers.report(TAG, "Riposte tiers are data only (reverse and ascending models)", checks)
+
+# ------------------------------------------------------------------------------
+# PACE1 rule 5: empower scales outgoing power where weaken does; the factors multiply; heals are untouched.
+# ------------------------------------------------------------------------------
+
+const EMP: int = 10
+
+static func _empower_now(c: Combatant, magnitude: int, rounds: int = 2) -> void:
+	StatusEffects.grant_now(c, StatusEffects.EMPOWER, rounds, magnitude)
+
+static func _test_empower() -> bool:
+	var checks: Dictionary = {}
+	var grid: CombatGrid = _grid()
+	var atk: Combatant = TestHelpers.unit("EmpAtk", grid, Vector2i(3, 4))
+	var foe: Combatant = TestHelpers.unit("EmpFoe", grid, Vector2i(4, 4))
+	var strike: SkillDef = SkillCatalog.find("strike")
+	var base_power: float = strike.power_for(atk)
+	checks["not empowered: factor 1.0"] = is_equal_approx(atk.empower_factor(), 1.0)
+	_empower_now(atk, EMP)
+	checks["empower %d: power_for x %.2f" % [EMP, 1.0 + float(EMP) / 100.0]] = is_equal_approx(strike.power_for(atk), base_power * (1.0 + float(EMP) / 100.0))
+	_weaken_now(atk, MAG)
+	checks["with weaken %d: x (1 + %d/100) x (1 - %d/100)" % [MAG, EMP, MAG]] = is_equal_approx(strike.power_for(atk), base_power * (1.0 + float(EMP) / 100.0) * (1.0 - float(MAG) / 100.0))
+	atk.remove_status(StatusEffects.WEAKEN)
+	var entry: PlanEntry = PlanEntry.create(strike, 1, 0)
+	entry.target = foe
+	var built: AttackCommand = entry.build_command(atk, grid) as AttackCommand
+	checks["PlanEntry.build_command carries the empowered multiplier"] = built != null and is_equal_approx(built.skill_mult, base_power * (1.0 + float(EMP) / 100.0))
+	var over := Combatant.new("Over", 100, 10, 1)
+	over.statuses[StatusEffects.EMPOWER] = true
+	over.status_rounds_left[StatusEffects.EMPOWER] = 1
+	over.status_magnitudes[StatusEffects.EMPOWER] = StatusRegistry.cap_of(StatusEffects.EMPOWER) + 50
+	checks["the factor is capped by the registry cap"] = is_equal_approx(over.empower_factor(), 1.0 + float(StatusRegistry.cap_of(StatusEffects.EMPOWER)) / 100.0)
+	var pending := Combatant.new("Pending", 100, 10, 1)
+	StatusEffects.queue(pending, StatusEffects.EMPOWER, 2, EMP)
+	checks["a queued empower does nothing until it is active"] = is_equal_approx(pending.empower_factor(), 1.0)
+	var mend: SkillDef = SkillDef.create("t_emp_mend", "m", SkillDef.Kind.SUPPORT, 1, 1, "")
+	mend.heal_base = 30
+	var healer := Combatant.new("EmpHealer", 100, 10, 1)
+	var plain := Combatant.new("EmpPlain", 100, 10, 1)
+	_empower_now(healer, EMP)
+	checks["heals ignore empower"] = SupportRules.heal_amount(healer, mend) == SupportRules.heal_amount(plain, mend)
+	# The riposte counter scales by the same factor.
+	var g2: CombatGrid = _grid()
+	var tank: Combatant = TestHelpers.unit("EmpTank", g2, Vector2i(3, 4))
+	var foe2: Combatant = TestHelpers.unit("EmpFoe2", g2, Vector2i(4, 4))
+	StatusEffects.grant_now(tank, StatusEffects.RIPOSTE, 2)
+	_empower_now(tank, EMP)
+	var mult: float = RiposteRules.COUNTER_MULT * (1.0 + float(EMP) / 100.0)
+	var expected: Dictionary = DamageCalculator.compute(tank, foe2, false, false, mult, false, _rng(5))
+	var result: Dictionary = RiposteRules.counter(foe2, tank, g2, false, _rng(5))
+	checks["an empowered riposter counters at 0.5 x (1 + m/100)"] = not result.is_empty() and DictUtil.to_int(result["damage"]) == DictUtil.to_int(expected["final_dmg"])
+	return TestHelpers.report(TAG, "PACE1 empower: power_for and the riposte counter x(1 + m/100), times weaken; heals unchanged", checks)

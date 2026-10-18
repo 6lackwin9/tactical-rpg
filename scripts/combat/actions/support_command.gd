@@ -69,5 +69,9 @@ func execute() -> void:
 		parts.append("cleansed %s" % (", ".join(names) if not names.is_empty() else "nothing"))
 	if not last_status.is_empty():
 		parts.append("%s next round%s" % [StatusEffects.display_name(last_status), "" if skill.status_rounds <= 1 else (" for %d rounds" % skill.status_rounds)])
+	for row: Dictionary in skill.extra_grants:
+		if ContentFactory._strings(result.get("extras", [])).has(str(row.get("status", ""))):
+			var extra_rounds: int = DictUtil.to_int(row.get("rounds", 1), 1)
+			parts.append("%s next round%s" % [StatusEffects.display_name(str(row["status"])), "" if extra_rounds <= 1 else (" for %d rounds" % extra_rounds)])
 	var who: String = "themselves" if target == source else target.name
 	execution_log = "[Support] %s used %s on %s: %s" % [source.name, command_name, who, ", ".join(parts) if not parts.is_empty() else "no effect"]

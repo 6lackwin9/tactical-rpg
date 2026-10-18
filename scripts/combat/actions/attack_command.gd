@@ -26,6 +26,7 @@ var max_range: int = -1
 var last_damage: int = 0
 var last_breakdown: String = ""
 var last_crit: bool = false
+var last_target: Combatant = null   # the unit the damage roll hit (null = no hit; MORALE1 reads it with last_crit)
 
 func _init(p_source: Combatant, p_target: Combatant = null, p_skill_mult: float = 1.0, p_block_cost: int = 2, p_priority: int = 0, p_grid: CombatGrid = null) -> void:
 	super(p_source, p_priority, p_block_cost)
@@ -153,6 +154,7 @@ func execute() -> void:
 	last_damage = 0
 	last_breakdown = ""
 	last_crit = false
+	last_target = null
 	reactions.clear()
 	broken_targets.clear()
 	combo_notes.clear()
@@ -197,6 +199,7 @@ func execute() -> void:
 		var taken_now: int = effective_target.take_damage(DictUtil.to_int(res["final_dmg"]), true)
 		last_damage = taken_now
 		last_crit = DictUtil.to_bool(res["is_crit"])
+		last_target = effective_target
 		last_breakdown = DamageCalculator.describe(res)
 		print("[%s] strikes [%s]: %s" % [source.name, effective_target.name, last_breakdown])
 		var stance_mult: float = DictUtil.to_float(res["stance_factor"])

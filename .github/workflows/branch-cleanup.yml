@@ -1,5 +1,5 @@
 # Deletes remote task branches whose work is already on develop (cloud sessions cannot delete
-# refs through their proxy). A branch is deleted when it is not main/develop, has no open PR,
+# refs through their proxy). A branch is deleted when it is not main/develop/engine, has no open PR,
 # its last commit is older than min_age_hours, and either its head is the head of a merged PR
 # or merging it into develop changes nothing. Everything else is listed in the job summary.
 # Do not turn on the repo setting "Automatically delete head branches": it would delete
@@ -48,7 +48,7 @@ jobs:
           cutoff=$(( $(date +%s) - MIN_AGE_HOURS * 3600 ))
           { echo "| Branch | Action | Reason |"; echo "| --- | --- | --- |"; } >> "$GITHUB_STEP_SUMMARY"
           for ref in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin); do
-            case "$ref" in main|develop|HEAD) continue ;; esac
+            case "$ref" in main|develop|engine|HEAD) continue ;; esac
             sha=$(git rev-parse "origin/$ref")
             if echo "$open" | grep -qx "$ref"; then why="open PR"; act=keep
             elif echo " $ALSO_DELETE " | grep -q " $ref "; then why="named in also_delete"; act=delete

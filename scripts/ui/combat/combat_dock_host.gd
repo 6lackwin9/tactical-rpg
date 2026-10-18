@@ -3,10 +3,12 @@ extends Control
 
 # ==============================================================================
 # Tactical RPG - Combat Dock Host (production combat UI layout)
-# COMBAT-UI2-L1 layout C: timeline row on top, a slim party column (the whole height) left, the biggest grid in the
-# middle, a slim hostile column (+ forecast) right, playback buttons and the one-line log ticker at the bottom;
-# every size comes from CombatHudMetrics (_fit). No gear button or equipment modal in battle. The unit hover card
-# (COMBAT-UI2-L2) floats inside the grid panel; Esc closes a pinned card before anything else.
+# COMBAT-UI3 layout A: the slim planning strip on top (plan blocks + tactic controls), the party column left
+# (compact cards + the selected-hero panel), the biggest grid in the middle, the hostile column right (hostile cards +
+# the merged enemy card), and the one-line status bar at the bottom (playback buttons, "Round 1 · Planning", the hint,
+# the collapsed log ticker: a click or Expand opens the full log over the grid). Every size comes from
+# CombatHudMetrics (_fit). No gear button or equipment modal in battle. Esc closes, in order: a modal, the strip's
+# question, the pinned (selected) enemy.
 # Static dock regions filled from data-driven layout presets. The game UI stays
 # fixed; a layout edit mode (⚙ / F9) lets any panel be undocked into a floating
 # UiWindow - its region keeps a same-size placeholder so nothing reflows - and
@@ -21,12 +23,12 @@ const DEFAULT_LAYOUT: String = "Standard"
 const LAYOUTS: Dictionary = {
 	"Standard": {
 		"top": ["timeline"],
-		"left_top": ["party"], "left": [], "center": ["grid"], "right_top": ["enemies"], "right": ["forecast"],
+		"left_top": ["party"], "left": ["hero"], "center": ["grid"], "right_top": ["enemies"], "right": ["enemy_card"],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 	"Mirrored": {
 		"top": ["timeline"],
-		"left_top": ["enemies"], "left": ["forecast"], "center": ["grid"], "right_top": ["party"], "right": [],
+		"left_top": ["enemies"], "left": ["enemy_card"], "center": ["grid"], "right_top": ["party"], "right": ["hero"],
 		"bottom_left": ["playback"], "bottom_center": ["action_log"],
 	},
 }
@@ -89,10 +91,10 @@ func _init() -> void:
 	root.add_theme_constant_override("separation", CombatHudMetrics.ROW_SEP)
 	margin.add_child(root)
 
-	# Top row: the timeline, with room at the right for the 32 px settings cog.
+	# Top row: the planning strip, with room at the right for the 32 px settings cog.
 	var top := _row(root, 4)
 	_top_row = top
-	top.custom_minimum_size = Vector2(0, CombatHudMetrics.TOP_H)
+	top.custom_minimum_size = Vector2(0, CombatHudMetrics.STRIP_MIN_H)
 	_add_region(top, "top", true, true)
 	var cog_gap := Control.new()
 	cog_gap.custom_minimum_size = Vector2(CORE_COG_PX + 4, 0)
@@ -111,14 +113,17 @@ func _init() -> void:
 	_add_region(right_col, "right", false, true)
 
 	_bottom_panel = PanelContainer.new()
-	_bottom_panel.custom_minimum_size = Vector2(0, 36)
-	_bottom_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.07, 0.09, 0.14, 0.98), Color(0.22, 0.32, 0.46, 0.9), 6, 8, 2))
+	_bottom_panel.name = "StatusBar"
+	_bottom_panel.custom_minimum_size = Vector2(0, CombatHudMetrics.BOTTOM_MIN_H)
+	_bottom_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(0.08, 0.11, 0.18, 0.97), Color(0.16, 0.23, 0.37, 1.0), 6, 8, 2))
 	root.add_child(_bottom_panel)
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 10)
 	_bottom_panel.add_child(bottom)
-	_add_region(bottom, "bottom_left", false, true)
+	_add_region(bottom, "bottom_left", true, true)
 	_add_region(bottom, "bottom_center", true, true)
+	_region("bottom_left").size_flags_stretch_ratio = 1.0 - CombatHudMetrics.TICKER_SHARE   # buttons, phase and the hint
+	_region("bottom_center").size_flags_stretch_ratio = CombatHudMetrics.TICKER_SHARE      # the collapsed log ticker
 
 	_float_layer = Control.new()
 	_float_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -147,10 +152,10 @@ func _row(parent: Control, separation: int) -> HBoxContainer:
 	parent.add_child(row)
 	return row
 
-# A fixed-width column holding two stacked regions (party alone, or hostiles / forecast).
+# A fixed-width column holding two stacked regions (party cards / selected hero, or hostile cards / enemy card).
 func _column(parent: Control) -> VBoxContainer:
 	var col := VBoxContainer.new()
-	col.custom_minimum_size = Vector2(CombatHudMetrics.SIDE_W, 0)
+	col.custom_minimum_size = Vector2(CombatHudMetrics.LEFT_W, 0)
 	col.add_theme_constant_override("separation", CombatHudMetrics.COL_GAP)
 	col.clip_contents = true
 	parent.add_child(col)
@@ -183,7 +188,8 @@ func setup(p_session: CombatSession, with_autoplay: bool = true) -> void:
 		CombatRosterPanel.create(false),
 		CombatActionLogPanel.new(),
 		CombatGridPanel.new(),
-		CombatForecastPanel.new(),
+		CombatHeroPanel.new(),
+		CombatEnemyCardPanel.new(),
 		CombatPlaybackPanel.new(),
 		CombatTimelinePanel.new(),
 	]
@@ -193,12 +199,16 @@ func setup(p_session: CombatSession, with_autoplay: bool = true) -> void:
 		panel.modal_requested.connect(open_modal)
 		_overlay_layer.host_panel(panel)
 		panel.bind(session)
-	_wire_hover_card()
 	var timeline: CombatTimelinePanel = get_panel("timeline") as CombatTimelinePanel
+	var playback: CombatPlaybackPanel = get_panel("playback") as CombatPlaybackPanel
 	if with_autoplay:
 		autoplay = CombatAutoplay.new(session)
+		autoplay.fill_blocks = true   # the strip's pickers leave no empty block when an action fits
 		if timeline != null:
 			timeline.bind_autoplay(autoplay)
+			if playback != null:   # the status bar's hint shows the autoplay pause / wait reason
+				playback.note_fn = timeline.autoplay_note
+				autoplay.state_changed.connect(playback.refresh)
 		_start_autoplay_timer()
 	elif timeline != null:
 		timeline.disable_autoplay()
@@ -242,32 +252,31 @@ func bind_game_state(store: GameState) -> void:
 	autoplay.store = store
 	autoplay.load_settings(store.autoplay)
 
-# Roster cards drive the grid's hover card: focus opens it at once, a click pins it.
-func _wire_hover_card() -> void:
-	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
-	for id: String in ["party", "enemies"]:
-		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
-		if roster == null or grid == null:
-			continue
-		roster.unit_focused.connect(grid.open_card)
-		roster.unit_blurred.connect(grid.focus_lost)
-		roster.unit_clicked.connect(grid.pin_card)
-
-# Sizes the whole screen from CombatHudMetrics: the grid's tile, the columns' fixed panel heights, the strips.
+# Sizes the whole screen from CombatHudMetrics: the grid's tile, the columns' widths and fixed panel heights, the strips.
 func _fit() -> void:
 	if session == null or _panels.is_empty():
 		return
 	var view: Vector2 = size if size.x > 1.0 and size.y > 1.0 else Vector2(1280, 720)
 	metrics = CombatHudMetrics.compute(view, UiTheme.text_scale(), session.allies.size(), maxi(session.enemies.size(), CombatHudMetrics.HOSTILE_SLOTS), session.encounter.party_slots())
-	_top_row.custom_minimum_size = Vector2(0, CombatHudMetrics.TOP_H)
+	_top_row.custom_minimum_size = Vector2(0, metrics.top_h)
 	_bottom_panel.custom_minimum_size = Vector2(0, metrics.bottom_h)
+	for col: Control in _columns:   # a column is as wide as the side it holds (party side or hostile side)
+		var party_side: bool = col.is_ancestor_of(_slot("party")) or col.is_ancestor_of(_slot("hero"))
+		col.custom_minimum_size = Vector2(metrics.left_w if party_side else metrics.right_w, 0)
 	_set_slot_height("party", metrics.party_panel_h)
+	_set_slot_height("hero", metrics.hero_panel_h)
 	_set_slot_height("enemies", metrics.hostile_panel_h)
-	_set_slot_height("forecast", metrics.forecast_h)
+	_set_slot_height("enemy_card", metrics.enemy_card_h)
 	for id: String in ["party", "enemies"]:
 		var roster: CombatRosterPanel = get_panel(id) as CombatRosterPanel
 		if roster != null:
 			roster.apply_metrics(metrics)
+	var hero_panel: CombatHeroPanel = get_panel("hero") as CombatHeroPanel
+	if hero_panel != null:
+		hero_panel.apply_metrics(metrics)
+	var enemy_card: CombatEnemyCardPanel = get_panel("enemy_card") as CombatEnemyCardPanel
+	if enemy_card != null:
+		enemy_card.apply_metrics(metrics)
 	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
 	if grid != null:
 		grid.set_tile_px(metrics.tile)
@@ -568,13 +577,28 @@ func close_modals() -> bool:
 		return true
 	return false
 
-# Esc closes the unit hover card (true when one was open).
-func close_hover_card() -> bool:
-	var grid: CombatGridPanel = get_panel("grid") as CombatGridPanel
-	if grid == null or not grid.card_is_open():
+# Esc after the modals: the strip's open question closes (Back / Keep), else a pinned (selected) enemy goes back to the
+# hero being planned. True when something closed.
+func close_question_or_pin() -> bool:
+	var timeline: CombatTimelinePanel = get_panel("timeline") as CombatTimelinePanel
+	if timeline != null and timeline.dock.cancel_question():
+		return true
+	var picked: Combatant = session.selected_combatant
+	if picked == null or session.is_ally(picked):
 		return false
-	grid.close_card()
+	if session.focused_hero != null:
+		session.select_combatant(session.focused_hero)
+	else:
+		session.focus_first_hero()
 	return true
+
+# Confirm round (Enter and the strip's button take the same path: the missing-actions question when it applies).
+func request_confirm() -> void:
+	var timeline: CombatTimelinePanel = get_panel("timeline") as CombatTimelinePanel
+	if timeline != null:
+		var _done: bool = timeline.request_confirm()
+	else:
+		var _ok: bool = session.confirm_plan()
 
 func _refresh_timeline_modal() -> void:
 	timeline_modal.set_total_blocks(session.total_blocks)
@@ -664,7 +688,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var handled: bool = true
 	match key.keycode:
 		KEY_ESCAPE:
-			handled = close_modals() or close_hover_card()
+			handled = close_modals() or close_question_or_pin()
 		KEY_L:
 			if log_modal.visible:
 				log_modal.close_modal()
@@ -682,7 +706,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				handled = false
 		KEY_ENTER, KEY_KP_ENTER:
 			if session.is_planning():
-				session.confirm_plan()
+				request_confirm()
 			else:
 				handled = false
 		KEY_F9:

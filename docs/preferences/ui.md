@@ -20,6 +20,8 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - A confirm-round warning that a setting can turn off (2026-10-18).
 - The combat log expands on click (2026-10-18).
 - Compact party cards plus a selected-hero panel (2026-10-18).
+- Hostile cards show HP beside the name (2026-10-18, his own choice).
+- Strip block labels in a smaller font, the move symbol when a name does not fit, details on hover (2026-10-18, his own choice).
 
 ## Test tools
 

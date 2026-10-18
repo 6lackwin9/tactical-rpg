@@ -121,6 +121,8 @@ static func _test_sliders(tree_parent: Node) -> bool:
 	var made: Array = _screen(tree_parent, MenuRouter.SETTINGS)
 	var host: Control = made[0] as Control
 	var view: MainMenuView = made[1] as MainMenuView
+	if AudioDirector.active == null:   # run on its own (fc.sh gate menus), no earlier suite left a director in the tree
+		host.add_child(AudioDirector.new())
 	var d: AudioDirector = AudioDirector.active
 	var checks: Dictionary = {"director exists": d != null}
 	if d != null:

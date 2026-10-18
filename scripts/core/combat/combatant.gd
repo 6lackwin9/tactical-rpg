@@ -416,6 +416,16 @@ func weaken_factor() -> float:
 	var magnitude: int = clampi(DictUtil.int_of(status_magnitudes, StatusEffects.WEAKEN), 0, cap if cap > 0 else 100)
 	return 1.0 - float(magnitude) / 100.0
 
+# Outgoing skill power factor from an active empower (PACE1 rule 5): 1 + magnitude/100 (1.0 when not empowered;
+# magnitude capped by the registry). Applied wherever weaken_factor is (SkillDef.power_for, the riposte counter); the
+# two factors multiply. Heals and the damage formula are untouched.
+func empower_factor() -> float:
+	if not has_status(StatusEffects.EMPOWER):
+		return 1.0
+	var cap: int = StatusRegistry.cap_of(StatusEffects.EMPOWER)
+	var magnitude: int = clampi(DictUtil.int_of(status_magnitudes, StatusEffects.EMPOWER), 0, cap if cap > 0 else 100)
+	return 1.0 + float(magnitude) / 100.0
+
 # Debuff resistance (%): from INT via the stat sheet.
 func debuff_resistance() -> float:
 	return stats.get_debuff_resistance(get_weapon_context()) if stats != null else 0.0

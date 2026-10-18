@@ -1,26 +1,31 @@
 # Balance handover
 
-Updated 2026-10-18 08:30 UTC (rotation, coordinator "Usage caps") by Balance session session_012hWXrrHGj1VxCBHAEN59mo. Read this first, then `docs/workflow/cloud.md` ("Usage caps": build lanes in economy mode, Balance holds the rotating build slot, sims over ~10 min run in the background with one wake). Agents: `balance` for runs, `logic-builder` for tools/sim, `asset-builder` for data, `change-reviewer` before each landing.
+Updated 2026-10-18 16:35 UTC (project wind-down to interactive mode) by Balance session session_01Lc7tUeurRvdktR4Qtn5PQ9. Read this first, then `docs/workflow/cloud.md` ("Usage caps", "Landing a task") and `planner-ops` (interactive mode: work only on Tushar's request, one thing at a time). Agents: `balance` for runs, `logic-builder` for sim/tools, `asset-builder` for data, `change-reviewer` before each landing. Land with `bash tools/fc.sh gate auto` (per-system gate) plus `tools/fc.sh docs`.
 
-## In progress
+## State
 
-**BAL5-SIM + BAL5-PH** on branch `claude/bal5-sim` (57354e9, pushed, not landed). All keys are coded: K1 `world=` plus character tuning via `WorldFactory.apply_character`; K2 `sweep size=3 lead=warrior`, 10 seeds default; K3 tank allies hp_end on won fights, priest heal casts / down round (small `sim_metrics.gd` edits); K4 `tier_foe=`; K5 A1 on, S2 behind `s2=on`; B2 generated boss phase `phase=on|off`; K6 PLAN SKIP lines. 7 new checks in bal2_rules and 2 in bal4_campaign, both suites pass alone; parse clean; README delta in the commit. Acceptance: jitter on + `phase=off`, 4-hero default, party L5 at 5 seeds reproduces BAL3-R exactly (100/100/80/100/80). The boss phase fires but the L5 boss cell stays 80.
-Next: run the full gate once (`SUITE_TIMEOUT=900 bash tools/fc.sh gate`), run `change-reviewer`, land on develop (commit with Review/Gate/Timing/Blocked-by/AgentMap/Done lines; BAL5-SIM and BAL5-PH TASKS rows -> done), then **message Gameplay** (session_017rPg9X4j3FhvPDo3t93bwo). BREPORT1-L waits for that landing because it moves `sim_metrics.gd`.
-Open question to settle in BAL5-R1: should the party/sweep defaults become trios (decision "BAL5 levers" Q1 says party targets are measured with trios)? Default: pass `comp=`/`size=3 lead=warrior` in R1 rather than change defaults.
+- Build slot: released 16:35 (coordinator told). Nothing in flight.
+- Landed this session: MORALE1-B (7bda7b5). Numbers: top of `docs/BALANCE_REPORT.md`.
+- MORALE1-B headline: solo warrior vs ash_scouts 20 -> 100 clear (mob band met); ash_raiders 100 clear for every duo and trio, 0.7-1.9 rounds faster; trios 1.1-1.7 rounds. DR1 levers (`morale_leader` "", `morale_break` 40, `FLEE_WAVERING`) not triggered.
+- ASHPACE1 (Assets) said "first change ash_scouts one scout fewer unless MORALE1-B already lifts it to 90+": it did (100), so that change is not needed. Tell Assets/coordinator if they have not seen it.
+- Older gaps (BAL5): tank won-fight allies hp 30 (< 40), priest heal share 2, brawler AoE 0.79, boss 26 / line 26 / wave 28 / elite 38, HEAL1 arms 63, stand 73.
 
-## Queue after that
+## Queue (start only when Tushar asks)
 
-1. BAL5-R1 (balance): trio re-measure at 10 seeds (party, trio sweep, role, tier_foe), marks which BAL5 triggers fire (`docs/specs/BAL5_LEVERS.md` sections 1-7).
-2. BAL5-AI (logic, `tactical_ai.gd`; Gameplay has no tactical_ai work queued), BAL5-L, BAL5-A only where triggers fire, then BAL5-R.
-3. HEAL1-S (sim keys `heal=rally`, `rest=`, `extra=`; after HEAL1-L and BAL5-SIM) and HEAL1-B (campaign run; pass if arms finale 30-55 and gate >= 75). BAL5 F2 (guards at party level) triggers on the HEAL1-B finale number.
+1. PACE1-S (logic, sim pace metrics + PACE1 sim boss phase): unblocked (PACE1-L landed, develop 6e72b3b; Gameplay's hooks are in its handover). Not started. Gameplay's hooks (PACE1-L schema 39daec9, behaviour a1ca665): `EncounterPhases.pace_of(entry, tier_of)` pace resolver; `WorldEncounter.grant_all_start` (default false) for the sim's start=on; enraged via `CatalogEncounter.is_enraged(c)` / `EncounterPhases.enraged_refs`; start buffs carry source "start:..." (BattleMetrics credits nobody); Empower = outgoing power x(1+mag/100) in power_for and riposte. Then PACE1-B. PACE1 adds a B3 trigger: boss median under 7 rounds.
+2. MORALE1-B follow-ups (proposals, need Tushar's approval as tasks): sim morale counters (`fled_shaken`, `fled_wavering`, `surrendered`, `break_by_crit_only`, `break_round`); campaign rerun with a higher SIM_TIMEOUT (both arms timed out at 900 s with 7 of 10 trios) or `comp=` per trio; question whether trios at 1.1-1.7 rounds vs ash_raiders are fine or want `morale_break` 40.
+3. LEVERS1-B: waits on LEVERS1-A1/A2/A3. BAL5-R is "before"; also check warrior-row won-fight allies hp_end >= 40 at L5/L7 after LEVERS1-L3 and A3.
 
-## Landed this session (develop)
+## Answered questions
 
-BAL3-R0, BAL3-S, BAL3-AI, BAL3-A, BAL3-R + CAMP1-B, BAL4-ATTR (`sim campaign`), RECRUIT1-B / OBJ1-B / BOSS1-B + BAL4-ATTR v4 (`enc=world:<id>`, 2fd535c). Latest numbers: `docs/BALANCE_REPORT.md`; older runs: `docs/archive/BALANCE_REPORT_2026-10.md`.
+- Walk-in taunt: answered 17:03 ("Advance, then taunt", decision row in `docs/decisions/balance.md`).
+- Trio targets: new trio sweep bands approved 17:06 (decision "Trio sweep bands"); he will say if something feels too easy, then tune bands up.
 
 ## Gotchas
 
-- Cloud arena suite takes ~5.5 min: always `SUITE_TIMEOUT=900` for the gate.
-- Develop moves fast; data merges (world encounters) change sim results. Merge develop before a long run, and rerun when a merge touched `data/worlds` or `tools/sim`.
-- Role L5 ~35 min, sweep 6-20 min, party/duel/tier 1-4 min (4 in parallel). Use SIM_TIMEOUT=3300 for long parallel runs.
-- `pgrep -f "fc.sh gate"` matches its own wait loop; wait on the background task notification instead.
+- Balance agent reports can be wrong: check logs (summary lines, diff against the previous run) before landing a report. MORALE1-B's agent also left `until grep ...; sleep` loops waiting for a "PLAN FAIL" line that a timed-out campaign never prints: kill them, and give campaigns `timeout` above 900 s.
+- Long campaigns: `campaign 5 10` per heal arm exceeds the 900 s sim timeout on a cloud container; split by `comp=`.
+- Check TASKS for an owning thread before building a shared-code row (STATCRED1-L was built twice).
+- Write `landed=` in Timing from `date -u` at push time, not a guess.
+- The default sweep/campaign loadout is the first 5 class-path skills (`content_factory.gd:362`), not the role loadout.
+- No more `landed <id> <sha>` messages to Merge & Release (Tushar 16:10, f1db72d); patch notes are written per release.

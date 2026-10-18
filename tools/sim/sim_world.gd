@@ -78,10 +78,13 @@ static func story_fights(steel_to_gate: bool) -> Array[Dictionary]:
 					out.append({"quest": str(q["id"]), "encounter": raid, "scripted": true})
 	return out
 
+# MORALE1-S: morale fields copied into the base of `full` encounters.
+const MORALE_KEYS: Array[String] = ["morale", "morale_break", "morale_leader", "morale_groups", "morale_text"]
+
 # {"enemies": unit ids, "base": encounter fields, "label", "max_rounds"} of encounter `enc_id` as seen
 # from `world`; like SimScenarios.encounter for a catalog entry, with the roster mapped to units (_ref).
 # elevel_set: the foes are level-shifted sandbox copies at `foe_level` (as for catalog encounters).
-# full: also the objective, deployment, phases, guests and protect fields (refs mapped to the same unit ids).
+# full: also the objective, deployment, phases, guests, protect and morale fields (refs mapped to the same unit ids).
 static func encounter(runner: SimRunner, enc_id: String, foe_level: int, elevel_set: bool, world: String = WORLD, full: bool = false) -> Dictionary:
 	var entry: Dictionary = WorldCatalog.resolve(world, "encounters", enc_id)
 	if entry.is_empty():
@@ -101,6 +104,10 @@ static func encounter(runner: SimRunner, enc_id: String, foe_level: int, elevel_
 		base["guests"] = _refs(ctx, DictUtil.array_of(entry.get("guests", [])))
 		base["protect"] = _refs(ctx, DictUtil.array_of(entry.get("protect", [])))
 		base["phases"] = _phases(ctx, DictUtil.array_of(entry.get("phases", [])))
+		# MORALE1-S: the five morale fields, only when authored (absent = morale off, today's sims); the leader is a roster ref.
+		for key: String in MORALE_KEYS:
+			if entry.has(key):
+				base[key] = _ref(ctx, str(entry[key])) if key == "morale_leader" else entry[key]
 	return {"enemies": enemies, "base": base, "label": enc_id, "max_rounds": DictUtil.to_int(entry.get("max_rounds", 0))}
 
 # The final sandbox/catalog unit id of story reference `id` ("" stays ""): a plain character (or a catalog

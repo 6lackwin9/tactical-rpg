@@ -57,6 +57,22 @@ func on_block_start(_round_num: int, _block_num: int) -> ActionLogEntry:
 func on_block_end(_round_num: int, _block_num: int) -> void:
 	pass
 
+# Right after an action resolves (before its log entry): a chance to read what it did (MORALE1: crits). Default: nothing.
+func on_action_resolved(_action: CombatResolver.ScheduledAction) -> void:
+	pass
+
+# MORALE1 rule 13: the shown morale state of `c` ("steady", "shaken", "wavering", "fearless"; "" = morale off or none).
+func morale_state_of(_c: Combatant) -> String:
+	return ""
+
+# MORALE1 rule 13: the morale group index of `c` (-1 = morale off or none).
+func morale_group_of(_c: Combatant) -> int:
+	return -1
+
+# MORALE1 rule 8: the flee ratio `c` drafts with, given its live profile's `base`. Default: `base`.
+func flee_ratio_of(_c: Combatant, base: float) -> float:
+	return base
+
 # A unit spawned but held back (BOSS1: a phase wave before its phase fires): off the field and skipped by the
 # end-of-battle check. Default: none.
 func is_reserved(_c: Combatant) -> bool:
@@ -118,9 +134,13 @@ func phase_state() -> Dictionary:
 func restore_phase_state(_state: Dictionary, _round_num: int) -> void:
 	pass
 
-# {id, name, actor, line, pause_autoplay} when `entry` is a phase EVENT entry of this battle, else {}.
+# {id, name, actor, line, pause_autoplay, enrage} when `entry` is a phase EVENT entry of this battle, else {}.
 func phase_info(_entry: ActionLogEntry) -> Dictionary:
 	return {}
+
+# PACE1: true when `c` is enraged in the round being planned (its whole plan is shown; CatalogEncounter).
+func is_enraged(_c: Combatant) -> bool:
+	return false
 
 # Narration when a round concludes: {"phase": String, "status": String, "log": String}
 func round_summary(_round_num: int, _combat_over: bool) -> Dictionary:
@@ -175,6 +195,11 @@ func hero_key(c: Combatant) -> String:
 func draft_steps(c: Combatant, preset_id: String = "balanced", shared: CombatPlan = null) -> Array[PlanStep]:
 	var ctx: PlanContext = shared.context if shared != null else plan_context()
 	return TacticalAI.build_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)), shared)
+
+# Fills the blocks c's draft left empty (TacticalAI.fill_steps); player-facing drafts only.
+func fill_steps(c: Combatant, preset_id: String, shared: CombatPlan) -> void:
+	var ctx: PlanContext = shared.context
+	TacticalAI.fill_steps(c, ctx, PlanPresets.profile_for(preset_id, ctx.profile_of(c)), shared)
 
 # Plans every enemy on the field with the AI and schedules it on the resolver.
 func schedule_enemy_ai(resolver: CombatResolver) -> void:

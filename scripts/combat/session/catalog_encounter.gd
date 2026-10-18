@@ -21,7 +21,14 @@ var objective_runtime: EncounterObjectives = EncounterObjectives.new()   # OBJ1 
 var deployment: String = EncounterObjectives.STANDARD
 var protected_guests: Array[Combatant] = []   # guests that must live (OBJ1 `protect`)
 var _verdict: String = ""   # the last non-empty verdict (round_summary reads it)
+var morale_runtime: EncounterMorale = EncounterMorale.new()   # MORALE1 enemy morale of this battle (rebuilt in build(); off by default)
+var _unit_keys: Dictionary = {}        # MORALE1: enemy Combatant -> "<ref>#<n>"
+var _units_by_key: Dictionary = {}     # MORALE1: "<ref>#<n>" -> enemy Combatant
+var _unit_tiers: Dictionary = {}       # MORALE1: enemy Combatant -> roster tier (rule 5)
+var _authored_profiles: Dictionary = {}   # MORALE1: enemy Combatant -> its spawned AiProfile (live profiles are rebuilt from it)
+var _planning_round: int = 1   # PACE1: the round prepare_round last set up (is_enraged reads it)
 const FLED_TEXT: String = "The party withdrew."
+const PHASE_SOURCE: String = "phase:"   # status source prefix of a phase's status grants ("phase:<id>"; BattleMetrics credits the enemy recipient)
 
 func _init(p_encounter_id: String = "") -> void:
 	encounter_id = p_encounter_id
@@ -118,6 +125,7 @@ func build() -> void:
 	allies = party
 	enemies = foes
 	objective_runtime = EncounterObjectives.create(definition)
+	_build_morale(deployed)
 	_verdict = ""
 	grid.deploy_combatants(allies, deployed, deployment)
 	_place_leftovers(allies, true)
@@ -125,6 +133,36 @@ func build() -> void:
 
 	party_stash = Inventory.new()
 	ItemCatalog.populate_party_starter_stash(party_stash)
+
+# MORALE1 (spec 1.2): unit keys of every enemy, the authored AI profiles and the starting groups (`starting` = the
+# starting enemies in `enemies` order).
+func _build_morale(starting: Array[Combatant]) -> void:
+	_unit_keys.clear()
+	_units_by_key.clear()
+	_unit_tiers.clear()
+	_authored_profiles.clear()
+	if not EncounterMorale.enabled(definition):   # rule 1: off means off
+		morale_runtime = EncounterMorale.new()
+		return
+	for ref: Variant in units_by_id:
+		var list: Array = units_by_id[ref]
+		for n: int in range(list.size()):
+			var c: Combatant = list[n]
+			if not enemies.has(c):
+				continue
+			var key: String = "%s#%d" % [str(ref), n]
+			_unit_keys[c] = key
+			_units_by_key[key] = c
+			_unit_tiers[c] = str(ContentSchema.normalize("units", _unit_entry(str(ref))).get("tier", c.tier))   # fixed-stat units too
+			if ai_profiles.get(c, null) is AiProfile:
+				var authored: AiProfile = ai_profiles[c]
+				_authored_profiles[c] = authored.duplicate_profile()
+	var keys: Array[String] = []
+	for c: Combatant in starting:
+		keys.append(str(_unit_keys.get(c, "")))   # index-aligned with `enemies` (morale_groups indices); "" never joins a group
+	var leader_ref: String = EncounterMorale.leader_ref(definition, func(ref: String) -> String: return str(_unit_entry(ref).get("tier", "")))
+	var leader_key: String = "%s#0" % leader_ref
+	morale_runtime = EncounterMorale.create(definition, keys, leader_key if _units_by_key.has(leader_key) else "")
 
 # The `index`-th unit spawned from catalog unit `unit_id` (null if none).
 func unit(unit_id: String, index: int = 0) -> Combatant:
@@ -225,6 +263,9 @@ func on_block_start(round_num: int, block_num: int) -> ActionLogEntry:
 	var due_id: String = phase_runtime.next_due()   # BOSS1 rule 2: a phase met at the end of the last block fires first
 	if not due_id.is_empty():
 		return _fire_phase(due_id, round_num, block_num)
+	var broke: Array[String] = morale_runtime.take_lines(round_num, block_num, 1)   # MORALE1 rule 12: one entry per break
+	if not broke.is_empty():
+		return _morale_entry(round_num, block_num, broke[0])
 	if wave.is_empty() or reinforcements_spawned:
 		return null
 	if round_num != DictUtil.to_int(definition["wave_round"]) or block_num != DictUtil.to_int(definition["wave_block"]):
@@ -235,6 +276,7 @@ func on_block_start(round_num: int, block_num: int) -> ActionLogEntry:
 	for c: Combatant in wave:
 		if grid.has_combatant(c):
 			arrived.append(c.name)
+	_form_morale_group(wave, "wave")   # MORALE1 rule 3: the wave is one fresh group
 	return CombatEncounter.make_event_entry(round_num, block_num, "Reinforcements", false, str(definition["wave_label"]), "Wave",
 		"ARRIVED", "%s join the battle." % ", ".join(arrived), "%d more hostiles" % arrived.size())
 
@@ -257,10 +299,14 @@ func verdict(_round_num: int, _block_num: int, end_of_round: bool) -> String:
 	return _verdict
 
 func objective_state() -> Dictionary:
-	return objective_runtime.state()
+	var state: Dictionary = objective_runtime.state()
+	if morale_runtime.on:
+		state["morale"] = morale_runtime.state()   # MORALE1 1.2: kept in every BlockSnapshot
+	return state
 
 func restore_objective_state(state: Dictionary) -> void:
 	objective_runtime.restore(state)
+	morale_runtime.restore(DictUtil.dict_of(state.get("morale", {})))
 	_verdict = ""
 
 # The objective line (rule 9): the authored text or the generated one, names from this battle's units.
@@ -271,8 +317,87 @@ func _ref_name(ref: String) -> String:
 	var c: Combatant = unit(ref, 0)
 	return c.name if c != null else str(_unit_entry(ref).get("name", ref))
 
-func on_block_end(_round_num: int, _block_num: int) -> void:
+func on_block_end(round_num: int, block_num: int) -> void:
 	phase_runtime.check_block_end(func(ref: String) -> Combatant: return unit(ref, 0))
+	# MORALE1 rule 7: losses, breaks and surrenders after the phase check, before the verdict.
+	var surrendering: Array[Combatant] = morale_runtime.block_end(round_num, block_num,
+		func(key: String) -> Combatant: return unit_by_key(key),
+		func(c: Combatant) -> bool: return is_fearless(c),
+		func(c: Combatant) -> bool: return is_reserved(c))
+	for c: Combatant in surrendering:
+		grid.withdraw_in_place(c)   # rule 9: leaves at its tile; the resolver drops its later actions (inactive)
+
+# ------------------------------------------------------------------------------
+# Morale (MORALE1, EncounterMorale; spec section 2)
+# ------------------------------------------------------------------------------
+
+func on_action_resolved(action: CombatResolver.ScheduledAction) -> void:
+	if not morale_runtime.on:
+		return
+	for hit: Dictionary in EncounterMorale.crit_events(action.command):
+		var c: Combatant = hit["unit"]
+		record_crit(c, DictUtil.to_bool(hit["killed"]))
+
+# Rule 6: a crit taken by `c` (killed = it defeated `c`); applied at the block end.
+func record_crit(c: Combatant, killed: bool) -> void:
+	if _unit_keys.has(c):
+		morale_runtime.record_crit(str(_unit_keys[c]), killed)
+
+func unit_key(c: Combatant) -> String:
+	return str(_unit_keys.get(c, ""))
+
+func unit_by_key(key: String) -> Combatant:
+	var raw: Variant = _units_by_key.get(key, null)
+	return raw if raw is Combatant else null
+
+# Rule 5: boss or elite tier, a live profile that never flees (reckless or flee 0), or the slay target.
+func is_fearless(c: Combatant) -> bool:
+	if c == null:
+		return false
+	if EncounterMorale.LEADER_TIERS.has(str(_unit_tiers.get(c, c.tier))):
+		return true
+	var raw: Variant = ai_profiles.get(c, null)
+	if raw is AiProfile:
+		var live: AiProfile = raw
+		if live.reckless or live.flee_ratio <= 0.0:
+			return true
+	return objective_runtime.objective == EncounterObjectives.SLAY and unit(objective_runtime.unit_ref, 0) == c
+
+func morale_group_of(c: Combatant) -> int:
+	if not morale_runtime.on:
+		return -1
+	return morale_runtime.group_of(unit_key(c))
+
+func morale_state_of(c: Combatant) -> String:
+	var gi: int = morale_group_of(c)
+	if gi < 0:
+		return ""
+	return EncounterMorale.FEARLESS if is_fearless(c) else morale_runtime.group_state(gi)
+
+func flee_ratio_of(c: Combatant, base: float) -> float:
+	var gi: int = morale_group_of(c)
+	if gi < 0 or is_fearless(c):
+		return base
+	return EncounterMorale.flee_for(base, morale_runtime.group_state(gi))
+
+func _form_morale_group(units: Array[Combatant], source: String) -> void:
+	if not morale_runtime.on or morale_runtime.has_group(source):
+		return
+	var keys: Array[String] = []
+	var size: int = 0
+	for c: Combatant in units:
+		if not _unit_keys.has(c):
+			continue
+		keys.append(str(_unit_keys[c]))
+		if not is_reserved(c):
+			size += 1
+	morale_runtime.form_group(keys, size, source)
+
+# Rule 12: the break EVENT entry (actor = the leader, else the encounter).
+func _morale_entry(round_num: int, block_num: int, line: String) -> ActionLogEntry:
+	var actor: Combatant = unit_by_key(morale_runtime.leader)
+	return CombatEncounter.make_event_entry(round_num, block_num, actor.name if actor != null else encounter_name, false,
+		EncounterMorale.SUBTYPE, EncounterMorale.SUBTYPE, EncounterMorale.OUTCOME, line, "")
 
 func phase_state() -> Dictionary:
 	return phase_runtime.state()
@@ -291,7 +416,17 @@ func units_of_ref(ref: String) -> Array[Combatant]:
 	return out
 
 func _apply_phase_profiles(round_num: int) -> void:
+	if morale_runtime.on:   # MORALE1 rule 8: rebuilt from the authored profiles each time, so the bonus never stacks
+		for c: Variant in _authored_profiles:
+			var authored: AiProfile = _authored_profiles[c]
+			ai_profiles[c] = authored.duplicate_profile()
 	phase_runtime.apply_profiles(ai_profiles, units_of_ref, round_num)
+	if not morale_runtime.on:
+		return
+	for c: Variant in _authored_profiles:   # the state bonus on top of the live (phase) profile
+		var unit_c: Combatant = c
+		var live: AiProfile = ai_profiles[unit_c]
+		live.flee_ratio = flee_ratio_of(unit_c, live.flee_ratio)
 
 # Fires phase `id` at [round, block] (block 0 = round start): line, wave, status, then ai (rule 3). Returns its EVENT entry.
 func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
@@ -313,6 +448,7 @@ func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
 		for c: Combatant in units:
 			if grid.has_combatant(c):
 				arrived += 1
+		_form_morale_group(units, PHASE_SOURCE + id)   # MORALE1 rule 3: each phase wave is one fresh group
 		var label: String = str(fx["label"])
 		parts.append(label if not label.is_empty() else "%d more hostiles" % arrived)
 	for fx: Dictionary in EncounterPhases.effects_of(p, EncounterPhases.EFFECT_STATUS):
@@ -320,16 +456,44 @@ func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
 		var granted: bool = false
 		for c: Combatant in units_of_ref(str(fx["unit"])):
 			if c.is_active() and grid.has_combatant(c) and not is_reserved(c):
-				StatusEffects.grant_now(c, status, DictUtil.to_int(fx["rounds"]), DictUtil.to_int(fx["magnitude"]), "phase:%s" % id)
+				StatusEffects.grant_now(c, status, DictUtil.to_int(fx["rounds"]), DictUtil.to_int(fx["magnitude"]), PHASE_SOURCE + id)
 				granted = true
 		if granted:
 			parts.append(StatusEffects.display_name(status))
+	for fx: Dictionary in EncounterPhases.effects_of(p, EncounterPhases.EFFECT_ENRAGE):
+		if _apply_enrage(id, fx, block_num):
+			parts.append("Enraged")
 	if not EncounterPhases.effects_of(p, EncounterPhases.EFFECT_AI).is_empty():
 		parts.append("new tactics from the next round" if block_num > 0 else "new tactics")
 	var entry: ActionLogEntry = CombatEncounter.make_event_entry(round_num, block_num, actor, false, str(p["name"]), EncounterPhases.SUBTYPE,
 		EncounterPhases.OUTCOME, detail, ", ".join(parts))
 	phase_runtime.mark_fired(id, round_num, block_num, entry)
 	return entry
+
+# PACE1 rule 4 / 3.3: the enrage unit gets empower at `power` % for the rest of the battle (rounds max_rounds + 1, so it
+# never ticks out). The power is queued: mid-round (block > 0) it waits in the pending statuses until the next round
+# start, so blocks planned before the phase keep their damage; at a round start (block 0, before the enemy draft and
+# the party plan) it is active at once. True when a unit got it.
+func _apply_enrage(id: String, fx: Dictionary, block_num: int) -> bool:
+	var granted: bool = false
+	for c: Combatant in units_of_ref(str(fx["unit"])):
+		if not c.is_active() or not grid.has_combatant(c) or is_reserved(c):
+			continue
+		if block_num > 0:
+			StatusEffects.queue(c, StatusEffects.EMPOWER, max_rounds + 1, DictUtil.to_int(fx["power"]), PHASE_SOURCE + id)
+		else:
+			StatusEffects.grant_now(c, StatusEffects.EMPOWER, max_rounds + 1, DictUtil.to_int(fx["power"]), PHASE_SOURCE + id)
+		granted = true
+	return granted
+
+# PACE1 3.6: enraged in the planning round (an enrage phase fired before it or at its start).
+func is_enraged(c: Combatant) -> bool:
+	if c == null:
+		return false
+	for ref: String in phase_runtime.enraged_refs(_planning_round):
+		if units_of_ref(ref).has(c):
+			return true
+	return false
 
 # ------------------------------------------------------------------------------
 # Round flow & narration
@@ -339,6 +503,7 @@ func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
 # of this round and phases met at the end of the last round fire (list order) before the enemy draft; the live AI
 # profiles are rebuilt for this round's draft. They come back under "entries".
 func prepare_round(round_num: int) -> Dictionary:
+	_planning_round = round_num
 	var info: Dictionary = _intro(round_num)
 	var entries: Array[ActionLogEntry] = phase_runtime.round_start_entries(round_num)
 	phase_runtime.mark_round(round_num)
@@ -346,6 +511,9 @@ func prepare_round(round_num: int) -> Dictionary:
 	while not id.is_empty():
 		entries.append(_fire_phase(id, round_num, 0))
 		id = phase_runtime.next_due()
+	# MORALE1 rule 12: breaks after the last block are announced here (a reset re-logs the ones said at this round start).
+	for line: String in morale_runtime.lines_said_at(round_num, 0) + morale_runtime.take_lines(round_num, 0):
+		entries.append(_morale_entry(round_num, 0, line))
 	_apply_phase_profiles(round_num)
 	info["entries"] = entries
 	return info
@@ -383,6 +551,14 @@ func round_summary(round_num: int, combat_over: bool) -> Dictionary:
 	if combat_over and ending.is_empty():   # no verdict stored (a subclass ended the battle): today's reading
 		ending = EncounterObjectives.WON if party_alive() else EncounterObjectives.LOST
 	if combat_over and ending == EncounterObjectives.WON:
+		var broke: Array[String] = morale_runtime.take_lines(round_num, -1)   # MORALE1 rule 12: a break ended the battle
+		if not broke.is_empty():
+			var said: String = " ".join(broke)
+			return {
+				"phase": "🏆 VICTORY",
+				"status": "🏆 %s: %s" % [encounter_name, said],
+				"log": "\n[color=#38bdf8][b]🏆 %s: %s[/b][/color]" % [encounter_name, said],
+			}
 		return {
 			"phase": "🏆 VICTORY",
 			"status": "🏆 %s: the enemy is down or has fled. Review the replay." % encounter_name,

@@ -14,9 +14,10 @@ extends RefCounted
 # remembered battle-autoplay choice (PlanPresets.AUTO_IDS; off in a new game). CombatAutoplay reads and writes it.
 # HEAL1-L (save v9): explore.last_rest = qualified id of the last rest place entered ("" = the start location; an id
 # that no longer resolves is read as "" by the runtime, never a load error); party members store hp_lost (UnitState).
+# PURSE1-L (save v10): purses = {qualified encounter id: wins >= 0} for encounters with a purse (PurseRules.pay).
 # ==============================================================================
 
-const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay"]
+const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses"]
 const AUTOPLAY_KEYS: Array[String] = ["on", "party", "heroes"]
 const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe", "last_rest"]
 const HOME_WORLD_KEY: String = "home_world"   # optional extra explore key: the world a `connects` crossing left (absent = none)
@@ -36,6 +37,7 @@ var rolls: Dictionary = {}   # stream id -> rolls drawn (int >= 0)
 var shops: Dictionary = {}   # shop qid -> {item id: sold count >= 1}
 var time: int = 0   # world clock (TRAV1-L)
 var autoplay: Dictionary = default_autoplay()   # AUTO1-L remembered autoplay choice
+var purses: Dictionary = {}   # PURSE1-L: encounter qid -> wins of that purse encounter (int >= 0)
 var load_problems: Array[String] = []   # raw type problems found by from_dict (not saved; validate() reports them)
 
 static func default_explore() -> Dictionary:
@@ -101,6 +103,7 @@ func to_dict() -> Dictionary:
 		"flags": flags.duplicate(true), "quests": quests.duplicate(true), "loot_claimed": _sorted(loot_claimed),
 		"position": [position.x, position.y], "explore": explore.duplicate(true), "rng_seed": rng_seed, "rolls": rolls.duplicate(true),
 		"shops": shops.duplicate(true), "time": time, "autoplay": autoplay.duplicate(true),
+		"purses": purses.duplicate(true),
 	}
 
 static func _sorted(list: Array[String]) -> Array[String]:
@@ -167,6 +170,11 @@ static func from_dict(d: Dictionary) -> GameState:
 		g.load_problems.append("autoplay must be {on, party, heroes}.")
 	else:
 		g.autoplay = raw_auto
+	var raw_purses: Variant = JsonUtil.normalize(d.get("purses", {}))
+	if not (raw_purses is Dictionary):
+		g.load_problems.append("purses must be an object {encounter qid: wins}.")
+	else:
+		g.purses = raw_purses
 	return g
 
 func equals(other: GameState) -> bool:
@@ -204,6 +212,15 @@ func validate() -> Array[String]:
 	if time < 0:
 		errors.append("time must be a whole number >= 0.")
 	errors.append_array(autoplay_errors(autoplay))
+	errors.append_array(purses_errors(purses))
+	return errors
+
+# PURSE1-L: {qualified encounter id: whole number >= 0}.
+static func purses_errors(blob: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	for key: Variant in blob:
+		if not (key is String) or not QuestRules.blob_key_ok(str(key)) or not (blob[key] is int) or DictUtil.to_int(blob[key]) < 0:
+			errors.append("purses: '%s' must be a qualified encounter id world:id with a win count >= 0." % str(key))
 	return errors
 
 # {on: bool, party: one of PlanPresets.AUTO_IDS, heroes: {non-empty key: AUTO_IDS id or "custom"}}, nothing else.

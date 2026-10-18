@@ -116,7 +116,7 @@ static func row_problems(e: Dictionary) -> Array[Dictionary]:
 	var guarded: Array[String] = SkillKinds.sectioned_fields()
 	guarded.append("stance")
 	for key: String in guarded:
-		if SkillKinds.has_field(kind, key):
+		if SkillKinds.has_field(kind, key) or key == "extra_grants":   # extra_grants has its own message (extra_grant_problems)
 			continue
 		var f: Dictionary = ContentSchema.field("skills", key)
 		if e.get(key, null) != f["default"]:
@@ -192,6 +192,7 @@ static func row_problems(e: Dictionary) -> Array[Dictionary]:
 			out.append(problem("reach_max", tier, "LINE areas start from an adjacent tile; leave the reach at 0 or 1."))
 		if not status_id.is_empty() and DictUtil.to_int(e["status_potency"]) <= 0:
 			out.append(problem("status_potency", tier, "Give the status a potency above 0."))
+	out.append_array(extra_grant_problems(e, kind, tier))
 	out.append_array(combo_problems(e, kind, tier))
 	# The weapon gate (ATTACK, DEFEND, SUPPORT): known gear types, and a type needs a proficiency to mean anything.
 	var types: Array[String] = ContentFactory._strings(e["weapon_types"])
@@ -200,6 +201,48 @@ static func row_problems(e: Dictionary) -> Array[Dictionary]:
 			out.append(problem("weapon_types", tier, "Needs weapon type: unknown gear type '%s' (gear types or '%s')." % [gear, SkillDef.UNARMED_TOKEN]))
 	if not types.is_empty() and DictUtil.to_int(e["min_proficiency"]) < 1:
 		out.append(problem("min_proficiency", tier, "Needs proficiency: a weapon type is listed, so give a proficiency of at least 1 (otherwise the types do nothing)."))
+	return out
+
+const EXTRA_GRANTS_MAX_ENTRIES: int = 1
+const EXTRA_GRANT_ROUNDS_MIN: int = 1
+const EXTRA_GRANT_ROUNDS_MAX: int = 3
+
+# extra_grants (BAL5-L, spec BAL5_LEVERS section 2 T3): DEFEND or SUPPORT only, at most 1 entry, a buff the kind can grant
+# (DEFEND: defend or support buffs, SUPPORT: support buffs) other than grant_status, rounds 1-3, magnitude inside the
+# status row's range (0 for a status without one). A taunt extra follows the grant_status rule: SUPPORT targets SELF.
+static func extra_grant_problems(e: Dictionary, kind: String, tier: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var extras: Array = DictUtil.array_of(e.get("extra_grants", []))
+	if extras.is_empty():
+		return out
+	if kind != "DEFEND" and kind != "SUPPORT":
+		out.append(problem("extra_grants", tier, "extra_grants needs a DEFEND or SUPPORT skill."))
+		return out
+	if extras.size() > EXTRA_GRANTS_MAX_ENTRIES:
+		out.append(problem("extra_grants", tier, "A skill holds at most one extra grant."))
+	var options: Array[String] = StatusEffects.support_buffs()
+	if kind == "DEFEND":
+		options.append_array(StatusEffects.defend_buffs())
+	var grant: String = str(e.get("grant_status", ""))
+	for raw: Variant in extras:
+		var row: Dictionary = DictUtil.dict_of(raw)
+		var status: String = str(row.get("status", ""))
+		if not options.has(status) or status == grant:
+			out.append(problem("extra_grants", tier, "Extra grant '%s' must be another buff." % status))
+			continue
+		var rounds: int = DictUtil.to_int(row.get("rounds", 0))
+		if rounds < EXTRA_GRANT_ROUNDS_MIN or rounds > EXTRA_GRANT_ROUNDS_MAX:
+			out.append(problem("extra_grants", tier, "Extra grant '%s' needs rounds %d-%d." % [status, EXTRA_GRANT_ROUNDS_MIN, EXTRA_GRANT_ROUNDS_MAX]))
+		var magnitude: int = DictUtil.to_int(row.get("magnitude", 0))
+		if StatusEffects.has_magnitude(status):
+			var mag_min: int = StatusRegistry.magnitude_min(status)
+			var mag_max: int = StatusRegistry.magnitude_max(status)
+			if magnitude < mag_min or magnitude > mag_max:
+				out.append(problem("extra_grants", tier, "Extra grant '%s' needs a magnitude %d-%d." % [status, mag_min, mag_max]))
+		elif magnitude != 0:
+			out.append(problem("extra_grants", tier, "Extra grant '%s' takes no magnitude (leave it 0)." % status))
+		if status == StatusEffects.TAUNT and kind == "SUPPORT" and str(e.get("target_mode", "")) != "SELF":
+			out.append(problem("target_mode", tier, "Taunt is cast on the taunter itself: set Targets to SELF."))
 	return out
 
 const EXPLOIT_MAX_ENTRIES: int = 2

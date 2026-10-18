@@ -1148,20 +1148,41 @@
 			"kind": "DEFEND",
 			"level": 3,
 			"blocks": 3,
-			"description": "{name}: -{mitigation} damage; grants taunt for {rounds}. Foes that can reach you must target you, starting next round.",
+			"description": "{name}: -{mitigation} damage; grants taunt for {rounds} and {extra}. Foes that can reach you must target you, starting next round.",
 			"learned_only": true,
 			"grade": "advanced",
 			"grant_status": "taunt",
+			"extra_grants": [
+				{
+					"status": "fortify",
+					"rounds": 1,
+					"magnitude": 4
+				}
+			],
 			"mitigation": 0.35,
 			"ranks": [
 				{
 					"level": 4,
 					"status_rounds": 2,
+					"extra_grants": [
+						{
+							"status": "fortify",
+							"rounds": 2,
+							"magnitude": 6
+						}
+					],
 					"mitigation": 0.45
 				},
 				{
 					"level": 5,
 					"status_rounds": 3,
+					"extra_grants": [
+						{
+							"status": "fortify",
+							"rounds": 3,
+							"magnitude": 8
+						}
+					],
 					"mitigation": 0.55
 				}
 			]

@@ -5,27 +5,19 @@ extends CombatPanel
 # Tactical RPG - Combat Grid Panel
 # 12x9 battlefield. Tokens are created for the session's own combatants (one
 # source of truth), placed from the displayed state (live or snapshot), and
-# animated by CombatPresenter from session.fx_requested. The unit hover card (UnitInspectorUI, COMBAT-UI2-L2)
-# follows session.hover_changed after HOVER_DELAY, so hovering a roster card shows it too; focus opens it at once;
-# a click or the Pin button pins it; Esc, a click elsewhere or a right click closes a pinned card.
+# animated by CombatPresenter from session.fx_requested. COMBAT-UI3: no floating hover card any more; hovering a token
+# sets session.hovered_combatant, which the merged enemy card (right column) and the selected-hero panel (left
+# column) show; clicking an enemy token outside planning selects (pins) it.
 # ==============================================================================
 
 const TILE_SIZE: int = CombatGridView.TILE_SIZE
-const HOVER_DELAY: float = 0.15   # seconds the pointer rests on a unit before the card opens
-const CLOSE_GRACE: float = 0.2    # seconds the unpinned card waits after the pointer leaves (so the Pin button is reachable)
-const CARD_GAP: float = 6.0       # space between the hovered tile and the card
 
 var grid_view: CombatGridView
 var popup: PlanActionPopup
 var presenter: CombatPresenter
-var hover_card: UnitInspectorUI
-var card_unit: Combatant = null   # whose card is open
 
 var _popup_key: Variant = null   # what the open popup is for: a Combatant or a Vector2i tile
 var _hint_option: PlanOption = null
-var _hover_timer: Timer
-var _close_timer: Timer
-var _pending: Combatant = null   # the unit the pointer rests on, waiting for HOVER_DELAY
 var _last_head: Vector2i = Vector2i(-1, -1)   # (viewed round, playhead) at the last refresh: stepping back kills live FX
 
 func _init() -> void:
@@ -41,21 +33,11 @@ func _init() -> void:
 	presenter = CombatPresenter.new()
 	presenter.overlay = grid_view.fx_layer
 	add_child(presenter)
-	hover_card = UnitInspectorUI.new()
-	grid_view.grid_anchor.add_child(hover_card)
-	_hover_timer = _make_timer(HOVER_DELAY, _on_hover_delay)
-	_close_timer = _make_timer(CLOSE_GRACE, _on_close_grace)
 
 func _on_bound() -> void:
 	session.mounted.connect(_mount)
 	session.fx_requested.connect(_on_fx)
 	session.log_reset.connect(presenter.kill_all)
-	session.hover_changed.connect(_on_hover_changed)
-	hover_card.pin_toggled.connect(_on_pin_toggled)
-	hover_card.card_clicked.connect(func() -> void:
-		if card_unit != null:
-			pin_card(card_unit)
-	)
 	grid_view.combatant_clicked.connect(_on_token_clicked)
 	grid_view.combatant_hovered.connect(_on_token_hovered)
 	grid_view.combatant_unhovered.connect(_on_token_unhovered)
@@ -113,8 +95,6 @@ func _planning_ready() -> bool:
 	return session.is_planning() and session.focused_hero != null and session.focused_hero.is_active()
 
 func _on_token_clicked(c: Combatant) -> void:
-	if _click_pins(c):
-		pin_card(c)
 	if not _planning_ready():
 		session.select_combatant(c)
 		return
@@ -128,12 +108,6 @@ func _on_token_clicked(c: Combatant) -> void:
 		session.select_combatant(c)   # switch the hero being planned
 		return
 	_open_popup(c, _title_for(c), session.plan_target_options(c), _token_rect(c))
-
-# A click on a token pins its card, unless the click opens the planning popup (the popup takes that spot).
-func _click_pins(c: Combatant) -> bool:
-	if not _planning_ready():
-		return true
-	return session.is_ally(c) and c != session.focused_hero and session.planned_position(c) == session.grid.get_position(c)
 
 func _on_tile_clicked(coord: Vector2i) -> void:
 	if not _planning_ready() or session.planned_occupant(coord) != null:
@@ -167,8 +141,6 @@ func _open_popup(key: Variant, title: String, options: Array[PlanOption], target
 			_on_option_chosen(step)
 		return
 	popup.close()
-	if not hover_card.is_pinned:
-		close_card()   # the popup opens beside the unit: the unpinned card gets out of its way
 	_popup_key = key
 	session.set_plan_preview(null)
 	popup.open_for(title, options, target_rect.end + Vector2(6, -target_rect.size.y), target_rect, extras)
@@ -370,232 +342,6 @@ func refresh() -> void:
 	_refresh_tells()
 	if popup.visible and not session.is_planning():
 		popup.close()
-	if hover_card.visible:
-		_fill_card()
-		_place_card()
-
-# ------------------------------------------------------------------------------
-# Unit hover card
-# ------------------------------------------------------------------------------
-
-func _make_timer(wait: float, callback: Callable) -> Timer:
-	var timer := Timer.new()
-	timer.one_shot = true
-	timer.wait_time = wait
-	timer.timeout.connect(callback)
-	add_child(timer)
-	return timer
-
-func _start(timer: Timer) -> void:
-	if timer.is_inside_tree():
-		timer.start()
-
-func _on_hover_changed(c: Combatant) -> void:
-	if c == null:
-		_hover_timer.stop()
-		_pending = null
-		if hover_card.visible and not hover_card.is_pinned:
-			_start(_close_timer)
-		return
-	_close_timer.stop()
-	if hover_card.is_pinned or (hover_card.visible and card_unit == c):
-		return
-	_pending = c
-	_start(_hover_timer)
-
-func _on_hover_delay() -> void:
-	if _pending != null and session != null and not popup.visible:
-		open_card(_pending)
-
-func _on_close_grace() -> void:
-	if hover_card.visible and not hover_card.is_pinned and not _pointer_on_card():
-		close_card()
-
-func _pointer_on_card() -> bool:
-	return hover_card.visible and hover_card.get_global_rect().has_point(get_global_mouse_position())
-
-# Shows the card for `c` beside its tile (replacing an unpinned card); a pinned card stays on its unit.
-func open_card(c: Combatant) -> void:
-	if c == null or session == null or session.grid == null or not is_instance_valid(c):
-		return
-	if hover_card.is_pinned and card_unit != c:
-		return
-	_close_timer.stop()
-	card_unit = c
-	_fill_card()
-	hover_card.visible = true
-	_place_card()
-	_place_next_frame.call_deferred(c)
-
-func pin_card(c: Combatant) -> void:
-	if c == null or session == null:
-		return
-	hover_card.set_pinned(false)
-	open_card(c)
-	hover_card.set_pinned(card_unit == c)
-	_fill_card()
-	_place_card()
-
-func close_card() -> void:
-	_hover_timer.stop()
-	_close_timer.stop()
-	_pending = null
-	card_unit = null
-	hover_card.set_pinned(false)
-	hover_card.visible = false
-
-func card_is_open() -> bool:
-	return hover_card.visible
-
-# Keyboard / controller focus left the card of a unit: an unpinned card closes.
-func focus_lost() -> void:
-	if hover_card.visible and not hover_card.is_pinned:
-		close_card()
-
-func _on_pin_toggled(pinned: bool) -> void:
-	if card_unit == null:
-		return
-	if pinned:
-		pin_card(card_unit)
-	else:
-		hover_card.set_pinned(false)
-		_fill_card()
-		_place_card()
-
-func _place_next_frame(c: Combatant) -> void:
-	if is_inside_tree() and hover_card.visible and card_unit == c:
-		await get_tree().process_frame
-		if hover_card.visible and card_unit == c:
-			_place_card()
-
-func _input(event: InputEvent) -> void:
-	var mouse_event := event as InputEventMouseButton
-	if mouse_event == null or not mouse_event.pressed or not hover_card.visible or not hover_card.is_pinned:
-		return
-	if mouse_event.button_index == MOUSE_BUTTON_RIGHT:   # right click = back: closes a pinned card first
-		close_card()
-		get_viewport().set_input_as_handled()
-	elif mouse_event.button_index == MOUSE_BUTTON_LEFT:
-		if not hover_card.get_global_rect().has_point(mouse_event.global_position) and not _on_unit_token(mouse_event.global_position):
-			close_card()
-
-func _on_unit_token(point: Vector2) -> bool:
-	var token: Control = grid_view.get_token_for(card_unit)
-	return token != null and token.visible and token.get_global_rect().has_point(point)
-
-# The hovered unit's tile in global coordinates (its cell, so the card does not follow a sliding token).
-func unit_tile_rect(c: Combatant) -> Rect2:
-	var px: float = float(grid_view.tile_px)
-	var origin: Vector2 = grid_view.grid_anchor.global_position
-	var cell: Vector2i = session.position_of(c)
-	if cell == Vector2i(-1, -1):
-		return Rect2(origin, Vector2.ZERO)
-	return Rect2(origin + Vector2(cell) * px, Vector2(px, px))
-
-# Beside the tile: right if the card fits, else left, else above or below; clamped to the board and the viewport.
-func _place_card() -> void:
-	if card_unit == null or not hover_card.visible:
-		return
-	hover_card.settle()
-	var board: Rect2 = _board_rect()
-	var bounds: Rect2 = board.intersection(get_viewport().get_visible_rect()) if is_inside_tree() else board
-	var tile: Rect2 = unit_tile_rect(card_unit)
-	var sz: Vector2 = hover_card.size
-	var pos := Vector2.ZERO
-	pos.x = tile.end.x + CARD_GAP
-	if pos.x + sz.x > bounds.end.x:
-		pos.x = tile.position.x - CARD_GAP - sz.x
-	if pos.x < bounds.position.x:   # neither side has room: above or below the tile
-		pos.x = clampf(tile.position.x, bounds.position.x, maxf(bounds.position.x, bounds.end.x - sz.x))
-		pos.y = tile.end.y + CARD_GAP
-		if pos.y + sz.y > bounds.end.y:
-			pos.y = tile.position.y - CARD_GAP - sz.y
-		pos.y = maxf(pos.y, bounds.position.y)
-	else:
-		pos.y = clampf(tile.position.y - 4.0, bounds.position.y, maxf(bounds.position.y, bounds.end.y - sz.y))
-	hover_card.global_position = pos
-
-func _fill_card() -> void:
-	var c: Combatant = card_unit
-	if c == null or not is_instance_valid(c):
-		return
-	var ally: bool = session.is_ally(c)
-	var plan_lines: Array[String] = []
-	if ally and session.plan != null:
-		var steps: Array[PlanStep] = session.plan.steps_of(c)
-		for i: int in range(steps.size()):
-			plan_lines.append("%d. %s" % [i + 1, steps[i].title()])
-	var intel: Array[Dictionary] = _threat_intel(c)
-	var versus: Array[String] = _versus_lines(c)
-	var intent: Dictionary = _intent_view(c)
-	for level: int in range(3):   # compact (no gauge bars), then tight (a hostile's tell only) when the card is taller than the board
-		hover_card.update_inspector(c, ally, session.position_text(c), session.encounter.get_sprite_texture(c), session.display_snapshot(),
-			intel, plan_lines, versus, level >= 1, intent, level >= 2)
-		hover_card.settle()
-		if hover_card.size.y <= _board_rect().size.y:
-			break
-
-func _board_rect() -> Rect2:
-	var px: float = float(grid_view.tile_px)
-	return Rect2(grid_view.grid_anchor.global_position, Vector2(px * CombatGridView.GRID_W, px * CombatGridView.GRID_H))
-
-# INTENT1-U: the hostile's tell for the hover card: {"first": the first action, "head": "Read by ..." (revealed only), "lines": the plan, one per action}. {} outside planning.
-func _intent_view(c: Combatant) -> Dictionary:
-	if session.is_ally(c):
-		return {}
-	var rec: Dictionary = session.intent_of(c)
-	if rec.is_empty():
-		return {}
-	var lines: Array[String] = []
-	var head: String = ""
-	if DictUtil.to_bool(rec["revealed"]):
-		head = IntentText.read_by(rec)
-		for raw: Variant in DictUtil.array_of(rec["plan"]):
-			lines.append(IntentText.plan_line(DictUtil.dict_of(raw)))
-	return {"first": IntentText.first_line(rec), "head": head, "lines": lines}
-
-# What the AI is known to do (role, strike power, guard and flee thresholds) for a hostile; one line each.
-func _threat_intel(c: Combatant) -> Array[Dictionary]:
-	var intel: Array[Dictionary] = []
-	if session.is_ally(c):
-		return intel
-	var profile: AiProfile = session.encounter.profile_of(c)
-	var role_desc: String = ""
-	match profile.role:
-		AiProfile.Role.AGGRESSOR:
-			role_desc = "closes in on the nearest foe and trades blows"
-		AiProfile.Role.SKIRMISHER:
-			role_desc = "hunts the weakest foe; backs off when hurt"
-		AiProfile.Role.SNIPER:
-			role_desc = "holds maximum range; retreats from melee"
-		AiProfile.Role.SUPPORT:
-			role_desc = "opens with Focus, then fights from range"
-	intel.append({"name": AiProfile.role_name(profile.role), "desc": role_desc, "color": Color(0.9, 0.6, 0.3)})
-	intel.append({"name": "Strike %d power, range %d" % [DamageCalculator.power_of(c, c.attack_range > 1), c.attack_range], "desc": "", "color": Color(0.9, 0.35, 0.35)})
-	if profile.defend_below > 0.0:
-		intel.append({"name": "Guards at <=%d%% HP (50%% guard, once a round)" % int(profile.defend_below * 100.0), "desc": "", "color": Color(0.35, 0.65, 0.95)})
-	if profile.flee_ratio > 0.0:
-		intel.append({"name": "Flees at <=%d%% HP to the exit" % int(profile.flee_ratio * 100.0), "desc": "", "color": Color(0.3, 0.85, 0.5)})
-	return intel
-
-# The numbers of the planning hero against a hostile: distance and reach, stance factor, both strikes.
-func _versus_lines(c: Combatant) -> Array[String]:
-	var lines: Array[String] = []
-	var hero: Combatant = session.focused_hero
-	if session.is_ally(c) or hero == null or not hero.is_active() or not c.is_active():
-		return lines
-	if not session.grid.has_combatant(hero) or not session.grid.has_combatant(c):
-		return lines
-	var basic: SkillDef = SkillCatalog.lowest(SkillDef.Kind.ATTACK)
-	var band: Vector2i = basic.reach_for(hero)
-	var dist: int = session.grid.get_distance(session.grid.get_position(hero), session.grid.get_position(c))
-	lines.append("%s: distance %d, reach %d-%d" % [hero.name, dist, band.x, band.y])
-	lines.append("Stance %s vs %s %.2fx" % [CombatTypes.stance_to_string(hero.current_stance), CombatTypes.stance_to_string(c.current_stance),
-		CombatTypes.get_matchup_multiplier(hero.current_stance, c.current_stance)])
-	var out: int = maxi(1, roundi(float(DamageCalculator.expected(hero, c, basic, basic.stance())) * (1.0 - c.defense_mitigation_ratio)))
-	var back: int = maxi(1, roundi(float(DamageCalculator.expected(c, hero, basic, basic.stance())) * (1.0 - hero.defense_mitigation_ratio)))
-	lines.append("Strike ~%d (crit %.0f%%); it hits you ~%d" % [out, DamageCalculator.crit_chance(hero), back])
-	return lines
 
 func _on_fx(entry: ActionLogEntry) -> void:
 	if entry == null or not is_inside_tree():

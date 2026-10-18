@@ -29,6 +29,8 @@ const GEAR: String = "gear"            # UI2-L: args {member}
 const RESULTS: String = "results"      # UI2-L: args {award, advanced, outcome (BATTLE1-L), rewards (BATTLE-FLOW, non-XP), report (BREPORT1-L, optional)}
 const JOURNAL: String = "journal"      # UI3-L
 
+const DISCARD_QUESTION: String = "Discard your changes?"   # Back / X / right click and a tab or member switch with a draft open
+
 var stack: Array[String] = []
 var models: Dictionary = {}        # screen id on the stack -> its model
 var play_scene: bool = true   # the host has a game scene to show (false: enter_game opens the full-screen hub instead of PLAY)
@@ -69,7 +71,7 @@ func make_model(id: String, args: Dictionary = {}) -> RefCounted:
 		HUB:
 			return HubModel.new(self)
 		PARTY:
-			return PartyModel.new(self) if CurrentGame.has_game() else null
+			return PartyModel.new(self, member, str(args.get("tab", ""))) if CurrentGame.has_game() else null
 		LEVEL_UP:
 			return LevelUpModel.new(member) if CurrentGame.has_game() else null
 		LOADOUT:
@@ -95,7 +97,7 @@ func pop() -> void:
 	if stack.size() <= 1 or top() == RESULTS:
 		return   # the results screen closes only through BattleResultsModel.continue_on (autosave, results_done)
 	if has_draft():
-		ask("Discard your changes?", _pop_now)
+		ask(DISCARD_QUESTION, _pop_now)
 		return
 	_pop_now()
 

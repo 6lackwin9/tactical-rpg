@@ -12,7 +12,13 @@ func _ready() -> void:
 	print("=== STARTING TACTICAL RPG ARENA HARNESS             ===")
 	print("=======================================================")
 
-	var all_tests_passed: bool = SuiteRegistry.run_all(self)
+	var systems: PackedStringArray = PackedStringArray()
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--systems="):
+			systems = arg.trim_prefix("--systems=").split(",", false)
+	if not systems.is_empty():
+		print("=== Systems: %s" % ", ".join(systems))
+	var all_tests_passed: bool = SuiteRegistry.run_all(self, systems)
 	ActionLogEntry.show_formulas = true   # test harness: log cells explain their damage on hover
 	var exit_code: int = 0 if all_tests_passed else 1
 

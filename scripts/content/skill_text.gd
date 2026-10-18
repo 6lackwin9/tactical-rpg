@@ -35,6 +35,7 @@ const TOKEN_KINDS: Dictionary = {
 	"flow": ["ATTACK", "DEFEND", "SUPPORT", "FOCUS"],
 	"exploit": ["ATTACK"],
 	"disrupt": ["ATTACK"],
+	"extra": ["DEFEND", "SUPPORT"],
 }
 
 const COUNTED: Array[String] = ["blocks", "dash", "reach", "rounds", "jump"]
@@ -228,6 +229,8 @@ static func token_value(token: String, suffix: String, row: Dictionary, rank: in
 			return format_exploit(DictUtil.array_of(row.get("exploit", [])))
 		"disrupt":
 			return "breaks stance" if str(row.get("disrupt", "NONE")) == "STANCE_BREAK" else ""
+		"extra":
+			return format_extra(DictUtil.array_of(row.get("extra_grants", [])))
 	return ""
 
 # "ends in Defensive" for a flow skill's end stance name; "" when empty (S12C-L).
@@ -243,6 +246,20 @@ static func format_exploit(entries: Array) -> String:
 	for raw: Variant in entries:
 		var row: Dictionary = DictUtil.dict_of(raw)
 		parts.append("%s vs %s" % [format_mult(DictUtil.to_float(row.get("power_mult", 1.0), 1.0)), StatusEffects.display_name(str(row.get("status", "")))])
+	return ", ".join(parts)
+
+# "Fortified 6 armor for 2 rounds" for an extra_grants list (BAL5-L; magnitude omitted for statuses without one);
+# "" when empty. Each rank renders its own (possibly overridden) list.
+static func format_extra(entries: Array) -> String:
+	var parts: Array[String] = []
+	for raw: Variant in entries:
+		var row: Dictionary = DictUtil.dict_of(raw)
+		var status: String = str(row.get("status", ""))
+		if status.is_empty():
+			continue
+		var magnitude: String = format_magnitude(status, DictUtil.to_int(row.get("magnitude", 0)))
+		var rounds: String = plural(DictUtil.to_int(row.get("rounds", 1), 1), "round")
+		parts.append("%s %s for %s" % [StatusEffects.display_name(status), magnitude, rounds] if not magnitude.is_empty() else "%s for %s" % [StatusEffects.display_name(status), rounds])
 	return ", ".join(parts)
 
 # The status a skill row's magnitude belongs to: status_effect if set, else grant_status (S12S-L).

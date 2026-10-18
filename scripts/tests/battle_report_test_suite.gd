@@ -64,6 +64,8 @@ static func run(tree_parent: Node = null) -> bool:
 		ok = _test_redo_round_one() and ok
 		ok = _test_frozen() and ok
 		ok = _test_dot_and_regen() and ok
+		ok = _test_status_source() and ok
+		ok = _test_potion_ledger() and ok
 		ok = _test_no_outcome_change() and ok
 	else:
 		ok = TestHelpers.report_ok(TAG, "sandbox fork and fixture skills", false) and ok
@@ -450,6 +452,103 @@ static func _test_dot_and_regen() -> bool:
 	checks["the report is valid"] = BattleReport.problems(report).is_empty()
 	s.dispose()
 	return TestHelpers.report(TAG, "bleed counts for its source, regen for its granter (rule 4)", checks)
+
+# ------------------------------------------------------------------------------
+# STATCRED1-L: a status counts for the unit that applied it, not for the next entry's actor
+# ------------------------------------------------------------------------------
+
+static func _entry(actor: Combatant, category: String) -> ActionLogEntry:
+	return ActionLogEntry.new(1, 1, category, actor.name, actor.name)
+
+static func _total(m: BattleMetrics, field: String) -> int:
+	var n: int = 0
+	for unit_name: Variant in m.units:
+		n += DictUtil.int_of(DictUtil.dict_of(m.units[unit_name]), field)
+	return n
+
+static func _test_status_source() -> bool:
+	var checks: Dictionary = {}
+	var s: CombatSession = _session(_runner(), 41)
+	var a: Combatant = s.allies[0] if s.allies.size() > 1 else null
+	var b: Combatant = s.allies[1] if s.allies.size() > 1 else null
+	var foe: Combatant = s.enemies[0] if not s.enemies.is_empty() else null
+	checks["fixture: two heroes and a foe"] = a != null and b != null and foe != null
+	if a == null or b == null or foe == null:
+		return TestHelpers.report(TAG, "status credit goes to its applier", checks)
+	var m := BattleMetrics.new()
+	m.quiet = true
+	m.attach(s)
+	var before_a: Dictionary = DictUtil.dict_of(m.units[a.name]).duplicate()
+	var before_b: Dictionary = DictUtil.dict_of(m.units[b.name]).duplicate()
+	# A queues a buff on B and a debuff on the foe, then grants itself an active buff (a guard's riposte); B acts next.
+	StatusEffects.queue(b, StatusEffects.HASTE, 2, 0, a.name)
+	StatusEffects.queue(foe, StatusEffects.SLOW, 1, 0, a.name)
+	StatusEffects.grant_now(a, StatusEffects.FORTIFY, 1, 0, a.name)
+	s.log_appended.emit(_entry(b, "MOVE"))
+	var rec_a: Dictionary = DictUtil.dict_of(m.units[a.name])
+	var rec_b: Dictionary = DictUtil.dict_of(m.units[b.name])
+	var counts_a: Dictionary = DictUtil.dict_of(DictUtil.dict_of(m.detail[a.name]).get("status_counts", {}))
+	var counts_b: Dictionary = DictUtil.dict_of(DictUtil.dict_of(m.detail[b.name]).get("status_counts", {}))
+	var buffs_a: int = DictUtil.int_of(rec_a, "buffs_applied") - DictUtil.int_of(before_a, "buffs_applied")
+	var debuffs_a: int = DictUtil.int_of(rec_a, "debuffs_applied") - DictUtil.int_of(before_a, "debuffs_applied")
+	checks["A's buffs_applied counts both of its buffs (+%d)" % buffs_a] = buffs_a == 2
+	checks["A's buff_rounds count their rounds"] = DictUtil.int_of(rec_a, "buff_rounds") - DictUtil.int_of(before_a, "buff_rounds") == 3
+	checks["A's debuffs_applied counts its slow (+%d)" % debuffs_a] = debuffs_a == 1
+	checks["A's Effects detail lists haste, slow and fortify"] = DictUtil.int_of(counts_a, StatusEffects.HASTE) == 1 \
+		and DictUtil.int_of(counts_a, StatusEffects.SLOW) == 1 and DictUtil.int_of(counts_a, StatusEffects.FORTIFY) == 1
+	checks["B, who acted next, gets none of them"] = counts_b.is_empty() \
+		and DictUtil.int_of(rec_b, "buffs_applied") == DictUtil.int_of(before_b, "buffs_applied") \
+		and DictUtil.int_of(rec_b, "debuffs_applied") == DictUtil.int_of(before_b, "debuffs_applied")
+	# A status with no recorded source still counts for the entry's actor; a boss-phase grant counts for its enemy
+	# recipient (no unit owns every phase), and for no one on the party side.
+	var foe_buffs: int = DictUtil.int_of(DictUtil.dict_of(m.units[foe.name]), "buffs_applied")
+	StatusEffects.queue(a, StatusEffects.REGEN, 1, 0, "")
+	StatusEffects.grant_now(foe, StatusEffects.FORTIFY, 1, 0, CatalogEncounter.PHASE_SOURCE + "t_statcred")
+	StatusEffects.grant_now(b, StatusEffects.FORTIFY, 1, 0, CatalogEncounter.PHASE_SOURCE + "t_statcred")
+	var total_before: int = _total(m, "buffs_applied")
+	s.log_appended.emit(_entry(b, "MOVE"))
+	counts_b = DictUtil.dict_of(DictUtil.dict_of(m.detail[b.name]).get("status_counts", {}))
+	var counts_foe: Dictionary = DictUtil.dict_of(DictUtil.dict_of(m.detail[foe.name]).get("status_counts", {}))
+	checks["an unsourced buff counts for the entry's actor"] = DictUtil.int_of(counts_b, StatusEffects.REGEN) == 1
+	checks["a phase grant counts for its enemy recipient"] = DictUtil.int_of(counts_foe, StatusEffects.FORTIFY) == 1 \
+		and DictUtil.int_of(DictUtil.dict_of(m.units[foe.name]), "buffs_applied") == foe_buffs + 1
+	checks["a phase grant on a hero counts for no one (two new buffs in total)"] = _total(m, "buffs_applied") - total_before == 2 \
+		and not counts_b.has(StatusEffects.FORTIFY)
+	# A status applied after the round's last entry is credited when the round concludes (before the next roll-over).
+	StatusEffects.queue(b, StatusEffects.HASTE, 3, 0, a.name)   # longer than the queued 2 rounds: a visible re-apply
+	var a_buffs: int = DictUtil.int_of(DictUtil.dict_of(m.units[a.name]), "buffs_applied")
+	s.round_concluded.emit(s.current_round, false)
+	checks["a buff after the last entry counts for A at the round's end"] = DictUtil.int_of(DictUtil.dict_of(m.units[a.name]), "buffs_applied") == a_buffs + 1
+	var report: Dictionary = BattleReport.build(m, s, "won")
+	checks["A's report row shows its four effects"] = DictUtil.int_of(_row(report, a.name), "effects") >= 4
+	m.freeze()
+	s.dispose()
+	return TestHelpers.report(TAG, "status credit goes to its applier, not the next actor (STATCRED1-L)", checks)
+
+# A pouch potion (ITEMUSE1) the hero drinks: its heal is heal_received in the ledger (not other_gain), the logged
+# item heal matches, no heal_done / heal cast for the user, and the closed fight has no METRIC FAIL.
+static func _test_potion_ledger() -> bool:
+	var checks: Dictionary = {}
+	var s: CombatSession = _session(_runner(), 43)
+	var hero: Combatant = s.allies[0]
+	hero.hp = maxi(1, roundi(float(hero.max_hp) * 0.5))   # room to heal
+	var potion := Consumable.new("t_br_potion", "Test Potion", Consumable.ConsumableType.HEALTH_POTION, maxi(1, roundi(float(hero.max_hp) * 0.25)))
+	hero.inventory.battle_pouch.append(potion)
+	var m := BattleMetrics.new()
+	m.quiet = true
+	m.attach(s)
+	var cmd := ItemCommand.new(hero, hero, potion, s.grid)
+	var act := CombatResolver.ScheduledAction.new(hero, cmd, 1, 1)
+	cmd.execute()
+	s.log_appended.emit(CombatLogBuilder.from_action(act, s.current_round, 1, s.allies, s.grid))
+	m.finish()
+	var rec: Dictionary = DictUtil.dict_of(m.units.get(hero.name, {}))
+	checks["the potion was used and healed (%d)" % cmd.last_heal] = cmd.used and cmd.last_heal > 0
+	checks["its heal is heal_received, not other_gain"] = DictUtil.int_of(rec, "heal_received") == cmd.last_heal and DictUtil.int_of(rec, "other_gain") == 0
+	checks["no heal_done or heal cast for the user"] = DictUtil.int_of(rec, "heal_done") == 0 and DictUtil.int_of(rec, "heal_casts") == 0
+	checks["the HP ledger balances: no METRIC FAIL %s" % str(m.fail_lines)] = m.fail_lines.is_empty() and m.checks > 0
+	s.dispose()
+	return TestHelpers.report(TAG, "a potion use balances the HP ledger (heal_received)", checks)
 
 static func _row(report: Dictionary, unit_name: String) -> Dictionary:
 	for raw: Variant in DictUtil.array_of(report.get("rows", [])):

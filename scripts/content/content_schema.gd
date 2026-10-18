@@ -148,7 +148,8 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_round", "Wave round", "int", 1, {"min": 1, "max": 30}),
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10, "help": "The wave enters before this block resolves."}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
-		_f("phases", "Phases", "json", [], {"help": "[{\"id\", \"name\", \"trigger\": {\"kind\": \"hp_below\", \"unit\", \"pct\": 50} or {\"kind\": \"round\", \"round\": 3}, \"effects\": [{\"type\": \"line\", \"text\"}, {\"type\": \"wave\", \"units\": [], \"label\"}, {\"type\": \"status\", \"unit\", \"status\": \"fortify\", \"rounds\": 2, \"magnitude\": 5}, {\"type\": \"ai\", \"unit\", \"reckless\": true}], \"pause_autoplay\": true}], at most 4 (BOSS1; EncounterPhases)."}),
+		_f("phases", "Phases", "json", [], {"help": "[{\"id\", \"name\", \"trigger\": {\"kind\": \"hp_below\", \"unit\", \"pct\": 50} or {\"kind\": \"round\", \"round\": 3}, \"effects\": [{\"type\": \"line\", \"text\"}, {\"type\": \"wave\", \"units\": [], \"label\"}, {\"type\": \"status\", \"unit\", \"status\": \"fortify\", \"rounds\": 2, \"magnitude\": 5}, {\"type\": \"ai\", \"unit\", \"reckless\": true}, {\"type\": \"enrage\", \"unit\", \"power\": 20}], \"pause_autoplay\": true}], at most 4 (BOSS1; EncounterPhases). hp_below may add \"or_round\": N (PACE1); one enrage per encounter, its phase pauses autoplay."}),
+		_f("pace", "Pace", "enum", "auto", {"options": ["auto", "mob", "elite", "boss"], "help": "Round target tier (PACE1): mob ~3, elite ~5, boss 7-9. auto = boss when any enemy (waves included) is tier boss, else elite when any is elite, else mob (EncounterPhases.pace_of)."}),
 		_f("objective", "Objective", "enum", "rout", {"options": ["rout", "hold", "escape", "slay"], "help": "rout: defeat every enemy; hold: keep the objective tiles; escape: get heroes out by an exit; slay: defeat one unit (OBJ1)."}),
 		_f("objective_tiles", "Objective tiles", "json", [], {"when": {"key": "objective", "in": ["hold"]}, "help": "[[x, y], ...] walkable, not exits; [] = the ring [[5, 4], [6, 4]]."}),
 		_f("objective_rounds", "Hold rounds", "int", 3, {"min": 1, "max": 30, "when": {"key": "objective", "in": ["hold"]}, "help": "Round ends held to win (1..max rounds)."}),
@@ -156,6 +157,12 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("objective_count", "Heroes out", "int", 1, {"min": 1, "max": 4, "when": {"key": "objective", "in": ["escape"]}, "help": "Heroes that must leave by an exit."}),
 		_f("objective_text", "Objective text", "string", "", {"help": "At most 80 characters; empty = generated from the objective."}),
 		_f("deployment", "Deployment", "enum", "standard", {"options": ["standard", "ambush", "centre"], "help": "standard: side against side; ambush: enemies on both sides; centre: the party holds the middle."}),
+		_f("morale", "Morale", "bool", false, {"help": "Enemy groups break and surrender as they lose members, take crits or lose their leader (MORALE1). Off = they fight to the last."}),
+		_f("morale_break", "Morale break", "int", 50, {"when": {"key": "morale", "in": ["true"]}, "help": "0..90: a group is Broken at or below this value (groups start at 100)."}),
+		_f("morale_leader", "Morale leader", "string", "", {"when": {"key": "morale", "in": ["true"]}, "help": "A unit id from Enemies; empty = the first boss or elite enemy, else none."}),
+		_f("morale_groups", "Morale groups", "json", [], {"when": {"key": "morale", "in": ["true"]}, "help": "[[enemy index, ...], ...]; every enemy in exactly one group; [] = all enemies are one group."}),
+		_f("morale_text", "Morale text", "string", "", {"when": {"key": "morale", "in": ["true"]}, "help": "At most 80 characters; empty = the generated break line."}),
+		_f("purse", "Purse", "json", {}, {"help": "{\"gold_min\": 0, \"gold_max\": gold_min, \"loot\": \"\", \"once\": true} (PURSE1): gold 0..500 rolled on a win; loot = a qualified world loot id (world:id, item reward), claimed once per save; once = pays only the first win. {} = no purse."}),
 		_f("guests", "Guests", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}, "help": "At most 2 extra party-side units; no XP, never saved."}),
 		_f("protect", "Protect", "refs", [], {"ref": "units", "ref_filter": {"side": "party"}, "help": "Guests that must survive (each must be in Guests)."}),
 	]
@@ -179,9 +186,11 @@ static func options_of(f: Dictionary) -> Array[String]:
 			out.append("")
 			out.append_array(StatusEffects.debuffs())
 			return out
-		"status_buff":
+		"status_buff":   # buffs a skill can grant (registry grant support / defend; empower, grant "", is left out: PACE1)
 			out.append("")
-			out.append_array(StatusEffects.buffs())
+			for s: String in StatusEffects.buffs():
+				if not str(StatusRegistry.row(s).get("grant", "")).is_empty():
+					out.append(s)
 			return out
 		"weapon_types":
 			return SkillDef.weapon_type_tokens()

@@ -297,6 +297,7 @@ func _step_resolution() -> void:
 	if not _pending_actions.is_empty():
 		var act: CombatResolver.ScheduledAction = _pending_actions.pop_front()
 		resolver.execute_single_action(act)
+		encounter.on_action_resolved(act)   # MORALE1 rule 6: crits are read here
 		_append_entry(CombatLogBuilder.from_action(act, current_round, current_block, allies, grid), true)
 		for reaction: Dictionary in act.command.reactions:
 			_append_entry(CombatLogBuilder.riposte_entry(reaction, current_round, current_block, allies), true)
@@ -454,12 +455,21 @@ func is_planning() -> bool:
 
 # Enemy intent tells (INTENT1): one record per active enemy on the grid, read from the enemies' scheduled actions
 # (the party plan is not scheduled until confirm, so editing it never changes these). Keys and rules: IntentRules
-# (unit, kind, target, cell, blocks, skill, revealed, readers, plan). Read-only; empty outside is_planning().
+# (unit, kind, target, cell, blocks, skill, revealed, readers, plan, enraged). Read-only; empty outside is_planning().
 func enemy_intents() -> Array[Dictionary]:
 	if not is_planning() or resolver == null:
 		var none: Array[Dictionary] = []
 		return none
-	return IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule)
+	var enraged: Array[Combatant] = []   # PACE1 3.6: an enraged enemy shows its whole plan to everyone
+	for foe: Combatant in enemies:
+		if encounter.is_enraged(foe):
+			enraged.append(foe)
+	var records: Array[Dictionary] = IntentRules.intents(enemies, allies, resolver.scheduled_actions, grid, _enemies_on_grid_at_schedule, enraged)
+	for record: Dictionary in records:   # MORALE1 rule 13: the state word and group, never the value or flee ratio
+		var unit: Combatant = record["unit"]
+		record["morale_state"] = encounter.morale_state_of(unit)
+		record["morale_group"] = encounter.morale_group_of(unit)
+	return records
 
 # The intent record of one enemy ({} when it has none: not planning, not an active enemy on the grid).
 func intent_of(enemy: Combatant) -> Dictionary:
@@ -594,15 +604,18 @@ func plan_clear(actor: Combatant) -> void:
 		plan_edited.emit("clear", actor)
 
 # Replaces `actor`'s sequence with an AI draft (see PlanPresets); still editable.
-func plan_apply_preset(actor: Combatant, preset_id: String) -> void:
+# fill_blocks (the strip's pickers and autoplay pass true): leftover empty blocks are filled (TacticalAI.fill_steps).
+func plan_apply_preset(actor: Combatant, preset_id: String, fill_blocks: bool = false) -> void:
 	if not is_planning() or actor == null or not actor.is_active():
 		return
 	encounter.draft_steps(actor, preset_id, plan)
+	if fill_blocks:
+		encounter.fill_steps(actor, preset_id, plan)
 	status_text = "%s: %s drafted %d step(s)." % [actor.name, PlanPresets.label(preset_id), plan.steps_of(actor).size()]
 	_after_plan_edit()
 	plan_edited.emit("preset", actor)
 
-func plan_apply_preset_all(preset_id: String) -> void:
+func plan_apply_preset_all(preset_id: String, fill_blocks: bool = false) -> void:
 	if not is_planning():
 		return
 	for a: Combatant in allies:
@@ -619,6 +632,10 @@ func plan_apply_preset_all(preset_id: String) -> void:
 				redrafted = true
 		if not redrafted:
 			break
+	if fill_blocks:
+		for a: Combatant in allies:
+			if a.is_active():
+				encounter.fill_steps(a, encounter.party_preset_for(a, preset_id), plan)
 	status_text = "Party: %s drafted. Review the sequences, then confirm." % PlanPresets.label(preset_id)
 	_after_plan_edit()
 	plan_edited.emit("preset_all", null)
@@ -629,6 +646,33 @@ func plan_is_valid() -> bool:
 		if a.is_active() and not plan.is_valid(a):
 			return false
 	return true
+
+# COMBAT-UI3: the blocks of `actor`'s round with nothing planned: not covered by a planned command, not taken by a
+# status, and none after a planned withdrawal. Empty for a unit that is not an active party member on the grid.
+func plan_empty_blocks(actor: Combatant) -> Array[int]:
+	var out: Array[int] = []
+	if plan == null or actor == null or not is_ally(actor) or not actor.is_active() or not grid.has_combatant(actor):
+		return out
+	var st: CombatPlan.SimState = plan.compile(actor)
+	var covered: Dictionary = {}
+	var last_end: int = 0
+	for e: PlanEntry in st.entries:
+		for b: int in range(e.start_block, e.end_block() + 1):
+			covered[b] = true
+		last_end = maxi(last_end, e.end_block())
+	for b: int in range(1, total_blocks + 1):
+		if covered.has(b) or st.blocked_blocks.has(b) or (st.withdrawn and b > last_end):
+			continue
+		out.append(b)
+	return out
+
+# COMBAT-UI3: the living party members whose round still has empty blocks (the Confirm round warning names them).
+func heroes_with_empty_blocks() -> Array[Combatant]:
+	var out: Array[Combatant] = []
+	for a: Combatant in allies:
+		if not plan_empty_blocks(a).is_empty():
+			out.append(a)
+	return out
 
 # Locks the party's sequences, schedules them with the enemies' and starts resolving
 # (auto-play; `auto_play` false lets the caller step manually). Refused while any is invalid.

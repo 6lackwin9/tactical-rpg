@@ -3,7 +3,7 @@
 Status: proposed (spec 2026-10-18; approved direction: decision combat "DR1 enemy intent tells (user 2026-10-18)", review `docs/specs/DESIGN_REVIEW1.md` 3.6)
 Depends on: COMBAT-UI2-L1 (layout C columns) and COMBAT-UI2-L2 (hover card) for the UI part; the logic part needs nothing new
 Lane: logic (INTENT1-L engine read-out and perk; INTENT1-U UI on the UI/UX thread), plus a tiny asset slice (INTENT1-A: one passive, one character edit)
-Touches: L: `scripts/combat/session/combat_session.gd` (`enemy_intents`), new `scripts/combat/session/intent_rules.gd`, `scripts/core/specs/passives.gd` (effect type `foresight`), `scripts/core/combat/combatant.gd` (`has_foresight`), new `scripts/tests/intent_test_suite.gd`. U: `scripts/ui/combat/combat_grid_view.gd` (arrows, chips), hostile cards in the right column, `scripts/ui/unit_inspector_ui.gd` (hover card), `scripts/ui/timeline_dock_ui.gd` (masked banner), `combat_ui_framework_test_suite`. A: `data/catalog/passives.json`, `data/worlds/ashlands/characters.json` (bryn_hale, RECRUIT1)
+Touches: L: `scripts/combat/session/combat_session.gd` (`enemy_intents`), new `scripts/combat/session/intent_rules.gd`, `scripts/core/specs/passives.gd` (effect type `foresight`), `scripts/core/combat/combatant.gd` (`has_foresight`), new `scripts/tests/intent_test_suite.gd`. U: `scripts/ui/combat/combat_grid_view.gd` (arrows, chips), hostile cards in the right column, `scripts/ui/combat/combat_enemy_card_panel.gd (was unit_inspector_ui.gd, COMBAT-UI3)` (hover card), `scripts/ui/timeline_dock_ui.gd` (masked banner), `combat_ui_framework_test_suite`. A: `data/catalog/passives.json`, `data/worlds/ashlands/characters.json` (bryn_hale, RECRUIT1)
 
 ## Goal
 

@@ -38,12 +38,13 @@ const SCENARIOS: Dictionary = {
 		"enemies": [["rogue", "standard"], ["rogue", "standard"], ["brawler", "standard"]]},
 	"aoe_swarm": {"role": "aoe", "allies": ["warrior", "priest"], "block": [2, 3],   # BAL5 A1: the trio (priest added)
 		"enemies": [["brawler", "minion"], ["rogue", "minion"], ["brawler", "minion"], ["brawler", "minion"], ["rogue", "minion"], ["priest", "minion"]]},
-	"support_attrition": {"role": "support", "allies": ["warrior", "brawler"],
-		"enemies": [["ranger", "standard"], ["ranger", "standard"], ["mage", "standard"], ["rogue", "standard"]]},
+	"support_attrition": {"role": "support", "allies": ["warrior", "brawler"],   # BAL5 S2 (trigger fired in BAL5-R1b): one ranger is a brawler
+		"enemies": [["ranger", "standard"], ["brawler", "standard"], ["mage", "standard"], ["rogue", "standard"]]},
 	"striker_priority": {"role": "striker", "allies": ["warrior"], "priority": true, "tier_until": {"level": 3, "slot": 0, "tier": "standard"},
 		"enemies": [["mage", "elite"], ["warrior", "standard"], ["warrior", "standard"]]},
 }
-# BAL5 S2 (key `s2=on`, only on its trigger): support_attrition with one ranger turned into a brawler.
+# BAL5 S2 (key `s2=on`): support_attrition with one ranger turned into a brawler. Its trigger fired in BAL5-R1b, so the
+# authored scenario now holds these foes and `s2=on` changes nothing (the key stays for older command lines).
 const S2_ENEMIES: Array = [["ranger", "standard"], ["brawler", "standard"], ["mage", "standard"], ["rogue", "standard"]]
 const S2_SCENARIO: String = "support_attrition"
 # BAL5 B2 (BAL5-PH, key `phase=on|off`, default on): the generated boss's phase, as the BOSS1 Crown of
