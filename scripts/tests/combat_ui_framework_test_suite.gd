@@ -281,6 +281,7 @@ static func _hud_checks(tree_parent: Node) -> bool:
 	_hover_card_checks(tree_parent, checks)
 	_autoplay_ui_checks(tree_parent, checks)
 	_intent_ui_checks(tree_parent, checks)
+	_phase_banner_checks(tree_parent, checks)
 	checks["party slots follow the cap, never fewer than the heroes, fallback 3 when unknown"] = (
 		CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 2).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 4).party_slots == 4
 		and CombatHudMetrics.compute(VIEWS[0], 1.0, 2, 5, 1).party_slots == 2 and CombatHudMetrics.compute(VIEWS[0], 1.0, 1, 5).party_slots == CombatHudMetrics.PARTY_SLOTS)
@@ -863,3 +864,71 @@ static func _intent_ui_checks(tree_parent: Node, checks: Dictionary) -> void:
 
 	SettingsFile.use_path(old_path)
 	DirAccess.remove_absolute(sandbox)
+
+# ------------------------------------------------------------------------------
+# BOSS1-U: the phase banner (one screen per case; the phase info is a test dictionary, never shipped content)
+# ------------------------------------------------------------------------------
+
+const PHASE_LINE: String = "The ground shakes as the warlord roars: you will not leave this hall alive, every last one of you, not while my banner stands tall above the broken field!"
+
+static func _fire_phase(host: CombatDockHost) -> void:
+	var entry := ActionLogEntry.new(1, 0, "EVENT", "Test Boss", "", PHASE_LINE, 0, "")
+	host.session.phase_fired.emit(entry, {"id": "rage", "name": "Warlord's Rage", "actor": "Test Boss", "line": PHASE_LINE, "pause_autoplay": true})
+
+static func _phase_banner_checks(tree_parent: Node, checks: Dictionary) -> void:
+	if tree_parent == null:
+		return
+	var saved: Variant = SettingsFile.get_value("ui/text_scale", 1.0)
+
+	# Appears with the name and the line; hides when its timer ends.
+	var host: CombatDockHost = _card_host(tree_parent, VIEWS[0], 1.0)
+	var none_before: bool = not host.is_phase_banner_visible()
+	_fire_phase(host)
+	var texts: Array[String] = _texts(host.get_node("PhaseBanner"))
+	checks["phase banner: shows the phase name and line when phase_fired emits"] = none_before and host.is_phase_banner_visible() and texts.has("Warlord's Rage") and texts.has(PHASE_LINE)
+	var timer: Timer = null
+	for child: Node in host.get_children():
+		if child is Timer and (child as Timer).one_shot:
+			timer = child
+	checks["phase banner: a one-shot timer of CombatDockHost.PHASE_BANNER_SECONDS runs"] = timer != null and is_equal_approx(timer.wait_time, CombatDockHost.PHASE_BANNER_SECONDS)
+	if timer != null:
+		timer.timeout.emit()
+	checks["phase banner: hides when its timer ends"] = not host.is_phase_banner_visible()
+	_card_free(tree_parent, host, saved)
+
+	# Any key skips it (and does nothing else).
+	host = _card_host(tree_parent, VIEWS[0], 1.0)
+	_fire_phase(host)
+	var round_before: int = host.session.viewed_round
+	host._unhandled_input(_key_event(KEY_X))
+	checks["phase banner: any key skips it"] = not host.is_phase_banner_visible() and host.session.viewed_round == round_before
+	_card_free(tree_parent, host, saved)
+
+	# Never during replay scrubbing.
+	host = _card_host(tree_parent, VIEWS[0], 1.0)
+	var live_phase: CombatSession.Phase = host.session.phase
+	host.session.phase = CombatSession.Phase.REPLAY
+	_fire_phase(host)
+	var replay_hidden: bool = not host.is_phase_banner_visible()
+	host.session.phase = live_phase
+	checks["phase banner: not shown while a replay plays"] = replay_hidden
+	_card_free(tree_parent, host, saved)
+
+	# Fits 1280x720 at every text size: inside the viewport, the panel's minimum height under the view.
+	for scale: float in SettingsFile.TEXT_LEVELS:
+		host = _card_host(tree_parent, VIEWS[0], scale)
+		_fire_phase(host)
+		_sort_now(host)
+		var panel: PanelContainer = host.get_node("PhaseBanner/PhasePanel")
+		var name_label: Label = host.get_node("PhaseBanner/PhasePanel/PhaseColumn/PhaseName")
+		var line_label: Label = host.get_node("PhaseBanner/PhasePanel/PhaseColumn/PhaseLine")
+		# The wrapped height from the font (a one-shot headless layout pass leaves wrapped labels at a transient height).
+		var text_w: float = line_label.custom_minimum_size.x
+		var name_h: float = name_label.get_theme_font("font").get_multiline_string_size(name_label.text, HORIZONTAL_ALIGNMENT_CENTER, text_w, name_label.get_theme_font_size("font_size")).y
+		var line_h: float = line_label.get_theme_font("font").get_multiline_string_size(line_label.text, HORIZONTAL_ALIGNMENT_CENTER, text_w, line_label.get_theme_font_size("font_size")).y
+		var need_h: float = name_h + line_h + 6.0 + 28.0 + 4.0   # label gap, the style's vertical margins, the 2 px borders
+		var rect: Rect2 = panel.get_global_rect()
+		var view_rect := Rect2(Vector2.ZERO, VIEWS[0])
+		checks["phase banner: fits 1280x720 at text size %.2f" % scale] = panel.custom_minimum_size.x <= VIEWS[0].x - 64.0 and need_h <= VIEWS[0].y - 64.0 and rect.position.x >= 0.0 and rect.end.x <= view_rect.end.x and line_h > name_h
+		_card_free(tree_parent, host, saved)
+	SettingsFile.set_value("ui/text_scale", saved)

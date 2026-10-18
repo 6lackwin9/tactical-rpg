@@ -33,6 +33,8 @@ const LAYOUTS: Dictionary = {
 const CORE_COG_PX: int = 32   # the settings cog (UIR-5: 32 px bordered button)
 const AUTO_PLAY_INTERVAL: float = 0.55
 const AUTOPLAY_TICK: float = 0.3
+const PHASE_BANNER_SECONDS: float = 2.0   # BOSS1-U: how long the phase banner stays
+const PHASE_BANNER_WIDTH: float = 520.0   # its widest size; it shrinks to fit the viewport
 
 var session: CombatSession = null
 var keys_blocked: bool = false   # BATTLE-FLOW: set while the results popup covers the arena
@@ -48,6 +50,11 @@ var _slots: Dictionary = {}     # String -> MarginContainer (panel + placeholder
 var _windows: Dictionary = {}   # String -> UiWindow (undocked panels)
 var _float_layer: Control
 var _overlay_layer: UiOverlayLayer
+var _phase_banner: Control = null          # BOSS1-U: centred phase banner (name + line), the results popup's panel style
+var _phase_panel: PanelContainer = null
+var _phase_name: Label = null
+var _phase_line: Label = null
+var _phase_timer: Timer = null
 var _edit_bar: PanelContainer
 var _layout_option: OptionButton
 var _zone_option: OptionButton
@@ -120,6 +127,7 @@ func _init() -> void:
 
 	_overlay_layer = UiOverlayLayer.new()
 	add_child(_overlay_layer)
+	_build_phase_banner()
 
 	_build_edit_controls()
 
@@ -202,6 +210,7 @@ func setup(p_session: CombatSession, with_autoplay: bool = true) -> void:
 	timeline_modal.block_selected.connect(func(b: int) -> void: session.select_block(b))
 	timeline_modal.combatant_selected.connect(func(c: Combatant) -> void: session.select_combatant(c))
 	session.changed.connect(_on_session_changed)
+	session.phase_fired.connect(_on_phase_fired)
 	apply_layout(DEFAULT_LAYOUT)
 	_sync_zone_option()
 	resized.connect(_fit)
@@ -584,9 +593,73 @@ func _refresh_timeline_modal() -> void:
 # Keyboard shortcuts
 # ------------------------------------------------------------------------------
 
+# BOSS1-U: the banner uses the battle results popup's panel look (opaque panel, header-coloured border); no dim, no art.
+func _build_phase_banner() -> void:
+	_phase_banner = CenterContainer.new()
+	_phase_banner.name = "PhaseBanner"
+	_phase_banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_phase_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_phase_banner.visible = false
+	_phase_banner.z_index = 60   # above the intent arrows (z 1) and the hover card (z 50)
+	add_child(_phase_banner)
+	_phase_panel = PanelContainer.new()
+	_phase_panel.name = "PhasePanel"
+	_phase_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_phase_panel.add_theme_stylebox_override("panel", UiTheme.box(Color(UiTheme.COL_PANEL_BG, 1.0), UiTheme.COL_HEADER, 8, 18, 14, 2))
+	_phase_banner.add_child(_phase_panel)
+	var col := VBoxContainer.new()
+	col.name = "PhaseColumn"
+	col.add_theme_constant_override("separation", 6)
+	_phase_panel.add_child(col)
+	_phase_name = UiTheme.header("")
+	_phase_name.name = "PhaseName"
+	_phase_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_phase_name)
+	_phase_line = UiTheme.label("", UiTheme.FONT_MD, UiTheme.COL_TEXT)
+	_phase_line.name = "PhaseLine"
+	_phase_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_phase_line)
+	_phase_timer = Timer.new()
+	_phase_timer.one_shot = true
+	_phase_timer.wait_time = PHASE_BANNER_SECONDS
+	_phase_timer.timeout.connect(hide_phase_banner)
+	add_child(_phase_timer)
+
+# A phase fired live: show its name and line. Never while a past round is viewed or a replay plays (scrubbing).
+func _on_phase_fired(_entry: ActionLogEntry, info: Dictionary) -> void:
+	if session == null or not session.is_live_view():
+		return
+	var title: String = str(info.get("name", ""))
+	var line: String = str(info.get("line", ""))
+	_phase_name.text = title
+	_phase_line.text = line
+	_phase_line.visible = not line.is_empty()
+	_phase_name.add_theme_font_size_override("font_size", UiTheme.hud_font(18))
+	_phase_line.add_theme_font_size_override("font_size", UiTheme.hud_font())
+	var width: float = minf(PHASE_BANNER_WIDTH, size.x - 64.0)
+	_phase_panel.custom_minimum_size = Vector2(width, 0)
+	_phase_name.custom_minimum_size = Vector2(width - 40.0, 0)   # wrapped labels need a width up front (the style margins are 18 px a side)
+	_phase_line.custom_minimum_size = Vector2(width - 40.0, 0)
+	_phase_banner.visible = true
+	if _phase_timer.is_inside_tree():
+		_phase_timer.start(PHASE_BANNER_SECONDS)
+
+func hide_phase_banner() -> void:
+	_phase_banner.visible = false
+	_phase_timer.stop()
+
+func is_phase_banner_visible() -> bool:
+	return _phase_banner.visible
+
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo or session == null or keys_blocked:
+		return
+	if _phase_banner.visible:   # any key skips the banner (and does nothing else)
+		hide_phase_banner()
+		get_viewport().set_input_as_handled()
 		return
 	var handled: bool = true
 	match key.keycode:
