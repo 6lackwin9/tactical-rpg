@@ -1,5 +1,35 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## HEAL1-B campaign with HEAL1 rules 2026-10-18
+
+Branch claude/heal1-b (develop f3d8ac2, with HEAL1-L, HEAL1-A and the HEAL1-S sim keys). Command `tools/fc.sh sim campaign 5 10 heal=rally rest=3 extra=4:ash_raiders` (level 5, all 10 trios, 10 seeds, both steels, objectives and phases on), against the baseline `campaign 5 10` (heal=none, no rest, no extra) run in parallel. 994 / 784 fights, 0 PLAN FAIL and 0 METRIC FAIL in both. Wall about 29 min (both in parallel, CPU shared with a test run). Logs: scratchpad `heal1b/`.
+
+Finale clear rate (full chain cleared, of 100 per steel):
+
+| Arm | Baseline (none) | HEAL1 rules | Pass |
+| --- | --- | --- | --- |
+| arms | 23 | 46 | 30-55: PASS |
+| gate | 68 | 95 | >= 75: PASS |
+
+Mean battles survived: arms 3.15 -> 3.44, gate 3.60 -> 3.93. Falls: arms 73 at the stand (baseline) vs 53 at the `ash_raiders` filler plus the stand fight (HEAL1 run, the log labels every one "battle 4 (ash_raiders)"; no fall is labelled with the stand), gate 28 vs 4, 1 early fall (B2) per steel in both. So with the rally rules the filler fight before the stand is where arms runs end; the stand itself is not what kills them. Caveat: the log's "survived n/5" with 4 hp entries and the label were not probed further.
+
+Clear per trio, arms / gate of 10 (baseline in brackets):
+
+| Trio | Arms | Gate |
+| --- | --- | --- |
+| ranger, priest | 8 (6) | 10 (10) |
+| ranger, brawler | 8 (2) | 10 (6) |
+| ranger, rogue | 6 (3) | 10 (6) |
+| ranger, mage | 8 (4) | 10 (8) |
+| priest, brawler | 2 (0) | 9 (9) |
+| priest, rogue | 1 (2) | 9 (8) |
+| priest, mage | 6 (6) | 10 (9) |
+| brawler, rogue | 1 (0) | 10 (6) |
+| brawler, mage | 5 (0) | 9 (2) |
+| rogue, mage | 1 (0) | 8 (4) |
+
+Verdict: PASS on both arms (46, inside 30-55) and gate (95, above 75). The spec trigger lists no lever: neither "above 55" (BAL5 F2) nor "below 30" (RALLY_PCT 25 -> 50) fires. Note the spread: ranger trios clear 6-8 of 10 on arms, priest+rogue, brawler+rogue and rogue+mage 1 of 10, so the mean hides trios that never clear the arms path (a trio-balance matter, not a HEAL1 one). Not run: other levels, heal=25 or full on the same chain.
+
 ## BAL5-R1 trio re-measure 2026-10-18
 
 Branch claude/bal5-r1 (develop c78b8ba, BAL5-SIM tooling; not on main yet). Trios are warrior plus two recruits, boss phase on (default), jitter on, 0 PLAN FAIL and 0 METRIC FAIL in every run. Cells: sweep and party 10 seeds, role and tier 3 seeds as the spec says (the role cell is a mean over 6 variants, ranges in the raw logs). Logs: scratchpad `r1/`. Wall about 2 h (4 processes in parallel; role L5 about 1 h, sweeps 20-60 min). Not run (time): role at L3 and L7, tier and party at other levels; the triggers below are all decided on L5 numbers, which is where the spec reads them.
