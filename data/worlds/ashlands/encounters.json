@@ -36,6 +36,7 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
 			"tags": []
 		},
 		{
@@ -73,6 +74,7 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "The warband springs the ambush!",
+			"phases": [],
 			"tags": []
 		},
 		{
@@ -106,6 +108,7 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
 			"tags": []
 		},
 		{
@@ -140,6 +143,7 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
 			"tags": []
 		},
 		{
@@ -173,6 +177,7 @@
 			"wave_round": 1,
 			"wave_block": 4,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
 			"tags": []
 		},
 		{
@@ -211,6 +216,7 @@
 			"wave_round": 2,
 			"wave_block": 1,
 			"wave_label": "The flankers pour out of the gorge!",
+			"phases": [],
 			"tags": []
 		},
 		{
@@ -245,6 +251,7 @@
 			"wave_round": 2,
 			"wave_block": 1,
 			"wave_label": "Reinforcements arrive!",
+			"phases": [],
 			"tags": []
 		}
 	]

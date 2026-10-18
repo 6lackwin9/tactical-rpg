@@ -12,6 +12,7 @@
 		"rogue",
 		"mage"
 	],
+	"party_max": -1,
 	"start_gold": 50,
 	"start_supplies": 10,
 	"service_lines": {},

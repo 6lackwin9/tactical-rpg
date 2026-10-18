@@ -15,7 +15,7 @@
 				}
 			],
 			"encounters": [],
-			"map": "walled_town",
+			"map": "ashlands_warden_keep",
 			"zone_bindings": {},
 			"markers": [
 				{
@@ -80,7 +80,8 @@
 							"value": true
 						}
 					],
-					"lore": "one_fire_lit"
+					"lore": "one_fire_lit",
+					"label": "The keep's hearth"
 				},
 				{
 					"id": "signpost",
@@ -89,8 +90,13 @@
 					"to": "world_map",
 					"requires_flags": [],
 					"unless_flags": [],
-					"sets_flags": []
+					"sets_flags": [],
+					"label": "World map: the roads"
 				}
+			],
+			"map_pos": [
+				0.19,
+				0.65
 			],
 			"tags": []
 		},
@@ -116,7 +122,7 @@
 				"ash_raiders",
 				"ash_patrol"
 			],
-			"map": "gorge_ruins",
+			"map": "ashlands_ruined_courtyard",
 			"zone_bindings": {
 				"ruins": {
 					"encounters": [
@@ -223,6 +229,10 @@
 					"lore": "the_long_dry"
 				}
 			],
+			"map_pos": [
+				0.365,
+				0.55
+			],
 			"tags": []
 		},
 		{
@@ -243,7 +253,7 @@
 				"ash_raiders",
 				"ash_patrol"
 			],
-			"map": "gorge_ruins",
+			"map": "ashlands_cinder_gate",
 			"zone_bindings": {
 				"ruins": {
 					"encounters": [
@@ -310,7 +320,9 @@
 							"key": "ashlands.gate_beacon_lit",
 							"value": true
 						}
-					]
+					],
+					"label": "Signal beacon",
+					"note": "You light the old Warden beacon. Smoke climbs over the pass."
 				},
 				{
 					"id": "camp_cache",
@@ -332,7 +344,8 @@
 					"to": "world_map",
 					"requires_flags": [],
 					"unless_flags": [],
-					"sets_flags": []
+					"sets_flags": [],
+					"label": "World map: the wastes"
 				},
 				{
 					"id": "banner",
@@ -348,6 +361,10 @@
 					"sets_flags": [],
 					"lore": "ashmaw_banner"
 				}
+			],
+			"map_pos": [
+				0.58,
+				0.33
 			],
 			"tags": []
 		},
@@ -370,7 +387,7 @@
 				"ash_scouts",
 				"ash_patrol"
 			],
-			"map": "gorge_ruins",
+			"map": "ashlands_ashmaw_camp",
 			"zone_bindings": {
 				"ruins": {
 					"encounters": [
@@ -436,6 +453,10 @@
 					"radius": 1,
 					"once": true
 				}
+			],
+			"map_pos": [
+				0.78,
+				0.28
 			],
 			"tags": []
 		}
