@@ -26,6 +26,7 @@ static func run() -> bool:
 	ok = _test_bad_files() and ok
 	ok = _test_migrations() and ok
 	ok = _test_peek_versions() and ok
+	ok = _test_heal1_schema() and ok
 	_wipe()
 	SaveGame.reset_base_dir()
 	SaveMigrations.reset()
@@ -271,3 +272,58 @@ static func _test_peek_versions() -> bool:
 	checks["version 1 still peeks ok"] = DictUtil.to_bool(SaveGame.peek(3)["ok"]) and SaveGame.newest_slot() == 3
 	_wipe()
 	return TestHelpers.report(TAG, "peek refuses version-less, 0 and negative files", checks)
+
+# HEAL1-L 4.1-4.2 (acceptance check 9): UnitState.hp_lost, explore.last_rest, the v8 -> v9 step and the location `rest` field.
+static func _test_heal1_schema() -> bool:
+	SaveMigrations.reset()
+	var g: GameState = _rich_state()
+	var checks: Dictionary = {"new state: hp_lost 0, last_rest empty": g.party.members[0].hp_lost == 0 and str(g.explore.get("last_rest", "x")).is_empty()}
+	g.party.members[0].hp_lost = 37
+	g.explore["last_rest"] = "qa:keep"
+	var back: GameState = GameState.from_dict(DictUtil.dict_of(JSON.parse_string(JSON.stringify(g.to_dict()))))
+	checks["hp_lost and last_rest round-trip"] = g.validate().is_empty() and back.equals(g) and back.party.members[0].hp_lost == 37 and back.party.members[1].hp_lost == 0
+	checks["duplicate_state keeps hp_lost"] = g.party.members[0].duplicate_state().hp_lost == 37
+	var other: UnitState = g.party.members[0].duplicate_state()
+	other.hp_lost = 36
+	checks["equals sees hp_lost"] = not other.equals(g.party.members[0])
+	var raw: Dictionary = g.party.members[0].to_dict()
+	raw.erase("hp_lost")
+	checks["missing hp_lost reads 0"] = UnitState.from_dict(raw).hp_lost == 0
+	raw["hp_lost"] = 12.0
+	checks["whole float reads as int"] = UnitState.from_dict(raw).hp_lost == 12
+	var refused: Array[Variant] = [1.5, "x", -3]
+	for bad: Variant in refused:
+		raw["hp_lost"] = bad
+		var u: UnitState = UnitState.from_dict(raw)
+		checks["hp_lost %s refused by validate" % str(bad)] = u.hp_lost < 0 and _joined(u.validate()).contains("hp_lost must be 0 or more.")
+	var bad_rest: GameState = GameState.from_dict(g.to_dict())
+	bad_rest.explore["last_rest"] = "not qualified"
+	checks["unqualified last_rest refused"] = not bad_rest.validate().is_empty()
+	var no_rest: GameState = GameState.from_dict(g.to_dict())
+	no_rest.explore.erase("last_rest")
+	checks["explore without last_rest refused"] = not no_rest.validate().is_empty()
+	var home: GameState = GameState.from_dict(g.to_dict())
+	home.explore[GameState.HOME_WORLD_KEY] = _world()
+	checks["home_world stays optional"] = home.validate().is_empty()
+	# v8 -> v9: hp_lost 0 on every member and explore.last_rest "", nothing else.
+	var v8_state: Dictionary = g.to_dict()
+	for m: Variant in DictUtil.array_of(DictUtil.dict_of(v8_state["party"]).get("members", [])):
+		DictUtil.dict_of(m).erase("hp_lost")
+	DictUtil.dict_of(v8_state["explore"]).erase("last_rest")
+	var up: Dictionary = SaveMigrations.migrate({"version": 8, "game_state": v8_state}, 9)
+	var expect: Dictionary = v8_state.duplicate(true)
+	for m: Variant in DictUtil.array_of(DictUtil.dict_of(expect["party"]).get("members", [])):
+		DictUtil.dict_of(m)["hp_lost"] = 0
+	DictUtil.dict_of(expect["explore"])["last_rest"] = ""
+	var got: Dictionary = DictUtil.dict_of(DictUtil.dict_of(up["data"]).get("game_state", {}))
+	checks["v8_to_v9 adds hp_lost 0 and last_rest only"] = DictUtil.to_bool(up["ok"]) and JsonUtil.deep_equal(got, expect) and DictUtil.array_of(up["warnings"]).is_empty()
+	var loaded: GameState = GameState.from_dict(got)
+	checks["v8 save loads valid at full HP"] = loaded.validate().is_empty() and loaded.party.members[0].hp_lost == 0 and str(loaded.explore["last_rest"]).is_empty()
+	var odd: Dictionary = SaveMigrations.migrate({"version": 8, "game_state": {"world_id": "w", "party": "x", "explore": 3}}, 9)
+	checks["v8_to_v9 skips non-object party / explore"] = DictUtil.to_bool(odd["ok"]) and str(DictUtil.dict_of(DictUtil.dict_of(odd["data"])["game_state"]).get("party", "")) == "x"
+	checks["SaveGame.VERSION >= 9"] = SaveGame.VERSION >= 9
+	# Location field `rest` (4.2): bool, default false, kept through normalize.
+	var rest_field: Dictionary = WorldSchema.field("locations", "rest")
+	checks["location rest is a bool field, default false"] = str(rest_field.get("type", "")) == "bool" and rest_field.get("default", null) == false
+	checks["normalize: missing rest = false, true kept"] = WorldSchema.normalize("locations", {"id": "a"}).get("rest", null) == false and WorldSchema.normalize("locations", {"id": "a", "rest": true}).get("rest", null) == true
+	return TestHelpers.report(TAG, "HEAL1 save v9 and location rest", checks)

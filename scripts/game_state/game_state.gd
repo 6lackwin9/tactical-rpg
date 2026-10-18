@@ -12,11 +12,13 @@ extends RefCounted
 # S10 (TRAV1-L, save v5): time = the world clock (int >= 0), advanced by travel legs.
 # AUTO1-L (save v7): autoplay = {on: bool, party: tactic id, heroes: {party member id: tactic id or "custom"}}, the
 # remembered battle-autoplay choice (PlanPresets.AUTO_IDS; off in a new game). CombatAutoplay reads and writes it.
+# HEAL1-L (save v9): explore.last_rest = qualified id of the last rest place entered ("" = the start location; an id
+# that no longer resolves is read as "" by the runtime, never a load error); party members store hp_lost (UnitState).
 # ==============================================================================
 
 const KEYS: Array[String] = ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay"]
 const AUTOPLAY_KEYS: Array[String] = ["on", "party", "heroes"]
-const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe"]
+const EXPLORE_KEYS: Array[String] = ["steps", "next_at", "loc_steps", "last_safe", "last_rest"]
 const HOME_WORLD_KEY: String = "home_world"   # optional extra explore key: the world a `connects` crossing left (absent = none)
 const NO_POSITION: Vector2i = Vector2i(-1, -1)
 const SEED_MAX: int = 2147483647
@@ -37,7 +39,7 @@ var autoplay: Dictionary = default_autoplay()   # AUTO1-L remembered autoplay ch
 var load_problems: Array[String] = []   # raw type problems found by from_dict (not saved; validate() reports them)
 
 static func default_explore() -> Dictionary:
-	return {"steps": 0, "next_at": 16, "loc_steps": 0, "last_safe": ""}
+	return {"steps": 0, "next_at": 16, "loc_steps": 0, "last_safe": "", "last_rest": ""}
 
 static func default_autoplay() -> Dictionary:
 	return {"on": false, "party": PlanPresets.DEFAULT_TACTIC, "heroes": {}}
@@ -137,7 +139,7 @@ static func from_dict(d: Dictionary) -> GameState:
 		g.position = Vector2i(DictUtil.to_int(pos[0]), DictUtil.to_int(pos[1]))
 	var raw_explore: Variant = JsonUtil.normalize(d.get("explore", default_explore()))
 	if not (raw_explore is Dictionary):
-		g.load_problems.append("explore must be {steps, next_at, loc_steps, last_safe}.")
+		g.load_problems.append("explore must be {steps, next_at, loc_steps, last_safe, last_rest}.")
 	else:
 		g.explore = raw_explore
 	var raw_seed: Variant = JsonUtil.normalize(d.get("rng_seed", 0))
@@ -251,6 +253,7 @@ static func explore_errors(e: Dictionary) -> Array[String]:
 		ok = e["steps"] is int and DictUtil.to_int(e["steps"]) >= 0 and e["loc_steps"] is int and DictUtil.to_int(e["loc_steps"]) >= 0
 		ok = ok and e["next_at"] is int and DictUtil.to_int(e["next_at"]) >= 1 and DictUtil.to_int(e["next_at"]) <= 99
 		ok = ok and e["last_safe"] is String and (str(e["last_safe"]).is_empty() or QuestRules.blob_key_ok(str(e["last_safe"])))
+		ok = ok and e["last_rest"] is String and (str(e["last_rest"]).is_empty() or QuestRules.blob_key_ok(str(e["last_rest"])))
 	if not ok:
-		errors.append("explore must be {steps, next_at, loc_steps, last_safe}.")
+		errors.append("explore must be {steps, next_at, loc_steps, last_safe, last_rest}.")
 	return errors

@@ -627,6 +627,8 @@ Battle items in play (ITEMUSE1-L stage 2): in planning, `Use <item> (<n> left)` 
 
 Battle pouch on the Gear screen (ITEMUSE1-U): out of battle, the Gear screen has a "Battle pouch" section under the slots and stash: three slot rows (item name + Remove, or a muted "Empty") and the stash consumables the pouch accepts, each with its count and an Add button (disabled while the pouch is full). Add and Remove edit the `GearModel` draft like gear (the stash count changes at once; nothing is written until Confirm; Cancel or Back discards). Slots and stash sit in a scroll area (`GearScroll`) so Confirm / Back stay on screen at every text size. Tested in `party_screen_test_suite.gd` (`_test_pouch_screen`).
 
+Between-battle healing, schema (HEAL1-L stage 1): save version 9 stores each hero's missing HP (`UnitState.hp_lost`, 0 = full; older saves load at full HP) and the last rest place entered (`explore.last_rest`, "" = the start location); world locations gain `rest` (default false), a place where the party rests on arrival. The rules (stored HP after battles, rest, make camp, defeat cost) land with stage 2. Tested in `save_test_suite.gd` and `save_compat_test_suite.gd`.
+
 Road data (TRAV1-A, seed `data/seeds/trav1a.gd`): the old road from Warden Keep to the Ruined Courtyard (time 2, a one-shot `ash_raiders` ambush before the courtyard is held), the high road to the Cinder Gate (time 4, closed until `ashlands.courtyard_held`), and the two-way south road from the Iron Reaches Slag Gate to Warden Keep (time 6, owned by Iron Reaches). Warden Keep (`signpost`) and the Cinder Gate (`wastes_road`) have exits to the world map.
 
 ### Reputation (REP1-L)

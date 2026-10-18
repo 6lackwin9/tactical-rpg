@@ -161,6 +161,8 @@ static func _location_fields() -> Array[Dictionary]:
 		_f("markers", "Markers", "json", [], {"help": "[{\"id\", \"kind\": exit|encounter|roamer|npc|chest|lore|point, \"anchor\", \"label\" (max 32), \"note\" (points only, max 160), ...}] placed on the map's anchors (a roamer walks a path instead)."}),
 		# World-map position (MAPREAD1-L1): [] = automatic layout, else [x, y] in 0..1.
 		_f("map_pos", "World-map position", "json", [], {"help": "[] = automatic layout, or [x, y] with each number 0..1 (0,0 top-left of the world map)."}),
+		# Rest place (HEAL1-L 4.2): an explicit flag, not the kind (a gate can be a battlefield). Read by HealRules / ExploreRunner.
+		_f("rest", "Rest place", "bool", false, {"help": "The party rests here on arrival: everyone's HP is restored."}),
 	]
 
 static func _faction_fields() -> Array[Dictionary]:

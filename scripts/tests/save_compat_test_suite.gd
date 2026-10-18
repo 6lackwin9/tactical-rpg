@@ -78,6 +78,13 @@ static func _check_version(version: int) -> bool:
 			for m: UnitState in g.party.members:
 				empty = empty and m.pouch.is_empty()
 			checks["pouch migrated empty"] = empty   # ITEMUSE1-L: v7 -> v8
+		var lost: Array[int] = []
+		for m: UnitState in g.party.members:
+			lost.append(m.hp_lost)
+		if version >= 9:
+			checks["hp_lost and last_rest"] = lost.has(37) and str(g.explore.get("last_rest", "")) == "ashlands:warden_keep"
+		else:
+			checks["hp_lost 0 and last_rest empty"] = lost.max() == 0 and lost.min() == 0 and str(g.explore.get("last_rest", "x")).is_empty()   # HEAL1-L: v8 -> v9
 		if version >= 6:
 			checks["supplies"] = g.party.supplies == 7
 			var again: Dictionary = SaveGame.decode(JSON.stringify({"format": SaveGame.FORMAT, "version": SaveGame.VERSION, "saved_at": 1, "game_state": g.to_dict()}))
