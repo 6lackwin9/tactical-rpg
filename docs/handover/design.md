@@ -1,19 +1,24 @@
 # Design handover
 
-Written 2026-10-18 01:10 UTC (updated; first written 00:25) by the Design session ("Fresh sessions" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`.
+Written 2026-10-18 08:25 UTC by the Design session (rotation by context size, `cloud.md` "Usage caps"). Read this, then `docs/workflow/cloud.md` and `docs/workflow/design-review.md`.
 
 ## Queue
 
-- 2026-10-18 02:45: design review cycle set up (`docs/workflow/design-review.md`, ledger `docs/design/OPTION_BRANCHES.md`, decision workflow "Design review cycle"). Routine "Design review check" (trig_01C87VVsqRTJWf99ggm9vqam, 12:20 and 18:20 UTC) is bound to the Design session; a new session recreates it and asks the coordinator to disable the old one. First review due when RECRUIT1-L, INTENT1-L, MAPREAD1-L1, ITEMUSE1-L and MAPREAD1-L2 are on `develop`. OPTLAUNCH1 (Platform) adds `run.bat opt`.
+- Nothing waits on the user from Design. All cards answered (BREPORT1, BAL5, Orsa quest, HEAL1).
+- Next spec: MORALE1 (enemy morale, builds on OBJ1 slay; TASKS row, `docs/specs/DESIGN_REVIEW1.md` 4.3) once OBJ1-L is on `develop`. Then the remaining DR1 design rows in `docs/TASKS.md` (for example COMBO-A2).
+- First design review: due when RECRUIT1-L, INTENT1-L, MAPREAD1-L1, ITEMUSE1-L and MAPREAD1-L2 are on `develop` (`docs/design/OPTION_BRANCHES.md`). Candidate option-build ideas are listed there. Option builds need the rotating build slot from the coordinator.
 
-- Empty: no design task is waiting.
-- Design review 2026-10-18 delivered to Tushar: `/mnt/project-files/design-review/DESIGN_REVIEW_2026-10-18.md` (23 approve/skip items, top 5: campaign-true balance run, items in battle, fewer/harder Ashlands fights, battle objectives and deployment variants, Grakka boss phases; 3 open questions: intent tells, injury cost, recruit method). Answered 01:34 (all recs with changes): decisions world-campaign "DR1 design review answers" and combat "DR1 enemy intent tells", HISTORY row (injuries rejected), review copied to `docs/specs/DESIGN_REVIEW1.md`, 19 TASKS rows (BAL4-ATTR first; then HEAL1, MAPREAD1, RECRUIT1, ITEMUSE1, INTENT1, BOSS1, OBJ1 specs, in that order). Spec work is next for the Design thread; BAL4-ATTR goes to Balance, MAPREAD1 aligns with UI/UX's full-screen maps.
-- AUTO1 (battle autoplay) is approved and done as a spec: `docs/specs/AUTO1.md`, decision "AUTO1 battle autoplay (user 2026-10-18)" in `docs/decisions/combat.md`, build row AUTO1-L (logic, Gameplay) in `docs/TASKS.md`. It shares `scripts/ui/combat/*` with UIR-5 and UI/UX's combat layout mockups, so Gameplay should land after them or merge carefully; the layout decides where the dropdowns sit, the spec decides what they do.
-- Ideas from CAMP1 that need Tushar before speccing: CAMP1-P (recorded New Game to ending playthrough, needs PLAYTEST2 for a clean replay), QUESTX (quests of `connects` worlds, so `iron_reaches:iron_for_embers` can finish).
+## Handed off today
 
-## Notes for the next session
+- BREPORT1-L to Gameplay (BREPORT1-U to UI/UX after UIR-4).
+- BAL5-SIM/R1/AI/PH/L/A/R to Balance (trio re-measure first).
+- HEAL1-L to Gameplay (pings Assets for HEAL1-A, UI/UX for HEAL1-U, Balance for HEAL1-S/B). Not parallel with BREPORT1-L. User changed the defeat rule: 3 supplies forced rest at the last checkpoint, else back to the last rest place (decision progression-save "HEAL1 between-battle healing").
+- OPTLAUNCH1 landed (Platform): `run.bat opt a|b|c`.
 
-- The player AI drafting already existed (`PlanPresets` + `TacticalAI`, the Draft menu); AUTO1 is the loop and the dropdown UI around it. Check for an existing preset or AI hook before speccing new AI features.
-- A short spec written directly by the thread (no design-brainstorm run) was enough for a UI-loop feature; keep brainstorm runs for new systems.
-- 2026-10-18 01:55: RECRUIT1, ITEMUSE1, INTENT1, MAPREAD1 specs approved (all recs, decision world-campaign "DR1 specs approved"); 11 build rows approved and handed to the coordinator for Gameplay, UI/UX and Assets. Next design specs: HEAL1 (after BAL4-ATTR), BOSS1, OBJ1, then the rest of the DR1 rows.
-- 2026-10-18 02:10: BOSS1 and OBJ1 approved (decision combat "BOSS1 and OBJ1"; OBJ1 hold count changed by the user). Build rows approved. Next specs: HEAL1 waits on BAL4-ATTR; then MORALE1 (on OBJ1 slay), BREPORT1, the rest of DR1.
+## Routines
+
+- "Design review check" trig_01C87VVsqRTJWf99ggm9vqam (12:20 and 18:20 UTC) is bound to the old Design session. The new session recreates it bound to itself (same prompt as in `design-review.md` "The check routine") and asks the coordinator to disable the old one.
+
+## Session ids for hand-offs (2026-10-18 08:20)
+
+Gameplay cse_017rPg9X4j3FhvPDo3t93bwo, UI/UX cse_01Rs6SLjohzJBiLs4ezyKKBN, Assets & Audio cse_01UywiZpBegbdrmR76smao3d, Balance cse_012hWXrrHGj1VxCBHAEN59mo (may have rotated), Platform cse_01BW1xnuo5QGUqFTpZpTWKyj.

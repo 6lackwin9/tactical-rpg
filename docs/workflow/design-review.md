@@ -29,6 +29,7 @@ A routine bound to the Design session fires at 12:20 and 18:20 UTC, after the 11
 ## Option builds (up to 3)
 
 1. Pick the report items that are easier to judge by playing than by reading (feel, pacing, layout). Group them into at most **3 options**, each a coherent direction (for example A: faster battles, B: more tactical battles, C: a middle path). Fewer is fine.
+   Building option branches needs the rotating build slot (`cloud.md` "Usage caps"): ask the coordinator for it before step 3 and hand it back when the set is built; the report itself is spec work and needs no slot. Reviews and specs run in standard mode.
 2. Each option gets a branch cut from the `develop` commit the review covered: `claude/design-opt-<YYYYMMDD>-a`, `-b`, `-c`. The date keeps sets from different reviews apart.
 3. The Design thread builds them with the lane agents (`logic-builder` for code, `asset-builder` for data, as in `cloud.md` "Lanes"): a mock build, not production work. Rules:
    - **One change per commit**, titled `OPT-<letter><n>: <plain description>` (for example `OPT-A2: enemies act before the party on round 1`), so any commit can be cherry-picked alone. A commit that needs an earlier one says so in the ledger (`needs A1`).
