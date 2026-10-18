@@ -27,6 +27,7 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _test_shipped_save_checks() and ok
 	ok = _test_inheritance() and ok
 	ok = _test_same_base_different_lore() and ok
+	ok = _test_ashlands_art_resolves() and ok
 	ok = _test_tuning_items_disciplines() and ok
 	ok = _test_encounters_play() and ok
 	var forked: bool = TestHelpers.fork_worlds(SANDBOX)
@@ -140,6 +141,22 @@ static func _test_inheritance() -> bool:
 	checks["unknown parent rejected"] = not WorldCatalog.update_manifest("ashlands", {"extends": ["nowhere"]}).is_empty()
 	return TestHelpers.report_ok(TAG, "Inheritance: namespaced entries, overrides replace for the child only, old ids redirect, cycles rejected", TestHelpers.failed(checks).is_empty(), TestHelpers.failed(checks))
 
+# Every Ashlands character's art key resolves to a file for token and portrait; the Ember Brigandine's icon to its file.
+static func _test_ashlands_art_resolves() -> bool:
+	var bad: Array[String] = []
+	var count: int = 0
+	for e: Dictionary in WorldCatalog.own_entries("ashlands", "characters"):
+		var art: String = str(e.get("art", ""))
+		count += 1
+		for variant: String in ["token", "portrait"]:
+			if art.is_empty() or str(AssetRegistry.resolve("unit", art, variant)["source"]) != "file":
+				bad.append("%s/%s" % [str(e.get("id", "")), variant])
+	var item: Dictionary = WorldCatalog.get_own("ashlands", "items", "ember_brigandine")
+	var icon: Dictionary = AssetRegistry.resolve("item", str(item.get("icon_id", "")), "icon")
+	if item.is_empty() or str(icon["source"]) != "file":
+		bad.append("ember_brigandine/icon")
+	return TestHelpers.report_ok(TAG, "Ashlands characters' art keys and the Ember Brigandine icon resolve to files (%d characters)" % count, bad.is_empty() and count > 0, str(bad))
+
 # Same base units in two worlds, different lore: they play the same (tuning deltas aside).
 static func _test_same_base_different_lore() -> bool:
 	var ash := WorldEncounter.new("ashlands", "courtyard_skirmish")
@@ -150,6 +167,8 @@ static func _test_same_base_different_lore() -> bool:
 	checks["same roster size"] = ash.allies.size() == tide.allies.size() and ash.enemies.size() == tide.enemies.size() and ash.enemies.size() == 5
 	var names_differ: bool = true
 	var stats_same: bool = true
+	var same_base: bool = true
+	var art_ok: bool = true
 	var detail: Array[String] = []
 	var all_ash: Array[Combatant] = ash.allies + ash.enemies
 	var all_tide: Array[Combatant] = tide.allies + tide.enemies
@@ -157,14 +176,24 @@ static func _test_same_base_different_lore() -> bool:
 		var a: Combatant = all_ash[i]
 		var b: Combatant = all_tide[i]
 		names_differ = names_differ and a.name != b.name
+		var char_a: Dictionary = WorldCatalog.resolve("ashlands", "characters", a.lore_ref)
+		var char_b: Dictionary = WorldCatalog.resolve("tidewrack", "characters", b.lore_ref)
+		var base_a: Dictionary = ContentCatalog.get_entry("units", str(char_a.get("base_unit", "")))
+		var base_b: Dictionary = ContentCatalog.get_entry("units", str(char_b.get("base_unit", "")))
+		same_base = same_base and not base_a.is_empty() and str(char_a.get("base_unit", "")) == str(char_b.get("base_unit", ""))
+		# A unit's art key is its character's own `art`, or the base unit's art when that is "".
+		art_ok = art_ok and ash.class_of(a) == (str(char_a.get("art", "")) if not str(char_a.get("art", "")).is_empty() else ContentFactory.art_of(base_a))
+		art_ok = art_ok and tide.class_of(b) == (str(char_b.get("art", "")) if not str(char_b.get("art", "")).is_empty() else ContentFactory.art_of(base_b))
 		var same: bool = (a.max_hp == b.max_hp and a.speed == b.speed and a.attack_range == b.attack_range and a.max_ap == b.max_ap
 			and DamageCalculator.power_of(a, a.attack_range > 1) == DamageCalculator.power_of(b, b.attack_range > 1)
-			and DamageCalculator.armor_rating(a) == DamageCalculator.armor_rating(b) and ash.class_of(a) == tide.class_of(b)
+			and DamageCalculator.armor_rating(a) == DamageCalculator.armor_rating(b)
 			and a.known_skills == b.known_skills)
 		if not same:
 			detail.append("%s/%s" % [a.name, b.name])
 		stats_same = stats_same and (same or b.lore_ref == "tidewrack:captain_dredge")   # the tuned boss differs on purpose
 	checks["lore names differ"] = names_differ
+	checks["same base unit in both worlds"] = same_base
+	checks["art key = the character's own art, else the base unit's"] = art_ok
 	checks["gameplay identical except the tuned boss"] = stats_same
 	# Behaviour is the base unit's: identical damage and the same AI plan.
 	var skarn: Combatant = ash.unit("skarn_ironjaw")

@@ -14,7 +14,8 @@
 			},
 			"stat_bonuses": {},
 			"grants": [],
-			"tags": []
+			"tags": [],
+			"icon_id": "ember_brigandine"
 		}
 	]
 }

@@ -221,6 +221,776 @@
 				]
 			},
 			"tags": []
+		},
+		{
+			"id": "ashlands_warden_keep",
+			"name": "Ashlands: Warden Keep yard",
+			"rows": [
+				"################################################",
+				"#..............................................#",
+				"#..............................................#",
+				"#...##########....................##########...#",
+				"#...##########....................##########...#",
+				"#...##########....................##########...#",
+				"#...##########....................##########...#",
+				"#...##########....................##########...#",
+				"#...##########....................##########...#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#.....................~~~~~....................#",
+				"#.....................~~~~~....................#",
+				"#.....................~~~~~....................#",
+				"#...#########......................#########...#",
+				"#...#########......................#########...#",
+				"#...#########......................#########...#",
+				"#...#########......................#########...#",
+				"#...#########......................#########...#",
+				"#...#########......................#########...#",
+				"#...#########......................#########...#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"########################.#######################"
+			],
+			"zones": [
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss",
+				"ssssssssssssssssssssssssssssssssssssssssssssssss"
+			],
+			"zone_legend": {
+				"s": {
+					"id": "town",
+					"kind": "safe"
+				}
+			},
+			"anchors": [
+				{
+					"id": "spawn",
+					"x": 24,
+					"y": 27
+				},
+				{
+					"id": "gate",
+					"x": 24,
+					"y": 29
+				},
+				{
+					"id": "road",
+					"x": 2,
+					"y": 27
+				},
+				{
+					"id": "npc_a",
+					"x": 14,
+					"y": 12
+				},
+				{
+					"id": "npc_b",
+					"x": 33,
+					"y": 12
+				},
+				{
+					"id": "npc_c",
+					"x": 24,
+					"y": 2
+				},
+				{
+					"id": "npc_d",
+					"x": 45,
+					"y": 12
+				},
+				{
+					"id": "chest_a",
+					"x": 2,
+					"y": 2
+				},
+				{
+					"id": "lore_a",
+					"x": 24,
+					"y": 12
+				}
+			],
+			"paths": {},
+			"tags": [
+				"ashlands"
+			]
+		},
+		{
+			"id": "ashlands_ruined_courtyard",
+			"name": "Ashlands: Ruined Courtyard",
+			"rows": [
+				"################################################",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#...................................~~~~~......#",
+				"#...................................~~~~~......#",
+				"#.............##......##......##....~~~~~......#",
+				"#.............##......##......##....~~~~~......#",
+				"#..............................................#",
+				"#..............................................#",
+				"#.................###....####..................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"................................................",
+				"#..............................................#",
+				"#..............................................#",
+				"#.................####.........................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#.............##......##......##......##.......#",
+				"#....~~~~.....##......##......##......##.......#",
+				"#....~~~~......................................#",
+				"#....~~~~......................................#",
+				"#....~~~~......................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"################################################"
+			],
+			"zones": [
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd"
+			],
+			"zone_legend": {
+				"s": {
+					"id": "camp",
+					"kind": "safe"
+				},
+				"d": {
+					"id": "ruins",
+					"kind": "danger"
+				}
+			},
+			"anchors": [
+				{
+					"id": "spawn",
+					"x": 3,
+					"y": 14
+				},
+				{
+					"id": "west",
+					"x": 0,
+					"y": 14
+				},
+				{
+					"id": "west_in",
+					"x": 1,
+					"y": 14
+				},
+				{
+					"id": "east",
+					"x": 47,
+					"y": 14
+				},
+				{
+					"id": "east_in",
+					"x": 46,
+					"y": 14
+				},
+				{
+					"id": "camp_npc",
+					"x": 3,
+					"y": 6
+				},
+				{
+					"id": "camp_chest",
+					"x": 2,
+					"y": 25
+				},
+				{
+					"id": "site_a",
+					"x": 30,
+					"y": 14
+				},
+				{
+					"id": "site_b",
+					"x": 40,
+					"y": 14
+				},
+				{
+					"id": "altar",
+					"x": 43,
+					"y": 3
+				},
+				{
+					"id": "ruin_chest",
+					"x": 44,
+					"y": 25
+				},
+				{
+					"id": "ruin_lore",
+					"x": 20,
+					"y": 24
+				}
+			],
+			"paths": {
+				"patrol": [
+					[
+						16,
+						26
+					],
+					[
+						17,
+						26
+					],
+					[
+						18,
+						26
+					],
+					[
+						19,
+						26
+					],
+					[
+						20,
+						26
+					],
+					[
+						21,
+						26
+					],
+					[
+						22,
+						26
+					],
+					[
+						23,
+						26
+					],
+					[
+						24,
+						26
+					],
+					[
+						25,
+						26
+					],
+					[
+						26,
+						26
+					],
+					[
+						27,
+						26
+					],
+					[
+						28,
+						26
+					],
+					[
+						29,
+						26
+					],
+					[
+						30,
+						26
+					],
+					[
+						31,
+						26
+					],
+					[
+						32,
+						26
+					]
+				]
+			},
+			"tags": [
+				"ashlands"
+			]
+		},
+		{
+			"id": "ashlands_cinder_gate",
+			"name": "Ashlands: Cinder Gate gorge",
+			"rows": [
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"#........##....##......##........##....##......#",
+				"#........##....##......##........##....##......#",
+				"#......................##......................#",
+				"#......................##..................##..#",
+				"#..........................~~..............##..#",
+				"...........................~~..............##...",
+				"#..........................................##..#",
+				"#..........................................##..#",
+				"#..............................................#",
+				"#..........##....##......##........##....##....#",
+				"#..........#.............##........##....##....#",
+				"#..........##....##......##........##....##....#",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################",
+				"################################################"
+			],
+			"zones": [
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd"
+			],
+			"zone_legend": {
+				"s": {
+					"id": "camp",
+					"kind": "safe"
+				},
+				"d": {
+					"id": "ruins",
+					"kind": "danger"
+				}
+			},
+			"anchors": [
+				{
+					"id": "spawn",
+					"x": 3,
+					"y": 14
+				},
+				{
+					"id": "west",
+					"x": 0,
+					"y": 14
+				},
+				{
+					"id": "west_in",
+					"x": 1,
+					"y": 14
+				},
+				{
+					"id": "east",
+					"x": 47,
+					"y": 14
+				},
+				{
+					"id": "east_in",
+					"x": 46,
+					"y": 14
+				},
+				{
+					"id": "camp_npc",
+					"x": 3,
+					"y": 10
+				},
+				{
+					"id": "camp_chest",
+					"x": 2,
+					"y": 19
+				},
+				{
+					"id": "site_a",
+					"x": 30,
+					"y": 14
+				},
+				{
+					"id": "site_b",
+					"x": 40,
+					"y": 14
+				},
+				{
+					"id": "altar",
+					"x": 43,
+					"y": 10
+				},
+				{
+					"id": "ruin_chest",
+					"x": 44,
+					"y": 19
+				},
+				{
+					"id": "ruin_lore",
+					"x": 20,
+					"y": 18
+				}
+			],
+			"paths": {
+				"patrol": [
+					[
+						12,
+						19
+					],
+					[
+						13,
+						19
+					],
+					[
+						14,
+						19
+					],
+					[
+						15,
+						19
+					],
+					[
+						16,
+						19
+					],
+					[
+						17,
+						19
+					],
+					[
+						18,
+						19
+					],
+					[
+						19,
+						19
+					],
+					[
+						20,
+						19
+					],
+					[
+						21,
+						19
+					],
+					[
+						22,
+						19
+					],
+					[
+						23,
+						19
+					],
+					[
+						24,
+						19
+					]
+				]
+			},
+			"tags": [
+				"ashlands"
+			]
+		},
+		{
+			"id": "ashlands_ashmaw_camp",
+			"name": "Ashlands: Ashmaw Camp",
+			"rows": [
+				"################################################",
+				"#..............................................#",
+				"#..............................................#",
+				"#.......................................~~~~~~.#",
+				"#.........................###...........~~~~~~.#",
+				"#.........................###...........~~~~~~.#",
+				"#.........................###...........~~~~~~.#",
+				"#..............................................#",
+				"#.......###....................................#",
+				"#.......###....................................#",
+				"#.......###....................................#",
+				"#...........###...................###..........#",
+				"#...........###...................###..........#",
+				"#...........###........###........###..........#",
+				".......................###......................",
+				"#......................###.....................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#.................###.........###..............#",
+				"#.................###.........###..............#",
+				"#.................###.........###..............#",
+				"#..............................................#",
+				"#...........###.......................###......#",
+				"#...........###.......................###......#",
+				"#...........###.......................###......#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"#..............................................#",
+				"################################################"
+			],
+			"zones": [
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd",
+				"ssssssssssdddddddddddddddddddddddddddddddddddddd"
+			],
+			"zone_legend": {
+				"s": {
+					"id": "camp",
+					"kind": "safe"
+				},
+				"d": {
+					"id": "ruins",
+					"kind": "danger"
+				}
+			},
+			"anchors": [
+				{
+					"id": "spawn",
+					"x": 3,
+					"y": 14
+				},
+				{
+					"id": "west",
+					"x": 0,
+					"y": 14
+				},
+				{
+					"id": "west_in",
+					"x": 1,
+					"y": 14
+				},
+				{
+					"id": "east",
+					"x": 47,
+					"y": 14
+				},
+				{
+					"id": "east_in",
+					"x": 46,
+					"y": 14
+				},
+				{
+					"id": "camp_npc",
+					"x": 3,
+					"y": 5
+				},
+				{
+					"id": "camp_chest",
+					"x": 2,
+					"y": 24
+				},
+				{
+					"id": "site_a",
+					"x": 26,
+					"y": 12
+				},
+				{
+					"id": "site_b",
+					"x": 24,
+					"y": 9
+				},
+				{
+					"id": "altar",
+					"x": 44,
+					"y": 9
+				},
+				{
+					"id": "ruin_chest",
+					"x": 44,
+					"y": 27
+				},
+				{
+					"id": "ruin_lore",
+					"x": 20,
+					"y": 25
+				}
+			],
+			"paths": {
+				"patrol": [
+					[
+						10,
+						26
+					],
+					[
+						11,
+						26
+					],
+					[
+						12,
+						26
+					],
+					[
+						13,
+						26
+					],
+					[
+						14,
+						26
+					],
+					[
+						15,
+						26
+					],
+					[
+						16,
+						26
+					],
+					[
+						17,
+						26
+					],
+					[
+						18,
+						26
+					],
+					[
+						19,
+						26
+					],
+					[
+						20,
+						26
+					],
+					[
+						21,
+						26
+					],
+					[
+						22,
+						26
+					],
+					[
+						23,
+						26
+					],
+					[
+						24,
+						26
+					],
+					[
+						25,
+						26
+					],
+					[
+						26,
+						26
+					],
+					[
+						27,
+						26
+					],
+					[
+						28,
+						26
+					],
+					[
+						29,
+						26
+					],
+					[
+						30,
+						26
+					]
+				]
+			},
+			"tags": [
+				"ashlands"
+			]
 		}
 	]
 }
