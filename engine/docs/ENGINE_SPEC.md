@@ -226,3 +226,15 @@ Open:
    only for agent and dev panels (tuning, inspectors). egui on its own does not
    give pixel-perfect art.
 2. When to formally add the engine to `docs/ROADMAP.md` and `docs/DECISIONS.md`.
+
+## 11. Backlog after the transition (look and feel)
+
+Function first: every Godot screen is replicated with its placeholder logic before polish (user, 2026-10-19).
+Wanted once the game runs on the engine:
+
+| Item | Note |
+| :--- | :--- |
+| Move path indicator | The planned route drawn tile by tile while choosing a destination |
+| Skill range indicator | The reach band of the hovered or chosen skill shaded on the grid |
+| Unit commands available on move | Choosing a tile offers the unit's actions from there, not only "Move here" |
+| Visual style pass | Godot's UI was function over form; the look is designed after the move |
