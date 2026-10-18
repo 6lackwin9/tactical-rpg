@@ -22,6 +22,7 @@ var deployment: String = EncounterObjectives.STANDARD
 var protected_guests: Array[Combatant] = []   # guests that must live (OBJ1 `protect`)
 var _verdict: String = ""   # the last non-empty verdict (round_summary reads it)
 const FLED_TEXT: String = "The party withdrew."
+const PHASE_SOURCE: String = "phase:"   # status source prefix of a phase's status grants ("phase:<id>"; BattleMetrics credits the enemy recipient)
 
 func _init(p_encounter_id: String = "") -> void:
 	encounter_id = p_encounter_id
@@ -320,7 +321,7 @@ func _fire_phase(id: String, round_num: int, block_num: int) -> ActionLogEntry:
 		var granted: bool = false
 		for c: Combatant in units_of_ref(str(fx["unit"])):
 			if c.is_active() and grid.has_combatant(c) and not is_reserved(c):
-				StatusEffects.grant_now(c, status, DictUtil.to_int(fx["rounds"]), DictUtil.to_int(fx["magnitude"]), "phase:%s" % id)
+				StatusEffects.grant_now(c, status, DictUtil.to_int(fx["rounds"]), DictUtil.to_int(fx["magnitude"]), PHASE_SOURCE + id)
 				granted = true
 		if granted:
 			parts.append(StatusEffects.display_name(status))
