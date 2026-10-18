@@ -2,12 +2,15 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: fb133e2 -->
+<!-- last: c5d9544 -->
 
 ## 2026-10-18
 
 In the game:
 
+- New combat screen layout. A slim strip at the top shows your selected hero's plan as coloured blocks, next to the tactics pickers, Autoplay, Clear and Confirm round. Your party is on the left with a panel for the selected hero; enemies are on the right with one combined enemy card showing their state, stats, next move and what your hero would deal and take. The battle log runs along the bottom (click it or press L to expand).
+- Confirm round now asks first if a hero still has empty action blocks. You can turn this off in Settings > Gameplay > Warn about missing actions.
+- Picking a Party or Hero tactic fills any empty blocks for you (a basic strike in reach, otherwise Rest). Enemy HP now sits on the same line as their name.
 - In the Ashlands, the ash scouts and ash raiders now lose heart as the fight turns against them. Kill half of them, or the raiders' smokecaller, and the rest throw down their arms and surrender, which counts as a win.
 - Talking to people now opens a bar across the bottom of the map with their portrait and numbered choices (press 1-9). Locked choices say why. The shop is now a popup with Buy and Sell tabs, and shows who in your party can use each item. Both follow the text size setting.
 - **Map screens**: the region and world maps no longer show debug tools in the real game; the top bar shows the place name and your supplies, and chest notes name the items inside.
@@ -35,6 +38,10 @@ In the game:
 
 Every change that touched the game:
 
+- COMBAT-UI3-F: drafts fill empty blocks, hostile HP beside name, compact strip labels (ce3c381)
+- PURSE1-L: encounter purses pay gold and loot on a win (save v10); no fight has a purse until PURSE1-A data (d0bcc9a)
+- COMBAT-UI3: combat HUD layout A (planning strip, merged enemy card, hero panel) (d2d1d64)
+- PURSE1-L (schema): encounter purse field and validation (02980d3)
 - PACE1-L: two-act boss behaviour (enrage by HP or round, empower buff, enraged intents shown, world start buffs, Forge warning); no boss uses it until PACE1-A data (a1ca665)
 - MORALE1-A: enemy morale on ash_scouts and ash_raiders (69c82e0)
 - UIR-6: dialogue as a full-width bottom bar, shop as a popup, text scale (c2de328)
@@ -125,6 +132,12 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- RELEASE-LOGS: shared logs for the evening batch
+- Wind-down handovers: UI/UX (c5d9544, 46133e3), Gameplay (f4133b6), Balance (7643049, d9d8dcb), Assets & Audio (6378713), Design (088910b)
+- INTERACTIVE: new interactive mode; work-starting routines paused (e6582f7)
+- BALANCE: trio sweep bands approved; walk-in taunt answer (a673f83, 8971de9)
+- MORALE1-B: morale balance probe report (7bda7b5)
+- PATCH-NOTES-BATCH: patch notes once per release, not per landing (f1db72d)
 - USAGE: 15:59 usage report and delta (fb133e2)
 - BALANCE-HANDOVER: PACE1-S unblocked (6e72b3b)
 - MODE-ECONOMY: economy dispatch window 15:45-18:45 UTC; mode-trial rows updated (6fb06ac)
