@@ -281,10 +281,12 @@ func finish() -> void:
 	finished.emit(outcome)
 
 # ITEMUSE1 rule 7: the heroes' unused pouch items go back to their saved pouches (every outcome; guests never).
+# HEAL1 rule 3.4: then the heroes' HP (won / fled; a loss is healed by ExploreRunner.wake).
 func _write_back() -> void:
 	if session != null and session.encounter is GameEncounter:
 		var game_enc: GameEncounter = session.encounter as GameEncounter
 		game_enc.write_back_pouches()
+		game_enc.write_back_hp(outcome)
 
 # Frees the arena (its _exit_tree disposes the session) and this screen.
 func close() -> void:

@@ -182,18 +182,25 @@ static func resolve_location(gs: GameState, ref: String) -> Dictionary:
 			hit = WorldCatalog.resolve(parts[0], "locations", parts[1])
 	return hit
 
-static func enter(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> Dictionary:
+# Why enter(gs, location_ref, anchor) would be refused ("" = it can enter); changes nothing.
+static func entry_problem(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> String:
 	var loc: Dictionary = resolve_location(gs, location_ref)
 	if loc.is_empty():
-		return _fail("Unknown location '%s'." % location_ref)
+		return "Unknown location '%s'." % location_ref
 	var t: Dictionary = template_of(loc)
 	if not str(loc.get("map", "")).is_empty() and t.is_empty():
-		return _fail("Location '%s' names an unknown map '%s'." % [str(loc["_qid"]), str(loc.get("map", ""))])
-	var pos: Vector2i = GameState.NO_POSITION
-	if not t.is_empty():
-		pos = MapRules.anchor_pos(t, anchor)
-		if pos == GameState.NO_POSITION:
-			return _fail("Map '%s' has no anchor '%s'." % [str(t["id"]), anchor])
+		return "Location '%s' names an unknown map '%s'." % [str(loc["_qid"]), str(loc.get("map", ""))]
+	if not t.is_empty() and MapRules.anchor_pos(t, anchor) == GameState.NO_POSITION:
+		return "Map '%s' has no anchor '%s'." % [str(t["id"]), anchor]
+	return ""
+
+static func enter(gs: GameState, location_ref: String, anchor: String = MapRules.SPAWN) -> Dictionary:
+	var problem: String = entry_problem(gs, location_ref, anchor)
+	if not problem.is_empty():
+		return _fail(problem)
+	var loc: Dictionary = resolve_location(gs, location_ref)
+	var t: Dictionary = template_of(loc)
+	var pos: Vector2i = MapRules.anchor_pos(t, anchor) if not t.is_empty() else GameState.NO_POSITION
 	var loc_world: String = str(loc["_world"])
 	# A `connects` crossing remembers the world left in explore["home_world"]; coming back into that world's lineage
 	# restores it (so a child world's overrides survive a trip through a connected world).
@@ -212,10 +219,19 @@ static func enter(gs: GameState, location_ref: String, anchor: String = MapRules
 	var _visited: String = QuestRunner.set_flag(gs, MapRules.visited_flag(qid), true)
 	if t.is_empty() or tile_safe(t, MapRules.anchor_pos(t, MapRules.SPAWN)):
 		gs.explore["last_safe"] = qid
+	# HEAL1 rule 3.3.1: a rest place (`rest: true`) rests the whole roster for free and becomes explore.last_rest (even
+	# with nobody hurt); idempotent, so re-entering is harmless.
+	var restored: int = 0
+	if DictUtil.to_bool(loc.get("rest", false)):
+		gs.explore["last_rest"] = qid
+		restored = HealRules.rest(gs.party)
 	QuestRunner.refresh(gs)
 	var advanced: Array[String] = QuestRunner.on_location_reached(gs, qid)
 	var errors: Array[String] = []
-	var events: Array[Dictionary] = [{"kind": "entered", "location": qid, "advanced": advanced}, {"kind": "autosave"}]
+	var events: Array[Dictionary] = [{"kind": "entered", "location": qid, "advanced": advanced}]
+	if restored > 0:
+		events.append({"kind": "rested", "location": qid, "restored": restored})
+	events.append({"kind": "autosave"})
 	return _result(true, errors, events)
 
 # Enters the world's resolved start location at its spawn.
@@ -268,18 +284,39 @@ static func menu(gs: GameState) -> Array[Dictionary]:
 		out.append({"to": MapRules.WORLD_MAP, "label": "World map"})
 	return out
 
-# The defeat rule (also TRAV1, DLG1): wake at `at` (or the current location) when it has no map or a SAFE spawn,
-# else at explore.last_safe, else at the start location. Fully healed (no HP is stored); nothing else is lost.
+# The defeat rule (also TRAV1, DLG1; the single defeat entry): the checkpoint is `at` (or the current location) when it
+# has no map or a SAFE spawn, else explore.last_safe, else the start location. HEAL1 rule 3.3.3 (HealRules.on_defeat):
+# every roster member is fully healed; a checkpoint that is a rest place costs nothing, else CAMP_COST supplies are
+# spent as a forced rest, else (fewer supplies, kept) the party wakes at explore.last_rest ("" = the start location).
+# Adds {"kind": "defeat", mode, spent, location} (the location woken at). XP, gold, items, flags and quests are kept.
 static func wake(gs: GameState, at: String = "") -> Dictionary:
 	var target_ref: String = at if not at.is_empty() else gs.location_id
 	var loc: Dictionary = resolve_location(gs, target_ref)
 	var t: Dictionary = template_of(loc)
+	var checkpoint: String = ""
 	if not loc.is_empty() and (t.is_empty() or tile_safe(t, MapRules.anchor_pos(t, MapRules.SPAWN))):
-		return enter(gs, str(loc["_qid"]))
-	var last_safe: String = str(gs.explore.get("last_safe", ""))
-	if not last_safe.is_empty():
-		return enter(gs, last_safe)
-	return begin(gs)
+		checkpoint = str(loc["_qid"])
+	else:
+		checkpoint = str(gs.explore.get("last_safe", ""))
+	# The target is checked before anything is settled: a refused wake keeps the HP and the supplies.
+	var defeat: Dictionary = HealRules.defeat_plan(gs, checkpoint)
+	var to: String = str(defeat["to"])
+	if to.is_empty():
+		to = MapRules.start_location(gs.world_id)
+		if to.is_empty():
+			return _fail("World '%s' has no start location." % gs.world_id)
+	var problem: String = entry_problem(gs, to)
+	if not problem.is_empty():
+		return _fail(problem)
+	HealRules.settle_defeat(gs, defeat)
+	var woke: Dictionary = enter(gs, to)
+	if DictUtil.to_bool(woke.get("ok", false)):
+		var events: Array[Dictionary] = []
+		for e: Variant in DictUtil.array_of(woke.get("events", [])):
+			events.append(DictUtil.dict_of(e))
+		events.append({"kind": "defeat", "mode": str(defeat["mode"]), "spent": DictUtil.to_int(defeat["spent"]), "location": gs.location_id})
+		woke["events"] = events
+	return woke
 
 # ------------------------------------------------------------------------------
 # Stepping (EXP1-L 2.2)

@@ -6,6 +6,8 @@ extends WorldEncounter
 # The authored `party` roster is replaced by the active members of a PartyState (PartyBuilder: level, spend, gear,
 # loadout), deployed by the normal ally placement for that many allies. `zone_override` (non-empty) replaces the
 # authored arena zone (TRAV1 route biome). Enemies, waves and rules stay the authored ones.
+# HEAL1-L: each member starts at its stored HP (HealRules.start_hp from hp_lost; PartyBuilder itself stays full HP) and
+# write_back_hp stores the after-battle HP (rule 3.2) once, for won and fled; lost is settled by ExploreRunner.wake.
 # ==============================================================================
 
 const PARTY_PREFIX: String = "__party_"
@@ -17,6 +19,7 @@ var _bases: Dictionary = {}   # roster id -> base unit id
 var _member_ids: Dictionary = {}   # Combatant -> party member id (hero_key)
 var _own_pouch: Dictionary = {}    # Combatant -> Array[Consumable]: battle_pouch items built from the member's saved pouch
 var _unloaded: Dictionary = {}     # Combatant -> Array[String]: saved pouch ids that found no battle slot (kept on write-back)
+var _hp_written: bool = false      # write_back_hp stores once per build (a results Replay never writes again)
 
 func _init(p_world_id: String = "", p_local_id: String = "", p_party: PartyState = null, p_zone: String = "") -> void:
 	super(p_world_id, p_local_id)
@@ -35,6 +38,7 @@ func build() -> void:
 	_member_ids.clear()
 	_own_pouch.clear()
 	_unloaded.clear()
+	_hp_written = false
 	if party_state != null:
 		for m: UnitState in party_state.active_members():
 			var report: Dictionary = PartyBuilder.build_report(m)
@@ -47,6 +51,7 @@ func build() -> void:
 				_built[rid] = c
 				_bases[rid] = m.base_unit
 				_member_ids[c] = m.id
+				c.hp = HealRules.start_hp(c.max_hp, m.hp_lost)
 	super()
 
 func _ids(key: String) -> Array[String]:
@@ -104,6 +109,25 @@ func write_back_pouches() -> void:
 					kept.append(con.id)
 		kept.append_array(JsonUtil.strings(_unloaded.get(c, [])))
 		m.pouch = kept
+
+# HEAL1 rule 3.2 / 3.4: won and fled store each member's after-battle HP as hp_lost, against its battle max HP (built
+# with auto-spend, the same max HealRules.max_hp_of reads); lost writes nothing (ExploreRunner.wake heals the roster).
+# Guests have no member; reserve members never fought. Writes once per build.
+func write_back_hp(outcome: String) -> void:
+	if party_state == null or _hp_written or (outcome != "won" and outcome != "fled"):
+		return
+	_hp_written = true
+	for key: Variant in _member_ids:
+		if not (key is Combatant):
+			continue
+		var c: Combatant = key
+		if is_guest(c):
+			continue
+		var m: UnitState = party_state.member(str(_member_ids[c]))
+		if m == null:
+			continue
+		var hp: int = HealRules.hp_after(mini(c.hp if c.is_alive() else 0, c.max_hp), c.max_hp, outcome)
+		m.hp_lost = maxi(c.max_hp - hp, 0)
 
 # The saved party's cap (`PartyState.max_active`); without a party the world's cap.
 func party_slots() -> int:

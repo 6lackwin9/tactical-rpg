@@ -3,7 +3,9 @@ extends RefCounted
 
 # ==============================================================================
 # Tactical RPG - Battle bridge (S9, spec EXP1-L 2.6): the shared way into and out of a battle from the game state.
-# Exploration-agnostic (ExploreRunner, TRAV1 road fights and DLG1 use it). Full heal is implicit: M3 stores no HP.
+# Exploration-agnostic (ExploreRunner, TRAV1 road fights and DLG1 use it). HEAL1-L: HP carries over (UnitState.hp_lost):
+# GameEncounter starts each member at its stored HP and BattleScreen writes it back (write_back_hp, won / fled); a loss
+# heals the roster through ExploreRunner.wake (HealRules.on_defeat).
 # Outcomes: won | lost | fled. X1 (user 2026-10-17): a battle that reaches its round limit with both sides
 # standing counts as fled; so does a battle the whole party left by withdrawing (alive, off the field).
 # ==============================================================================
