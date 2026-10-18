@@ -331,6 +331,7 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_round", "Wave round", "int", 1, {"min": 1, "max": 30}),
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
+		_f("phases", "Phases", "json", [], {"help": "Boss phases (BOSS1): same shape as catalog encounters; refs are character refs (EncounterPhases)."}),
 	]
 
 # ------------------------------------------------------------------------------

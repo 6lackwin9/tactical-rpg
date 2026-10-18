@@ -1138,7 +1138,7 @@ static func _quest_errors(world_id: String, e: Dictionary) -> Array[String]:
 static func _loot_errors(e: Dictionary) -> Array[String]:
 	return QuestRules.loot_entry_errors(e)
 
-static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]:
+static func _encounter_errors(world_id: String, e: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	var party: Array = e["party"]
 	if party.is_empty():
@@ -1153,6 +1153,9 @@ static func _encounter_errors(_world_id: String, e: Dictionary) -> Array[String]
 			errors.append("The wave block is past the end of the round (%d blocks)." % DictUtil.to_int(e["total_blocks"]))
 		if DictUtil.to_int(e["wave_round"]) > DictUtil.to_int(e["max_rounds"]):
 			errors.append("The wave round is after the last round.")
+	var wave_field: Dictionary = WorldSchema.field("encounters", "wave_units")
+	errors.append_array(EncounterPhases.problems(e, func(ref: String) -> bool:
+		return _check_ref(world_id, wave_field, "characters", ref).is_empty()))
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		for x: Variant in DictUtil.array_of(exits):

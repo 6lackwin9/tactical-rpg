@@ -1204,6 +1204,10 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 			errors.append("The wave block is past the end of the round (%d blocks)." % DictUtil.to_int(e["total_blocks"]))
 		if DictUtil.to_int(e["wave_round"]) > DictUtil.to_int(e["max_rounds"]):
 			errors.append("The wave round is after the last round.")
+	var wave_field: Dictionary = ContentSchema.field("encounters", "wave_units")
+	errors.append_array(EncounterPhases.problems(e, func(ref: String) -> bool:
+		var target: Dictionary = get_entry("units", ref)
+		return not target.is_empty() and ContentSchema.passes_filter(wave_field, target)))
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		var exit_list: Array = exits

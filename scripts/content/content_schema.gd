@@ -148,6 +148,7 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("wave_round", "Wave round", "int", 1, {"min": 1, "max": 30}),
 		_f("wave_block", "Wave block", "int", 4, {"min": 1, "max": 10, "help": "The wave enters before this block resolves."}),
 		_f("wave_label", "Wave label", "string", "Reinforcements arrive!"),
+		_f("phases", "Phases", "json", [], {"help": "[{\"id\", \"name\", \"trigger\": {\"kind\": \"hp_below\", \"unit\", \"pct\": 50} or {\"kind\": \"round\", \"round\": 3}, \"effects\": [{\"type\": \"line\", \"text\"}, {\"type\": \"wave\", \"units\": [], \"label\"}, {\"type\": \"status\", \"unit\", \"status\": \"fortify\", \"rounds\": 2, \"magnitude\": 5}, {\"type\": \"ai\", \"unit\", \"reckless\": true}], \"pause_autoplay\": true}], at most 4 (BOSS1; EncounterPhases)."}),
 	]
 
 # ------------------------------------------------------------------------------
