@@ -72,10 +72,10 @@ The engine exists for three reasons (user, 2026-10-18):
 | `aegis_sim` | Battle and game state machines; applies commands; emits events | rules | no |
 | `aegis_proto` | Command, query and event types (serde JSON); record/replay format | sim | no |
 | `aegis_host` | Runs a session and serves the protocol over stdin/stdout and a local socket | proto | no |
-| `aegis_cli` | Agent client: run, step, inspect, replay, diff, golden checks | proto | no |
+| `aegis_cli` | Agent client: run, step, inspect, replay, diff, parity checks | proto | no |
 | `aegis_tune` | Tuning file schema, hot reload, variant sets | core | no |
 | `aegis_gui` | Thin view: renders state and UI tree, maps input to commands, tuning panel | proto, tune | yes |
-| `aegis_parity` | Golden-trace runner: compares sim output with traces from Godot | sim | no |
+| `aegis_parity` | Parity runner: exact rule tables and statistical battle comparison with Godot | sim | no |
 
 Rules stay pure functions with no I/O, so they are cheap to test and to diff
 against Godot. The sim never imports the GUI. The GUI never decides a rule.
@@ -115,27 +115,49 @@ user sees. Screenshots are for visual bugs only.
 
 ## 6. Parity with Godot
 
-Parity is measured on **behaviour**, not pixels.
+Parity is measured on **behaviour**, not pixels. Godot defines what is
+acceptable. Where the engine should do better, that is a design choice the user
+makes, recorded in `engine/docs/PARITY.md` as an intended divergence
+(user, 2026-10-18).
 
-1. **Golden traces.** A seeded battle in Godot writes a JSONL trace: every
-   command, roll and resulting event with numbers. The same seed and commands
-   in `aegis_sim` must give an identical trace. `aegis_parity` diffs them and
-   shows the first divergence.
-2. **Rule unit parity.** Each pure rule (for example damage `compute()`) gets a
-   table of inputs and Godot-computed outputs; the Rust function must match.
-3. **RNG parity.** Exact trace parity needs the same random stream. Options:
-   port Godot's PCG32 bit-for-bit, or make the trace record every roll and feed
-   them back. Decision needed (task E1).
+Two layers, because they need different kinds of match:
+
+1. **Rule parity (exact).** Pure rules with no randomness inside (damage
+   `compute()` given a fixed crit roll, armor rating, stance matchup, Focus
+   costs, status ticks) get input/output tables computed by Godot. The Rust
+   function must match exactly, with a float tolerance only for float math.
+2. **Battle parity (statistical).** Full battles are compared over many seeds,
+   not seed by seed, so Godot's random generator is **not** ported
+   (user, 2026-10-18). For each scenario both engines run N battles (N ≥ 1000)
+   and report win rate, mean rounds, mean damage dealt and taken per unit, KO
+   rate and status uptime. Means and proportions are compared with a two-sample
+   test at 95% confidence. With many scenarios some will fail by chance, so a
+   failure is re-run with a fresh seed set before it counts. A metric passes when
+   the difference is not significant **and** is inside a practical band (for
+   example win rate within ±2 points), so huge N doesn't flag tiny harmless
+   gaps.
+3. **Debug traces (optional).** When a scenario fails, record one Godot battle
+   as a JSONL trace (commands, rolls, events) and replay its rolls in the Rust
+   sim to find the first divergence. This is a tool for debugging, not the pass
+   bar.
 4. **System checklist.** `engine/docs/PARITY.md` lists Godot systems
    (combat core, stances, Focus, statuses, terrain, combos, AI, intents,
    autoplay, exploration, dialogue, camp, saves) with status:
-   `not-started / rules / sim / gui / parity`.
+   `not-started / rules / sim / gui / parity`, plus intended divergences.
 
-The Godot trace exporter is a GDScript tool. To keep everything under
-`engine/`, it lives in `engine/parity/godot/` and is run with
-`godot --headless --path .. --script <abs path>`. Whether a script under a
-`.gdignore` folder can load project classes that way must be checked first
-(task E1); if it cannot, the user decides where the exporter goes.
+### 6.1 Godot side: no edits to existing files
+
+Existing Godot files are never edited, to avoid merge conflicts with `main`
+(user, 2026-10-18).
+
+- **Battle stats** come from the existing `tools/balance_sim.gd` modes
+  (`duel`, `tier`, `party`, `sweep`), run as they are. `aegis_parity` runs the
+  matching Rust scenario and parses both outputs.
+- **Rule tables and debug traces** need new GDScript. It lives in
+  `engine/parity/godot/` when Godot can run it from there
+  (`godot --headless --path .. --script <abs path>` under `.gdignore`); if it
+  cannot, in a folder outside the project. Either way, only new files, never
+  edits to existing ones. Checking which works is the first step of E1.
 
 ## 7. Current branch: keep, rework, retire
 
@@ -159,10 +181,10 @@ against Godot.
 | Id | Deliverable | Done when |
 | :--- | :--- | :--- |
 | E0 | This spec approved; `.gdignore`; retire list agreed | User sign-off |
-| E1 | Trace format, Godot trace exporter, RNG parity decision | One Godot battle exports a trace |
+| E1 | Parity harness: run `balance_sim.gd` and parse its output; rule-table exporter; where the exporter can live | One Godot duel scenario and one rule table are captured as JSON |
 | E2 | `aegis_proto` schema; `aegis_host` + `aegis_cli` skeleton | Agent can `new`, `state`, `end_turn`, `replay` headlessly |
 | E3 | `aegis_rules` damage path (attack power, armor, crit, stance, guard) | Rule-table parity with Godot `DamageCalculator` |
-| E4 | Combat sim core (turns, Focus, skills, statuses, AI) | Golden-trace parity on the core encounter set |
+| E4 | Combat sim core (turns, Focus, skills, statuses, AI) | Statistical parity with `balance_sim` duel and tier modes |
 | E5 | `aegis_gui` on the protocol, UI tree, tuning file | User plays a battle; agent reads `ui_tree` of the same screen |
 | E6 | Feel tooling (panel, hotkey capture, variants, metrics) | One feel issue fixed end to end through the tools |
 | E7 | Remaining systems by checklist | `PARITY.md` all `parity` |
@@ -170,10 +192,31 @@ against Godot.
 Godot keeps shipping during this. Each milestone re-runs parity against the
 latest `main` to catch drift.
 
-## 9. Open questions for the user
+## 9. Scope
 
-1. RNG parity: port Godot's generator exactly, or record and replay rolls? (E1)
-2. Where the Godot trace exporter may live if it cannot run from `engine/`.
-3. GUI stack: stay on egui (fast to build, less game feel) or move to a custom
-   wgpu 2D renderer for the battle view with egui only for panels?
-4. When to formally add the engine to `docs/ROADMAP.md` and `docs/DECISIONS.md`.
+- **Target:** switch this game over to the engine. If that works and
+  development stays smooth, a wider scope may come later, still limited to 2D
+  pixel-art games (user, 2026-10-18).
+- **UI and layout are built from scratch**, without Godot libraries. Assets are
+  mostly placeholders, so now is the time to test how far that goes.
+- **Pixel art shapes the renderer:** integer scaling to a fixed low-resolution
+  canvas, nearest-neighbour sampling, sprite atlases, a tilemap layer, a pixel
+  font, and UI snapped to the pixel grid.
+
+## 10. Decisions and open questions
+
+Settled (user, 2026-10-18):
+
+1. RNG: not ported. Battles are matched statistically (Section 6).
+2. Godot reference: defines what is acceptable; improvements are design calls.
+3. Existing Godot files are never edited. New files outside the project are
+   fine.
+4. Order: combat first, then the rest of the game.
+
+Open:
+
+1. GUI stack. Recommendation: a custom wgpu pixel renderer for the game view
+   and the in-game UI (with a small layout engine such as `taffy`), and egui
+   only for agent and dev panels (tuning, inspectors). egui on its own does not
+   give pixel-perfect art.
+2. When to formally add the engine to `docs/ROADMAP.md` and `docs/DECISIONS.md`.
