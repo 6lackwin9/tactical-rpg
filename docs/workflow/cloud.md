@@ -10,7 +10,7 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 - **Merge & Release thread**: a standing thread that owns the only route to `main`. It keeps the approval and ticket queue (TASKS status, decisions check, `Review:` lines) and opens one batched `develop` -> `main` PR per batch (below).
 - Decision requests go to the user in the thread (a decision card when offered): question, options with one-line consequences, one recommendation. Work continues on the recommended option unless the step cannot be undone.
 - Failure alerts: a thread reply that leads with what is blocked and what the thread is doing about it (replaces the desktop `ALERT` line).
-- Dispatch mode: the user types `mode <name>` in the project chat; it applies to later threads. Scheduled routines always run in economy mode.
+- Dispatch mode: the user types `mode <name>` in the project chat; it applies to later threads. Scheduled routines always run in economy mode. Usage caps (slots for building threads): "Usage caps" below.
 
 ## Area threads
 
@@ -83,12 +83,21 @@ Cost grows with the thread's context size times its turns (user dashboard 2026-1
 
 ### Fresh sessions (user 2026-10-17, "Restart often")
 
-After about 3 landed tasks, or sooner when its context gets long, an area thread stops at a task boundary (nothing uncommitted, no builder running) and hands over:
+Rotate by context size, not task count (user 2026-10-18, usage cutbacks): when the thread's context passes about 120k tokens (`get_session` with no id, `external_metadata.context_usage.used_tokens`; else a compaction notice), an area thread stops at the next task boundary (nothing uncommitted, no builder running) and hands over. A fresh session costs 4M to 13M tokens to start, so a thread with a small context keeps going whatever its task count:
 
-1. Write `docs/handover/<area>.md` (for example `platform.md`), replacing the previous one: queue position (next task ids), any in-flight branch and its state, open questions, cards still waiting on the user (question and options), and routines or watches it owns. Keep it short; everything else is in the repo docs.
+1. Write `docs/handover/<area>.md` (for example `platform.md`), replacing the previous one: queue position (next task ids), any in-flight branch and its state, open questions, cards still waiting on the user (question and options), and routines or watches it owns. One page at most (about 40 lines); everything else is in the repo docs.
 2. Commit it straight to `develop` (`<AREA>-HANDOVER: ...`, docs-only, `Review: none (handover)` and `Gate: fc.sh docs passed (docs-only)`; no AgentMap or Done lines; the release check accepts it under decision "Fresh area sessions").
 3. Send the coordinator a cross-session message: the area, the handover path and the commit.
 4. The coordinator starts a fresh session for that area under a new project post, pointed at the handover, and resolves the old thread. The new thread reads the handover first and carries on.
+
+### Usage caps (user 2026-10-18, usage cutbacks 1-4)
+
+The user hits the 5-hour and weekly usage limits, so usage is spread out:
+
+1. At most 3 area threads build at once: Gameplay, UI/UX and one rotating slot (Balance, Assets & Audio, Platform & Workflow, or Design option builds). Building means running `logic-builder`, `asset-builder` or `balance`; Design spec work, Merge & Release and the coordinator do not count. An area outside the slots keeps its approved tasks queued (rows stay `approved`) until the coordinator gives it the slot; the coordinator tracks who holds it, and a thread hands the slot back when its queue is empty or it rotates.
+2. Dispatch mode is split: economy for build lanes, standard for specs, design reviews and the final gate (planner-ops "Current mode").
+3. Long sims (more than about 10 minutes) run in the background (`balance` agent or a background command) and the thread ends its turn; the completion wakes it once. No polling with sleeps or monitors: every wake re-reads the whole context, and a wake after the prompt cache expired re-writes it.
+4. Rotation goes by context size (above).
 
 ## Task timing
 
@@ -105,7 +114,7 @@ Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.
 
 ## Scheduled routines
 
-- Daily planner pass (economy mode, 18:30 UTC): pick the next `approved` task whose `Depends on` rows are `done` and whose `Touches` do not overlap another area's unmerged task branch, and hand it to its area thread, which lands it on `develop`. The routine wakes the Platform & Workflow thread (no new thread per run), which only dispatches: it sends the task to the area thread's session as a cross-session message (thread found by title in the project's thread list), or keeps it when the area is Platform & Workflow. If the area has no live thread, it asks the coordinator session to open that area thread (already approved by the user) and pass the task on. The area thread stops at any design question. If the Platform & Workflow thread is closed, recreate the routine bound to the new one. Balance and housekeeper routines are added later on request.
+- Daily planner pass (economy mode, 18:30 UTC): pick the next `approved` task whose `Depends on` rows are `done`, whose `Touches` do not overlap another area's unmerged task branch and whose area holds a building slot ("Usage caps"; otherwise ask the coordinator for the slot), and hand it to its area thread, which lands it on `develop`. The routine wakes the Platform & Workflow thread (no new thread per run), which only dispatches: it sends the task to the area thread's session as a cross-session message (thread found by title in the project's thread list), or keeps it when the area is Platform & Workflow. If the area has no live thread, it asks the coordinator session to open that area thread (already approved by the user) and pass the task on. The area thread stops at any design question. If the Platform & Workflow thread is closed, recreate the routine bound to the new one. Balance and housekeeper routines are added later on request.
 - Design review check: the Design thread keeps a routine bound to itself at 12:20 and 18:20 UTC, after each release, that starts a design review when one is due ([design-review.md](design-review.md)).
 - Release batch: the Merge & Release thread keeps two routines bound to itself, 11:52 UTC ("Midday release batch") and 17:52 UTC ("Daily release batch", before the 18:30 dispatch).
 - Routines follow the same approval rule as threads.
