@@ -4,7 +4,9 @@
 pub mod damage;
 pub mod gear;
 pub mod rng;
+pub mod sort;
 pub mod stats;
+pub mod status;
 pub mod unit;
 
 pub use unit::{build_unit, Stance, Unit};

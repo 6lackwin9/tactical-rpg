@@ -4,7 +4,7 @@ use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_data::value::{self, to_int, to_str};
 use aegis_data::{Catalog, ClassDef, UnitDef, NO_ITEM};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
 pub const BASE_AP: i32 = 10;
@@ -91,8 +91,17 @@ pub struct Unit {
     pub passive_status_potency: i32,
     pub passive_spell_reach: i32,
     pub foresight_source: String,
-    /// Active statuses: name -> magnitude (0 = none). Combat state; empty for a freshly built unit.
-    pub statuses: IndexMap<String, i32>,
+    /// Combat state (empty for a freshly built unit).
+    pub st: StatusState,
+    pub is_withdrawn: bool,
+    /// Target lock (a unit index in the battle).
+    pub active_target: Option<usize>,
+    pub attack_boost_rounds: i32,
+    pub stance_hold_duration: i32,
+    /// Attackers this unit already countered this round (RiposteRules).
+    pub riposted: Vec<usize>,
+    pub ap_cost_modifier: i32,
+    pub loadout_locked: bool,
 }
 
 impl Unit {
@@ -137,7 +146,14 @@ impl Unit {
             passive_status_potency: 0,
             passive_spell_reach: 0,
             foresight_source: String::new(),
-            statuses: IndexMap::new(),
+            st: StatusState::default(),
+            is_withdrawn: false,
+            active_target: None,
+            attack_boost_rounds: 0,
+            stance_hold_duration: 0,
+            riposted: Vec::new(),
+            ap_cost_modifier: 0,
+            loadout_locked: false,
         }
     }
 
@@ -155,11 +171,11 @@ impl Unit {
     }
 
     pub fn has_status(&self, s: &str) -> bool {
-        self.statuses.contains_key(s)
+        self.st.active.contains(s)
     }
 
     pub fn active_magnitude(&self, s: &str) -> i32 {
-        self.statuses.get(s).copied().unwrap_or(0)
+        if self.has_status(s) { self.st.magnitudes.get(s).copied().unwrap_or(0) } else { 0 }
     }
 
     pub fn move_per_block(&self) -> i32 {
@@ -592,4 +608,190 @@ fn equip(cat: &Catalog, u: &mut Unit, e: &UnitDef, arch: Option<&ClassDef>) {
 /// An int from a JSON value (helper for tests and parity tools).
 pub fn json_int(v: &Value) -> i32 {
     to_int(v, 0)
+}
+
+/// Statuses of one unit: active this round, and queued for next round. Every map keeps insertion order like a
+/// Godot Dictionary (removal keeps the order of the rest), because round roll-over and planning iterate them.
+#[derive(Debug, Clone, Default)]
+pub struct StatusState {
+    pub active: IndexSet<String>,
+    pub rounds_left: IndexMap<String, i32>,
+    pub magnitudes: IndexMap<String, i32>,
+    pub sources: IndexMap<String, String>,
+    pub pending: IndexSet<String>,
+    pub pending_rounds: IndexMap<String, i32>,
+    pub pending_magnitudes: IndexMap<String, i32>,
+    pub pending_sources: IndexMap<String, String>,
+}
+
+impl StatusState {
+    pub fn has_any(&self, s: &str) -> bool {
+        self.active.contains(s) || self.pending.contains(s)
+    }
+}
+
+impl Unit {
+    pub fn is_active(&self) -> bool {
+        self.is_alive() && !self.is_withdrawn
+    }
+
+    /// Combatant.take_damage: `mitigated` false applies the unit's guard first. Returns the damage dealt.
+    pub fn take_damage(&mut self, amount: i32, mitigated: bool) -> i32 {
+        let mut dmg = amount;
+        if !mitigated && self.guard > 0.0 {
+            dmg = roundi(amount as f64 * (1.0 - self.guard)).max(1);
+        }
+        self.hp = (self.hp - dmg).max(0);
+        dmg
+    }
+
+    pub fn heal(&mut self, amount: i32) {
+        if self.is_alive() {
+            self.hp = self.max_hp.min(self.hp + amount);
+        }
+    }
+
+    pub fn withdraw(&mut self) {
+        self.is_withdrawn = true;
+    }
+
+    pub fn set_stance(&mut self, s: Stance) {
+        if self.stance != s {
+            self.stance = s;
+            self.stance_hold_duration = 0;
+            self.remove_status("riposte");
+        }
+    }
+
+    /// Removes `status` entirely (active and pending).
+    pub fn remove_status(&mut self, status: &str) {
+        let st = &mut self.st;
+        st.active.shift_remove(status);
+        st.rounds_left.shift_remove(status);
+        st.pending.shift_remove(status);
+        st.pending_rounds.shift_remove(status);
+        st.magnitudes.shift_remove(status);
+        st.pending_magnitudes.shift_remove(status);
+        st.sources.shift_remove(status);
+        st.pending_sources.shift_remove(status);
+    }
+
+    fn capped_magnitude(&self, status: &str) -> i32 {
+        let cap = crate::status::cap_of(status);
+        self.st.magnitudes.get(status).copied().unwrap_or(0).clamp(0, if cap > 0 { cap } else { 100 })
+    }
+
+    pub fn weaken_factor(&self) -> f64 {
+        if !self.has_status("weaken") {
+            return 1.0;
+        }
+        1.0 - self.capped_magnitude("weaken") as f64 / 100.0
+    }
+
+    pub fn empower_factor(&self) -> f64 {
+        if !self.has_status("empower") {
+            return 1.0;
+        }
+        1.0 + self.capped_magnitude("empower") as f64 / 100.0
+    }
+
+    pub fn potency_for(&self, family: &str) -> f64 {
+        1.0 + self.potency_bonus.get(family).copied().unwrap_or(0.0) + self.gear_potency_family.get(family).copied().unwrap_or(0.0)
+    }
+
+    pub fn potency_for_skill(&self, skill: &aegis_data::SkillDef) -> f64 {
+        let mut total = self.potency_for(skill.family_id());
+        for g in GROUPS {
+            if skill_in_group(skill, g) {
+                total += self.potency_group.get(g).copied().unwrap_or(0.0) + self.gear_potency_group.get(g).copied().unwrap_or(0.0);
+            }
+        }
+        total
+    }
+
+    /// SkillDef.power_for: the skill multiplier x potency x weaken x empower.
+    pub fn power_for(&self, skill: &aegis_data::SkillDef) -> f64 {
+        skill.power_mult * self.potency_for_skill(skill) * self.weaken_factor() * self.empower_factor()
+    }
+
+    pub fn status_potency_bonus(&self) -> i32 {
+        self.gear_status_potency + self.passive_status_potency
+    }
+
+    pub fn spell_reach_bonus(&self) -> i32 {
+        self.gear_spell_reach.min(GEAR_REACH_CAP) + self.passive_spell_reach
+    }
+
+    pub fn resist_for(&self, status: &str) -> i32 {
+        (self.status_resist.get(status).copied().unwrap_or(0) + self.gear_status_resist.get(status).copied().unwrap_or(0)).min(100)
+    }
+
+    /// The weapon type that counts for skill gating in `hand` ("main", "off"): "unarmed" when that hand is empty.
+    pub fn wielded_type(&self, hand: &str) -> String {
+        let main = self.inventory.main_weapon();
+        let weapon = if hand == "off" {
+            if main.is_some_and(|m| m.item.two_handed) {
+                None
+            } else {
+                self.inventory.offhand_weapon()
+            }
+        } else {
+            main
+        };
+        weapon.map(|w| w.weapon_type().to_string()).unwrap_or_else(|| "unarmed".into())
+    }
+
+    pub fn skill_unlock_level(&self, cat: &Catalog, skill: &aegis_data::SkillDef) -> i32 {
+        stats::MAX_LEVEL.min(self.family_unlock_level(cat, skill.family_id()) + skill.tier_offset())
+    }
+
+    /// The level gate of can_use: basics, engine skills and hand-built units are never gated.
+    pub fn tier_unlocked(&self, cat: &Catalog, skill: &aegis_data::SkillDef) -> bool {
+        if self.path_levels.is_empty() || skill.system || skill.basic {
+            return true;
+        }
+        self.stats.level >= self.skill_unlock_level(cat, skill)
+    }
+
+    /// Known, unlocked, and trained for (min_proficiency in the hand's weapon type).
+    pub fn can_use(&self, cat: &Catalog, skill: &aegis_data::SkillDef) -> bool {
+        if !self.knows_skill(cat, &skill.id) || !self.tier_unlocked(cat, skill) {
+            return false;
+        }
+        if self.known_skills.is_empty() || skill.min_proficiency <= 0 {
+            return true;
+        }
+        let hands: &[&str] = match skill.weapon_hand.to_lowercase().as_str() {
+            "off" => &["off"],
+            "both" => &["main", "off"],
+            _ => &["main"],
+        };
+        for hand in hands {
+            let t = self.wielded_type(hand);
+            if !skill.weapon_types.is_empty() && !skill.weapon_types.contains(&t) {
+                return false;
+            }
+            let prof_key = if t == "unarmed" { "fist" } else { t.as_str() };
+            if self.stats.proficiency.level_of(prof_key) < skill.min_proficiency {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn apply_attack_boost(&mut self, multiplier: f64, rounds: i32) {
+        self.attack_boost = multiplier;
+        self.attack_boost_rounds = rounds;
+    }
+
+    /// Combatant.tick_round_buffs: clears riposte memory and counts the Focus boost down.
+    pub fn tick_round_buffs(&mut self) {
+        self.riposted.clear();
+        if self.attack_boost_rounds > 0 {
+            self.attack_boost_rounds -= 1;
+            if self.attack_boost_rounds <= 0 {
+                self.attack_boost = 1.0;
+            }
+        }
+    }
 }

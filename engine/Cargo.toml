@@ -4,6 +4,7 @@ members = [
     "crates/aegis_core",
     "crates/aegis_data",
     "crates/aegis_rules",
+    "crates/aegis_battle",
     "crates/aegis_vfs",
     "crates/aegis_md_parser",
     "crates/aegis_gd_bridge",

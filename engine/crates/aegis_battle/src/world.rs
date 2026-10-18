@@ -1,0 +1,397 @@
+//! The battle world: units, grid, sides and AI profiles (CombatGrid unit operations, PlanContext, AiProfile,
+//! ContentFactory.ai_profile). Units are referred to by their index in `units`.
+
+use crate::grid::{Grid, V2, DEPLOY_ANCHOR_Y, DEPLOY_ROWS, GRID_H, GRID_W, NO_CELL};
+use crate::skill::Book;
+use aegis_data::{Catalog, UnitDef};
+use aegis_rules::Unit;
+use indexmap::IndexMap;
+use std::sync::Arc;
+
+pub type UnitId = usize;
+
+pub const NO_CEILING: i32 = 5;
+pub const DEFAULT_HEAL_BELOW: f64 = 0.7;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Aggressor,
+    Skirmisher,
+    Sniper,
+    Support,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetPref {
+    Nearest,
+    Weakest,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AiProfile {
+    pub role: Role,
+    pub skill_cap: i32,
+    pub flee_ratio: f64,
+    pub defend_below: f64,
+    pub target_pref: TargetPref,
+    pub prefer_level: i32,
+    pub reckless: bool,
+    pub heal_below: f64,
+    pub area_min_foes: i32,
+    pub use_items: bool,
+}
+
+impl AiProfile {
+    pub fn create(role: Role, flee_ratio: f64, skill_cap: i32) -> Self {
+        Self {
+            role,
+            skill_cap,
+            flee_ratio,
+            defend_below: 0.4,
+            target_pref: if role == Role::Aggressor { TargetPref::Nearest } else { TargetPref::Weakest },
+            prefer_level: 0,
+            reckless: false,
+            heal_below: DEFAULT_HEAL_BELOW,
+            area_min_foes: 2,
+            use_items: false,
+        }
+    }
+
+    pub fn area_threshold(&self) -> i32 {
+        self.area_min_foes.clamp(1, 6)
+    }
+
+    /// ContentFactory.ai_profile: the unit's AI role (or its class's), thresholds and AP ceiling.
+    pub fn for_unit(cat: &Catalog, e: &UnitDef) -> Self {
+        let arch = (!e.class_id.is_empty()).then(|| cat.classes.get(&e.class_id)).flatten();
+        let role_name = if !e.ai_role.is_empty() { e.ai_role.clone() } else { arch.map(|a| a.ai_role.clone()).unwrap_or_else(|| "AGGRESSOR".into()) };
+        let role = match role_name.as_str() {
+            "SKIRMISHER" => Role::Skirmisher,
+            "SNIPER" => Role::Sniper,
+            "SUPPORT" => Role::Support,
+            _ => Role::Aggressor,
+        };
+        let mut cap = e.skill_cap;
+        if cap <= 0 && arch.is_some() {
+            let tier_cap = aegis_rules::stats::tier_scales(&e.tier).2;
+            cap = if tier_cap > 0 { tier_cap } else { NO_CEILING };
+        } else if cap <= 0 {
+            cap = 1;
+        }
+        let mut p = AiProfile::create(role, e.flee_ratio, cap);
+        p.defend_below = e.defend_below;
+        p.prefer_level = e.prefer_level;
+        p.reckless = e.reckless;
+        p.heal_below = e.heal_below;
+        if e.target_pref != "ROLE" {
+            p.target_pref = if e.target_pref == "WEAKEST" { TargetPref::Weakest } else { TargetPref::Nearest };
+        }
+        p
+    }
+
+    /// PlanPresets.profile_for.
+    pub fn with_preset(&self, preset: &str) -> Self {
+        let mut p = self.clone();
+        match preset {
+            "aggressive" => {
+                p.role = Role::Aggressor;
+                p.target_pref = TargetPref::Nearest;
+                p.defend_below = 0.0;
+                p.flee_ratio = 0.0;
+            }
+            "focus_weakest" => {
+                p.role = Role::Aggressor;
+                p.target_pref = TargetPref::Weakest;
+                p.defend_below = 0.25;
+            }
+            "defensive" => p.defend_below = 1.0,
+            "ranged_kite" => {
+                p.role = Role::Sniper;
+                p.target_pref = TargetPref::Weakest;
+            }
+            "economy" => p.prefer_level = 1,
+            "withdraw" => p.flee_ratio = 1.0,
+            _ => {}
+        }
+        p
+    }
+}
+
+#[derive(Clone)]
+pub struct World {
+    pub cat: Arc<Catalog>,
+    pub units: Vec<Unit>,
+    pub grid: Grid,
+    pub allies: Vec<UnitId>,
+    pub enemies: Vec<UnitId>,
+    pub profiles: IndexMap<UnitId, AiProfile>,
+    pub total_blocks: i32,
+}
+
+impl World {
+    pub fn book(&self) -> Book<'_> {
+        Book { cat: &self.cat }
+    }
+
+    pub fn u(&self, id: UnitId) -> &Unit {
+        &self.units[id]
+    }
+
+    pub fn profile_of(&self, c: UnitId) -> AiProfile {
+        self.profiles.get(&c).cloned().unwrap_or_else(|| AiProfile::create(if self.units[c].attack_range > 1 { Role::Sniper } else { Role::Aggressor }, 0.25, 1))
+    }
+
+    pub fn skill_cap_of(&self, c: UnitId) -> i32 {
+        self.profile_of(c).skill_cap
+    }
+
+    pub fn foes_of(&self, c: UnitId) -> &[UnitId] {
+        if self.allies.contains(&c) {
+            &self.enemies
+        } else if self.enemies.contains(&c) {
+            &self.allies
+        } else {
+            &[]
+        }
+    }
+
+    pub fn friends_of(&self, c: UnitId) -> &[UnitId] {
+        if self.allies.contains(&c) {
+            &self.allies
+        } else if self.enemies.contains(&c) {
+            &self.enemies
+        } else {
+            &[]
+        }
+    }
+
+    // ---- CombatGrid operations that need unit state -----------------------------------------------------------
+
+    /// On the grid and active (alive, not withdrawn).
+    pub fn has(&self, c: UnitId) -> bool {
+        self.grid.positions[c].is_some() && self.units[c].is_active()
+    }
+
+    pub fn pos(&self, c: UnitId) -> V2 {
+        self.grid.position(c)
+    }
+
+    pub fn dist(&self, a: UnitId, b: UnitId) -> i32 {
+        self.pos(a).dist(self.pos(b))
+    }
+
+    pub fn occupant(&self, cell: V2) -> Option<UnitId> {
+        (0..self.units.len()).find(|&u| self.grid.positions[u] == Some(cell) && self.units[u].is_active())
+    }
+
+    pub fn is_occupied(&self, cell: V2) -> bool {
+        self.occupant(cell).is_some()
+    }
+
+    pub fn place(&mut self, c: UnitId, cell: V2) -> bool {
+        if !self.grid.is_valid(cell) || !self.grid.is_walkable(cell) || self.is_occupied(cell) {
+            return false;
+        }
+        self.grid.positions[c] = Some(cell);
+        true
+    }
+
+    pub fn remove(&mut self, c: UnitId) {
+        self.grid.positions[c] = None;
+    }
+
+    fn leave(&mut self, c: UnitId) {
+        self.grid.positions[c] = None;
+        if !self.grid.withdrawn.contains(&c) {
+            self.grid.withdrawn.push(c);
+        }
+        self.units[c].withdraw();
+    }
+
+    /// MORALE1: leaves the field at its own tile.
+    pub fn withdraw_in_place(&mut self, c: UnitId) -> bool {
+        if !self.units[c].is_active() || self.grid.positions[c].is_none() {
+            return false;
+        }
+        self.leave(c);
+        true
+    }
+
+    /// One step by `offset`; stepping onto an exit (or off an open arena) withdraws the unit.
+    pub fn move_unit(&mut self, c: UnitId, offset: V2) -> bool {
+        if !self.units[c].is_active() || self.grid.positions[c].is_none() {
+            return false;
+        }
+        let target = self.pos(c) + offset;
+        if self.grid.is_exit(target) || (self.grid.open && !self.grid.is_valid(target)) {
+            self.leave(c);
+            return true;
+        }
+        if !self.grid.is_valid(target) || !self.grid.is_walkable(target) || self.is_occupied(target) {
+            return false;
+        }
+        self.grid.positions[c] = Some(target);
+        true
+    }
+
+    pub fn jump_unit(&mut self, c: UnitId, cell: V2) -> bool {
+        if !self.units[c].is_active() || self.grid.positions[c].is_none() {
+            return false;
+        }
+        if !self.grid.is_valid(cell) || !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
+            return false;
+        }
+        self.grid.positions[c] = Some(cell);
+        true
+    }
+
+    // ---- Deployment (CombatGrid.deploy_combatants and friends) --------------------------------------------------
+
+    pub fn layout_columns(deployment: &str, side: &str) -> Vec<i32> {
+        let (party, a, b): (Vec<i32>, Vec<i32>, Vec<i32>) = match deployment {
+            "ambush" => (vec![5, 4], vec![7, 8], vec![2, 1]),
+            "centre" => (vec![5, 6], vec![8, 9], vec![3, 2]),
+            _ => (vec![5, 4], vec![7, 8], vec![]),
+        };
+        match side {
+            "party" => party,
+            "a" => a,
+            _ => b,
+        }
+    }
+
+    pub fn group_of(index: usize, deployment: &str) -> usize {
+        if Self::layout_columns(deployment, "b").is_empty() {
+            0
+        } else {
+            index % 2
+        }
+    }
+
+    pub fn spill_columns(front: i32, back: i32) -> Vec<i32> {
+        let mut out = Vec::new();
+        let probe = V2::new(front, 0);
+        if Grid::is_party_half(probe) == Grid::is_party_half(V2::new(back, 0)) {
+            let dir = (back - front).signum();
+            let mut x = back + dir;
+            while x >= 0 && x < GRID_W && Grid::is_party_half(V2::new(x, 0)) == Grid::is_party_half(probe) {
+                out.push(x);
+                x += dir;
+            }
+            return out;
+        }
+        let (mut lo, mut hi) = (front.min(back) - 1, front.max(back) + 1);
+        while lo >= 0 || hi < GRID_W {
+            if lo >= 0 {
+                out.push(lo);
+            }
+            if hi < GRID_W {
+                out.push(hi);
+            }
+            lo -= 1;
+            hi += 1;
+        }
+        out
+    }
+
+    pub fn deploy(&mut self, allies: &[UnitId], enemies: &[UnitId], deployment: &str) {
+        let party = Self::layout_columns(deployment, "party");
+        self.deploy_side(allies, party[0], party[1]);
+        let mut groups: [Vec<UnitId>; 2] = [Vec::new(), Vec::new()];
+        for (i, e) in enemies.iter().enumerate() {
+            groups[Self::group_of(i, deployment)].push(*e);
+        }
+        for (g, units) in groups.iter().enumerate() {
+            let cols = Self::layout_columns(deployment, if g == 0 { "a" } else { "b" });
+            if cols.len() == 2 && !units.is_empty() {
+                self.deploy_side(units, cols[0], cols[1]);
+            }
+        }
+    }
+
+    fn deploy_side(&mut self, units: &[UnitId], front: i32, back: i32) {
+        let spill = Self::spill_columns(front, back);
+        for &c in units {
+            let mut columns = if self.units[c].attack_range > 1 { vec![back, front] } else { vec![front, back] };
+            columns.extend(&spill);
+            for col in columns {
+                if self.place_in_column(c, col) {
+                    break;
+                }
+            }
+        }
+    }
+
+    fn place_in_column(&mut self, c: UnitId, x: i32) -> bool {
+        for y in DEPLOY_ROWS {
+            let cell = V2::new(x, y);
+            if self.grid.is_walkable(cell) && !self.grid.is_exit(cell) && !self.is_occupied(cell) {
+                return self.place(c, cell);
+            }
+        }
+        false
+    }
+
+    pub fn place_near_front(&mut self, c: UnitId, front: i32) -> bool {
+        let anchor = V2::new(front, DEPLOY_ANCHOR_Y);
+        let right = !Grid::is_party_half(anchor);
+        let mut best = NO_CELL;
+        let mut best_score = 1 << 30;
+        for y in 0..GRID_H {
+            let rank = DEPLOY_ROWS.iter().position(|r| *r == y).unwrap_or(DEPLOY_ROWS.len()) as i32;
+            for x in 0..GRID_W {
+                let cell = V2::new(x, y);
+                if !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
+                    continue;
+                }
+                let outward = if right { GRID_W - 1 - x } else { x };
+                let score = cell.dist(anchor) * 10000 + rank * 100 + outward;
+                if score < best_score {
+                    best_score = score;
+                    best = cell;
+                }
+            }
+        }
+        best != NO_CELL && self.place(c, best)
+    }
+
+    /// CatalogEncounter._place_leftovers (standard deployment): units off the grid take the free tile on their half
+    /// nearest the centre.
+    pub fn place_leftovers(&mut self, units: &[UnitId], party_side: bool, deployment: &str) {
+        if !party_side && deployment != "standard" {
+            let mut turn = 0;
+            for &c in units {
+                if self.has(c) {
+                    continue;
+                }
+                let cols = Self::layout_columns(deployment, if turn % 2 == 0 { "a" } else { "b" });
+                self.place_near_front(c, cols[0]);
+                turn += 1;
+            }
+            return;
+        }
+        for &c in units {
+            if self.has(c) {
+                continue;
+            }
+            let mut best = NO_CELL;
+            let mut best_score = 1 << 30;
+            for y in 0..GRID_H {
+                for x in 0..GRID_W {
+                    let cell = V2::new(x, y);
+                    if Grid::is_party_half(cell) != party_side || !self.grid.is_walkable(cell) || self.grid.is_exit(cell) || self.is_occupied(cell) {
+                        continue;
+                    }
+                    let score = Grid::centre_distance(cell) * 1000 + y * 20 + x;
+                    if score < best_score {
+                        best_score = score;
+                        best = cell;
+                    }
+                }
+            }
+            if best != NO_CELL {
+                self.place(c, best);
+            }
+        }
+    }
+}
