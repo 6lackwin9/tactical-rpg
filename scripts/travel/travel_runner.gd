@@ -123,7 +123,7 @@ static func complete_leg(gs: GameState, route_qid: String, to_qid: String) -> Di
 	var _t: String = QuestRunner.set_flag(gs, TravelRules.traversed_flag(route_qid), true)
 	return ExploreRunner.enter(gs, to_qid, MapRules.SPAWN)
 
-# TRAV1-L 2.5: {ok, errors, events, xp, advanced}. won: BattleBridge.apply, a scripted event's done flag then its
+# TRAV1-L 2.5: {ok, errors, events, xp, advanced, gold?, loot?} (gold / loot = a paid purse, PURSE1). won: BattleBridge.apply, a scripted event's done flag then its
 # sets_flags, then the leg completes; fled: nothing (the party is still at the leg's start, the time stays spent);
 # lost: the EXP1 wake rule at the leg's start node.
 static func after_fight(gs: GameState, fight: Dictionary, result: String) -> Dictionary:
@@ -160,4 +160,6 @@ static func after_fight(gs: GameState, fight: Dictionary, result: String) -> Dic
 		"lost":
 			var woke: Dictionary = ExploreRunner.wake(gs, str(fight.get("from", "")))
 			events.append_array(DictUtil.array_of(woke.get("events", [])))
-	return {"ok": true, "errors": errors, "events": events, "xp": applied["xp"], "advanced": applied["advanced"]}
+	var out: Dictionary = {"ok": true, "errors": errors, "events": events, "xp": applied["xp"], "advanced": applied["advanced"]}
+	out.merge(PurseRules.result_keys(DictUtil.dict_of(applied.get("purse", {}))))   # PURSE1 1.6: gold / loot lines
+	return out

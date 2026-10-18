@@ -48,13 +48,16 @@ func _init() -> void:
 	g.party.members[0].pouch = ["con_heal_potion", "con_heal_potion", "con_fire_bomb"] as Array[String]
 	g.party.members[1].hp_lost = 37   # HEAL1-L (save v9)
 	g.explore["last_rest"] = "ashlands:warden_keep"
+	g.purses = {"ashlands:courtyard_skirmish": 1}   # PURSE1-L (save v10)
 	g.autoplay = {"on": true, "party": "aggressive", "heroes": {g.party.members[0].id: "balanced", g.party.members[1].id: PlanPresets.CUSTOM}}
 	var errors: Array[String] = g.validate()
 	if not errors.is_empty():
 		push_error("gen_save_fixtures: played state invalid: %s" % str(errors))
 		quit(1)
 		return
-	var v9: Dictionary = g.to_dict()
+	var v10: Dictionary = g.to_dict()
+	var v9: Dictionary = v10.duplicate(true)
+	v9.erase("purses")
 	var v8: Dictionary = v9.duplicate(true)
 	for raw: Variant in DictUtil.array_of(DictUtil.dict_of(v8["party"]).get("members", [])):
 		DictUtil.dict_of(raw).erase("hp_lost")
@@ -77,7 +80,7 @@ func _init() -> void:
 	v2["location_id"] = "warden_keep"   # v2 saves had an unqualified location id
 	var v1: Dictionary = v2.duplicate(true)
 	v1.erase("loot_claimed")
-	var by_version: Dictionary = {1: v1, 2: v2, 3: v3, 4: v4, 5: v5, 6: v6, 7: v7, 8: v8, 9: v9}
+	var by_version: Dictionary = {1: v1, 2: v2, 3: v3, 4: v4, 5: v5, 6: v6, 7: v7, 8: v8, 9: v9, 10: v10}
 	for version: int in range(1, SaveGame.VERSION + 1):
 		if not by_version.has(version):
 			push_error("gen_save_fixtures: no derivation for save version %d; add one to by_version first (nothing written)." % version)

@@ -8,7 +8,10 @@ extends RefCounted
 # entry), valid purses clean in both catalogs (world-local and qualified loot; catalog encounters take only
 # qualified loot), the two soft warnings in both catalogs, storage, and shipped encounters clean. Fixture refs
 # are picked by rule (side / role, first item and passive); loot fixtures and writes go to a sandbox world fork.
-# Stage 2 (runtime): roll / pay, BattleBridge hook, save state.
+# Stage 2 (runtime, spec section 1 and 5): a sandbox world fork with test-only purse encounters and loot entries, played
+# from new games through BattleBridge.apply: no purse = today, win only, the roll (pure, seeded, in range), once,
+# loot (claimed once, pre-claimed and gated skipped), the gold cap, qualified ids, after-fight result keys and the
+# results reward lines, and a morale break win paying like a rout. Save v10 is tested in save_test_suite.
 # ==============================================================================
 
 const TAG: String = "Purse"
@@ -24,6 +27,7 @@ static func run() -> bool:
 	ok = _test_schema_defaults() and ok
 	ok = _test_shipped_clean() and ok
 	ok = _test_validation() and ok
+	ok = _test_runtime() and ok
 	return ok
 
 # ------------------------------------------------------------------------------
@@ -99,7 +103,7 @@ static func _bad_cases(prefix: String) -> Dictionary:
 		"gold_max above the cap": [{"gold_min": 5, "gold_max": cap + 1}, max_msg],
 		"gold_max not whole": [{"gold_min": 1, "gold_max": 1.5}, max_msg],
 		"loot missing": [{"gold_min": 1, "loot": prefix + MISSING_LOOT}, "Purse loot '%s' does not resolve." % (prefix + MISSING_LOOT)],
-		"loot not a string": [{"gold_min": 1, "loot": 7}, "Purse loot '7' does not resolve."],
+		"loot not a string": [{"gold_min": 1, "loot": 7}, "Purse loot '7' must be an item id."],
 		"loot a passive reward": [{"gold_min": 1, "loot": prefix + PASSIVE_LOOT}, "Purse loot '%s' must be an item reward." % (prefix + PASSIVE_LOOT)],
 		"once not a bool": [{"gold_min": 1, "once": "yes"}, "Purse once must be true or false."],
 	}
@@ -218,3 +222,245 @@ static func _test_validation() -> bool:
 	checks["catalog warnings: none for a plain purse (%s)" % "; ".join(cq)] = not TestHelpers.any_contains(cq, "urse")
 	TestHelpers.cleanup_worlds(path)
 	return TestHelpers.report(TAG, "Purse validation in both catalogs (%s): every message fires once; valid purses are clean; warnings" % world, checks)
+
+# ------------------------------------------------------------------------------
+# Runtime (stage 2)
+# ------------------------------------------------------------------------------
+
+const GATE_FLAG: String = "purse_probe.gate"
+const GATED_LOOT: String = "purse_probe_gated"
+
+# Test-only purse encounters (ids) for the runtime checks.
+static func _runtime_encounters() -> Dictionary:
+	return {
+		"purse_none": null,
+		"purse_fixed": {"gold_min": 10, "gold_max": 10},
+		"purse_farm": {"gold_min": 3, "gold_max": 6, "once": false},
+		"purse_loot": {"gold_min": 2, "gold_max": 2, "loot": ITEM_LOOT, "once": false},
+		"purse_gated": {"gold_min": 1, "loot": GATED_LOOT, "once": false},
+	}
+
+static func _new_game(world: String, unit: String) -> GameState:
+	var made: Dictionary = NewGame.create(world, [unit] as Array[String], 1)
+	return GameState.of(made.get("state", null))
+
+static func _purse_of(res: Dictionary) -> Dictionary:
+	return DictUtil.dict_of(res.get("purse", {}))
+
+static func _test_runtime() -> bool:
+	var crefs: Dictionary = _catalog_refs()
+	var wrefs: Dictionary = _world_refs()
+	var items: Array[String] = ContentCatalog.ids("items")
+	if crefs.is_empty() or wrefs.is_empty() or items.is_empty():
+		return TestHelpers.report_ok(TAG, "Runtime fixtures", false, "need catalog units, a world with party / enemy characters and an item")
+	var world: String = str(wrefs["world"])
+	var path: String = TestHelpers.sandbox("purse_runtime")
+	if not TestHelpers.fork_worlds(path):
+		TestHelpers.cleanup_worlds(path)
+		return TestHelpers.report_ok(TAG, "Runtime", false, "world fork failed")
+	var ok: bool = true
+	var setup: Array[String] = []
+	setup.append_array(WorldCatalog.upsert(world, "loot", {"id": ITEM_LOOT, "name": "Purse Probe Item", "reward_kind": "item", "ref": items[0], "count": 1}))
+	setup.append_array(WorldCatalog.upsert(world, "loot", {"id": GATED_LOOT, "name": "Purse Probe Gated", "reward_kind": "item", "ref": items[0], "count": 1,
+		"requires_flags": [{"key": GATE_FLAG, "value": true}]}))
+	var encs: Dictionary = _runtime_encounters()
+	for id: Variant in encs:
+		var e: Dictionary = _entry(wrefs, encs[id])
+		e["id"] = str(id)
+		setup.append_array(WorldCatalog.upsert(world, "encounters", e))
+	var gs0: GameState = _new_game(world, str(crefs["party"]))
+	if not setup.is_empty() or gs0 == null:
+		TestHelpers.cleanup_worlds(path)
+		return TestHelpers.report_ok(TAG, "Runtime fixtures stored", false, "%s; game %s" % ["; ".join(setup), str(gs0 != null)])
+	var unit: String = str(crefs["party"])
+	ok = _test_no_purse(world, unit) and ok
+	ok = _test_win_only(world, unit) and ok
+	ok = _test_roll(world, unit) and ok
+	ok = _test_loot(world, unit, items[0]) and ok
+	ok = _test_results(world, unit) and ok
+	ok = _test_break_pays(world, unit, wrefs) and ok
+	TestHelpers.cleanup_worlds(path)
+	return ok
+
+# Acceptance "No purse": the apply result, party gold and purses are as today for won, lost and fled.
+static func _test_no_purse(world: String, unit: String) -> bool:
+	var checks: Dictionary = {}
+	for outcome: String in BattleBridge.OUTCOMES:
+		var gs: GameState = _new_game(world, unit)
+		var gold: int = gs.party.gold
+		var res: Dictionary = BattleBridge.apply(gs, "purse_none", outcome)
+		var keys: Array = res.keys()
+		keys.sort()
+		checks["%s: result keys %s" % [outcome, str(keys)]] = str(keys) == str(["advanced", "errors", "ok", "xp"])
+		checks["%s: gold and purses unchanged" % outcome] = gs.party.gold == gold and gs.purses.is_empty()
+		checks["%s: pay of a no-purse encounter is {} and changes nothing" % outcome] = PurseRules.pay(gs, "purse_none").is_empty() and gs.purses.is_empty() and gs.party.gold == gold
+	return TestHelpers.report(TAG, "No purse: apply result, gold and purses as today (won, lost, fled)", checks)
+
+# Rules 1.1, 1.4, 1.7, 1.8: win only, once, every win counted, the gold cap, qualified ids.
+static func _test_win_only(world: String, unit: String) -> bool:
+	var checks: Dictionary = {}
+	var qid: String = WorldCatalog.qid(world, "purse_fixed")
+	for outcome: String in ["lost", "fled"]:
+		var g: GameState = _new_game(world, unit)
+		var gold: int = g.party.gold
+		var res: Dictionary = BattleBridge.apply(g, "purse_fixed", outcome)
+		checks["%s pays nothing, records nothing" % outcome] = g.party.gold == gold and g.purses.is_empty() and not res.has("purse")
+	var gs: GameState = _new_game(world, unit)
+	var start: int = gs.party.gold
+	var first: Dictionary = BattleBridge.apply(gs, "purse_fixed", "won")
+	checks["won 10-10: gold +10 (%d -> %d)" % [start, gs.party.gold]] = gs.party.gold == start + 10
+	checks["won: purse.gold 10, loot empty (%s)" % str(_purse_of(first))] = DictUtil.to_int(_purse_of(first).get("gold", -1)) == 10 and str(_purse_of(first).get("loot", "x")).is_empty()
+	checks["won: purses[%s] = 1 (qualified)" % qid] = DictUtil.to_int(gs.purses.get(qid, 0)) == 1 and gs.purses.size() == 1
+	checks["won: still valid"] = gs.validate().is_empty()
+	var second: Dictionary = BattleBridge.apply(gs, "purse_fixed", "won")
+	checks["once: the second win pays 0"] = DictUtil.to_int(_purse_of(second).get("gold", -1)) == 0 and gs.party.gold == start + 10
+	checks["once: no gold key for the results"] = PurseRules.result_keys(_purse_of(second)).is_empty()
+	checks["once: purses[qid] becomes 2"] = DictUtil.to_int(gs.purses.get(qid, 0)) == 2
+	var farm: GameState = _new_game(world, unit)
+	var paid: Array[int] = []
+	for i: int in range(3):
+		var before: int = farm.party.gold
+		var expect: int = DictUtil.to_int(PurseRules.roll(farm, "purse_farm")["gold"])
+		var r: Dictionary = BattleBridge.apply(farm, "purse_farm", "won")
+		paid.append(farm.party.gold - before)
+		checks["once false: win %d pays the roll (%d)" % [i + 1, expect]] = farm.party.gold - before == expect and DictUtil.to_int(_purse_of(r)["gold"]) == expect and expect >= 3
+	checks["once false: three wins counted"] = DictUtil.to_int(farm.purses.get(WorldCatalog.qid(world, "purse_farm"), 0)) == 3
+	# Rule 1.7: the cap.
+	var rich: GameState = _new_game(world, unit)
+	rich.party.gold = PartyState.GOLD_MAX - 3
+	var capped: Dictionary = BattleBridge.apply(rich, "purse_fixed", "won")
+	checks["cap: gold stops at GOLD_MAX, 3 added (%s)" % str(_purse_of(capped))] = rich.party.gold == PartyState.GOLD_MAX and DictUtil.to_int(_purse_of(capped)["gold"]) == 3
+	checks["cap: a note says so"] = TestHelpers.any_contains(JsonUtil.strings(_purse_of(capped)["notes"]), "capped")
+	# Rule 1.8: a qualified ref records the qualified id, also from another world.
+	var q: GameState = _new_game(world, unit)
+	var _qr: Dictionary = BattleBridge.apply(q, qid, "won")
+	checks["qualified ref records %s" % qid] = DictUtil.to_int(q.purses.get(qid, 0)) == 1
+	var other: String = ""
+	for w: String in WorldCatalog.world_ids():
+		if not WorldCatalog.lineage(w).has(world):
+			other = w
+			break
+	if not other.is_empty():
+		var x: GameState = _new_game(world, unit)
+		x.world_id = other
+		var before_x: int = x.party.gold
+		var _xr: Dictionary = BattleBridge.apply(x, qid, "won")
+		checks["from world %s: records %s and pays" % [other, qid]] = DictUtil.to_int(x.purses.get(qid, 0)) == 1 and x.party.gold == before_x + 10
+	return TestHelpers.report(TAG, "Win only; once; every win counted; gold cap; qualified ids (rules 1.1, 1.4, 1.7, 1.8)", checks)
+
+# Rule 1.3: pure, seeded from (qid, time, paid), in range, both ends reachable.
+static func _test_roll(world: String, unit: String) -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _new_game(world, unit)
+	gs.time = 37
+	var before: Dictionary = gs.to_dict()
+	var a: Dictionary = PurseRules.roll(gs, "purse_farm")
+	var b: Dictionary = PurseRules.roll(gs, "purse_farm")
+	checks["roll is pure"] = JsonUtil.deep_equal(before, gs.to_dict())
+	checks["same time and paid: same gold (%d, %d)" % [DictUtil.to_int(a["gold"]), DictUtil.to_int(b["gold"])]] = DictUtil.to_int(a["gold"]) == DictUtil.to_int(b["gold"]) and DictUtil.to_bool(a["pays"])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = ("%s|%d|%d" % [WorldCatalog.qid(world, "purse_farm"), 37, 0]).hash()
+	checks["seed is (qid|time|paid).hash()"] = DictUtil.to_int(a["gold"]) == rng.randi_range(3, 6)
+	var seen: Dictionary = {}
+	var in_range: bool = true
+	var qid: String = WorldCatalog.qid(world, "purse_farm")
+	for paid: int in range(200):
+		gs.purses[qid] = paid
+		var g: int = DictUtil.to_int(PurseRules.roll(gs, "purse_farm")["gold"])
+		in_range = in_range and g >= 3 and g <= 6
+		seen[g] = true
+	checks["every roll in 3..6"] = in_range
+	checks["paid 0..199 hits 3 and 6 (%s)" % str(seen.keys())] = seen.has(3) and seen.has(6)
+	var once: GameState = _new_game(world, unit)
+	once.purses[WorldCatalog.qid(world, "purse_fixed")] = 1
+	var r: Dictionary = PurseRules.roll(once, "purse_fixed")
+	checks["once, already won: does not pay"] = not DictUtil.to_bool(r["pays"]) and DictUtil.to_int(r["gold"]) == 0 and DictUtil.to_bool(r["has_purse"])
+	checks["no purse: has_purse false"] = not DictUtil.to_bool(PurseRules.roll(once, "purse_none")["has_purse"])
+	return TestHelpers.report(TAG, "Roll: pure, seeded, in range (rule 1.3)", checks)
+
+# Rule 1.5: loot claimed on the first paying win; then gold only; pre-claimed and gated loot skipped, gold still paid.
+static func _test_loot(world: String, unit: String, item: String) -> bool:
+	var checks: Dictionary = {}
+	var lqid: String = WorldCatalog.qid(world, ITEM_LOOT)
+	var gs: GameState = _new_game(world, unit)
+	var stash: int = DictUtil.to_int(gs.party.stash.get(item, 0))
+	var first: Dictionary = BattleBridge.apply(gs, "purse_loot", "won")
+	checks["first win: loot %s (%s)" % [lqid, str(_purse_of(first))]] = str(_purse_of(first).get("loot", "")) == lqid and gs.loot_claimed.has(lqid)
+	checks["first win: item in the stash"] = DictUtil.to_int(gs.party.stash.get(item, 0)) == stash + 1
+	var second: Dictionary = BattleBridge.apply(gs, "purse_loot", "won")
+	checks["second win: gold only"] = str(_purse_of(second).get("loot", "x")).is_empty() and DictUtil.to_int(_purse_of(second)["gold"]) == 2 and DictUtil.to_int(gs.party.stash.get(item, 0)) == stash + 1
+	var pre: GameState = _new_game(world, unit)
+	var _c: String = RewardGrant.claim_loot(pre, lqid)
+	var pre_gold: int = pre.party.gold
+	var pr: Dictionary = BattleBridge.apply(pre, "purse_loot", "won")
+	checks["claimed before (by a quest): skipped, gold pays"] = str(_purse_of(pr).get("loot", "x")).is_empty() and pre.party.gold == pre_gold + 2
+	var gated: GameState = _new_game(world, unit)
+	var gqid: String = WorldCatalog.qid(world, GATED_LOOT)
+	var gr: Dictionary = BattleBridge.apply(gated, "purse_gated", "won")
+	checks["unmet requires_flags: unclaimed, gold pays"] = str(_purse_of(gr).get("loot", "x")).is_empty() and not gated.loot_claimed.has(gqid) and DictUtil.to_int(_purse_of(gr)["gold"]) == 1
+	var _f: String = gated.set_flag(GATE_FLAG, true)
+	var gr2: Dictionary = BattleBridge.apply(gated, "purse_gated", "won")
+	checks["flags met: claimed"] = str(_purse_of(gr2).get("loot", "")) == gqid and gated.loot_claimed.has(gqid)
+	return TestHelpers.report(TAG, "Loot: once per save; claimed and gated entries skipped, gold still pays (rule 1.5)", checks)
+
+# Rule 1.6: the after-fight results carry top-level gold / loot; the results popup lists them.
+static func _test_results(world: String, unit: String) -> bool:
+	var checks: Dictionary = {}
+	var gs: GameState = _new_game(world, unit)
+	var dlg: Dictionary = DialogueRunner.after_fight(gs, {"encounter": "purse_loot"}, "won")
+	checks["dialogue fight: gold 2 and loot (%s)" % str(dlg.get("gold", null))] = DictUtil.to_int(dlg.get("gold", 0)) == 2 and str(dlg.get("loot", "")) == WorldCatalog.qid(world, ITEM_LOOT)
+	var map: Dictionary = ExploreRunner.after_fight(gs, {"encounter": "purse_fixed"}, "won")
+	checks["map fight: gold 10"] = DictUtil.to_bool(map.get("ok", false)) and DictUtil.to_int(map.get("gold", 0)) == 10 and not map.has("loot")
+	var again: Dictionary = ExploreRunner.after_fight(gs, {"encounter": "purse_fixed"}, "won")
+	checks["map fight, once paid: no gold key"] = DictUtil.to_bool(again.get("ok", false)) and not again.has("gold")
+	var none: Dictionary = DialogueRunner.after_fight(gs, {"encounter": "purse_none"}, "won")
+	checks["no purse: no gold / loot keys"] = not none.has("gold") and not none.has("loot")
+	var rewards: Dictionary = BattleResultsModel.rewards_of(dlg)
+	checks["rewards_of holds gold and loot"] = DictUtil.to_int(rewards.get("gold", 0)) == 2 and not str(rewards.get("loot", "")).is_empty()
+	var lines: Array[String] = BattleResultsModel.new(null, {}, [] as Array[String], "won", rewards).reward_lines()
+	checks["reward lines: Gold +2 and the loot (%s)" % "; ".join(lines)] = lines.has("Gold +2") and TestHelpers.any_contains(lines, "Loot: ")
+	# Road fights (TravelRunner.after_fight) merge the same PurseRules.result_keys; a leg needs a route, so the shared
+	# helper is checked directly.
+	checks["result_keys: gold and loot"] = JsonUtil.deep_equal(PurseRules.result_keys({"gold": 4, "loot": "w:x", "notes": []}), {"gold": 4, "loot": "w:x"})
+	return TestHelpers.report(TAG, "Results: settled fights carry gold / loot; reward lines show them (rule 1.6)", checks)
+
+# Rule 1.2: a morale break win pays the same as a full rout (both are `won`). A test-only enemy that can flee, picked
+# by rule, three of them in a morale encounter with a fixed purse; two down, the third surrenders.
+static func _test_break_pays(world: String, unit: String, refs: Dictionary) -> bool:
+	var checks: Dictionary = {}
+	var grunt_unit: String = ""
+	for u: Dictionary in ContentCatalog.entries("units"):
+		var n: Dictionary = ContentSchema.normalize("units", u)
+		if str(n["side"]) == "enemy" and DictUtil.to_float(n["flee_ratio"]) > 0.0 and not DictUtil.to_bool(n["reckless"]) and not EncounterMorale.LEADER_TIERS.has(str(n["tier"])):
+			grunt_unit = str(n["id"])
+			break
+	if grunt_unit.is_empty():
+		return TestHelpers.report_ok(TAG, "Break win pays", false, "no catalog enemy unit that can flee")
+	var stored: Array[String] = WorldCatalog.upsert(world, "characters", {"id": "purse_probe_grunt", "name": "Purse Grunt", "role": "enemy", "base_unit": grunt_unit})
+	stored.append_array(WorldCatalog.upsert(world, "encounters", {"id": "purse_break", "name": "Purse Break", "zone": "stone_arena", "party": [refs["party"]],
+		"enemies": ["purse_probe_grunt", "purse_probe_grunt", "purse_probe_grunt"], "morale": true, "purse": {"gold_min": 7, "gold_max": 7}}))
+	checks["fixtures stored (%s)" % "; ".join(stored)] = stored.is_empty()
+	var gs: GameState = _new_game(world, unit)
+	var built: Dictionary = BattleBridge.encounter_for(gs, "purse_break")
+	var raw_enc: Variant = built.get("encounter", null)
+	if not (raw_enc is GameEncounter):
+		checks["encounter built (%s)" % str(built.get("errors", []))] = false
+		return TestHelpers.report(TAG, "A morale break win pays the purse (rule 1.2)", checks)
+	var s := CombatSession.new(raw_enc as GameEncounter)
+	s.start()
+	for i: int in range(2):
+		s.enemies[i].hp = 0
+	# One block, as MoraleTestSuite._run_block: the break resolves at the block end.
+	if s.phase != CombatSession.Phase.PLANNING or s.confirm_plan(false):
+		var b: int = s.current_block
+		for i: int in range(600):
+			s.step_next()
+			if s.phase == CombatSession.Phase.REPLAY or s.current_block != b or s.combat_over:
+				break
+	var outcome: String = BattleBridge.outcome(s)
+	checks["break win is won (%s)" % outcome] = outcome == "won"
+	var before: int = gs.party.gold
+	var res: Dictionary = BattleBridge.apply(gs, "purse_break", outcome)
+	checks["break win pays the full purse"] = gs.party.gold == before + 7 and DictUtil.to_int(_purse_of(res).get("gold", 0)) == 7
+	s.dispose()
+	return TestHelpers.report(TAG, "A morale break win pays the purse (rule 1.2)", checks)

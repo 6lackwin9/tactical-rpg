@@ -23,6 +23,7 @@ static func _table() -> Dictionary:
 		_steps[6] = _v6_to_v7
 		_steps[7] = _v7_to_v8
 		_steps[8] = _v8_to_v9
+		_steps[9] = _v9_to_v10
 	return _steps
 
 static func register(from_version: int, step: Callable) -> void:
@@ -104,7 +105,8 @@ static func _v7_to_v8(state: Dictionary) -> Dictionary:
 	return out
 
 # v8 -> v9 (HEAL1-L): every party member (when the party and the member are objects) gets hp_lost 0 (full HP) and
-# explore (when it is an object) gets last_rest "" (the start location); nothing else changes.
+# explore (when it is an object) gets last_rest "" (the start location); nothing else changes. 9 -> 10 (PURSE1-L) adds
+# purses {}.
 static func _v8_to_v9(state: Dictionary) -> Dictionary:
 	var out: Dictionary = state.duplicate(true)
 	if out.get("party", null) is Dictionary:
@@ -116,6 +118,13 @@ static func _v8_to_v9(state: Dictionary) -> Dictionary:
 	if out.get("explore", null) is Dictionary:
 		var explore: Dictionary = out["explore"]
 		explore["last_rest"] = ""
+	return out
+
+# v9 -> v10 (PURSE1-L): no purse encounter won yet (purses {}); nothing else changes. A story purse won before the
+# bump pays once more if re-fought (spec rule 1.9, accepted).
+static func _v9_to_v10(state: Dictionary) -> Dictionary:
+	var out: Dictionary = state.duplicate(true)
+	out["purses"] = {}
 	return out
 
 # Brings a save envelope to `target_version`. Returns

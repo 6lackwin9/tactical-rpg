@@ -408,7 +408,7 @@ func _advance() -> Dictionary:
 	return _fail("Pick a choice.")
 
 # After a dialogue fight: BattleBridge.apply (XP + quest hook on won), plus ExploreRunner.wake on lost.
-# Returns {ok, errors, xp, advanced, events}.
+# Returns {ok, errors, xp, advanced, events, gold?, loot?} (gold / loot = a paid purse, PURSE1).
 static func after_fight(p_gs: GameState, fight: Dictionary, outcome: String) -> Dictionary:
 	var applied: Dictionary = BattleBridge.apply(p_gs, str(fight.get("encounter", "")), outcome)
 	var events: Array[Dictionary] = []
@@ -420,4 +420,6 @@ static func after_fight(p_gs: GameState, fight: Dictionary, outcome: String) -> 
 		var woke: Dictionary = ExploreRunner.wake(p_gs)
 		for e: Variant in DictUtil.array_of(woke.get("events", [])):
 			events.append(DictUtil.dict_of(e))
-	return {"ok": true, "errors": errs, "xp": applied["xp"], "advanced": applied["advanced"], "events": events}
+	var out: Dictionary = {"ok": true, "errors": errs, "xp": applied["xp"], "advanced": applied["advanced"], "events": events}
+	out.merge(PurseRules.result_keys(DictUtil.dict_of(applied.get("purse", {}))))   # PURSE1 1.6: gold / loot lines
+	return out

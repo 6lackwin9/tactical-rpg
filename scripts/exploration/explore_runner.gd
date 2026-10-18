@@ -455,8 +455,9 @@ static func reset_counter(gs: GameState) -> void:
 	gs.explore["steps"] = 0
 	gs.explore["next_at"] = GameRolls.range_i(gs, GameRolls.EXPLORE, lo, hi)
 
-# {ok, errors, events, xp, advanced}: BattleBridge.apply, then won: the marker's done flag (once) and sets_flags;
-# fled: back to the tile before the step; lost: wake. Then the counter reset.
+# {ok, errors, events, xp, advanced, gold?, loot?}: BattleBridge.apply (gold / loot = a paid purse, PURSE1), then
+# won: the marker's done flag (once) and sets_flags; fled: back to the tile before the step; lost: wake. Then the
+# counter reset.
 static func after_fight(gs: GameState, fight: Dictionary, result: String) -> Dictionary:
 	var applied: Dictionary = BattleBridge.apply(gs, str(fight.get("encounter", "")), result)
 	var errors: Array[String] = []
@@ -485,7 +486,9 @@ static func after_fight(gs: GameState, fight: Dictionary, result: String) -> Dic
 			var woke: Dictionary = wake(gs)
 			events.append_array(DictUtil.array_of(woke.get("events", [])))
 	reset_counter(gs)
-	return {"ok": true, "errors": errors, "events": events, "xp": applied["xp"], "advanced": applied["advanced"]}
+	var out: Dictionary = {"ok": true, "errors": errors, "events": events, "xp": applied["xp"], "advanced": applied["advanced"]}
+	out.merge(PurseRules.result_keys(DictUtil.dict_of(applied.get("purse", {}))))   # PURSE1 1.6: gold / loot lines
+	return out
 
 # ------------------------------------------------------------------------------
 # Interacting (EXP1-L 2.5)
