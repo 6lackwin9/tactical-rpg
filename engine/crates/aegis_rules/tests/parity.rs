@@ -180,3 +180,27 @@ fn rng_matches_godot() {
     }
     eprintln!("rng: {n} draws match Godot");
 }
+
+#[test]
+fn godot_hash_matches() {
+    use aegis_rules::ghash::{hash, GVar};
+    use aegis_rules::rng::GodotRng;
+    let rows: Value = serde_json::from_str(&std::fs::read_to_string(out_dir().join("hash.json")).expect("missing hash.json - run engine/parity/export.sh")).unwrap();
+    let mut n = 0;
+    for r in rows.as_array().unwrap() {
+        let want = r["hash"].as_u64().unwrap() as u32;
+        let got = if let Some(s) = r.get("string") {
+            hash(&GVar::Str(s.as_str().unwrap().into()))
+        } else if let Some(i) = r.get("int") {
+            hash(&GVar::Int(i.as_i64().unwrap()))
+        } else {
+            let v = GVar::Arr(vec![GVar::Int(r["seed"].as_i64().unwrap()), GVar::Str(r["stream"].as_str().unwrap().into()), GVar::Int(r["n"].as_i64().unwrap())]);
+            let h = hash(&v);
+            assert_eq!(GodotRng::new(h as u64).randi(), r["roll"].as_i64().unwrap(), "GameRolls draw for {r}");
+            h
+        };
+        assert_eq!(got, want, "hash of {r}");
+        n += 1;
+    }
+    eprintln!("hash: {n} samples match Godot");
+}

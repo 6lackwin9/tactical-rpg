@@ -13,7 +13,7 @@ const STANCES: Array[int] = [0, 1, 2, 3]   # CombatTypes.StanceType NEUTRAL, OFF
 const SLOTS: Array[String] = ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"]
 
 var out_dir: String = ""
-var only: Array[String] = ["catalog", "units", "damage", "rng"]
+var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data"]
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -38,7 +38,50 @@ func _initialize() -> void:
 		_write("damage.json", {"cases": _damage(units)})
 	if only.has("rng"):
 		_write("rng.json", _rng())
+	if only.has("hash"):
+		_write("hash.json", _hash_samples())
+	if only.has("worlds"):
+		_write("worlds.json", _worlds())
+	if only.has("game_data"):
+		_write("game_data.json", _game_data())
 	quit()
+
+# Godot's hash() on the shapes the game hashes (GameRolls: [seed, stream, n]; strings; ints) and GameRolls draws.
+func _hash_samples() -> Array:
+	var rows: Array = []
+	for s: int in [0, 1, 1337, 2147483647, 99]:
+		for stream: String in ["explore", "travel", "purse", ""]:
+			for n: int in [0, 1, 7]:
+				var gs := GameState.new()
+				gs.rng_seed = s
+				gs.rolls[stream] = n
+				rows.append({"seed": s, "stream": stream, "n": n, "hash": hash([s, stream, n]), "roll": GameRolls.roll(gs, stream)})
+	for text: String in ["", "a", "explore", "ashlands:warden_keep|3|0"]:
+		rows.append({"string": text, "hash": hash(text)})
+	for i: int in [0, 1, -1, 123456789, 2147483647]:
+		rows.append({"int": i, "hash": hash(i)})
+	return rows
+
+# Every world: manifest, lineage and its OWN normalised entries per kind (the engine applies inheritance itself).
+func _worlds() -> Dictionary:
+	var out: Dictionary = {}
+	for w: String in WorldCatalog.world_ids():
+		var own: Dictionary = {}
+		for kind: String in WorldSchema.KINDS:
+			var rows: Array = []
+			for e: Dictionary in WorldCatalog.own_entries(w, kind):
+				rows.append(e)
+			own[kind] = rows
+		out[w] = {"manifest": WorldCatalog.manifest(w), "lineage": WorldCatalog.lineage(w), "own": own}
+	return out
+
+# The global game catalogs as loaded: region maps, quests, dialogue services, the XP curve, item families.
+func _game_data() -> Dictionary:
+	var xp: Array = []
+	for level: int in range(1, StatRules.MAX_LEVEL + 1):
+		xp.append(XpCurve.xp_for_level(level))
+	return {"maps": MapCatalog.entries(), "quests": QuestCatalog.entries(), "services": ServiceCatalog.entries(),
+		"xp_for_level": xp, "item_families": ContentCatalog.entries("item_families"), "playable_worlds": NewGame.playable_worlds()}
 
 # Seeded RandomNumberGenerator draws (the PCG32 port is checked against them).
 func _rng() -> Array:
