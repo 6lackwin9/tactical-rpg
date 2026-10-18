@@ -20,7 +20,7 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 | UI/UX | screens, menus, HUD, browser rendering | `logic-builder`, `asset-builder` for UI art |
 | Assets & Audio | art, icons, SFX, fonts, catalog and world data | `asset-builder` |
 | Balance | sims, `docs/BALANCE_REPORT.md`, tuning | `balance`, then `design-brainstorm` for options |
-| Design | specs, decisions, the roadmap; each spec is approved here, then built in its area's thread | `design-brainstorm` |
+| Design | specs, decisions, the roadmap; each spec is approved here, then built in its area's thread; the design review cycle and its option branches ([design-review.md](design-review.md)) | `design-brainstorm`; `logic-builder` and `asset-builder` for option builds only |
 | Platform & Workflow | CI, the web build, playtest tooling, agent and skill changes, cleanups | `housekeeper`, `logic-builder` for tools and CI |
 
 Every area thread also runs `change-reviewer` on each task branch before it merges into `develop`. A task whose area is unclear goes to the thread that owns most of its `Touches`. Content changes (values, new items, enemies, abilities) follow `content-edits.md`: small tweaks land with a before/after table, new content needs one approval card.
@@ -106,6 +106,7 @@ Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.
 ## Scheduled routines
 
 - Daily planner pass (economy mode, 18:30 UTC): pick the next `approved` task whose `Depends on` rows are `done` and whose `Touches` do not overlap another area's unmerged task branch, and hand it to its area thread, which lands it on `develop`. The routine wakes the Platform & Workflow thread (no new thread per run), which only dispatches: it sends the task to the area thread's session as a cross-session message (thread found by title in the project's thread list), or keeps it when the area is Platform & Workflow. If the area has no live thread, it asks the coordinator session to open that area thread (already approved by the user) and pass the task on. The area thread stops at any design question. If the Platform & Workflow thread is closed, recreate the routine bound to the new one. Balance and housekeeper routines are added later on request.
+- Design review check: the Design thread keeps a routine bound to itself at 12:20 and 18:20 UTC, after each release, that starts a design review when one is due ([design-review.md](design-review.md)).
 - Release batch: the Merge & Release thread keeps two routines bound to itself, 11:52 UTC ("Midday release batch") and 17:52 UTC ("Daily release batch", before the 18:30 dispatch).
 - Routines follow the same approval rule as threads.
 
