@@ -1,0 +1,12 @@
+[package]
+name = "aegis_sim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aegis_core = { path = "../aegis_core" }
+aegis_vfs = { path = "../aegis_vfs" }
+aegis_vm = { path = "../aegis_vm" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
