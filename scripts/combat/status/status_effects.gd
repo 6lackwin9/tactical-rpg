@@ -176,6 +176,24 @@ static func grant_now(target: Combatant, status: String, rounds: int = 1, magnit
 	if not source.is_empty():
 		target.status_sources[status] = source
 
+# Grants a skill's extra_grants (BAL5-L) to `target` at the timing of the skill's own grant: on a DEFEND skill
+# (`defend` true) a defend buff (riposte) is active at once, every other buff is queued for next round.
+# Returns the granted status ids in list order.
+static func grant_extras(target: Combatant, extras: Array[Dictionary], defend: bool, source: String = "") -> Array[String]:
+	var granted: Array[String] = []
+	for row: Dictionary in extras:
+		var status: String = str(row.get("status", ""))
+		if status.is_empty():
+			continue
+		var rounds: int = DictUtil.to_int(row.get("rounds", 1), 1)
+		var magnitude: int = DictUtil.to_int(row.get("magnitude", 0))
+		if defend and defend_buffs().has(status):
+			grant_now(target, status, rounds, magnitude, source)
+		else:
+			queue(target, status, rounds, magnitude, source)
+		granted.append(status)
+	return granted
+
 # True when `status` is active now or queued for next round.
 static func has_any(target: Combatant, status: String) -> bool:
 	return target.statuses.has(status) or target.pending_statuses.has(status)

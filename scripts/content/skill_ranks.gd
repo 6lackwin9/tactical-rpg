@@ -15,7 +15,7 @@ extends RefCounted
 const RANK_KEYS: Array[String] = [
 	"level", "blocks", "unlock_offset", "power_mult", "dash_tiles", "reach_min", "reach_max",
 	"status_potency", "status_magnitude", "status_rounds", "heal_base", "heal_mult", "grant_status",
-	"cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap",
+	"extra_grants", "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap",
 ]
 
 # Combo fields (S12C-L) set on the family only: one value for all ranks; a rank modifier that sets one is refused

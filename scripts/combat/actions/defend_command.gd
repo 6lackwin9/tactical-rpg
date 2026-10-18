@@ -10,18 +10,36 @@ func _init(p_source: Combatant, p_mitigation_ratio: float = 0.5, p_block_cost: i
 
 var grant_status: String = ""   # buff made active the moment the defend starts (StatusEffects.defend_buffs(), e.g. riposte)
 var status_rounds: int = 1      # rounds it lasts, counting the current one
+var extra_grants: Array[Dictionary] = []   # the skill's extra_grants (BAL5-L), granted with grant_status at the same timing
 # BattleCommand.status_magnitude carries the skill's status_magnitude (fortify armor points; 0 = the registry minimum).
 
 # Runs after AP and the (Defensive) stance switch, so the riposte survives its own skill's switch.
 func on_start() -> String:
-	if grant_status.is_empty() or not source.is_active():
+	if (grant_status.is_empty() and extra_grants.is_empty()) or not source.is_active():
 		return ""
-	if StatusEffects.defend_buffs().has(grant_status):
+	var lines: Array[String] = []
+	if grant_status.is_empty():
+		pass
+	elif StatusEffects.defend_buffs().has(grant_status):
 		StatusEffects.grant_now(source, grant_status, status_rounds, status_magnitude, source.name)
-		return "[Riposte] %s readies a riposte (%d round%s, ends on a stance change)" % [source.name, status_rounds, "" if status_rounds == 1 else "s"]
-	# A support-grant buff (taunt) is queued like every support buff: it starts next round.
-	StatusEffects.queue(source, grant_status, status_rounds, status_magnitude, source.name)
-	return "[%s] %s will be %s next round (%d round%s)" % [grant_status.capitalize(), source.name, StatusEffects.display_name(grant_status).to_lower(), status_rounds, "" if status_rounds == 1 else "s"]
+		lines.append("[Riposte] %s readies a riposte (%d round%s, ends on a stance change)" % [source.name, status_rounds, "" if status_rounds == 1 else "s"])
+	else:
+		# A support-grant buff (taunt) is queued like every support buff: it starts next round.
+		StatusEffects.queue(source, grant_status, status_rounds, status_magnitude, source.name)
+		lines.append(_queued_line(grant_status, status_rounds))
+	for status: String in StatusEffects.grant_extras(source, extra_grants, true, source.name):
+		if not StatusEffects.defend_buffs().has(status):
+			lines.append(_queued_line(status, _extra_rounds(status)))
+	return "; ".join(lines)
+
+func _queued_line(status: String, rounds: int) -> String:
+	return "[%s] %s will be %s next round (%d round%s)" % [status.capitalize(), source.name, StatusEffects.display_name(status).to_lower(), rounds, "" if rounds == 1 else "s"]
+
+func _extra_rounds(status: String) -> int:
+	for row: Dictionary in extra_grants:
+		if str(row.get("status", "")) == status:
+			return DictUtil.to_int(row.get("rounds", 1), 1)
+	return 1
 
 # Set by the resolver when a stance-break hit lands on this unit (S12C-L): the guard is not re-applied for the
 # remaining blocks.

@@ -88,6 +88,7 @@ func build_command(actor: Combatant, grid: CombatGrid) -> BattleCommand:
 				var defend := DefendCommand.new(actor, skill.mitigation, skill.blocks, 1)
 				defend.grant_status = skill.grant_status
 				defend.status_rounds = skill.status_rounds
+				defend.extra_grants = skill.extra_grants
 				defend.status_magnitude = skill.status_magnitude
 				command = defend
 			SkillDef.Kind.FOCUS:

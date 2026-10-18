@@ -64,6 +64,7 @@ static func skill(entry: Dictionary) -> SkillDef:
 	s.heal_mult = DictUtil.to_float(e["heal_mult"])
 	s.grant_status = str(e["grant_status"])
 	s.cleanse_statuses = _strings(e["cleanse_statuses"])
+	s.extra_grants = _extra_grant_rows(e["extra_grants"])
 	s.jump_tiles = DictUtil.to_int(e["jump_tiles"])
 	s.ends_in_stance = -1 if str(e["ends_in_stance"]).is_empty() else _enum(CombatTypes.StanceType.keys(), str(e["ends_in_stance"]), -1)
 	s.disrupt = _enum(SkillDef.Disrupt.keys(), str(e["disrupt"]), SkillDef.Disrupt.NONE)
@@ -89,6 +90,14 @@ static func _exploit_rows(raw: Variant) -> Array[Dictionary]:
 		out.append({"status": str(row.get("status", "")), "power_mult": DictUtil.to_float(row.get("power_mult", 1.0), 1.0)})
 	return out
 
+# The extra_grants list of a skill row as typed {"status": String, "rounds": int, "magnitude": int} rows (BAL5-L).
+static func _extra_grant_rows(raw: Variant) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for item: Variant in DictUtil.array_of(raw):
+		var row: Dictionary = DictUtil.dict_of(item)
+		out.append({"status": str(row.get("status", "")), "rounds": DictUtil.to_int(row.get("rounds", 1), 1), "magnitude": DictUtil.to_int(row.get("magnitude", 0))})
+	return out
+
 static func skill_to_entry(s: SkillDef) -> Dictionary:
 	return ContentSchema.normalize("skills", {
 		"id": s.id, "name": s.display_name, "kind": _name(SkillDef.Kind.keys(), s.kind),
@@ -100,7 +109,7 @@ static func skill_to_entry(s: SkillDef) -> Dictionary:
 		"boost": s.boost, "boost_rounds": s.boost_rounds, "recover_ap": s.recover_ap,
 		"dash_tiles": s.dash_tiles, "status_rounds": s.status_rounds, "target_mode": _name(SkillDef.TargetMode.keys(), s.target_mode),
 		"heal_stat": s.heal_stat, "heal_base": s.heal_base, "heal_mult": s.heal_mult, "grant_status": s.grant_status, "learned_only": s.learned_only,
-		"cleanse_statuses": s.cleanse_statuses, "jump_tiles": s.jump_tiles,
+		"cleanse_statuses": s.cleanse_statuses, "extra_grants": s.extra_grants, "jump_tiles": s.jump_tiles,
 		"ends_in_stance": "" if s.ends_in_stance < 0 else _name(CombatTypes.StanceType.keys(), s.ends_in_stance),
 		"disrupt": _name(SkillDef.Disrupt.keys(), s.disrupt), "exploit": s.exploit, "exploit_consume": s.exploit_consume,
 		"family": s.family, "tier": s.tier, "template": s.template, "origin": s.origin, "basic": s.basic, "grade": _name(SkillDef.Grade.keys(), s.grade).to_lower(), "requires": s.requires, "unlock_offset": s.unlock_offset,

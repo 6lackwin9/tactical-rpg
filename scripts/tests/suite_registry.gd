@@ -54,6 +54,7 @@ static func run_all(tree_parent: Node = null, systems: PackedStringArray = Packe
 	if _on("ai"): results.append(StatusExpansionAiTestSuite.run())
 	if _on("rules"): results.append(TerrainRulesTestSuite.run())
 	if _on("rules"): results.append(ComboRulesTestSuite.run())
+	if _on("rules"): results.append(ExtraGrantsTestSuite.run())
 	if _on("balance"): results.append(Bal2RulesTestSuite.run())
 	if _on("balance"): results.append(Bal2SimTestSuite.run())
 	if _on("balance"): results.append(Bal4CampaignTestSuite.run())

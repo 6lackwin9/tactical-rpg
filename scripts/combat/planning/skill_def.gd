@@ -87,6 +87,7 @@ var heal_stat: String = ""      # SUPPORT: stat the heal scales with ("INT" / "K
 var heal_base: int = 0          # SUPPORT: flat heal
 var heal_mult: float = 0.0      # SUPPORT: heal per point of heal_stat (see SupportRules.heal_amount)
 var grant_status: String = ""   # SUPPORT: buff status given to the target (StatusEffects.buffs())
+var extra_grants: Array[Dictionary] = []   # DEFEND / SUPPORT (BAL5-L): [{"status", "rounds", "magnitude"}] buffs granted with grant_status, same timing
 var cleanse_statuses: Array[String] = []   # SUPPORT: debuffs removed from the target, active and pending (CLEANSE_ALL = every debuff; empty = none)
 var jump_tiles: int = 0         # DISENGAGE: how many tiles the jump covers at most
 # Combos (S12C-L; family-level fields, ContentFactory builds them).
