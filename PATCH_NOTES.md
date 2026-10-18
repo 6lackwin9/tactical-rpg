@@ -1,0 +1,153 @@
+# Patch notes
+
+Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
+
+<!-- last: 1c617f5 -->
+
+## 2026-10-18
+
+In the game:
+
+- **Map movement**: walk with WASD or the arrow keys, hold a key to keep walking, and the party slides smoothly between tiles.
+- **Game menu**: Esc on the map opens a menu over the paused map with Party, Journal, Save, Load, Settings and Quit; New Game and save/load fixes.
+- **Healing between battles**: HP now carries over between fights, you regain some after each win, and rest places and Make camp (3 supplies) heal fully. Rest places added at Warden Keep and Slag Gate.
+- **Enemy intent**: in combat planning, enemies show what they plan to do (chips, arrows and a short line), and Bryn's Warden's Eye passive reveals more.
+- **Boss phases**: Grakka changes phase mid-fight (Crown of Nails), with a phase banner in combat.
+- **Battle objectives**: fights can be about more than defeat: hold the courtyard, the wagon raid with Wenn Tallow, slay Grakka.
+- **Recruiting**: Bryn and five story recruits join through the campaign, with the Toller muster and new priest and brawler units.
+- **Battle pouch**: carry potions and bombs into battle (Gear screen) and use them as a planned step; the free class potions are gone.
+- **Combat screen**: compact layout, a hover card for units instead of the inspector, tactic dropdowns and an Autoplay toggle on the timeline row.
+- **Battle autoplay**: let the party fight on its own using tactics, with safety stops.
+- **Maps**: full-screen region and world maps with marker icons, labels, a legend and hover info; click your own pin on the world map to enter; the world map opened over a region map draws again.
+- **Travel supplies**: spent on the road, bought in shops (Hest) and found in chests.
+- **Campaign**: the Ashlands campaign "The Long Dry"; quests keep tracking across connected worlds.
+- **Music and sound**: music for menus, towns, danger, shops, travel and bosses; volume sliders play a sample; Mute.
+- **Settings and controls**: Settings is a tabbed popup you can open during play; a Controls tab lists every key.
+- **Battle flow**: a transition into combat and a victory popup with XP bars, rewards, minimise and replay.
+- **Enemy AI**: taunters step in early, healers look after themselves, and area attacks tolerate a little friendly fire.
+- **Art**: Ashlands placeholder art (characters, classes, icons, tiles, maps, backdrops) and a second pass for chips and tiles.
+- **Scene Runner (testing)**: F11 or the Fullscreen button toggles fullscreen; Minimize and Exit buttons; no runner pill over the real game; a Note button for playtest notes.
+
+Every change that touched the game:
+
+- BAL5-AI: early taunt with walk-in, healer self-care, AoE friendly-fire tolerance (7ceddcb)
+- UIR-2: game menu popup over the paused map (Party, Journal, Save, Load, Settings, Quit), new game, save/load fixes (52dda97)
+- HEAL1-B: campaign check passes (arms 46, gate 95) (ddbb56c)
+- MAPKEYS1-U: WASD, held-key walking, smooth map movement, label fix (126f56f)
+- BAL5-R1: trio re-measure; T2, S1 and A2 triggers fire (f3d8ac2)
+- BREPORT1-L: battle report data (shared BattleMetrics collector, combo signal, BattleReport, results-model API) (d0219fa)
+- WMAP-BLANK: world map opened over the region map draws again (41d2282)
+- BOSS1-U: boss phase banner in combat (c14582e)
+- PILL-GAME: no Scene Runner pill over the real game (f75b545)
+- HEAL1-S: campaign sim keys heal=rally, rest=, extra= (47ef3b4)
+- HEAL1-L: between-battle healing rules (stored HP, rally, rest places, Make camp, defeat cost) (0832b03)
+- BAL5-SIM + BAL5-PH: trio sim tooling and generated boss phase (c78b8ba)
+- HEAL1-A: rest places at warden_keep and slag_gate (message for 85ac473) (9d270f6)
+- INTENT1-U: enemy intent chips, arrows and tell lines in combat planning (8d4971d)
+- ITEMUSE1-A2: remove the free class pouch potions (fda40cc)
+- HEAL1-L (1/2 schema): stored HP, last rest place, save v9, location rest (44e0641)
+- SONNET-TRIAL: decision row, Assets & Audio runs on Sonnet as a trial (user card 08:21 UTC) (a499b3f)
+- UIR-1: shared screen frame, button width classes, selected style, No focus on destructive questions (3e4f6d3)
+- CLN-3b: drop legacy skill keys and version 1 skills loading (6e6abf7)
+- ORSA-QUEST (answer): iron_for_embers stays hidden until the Iron Reaches campaign (439bca6)
+- MODE-STANDARD: dispatch mode set to standard (user 2026-10-18 07:53 UTC) (261f9a7)
+- RECRUIT1-B, OBJ1-B, BOSS1-B: world-encounter probes; BAL4-ATTR v4 (2fd535c)
+- ITEMUSE1: decision row, no free class potion (user 2026-10-18) (9fcbaf4)
+- EXPWORLD: a child world survives a trip through a connected world (74f4748)
+- QUESTX: quests keep tracking across connected worlds (2d9db38)
+- ITEMUSE1-U: battle pouch section on the Gear screen (069ac28)
+- COMBAT-UI2-L3: tactic dropdowns and Autoplay toggle in the timeline row (bb98f4f)
+- ITEMUSE1-L: use pouch items in battle as a planner step (e5653ac)
+- COMBAT-UI2-L2: unit hover card replaces the combat inspector (1c6fea4)
+- BAL4-ATTR: campaign attrition sim and report (15850e0)
+- ITEMUSE1-A: use_reach on the potion, focus elixir and fire bomb (3048364)
+- ITEMUSE1-L (schema): hero battle pouch, save v8, use_reach, item plan step (ad83b98)
+- ART2-A: Ashlands placeholder art pass 2 (intent and objective chips, ring tile, miss sound) (0218602)
+- OBJ1-A: courtyard hold, wagon raid with Wenn Tallow, slay Grakka (bda1aa0)
+- COMBAT-UI2-L1: combat layout C (compact columns) plus UIR-5 leftovers (7f66209)
+- OBJ1-L: battle objectives runtime, deployments, guests and verdict (3abdb63)
+- BOSS1-A: Crown of Nails phase on Grakka's stands (1303031)
+- INTENT1-A: Warden's Eye passive on Bryn (4205bc1)
+- MAPREAD1-L2: map marker icons, labels, legend, badges, world pins and hover (73f31fa)
+- RECRUIT1-A: Bryn and five story recruits, Toller muster, priest/brawler units, trio sizing (40cd863)
+- OBJ1-L (schema): encounter objective, deployment and guest fields (2c9bc80)
+- BAL3-R + CAMP1-B: final BAL3 rerun, band proposal, Ashmaw finale sim (e9477d9)
+- BOSS1-L: boss phases fire in battle (5c85e7e)
+- MAPREAD1-A: Ashlands marker labels, world-map pins, 48x30 maps (092c1d6)
+- ART1-A: Ashlands placeholder art (characters, classes, icons, tiles, maps, backdrops) (98d6da5)
+- BOSS1-L (schema): encounter phases field and validation (1cb608e)
+- MAPVIEW1: full-screen region and world maps (cf333ab)
+- MAPREAD1-L1: marker labels and notes, marker_view, location map_pos, world-map node extras (bf162bb)
+- INTENT1-L: enemy intent read-out and the foresight passive effect (a56dda7)
+- OPTLAUNCH1: remove its TASKS row (landed in 467dba2) (0bda9bd)
+- OPTLAUNCH1: run.bat opt opens a design option branch in its own folder (467dba2)
+- RECRUIT1-L: recruiting, hero names and the runtime party cap (0d6a3ae)
+- MODE-ECONOMY: dispatch mode set to economy (user 2026-10-18 02:35 UTC) (267dee7)
+- DESIGN-REVIEW-CYCLE: recurring design review with up to 3 option branches and a commit ledger (d12440c)
+- CONTROLS-HELP: Controls tab, Settings during play, volume fix and Mute (3a2ede5)
+- RECRUIT1-L (schema): manifest party_max, party characters in start_party, recruit effect validation (795aca1)
+- MUSIC2-A + MUSIC2-L: town, danger, shop, travel and boss music, wired by location kind (5a1f677)
+- WORLDMAP-ENTER: click the party's own pin on the world map to enter its location (0bd96e3)
+- SOUND-PREVIEW: volume sliders play a sample at the new level (bf53760)
+- MUSIC1-A + MUSIC1-L: five generated music loops and a context-based music player (a836119)
+- POI-FIX: region map shows how to use chests, people and lore, and a click works too (e143307)
+- AUTO1-L (logic): battle autoplay loop, party and hero tactics, safety stops, save v7 (f09c933)
+- NOTE-BUTTON: "✎ Note" in the in-scene pill opens the playtest note box (68f5ac3)
+- BAL3-A: data levers (sweep_kick), elite power 1.0, sim tank loadout (a3b7c35)
+- BATTLE-FLOW: combat transition, victory popup with XP bars, rewards, minimise and replay; COMBAT-UI2 approved (layout C) (608d45a)
+- TRAV2-A: Ashlands supply sources and start supplies (ba415d6)
+- TRAV2-L: travel supplies are spent on the road, bought in shops and found in chests (0cfe7f5)
+- CAMP1-A1 + CAMP1-A2: Ashlands campaign "The Long Dry" (boss unit and story data) (793d456)
+- SETTINGS-POPUP: Settings as a tabbed popup, window changes on select, right-click back fixed (5bf8f5e)
+
+Under the hood (specs, decisions, handovers, workflow, tooling):
+
+- RELEASE-LOGS: shared logs for the 2026-10-18 midday batch (1c617f5)
+- USAGE: 2026-10-18 11:45 usage report, delta and efficiency (2f01ec6)
+- UI-UX-HANDOVER: queue and notes for the next UI/UX session (2b2f70e)
+- RUNNER-WINDOW: fullscreen toggle, minimize and exit in the Scene Runner (5ddcea3)
+- PACE1: Q3 B, start_status schema only, no reward data yet (ac51dec)
+- PACE1: no party buff at the phase change; Empowered only as a story reward (597eedc)
+- PACE1: approved (pace all recs), decisions and task rows (051bee9)
+- PACE1-SPEC: fight pacing targets and the two-act boss (proposed) (bd77de4)
+- USAGE-TRACKING fix: .gdignore so Godot skips the usage CSVs (12921f8)
+- MORALE1: spec final, flee per state, surrender on Broken, Fearless bosses/elites/reckless (7e78b41)
+- GAMEPLAY-HANDOVER: rotation after EXPWORLD, UIR-1, HEAL1-L (539862a)
+- USAGE-TRACKING: usage reports, deltas and efficiency script in docs/metrics/usage (96da6e0)
+- MORALE1-APPROVE: spec approved (all recs), refinements R1-R3 folded in for confirmation (cce2a14)
+- TOKENS-PER-AGENT: Timing lines log tokens per agent kind and a task type (7abbb56)
+- DR2-ANSWERS: design review 2 approved (all recs), UI choices are preferences (0eeb52a)
+- MORALE1-SPEC: enemy morale spec (proposed, awaiting approval) (df535ca)
+- BALANCE-HANDOVER: handover for a fresh Balance session (0331486)
+- ASSETS-HANDOVER: queue HEAL1-A (unblocked by HEAL1-L schema) (d8b2d0e)
+- ASSETS-HANDOVER: Assets & Audio rotation after ART2-A, ITEMUSE1-A, ITEMUSE1-A2 (c4a6f08)
+- DESIGN-HANDOVER: queue, routines and the option-build slot rule (002c2b5)
+- USAGE-CAPS: building slots, split dispatch mode, background sims, rotation by context size (e3f215b)
+- HEAL1 (spec approved): defeat cost per the user, decision row, build rows approved (bbb1e21)
+- HEAL1 (spec): between-battle healing spec from BAL4-ATTR v4, TASKS rows, waiting on the user (9794c49)
+- BAL5 (spec approved) + Orsa quest answer: decision rows, BAL5 rows approved (2aac644)
+- BREPORT1 (spec approved): decision row, TASKS rows approved (cf765b8)
+- GAMEPLAY-HANDOVER: rotation after OBJ1-L, ITEMUSE1-L, QUESTX (73e2e64)
+- UI-UX-HANDOVER: queue and notes for the next UI/UX session (71172b6)
+- GAMEPLAY-HANDOVER: queue empty after OBJ1-L and ITEMUSE1-L, open class-potion card (b5a3c04)
+- ASSETS-HANDOVER: new UI/UX session id (71fbeef)
+- PLATFORM-HANDOVER: Platform & Workflow hands over to a fresh session (fe9aee2)
+- UI-UX-HANDOVER: queue and notes for the next UI/UX session (7cf9c91)
+- ASSETS-HANDOVER: Assets & Audio session rotation after INTENT1-A, BOSS1-A, OBJ1-A (1c50088)
+- Assets & Audio handover (session rotation) (b337d5d)
+- GAMEPLAY-HANDOVER: queue OBJ1-L then ITEMUSE1-L, follow-ups and landing notes (805a504)
+- BAL5 (spec): lever options for the BAL3-R balance gaps, TASKS rows, review candidates (4a2b759)
+- BREPORT1 (spec): battle report spec and TASKS rows, waiting on the user (94c3dc6)
+- UI-UX-HANDOVER: queue and notes for the next UI/UX session (95b7cfc)
+- ASSETS-HANDOVER: MUSIC2 landed; DR1, BOSS1 and OBJ1 -A rows queued (6d9bf54)
+- docs: approve BOSS1 and OBJ1 (user all recs, hold count changed) and their build rows (519eda1)
+- docs(specs): BOSS1 and OBJ1 specs (awaiting approval) and build rows (0adcd6c)
+- docs: approve RECRUIT1, ITEMUSE1, INTENT1, MAPREAD1 (user all recs) and their build rows (53c7433)
+- docs(specs): RECRUIT1, ITEMUSE1, INTENT1, MAPREAD1 specs (awaiting approval) and 11 build rows (46e09f9)
+- ASSETS-HANDOVER: MUSIC1 landed; MUSIC2 proposed (23411fa)
+- docs: design review answers DR1, review spec and 19 task rows (71765c2)
+- GAMEPLAY-HANDOVER: TRAV2-L, AUTO1-L logic and POI-FIX landed; queue empty (e758867)
+- docs(handover): design review 2026-10-18 delivered, awaiting Tushar's answers (8f805eb)
+- ASSETS-HANDOVER: CAMP1-A1/A2 and TRAV2-A landed; queue empty (184f09c)
+- AUTO1 (spec): battle autoplay with a tactic dropdown per timeline row (e666c30)
+- DESIGN-PAUSE: option builds paused, Design proposes ideas for approval (4ad84c9)
