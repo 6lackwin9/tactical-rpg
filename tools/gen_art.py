@@ -302,7 +302,15 @@ def figure(c: Cv, s: dict) -> None:
         c.line([(40, 96), (56, 96)], OUT, w=0.9, ol=None)
 
 
+# Keys drawn as pixel-art sprites by tools/sprites/export_units.py (SPRITE1-A); this generator leaves them alone.
+# Keep in step with SPRITE_KEYS in tools/sprites/export_units.py and KEYS in data/seeds/sprite1_a.gd.
+SPRITE_KEYS = {"warrior", "ranger", "brawler", "priest", "rogue", "mage", "mara_voss", "bryn_hale", "tev_quill",
+               "sella_marsh", "dagny_coal", "alda_wren", "kit_vane", "oren_dusk"}
+
+
 def unit_pair(key: str, spec: dict, out: str) -> None:
+    if key in SPRITE_KEYS:
+        return
     for variant, size in (("token", 104), ("portrait", 240)):
         c = Cv(size)
         if spec is None:
