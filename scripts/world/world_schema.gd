@@ -341,6 +341,11 @@ static func _encounter_fields() -> Array[Dictionary]:
 		_f("objective_count", "Heroes out", "int", 1, {"min": 1, "max": 4, "help": "Escape only: heroes that must leave by an exit."}),
 		_f("objective_text", "Objective text", "string", "", {"help": "At most 80 characters; empty = generated from the objective."}),
 		_f("deployment", "Deployment", "enum", "standard", {"options": ["standard", "ambush", "centre"]}),
+		_f("morale", "Morale", "bool", false, {"help": "Enemy groups break and surrender (MORALE1; EncounterMorale). Off = they fight to the last."}),
+		_f("morale_break", "Morale break", "int", 50, {"help": "Morale only: 0..90, a group is Broken at or below this value."}),
+		_f("morale_leader", "Morale leader", "string", "", {"help": "Morale only: a ref from Enemies; empty = the first boss or elite enemy, else none."}),
+		_f("morale_groups", "Morale groups", "json", [], {"help": "Morale only: [[enemy index, ...], ...]; every enemy in exactly one group; [] = one group."}),
+		_f("morale_text", "Morale text", "string", "", {"help": "Morale only: at most 80 characters; empty = the generated break line."}),
 		_f("guests", "Guests", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "At most 2 party-side extras: party characters, or npcs whose base unit has side party."}),
 		_f("protect", "Protect", "refs", [], {"ref": "characters", "ref_filter": {"role": ["party", "npc"]}, "help": "Guests that must survive (each must be in Guests)."}),
 	]

@@ -1212,6 +1212,7 @@ static func _encounter_errors(e: Dictionary) -> Array[String]:
 		return not target.is_empty() and ContentSchema.passes_filter(wave_field, target)))
 	# OBJ1: guests are party-side units; the generic ref check already refuses others, so every guest passes here.
 	errors.append_array(EncounterObjectives.problems(e, func(_ref: String) -> bool: return true))
+	errors.append_array(EncounterMorale.problems(e))   # MORALE1 spec 1.1
 	var exits: Variant = e["exits"]
 	if exits is Array:
 		var exit_list: Array = exits

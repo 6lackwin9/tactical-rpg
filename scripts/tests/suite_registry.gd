@@ -63,6 +63,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(IntentTestSuite.run())
 	results.append(BossPhaseTestSuite.run())
 	results.append(ObjectiveTestSuite.run())
+	results.append(MoraleTestSuite.run())
 	results.append(ContentTestSuite.run(tree_parent))
 	results.append(RunnerTestSuite.run(tree_parent))
 	results.append(WorldTestSuite.run(tree_parent))

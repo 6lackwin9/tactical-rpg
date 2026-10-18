@@ -8,7 +8,7 @@ Builders put code where this file says; if a path is missing from here, ask the 
 | `scripts/core/specs/{item_families,item_modifiers,item_text}.gd` | item family templates, modifier resolve/collapse, description tokens (ITEM1) | S3, S5 | done |
 | `scripts/content/class_forge_model.gd` | ClassForgeModel: class tab view model (layout, path helpers, panels, grouped pickers, unit AI visibility) (CLASS1) | S5 | done |
 | `scripts/core/combat/`, `scripts/core/inventory/` | Combatant, DamageCalculator, equipment, inventory | S1, S3 | done |
-| `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses; session/battle_observer.gd, battle_metrics.gd (per-unit collector shared by the sim and the results screen), battle_report.gd (BREPORT1) | S1, S4 | done |
+| `scripts/combat/{planning,actions,ai,session,status,arena}/` | planner, resolver commands, AI, sessions, statuses; session/battle_observer.gd, battle_metrics.gd (per-unit collector shared by the sim and the results screen), battle_report.gd (BREPORT1), encounter_morale.gd (MORALE1) | S1, S4 | done |
 | `scripts/content/` + `data/catalog/` | catalog store, schema, factory + JSON | S5 | done |
 | `scripts/world/` + `data/worlds/` | world catalog/schema/factory + JSON | S6 | done |
 | `scripts/ui/{combat,forge,dojo,world,runner,framework,playtest}/` | panels and tools (forge and world are read-only viewers since TOOLS-RO) | all | done |

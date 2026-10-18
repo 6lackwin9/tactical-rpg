@@ -192,6 +192,11 @@ static func _encounter(world_id: String, e: Dictionary) -> String:
 		text += _line("Guests", _names_of(world_id, "characters", e["guests"]))
 	var name_of: Callable = func(ref: String) -> String: return _name_of(world_id, "characters", ref)
 	text += _line("Objective", _esc(EncounterObjectives.text_of(e, name_of)))   # OBJ1 rule 12
+	var tier_of: Callable = func(ref: String) -> String:
+		return str(WorldFactory.unit_entry(WorldCatalog.resolve(world_id, "characters", ref)).get("tier", ""))
+	var morale: String = EncounterMorale.summary(e, name_of, tier_of)
+	if not morale.is_empty():
+		text += _line("Morale", _esc(morale))   # MORALE1 rule 16
 	text += _line("Deployment", str(e.get("deployment", EncounterObjectives.STANDARD)))
 	if not DictUtil.array_of(e["party"]).is_empty() and not DictUtil.array_of(e["enemies"]).is_empty():
 		var enc := WorldEncounter.new(world_id, "")
