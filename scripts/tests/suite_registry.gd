@@ -76,6 +76,7 @@ static func run_all(tree_parent: Node = null) -> bool:
 	results.append(AssetPipelineTestSuite.run())
 	results.append(AnimationLifecycleTestSuite.run(tree_parent))
 	results.append(AudioTestSuite.run(tree_parent))
+	results.append(SoundPreviewTestSuite.run(tree_parent))
 	results.append(PlaytestTestSuite.run(tree_parent))
 	PlaytestStore.force_enabled = -1
 	return not results.has(false)

@@ -39,6 +39,7 @@ var _overlay_text: Label = null
 var _overlay_buttons: HBoxContainer = null
 var _notice_lines: Array[String] = []
 var _confirm: SettingsModel = null   # DISPLAY1: the settings model whose window change waits for Keep
+var _volumes_previewed: bool = false   # the buses hold an unsaved draft level
 
 func _ready() -> void:
 	WebFonts.install()   # the browser build starts here (application/run/main_scene.web)
@@ -87,6 +88,37 @@ func _ready() -> void:
 	MusicDirector.request(self, MusicDirector.CTX_MENU, MusicDirector.MENU)   # MUSIC1
 	render()
 
+# SOUND-PREVIEW: a volume slider of the settings popup moved; the bus follows the draft and a sample plays (throttled).
+func preview_volume(setting: String, linear: float) -> void:
+	var audio: AudioDirector = _director(true)
+	if audio != null:
+		_volumes_previewed = true
+		var _played: bool = audio.preview(setting, linear)
+
+# The newest director; `make` adds one to this view when none exists (the menu run on its own, as the web main scene).
+func _director(make: bool) -> AudioDirector:
+	var found: AudioDirector = AudioDirector.active
+	if found == null and make:
+		found = AudioDirector.new()
+		add_child(found)
+	return found
+
+# A settings re-render: the bus holds the draft level when it differs from the saved one (no sample).
+func sync_volume(setting: String, linear: float) -> void:
+	var audio: AudioDirector = _director(false)
+	if audio == null:
+		return
+	if _volumes_previewed or not is_equal_approx(linear, SettingsFile.get_float(setting)):
+		_volumes_previewed = true
+		audio.set_bus_linear(setting, linear)
+
+# The saved bus volumes come back (the popup closed without Apply, or another screen is showing).
+func restore_volumes() -> void:
+	_volumes_previewed = false
+	var audio: AudioDirector = _director(false)
+	if audio != null:
+		audio.apply_volumes()
+
 # The theme's default font size follows the `ui/text_scale` setting.
 func apply_text_scale(preview: float = 0.0) -> void:
 	var text_scale: float = preview if preview > 0.0 else DictUtil.to_float(SettingsFile.get_value("ui/text_scale", 1.0), 1.0)
@@ -111,6 +143,8 @@ func render() -> void:
 	var over_battle: bool = _results_over_battle()
 	var results_model: BattleResultsModel = router.model(MenuRouter.RESULTS) as BattleResultsModel if router.stack.has(MenuRouter.RESULTS) else null
 	var popup: bool = id == MenuRouter.SETTINGS
+	if not popup and _volumes_previewed:
+		restore_volumes()   # the popup closed: an unapplied draft volume goes back to the saved one
 	var in_results: bool = id == MenuRouter.RESULTS and over_battle
 	var minimised: bool = in_results and results_model != null and results_model.minimised
 	_popup.visible = popup

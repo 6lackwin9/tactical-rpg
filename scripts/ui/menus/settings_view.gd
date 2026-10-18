@@ -94,6 +94,8 @@ func build(host: MainMenuView, model: RefCounted) -> void:
 		host.apply_text_scale()
 		if m.confirming():
 			host.begin_display_confirm(m))))
+	for key: String in SOUND_KEYS:   # a re-render (Restore defaults) keeps the buses on the draft levels
+		host.sync_volume(key, DictUtil.to_float(m.value(key)))
 	var cur: Control = tabs.get_current_tab_control()
 	var first: Array[Node] = cur.find_children("*", "HSlider", true, false) if cur != null else []
 	if not first.is_empty():
@@ -186,7 +188,9 @@ func _add_row(grid: GridContainer, host: MainMenuView, m: SettingsModel, key: St
 	shown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	slider.value_changed.connect(func(v: float) -> void:
 		var _e: Array[String] = m.set_value(key, v)
-		shown.text = "%d%%" % roundi(v * 100.0))
+		shown.text = "%d%%" % roundi(v * 100.0)
+		if SOUND_KEYS.has(key):
+			host.preview_volume(key, v))   # the bus takes the draft level and a short sample plays (throttled)
 	grid.add_child(slider)
 	grid.add_child(shown)
 

@@ -24,6 +24,11 @@ static var active: AudioDirector:
 				return _stack[i]
 		return null
 
+var record_previews: bool = false
+var previews: Array[Dictionary] = []
+
+var _throttle := VolumePreview.new()
+var _music_bus: Array[AudioStreamPlayer] = []   # one voice on the Music bus for the music slider's sample
 var _sfx: Array[AudioStreamPlayer] = []
 var _ui: Array[AudioStreamPlayer] = []
 var _started: Dictionary = {}   # AudioStreamPlayer -> Time.get_ticks_usec() at its last start
@@ -52,12 +57,50 @@ func _ready() -> void:
 		_sfx.append(_voice("SFX"))
 	for i: int in UI_VOICES:
 		_ui.append(_voice("UI"))
+	_music_bus.append(_voice("Music"))
 
 func _voice(bus: String) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.bus = bus
 	add_child(p)
 	return p
+
+# ------------------------------------------------------------------------------
+# Volume previews (SOUND-PREVIEW)
+# `previews` is the recording seam (headless tests): one entry per sample asked for, when `record_previews` is on.
+# ------------------------------------------------------------------------------
+
+# A volume slider moved: the bus follows the draft level at once and, at most every VolumePreview.INTERVAL seconds, the key's
+# sample plays on its bus (the music slider plays a short sample on the Music bus). `now` is in seconds (the clock is injectable for tests).
+func preview(setting: String, linear: float, now: float = -1.0) -> bool:
+	set_bus_linear(setting, linear)
+	var t: float = now if now >= 0.0 else float(Time.get_ticks_msec()) / 1000.0
+	if not _throttle.allow(t):
+		return false
+	var sample: String = VolumePreview.sample_of(setting)
+	if sample.is_empty():
+		return false
+	if record_previews:
+		previews.append({"setting": setting, "sample": sample, "bus": VolumePreview.bus_of(setting), "level": linear})
+	match VolumePreview.bus_of(setting):
+		"SFX":
+			_play(_sfx, sample)
+		"Music":
+			_play(_music_bus, sample)
+		_:
+			_play(_ui, sample)
+	return true
+
+func reset_throttle() -> void:
+	_throttle.reset()
+
+# One bus (by its SettingsFile key) to a linear level, without touching the saved settings.
+func set_bus_linear(setting: String, linear: float) -> void:
+	var idx: int = AudioServer.get_bus_index(VolumePreview.volume_bus_of(setting))
+	if idx < 0:
+		return
+	AudioServer.set_bus_mute(idx, linear <= 0.0)
+	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, 0.0001)))
 
 func voice_count() -> int:
 	return _sfx.size() + _ui.size()
