@@ -1,7 +1,7 @@
 //! SaveGame and SaveMigrations (scripts/game_state/): one versioned JSON file per slot, the same files Godot
 //! writes ({format: "fc_save", version, saved_at, game_state}), slot 0 = autosave, 1..5 manual. Writes go to a temp
 //! file then rename; reads migrate then validate and never return a half-loaded state.
-//! Migrations ported: 1 -> 2 and 3 -> 10. 2 -> 3 seeds rng_seed from Godot's sorted JSON text and is refused here.
+//! Every migration is ported (1 -> 10); 2 -> 3 seeds rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
 
 use crate::data::Data;
 use crate::json::{self, int, Dict};
@@ -99,7 +99,7 @@ pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     if json::s(&envelope, "format") != FORMAT {
         return Err(vec![format!("Not a save file (format '{}').", json::s(&envelope, "format"))]);
     }
-    let (data, warnings) = migrate(&envelope)?;
+    let (data, warnings) = migrate(d, &envelope)?;
     let state = GameState::from_dict(d, json::dget(&data, "game_state"));
     let errors = state.validate(d);
     if !errors.is_empty() {
@@ -114,7 +114,43 @@ fn quest_entry_ok(key: &str, v: &Value) -> bool {
     crate::state::quest_blob_errors(&one).is_empty()
 }
 
-fn step(version: i64, state: &Dict) -> Option<Dict> {
+/// JSON.stringify(v, "", true) as Godot writes a value it parsed from a save: keys sorted, no spaces, every number a
+/// float ("3.0"; Godot's JSON parser makes all numbers floats), except the quest blob after the 1 -> 2 step, which
+/// JsonUtil.normalize turned back into ints (`ints`).
+fn godot_text(v: &Value, ints: bool) -> String {
+    match v {
+        Value::Null => "null".into(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => {
+            let f = n.as_f64().unwrap_or(0.0);
+            if f == f.floor() && f.abs() < 1e15 {
+                if ints && (n.is_i64() || n.is_u64()) {
+                    format!("{}", f as i64)
+                } else {
+                    format!("{}.0", f as i64)
+                }
+            } else {
+                format!("{f}")
+            }
+        }
+        Value::String(s) => serde_json::to_string(s).unwrap_or_default(),
+        Value::Array(a) => format!("[{}]", a.iter().map(|x| godot_text(x, ints)).collect::<Vec<_>>().join(",")),
+        Value::Object(o) => {
+            let mut keys: Vec<&String> = o.keys().collect();
+            keys.sort();
+            format!("{{{}}}", keys.iter().map(|k| format!("{}:{}", serde_json::to_string(k).unwrap_or_default(), godot_text(&o[*k], ints))).collect::<Vec<_>>().join(","))
+        }
+    }
+}
+
+fn state_text(state: &Dict, quests_int: bool) -> String {
+    let mut keys: Vec<&String> = state.keys().collect();
+    keys.sort();
+    let parts: Vec<String> = keys.iter().map(|k| format!("{}:{}", serde_json::to_string(k).unwrap_or_default(), godot_text(&state[*k], quests_int && k.as_str() == "quests"))).collect();
+    format!("{{{}}}", parts.join(","))
+}
+
+fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> {
     let mut out = state.clone();
     let party = |out: &mut Dict, f: &dyn Fn(&mut Dict)| {
         if let Some(Value::Object(p)) = out.get_mut("party") {
@@ -138,6 +174,16 @@ fn step(version: i64, state: &Dict) -> Option<Dict> {
             let kept: Dict = json::dict(&quests).iter().filter(|(k, v)| quest_entry_ok(k, v)).map(|(k, v)| (k.clone(), v.clone())).collect();
             out.insert("quests".into(), Value::Object(kept));
             out.insert("loot_claimed".into(), Value::Array(Vec::new()));
+        }
+        2 => {
+            let seed = (aegis_rules::ghash::string_hash(&state_text(state, quests_int)) & 0x7FFF_FFFF) as i64;
+            out.insert("rng_seed".into(), int(seed));
+            out.insert("position".into(), Value::Array(vec![int(-1), int(-1)]));
+            out.insert("explore".into(), Value::Object(crate::state::default_explore()));
+            out.insert("rolls".into(), Value::Object(Dict::new()));
+            let (world, loc) = (json::s(state, "world_id"), json::s(state, "location_id"));
+            let hit = if world.is_empty() || loc.is_empty() { json::empty() } else { d.resolve(&world, "locations", &loc) };
+            out.insert("location_id".into(), json::s(hit, "_qid").into());
         }
         3 => {
             party(&mut out, &|p| {
@@ -174,7 +220,7 @@ fn step(version: i64, state: &Dict) -> Option<Dict> {
 }
 
 /// Brings an envelope to VERSION: (envelope, warnings) or the refusal.
-pub fn migrate(envelope: &Dict) -> Result<(Dict, Vec<String>), Vec<String>> {
+pub fn migrate(d: &Data, envelope: &Dict) -> Result<(Dict, Vec<String>), Vec<String>> {
     let mut warnings = Vec::new();
     let mut data = envelope.clone();
     let raw_version = json::get(&data, "version");
@@ -189,16 +235,18 @@ pub fn migrate(envelope: &Dict) -> Result<(Dict, Vec<String>), Vec<String>> {
         return Err(vec![format!("save version {version} is invalid")]);
     }
     let mut state = json::dget(&data, "game_state").clone();
+    let mut quests_int = false;
     while version < VERSION {
         if !state.get("quests").map_or(true, Value::is_object) {
             warnings.push("dropped invalid quests blob (not an object)".into());
         }
         let before: Vec<String> = json::dget(&state, "quests").keys().cloned().collect();
         let loc_before = json::s(&state, "location_id");
-        let Some(next) = step(version, &state) else {
+        let Some(next) = step(d, version, &state, quests_int) else {
             return Err(vec![format!("no migration from save version {version}")]);
         };
         state = next;
+        quests_int = quests_int || version == 1;
         let after = json::dget(&state, "quests");
         for k in before {
             if !after.contains_key(&k) {

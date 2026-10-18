@@ -135,15 +135,26 @@ pub struct Built {
 
 /// PartyBuilder.build_report with auto-spend: None when the state is invalid.
 pub fn build(d: &Data, state: &UnitState) -> Option<Built> {
+    build_with(d, state, true)
+}
+
+/// `auto_spend` false leaves unspent points unspent (the party screen's preview: confirmed and drafted points only).
+pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built> {
     if !state.validate(d).is_empty() {
         return None;
     }
     let cat = &d.cat;
     let mut work = state.clone();
-    auto_for(d, &mut work);
+    if auto_spend {
+        auto_for(d, &mut work);
+    }
     let mut def = cat.units.get(&work.base_unit)?.clone();
     def.level = work.level(d) as i32;
     def.spend = work.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
+    if def.spend.is_empty() {
+        // ContentFactory.NO_AUTO_SPEND: an empty spend must not be auto-spent by the factory either
+        def.spend.insert(aegis_data::STATS[0].to_string(), 0);
+    }
     def.name = display_name(d, &work);
     let mut u = build_unit(cat, &def, 0);
     for id in &work.passives {

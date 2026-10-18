@@ -80,6 +80,11 @@ impl Data {
             world_map.insert(id.clone(), World { manifest: json::dget(w, "manifest").clone(), own });
         }
         let g = json::dict(game);
+        let mut families = IndexMap::new();
+        for e in dicts(json::get(g, "item_families")) {
+            families.insert(json::s(&e, "id"), e);
+        }
+        content.insert("item_families".into(), families);
         let curve = json::dget(g, "xp_curve");
         let kill = json::dget(curve, "kill_xp");
         let xp = XpCurve {

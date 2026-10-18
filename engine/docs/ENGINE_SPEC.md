@@ -189,6 +189,9 @@ against Godot.
 | E6 | Feel tooling (panel, hotkey capture, variants, metrics) | One feel issue fixed end to end through the tools |
 | E7 | Remaining systems by checklist | `PARITY.md` all `parity` |
 
+Status (2026-10-19): E1 to E5 done; E7 in progress: the game loop (aegis_world, journey parity) and every
+screen are ported (docs/SCREENS.md); E6 not started.
+
 Godot keeps shipping during this. Each milestone re-runs parity against the
 latest `main` to catch drift.
 

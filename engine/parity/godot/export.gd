@@ -13,7 +13,7 @@ const STANCES: Array[int] = [0, 1, 2, 3]   # CombatTypes.StanceType NEUTRAL, OFF
 const SLOTS: Array[String] = ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"]
 
 var out_dir: String = ""
-var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data"]
+var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data", "saves"]
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -44,7 +44,23 @@ func _initialize() -> void:
 		_write("worlds.json", _worlds())
 	if only.has("game_data"):
 		_write("game_data.json", _game_data())
+	if only.has("saves"):
+		_write("saves.json", _saves())
 	quit()
+
+# SaveGame.decode on every save fixture (scripts/tests/fixtures/saves, one per save version): ok, errors, warnings and
+# the loaded state's to_dict, for the engine's save-compatibility test.
+func _saves() -> Array:
+	var rows: Array = []
+	var dir: String = "res://scripts/tests/fixtures/saves"
+	for f: String in DirAccess.get_files_at(dir):
+		if not f.ends_with(".json"):
+			continue
+		var text: String = FileAccess.get_file_as_string(dir.path_join(f))
+		var res: Dictionary = SaveGame.decode(text)
+		var gs: GameState = GameState.of(res.get("state", null))
+		rows.append({"file": f, "text": text, "ok": res["ok"], "errors": res["errors"], "warnings": res["warnings"], "state": gs.to_dict() if gs != null else {}})
+	return rows
 
 # Godot's hash() on the shapes the game hashes (GameRolls: [seed, stream, n]; strings; ints) and GameRolls draws.
 func _hash_samples() -> Array:

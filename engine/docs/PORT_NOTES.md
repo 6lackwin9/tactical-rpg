@@ -51,3 +51,38 @@ because the RNG is bit-exact.
 - Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` (about 8 s).
 - Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
   goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).
+
+## Game loop (aegis_world, 2026-10-19)
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `game_state/game_state.gd`, `progression/party_state.gd`, `unit_state.gd` | `aegis_world::state` | journeys (state after every action) |
+| `game_state/new_game.gd`, `game_rolls.gd`, `json_util.gd` | `new_game`, `rolls`, `json` | journeys (start state, every roll) |
+| `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10) | `save` | `tests/saves.rs`: every Godot save fixture v1..v10 |
+| `progression/xp_curve.gd`, `level_up.gd`, `party_builder.gd`, `heal_rules.gd` | `progression` | journeys (HP views, level-ups, camp) |
+| `world/world_catalog.gd` (lineage, merged, resolve, party rules), `world_factory.gd` (unit entry, passives) | `data` | journeys |
+| `exploration/map_rules.gd` (runtime), `explore_runner.gd`, `purse_rules.gd`, `battle_bridge.gd` (apply) | `explore`, `purse`, `battle` | journeys (marker views too) |
+| `quests/quest_rules.gd` (runtime), `quest_runner.gd`, `reward_grant.gd` | `quest` | journeys (statuses, objectives, offers) |
+| `dialogue/rep_rules.gd`, `dialogue_rules.gd` (runtime), `dialogue_runner.gd`, `shop_rules.gd` (runtime) | `dialogue`, `shop` | journeys (dialogue and shop views) |
+| `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
+| `exploration/game_encounter.gd` (saved party in battle, HP write-back) | `aegis_gui::battle` (`BattleScreen::world`) | manual (GUI) |
+
+Godot behaviours found on the way:
+
+- `hash([...])` is murmur3 over the array (Variant ARRAY = 28), Thomas Wang 64 -> 32 for ints, djb2 for strings
+  (`aegis_rules::ghash`); `String.hash()` is djb2.
+- `JSON.stringify` sorts keys by default, so a Godot save round trip re-orders every dictionary (stash, flags,
+  quests): engine saves sort keys too, and the journey replay's reload does the same.
+- `JSON.parse` makes every number a float and `stringify` writes it back as `3.0`; the 2 -> 3 save step hashes that
+  text (rebuilt by `save::godot_text`).
+
+Journeys (`parity/journey.sh`, `tests/journey.rs`): seeded random play through the shipped rules, goal-directed
+walking, dialogue biased to quest services, shops, chests, travel, camp, level-ups, abandons, journal turn-ins, save /
+load round trips and battle outcomes drawn at random (won / fled / lost). Each action's result, the state after it and
+the screen views (quest statuses, objectives, turn-in offers, HP, camp, exits menu, markers, dialogue, shop, world
+map) must equal Godot's. Last run: 8 journeys, 5608 actions, all equal; includes quest completion, recruits and a
+`connects` world crossing.
+
+Not ported yet: content validation (`*_errors`, warnings), save import / export, battle items in world battles
+(pouch write-back), objectives other than rout, world characters' named items and tuning in battle,
+`WorldEncounter` start statuses and phases.

@@ -12,6 +12,8 @@ aegis_data = { path = "../aegis_data" }
 aegis_rules = { path = "../aegis_rules" }
 aegis_battle = { path = "../aegis_battle" }
 aegis_host = { path = "../aegis_host" }
+aegis_world = { path = "../aegis_world" }
+indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 winit = "0.30.5"

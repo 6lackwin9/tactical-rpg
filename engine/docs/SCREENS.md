@@ -5,40 +5,53 @@ engine has a working reference for each screen type before the transition. Look 
 (ENGINE_SPEC section 11).
 
 Reference shots: `engine/docs/screens/` (1280x720, captured from the Godot build by
-`engine/parity/godot/screen_tour.gd` on a sandbox save folder; re-run it after Godot UI changes).
+`engine/parity/godot/screen_tour.gd` on a sandbox save folder; re-run it after Godot UI changes). The engine's own
+shots of the same screens are in `engine/docs/screens/engine/` (taken over the agent link).
+
+The rules behind every player screen come from `aegis_world`, checked against Godot by the journey replay
+(`tests/journey.rs`: result, state and the views these screens read, after every action) and the save fixtures
+(`tests/saves.rs`).
 
 ## Player screens
 
-| # | Screen | Godot model / view | Systems behind it | Engine status |
+| # | Screen | Godot model / view | Engine | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| 00 | Main menu | `ui/menus/main_menu_model.gd`, `main_screen_view.gd` | router, save peek | to do |
-| 01 | New game (world cards) | `new_game_model.gd`, `new_game_view.gd` | NewGame, WorldCatalog, PartyBuilder | to do |
-| 02, 17 | Load / save slots | `save_slots_model.gd`, `save_slots_view.gd` | SaveGame, migrations | to do |
-| 03-06 | Settings (Sound, Display, Gameplay, Controls) | `settings_model.gd`, `settings_view.gd`, `display_settings.gd`, `controls_list.gd` | SettingsFile | to do |
-| 07 | Region map (exploration) | `ui/overworld/region_map_view.gd` | ExploreRunner, MapRules, MapCatalog, encounters | to do |
-| 08 | Dialogue (bottom dock) | `ui/overworld/dialogue_panel.gd` | DialogueRunner, DialogueRules, RepRules, quests | to do |
-| 09 | Shop | `ui/overworld/shop_panel.gd` | ShopRules, ServiceCatalog | to do |
-| 10 | World map (travel) | `ui/overworld/world_map_view.gd` | TravelRunner, TravelRules, routes, road fights | to do |
-| 11 | Game menu (hub) | `hub_model.gd`, `hub_view.gd` | router | to do |
-| 12-15 | Character: Stats, Level up, Skills, Gear | `party_model.gd`, `character_view.gd`, `stats_model.gd`, `level_up_*`, `loadout_*`, `gear_*` | PartyState, UnitState, LevelUp, XpCurve, gear model | to do |
-| 16 | Quest journal | `journal_model.gd`, `journal_view.gd` | QuestRunner | to do |
-| 18 | Battle results | `battle_results_model.gd`, `battle_results_view.gd` | BattleBridge, XP award, purse, battle report | to do |
-| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | combat core | done (aegis-gui), parity-checked |
+| 00 | Main menu | `main_menu_model.gd`, `main_screen_view.gd` | `menus.rs` `MainMenu` | done: Continue (newest save), New game, Load, Settings, Tools, Quit (asks when dirty) |
+| 01 | New game (world cards) | `new_game_model.gd`, `new_game_view.gd` | `NewGameScreen` | done: playable worlds, party line, asks before replacing the autosave |
+| 02, 17 | Load / save slots | `save_slots_model.gd`, `save_slots_view.gd` | `Slots` | done: autosave + 5 slots, peek rows, load / save / delete with the Godot questions; file import / export not yet |
+| 03-06 | Settings (Sound, Display, Gameplay, Controls) | `settings_model.gd`, `settings_view.gd` | `SettingsScreen` | done as a draft-and-apply form saved to `%APPDATA%/Aegis/settings.json`; values not applied to the window or audio yet (no audio) |
+| 07 | Region map (exploration) | `region_map_view.gd` | `region.rs` `RegionMap` | done: 32 px tiles with a camera, markers with labels / badges / hover verbs, Here list, event log, click-to-walk, E interact, chests, lore, exits, fights |
+| 08 | Dialogue (bottom dock) | `dialogue_panel.gd` | `RegionMap` dock | done: portrait, faction band, choices with lock reasons and rep / stat prefixes, services, turn-in picker (loot picks, recipient), recruits, fights |
+| 09 | Shop | `shop_panel.gd` | `RegionMap::draw_shop` | done: buy / sell tabs, stock left, supplies x1 / x5, item detail line |
+| 10 | World map (travel) | `world_map_view.gd` | `worldmap.rs` | done: backdrop, pins by map_pos (circle slots otherwise), routes with times, trip hover, travel with road fights, camp, enter |
+| 11 | Game menu (hub) | `hub_model.gd`, `hub_view.gd` | `hub.rs` `Hub` | done: party box with HP, doors with the Godot refusal reasons, quit to menu |
+| 12-15 | Character: Stats, Level up, Skills, Gear | `party_model.gd`, `stats_model.gd`, `level_up_model.gd`, `loadout_model.gd`, `gear_model.gd` | `party.rs` `Character` | done: active toggle, stat table and derived block, level-up draft with before / after and the permanent-spend question, loadout slots, gear and battle pouch drafts, discard questions |
+| 16 | Quest journal | `journal_model.gd`, `journal_view.gd` | `hub.rs` `Journal` | done: groups, resolved text, progress, current step, rewards, loot choices |
+| 18 | Battle results | `battle_results_model.gd`, `battle_results_view.gd` | `hub.rs` `Results` | done: headline and note, XP rows with bars, gold / loot / quest lines, level-up prompt; battle report table not yet |
+| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement |
 
 ## Dev tools (dev-only, never in the real game)
 
-| # | Screen | Godot | Engine status |
-| :--- | :--- | :--- | :--- |
-| 19 | Content Forge (catalog viewer) | `ui/forge/*` | to do |
-| 20 | World Forge (world viewer) | `ui/world/*` | to do |
-| 21 | Gear & Skill Dojo | `ui/dojo/*` | to do |
-| 22 | Scene Runner | `ui/runner/*` | to do (becomes the engine's launcher) |
+| # | Screen | Godot | Engine | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| 19 | Content Forge (catalog viewer) | `ui/forge/*` | `forge.rs` | read-only viewer: kinds, entries, every field, engine summary, used by; no search, validation or editing yet |
+| 20 | World Forge (world viewer) | `ui/world/*` | `forge.rs` | read-only viewer: world picker, overview (inheritance, connects, counts), merged entries with origin, used by |
+| 21 | Gear & Skill Dojo | `ui/dojo/*` | `dojo.rs` | unit / level / per-slot gear, attributes, proficiency, derived stats, damage vs the training dummy; no windowed workbench or test console yet |
+| 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, debug region and world maps with Won / Fled / Lost, data reload; playtest recording not yet |
 
-## Order
+## Known gaps (function over form)
 
-1. Data: read `data/` directly (item families, world catalogs with inheritance), checked against Godot exports.
-2. Game state: GameState, NewGame, SaveGame (Godot save files load unchanged), party and progression rules.
+- Godot's region tiles are drawn from its asset registry (green ground in the keep); the engine draws the
+  `region_*` icon files, so colours differ. Marker icons are simple shapes until the sprite assets arrive.
+- Battles in the world: rout objective only (hold / escape / slay, phases, morale and start statuses not ported);
+  battle items are not written back to the pouch; world characters' named items and tuning are not applied in battle.
+- Keyboard focus navigation exists on the main menu only; other screens are mouse + shortcuts.
+
+## Order (done)
+
+1. Data: the Godot exports (`parity/export.sh`); reading `data/` directly is the later data-independence step.
+2. Game state: GameState, NewGame, SaveGame (Godot saves load unchanged, every migration), party and progression rules.
 3. Game loop rules: exploration, travel, dialogue, shop, quests, rest and camp, world battles, results; checked with
-   scripted action sequences replayed in both engines (state compared after every action).
-4. Screens on a shared widget kit (frame, list, tabs, scroll, slider, checkbox, dropdown, popup), menus first, then the
-   play screens, then the dev tools.
+   journeys replayed in both engines (state compared after every action).
+4. Screens on a shared widget kit (`ui.rs`: buttons, tabs, cards, checkboxes, steppers, dropdowns, frames, rows,
+   hover cards), menus first, then the play screens, then the dev tools.
