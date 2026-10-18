@@ -1,16 +1,26 @@
 # Gameplay handover
 
-Updated 2026-10-18 14:40 UTC by Gameplay session session_01448UbhXvTzeBA1Brw4buLy (rotation by context size, "Usage caps" in `docs/workflow/cloud.md`). Read this first, then `docs/workflow/cloud.md`. Dispatch mode: standard for every lane until ~15:45 UTC, then economy until ~18:45 UTC (user 12:42, `docs/metrics/usage/MODE_TRIAL.md`); keep `type=` and `tokens=` on every Timing line. Land with `bash tools/fc.sh gate auto` (per-system gate; `fc.sh systems` shows the pick; a new suite needs its `if _on("<system>")` line in suite_registry.gd). After each push to develop, send Merge & Release (session_01KhQLgrvAgUunc9TcJKTHzK) "landed <task-id> <sha>" (cloud.md "Landing a task" step 7).
+Updated 2026-10-18 17:00 UTC by Gameplay session session_01QCe4DugW3btbTntzfddbhN (project wind-down, user 16:28 UTC). Read this first, then `docs/workflow/cloud.md`. Mode is now **interactive** (planner-ops "Current mode", decision "Interactive mode"): act only on Tushar's direct requests; do not start queued rows on your own. Land with `bash tools/fc.sh gate auto` (per-system gate; a new suite needs its `if _on("<system>")` line in suite_registry.gd). Landed pings to Merge & Release are off (f1db72d); patch notes are written per release.
 
-## Queue (in order)
+## Nothing in flight
 
-1. **PACE1-L** (approved 09:33, `docs/specs/PACE1.md`; decision "PACE1 two-act boss" in decisions/combat.md): enrage and party_buff phase effects, `or_round` trigger, `empower` status, `start_status` field (Q3 B: schema only, no reward data), `pace` field and boss warning, enraged intents. Commit 1 = schema slice. Overlaps MORALE1-L files (catalog_encounter, combat_session, schemas): merge develop first. On landing ping Assets (PACE1-A), Balance (PACE1-S) and UI/UX (PACE1-U).
-2. **PURSE1-L** (approved 12:28, `docs/specs/PURSE1.md`, decision "PURSE1 encounter purse" in items-gear.md): purse field + validation, GameState.purses + save bump, PurseRules, BattleBridge.apply hook. Commit 1 = schema slice; ping Assets for PURSE1-A after it. Sequence with other save-bump tasks.
-3. **LEVERS1-L1** then **LEVERS1-L2** (approved 14:26, `docs/specs/LEVERS1.md`), both after BAL5-L (check who owns BAL5-L; it is a logic row from the Balance levers spec). L1/L2 share tactical_ai.gd. Then **LEVERS1-L3** (user card 15:36, LEVERS1 3.3, row e0f1ae5): AI guard rule in tactical_ai.gd (taunt DEFEND skill such as shield_wall cast in the first free block when an adjacent ally is targeted by a foe intent this round and the unit is not already taunting; reckless skips; low-HP guard unchanged); Assets then does A3.
+No open branch work: the thread branch `claude/project-thread-diteok` equals develop after d0bcc9a.
+
+## Queue (in order, start only when Tushar asks)
+
+1. **LEVERS1-L1** then **LEVERS1-L2** (approved 14:26, `docs/specs/LEVERS1.md`), both after BAL5-L (logic row; `origin/claude/bal5-l` had WIP from another thread at 14:06, touching skill_def, status_effects, skill_validator, suite_registry). L1/L2 share tactical_ai.gd.
+2. **LEVERS1-L3** (user card 15:36, LEVERS1 3.3): AI guard rule in tactical_ai.gd (taunt DEFEND skill such as shield_wall cast in the first free block when an adjacent ally is targeted by a foe intent this round and the unit is not already taunting; reckless skips; low-HP guard unchanged); Assets then does A3. After BAL5-L; shares tactical_ai.gd with L1/L2.
 
 ## Landed on `develop` (this session)
 
-WMAP-BLANK 41d2282 (world map over the region map was zero-sized; known-issues row added), BREPORT1-L d0219fa (BattleMetrics/BattleReport, combo signal, results-model API), UIR-2 52dda97 (game menu popup over the paused map: Party, Journal, Save, Load, Settings, Quit; PLAY route; busy rules), POUCH-TIDY 8c1494c, MORALE1-L schema 6a473ad + behaviour f344531 (flee formula max(base, min(0.60, base+bonus)) accepted by Design), STATCRED1-L 3fa4cea (statuses credited to their applier; boss-phase grants to the enemy recipient). All pinged to the owning threads.
+PACE1-L schema 39daec9 + behaviour a1ca665 (enrage phase effect, or_round trigger, empower status, pace field + boss warning, start_status grants at round 1, enraged intents; party_buff was dropped by the revised spec). PURSE1-L schema 02980d3 + behaviour d0bcc9a (purse field, PurseRules roll/pay, GameState.purses, save v10, BattleBridge pays on won). Assets told PACE1-A and PURSE1-A can start; Balance told PACE1-S; UI/UX told PACE1-U hooks and the Focus "Empowered" log-label clash (their call).
+
+## Open questions (not asked yet; raise only if relevant)
+
+- Playtest replayer rebuilds battles without game state, so game battles with start buffs or a saved party do not replay exactly; making it carry the state would be its own task.
+- PACE1: a wave unit sharing an enraged boss ref would read as enraged without empower (only matters if a boss ref is reinforced).
+- PURSE1: the win count goes up before the grant, so a once purse whose grant fully fails is used up having paid nothing (very unlikely).
+- Until PACE1-A lands, both Ashmaw stands show the "boss fight has no enrage phase" soft warning.
 
 ## Sessions to ping
 
