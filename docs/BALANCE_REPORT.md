@@ -1,5 +1,52 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## MORALE1-B 2026-10-18
+
+Measured build: cloud branch claude/project-thread-6a605c = develop 69c82e0 (MORALE1-A morale data on `ash_scouts` and `ash_raiders`, MORALE1-S sim mapping). Level 5, boss phase on, jitter on, 10 seeds. "Before" for the party rows is the same sim on the parent 233dd98 (no morale data, same code otherwise), run in a throwaway worktree, so only the morale rows differ. All 31 party runs: 0 PLAN FAIL, 0 METRIC FAIL. Party wall about 6 min (4 processes). Logs: scratchpad `morale1b/`.
+
+Commands: `tools/fc.sh sim party 5 10 comp=<warrior[,a[,b]]> enc=world:ash_scouts|ash_raiders` (solo; five duos; ten trios) and `tools/fc.sh sim campaign 5 10 heal=none` / `heal=25`. The solo before cell (20 clear, 4.5 rounds, party hp 0.17) reproduces R1b exactly.
+
+Headline (clear % / rounds / party HP at fight end; HP is a fraction of max):
+
+| Cell | Before | Now | Band |
+| --- | --- | --- | --- |
+| solo warrior vs ash_scouts | 20 / 4.5 / 0.17 | 100 / 1.8 / 0.72 | mob >= 90: PASS |
+| duo warrior+ranger vs ash_raiders | 100 / 3.6 / 0.54 | 100 / 1.7 / 0.71 | |
+| duo +priest | 90 / 4.6 / 0.76 | 100 / 3.4 / 0.75 | |
+| duo +brawler | 100 / 3.1 / 0.71 | 100 / 2.0 / 0.73 | |
+| duo +rogue | 100 / 3.1 / 0.72 | 100 / 1.9 / 0.80 | |
+| duo +mage | 100 / 2.9 / 0.54 | 100 / 1.4 / 0.71 | |
+| ten trios | all 100 / 2.0-2.8 / 0.79-0.91 | all 100 / 1.1-1.7 / 0.84-0.91 | |
+
+Trio detail (rounds before / now, end HP now): ranger+priest 2.1 / 1.1 (0.89), ranger+rogue 2.0 / 1.3 (0.90), ranger+brawler 2.1 / 1.4 (0.86), ranger+mage 2.0 / 1.2 (0.89), priest+rogue 2.6 / 1.6 (0.90), priest+brawler 2.8 / 1.7 (0.89), priest+mage 2.6 / 1.2 (0.84), brawler+rogue 2.4 / 1.6 (0.91), brawler+mage 2.5 / 1.7 (0.84), rogue+mage 2.2 / 1.2 (0.87).
+
+Reading: the solo band is met (20 to 100). The clear rate did not move on ash_raiders (it was already 90-100) but every comp now ends faster (0.7 to 1.9 rounds) and the lowest-HP duos (ranger, mage) end with 0.17 more HP. The sim records no start-of-fight HP (every fight starts at full HP); the columns above are end-of-fight HP.
+
+Campaign (`campaign 5 10 heal=none` and `heal=25`): both runs hit the 900 s sim timeout (`[sim] TIMEOUT after 900 s`) with 14 of 20 trio-steel rows done, so only 7 trios finished (ranger+priest, ranger+brawler, ranger+rogue, ranger+mage, priest+brawler, priest+rogue, priest+mage); brawler+rogue, brawler+mage and rogue+mage are missing. No PLAN or METRIC totals were printed. Compared with BAL4-ATTR v4 restricted to the same seven trios (battles) and to all ten (HP, v4 only has all-trio HP):
+
+| Cell | v4 (same 7 trios) | Now (7 trios) |
+| --- | --- | --- |
+| heal=none mean battles (arms and gate) | 3.51 | 3.58 |
+| heal=25 mean battles | 3.61 | 3.80 |
+| heal=none party HP after B2 / B3 | 74 / 69 (10 trios) | 77 / 71 |
+| heal=25 party HP after B2 / B3 | 82 / 85 (10 trios) | 84 / 88 |
+
+The 7-trio subset is not the 10-trio set, and v4 is an older build (BAL5 and LEVERS1 changes in between), so the shifts (+0.07 and +0.19 battles, +2 to +3 HP) are small and not attributable to morale; B2 and B3 contain no morale rows (`ash_raiders` is the extra battle only in `extra=` chains, not in the default chain). Expect no campaign change from MORALE1-A on this chain; the missing three trios would need a rerun with a higher SIM_TIMEOUT or `comp=` per trio.
+
+Per-run morale counts (units fled while Shaken or Wavering, units surrendered, breaks from crit losses alone): not measured by the sim. A small sim task would add per-fight counters to the party and campaign output: `fled_shaken`, `fled_wavering`, `surrendered`, `break_by_crit_only` (a break where no kill or exit contributed), `break_round`, and units alive at the break.
+
+DR1 checks:
+
+- Does ash_raiders fall under 2 rounds for every comp? Trios: yes (all ten 1.1-1.7). Duos: no (priest 3.4, brawler 2.0; ranger 1.7, rogue 1.9, mage 1.4). So the condition "under 2 for every comp" is not met for duos; no asset lever (`morale_leader` "" or `morale_break` 40) is triggered, but trios are close to it.
+- Do flee cascades end fights before real fighting? Cannot be told from the output (no flee counts). Indirect evidence says no: duo fights last 1.4-3.4 rounds and end HP is 0.71-0.80, trios 1.1-1.7 rounds with 0.84-0.91 HP; the shortest cell (ranger+priest trio, 1.1 rounds) is the nearest to a cascade. FLEE_WAVERING 0.20 is not indicated by these numbers.
+
+Open questions:
+
+- Is 1.1-1.7 rounds for trios acceptable as a "lesson" fight, or should `morale_break` go up to 40 (asset lever) for trios only?
+- The priest duo stays at 3.4 rounds: the morale break fires late there (unprobed).
+- Rerun the campaign with a larger timeout to cover all ten trios.
+- Add the morale counters above to the sim before MORALE1 is called balance-ready.
+
 ## BAL5-R (final) 2026-10-18
 
 Branch claude/bal5-r (develop 744f175: BAL5-AI, S2 support_attrition scenario and POTLEDGER, BAL5-L extra_grants, BAL5-A shield_wall fortify 4/6/8 and potion price 30, STATCRED1-L). Same commands and seeds as BAL5-R1b (level 5, boss phase on, jitter on; role 3 seeds, sweep and campaign 10). 0 PLAN FAIL and 0 METRIC FAIL in all 8 runs, including the potion arm (the POTLEDGER fix works). Wall about 47 min (4 processes in parallel). Logs: scratchpad `bal5r/`. STATCRED1-L moved the buffs columns (buff / debuff rounds per fight now credit the applier); no band uses them. Potion price is 30 now (it does not touch the sim pouch).
