@@ -5,7 +5,7 @@ Written 2026-10-18 16:52 UTC by the UI/UX session at the project wind-down (Tush
 ## Landed this session (develop)
 
 - UIR-6 (c2de328): dialogue as a full-width bottom bar (canvas layer 1, portrait, 1-9 choices, lock reasons via `DialogueRules.lock_reason`, Esc / right click = Farewell / Cancel / Continue); shop popup (layer 31, Buy / Sell tabs, detail line); text scale. Renders `/mnt/project-files/uir6/`.
-- COMBAT-UI3 (d2d1d64): layout A. Planning strip, merged enemy card, selected-hero panel, missing-actions warning (setting `ui/warn_missing_actions`), log ticker in the bottom bar. Decision row in `docs/decisions/combat.md`. Renders `/mnt/project-files/combat-ui3/`. **Waiting on Tushar's layout review** (asked in the thread).
+- COMBAT-UI3 (d2d1d64): layout A. Planning strip, merged enemy card, selected-hero panel, missing-actions warning (setting `ui/warn_missing_actions`), log ticker in the bottom bar. Decision row in `docs/decisions/combat.md`. Renders `/mnt/project-files/combat-ui3/`. Tushar reviewed it 17:00-17:05; follow-up COMBAT-UI3-F (ce3c381): pickers fill empty blocks, hostile HP beside the name, smaller strip labels with a kind-symbol fallback (1-block names show the symbol from Normal text up; a second smaller font tier was not tried).
 
 No branch in flight; `claude/project-thread-durs1a` is fully squashed into develop.
 
@@ -16,7 +16,7 @@ UIR-3B (Gear tab stash stat delta, item descriptions); OBJ1-U; MORALE1-U (Gamepl
 ## Open questions (for Tushar when relevant)
 
 - UIR-6: Esc / right click on a story end node does Continue; RCLOSE1-U may want explicit buttons only. Shop "Owned" counts stash plus worn copies. No key to switch shop tabs yet (UIR-7).
-- COMBAT-UI3: the Balanced draft often leaves the Ranger's last block empty, so the warning shows often (presets fill it, or intended?). Hostile cards dropped their HP bar to fit five (bring back?). The Controls tab is wider than the settings popup at Large / Extra large text (911 / 992 px vs 864), a small fix task.
+- COMBAT-UI3: the Controls tab is wider than the settings popup at Large / Extra large text (911 / 992 px vs 864), a small fix task.
 - From UIR-3: Stats tab has no bar action; Hub entry still reads "Party".
 
 ## Notes
