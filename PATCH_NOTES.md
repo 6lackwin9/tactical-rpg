@@ -2,12 +2,13 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: f344531 -->
+<!-- last: 7780fe0 -->
 
 ## 2026-10-18
 
 In the game:
 
+- **Map screens**: the region and world maps no longer show debug tools in the real game; the top bar shows the place name and your supplies, and chest notes name the items inside.
 - **Balance**: Shield Wall now also fortifies the user (4/6/8 by rank) alongside its taunt, and the healing potion costs 30 in the Hest shop (was 15).
 - **Character screen**: one Character popup with Stats, Level up, Skills and Gear tabs; questions and the Gear board no longer hide under other in-game popups.
 - **Map movement**: walk with WASD or the arrow keys, hold a key to keep walking, and the party slides smoothly between tiles.
@@ -32,6 +33,7 @@ In the game:
 
 Every change that touched the game:
 
+- MAPDEV1-U: map debug tools only in debug scenes; play bars show place and supplies (7780fe0)
 - MORALE1-L: enemy morale in battle (losses, breaks, flee bonus, surrender, Fearless) (f344531)
 - BAL5-A: shield_wall fortify extra grant and potion price 30 (744f175)
 - BAL5-L: extra_grants skill field (second grant on DEFEND/SUPPORT skills) (49a8a70)
@@ -116,6 +118,8 @@ Every change that touched the game:
 
 Under the hood (specs, decisions, handovers, workflow, tooling):
 
+- GAMEPLAY-HANDOVER: rotation after MORALE1-L, STATCRED1-L, UIR-2 (c87d94d)
+- PATCH-NOTES: MORALE1-L, LEVERS1 approval (c23d235)
 - LEVERS1-B: point the S2 dependency at BAL5-S2 (b9fcc80) (6c01248)
 - LEVERS1 approved: priest Ward, brawler spin; task rows routed (0525027)
 - PATCH-NOTES: BAL5-A, MORALE1 spec rule 8 (b2ef357)
