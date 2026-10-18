@@ -83,6 +83,7 @@ static func run(tree_parent: Node = null) -> bool:
 			ok = _test_trees(fx) and ok
 			ok = _test_conditions(fx) and ok
 			ok = _test_effects(fx) and ok
+			ok = _test_recruit(fx) and ok
 			ok = _test_shops(fx) and ok
 			ok = _test_gold_gone_services(fx) and ok
 			ok = _test_lint() and ok
@@ -352,6 +353,76 @@ static func _test_effects(fx: Dictionary) -> bool:
 	checks["flag then shop ok"] = DialogueRules.effects_errors(W, [flag, shop], "Choice", false).is_empty()
 	checks["node level refuses start_quest"] = _one(DialogueRules.effects_errors(W, [{"effect": "start_quest", "quest": "q_main"}], "Node 'x'", true), "Node effects may only be set_flag, add_flag or give.")
 	return _report("Check 3: effects (unknown, order rules, give/take bounds, refs: errors)", checks)
+
+# A party-side and an enemy-side catalog unit, picked by rule (read-only).
+static func _unit_of_side(side: String) -> String:
+	for row: Dictionary in ContentCatalog.entries("units"):
+		if str(row.get("side", "enemy")) == side:
+			return str(row["id"])
+	return ""
+
+# Check 3b (RECRUIT1-L 1.4): effect `recruit` validation (keys, choices only, at most one per choice, ref, party
+# character rules) and its `character` ref in reference scans and renames. Test-only characters, removed afterwards.
+static func _test_recruit(fx: Dictionary) -> bool:
+	var checks: Dictionary = {}
+	var party_unit: String = _unit_of_side("party")
+	var enemy_unit: String = _unit_of_side("enemy")
+	var item_qid: String = ""
+	var errors: Array[String] = []
+	errors.append_array(WorldCatalog.upsert(W, "items", {"id": "rc_blade", "name": "Recruit blade", "base_item": JsonUtil.strings(fx["items"])[0]}))
+	if WorldCatalog.get_own(W, "items", "rc_blade").is_empty():
+		errors.clear()   # the item fixture is optional; the named-item case falls back to tuning
+	else:
+		item_qid = "rc_blade"
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_hero", "name": "Rc Hero", "role": "party", "base_unit": party_unit, "passives": [str(fx["passive"])]}))
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_npc", "name": "Rc Npc", "role": "npc", "base_unit": party_unit}))
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_foe_unit", "name": "Rc Foe Unit", "role": "party", "base_unit": enemy_unit}))
+	errors.append_array(WorldCatalog.upsert(W, "characters", {"id": "rc_tuned", "name": "Rc Tuned", "role": "party", "base_unit": party_unit, "tuning": {"power": 1}}))
+	checks["fixtures stored"] = errors.is_empty() and not party_unit.is_empty() and not enemy_unit.is_empty()
+	if not errors.is_empty():
+		print("      [%s] recruit fixtures: %s" % [TAG, str(errors)])
+	var rc: Dictionary = {"effect": "recruit", "character": "rc_hero"}
+	var flag: Dictionary = {"effect": "set_flag", "key": "dg.rc"}
+	checks["known effect"] = DialogueRules.EFFECTS.has("recruit") and str(DialogueRules.EFFECT_REF_KEYS.get("character", "")) == "characters"
+	checks["valid recruit (passives allowed)"] = DialogueRules.effects_errors(W, [rc, flag], "Choice", false).is_empty()
+	checks["party_character_errors clean"] = WorldCatalog.party_character_errors(W, "rc_hero").is_empty()
+	var bad: Dictionary = {
+		"unknown character": [[{"effect": "recruit", "character": "rc_nobody"}], "Recruit: unknown character 'rc_nobody'."],
+		"no character": [[{"effect": "recruit"}], "choose a character"],
+		"extra key": [[{"effect": "recruit", "character": "rc_hero", "who": 1}], "unknown key 'who'"],
+		"two recruits": [[rc, {"effect": "recruit", "character": "rc_hero"}], "at most one recruit per choice."],
+		"not role party": [[{"effect": "recruit", "character": "rc_npc"}], "Party hero 'rc_npc' needs role party"],
+		"enemy base unit": [[{"effect": "recruit", "character": "rc_foe_unit"}], "Party hero 'rc_foe_unit' must play as a party unit"],
+		"tuning": [[{"effect": "recruit", "character": "rc_tuned"}], "Party hero 'rc_tuned' may not carry named items, disciplines or tuning yet (RECRUIT1)."],
+	}
+	for label: Variant in bad:
+		var pair: Array = DictUtil.array_of(bad[label])
+		checks[str(label)] = _one(DialogueRules.effects_errors(W, pair[0], "Choice", false), str(pair[1]))
+	if not item_qid.is_empty():
+		var armed_errs: Array[String] = WorldCatalog.upsert(W, "characters", {"id": "rc_armed", "name": "Rc Armed", "role": "party", "base_unit": party_unit, "named_items": [item_qid]})
+		checks["named item"] = armed_errs.is_empty() and WorldCatalog.party_character_errors(W, "rc_armed") == ["Party hero 'rc_armed' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
+		var _gone_armed: String = WorldCatalog.remove(W, "characters", "rc_armed")
+	checks["node level refuses recruit"] = _one(DialogueRules.effects_errors(W, [rc], "Node 'x'", true), "Node effects may only be set_flag, add_flag or give.")
+	# A stored tree: the recruit ref is found by reference scans and follows a rename.
+	var tree: Dictionary = {"id": "d_rc", "name": "Recruit talk", "speaker": "mara", "start": "hello", "services": false, "nodes": [
+		{"id": "hello", "text": "Join?", "choices": [{"text": "Join me", "to": "", "effects": [rc, flag]}, {"text": "Bye", "to": ""}]}]}
+	var stored: Array[String] = WorldCatalog.upsert(W, "dialogues", tree)
+	checks["tree stored"] = stored.is_empty()
+	if not stored.is_empty():
+		print("      [%s] recruit tree: %s" % [TAG, str(stored)])
+	checks["recruit ref scanned"] = _keys_from(WorldCatalog.references_to(W, "characters", "rc_hero"), "dialogues", "d_rc") == ["nodes"]
+	var hero: Dictionary = WorldCatalog.get_own(W, "characters", "rc_hero")
+	hero["id"] = "rc_hero2"
+	var renamed: bool = WorldCatalog.upsert(W, "characters", hero, "rc_hero").is_empty()
+	var after: Dictionary = WorldCatalog.get_own(W, "dialogues", "d_rc")
+	checks["recruit ref renamed"] = renamed and str(DictUtil.dict_of(DictUtil.array_of(DictUtil.dict_of(_choices(after, "hello")[0])["effects"])[0])["character"]) == "rc_hero2"
+	var _gone_tree: String = WorldCatalog.remove(W, "dialogues", "d_rc")
+	for id: String in ["rc_hero2", "rc_npc", "rc_foe_unit", "rc_tuned"]:
+		var _gone: String = WorldCatalog.remove(W, "characters", id)
+	if not item_qid.is_empty():
+		var _gone_item: String = WorldCatalog.remove(W, "items", item_qid)
+	checks["fixture world still validates"] = WorldCatalog.validate_world(W).is_empty()
+	return _report("Check 3b: recruit effect (RECRUIT1-L 1.4: keys, choices only, one per choice, ref, party hero rules, scans)", checks)
 
 # ------------------------------------------------------------------------------
 # Check 4: shops

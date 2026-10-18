@@ -45,6 +45,7 @@ const EFFECTS: Dictionary = {
 	"take": {"items": {}, "gold": 0},
 	"open_shop": {"shop": ""},
 	"fight": {"encounter": ""},
+	"recruit": {"character": ""},   # RECRUIT1-L 1.4: choices only, at most one per choice
 }
 const NODE_EFFECTS: Array[String] = ["set_flag", "add_flag", "give"]
 const EFFECT_GOLD_MAX: int = 99999
@@ -52,7 +53,7 @@ const ADD_DELTA_MAX: int = 100   # |delta| of add_flag (REP1-L 1.3)
 
 # Json ref keys (WorldCatalog reference scans and renames): condition / effect key -> the world kind it names.
 const CONDITION_REF_KEYS: Dictionary = {"quest": "quests"}
-const EFFECT_REF_KEYS: Dictionary = {"quest": "quests", "shop": "shops", "encounter": "encounters"}
+const EFFECT_REF_KEYS: Dictionary = {"quest": "quests", "shop": "shops", "encounter": "encounters", "character": "characters"}
 
 # Base service lines (data/dialogue/services.json ids, in service order) and the fallback the runtime uses for a
 # missing one. Lore-free; tokens are replaced when a node is shown.
@@ -394,6 +395,8 @@ static func effects_errors(world_id: String, raw: Variant, label: String, node_l
 		errors.append_array(_effect_errors(world_id, effect, fx, el))
 	if not node_level:
 		errors.append_array(_order_errors(names, label))
+		if names.count("recruit") > 1:
+			errors.append("%s: at most one recruit per choice." % label)
 	return errors
 
 static func _effect_errors(world_id: String, effect: String, fx: Dictionary, el: String) -> Array[String]:
@@ -421,6 +424,22 @@ static func _effect_errors(world_id: String, effect: String, fx: Dictionary, el:
 			errors.append_array(_ref_value_errors(world_id, fx.get("shop", ""), "shops", el + " shop"))
 		"fight":
 			errors.append_array(_ref_value_errors(world_id, fx.get("encounter", ""), "encounters", el + " encounter"))
+		"recruit":
+			errors.append_array(_recruit_errors(world_id, fx.get("character", ""), el))
+	return errors
+
+# recruit (RECRUIT1-L 1.4): a world character that resolves and may join the party (WorldCatalog.party_character_errors).
+static func _recruit_errors(world_id: String, raw: Variant, el: String) -> Array[String]:
+	var errors: Array[String] = []
+	if not (raw is String) or str(raw).is_empty():
+		errors.append("%s: choose a character." % el)
+		return errors
+	var id: String = str(raw)
+	if WorldCatalog.resolve(world_id, "characters", id).is_empty():
+		errors.append("%s: Recruit: unknown character '%s'." % [el, id])
+		return errors
+	for why: String in WorldCatalog.party_character_errors(world_id, id):
+		errors.append("%s: %s" % [el, why])
 	return errors
 
 # add_flag (REP1-L 1.3): a valid key, delta a whole number in -ADD_DELTA_MAX..ADD_DELTA_MAX and not 0, optional

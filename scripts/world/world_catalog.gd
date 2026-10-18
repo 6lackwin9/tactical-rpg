@@ -1186,7 +1186,13 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	var start: String = str(m.get("start_location", ""))
 	if not start.is_empty() and resolve(world_id, "locations", start).is_empty():
 		errors.append("Start location '%s' is unknown." % start)
-	errors.append_array(start_party_errors(m.get("start_party", [])))
+	errors.append_array(start_party_errors(world_id, m.get("start_party", [])))
+	var cap: Variant = m.get("party_max", -1)
+	if not (cap is int) or (DictUtil.to_int(cap) != -1 and (DictUtil.to_int(cap) < 1 or DictUtil.to_int(cap) > PartyState.PARTY_MAX)):
+		errors.append("Party max must be -1 (inherited) or 1..%d." % PartyState.PARTY_MAX)
+	var resolved: Array[String] = start_party(world_id)
+	if resolved.size() <= PartyState.PARTY_MAX and resolved.size() > party_max(world_id):
+		errors.append("Start party has %d heroes; party max is %d." % [resolved.size(), party_max(world_id)])
 	var gold: Variant = m.get("start_gold", -1)
 	if not (gold is int) or DictUtil.to_int(gold) < -1 or DictUtil.to_int(gold) > 99999:
 		errors.append("Start gold must be -1 (inherited) or 0..99999.")
@@ -1196,9 +1202,9 @@ static func manifest_errors(world_id: String) -> Array[String]:
 	errors.append_array(DialogueRules.service_lines_errors(m.get("service_lines", {}), "Service lines"))
 	return errors
 
-# Problems with a manifest `start_party` value (UI1-L): known party-side catalog units, at most PartyState.PARTY_MAX,
-# no duplicates.
-static func start_party_errors(raw: Variant) -> Array[String]:
+# Problems with a manifest `start_party` value (UI1-L, RECRUIT1-L 1.2): each entry is a party-side catalog unit or a
+# party character of `world_id` (party_character_errors); never both; at most PartyState.PARTY_MAX, no duplicates.
+static func start_party_errors(world_id: String, raw: Variant) -> Array[String]:
 	var errors: Array[String] = []
 	var ids: Array[String] = _strings(raw)
 	var seen: Dictionary = {}
@@ -1208,13 +1214,47 @@ static func start_party_errors(raw: Variant) -> Array[String]:
 			continue
 		seen[id] = true
 		var unit: Dictionary = ContentCatalog.get_entry("units", id)
-		if unit.is_empty():
+		var character: Dictionary = resolve(world_id, "characters", id)
+		if not unit.is_empty() and not character.is_empty():
+			errors.append("'%s' is both a unit and a character." % id)
+		elif not character.is_empty():
+			errors.append_array(party_character_errors(world_id, id))
+		elif unit.is_empty():
 			errors.append("Start party unit '%s' is not a known unit." % id)
 		elif str(unit.get("side", "enemy")) != "party":
 			errors.append("Start party unit '%s' is not a party unit." % id)
 	if ids.size() > PartyState.PARTY_MAX:
 		errors.append("A start party holds at most 4 units.")
 	return errors
+
+# Problems that keep world character `id` from joining the party (RECRUIT1-L 1.2; start_party and the dialogue
+# effect `recruit`): role party, a party-side base unit, no named items, disciplines or tuning (passives are fine).
+static func party_character_errors(world_id: String, id: String) -> Array[String]:
+	var errors: Array[String] = []
+	var c: Dictionary = resolve(world_id, "characters", id)
+	if c.is_empty():
+		errors.append("'%s' is not a known character." % id)
+		return errors
+	if str(c.get("role", "npc")) != "party":
+		errors.append("Party hero '%s' needs role party (has %s)." % [id, str(c.get("role", "npc"))])
+	var base_id: String = str(c.get("base_unit", ""))
+	var base: Dictionary = ContentCatalog.get_entry("units", base_id)
+	if base.is_empty() or str(base.get("side", "enemy")) != "party":
+		errors.append("Party hero '%s' must play as a party unit (base unit '%s')." % [id, base_id])
+	if not _strings(c.get("named_items", [])).is_empty() or not _strings(c.get("disciplines", [])).is_empty() or not DictUtil.dict_of(c.get("tuning", {})).is_empty():
+		errors.append("Party hero '%s' may not carry named items, disciplines or tuning yet (RECRUIT1)." % id)
+	return errors
+
+# The resolved party cap of `world_id` (RECRUIT1-L 1.1): the nearest manifest in the lineage with `party_max` >= 1,
+# else PartyState.PARTY_MAX.
+static func party_max(world_id: String) -> int:
+	var chain: Array[String] = lineage(world_id)
+	chain.reverse()
+	for w: String in chain:
+		var cap: Variant = manifest(w).get("party_max", -1)
+		if cap is int and DictUtil.to_int(cap) >= 1:
+			return mini(DictUtil.to_int(cap), PartyState.PARTY_MAX)
+	return PartyState.PARTY_MAX
 
 # The resolved start party of `world_id`: its own non-empty `start_party`, else the nearest ancestor's (lineage order,
 # the same rule as `start_location`). [] when none.

@@ -52,6 +52,8 @@ static func run(tree_parent: Node = null) -> bool:
 	ok = _report("Content fixtures picked by rule", {"two party units": units.size() >= 2, "an enemy unit": not _enemy_unit().is_empty()}) and ok
 	if sandboxed and units.size() >= 2 and _build_worlds(units):
 		ok = _test_start_party(units) and ok
+		ok = _test_party_max(units) and ok
+		ok = _test_start_characters(units) and ok
 		ok = _test_create_for_world(units) and ok
 		ok = _test_slots() and ok
 		ok = _test_peek() and ok
@@ -78,6 +80,9 @@ static func _test_shipped_start() -> bool:
 			levels_ok = levels_ok and XpCurve.level_for(m.total_xp) == DictUtil.to_int(ContentCatalog.get_entry("units", m.base_unit).get("level", 1), 1)
 	checks["ashlands: four members at authored levels"] = levels_ok and gs.validate().is_empty()
 	checks["tidewrack inherits"] = WorldCatalog.start_party("tidewrack") == WorldCatalog.start_party("ashlands") and not WorldCatalog.start_party("ashlands").is_empty()
+	var own_cap: int = DictUtil.to_int(WorldCatalog.manifest("ashlands").get("party_max", -1), -1)
+	var ash_cap: int = own_cap if own_cap >= 1 else PartyState.PARTY_MAX
+	checks["tidewrack inherits party_max (RECRUIT1-L)"] = WorldCatalog.party_max("ashlands") == ash_cap and WorldCatalog.party_max("tidewrack") == ash_cap and DictUtil.to_int(WorldCatalog.manifest("tidewrack").get("party_max", -1), -1) < 1
 	checks["iron_reaches not playable"] = JsonUtil.strings(NewGame.create_for_world("iron_reaches")["errors"]).has("World 'iron_reaches' is not playable (no start party).")
 	return _report("UI1-A: shipped start party", checks)
 
@@ -123,6 +128,57 @@ static func _test_start_party(units: Array[String]) -> bool:
 	var _undo: Array[String] = WorldCatalog.update_manifest(KID, {"start_party": []})
 	checks["playable worlds"] = NewGame.playable_worlds() == [BASE, KID]
 	return _report("Check 1: start_party validation and inheritance", checks)
+
+static func _manifest_set(world_id: String, changes: Dictionary) -> Array[String]:
+	var stored: Array[String] = WorldCatalog.update_manifest(world_id, changes)
+	if not stored.is_empty():
+		print("      [%s] update_manifest %s: %s" % [TAG, world_id, str(stored)])
+	return WorldCatalog.manifest_errors(world_id)
+
+# Check 1b (RECRUIT1-L 1.1): manifest party_max range, the lineage resolver and the start-party-longer-than-cap error.
+static func _test_party_max(units: Array[String]) -> bool:
+	var checks: Dictionary = {}
+	var msg: String = "Party max must be -1 (inherited) or 1..%d." % PartyState.PARTY_MAX
+	checks["default -1"] = DictUtil.to_int(WorldSchema.defaults("world").get("party_max", 0)) == -1
+	checks["unset = PARTY_MAX"] = WorldCatalog.party_max(BARE) == PartyState.PARTY_MAX and WorldCatalog.party_max(KID) == PartyState.PARTY_MAX
+	checks["0 refused"] = _manifest_set(BASE, {"party_max": 0}) == [msg]
+	checks["above PARTY_MAX refused"] = _manifest_set(BASE, {"party_max": PartyState.PARTY_MAX + 1}) == [msg]
+	checks["-2 refused"] = _manifest_set(BASE, {"party_max": -2}) == [msg]
+	checks["PARTY_MAX valid"] = _manifest_set(BASE, {"party_max": PartyState.PARTY_MAX}).is_empty() and WorldCatalog.party_max(BASE) == PartyState.PARTY_MAX
+	var two: int = WorldCatalog.start_party(BASE).size()
+	var cap: int = two - 1
+	var long_msg: String = "Start party has %d heroes; party max is %d." % [two, cap]
+	checks["start party longer than cap"] = cap >= 1 and _manifest_set(BASE, {"party_max": cap}) == [long_msg]
+	checks["child inherits cap"] = WorldCatalog.party_max(KID) == cap and WorldCatalog.manifest_errors(KID) == [long_msg]
+	checks["child own cap wins"] = _manifest_set(KID, {"party_max": two}).is_empty() and WorldCatalog.party_max(KID) == two
+	checks["child -1 inherits again"] = _manifest_set(KID, {"party_max": -1}) == [long_msg]
+	checks["short own list clears it"] = _manifest_set(KID, {"start_party": [units[0]]}).is_empty()
+	var _undo_kid: Array[String] = WorldCatalog.update_manifest(KID, {"start_party": [], "party_max": -1})
+	checks["back to inherited"] = _manifest_set(BASE, {"party_max": -1}).is_empty() and WorldCatalog.party_max(KID) == PartyState.PARTY_MAX
+	return _report("Check 1b: party_max range, lineage resolver, start party vs cap (RECRUIT1-L 1.1)", checks)
+
+# Check 1c (RECRUIT1-L 1.2): start_party takes world party characters; both-unit-and-character and party-hero errors.
+static func _test_start_characters(units: Array[String]) -> bool:
+	var checks: Dictionary = {}
+	var u: String = units[0]
+	var errors: Array[String] = []
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_hero", "name": "Mn Hero", "role": "party", "base_unit": u}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_tuned", "name": "Mn Tuned", "role": "party", "base_unit": u, "tuning": {"power": 1}}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": "mn_npc", "name": "Mn Npc", "role": "npc", "base_unit": u}))
+	errors.append_array(WorldCatalog.upsert(BARE, "characters", {"id": u, "name": "Mn Twin", "role": "party", "base_unit": u}))
+	checks["fixtures stored"] = errors.is_empty()
+	if not errors.is_empty():
+		print("      [%s] character fixtures: %s" % [TAG, str(errors)])
+	checks["character entry"] = _party_errs(["mn_hero"]).is_empty()
+	checks["mixed unit and character"] = _party_errs([units[1], "mn_hero"]).is_empty()
+	checks["both unit and character"] = _party_errs([u]) == ["'%s' is both a unit and a character." % u]
+	checks["tuned hero"] = _party_errs(["mn_tuned"]) == ["Party hero 'mn_tuned' may not carry named items, disciplines or tuning yet (RECRUIT1)."]
+	checks["npc role"] = _party_errs(["mn_npc"]) == WorldCatalog.party_character_errors(BARE, "mn_npc") and _party_errs(["mn_npc"]).size() == 1
+	checks["unknown id"] = _party_errs(["mn_nobody"]) == ["Start party unit 'mn_nobody' is not a known unit."]
+	for id: String in ["mn_hero", "mn_tuned", "mn_npc", u]:
+		var _gone: String = WorldCatalog.remove(BARE, "characters", id)
+	checks["bare clean again"] = WorldCatalog.manifest_errors(BARE).is_empty() and WorldCatalog.own_ids(BARE, "characters").is_empty()
+	return _report("Check 1c: start_party world characters (RECRUIT1-L 1.2)", checks)
 
 # Check 2: create_for_world on a playable world; the exact error on a world without a start party.
 static func _test_create_for_world(units: Array[String]) -> bool:

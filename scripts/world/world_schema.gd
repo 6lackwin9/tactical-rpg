@@ -126,7 +126,9 @@ static func _world_fields() -> Array[Dictionary]:
 		_f("connects", "Connects to", "refs", [], {"ref": "worlds", "help": "Worlds this one links to without inheriting (locations may exit into them)."}),
 		_f("start_location", "Start location", "ref", "", {"ref": "locations", "optional": true, "help": "Where a new game enters this world. Empty = the nearest parent world's."}),
 		# Starting party (UI1-L, S13): fixed per world; WorldCatalog.manifest_errors checks it, start_party() resolves it.
-		_f("start_party", "Start party", "refs", [], {"ref": "base:units", "ref_filter": {"side": "party"}, "help": "Party-side units a new game starts with (at most 4). Empty = the nearest parent world's."}),
+		_f("start_party", "Start party", "refs", [], {"ref": "base:units", "ref_filter": {"side": "party"}, "help": "Party-side units or party characters of this world (RECRUIT1) a new game starts with (at most the party max). Empty = the nearest parent world's."}),
+		# Party cap (RECRUIT1-L 1.1): WorldCatalog.party_max() resolves it, manifest_errors checks the range.
+		_f("party_max", "Party max", "int", -1, {"help": "Most heroes in the party (-1 = the nearest parent world's, else 4); 1..4."}),
 		# Dialogue and gold (DLG1-L, S11); ranges are checked by WorldCatalog.manifest_errors, not clamped here.
 		_f("start_gold", "Start gold", "int", -1, {"help": "Party gold of a new game (-1 = the nearest parent world's, else 0)."}),
 		# Travel supplies (TRAV2-L, S10); the range is checked by WorldCatalog.manifest_errors.
