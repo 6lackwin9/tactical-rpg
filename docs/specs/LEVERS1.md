@@ -132,7 +132,7 @@ One data step each if missed, then report and stop (DR1 (3)): priest alive at r3
 | LEVERS1-A1 | Cyclone Kick becomes the spin | asset | LEVERS1-L1, BAL5-A | approved | docs/specs/LEVERS1.md 4.1 | data/catalog/skills.json, data/seeds/levers1.gd |
 | LEVERS1-A2 | Ward skill and priest path | asset | LEVERS1-L2, BAL5-A | approved | docs/specs/LEVERS1.md 4.2 | data/catalog/skills.json, data/catalog/classes.json, data/seeds/levers1.gd |
 | LEVERS1-U | Ward on the unit card and HP bar (shield segment), forecast line "Ward absorbs N", log line; spin preview around the caster | UI | LEVERS1-L2, LEVERS1-L1 | approved | docs/specs/LEVERS1.md 3.1 (3), 3.2 | scripts/ui/combat/*, scripts/ui/roster_panel_ui.gd |
-| LEVERS1-B | Measure both levers against section 5 | balance | LEVERS1-A1, LEVERS1-A2, BAL5-R, BAL5 S2 scenario (Balance queue, after BAL5-L) | approved | docs/specs/LEVERS1.md 5 | docs/BALANCE_REPORT.md |
+| LEVERS1-B | Measure both levers against section 5 | balance | LEVERS1-A1, LEVERS1-A2, BAL5-R, BAL5-S2 (done, b9fcc80) | approved | docs/specs/LEVERS1.md 5 | docs/BALANCE_REPORT.md |
 
 ROADMAP row (proposed): "LEVERS1 role-feel levers: brawler spin, priest Ward (DR2 4B)", status `proposed`.
 
