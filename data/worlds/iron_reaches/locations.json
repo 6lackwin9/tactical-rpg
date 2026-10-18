@@ -50,6 +50,7 @@
 				}
 			],
 			"map_pos": [],
+			"rest": true,
 			"tags": []
 		}
 	]
