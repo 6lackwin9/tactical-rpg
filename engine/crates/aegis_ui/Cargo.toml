@@ -1,0 +1,12 @@
+[package]
+name = "aegis_ui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+winit = "0.30.5"
+pixels = "0.15.0"
+png = "0.17.13"
+fontdue = "0.9.2"

@@ -2,10 +2,10 @@
 //! combat arena takes any catalog or world encounter; the debug region and world maps play a world without saving and
 //! settle fights with Won / Fled / Lost buttons (DebugFight). Reload re-reads the data folder from disk.
 
-use crate::canvas::{rgb, rgba, Rect};
-use crate::screens::{show_errors, Cx, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgb, rgba, Rect};
+use crate::screens::{enter_game, show_errors, Cx, GameCx, Nav, Screen};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use aegis_world::{dialogue, explore, new_game, travel};
 use serde_json::{json, Value};
@@ -56,7 +56,7 @@ impl SceneRunner {
             Err(e) => show_errors(cx, e),
             Ok(gs) => {
                 cx.debug = true;
-                cx.enter_game(gs, -1, Vec::new());
+                enter_game(cx, gs, -1, Vec::new());
                 if world_map {
                     cx.nav.push(Nav::Push(Box::new(crate::worldmap::WorldMap::new())));
                 }
@@ -102,7 +102,7 @@ impl SceneRunner {
     }
 }
 
-impl Screen for SceneRunner {
+impl Screen<GameCx> for SceneRunner {
     fn id(&self) -> &'static str {
         "scene_runner"
     }
@@ -207,7 +207,7 @@ impl DebugFight {
     }
 }
 
-impl Screen for DebugFight {
+impl Screen<GameCx> for DebugFight {
     fn id(&self) -> &'static str {
         "debug_fight"
     }

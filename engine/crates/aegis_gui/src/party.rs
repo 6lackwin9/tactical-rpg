@@ -2,10 +2,10 @@
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
 
-use crate::canvas::{rgba, Rect};
-use crate::screens::{show_errors, Cx, Key, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgba, Rect};
+use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
 use aegis_data::STATS;
 use aegis_rules::damage;
@@ -381,7 +381,7 @@ fn take_one(stash: &mut IndexMap<String, i64>, item: &str) {
     }
 }
 
-impl Screen for Character {
+impl Screen<GameCx> for Character {
     fn id(&self) -> &'static str {
         "character"
     }

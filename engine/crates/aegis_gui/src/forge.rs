@@ -2,10 +2,10 @@
 //! entries on the left, every field of the selected entry in the middle, an engine summary on the right (built units,
 //! skill costs, world inheritance and who uses the entry). Validation and editing stay in Godot for now.
 
-use crate::canvas::{rgb, rgba, Rect};
-use crate::screens::{Cx, Nav, Screen};
-use crate::ui::{Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgb, rgba, Rect};
+use crate::screens::{Cx, GameCx, Nav, Screen};
+use aegis_ui::ui::{Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use serde_json::{json, Value};
 
@@ -124,10 +124,10 @@ impl Forge {
     }
 
     /// The right panel: what the engine makes of the entry.
-    fn summary(&self, cx: &Cx, id: &str, e: &Dict) -> Vec<(String, crate::canvas::Rgba)> {
+    fn summary(&self, cx: &Cx, id: &str, e: &Dict) -> Vec<(String, aegis_ui::canvas::Rgba)> {
         let d = &cx.data;
         let cat = &d.cat;
-        let mut out: Vec<(String, crate::canvas::Rgba)> = Vec::new();
+        let mut out: Vec<(String, aegis_ui::canvas::Rgba)> = Vec::new();
         let mut line = |t: String, c| out.push((t, c));
         match (self.world_forge, self.kind()) {
             (false, "skills") => {
@@ -253,7 +253,7 @@ fn value_text(v: &Value) -> String {
     }
 }
 
-impl Screen for Forge {
+impl Screen<GameCx> for Forge {
     fn id(&self) -> &'static str {
         if self.world_forge {
             "world_forge"

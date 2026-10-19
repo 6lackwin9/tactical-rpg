@@ -1,10 +1,9 @@
-//! Feel tuning (engine/data/tuning.json): every timing, size and feedback colour the GUI animates with. Reloaded when
-//! the file changes, so the user can tune while playing and the agent reads the exact values.
+//! The game's feel tuning (engine/data/tuning.json): every timing, size and feedback colour the battle screen animates
+//! with, read by the engine's live tuning file (`aegis_ui::tuning::TuningFile`, reloaded when the file changes).
 
-use crate::canvas::{rgb, Rgba};
+use aegis_ui::canvas::{rgb, Rgba};
+use aegis_ui::tuning::Tuned;
 use serde_json::Value;
-use std::path::PathBuf;
-use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
 pub struct Tuning {
@@ -46,8 +45,8 @@ fn color(v: &Value, d: Rgba) -> Rgba {
     }
 }
 
-impl Tuning {
-    pub fn from_json(v: &Value) -> Self {
+impl Tuned for Tuning {
+    fn from_json(v: &Value) -> Self {
         let d = Tuning::default();
         let u = |k: &str, def: u64| v.get(k).and_then(Value::as_u64).unwrap_or(def);
         let i = |k: &str, def: i32| v.get(k).and_then(Value::as_i64).map(|x| x as i32).unwrap_or(def);
@@ -67,33 +66,3 @@ impl Tuning {
     }
 }
 
-/// The tuning file plus change detection.
-pub struct TuningFile {
-    pub path: Option<PathBuf>,
-    pub value: Tuning,
-    pub raw: Value,
-    stamp: Option<SystemTime>,
-}
-
-impl TuningFile {
-    pub fn new(path: Option<PathBuf>) -> Self {
-        let mut t = Self { path, value: Tuning::default(), raw: Value::Null, stamp: None };
-        t.reload_if_changed();
-        t
-    }
-
-    /// Re-reads the file when its timestamp moved; true when the values changed.
-    pub fn reload_if_changed(&mut self) -> bool {
-        let Some(p) = &self.path else { return false };
-        let stamp = std::fs::metadata(p).and_then(|m| m.modified()).ok();
-        if stamp.is_none() || stamp == self.stamp {
-            return false;
-        }
-        self.stamp = stamp;
-        let Ok(text) = std::fs::read_to_string(p) else { return false };
-        let Ok(v) = serde_json::from_str::<Value>(&text) else { return false };
-        self.value = Tuning::from_json(&v);
-        self.raw = v;
-        true
-    }
-}

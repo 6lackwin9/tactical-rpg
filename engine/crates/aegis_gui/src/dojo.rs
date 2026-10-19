@@ -2,10 +2,10 @@
 //! from the catalog, read the attributes, proficiencies and derived numbers, and see what each hand and skill deals to
 //! the training dummy (DamageCalculator, no crit). The windowed workbench and the step-by-step test console come later.
 
-use crate::canvas::{rgb, rgba, Rect};
-use crate::screens::{Cx, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgb, rgba, Rect};
+use crate::screens::{Cx, GameCx, Nav, Screen};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_data::{UnitDef, NO_ITEM, STATS};
 use aegis_rules::damage::{self, HitInput};
 use aegis_rules::gear::Slot;
@@ -81,7 +81,7 @@ impl Dojo {
     }
 }
 
-impl Screen for Dojo {
+impl Screen<GameCx> for Dojo {
     fn id(&self) -> &'static str {
         "gear_dojo"
     }

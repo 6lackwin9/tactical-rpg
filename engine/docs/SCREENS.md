@@ -56,5 +56,5 @@ The rules behind every player screen come from `aegis_world`, checked against Go
 2. Game state: GameState, NewGame, SaveGame (Godot saves load unchanged, every migration), party and progression rules.
 3. Game loop rules: exploration, travel, dialogue, shop, quests, rest and camp, world battles, results; checked with
    journeys replayed in both engines (state compared after every action).
-4. Screens on a shared widget kit (`ui.rs`: buttons, tabs, cards, checkboxes, steppers, dropdowns, frames, rows,
+4. Screens on a shared widget kit (`ui.rs`, now `aegis_ui::ui`: buttons, tabs, cards, checkboxes, steppers, dropdowns, frames, rows,
    hover cards), menus first, then the play screens, then the dev tools.

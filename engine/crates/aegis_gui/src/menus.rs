@@ -1,10 +1,10 @@
 //! Main menu, New game, Load / Save slots and Settings (scripts/ui/menus: main_menu_model, new_game_model,
 //! save_slots_model, settings_model). Placeholder logic as in Godot; file import / export of saves is not ported yet.
 
-use crate::canvas::{rgba, Rect};
-use crate::screens::{default_settings, show_errors, title, Cx, Key, Nav, Screen};
-use crate::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgba, Rect};
+use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
 use aegis_world::{new_game, progression, save};
 use serde_json::{json, Value};
@@ -69,7 +69,7 @@ impl MainMenu {
     }
 }
 
-impl Screen for MainMenu {
+impl Screen<GameCx> for MainMenu {
     fn id(&self) -> &'static str {
         "main_menu"
     }
@@ -117,7 +117,7 @@ impl Screen for MainMenu {
 pub fn load_slot(cx: &mut Cx, slot: i64) {
     match save::read(&cx.data, &cx.save_dir, slot) {
         Ok(l) => {
-            cx.enter_game(l.state, slot, l.warnings);
+            enter_game(cx, l.state, slot, l.warnings);
             cx.mark_saved(slot);
         }
         Err(errors) => show_errors(cx, errors),
@@ -225,13 +225,13 @@ fn start_world(cx: &mut Cx, world: &str) {
     match new_game::create_for_world(&cx.data, world, cx.seed.unwrap_or(-1)) {
         Err(errors) => show_errors(cx, errors),
         Ok(gs) => {
-            cx.enter_game(gs, -1, Vec::new());
+            enter_game(cx, gs, -1, Vec::new());
             cx.autosave();
         }
     }
 }
 
-impl Screen for NewGameScreen {
+impl Screen<GameCx> for NewGameScreen {
     fn id(&self) -> &'static str {
         "new_game"
     }
@@ -345,7 +345,7 @@ fn save_now(cx: &mut Cx, slot: i64) {
     }
 }
 
-impl Screen for Slots {
+impl Screen<GameCx> for Slots {
     fn id(&self) -> &'static str {
         if self.saving {
             "save_slots"
@@ -381,7 +381,7 @@ impl Screen for Slots {
             } else {
                 "Empty".into()
             };
-            ui.p.panel(r, rgba(26, 36, 58, 250), crate::ui::BORDER, 2.0);
+            ui.p.panel(r, rgba(26, 36, 58, 250), aegis_ui::ui::BORDER, 2.0);
             ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, if ok { TEXT } else { DIM });
             ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, 340.0, if ok { INFO } else { DIM });
             ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, true, false, None, Vec::new());
@@ -471,7 +471,7 @@ impl SettingsScreen {
     }
 }
 
-impl Screen for SettingsScreen {
+impl Screen<GameCx> for SettingsScreen {
     fn id(&self) -> &'static str {
         "settings"
     }

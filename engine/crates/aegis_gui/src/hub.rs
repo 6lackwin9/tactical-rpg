@@ -2,10 +2,10 @@
 //! (battle_results_model.gd). Read-only views over the game state, except the hub's doors (save, load, settings,
 //! party, quit to the main menu).
 
-use crate::canvas::{rgba, Rect};
-use crate::screens::{show_errors, Cx, Key, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgba, Rect};
+use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use aegis_world::state::UnitState;
 use aegis_world::{progression, quest, save};
@@ -109,7 +109,7 @@ impl Hub {
     }
 }
 
-impl Screen for Hub {
+impl Screen<GameCx> for Hub {
     fn id(&self) -> &'static str {
         "hub"
     }
@@ -197,7 +197,7 @@ impl Journal {
     }
 }
 
-impl Screen for Journal {
+impl Screen<GameCx> for Journal {
     fn id(&self) -> &'static str {
         "journal"
     }
@@ -332,7 +332,7 @@ impl Results {
     }
 }
 
-impl Screen for Results {
+impl Screen<GameCx> for Results {
     fn id(&self) -> &'static str {
         "battle_results"
     }
@@ -350,7 +350,7 @@ impl Screen for Results {
             "fled" => "Fled",
             o => o,
         };
-        ui.p.text(24.0, 24.0, head, crate::ui::HEAD + 4.0, GOLD);
+        ui.p.text(24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, GOLD);
         let note = match self.outcome.as_str() {
             "lost" => "The party woke at the last safe place, fully healed. No XP.",
             "fled" => "The party got away. No XP.",

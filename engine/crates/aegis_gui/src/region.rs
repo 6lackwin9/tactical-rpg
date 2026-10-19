@@ -3,10 +3,10 @@
 //! (DialogueRunner), the shop popup (ShopRules), the turn-in picker and lore pages. Fights start the battle screen;
 //! a world-map exit opens the world map. Map-less locations show their exits as buttons.
 
-use crate::canvas::{rgb, rgba, Rect, Rgba};
-use crate::screens::{show_errors, Cx, Key, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, TITLE, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, TITLE, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use aegis_world::dialogue::DialogueRunner;
 use aegis_world::explore::{self, Pos};
@@ -462,7 +462,7 @@ fn region_key(ch: char, x: i64, y: i64) -> Option<String> {
     Some(format!("ui/{base}_{}_icon", (x * 7 + y * 13).rem_euclid(3)))
 }
 
-impl Screen for RegionMap {
+impl Screen<GameCx> for RegionMap {
     fn id(&self) -> &'static str {
         "region_map"
     }
@@ -787,7 +787,7 @@ impl RegionMap {
         let gs = cx.gs();
         let sh = shop::shop_of(d, gs, sq);
         let fr = Rect::new(133, 47, 373, 266);
-        ui.p.panel(fr, crate::ui::MODAL, FRAME_LINE, 4.0);
+        ui.p.panel(fr, aegis_ui::ui::MODAL, FRAME_LINE, 4.0);
         ui.p.text(fr.x as f32 + 9.0, fr.y as f32 + 7.0, &s_or(sh, "name", sq), 10.0, GOLD);
         ui.p.text_right((fr.x + fr.w) as f32 - 9.0, fr.y as f32 + 9.0, &format!("Gold: {}  Supplies: {}/99", gs.party.gold, gs.party.supplies), BODY, TEXT);
         let fq = shop::keeper_faction(d, gs, sh);

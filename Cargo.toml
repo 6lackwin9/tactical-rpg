@@ -5,6 +5,7 @@ members = [
     "engine/crates/aegis_content",
     "engine/crates/aegis_data",
     "engine/crates/aegis_save",
+    "engine/crates/aegis_ui",
     "engine/crates/aegis_rules",
     "engine/crates/aegis_battle",
     "engine/crates/aegis_world",

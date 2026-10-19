@@ -6,7 +6,6 @@ Transition to the Aegis engine (2026-10-19, decision "Engine transition (user 20
 
 | Id | Title | Lane | Depends on | Status | Spec | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
-| SPLIT1-5 | Engine UI `aegis_ui`: toolkit, art loader, tuning, agent link, screen stack, app loop; engine and game contexts split (size L; move only, gate and parity green) | logic | SPLIT1-2 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | engine/crates/aegis_ui (new), aegis_gui |
 | SPLIT1-6 | Engine command API and CLI: generic protocol and shell in `aegis_host` / `aegis_cli`; Emberwake registers its commands (size M; move only, gate and parity green) | logic | SPLIT1-5 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | aegis_host, aegis_cli |
 | SPLIT1-7 | Game crates renamed and moved to `games/emberwake/crates/` (rules, data, content, battle, world, host, gui) (size M; move only, gate and parity green) | logic | SPLIT1-3, SPLIT1-4, SPLIT1-5, SPLIT1-6 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | `engine/crates/*` -> `games/emberwake/crates/*`, Cargo.toml |
 | SPLIT1-8 | `games/emberwake/`: data, assets, schema, tuning, parity tools; `game.json` with the title read everywhere; saves under the game id (existing saves copied) (size M; move only, gate and parity green) | logic | SPLIT1-7 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | data/, assets/, engine/data/, engine/parity/ -> games/emberwake/; game.json; aegis_content (manifest kind); aegis_gui menus and window title |

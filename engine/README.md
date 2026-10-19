@@ -26,7 +26,8 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_world/` | The game's data loader and writer on `aegis_content` (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) and the game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | The command API (JSON request in, JSON reply out): state, skills, plan, preset, confirm, step, resolve, advance, autoplay, history |
 | `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
-| `crates/aegis_gui/` | `aegis-gui`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo); agent link on port 47800 |
+| `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader, live tuning files, agent link, screen stack with the game's context, window shell and event loop |
+| `crates/aegis_gui/` | `aegis-gui`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo) on `aegis_ui`; agent link on port 47800 |
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `aegis_gui`; in git history |
 | `crates/aegis_core/` (old) | Retired 2026-10-19 with `aegis_app` (its only user); in git history. The name is reused by the engine core above (SPLIT1-2) |
 

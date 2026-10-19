@@ -2,10 +2,10 @@
 //! (TravelRules.view), trips by clicking a node (TravelRunner.travel: clock, supplies, road fights), making camp
 //! (HealRules.make_camp) and entering the location the party stands on. Esc / Back returns to the region map.
 
-use crate::canvas::{rgb, rgba, Rect};
-use crate::screens::{show_errors, Cx, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
-use crate::widget_plumbing;
+use aegis_ui::canvas::{rgb, rgba, Rect};
+use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s};
 use aegis_world::{explore, progression, travel};
 use serde_json::{json, Value};
@@ -90,7 +90,7 @@ impl WorldMap {
     }
 }
 
-impl Screen for WorldMap {
+impl Screen<GameCx> for WorldMap {
     fn id(&self) -> &'static str {
         "world_map"
     }

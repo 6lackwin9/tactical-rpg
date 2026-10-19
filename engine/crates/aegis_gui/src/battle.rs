@@ -8,10 +8,10 @@
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close.
 
-use crate::canvas::{rgb, rgba, Rect, Rgba};
-use crate::screens::{show_errors, Cx, Key, Nav, Screen};
-use crate::painter::Painter;
-use crate::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
+use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::painter::Painter;
+use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
 use aegis_battle::command::CmdKind;
 use aegis_battle::grid::{V2, GRID_H, GRID_W};
 use aegis_battle::plan::expected;
@@ -628,7 +628,7 @@ impl BattleScreen {
     }
 }
 
-impl Screen for BattleScreen {
+impl Screen<GameCx> for BattleScreen {
     fn id(&self) -> &'static str {
         if self.world_mode() {
             "battle"
@@ -744,11 +744,15 @@ impl Screen for BattleScreen {
             "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))})
     }
 
-    fn as_battle(&mut self) -> Option<&mut BattleScreen> {
-        Some(self)
+    fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
+        let reply = self.host.handle(body);
+        if self.host.session.is_some() {
+            self.after_change(cx);
+        }
+        Some(reply)
     }
 
-    crate::widget_plumbing!();
+    aegis_ui::widget_plumbing!();
 }
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
