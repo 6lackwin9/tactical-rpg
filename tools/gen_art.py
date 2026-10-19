@@ -3,8 +3,8 @@
 #   python3 tools/gen_art.py [group ...] [--out DIR] [--list]   (default: every group, DIR = assets/art)
 # Groups: characters classes items skills statuses terrain overlays region markers pins world_map backdrops menu.
 # Needs Pillow and numpy. Output is deterministic (seeded noise), so re-running rewrites identical files.
-# It writes PNGs under assets/, which the engine reads directly. New art keys (data/assets/manifest.json, character art
-# keys, map templates) are data edits: `aegis content` / tools/fc.sh content. Prints "wrote <path>" per group.
+# It writes PNGs under assets/, which the engine reads directly. Character art keys and map templates are data edits
+# (`aegis content`); manifest rows (data/assets/manifest.json) are not writable by the engine yet. Prints "wrote <path>" per group.
 import argparse
 import hashlib
 import math
@@ -302,7 +302,16 @@ def figure(c: Cv, s: dict) -> None:
         c.line([(40, 96), (56, 96)], OUT, w=0.9, ol=None)
 
 
+# Keys drawn as pixel-art sprites by tools/sprites/export_units.py (SPRITE1-A); this generator leaves them alone.
+# Keep in step with SPRITE_KEYS in tools/sprites/export_units.py and the SPRITE1-A rows of data/assets/manifest.json
+# (written by the Godot seed sprite1_a.gd, kept on the sprite1-a-godot branch).
+SPRITE_KEYS = {"warrior", "ranger", "brawler", "priest", "rogue", "mage", "mara_voss", "bryn_hale", "tev_quill",
+               "sella_marsh", "dagny_coal", "alda_wren", "kit_vane", "oren_dusk"}
+
+
 def unit_pair(key: str, spec: dict, out: str) -> None:
+    if key in SPRITE_KEYS:
+        return
     for variant, size in (("token", 104), ("portrait", 240)):
         c = Cv(size)
         if spec is None:

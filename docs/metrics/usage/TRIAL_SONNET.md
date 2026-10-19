@@ -13,6 +13,7 @@ User 2026-10-18 12:15 UTC: the Assets & Audio thread (session `cse_01V6GmFsz2ESn
 |---|---|---|---|---|
 | 2026-10-18 12:17 | ITEMPOW1-A | data (seed) | mixed: started 11:45 on Opus, landed on Sonnet; excluded from the comparison | 02c6bf4 |
 | 2026-10-18 15:42 | MORALE1-A | data (enemy morale fields) | sonnet; agents asset 19k + review 16k, work 17 min | 69c82e0 |
+| 2026-10-18 19:01 | SPRITE1-A | art (party sprites, rig tools; thread-built, no asset-builder) | sonnet; review 20k, work 108 min, interactive mode | 0e175e3 |
 
 ## Report deltas
 
