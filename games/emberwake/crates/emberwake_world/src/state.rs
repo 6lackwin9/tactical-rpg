@@ -8,19 +8,8 @@ use aegis_core::json::{self, int, strs, Dict};
 use emberwake_data::STATS;
 use indexmap::IndexMap;
 
-/// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)", the Godot gear dojo):
-/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (an orb or a tome:
-/// Equipment.is_focus, conflicts_with_main).
-pub fn off_hand_ok(main: Option<&emberwake_data::ItemDef>, off: &emberwake_data::ItemDef) -> bool {
-    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !matches!(off.weapon_type.as_str(), "orb" | "tome"))
-}
-
-/// ContentFactory.item_fits_slot with worn gear kept: equipment whose slot is `slot`, either accessory slot for an
-/// accessory, and a one-handed main-hand weapon in the off hand.
-pub fn item_fits_slot(item: &emberwake_data::ItemDef, slot: &str) -> bool {
-    let up = slot.to_uppercase();
-    item.is_equipment() && (item.slot == up || (up.starts_with("ACCESSORY") && item.slot.starts_with("ACCESSORY")) || (up == "OFF_HAND" && item.slot == "MAIN_HAND" && !item.two_handed && item.item_type == "WEAPON"))
-}
+// The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
+pub use emberwake_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok};
 use serde_json::Value;
 
 pub const GOLD_MAX: i64 = 9_999_999;
@@ -90,7 +79,7 @@ impl UnitState {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
         let class = d.cat.classes.get(&self.class_id(d));
-        if !def.weapon_type.is_empty() && !class.is_some_and(|c| emberwake_rules::stats::Proficiency::from_class(c).can_use(&def.weapon_type)) {
+        if !class.is_some_and(|c| class_can_equip(&emberwake_rules::stats::Proficiency::from_class(c), def)) {
             return Err(format!("{} has no training in {} ({}).", class.map(|c| c.name.as_str()).unwrap_or("This class"), def.weapon_type, def.name));
         }
         Ok(())

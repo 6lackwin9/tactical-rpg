@@ -37,6 +37,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | GEARUI1 | - | game: Gear tab in three columns, drag and drop both ways (stash, slots, pouch), green and red stat change for a hovered or dragged item, ItemText.render (item description tokens); folds in UIR-3B |
 | main session (no lane agents) | GEAR2H1 | - | game: two-handed weapon and the off hand (dojo rule) in validation, member builds and the Gear tab |
 | main session (no lane agents) | UIKIT3 | - | engine: windows in the UI kit (desk, move, resize, raise, close, collapse, layouts, saved per screen, clipping, agent commands); 8 tests |
+| main session (no lane agents) | PORT-DOJO | - | engine: scroll areas, nested clips, rich text; game: DojoSession (strikes, skills, dummy, rounds, stances, pouch, benchmark, gear, presets, weapon switch, allocation), PartyCarry, damage explanation, the dojo desk of windows; 12 session tests |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

@@ -36,7 +36,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | :--- | :--- | :--- | :--- | :--- |
 | 19 | Content Forge (catalog viewer) | `ui/forge/*` | `forge.rs` | read-only viewer: kinds, entries, every field, engine summary, used by; no search, validation or editing yet |
 | 20 | World Forge (world viewer) | `ui/world/*` | `forge.rs` | read-only viewer: world picker, overview (inheritance, connects, counts), merged entries with origin, used by |
-| 21 | Gear & Skill Dojo | `ui/dojo/*` | `dojo.rs` | unit / level / per-slot gear, attributes, proficiency, derived stats, damage vs the training dummy; no windowed workbench or test console yet |
+| 21 | Gear & Skill Dojo | `ui/dojo/*`, `scripts/dojo/*` | `dojo.rs` on `emberwake_battle::dojo` | done (PORT-DOJO): the Godot dojo on a desk of engine windows (party with the carry bar, unit inspector with stat allocation, derived stats, gear with the pouch and quick-setup presets, stash with filters, stage, console, test log with breakdowns), drag and drop between the stash, the slots and the pouch, Godot's three layouts saved per player |
 | 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, debug region and world maps with Won / Fled / Lost, data reload; playtest recording not yet |
 
 ## Known gaps (function over form)
