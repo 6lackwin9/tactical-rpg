@@ -13,7 +13,7 @@ const STANCES: Array[int] = [0, 1, 2, 3]   # CombatTypes.StanceType NEUTRAL, OFF
 const SLOTS: Array[String] = ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"]
 
 var out_dir: String = ""
-var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data", "saves", "schema", "resave"]
+var only: Array[String] = ["catalog", "units", "damage", "rng", "hash", "worlds", "game_data", "saves", "schema", "resave"]
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
