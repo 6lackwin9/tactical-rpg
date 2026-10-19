@@ -115,4 +115,4 @@ Rules and open questions: `games/emberwake/docs/specs/S12_RULES.md` (S12S status
 The resolved bullets (AI hooks, done in AI1) are archived in `docs/archive/ROADMAP_2026-10.md`.
 
 - Disengage "once per round" and "after a MOVE" are not enforced/modelled (same as plain MOVE).
-- Skill-tier picker is not rendered in the planner UI yet (grouping API exists).
+- Skill-tier picker is not rendered in the planner UI yet (grouping API exists). For party heroes this is replaced by the rank chosen on the Skills tab (SKILLUI1, approved 2026-10-20); it stays open for enemies only (no player-facing need).
