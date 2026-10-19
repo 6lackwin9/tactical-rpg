@@ -4,6 +4,7 @@
 use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, WINDOW_MODES, WINDOW_SIZES};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
 use emberwake_world::{new_game, progression, save};
@@ -424,8 +425,8 @@ pub struct SettingsScreen {
 }
 
 const TABS: [&str; 4] = ["Sound", "Display", "Gameplay", "Controls"];
-const CHOICES: [(&str, &[&str]); 3] =
-    [("window_mode", &["Windowed", "Borderless", "Fullscreen"]), ("window_size", &["1280x720", "1600x900", "1920x1080"]), ("fps_cap", &["Unlimited", "30", "60", "120", "144"])];
+/// The display choices are the engine's (aegis_ui::screen).
+const CHOICES: [(&str, &[&str]); 3] = [("window_mode", &WINDOW_MODES), ("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
 const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
     (
         "Menus",
@@ -466,7 +467,7 @@ impl SettingsScreen {
                     show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
                 }
             }
-            SetAct::Defaults => self.draft = default_settings(),
+            SetAct::Defaults => self.draft = Settings::defaults(default_settings()),
             SetAct::Close => cx.nav.push(Nav::Pop),
         }
     }
@@ -485,8 +486,12 @@ impl Screen<GameCx> for SettingsScreen {
         let r = Rect::new(95, 25, 450, 310);
         ui.frame(r, "Settings", false);
         ui.close_x("settings.close", Rect::new(r.x + r.w - 28, r.y + 9, 19, 18), SetAct::Close);
+        let mut tx = r.x + 12;
         for (i, t) in TABS.iter().enumerate() {
-            ui.tab(&format!("settings.tab.{}", t.to_lowercase()), Rect::new(r.x + 12 + i as i32 * 46, r.y + 36, 44, 16), t, SetAct::Tab(i), self.tab == i);
+            // At least 44 wide; wider when the label needs it (larger text sizes).
+            let tw = 44.max(ui.p.text_w(t, BODY).ceil() as i32 + 10);
+            ui.tab(&format!("settings.tab.{}", t.to_lowercase()), Rect::new(tx, r.y + 36, tw, 16), t, SetAct::Tab(i), self.tab == i);
+            tx += tw + 2;
         }
         let body = Rect::new(r.x + 9, r.y + 55, r.w - 18, 222);
         ui.p.panel(body, rgba(24, 26, 32, 255), rgba(24, 26, 32, 255), 1.0);
@@ -518,9 +523,12 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, TEXT);
                 choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""));
                 y += 24;
-                ui.p.text(x as f32, y as f32 + 2.0, "Text size", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, TEXT);
+                // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
                 let ts = pct("text_scale");
-                ui.slider("settings.text_scale", Rect::new(x + 125, y, 200, 13), ((ts - 0.5) / SCALE_STEP).round() as usize, 7, &format!("{ts:.2}x"), |i| SetAct::Set("text_scale", 0.5 + i as f64 * SCALE_STEP), true);
+                let labels: Vec<String> = TEXT_SIZES.iter().map(|t| t.0.to_string()).collect();
+                let at = TEXT_SIZES.iter().enumerate().min_by(|a, b| (a.1 .1 - ts).abs().total_cmp(&(b.1 .1 - ts).abs())).map(|(i, _)| i).unwrap_or(1);
+                ui.select("settings.text_scale", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Set("text_scale", TEXT_SIZES[i].1), true, Vec::new());
             }
             2 => {
                 ui.p.text(x as f32, y as f32 + 2.0, "Animation speed", BODY, TEXT);

@@ -11,7 +11,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 * **Game data:** the project's `games/emberwake/data/` folder (catalog, worlds, maps, quests, dialogue services, XP curve), read by the
   engine's own loader (`emberwake_content::source`) with the field tables in `games/emberwake/schema.json`; no Godot export is
   needed to play. `data=<dir>` points the GUI or CLI at another data folder, or at a Godot export folder.
-* **Saves and settings:** per game under its id, `%APPDATA%/Aegis/emberwake/saves` and `%APPDATA%/Aegis/emberwake/settings.json` (outside the repo; the first start after SPLIT1-8 copies the old shared `%APPDATA%/Aegis/saves` and `settings.json` there and leaves them; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged.
+* **Saves and settings:** per game under its id, `%APPDATA%/Aegis/emberwake/saves` and `%APPDATA%/Aegis/emberwake/settings.json` (outside the repo; the first start after SPLIT1-8 copies the old shared `%APPDATA%/Aegis/saves` and `settings.json` there and leaves them; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged. The engine owns the sound, display and text-size settings (`aegis_ui::screen::Settings`) and applies them when they change (PORT-SETTINGS): window mode (windowed at the chosen size, borderless or exclusive fullscreen), vsync, frame-rate cap and text size (Small 0.85 to Extra large 1.3); the game adds its own keys; volumes apply once the engine has sound (PORT-AUDIO).
 
 ## Workspace
 

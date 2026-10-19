@@ -74,6 +74,17 @@ fn derived(d: &Data, m: &UnitState) -> Vec<(&'static str, i64)> {
     ]
 }
 
+/// Table columns at the current text size: each header keeps its position at normal size unless the previous header
+/// would run into it (then it moves right by `gap`); (x, right edge), numbers are right-aligned to the right edge.
+fn columns(ui: &mut Ui<PAct>, cols: &[(f32, &str)], gap: f32) -> Vec<(f32, f32)> {
+    let mut out: Vec<(f32, f32)> = Vec::new();
+    for &(x, h) in cols {
+        let x = out.last().map_or(x, |p| x.max(p.1 + gap));
+        out.push((x, x + ui.p.text_w(h, BODY + 1.0)));
+    }
+    out
+}
+
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
 fn stat_desc(st: &str) -> String {
     use emberwake_rules::damage::{CRIT_DEX_FLOOR, CRIT_PER_DEX};
@@ -498,32 +509,36 @@ impl Character {
             spend.insert(STATS[0].into(), 0);
         }
         let cs = emberwake_rules::stats::CharacterStats::new(arch, lvl as i32, &spend);
-        let cols = [(68.0, "Stat"), (112.0, "Base"), (148.0, "Growth"), (190.0, "Spent"), (226.0, "Total")];
-        for (x, h) in cols {
+        let cols = columns(ui, &[(68.0, "Stat"), (112.0, "Base"), (148.0, "Growth"), (190.0, "Spent"), (226.0, "Total")], 10.0);
+        for (&(x, _), h) in cols.iter().zip(["Stat", "Base", "Growth", "Spent", "Total"]) {
             ui.p.text(x, 143.0, h, BODY + 1.0, DIM);
         }
+        let table_right = cols[4].1;
         for (i, st) in STATS.iter().enumerate() {
             let y = 158.0 + i as f32 * 15.0;
             let base = arch.base_stats.get(*st).copied().unwrap_or(0);
             let sp = m.spend.get(*st).copied().unwrap_or(0) as i32;
             let total = cs.base(st);
             ui.p.text(68.0, y, st, BODY + 1.0, TEXT);
-            for (x, v) in [(126.0, base), (168.0, total - base - sp), (204.0, sp), (234.0, total)] {
-                ui.p.text_right(x, y, &v.to_string(), BODY + 1.0, TEXT);
+            for (c, v) in cols[1..].iter().zip([base, total - base - sp, sp, total]) {
+                ui.p.text_right(c.1, y, &v.to_string(), BODY + 1.0, TEXT);
             }
-            ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, 172, 14), true, false, None, tip(st, &stat_desc(st)));
+            ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
-        for (i, (label, v)) in derived(d, m).iter().enumerate() {
+        let rows = derived(d, m);
+        let label_x = 250f32.max(table_right + 6.0);
+        let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(r.0, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
+        for (i, (label, v)) in rows.iter().enumerate() {
             let y = 143.0 + i as f32 * 15.0;
-            ui.p.text(250.0, y, label, BODY + 1.0, DIM);
-            ui.p.text(325.0, y, &v.to_string(), BODY + 1.0, TEXT);
-            ui.push(format!("stats.derived.{label}"), "row", format!("{label} {v}"), Rect::new(248, y as i32 - 2, 100, 14), true, false, None, tip(label, &derived_desc(label)));
+            ui.p.text(label_x, y, label, BODY + 1.0, DIM);
+            ui.p.text(value_x, y, &v.to_string(), BODY + 1.0, TEXT);
+            ui.push(format!("stats.derived.{label}"), "row", format!("{label} {v}"), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, 14), true, false, None, tip(label, &derived_desc(label)));
         }
         let names: Vec<String> = m.passives.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
-        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, 540.0, DIM);
+        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, DIM);
         let about: Vec<String> = m.passives.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
-        ui.push("stats.passives", "row", line, Rect::new(66, 256, 544, 13), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, 13), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -535,34 +550,39 @@ impl Character {
         let mut spend: IndexMap<String, i32> = m.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
         spend.entry(STATS[0].into()).or_insert(0);
         let cs = emberwake_rules::stats::CharacterStats::new(arch, m.level(d) as i32, &spend);
-        for (x, h) in [(70.0, "Stat"), (105.0, "Now"), (132.0, "Added"), (165.0, "New")] {
+        let cols = columns(ui, &[(70.0, "Stat"), (105.0, "Now"), (132.0, "Added"), (165.0, "New")], 8.0);
+        for (&(x, _), h) in cols.iter().zip(["Stat", "Now", "Added", "New"]) {
             ui.p.text(x, 122.0, h, BODY + 1.0, DIM);
         }
+        let minus_x = 195.max(cols[3].1 as i32 + 8);
+        let auto_x = 266.max(minus_x + 71);
         for (i, st) in STATS.iter().enumerate() {
             let y = 136 + i as i32 * 21;
             let now = cs.base(st) as i64;
             let add = self.draft.get(*st).copied().unwrap_or(0);
             ui.p.text(70.0, y as f32 + 4.0, st, BODY + 1.0, TEXT);
-            ui.p.text_right(125.0, y as f32 + 4.0, &now.to_string(), BODY + 1.0, TEXT);
-            ui.p.text_right(158.0, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { GOLD } else { DIM });
-            ui.p.text_right(187.0, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, TEXT);
-            ui.push(format!("level.{st}"), "row", format!("{st} {now} + {add}"), Rect::new(68, y, 122, 17), true, false, None, tip(st, &stat_desc(st)));
-            ui.button_tip(&format!("level.{st}.minus"), Rect::new(195, y, 23, 17), "-", PAct::Remove(st), add > 0, tip(&format!("-1 {st}"), "Take back a drafted point. Nothing is spent until you Confirm."));
-            ui.button_tip(&format!("level.{st}.plus"), Rect::new(226, y, 23, 17), "+", PAct::Add(st), left > 0, tip(&format!("+1 {st}"), &stat_desc(st)));
+            ui.p.text_right(cols[1].1, y as f32 + 4.0, &now.to_string(), BODY + 1.0, TEXT);
+            ui.p.text_right(cols[2].1, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { GOLD } else { DIM });
+            ui.p.text_right(cols[3].1, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, TEXT);
+            ui.push(format!("level.{st}"), "row", format!("{st} {now} + {add}"), Rect::new(68, y, minus_x - 73, 17), true, false, None, tip(st, &stat_desc(st)));
+            ui.button_tip(&format!("level.{st}.minus"), Rect::new(minus_x, y, 23, 17), "-", PAct::Remove(st), add > 0, tip(&format!("-1 {st}"), "Take back a drafted point. Nothing is spent until you Confirm."));
+            ui.button_tip(&format!("level.{st}.plus"), Rect::new(minus_x + 31, y, 23, 17), "+", PAct::Add(st), left > 0, tip(&format!("+1 {st}"), &stat_desc(st)));
         }
-        ui.button_tip("level.auto", Rect::new(266, 121, 69, 17), "Auto", PAct::Auto, left > 0, tip("Auto", "Spend the remaining points by the class growth weights."));
-        ui.button_tip("level.revert", Rect::new(266, 145, 69, 17), "Revert", PAct::Revert, drafted > 0, tip("Revert", "Clear the drafted points. Nothing is spent until you Confirm."));
+        ui.button_tip("level.auto", Rect::new(auto_x, 121, 69, 17), "Auto", PAct::Auto, left > 0, tip("Auto", "Spend the remaining points by the class growth weights."));
+        ui.button_tip("level.revert", Rect::new(auto_x, 145, 69, 17), "Revert", PAct::Revert, drafted > 0, tip("Revert", "Clear the drafted points. Nothing is spent until you Confirm."));
         let mut work = m.clone();
         for (k, v) in &self.draft {
             *work.spend.entry(k.clone()).or_insert(0) += v;
         }
         let (before, after) = (derived(d, m), derived(d, &work));
+        let label_x = 352f32.max((auto_x + 86) as f32);
+        let value_x = 427f32.max(label_x + after.iter().map(|r| ui.p.text_w(r.0, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         for (i, (label, v)) in after.iter().enumerate() {
             let y = 122.0 + i as f32 * 15.0;
             let old = before.get(i).map(|b| b.1).unwrap_or(*v);
-            ui.p.text(352.0, y, label, BODY + 1.0, DIM);
-            ui.p.text(427.0, y, &if old != *v { format!("{old} -> {v}") } else { v.to_string() }, BODY + 1.0, if old != *v { GOLD } else { TEXT });
-            ui.push(format!("level.derived.{label}"), "row", format!("{label} {v}"), Rect::new(350, y as i32 - 2, 130, 14), true, false, None, tip(label, &derived_desc(label)));
+            ui.p.text(label_x, y, label, BODY + 1.0, DIM);
+            ui.p.text(value_x, y, &if old != *v { format!("{old} -> {v}") } else { v.to_string() }, BODY + 1.0, if old != *v { GOLD } else { TEXT });
+            ui.push(format!("level.derived.{label}"), "row", format!("{label} {v}"), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 55, 14), true, false, None, tip(label, &derived_desc(label)));
         }
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
     }
