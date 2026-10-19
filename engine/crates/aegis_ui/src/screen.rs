@@ -217,6 +217,13 @@ pub trait Screen<G> {
     fn music(&self, _cx: &Cx<G>) -> Option<String> {
         None
     }
+    /// Drag and drop (UIKIT2): whether payload `from` (`Ui::draggable`) may be dropped on the target `to`
+    /// (`Ui::drop_target`); valid targets are outlined while dragging.
+    fn can_drop(&self, _cx: &Cx<G>, _from: &str, _to: &str) -> bool {
+        true
+    }
+    /// Payload `from` was released over target `to` (only when `can_drop` allowed it).
+    fn accept_drop(&mut self, _cx: &mut Cx<G>, _from: &str, _to: &str) {}
 }
 
 /// The widget plumbing every screen shares: its `w` list and `act(cx, action)`. The context type is `Cx` as named

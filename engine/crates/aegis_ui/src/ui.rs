@@ -49,19 +49,40 @@ pub struct Widget<A> {
     pub active: bool,
     pub action: Option<A>,
     pub tip: Tip,
+    /// Drag and drop (UIKIT2): the payload this widget carries when dragged (`Ui::draggable`), and the key it
+    /// accepts drops under (`Ui::drop_target`); both are the screen's own strings, e.g. "stash.3", "slot.weapon".
+    pub drag: Option<String>,
+    pub drop: Option<String>,
 }
 
 impl<A> Widget<A> {
     pub fn info(&self) -> Value {
-        json!({"id": self.id, "kind": self.kind, "text": self.text, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h],
-            "enabled": self.enabled, "active": self.active, "clickable": self.action.is_some() || self.kind == "select", "tip": self.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()})
+        let mut info = json!({"id": self.id, "kind": self.kind, "text": self.text, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h],
+            "enabled": self.enabled, "active": self.active, "clickable": self.action.is_some() || self.kind == "select", "tip": self.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()});
+        // Drag and drop keys only where set, so ui_tree stays small.
+        for (k, v) in [("drag", &self.drag), ("drop", &self.drop)] {
+            if let Some(v) = v {
+                info[k] = json!(v);
+            }
+        }
+        info
     }
 }
 
-/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open.
+/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open and the drag in
+/// progress.
 #[derive(Debug, Clone, Default)]
 pub struct Kit {
     pub open: Option<String>,
+    pub drag: Option<Drag>,
+}
+
+/// A drag in progress (UIKIT2): the dragged widget's payload, id and text (the ghost under the cursor).
+#[derive(Debug, Clone)]
+pub struct Drag {
+    pub key: String,
+    pub id: String,
+    pub text: String,
 }
 
 /// The drawing surface the shell lends a screen for one frame.
@@ -80,12 +101,38 @@ pub struct Ui<'a, A> {
     pub live: bool,
     /// The select whose list is open (`Kit::open`, read at the start of the frame).
     open: Option<String>,
+    /// The drag in progress (`Kit::drag`, read at the start of the frame).
+    drag: Option<Drag>,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
-        let open = g.kit.open.clone();
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open }
+        // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
+        let (open, drag) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None });
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag }
+    }
+
+    /// Makes the last recorded widget draggable with payload `key` (UIKIT2): press and move picks it up, a press
+    /// without a move stays a click. The widget being dragged is drawn dimmed.
+    pub fn draggable(&mut self, key: impl Into<String>) {
+        let Some(w) = self.widgets.last_mut() else { return };
+        w.drag = Some(key.into());
+        let r = w.rect;
+        if self.drag.as_ref().is_some_and(|d| d.id == w.id) {
+            self.p.fill(r, rgba(10, 14, 24, 150));
+        }
+    }
+
+    /// Makes the last recorded widget accept drops under `key`; the screen's `can_drop` and `accept_drop` decide.
+    pub fn drop_target(&mut self, key: impl Into<String>) {
+        if let Some(w) = self.widgets.last_mut() {
+            w.drop = Some(key.into());
+        }
+    }
+
+    /// The payload being dragged, if any (to draw previews, e.g. the stat change over a hovered slot).
+    pub fn dragging(&self) -> Option<&str> {
+        self.drag.as_ref().map(|d| d.key.as_str())
     }
 
     /// Records a widget; an info row (a hover card but no action) gets a hover outline, so hovering shows it responds.
@@ -94,7 +141,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         if kind == "row" && action.is_none() && tip.len() > 1 && self.hover(rect) {
             self.p.panel(rect, rgba(0, 0, 0, 0), rgb(110, 140, 196), RADIUS);
         }
-        self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip });
+        self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip, drag: None, drop: None });
     }
 
     pub fn hover(&self, r: Rect) -> bool {

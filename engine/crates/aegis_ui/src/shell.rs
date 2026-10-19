@@ -8,8 +8,8 @@ use crate::bridge;
 use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
-use crate::canvas::{rgb, Rect};
-use crate::ui::{Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
+use crate::canvas::{rgb, rgba, Rect};
+use crate::ui::{Drag, Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -40,7 +40,20 @@ struct Shell<G> {
     mouse: (i32, i32),
     /// The slider being dragged (its id) and the step widget it last set.
     drag: Option<(String, String)>,
+    /// A press on a draggable widget (UIKIT2), waiting to become a drag (a move) or a click (a release).
+    press: Option<Press>,
 }
+
+/// A press on a draggable widget: its id, payload and text, and where the press was.
+struct Press {
+    id: String,
+    key: String,
+    text: String,
+    at: (i32, i32),
+}
+
+/// How far (canvas pixels) the mouse moves from the press before a draggable widget is picked up.
+const DRAG_START: i32 = 3;
 
 /// The rect of a widget's agent info.
 fn info_rect(w: &Value) -> Rect {
@@ -62,6 +75,8 @@ impl<G: Context> Shell<G> {
             guard += 1;
             self.gfx.kit.open = None;
             self.drag = None;
+            self.press = None;
+            self.gfx.kit.drag = None;
             let navs: Vec<Nav<G>> = self.cx.nav.drain(..).collect();
             for n in navs {
                 match n {
@@ -114,6 +129,17 @@ impl<G: Context> Shell<G> {
             } else {
                 draw_options(&mut p, &opts, self.mouse);
             }
+        } else if let Some(d) = &self.gfx.kit.drag {
+            // Dragging: valid targets outlined (the one under the cursor in gold) and the ghost; no hover card.
+            let top = &self.stack[n - 1];
+            for w in top.widgets().iter().filter(|w| w["enabled"] == json!(true) && w["drop"].is_string()) {
+                if top.can_drop(&self.cx, &d.key, w["drop"].as_str().unwrap_or("")) {
+                    let r = info_rect(w);
+                    let over = r.contains(self.mouse.0, self.mouse.1);
+                    p.panel(r, if over { rgba(244, 198, 84, 40) } else { rgba(0, 0, 0, 0) }, if over { GOLD } else { rgb(110, 140, 196) }, RADIUS);
+                }
+            }
+            draw_ghost(&mut p, &d.text, self.mouse);
         } else {
             self.stack[n - 1].draw_tip(&mut p, self.mouse);
         }
@@ -124,8 +150,16 @@ impl<G: Context> Shell<G> {
         cx.audio.tick();
     }
 
+    /// Drops a press or drag in progress; true when there was one.
+    fn cancel_drag(&mut self) -> bool {
+        let had = self.press.take().is_some();
+        self.gfx.kit.drag.take().is_some() || had
+    }
+
     fn key(&mut self, k: Key) {
-        if k == Key::Esc && self.gfx.kit.open.take().is_some() {
+        // Any key drops a press or drag in progress (what it changes could move the target); Esc does only that.
+        let cancelled = self.cancel_drag();
+        if k == Key::Esc && (cancelled || self.gfx.kit.open.take().is_some()) {
             return;
         }
         let cx = &mut self.cx;
@@ -140,6 +174,8 @@ impl<G: Context> Shell<G> {
 
     /// A left click: opens or closes a choice list, picks from it, starts a slider drag, or clicks the widget.
     fn click(&mut self) {
+        // A press or drag whose release was lost (focus moved away mid-drag) ends here.
+        self.cancel_drag();
         let pos = self.mouse;
         let infos = self.stack.last().unwrap().widgets();
         let at = info_at(&infos, pos).cloned();
@@ -158,6 +194,12 @@ impl<G: Context> Shell<G> {
             self.gfx.kit.open = Some(id);
             return;
         }
+        if let Some(key) = at.as_ref().and_then(|w| w["drag"].as_str()) {
+            // A draggable widget: a move picks it up (`drag_to`), a release without one clicks it (`release`).
+            let text = at.as_ref().and_then(|w| w["text"].as_str()).unwrap_or("").to_string();
+            self.press = Some(Press { id, key: key.to_string(), text, at: pos });
+            return;
+        }
         if kind == "slider_step" {
             if let Some((slider, _)) = id.rsplit_once(".step.") {
                 self.drag = Some((slider.to_string(), id.clone()));
@@ -168,8 +210,15 @@ impl<G: Context> Shell<G> {
         self.settle();
     }
 
-    /// The mouse moved: a slider drag follows it along the track (the step under its x).
+    /// The mouse moved: a press on a draggable widget becomes a drag once it moved DRAG_START pixels; a slider drag
+    /// follows it along the track (the step under its x).
     fn drag_to(&mut self) {
+        if let Some(p) = &self.press {
+            if self.gfx.kit.drag.is_none() && ((self.mouse.0 - p.at.0).abs() > DRAG_START || (self.mouse.1 - p.at.1).abs() > DRAG_START) {
+                self.gfx.kit.drag = Some(Drag { key: p.key.clone(), id: p.id.clone(), text: p.text.clone() });
+            }
+            return;
+        }
         let Some((slider, last)) = self.drag.clone() else { return };
         let prefix = format!("{slider}.step.");
         let infos = self.stack.last().unwrap().widgets();
@@ -194,8 +243,37 @@ impl<G: Context> Shell<G> {
         }
     }
 
+    /// The left button came up: a drag drops on the target under the cursor when the screen allows it (else it is
+    /// cancelled), a press on a draggable widget that never moved clicks it, a slider drag ends.
+    fn release(&mut self) {
+        self.drag = None;
+        let Some(p) = self.press.take() else { return };
+        match self.gfx.kit.drag.take() {
+            Some(d) => {
+                if let Some(to) = self.drop_at(&d.key) {
+                    let cx = &mut self.cx;
+                    self.stack.last_mut().unwrap().accept_drop(cx, &d.key, &to);
+                }
+            }
+            None => {
+                let cx = &mut self.cx;
+                self.stack.last_mut().unwrap().click(cx, p.at);
+            }
+        }
+        self.settle();
+    }
+
+    /// The drop key of the topmost enabled drop target under the mouse, when it accepts payload `from`.
+    fn drop_at(&self, from: &str) -> Option<String> {
+        let top = self.stack.last().unwrap();
+        let infos = top.widgets();
+        let hit = infos.iter().rev().find(|w| w["enabled"] == json!(true) && w["drop"].is_string() && info_rect(w).contains(self.mouse.0, self.mouse.1))?;
+        let to = hit["drop"].as_str()?;
+        top.can_drop(&self.cx, from, to).then(|| to.to_string())
+    }
+
     fn back(&mut self) {
-        if self.gfx.kit.open.take().is_some() {
+        if self.cancel_drag() || self.gfx.kit.open.take().is_some() {
             return;
         }
         let cx = &mut self.cx;
@@ -239,10 +317,17 @@ impl<G: Context> Shell<G> {
                 }
             }
             "drag" => {
-                // Press on widget `id`, move to `to` [x, y] in 8 steps, release: the real mouse path (slider drags).
+                // Press on widget `id`, move to `to` ([x, y] or a widget id, its centre) in 8 steps, release: the real
+                // mouse path (slider drags, drag and drop).
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
-                let to = (body["to"][0].as_i64().unwrap_or(0) as i32, body["to"][1].as_i64().unwrap_or(0) as i32);
                 let infos = self.stack.last().unwrap().widgets();
+                let to = match body["to"].as_str() {
+                    Some(target) => match infos.iter().find(|w| w["id"] == target).map(info_rect) {
+                        Some(r) => (r.x + r.w / 2, r.y + r.h / 2),
+                        None => return json!({"ok": false, "error": format!("no widget '{target}'")}),
+                    },
+                    None => (body["to"][0].as_i64().unwrap_or(0) as i32, body["to"][1].as_i64().unwrap_or(0) as i32),
+                };
                 match infos.iter().find(|w| w["id"] == id).map(info_rect) {
                     Some(r) => {
                         let from = (r.x + r.w / 2, r.y + r.h / 2);
@@ -252,7 +337,7 @@ impl<G: Context> Shell<G> {
                             self.mouse = (from.0 + (to.0 - from.0) * t / 8, from.1 + (to.1 - from.1) * t / 8);
                             self.drag_to();
                         }
-                        self.drag = None;
+                        self.release();
                         json!({"ok": true, "dragged": id, "to": [to.0, to.1]})
                     }
                     None => json!({"ok": false, "error": format!("no widget '{id}'")}),
@@ -389,7 +474,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -432,6 +517,12 @@ impl<G: Context> ApplicationHandler for App<G> {
                 }
             }
             WindowEvent::RedrawRequested => self.redraw(),
+            WindowEvent::Focused(false) => {
+                // The release may never arrive (alt-tab mid-drag): drop the drag.
+                if let Some(s) = self.shell.as_mut() {
+                    s.cancel_drag();
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.shell.as_mut() {
                     s.mouse = s.gfx.view.to_logical(position.x as f32, position.y as f32);
@@ -458,7 +549,7 @@ impl<G: Context> ApplicationHandler for App<G> {
             }
             WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => {
                 if let Some(s) = self.shell.as_mut() {
-                    s.drag = None;
+                    s.release();
                 }
             }
             WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Pressed, .. }, .. } => {
@@ -493,6 +584,15 @@ impl<G: Context> ApplicationHandler for App<G> {
             _ => {}
         }
     }
+}
+
+/// The dragged widget's text in a small card under the cursor.
+fn draw_ghost(p: &mut Painter, text: &str, mouse: (i32, i32)) {
+    let w = (p.text_w(text, BODY).ceil() as i32 + 10).clamp(24, 160);
+    let h = p.line_h(BODY).ceil() as i32 + 4;
+    let r = Rect::new((mouse.0 + 6).min(W - w - 2), (mouse.1 + 6).min(H - h - 2), w, h);
+    p.panel(r, rgba(18, 26, 44, 220), GOLD, RADIUS);
+    p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, text, BODY, (w - 10) as f32, TEXT);
 }
 
 /// An open select's choice list, over the screen: one row per option, the chosen one in gold, the hovered one lit.
@@ -534,4 +634,177 @@ pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Optio
     let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)) };
     el.run_app(&mut app)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::art::Art;
+    use crate::audio::Audio;
+    use crate::screen::Settings;
+    use crate::ui::{Tip, Ui, Widget};
+
+    #[derive(Default)]
+    struct App {
+        log: Vec<String>,
+    }
+
+    impl Context for App {
+        const MORE_COMMANDS: &'static str = "none";
+        fn note(&mut self, _line: String) {}
+        fn agent_summary(&self) -> Value {
+            Value::Null
+        }
+        fn agent_game(&self) -> Value {
+            Value::Null
+        }
+    }
+
+    type Cx = crate::screen::Cx<App>;
+
+    /// An item that can be dragged (and clicked), a slot that takes it and a locked slot that refuses it.
+    #[derive(Default)]
+    struct Board {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    impl Board {
+        fn act(&mut self, cx: &mut Cx, a: &'static str) {
+            cx.app.log.push(format!("click {a}"));
+        }
+    }
+
+    impl Screen<App> for Board {
+        fn id(&self) -> &'static str {
+            "board"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            let no_tip: Tip = Vec::new();
+            ui.row("item", Rect::new(10, 10, 60, 14), "Sword", TEXT, Some("item"), false, no_tip.clone());
+            ui.draggable("item.sword");
+            ui.row("slot", Rect::new(100, 10, 60, 14), "Weapon", TEXT, None, false, no_tip.clone());
+            ui.drop_target("slot.weapon");
+            ui.row("locked", Rect::new(100, 40, 60, 14), "Locked", TEXT, None, false, no_tip);
+            ui.drop_target("slot.locked");
+            self.w = ui.widgets;
+        }
+        fn can_drop(&self, _cx: &Cx, _from: &str, to: &str) -> bool {
+            to != "slot.locked"
+        }
+        fn accept_drop(&mut self, cx: &mut Cx, from: &str, to: &str) {
+            cx.app.log.push(format!("drop {from} on {to}"));
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    fn shell() -> Shell<App> {
+        let font = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        let cx = Cx {
+            settings: Settings::load(std::env::temp_dir().join("aegis_no_settings.json"), json!({})),
+            art: Art::new(None),
+            audio: Audio::offline(None),
+            nav: Vec::new(),
+            notice: Vec::new(),
+            shot_dir: std::env::temp_dir(),
+            quit: false,
+            answers: Vec::new(),
+            app: App::default(),
+        };
+        let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None };
+        s.frame();
+        s
+    }
+
+    /// Press at `from`, move to `to` in steps, release (the window's mouse path).
+    fn drag(s: &mut Shell<App>, from: (i32, i32), to: (i32, i32)) {
+        s.mouse = from;
+        s.click();
+        for t in 1..=4 {
+            s.mouse = (from.0 + (to.0 - from.0) * t / 4, from.1 + (to.1 - from.1) * t / 4);
+            s.drag_to();
+            s.frame();
+        }
+        s.release();
+    }
+
+    #[test]
+    fn a_press_without_a_move_is_a_click() {
+        let mut s = shell();
+        s.mouse = (20, 15);
+        s.click();
+        assert!(s.cx.app.log.is_empty(), "a draggable widget clicks on release");
+        s.mouse = (22, 16);
+        s.drag_to();
+        s.release();
+        assert_eq!(s.cx.app.log, ["click item"]);
+    }
+
+    #[test]
+    fn a_drag_onto_a_target_that_accepts_drops_it() {
+        let mut s = shell();
+        drag(&mut s, (20, 15), (120, 15));
+        assert_eq!(s.cx.app.log, ["drop item.sword on slot.weapon"]);
+        assert!(s.gfx.kit.drag.is_none() && s.press.is_none());
+    }
+
+    #[test]
+    fn a_refused_target_or_empty_space_cancels() {
+        let mut s = shell();
+        drag(&mut s, (20, 15), (120, 45));
+        drag(&mut s, (20, 15), (300, 200));
+        assert!(s.cx.app.log.is_empty());
+    }
+
+    #[test]
+    fn esc_cancels_a_drag() {
+        let mut s = shell();
+        s.mouse = (20, 15);
+        s.click();
+        s.mouse = (60, 15);
+        s.drag_to();
+        assert!(s.gfx.kit.drag.is_some());
+        s.key(Key::Esc);
+        s.mouse = (120, 15);
+        s.release();
+        assert!(s.cx.app.log.is_empty());
+    }
+
+    #[test]
+    fn right_click_navigation_or_a_new_press_end_a_drag() {
+        let mut s = shell();
+        let pick_up = |s: &mut Shell<App>| {
+            s.mouse = (20, 15);
+            s.click();
+            s.mouse = (60, 15);
+            s.drag_to();
+            assert!(s.gfx.kit.drag.is_some());
+        };
+        pick_up(&mut s);
+        s.back();
+        assert!(s.gfx.kit.drag.is_none() && s.press.is_none(), "right click cancels");
+        pick_up(&mut s);
+        s.cx.nav.push(Nav::Pop);
+        s.settle();
+        assert!(s.gfx.kit.drag.is_none() && s.press.is_none(), "navigation clears the drag");
+        pick_up(&mut s);
+        s.mouse = (300, 200);
+        s.click();
+        assert!(s.gfx.kit.drag.is_none() && s.press.is_none(), "a lost release ends at the next press");
+        s.mouse = (120, 15);
+        s.release();
+        assert!(s.cx.app.log.is_empty());
+    }
+
+    #[test]
+    fn the_agent_link_drags_by_widget_ids_and_sees_the_keys() {
+        let mut s = shell();
+        let tree = s.bridge(&json!({"cmd": "ui_tree"}));
+        let w = |id: &str| tree["widgets"].as_array().unwrap().iter().find(|w| w["id"] == id).cloned().unwrap();
+        assert_eq!((w("item")["drag"].clone(), w("slot")["drop"].clone()), (json!("item.sword"), json!("slot.weapon")));
+        assert_eq!(s.bridge(&json!({"cmd": "drag", "id": "item", "to": "slot"}))["ok"], json!(true));
+        assert_eq!(s.cx.app.log, ["drop item.sword on slot.weapon"]);
+        assert_eq!(s.bridge(&json!({"cmd": "drag", "id": "item", "to": "nowhere"}))["ok"], json!(false));
+    }
 }
