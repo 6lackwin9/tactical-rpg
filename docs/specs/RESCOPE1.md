@@ -25,7 +25,7 @@ display, measurement or tooling layers the traces do not record. Several approve
 | Settings applied | text size, display mode, volumes applied live | values saved, not applied (SCREENS 03-06) | UIR rows checked "at four text sizes" (HEAL1-U, BREPORT1-U, UIR-4) |
 | Keyboard focus navigation | focus moves through every menu | main menu only (SCREENS "Known gaps") | UIR-7 (controller support builds on it) |
 | Playtest recording and replay (PLAYTEST1) | recorder, replayer, trail, F8 notes | none (the command API's `history` replays a battle) | PLAYTEST2, CAMP1-P (recorded run) |
-| Asset manifest and registry | aliases, team overlay, manifest rows, strips planned | reads `assets/art/<key>_<variant>.png` directly; the manifest is not read or written | SPRITE1-L (strips) |
+| Asset manifest and registry | aliases, team overlay, manifest rows, strips planned | reads `assets/art/<key>_<variant>.png` directly (since ASSETORG1 `<category>/<key>/<variant>.png`); the manifest is not read or written | SPRITE1-L (strips) |
 | Content checks of the Forge | SkillValidator, gear budget warnings, world reference rules | the writer checks schema, references and a clean reload | asset rows rely on review for the rest |
 
 ## 2. Proposed new rows (status `proposed`, for the user)

@@ -457,7 +457,7 @@ fn region_key(ch: char, x: i64, y: i64) -> Option<String> {
         '~' => "region_water",
         _ => return None,
     };
-    Some(format!("ui/{base}_{}_icon", (x * 7 + y * 13).rem_euclid(3)))
+    Some(format!("{base}_{}", (x * 7 + y * 13).rem_euclid(3)))
 }
 
 impl Screen<GameCx> for RegionMap {
@@ -500,7 +500,7 @@ impl Screen<GameCx> for RegionMap {
                         continue;
                     }
                     let key = region_key(*ch, x as i64, y as i64);
-                    match key.and_then(|k| cx.art.get(&k, ts)) {
+                    match key.and_then(|k| cx.art.get("ui", &k, "icon", ts)) {
                         Some(img) => ui.p.image(img, r),
                         None => ui.p.fill(r, match ch {
                             '.' => rgb(70, 90, 64),
@@ -636,7 +636,7 @@ impl Screen<GameCx> for RegionMap {
             ui.p.panel(pbox, rgb(22, 30, 48), BORDER, 2.0);
             let speaker = d.resolve(&gs.world_id, "characters", &s(&view, "speaker"));
             let art = s(speaker, "art");
-            match cx.art.get(&format!("unit/{art}_portrait"), 89) {
+            match cx.art.portrait(&art, 89) {
                 Some(img) => ui.p.image(img, Rect::new(8, 214, 89, 89)),
                 None => ui.p.text_center(52.0, 250.0, &s(&view, "speaker_name").chars().next().unwrap_or('?').to_string(), 20.0, GOLD),
             }
@@ -892,4 +892,37 @@ pub fn item_line(cx: &Cx, item: &str) -> String {
     }
     parts.push(format!("{} · Owned {owned}", s_or(e, "item_type", "ITEM").to_lowercase()));
     parts.join(" · ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::region_key;
+    use aegis_ui::art::Art;
+    use std::path::Path;
+
+    /// ASSETORG1: every PNG sits in a folder per thing, assets/art/<category>/<id>/<variant>.png.
+    #[test]
+    fn art_is_one_folder_per_thing() {
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let art = game.join("assets/art");
+        let mut stray = Vec::new();
+        let mut walk = vec![(art.clone(), 0)];
+        while let Some((dir, depth)) = walk.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk.push((p, depth + 1));
+                } else if p.extension().is_some_and(|x| x == "png") && depth != 2 {
+                    stray.push(p.strip_prefix(&art).unwrap().display().to_string());
+                }
+            }
+        }
+        assert!(stray.is_empty(), "art outside <category>/<id>/<variant>.png: {stray:?}");
+        for (x, y) in [(0, 0), (1, 0), (2, 0)] {
+            for ch in ['.', '#', '~'] {
+                let id = region_key(ch, x, y).unwrap();
+                assert!(Art::path(&game, "ui", &id, "icon").is_file(), "ui/{id}/icon.png");
+            }
+        }
+    }
 }

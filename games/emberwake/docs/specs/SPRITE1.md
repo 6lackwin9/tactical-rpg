@@ -13,7 +13,7 @@ Six party classes and the eight named party characters that use them show a pixe
 
 Animations the rig already produces per class: `idle`, `walk`, `hurt`, `death`, one attack clip per weapon family (warrior thrust and shield bash, ranger draw and release, brawler jab, haymaker, kick, sweep, priest smash, rogue double stab, mage bolt), and the stance clips `defend`, `idle_guarded`, `hurt_guarded`.
 
-- **SPRITE1-A2 (asset):** export each clip as one horizontal strip `assets/art/unit/<key>_<clip>.png` (frames of 48x48, nearest filter) plus per-frame durations in a small JSON next to it (`<key>_<clip>.json`), and one manifest row per strip.
+- **SPRITE1-A2 (asset):** export each clip as one horizontal strip `assets/art/unit/<key>/<clip>.png` (frames of 48x48, nearest filter; the unit's folder, ASSETORG1) plus per-frame durations in a small JSON next to it (`<key>/<clip>.json`), and one manifest row per strip.
 - **SPRITE1-L (logic):** lift the `frames` rule: a strip row has `frames` = the strip's frame count; `AssetRegistry` gets `strip(key, clip)` returning the texture, frame size and durations (never null: falls back to the static token). Variants gain the clip names. Tests: manifest validation, strip slicing, fallback.
 - **SPRITE1-U (UI/UX):** the battle token plays clips: `idle` always, `walk` while moving, `hurt` on a hit (`hurt_guarded` when the target defended), `death` on defeat, an attack clip chosen by the skill's kind and weapon family (table in the task), the `defend` clip and `idle_guarded` while a defensive stance is active. Respect the animation speed and instant settings (`FxSettings`). No engine or rules change; clips are presentation only.
 

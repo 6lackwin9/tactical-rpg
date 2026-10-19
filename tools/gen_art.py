@@ -3,7 +3,8 @@
 #   python3 tools/gen_art.py [group ...] [--out DIR] [--list]   (default: every group, DIR = games/emberwake/assets/art)
 # Groups: characters classes items skills statuses terrain overlays region markers pins world_map backdrops menu.
 # Needs Pillow and numpy. Output is deterministic (seeded noise), so re-running rewrites identical files.
-# It writes PNGs under games/emberwake/assets/, which the engine reads directly. Character art keys and map templates are data edits
+# It writes PNGs under games/emberwake/assets/art, one folder per thing (<category>/<id>/<variant>.png, ASSETORG1),
+# which the engine reads directly. Character art keys and map templates are data edits
 # (`aegis content`); manifest rows (games/emberwake/data/assets/manifest.json) are not writable by the engine yet. Prints "wrote <path>" per group.
 import argparse
 import hashlib
@@ -318,7 +319,7 @@ def unit_pair(key: str, spec: dict, out: str) -> None:
             dummy(c)
         else:
             figure(c, spec)
-        save(c.done(), "unit/%s_%s.png" % (key, variant), out)
+        save(c.done(), "unit/%s/%s.png" % (key, variant), out)
 
 
 def g_characters(out: str) -> None:
@@ -596,7 +597,7 @@ SKILL_KIND = {
 def g_skills(out: str) -> None:
     for fam, glyph in SKILL_GLYPH.items():
         col = SKILL_KIND_COL[SKILL_KIND.get(fam, "ATTACK")]
-        save(glyph_icon(64, glyph, col), "skill/%s_icon.png" % fam, out)
+        save(glyph_icon(64, glyph, col), "skill/%s/icon.png" % fam, out)
 
 
 STATUS_GLYPH = {
@@ -618,7 +619,7 @@ def g_statuses(out: str) -> None:
             gi = g.done().resize((46, 46), Image.LANCZOS)
             img = c.done()
             img.alpha_composite(gi, (9, 9))
-        save(img, "status/%s_icon.png" % sid, out)
+        save(img, "status/%s/icon.png" % sid, out)
 
 
 # ------------------------------------------------------------------------------
@@ -771,7 +772,7 @@ ITEM_FRAME = {"titan_warhammer": GOLD, "runed_staff": "#9a7fe0", "ember_brigandi
 
 def g_items(out: str) -> None:
     for k in ITEM_KEYS:
-        save(item_img(globals()["it_" + k], ITEM_FRAME.get(k, "#6d7684")), "item/%s_icon.png" % k, out)
+        save(item_img(globals()["it_" + k], ITEM_FRAME.get(k, "#6d7684")), "item/%s/icon.png" % k, out)
 
 
 # ------------------------------------------------------------------------------
@@ -889,7 +890,7 @@ def terrain_tile(name: str, v: int) -> Image.Image:
 def g_terrain(out: str) -> None:
     for name in TERRAIN:
         for v in range(4):
-            save(terrain_tile(name, v), "tile/%s_v%d.png" % (name, v), out)
+            save(terrain_tile(name, v), "tile/%s/v%d.png" % (name, v), out)
 
 
 def marker(kind: str, size: int = 32) -> Image.Image:
@@ -950,12 +951,12 @@ OVERLAYS = ["npc", "chest", "chest_open", "lore", "exit", "exit_locked", "encoun
 
 def g_overlays(out: str) -> None:
     for k in OVERLAYS:
-        save(marker(k), "tile/overlay_%s_v0.png" % k, out)
+        save(marker(k), "tile/overlay_%s/v0.png" % k, out)
 
 
 def g_markers(out: str) -> None:
     for k in ("quest", "ready"):
-        save(marker("badge_" + k), "ui/badge_%s_icon.png" % k, out)
+        save(marker("badge_" + k), "ui/badge_%s/icon.png" % k, out)
 
 
 # ART2-A: intent kind chips (hostile-red rim), foresight/slay/guest chips, one 32 px each (ui namespace).
@@ -1031,10 +1032,10 @@ def flee_chip(size: int = 32) -> Image.Image:
 def g_chips(out: str) -> None:
     for k, fn in CHIP_GLYPHS.items():
         img = flee_chip() if k == "flee" else chip(fn, HOSTILE)
-        save(img, "ui/intent_%s_icon.png" % k, out)
-    save(chip(gl_eye, GOLD, "#1d1810"), "ui/badge_foresight_icon.png", out)
-    save(chip(cg_crown, GOLD, "#1d1810"), "ui/chip_slay_icon.png", out)
-    save(chip(cg_guest, "#4f9ad0", "#101a22"), "ui/chip_guest_icon.png", out)
+        save(img, "ui/intent_%s/icon.png" % k, out)
+    save(chip(gl_eye, GOLD, "#1d1810"), "ui/badge_foresight/icon.png", out)
+    save(chip(cg_crown, GOLD, "#1d1810"), "ui/chip_slay/icon.png", out)
+    save(chip(cg_guest, "#4f9ad0", "#101a22"), "ui/chip_guest/icon.png", out)
 
 
 # ------------------------------------------------------------------------------
@@ -1090,7 +1091,7 @@ def region_tiles() -> dict:
 
 def g_region(out: str) -> None:
     for k, im in region_tiles().items():
-        save(im, "ui/region_%s_icon.png" % k, out)
+        save(im, "ui/region_%s/icon.png" % k, out)
 
 
 # ------------------------------------------------------------------------------
@@ -1124,7 +1125,7 @@ def pin(kind: str) -> Image.Image:
 
 def g_pins(out: str) -> None:
     for k in ("fortress", "town", "camp", "ruin", "gate", "wild", "here"):
-        save(pin(k), "ui/pin_%s_icon.png" % k, out)
+        save(pin(k), "ui/pin_%s/icon.png" % k, out)
 
 
 # ------------------------------------------------------------------------------
@@ -1252,7 +1253,7 @@ def g_world_map(out: str) -> None:
         d.line([(x, y), (x + int(rng.integers(-6, 6)), y - int(rng.integers(8, 18)))], fill=rgb("#14100c", 160), width=2)
     embers(img, rng, 90)
     img = vignette(img, 0.6)
-    save(img, "ui/ashlands_world_map_background.png", out)
+    save(img, "ui/ashlands_world_map/background.png", out)
 
 
 def sky(w, h, top, bot, rng):
@@ -1280,7 +1281,7 @@ def g_backdrops(out: str) -> None:
         d.polygon([(bx, 80), (bx + 120, 80), (bx + 120, 300), (bx + 60, 340), (bx, 300)], fill=rgb(BLOOD), outline=rgb(OUT))
         d.ellipse([bx + 40, 150, bx + 80, 190], fill=rgb(EMBER))
     embers(img, rng, 40)
-    save(vignette(img, 0.7), "ui/warden_keep_background.png", out)
+    save(vignette(img, 0.7), "ui/warden_keep/background.png", out)
     # Ruined courtyard: broken arches under an ember sky
     rng = np.random.default_rng(2)
     img = sky(W, H, "#3a2a2a", "#7a4a30", rng)
@@ -1300,7 +1301,7 @@ def g_backdrops(out: str) -> None:
         d.polygon([(x, y), (x + 30, y - 6), (x + 36, y + 14), (x + 4, y + 18)], fill=rgb("#3a3532"), outline=rgb(OUT))
     glow(img, 900, 160, 200, EMBER, 100)
     embers(img, rng, 70)
-    save(vignette(img, 0.6), "ui/ruined_courtyard_background.png", out)
+    save(vignette(img, 0.6), "ui/ruined_courtyard/background.png", out)
     # Cinder Gate: collapsed toll arch over the gorge
     rng = np.random.default_rng(3)
     img = sky(W, H, "#241c26", "#8a4a2a", rng)
@@ -1316,7 +1317,7 @@ def g_backdrops(out: str) -> None:
         d.polygon([(x, y), (x + 40, y - 10), (x + 48, y + 20), (x + 6, y + 26)], fill=rgb("#3a3538"), outline=rgb(OUT))
     glow(img, 640, 640, 220, EMBER, 120)
     embers(img, rng, 60)
-    save(vignette(img, 0.6), "ui/cinder_gate_background.png", out)
+    save(vignette(img, 0.6), "ui/cinder_gate/background.png", out)
     # Ashmaw Camp: hide tents around fires on the wastes
     rng = np.random.default_rng(4)
     img = sky(W, H, "#2a2224", "#6a4230", rng)
@@ -1334,7 +1335,7 @@ def g_backdrops(out: str) -> None:
         d.line([(px, 380), (px, 560)], fill=rgb("#3a2a1e"), width=6)
         d.polygon([(px, 380), (px + 60, 394), (px, 420)], fill=rgb(BLOOD))
     embers(img, rng, 90)
-    save(vignette(img, 0.6), "ui/ashmaw_camp_background.png", out)
+    save(vignette(img, 0.6), "ui/ashmaw_camp/background.png", out)
 
 
 def g_menu(out: str) -> None:
@@ -1349,7 +1350,7 @@ def g_menu(out: str) -> None:
     ridge(img, rng, 850, 50, "#100d10", 90, None)
     ridge(img, rng, 980, 30, "#0a080b", 80, None)
     embers(img, rng, 220)
-    save(vignette(img, 0.7), "ui/main_menu_background.png", out)
+    save(vignette(img, 0.7), "ui/main_menu/background.png", out)
     # title card
     rng = np.random.default_rng(8)
     img = sky(1280, 360, "#160f14", "#3a1a12", rng)
@@ -1370,7 +1371,7 @@ def g_menu(out: str) -> None:
     sub = "The Ember Wardens"
     sw = d.textlength(sub, font=small)
     d.text(((1280 - sw) / 2, 250), sub, font=small, fill=rgb(EMBER2))
-    save(img, "ui/ashlands_title_background.png", out)
+    save(img, "ui/ashlands_title/background.png", out)
 
 
 GROUPS = {
