@@ -30,5 +30,6 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 ## Character popup (user playtest 2026-10-20)
 
 - Skills tab: drag a skill from the list onto a loadout slot (clicking still works); each filled slot has < > arrows over the unlocked ranks (decision "Skill rank choice").
-- Gear tab: three columns like the Godot gear dojo: character info and stats | equipped slots (click to unequip, with the stat change) | party stash (click or drag onto a slot to equip); the battle pouch under the slots; the detail pane explains the hovered row.
+- Gear tab: three columns like the Godot gear dojo: character info and stats | equipped slots (click to unequip, with the stat change) | party stash; the battle pouch under the slots; drag and drop both ways (stash to a gear or pouch slot equips, an equipped or pouch item back to the stash unequips; user 2026-10-20), clicks still work; the detail pane explains the hovered row.
 - Every row (stats, skills, gear) is hoverable and fills the detail pane; "Move to a row" must never stay on screen while the mouse is over a row.
+- Drag and drop wherever moving a thing between two places makes sense, on every screen, once the UI kit has it (UIKIT1, then DRAG1); clicking keeps working everywhere (user 2026-10-20).
