@@ -60,6 +60,7 @@ func _initialize() -> void:
 	var jitter: String = "on"
 	var classes: Array[String] = []
 	var mode: String = "duel"
+	var pouch: String = ""   # pouch=<id,id,id>: every party unit carries these and may use them (SimArgs pouch)
 	for arg: String in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = arg.split("=", true, 1)
 		if kv.size() != 2:
@@ -77,6 +78,8 @@ func _initialize() -> void:
 				jitter = kv[1]
 			"classes":
 				classes.assign(kv[1].split(","))
+			"pouch":
+				pouch = kv[1]
 			"mode":
 				mode = kv[1]
 	if mode == "world":
@@ -84,7 +87,10 @@ func _initialize() -> void:
 		quit()
 		return
 	var args := SimArgs.new()
-	if not args.parse(PackedStringArray(["duel", str(level), str(seed_count), "jitter=%s" % jitter])):
+	var sim_args: PackedStringArray = PackedStringArray(["duel", str(level), str(seed_count), "jitter=%s" % jitter])
+	if not pouch.is_empty():
+		sim_args.append("pouch=%s" % pouch)
+	if not args.parse(sim_args):
 		print("§ trace: argument error: ", args.error)
 		quit(1)
 		return
@@ -170,9 +176,9 @@ func _initialize() -> void:
 		fights.append(f)
 	_clear_sandbox()
 	DirAccess.make_dir_recursive_absolute(out_dir)
-	var path: String = out_dir.path_join("traces_%s_l%d.json" % [mode, level])
+	var path: String = out_dir.path_join("traces_%s_l%d%s.json" % [mode, level, "" if pouch.is_empty() else "_items"])
 	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
-	file.store_string(JSON.stringify({"units": units, "jitter": jitter, "level": level, "fights": fights}, "", false))
+	file.store_string(JSON.stringify({"units": units, "jitter": jitter, "level": level, "pouch": pouch, "fights": fights}, "", false))
 	file.close()
 	print("§ trace: %d fights -> %s" % [fights.size(), path])
 	quit()

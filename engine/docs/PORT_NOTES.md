@@ -29,13 +29,14 @@ because the RNG is bit-exact.
 | `combat/arena/combat_grid.gd`, `terrain.gd`, `combat_zones.gd` | `aegis_battle::grid`, `world` | battle traces |
 | `combat/arena/grid_path.gd` | `aegis_battle::path` | battle traces |
 | `combat/arena/cover_rules.gd`, `hazard_rules.gd`, `status/riposte_rules.gd`, `status/support_rules.gd` | `aegis_battle::command` | battle traces |
-| `core/combat/battle_command.gd`, `combat/actions/*` (no item command yet) | `aegis_battle::command` | battle traces |
+| `core/combat/battle_command.gd`, `combat/actions/*` (with `item_command.gd`) | `aegis_battle::command` | battle traces, item traces |
 | `combat/arena/combat_resolver.gd` | `aegis_battle::resolver` | battle traces |
 | `combat/planning/combat_plan.gd`, `plan_step.gd`, `plan_entry.gd` (no options / UI probes yet) | `aegis_battle::plan` | battle traces |
 | `combat/planning/skill_def.gd`, `skill_catalog.gd`, `content/skill_kinds.gd` | `aegis_battle::skill` | battle traces |
-| `combat/ai/tactical_ai.gd`, `ai_profile.gd`, `plan_presets.gd` (no item use yet) | `aegis_battle::ai`, `world` | battle traces |
-| `combat/session/combat_session.gd`, `catalog_encounter.gd`, `combat_encounter.gd` (rout only; no waves, phases, morale) | `aegis_battle::session` | battle traces |
-| `tools/sim/sim_runner.gd` (`fight`), `sim_variants.gd` (jitter) | `aegis_battle::sim` | battle traces |
+| `combat/ai/tactical_ai.gd` (with `_try_item`), `ai_profile.gd`, `plan_presets.gd` | `aegis_battle::ai`, `world` | battle traces, item traces |
+| `combat/session/combat_session.gd`, `catalog_encounter.gd`, `combat_encounter.gd` | `aegis_battle::session` | battle traces, world traces |
+| `combat/session/encounter_objectives.gd`, `encounter_phases.gd`, `encounter_morale.gd`, `world_encounter.gd` (guests, start buffs) | `aegis_battle::encounter`, `session`; `aegis_world::battle::WorldRoster` | world traces |
+| `tools/sim/sim_runner.gd` (`fight`, `apply_pouch`), `sim_variants.gd` (jitter) | `aegis_battle::sim` | battle traces |
 
 ## Parity status (2026-10-19)
 
@@ -45,12 +46,23 @@ because the RNG is bit-exact.
   Compared after every step: HP, AP, tile, stance, active and pending statuses; and every round's schedule.
   About 80 distinct skills appear (dashes, disengages, areas, heals, cleanses, taunts, buffs, Focus, riposte);
   statuses seen: stagger, stun, root, bleed, weaken, haste, taunt, riposte.
+- Battle items (ITEMUSE1): 180 more sim fights with `pouch=` (`trace.sh ... pouch=<ids>`, written as
+  `traces_<mode>_l<level>_items.json`): 120 duels at level 5 (potion, bomb, focus elixir), 24 team fights and 36
+  group fights at level 7; 250 Healing Draught and 39 Throwing Fire Bomb uses, all step for step. Mutating the
+  potion threshold or the bomb damage makes 8 to 12 fights diverge, so both item paths are checked.
+- World battles (`trace.sh mode=world preset=<p>`, `aegis_world/tests/world_traces.rs`): 240 fights over every
+  world encounter plus synthetic variants (escape, centre deployment, morale, custom hold tiles, start buffs) with
+  the balanced, aggressive, withdraw and defensive presets: hold, slay, escape, fled, lost and round-limit verdicts,
+  boss phases (hp_below, round, waves, status, ai, enrage), morale breaks and surrenders, ambush and centre
+  deployments, a protected guest and start buffs, all step for step.
 - Not covered yet: statuses expose, fortify, regen, poison, burn, empower, slow (the shipped classes rarely use
-  them in these fights), battle items, boss phases, morale, hold / escape / slay objectives,
-  ambush and centre deployments, terrain zones other than the stone arena.
-- Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` (about 8 s).
+  them in these fights), terrain zones other than the stone arena and the two catalog ones.
+- Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` except the world
+  ones (677 fights, about 8 s).
 - Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
   goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).
+- Windows Smart App Control sometimes blocks a freshly linked test binary (`os error 4551`); touching the test file
+  and re-running relinks it and it runs.
 
 ## Game loop (aegis_world, 2026-10-19)
 
@@ -65,7 +77,7 @@ because the RNG is bit-exact.
 | `quests/quest_rules.gd` (runtime), `quest_runner.gd`, `reward_grant.gd` | `quest` | journeys (statuses, objectives, offers) |
 | `dialogue/rep_rules.gd`, `dialogue_rules.gd` (runtime), `dialogue_runner.gd`, `shop_rules.gd` (runtime) | `dialogue`, `shop` | journeys (dialogue and shop views) |
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
-| `exploration/game_encounter.gd` (saved party in battle, HP write-back) | `aegis_gui::battle` (`BattleScreen::world`) | manual (GUI) |
+| `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `aegis_gui::battle` (`BattleScreen::world`) | manual (GUI) |
 
 Godot behaviours found on the way:
 
@@ -83,6 +95,4 @@ the screen views (quest statuses, objectives, turn-in offers, HP, camp, exits me
 map) must equal Godot's. Last run: 8 journeys, 5608 actions, all equal; includes quest completion, recruits and a
 `connects` world crossing.
 
-Not ported yet: content validation (`*_errors`, warnings), save import / export, battle items in world battles
-(pouch write-back), objectives other than rout, world characters' named items and tuning in battle,
-`WorldEncounter` start statuses and phases.
+Not ported yet: content validation (`*_errors`, warnings), save import / export.

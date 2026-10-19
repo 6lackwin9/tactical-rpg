@@ -9,6 +9,7 @@ use crate::path::{self, Cells, Hooks};
 use crate::resolver::Resolver;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
+use aegis_data::ItemDef;
 use aegis_rules::damage::{self, HitInput};
 use aegis_rules::sort::godot_sort;
 use aegis_rules::{status, Stance};
@@ -40,19 +41,21 @@ pub struct PlanStep {
     pub tiles: i32,
     /// GOTO / AREA destination, or the approach / landing tile fixed when first compiled.
     pub cell: Cell<V2>,
+    /// ITEM: the catalog consumable id used from the battle pouch.
+    pub item_id: String,
 }
 
 pub type Step = Rc<PlanStep>;
 
 impl PlanStep {
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
-        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell) })
+        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new() })
     }
     pub fn engage(skill: SkillId, target: UnitId) -> Step {
         Self::make(Mode::Engage, Some(skill), Some(target), NO_CELL)
     }
     pub fn mv(skill: SkillId, direction: V2, tiles: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL) })
+        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new() })
     }
     pub fn go_to(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Goto, Some(skill), None, cell)
@@ -68,6 +71,10 @@ impl PlanStep {
     }
     pub fn self_skill(skill: SkillId) -> Step {
         Self::make(Mode::SelfCast, Some(skill), None, NO_CELL)
+    }
+    /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
+    pub fn use_item(item_id: &str, target: UnitId) -> Step {
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string() })
     }
 }
 
@@ -95,6 +102,8 @@ pub struct PlanEntry {
     pub switch_ap: i32,
     pub stance_before: Stance,
     pub stance_after: Stance,
+    /// ITEM (ITEMUSE1): the pouch consumable used (`skill` is its synthetic skill).
+    pub item: Option<ItemDef>,
 }
 
 impl PlanEntry {
@@ -122,6 +131,7 @@ impl PlanEntry {
             switch_ap: 0,
             stance_before: Stance::Neutral,
             stance_after: Stance::Neutral,
+            item: None,
         }
     }
 
@@ -147,6 +157,10 @@ impl PlanEntry {
         let u = &w.units[actor];
         let blocks = self.blocks(w);
         let mut cmd = match skill::kind(s) {
+            // ItemCommand: the SupportCommand slot (priority 0), `blocks` long
+            _ if self.item.is_some() => {
+                Command::new(actor, 0, blocks, CmdKind::Item { target: self.target.unwrap_or(actor), item: Box::new(self.item.clone().unwrap()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0 })
+            }
             Kind::Attack => {
                 let mut c = if skill::is_area(s) {
                     Command::new(actor, 0, s.blocks, CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s), status_rounds: s.status_rounds, last_damage: 0, last_hits: 0, crit_hits: Vec::new() })
@@ -446,8 +460,66 @@ impl Plan {
             Mode::Withdraw => self.apply_withdraw(w, c, st, index),
             Mode::Engage => self.apply_engage(w, c, st, step, index),
             Mode::Area => self.apply_area(w, c, st, step.skill.unwrap(), step.cell.get(), index),
-            Mode::Item => "Battle items are not supported yet.".into(),
+            Mode::Item => self.apply_item(w, c, st, step, index),
         }
+    }
+
+    /// ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. 1 AP, `use_blocks` blocks at the lowest free blocks
+    /// like a SELF step, no auto-move: the target must stand within the item's reach of the user's planned tile when the
+    /// step starts. Earlier ITEM steps of this round use up copies (nothing leaves the pouch before the command resolves).
+    fn apply_item(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
+        let con = command::pouch_item(w, c, &step.item_id);
+        let item_name = con.map(|i| i.name.clone()).or_else(|| w.cat.items.get(&step.item_id).map(|i| i.name.clone())).unwrap_or_else(|| step.item_id.clone());
+        let Some(con) = con.filter(|_| self.items_left(w, c, &step.item_id, index) > 0) else {
+            return format!("No {item_name} left in {}'s pouch.", w.units[c].name);
+        };
+        if !con.offered_in_battle() {
+            return format!("{item_name} can't be used in battle.");
+        }
+        let target = step.target.unwrap_or(c);
+        let side = command::item_side_problem(w, c, con, Some(target));
+        if !side.is_empty() {
+            return side;
+        }
+        if !w.units[target].is_active() || w.grid.positions[target].is_none() {
+            return format!("{} is not on the field.", w.units[target].name);
+        }
+        if target != c && st.pos.dist(w.pos(target)) > con.battle_reach() {
+            return format!("Out of reach for {item_name}.");
+        }
+        let Some(sid) = w.book().find(&skill::item_skill_id(&con.id)) else {
+            return format!("{item_name} can't be used in battle.");
+        };
+        let problem = self.add_entry(w, c, st, sid, index, Some(target), &[], 0, &[]);
+        if !problem.is_empty() {
+            return problem;
+        }
+        let last = st.entries.len() - 1;
+        let e = &mut st.entries[last];
+        e.item = Some(con.clone());
+        e.skill_ap = command::ITEM_AP;
+        // add_entry charged the skill's AP; an item costs ITEM_AP
+        st.ap_left += skill::ap_cost(&w.cat.skills[sid], Some(&w.units[c])) - command::ITEM_AP;
+        if st.dry_entry == last as i32 && st.ap_left >= 0 {
+            st.dry_entry = -1;
+        }
+        let tu = &w.units[target];
+        if con.heal > 0 {
+            st.entries[last].est_heal = con.heal.min((tu.max_hp - tu.hp).max(0));
+        }
+        if con.damage > 0 {
+            st.entries[last].est_damage = con.damage;
+            let hp = st.est_hp.get(&target).copied().unwrap_or(tu.hp);
+            st.est_hp.insert(target, (hp - con.damage).max(0));
+        }
+        String::new()
+    }
+
+    /// Copies of `item_id` in `c`'s pouch not claimed by its ITEM steps before step `before` (-1 = all planned steps).
+    pub fn items_left(&self, w: &World, c: UnitId, item_id: &str, before: i32) -> i32 {
+        let steps = self.steps_of(c);
+        let upto = if before < 0 { steps.len() } else { (before as usize).min(steps.len()) };
+        command::pouch_count(w, c, item_id) - steps[..upto].iter().filter(|s| s.mode == Mode::Item && s.item_id == item_id).count() as i32
     }
 
     fn move_problem(&self, w: &World, c: UnitId, st: &SimState) -> String {

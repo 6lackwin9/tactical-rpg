@@ -32,9 +32,12 @@ Godot file is edited):
 ```bash
 engine/parity/export.sh                      # catalog, worlds, game data, unit snapshots, damage cases, RNG, save fixtures (~5 s)
 engine/parity/trace.sh mode=duel level=5    # record Godot sim fights step by step (duel | group | teams | encounters)
+engine/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
+engine/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
 engine/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
 cargo test -p aegis_rules -p aegis_battle -p aegis_host -p aegis_world
-    # exact parity: units, damage, RNG, battle traces, journeys (result, state and screen views per action), saves
+    # exact parity: units, damage, RNG, battle, item and world battle traces, journeys (result, state and screen
+    # views per action), saves
 cargo run --release -p aegis_cli -- sim duel 1 20   # the balance-sim duel table
 ```
 

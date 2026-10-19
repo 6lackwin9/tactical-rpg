@@ -62,11 +62,12 @@ fn replay_file(cat: &Arc<Catalog>, name: &str) -> usize {
     let t = load(name);
     let units: IndexMap<String, UnitDef> = t["units"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), UnitDef::from_obj(v.as_object().unwrap()))).collect();
     let jitter = t["jitter"].as_str() == Some("on");
+    let pouch: Vec<String> = t["pouch"].as_str().unwrap_or("").split(',').filter(|s| !s.is_empty()).map(String::from).collect();
     let fights = t["fights"].as_array().unwrap();
     let mut failures = Vec::new();
     for f in fights {
         let fo = f.as_object().unwrap();
-        let spec = FightSpec { left: value::strings(fo, "left"), right: value::strings(fo, "right"), seed: f["seed"].as_i64().unwrap(), preset: value::string(fo, "preset", "balanced"), cap: 10, jitter, base: f.get("base").and_then(|b| b.as_object()).filter(|b| !b.is_empty()).cloned() };
+        let spec = FightSpec { left: value::strings(fo, "left"), right: value::strings(fo, "right"), seed: f["seed"].as_i64().unwrap(), preset: value::string(fo, "preset", "balanced"), cap: 10, jitter, base: f.get("base").and_then(|b| b.as_object()).filter(|b| !b.is_empty()).cloned(), pouch: pouch.clone() };
         let res = fight(cat.clone(), &units, &spec, true);
         if let Some(d) = first_divergence(f, res.trace.as_ref().unwrap()) {
             failures.push(format!("{:?} vs {:?} seed {}: {d}", spec.left, spec.right, spec.seed));

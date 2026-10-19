@@ -265,6 +265,7 @@ impl Session {
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_zone(&def.zone);
         let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks };
+        w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
         let mut unit_keys = IndexMap::new();

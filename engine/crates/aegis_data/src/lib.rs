@@ -333,6 +333,40 @@ impl ItemDef {
     pub fn is_equipment(&self) -> bool {
         matches!(self.item_type.as_str(), "WEAPON" | "SHIELD" | "ARMOR" | "ACCESSORY")
     }
+
+    pub fn is_consumable(&self) -> bool {
+        self.item_type == "CONSUMABLE"
+    }
+
+    /// Consumable.TYPE_REACH: the battle reach of the item's type, -1 when the type is not offered in battle
+    /// (an unknown type reads as HEALTH_POTION, like ContentFactory's enum fallback).
+    pub fn type_reach(&self) -> i32 {
+        match self.consumable_type.as_str() {
+            "FOCUS_INCENSE" => 0,
+            "THROWABLE_BOMB" => 3,
+            "STAMINA_BREW" | "ANTIDOTE" => -1,
+            _ => 1,
+        }
+    }
+
+    /// Consumable.reach: its own use_reach, else the type default (0 = self only).
+    pub fn battle_reach(&self) -> i32 {
+        if self.use_reach >= 0 {
+            self.use_reach
+        } else {
+            self.type_reach()
+        }
+    }
+
+    /// ItemCommand.offered: a consumable whose type is offered in battle.
+    pub fn offered_in_battle(&self) -> bool {
+        self.is_consumable() && self.type_reach() >= 0 && self.battle_reach() >= 0
+    }
+
+    /// ItemCommand.aims_at_foes: damage with no heal or boost.
+    pub fn aims_at_foes(&self) -> bool {
+        self.damage > 0 && self.heal <= 0 && self.buff_pct <= 0.0
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +428,12 @@ impl Catalog {
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
+    }
+
+    /// Appends skills after the authored ones (a battle's synthetic item skills) and re-indexes.
+    pub fn add_skills(&mut self, extra: Vec<SkillDef>) {
+        self.skills.extend(extra);
+        self.index_skills();
     }
 
     /// SkillCatalog._build: first row per id, lowest tier per family (ties keep file order).

@@ -23,6 +23,8 @@ pub struct FightSpec {
     pub jitter: bool,
     /// Encounter fields that replace the sim defaults (zone, arena, exits, blocks, AP, waves...); None = the stone arena.
     pub base: Option<serde_json::Map<String, Value>>,
+    /// SimArgs `pouch=`: every party unit's battle pouch becomes these catalog consumables and its AI may use items.
+    pub pouch: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -155,6 +157,9 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         jitter_start(&mut s.w, r);
         s.replan_enemies();
     }
+    if !spec.pouch.is_empty() {
+        apply_pouch(&mut s.w, &spec.pouch);
+    }
     let mut trace_rounds: Vec<Value> = Vec::new();
     let start = record.then(|| units_state(&s.w));
     let mut rounds = 0;
@@ -207,6 +212,23 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         outcome: s.outcome.clone(),
         trace: record.then(|| json!({"start": start, "rounds": trace_rounds})),
     }
+}
+
+/// SimRunner.apply_pouch (ITEMUSE1 rule 9): every party unit's battle pouch becomes `ids` (catalog consumables,
+/// unknown ids skipped) and its AI profile may use items. Enemies keep use_items off.
+pub fn apply_pouch(w: &mut World, ids: &[String]) {
+    for a in w.allies.clone() {
+        w.units[a].inventory.pouch.clear();
+        for id in ids {
+            if let Some(item) = w.cat.items.get(id).filter(|i| i.is_consumable()).cloned() {
+                w.units[a].inventory.add_to_pouch(&item);
+            }
+        }
+        let mut profile = w.profile_of(a);
+        profile.use_items = true;
+        w.profiles.insert(a, profile);
+    }
+    w.add_item_skills();
 }
 
 /// SimRunner.is_reach_error / _plan_skip: every invalid ally plan failed because its target is out of reach.

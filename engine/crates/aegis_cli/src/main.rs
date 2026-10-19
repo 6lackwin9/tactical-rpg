@@ -96,7 +96,7 @@ fn sim_duel(args: &Args) -> Result<()> {
             let (mut bin, mut hp, mut n) = (0.0, 0.0, 0usize);
             for i in 0..seeds {
                 let seed = 11 + 12 * i;
-                let spec = |l: &str, r: &str| FightSpec { left: vec![format!("simp_{l}")], right: vec![format!("sime_{r}")], seed, preset: preset.clone(), cap: 10, jitter, base: None };
+                let spec = |l: &str, r: &str| FightSpec { left: vec![format!("simp_{l}")], right: vec![format!("sime_{r}")], seed, preset: preset.clone(), cap: 10, jitter, base: None, pouch: Vec::new() };
                 let ab = fight(cat.clone(), &units, &spec(a, b), false);
                 let ba = fight(cat.clone(), &units, &spec(b, a), false);
                 fights += 2;

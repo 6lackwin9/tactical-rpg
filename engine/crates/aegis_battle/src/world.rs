@@ -2,7 +2,7 @@
 //! ContentFactory.ai_profile). Units are referred to by their index in `units`.
 
 use crate::grid::{Grid, V2, DEPLOY_ANCHOR_Y, DEPLOY_ROWS, GRID_H, GRID_W, NO_CELL};
-use crate::skill::Book;
+use crate::skill::{self, Book};
 use aegis_data::{Catalog, UnitDef};
 use aegis_rules::Unit;
 use indexmap::IndexMap;
@@ -131,6 +131,23 @@ pub struct World {
 impl World {
     pub fn book(&self) -> Book<'_> {
         Book { cat: &self.cat }
+    }
+
+    /// Adds the synthetic skill (skill::item_skill) of every pouch item missing from this battle's catalog copy;
+    /// call after pouches change.
+    pub fn add_item_skills(&mut self) {
+        let mut missing: Vec<aegis_data::SkillDef> = Vec::new();
+        for p in self.units.iter().flat_map(|u| u.inventory.pouch.iter()) {
+            let id = skill::item_skill_id(&p.id);
+            if self.cat.skill(&id).is_none() && !missing.iter().any(|s| s.id == id) {
+                missing.push(skill::item_skill(p));
+            }
+        }
+        if !missing.is_empty() {
+            let mut cat = (*self.cat).clone();
+            cat.add_skills(missing);
+            self.cat = Arc::new(cat);
+        }
     }
 
     pub fn u(&self, id: UnitId) -> &Unit {

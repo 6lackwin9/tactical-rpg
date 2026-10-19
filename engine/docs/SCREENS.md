@@ -43,8 +43,10 @@ The rules behind every player screen come from `aegis_world`, checked against Go
 
 - Godot's region tiles are drawn from its asset registry (green ground in the keep); the engine draws the
   `region_*` icon files, so colours differ. Marker icons are simple shapes until the sprite assets arrive.
-- Battles in the world: rout objective only (hold / escape / slay, phases, morale and start statuses not ported);
-  battle items are not written back to the pouch; world characters' named items and tuning are not applied in battle.
+- Battles in the world now play the full rules (objectives, phases, morale, guests, start statuses, world
+  characters with named items and tuning) and battle items (pick a unit, then "Use <item> (<n> left)"; unused items
+  go back to the saved pouch). The battle screen shows the objective and phase / morale events in the message bar;
+  Godot's centred phase banner (BOSS1-U) is look-and-feel work for after the transition.
 - Keyboard focus navigation exists on the main menu only; other screens are mouse + shortcuts.
 
 ## Order (done)

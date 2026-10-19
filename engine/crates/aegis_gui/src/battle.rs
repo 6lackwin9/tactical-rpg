@@ -111,7 +111,8 @@ enum Mode {
     Arena,
     /// A world fight: the fight dict, the runner that settles it (explore / travel / dialogue) and the member ids of
     /// the party units in battle order.
-    World { fight: Dict, runner: String, members: Vec<String> },
+    /// `members`: party member id and the saved pouch ids that found no battle slot (kept on write-back), per ally.
+    World { fight: Dict, runner: String, members: Vec<(String, Vec<String>)> },
 }
 
 pub struct BattleScreen {
@@ -225,7 +226,7 @@ impl BattleScreen {
             let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
             let art = if !base.art.is_empty() { base.art.clone() } else { d.cat.classes.get(&base.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) };
             party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base) });
-            members.push(m.id.clone());
+            members.push((m.id.clone(), built.pouch_unloaded));
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
@@ -353,13 +354,20 @@ impl BattleScreen {
             return;
         }
         let d = cx.data.clone();
-        let units: Vec<(i64, i64, bool)> = self.session().w.allies.iter().map(|a| {
+        let units: Vec<(i64, i64, bool, Vec<String>)> = self.session().w.allies.iter().map(|a| {
             let u = &self.session().w.units[*a];
-            (u.hp as i64, u.max_hp as i64, u.is_alive())
+            (u.hp as i64, u.max_hp as i64, u.is_alive(), u.inventory.pouch.iter().map(|p| p.id.clone()).collect())
         }).collect();
         let gs = cx.gs_mut();
+        // ITEMUSE1 rule 7 (GameEncounter.write_back_pouches): the heroes' unused pouch items go back to their saved
+        // pouches on every outcome, then the ids that found no battle slot; guests have no member.
+        for ((id, unloaded), (.., left)) in members.iter().zip(&units) {
+            if let Some(m) = gs.party.member_mut(id) {
+                m.pouch = left.iter().chain(unloaded).cloned().collect();
+            }
+        }
         if outcome == "won" || outcome == "fled" {
-            for (id, (hp, max, alive)) in members.iter().zip(units) {
+            for ((id, _), (hp, max, alive, _)) in members.iter().zip(units) {
                 if let Some(m) = gs.party.member_mut(id) {
                     let hp = progression::hp_after(if alive { hp.min(max) } else { 0 }, max, &outcome);
                     m.hp_lost = (max - hp).max(0);
@@ -565,6 +573,23 @@ impl BattleScreen {
                 "self" if matches!(kind, "DEFEND" | "FOCUS" | "REST" | "DISENGAGE" | "SUPPORT") => steps.push((name, json!({"mode": "self", "skill": id}), tip)),
                 "tile" if kind == "ATTACK" && area => steps.push((name, json!({"mode": "area", "skill": id, "cell": cell.map(|c| json!([c.x, c.y]))}), tip)),
                 _ => {}
+            }
+        }
+        // ITEMUSE1 rule 2: "Use <item> (<n> left)" for each pouch item that may be aimed at the clicked unit.
+        if let Some(t) = if what == "self" { Some(h) } else { target.filter(|_| what != "tile") } {
+            let items = self.host.handle(&json!({"cmd": "items", "unit": h, "target": t}))["items"].as_array().cloned().unwrap_or_default();
+            for it in items {
+                let name = it["name"].as_str().unwrap_or("").to_string();
+                let mut tip: Tip = vec![(name.clone(), GOLD)];
+                if let Some(d) = it["description"].as_str().filter(|d| !d.is_empty()) {
+                    tip.push((d.to_string(), TEXT));
+                }
+                let reach = match it["reach"].as_i64().unwrap_or(0) {
+                    0 => "self only".to_string(),
+                    r => format!("reach {r}"),
+                };
+                tip.push((format!("{} AP, {} block{}, {reach}; used when the action resolves", it["ap"], it["blocks"], if it["blocks"] == json!(1) { "" } else { "s" }), DIM));
+                steps.push((format!("Use {name} ({} left)", it["left"]), json!({"mode": "item", "item": it["item"], "target": t}), tip));
             }
         }
         if what == "tile" {
@@ -791,6 +816,7 @@ fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<Str
                 CmdKind::Rest { .. } => ("REST", None),
                 CmdKind::StatusBlock { .. } => ("STATUS", None),
                 CmdKind::Support { target, .. } => ("SUPPORT", Some(*target)),
+                CmdKind::Item { target, .. } => ("ITEM", Some(*target)),
                 CmdKind::Target { target } => ("TARGET", *target),
                 CmdKind::Walk { .. } => ("MOVE", None),
                 CmdKind::Disengage { .. } => ("DISENGAGE", None),

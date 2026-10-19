@@ -185,6 +185,23 @@ pub fn cleanse_list(s: &SkillDef) -> Vec<&'static str> {
     aegis_rules::status::debuffs().into_iter().filter(|d| all || s.cleanse_statuses.iter().any(|x| x == d)).collect()
 }
 
+/// ItemCommand.skill_for: the synthetic SUPPORT skill a battle item rides on the timeline (keeps the stance, never
+/// offered as a skill). Sessions add one per pouch item id to their catalog copy (Session::add_item_skills).
+pub fn item_skill(item: &aegis_data::ItemDef) -> SkillDef {
+    let o = serde_json::json!({"id": item_skill_id(&item.id), "name": item.name, "kind": "SUPPORT", "level": 1, "blocks": item.use_blocks.max(1),
+        "target_mode": "ALLY_OR_SELF", "system": true, "_item": item.id});
+    SkillDef::from_obj(o.as_object().unwrap())
+}
+
+pub fn item_skill_id(item_id: &str) -> String {
+    format!("item_{item_id}")
+}
+
+/// True for an item's synthetic skill.
+pub fn is_item(s: &SkillDef) -> bool {
+    s.raw.contains_key("_item")
+}
+
 pub fn target_mode(s: &SkillDef) -> &str {
     &s.target_mode
 }
@@ -289,7 +306,7 @@ impl<'a> Book<'a> {
             .skills
             .iter()
             .enumerate()
-            .filter(|(_, s)| kind(s) == k && s.level <= cap && c.is_none_or(|u| u.can_use(self.cat, s)))
+            .filter(|(_, s)| kind(s) == k && !is_item(s) && s.level <= cap && c.is_none_or(|u| u.can_use(self.cat, s)))
             .map(|(i, _)| i)
             .collect()
     }

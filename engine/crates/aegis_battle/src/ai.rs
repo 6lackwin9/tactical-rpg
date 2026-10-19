@@ -20,6 +20,8 @@ pub const FAST_BLOCK: i32 = 2;
 pub const SELF_CARE_RATIO: f64 = 0.5;
 pub const AREA_FF_MIN_FOES: i32 = 3;
 pub const AREA_FF_HP_RATIO: f64 = 0.25;
+/// ITEMUSE1 rule 9: drink a potion when the round would leave the unit at or below this HP share.
+pub const ITEM_HEAL_RATIO: f64 = 0.35;
 
 #[derive(PartialEq)]
 enum Care {
@@ -57,6 +59,10 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
         if !shooters.is_empty() {
             plan.goal_preferences.insert(actor, shooters);
         }
+    }
+    if profile.use_items {
+        // ITEMUSE1 rule 9 (sim only): at most one item step, first in the sequence
+        try_item(w, plan, actor);
     }
     let book = w.book();
     let cap = w.skill_cap_of(actor);
@@ -371,6 +377,70 @@ fn fast_strike(w: &World, plan: &mut Plan, actor: UnitId, ranked: &[UnitId], cap
         Some(step) => plan.add_step(w, actor, step, false).is_empty(),
         None => false,
     }
+}
+
+/// ITEMUSE1 rule 9: a heal potion on itself when the expected incoming damage leaves it at or below ITEM_HEAL_RATIO
+/// of max HP by round end and no friend plans a heal on it; else a bomb on the weakest foe in the bomb's reach whose
+/// HP is at or below the bomb's damage. Elixirs are never AI-used. True when a step was added.
+fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
+    let pos = w.pos(actor);
+    let mut potion: Option<&aegis_data::ItemDef> = None;
+    let mut bomb: Option<&aegis_data::ItemDef> = None;
+    for id in command::pouch_ids(w, actor) {
+        let con = command::pouch_item(w, actor, &id).unwrap();
+        if !con.offered_in_battle() || plan.items_left(w, actor, &id, -1) <= 0 {
+            continue;
+        }
+        if potion.is_none() && con.heal > 0 && !con.aims_at_foes() {
+            potion = Some(con);
+        } else if bomb.is_none() && con.aims_at_foes() {
+            bomb = Some(con);
+        }
+    }
+    let u = &w.units[actor];
+    if let Some(p) = potion {
+        let after = u.hp - incoming_damage(w, plan, actor, w.total_blocks, pos, None);
+        if after as f64 <= ITEM_HEAL_RATIO * u.max_hp as f64 && !heal_planned_on(w, plan, actor) && plan.add_step(w, actor, PlanStep::use_item(&p.id, actor), false).is_empty() {
+            return true;
+        }
+    }
+    if let Some(b) = bomb {
+        let mut best: Option<UnitId> = None;
+        for &foe in w.foes_of(actor) {
+            let fu = &w.units[foe];
+            if !fu.is_active() || w.grid.positions[foe].is_none() || fu.hp > b.damage || pos.dist(w.pos(foe)) > b.battle_reach() {
+                continue;
+            }
+            if best.is_none_or(|x| fu.hp < w.units[x].hp) {
+                best = Some(foe);
+            }
+        }
+        if let Some(t) = best {
+            if plan.add_step(w, actor, PlanStep::use_item(&b.id, t), false).is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// True when a friend of `actor` already plans a heal (support skill or heal item) on it this round.
+fn heal_planned_on(w: &World, plan: &Plan, actor: UnitId) -> bool {
+    for &friend in w.friends_of(actor) {
+        if friend == actor {
+            continue;
+        }
+        for e in plan.entries_for(w, friend) {
+            let heal = match &e.item {
+                Some(i) => i.heal > 0,
+                None => skill::heals(&w.cat.skills[e.skill]),
+            };
+            if e.target == Some(actor) && heal {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn try_heal(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfile, cap: i32, already: &[UnitId]) -> Option<UnitId> {

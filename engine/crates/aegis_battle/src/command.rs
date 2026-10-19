@@ -6,6 +6,7 @@ use crate::grid::{Grid, V2, NO_CELL};
 use crate::path::{self, Cells, Hooks};
 use crate::skill::{self, SkillId};
 use crate::world::{UnitId, World};
+use aegis_data::ItemDef;
 use aegis_rules::damage::{self, Hit, HitInput};
 use aegis_rules::rng::GodotRng;
 use aegis_rules::stats::roundi;
@@ -71,6 +72,15 @@ pub enum CmdKind {
     },
     Target {
         target: Option<UnitId>,
+    },
+    /// ItemCommand (ITEMUSE1 rules 3-5): one battle-pouch consumable on `target`, in the SupportCommand slot.
+    Item {
+        target: UnitId,
+        item: Box<ItemDef>,
+        used: bool,
+        last_heal: i32,
+        last_damage: i32,
+        last_boost: f64,
     },
     Walk {
         path: Vec<V2>,
@@ -338,6 +348,39 @@ impl Command {
                     *last_heal = healed;
                 }
                 self.log = format!("[Support] {src_name} used {} on {}: healed {healed}", self.name, w.units[target].name);
+            }
+            CmdKind::Item { target, item, .. } => {
+                let problem = item_problem(w, src, target, &item);
+                if !problem.is_empty() {
+                    self.failed = true;
+                    self.log = format!("[Item] {} not used: {problem}.", item.name);
+                    return;
+                }
+                let idx = w.units[src].inventory.pouch.iter().position(|p| p.id == item.id).unwrap();
+                w.units[src].inventory.pouch.remove(idx);
+                let mut parts = Vec::new();
+                let (mut heal, mut dmg, mut boost) = (0, 0, 0.0);
+                let t = &mut w.units[target];
+                if item.heal > 0 {
+                    let before = t.hp;
+                    t.heal(item.heal);
+                    heal = t.hp - before;
+                    parts.push(format!("healed {heal} (HP {}/{})", t.hp, t.max_hp));
+                }
+                if item.damage > 0 {
+                    dmg = t.take_damage(item.damage, true);
+                    parts.push(format!("{dmg} damage (HP {}/{}){}", t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
+                }
+                if item.buff_pct > 0.0 {
+                    boost = 1.0 + item.buff_pct;
+                    t.apply_attack_boost(boost, item.duration);
+                    parts.push(format!("+{}% attack for {} rounds", roundi(item.buff_pct * 100.0), item.duration));
+                }
+                let who = if target == src { "themselves".to_string() } else { t.name.clone() };
+                if let CmdKind::Item { used, last_heal, last_damage, last_boost, .. } = &mut self.kind {
+                    (*used, *last_heal, *last_damage, *last_boost) = (true, heal, dmg, boost);
+                }
+                self.log = format!("[Item] {src_name} used {} on {who}: {}", item.name, if parts.is_empty() { "no effect".into() } else { parts.join(", ") });
             }
             CmdKind::Target { target } => {
                 if !w.units[src].is_alive() {
@@ -649,6 +692,66 @@ pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Opti
     }
     if !w.friends_of(caster).contains(&t) {
         return "not an ally".into();
+    }
+    String::new()
+}
+
+// ---- ItemCommand shared rules (planner, AI, command) --------------------------------------------------------
+
+/// ITEMUSE1 rule 3: every item use costs 1 AP (AP debt allowed).
+pub const ITEM_AP: i32 = 1;
+
+/// ItemCommand.pouch_item: the first consumable with `item_id` in the unit's battle pouch.
+pub fn pouch_item<'a>(w: &'a World, c: UnitId, item_id: &str) -> Option<&'a ItemDef> {
+    w.units[c].inventory.pouch.iter().find(|p| p.id == item_id)
+}
+
+pub fn pouch_count(w: &World, c: UnitId, item_id: &str) -> i32 {
+    w.units[c].inventory.pouch.iter().filter(|p| p.id == item_id).count() as i32
+}
+
+/// Distinct pouch item ids in slot order.
+pub fn pouch_ids(w: &World, c: UnitId) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for p in &w.units[c].inventory.pouch {
+        if !out.contains(&p.id) {
+            out.push(p.id.clone());
+        }
+    }
+    out
+}
+
+/// ItemCommand.side_problem: "" when `user` may aim `item` at `target` by side (and reach 0 = self only).
+pub fn item_side_problem(w: &World, user: UnitId, item: &ItemDef, target: Option<UnitId>) -> String {
+    let Some(target) = target else { return format!("Pick a target for {}.", item.name) };
+    let foe = w.foes_of(user).contains(&target);
+    if item.aims_at_foes() {
+        if !foe {
+            return format!("{} is thrown at a foe.", item.name);
+        }
+    } else if foe {
+        return format!("{} is used on yourself or an ally.", item.name);
+    }
+    if item.battle_reach() == 0 && target != user {
+        return format!("{} is used on yourself only.", item.name);
+    }
+    String::new()
+}
+
+/// ItemCommand.problem: why the item can't be used now ("" = it can).
+fn item_problem(w: &World, src: UnitId, target: UnitId, item: &ItemDef) -> String {
+    if !w.units[src].is_active() {
+        return format!("{} can't act", w.units[src].name);
+    }
+    if !w.units[target].is_active() {
+        return format!("{} is down", w.units[target].name);
+    }
+    let in_reach = target == src || (w.has(src) && w.has(target) && w.dist(src, target) <= item.battle_reach());
+    if !in_reach {
+        return format!("{} is out of reach", w.units[target].name);
+    }
+    if pouch_item(w, src, &item.id).is_none() {
+        return format!("none left in {}'s pouch", w.units[src].name);
     }
     String::new()
 }

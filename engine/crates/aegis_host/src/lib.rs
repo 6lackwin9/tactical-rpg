@@ -7,6 +7,7 @@
 //!   state                                      round, block, phase, outcome, units, grid
 //!   intents                                    every scheduled action this round (enemies included)
 //!   skills {unit}                              the skills the unit can plan now
+//!   items {unit, target?}                      battle-pouch items it can use (on target: CombatPlan.item_options)
 //!   preset {preset, unit?}                     AI-draft one ally (or every ally) with a PlanPresets tactic
 //!   plan {unit, steps: [...]}                  replace an ally's steps; reports each step's problem
 //!   plan_view {unit?}                          compiled timeline per ally (blocks, AP, targets, est. damage)
@@ -21,8 +22,10 @@
 //!   history                                    the mutating requests so far (feed them back to replay)
 //! Step shapes: {"mode": "engage", "skill", "target"}, {"mode": "self", "skill"}, {"mode": "ally", "skill",
 //! "target"}, {"mode": "area", "skill", "cell": [x, y]}, {"mode": "goto", "cell"}, {"mode": "move", "dir": [dx, dy],
-//! "tiles"}, {"mode": "withdraw"}. Units are referred to by index (as in `state`) or by name.
+//! "tiles"}, {"mode": "withdraw"}, {"mode": "item", "item", "target"}. Units are referred to by index (as in `state`)
+//! or by name.
 
+use aegis_battle::command;
 use aegis_battle::grid::{V2, GRID_H, GRID_W, TERRAIN_IDS};
 use aegis_battle::plan::{PlanStep, Step};
 use aegis_battle::session::{EncounterDef, Phase, Session};
@@ -109,6 +112,10 @@ impl Host {
                 }
                 json!({"ok": true, "plan": plan_view(s, None)})
             }
+            "items" => match unit_arg(s, req, "unit") {
+                Some(u) => json!({"ok": true, "items": items_of(s, u, unit_arg(s, req, "target"))}),
+                None => err("items needs a unit"),
+            },
             "plan" => set_plan(s, req),
             "probe" => probe(s, req),
             "add_step" => edit_steps(s, req, "add"),
@@ -241,6 +248,22 @@ fn scheduled(s: &Session) -> Vec<Value> {
         .collect()
 }
 
+/// ITEMUSE1 rule 2: one row per distinct offered pouch item with copies left this round; with a target, only the items
+/// that may be aimed at it (CombatPlan.item_options).
+fn items_of(s: &Session, u: UnitId, target: Option<UnitId>) -> Vec<Value> {
+    let mut out = Vec::new();
+    for id in command::pouch_ids(&s.w, u) {
+        let con = command::pouch_item(&s.w, u, &id).unwrap();
+        let left = s.plan.items_left(&s.w, u, &id, -1);
+        if left <= 0 || !con.offered_in_battle() || target.is_some_and(|t| !command::item_side_problem(&s.w, u, con, Some(t)).is_empty()) {
+            continue;
+        }
+        out.push(json!({"item": id, "name": con.name, "left": left, "heal": con.heal, "damage": con.damage, "buff_pct": con.buff_pct, "rounds": con.duration,
+            "reach": con.battle_reach(), "blocks": con.use_blocks.max(1), "ap": command::ITEM_AP, "at_foes": con.aims_at_foes(), "description": con.raw.get("description")}));
+    }
+    out
+}
+
 fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
     let w = &s.w;
     let cap = w.skill_cap_of(u);
@@ -278,6 +301,7 @@ fn step_from(s: &Session, v: &Value) -> Result<Step, String> {
             PlanStep::mv(book.lowest(Kind::Move), d, v.get("tiles").and_then(Value::as_i64).unwrap_or(1) as i32)
         }
         "withdraw" => PlanStep::withdraw(),
+        "item" => PlanStep::use_item(v.get("item").and_then(Value::as_str).ok_or("item step needs an item id")?, target()?),
         _ => return Err(format!("unknown step mode '{mode}'")),
     })
 }
