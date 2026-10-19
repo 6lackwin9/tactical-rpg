@@ -23,8 +23,8 @@ jobs:
     timeout-minutes: 30
     env:
       GODOT_VERSION: 4.7.2
-      RUSTUP_TOOLCHAIN: stable   # engine/rust-toolchain.toml pins the Windows (gnullvm) toolchain of the desktop
-      CARGO_TARGET_DIR: ${{ github.workspace }}/engine/target   # engine/.cargo/config.toml points at a Windows folder
+      RUSTUP_TOOLCHAIN: stable   # rust-toolchain.toml pins the Windows (gnullvm) toolchain of the desktop
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target   # .cargo/config.toml points at a Windows folder
       CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: engine -> target
+          workspaces: . -> target
 
       - name: Build and test
         run: bash tools/fc.sh gate

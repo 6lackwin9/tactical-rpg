@@ -19,7 +19,7 @@ SUDO=""
 log() { echo "[session-start] $*" >&2; }
 
 # --- Rust (rustup, stable): the engine gate ----------------------------------
-# engine/rust-toolchain.toml pins the desktop's Windows toolchain, and engine/.cargo/config.toml a Windows target
+# rust-toolchain.toml pins the desktop's Windows toolchain, and .cargo/config.toml a Windows target
 # folder: on Linux both are overridden through the environment.
 if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
   log "installing Rust (stable)"
@@ -30,7 +30,7 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   {
     echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\""
     echo "export RUSTUP_TOOLCHAIN=stable"
-    echo "export CARGO_TARGET_DIR=\"${CLAUDE_PROJECT_DIR:-$PWD}/engine/target\""
+    echo "export CARGO_TARGET_DIR=\"${CLAUDE_PROJECT_DIR:-$PWD}/target\""
   } >> "$CLAUDE_ENV_FILE"
 fi
 

@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/aegis_data",
-    "crates/aegis_rules",
-    "crates/aegis_battle",
-    "crates/aegis_world",
-    "crates/aegis_cli",
-    "crates/aegis_host",
-    "crates/aegis_gui",
+    "engine/crates/aegis_data",
+    "engine/crates/aegis_rules",
+    "engine/crates/aegis_battle",
+    "engine/crates/aegis_world",
+    "engine/crates/aegis_cli",
+    "engine/crates/aegis_host",
+    "engine/crates/aegis_gui",
 ]
 
 [workspace.package]

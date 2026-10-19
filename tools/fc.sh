@@ -11,13 +11,13 @@
 #   tools/fc.sh parity           re-record the Godot reference from legacy/ (export, traces, journeys; needs Godot 4.7.2)
 # The Godot-only commands (parse, parse-all, arena, dojo, run, replay, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
-# Build output: engine/.cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
+# Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 status=0
 # A linked worktree (.git is a file) builds into its own folder, so parallel lanes never share cargo's build lock or
-# overwrite each other's binaries (engine/.cargo/config.toml names one folder for every checkout).
+# overwrite each other's binaries (.cargo/config.toml names one folder for every checkout).
 if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f .git ]; then
-  base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' engine/.cargo/config.toml)
+  base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' .cargo/config.toml)
   export CARGO_TARGET_DIR="${base}-$(basename "$PWD")"
 fi
 
@@ -26,7 +26,7 @@ fi
 cargo_test() {
   local out try
   for try in 1 2 3 4; do
-    out=$(cd engine && cargo test --workspace --no-fail-fast "$@" 2>&1)
+    out=$(cargo test --workspace --no-fail-fast "$@" 2>&1)
     if echo "$out" | grep -q "os error 4551"; then
       echo "$out" | grep -o 'could not execute process `[^`]*\.exe`' | cut -d'`' -f2 | sort -u | while read -r exe; do rm -f "$exe"; done
       echo "[test] Smart App Control blocked a test binary; relinking (try $try)"
@@ -40,7 +40,7 @@ cargo_test() {
 
 build() {
   local out
-  if out=$(cd engine && cargo build --workspace 2>&1); then
+  if out=$(cargo build --workspace 2>&1); then
     echo "$out" | grep -E "^warning" -A4 | head -40
     echo "[build] ok"
   else
@@ -71,14 +71,14 @@ gate() {
 }
 
 aegis() {  # the CLI, built on demand
-  (cd engine && cargo run -q -p aegis_cli -- "$@")
+  cargo run -q -p aegis_cli -- "$@"
 }
 
 case "$1" in
   gate) gate ;;
   build) build ;;
   test) cargo_test "${@:2}" ;;
-  clippy) (cd engine && cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80) ;;
+  clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
   docs) docs_check || status=1 ;;
   content) aegis content "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;

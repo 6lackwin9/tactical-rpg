@@ -12,7 +12,7 @@ These rules are written for the desktop IDE. In the cloud there is no IDE: the I
 
 Whenever creating, deleting or renaming modules or crates:
 
-1. **Register them**: a new module gets its `pub mod` line in the crate's `lib.rs`; a new crate goes into `members` in `engine/Cargo.toml`; a new test file in `crates/<crate>/tests/` is found by cargo on its own.
+1. **Register them**: a new module gets its `pub mod` line in the crate's `lib.rs`; a new crate goes into `members` in the root `Cargo.toml`; a new test file in `crates/<crate>/tests/` is found by cargo on its own.
 2. **Put them where `docs/STRUCTURE.md` says**; if a path is not listed, ask the planner first.
 3. **Audit Diagnostics**: build, run the tests, and verify the IDE reports 0 errors and 0 warnings (rust-analyzer; Godot language-server errors on `engine/parity/godot/*.gd` are stale: those scripts run inside `legacy/`).
 

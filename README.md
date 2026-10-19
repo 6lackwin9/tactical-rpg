@@ -24,7 +24,7 @@ run.bat dev        :: the same for develop, in the sibling folder <checkout>-dev
 run.bat opt a      :: a design-review option build (see the header of run.bat)
 ```
 
-Or directly: `cd engine` then `cargo run --release -p aegis_gui` (main menu) or `-- screen=runner`. Saves and settings
+Or directly from the repo root: `cargo run --release -p aegis_gui` (main menu) or `-- screen=runner`. Saves and settings
 live in `%APPDATA%/Aegis`; Godot saves load in the engine unchanged. Controls, screens and the agent link (port 47800):
 [engine/README.md](engine/README.md).
 
@@ -43,12 +43,11 @@ Content changes go through the engine's writer, which validates them and writes 
 without changes stays byte for byte the same):
 
 ```bash
-cd engine
 cargo run -q -p aegis_cli -- content check
 cargo run -q -p aegis_cli -- content upsert units '{"id": "goblin_scout", "name": "Goblin Scout", "class_id": "ranger", "side": "enemy"}'
 cargo run -q -p aegis_cli -- content upsert lore @entry.json world=ashlands
 cargo run -q -p aegis_cli -- content remove units goblin_scout
-cargo run -q -p aegis_cli -- content apply ../data/seeds/<task>.json   # {"steps": [{"op": "upsert", "kind", "entry", "world"?}, ...]}
+cargo run -q -p aegis_cli -- content apply data/seeds/<task>.json   # {"steps": [{"op": "upsert", "kind", "entry", "world"?}, ...]}
 ```
 
 Kinds: the catalog kinds, `maps`, `quests` and `services`, and every world kind (with `world=<id>`). Entries are given in

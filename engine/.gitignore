@@ -1,4 +1,3 @@
-/target/
 **/*.rs.bk
 
 # Engine saves (written by aegis_game)

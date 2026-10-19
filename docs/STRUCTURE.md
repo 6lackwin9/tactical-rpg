@@ -5,7 +5,7 @@ file when a module, crate or folder is added. Since 2026-10-19 the game is the A
 (`scripts/`, `scenes/`, GDScript tools) is frozen in `legacy/` and its version of this file is
 `legacy/docs/STRUCTURE.md`. Which Godot file each engine module ports: `engine/docs/PORT_NOTES.md`.
 
-## Engine (`engine/`, one Cargo workspace)
+## Engine (`engine/`; the Cargo workspace is the repo root: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `.cargo/config.toml`, SPLIT1-1)
 
 | Path | Purpose | Status |
 | --- | --- | --- |

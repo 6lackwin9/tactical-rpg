@@ -74,13 +74,13 @@ setlocal EnableDelayedExpansion
     if /i "!OBR:~-2!"=="-c" set "OPTNAME=Option C"
     if not defined INOPT for %%d in ("%~dp0.") do set "DIR=%%~fd-opt"
     set "OPTNEW="
-    if not exist "!DIR!\engine\Cargo.toml" (
+    if not exist "!DIR!\engine\crates" (
       echo First option launch: creating !DIR! ...
       git worktree prune 2>nul
       git worktree add --quiet --detach "!DIR!" "origin/!OBR!"
       set "OPTNEW=1"
     )
-    if not exist "!DIR!\engine\Cargo.toml" (
+    if not exist "!DIR!\engine\crates" (
       echo Could not create the option folder, or the option has no engine: not launching.
       timeout /t 8 /nobreak >nul
       exit /b
@@ -170,14 +170,15 @@ setlocal EnableDelayedExpansion
     robocopy "!SAVES!" "!BACKUPS!\!STAMP!-!OLD:~0,7!" /e /njh /njs /nfl /ndl /np >nul
     for /f "skip=10 delims=" %%d in ('dir /b /ad /o-n "!BACKUPS!" 2^>nul') do rd /s /q "!BACKUPS!\%%d"
   )
-  if not exist "!DIR!\engine\Cargo.toml" (
+  if not exist "!DIR!\engine\crates" (
     echo !DIR! has no engine (an old Godot branch?^): not launching. The Godot build is in legacy\ or on the legacy branch.
     timeout /t 8 /nobreak >nul
     exit /b
   )
   set "CARGO_TARGET_DIR=!TARGET!"
   echo Building the engine into !TARGET! ...
-  pushd "!DIR!\engine"
+  rem the workspace is at the repo root since SPLIT1-1; older engine branches keep it in engine\
+  if exist "!DIR!\Cargo.toml" (pushd "!DIR!") else (pushd "!DIR!\engine")
   cargo build --release -q -p aegis_gui -p aegis_cli
   if errorlevel 1 echo The build failed: launching the last build if there is one.
   popd
