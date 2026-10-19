@@ -88,6 +88,8 @@ impl<G: Context> Shell<G> {
 
     fn frame(&mut self) {
         self.settle();
+        // The saved sound levels; a screen may play draft ones for this frame (the settings popup).
+        self.cx.audio.set_levels(&self.cx.settings.v);
         let cx = &mut self.cx;
         self.stack.last_mut().unwrap().tick(cx);
         self.settle();
@@ -116,6 +118,10 @@ impl<G: Context> Shell<G> {
             self.stack[n - 1].draw_tip(&mut p, self.mouse);
         }
         self.settle();
+        let cx = &self.cx;
+        let track = self.stack.iter().rev().find_map(|s| s.music(cx));
+        cx.audio.music(track.as_deref());
+        cx.audio.tick();
     }
 
     fn key(&mut self, k: Key) {
@@ -209,7 +215,7 @@ impl<G: Context> Shell<G> {
                 let cx = &self.cx;
                 let top = self.stack.last().unwrap();
                 json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": [W, H], "mouse": [self.mouse.0, self.mouse.1],
-                    "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets()})
+                    "music": cx.audio.wanted_music(), "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets()})
             }
             "click" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");

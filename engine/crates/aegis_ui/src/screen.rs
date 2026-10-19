@@ -1,9 +1,10 @@
 //! The screen stack (MenuRouter): every screen draws with the widget kit, records its widgets for the agent link and
-//! reacts to clicks, keys and the wheel. The shared context `Cx<G>` holds the engine's half (settings, art, queued
+//! reacts to clicks, keys and the wheel. The shared context `Cx<G>` holds the engine's half (settings, art, audio, queued
 //! navigation and notices, answers) and the game's half `G` (its data, the game in play, its log), which screens
 //! reach through Deref. Screens never call each other; they queue navigation in `cx.nav`.
 
 use crate::art::Art;
+use crate::audio::Audio;
 use crate::canvas::Rect;
 use crate::painter::Painter;
 use crate::ui::{self, Gfx, Ui, Widget, BODY, GOLD, H, TEXT, W};
@@ -131,6 +132,7 @@ pub trait Context: Sized + 'static {
 pub struct Cx<G> {
     pub settings: Settings,
     pub art: Art,
+    pub audio: Audio,
     pub nav: Vec<Nav<G>>,
     /// A one-shot message the shell shows as a notice popup.
     pub notice: Vec<String>,
@@ -208,6 +210,11 @@ pub trait Screen<G> {
     fn resume(&mut self, _cx: &mut Cx<G>) {}
     /// An agent link command the shell does not know (the battle screen's command API); None when not handled.
     fn command(&mut self, _cx: &Cx<G>, _body: &Value) -> Option<Value> {
+        None
+    }
+    /// The music this screen wants (a path under the game's audio folder); the shell plays the topmost screen's
+    /// wish, None lets the screen below choose.
+    fn music(&self, _cx: &Cx<G>) -> Option<String> {
         None
     }
 }
