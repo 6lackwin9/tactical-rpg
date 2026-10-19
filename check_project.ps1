@@ -1,7 +1,7 @@
 # ==============================================================================
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
 # Builds every engine crate, then runs every test: the rules, battle, world, data-loader, content-writer and Godot
-# parity suites (the parity suites skip themselves when engine/parity/out is missing; tools/fc.sh parity records it
+# parity suites (the parity suites skip themselves when games/emberwake/parity/out is missing; tools/fc.sh parity records it
 # from legacy/). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (
@@ -12,12 +12,12 @@ param (
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 # A linked worktree (.git is a file) builds into its own folder, so parallel lanes never share cargo's build lock or
-# overwrite each other's binaries (engine/.cargo/config.toml names one folder for every checkout).
+# overwrite each other's binaries (.cargo/config.toml names one folder for every checkout).
 if (-not $env:CARGO_TARGET_DIR -and (Test-Path (Join-Path $projectRoot ".git") -PathType Leaf)) {
-    $base = (Select-String -Path (Join-Path $projectRoot "engine\.cargo\config.toml") -Pattern '^target-dir = "(.*)"').Matches[0].Groups[1].Value
+    $base = (Select-String -Path (Join-Path $projectRoot ".cargo\config.toml") -Pattern '^target-dir = "(.*)"').Matches[0].Groups[1].Value
     $env:CARGO_TARGET_DIR = "$base-$(Split-Path -Leaf $projectRoot)"
 }
-Set-Location (Join-Path $projectRoot "engine")
+Set-Location $projectRoot   # the Cargo workspace is at the repo root (SPLIT1-1)
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     Write-Host "[ERROR] cargo not found: install Rust (rustup) and reopen the terminal." -ForegroundColor Red

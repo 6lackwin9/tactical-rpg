@@ -11,13 +11,19 @@ These describe how the engine is written today (transition 2026-10-19); follow t
 
 | Crate | Holds | Never |
 | --- | --- | --- |
-| `aegis_data` | typed catalog rows (`UnitDef`, `SkillDef`, `ItemDef`, ...) built from resolved JSON | game rules |
-| `aegis_rules` | pure rules: stats, gear, unit building, damage, statuses, Godot RNG, sort and `hash()` | battle state, IO |
-| `aegis_battle` | grid, paths, commands, resolver, planner, AI, encounter rules, session, sim | world state, drawing |
-| `aegis_world` | data loader (`source`) and writer (`store`), game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
-| `aegis_host` | the JSON command API over a battle session | rules of its own |
-| `aegis_cli` | `aegis`: sim, battle, serve, link, content | rules of its own |
-| `aegis_gui` | screens and dev tools; every battle action goes through `aegis_host` requests | game rules |
+| `aegis_core` | engine core: Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`) | anything game-specific |
+| `aegis_content` | engine content layer: file format, schema normalize and storage, content store and world graph, upsert / remove over the game's `Hooks` | anything game-specific |
+| `aegis_save` | engine save framework: slots, envelope, atomic write, migration runner (the game gives its format and steps) | anything game-specific |
+| `emberwake_data` | typed catalog rows (`UnitDef`, `SkillDef`, `ItemDef`, ...) built from resolved JSON | game rules |
+| `emberwake_rules` | pure rules: stats, gear, unit building, damage, statuses | battle state, IO |
+| `emberwake_battle` | grid, paths, commands, resolver, planner, AI, encounter rules, session, sim | world state, drawing |
+| `emberwake_content` | the game's data loader (`source`) and writer (`store`) on `aegis_content` | drawing, game state |
+| `emberwake_world` | game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
+| `aegis_host` | engine command API protocol: request routing, history, step counter over the game's `Commands` | anything game-specific |
+| `emberwake_host` | the game's battle command set and CLI commands; the `aegis` binary | rules of its own |
+| `aegis_cli` | engine command line shell: arguments, serve, link, content over the game's `Game` | anything game-specific |
+| `aegis_ui` | engine UI: drawing, widget kit, art, live tuning, agent link, screen stack (`Cx<G>`), window shell | anything game-specific |
+| `emberwake_gui` | the game's screens and dev tools on `aegis_ui`; every battle action goes through `emberwake_host` requests | game rules |
 
 A rule lives in exactly one place; the GUI, the CLI and the tests call it (the Godot build's "rules engines own logic, scenes only render" rule).
 
@@ -29,9 +35,9 @@ A rule lives in exactly one place; the GUI, the CLI and the tests call it (the G
 
 ## Godot semantics kept on purpose
 
-- JSON-shaped data (world entries, game state, saves, data files) stays `serde_json::Value` / `Dict` (`aegis_world::json`), read with the Variant helpers there (`to_int`, `to_float_or`, `gstr` for GDScript `str()`, `s` / `i` / `b` / `f` / `dget` / `aget`), so ports read line by line like the originals.
+- JSON-shaped data (world entries, game state, saves, data files) stays `serde_json::Value` / `Dict` (`aegis_core::json`), read with the Variant helpers there (`to_int`, `to_float_or`, `gstr` for GDScript `str()`, `s` / `i` / `b` / `f` / `dget` / `aget`), so ports read line by line like the originals.
 - Object order is insertion order (`serde_json` `preserve_order`): erase with `shift_remove`, never `remove`; use `IndexMap` / `IndexSet` where Godot iterated a Dictionary.
-- Godot quirks are reproduced, not "fixed": `roundi` rounds half away from zero, `JSON.parse` makes every number a float, `JSON.stringify` writes 14 significant digits, `hash()` is murmur3 over Variants, RNG is PCG32 (`aegis_rules::rng::GodotRng`) with draws in Godot's order. Changing one of these is a rule change (CLAUDE.md "Godot parity").
+- Godot quirks are reproduced, not "fixed": `roundi` rounds half away from zero, `JSON.parse` makes every number a float, `JSON.stringify` writes 14 significant digits, `hash()` is murmur3 over Variants, RNG is PCG32 (`aegis_core::rng::GodotRng`) with draws in Godot's order. Changing one of these is a rule change (CLAUDE.md "Godot parity").
 - Determinism: no wall clock, no thread timing, no `HashMap` iteration order in anything a battle, save or trace depends on.
 
 ## Style
@@ -43,6 +49,6 @@ A rule lives in exactly one place; the GUI, the CLI and the tests call it (the G
 
 ## Tests
 
-- Integration tests live in `crates/<crate>/tests/*.rs`; most compare the engine with the Godot reference in `engine/parity/out` (recorded from `legacy/`) and return early with a message when it is missing.
+- Integration tests live in `crates/<crate>/tests/*.rs`; most compare the engine with the Godot reference in `games/emberwake/parity/out` (recorded from `legacy/`) and return early with a message when it is missing.
 - New behaviour gets a test whose expectation comes from a rule or from the Godot reference, never a number nobody printed.
-- A test that changes data works on a scratch copy (`std::env::temp_dir()`), never on the shipped `data/` (see `tests/store.rs`).
+- A test that changes data works on a scratch copy (`std::env::temp_dir()`), never on the shipped `games/emberwake/data/` (see `tests/store.rs`).

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Writes the generated placeholder art (ART1-A): flat-shaded shapes with dark outlines in an Ashlands palette.
-#   python3 tools/gen_art.py [group ...] [--out DIR] [--list]   (default: every group, DIR = assets/art)
+#   python3 tools/gen_art.py [group ...] [--out DIR] [--list]   (default: every group, DIR = games/emberwake/assets/art)
 # Groups: characters classes items skills statuses terrain overlays region markers pins world_map backdrops menu.
 # Needs Pillow and numpy. Output is deterministic (seeded noise), so re-running rewrites identical files.
-# It writes PNGs under assets/, which the engine reads directly. Character art keys and map templates are data edits
-# (`aegis content`); manifest rows (data/assets/manifest.json) are not writable by the engine yet. Prints "wrote <path>" per group.
+# It writes PNGs under games/emberwake/assets/, which the engine reads directly. Character art keys and map templates are data edits
+# (`aegis content`); manifest rows (games/emberwake/data/assets/manifest.json) are not writable by the engine yet. Prints "wrote <path>" per group.
 import argparse
 import hashlib
 import math
@@ -32,7 +32,7 @@ WOOD = "#8a6a44"
 BONE = "#e8e0c8"
 SKIN = "#d9a679"
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "art")
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "games", "emberwake", "assets", "art")
 
 
 def rgb(h: str, a: int = 255):
@@ -303,7 +303,7 @@ def figure(c: Cv, s: dict) -> None:
 
 
 # Keys drawn as pixel-art sprites by tools/sprites/export_units.py (SPRITE1-A); this generator leaves them alone.
-# Keep in step with SPRITE_KEYS in tools/sprites/export_units.py and the SPRITE1-A rows of data/assets/manifest.json
+# Keep in step with SPRITE_KEYS in tools/sprites/export_units.py and the SPRITE1-A rows of games/emberwake/data/assets/manifest.json
 # (written by the Godot seed sprite1_a.gd, kept on the sprite1-a-godot branch).
 SPRITE_KEYS = {"warrior", "ranger", "brawler", "priest", "rogue", "mage", "mara_voss", "bryn_hale", "tev_quill",
                "sella_marsh", "dagny_coal", "alda_wren", "kit_vane", "oren_dusk"}

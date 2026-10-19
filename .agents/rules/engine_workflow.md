@@ -5,16 +5,16 @@ These rules are written for the desktop IDE. In the cloud there is no IDE: the I
 ## 1. Static Typing & Code Standards
 
 - Rust is statically typed; the build has no compiler warnings (`tools/fc.sh build` shows them). Clippy (`tools/fc.sh clippy`) is advisory: fix what new code adds, leave old lints to cleanup tasks.
-- Follow the patterns in the skill `rust-conventions`: port comments name the Godot function a piece mirrors, JSON-shaped data goes through `aegis_world::json` (Godot Variant semantics), `serde_json` keeps insertion order (`shift_remove`, never `remove`).
-- Game rules live in the library crates (`aegis_rules`, `aegis_battle`, `aegis_world`); `aegis_gui` only draws and calls the command API (`aegis_host`), so everything a player does is scriptable and testable without a window.
+- Follow the patterns in the skill `rust-conventions`: port comments name the Godot function a piece mirrors, JSON-shaped data goes through `aegis_core::json` (Godot Variant semantics), `serde_json` keeps insertion order (`shift_remove`, never `remove`).
+- Game rules live in the library crates (`emberwake_rules`, `emberwake_battle`, `emberwake_world`); `emberwake_gui` only draws and calls the command API (`aegis_host`), so everything a player does is scriptable and testable without a window.
 
 ## 2. File Creation, Deletion & Rename Protocol
 
 Whenever creating, deleting or renaming modules or crates:
 
-1. **Register them**: a new module gets its `pub mod` line in the crate's `lib.rs`; a new crate goes into `members` in `engine/Cargo.toml`; a new test file in `crates/<crate>/tests/` is found by cargo on its own.
+1. **Register them**: a new module gets its `pub mod` line in the crate's `lib.rs`; a new crate goes into `members` in the root `Cargo.toml`; a new test file in `crates/<crate>/tests/` is found by cargo on its own.
 2. **Put them where `docs/STRUCTURE.md` says**; if a path is not listed, ask the planner first.
-3. **Audit Diagnostics**: build, run the tests, and verify the IDE reports 0 errors and 0 warnings (rust-analyzer; Godot language-server errors on `engine/parity/godot/*.gd` are stale: those scripts run inside `legacy/`).
+3. **Audit Diagnostics**: build, run the tests, and verify the IDE reports 0 errors and 0 warnings (rust-analyzer; Godot language-server errors on `games/emberwake/parity/godot/*.gd` are stale: those scripts run inside `legacy/`).
 
 ## 3. Mandatory Post-Code Error Resolution Protocol
 
@@ -23,7 +23,7 @@ After making any code edits (`*.rs`, `Cargo.toml`, tools or configuration files)
 1. **Run the per-edit checks**: `tools/fc.sh build` after each edit, `tools/fc.sh test <filter>` for the behaviour you touched, and `check_project.ps1 -Fast -Quiet` (or `tools/fc.sh gate`) before handing work back.
 2. **Verify the check stages**:
    - Every crate builds with 0 errors and 0 compiler warnings.
-   - Every test passes, including the Godot parity suites (they skip themselves only when `engine/parity/out` is missing; record it with `tools/fc.sh parity`).
+   - Every test passes, including the Godot parity suites (they skip themselves only when `games/emberwake/parity/out` is missing; record it with `tools/fc.sh parity`).
    - Data edits leave `aegis content check` clean.
 3. **Auto-Remediate All Current Problems**: If any compile errors, warnings, markdownlint diagnostics, IDE diagnostics (IDE Problems tab), or test failures occur, the agent MUST diagnose the root cause, fix the code/docs, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 test failures)** before proceeding to documentation or committing. A Godot parity divergence caused by an intended, approved rule change is not fixed by editing the traces: the task retires the check it breaks (CLAUDE.md "Godot parity").
 

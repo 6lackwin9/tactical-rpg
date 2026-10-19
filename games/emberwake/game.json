@@ -1,0 +1,17 @@
+{
+	"id": "emberwake",
+	"title": "Emberwake",
+	"subtitle": "A small campaign of tactical battles.",
+	"version": "0.1.0",
+	"kit": "",
+	"engine": ">=0.1",
+	"worlds": [
+		"ashlands",
+		"iron_reaches",
+		"tidewrack"
+	],
+	"start_worlds": [
+		"ashlands"
+	],
+	"references": []
+}

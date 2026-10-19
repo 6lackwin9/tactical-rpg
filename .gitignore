@@ -35,3 +35,6 @@ test_*.txt
 
 # run.bat opt: branch the -opt worktree was opened from
 .opt_branch
+
+# Rust build output when CARGO_TARGET_DIR points inside the checkout (CI, the cloud hook)
+/target/

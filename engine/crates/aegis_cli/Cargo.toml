@@ -3,16 +3,8 @@ name = "aegis_cli"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "aegis"
-path = "src/main.rs"
-
 [dependencies]
-aegis_data = { path = "../aegis_data" }
-aegis_rules = { path = "../aegis_rules" }
-aegis_battle = { path = "../aegis_battle" }
-aegis_host = { path = "../aegis_host" }
-aegis_world = { path = "../aegis_world" }
+aegis_content = { path = "../aegis_content" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

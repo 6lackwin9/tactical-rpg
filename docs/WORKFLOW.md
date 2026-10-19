@@ -7,7 +7,7 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 
 | Bottleneck | Fix |
 | --- | --- |
-| Re-reading the codebase for context | `docs/GAME_BRIEF.md`, `ROADMAP.md`, `DECISIONS.md` (indexed from CLAUDE.md; index plus `docs/decisions/<system>.md`, read only the targeted system's file); `engine/docs/PORT_NOTES.md` maps each Godot file to its engine module |
+| Re-reading the codebase for context | `games/emberwake/docs/GAME_BRIEF.md`, `ROADMAP.md`, `DECISIONS.md` (indexed from CLAUDE.md; index plus `games/emberwake/docs/decisions/<system>.md` or `docs/decisions/workflow.md`, read only the targeted system's file); `engine/docs/PORT_NOTES.md` maps each Godot file to its engine module |
 | Full check floods output | `tools/fc.sh`: `build` (errors and warnings first), `test <filter>` (summary and failures only), `gate` (build + every test, ~30 s warm) |
 | Failures re-debugged from scratch | `known-issues` skill table; add every new cause |
 | Ad-hoc patch scripts truncating files / data edits by hand | `patch-and-seed` skill: Edit tool for text, `aegis content` (upsert, remove, JSON seeds) for data |
@@ -30,8 +30,8 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 | Tool | Use |
 | --- | --- |
 | `tools/fc.sh build / test / gate / clippy / docs / content / sim / parity` | Compact checks, data edits, the sim and the Godot reference (see the header of the script); `gate` is the commit gate in bash, `check_project.ps1` the same in PowerShell |
-| `aegis` (`engine/crates/aegis_cli`; `cargo run -q -p aegis_cli -- ...` in `engine/`) | `sim duel [level] [seeds]` (balance table, about a second per level), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `aegis-gui`), `content` (edit `data/`) |
-| `engine/parity/*.sh` (`tools/fc.sh parity`) | Record the frozen Godot build's reference from `legacy/` (exports, battle and world traces, journeys) for the parity suites; needs Godot 4.7.2 |
+| `aegis` (shell `engine/crates/aegis_cli`, binary in `games/emberwake/crates/emberwake_host`; `cargo run -q -p emberwake_host -- ...` from the repo root) | `sim duel [level] [seeds]` (balance table, about a second per level), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `emberwake`), `content` (edit `games/emberwake/data/`) |
+| `games/emberwake/parity/*.sh` (`tools/fc.sh parity`) | Record the frozen Godot build's reference from `legacy/` (exports, battle and world traces, journeys) for the parity suites; needs Godot 4.7.2 |
 | Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
 | Agent `change-reviewer` | Pre-commit review: the gate, code patterns, docs/README, known-issues match; read-only |
 | Skills `engine-checklist`, `known-issues`, `patch-and-seed` | Edit checklist, known issues and safe editing |
@@ -42,11 +42,11 @@ Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserke
 
 ## Iteration loop (agreed 2026-10-15)
 
-1. **Brainstorm** (`design-brainstorm`): options for systems -> `docs/ROADMAP.md` entries as `proposed`. User approves.
+1. **Brainstorm** (`design-brainstorm`): options for systems -> `games/emberwake/docs/ROADMAP.md` entries as `proposed`. User approves.
 2. **Plan** (main session, skill `planner`): milestones + change lists; user confirms before any change.
 3. **Build** (`builder` agent, feature branch `feat/<id>-<slug>`): implement + tests, report.
 4. **Review/ship** (planner): review (+ `change-reviewer`), summary to user, README/docs, `check_project.ps1`, commit, merge to `main`, push.
-5. **Balance** (`balance` agent, clean `main`, only `balance-ready` systems): `docs/BALANCE_REPORT.md`.
+5. **Balance** (`balance` agent, clean `main`, only `balance-ready` systems): `games/emberwake/docs/BALANCE_REPORT.md`.
 6. **Discuss** (`design-brainstorm` + user): fixes or logic changes -> back to step 1. Dropped ideas go to `docs/HISTORY.md` with reasons.
 
 Sims are parallel-safe (own sandbox per run); builders on separate systems use separate worktrees.

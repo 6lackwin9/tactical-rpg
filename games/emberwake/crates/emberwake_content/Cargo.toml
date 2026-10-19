@@ -1,0 +1,10 @@
+[package]
+name = "emberwake_content"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_content = { path = "../../../../engine/crates/aegis_content" }
+emberwake_rules = { path = "../emberwake_rules" }
+serde_json = { workspace = true }

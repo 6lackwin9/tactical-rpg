@@ -19,7 +19,7 @@ SUDO=""
 log() { echo "[session-start] $*" >&2; }
 
 # --- Rust (rustup, stable): the engine gate ----------------------------------
-# engine/rust-toolchain.toml pins the desktop's Windows toolchain, and engine/.cargo/config.toml a Windows target
+# rust-toolchain.toml pins the desktop's Windows toolchain, and .cargo/config.toml a Windows target
 # folder: on Linux both are overridden through the environment.
 if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
   log "installing Rust (stable)"
@@ -30,7 +30,7 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   {
     echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\""
     echo "export RUSTUP_TOOLCHAIN=stable"
-    echo "export CARGO_TARGET_DIR=\"${CLAUDE_PROJECT_DIR:-$PWD}/engine/target\""
+    echo "export CARGO_TARGET_DIR=\"${CLAUDE_PROJECT_DIR:-$PWD}/target\""
   } >> "$CLAUDE_ENV_FILE"
 fi
 
@@ -47,9 +47,9 @@ if ! command -v pwsh >/dev/null 2>&1; then
 fi
 
 # --- Rendering a game window off-screen (Xvfb + Mesa software Vulkan / OpenGL) ---
-# Meant to let a session run aegis-gui and screenshot it through its agent link (not yet tried in a cloud container;
+# Meant to let a session run the game GUI (emberwake) and screenshot it through its agent link (not yet tried in a cloud container;
 # wgpu needs Mesa's software Vulkan or OpenGL there):
-#   xvfb-run -a -s "-screen 0 1280x720x24" "$CARGO_TARGET_DIR/release/aegis-gui" screen=runner
+#   xvfb-run -a -s "-screen 0 1280x720x24" "$CARGO_TARGET_DIR/release/emberwake" screen=runner
 if ! command -v xvfb-run >/dev/null 2>&1; then
   log "installing Xvfb and Mesa"
   $SUDO apt-get update -qq >/dev/null
@@ -74,7 +74,7 @@ if [ ! -x "$GODOT_BIN" ]; then
     rm -rf "$tmp"
     log "WARNING: could not download Godot (github.com release assets and downloads.godotengine.org"
     log "         are blocked by this environment's network policy). The engine gate still runs; the Godot parity"
-    log "         reference (tools/fc.sh parity, engine/parity/*.sh) needs one of those hosts allowed."
+    log "         reference (tools/fc.sh parity, games/emberwake/parity/*.sh) needs one of those hosts allowed."
     exit 0
   fi
   python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$tmp/godot.zip" "$tmp"
@@ -83,7 +83,7 @@ if [ ! -x "$GODOT_BIN" ]; then
   rm -rf "$tmp"
 fi
 
-# engine/parity/*.sh read $GODOT (else godot on PATH).
+# games/emberwake/parity/*.sh read $GODOT (else godot on PATH).
 $SUDO ln -sf "$GODOT_BIN" /usr/local/bin/godot
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export GODOT=\"${GODOT_BIN}\"" >> "$CLAUDE_ENV_FILE"
@@ -94,7 +94,7 @@ LEGACY="${CLAUDE_PROJECT_DIR:-.}/legacy"
 if [ -f "$LEGACY/project.godot" ] && [ ! -d "$LEGACY/.godot" ]; then
   log "importing legacy/ (first run)"
   timeout 300 "$GODOT_BIN" --headless --path "$LEGACY" --import >/dev/null 2>&1 || \
-    log "WARNING: initial import of legacy/ exited non-zero; run engine/parity/export.sh to see why"
+    log "WARNING: initial import of legacy/ exited non-zero; run games/emberwake/parity/export.sh to see why"
 fi
 
 log "ready: $("$GODOT_BIN" --version 2>/dev/null | head -1), $(pwsh -v), $("$HOME/.cargo/bin/cargo" --version 2>/dev/null || cargo --version 2>/dev/null || echo 'no cargo')"

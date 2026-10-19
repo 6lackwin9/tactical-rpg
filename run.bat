@@ -1,5 +1,5 @@
 @echo off
-rem Opens the Scene Runner of the Aegis engine (aegis-gui screen=runner) on the latest code: launch any screen, battle,
+rem Opens the Scene Runner of the Aegis engine (emberwake screen=runner; aegis-gui on older branches) on the latest code: launch any screen, battle,
 rem forge or debug map. (Transition step 2, 2026-10-19: the Godot build is frozen in legacy\; see legacy\LEGACY.md.)
 rem   run.bat        latest main (released code) in this folder
 rem   run.bat dev    latest develop (finished tasks not yet released) in the sibling folder
@@ -15,10 +15,11 @@ rem                  kept in <opt folder>\.opt_branch, so run.bat with no args i
 rem                  reopens the same option on its newest commit; run_opt.bat does the same.
 rem Each folder builds into its own output folder (%LOCALAPPDATA%\Temp\aegis-target, -dev, -opt), so switching between
 rem main, dev and an option never rebuilds the others (a first build takes a few minutes, later ones seconds).
-rem The dev game also keeps its own saves and settings: the engine keeps them under %APPDATA%\Aegis,
-rem so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
-rem When a pull changed the code, it first copies that game's saves (%APPDATA%\Aegis\saves) to
-rem %APPDATA%\Aegis\save_backups\<date>-<old commit> and keeps the newest 10 (user 2026-10-17).
+rem The dev game also keeps its own saves and settings: the engine keeps them under %APPDATA%\Aegis\<game id>
+rem (%APPDATA%\Aegis before SPLIT1-8), so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
+rem When a pull changed the code, it first copies that game's saves (%APPDATA%\Aegis\emberwake\saves, or
+rem %APPDATA%\Aegis\saves before the game has its own) to save_backups\<date>-<old commit> beside them and keeps the
+rem newest 10 (user 2026-10-17).
 rem Before launching it fetches and fast-forwards the branch (about 1-2 s when nothing changed)
 rem and rebuilds the engine (cargo build --release). It launches the copy on disk when offline, when
 rem the pull fails, when that folder has local changes or is on another branch (it never stashes,
@@ -74,13 +75,13 @@ setlocal EnableDelayedExpansion
     if /i "!OBR:~-2!"=="-c" set "OPTNAME=Option C"
     if not defined INOPT for %%d in ("%~dp0.") do set "DIR=%%~fd-opt"
     set "OPTNEW="
-    if not exist "!DIR!\engine\Cargo.toml" (
+    if not exist "!DIR!\engine\crates" (
       echo First option launch: creating !DIR! ...
       git worktree prune 2>nul
       git worktree add --quiet --detach "!DIR!" "origin/!OBR!"
       set "OPTNEW=1"
     )
-    if not exist "!DIR!\engine\Cargo.toml" (
+    if not exist "!DIR!\engine\crates" (
       echo Could not create the option folder, or the option has no engine: not launching.
       timeout /t 8 /nobreak >nul
       exit /b
@@ -160,8 +161,13 @@ setlocal EnableDelayedExpansion
   )
   set "NEW="
   for /f %%h in ('git rev-parse HEAD 2^>nul') do set "NEW=%%h"
+  rem saves live under the game id since SPLIT1-8 (%APPDATA%\Aegis\emberwake\saves; copied from Aegis\saves on first start)
   set "SAVES=!APPDATA!\Aegis\saves"
   set "BACKUPS=!APPDATA!\Aegis\save_backups"
+  if exist "!APPDATA!\Aegis\emberwake\saves\*" (
+    set "SAVES=!APPDATA!\Aegis\emberwake\saves"
+    set "BACKUPS=!APPDATA!\Aegis\emberwake\save_backups"
+  )
   if defined OLD if not "!OLD!"=="!NEW!" if exist "!SAVES!\*" (
     set "STAMP="
     for /f %%t in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "STAMP=%%t"
@@ -170,15 +176,27 @@ setlocal EnableDelayedExpansion
     robocopy "!SAVES!" "!BACKUPS!\!STAMP!-!OLD:~0,7!" /e /njh /njs /nfl /ndl /np >nul
     for /f "skip=10 delims=" %%d in ('dir /b /ad /o-n "!BACKUPS!" 2^>nul') do rd /s /q "!BACKUPS!\%%d"
   )
-  if not exist "!DIR!\engine\Cargo.toml" (
+  if not exist "!DIR!\engine\crates" (
     echo !DIR! has no engine (an old Godot branch?^): not launching. The Godot build is in legacy\ or on the legacy branch.
     timeout /t 8 /nobreak >nul
     exit /b
   )
   set "CARGO_TARGET_DIR=!TARGET!"
   echo Building the engine into !TARGET! ...
-  pushd "!DIR!\engine"
-  cargo build --release -q -p aegis_gui -p aegis_cli
+  rem the workspace is at the repo root since SPLIT1-1; older engine branches keep it in engine\
+  if exist "!DIR!\Cargo.toml" (pushd "!DIR!") else (pushd "!DIR!\engine")
+  rem the aegis binary lives in emberwake_host since SPLIT1-6 (aegis_cli before); the game crates live in
+  rem games\emberwake\ since SPLIT1-7 (GUI emberwake_gui, binary emberwake.exe; aegis_gui and aegis-gui.exe before)
+  set "GUI=aegis_gui"
+  set "EXE=aegis-gui.exe"
+  set "CLI=aegis_cli"
+  if exist "!DIR!\engine\crates\emberwake_host" set "CLI=emberwake_host"
+  if exist "!DIR!\games\emberwake\crates\emberwake_gui" (
+    set "GUI=emberwake_gui"
+    set "EXE=emberwake.exe"
+    set "CLI=emberwake_host"
+  )
+  cargo build --release -q -p !GUI! -p !CLI!
   if errorlevel 1 echo The build failed: launching the last build if there is one.
   popd
   set "SHA=?"
@@ -188,14 +206,14 @@ setlocal EnableDelayedExpansion
   ) else (
     echo Running !CUR! at !SHA! from !DIR!
   )
-  if not exist "!TARGET!\release\aegis-gui.exe" (
+  if not exist "!TARGET!\release\!EXE!" (
     echo No build to launch: see the errors above.
     timeout /t 15 /nobreak >nul
     exit /b
   )
   rem Windows Smart App Control can block a freshly built exe started by cmd; PowerShell's Start-Process starts it
   rem (engine/docs/PORT_NOTES.md), retried a few times.
-  powershell -NoProfile -Command "$a = @{FilePath = '!TARGET!\release\aegis-gui.exe'; ArgumentList = 'screen=runner'; WorkingDirectory = '!DIR!\engine'}; for ($i = 1; $i -le 3; $i++) { try { Start-Process @a -ErrorAction Stop; exit 0 } catch { Start-Sleep 3 } }; Write-Host 'Windows blocked the engine build (Smart App Control). See engine/docs/PORT_NOTES.md.'; exit 1"
+  powershell -NoProfile -Command "$a = @{FilePath = '!TARGET!\release\!EXE!'; ArgumentList = 'screen=runner'; WorkingDirectory = '!DIR!\engine'}; for ($i = 1; $i -le 3; $i++) { try { Start-Process @a -ErrorAction Stop; exit 0 } catch { Start-Sleep 3 } }; Write-Host 'Windows blocked the engine build (Smart App Control). See engine/docs/PORT_NOTES.md.'; exit 1"
   timeout /t 4 /nobreak >nul
   exit /b
 )

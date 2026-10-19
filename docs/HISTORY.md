@@ -42,6 +42,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-19 | `ContentCatalog.upsert` seed scripts (`data/seeds/*.gd`) | deprecated | `aegis content` and JSON seeds (`aegis content apply`) | They needed the Godot runtime; the engine's writer writes the same storage format (checked against Godot's own save) |
 | 2026-10-19 | Per-system arena gates (`fc.sh gate auto`, GATE-SPLIT CI jobs) and `fc.sh parse / arena / dojo` | deprecated | One cargo gate (`tools/fc.sh gate`, `check_project.ps1`): build every crate, run every test (~30 s warm) | The Godot suites needed splitting because they took ~10 min in CI; the engine's whole test run takes seconds |
 | 2026-10-19 | Godot web export (`export_presets.cfg`, `web.yml`) | deprecated (on the `legacy` branch) | none yet (a WebAssembly build of the engine would be a new task) | It exported the Godot project; deploys were already paused (2026-10-17) |
+| 2026-10-19 | CLN-17 (wire or drop the uncalled Godot dojo checks, split long Godot suites) and CLN-18 (Godot Forge widget cleanup) | dropped (obsolete) | - | They cleaned up Godot code that is now frozen in `legacy/`; the engine's dojo and Forge are new code without those leftovers (RESCOPE1, user 2026-10-19) |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 

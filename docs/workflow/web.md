@@ -2,18 +2,18 @@
 
 **Retired 2026-10-19 with the Godot build (transition step 2).** This page describes the Godot web export: the preset
 (`export_presets.cfg`) and `.github/workflows/web.yml` are gone from `main` and stay on the `legacy` branch. The Aegis
-engine has no web build yet (a WebAssembly build of `aegis-gui` would be a new task); deploys were already paused
+engine has no web build yet (a WebAssembly build of `emberwake` would be a new task); deploys were already paused
 (decision "Web deploy paused (user 2026-10-17)"). Kept as the record of how the Godot build was published.
 
 A browser build for cross-platform testing and porting checks (user 2026-10-17). It is a release build and less debug-friendly than the desktop runner; playtesting and debugging stay on desktop.
 
 ## How it is built
 
-- Preset `Web` in `export_presets.cfg`: single-threaded templates (`variant/thread_support=false`), so the page needs no cross-origin isolation headers (`COOP`/`COEP`) and no `SharedArrayBuffer`. GitHub Pages cannot set those headers, so the threaded templates are not used. The preset adds `data/*.json` to the pack (the catalogs are read with `FileAccess`, not as resources).
+- Preset `Web` in `export_presets.cfg`: single-threaded templates (`variant/thread_support=false`), so the page needs no cross-origin isolation headers (`COOP`/`COEP`) and no `SharedArrayBuffer`. GitHub Pages cannot set those headers, so the threaded templates are not used. The preset adds `games/emberwake/data/*.json` to the pack (the catalogs are read with `FileAccess`, not as resources).
 - Renderer: the web always uses Compatibility (WebGL 2); desktop uses Forward+.
 - Entry scene (WEB3, user 2026-10-17): the browser build opens on the Main Menu (`application/run/main_scene.web` = `scenes/main_menu.tscn`, which installs the fallback fonts and hides Quit, since a page cannot close its tab); the desktop keeps the Scene Runner (`run/main_scene`). Debug web exports still reach the tools through the menu's Tools button.
 - Workflow `.github/workflows/web.yml` (user 2026-10-17: once a day and on request, to cut CI time; user 2026-10-17: deploy after each release), PAUSED until a playable build (user 2026-10-17): no after-release or 19:07 UTC runs for now; a manual run exports the build, uploads it as the `web-build` artifact (14 days) and deploys it (itch.io below; GitHub Pages when the repository variable `WEB_PAGES` is `true`); the `check` job that skips a scheduled run when `main` is unchanged stays in place for when the schedule returns. A manual run (**Actions > web > Run workflow** on `main`, or ask in the project chat: "deploy") always builds and deploys. Pushes to `main` no longer build; PRs into `main` build (no deploy) only when they change `export_presets.cfg` or `web.yml`.
-- Pack contents (REVIEW-F4): the preset's `exclude_filter` drops `build/*`, `scripts/tests/*` and `data/seeds/*` (tests and seed scripts are dev-only; nothing shipped preloads them, `asset_scan.gd` only names the paths as strings). Re-check with `strings build/web/index.pck | grep -c "scripts/tests/"` (expect 0) after adding references.
+- Pack contents (REVIEW-F4): the preset's `exclude_filter` drops `build/*`, `scripts/tests/*` and `games/emberwake/data/seeds/*` (tests and seed scripts are dev-only; nothing shipped preloads them, `asset_scan.gd` only names the paths as strings). Re-check with `strings build/web/index.pck | grep -c "scripts/tests/"` (expect 0) after adding references.
 - CI hardening (REVIEW-F4): the concurrency group cancels in-progress runs only for PRs (a running deploy is never cancelled); the `itch` job has a 15-minute timeout. Butler is pinned to 15.32.0 (`BUTLER_VERSION` + `BUTLER_SHA256` in the `itch` job, checked with `sha256sum -c` before unzip); to bump, fetch the new version and its sha256 from a GitHub runner, since the cloud proxy blocks broth.itch.zone.
 - Templates come from the GitHub release `.tpz` (downloads.godotengine.org is blocked in the cloud); only `web_nothreads_*.zip` and `version.txt` are kept, cached per Godot version.
 
@@ -58,7 +58,7 @@ The `itch` job in `web.yml` uploads each daily or manual run on `main` with butl
 | --- | --- |
 | Scene Runner developer panel | Reload scripts, Restart runner and the Arena/Dojo suite buttons do nothing useful: the browser cannot start processes and the pack holds no editable script sources |
 | Saves and prefs (`user://`) | Work, stored in the browser's IndexedDB for that site; clearing site data wipes them |
-| Emoji icons in labels and buttons | Render from bundled fallback fonts (`assets/fonts`, web only): monochrome instead of the desktop's color emoji; they add about 2.5 MB to the download (Noto Emoji is the full font so new emoji work without re-subsetting) |
+| Emoji icons in labels and buttons | Render from bundled fallback fonts (`games/emberwake/assets/fonts`, web only): monochrome instead of the desktop's color emoji; they add about 2.5 MB to the download (Noto Emoji is the full font so new emoji work without re-subsetting) |
 | Keys | F5 may reload the browser tab instead of the scene; use the Menu pill buttons |
 | Debug output | Release build: no debug-only logs (`combat_last.log` is skipped) and no remote debugger |
 | Audio | Starts only after the first click or key press (browser autoplay rule) |

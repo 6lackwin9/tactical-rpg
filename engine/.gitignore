@@ -1,8 +1,5 @@
-/target/
 **/*.rs.bk
 
 # Engine saves (written by aegis_game)
 /saves/
 
-# Godot reference exported by parity/export.sh
-/parity/out/

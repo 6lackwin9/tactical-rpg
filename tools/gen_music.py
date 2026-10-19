@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Writes the generated music loops (MUSIC1-A): original tracks synthesized from notes, no samples.
-#   python3 tools/gen_music.py [track ...] [--out DIR]      (default: every track, DIR = assets/audio/music)
+#   python3 tools/gen_music.py [track ...] [--out DIR]      (default: every track, DIR = games/emberwake/assets/audio/music)
 # Needs numpy and ffmpeg (libvorbis). Each track renders as one circular buffer, so notes, reverb and
 # noise beds that run past the end wrap onto the start and the loop has no seam. Prints "§ wrote <path> <s>s".
 import argparse
@@ -561,7 +561,7 @@ def write_ogg(stereo: np.ndarray, path: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("tracks", nargs="*")
-    ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "assets", "audio", "music"))
+    ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "games", "emberwake", "assets", "audio", "music"))
     args = ap.parse_args()
     if shutil.which("ffmpeg") is None:
         print("§ ffmpeg not found")

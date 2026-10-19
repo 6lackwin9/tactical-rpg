@@ -4,10 +4,10 @@ Set up 2026-10-18 at the user's ask (decision "Design review cycle (user 2026-10
 
 ## When a review is due
 
-The ledger `docs/design/OPTION_BRANCHES.md` records the `develop` commit each review covered (`Reviewed at`). A review is due when one of these holds since that commit:
+The ledger `games/emberwake/docs/design/OPTION_BRANCHES.md` records the `develop` commit each review covered (`Reviewed at`). A review is due when one of these holds since that commit:
 
-1. At least **6 playable task commits** have landed: commits whose title starts with a task id and that change `engine/` or `data/` (count with `git log --oneline <reviewed-at>..origin/develop -- engine data`, then drop handover, cleanup-only and test-only commits; before the transition, 2026-10-19, the paths were `scripts`, `scenes` and `data`).
-2. A roadmap system moved to `done` or `balance-ready` in `docs/ROADMAP.md`.
+1. At least **6 playable task commits** have landed: commits whose title starts with a task id and that change `engine/` or `games/emberwake/data/` (count with `git log --oneline <reviewed-at>..origin/develop -- engine data`, then drop handover, cleanup-only and test-only commits; before the transition, 2026-10-19, the paths were `scripts`, `scenes` and `data`).
+2. A roadmap system moved to `done` or `balance-ready` in `games/emberwake/docs/ROADMAP.md`.
 3. At least **3 days** have passed and at least one playable commit landed.
 
 A review is never due while the previous one still has an option set waiting on the user; the check then repeats the waiting items to the coordinator instead (the pending list).
@@ -21,7 +21,7 @@ A routine bound to the Design session fires at 12:20 and 18:20 UTC, after the 11
 ## The report
 
 - One Markdown file, `/mnt/project-files/design-review/DESIGN_REVIEW_<YYYY-MM-DD>.md`, linked in the Design thread with a one-line reply; a copy goes to `docs/specs/DESIGN_REVIEW<n>.md` when the user answers it (as DESIGN_REVIEW1).
-- Covers all of the game, one section per aspect: combat rules and AI, party and classes, progression (levels, skills, gear), items and economy, world map, travel and quests, story and dialogue, battles' pacing and difficulty (latest `docs/BALANCE_REPORT.md`), UI and readability, audio and art, saves and settings, and playtest notes (`playtests/` and notes the user sent).
+- Covers all of the game, one section per aspect: combat rules and AI, party and classes, progression (levels, skills, gear), items and economy, world map, travel and quests, story and dialogue, battles' pacing and difficulty (latest `games/emberwake/docs/BALANCE_REPORT.md`), UI and readability, audio and art, saves and settings, and playtest notes (`playtests/` and notes the user sent).
 - Each section: **Working** (what the changes since the last review got right, with the commit or task id), **Needs improvement** (the problem and the evidence: a sim number, a frame, a playtest note), and **Options** (2-3 ways to fix it, one-line consequence each, one recommended).
 - Evidence comes from the repo agents: `design-brainstorm` writes the options, `balance` runs a sim when a claim needs numbers (on `main`, so ask for a release first if needed). Frames for UI claims come from Xvfb renders (`cloud.md` "Environment").
 - The report ends with an approval list (one line per item, `approve / skip / pick A, B, C`) and the option builds below with the branch to launch for each.
@@ -38,7 +38,7 @@ A routine bound to the Design session fires at 12:20 and 18:20 UTC, after the 11
    - Data still goes through `aegis content`.
    - The build must run: `tools/fc.sh build` and the tests the change touches (`tools/fc.sh test <filter>`) pass before each push. Failing tests the mock change makes obsolete may be updated on the branch; say so in the ledger row (an option that diverges from a Godot parity test says so in the ledger; the check is retired only when the pick lands, CLAUDE.md "Godot parity"). No `change-reviewer` pass and no full gate (that happens when a pick lands).
    - Never merge an option branch into `develop` or another option branch, never force-push it.
-4. After every push, add the commit to `docs/design/OPTION_BRANCHES.md` (commit hash, id, one-line description, files, needs, conflicts with). The ledger lives on `develop`; ledger updates are docs-only commits straight to `develop` (`DESIGN-LEDGER: ...`, `Review: none (ledger)`, `Gate: fc.sh docs passed (docs-only)`).
+4. After every push, add the commit to `games/emberwake/docs/design/OPTION_BRANCHES.md` (commit hash, id, one-line description, files, needs, conflicts with). The ledger lives on `develop`; ledger updates are docs-only commits straight to `develop` (`DESIGN-LEDGER: ...`, `Review: none (ledger)`, `Gate: fc.sh docs passed (docs-only)`).
 5. Rows that touch the same file as a row of another option get `conflicts with <id>` so a mix can be planned before cherry-picking.
 
 ## How the user plays an option
