@@ -91,7 +91,7 @@ F12 screenshot.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the top screen's state and every
-widget with its id, text, rect, state and hover card), `click {id}`, `hover {id}`, `key {key}` (up / down / left /
+widget with its id, text, rect, state and hover card), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to: [x, y]}` (press, move, release: slider drags), `hover {id}`, `key {key}` (up / down / left /
 right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 

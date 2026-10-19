@@ -1,6 +1,6 @@
 //! The window shell: one window over the screen stack; the logical canvas is 640x360, pixel art scales with nearest
 //! sampling and the UI is drawn smooth at native resolution. The agent link (TCP, `aegis link`) sees and drives
-//! exactly what the player sees: ui_tree, click, hover, key, back, screenshot, game, plus whatever the top screen
+//! exactly what the player sees: ui_tree, click, drag, hover, key, back, screenshot, game, plus whatever the top screen
 //! answers (`Screen::command`). Keys: arrows, Enter, Space, Esc, Tab, Page Up / Down and characters go to the top
 //! screen; F12 takes a screenshot; right click goes back.
 
@@ -8,7 +8,8 @@ use crate::bridge;
 use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
-use crate::ui::{Gfx, BG, H, W};
+use crate::canvas::{rgb, Rect};
+use crate::ui::{Gfx, Kit, BG, BODY, GOLD, H, LINE, MODAL, PANEL_HI, RADIUS, TEXT, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -36,14 +37,30 @@ struct Shell<G> {
     gfx: Gfx,
     stack: Vec<Box<dyn Screen<G>>>,
     mouse: (i32, i32),
+    /// The slider being dragged (its id) and the step widget it last set.
+    drag: Option<(String, String)>,
+}
+
+/// The rect of a widget's agent info.
+fn info_rect(w: &Value) -> Rect {
+    let r = |i: usize| w["rect"][i].as_i64().unwrap_or(0) as i32;
+    Rect::new(r(0), r(1), r(2), r(3))
+}
+
+/// The topmost enabled widget info under `pos`; an open select's options lie over everything (like `ui::hit`).
+fn info_at(infos: &[Value], pos: (i32, i32)) -> Option<&Value> {
+    let under = |w: &&Value| w["enabled"] == json!(true) && info_rect(w).contains(pos.0, pos.1);
+    infos.iter().rev().filter(|w| w["kind"] == "option").find(under).or_else(|| infos.iter().rev().find(under))
 }
 
 impl<G: Context> Shell<G> {
-    /// Applies queued navigation and notices.
+    /// Applies queued navigation and notices (a screen change closes an open choice list).
     fn settle(&mut self) {
         let mut guard = 0;
         while (!self.cx.nav.is_empty() || !self.cx.notice.is_empty()) && guard < 32 {
             guard += 1;
+            self.gfx.kit.open = None;
+            self.drag = None;
             let navs: Vec<Nav<G>> = self.cx.nav.drain(..).collect();
             for n in navs {
                 match n {
@@ -85,11 +102,25 @@ impl<G: Context> Shell<G> {
             self.stack[i].draw(&mut self.cx, &mut self.gfx, mouse, live);
         }
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
-        self.stack[n - 1].draw_tip(&mut p, self.mouse);
+        if self.gfx.kit.open.is_some() {
+            // The open choice list goes over everything the screen drew; no hover card while it is open.
+            let infos = self.stack[n - 1].widgets();
+            let opts: Vec<&Value> = infos.iter().filter(|w| w["kind"] == "option").collect();
+            if opts.is_empty() {
+                self.gfx.kit.open = None;
+            } else {
+                draw_options(&mut p, &opts, self.mouse);
+            }
+        } else {
+            self.stack[n - 1].draw_tip(&mut p, self.mouse);
+        }
         self.settle();
     }
 
     fn key(&mut self, k: Key) {
+        if k == Key::Esc && self.gfx.kit.open.take().is_some() {
+            return;
+        }
         let cx = &mut self.cx;
         let top = self.stack.last_mut().unwrap();
         if k == Key::Esc {
@@ -100,13 +131,66 @@ impl<G: Context> Shell<G> {
         self.settle();
     }
 
+    /// A left click: opens or closes a choice list, picks from it, starts a slider drag, or clicks the widget.
     fn click(&mut self) {
-        let (cx, pos) = (&mut self.cx, self.mouse);
+        let pos = self.mouse;
+        let infos = self.stack.last().unwrap().widgets();
+        let at = info_at(&infos, pos).cloned();
+        let kind = at.as_ref().map(|w| w["kind"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        if self.gfx.kit.open.take().is_some() {
+            // An open list: a pick goes through, any other click only closes it.
+            if kind == "option" {
+                let cx = &mut self.cx;
+                self.stack.last_mut().unwrap().click(cx, pos);
+            }
+            self.settle();
+            return;
+        }
+        let id = at.as_ref().map(|w| w["id"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        if kind == "select" {
+            self.gfx.kit.open = Some(id);
+            return;
+        }
+        if kind == "slider_step" {
+            if let Some((slider, _)) = id.rsplit_once(".step.") {
+                self.drag = Some((slider.to_string(), id.clone()));
+            }
+        }
+        let cx = &mut self.cx;
         self.stack.last_mut().unwrap().click(cx, pos);
         self.settle();
     }
 
+    /// The mouse moved: a slider drag follows it along the track (the step under its x).
+    fn drag_to(&mut self) {
+        let Some((slider, last)) = self.drag.clone() else { return };
+        let prefix = format!("{slider}.step.");
+        let infos = self.stack.last().unwrap().widgets();
+        let step = infos.iter().find(|w| w["id"].as_str().is_some_and(|i| i.starts_with(&prefix)) && {
+            let r = info_rect(w);
+            self.mouse.0 >= r.x && self.mouse.0 < r.x + r.w
+        });
+        let step = step.or_else(|| {
+            // Past either end: the first or last step.
+            let steps: Vec<&Value> = infos.iter().filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with(&prefix))).collect();
+            let first = steps.first().map(|w| info_rect(w))?;
+            if self.mouse.0 < first.x { steps.first().copied() } else { steps.last().copied() }
+        });
+        let Some(step) = step else { return };
+        let id = step["id"].as_str().unwrap_or("").to_string();
+        if id != last {
+            let r = info_rect(step);
+            let cx = &mut self.cx;
+            self.stack.last_mut().unwrap().click(cx, (r.x + r.w / 2, r.y + r.h / 2));
+            self.drag = Some((slider, id));
+            self.settle();
+        }
+    }
+
     fn back(&mut self) {
+        if self.gfx.kit.open.take().is_some() {
+            return;
+        }
         let cx = &mut self.cx;
         self.stack.last_mut().unwrap().back(cx);
         self.settle();
@@ -128,10 +212,43 @@ impl<G: Context> Shell<G> {
             }
             "click" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
-                let cx = &mut self.cx;
-                match self.stack.last_mut().unwrap().click_id(cx, id) {
-                    Ok(()) => json!({"ok": true, "clicked": id}),
-                    Err(e) => json!({"ok": false, "error": e}),
+                let infos = self.stack.last().unwrap().widgets();
+                let target = infos.iter().find(|w| w["id"] == id).cloned();
+                if target.as_ref().is_some_and(|w| w["kind"] == "select" && w["enabled"] == json!(true)) {
+                    // A select opens (or closes) its list; the reply names the options to click.
+                    let open = self.gfx.kit.open.as_deref() != Some(id);
+                    self.gfx.kit.open = open.then(|| id.to_string());
+                    self.frame();
+                    let options: Vec<Value> = self.stack.last().unwrap().widgets().into_iter().filter(|w| w["kind"] == "option").map(|w| json!({"id": w["id"], "text": w["text"]})).collect();
+                    json!({"ok": true, "clicked": id, "open": open, "options": options})
+                } else {
+                    // Any other click closes an open list (a pick from it still goes through).
+                    self.gfx.kit.open = None;
+                    let cx = &mut self.cx;
+                    match self.stack.last_mut().unwrap().click_id(cx, id) {
+                        Ok(()) => json!({"ok": true, "clicked": id}),
+                        Err(e) => json!({"ok": false, "error": e}),
+                    }
+                }
+            }
+            "drag" => {
+                // Press on widget `id`, move to `to` [x, y] in 8 steps, release: the real mouse path (slider drags).
+                let id = body.get("id").and_then(Value::as_str).unwrap_or("");
+                let to = (body["to"][0].as_i64().unwrap_or(0) as i32, body["to"][1].as_i64().unwrap_or(0) as i32);
+                let infos = self.stack.last().unwrap().widgets();
+                match infos.iter().find(|w| w["id"] == id).map(info_rect) {
+                    Some(r) => {
+                        let from = (r.x + r.w / 2, r.y + r.h / 2);
+                        self.mouse = from;
+                        self.click();
+                        for t in 1..=8 {
+                            self.mouse = (from.0 + (to.0 - from.0) * t / 8, from.1 + (to.1 - from.1) * t / 8);
+                            self.drag_to();
+                        }
+                        self.drag = None;
+                        json!({"ok": true, "dragged": id, "to": [to.0, to.1]})
+                    }
+                    None => json!({"ok": false, "error": format!("no widget '{id}'")}),
                 }
             }
             "hover" => {
@@ -223,8 +340,8 @@ impl<G: Context> ApplicationHandler for App<G> {
         let pixels = Pixels::new(pw, ph, SurfaceTexture::new(pw, ph, window.clone())).expect("pixels");
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
-        let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes) };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0) };
+        let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -266,6 +383,7 @@ impl<G: Context> ApplicationHandler for App<G> {
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.shell.as_mut() {
                     s.mouse = s.gfx.view.to_logical(position.x as f32, position.y as f32);
+                    s.drag_to();
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -284,6 +402,11 @@ impl<G: Context> ApplicationHandler for App<G> {
                     MouseButton::Left => s.click(),
                     MouseButton::Right => s.back(),
                     _ => {}
+                }
+            }
+            WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Left, .. } => {
+                if let Some(s) = self.shell.as_mut() {
+                    s.drag = None;
                 }
             }
             WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Pressed, .. }, .. } => {
@@ -317,6 +440,21 @@ impl<G: Context> ApplicationHandler for App<G> {
             }
             _ => {}
         }
+    }
+}
+
+/// An open select's choice list, over the screen: one row per option, the chosen one in gold, the hovered one lit.
+fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32)) {
+    let rects: Vec<Rect> = opts.iter().map(|w| info_rect(w)).collect();
+    let (x0, y0) = (rects.iter().map(|r| r.x).min().unwrap_or(0), rects.iter().map(|r| r.y).min().unwrap_or(0));
+    let (x1, y1) = (rects.iter().map(|r| r.x + r.w).max().unwrap_or(0), rects.iter().map(|r| r.y + r.h).max().unwrap_or(0));
+    p.panel(Rect::new(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2), MODAL, GOLD, RADIUS);
+    for (w, r) in opts.iter().zip(&rects) {
+        if r.contains(mouse.0, mouse.1) {
+            p.panel(*r, PANEL_HI, rgb(110, 140, 196), RADIUS);
+        }
+        let chosen = w["active"] == json!(true);
+        p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, w["text"].as_str().unwrap_or(""), BODY, r.w as f32 - 10.0, if chosen { GOLD } else { TEXT });
     }
 }
 
