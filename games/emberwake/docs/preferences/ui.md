@@ -26,3 +26,9 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 ## Test tools
 
 - Dev-only UI appears only in test scenes (Forge, scenario scenes), never over the real game; the Scene Runner pill follows this (2026-10-18).
+
+## Character popup (user playtest 2026-10-20)
+
+- Skills tab: drag a skill from the list onto a loadout slot (clicking still works); each filled slot has < > arrows over the unlocked ranks (decision "Skill rank choice").
+- Gear tab: three columns like the Godot gear dojo: character info and stats | equipped slots (click to unequip, with the stat change) | party stash (click or drag onto a slot to equip); the battle pouch under the slots; the detail pane explains the hovered row.
+- Every row (stats, skills, gear) is hoverable and fills the detail pane; "Move to a row" must never stay on screen while the mouse is over a row.
