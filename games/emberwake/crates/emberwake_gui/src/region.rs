@@ -4,6 +4,7 @@
 //! a world-map exit opens the world map. Map-less locations show their exits as buttons.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, TITLE, W};
 use aegis_ui::widget_plumbing;
@@ -31,7 +32,7 @@ pub enum RAct {
     Sell(String),
     CloseShop,
     TogglePick(String),
-    Recipient,
+    PickRecipient(usize),
     ConfirmTurnIn,
     CancelTurnIn,
     CloseLore,
@@ -413,10 +414,7 @@ impl RegionMap {
                     self.picks.push(id);
                 }
             }
-            RAct::Recipient => {
-                let n = cx.gs().party.members.len().max(1);
-                self.recipient = (self.recipient + 1) % n;
-            }
+            RAct::PickRecipient(i) => self.recipient = i,
             RAct::ConfirmTurnIn => {
                 let rec = cx.gs().party.members.get(self.recipient).map(|m| m.id.clone()).unwrap_or_default();
                 let picks = self.picks.clone();
@@ -459,7 +457,7 @@ fn region_key(ch: char, x: i64, y: i64) -> Option<String> {
         '~' => "region_water",
         _ => return None,
     };
-    Some(format!("ui/{base}_{}_icon", (x * 7 + y * 13).rem_euclid(3)))
+    Some(format!("{base}_{}", (x * 7 + y * 13).rem_euclid(3)))
 }
 
 impl Screen<GameCx> for RegionMap {
@@ -502,7 +500,7 @@ impl Screen<GameCx> for RegionMap {
                         continue;
                     }
                     let key = region_key(*ch, x as i64, y as i64);
-                    match key.and_then(|k| cx.art.get(&k, ts)) {
+                    match key.and_then(|k| cx.art.get("ui", &k, "icon", ts)) {
                         Some(img) => ui.p.image(img, r),
                         None => ui.p.fill(r, match ch {
                             '.' => rgb(70, 90, 64),
@@ -638,7 +636,7 @@ impl Screen<GameCx> for RegionMap {
             ui.p.panel(pbox, rgb(22, 30, 48), BORDER, 2.0);
             let speaker = d.resolve(&gs.world_id, "characters", &s(&view, "speaker"));
             let art = s(speaker, "art");
-            match cx.art.get(&format!("unit/{art}_portrait"), 89) {
+            match cx.art.portrait(&art, 89) {
                 Some(img) => ui.p.image(img, Rect::new(8, 214, 89, 89)),
                 None => ui.p.text_center(52.0, 250.0, &s(&view, "speaker_name").chars().next().unwrap_or('?').to_string(), 20.0, GOLD),
             }
@@ -776,6 +774,12 @@ impl Screen<GameCx> for RegionMap {
             "lore": self.lore.as_ref().map(|l| l.0.clone())})
     }
 
+    /// MUSIC2: shop while the shop is open, else the location's kind.
+    fn music(&self, cx: &Cx) -> Option<String> {
+        let shop = self.runner.as_ref().is_some_and(|r| !r.closed && !r.shop_qid.is_empty());
+        cx.game.as_ref().and_then(|g| music::game_track(cx, music::region_context(&cx.data, &g.gs, shop)))
+    }
+
     widget_plumbing!();
 }
 
@@ -866,9 +870,9 @@ impl RegionMap {
                 y += 14;
             }
         }
-        let rec = gs.party.members.get(self.recipient).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+        let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
         ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, DIM);
-        ui.dropdown("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &rec, RAct::Recipient, gs.party.members.len() > 1, Vec::new());
+        ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, RAct::PickRecipient, gs.party.members.len() > 1, Vec::new());
         ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", RAct::CancelTurnIn, true);
         ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", RAct::ConfirmTurnIn, self.picks.len() as i64 <= allowed);
     }
@@ -888,4 +892,37 @@ pub fn item_line(cx: &Cx, item: &str) -> String {
     }
     parts.push(format!("{} · Owned {owned}", s_or(e, "item_type", "ITEM").to_lowercase()));
     parts.join(" · ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::region_key;
+    use aegis_ui::art::Art;
+    use std::path::Path;
+
+    /// ASSETORG1: every PNG sits in a folder per thing, assets/art/<category>/<id>/<variant>.png.
+    #[test]
+    fn art_is_one_folder_per_thing() {
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let art = game.join("assets/art");
+        let mut stray = Vec::new();
+        let mut walk = vec![(art.clone(), 0)];
+        while let Some((dir, depth)) = walk.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk.push((p, depth + 1));
+                } else if p.extension().is_some_and(|x| x == "png") && depth != 2 {
+                    stray.push(p.strip_prefix(&art).unwrap().display().to_string());
+                }
+            }
+        }
+        assert!(stray.is_empty(), "art outside <category>/<id>/<variant>.png: {stray:?}");
+        for (x, y) in [(0, 0), (1, 0), (2, 0)] {
+            for ch in ['.', '#', '~'] {
+                let id = region_key(ch, x, y).unwrap();
+                assert!(Art::path(&game, "ui", &id, "icon").is_file(), "ui/{id}/icon.png");
+            }
+        }
+    }
 }

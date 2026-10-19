@@ -11,7 +11,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 * **Game data:** the project's `games/emberwake/data/` folder (catalog, worlds, maps, quests, dialogue services, XP curve), read by the
   engine's own loader (`emberwake_content::source`) with the field tables in `games/emberwake/schema.json`; no Godot export is
   needed to play. `data=<dir>` points the GUI or CLI at another data folder, or at a Godot export folder.
-* **Saves and settings:** per game under its id, `%APPDATA%/Aegis/emberwake/saves` and `%APPDATA%/Aegis/emberwake/settings.json` (outside the repo; the first start after SPLIT1-8 copies the old shared `%APPDATA%/Aegis/saves` and `settings.json` there and leaves them; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged.
+* **Saves and settings:** per game under its id, `%APPDATA%/Aegis/emberwake/saves` and `%APPDATA%/Aegis/emberwake/settings.json` (outside the repo; the first start after SPLIT1-8 copies the old shared `%APPDATA%/Aegis/saves` and `settings.json` there and leaves them; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged. The engine owns the sound, display and text-size settings (`aegis_ui::screen::Settings`) and applies them when they change (PORT-SETTINGS): window mode (windowed at the chosen size, borderless or exclusive fullscreen), vsync, frame-rate cap and text size (Small 0.85 to Extra large 1.3) and the four volumes and mute (PORT-AUDIO); the game adds its own keys.
+* **Drag and drop (UIKIT2):** a screen marks a widget draggable with a payload key (`Ui::draggable("stash.3")`) and widgets as drop targets (`Ui::drop_target("slot.weapon")`); `Screen::can_drop` says which targets take a payload (outlined while dragging, gold under the cursor) and `Screen::accept_drop` acts on a release over one. A press on a draggable widget clicks on release when the mouse did not move; a move of more than 3 canvas pixels picks it up (a ghost card follows the cursor, `Ui::dragging` lets the screen preview); Esc, right click or a release elsewhere cancels.
+* **Sound and music (PORT-AUDIO):** `aegis_ui::audio` plays the game's `assets/audio` files (WAV and Ogg Vorbis, through rodio) on four levels (master times music, effects or interface), 8 effect voices and 2 interface voices (the oldest restarts when all are busy), and one looping music track that crossfades (1 s; 2 s from silence; 6 dB under the effects). Each screen names its track (`Screen::music`); the shell plays the topmost screen's choice, so overlays keep the music below. Emberwake picks tracks with the MUSIC1 chain (`emberwake_gui/src/music.rs`: menu, region by location kind or shop, travel, combat or boss, each tried per region, world and lineage before the plain context) and battle sounds from the resolver log; the settings popup plays the draft levels and a sample per volume slider. Without a sound device everything stays silent.
 
 ## Workspace
 
@@ -28,7 +30,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
 | `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
 | `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim duel`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply) |
-| `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader, live tuning files, agent link, screen stack with the game's context, window shell and event loop |
+| `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader (`assets/art/<category>/<id>/<variant>.png`, one folder per thing), live tuning files, agent link, screen stack with the game's context, window shell and event loop |
 | `../games/emberwake/crates/emberwake_gui/` | `emberwake`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo) on `aegis_ui`; agent link on port 47800 |
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `emberwake_gui`; in git history |
 | `crates/aegis_core/` (old) | Retired 2026-10-19 with `aegis_app` (its only user); in git history. The name is reused by the engine core above (SPLIT1-2) |
@@ -90,8 +92,8 @@ or PageUp / PageDown. Keys: Enter confirm, Space step / next round, A autoplay, 
 F12 screenshot.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
-runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the top screen's state and every
-widget with its id, text, rect, state and hover card), `click {id}`, `hover {id}`, `key {key}` (up / down / left /
+runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every
+widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `key {key}` (up / down / left /
 right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 

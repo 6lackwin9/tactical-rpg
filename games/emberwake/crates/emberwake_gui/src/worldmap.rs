@@ -3,6 +3,7 @@
 //! (HealRules.make_camp) and entering the location the party stands on. Esc / Back returns to the region map.
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
+use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
@@ -101,8 +102,8 @@ impl Screen<GameCx> for WorldMap {
         let mut ui: Ui<WAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgb(12, 16, 24));
         let lineage = d.lineage(&gs.world_id);
-        let bg = lineage.iter().rev().find_map(|w| cx.art.get(&format!("ui/{w}_world_map_background"), 500).map(|_| w.clone()));
-        match bg.and_then(|w| cx.art.get(&format!("ui/{w}_world_map_background"), 500)) {
+        let bg = lineage.iter().rev().find_map(|w| cx.art.get("ui", &format!("{w}_world_map"), "background", 500).map(|_| w.clone()));
+        match bg.and_then(|w| cx.art.get("ui", &format!("{w}_world_map"), "background", 500)) {
             Some(img) => ui.p.image(img, Rect::new(MAP.x, MAP.y + (MAP.h - 281) / 2, 500, 281)),
             None => ui.p.fill(MAP, rgb(30, 30, 36)),
         }
@@ -151,7 +152,7 @@ impl Screen<GameCx> for WorldMap {
             if is_here || sel {
                 ui.p.circle(x, y, 9.0, if is_here { rgba(244, 198, 84, 160) } else { rgba(140, 196, 236, 160) });
             }
-            match cx.art.get(&format!("ui/pin_{}_icon", s(n, "kind")), 14) {
+            match cx.art.get("ui", &format!("pin_{}", s(n, "kind")), "icon", 14) {
                 Some(img) => ui.p.image(img, r),
                 None => ui.p.circle(x, y, 5.0, rgb(210, 210, 220)),
             }
@@ -179,7 +180,7 @@ impl Screen<GameCx> for WorldMap {
         ui.p.panel(lg, rgba(10, 14, 22, 220), BORDER, 2.0);
         let mut ly = lg.y as f32 + 3.0;
         for (kind, label) in [("fortress", "Fortress"), ("town", "Town"), ("camp", "Camp"), ("ruin", "Ruin"), ("gate", "Gate"), ("wild", "Wild")] {
-            if let Some(img) = cx.art.get(&format!("ui/pin_{kind}_icon"), 9) {
+            if let Some(img) = cx.art.get("ui", &format!("pin_{kind}"), "icon", 9) {
                 ui.p.image(img, Rect::new(lg.x + 4, ly as i32, 9, 9));
             }
             ui.p.text(lg.x as f32 + 17.0, ly, label, SMALL, TEXT);
@@ -230,6 +231,10 @@ impl Screen<GameCx> for WorldMap {
 
     fn state(&self, cx: &Cx) -> Value {
         json!({"selected": self.selected, "view": travel::view(&cx.data, cx.gs())})
+    }
+
+    fn music(&self, cx: &Cx) -> Option<String> {
+        music::game_track(cx, music::TRAVEL)
     }
 
     widget_plumbing!();

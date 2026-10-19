@@ -32,7 +32,7 @@ const WORLD_TABS: [(&str, &str); 14] = [
 pub enum FAct {
     Tab(usize),
     Select(String),
-    NextWorld,
+    PickWorld(usize),
     Exit,
 }
 
@@ -113,10 +113,8 @@ impl Forge {
                 self.selected = id;
                 self.field_scroll = 0;
             }
-            FAct::NextWorld => {
-                let ids = cx.data.world_ids();
-                let at = ids.iter().position(|w| *w == self.world).unwrap_or(0);
-                self.world = ids.get((at + 1) % ids.len().max(1)).cloned().unwrap_or_default();
+            FAct::PickWorld(i) => {
+                self.world = cx.data.world_ids().get(i).cloned().unwrap_or_default();
                 self.selected.clear();
             }
             FAct::Exit => cx.nav.push(Nav::Pop),
@@ -269,8 +267,10 @@ impl Screen<GameCx> for Forge {
         let head = if self.world_forge { "WORLD FORGE (viewer)" } else { "CONTENT FORGE (viewer)" };
         let mut x = ui.p.text(6.0, 4.0, head, BODY, GOLD) as i32 + 6;
         if self.world_forge {
-            let name = format!("{}  [{}]", cx.world_name(&self.world), self.world);
-            ui.dropdown("forge.world", Rect::new(x, 2, 140, 14), &name, FAct::NextWorld, true, Vec::new());
+            let ids = cx.data.world_ids();
+            let names: Vec<String> = ids.iter().map(|w| format!("{}  [{w}]", cx.world_name(w))).collect();
+            let at = ids.iter().position(|w| *w == self.world).unwrap_or(0);
+            ui.select("forge.world", Rect::new(x, 2, 140, 14), &names, at, FAct::PickWorld, true, Vec::new());
             x = 6;
         }
         let ty = if self.world_forge { 20 } else { 3 };

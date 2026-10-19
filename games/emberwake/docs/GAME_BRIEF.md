@@ -158,7 +158,7 @@ See `games/emberwake/docs/ROADMAP.md` for what is next and `docs/DECISIONS.md` (
 
 ## Asset pipeline (S14-L1)
 
-- Art keys: `AssetRegistry.resolve` / `texture` (`scripts/art/asset_registry.gd`): manifest row, then tile variant 0, then one alias hop, then template, then fallback; never null. File overrides go in `games/emberwake/data/assets/manifest.json` via `AssetCatalog.upsert` (system rows only inside the system-edit scope; origin via promote/demote). Removal: allowed when the key has a template; refused for manifest-only keys still referenced per variant or aliased. Placeholder PNG: `tools/fc.sh export_placeholder`.
+- Art keys: `AssetRegistry.resolve` / `texture` (`scripts/art/asset_registry.gd`): manifest row, then tile variant 0, then one alias hop, then template, then fallback; never null. File overrides go in `games/emberwake/data/assets/manifest.json` via `AssetCatalog.upsert` (system rows only inside the system-edit scope; origin via promote/demote). Removal: allowed when the key has a template; refused for manifest-only keys still referenced per variant or aliased. Placeholder PNG: `tools/fc.sh export_placeholder`. Engine: `aegis_ui::art` reads `games/emberwake/assets/art/<category>/<key>/<variant>.png`, one folder per thing (ASSETORG1); it does not read the manifest.
 
 ## Region maps (EXP1)
 

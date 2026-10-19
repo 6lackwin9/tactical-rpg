@@ -49,13 +49,40 @@ pub struct Widget<A> {
     pub active: bool,
     pub action: Option<A>,
     pub tip: Tip,
+    /// Drag and drop (UIKIT2): the payload this widget carries when dragged (`Ui::draggable`), and the key it
+    /// accepts drops under (`Ui::drop_target`); both are the screen's own strings, e.g. "stash.3", "slot.weapon".
+    pub drag: Option<String>,
+    pub drop: Option<String>,
 }
 
 impl<A> Widget<A> {
     pub fn info(&self) -> Value {
-        json!({"id": self.id, "kind": self.kind, "text": self.text, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h],
-            "enabled": self.enabled, "active": self.active, "clickable": self.action.is_some(), "tip": self.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()})
+        let mut info = json!({"id": self.id, "kind": self.kind, "text": self.text, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h],
+            "enabled": self.enabled, "active": self.active, "clickable": self.action.is_some() || self.kind == "select", "tip": self.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()});
+        // Drag and drop keys only where set, so ui_tree stays small.
+        for (k, v) in [("drag", &self.drag), ("drop", &self.drop)] {
+            if let Some(v) = v {
+                info[k] = json!(v);
+            }
+        }
+        info
     }
+}
+
+/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open and the drag in
+/// progress.
+#[derive(Debug, Clone, Default)]
+pub struct Kit {
+    pub open: Option<String>,
+    pub drag: Option<Drag>,
+}
+
+/// A drag in progress (UIKIT2): the dragged widget's payload, id and text (the ghost under the cursor).
+#[derive(Debug, Clone)]
+pub struct Drag {
+    pub key: String,
+    pub id: String,
+    pub text: String,
 }
 
 /// The drawing surface the shell lends a screen for one frame.
@@ -63,6 +90,7 @@ pub struct Gfx {
     pub canvas: Canvas,
     pub view: View,
     pub fonts: Fonts,
+    pub kit: Kit,
 }
 
 pub struct Ui<'a, A> {
@@ -71,16 +99,49 @@ pub struct Ui<'a, A> {
     pub mouse: (i32, i32),
     /// Mouse position for hover effects; (-1, -1) while a screen is drawn under an overlay.
     pub live: bool,
+    /// The select whose list is open (`Kit::open`, read at the start of the frame).
+    open: Option<String>,
+    /// The drag in progress (`Kit::drag`, read at the start of the frame).
+    drag: Option<Drag>,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live }
+        // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
+        let (open, drag) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None });
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag }
     }
 
+    /// Makes the last recorded widget draggable with payload `key` (UIKIT2): press and move picks it up, a press
+    /// without a move stays a click. The widget being dragged is drawn dimmed.
+    pub fn draggable(&mut self, key: impl Into<String>) {
+        let Some(w) = self.widgets.last_mut() else { return };
+        w.drag = Some(key.into());
+        let r = w.rect;
+        if self.drag.as_ref().is_some_and(|d| d.id == w.id) {
+            self.p.fill(r, rgba(10, 14, 24, 150));
+        }
+    }
+
+    /// Makes the last recorded widget accept drops under `key`; the screen's `can_drop` and `accept_drop` decide.
+    pub fn drop_target(&mut self, key: impl Into<String>) {
+        if let Some(w) = self.widgets.last_mut() {
+            w.drop = Some(key.into());
+        }
+    }
+
+    /// The payload being dragged, if any (to draw previews, e.g. the stat change over a hovered slot).
+    pub fn dragging(&self) -> Option<&str> {
+        self.drag.as_ref().map(|d| d.key.as_str())
+    }
+
+    /// Records a widget; an info row (a hover card but no action) gets a hover outline, so hovering shows it responds.
     #[allow(clippy::too_many_arguments)]
     pub fn push(&mut self, id: impl Into<String>, kind: &'static str, text: impl Into<String>, rect: Rect, enabled: bool, active: bool, action: Option<A>, tip: Tip) {
-        self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip });
+        if kind == "row" && action.is_none() && tip.len() > 1 && self.hover(rect) {
+            self.p.panel(rect, rgba(0, 0, 0, 0), rgb(110, 140, 196), RADIUS);
+        }
+        self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip, drag: None, drop: None });
     }
 
     pub fn hover(&self, r: Rect) -> bool {
@@ -95,7 +156,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         let border = if active || (hover && enabled) { GOLD } else if enabled { rgb(100, 130, 186) } else { BORDER };
         self.p.panel(r, fill, border, RADIUS);
         let col = if enabled { if active { GOLD } else { TEXT } } else { DIM };
-        let line = size * 1.28;
+        let line = self.p.line_h(size);
         let txt = self.p.fit(label, size, if r.w < 20 { r.w as f32 } else { r.w as f32 - 6.0 });
         self.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - line) / 2.0, &txt, size, col);
         self.push(id, "button", label, r, enabled, active, Some(action), t);
@@ -146,7 +207,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.push(id, "checkbox", format!("{label}: {}", if checked { "on" } else { "off" }), r, enabled, checked, Some(action), Vec::new());
     }
 
-    /// A value bar with - / + steps (function over form: no dragging yet).
+    /// A value bar with - / + steps (`slider` drags; this one stays for fine steps).
     #[allow(clippy::too_many_arguments)]
     pub fn stepper(&mut self, id: &str, r: Rect, value: f32, text: &str, minus: A, plus: A, enabled: bool) {
         self.button(&format!("{id}.minus"), Rect::new(r.x, r.y, 12, r.h), "-", minus, enabled);
@@ -156,7 +217,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.p.panel(fill, rgb(200, 204, 214), rgb(200, 204, 214), 2.0);
         self.p.circle((fill.x + fill.w) as f32, bar.y as f32 + 2.0, 3.0, rgb(240, 242, 248));
         self.button(&format!("{id}.plus"), Rect::new(bar.x + bar.w + 3, r.y, 12, r.h), "+", plus, enabled);
-        self.p.text(bar.x as f32 + bar.w as f32 + 19.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, text, BODY, DIM);
+        self.p.text(bar.x as f32 + bar.w as f32 + 19.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, DIM);
         self.push(id, "slider", text, r, enabled, false, None, Vec::new());
     }
 
@@ -165,11 +226,64 @@ impl<'a, A: Clone> Ui<'a, A> {
         let hover = enabled && self.hover(r);
         self.p.panel(r, if hover { PANEL_HI } else { rgb(30, 44, 74) }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
         let col = if enabled { TEXT } else { DIM };
-        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, label, BODY, r.w as f32 - 16.0, col);
+        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 16.0, col);
         let (cx, cy) = (r.x as f32 + r.w as f32 - 7.0, r.y as f32 + r.h as f32 / 2.0);
         self.p.line(cx - 2.5, cy - 1.2, cx, cy + 1.3, col, 0.0);
         self.p.line(cx, cy + 1.3, cx + 2.5, cy - 1.2, col, 0.0);
         self.push(id, "dropdown", label, r, enabled, false, Some(action), t);
+    }
+
+    /// A dropdown with its choice list: a click opens the list under it (above when there is no room), a pick sends
+    /// `pick(index)`; the shell opens and closes the list and draws it over the screen (`kind` "select" / "option").
+    #[allow(clippy::too_many_arguments)]
+    pub fn select(&mut self, id: &str, r: Rect, options: &[String], selected: usize, pick: impl Fn(usize) -> A, enabled: bool, t: Tip) {
+        let label = options.get(selected).cloned().unwrap_or_default();
+        let open = enabled && self.open.as_deref() == Some(id);
+        let hover = enabled && (open || self.hover(r));
+        self.p.panel(r, if hover { PANEL_HI } else { rgb(30, 44, 74) }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
+        let col = if enabled { TEXT } else { DIM };
+        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, &label, BODY, r.w as f32 - 16.0, col);
+        let (cx, cy, d) = (r.x as f32 + r.w as f32 - 7.0, r.y as f32 + r.h as f32 / 2.0, if open { -1.0 } else { 1.0 });
+        self.p.line(cx - 2.5, cy - 1.2 * d, cx, cy + 1.3 * d, col, 0.0);
+        self.p.line(cx, cy + 1.3 * d, cx + 2.5, cy - 1.2 * d, col, 0.0);
+        self.push(id, "select", label, r, enabled, open, None, t);
+        if open {
+            // Below the field, else above it; a list taller than the room flows into columns (shifted left to fit).
+            let (h, n) = (r.h.max(14), options.len().max(1) as i32);
+            let (below, above) = (H - 2 - (r.y + r.h + 1), r.y - 3);
+            let per_col = (below.max(above) / h).clamp(1, n);
+            let cols = (n + per_col - 1) / per_col;
+            let w = r.w.min((W - 4) / cols);
+            let y0 = if per_col * h <= below { r.y + r.h + 1 } else { r.y - per_col * h - 1 };
+            let x0 = r.x.min(W - 2 - cols * w).max(2);
+            for (i, o) in options.iter().enumerate() {
+                let (col, row) = (i as i32 / per_col, i as i32 % per_col);
+                self.push(format!("{id}.opt.{i}"), "option", o.clone(), Rect::new(x0 + col * w, y0 + row * h, w, h), true, i == selected, Some(pick(i)), Vec::new());
+            }
+        }
+    }
+
+    /// A slider over `steps` values (index 0..steps): click the track or drag along it (the shell drags through the
+    /// per-step widgets, `kind` "slider_step"); `text` is shown to the right.
+    #[allow(clippy::too_many_arguments)]
+    pub fn slider(&mut self, id: &str, r: Rect, at: usize, steps: usize, text: &str, set: impl Fn(usize) -> A, enabled: bool) {
+        let steps = steps.max(2);
+        let area = Rect::new(r.x, r.y, r.w - 44, r.h);
+        let bar = Rect::new(area.x + 4, r.y + r.h / 2 - 2, area.w - 8, 4);
+        let hover = enabled && self.hover(area);
+        let knob = bar.x as f32 + bar.w as f32 * at.min(steps - 1) as f32 / (steps - 1) as f32;
+        self.p.panel(bar, rgb(40, 46, 60), rgb(40, 46, 60), 2.0);
+        self.p.panel(Rect::new(bar.x, bar.y, (knob as i32 - bar.x).max(0), bar.h), rgb(200, 204, 214), rgb(200, 204, 214), 2.0);
+        self.p.circle(knob, bar.y as f32 + 2.0, if hover { 4.0 } else { 3.0 }, if hover { GOLD } else if enabled { rgb(240, 242, 248) } else { DIM });
+        self.p.text(area.x as f32 + area.w as f32 + 6.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, DIM);
+        self.push(id, "slider", text, area, enabled, false, None, Vec::new());
+        let seg = bar.w as f32 / (steps - 1) as f32;
+        for i in 0..steps {
+            let left = if i == 0 { area.x as f32 } else { bar.x as f32 + seg * (i as f32 - 0.5) };
+            let right = if i == steps - 1 { (area.x + area.w) as f32 } else { bar.x as f32 + seg * (i as f32 + 0.5) };
+            let rect = Rect::new(left.round() as i32, r.y, (right - left).round().max(1.0) as i32, r.h);
+            self.push(format!("{id}.step.{i}"), "slider_step", i.to_string(), rect, enabled, i == at, Some(set(i)), Vec::new());
+        }
     }
 
     /// The X close button of a frame.
@@ -214,7 +328,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         if selected || hover {
             self.p.panel(r, if selected { SELECTED } else { PANEL_HI }, if selected { GOLD } else { rgb(110, 140, 196) }, RADIUS);
         }
-        self.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, label, BODY, r.w as f32 - 8.0, col);
+        self.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 8.0, col);
         self.push(id, "row", label, r, true, selected, action, t);
     }
 }
@@ -251,9 +365,10 @@ pub fn draw_tip<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32)) {
     }
 }
 
-/// The topmost enabled clickable widget under `pos`.
+/// The topmost enabled clickable widget under `pos`; an open select's options lie over everything.
 pub fn hit<A: Clone>(widgets: &[Widget<A>], pos: (i32, i32)) -> Option<A> {
-    widgets.iter().rev().find(|w| w.enabled && w.action.is_some() && w.rect.contains(pos.0, pos.1)).and_then(|w| w.action.clone())
+    let under = |w: &&Widget<A>| w.enabled && w.action.is_some() && w.rect.contains(pos.0, pos.1);
+    widgets.iter().rev().filter(|w| w.kind == "option").find(under).or_else(|| widgets.iter().rev().find(under)).and_then(|w| w.action.clone())
 }
 
 /// The action of widget `id`, or why it can't be clicked.

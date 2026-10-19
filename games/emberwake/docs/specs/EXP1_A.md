@@ -1,5 +1,7 @@
 # EXP1-A: Map templates and Ashlands exploration data (S9)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
 Depends on: EXP1-L commit 1 merged (MapCatalog, location fields, `start_location`, validation); M4-A merged
 Lane: asset (one branch, seed `data/seeds/exp1a.gd`)

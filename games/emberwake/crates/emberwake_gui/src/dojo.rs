@@ -10,7 +10,7 @@ use emberwake_data::{UnitDef, NO_ITEM, STATS};
 use emberwake_rules::damage::{self, HitInput};
 use emberwake_rules::gear::Slot;
 use emberwake_rules::{build_unit, Unit};
-use emberwake_world::state::LOADOUT_SLOTS;
+use emberwake_world::state::{LOADOUT_SLOTS, POUCH_MAX};
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone)]
@@ -153,8 +153,13 @@ impl Screen<GameCx> for Dojo {
             y += 26;
         }
         ui.p.text(p.x as f32 + 5.0, y as f32 + 4.0, "Battle pouch", SMALL, INFO);
-        for (i, it) in u.inventory.pouch.iter().enumerate() {
-            ui.p.text(p.x as f32 + 5.0, y as f32 + 14.0 + i as f32 * 9.0, &format!("{}. {}", i + 1, it.name), SMALL, TEXT);
+        // Every slot, empty ones too (the classes' default pouches are empty), like the Character popup's Gear tab.
+        for i in 0..POUCH_MAX as usize {
+            let (name, col) = match u.inventory.pouch.get(i) {
+                Some(it) => (it.name.clone(), TEXT),
+                None => ("Empty".to_string(), DIM),
+            };
+            ui.p.text(p.x as f32 + 5.0, y as f32 + 14.0 + i as f32 * 9.0, &format!("{}. {name}", i + 1), SMALL, col);
         }
         // -- Derived
         let p = panels[2];
@@ -178,13 +183,21 @@ impl Screen<GameCx> for Dojo {
             ui.p.text_right((p.x + p.w) as f32 - 6.0, yy, v, SMALL, TEXT);
         }
         let mut yy = p.y as f32 + 18.0 + rows.len() as f32 * 12.0 + 6.0;
-        ui.p.text(p.x as f32 + 5.0, yy, "Active skills", SMALL, INFO);
+        // No loadout set means every owned family is active (Unit::knows_skill), so list the owned ones then.
+        let set = u.active_families();
+        let (title, fams) = if set.is_empty() { ("Active skills (no loadout: all owned)", u.owned_families(cat)) } else { ("Active skills (loadout)", set) };
+        ui.p.text(p.x as f32 + 5.0, yy, title, SMALL, INFO);
         yy += 10.0;
-        for fam in u.active_families() {
+        if fams.is_empty() {
+            ui.p.text(p.x as f32 + 5.0, yy, "Basic skills only at this level.", SMALL, DIM);
+        }
+        for fam in fams {
             if yy > (p.y + p.h) as f32 - 10.0 {
                 break;
             }
-            ui.p.text_fit(p.x as f32 + 5.0, yy, &cat.tier_one(&fam).map(|s| s.name.clone()).unwrap_or(fam), SMALL, (p.w - 10) as f32, TEXT);
+            let rank = cat.skills.iter().filter(|s| cat.family_of(&s.id) == fam && u.tier_unlocked(cat, s)).map(|s| s.tier).max().unwrap_or(1);
+            let name = cat.tier_one(&fam).map(|s| s.name.clone()).unwrap_or(fam);
+            ui.p.text_fit(p.x as f32 + 5.0, yy, &format!("{name}  (rank {rank})"), SMALL, (p.w - 10) as f32, TEXT);
             yy += 8.5;
         }
         // -- Dummy

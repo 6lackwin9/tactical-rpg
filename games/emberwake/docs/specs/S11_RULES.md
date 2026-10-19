@@ -1,5 +1,7 @@
 # S11 baseline rules: NPCs, dialogue, shops and faction reputation
 
+Status update (2026-10-20): answered (decision "S9-S11 baseline answers (user 2026-10-17)") and built as DLG1 and REP1. The status line below is the original.
+
 Status: proposed (baseline rules, design-brainstorm 2026-10-17; nothing approved; the open questions in section 3 block the DLG1 and REP1 specs)
 Depends on: M4-L merged (flags, `QuestRunner`, resolved giver / turn_in, variants, `RewardGrant`, `loot_claimed`); EXP1-L for NPC markers on maps and `BattleBridge` (the `fight` effect)
 Lane: design (this file); later logic + asset (section 4)

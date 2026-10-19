@@ -1,9 +1,12 @@
 //! Main menu, New game, Load / Save slots and Settings (scripts/ui/menus: main_menu_model, new_game_model,
 //! save_slots_model, settings_model). Placeholder logic as in Godot; file import / export of saves is not ported yet.
 
+use aegis_ui::audio::Bus;
 use aegis_ui::canvas::{rgba, Rect};
+use crate::music;
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, WINDOW_MODES, WINDOW_SIZES};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
 use emberwake_world::{new_game, progression, save};
@@ -110,6 +113,9 @@ impl Screen<GameCx> for MainMenu {
         }
     }
     fn back(&mut self, _cx: &mut Cx) {}
+    fn music(&self, cx: &Cx) -> Option<String> {
+        music::track(cx, music::MENU, "", "")
+    }
     widget_plumbing!();
 }
 
@@ -408,8 +414,10 @@ impl Screen<GameCx> for Slots {
 pub enum SetAct {
     Tab(usize),
     Toggle(&'static str),
-    Step(&'static str, f64),
-    Cycle(&'static str),
+    /// A slider value (volumes 0-100, speeds and scales 0.5-2.0).
+    Set(&'static str, f64),
+    /// A choice from CHOICES by index.
+    Pick(&'static str, usize),
     Apply,
     Defaults,
     Close,
@@ -422,8 +430,8 @@ pub struct SettingsScreen {
 }
 
 const TABS: [&str; 4] = ["Sound", "Display", "Gameplay", "Controls"];
-const CHOICES: [(&str, &[&str]); 3] =
-    [("window_mode", &["Windowed", "Borderless", "Fullscreen"]), ("window_size", &["1280x720", "1600x900", "1920x1080"]), ("fps_cap", &["Unlimited", "30", "60", "120", "144"])];
+/// The display choices are the engine's (aegis_ui::screen).
+const CHOICES: [(&str, &[&str]); 3] = [("window_mode", &WINDOW_MODES), ("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
 const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
     (
         "Menus",
@@ -439,6 +447,17 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
     ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Screenshot", "F12")]),
 ];
 
+/// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
+fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
+    match key {
+        "master" => Some((Bus::Ui, "sfx/ui_confirm.wav")),
+        "music" => Some((Bus::Music, "sfx/ui_confirm.wav")),
+        "effects" => Some((Bus::Sfx, "sfx/hit.wav")),
+        "interface" => Some((Bus::Ui, "sfx/ui_click.wav")),
+        _ => None,
+    }
+}
+
 impl SettingsScreen {
     pub fn new(cx: &Cx) -> Self {
         Self { tab: 0, draft: cx.settings.v.clone(), w: Vec::new() }
@@ -448,16 +467,19 @@ impl SettingsScreen {
         match a {
             SetAct::Tab(t) => self.tab = t,
             SetAct::Toggle(k) => self.draft[k] = Value::Bool(!self.draft[k].as_bool().unwrap_or(false)),
-            SetAct::Step(k, d) => {
+            SetAct::Set(k, v) => {
                 let (lo, hi) = if k.ends_with("speed") || k.ends_with("scale") { (0.5, 2.0) } else { (0.0, 100.0) };
-                let v = (self.draft[k].as_f64().unwrap_or(0.0) + d).clamp(lo, hi);
+                let v = v.clamp(lo, hi);
                 self.draft[k] = if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) };
+                if let Some((bus, sample)) = preview_of(k) {
+                    cx.audio.set_levels(&self.draft);
+                    cx.audio.preview(bus, sample);
+                }
             }
-            SetAct::Cycle(k) => {
-                let opts = CHOICES.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(&[]);
-                let cur = self.draft[k].as_str().unwrap_or("");
-                let i = opts.iter().position(|o| *o == cur).map(|i| (i + 1) % opts.len()).unwrap_or(0);
-                self.draft[k] = json!(opts[i]);
+            SetAct::Pick(k, i) => {
+                if let Some(o) = choices(k).get(i) {
+                    self.draft[k] = json!(o);
+                }
             }
             SetAct::Apply => {
                 cx.settings.v = self.draft.clone();
@@ -465,7 +487,7 @@ impl SettingsScreen {
                     show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
                 }
             }
-            SetAct::Defaults => self.draft = default_settings(),
+            SetAct::Defaults => self.draft = Settings::defaults(default_settings()),
             SetAct::Close => cx.nav.push(Nav::Pop),
         }
     }
@@ -478,14 +500,20 @@ impl Screen<GameCx> for SettingsScreen {
     fn overlay(&self) -> bool {
         true
     }
-    fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        // The draft levels play while the popup is open; the shell puts the saved ones back each frame.
+        cx.audio.set_levels(&self.draft);
         let mut ui: Ui<SetAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 140));
         let r = Rect::new(95, 25, 450, 310);
         ui.frame(r, "Settings", false);
         ui.close_x("settings.close", Rect::new(r.x + r.w - 28, r.y + 9, 19, 18), SetAct::Close);
+        let mut tx = r.x + 12;
         for (i, t) in TABS.iter().enumerate() {
-            ui.tab(&format!("settings.tab.{}", t.to_lowercase()), Rect::new(r.x + 12 + i as i32 * 46, r.y + 36, 44, 16), t, SetAct::Tab(i), self.tab == i);
+            // At least 44 wide; wider when the label needs it (larger text sizes).
+            let tw = 44.max(ui.p.text_w(t, BODY).ceil() as i32 + 10);
+            ui.tab(&format!("settings.tab.{}", t.to_lowercase()), Rect::new(tx, r.y + 36, tw, 16), t, SetAct::Tab(i), self.tab == i);
+            tx += tw + 2;
         }
         let body = Rect::new(r.x + 9, r.y + 55, r.w - 18, 222);
         ui.p.panel(body, rgba(24, 26, 32, 255), rgba(24, 26, 32, 255), 1.0);
@@ -498,14 +526,15 @@ impl Screen<GameCx> for SettingsScreen {
                 y += 20;
                 for (k, label) in [("master", "Master volume"), ("music", "Music volume"), ("effects", "Effects volume"), ("interface", "Interface volume")] {
                     ui.p.text(x as f32, y as f32 + 2.0, label, BODY, TEXT);
-                    ui.stepper(&format!("settings.{k}"), Rect::new(x + 125, y, 200, 13), (pct(k) / 100.0) as f32, &format!("{}%", pct(k)), SetAct::Step(static_key(k), -10.0), SetAct::Step(static_key(k), 10.0), true);
+                    let key = static_key(k);
+                    ui.slider(&format!("settings.{k}"), Rect::new(x + 125, y, 200, 13), (pct(k) / VOLUME_STEP).round() as usize, 21, &format!("{}%", pct(k)), |i| SetAct::Set(key, i as f64 * VOLUME_STEP), true);
                     y += 18;
                 }
             }
             1 => {
                 for (k, label) in [("window_mode", "Window mode"), ("window_size", "Window size")] {
                     ui.p.text(x as f32, y as f32 + 3.0, label, BODY, TEXT);
-                    ui.dropdown(&format!("settings.{k}"), Rect::new(x + 125, y, 150, 16), d[k].as_str().unwrap_or(""), SetAct::Cycle(static_key(k)), true, Vec::new());
+                    choice(&mut ui, static_key(k), Rect::new(x + 125, y, 150, 16), d[k].as_str().unwrap_or(""));
                     y += 22;
                 }
                 ui.p.text(x as f32, y as f32, "In use", BODY, TEXT);
@@ -514,16 +543,19 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
                 y += 20;
                 ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, TEXT);
-                ui.dropdown("settings.fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""), SetAct::Cycle("fps_cap"), true, Vec::new());
+                choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""));
                 y += 24;
-                ui.p.text(x as f32, y as f32 + 2.0, "Text size", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, TEXT);
+                // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
                 let ts = pct("text_scale");
-                ui.stepper("settings.text_scale", Rect::new(x + 125, y, 200, 13), ((ts - 0.5) / 1.5) as f32, &format!("{ts:.2}x"), SetAct::Step("text_scale", -0.25), SetAct::Step("text_scale", 0.25), true);
+                let labels: Vec<String> = TEXT_SIZES.iter().map(|t| t.0.to_string()).collect();
+                let at = TEXT_SIZES.iter().enumerate().min_by(|a, b| (a.1 .1 - ts).abs().total_cmp(&(b.1 .1 - ts).abs())).map(|(i, _)| i).unwrap_or(1);
+                ui.select("settings.text_scale", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Set("text_scale", TEXT_SIZES[i].1), true, Vec::new());
             }
             2 => {
                 ui.p.text(x as f32, y as f32 + 2.0, "Animation speed", BODY, TEXT);
                 let a = pct("anim_speed");
-                ui.stepper("settings.anim_speed", Rect::new(x + 125, y, 200, 13), ((a - 0.5) / 1.5) as f32, &format!("{a:.2}x"), SetAct::Step("anim_speed", -0.25), SetAct::Step("anim_speed", 0.25), true);
+                ui.slider("settings.anim_speed", Rect::new(x + 125, y, 200, 13), ((a - 0.5) / SCALE_STEP).round() as usize, 7, &format!("{a:.2}x"), |i| SetAct::Set("anim_speed", 0.5 + i as f64 * SCALE_STEP), true);
                 ui.checkbox("settings.skip_anim", x + 300, y + 1, "Skip animations", d["skip_anim"].as_bool().unwrap_or(false), SetAct::Toggle("skip_anim"), true);
                 y += 22;
                 ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
@@ -551,6 +583,21 @@ impl Screen<GameCx> for SettingsScreen {
         json!({"tab": TABS[self.tab], "draft": self.draft})
     }
     widget_plumbing!();
+}
+
+/// Volume sliders move in steps of 5 (0-100); speed and text-size sliders in quarters (0.5-2.0).
+const VOLUME_STEP: f64 = 5.0;
+const SCALE_STEP: f64 = 0.25;
+
+fn choices(k: &str) -> &'static [&'static str] {
+    CHOICES.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(&[])
+}
+
+/// A settings choice (CHOICES) as a select with its option list.
+fn choice(ui: &mut Ui<SetAct>, k: &'static str, r: Rect, current: &str) {
+    let opts: Vec<String> = choices(k).iter().map(|o| o.to_string()).collect();
+    let at = opts.iter().position(|o| o == current).unwrap_or(0);
+    ui.select(&format!("settings.{k}"), r, &opts, at, |i| SetAct::Pick(k, i), true, Vec::new());
 }
 
 fn static_key(k: &str) -> &'static str {

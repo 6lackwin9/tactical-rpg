@@ -513,9 +513,14 @@ impl Session {
         encounter::flee_for(base, self.morale.group_state(gi))
     }
 
+    /// A unit's tier (minion, standard, elite, boss, hero): the roster's, else the unit's own.
+    pub fn tier_of(&self, c: UnitId) -> String {
+        self.unit_tiers.get(&c).cloned().unwrap_or_else(|| self.w.units[c].tier.clone())
+    }
+
     /// Rule 5: boss or elite tier, a live profile that never flees, or the slay target.
     pub fn is_fearless(&self, c: UnitId) -> bool {
-        let tier = self.unit_tiers.get(&c).cloned().unwrap_or_else(|| self.w.units[c].tier.clone());
+        let tier = self.tier_of(c);
         if LEADER_TIERS.contains(&tier.as_str()) {
             return true;
         }

@@ -1,5 +1,7 @@
 # BREPORT1: Battle report on the results screen (what worked, from sim metrics)
 
+Status update (2026-10-20): approved; BREPORT1-L done on Godot, PORT-BREPORT and BREPORT1-U approved and queued. The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: decision world-campaign "DR1 design review answers (user 2026-10-18)" (all recommendations), review `games/emberwake/docs/specs/DESIGN_REVIEW1.md` 3.7)
 Depends on: L: none (sequence with OBJ1-L for the one-line `tools/sim/sim_runner.gd` change). U: BREPORT1-L and UIR-4 (same two results files; build on its grid columns)
 Lane: logic only (BREPORT1-L engine and model, then BREPORT1-U view on the UI/UX thread); no asset part, no data

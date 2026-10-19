@@ -1,5 +1,7 @@
 # EXP1-L: Region maps and exploration runtime (S9)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
 Depends on: M4-L merged (slice 2: `QuestRunner`, `RewardGrant`, `GameState.loot_claimed`, save v2), M3
 Lane: logic (one branch; commit 1 is the schema slice that releases EXP1-A)

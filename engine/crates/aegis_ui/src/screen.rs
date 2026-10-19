@@ -1,9 +1,10 @@
 //! The screen stack (MenuRouter): every screen draws with the widget kit, records its widgets for the agent link and
-//! reacts to clicks, keys and the wheel. The shared context `Cx<G>` holds the engine's half (settings, art, queued
+//! reacts to clicks, keys and the wheel. The shared context `Cx<G>` holds the engine's half (settings, art, audio, queued
 //! navigation and notices, answers) and the game's half `G` (its data, the game in play, its log), which screens
 //! reach through Deref. Screens never call each other; they queue navigation in `cx.nav`.
 
 use crate::art::Art;
+use crate::audio::Audio;
 use crate::canvas::Rect;
 use crate::painter::Painter;
 use crate::ui::{self, Gfx, Ui, Widget, BODY, GOLD, H, TEXT, W};
@@ -63,17 +64,42 @@ pub enum Nav<G> {
     Reset(Box<dyn Screen<G>>),
 }
 
-/// Player settings (SettingsFile): a JSON object over the game's defaults, saved where the game says.
+/// Player settings (SettingsFile): a JSON object of the engine's keys (sound, display, text size; the shell applies
+/// them) and the game's own keys, over their defaults, saved where the game says.
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub v: Value,
     path: PathBuf,
 }
 
+/// The engine's choices (Godot SettingsFile / DisplaySettings): window modes, window sizes, frame-rate caps.
+pub const WINDOW_MODES: [&str; 3] = ["Windowed", "Borderless", "Fullscreen"];
+pub const WINDOW_SIZES: [&str; 8] = ["960x540", "1024x576", "1152x648", "1280x720", "1366x768", "1600x900", "1920x1080", "2560x1440"];
+pub const FPS_CAPS: [&str; 5] = ["Unlimited", "30", "60", "120", "144"];
+/// Text size levels (Godot TEXT_LEVELS): label and font factor.
+pub const TEXT_SIZES: [(&str, f64); 4] = [("Small", 0.85), ("Normal", 1.0), ("Large", 1.15), ("Extra large", 1.3)];
+
 impl Settings {
-    /// The saved settings over `defaults` (keys the file lacks keep their default).
-    pub fn load(path: PathBuf, defaults: Value) -> Self {
-        let mut v = defaults;
+    /// The engine's keys and their defaults.
+    pub fn engine_defaults() -> Value {
+        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "window_mode": "Windowed", "window_size": "1280x720",
+            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0})
+    }
+
+    /// Every default: the engine's keys, then the game's own (`game_defaults`).
+    pub fn defaults(game_defaults: Value) -> Value {
+        let mut v = Self::engine_defaults();
+        if let Value::Object(g) = game_defaults {
+            for (k, x) in g {
+                v[k] = x;
+            }
+        }
+        v
+    }
+
+    /// The saved settings over the defaults (keys the file lacks keep their default).
+    pub fn load(path: PathBuf, game_defaults: Value) -> Self {
+        let mut v = Self::defaults(game_defaults);
         if let Ok(Value::Object(saved)) = std::fs::read_to_string(&path).map(|t| serde_json::from_str::<Value>(&t).unwrap_or(Value::Null)) {
             for (k, x) in saved {
                 v[k] = x;
@@ -106,6 +132,7 @@ pub trait Context: Sized + 'static {
 pub struct Cx<G> {
     pub settings: Settings,
     pub art: Art,
+    pub audio: Audio,
     pub nav: Vec<Nav<G>>,
     /// A one-shot message the shell shows as a notice popup.
     pub notice: Vec<String>,
@@ -185,6 +212,18 @@ pub trait Screen<G> {
     fn command(&mut self, _cx: &Cx<G>, _body: &Value) -> Option<Value> {
         None
     }
+    /// The music this screen wants (a path under the game's audio folder); the shell plays the topmost screen's
+    /// wish, None lets the screen below choose.
+    fn music(&self, _cx: &Cx<G>) -> Option<String> {
+        None
+    }
+    /// Drag and drop (UIKIT2): whether payload `from` (`Ui::draggable`) may be dropped on the target `to`
+    /// (`Ui::drop_target`); valid targets are outlined while dragging.
+    fn can_drop(&self, _cx: &Cx<G>, _from: &str, _to: &str) -> bool {
+        true
+    }
+    /// Payload `from` was released over target `to` (only when `can_drop` allowed it).
+    fn accept_drop(&mut self, _cx: &mut Cx<G>, _from: &str, _to: &str) {}
 }
 
 /// The widget plumbing every screen shares: its `w` list and `act(cx, action)`. The context type is `Cx` as named

@@ -80,6 +80,8 @@ because the RNG is bit-exact.
 | `dialogue/rep_rules.gd`, `dialogue_rules.gd` (runtime), `dialogue_runner.gd`, `shop_rules.gd` (runtime) | `dialogue`, `shop` | journeys (dialogue and shop views) |
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
 | `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `emberwake_gui::battle` (`BattleScreen::world`) | manual (GUI) |
+| `audio/audio_director.gd` (buses, voice pools), `music_director.gd` (player: crossfade, loop), `volume_preview.gd` (throttle) | `aegis_ui::audio` (the master slider's sample plays on the interface bus and the music sample without the -6 dB, as in Godot) | unit tests (levels, wanted track); manual (GUI) |
+| `audio/music_director.gd` (choice: contexts, candidates, scopes, kind and combat context), `sound_events.gd` | `emberwake_gui::music`, `battle` (`sound_of`, from the resolver log; a hit for 0 plays mitigated, the engine log has no mitigation tag) | unit tests (chains, every shipped file decodes, log lines) |
 
 Godot behaviours found on the way:
 
@@ -109,6 +111,8 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
 | `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `games/emberwake/schema.json` | `tests/data_source.rs` |
 | `content/skill_ranks.gd` (`expand`, `effective`, `resolve`), `content/skill_text.gd` (`render`, `token_value`) | `source::expand`, `render` | `tests/data_source.rs` (151 rank rows, every description) |
 | `core/specs/item_families.gd` (`derive`, hands, base), `item_modifiers.gd` (`resolve`, `legacy_tiers`), `item_text.gd` (`tier_desc`) | `source::derive_family`, `resolve_item` | `tests/data_source.rs` |
+| `core/specs/item_text.gd` (`render`, `token_value`) | `emberwake_content::source::render_item`, `emberwake_world::Data::item_description` | `emberwake_world/tests/item_text.rs` |
+| `progression/unit_state.gd` (`_gear_errors`), `core/specs/proficiency.gd` (`can_use`), `ui/menus/gear_model.gd` (`equip`, `unequip`, `_pouch_problem`) | `UnitState::can_wear` and `validate`, `state::item_fits_slot`, `Proficiency::can_use`, `emberwake_gui::party` gear moves (plus slot to slot and pouch reorder, new in GEARUI1) | `emberwake_gui` party tests |
 | `world/world_catalog.gd` (`reload_from_disk`, `lineage`, `own_entries`) | `aegis_content::world::load` (over `source::WORLD_KINDS`) | `tests/data_source.rs` |
 | `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
 

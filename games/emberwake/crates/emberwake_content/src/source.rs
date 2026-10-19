@@ -213,6 +213,12 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
 
 /// SkillText.render: literal parts as they are, valid tokens by the rank's effective row.
 pub fn render(template: &str, kind: &str, row: &Dict, rank: usize) -> String {
+    render_tokens(template, |token, suffix| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind)).then(|| token_value(token, suffix, row, rank)))
+}
+
+/// SkillText.parse as used by render: `{{` and `}}` are literal braces, `{token}` or `{token:suffix}` is filled by
+/// `value` (None, an empty or an unclosed token renders as nothing or as written).
+fn render_tokens(template: &str, mut value: impl FnMut(&str, &str) -> Option<String>) -> String {
     let chars: Vec<char> = template.chars().collect();
     let n = chars.len();
     let find = |c: char, from: usize| (from..n).find(|&j| chars[j] == c);
@@ -239,8 +245,8 @@ pub fn render(template: &str, kind: &str, row: &Dict, rank: usize) -> String {
                     Some((t, s)) => (t.to_string(), s.split(':').next().unwrap_or("").to_string()),
                     None => (body.clone(), String::new()),
                 };
-                if token_kinds(&token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind)) {
-                    out.push_str(&token_value(&token, &suffix, row, rank));
+                if let Some(text) = value(&token, &suffix) {
+                    out.push_str(&text);
                 }
             }
             i = close + 1;
@@ -602,6 +608,59 @@ fn legacy_tier(tier: &Dict) -> Dict {
         row.insert("bonus".into(), Value::Object(bonus));
     }
     row
+}
+
+/// ItemText.render: an item description template filled from the resolved row ({name}, {family}, {power}, {range},
+/// {hand}, {burden}, {mitigation}, {block_cost}, {req:STAT}, {bon:STAT}, {tier<n>.value}, {tier<n>.power}); a token not
+/// valid for the item type renders as nothing; a description without tokens is returned as it is.
+pub fn render_item(template: &str, row: &Dict) -> String {
+    if !template.contains('{') && !template.contains('}') {
+        return template.to_string();
+    }
+    let item_type = sget(row, "item_type", "WEAPON");
+    let equip = ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"].contains(&item_type.as_str());
+    let weapon = item_type == "WEAPON";
+    let tiers = json::aget(row, "tiers");
+    render_tokens(template, |token, suffix| {
+        let number = |k: &str| Some(json::to_int(json::get(row, k)).to_string());
+        if let Some((n, part)) = token.strip_prefix("tier").and_then(|t| t.split_once('.')).filter(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())).and_then(|(n, p)| Some((n.parse::<usize>().ok()?, p))) {
+            if !equip || (part == "power" && !weapon) || !["value", "power"].contains(&part) {
+                return None;
+            }
+            let tier = tiers.get(n.checked_sub(1)?)?.as_object()?;
+            return Some(match part {
+                "value" => {
+                    let when = json::dget(tier, "when");
+                    json::to_int(when.get("value").or_else(|| when.get("level")).unwrap_or(&Value::Null)).to_string()
+                }
+                _ => {
+                    let p = json::to_int(json::get(json::dget(tier, "bonus"), "power"));
+                    if p > 0 { p.to_string() } else { String::new() }
+                }
+            });
+        }
+        match token {
+            "name" | "family" => Some(sget(row, token, "")),
+            "power" if weapon => number("base_power"),
+            "range" if weapon => number("base_range"),
+            "hand" if weapon || item_type == "SHIELD" => Some(
+                match sget(row, "hand", "").as_str() {
+                    "" => "",
+                    "main_1h" => "main hand, one-handed",
+                    "main_2h" => "main hand, two-handed",
+                    "off" => "off hand",
+                    _ => "-",
+                }
+                .to_string(),
+            ),
+            "burden" | "mitigation" | "block_cost" if equip => number(token),
+            "req" | "bon" if equip => {
+                let stats = json::dget(row, if token == "req" { "required_stats" } else { "stat_bonuses" });
+                Some(stats.get(suffix).map(|v| json::to_int(v).to_string()).unwrap_or_default())
+            }
+            _ => None,
+        }
+    })
 }
 
 /// ItemText.tier_desc: "<label>: <bonus text>".

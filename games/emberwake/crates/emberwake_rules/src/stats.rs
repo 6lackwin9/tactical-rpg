@@ -157,6 +157,11 @@ impl Proficiency {
         self.level_of(gear) * 2
     }
 
+    /// Proficiency.can_use: no gear type, or at least level 1 in it.
+    pub fn can_use(&self, gear: &str) -> bool {
+        gear.is_empty() || self.level_of(gear) >= 1
+    }
+
     pub fn power_bonus(&self, gear: &str) -> i32 {
         self.level_of(gear)
     }

@@ -25,6 +25,16 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | SPLIT1-7 | - | game crates renamed `emberwake_*` under `games/emberwake/crates/`, `emberwake_content` carved out, GUI binary `emberwake` |
 | main session (no lane agents) | SPLIT1-8 | - | `games/emberwake/` holds data, assets, schema, tuning and parity; `game.json` (title read by the window and main menu); saves and settings under the game id |
 | main session (no lane agents) | SPLIT1-9 | - | Layer column in TASKS, layer check in the change-reviewer, STRUCTURE and CLAUDE.md by layer, the game's design docs in `games/emberwake/docs/` |
+| main session (no lane agents) | ARENA-EXIT | - | Exit button in Test Arena battles |
+| main session (no lane agents) | PARTY2-B | - | the character popup's detail pane on every stat, derived and level-up row |
+| main session (no lane agents) | DOJO2-B | - | gear dojo: skills (with ranks) and pouch slots listed; arrows checked |
+| main session (no lane agents) | UIKIT1 | - | engine: select with its choice list, draggable slider, info-row hover, agent `drag`; game: settings, Scene Runner, World Forge and turn-in use them |
+| main session (no lane agents) | PORT-SETTINGS | - | engine owns and applies window mode, size, vsync, frame cap and text size; game: settings screen, Character popup and Settings tabs fit the text size |
+| main session (no lane agents) | PORT-AUDIO | - | engine: aegis_ui::audio on rodio (buses, voice pools, crossfaded looping music, volume previews), Screen::music, levels from the settings; game: MUSIC1 chooser per screen, battle sounds from the resolver log, settings volume samples |
+| main session (no lane agents) | ASSETORG1 | - | engine: art loader reads `<category>/<id>/<variant>.png` (get, token, portrait, tile); game: 296 PNGs moved to a folder per thing, call sites, layout test; tools: gen_art.py, export_units.py; READMEs and specs note the layout |
+| main session (no lane agents) | UIKIT2 | - | engine: drag and drop in the kit (draggable payloads, drop targets, can_drop and accept_drop, ghost and outlines, click on release without a move, Esc cancels, agent drag onto a widget id); 5 shell tests |
+| main session (no lane agents) | SKILLUI1 spec | design-brainstorm | Skills tab spec (games/emberwake/docs/specs/SKILLUI1.md): chosen rank per slot, drag list to slot, slot to slot and back, rank arrows; four questions answered by the user |
+| main session (no lane agents) | GEARUI1 | - | game: Gear tab in three columns, drag and drop both ways (stash, slots, pouch), green and red stat change for a hovered or dragged item, ItemText.render (item description tokens); folds in UIR-3B |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

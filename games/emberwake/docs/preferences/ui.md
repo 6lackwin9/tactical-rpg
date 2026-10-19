@@ -33,3 +33,7 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - Gear tab: three columns like the Godot gear dojo: character info and stats | equipped slots (click to unequip, with the stat change) | party stash; the battle pouch under the slots; drag and drop both ways (stash to a gear or pouch slot equips, an equipped or pouch item back to the stash unequips; user 2026-10-20), clicks still work; the detail pane explains the hovered row.
 - Every row (stats, skills, gear) is hoverable and fills the detail pane; "Move to a row" must never stay on screen while the mouse is over a row.
 - Drag and drop wherever moving a thing between two places makes sense, on every screen, once the UI kit has it (UIKIT1, then DRAG1); clicking keeps working everywhere (user 2026-10-20).
+
+## Text size (user 2026-10-20)
+
+- Text size works the Godot way: four levels (Small 0.85, Normal 1.0, Large 1.15, Extra large 1.3), every font scales, and layouts grow with the text; screens that still overflow are fixed one by one (TEXTFIT1), with positions and widths computed from text widths rather than fixed.

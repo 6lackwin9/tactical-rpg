@@ -1,5 +1,7 @@
 # BAL5_LEVERS: design levers for the BAL3-R gaps
 
+Status update (2026-10-20): approved (LEVERS1 rows, user 2026-10-18); BAL5 rows done, LEVERS1 rows approved and queued. The status line below is the original.
+
 Status: proposed (spec 2026-10-18; input: BAL3-R final rerun and CAMP1-B, report `BALANCE_REPORT_BAL3-R.md`, sections cited as "R §n")
 Depends on: user answers Q1-Q6 below; BAL4-ATTR (shares `tools/sim/*`); BOSS1-L for lever B2
 Lane: balance, logic, asset (split in section 9)

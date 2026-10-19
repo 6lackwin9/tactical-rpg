@@ -1,5 +1,7 @@
 # BAL2-L: sim tooling, PERC range fix, unit gear `none`, elite and boss tiers
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: spec (design-brainstorm 2026-10-17; user answers in DECISIONS "BAL2 answers (user 2026-10-17)"; awaiting approval)
 Depends on: SKILL1-L (merged; it touched the same content hub files)
 Lane: logic (one branch, commit order fixed)

@@ -1,6 +1,6 @@
 # Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main and on pushes to main: the docs lint,
 # the Godot reference recorded from the frozen copy in legacy/ (catalog, worlds, game data, schema, Godot's resave, units,
-# damage, RNG, save fixtures), then every engine crate built and every test run (the same steps as tools/fc.sh gate and
+# damage, RNG, save fixtures), then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate and
 # check_project.ps1, plus the exports those parity suites read). The battle and journey traces are recorded on the
 # desktop (tools/fc.sh parity); their suites skip themselves here. Docs-only pushes to main skip it; `gate` is the
 # required check on main.
@@ -54,6 +54,9 @@ jobs:
           export GODOT="$HOME/godot/${GODOT_VERSION}/godot"
           "$GODOT" --headless --path legacy --import > /tmp/import.out 2>&1 || { tail -40 /tmp/import.out; exit 1; }
           bash games/emberwake/parity/export.sh
+
+      - name: System libraries (ALSA, for the audio crate on Linux)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config
 
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal && rustc --version

@@ -1,4 +1,6 @@
-//! Placeholder art from the project's assets/art folder (read-only), downsampled to pixel scale and cached.
+//! Art from the game's assets/art folder (read-only), downsampled to pixel scale and cached. One folder per thing
+//! (ASSETORG1): `<category>/<id>/<variant>.png`, e.g. `unit/warrior/token.png`, `tile/dirt/v2.png`, `ui/pin_town/icon.png`;
+//! data names the id, the screen the category and variant.
 
 use crate::canvas::Image;
 use std::collections::HashMap;
@@ -6,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 pub struct Art {
     root: Option<PathBuf>,
-    cache: HashMap<(String, i32), Option<Image>>,
+    cache: HashMap<(String, String, String, i32), Option<Image>>,
 }
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
@@ -35,28 +37,35 @@ impl Art {
         Self { root, cache: HashMap::new() }
     }
 
-    /// `rel` (e.g. "unit/warrior_token") at `size` x `size` pixels.
-    pub fn get(&mut self, rel: &str, size: i32) -> Option<&Image> {
-        let key = (rel.to_string(), size);
+    /// The file of `variant` of thing `id` in `category` (assets/art/<category>/<id>/<variant>.png).
+    pub fn path(root: &Path, category: &str, id: &str, variant: &str) -> PathBuf {
+        root.join("assets/art").join(category).join(id).join(format!("{variant}.png"))
+    }
+
+    /// `variant` of `id` in `category` (e.g. "unit", "warrior", "token") at `size` x `size` pixels.
+    pub fn get(&mut self, category: &str, id: &str, variant: &str, size: i32) -> Option<&Image> {
+        let key = (category.to_string(), id.to_string(), variant.to_string(), size);
         if !self.cache.contains_key(&key) {
-            let img = self.root.as_ref().and_then(|r| load_png(&r.join("assets/art").join(format!("{rel}.png")))).map(|i| i.downsample(size, size));
+            let img = self.root.as_ref().and_then(|r| load_png(&Self::path(r, category, id, variant))).map(|i| i.downsample(size, size));
             self.cache.insert(key.clone(), img);
         }
         self.cache.get(&key).and_then(|i| i.as_ref())
     }
 
+    /// A unit's token (unit/<art>/token).
     pub fn token(&mut self, art: &str, size: i32) -> Option<&Image> {
-        let rel = format!("unit/{art}_token");
-        if self.get(&rel, size).is_some() {
-            return self.get(&rel, size);
-        }
-        None
+        self.get("unit", art, "token", size)
     }
 
-    /// Terrain tile `id` (variant chosen by the cell, like TileArt).
+    /// A unit's portrait (unit/<art>/portrait).
+    pub fn portrait(&mut self, art: &str, size: i32) -> Option<&Image> {
+        self.get("unit", art, "portrait", size)
+    }
+
+    /// Terrain tile `id` (tile/<id>/v<n>, the variant chosen by the cell, like TileArt).
     pub fn tile(&mut self, id: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
         let v = ((x * 7 + y * 13) % 4 + 4) % 4;
-        self.get(&format!("tile/{id}_v{v}"), size)
+        self.get("tile", id, &format!("v{v}"), size)
     }
 }
 

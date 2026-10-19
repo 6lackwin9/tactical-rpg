@@ -2,7 +2,7 @@
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, then every test
 #                                (parity suites skip themselves when games/emberwake/parity/out is missing); `auto` is accepted and runs everything
-#   tools/fc.sh build            cargo build --workspace (warnings shown)
+#   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
 #   tools/fc.sh docs             warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint
@@ -38,11 +38,15 @@ cargo_test() {
   echo "$out" | grep -qE "test result: FAILED|^error|os error 4551" && status=1
 }
 
-build() {
+build() {  # every target (tests included); a compiler warning fails it (cargo replays cached warnings, CI1)
   local out
-  if out=$(cargo build --workspace 2>&1); then
-    echo "$out" | grep -E "^warning" -A4 | head -40
-    echo "[build] ok"
+  if out=$(cargo build --workspace --all-targets 2>&1); then
+    if echo "$out" | grep -qE "^warning"; then
+      echo "$out" | grep -E "^warning" -A6 | head -60
+      echo "[build] FAIL: compiler warnings"; status=1
+    else
+      echo "[build] ok"
+    fi
   else
     echo "$out" | grep -E "^(error|warning)" -A8 | head -60
     echo "[build] FAIL"; status=1

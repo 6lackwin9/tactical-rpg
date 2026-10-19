@@ -1,5 +1,7 @@
 # DLG1-A: Service lines, Ashlands dialogue, the keep shop and gold (S11)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
 Depends on: DLG1-L commit 1 merged; EXP1-A merged (npc and chest markers); M4-A merged
 Lane: asset (one branch, seed `data/seeds/dlg1a.gd`)

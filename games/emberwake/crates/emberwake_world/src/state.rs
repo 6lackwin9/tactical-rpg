@@ -7,6 +7,13 @@ use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
 use emberwake_data::STATS;
 use indexmap::IndexMap;
+
+/// ContentFactory.item_fits_slot with worn gear kept: equipment whose slot is `slot`, either accessory slot for an
+/// accessory, and a one-handed main-hand weapon in the off hand.
+pub fn item_fits_slot(item: &emberwake_data::ItemDef, slot: &str) -> bool {
+    let up = slot.to_uppercase();
+    item.is_equipment() && (item.slot == up || (up.starts_with("ACCESSORY") && item.slot.starts_with("ACCESSORY")) || (up == "OFF_HAND" && item.slot == "MAIN_HAND" && !item.two_handed && item.item_type == "WEAPON"))
+}
 use serde_json::Value;
 
 pub const GOLD_MAX: i64 = 9_999_999;
@@ -66,6 +73,20 @@ impl UnitState {
 
     pub fn unspent(&self, d: &Data) -> i64 {
         emberwake_rules::stats::spend_pool(self.level(d) as i32) as i64 - self.spent()
+    }
+
+    /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept) and the
+    /// class has training in its weapon or gear type (Proficiency.can_use on the class's own proficiency).
+    pub fn can_wear(&self, d: &Data, item: &str, slot: &str) -> Result<(), String> {
+        let def = d.cat.items.get(item).ok_or_else(|| format!("unknown item '{item}'."))?;
+        if !item_fits_slot(def, slot) {
+            return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
+        }
+        let class = d.cat.classes.get(&self.class_id(d));
+        if !def.weapon_type.is_empty() && !class.is_some_and(|c| emberwake_rules::stats::Proficiency::from_class(c).can_use(&def.weapon_type)) {
+            return Err(format!("{} has no training in {} ({}).", class.map(|c| c.name.as_str()).unwrap_or("This class"), def.weapon_type, def.name));
+        }
+        Ok(())
     }
 
     pub fn class_id(&self, d: &Data) -> String {
@@ -202,6 +223,8 @@ impl UnitState {
                 errors.push(format!("{at}: unknown equipment slot '{slot}'."));
             } else if !d.has("items", item) {
                 errors.push(format!("{at}: unknown item '{item}' in {slot}."));
+            } else if let Err(e) = self.can_wear(d, item, slot) {
+                errors.push(format!("{at}: {e}"));
             }
         }
         for item in &self.carried {

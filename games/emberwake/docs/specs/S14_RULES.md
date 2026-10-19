@@ -1,5 +1,7 @@
 # S14-RULES: asset pipeline, animation, audio and asset-load tests (baseline)
 
+Status update (2026-10-20): answered and built (S14 rows done); the engine reads art by path since ASSETORG1. The status line below is the original.
+
 Status: proposed (design-brainstorm 2026-10-17; baseline rules so S14 can be specced and built later; nothing approved)
 Depends on: none for the art registry; S12-RULES status and terrain ids for their icons; UI_MENUS_RULES settings for volumes and animation speed
 Lane: design (this file); later logic and asset tasks listed in section 4
@@ -70,7 +72,7 @@ One row per key and variant that has a FILE (generated-only keys need no row):
 | `frames` | int | 1 | reserved for sprite strips (Q-A2 option B); must be 1 until that slice |
 | `origin` | `system`, `user` | `user` | same origin rules as content (SKILL1) |
 
-File layout: `assets/art/<namespace>/<key>_<variant>.<png or svg>`, `assets/audio/sfx/<key>.ogg`, `assets/audio/music/<key>.ogg`. Godot import settings: art imported lossless with filtering per namespace (tiles nearest, portraits linear), audio OGG Vorbis, music loops on.
+File layout: `assets/art/<namespace>/<key>_<variant>.<png or svg>` (Godot; the engine since ASSETORG1: `assets/art/<namespace>/<key>/<variant>.png`), `assets/audio/sfx/<key>.ogg`, `assets/audio/music/<key>.ogg`. Godot import settings: art imported lossless with filtering per namespace (tiles nearest, portraits linear), audio OGG Vorbis, music loops on.
 
 Default sizes for file art (pixels; the placeholder x2 raster sizes, so swapping keeps layouts): token 128x128, portrait 240x240, item icon 96x96, tile 108x108, skill and status icon 64x64.
 

@@ -17,9 +17,9 @@ pub use aegis_ui::screen::{show_errors, title, Key, Screen};
 pub type Cx = aegis_ui::Cx<GameCx>;
 pub type Nav = aegis_ui::Nav<GameCx>;
 
+/// The game's own settings keys and defaults (sound, display and text size are the engine's: `Settings::engine_defaults`).
 pub fn default_settings() -> Value {
-    json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "window_mode": "Windowed", "window_size": "1280x720",
-        "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true})
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true})
 }
 
 /// The game in play (CurrentGame): the state, the slot it came from and its copy at the last save or load.

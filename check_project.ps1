@@ -1,6 +1,6 @@
 # ==============================================================================
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
-# Builds every engine crate, then runs every test: the rules, battle, world, data-loader, content-writer and Godot
+# Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader, content-writer and Godot
 # parity suites (the parity suites skip themselves when games/emberwake/parity/out is missing; tools/fc.sh parity records it
 # from legacy/). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
@@ -32,11 +32,13 @@ function Invoke-Cargo([string[]]$CargoArgs) {
 Write-Host "=== AEGIS: COMMIT GATE ===" -ForegroundColor Cyan
 
 Write-Host "[1/2] Building every crate..."
-$build = Invoke-Cargo @("build", "--workspace")
+# Every target (tests included); a compiler warning fails the gate like an error (cargo replays cached warnings, CI1).
+$build = Invoke-Cargo @("build", "--workspace", "--all-targets")
 if ($VerboseOutput) { $build.Lines | ForEach-Object { Write-Host $_ } }
-if ($build.Code -ne 0) {
+$warned = @($build.Lines | Where-Object { $_ -match "^warning" }).Count -gt 0
+if ($build.Code -ne 0 -or $warned) {
     $build.Lines | Where-Object { $_ -match "^(error|warning)|-->" } | Select-Object -First 60 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-    Write-Host "=== [FAILED] build ===" -ForegroundColor Red
+    Write-Host "=== [FAILED] build$(if ($build.Code -eq 0) { ': compiler warnings' }) ===" -ForegroundColor Red
     exit 1
 }
 if (-not $Quiet) { Write-Host "  -> build ok" -ForegroundColor Green }

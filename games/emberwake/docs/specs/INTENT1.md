@@ -1,5 +1,7 @@
 # INTENT1: Enemy intent tells
 
+Status update (2026-10-20): approved and built on Godot; PORT-INTENT (the engine port) approved and queued. The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: decision combat "DR1 enemy intent tells (user 2026-10-18)", review `games/emberwake/docs/specs/DESIGN_REVIEW1.md` 3.6)
 Depends on: COMBAT-UI2-L1 (layout C columns) and COMBAT-UI2-L2 (hover card) for the UI part; the logic part needs nothing new
 Lane: logic (INTENT1-L engine read-out and perk; INTENT1-U UI on the UI/UX thread), plus a tiny asset slice (INTENT1-A: one passive, one character edit)
