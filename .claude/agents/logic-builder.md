@@ -19,7 +19,7 @@ Rules:
 
 - No compiler warnings; content/data only through `aegis content` when a fixture or the schema migration needs it; use the Edit tool, not sed ranges.
 - Put files where `docs/STRUCTURE.md` says. If a needed path is not listed, stop and ask.
-- Add rule-derived tests (integration tests in `engine/crates/<crate>/tests/`, one file per system). Do not hard-code numbers you have not printed. A Godot parity suite that diverges because of an intended rule change: stop and report (CLAUDE.md "Godot parity").
+- Add rule-derived tests (integration tests in `engine/crates/<crate>/tests/`, one file per system). Do not hard-code numbers you have not printed. A Godot parity suite that diverges because of the rule change the task intends: retire that check (remove or narrow the suite or its recorded cases) and list it in the docs delta (CLAUDE.md "Godot parity"); an unintended divergence is a bug to fix.
 - Verify with `tools/fc.sh build` then `tools/fc.sh test <filter>`; finish with `check_project.ps1 -Fast -Quiet` (or `tools/fc.sh gate`). Each worktree builds into its own folder (fc.sh sets it).
 - Uncertainty rule: after two failed targeted fixes for the same problem, or on any gameplay/design question, STOP and report the question with findings and options instead of guessing.
 - If the brief contradicts the spec or the decisions files (per CLAUDE.md), say so in the first line of your report (do the safe reading and keep the other behind a flag or note).

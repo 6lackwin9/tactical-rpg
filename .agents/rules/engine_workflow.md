@@ -25,7 +25,7 @@ After making any code edits (`*.rs`, `Cargo.toml`, tools or configuration files)
    - Every crate builds with 0 errors and 0 compiler warnings.
    - Every test passes, including the Godot parity suites (they skip themselves only when `engine/parity/out` is missing; record it with `tools/fc.sh parity`).
    - Data edits leave `aegis content check` clean.
-3. **Auto-Remediate All Current Problems**: If any compile errors, warnings, markdownlint diagnostics, IDE diagnostics (IDE Problems tab), or test failures occur, the agent MUST diagnose the root cause, fix the code/docs, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 test failures)** before proceeding to documentation or committing. A Godot parity divergence caused by an intended rule change is not fixed by editing the test: stop and ask (CLAUDE.md "Godot parity").
+3. **Auto-Remediate All Current Problems**: If any compile errors, warnings, markdownlint diagnostics, IDE diagnostics (IDE Problems tab), or test failures occur, the agent MUST diagnose the root cause, fix the code/docs, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 test failures)** before proceeding to documentation or committing. A Godot parity divergence caused by an intended, approved rule change is not fixed by editing the traces: the task retires the check it breaks (CLAUDE.md "Godot parity").
 
 ## 4. Mandatory Documentation & Commit Protocol
 

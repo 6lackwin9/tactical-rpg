@@ -250,8 +250,8 @@ switches to the engine.
 - `docs/workflow/*`, `docs/WORKFLOW.md`, `docs/STRUCTURE.md` (engine layout), `docs/EFFICIENCY.md` (engine timings
   on top, Godot rows kept), `docs/GAME_BRIEF.md` (layers and a reading note; its rules still hold),
   `data/seeds/README.md` (JSON seeds), `assets/README.md`; the cloud hook installs Rust and imports `legacy/`.
-- Decisions: "Engine transition", "Engine merged into main", "Godot parity divergence" (planner interim, awaiting the
-  user), "Smart App Control off"; "Content edits", "Typing", "Engine branch hold" and "Per-system gates" archived with
+- Decisions: "Engine transition", "Engine merged into main", "Godot parity divergence" (planner interim; replaced the same day
+  by the user's "Godot parity as a migration check"), "Smart App Control off"; "Content edits", "Typing", "Engine branch hold" and "Per-system gates" archived with
   pointers; HISTORY rows for the Godot build, seeds, the arena gates and the web export.
 - Fixes found on the way: `branch-cleanup.yml` would have deleted the `legacy` branch (now skipped); every worktree
   shared one cargo build folder (the gates now give a linked worktree its own); markdown lint in `pc-launch`.

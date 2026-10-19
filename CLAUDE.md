@@ -36,7 +36,7 @@ Read these instead of crawling the code:
 
 Strict static typing (Rust; the build has no compiler warnings, clippy is advisory); README is updated with every change (builders report a docs delta, the planner applies it); commit/push only when `check_project.ps1 -Fast -Quiet` (desktop) or `tools/fc.sh gate` (cloud; same steps: build every crate, run every test) is clean and `tools/fc.sh docs` is clean; on desktop also the IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/engine_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content only through `aegis content` (`tools/fc.sh content`), never raw JSON; never edit `legacy/`; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
 
-Godot parity: the engine's parity suites replay the frozen Godot build step for step (battle traces, world battles, journeys, saves, the data loader and writer). A task that changes a rule on purpose and makes one of them diverge stops and asks the user how to proceed; never edit a parity test or its recorded traces to make it pass.
+Godot parity (user 2026-10-19): the engine's parity suites replay the frozen Godot build step for step (battle traces, world battles, journeys, saves, the data loader and writer). They are the migration check, not a permanent contract: an unintended divergence is a bug (fix the engine); an approved task that changes a rule on purpose retires the parity check it breaks in the same change (removes or narrows that suite or its recorded cases, names it in the commit and a `docs/HISTORY.md` row). Never edit recorded traces or expectations to make a parity test pass.
 
 ## Feedback rule
 

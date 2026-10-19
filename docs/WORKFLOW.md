@@ -12,7 +12,7 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 | Failures re-debugged from scratch | `known-issues` skill table; add every new cause |
 | Ad-hoc patch scripts truncating files / data edits by hand | `patch-and-seed` skill: Edit tool for text, `aegis content` (upsert, remove, JSON seeds) for data |
 | Test numbers hard-coded, break on every data change | Derive expectations from rules or the Godot reference; print real values first (`aegis battle ... log`, `aegis serve`) |
-| A rule change silently drifting from the released game | The Godot parity suites replay the frozen Godot build step for step; an intended divergence goes to the user (CLAUDE.md "Godot parity") |
+| A rule change silently drifting from the released game | The Godot parity suites replay the frozen Godot build step for step; an intended divergence retires the check it breaks (CLAUDE.md "Godot parity") |
 | Guessing at design/balance | Ask the user (options + trade-offs) after 2 failed fixes or any design choice |
 | Markdown lint warnings (MD060, MD022, MD032, MD012) | Pad table pipes (`\| --- \|`), single blank lines around headings/lists, no consecutive blanks |
 
