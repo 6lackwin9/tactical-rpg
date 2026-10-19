@@ -121,3 +121,27 @@ The engine reads the project's `data/` folder itself; the Godot exports are only
   content editing in the engine later.
 - Not read: version 1 (flat) skills and items files, pre-CLASS1 class `skill_path` lists (the shipped data has none;
   the loader reports them), and the load-time validation messages that only block saving in Godot.
+
+## Data writer (aegis_world::store, 2026-10-19)
+
+Content is edited without Godot through `aegis content check | upsert | remove | apply` (crate `aegis_cli`, also
+`tools/fc.sh content`), which replaced `ContentCatalog.upsert` seeds when the Godot build moved to `legacy/`.
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `upsert`, `remove`, `check` | `tests/store.rs` |
+| `content/skill_ranks.gd` (`collapse`, `fold`), `skill_kinds.gd` (`has_field`) | `store::skill_storage` | `tests/store.rs` |
+| `core/specs/item_modifiers.gd` (`stored`) | `store::catalog_storage` (items) | `tests/store.rs` |
+| `world/world_catalog.gd` (`save_world`, `upsert`), `world_schema.gd` (`to_storage`) | `store::world_storage`, `manifest_text` | `tests/store.rs` |
+| `exploration/map_catalog.gd`, `quests/quest_catalog.gd`, `dialogue/service_catalog.gd` (`to_storage`, `save`) | `store::game_storage` | `tests/store.rs` |
+| `JSON.stringify(doc, "\t", false)` | `store::stringify` (14 significant digits for floats, Godot's escapes) | `tests/store.rs` |
+
+- `parity/export.sh only=resave` copies `legacy/data` (catalog, worlds, maps, quests, dialogue) to `out/resave/before`
+  and lets Godot's own saves rewrite the copy into `out/resave/after`; the writer, given `before`, writes all 53 files
+  of `after` byte for byte. Nine shipped files are older than their schema (field order), so Godot's save reorders
+  them too; the first engine save of such a file does the same.
+- Validation: id (snake_case), name, enum options and catalog references by the schema; skill ranks and item families
+  by construction; then the whole data folder must load without new problems, else the file is put back.
+- Not covered: the asset manifest (`data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
+  sprite work), the Forge's richer checks (SkillValidator, item budgets, world reference rules); the gate's test
+  suites and `content check` catch what a broken entry does to the game.

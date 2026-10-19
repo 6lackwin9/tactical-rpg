@@ -1,6 +1,7 @@
 //! `aegis`: the engine's command line for agents and humans.
 //!   aegis sim duel [level] [seeds] [preset=balanced] [jitter=on|off] [json]   balance-sim duel matrix
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
+//!   aegis content check | upsert | remove | apply                               edit data/ (see `content`)
 //! Data: the project's data/ folder (`data=<dir>`), read by the engine's own loader; `catalog=<path>` (or
 //! $AEGIS_CATALOG) reads a resolved Godot export instead.
 
@@ -26,7 +27,7 @@ impl Args {
         let mut positional = Vec::new();
         let mut keys = IndexMap::new();
         for a in raw {
-            match a.split_once('=') {
+            match a.split_once('=').filter(|_| !a.starts_with('{') && !a.starts_with('[') && !a.starts_with('@')) {
                 Some((k, v)) => {
                     keys.insert(k.to_string(), v.to_string());
                 }
@@ -53,18 +54,122 @@ fn load_catalog(args: &Args) -> Result<Arc<Catalog>> {
         let path = PathBuf::from(p);
         return Ok(Arc::new(Catalog::load_resolved(&path).with_context(|| format!("loading {}", path.display()))?));
     }
-    let dir = match args.keys.get("data") {
-        Some(d) => PathBuf::from(d),
-        None => match aegis_world::Data::find_data_dir(&std::env::current_dir()?) {
-            Some(d) => d,
-            None => bail!("data folder not found: run from the project or pass data=<dir> (or catalog=<export file>)"),
-        },
-    };
+    let dir = data_dir(args)?;
     let src = aegis_world::source::load(&dir);
     for e in &src.errors {
         eprintln!("data: {e}");
     }
     Ok(Arc::new(Catalog::from_value(&src.catalog)))
+}
+
+/// `data=<dir>`, else the project's data/ folder above the working directory.
+fn data_dir(args: &Args) -> Result<PathBuf> {
+    match args.keys.get("data") {
+        Some(d) => Ok(PathBuf::from(d)),
+        None => match aegis_world::Data::find_data_dir(&std::env::current_dir()?) {
+            Some(d) => Ok(d),
+            None => bail!("data folder not found: run from the project or pass data=<dir> (or catalog=<export file>)"),
+        },
+    }
+}
+
+/// A JSON argument: inline, or `@<file>`.
+fn json_arg(raw: &str) -> Result<serde_json::Value> {
+    let text = match raw.strip_prefix('@') {
+        Some(path) => std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?,
+        None => raw.to_string(),
+    };
+    serde_json::from_str(&text).context("parsing the JSON argument")
+}
+
+/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?} or {"op": "remove", "kind", "id", "world"?}.
+fn content_step(dir: &std::path::Path, step: &serde_json::Value) -> std::result::Result<String, Vec<String>> {
+    use aegis_world::store;
+    let s = |k: &str| step.get(k).and_then(|v| v.as_str()).map(String::from);
+    let kind = s("kind").ok_or_else(|| vec!["step needs a kind".to_string()])?;
+    let world = s("world");
+    let (verb, outcome) = match s("op").as_deref().unwrap_or("upsert") {
+        "remove" => {
+            let id = s("id").ok_or_else(|| vec!["remove needs an id".to_string()])?;
+            ("removed", store::remove(dir, world.as_deref(), &kind, &id)?)
+        }
+        "upsert" => {
+            let entry = step.get("entry").and_then(|e| e.as_object()).ok_or_else(|| vec!["upsert needs an entry object".to_string()])?;
+            let o = store::upsert(dir, world.as_deref(), &kind, entry, s("replace").as_deref())?;
+            (if o.replaced { "replaced" } else { "added" }, o)
+        }
+        other => return Err(vec![format!("unknown op '{other}' (upsert or remove)")]),
+    };
+    let id = s("id").or_else(|| step.get("entry").and_then(|e| e.get("id")).and_then(|v| v.as_str()).map(String::from)).unwrap_or_default();
+    Ok(format!("{verb} {kind} '{id}' in {}", outcome.file.display()))
+}
+
+/// `aegis content ...`: the data folder edited through the engine's writer (aegis_world::store), never by hand.
+///   check                                              load problems and broken references (exit 1 when any)
+///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
+///   remove <kind> <id> [world=<id>]                    remove one entry
+///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
+fn content(args: &Args) -> Result<()> {
+    let dir = data_dir(args)?;
+    let fail = |errors: Vec<String>| -> Result<()> {
+        for e in &errors {
+            eprintln!("error: {e}");
+        }
+        bail!("{} problem(s); nothing was written for the failing step", errors.len())
+    };
+    match args.pos(1) {
+        Some("check") => {
+            let problems = aegis_world::store::check(&dir);
+            for p in &problems {
+                println!("{p}");
+            }
+            if !problems.is_empty() {
+                bail!("{} problem(s) in {}", problems.len(), dir.display());
+            }
+            println!("data ok: {}", dir.display());
+            Ok(())
+        }
+        Some("upsert") => {
+            let (Some(kind), Some(raw)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content upsert <kind> <json | @file> [world=<id>] [replace=<id>]") };
+            let mut step = json!({"op": "upsert", "kind": kind, "entry": json_arg(raw)?});
+            for k in ["world", "replace"] {
+                if let Some(v) = args.keys.get(k) {
+                    step[k] = json!(v);
+                }
+            }
+            match content_step(&dir, &step) {
+                Ok(line) => Ok(println!("{line}")),
+                Err(e) => fail(e),
+            }
+        }
+        Some("remove") => {
+            let (Some(kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content remove <kind> <id> [world=<id>]") };
+            let mut step = json!({"op": "remove", "kind": kind, "id": id});
+            if let Some(w) = args.keys.get("world") {
+                step["world"] = json!(w);
+            }
+            match content_step(&dir, &step) {
+                Ok(line) => Ok(println!("{line}")),
+                Err(e) => fail(e),
+            }
+        }
+        Some("apply") => {
+            let Some(path) = args.pos(2) else { bail!("usage: aegis content apply <seed.json>") };
+            let seed = json_arg(&format!("@{path}"))?;
+            let steps = seed.get("steps").and_then(|s| s.as_array()).cloned().or_else(|| seed.as_array().cloned()).context("a seed is {\"steps\": [...]} or a list of steps")?;
+            for (i, step) in steps.iter().enumerate() {
+                match content_step(&dir, step) {
+                    Ok(line) => println!("{}/{}: {line}", i + 1, steps.len()),
+                    Err(e) => {
+                        eprintln!("step {} of {} failed (earlier steps stay written):", i + 1, steps.len());
+                        return fail(e);
+                    }
+                }
+            }
+            Ok(())
+        }
+        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json>"),
+    }
 }
 
 /// The sim's sandbox unit (SimRunner.define + _write): a class unit of `level`, hero tier, never flees.
@@ -191,10 +296,12 @@ fn main() -> Result<()> {
         (Some("battle"), Some(_)) => battle(&args),
         (Some("serve"), _) => serve(&args),
         (Some("link"), _) => link(&raw),
+        (Some("content"), Some(_)) => content(&args),
         _ => {
             println!("aegis sim duel [level] [seeds] [preset=balanced] [jitter=on|off] [json]\naegis battle <encounter id> [seed=N] [preset=balanced] [log]
 aegis serve   (JSON lines on stdin / stdout; see crates/aegis_host)
-aegis link '<json>' ... [port=47800]   (requests to a running aegis-gui)");
+aegis link '<json>' ... [port=47800]   (requests to a running aegis-gui)
+aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json>");
             Ok(())
         }
     }

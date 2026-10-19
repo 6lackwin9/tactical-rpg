@@ -222,6 +222,24 @@ Step 1 done (2026-10-19, user: frozen data copy, the entire project, a version n
 - The parity tools (`export.sh`, `trace.sh`, `journey.sh`) run `legacy/`; their output is byte-identical to the
   root project's, and `godot_commit.txt` records the commit from `LEGACY.md`.
 
+Step 2 (2026-10-19, user go-ahead): the code and tooling switch to Aegis.
+
+- Content editing without Godot: `aegis_world::store` and `aegis content check | upsert | remove | apply` write
+  Godot's storage format exactly (checked against Godot's own re-save of every data file; PORT_NOTES "Data writer").
+- The engine no longer needs the Godot root: art comes from the folder holding `assets/art`; the GUI and CLI read
+  `data/`; `aegis_app` and `aegis_core` are retired.
+- Gates: `check_project.ps1` and `tools/fc.sh gate` build every crate and run every test; CI (`gate.yml`, required
+  check `gate`) records the Godot reference from `legacy/` with Godot 4.7.2, then runs the same gate. `web.yml` (the
+  Godot web export, paused since 2026-10-17) is removed; the `legacy` branch still has it.
+- Launch: `run.bat` (and `run_dev.bat`, `run_opt.bat`) keep the pull, worktree and save-backup rules and build and
+  open the engine's Scene Runner, each folder with its own build output.
+- The Godot project leaves the root (`project.godot`, `scenes/`, `scripts/`, Godot tools and seeds, `.import` /
+  `.uid` files, playtest recordings): it lives on in `legacy/` and on the `legacy` branch.
+- The root README describes the Aegis project; then `engine` is merged into `main`.
+- Left for step 3 (process): `CLAUDE.md`, `.claude/` agents and skills, `.agents/rules`, `docs/workflow/*` (cloud and
+  desktop flow, web deploy), `docs/STRUCTURE.md`, `data/seeds/README.md`, `assets/README.md`, and `develop` (still the
+  pre-engine Godot branch with the SPRITE1-A work in progress).
+
 ## 9. Scope
 
 - **Target:** switch this game over to the engine. If that works and

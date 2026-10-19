@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/aegis_core",
     "crates/aegis_data",
     "crates/aegis_rules",
     "crates/aegis_battle",
@@ -9,7 +8,6 @@ members = [
     "crates/aegis_cli",
     "crates/aegis_host",
     "crates/aegis_gui",
-    "crates/aegis_app",
 ]
 
 [workspace.package]

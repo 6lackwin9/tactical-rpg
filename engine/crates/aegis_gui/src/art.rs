@@ -1,4 +1,4 @@
-//! Placeholder art from the Godot project (assets/art, read-only), downsampled to pixel scale and cached.
+//! Placeholder art from the project's assets/art folder (read-only), downsampled to pixel scale and cached.
 
 use crate::canvas::Image;
 use std::collections::HashMap;
@@ -30,7 +30,7 @@ pub fn load_png(path: &Path) -> Option<Image> {
 }
 
 impl Art {
-    /// `root`: the Godot project folder (holds assets/art); None draws fallbacks only.
+    /// `root`: the project folder (holds assets/art); None draws fallbacks only.
     pub fn new(root: Option<PathBuf>) -> Self {
         Self { root, cache: HashMap::new() }
     }
@@ -60,11 +60,11 @@ impl Art {
     }
 }
 
-/// The Godot project folder above `start` (the first ancestor holding project.godot).
+/// The project folder above `start` (the first ancestor holding assets/art).
 pub fn find_project(start: &Path) -> Option<PathBuf> {
     let mut dir = start.to_path_buf();
     loop {
-        if dir.join("project.godot").is_file() {
+        if dir.join("assets/art").is_dir() {
             return Some(dir);
         }
         if !dir.pop() {

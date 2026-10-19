@@ -1,6 +1,6 @@
-//! Data independence: the engine's own loader (aegis_world::source) reads the project's data/ folder and must build
-//! exactly what Godot's catalogs build, as recorded by engine/parity/export.sh: every catalog kind (skill ranks
-//! expanded, items resolved against their families), every world (manifest, lineage, own entries) and the game data
+//! Data independence: the engine's own loader (aegis_world::source) reads a data folder and must build exactly what
+//! Godot's catalogs build from it, as recorded by engine/parity/export.sh from legacy/ (so the loader reads
+//! legacy/data): every catalog kind (skill ranks expanded, items resolved against their families), every world (manifest, lineage, own entries) and the game data
 //! (maps, quests, services, XP curve, item families). Keys, key order and int / float types must match; floats match
 //! to 1e-9 (Godot's JSON.stringify writes fewer digits than it computes with). The schema copy must match the export.
 
@@ -13,7 +13,8 @@ fn out_dir() -> PathBuf {
 }
 
 fn data_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data")
+    // the data Godot read for the exports: the frozen copy (the live data/ is checked by tests/store.rs)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../legacy/data")
 }
 
 fn read(name: &str) -> Option<Value> {

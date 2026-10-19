@@ -1,6 +1,5 @@
 /target/
 **/*.rs.bk
-Cargo.lock
 
 # Engine saves (written by aegis_game)
 /saves/

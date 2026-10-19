@@ -16,6 +16,7 @@ pub mod rolls;
 pub mod save;
 pub mod shop;
 pub mod source;
+pub mod store;
 pub mod state;
 pub mod travel;
 

@@ -8,4 +8,6 @@ project="$(cd "$here/../../legacy" && pwd)"   # the frozen Godot reference (lega
 GODOT="${GODOT:-$(command -v godot || echo "/c/Program Files/Godot/godot.exe")}"
 win() { if command -v cygpath >/dev/null; then cygpath -m "$1"; else echo "$1"; fi; }
 mkdir -p "$here/out"
+# a fresh checkout has no class cache yet: import the project once
+[ -d "$project/.godot" ] || "$GODOT" --headless --path "$project" --import > /dev/null 2>&1 || true
 "$GODOT" --headless --path "$project" -s "$(win "$here/godot/journey.gd")" -- out="$(win "$here/out")" "$@" 2>&1 | grep -E "^§|ERROR|SCRIPT" | sed "s/^§ //"

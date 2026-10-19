@@ -13,7 +13,7 @@ const STANCES: Array[int] = [0, 1, 2, 3]   # CombatTypes.StanceType NEUTRAL, OFF
 const SLOTS: Array[String] = ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"]
 
 var out_dir: String = ""
-var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data", "saves", "schema"]
+var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data", "saves", "schema", "resave"]
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -48,7 +48,43 @@ func _initialize() -> void:
 		_write("saves.json", _saves())
 	if only.has("schema"):
 		_write("schema.json", _schema())
+	if only.has("resave"):
+		_resave()
 	quit()
+
+# What Godot's saves write: the project's catalog and world files copied to resave/before, then the copy loaded and
+# saved by ContentCatalog.save_all and WorldCatalog.save_all into resave/after (the engine's writer must match it).
+func _resave() -> void:
+	for stage: String in ["before", "after"]:
+		_copy_tree(ProjectSettings.globalize_path("res://data/catalog"), out_dir.path_join("resave/%s/catalog" % stage))
+		_copy_tree(ProjectSettings.globalize_path("res://data/worlds"), out_dir.path_join("resave/%s/worlds" % stage))
+	ContentCatalog.use_root(out_dir.path_join("resave/after/catalog"))
+	var content_err: Error = ContentCatalog.save_all()
+	WorldCatalog.use_root(out_dir.path_join("resave/after/worlds"))
+	var world_err: Error = WorldCatalog.save_all()
+	for sub: String in ["maps", "quests", "dialogue"]:
+		for stage: String in ["before", "after"]:
+			_copy_tree(ProjectSettings.globalize_path("res://data/" + sub), out_dir.path_join("resave/%s/%s" % [stage, sub]))
+	MapCatalog.use_path(out_dir.path_join("resave/after/maps/maps.json"))
+	MapCatalog.save()
+	QuestCatalog.use_path(out_dir.path_join("resave/after/quests/quests.json"))
+	QuestCatalog.save()
+	ServiceCatalog.use_path(out_dir.path_join("resave/after/dialogue/services.json"))
+	ServiceCatalog.save()
+	MapCatalog.use_path("res://data/maps/maps.json")
+	QuestCatalog.use_path("res://data/quests/quests.json")
+	ServiceCatalog.use_path("res://data/dialogue/services.json")
+	ContentCatalog.use_root("res://data/catalog")
+	WorldCatalog.use_root("res://data/worlds")
+	print("§ export: resaved catalog (%s) and worlds (%s) into %s" % [error_string(content_err), error_string(world_err), out_dir.path_join("resave/after")])
+
+func _copy_tree(from: String, to: String) -> void:
+	DirAccess.make_dir_recursive_absolute(to)
+	for f: String in DirAccess.get_files_at(from):
+		if f.ends_with(".json"):
+			DirAccess.copy_absolute(from.path_join(f), to.path_join(f))
+	for d: String in DirAccess.get_directories_at(from):
+		_copy_tree(from.path_join(d), to.path_join(d))
 
 # The field tables the loaders normalize with (ContentSchema.fields per catalog kind, WorldSchema.fields per world kind
 # and the manifest), for the engine's own loader; engine/data/schema.json is the committed copy.

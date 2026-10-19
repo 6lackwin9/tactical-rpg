@@ -1,5 +1,6 @@
 @echo off
-rem Opens the Scene Runner (main menu) on the latest code: launch any scene, hot-reload scripts, run test suites.
+rem Opens the Scene Runner of the Aegis engine (aegis-gui screen=runner) on the latest code: launch any screen, battle,
+rem forge or debug map. (Transition step 2, 2026-10-19: the Godot build is frozen in legacy\; see legacy\LEGACY.md.)
 rem   run.bat        latest main (released code) in this folder
 rem   run.bat dev    latest develop (finished tasks not yet released) in the sibling folder
 rem                  <this folder>-dev, a git worktree created on first use; run_dev.bat does the same.
@@ -11,21 +12,20 @@ rem                  Opens it in the sibling folder <this folder>-opt (a detache
 rem                  first use, switched to the branch tip on later launches unless it has local changes),
 rem                  with its own saves and settings under %APPDATA%\tactical-rpg-opt. The branch name is
 rem                  kept in <opt folder>\.opt_branch, so run.bat with no args inside the -opt folder
-rem                  (Restart runner) reopens the same option on its newest commit; run_opt.bat does the same.
-rem Scene Runner's "Restart runner" button (DEVELOPER panel) calls this file to pull.
-rem Two folders, so switching between main and dev never waits for a script cache rebuild.
-rem The dev game also keeps its own saves and settings: Godot puts user:// under %APPDATA%,
+rem                  reopens the same option on its newest commit; run_opt.bat does the same.
+rem Each folder builds into its own output folder (%LOCALAPPDATA%\Temp\aegis-target, -dev, -opt), so switching between
+rem main, dev and an option never rebuilds the others (a first build takes a few minutes, later ones seconds).
+rem The dev game also keeps its own saves and settings: the engine keeps them under %APPDATA%\Aegis,
 rem so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
-rem When a pull changed the code, it first copies that game's saves (user://saves) to
-rem user://save_backups/<date>-<old commit> and keeps the newest 10 (user 2026-10-17).
+rem When a pull changed the code, it first copies that game's saves (%APPDATA%\Aegis\saves) to
+rem %APPDATA%\Aegis\save_backups\<date>-<old commit> and keeps the newest 10 (user 2026-10-17).
 rem Before launching it fetches and fast-forwards the branch (about 1-2 s when nothing changed)
-rem and rebuilds the script cache only when the code changed (about a minute). It launches the
-rem copy on disk when offline, when the pull fails, when that folder has local changes or is on
-rem another branch (it never stashes, resets or merges). Everything runs inside one ( ) block that
-rem ends with exit /b: cmd parses it before running, so a pull that rewrites this file is safe.
+rem and rebuilds the engine (cargo build --release). It launches the copy on disk when offline, when
+rem the pull fails, when that folder has local changes or is on another branch (it never stashes,
+rem resets or merges), and the last build when a build fails. Everything runs inside one ( ) block
+rem that ends with exit /b: cmd parses it before running, so a pull that rewrites this file is safe.
 setlocal EnableDelayedExpansion
 (
-  set "GODOT=C:\Program Files\Godot\godot.exe"
   set "DIR=%~dp0."
   cd /d "%~dp0"
   set "HERE=?"
@@ -74,28 +74,28 @@ setlocal EnableDelayedExpansion
     if /i "!OBR:~-2!"=="-c" set "OPTNAME=Option C"
     if not defined INOPT for %%d in ("%~dp0.") do set "DIR=%%~fd-opt"
     set "OPTNEW="
-    if not exist "!DIR!\project.godot" (
+    if not exist "!DIR!\engine\Cargo.toml" (
       echo First option launch: creating !DIR! ...
       git worktree prune 2>nul
       git worktree add --quiet --detach "!DIR!" "origin/!OBR!"
       set "OPTNEW=1"
     )
-    if not exist "!DIR!\project.godot" (
-      echo Could not create the option folder: not launching.
+    if not exist "!DIR!\engine\Cargo.toml" (
+      echo Could not create the option folder, or the option has no engine: not launching.
       timeout /t 8 /nobreak >nul
       exit /b
     )
   )
   if "!BRANCH!"=="develop" if not "!HERE!"=="develop" (
     for %%d in ("%~dp0.") do set "DIR=%%~fd-dev"
-    if not exist "!DIR!\project.godot" (
+    if not exist "!DIR!\.git" (
       echo First dev launch: creating !DIR! ...
       git worktree prune 2>nul
       git fetch --quiet origin develop 2>nul
       git worktree add --quiet "!DIR!" develop 2>nul
       if errorlevel 1 git worktree add --quiet -b develop "!DIR!" origin/develop
     )
-    if not exist "!DIR!\project.godot" (
+    if not exist "!DIR!\.git" (
       echo Could not create the dev folder: launching main instead.
       set "BRANCH=main"
       set "DIR=%~dp0."
@@ -104,16 +104,19 @@ setlocal EnableDelayedExpansion
   set "BASEAPP=!APPDATA!"
   if /i "!BASEAPP:~-17!"=="\tactical-rpg-dev" set "BASEAPP=!BASEAPP:~0,-17!"
   if /i "!BASEAPP:~-17!"=="\tactical-rpg-opt" set "BASEAPP=!BASEAPP:~0,-17!"
+  set "TARGET=!LOCALAPPDATA!\Temp\aegis-target"
   if "!BRANCH!"=="opt" (
     set "APPDATA=!BASEAPP!\tactical-rpg-opt"
     if not exist "!APPDATA!" mkdir "!APPDATA!"
     echo Option saves and settings: !APPDATA!
+    set "TARGET=!LOCALAPPDATA!\Temp\aegis-target-opt"
   )
   if "!BRANCH!"=="develop" (
-    rem Restart runner starts this from a dev game that already has the dev APPDATA: do not nest it.
+    rem Restart from a dev game that already has the dev APPDATA: do not nest it.
     set "APPDATA=!BASEAPP!\tactical-rpg-dev"
     if not exist "!APPDATA!" mkdir "!APPDATA!"
     echo Dev saves and settings: !APPDATA!
+    set "TARGET=!LOCALAPPDATA!\Temp\aegis-target-dev"
   )
   cd /d "!DIR!"
   set "OLD="
@@ -157,8 +160,8 @@ setlocal EnableDelayedExpansion
   )
   set "NEW="
   for /f %%h in ('git rev-parse HEAD 2^>nul') do set "NEW=%%h"
-  set "SAVES=!APPDATA!\Godot\app_userdata\rpg\saves"
-  set "BACKUPS=!APPDATA!\Godot\app_userdata\rpg\save_backups"
+  set "SAVES=!APPDATA!\Aegis\saves"
+  set "BACKUPS=!APPDATA!\Aegis\save_backups"
   if defined OLD if not "!OLD!"=="!NEW!" if exist "!SAVES!\*" (
     set "STAMP="
     for /f %%t in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "STAMP=%%t"
@@ -167,11 +170,17 @@ setlocal EnableDelayedExpansion
     robocopy "!SAVES!" "!BACKUPS!\!STAMP!-!OLD:~0,7!" /e /njh /njs /nfl /ndl /np >nul
     for /f "skip=10 delims=" %%d in ('dir /b /ad /o-n "!BACKUPS!" 2^>nul') do rd /s /q "!BACKUPS!\%%d"
   )
-  if not exist ".godot\global_script_class_cache.cfg" set "OLD=none"
-  if not "!OLD!"=="!NEW!" (
-    echo Code updated: rebuilding the script cache, about a minute...
-    "!GODOT!" --headless --import --path . >nul 2>&1
+  if not exist "!DIR!\engine\Cargo.toml" (
+    echo !DIR! has no engine (an old Godot branch?^): not launching. The Godot build is in legacy\ or on the legacy branch.
+    timeout /t 8 /nobreak >nul
+    exit /b
   )
+  set "CARGO_TARGET_DIR=!TARGET!"
+  echo Building the engine into !TARGET! ...
+  pushd "!DIR!\engine"
+  cargo build --release -q -p aegis_gui -p aegis_cli
+  if errorlevel 1 echo The build failed: launching the last build if there is one.
+  popd
   set "SHA=?"
   for /f %%h in ('git rev-parse --short HEAD 2^>nul') do set "SHA=%%h"
   if "!BRANCH!"=="opt" (
@@ -179,7 +188,14 @@ setlocal EnableDelayedExpansion
   ) else (
     echo Running !CUR! at !SHA! from !DIR!
   )
-  start "" "!GODOT!" --path "!DIR!" res://scenes/scene_runner.tscn
+  if not exist "!TARGET!\release\aegis-gui.exe" (
+    echo No build to launch: see the errors above.
+    timeout /t 15 /nobreak >nul
+    exit /b
+  )
+  rem Windows Smart App Control can block a freshly built exe started by cmd; PowerShell's Start-Process starts it
+  rem (engine/docs/PORT_NOTES.md), retried a few times.
+  powershell -NoProfile -Command "$a = @{FilePath = '!TARGET!\release\aegis-gui.exe'; ArgumentList = 'screen=runner'; WorkingDirectory = '!DIR!\engine'}; for ($i = 1; $i -le 3; $i++) { try { Start-Process @a -ErrorAction Stop; exit 0 } catch { Start-Sleep 3 } }; Write-Host 'Windows blocked the engine build (Smart App Control). See engine/docs/PORT_NOTES.md.'; exit 1"
   timeout /t 4 /nobreak >nul
   exit /b
 )

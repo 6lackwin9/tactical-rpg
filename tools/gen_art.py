@@ -3,8 +3,8 @@
 #   python3 tools/gen_art.py [group ...] [--out DIR] [--list]   (default: every group, DIR = assets/art)
 # Groups: characters classes items skills statuses terrain overlays region markers pins world_map backdrops menu.
 # Needs Pillow and numpy. Output is deterministic (seeded noise), so re-running rewrites identical files.
-# After adding or changing files run `tools/fc.sh run data/seeds/art1_a.gd` (manifest rows, character art keys, map
-# templates) and `godot --headless --import` (writes the .png.import files). Prints "wrote <path>" per group.
+# It writes PNGs under assets/, which the engine reads directly. New art keys (data/assets/manifest.json, character art
+# keys, map templates) are data edits: `aegis content` / tools/fc.sh content. Prints "wrote <path>" per group.
 import argparse
 import hashlib
 import math

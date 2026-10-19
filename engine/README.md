@@ -20,12 +20,12 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
 | `crates/aegis_rules/` | Pure rules: stats, gear, unit building, damage, statuses, Godot RNG, sort and `hash()` |
 | `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
-| `crates/aegis_world/` | The data loader (`source`: reads `data/` like Godot's catalogs) and the game loop around battles: game state, new game, saves (Godot format, every migration), exploration, quests, dialogue, shops, travel, rest, battle bridge |
+| `crates/aegis_world/` | The data loader and writer (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) and the game loop around battles: game state, new game, saves (Godot format, every migration), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | The command API (JSON request in, JSON reply out): state, skills, plan, preset, confirm, step, resolve, advance, autoplay, history |
-| `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout), `link` (the GUI's agent link) |
+| `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
 | `crates/aegis_gui/` | `aegis-gui`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo); agent link on port 47800 |
-| `crates/aegis_app/` | Old egui demo (superseded by `aegis_gui`; to retire) |
-| `crates/aegis_core/` | Old shared types (used by `aegis_app` only) |
+| `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `aegis_gui`; in git history |
+| `crates/aegis_core/` | Retired 2026-10-19 with `aegis_app` (its only user); in git history |
 
 ## Parity with Godot
 

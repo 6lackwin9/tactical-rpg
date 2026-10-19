@@ -34,7 +34,7 @@ pub fn schema() -> &'static Value {
     S.get_or_init(|| serde_json::from_str(SCHEMA_TEXT).expect("engine/data/schema.json"))
 }
 
-fn fields<'a>(section: &str, kind: &str) -> &'a [Value] {
+pub(crate) fn fields<'a>(section: &str, kind: &str) -> &'a [Value] {
     schema()[section][kind].as_array().map(|a| a.as_slice()).unwrap_or(&[])
 }
 
@@ -69,7 +69,7 @@ fn floats(v: Value) -> Value {
     }
 }
 
-fn read(path: &Path, errors: &mut Vec<String>) -> Option<Value> {
+pub(crate) fn read(path: &Path, errors: &mut Vec<String>) -> Option<Value> {
     let text = std::fs::read_to_string(path).ok()?;
     match serde_json::from_str::<Value>(&text) {
         Ok(v) => Some(floats(v)),
@@ -81,7 +81,7 @@ fn read(path: &Path, errors: &mut Vec<String>) -> Option<Value> {
 }
 
 /// A file's entry list: {"version", "entries": [...]} (or a bare list) -> (entries, version).
-fn entries_of(doc: Value) -> (Vec<Value>, i64) {
+pub(crate) fn entries_of(doc: Value) -> (Vec<Value>, i64) {
     match doc {
         Value::Object(mut o) => {
             let version = to_int_or(json::get(&o, "version"), 1);
@@ -113,7 +113,7 @@ fn json_ints(v: &Value) -> Value {
 }
 
 /// ContentSchema._copy: collections get whole numbers back as ints; scalars stay as they are.
-fn copy(v: &Value) -> Value {
+pub(crate) fn copy(v: &Value) -> Value {
     if v.is_array() || v.is_object() {
         json_ints(v)
     } else {
@@ -121,15 +121,15 @@ fn copy(v: &Value) -> Value {
     }
 }
 
-fn strings(v: &Value) -> Vec<String> {
+pub(crate) fn strings(v: &Value) -> Vec<String> {
     v.as_array().map(|a| a.iter().map(gstr).collect()).unwrap_or_default()
 }
 
-fn str_list(list: &[String]) -> Value {
+pub(crate) fn str_list(list: &[String]) -> Value {
     Value::Array(list.iter().map(|s| Value::from(s.as_str())).collect())
 }
 
-fn sget(d: &Dict, key: &str, fallback: &str) -> String {
+pub(crate) fn sget(d: &Dict, key: &str, fallback: &str) -> String {
     d.get(key).map(gstr).unwrap_or_else(|| fallback.to_string())
 }
 
@@ -201,7 +201,7 @@ fn whole_level(v: &Value) -> Value {
 }
 
 /// ContentSchema.normalize (`world` false) / WorldSchema.normalize (`world` true: "_" keys are dropped).
-fn normalize(fields: &[Value], entry: &Dict, world: bool) -> Dict {
+pub(crate) fn normalize(fields: &[Value], entry: &Dict, world: bool) -> Dict {
     let mut out = Dict::new();
     for f in fields {
         let f = json::dict(f);
@@ -217,7 +217,7 @@ fn normalize(fields: &[Value], entry: &Dict, world: bool) -> Dict {
     out
 }
 
-fn content(kind: &str, entry: &Dict) -> Dict {
+pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
     normalize(fields("content", kind), entry, false)
 }
 
@@ -264,7 +264,7 @@ fn read_kind(dir: &Path, kind: &str, families: &[Dict], errors: &mut Vec<String>
 
 // ---- Skills (SkillRanks, SkillText) ----------------------------------------------------------------------------
 
-const RANK_KEYS: [&str; 20] = [
+pub(crate) const RANK_KEYS: [&str; 20] = [
     "level", "blocks", "unlock_offset", "power_mult", "dash_tiles", "reach_min", "reach_max", "status_potency", "status_magnitude", "status_rounds", "heal_base", "heal_mult", "grant_status", "extra_grants",
     "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap",
 ];
@@ -312,7 +312,7 @@ fn roman(n: usize) -> &'static str {
 }
 
 /// SkillRanks.expand.
-fn expand(e: &Dict) -> Vec<Dict> {
+pub(crate) fn expand(e: &Dict) -> Vec<Dict> {
     let mods = rank_mods(e);
     let mut base_raw = e.clone();
     for k in ["ranks", "family", "tier", "template"] {
@@ -581,11 +581,11 @@ const GEAR_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
 const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
 const NUMBER_FIELDS: [(&str, &str, i64); 5] = [("power", "base_power", 0), ("range", "base_range", 1), ("block_cost", "block_cost", 1), ("burden", "burden", 0), ("mitigation", "mitigation", 0)];
 
-fn item_type_of(family: &Dict) -> String {
+pub(crate) fn item_type_of(family: &Dict) -> String {
     sget(family, "item_type", "WEAPON")
 }
 
-fn hands_of(family: &Dict) -> Vec<String> {
+pub(crate) fn hands_of(family: &Dict) -> Vec<String> {
     if !HAND_TYPES.contains(&item_type_of(family).as_str()) {
         return Vec::new();
     }
@@ -626,7 +626,7 @@ fn default_hand(family: &Dict) -> String {
 }
 
 /// ItemFamilies.derive.
-fn derive_family(family: &Dict) -> Dict {
+pub(crate) fn derive_family(family: &Dict) -> Dict {
     let mut out = family.clone();
     let t = item_type_of(&out);
     if !HAND_TYPES.contains(&t.as_str()) {
@@ -670,7 +670,7 @@ fn read_items(list: &[Value], at: &str, version: i64, families: &[Dict], errors:
 }
 
 /// ItemModifiers.resolve: the flat row of a stored entry (normalized by the caller).
-fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
+pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     let mut row = entry.clone();
     let t = item_type_of(family);
     let family_id = sget(family, "id", "");
@@ -853,7 +853,7 @@ fn visit(id: &str, manifests: &[(String, Dict)], out: &mut Vec<String>, stack: &
 
 // ---- MapCatalog / QuestCatalog / ServiceCatalog / XpCurve ------------------------------------------------------
 
-fn load_list(path: &Path, errors: &mut Vec<String>, normalize_one: fn(&Dict) -> Dict) -> Vec<Value> {
+pub(crate) fn load_list(path: &Path, errors: &mut Vec<String>, normalize_one: fn(&Dict) -> Dict) -> Vec<Value> {
     let Some(doc) = read(path, errors) else { return Vec::new() };
     entries_of(doc).0.iter().filter_map(Value::as_object).map(|e| Value::Object(normalize_one(e))).collect()
 }
@@ -875,19 +875,19 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
 }
 
 /// MapRules.normalize_template.
-fn map_template(e: &Dict) -> Dict {
+pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
     template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("tags", a)])
 }
 
 /// QuestCatalog.normalize.
-fn quest_template(e: &Dict) -> Dict {
+pub(crate) fn quest_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
     template(e, &[("id", s.clone()), ("name", s.clone()), ("description", s), ("objectives", a.clone()), ("rewards", d), ("tags", a)])
 }
 
 /// ServiceCatalog.normalize.
-fn service(e: &Dict) -> Dict {
+pub(crate) fn service(e: &Dict) -> Dict {
     let s = Value::from("");
     template(e, &[("id", s.clone()), ("text", s)])
 }
