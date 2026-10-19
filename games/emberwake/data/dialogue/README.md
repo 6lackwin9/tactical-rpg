@@ -1,6 +1,6 @@
 # data/dialogue
 
-System: S11 (spec `docs/specs/DLG1_L.md`). Status: in progress (schema merged; lines arrive with DLG1-A).
+System: S11 (spec `games/emberwake/docs/specs/DLG1_L.md`). Status: in progress (schema merged; lines arrive with DLG1-A).
 
 Purpose: lore-free base service lines. Dialogue trees are world data (`data/worlds/<id>/dialogues.json`), shops too (`shops.json`).
 

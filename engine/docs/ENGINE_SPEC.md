@@ -1,7 +1,7 @@
 # Aegis Engine Spec (agent-native engine, parallel to Godot)
 
 Status: draft, branch `engine` only (2026-10-18). Not merged to `main`; not in
-`docs/ROADMAP.md` or `docs/DECISIONS.md` until the user approves it.
+`games/emberwake/docs/ROADMAP.md` or `docs/DECISIONS.md` until the user approves it.
 Supersedes the Markdown-as-language direction in `../ENGINE_PROPOSAL.md`.
 
 ## 1. Goal
@@ -248,7 +248,7 @@ switches to the engine.
   `engine-checklist`, `known-issues`, `rust-conventions` replace `godot-debug-checklist`, `godot-known-issues`,
   `gdscript-typing` (those stay in `legacy/.claude/skills/`); `patch-and-seed`, `pc-launch`, `planner` updated.
 - `docs/workflow/*`, `docs/WORKFLOW.md`, `docs/STRUCTURE.md` (engine layout), `docs/EFFICIENCY.md` (engine timings
-  on top, Godot rows kept), `docs/GAME_BRIEF.md` (layers and a reading note; its rules still hold),
+  on top, Godot rows kept), `games/emberwake/docs/GAME_BRIEF.md` (layers and a reading note; its rules still hold),
   `data/seeds/README.md` (JSON seeds), `assets/README.md`; the cloud hook installs Rust and imports `legacy/`.
 - Decisions: "Engine transition", "Engine merged into main", "Godot parity divergence" (planner interim; replaced the same day
   by the user's "Godot parity as a migration check"), "Smart App Control off"; "Content edits", "Typing", "Engine branch hold" and "Per-system gates" archived with
@@ -291,7 +291,7 @@ Open:
    and the in-game UI (with a small layout engine such as `taffy`), and egui
    only for agent and dev panels (tuning, inspectors). egui on its own does not
    give pixel-perfect art.
-2. When to formally add the engine to `docs/ROADMAP.md` and `docs/DECISIONS.md`.
+2. When to formally add the engine to `games/emberwake/docs/ROADMAP.md` and `docs/DECISIONS.md`.
 
 ## 11. Backlog after the transition (look and feel)
 

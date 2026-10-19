@@ -7,17 +7,17 @@ description: The milestone and lane workflow run by the planner (desktop main se
 
 Environment first: `$CLAUDE_CODE_REMOTE` empty = desktop, read `docs/workflow/desktop.md`; `true` = cloud, read `docs/workflow/cloud.md`. That file says how sessions, the front desk, alerts, branches, commits and merges work there; this skill holds what both share. On desktop you plan everything; in the cloud a standing area thread plans its area's tasks, one at a time with one branch each, landing on `develop` without a PR (a Merge & Release thread batches `develop` into `main`), and never opens a new thread without asking the user first (`docs/workflow/cloud.md` "Area threads").
 
-You are the planner and orchestrator. Agents cannot message each other; everything flows through you, with files as handoffs: `docs/TASKS.md` (queue), `docs/specs/<id>.md` (contracts), `docs/ROADMAP.md`, `docs/STRUCTURE.md`, the decisions files (per CLAUDE.md), `docs/HISTORY.md`, `docs/BALANCE_REPORT.md`. Dispatch modes: skill `planner-ops`; front desk and alerts: the environment file.
+You are the planner and orchestrator. Agents cannot message each other; everything flows through you, with files as handoffs: `docs/TASKS.md` (queue), `docs/specs/<id>.md` (contracts), `games/emberwake/docs/ROADMAP.md`, `docs/STRUCTURE.md`, the decisions files (per CLAUDE.md), `docs/HISTORY.md`, `games/emberwake/docs/BALANCE_REPORT.md`. Dispatch modes: skill `planner-ops`; front desk and alerts: the environment file.
 
 ## Lanes (segregation of duties)
 
 | Lane | Agent | Owns | Never touches |
 | --- | --- | --- | --- |
-| plan | planner (desktop main session; cloud: each area thread for its own tasks' rows) | the only writer of `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/decisions/*`, `docs/HISTORY.md`, README, GAME_BRIEF, STRUCTURE | builder lanes' files |
+| plan | planner (desktop main session; cloud: each area thread for its own tasks' rows) | the only writer of `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/decisions/*`, `docs/HISTORY.md`, README, GAME_BRIEF, STRUCTURE | builder lanes' files |
 | design | `design-brainstorm` | new or updated spec files under `docs/specs/` (and archive moves it is asked for); lists wanted TASKS/ROADMAP/decision rows in its report | TASKS, ROADMAP, decisions, code, data |
 | logic | `logic-builder` | `engine/crates/**` (rules, schema, loader and writer, validation, tests), `games/emberwake/**`, `tools/**` | shipped `games/emberwake/data/**`, `legacy/**`, the recorded Godot reference (`games/emberwake/parity/**`) |
 | asset | `asset-builder` | `games/emberwake/data/**` through `aegis content` (upsert, remove, `games/emberwake/data/seeds/<task>.json` with `apply`) | engine code, tests, docs |
-| balance | `balance` | `docs/BALANCE_REPORT.md`, sims on a clean `main` worktree | everything else |
+| balance | `balance` | `games/emberwake/docs/BALANCE_REPORT.md`, sims on a clean `main` worktree | everything else |
 | review | `change-reviewer` | read-only | - |
 | cleanup | `housekeeper` | `docs/specs/CLEANUP.md` | TASKS, ROADMAP, HISTORY, code, data, tests, tools |
 
@@ -25,7 +25,7 @@ Docs written in the main checkout by a design or cleanup agent are committed by 
 
 ## 1. Plan (no code changes)
 
-1. Read `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/STRUCTURE.md`, `docs/HISTORY.md` (do not propose deprecated concepts), the decisions files (per CLAUDE.md). Do not crawl code.
+1. Read `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/STRUCTURE.md`, `docs/HISTORY.md` (do not propose deprecated concepts), the decisions files (per CLAUDE.md). Do not crawl code.
 2. Pick tasks the user marked `approved`. A task needs a spec in `docs/specs/`: if it has none, dispatch `design-brainstorm` in the background to write it (it also drafts specs for the NEXT tasks while builders work).
 3. Present the task list, lanes, dependencies and parallel plan to the user. **Make no changes until they confirm.** Design questions go to the user.
 
@@ -41,7 +41,7 @@ Docs written in the main checkout by a design or cleanup agent are committed by 
 ## 3. Review and ship
 
 1. Review each report; run `change-reviewer`, which runs the suites (don't run them a second time yourself unless you changed something after the review). If a builder failed the same thing twice, ask the user rather than retry. Review fixes go to the SAME builder via `SendMessage` while it is resumable (it keeps its context); spawn a fresh one only when it was stopped or failed, and point it at `.agent/progress.md` (in the cloud also at the last pushed commit). If the planner itself changes code or data after a builder's gate (flag flip, seed re-run), re-run the gate before the review.
-2. Apply the builders' "docs delta" (README, GAME_BRIEF, STRUCTURE, new decision rows go to the matching `docs/decisions/<system>.md`; HISTORY append-only), update `docs/ROADMAP.md` and `docs/TASKS.md` statuses.
+2. Apply the builders' "docs delta" (README, GAME_BRIEF, STRUCTURE, new decision rows go to the matching decisions file: `games/emberwake/docs/decisions/<system>.md`, or `docs/decisions/workflow.md` for process; HISTORY append-only), update `games/emberwake/docs/ROADMAP.md` and `docs/TASKS.md` statuses.
 3. Update `docs/AGENT_MAP.md` (desktop: Active section on dispatch and finished agents into their milestone section, newest first; cloud: `AgentMap:` lines in the task commit, written by the Merge & Release thread) and append a row to the "Agent run log" in `docs/WORKFLOW.md` for milestones.
 4. Run `check_project.ps1 -Fast -Quiet` and `tools/fc.sh docs` (never pipe it into `tail` before `&& git commit`). If clean: commit with the attribution trailer from the session's system reminder and merge per the environment file (both environments: squash into `develop` when approved, no PR; desktop also removes the worktree; `main` moves only through the release PR, desktop.md "Release").
 5. If the system is now stable, ask the user whether to mark it `balance-ready`.
@@ -52,7 +52,7 @@ Docs written in the main checkout by a design or cleanup agent are committed by 
 
 ## Balance loop
 
-`balance` agent (own `main` worktree) -> `docs/BALANCE_REPORT.md` -> `design-brainstorm` (options/spec) -> user decision -> new task in `docs/TASKS.md` and the same lanes.
+`balance` agent (own `main` worktree) -> `games/emberwake/docs/BALANCE_REPORT.md` -> `design-brainstorm` (options/spec) -> user decision -> new task in `docs/TASKS.md` and the same lanes.
 
 ## Rules
 

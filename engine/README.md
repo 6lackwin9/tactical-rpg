@@ -80,7 +80,7 @@ Won / Fled / Lost buttons). In play: arrows / W A S D walk, E interacts with the
 (or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Talking opens the dialogue
 dock (1-9 choose); shops, turn-ins and lore open as popups; a world-map exit opens the world map (click a node, Travel,
 Make camp, Enter). Fights open the battle screen with the saved party; Continue settles the outcome and shows the
-results. The screen list and what is left: [docs/SCREENS.md](docs/SCREENS.md).
+results. The screen list and what is left: [games/emberwake/docs/SCREENS.md](../games/emberwake/docs/SCREENS.md).
 
 In battle: hover anything (units, cards, plan blocks, menu options) for a detail card. Click a hero to select it; click
 a foe, an ally, the hero itself or an empty tile for its options (each shows AP and the expected damage or heal); right

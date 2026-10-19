@@ -8,7 +8,7 @@ lands on `develop`.
 ## 1. What the re-scope found
 
 Most approved rows translate directly: the rules they build on are in the engine, checked step for step against Godot
-(`engine/docs/PORT_NOTES.md`), and every Godot screen has an engine counterpart (`engine/docs/SCREENS.md`). Rows that
+(`engine/docs/PORT_NOTES.md`), and every Godot screen has an engine counterpart (`games/emberwake/docs/SCREENS.md`). Rows that
 named `scripts/ui/...` now name the matching `engine/crates/aegis_gui/src/*.rs` screen; rows that named
 `scripts/combat/...` or `scripts/content/...` name the `aegis_battle` / `aegis_world` module and
 `engine/data/schema.json`; data rows go through `aegis content` with a JSON seed.

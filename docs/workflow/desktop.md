@@ -4,7 +4,7 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 
 ## Sessions
 
-- **Planner**: the main terminal session (skills `planner`, `planner-ops`). The only writer of `docs/TASKS.md`, `docs/ROADMAP.md`, `docs/decisions/*` and `docs/HISTORY.md`; commits, merges and pushes.
+- **Planner**: the main terminal session (skills `planner`, `planner-ops`). The only writer of `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/decisions/*` and `docs/HISTORY.md`; commits, merges and pushes.
 - **Front desk**: a second local session, the user's interactive desk; the planner finds it with `ListAgents` (its display name can change). The desk is read-mostly.
 - Planner to front desk: decision requests (question, recommendation and options in one message), a one-line ack on reading each relayed message plus a short done note when finished, and short summaries when a task finishes or a review has findings. Keep `docs/AGENT_MAP.md` and `docs/TASKS.md` current: the desk reads them for status. Anything needing a permission prompt, hard to reverse, or editing `CLAUDE.md` / `.claude/` is confirmed in the planner's terminal.
 - Hard failures get an immediate one-line alert to the desk, without waiting for a done note: `ALERT <task>: <what failed>, <what you are doing about it>`. Triggers: an agent error, crash or usage limit; `check_project` failing twice on the same task; a merge conflict; a blocked task or stalled agent; anything that would otherwise only be logged. Routine fixes a builder resolves on its own stay in the done notes.

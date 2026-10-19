@@ -1,6 +1,6 @@
 # data/quests
 
-System: S8. Status: schema and runtime built (M4-L); sample templates from M4-A. Specs: docs/specs/M4_L.md, docs/specs/M4_A.md.
+System: S8. Status: schema and runtime built (M4-L); sample templates from M4-A. Specs: games/emberwake/docs/specs/M4_L.md, games/emberwake/docs/specs/M4_A.md.
 
 Purpose: Lore-free quest templates (JSON).
 

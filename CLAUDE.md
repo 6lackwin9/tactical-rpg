@@ -4,18 +4,23 @@ The game runs on Aegis, its own Rust engine in `engine/` (since 2026-10-19). The
 `legacy/` (`legacy/LEGACY.md`): never edit it; it is the parity reference the engine is checked against, and the `legacy`
 branch resumes Godot work only if the user asks.
 
+Layers (SPLIT1, `docs/specs/SPLIT1.md`, done 2026-10-20): the engine (`engine/`, crates `aegis_*`) is game-agnostic; the
+game is `games/emberwake/` (crates `emberwake_*`, `data/`, `assets/`, `schema.json`, `tuning.json`, `parity/`, its
+manifest `game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands
+in that layer; the engine never names a game.
+
 Environment: `$CLAUDE_CODE_REMOTE` empty = **desktop** (read `docs/workflow/desktop.md`), `true` = **cloud** (read `docs/workflow/cloud.md`). Both share everything in this file; what differs (sessions, branches, commits, merges, gate time, IDE rule) and how to switch: `docs/workflow/README.md`.
 
 Read these instead of crawling the code:
 
-- `docs/GAME_BRIEF.md`: layers, core rules/numbers, where to look for X
-- `docs/ROADMAP.md`: systems, statuses (proposed/approved/in-progress/done/balance-ready), milestone order
-- `docs/STRUCTURE.md`: where code goes (engine crates, data, tools)
-- `docs/DECISIONS.md`: index of settled decisions (do not re-litigate); rows live in `docs/decisions/<system>.md` (read only the system you work on), superseded rows in `docs/decisions/archive.md`
-- `docs/preferences/`: Tushar's design, UI and asset preferences that are not formal decisions (read the one for your area)
+- `games/emberwake/docs/GAME_BRIEF.md`: layers, core rules/numbers, where to look for X
+- `games/emberwake/docs/ROADMAP.md`: systems, statuses (proposed/approved/in-progress/done/balance-ready), milestone order
+- `docs/STRUCTURE.md`: where code goes (engine and game crates, data, tools, docs by layer)
+- `docs/DECISIONS.md`: index of settled decisions (do not re-litigate); rows live in `games/emberwake/docs/decisions/<system>.md` (game systems) and `docs/decisions/workflow.md` (process; read only the file you work on), superseded rows in `docs/decisions/archive.md`
+- `games/emberwake/docs/preferences/`: Tushar's design, UI and asset preferences that are not formal decisions (read the one for your area)
 - `docs/HISTORY.md`: deprecated/tried ideas with reasons (append-only; never re-propose without new reasons)
-- `docs/BALANCE_REPORT.md`: latest balance runs and open issues
-- `docs/TASKS.md`: task queue (lanes, dependencies, status); specs in `docs/specs/`
+- `games/emberwake/docs/BALANCE_REPORT.md`: latest balance runs and open issues
+- `docs/TASKS.md`: task queue (layer, lanes, dependencies, status); game specs in `games/emberwake/docs/specs/`, engine and process specs in `docs/specs/`
 - `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained; cloud: written by the Merge & Release thread)
 - `docs/WORKFLOW.md`: tools and how to iterate; `docs/workflow/`: desktop vs cloud
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
@@ -25,12 +30,12 @@ Read these instead of crawling the code:
 ## Roles and lanes (agents cannot message each other; the planner routes via the docs above)
 
 - **Planner** (skills `planner`, `planner-ops`; the writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in lanes, user confirmation gate, review, commit/push, README/docs. Desktop: the main session for everything; cloud: standing area threads (Gameplay, UI/UX, Assets & Audio, Balance, Design, Platform & Workflow), each working its area's tasks one at a time on its own branch, squash-merged into `develop` without a PR; a Merge & Release thread batches `develop` into `main` with one PR; no new thread without asking the user first (the project chat is the front desk).
-- `design-brainstorm` agent (design lane): options and specs in `docs/specs/`; lists wanted roadmap and task rows in its report (the planner writes them); works ahead while builders run.
-- `logic-builder` agent (logic lane): engine code (`engine/crates/**`), schema, validation, tests and tools on the task's branch (desktop: a feature worktree); never edits shipped data; never commits (the planner or cloud thread does).
+- `design-brainstorm` agent (design lane): options and specs in `games/emberwake/docs/specs/` (game) or `docs/specs/` (engine, process); lists wanted roadmap and task rows in its report (the planner writes them); works ahead while builders run.
+- `logic-builder` agent (logic lane): code in the task's layer (`engine/crates/**` engine, `games/emberwake/crates/**` game), schema, validation, tests and tools on the task's branch (desktop: a feature worktree); never edits shipped data; never commits (the planner or cloud thread does).
 - `asset-builder` agent (asset lane): fills `games/emberwake/data/` through `aegis content` (upsert / remove / apply a seed) against a merged schema; no code, no tests.
-- `balance` agent (balance lane): sims on a clean `main` checkout (desktop: its own worktree) on `balance-ready` systems; writes `docs/BALANCE_REPORT.md`.
+- `balance` agent (balance lane): sims on a clean `main` checkout (desktop: its own worktree) on `balance-ready` systems; writes `games/emberwake/docs/BALANCE_REPORT.md`.
 - `change-reviewer` agent: read-only pre-commit review.
-- `housekeeper` agent (cleanup lane): finds legacy/redundant code, dead paths and bloat; proposes trims in `docs/specs/CLEANUP.md`; the planner adds confirmed ones to `docs/TASKS.md`/`docs/ROADMAP.md`; never implements (builders do, as separate tasks).
+- `housekeeper` agent (cleanup lane): finds legacy/redundant code, dead paths and bloat; proposes trims in `docs/specs/CLEANUP.md`; the planner adds confirmed ones to `docs/TASKS.md`/`games/emberwake/docs/ROADMAP.md`; never implements (builders do, as separate tasks).
 
 ## Standing rules
 

@@ -1,6 +1,6 @@
 # assets
 
-System: S14. Status: placeholder art stays until the base game is done. Spec: docs/specs/S14_L1.md. See docs/STRUCTURE.md and docs/ROADMAP.md.
+System: S14. Status: placeholder art stays until the base game is done. Spec: games/emberwake/docs/specs/S14_L1.md. See docs/STRUCTURE.md and games/emberwake/docs/ROADMAP.md.
 
 Purpose: art, audio and font files. Since 2026-10-19 the Aegis engine reads the PNGs directly: `emberwake` loads `games/emberwake/assets/art/<namespace>/<key>_<variant>.png` by key (`games/emberwake/crates/emberwake_gui/src/art.rs`), downsamples it to pixel scale and draws a simple fallback shape when a file is missing. There is no import step and no `.import` file (those were Godot's and stay with the Godot build in `legacy/`).
 

@@ -24,6 +24,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | SPLIT1-6 | - | engine protocol `aegis_host` and shell `aegis_cli`; game command set and `aegis` binary in `emberwake_host` |
 | main session (no lane agents) | SPLIT1-7 | - | game crates renamed `emberwake_*` under `games/emberwake/crates/`, `emberwake_content` carved out, GUI binary `emberwake` |
 | main session (no lane agents) | SPLIT1-8 | - | `games/emberwake/` holds data, assets, schema, tuning and parity; `game.json` (title read by the window and main menu); saves and settings under the game id |
+| main session (no lane agents) | SPLIT1-9 | - | Layer column in TASKS, layer check in the change-reviewer, STRUCTURE and CLAUDE.md by layer, the game's design docs in `games/emberwake/docs/` |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 
@@ -990,14 +991,14 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
 | change-reviewer (x7) | Retroactive static review of the 13 code PRs merged without review (#4, #6, #8, #9, #11, #13, #14, #16, #17, #19, #20, #21, #23) | 459k / 3 | 1 high (TASKS_DONE wipe, fixed in this PR), 7 medium, lows; follow-ups REVIEW-F1..F5 |
-| design-brainstorm | docs/specs/REVIEW_F.md from the review findings, three design questions | 79k / 5 | spec |
+| design-brainstorm | games/emberwake/docs/specs/REVIEW_F.md from the review findings, three design questions | 79k / 5 | spec |
 | planner (cloud thread) | cloud.md review step and lane-agent rule, decision rows, TASKS_DONE restored | n/a | PR #30 |
 
 ### BAL3 balance levers spec (2026-10-17, cloud)
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
-| cloud thread (no subagent) | docs/specs/BAL3.md: sim, AI and data levers for I2-I14 with triggers, sequenced after the 12x9 grid and S12S-L | n/a / 25 | approved by the user (all recs) and merged via PR #29 |
+| cloud thread (no subagent) | games/emberwake/docs/specs/BAL3.md: sim, AI and data levers for I2-I14 with triggers, sequenced after the 12x9 grid and S12S-L | n/a / 25 | approved by the user (all recs) and merged via PR #29 |
 
 ### S14-A1 first manifest rows (2026-10-17, cloud)
 

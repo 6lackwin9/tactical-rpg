@@ -19,7 +19,7 @@ Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`)
 | Gameplay | combat, map, battles, grid, terrain, travel, quests, saves | `logic-builder`, `asset-builder` for the task's data |
 | UI/UX | screens, menus, HUD, browser rendering | `logic-builder`, `asset-builder` for UI art |
 | Assets & Audio | art, icons, SFX, fonts, catalog and world data | `asset-builder` |
-| Balance | sims, `docs/BALANCE_REPORT.md`, tuning | `balance`, then `design-brainstorm` for options |
+| Balance | sims, `games/emberwake/docs/BALANCE_REPORT.md`, tuning | `balance`, then `design-brainstorm` for options |
 | Design | specs, decisions, the roadmap; each spec is approved here, then built in its area's thread; the design review cycle and its option branches ([design-review.md](design-review.md)) | `design-brainstorm`; `logic-builder` and `asset-builder` for option builds only |
 | Platform & Workflow | CI, the web build, playtest tooling, agent and skill changes, cleanups | `housekeeper`, `logic-builder` for tools and CI |
 
@@ -42,7 +42,7 @@ The thread is the planner (lane table: skill `planner`). It writes the planner d
 | engine code, schema, validation, tools, tests, and fixes to them (review fixes included) | `logic-builder` |
 | catalog or world data and its seed | `asset-builder` |
 | a new or changed spec, design options | `design-brainstorm` |
-| simulator runs and `docs/BALANCE_REPORT.md` | `balance` |
+| simulator runs and `games/emberwake/docs/BALANCE_REPORT.md` | `balance` |
 | review of the whole branch before the PR is marked ready | `change-reviewer` |
 | a cleanup pass (after a goal or milestone finishes, or on request) | `housekeeper` |
 

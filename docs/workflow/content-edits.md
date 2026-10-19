@@ -1,6 +1,6 @@
 # Content edits (agent-driven)
 
-How game content (skills, items, classes, units, passives, encounters, world data) changes now that the creation tools are read-only viewers (decision "Content edits (user 2026-10-17)", `docs/decisions/workflow.md`; tools: `docs/decisions/content-forge.md` "Read-only tools"). Agents make every edit; the user controls what is wanted, approves anything new, and can undo.
+How game content (skills, items, classes, units, passives, encounters, world data) changes now that the creation tools are read-only viewers (decision "Content edits (user 2026-10-17)", `docs/decisions/workflow.md`; tools: `games/emberwake/docs/decisions/content-forge.md` "Read-only tools"). Agents make every edit; the user controls what is wanted, approves anything new, and can undo.
 
 ## Flow
 
@@ -25,7 +25,7 @@ When unsure, treat it as new content. Design or gameplay questions always go to 
 
 ## When a sim run is required
 
-The balance agent runs `tools/fc.sh sim duel` before landing when a tweak changes a balance-relevant value of a unit, class, skill, item or passive used in combat: damage, healing, HP, armor, speed or movement, range, cost, cooldown, status magnitude or duration, gear budget, or AI thresholds, and puts the before/after numbers in the reply. Only the duel mode exists on the engine so far; a tweak that needs another mode (`tier`, `party`, `role`) says so and waits for that mode's port (a logic task). Text, icons, prices, drop weights and encounter placement need no sim. Systems not yet `balance-ready` (`docs/ROADMAP.md`) skip the sim and say so.
+The balance agent runs `tools/fc.sh sim duel` before landing when a tweak changes a balance-relevant value of a unit, class, skill, item or passive used in combat: damage, healing, HP, armor, speed or movement, range, cost, cooldown, status magnitude or duration, gear budget, or AI thresholds, and puts the before/after numbers in the reply. Only the duel mode exists on the engine so far; a tweak that needs another mode (`tier`, `party`, `role`) says so and waits for that mode's port (a logic task). Text, icons, prices, drop weights and encounter placement need no sim. Systems not yet `balance-ready` (`games/emberwake/docs/ROADMAP.md`) skip the sim and say so.
 
 ## Rules
 

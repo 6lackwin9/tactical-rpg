@@ -1,6 +1,6 @@
 # data/maps
 
-System: S9. Status: schema built (EXP1-L commit 1); templates come from EXP1-A. Specs: docs/specs/EXP1_L.md, docs/specs/EXP1_A.md.
+System: S9. Status: schema built (EXP1-L commit 1); templates come from EXP1-A. Specs: games/emberwake/docs/specs/EXP1_L.md, games/emberwake/docs/specs/EXP1_A.md.
 
 Purpose: Lore-free region map templates (JSON).
 

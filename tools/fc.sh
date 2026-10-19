@@ -51,7 +51,7 @@ build() {
 
 docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB (split by domain behind an index)
   local f lines bytes warned=0
-  for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md; do
+  for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md games/*/docs/*.md games/*/docs/specs/*.md; do
     [ -f "$f" ] || continue
     lines=$(wc -l < "$f"); bytes=$(wc -c < "$f")
     if [ "$lines" -gt 300 ] || [ "$bytes" -gt 25000 ]; then echo "[docs] WARN $f is $lines lines / $bytes bytes: split by domain behind an index"; warned=1; fi
@@ -59,7 +59,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
   local md=() out
-  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md docs/preferences/*.md games/*/data/*/README.md \
+  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md games/*/docs/*.md games/*/docs/*/*.md games/*/data/*/README.md \
     .claude/agents/*.md .claude/skills/*/SKILL.md engine/README.md engine/docs/*.md legacy/LEGACY.md; do [ -f "$f" ] && md+=("$f"); done
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }

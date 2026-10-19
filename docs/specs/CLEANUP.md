@@ -41,10 +41,10 @@ All candidates confirmed; TASKS rows `CLN-<n>` carry status `approved`. Lanes: d
 
 Doc drift. Status: done for docs/ 2026-10-17.
 
-- What and where: agent-facing facts that the code no longer has. `docs/GAME_BRIEF.md:22` "skill cap = ceil(level/2)" and `:57` "within the unit's skill cap" (SK2 removed the cap, DECISIONS rows SK2 picks / SK2-L built); `:52` riposte "L2, learned_only, guard 0.15, 2 rounds" (now skill data, DECISIONS "M2C2B content"); `:93` "Advanced families (`advanced`)" (now `grade`, HISTORY 2026-10-16 row); `docs/STRUCTURE.md:44` and `.claude/agents/logic-builder.md:22` register suites in `ArenaTestSuite.run_all_tests` (now `SuiteRegistry`, DECISIONS "R1 test split"); `.claude/skills/godot-debug-checklist/SKILL.md:42` and `.claude/skills/patch-and-seed/SKILL.md:17` cite the skill cap; `README.md:79,121,294,596` skill cap, `README.md:381` "20 test suites, 171 assertions" (34 suites now). `docs/TASKS.md:8-9` keep C1 and D1 `in-progress` although their asset parts were folded into M2C2B (done) and DECISIONS records the C1-L, C1-A1 and D1-L reviews; `docs/TASKS.md:17` still lists "open question: `evolves_from`" (resolved, DECISIONS "FORGE1 skill answers 2" and "round 4"). `docs/HISTORY.md:19-22` the Lessons section sits inside the table, so rows 23-28 render outside it.
+- What and where: agent-facing facts that the code no longer has. `games/emberwake/docs/GAME_BRIEF.md:22` "skill cap = ceil(level/2)" and `:57` "within the unit's skill cap" (SK2 removed the cap, DECISIONS rows SK2 picks / SK2-L built); `:52` riposte "L2, learned_only, guard 0.15, 2 rounds" (now skill data, DECISIONS "M2C2B content"); `:93` "Advanced families (`advanced`)" (now `grade`, HISTORY 2026-10-16 row); `docs/STRUCTURE.md:44` and `.claude/agents/logic-builder.md:22` register suites in `ArenaTestSuite.run_all_tests` (now `SuiteRegistry`, DECISIONS "R1 test split"); `.claude/skills/godot-debug-checklist/SKILL.md:42` and `.claude/skills/patch-and-seed/SKILL.md:17` cite the skill cap; `README.md:79,121,294,596` skill cap, `README.md:381` "20 test suites, 171 assertions" (34 suites now). `docs/TASKS.md:8-9` keep C1 and D1 `in-progress` although their asset parts were folded into M2C2B (done) and DECISIONS records the C1-L, C1-A1 and D1-L reviews; `docs/TASKS.md:17` still lists "open question: `evolves_from`" (resolved, DECISIONS "FORGE1 skill answers 2" and "round 4"). `docs/HISTORY.md:19-22` the Lessons section sits inside the table, so rows 23-28 render outside it.
 - Change: correct the lines; set C1, D1, FORGE1 rows to `done`; move the Lessons block below the table (no row text changes, append-only kept). Leave `GAME_BRIEF.md:65` (UNARMED_VALUE 14) to BAL2-A, which changes it.
 - Risk: none in code. `.claude/*` edits are the planner's with the user's consent.
-- Touches: `docs/GAME_BRIEF.md`, `docs/STRUCTURE.md`, `docs/TASKS.md`, `docs/HISTORY.md`, `README.md`, `.claude/agents/logic-builder.md`, `.claude/skills/godot-debug-checklist/SKILL.md`, `.claude/skills/patch-and-seed/SKILL.md`.
+- Touches: `games/emberwake/docs/GAME_BRIEF.md`, `docs/STRUCTURE.md`, `docs/TASKS.md`, `docs/HISTORY.md`, `README.md`, `.claude/agents/logic-builder.md`, `.claude/skills/godot-debug-checklist/SKILL.md`, `.claude/skills/patch-and-seed/SKILL.md`.
 
 ### CLN-2
 
@@ -82,10 +82,10 @@ Archive `.context/`. Status: done for docs/ 2026-10-17; the planner deletes the 
 Archive done specs. Status: done 2026-10-17.
 
 - What and where: (a) specs of done tasks whose headers still say `proposed`/`approved`: `AI1.md:3`, `B1.md:3`, `C1.md:3`, `D1.md:3`, `M2C2B.md:3`, `M3.md:3`, `R1.md:3`, `SK2.md:3` (about 88 KB). (b) `FORGE1_DESIGN.md` (23 KB): skills part already archived, items superseded by FORGE1_ITEMS (HISTORY 2026-10-16 items row), classes by FORGE1_CLASSES, units section 5 restated by `FORGE1_CLASSES.md` section 8. (c) `FORGE1_SKILLS.md` (40 KB) and `FORGE1_SKILLS_MATRIX.md` (28 KB), both over the 25 KB limit (`tools/fc.sh docs`); SKILL1 is done.
-- Change: mark (a) `done` and move to `docs/archive/specs/`; archive (b); for (c) copy the parts the next passes still cite into `docs/specs/FORGE_SHARED.md` (section 12 shared Forge rules, 11.3 ownership, 4.1 `weapon_hand`, matrix M origin key fields; about 10 KB, keep the section numbers so code comments such as `asset_scan.gd:5` "FORGE1 section 12.5" and `skill_def.gd:31` "FORGE1 11" still resolve) and archive the rest. Repoint `FORGE1_CLASSES.md:4,29,117,234`, `FORGE1_ITEMS.md:96,172`, `TASKS.md:17-19`.
+- Change: mark (a) `done` and move to `docs/archive/specs/`; archive (b); for (c) copy the parts the next passes still cite into `games/emberwake/docs/specs/FORGE_SHARED.md` (section 12 shared Forge rules, 11.3 ownership, 4.1 `weapon_hand`, matrix M origin key fields; about 10 KB, keep the section numbers so code comments such as `asset_scan.gd:5` "FORGE1 section 12.5" and `skill_def.gd:31` "FORGE1 11" still resolve) and archive the rest. Repoint `FORGE1_CLASSES.md:4,29,117,234`, `FORGE1_ITEMS.md:96,172`, `TASKS.md:17-19`.
 - Leave `FORGE1_ITEMS.md` (40 KB) and `FORGE1_CLASSES.md` (26 KB) alone: ITEM1 and CLASS1 build from them; slim them the same way after those merge.
 - Risk: none in code; a builder brief pointing at an old path. Do it before ITEM1 / CLASS1 are dispatched so their briefs cite stable paths.
-- Touches: `docs/specs/*`, `docs/archive/*`, `docs/TASKS.md`, `docs/specs/README.md` (note that done specs move to the archive).
+- Touches: `docs/specs/*`, `docs/archive/*`, `docs/TASKS.md`, `games/emberwake/docs/specs/README.md` (note that done specs move to the archive).
 
 ### CLN-6
 
@@ -144,9 +144,9 @@ DECISIONS split. Status: done for docs/ 2026-10-17 (user: split by system, moved
 
 ROADMAP trim. Status: done 2026-10-17.
 
-- What and where (`docs/ROADMAP.md`, 21 KB): "Open questions for the user" (37-42, answered by DECISIONS 25-28); "Proposed designs (brainstorm pass 2026-10-15)" (44-138, options decided by DECISIONS 16-28 and built in M1-M3); "Refactor backlog" R1 (140-144, done); "Milestone plan v2" and its hub matrix (146-178, all done except M4); S2 row note "M2c-2b content next" (14, done); "Open engine items" first two bullets (192-194, AI hooks done in AI1).
+- What and where (`games/emberwake/docs/ROADMAP.md`, 21 KB): "Open questions for the user" (37-42, answered by DECISIONS 25-28); "Proposed designs (brainstorm pass 2026-10-15)" (44-138, options decided by DECISIONS 16-28 and built in M1-M3); "Refactor backlog" R1 (140-144, done); "Milestone plan v2" and its hub matrix (146-178, all done except M4); S2 row note "M2c-2b content next" (14, done); "Open engine items" first two bullets (192-194, AI hooks done in AI1).
 - Change: move those sections verbatim to `docs/archive/ROADMAP_2026-10.md`; keep systems table, suggested build order, BAL2 plan, remaining open engine items; set the S2 note to the current state.
-- Risk: none. Touches: `docs/ROADMAP.md`, `docs/archive/*`.
+- Risk: none. Touches: `games/emberwake/docs/ROADMAP.md`, `docs/archive/*`.
 
 ### CLN-12
 
@@ -189,7 +189,7 @@ Legacy AI path. Status: done 2026-10-17.
 - What and where: `AiProfile.smart_skills` (`ai_profile.gd`, 2 uses) and its off branches in `tactical_ai.gd` (5 uses); `ai_skills_test_suite.gd` (7 uses) covers both paths; BAL2-L adds a sim switch for it (`tools/sim/*`).
 - Change: remove the `false` path, the field, its tests and the sim switch; fix GAME_BRIEF "AI skill use".
 - When: after the BAL2 rerun. Risk: low (ai_skills suite).
-- Touches: `ai_profile.gd`, `tactical_ai.gd`, `ai_skills_test_suite.gd`, `tools/sim/*`, `docs/GAME_BRIEF.md` (planner).
+- Touches: `ai_profile.gd`, `tactical_ai.gd`, `ai_skills_test_suite.gd`, `tools/sim/*`, `games/emberwake/docs/GAME_BRIEF.md` (planner).
 
 ### Questions (not proposed for removal)
 
