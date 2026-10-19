@@ -103,13 +103,23 @@ pub struct Ui<'a, A> {
     open: Option<String>,
     /// The drag in progress (`Kit::drag`, read at the start of the frame).
     drag: Option<Drag>,
+    /// Widgets and drawing are kept inside this rect (a window's body, `set_clip`).
+    clip: Option<Rect>,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
         // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
         let (open, drag) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None });
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag }
+        g.canvas.clip = None;
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None }
+    }
+
+    /// Keeps the drawing and the recorded widgets inside `r` (None: the whole canvas); a widget partly outside keeps
+    /// only its visible part, so it can't be clicked outside the window that shows it (UIKIT3).
+    pub fn set_clip(&mut self, r: Option<Rect>) {
+        self.clip = r;
+        self.p.clip(r);
     }
 
     /// Makes the last recorded widget draggable with payload `key` (UIKIT2): press and move picks it up, a press
@@ -141,11 +151,17 @@ impl<'a, A: Clone> Ui<'a, A> {
         if kind == "row" && action.is_none() && tip.len() > 1 && self.hover(rect) {
             self.p.panel(rect, rgba(0, 0, 0, 0), rgb(110, 140, 196), RADIUS);
         }
+        let rect = match self.clip {
+            // An open select's options are drawn over everything by the shell: not cut to a window body.
+            Some(c) if kind != "option" => rect.intersect(c),
+            _ => rect,
+        };
         self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip, drag: None, drop: None });
     }
 
+    /// The mouse is over `r` (and inside the clip, so a widget scrolled out of its window shows no hover).
     pub fn hover(&self, r: Rect) -> bool {
-        self.live && r.contains(self.mouse.0, self.mouse.1)
+        self.live && r.contains(self.mouse.0, self.mouse.1) && self.clip.is_none_or(|c| c.contains(self.mouse.0, self.mouse.1))
     }
 
     /// A plain button; `active` draws it selected (gold).

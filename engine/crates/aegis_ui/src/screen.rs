@@ -224,6 +224,11 @@ pub trait Screen<G> {
     }
     /// Payload `from` was released over target `to` (only when `can_drop` allowed it).
     fn accept_drop(&mut self, _cx: &mut Cx<G>, _from: &str, _to: &str) {}
+    /// The screen's windows (UIKIT3), when it keeps a desk: the shell moves, resizes, raises, opens and closes them and
+    /// saves the desk; the screen draws it (`Desk::draw`, `Desk::toolbar`).
+    fn desk(&mut self) -> Option<&mut crate::window::Desk> {
+        None
+    }
 }
 
 /// The widget plumbing every screen shares: its `w` list and `act(cx, action)`. The context type is `Cx` as named

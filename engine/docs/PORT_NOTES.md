@@ -81,6 +81,7 @@ because the RNG is bit-exact.
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
 | `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `emberwake_gui::battle` (`BattleScreen::world`) | manual (GUI) |
 | `audio/audio_director.gd` (buses, voice pools), `music_director.gd` (player: crossfade, loop), `volume_preview.gd` (throttle) | `aegis_ui::audio` (the master slider's sample plays on the interface bus and the music sample without the -6 dB, as in Godot) | unit tests (levels, wanted track); manual (GUI) |
+| `ui/framework/ui_window.gd` (`_clamp_to_parent`, `commit_fraction`, title drag, grip resize, collapse), `ui/dojo/dojo_workspace.gd` (`LAYOUTS`, `apply_layout`, `save_layout`, `_load_layout`, window toggles) | `aegis_ui::window` (`Desk`, `Win`, `Layout`), the shell's desk handling (`desk_press`, `save_desk`) | unit and shell tests (window.rs, shell.rs) |
 | `audio/music_director.gd` (choice: contexts, candidates, scopes, kind and combat context), `sound_events.gd` | `emberwake_gui::music`, `battle` (`sound_of`, from the resolver log; a hit for 0 plays mitigated, the engine log has no mitigation tag) | unit tests (chains, every shipped file decodes, log lines) |
 
 Godot behaviours found on the way:

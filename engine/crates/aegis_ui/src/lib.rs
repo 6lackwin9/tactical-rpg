@@ -13,5 +13,6 @@ pub mod screen;
 pub mod shell;
 pub mod tuning;
 pub mod ui;
+pub mod window;
 
 pub use screen::{Context, Cx, Key, Nav, Screen};

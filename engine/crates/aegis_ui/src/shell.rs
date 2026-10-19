@@ -9,6 +9,7 @@ use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
 use crate::canvas::{rgb, rgba, Rect};
+use crate::window::Grab;
 use crate::ui::{Drag, Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
@@ -42,6 +43,8 @@ struct Shell<G> {
     drag: Option<(String, String)>,
     /// A press on a draggable widget (UIKIT2), waiting to become a drag (a move) or a click (a release).
     press: Option<Press>,
+    /// A window being moved or resized (UIKIT3): its id, the grab and the last mouse position.
+    win_drag: Option<(String, Grab, (i32, i32))>,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -54,6 +57,13 @@ struct Press {
 
 /// How far (canvas pixels) the mouse moves from the press before a draggable widget is picked up.
 const DRAG_START: i32 = 3;
+
+/// The drop key under `pos`: the topmost enabled widget that is a drop target or a window's backdrop (a window covers
+/// what lies under it), when it is a target.
+fn drop_key_at(infos: &[Value], pos: (i32, i32)) -> Option<&str> {
+    let hit = infos.iter().rev().find(|w| w["enabled"] == json!(true) && (w["drop"].is_string() || w["kind"] == "backdrop") && info_rect(w).contains(pos.0, pos.1))?;
+    hit["drop"].as_str()
+}
 
 /// The rect of a widget's agent info.
 fn info_rect(w: &Value) -> Rect {
@@ -76,6 +86,7 @@ impl<G: Context> Shell<G> {
             self.gfx.kit.open = None;
             self.drag = None;
             self.press = None;
+            self.win_drag = None;
             self.gfx.kit.drag = None;
             let navs: Vec<Nav<G>> = self.cx.nav.drain(..).collect();
             for n in navs {
@@ -103,6 +114,7 @@ impl<G: Context> Shell<G> {
 
     fn frame(&mut self) {
         self.settle();
+        self.gfx.canvas.clip = None;
         // The saved sound levels; a screen may play draft ones for this frame (the settings popup).
         self.cx.audio.set_levels(&self.cx.settings.v);
         let cx = &mut self.cx;
@@ -119,6 +131,7 @@ impl<G: Context> Shell<G> {
             let mouse = if live { self.mouse } else { (-1, -1) };
             self.stack[i].draw(&mut self.cx, &mut self.gfx, mouse, live);
         }
+        self.gfx.canvas.clip = None;
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
         if self.gfx.kit.open.is_some() {
             // The open choice list goes over everything the screen drew; no hover card while it is open.
@@ -132,10 +145,13 @@ impl<G: Context> Shell<G> {
         } else if let Some(d) = &self.gfx.kit.drag {
             // Dragging: valid targets outlined (the one under the cursor in gold) and the ghost; no hover card.
             let top = &self.stack[n - 1];
-            for w in top.widgets().iter().filter(|w| w["enabled"] == json!(true) && w["drop"].is_string()) {
-                if top.can_drop(&self.cx, &d.key, w["drop"].as_str().unwrap_or("")) {
-                    let r = info_rect(w);
-                    let over = r.contains(self.mouse.0, self.mouse.1);
+            let infos = top.widgets();
+            for (i, w) in infos.iter().enumerate().filter(|(_, w)| w["enabled"] == json!(true) && w["drop"].is_string()) {
+                let r = info_rect(w);
+                // A target whose centre a later window backdrop covers takes no drop there (`drop_at`): no outline.
+                let covered = infos[i + 1..].iter().any(|o| o["kind"] == "backdrop" && info_rect(o).contains(r.x + r.w / 2, r.y + r.h / 2));
+                if !covered && top.can_drop(&self.cx, &d.key, w["drop"].as_str().unwrap_or("")) {
+                    let over = r.contains(self.mouse.0, self.mouse.1) && drop_key_at(&infos, self.mouse) == w["drop"].as_str();
                     p.panel(r, if over { rgba(244, 198, 84, 40) } else { rgba(0, 0, 0, 0) }, if over { GOLD } else { rgb(110, 140, 196) }, RADIUS);
                 }
             }
@@ -152,7 +168,11 @@ impl<G: Context> Shell<G> {
 
     /// Drops a press or drag in progress; true when there was one.
     fn cancel_drag(&mut self) -> bool {
-        let had = self.press.take().is_some();
+        let moved = self.win_drag.take().is_some();
+        if moved {
+            self.save_desk();
+        }
+        let had = self.press.take().is_some() | moved;
         self.gfx.kit.drag.take().is_some() || had
     }
 
@@ -190,6 +210,15 @@ impl<G: Context> Shell<G> {
             return;
         }
         let id = at.as_ref().map(|w| w["id"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        if self.desk_press(&id, pos) {
+            return;
+        }
+        // A press on a window's content brings the window to the front (the content still gets the click).
+        if let Some(d) = self.stack.last_mut().unwrap().desk() {
+            if let Some(w) = d.top_at(pos).map(String::from) {
+                d.raise(&w);
+            }
+        }
         if kind == "select" {
             self.gfx.kit.open = Some(id);
             return;
@@ -213,6 +242,13 @@ impl<G: Context> Shell<G> {
     /// The mouse moved: a press on a draggable widget becomes a drag once it moved DRAG_START pixels; a slider drag
     /// follows it along the track (the step under its x).
     fn drag_to(&mut self) {
+        if let Some((win, grab, last)) = self.win_drag.clone() {
+            if let Some(d) = self.stack.last_mut().unwrap().desk() {
+                d.drag(&win, grab, self.mouse.0 - last.0, self.mouse.1 - last.1);
+            }
+            self.win_drag = Some((win, grab, self.mouse));
+            return;
+        }
         if let Some(p) = &self.press {
             if self.gfx.kit.drag.is_none() && ((self.mouse.0 - p.at.0).abs() > DRAG_START || (self.mouse.1 - p.at.1).abs() > DRAG_START) {
                 self.gfx.kit.drag = Some(Drag { key: p.key.clone(), id: p.id.clone(), text: p.text.clone() });
@@ -247,6 +283,9 @@ impl<G: Context> Shell<G> {
     /// cancelled), a press on a draggable widget that never moved clicks it, a slider drag ends.
     fn release(&mut self) {
         self.drag = None;
+        if self.win_drag.take().is_some() {
+            self.save_desk();
+        }
         let Some(p) = self.press.take() else { return };
         match self.gfx.kit.drag.take() {
             Some(d) => {
@@ -267,9 +306,54 @@ impl<G: Context> Shell<G> {
     fn drop_at(&self, from: &str) -> Option<String> {
         let top = self.stack.last().unwrap();
         let infos = top.widgets();
-        let hit = infos.iter().rev().find(|w| w["enabled"] == json!(true) && w["drop"].is_string() && info_rect(w).contains(self.mouse.0, self.mouse.1))?;
-        let to = hit["drop"].as_str()?;
+        let to = drop_key_at(&infos, self.mouse)?;
         top.can_drop(&self.cx, from, to).then(|| to.to_string())
+    }
+
+    /// A press on a desk widget (UIKIT3): `win.<id>.<part>` raises the window and moves it (title), resizes it (grip),
+    /// closes or collapses it; `desk.toggle.<id>` and `desk.layout.<name>` are the toolbar's. False when `id` is none of
+    /// these or the top screen has no desk.
+    fn desk_press(&mut self, id: &str, pos: (i32, i32)) -> bool {
+        let Some(desk) = self.stack.last_mut().unwrap().desk() else { return false };
+        if let Some((win, part)) = id.strip_prefix("win.").and_then(|r| r.rsplit_once('.')) {
+            if desk.win(win).is_none() {
+                return false;
+            }
+            desk.raise(win);
+            match part {
+                "title" => self.win_drag = Some((win.to_string(), Grab::Move, pos)),
+                "grip" => self.win_drag = Some((win.to_string(), Grab::Resize, pos)),
+                "close" => desk.set_open(win, false),
+                "collapse" => desk.collapse(win),
+                _ => {}
+            }
+        } else if let Some((what, name)) = id.strip_prefix("desk.").and_then(|r| r.split_once('.')) {
+            match what {
+                "toggle" => desk.toggle(name),
+                "layout" => {
+                    desk.apply_layout(name);
+                }
+                _ => return false,
+            }
+        } else {
+            return false;
+        }
+        if self.win_drag.is_none() && !id.ends_with(".body") {
+            self.save_desk();
+        }
+        true
+    }
+
+    /// Saves the top screen's desk in the settings (`desks.<screen id>`).
+    fn save_desk(&mut self) {
+        let top = self.stack.last_mut().unwrap();
+        let id = top.id();
+        let Some(d) = top.desk() else { return };
+        if !self.cx.settings.v["desks"].is_object() {
+            self.cx.settings.v["desks"] = json!({});
+        }
+        self.cx.settings.v["desks"][id] = d.to_value();
+        let _ = self.cx.settings.save();
     }
 
     fn back(&mut self) {
@@ -299,7 +383,13 @@ impl<G: Context> Shell<G> {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
                 let infos = self.stack.last().unwrap().widgets();
                 let target = infos.iter().find(|w| w["id"] == id).cloned();
-                if target.as_ref().is_some_and(|w| w["kind"] == "select" && w["enabled"] == json!(true)) {
+                if target.as_ref().is_some_and(|w| w["kind"].as_str().is_some_and(|k| k.starts_with("win_") || k == "desk_button")) {
+                    // A window or toolbar control: what the press does (no window drag through a click).
+                    let r = target.as_ref().map(info_rect).unwrap_or_default();
+                    self.desk_press(id, (r.x + r.w / 2, r.y + r.h / 2));
+                    self.win_drag = None;
+                    json!({"ok": true, "clicked": id})
+                } else if target.as_ref().is_some_and(|w| w["kind"] == "select" && w["enabled"] == json!(true)) {
                     // A select opens (or closes) its list; the reply names the options to click.
                     let open = self.gfx.kit.open.as_deref() != Some(id);
                     self.gfx.kit.open = open.then(|| id.to_string());
@@ -342,6 +432,45 @@ impl<G: Context> Shell<G> {
                     }
                     None => json!({"ok": false, "error": format!("no widget '{id}'")}),
                 }
+            }
+            "windows" => match self.stack.last_mut().unwrap().desk() {
+                Some(d) => json!({"ok": true, "desk": d.info()}),
+                None => json!({"ok": false, "error": "this screen has no windows"}),
+            },
+            "window" => {
+                // {id, op: open | close | raise | collapse | move | size, by: [dx, dy]} or {layout}.
+                let id = body["id"].as_str().unwrap_or("").to_string();
+                let op = body["op"].as_str().unwrap_or("raise");
+                let by = (body["by"][0].as_i64().unwrap_or(0) as i32, body["by"][1].as_i64().unwrap_or(0) as i32);
+                let reply = match self.stack.last_mut().unwrap().desk() {
+                    None => json!({"ok": false, "error": "this screen has no windows"}),
+                    Some(d) => {
+                        if let Some(l) = body["layout"].as_str() {
+                            if d.apply_layout(l) {
+                                json!({"ok": true, "desk": d.info()})
+                            } else {
+                                json!({"ok": false, "error": format!("no layout '{l}'")})
+                            }
+                        } else if d.win(&id).is_none() {
+                            json!({"ok": false, "error": format!("no window '{id}'")})
+                        } else {
+                            match op {
+                                "open" => d.set_open(&id, true),
+                                "close" => d.set_open(&id, false),
+                                "collapse" => d.collapse(&id),
+                                "move" => d.drag(&id, Grab::Move, by.0, by.1),
+                                "size" => d.drag(&id, Grab::Resize, by.0, by.1),
+                                "raise" => d.raise(&id),
+                                _ => return json!({"ok": false, "error": format!("unknown op '{op}' (open, close, raise, collapse, move, size)")}),
+                            }
+                            json!({"ok": true, "desk": d.info()})
+                        }
+                    }
+                };
+                if reply["ok"] == json!(true) {
+                    self.save_desk();
+                }
+                reply
             }
             "hover" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
@@ -474,7 +603,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -712,7 +841,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None };
         s.frame();
         s
     }
@@ -806,5 +935,190 @@ mod tests {
         assert_eq!(s.bridge(&json!({"cmd": "drag", "id": "item", "to": "slot"}))["ok"], json!(true));
         assert_eq!(s.cx.app.log, ["drop item.sword on slot.weapon"]);
         assert_eq!(s.bridge(&json!({"cmd": "drag", "id": "item", "to": "nowhere"}))["ok"], json!(false));
+    }
+
+    thread_local! {
+        static TEMP_FILES: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// Removes the settings files the desktop tests wrote (call at the end of a test).
+    fn clean() {
+        TEMP_FILES.with(|t| t.borrow_mut().drain(..).for_each(|p| {
+            let _ = std::fs::remove_file(p);
+        }));
+    }
+
+    /// Two overlapping windows, each with a button: "a" at the left, "b" over a's right part (b on top).
+    struct Desktop {
+        w: Vec<Widget<&'static str>>,
+        desk: crate::window::Desk,
+    }
+
+    impl Desktop {
+        fn new() -> Self {
+            use crate::window::{Desk, Frac, Layout, Win};
+            let wins = vec![Win::new("a", "Alpha", (40, 30)), Win::new("b", "Beta", (40, 30))];
+            let layouts = vec![
+                Layout { name: "Both".into(), places: vec![("a".into(), Frac::new(0.0, 0.0, 0.5, 0.5)), ("b".into(), Frac::new(0.25, 0.0, 0.5, 0.5))] },
+                Layout { name: "Solo".into(), places: vec![("a".into(), Frac::new(0.0, 0.0, 1.0, 1.0))] },
+            ];
+            Self { w: Vec::new(), desk: Desk::new(Rect::new(0, 20, 400, 200), wins, layouts) }
+        }
+        fn act(&mut self, cx: &mut Cx, a: &'static str) {
+            cx.app.log.push(format!("click {a}"));
+        }
+    }
+
+    impl Screen<App> for Desktop {
+        fn id(&self) -> &'static str {
+            "desktop"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            self.desk.toolbar(&mut ui, 2, 2);
+            self.desk.draw(&mut ui, |ui, id, body| {
+                // A button across the whole body width, so part of a's is under b.
+                let (label, act, dy) = if id == "a" { ("A button", "a", 4) } else { ("B button", "b", 40) };
+                ui.row(&format!("{id}.button"), Rect::new(body.x, body.y + dy, body.w + 40, 14), label, TEXT, Some(act), false, Vec::new());
+                if id == "b" {
+                    // A select at the bottom of the body: its open list reaches below the window.
+                    let opts: Vec<String> = ["One", "Two", "Three"].iter().map(|s| s.to_string()).collect();
+                    ui.select("b.pick", Rect::new(body.x, body.y + body.h - 14, 60, 12), &opts, 0, |_| "pick", true, Vec::new());
+                }
+            });
+            self.w = ui.widgets;
+        }
+        fn desk(&mut self) -> Option<&mut crate::window::Desk> {
+            Some(&mut self.desk)
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// A shell over the two-window screen with its own settings file in the temp dir (removed by `clean`).
+    fn desktop(name: &str) -> Shell<App> {
+        let mut s = shell();
+        let path = std::env::temp_dir().join(format!("aegis_desk_{name}_{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        TEMP_FILES.with(|t| t.borrow_mut().push(path.clone()));
+        s.cx.settings = Settings::load(path, json!({}));
+        s.stack = vec![Box::new(Desktop::new())];
+        s.frame();
+        s
+    }
+
+    fn rect_of(s: &mut Shell<App>, id: &str) -> Rect {
+        s.stack.last_mut().unwrap().desk().unwrap().rect(id).unwrap()
+    }
+
+    #[test]
+    fn dragging_the_title_moves_and_the_grip_resizes_and_the_desk_is_saved() {
+        let mut s = desktop("drag");
+        let a = rect_of(&mut s, "a");
+        drag(&mut s, (a.x + 10, a.y + 5), (a.x + 40, a.y + 35));
+        let moved = rect_of(&mut s, "a");
+        assert_eq!((moved.x, moved.y), (a.x + 30, a.y + 30));
+        let saved = s.cx.settings.v["desks"]["desktop"].clone();
+        assert!(saved["wins"].as_array().is_some_and(|w| w.len() == 2), "{saved}");
+        let g = (moved.x + moved.w - 3, moved.y + moved.h - 3);
+        drag(&mut s, g, (g.0 - 20, g.1 - 10));
+        let sized = rect_of(&mut s, "a");
+        assert_eq!((sized.w, sized.h), (moved.w - 20, moved.h - 10));
+        assert!(s.cx.app.log.is_empty(), "no button was clicked");
+        clean();
+    }
+
+    #[test]
+    fn a_window_covers_the_widgets_under_it_and_a_press_raises_it() {
+        let mut s = desktop("cover");
+        let b = rect_of(&mut s, "b");
+        // a's button reaches under b: a press there lands on b (raised, its backdrop), not on a's button.
+        let under = (b.x + 4, b.y + 20);
+        s.mouse = under;
+        s.click();
+        s.release();
+        assert!(s.cx.app.log.is_empty(), "{:?}", s.cx.app.log);
+        let a = rect_of(&mut s, "a");
+        s.mouse = (a.x + 6, a.y + 20);
+        s.click();
+        s.release();
+        assert_eq!(s.cx.app.log, ["click a"]);
+        s.frame();
+        assert_eq!(s.stack.last_mut().unwrap().desk().unwrap().top_at(under), Some("a"), "the press raised a");
+        clean();
+    }
+
+    #[test]
+    fn the_toolbar_and_window_buttons_open_close_collapse_and_lay_out() {
+        let mut s = desktop("toolbar");
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "win.b.close"}))["ok"], json!(true));
+        assert!(!s.stack.last_mut().unwrap().desk().unwrap().win("b").unwrap().open);
+        s.bridge(&json!({"cmd": "click", "id": "desk.toggle.b"}));
+        assert!(s.stack.last_mut().unwrap().desk().unwrap().win("b").unwrap().open);
+        s.bridge(&json!({"cmd": "click", "id": "win.a.collapse"}));
+        assert_eq!(rect_of(&mut s, "a").h, crate::window::TITLE_H);
+        s.bridge(&json!({"cmd": "click", "id": "desk.layout.Solo"}));
+        let d = s.stack.last_mut().unwrap().desk().unwrap();
+        assert!(d.win("a").unwrap().open && !d.win("b").unwrap().open && d.layout == "Solo");
+        assert_eq!(s.cx.settings.v["desks"]["desktop"]["layout"], json!("Solo"));
+        clean();
+    }
+
+    #[test]
+    fn a_select_in_a_window_opens_its_whole_list() {
+        let mut s = desktop("select");
+        s.gfx.kit.open = Some("b.pick".into());
+        s.frame();
+        let body = s.stack.last_mut().unwrap().desk().unwrap().body("b").unwrap();
+        let opts: Vec<Rect> = s.stack.last().unwrap().widgets().iter().filter(|w| w["kind"] == "option").map(info_rect).collect();
+        assert_eq!(opts.len(), 3);
+        assert!(opts.iter().all(|r| r.w > 0 && r.h > 0), "{opts:?}");
+        assert!(opts.iter().any(|r| r.y + r.h > body.y + body.h), "the list reaches past the body, uncut");
+        clean();
+    }
+
+    #[test]
+    fn a_window_backdrop_stops_a_drop_on_a_target_it_covers() {
+        let target = json!({"id": "t", "kind": "row", "rect": [0, 0, 50, 20], "enabled": true, "drop": "slot"});
+        let backdrop = json!({"id": "win.w.body", "kind": "backdrop", "rect": [10, 0, 50, 50], "enabled": true});
+        assert_eq!(drop_key_at(&[target.clone(), backdrop.clone()], (20, 10)), None, "covered");
+        assert_eq!(drop_key_at(&[target.clone(), backdrop.clone()], (5, 10)), Some("slot"), "beside the window");
+        assert_eq!(drop_key_at(&[backdrop, target], (20, 10)), Some("slot"), "a target inside the window");
+    }
+
+    #[test]
+    fn esc_mid_move_keeps_and_saves_the_window_and_a_bad_desks_value_is_replaced() {
+        let mut s = desktop("esc");
+        s.cx.settings.v["desks"] = json!([]);
+        let a = rect_of(&mut s, "a");
+        s.mouse = (a.x + 10, a.y + 5);
+        s.click();
+        s.mouse = (a.x + 30, a.y + 25);
+        s.drag_to();
+        s.key(Key::Esc);
+        let moved = rect_of(&mut s, "a");
+        assert_eq!((moved.x, moved.y), (a.x + 20, a.y + 20));
+        let saved = s.cx.settings.v["desks"]["desktop"]["wins"].as_array().cloned().unwrap_or_default();
+        let x = saved.iter().find(|w| w["id"] == "a").and_then(|w| w["frac"][0].as_f64()).unwrap();
+        assert!((x * 400.0 - 20.0).abs() < 0.5, "saved where it was left: {x}");
+        clean();
+    }
+
+    #[test]
+    fn the_agent_link_lists_and_drives_windows_and_widgets_stay_in_their_window() {
+        let mut s = desktop("agent");
+        let list = s.bridge(&json!({"cmd": "windows"}));
+        assert_eq!(list["desk"]["windows"].as_array().map(|w| w.len()), Some(2));
+        let before = rect_of(&mut s, "a");
+        assert_eq!(s.bridge(&json!({"cmd": "window", "id": "a", "op": "move", "by": [20, 10]}))["ok"], json!(true));
+        assert_eq!(rect_of(&mut s, "a"), Rect::new(before.x + 20, before.y + 10, before.w, before.h));
+        assert_eq!(s.bridge(&json!({"cmd": "window", "id": "zz"}))["ok"], json!(false));
+        assert_eq!(s.bridge(&json!({"cmd": "window", "id": "a", "op": "spin"}))["ok"], json!(false));
+        assert_eq!(s.bridge(&json!({"cmd": "window", "layout": "Both"}))["ok"], json!(true));
+        s.frame();
+        let tree = s.bridge(&json!({"cmd": "ui_tree"}));
+        let a_body = rect_of(&mut s, "a");
+        let button = tree["widgets"].as_array().unwrap().iter().find(|w| w["id"] == "a.button").cloned().unwrap();
+        assert!(button["rect"][0].as_i64().unwrap() + button["rect"][2].as_i64().unwrap() <= (a_body.x + a_body.w) as i64, "clipped to the window: {button}");
+        clean();
     }
 }

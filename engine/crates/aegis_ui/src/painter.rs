@@ -95,6 +95,11 @@ impl<'a> Painter<'a> {
         self.c.fill(pr, col);
     }
 
+    /// Draws only inside the logical rect `r` from now on (None: everywhere).
+    pub fn clip(&mut self, r: Option<Rect>) {
+        self.c.clip = r.map(|r| self.v.rect(r));
+    }
+
     /// Rounded panel with a 1-physical-pixel border; corner radius in logical units.
     pub fn panel(&mut self, r: Rect, fill: Rgba, border: Rgba, radius: f32) {
         let pr = self.v.rect(r);
