@@ -1,0 +1,135 @@
+{
+	"kind": "characters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ilse_marrow",
+			"name": "Ilse Marrow",
+			"title": "Lampwarden of Gull Harbour",
+			"role": "party",
+			"base_unit": "warrior",
+			"art": "",
+			"background": "A former ship's bosun who now keeps Gull Harbour's lamp lit and its raiders out. Mara Voss's counterpart in this world: she plays exactly like her.",
+			"personality": "loud, loyal",
+			"faction": "harbour_guard",
+			"home": "gull_harbour",
+			"disciplines": [
+				"ember_blade"
+			],
+			"named_items": [
+				"ember_brigandine"
+			],
+			"tuning": {},
+			"override": "ashlands:mara_voss",
+			"tags": []
+		},
+		{
+			"id": "pell_driftwood",
+			"name": "Pell Driftwood",
+			"title": "Beachcomber Scout",
+			"role": "party",
+			"base_unit": "ranger",
+			"art": "",
+			"background": "Reads tides the way Tev reads smoke.",
+			"personality": "",
+			"faction": "harbour_guard",
+			"home": "gull_harbour",
+			"disciplines": [
+				"cinder_archery"
+			],
+			"named_items": [],
+			"tuning": {},
+			"override": "ashlands:tev_quill",
+			"tags": []
+		},
+		{
+			"id": "brannoch_saltfist",
+			"name": "Brannoch Saltfist",
+			"title": "Reef Brawler",
+			"role": "enemy",
+			"base_unit": "goblin_brawler",
+			"art": "",
+			"background": "Hauls his catch with one hand and punches with the other.",
+			"personality": "",
+			"faction": "reef_raiders",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"override": "ashlands:skarn_ironjaw",
+			"tags": []
+		},
+		{
+			"id": "captain_dredge",
+			"name": "Captain Dredge",
+			"title": "Reef Raider Captain",
+			"role": "enemy",
+			"base_unit": "goblin_berserker",
+			"art": "",
+			"background": "A berserker with a ship. Tougher than the Horde's Bolg on purpose: the Forge shows exactly how.",
+			"personality": "",
+			"faction": "reef_raiders",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {
+				"hp_pct": 20,
+				"power": 2,
+				"armor": 1
+			},
+			"override": "ashlands:bolg_redhand",
+			"tags": []
+		},
+		{
+			"id": "salt_archer",
+			"name": "Salt-Eyed Sniper",
+			"title": "Mast Archer",
+			"role": "enemy",
+			"base_unit": "goblin_archer",
+			"art": "",
+			"background": "Perches in rigging and shoots anyone who looks up.",
+			"personality": "",
+			"faction": "reef_raiders",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"override": "ashlands:nok_flamebow",
+			"tags": []
+		},
+		{
+			"id": "tide_shaman",
+			"name": "Tide-Whisper",
+			"title": "Reef Shaman",
+			"role": "enemy",
+			"base_unit": "goblin_shaman",
+			"art": "",
+			"background": "Listens to the surf for omens.",
+			"personality": "",
+			"faction": "reef_raiders",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"override": "ashlands:gruk_smokecaller",
+			"tags": []
+		},
+		{
+			"id": "gull_skirmisher",
+			"name": "Gull-Hand",
+			"title": "Raider",
+			"role": "enemy",
+			"base_unit": "goblin_skirmisher",
+			"art": "",
+			"background": "Quick, light and never where you aimed.",
+			"personality": "",
+			"faction": "reef_raiders",
+			"home": "",
+			"disciplines": [],
+			"named_items": [],
+			"tuning": {},
+			"override": "ashlands:vex_cutpurse",
+			"tags": []
+		}
+	]
+}

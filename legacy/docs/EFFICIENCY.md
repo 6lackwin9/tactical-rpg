@@ -1,0 +1,74 @@
+# Time and token efficiency log
+
+Living file: measure, fix, record. Add a row whenever a step feels slow or a run floods the context. Re-measure after changes. Times are wall-clock on the dev machine (2026-10-15).
+
+## Measured steps
+
+| Step | Cost | Verdict |
+|---|---|---|
+| `tools/fc.sh parse` (changed files) | 0.5 s (auto class-cache refresh only when new .gd files appear) | fine |
+| `tools/fc.sh parse-all` (every script, one process) | 3 s | use for "does everything compile" |
+| `tools/fc.sh arena` | 20 s | fine |
+| `tools/fc.sh dojo` | 2.5 s | fine |
+| `check_project.ps1` (old default) | 188 s, ~170 output lines (~9k tokens of PASS lines) | **slow + noisy**: 130+ Godot launches (one per file) |
+| `check_project.ps1 -Fast -Quiet` | 32 s, ~20 output lines | pre-commit default |
+| `tools/fc.sh gate` / `check_project.ps1 -Fast -Quiet` on a Linux cloud container (2026-10-17) | ~3.5 min on a fresh clone, ~3 min with the class cache; parse steps take ~17 s, so the arena suite (inferred) dominates | slow but usable; worth measuring the arena suite there if cloud checks become routine |
+| `check_project.ps1` (per-file parse) on a Linux cloud container | ~8 min | avoid; use `-Fast` |
+| `tools/fc.sh sim duel 5` (3 seeds) | ~90 s; `tier` ~2 min; 10 seeds ~5 min | acceptable; run in background / in parallel (own sandboxes) |
+| `tools/fc.sh sim` on a fresh cloud checkout (2026-10-17, BAL3-R0) | hung silently with empty output for ~40 min (stale class cache after a new `class_name`, e.g. `AssetRegistry`); cloud role runs: L3 19 min, L5 35 min, L7 40 min with 4 runs in parallel | fc.sh imports automatically when the class cache is stale (one import under flock for parallel runs); timeouts print TIMEOUT; sim has a 120 s startup watchdog |
+| `tools/fc.sh gate` arena suite on the cloud container (2026-10-17, BAL3-S) | ~5.5 min, base commit included, so the default 290 s suite timeout fails there | set `SUITE_TIMEOUT=900` (seconds; default 290) when gating in the cloud |
+| Arena suite on the cloud container (2026-10-18, release #38) | ~9.5 min (929 tests), whole gate 10m34s, about double the day before; the 290 s default timed out the release gate | `tools/fc.sh` defaults to 900 s when `CLAUDE_CODE_REMOTE=true` (290 s on desktop); `gate.yml` sets 900. Done (GATE-SPLIT, user 2026-10-18): arena split into 8 systems; tasks gate their own (`fc.sh gate auto`), CI runs them in parallel. Per-suite times 2026-10-18: Playtest 89 s, CombatUiFramework 86 s, Bal2Rules 81 s, Planning 71 s (42% of 772 s); by system rules ~110 s, ai ~150 s, combat_ui 125 s, balance 128 s, world 66 s, party_save 16 s, content 71 s, menus 105 s. Next: trim those four suites |
+| `tools/fc.sh parse` in a branch review on a clean tree (2026-10-18, MAPKEYS1-U) | checks only files `git status` lists, so after a commit it checks nothing | reviewers run `godot --headless --check-only` on `git diff --name-only origin/develop...HEAD` (`.gd` files) instead |
+| Builder agent for M1 | ~23 min, ~300k tokens, 159 tool calls | the dominant cost; see below |
+| Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
+| Brainstorm agent | ~1.5 min, ~56k tokens | cheap, keep |
+| gate `godot --headless --import` step (S14-A1/A2) | ~2 s when nothing new, longer on a fresh checkout with new assets | fine; needed so CI loads committed PNG/WAV files |
+
+## Bottlenecks found and fixes
+
+1. **Per-file parse in check_project.ps1 (~155 of 188 s).** Fixed: `tools/parse_all.gd` + `-Fast` switch (and `fc.sh parse-all`).
+2. **Test output floods context (~9k tokens per full run).** Fixed: `-Quiet` prints failures and a summary only; `fc.sh` prints failures first with a log path. Rule: never print full suite output; grep the log.
+3. **Patch scripts that failed silently or truncated files** (find() == -1, `\n` in `"""` strings, shell heredocs with GDScript). Cost: several retry loops. Fixed: `patch-and-seed` skill (Edit tool for text, upsert for data), known-issues rows.
+4. **Test numbers hard-coded to old data** forced repeated suite-by-suite fixes after each data change. Fix: derive expectations from rules (done for new suites); when data changes broadly, print real values once with a scratch script instead of iterating through full runs.
+5. **Rediscovering context** (reading files to learn rules). Fixed: `CLAUDE.md` + `docs/GAME_BRIEF.md`, STRUCTURE, DECISIONS, HISTORY. Keep them updated in the same change.
+6. **Large builder tasks.** One agent doing engine + AI + data + tests is long and expensive. Mitigation: split milestones into slices of roughly one subsystem each (e.g. M1 could have been 1: ally targeting, 2: gap-close + statuses, 3: AI), brief the builder with exact file pointers from the brief instead of letting it explore, and ask it to report open questions early rather than at the end.
+7. **Re-spawning agents for follow-ups** loses their context. Prefer `SendMessage` to continue the same agent for fixes to its own work.
+8. **Waiting on long jobs in the foreground.** Run sims and full checks with `run_in_background` and do doc work meanwhile; parallelise independent sims (each has its own sandbox).
+9. **Custom agents are not callable until the session restarts**; a fallback (general-purpose agent with the same instructions) worked. Restart after adding agent files to avoid the detour.
+10. **Stale IDE diagnostics** after adding `class_name` files caused false alarms. `fc.sh parse` refreshes the class cache; trust it over the IDE panel.
+
+## Working rules (cheap path first)
+
+- Edit -> `tools/fc.sh parse` -> `tools/fc.sh arena` (or `dojo`) -> repeat. Run `check_project.ps1 -Fast -Quiet` only before a commit.
+- Read with `grep -n` and line ranges, not whole files; use the brief to find the file first.
+- Batch independent tool calls in one turn; background anything over ~30 s.
+- After 2 failed fixes, ask the user instead of brute-forcing (token sink).
+
+## Ideas not done yet
+
+- `fc.sh suite <name>`: run a single test suite (arena takes 20 s, so low value now; revisit if it grows past ~60 s).
+- Cache catalog loads in sims (minor).
+- Cut `balance_sim` time by lowering tick/step overhead or fighting fewer seeds on obvious matchups (revisit when tuning).
+
+## Agent reuse (2026-10-15)
+
+Agent types are reused; instances are fresh per call. Fresh instance for reviews (independence), balance runs and new milestones; resume the same instance (SendMessage) for follow-ups to its own work; do tiny fixes in the main session. A long-lived builder's context grows and every follow-up re-reads it.
+
+## Parallel lanes (2026-10-16)
+
+Idle time while a single builder ran (4-23 min) was the largest remaining cost. Fixes: split the builder into `logic-builder` and `asset-builder` with disjoint file ownership; run `design-brainstorm` ahead of the builders writing specs; run `balance` continuously in its own `main` worktree; reviews in the background; `fc.sh` logs per worktree. Expected costs: same tokens, less wall time; one-time worktree import delay; merge discipline matters (schema first, data files only touched by the asset lane). Re-measure after the first parallel milestone and update this section.
+
+## Doc housekeeping (2026-10-16)
+
+- Done: superseded drafts go to `docs/archive/`; `tools/fc.sh docs` (also in `fc.sh all`) warns when an agent-facing doc passes 300 lines or 25 KB.
+- Parked for the next heavy edit (user: pick up then, not now): (3) split `docs/DECISIONS.md` by domain behind a short index once it passes ~25 KB (18 KB at the time of writing; rows are long single lines; done 2026-10-17 in CLN-10 at 36 KB: index plus `docs/decisions/<system>.md`); (4) turn the 640-line README into an overview plus per-system files in `docs/features/` when it next needs a large update. Agents do not read the README, so the benefit is safer edits for the planner.
+
+## Downtime pass (2026-10-17, after SKILL1)
+
+Measured on SKILL1: the asset lane waited for the whole logic run (schema + UI) instead of the schema slice; a usage-limit stop and an API error each forced a fresh builder to re-derive context; a brief narrower than a recorded user decision cost a seed re-run; the review fix went to a fresh builder (140k) instead of the resumable one; markdown lint issues were found only in the IDE panel (it lints open files only), so 38 old issues had piled up; 12 finished worktrees made every git command print "Permission denied" noise.
+
+Fixes: schema slice is its own logic-builder run that ends with the report; builders keep `.agent/progress.md` (gitignored) and resume from it; builders flag brief-vs-spec/DECISIONS contradictions in the first report line; the planner checks briefs against DECISIONS, sends review fixes to the same builder via SendMessage, re-runs the gate after its own edits, auto-dispatches the reviewer on a finished builder and the brainstorm agent on a new balance report; `tools/md_lint.awk` (MD012/MD022/MD032/MD033 subset, no node) runs inside `tools/fc.sh docs` and fails it; the commit trailer comes from the session's attribution reminder instead of a hard-coded model; worktrees are removed right after their merge.
+
+## Parallel CPU contention (2026-10-17)
+
+With 3 logic builders plus a reviewer running Godot at once, `check_project.ps1 -Fast -Quiet` took about 10 minutes instead of 32 s (EXP1-L report). Reviewers re-running the full check add another Godot process. Rule: above 3 concurrent builders, expect checks to slow sharply; prefer starting the next builder when one finishes, and let a reviewer trust a fresh builder check when the diff is a small schema slice.

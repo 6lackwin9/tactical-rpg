@@ -1,0 +1,106 @@
+{
+	"kind": "shops",
+	"version": 1,
+	"entries": [
+		{
+			"id": "hest_stores",
+			"name": "Keep Stores Counter",
+			"keeper": "hest_the_quartermaster",
+			"stock": [
+				{
+					"item": "con_heal_potion",
+					"count": -1,
+					"price": 30,
+					"requires_flags": []
+				},
+				{
+					"item": "con_focus_elixir",
+					"count": 5,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "con_fire_bomb",
+					"count": 3,
+					"price": 40,
+					"requires_flags": []
+				},
+				{
+					"item": "shd_buckler",
+					"count": 1,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "arm_leather",
+					"count": 1,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "wpn_broadsword",
+					"count": 2,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "ashlands.steel_to_arms",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "wpn_claymore",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "ashlands.steel_to_arms",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "shd_kite",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "ashlands.steel_to_arms",
+							"value": true
+						}
+					]
+				},
+				{
+					"item": "arm_plate",
+					"count": 1,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "ashlands.steel_to_arms",
+							"value": true
+						}
+					]
+				}
+			],
+			"loot": [
+				{
+					"loot": "keep_ring",
+					"price": 150
+				}
+			],
+			"buy_mult": 1.0,
+			"supply_price": 2,
+			"sell_mult": 0.5,
+			"buys": [
+				"WEAPON",
+				"SHIELD",
+				"ARMOR",
+				"ACCESSORY",
+				"CONSUMABLE",
+				"MATERIAL"
+			],
+			"requires_flags": [],
+			"tags": []
+		}
+	]
+}

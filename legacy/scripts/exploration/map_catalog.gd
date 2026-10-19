@@ -1,0 +1,243 @@
+class_name MapCatalog
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - Map Catalog (S9, spec EXP1-L 1.1): lore-free region map templates
+# res://data/maps/maps.json: {"kind": "map_templates", "version": 1, "entries": [...]}
+# A template is {id, name, rows, zones, zone_legend, anchors, paths, tags} (MapRules validates it).
+# World locations bind a template by id (WorldSchema location `map`, `zone_bindings`, `markers`).
+# Same contract as QuestCatalog: upsert validates and stores (nothing changes on error), save writes the file,
+# a file that loaded with errors refuses to save. Tests call use_path("user://...") and never write res://.
+# State lives on the Engine singleton (hot reloads can't reset it).
+# ==============================================================================
+
+const DEFAULT_PATH: String = "res://data/maps/maps.json"
+const FILE_KIND: String = "map_templates"
+const VERSION: int = 1
+const STATE_KEY: StringName = &"map_catalog_state"
+
+static func _state() -> Dictionary:
+	if not Engine.has_meta(STATE_KEY):
+		var errors: Array[String] = []
+		Engine.set_meta(STATE_KEY, {"path": DEFAULT_PATH, "entries": [], "errors": errors, "dirty": false, "blocked": false, "loaded": false})
+	var state: Dictionary = Engine.get_meta(STATE_KEY)
+	return state
+
+static func _list() -> Array:
+	var list: Array = _state()["entries"]
+	return list
+
+static func _error_list() -> Array[String]:
+	var errors: Array[String] = _state()["errors"]
+	return errors
+
+static func _ensure_loaded() -> void:
+	if not DictUtil.to_bool(_state()["loaded"]):
+		reload_from_disk()
+
+static func file_path() -> String:
+	return str(_state()["path"])
+
+# Points the catalog at another file (a test sandbox) and loads it.
+static func use_path(p_path: String) -> void:
+	_state()["path"] = p_path
+	reload_from_disk()
+
+static func clear_cache() -> void:
+	if Engine.has_meta(STATE_KEY):
+		Engine.remove_meta(STATE_KEY)
+
+static func reload_from_disk() -> void:
+	_list().clear()
+	_error_list().clear()
+	_state()["dirty"] = false
+	_state()["blocked"] = false
+	_state()["loaded"] = true
+	var path: String = file_path()
+	if not FileAccess.file_exists(path):
+		return
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(path)) != OK:
+		_error_list().append("%s: JSON error on line %d: %s" % [path, json.get_error_line(), json.get_error_message()])
+		_state()["blocked"] = true
+		return
+	var doc: Dictionary = DictUtil.dict_of(json.data)
+	var raw: Variant = doc.get("entries", null)
+	if not (json.data is Dictionary) or not (raw is Array):
+		_error_list().append("%s: expected {\"kind\": \"%s\", \"entries\": [...]}." % [path, FILE_KIND])
+		_state()["blocked"] = true
+		return
+	for item: Variant in DictUtil.array_of(raw):
+		if not (item is Dictionary):
+			_error_list().append("%s: an entry is not an object; it is skipped." % path)
+			_state()["blocked"] = true
+			continue
+		var dict: Dictionary = item
+		for key: Variant in dict:
+			if not MapRules.TEMPLATE_FIELDS.has(str(key)):
+				# to_storage keeps TEMPLATE_FIELDS only: saving now would silently drop the key
+				_error_list().append("%s: map '%s' has unknown field '%s'; fix the file before saving." % [path, str(dict.get("id", "")), str(key)])
+				_state()["blocked"] = true
+		_list().append(normalize(dict))
+
+static func load_errors() -> Array[String]:
+	_ensure_loaded()
+	return _error_list().duplicate()
+
+# True when save() is refused because the file loaded with problems (see load_errors()).
+static func save_blocked() -> bool:
+	_ensure_loaded()
+	return DictUtil.to_bool(_state()["blocked"])
+
+static func is_dirty() -> bool:
+	return DictUtil.to_bool(_state()["dirty"])
+
+# ------------------------------------------------------------------------------
+# Entries
+# ------------------------------------------------------------------------------
+
+static func normalize(entry: Dictionary) -> Dictionary:
+	return MapRules.normalize_template(entry)
+
+static func entries() -> Array[Dictionary]:
+	_ensure_loaded()
+	var out: Array[Dictionary] = []
+	for e: Variant in _list():
+		out.append(DictUtil.dict_of(e).duplicate(true))
+	return out
+
+static func ids() -> Array[String]:
+	var out: Array[String] = []
+	for e: Dictionary in entries():
+		out.append(str(e.get("id", "")))
+	return out
+
+static func _index_of(id: String) -> int:
+	_ensure_loaded()
+	var list: Array = _list()
+	for i: int in range(list.size()):
+		if str(DictUtil.dict_of(list[i]).get("id", "")) == id:
+			return i
+	return -1
+
+static func has(id: String) -> bool:
+	return not id.is_empty() and _index_of(id) >= 0
+
+# A copy of the template ({} when missing).
+static func get_entry(id: String) -> Dictionary:
+	var i: int = _index_of(id) if not id.is_empty() else -1
+	return DictUtil.dict_of(_list()[i]).duplicate(true) if i >= 0 else {}
+
+# Every problem with `entry` as a template (current_id: the id it replaces).
+static func validate_entry(entry: Dictionary, current_id: String = "") -> Array[String]:
+	_ensure_loaded()
+	var e: Dictionary = normalize(entry)
+	var errors: Array[String] = []
+	var id: String = str(e["id"])
+	if not id.is_empty() and id != current_id and has(id):
+		errors.append("Map id '%s' is already used." % id)
+	errors.append_array(MapRules.template_errors(e))
+	return errors
+
+# Validates and stores (replacing `replace_id`, or the entry with the same id, in place; otherwise appended).
+# Returns the problems; nothing changes if any. Renaming a template that world locations use is refused (used_by).
+static func upsert(entry: Dictionary, replace_id: String = "") -> Array[String]:
+	_ensure_loaded()
+	var clean: Dictionary = normalize(entry)
+	var new_id: String = str(clean["id"])
+	var old_id: String = replace_id if not replace_id.is_empty() else new_id
+	var errors: Array[String] = validate_entry(clean, old_id)
+	if old_id != new_id and has(old_id):
+		var users: Array[String] = used_by(old_id)
+		if not users.is_empty():
+			errors.append("Map '%s' is used by: %s; point those locations at another map before renaming it." % [old_id, ", ".join(users)])
+	if not errors.is_empty():
+		return errors
+	var at: int = _index_of(old_id)
+	if at >= 0:
+		_list()[at] = clean
+	else:
+		_list().append(clean)
+	_state()["dirty"] = true
+	return errors
+
+# Qualified ids of the world locations (every loaded world, own entries) whose `map` is `id`, sorted.
+static func used_by(id: String) -> Array[String]:
+	var out: Array[String] = []
+	for w: String in WorldCatalog.world_ids():
+		for e: Dictionary in WorldCatalog.own_entries(w, "locations"):
+			if str(e.get("map", "")) == id:
+				out.append(str(e["_qid"]))
+	out.sort()
+	return out
+
+# Removes a template unless a world location still uses it. Returns "" or why not.
+static func remove(id: String) -> String:
+	var at: int = _index_of(id)
+	if at < 0:
+		return "No map template '%s'." % id
+	var users: Array[String] = used_by(id)
+	if not users.is_empty():
+		return "Map '%s' is still used by: %s." % [id, ", ".join(users)]
+	_list().remove_at(at)
+	_state()["dirty"] = true
+	return ""
+
+# {"maps:<id>": [errors]} plus "load" for file problems; {} when clean.
+static func validate_all() -> Dictionary:
+	_ensure_loaded()
+	var problems: Dictionary = {}
+	var seen: Dictionary = {}
+	for e: Dictionary in entries():
+		var id: String = str(e.get("id", ""))
+		var errs: Array[String] = validate_entry(e, id)
+		if seen.has(id):
+			errs.append("Map id '%s' is used twice in the file." % id)
+		seen[id] = true
+		if not errs.is_empty():
+			problems["maps:%s" % id] = errs
+	if not _error_list().is_empty():
+		problems["load"] = _error_list().duplicate()
+	return problems
+
+# Soft problems of one template (never block saving).
+static func warnings_for(entry: Dictionary) -> Array[String]:
+	return MapRules.template_warnings(entry)
+
+static func warnings_all() -> Dictionary:
+	var out: Dictionary = {}
+	for e: Dictionary in entries():
+		var found: Array[String] = warnings_for(e)
+		if not found.is_empty():
+			out["maps:%s" % str(e.get("id", ""))] = found
+	return out
+
+# ------------------------------------------------------------------------------
+# Saving
+# ------------------------------------------------------------------------------
+
+static func to_storage(entry: Dictionary) -> Dictionary:
+	var e: Dictionary = normalize(entry)
+	var out: Dictionary = {}
+	for key: String in MapRules.TEMPLATE_FIELDS:
+		out[key] = e[key]
+	return out
+
+static func save() -> Error:
+	_ensure_loaded()
+	if save_blocked():
+		push_error("MapCatalog.save refused: %s loaded with errors: %s" % [file_path(), "; ".join(PackedStringArray(_error_list()))])
+		return ERR_INVALID_DATA
+	var dir: String = file_path().get_base_dir()
+	if DirAccess.make_dir_recursive_absolute(dir) != OK and not DirAccess.dir_exists_absolute(dir):
+		return ERR_CANT_CREATE
+	var stored: Array = []
+	for e: Dictionary in entries():
+		stored.append(to_storage(e))
+	var file := FileAccess.open(file_path(), FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_string(JSON.stringify({"kind": FILE_KIND, "version": VERSION, "entries": stored}, "\t", false) + "\n")
+	file.close()
+	_state()["dirty"] = false
+	return OK

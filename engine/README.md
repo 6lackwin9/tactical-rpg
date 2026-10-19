@@ -29,8 +29,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 
 ## Parity with Godot
 
-The Godot game is the reference. `parity/` holds the tools that check the engine against it (new files only; no
-Godot file is edited):
+The Godot game is the reference: the frozen copy in `legacy/` (main at 7fa10da, see `legacy/LEGACY.md`; branch
+`legacy` to resume Godot work). `parity/` holds the tools that run it and check the engine against it (new files only;
+no Godot file is edited):
 
 ```bash
 engine/parity/export.sh                      # catalog, worlds, game data, schema, unit snapshots, damage cases, RNG, save fixtures (~5 s)

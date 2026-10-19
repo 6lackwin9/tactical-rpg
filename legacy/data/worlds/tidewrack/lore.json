@@ -1,0 +1,13 @@
+{
+	"kind": "lore",
+	"version": 1,
+	"entries": [
+		{
+			"id": "lamp_and_tide",
+			"name": "The Lamp and the Tide",
+			"category": "history",
+			"text": "Tidewrack's founders were Ashlands Wardens who followed the smoke to the sea. The order's creed, keep one fire lit, became the harbour lamp.",
+			"tags": []
+		}
+	]
+}

@@ -1,0 +1,628 @@
+{
+	"kind": "dialogues",
+	"version": 1,
+	"entries": [
+		{
+			"id": "mara_talk",
+			"name": "Mara at the map table",
+			"speaker": "mara_voss",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Mara looks up from a map pinned flat with knives. \"Make it quick.\"",
+					"choices": [
+						{
+							"text": "What is this place?",
+							"to": "keep"
+						},
+						{
+							"text": "These ash drifts are fresh. The Horde is close.",
+							"to": "drifts",
+							"requires": [
+								{
+									"kind": "stat",
+									"stat": "KNOW",
+									"min": 14
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.mara_drifts_told",
+									"value": true
+								}
+							],
+							"show_locked": true
+						},
+						{
+							"text": "The Courtyard is ours.",
+							"to": "proud",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "hold_the_courtyard",
+									"status": "completed"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.mara_courtyard_thanks",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "The steel is here. Where does it go?",
+							"to": "steel_choice",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "steel_for_the_gate",
+									"status": "completed"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_spent",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "It's over. The Horde is scattered.",
+							"to": "end_gate",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "completed"
+								},
+								{
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "It's over. The Horde is scattered.",
+							"to": "end_arms",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "completed"
+								},
+								{
+									"key": "ashlands.steel_to_arms",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.campaign_done",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "keep",
+					"text": "\"Warden Keep. One fire, four walls and too few of us to hold either.\"",
+					"next": "hello"
+				},
+				{
+					"id": "drifts",
+					"text": "\"Sharp eyes. Take this; you will need it before I do.\"",
+					"next": "hello",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "ashlands.mara_drifts_told",
+							"value": true
+						},
+						{
+							"effect": "give",
+							"items": {
+								"con_focus_elixir": 1
+							}
+						}
+					]
+				},
+				{
+					"id": "proud",
+					"text": "\"It is. For now. Drink to it later.\"",
+					"next": "hello",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "ashlands.mara_courtyard_thanks",
+							"value": true
+						},
+						{
+							"effect": "give",
+							"gold": 20
+						}
+					]
+				},
+				{
+					"id": "steel_choice",
+					"text": "Mara weighs a bar of slag-steel. \"Enough for one thing done well. The gate, or your hands?\"",
+					"choices": [
+						{
+							"text": "Bar the Cinder Gate.",
+							"to": "gate_barred",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_spent",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								},
+								{
+									"effect": "add_flag",
+									"key": "rep.ashlands.ember_wardens",
+									"delta": 10
+								}
+							]
+						},
+						{
+							"text": "Arm the party.",
+							"to": "party_armed",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_spent",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "ashlands.steel_to_arms",
+									"value": true
+								},
+								{
+									"effect": "give",
+									"items": {
+										"arm_plate": 1
+									}
+								}
+							]
+						},
+						{
+							"text": "Let me think.",
+							"to": "hello"
+						}
+					]
+				},
+				{
+					"id": "gate_barred",
+					"text": "\"Then the gorge is shut behind you. Whatever waits in the wastes waits alone.\"",
+					"next": "hello"
+				},
+				{
+					"id": "party_armed",
+					"text": "\"Then go out sharp. Hest has the rest on his counter.\"",
+					"next": "hello"
+				},
+				{
+					"id": "end_gate",
+					"text": "\"One fire lit, and a door that holds. The Long Dry is over. This year.\"",
+					"next": "hello"
+				},
+				{
+					"id": "end_arms",
+					"text": "\"The wastes will remember that steel. Rest; you have earned the hearth.\"",
+					"next": "hello"
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "tev_talk",
+			"name": "Tev by the arrow bench",
+			"speaker": "tev_quill",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Tev is whittling arrow shafts. \"Smoke's wrong today.\"",
+					"choices": [
+						{
+							"text": "What do you see?",
+							"to": "smoke"
+						},
+						{
+							"text": "The pass is clear.",
+							"to": "thanks",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "cinder_gate_watch",
+									"status": "completed"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.tev_pass_thanks",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "Where do we get steel?",
+							"to": "steel",
+							"requires": [
+								{
+									"key": "ashlands.oath_sworn",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_delivered",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "smoke",
+					"text": "\"Too much of it, too close, and upwind. Someone wants us looking the wrong way.\"",
+					"next": "hello"
+				},
+				{
+					"id": "thanks",
+					"text": "\"Then I owe you a drink and an arrow. Have the arrow money.\"",
+					"next": "hello",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "ashlands.tev_pass_thanks",
+							"value": true
+						},
+						{
+							"effect": "give",
+							"gold": 15
+						}
+					]
+				},
+				{
+					"id": "steel",
+					"text": "\"Slag Gate, up the south road. Orsa sells to us at cost. Take the signpost to the world map.\"",
+					"next": "hello"
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "hest_talk",
+			"name": "Hest at the stores",
+			"speaker": "hest_the_quartermaster",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Hest counts arrows without looking up. \"Buying or bothering?\"",
+					"choices": [
+						{
+							"text": "Trade a fire bomb back for coin?",
+							"to": "traded",
+							"requires": [
+								{
+									"kind": "items",
+									"item": "con_fire_bomb",
+									"count": 1
+								}
+							],
+							"show_locked": true,
+							"effects": [
+								{
+									"effect": "take",
+									"items": {
+										"con_fire_bomb": 1
+									}
+								},
+								{
+									"effect": "give",
+									"gold": 20
+								}
+							]
+						},
+						{
+							"text": "What do the stores need?",
+							"to": "needs"
+						},
+						{
+							"text": "Any spare stores for friends of the Wardens?",
+							"to": "spare",
+							"requires": [
+								{
+									"key": "rep.ashlands.ember_wardens",
+									"op": ">=",
+									"value": 10
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.hest_spare_given",
+									"value": true
+								}
+							],
+							"show_locked": true,
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "ashlands.hest_spare_given",
+									"value": true
+								},
+								{
+									"effect": "give",
+									"items": {
+										"con_heal_potion": 2
+									}
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "traded",
+					"text": "\"Fewer bombs in the hall is fine by me.\"",
+					"next": "hello"
+				},
+				{
+					"id": "needs",
+					"text": "\"Everything. Bring the potions back unopened and we will get along.\"",
+					"next": "hello"
+				},
+				{
+					"id": "spare",
+					"text": "\"For you? Two, and don't tell the others.\"",
+					"next": "hello"
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "grakka_parley",
+			"name": "Grakka at the fire",
+			"speaker": "grakka_ashmaw",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "A goblin in a crown of rusted nails grins over the fire. \"Come to beg for your little flame?\"",
+					"choices": [
+						{
+							"text": "Leave the pass and live.",
+							"to": "scorn"
+						},
+						{
+							"text": "Then we fight.",
+							"to": "",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "active"
+								}
+							],
+							"unless": [
+								{
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "fight",
+									"encounter": "ashmaw_stand"
+								}
+							]
+						},
+						{
+							"text": "Then we fight. Your flankers are not coming.",
+							"to": "",
+							"requires": [
+								{
+									"kind": "quest",
+									"quest": "keep_one_fire_lit",
+									"status": "active"
+								},
+								{
+									"key": "ashlands.steel_to_gate",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "fight",
+									"encounter": "ashmaw_stand_barred"
+								}
+							]
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "scorn",
+					"text": "\"The Long Dry is mine. Your fire goes out tonight.\"",
+					"next": "hello"
+				}
+			],
+			"services": false,
+			"tags": []
+		},
+		{
+			"id": "muster_talk",
+			"name": "Toller at the duty roll",
+			"speaker": "brask_toller",
+			"start": "hello",
+			"nodes": [
+				{
+					"id": "hello",
+					"text": "Toller runs a thumb down the duty roll. \"The keep can spare a blade or two, Warden. No more.\"",
+					"choices": [
+						{
+							"text": "Who can ride with me?",
+							"to": "roll",
+							"requires": [
+								{
+									"key": "ashlands.muster_1",
+									"value": true
+								},
+								{
+									"key": "ashlands.recruits",
+									"op": "<",
+									"value": 1
+								}
+							]
+						},
+						{
+							"text": "The oath is sworn. Who else?",
+							"to": "roll",
+							"requires": [
+								{
+									"key": "ashlands.muster_2",
+									"value": true
+								},
+								{
+									"key": "ashlands.recruits",
+									"op": "<",
+									"value": 2
+								}
+							]
+						},
+						{
+							"text": "Farewell.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "roll",
+					"text": "Toller nods at the yard. \"Pick one. The rest stay on the wall.\"",
+					"choices": [
+						{
+							"text": "Sella Marsh, the archer on the north wall.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "sella_marsh"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Kit Vane, the cutpurse who took the oath.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "kit_vane"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Oren Dusk, the hedge-mage by the forge.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "oren_dusk"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Sister Alda Wren, the hearth-keeper.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "alda_wren"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Dagny Coal, the pit fighter from Slag Gate.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "dagny_coal"
+								},
+								{
+									"effect": "add_flag",
+									"key": "ashlands.recruits",
+									"delta": 1
+								}
+							]
+						},
+						{
+							"text": "Not yet.",
+							"to": "hello"
+						}
+					]
+				},
+				{
+					"id": "joined",
+					"text": "Toller strikes a line through a name. \"Bring them back.\"",
+					"next": "hello"
+				}
+			],
+			"services": false,
+			"tags": []
+		}
+	]
+}

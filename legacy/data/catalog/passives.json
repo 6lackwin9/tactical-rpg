@@ -1,0 +1,166 @@
+{
+	"kind": "passives",
+	"version": 1,
+	"entries": [
+		{
+			"id": "sword_training",
+			"name": "Sword Training",
+			"description": "Drilled with blades: +1 sword proficiency.",
+			"effects": [
+				{
+					"type": "proficiency",
+					"gear": "sword",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "bow_training",
+			"name": "Bow Training",
+			"description": "Raised on the longbow: +1 bow proficiency.",
+			"effects": [
+				{
+					"type": "proficiency",
+					"gear": "bow",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "axe_training",
+			"name": "Axe Training",
+			"description": "Trained with axes: +1 axe proficiency.",
+			"effects": [
+				{
+					"type": "proficiency",
+					"gear": "axe",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "hardy",
+			"name": "Hardy",
+			"description": "Tough constitution: +2 CONS.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "CONS",
+					"value": 2
+				}
+			]
+		},
+		{
+			"id": "keen_senses",
+			"name": "Keen Senses",
+			"description": "Watchful: +2 PERC.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 2
+				}
+			]
+		},
+		{
+			"id": "ruin_lore",
+			"name": "Ruin Lore",
+			"description": "Knows old stones: +3 KNOW in ruins.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "KNOW",
+					"value": 3,
+					"context": {
+						"biome": "ruins"
+					}
+				}
+			]
+		},
+		{
+			"id": "steady_nerves",
+			"name": "Steady Nerves",
+			"description": "Hard to rattle: 25% resistance to Stagger and Stun.",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "stagger",
+					"value": 25
+				},
+				{
+					"type": "resist",
+					"status": "stun",
+					"value": 25
+				}
+			]
+		},
+		{
+			"id": "second_wind",
+			"name": "Second Wind",
+			"description": "Recovers quickly: +1 AP each round.",
+			"effects": [
+				{
+					"type": "ap_regen",
+					"value": 1
+				}
+			]
+		},
+		{
+			"id": "dirty_tricks",
+			"name": "Dirty Tricks",
+			"description": "Street-taught: knows Quick Stab.",
+			"effects": [
+				{
+					"type": "skill",
+					"skill": "quick_stab"
+				}
+			]
+		},
+		{
+			"id": "field_medic",
+			"name": "Field Medic",
+			"description": "Opens healing families one level earlier.",
+			"effects": [
+				{
+					"type": "unlock",
+					"group": "heal",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "arcane_study",
+			"name": "Arcane Study",
+			"description": "Opens spell families one level earlier.",
+			"effects": [
+				{
+					"type": "unlock",
+					"group": "spell",
+					"levels": 1
+				}
+			]
+		},
+		{
+			"id": "riposte_drill",
+			"name": "Riposte Drill",
+			"description": "Opens Riposte two levels earlier (level 1 for a warrior).",
+			"effects": [
+				{
+					"type": "unlock",
+					"family": "riposte",
+					"levels": 2
+				}
+			]
+		},
+		{
+			"id": "wardens_eye",
+			"name": "Warden's Eye",
+			"description": "Reads the foe coming for you: shows the whole round plan of every enemy that targets this hero.",
+			"effects": [
+				{
+					"type": "foresight"
+				}
+			]
+		}
+	]
+}

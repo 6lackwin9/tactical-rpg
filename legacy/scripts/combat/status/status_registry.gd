@@ -1,0 +1,193 @@
+class_name StatusRegistry
+extends RefCounted
+
+# ==============================================================================
+# Tactical RPG - Status Registry (the ONE table of every valid buff / debuff)
+# StatusEffects derives debuffs() / buffs() / resistable() / support_buffs() / defend_buffs() /
+# display_name() from ROWS and applies the stacking rule through stack().
+#
+# Row fields:
+#   id             status key (a StatusEffects constant)
+#   kind           "buff" | "debuff"
+#   resistable     debuffs only: a unit / passive may carry status_resist for it, and attack skills
+#                  roll it against resistance. Self-inflicted debuffs (AP debt) skip the roll.
+#   default_rounds rounds it lasts when the source does not say (skills carry their own status_rounds)
+#   stacking       what a second application does (see stack()):
+#                    refresh_max_duration  rounds = longer of the two, potency = stronger of the two (today's behaviour)
+#                    extend_duration       rounds add up (cap = max total rounds), potency = stronger
+#                    stack_potency         rounds = longer, potency adds up (cap = max total potency)
+#                    none                  the first application stays until it expires
+#   cap            0 = no cap. extend_duration: max rounds; every other rule: max potency
+#   display        player-facing name
+#   grant          buffs only: "support" (queued by a SUPPORT skill) or "defend" (active now, DEFEND skill); "" for debuffs
+#                  and for buffs no skill grants (empower, PACE1: only an enrage phase effect or a start_status entry)
+#   magnitude_min  0..100: lowest magnitude a skill may give the status (S12S-L)
+#   magnitude_max  >= magnitude_min; 0 (with min 0) = the status carries no magnitude
+#   magnitude_unit "pct" (weaken: % of outgoing power), "flat" (expose / fortify armor points, poison HP per round)
+#                  or "pct_max_hp" (regen / burn: % of max HP per round)
+#
+# A magnitude travels in the `potency` channel of stack(), capped by `cap` (StatusEffects.has_magnitude reads magnitude_max).
+# HOW TO ADD A STATUS (e.g. weaken, slice D):
+#   1. add `const WEAKEN: String = "weaken"` to StatusEffects and one row to ROWS below (all fields);
+#   2. effects of the status live where they act (blocked_blocks, damage hook, ...), never in the registry;
+#   3. the derived lists, schema validation (status_effect / grant_status / cleanse), passive `resist` and the
+#      Forge pick it up automatically; extend StatusEffects' header comment;
+#   4. the registry test requires every StatusEffects id constant to have a row, so a forgotten row fails.
+# ==============================================================================
+
+const KIND_BUFF: String = "buff"
+const KIND_DEBUFF: String = "debuff"
+
+const REFRESH_MAX_DURATION: String = "refresh_max_duration"
+const EXTEND_DURATION: String = "extend_duration"
+const STACK_POTENCY: String = "stack_potency"
+const NONE: String = "none"
+const RULES: Array[String] = [REFRESH_MAX_DURATION, EXTEND_DURATION, STACK_POTENCY, NONE]
+
+const UNIT_PCT: String = "pct"
+const UNIT_FLAT: String = "flat"
+const UNIT_PCT_MAX_HP: String = "pct_max_hp"
+const UNITS: Array[String] = [UNIT_PCT, UNIT_FLAT, UNIT_PCT_MAX_HP]
+
+const ROWS: Array[Dictionary] = [
+	{"id": "stagger", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Staggered", "grant": "", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "stun", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Stunned", "grant": "", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "root", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Rooted", "grant": "", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "bleed", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Bleeding", "grant": "", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "weaken", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 25, "display": "Weakened", "grant": "", "magnitude_min": 1, "magnitude_max": 25, "magnitude_unit": UNIT_PCT},
+	{"id": "haste", "kind": KIND_BUFF, "resistable": false, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Hasted", "grant": "support", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "taunt", "kind": KIND_BUFF, "resistable": false, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Taunting", "grant": "support", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "riposte", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Riposte", "grant": "defend", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "slow", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 1, "stacking": REFRESH_MAX_DURATION, "cap": 0, "display": "Slowed", "grant": "", "magnitude_min": 0, "magnitude_max": 0, "magnitude_unit": UNIT_PCT},
+	{"id": "expose", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 20, "display": "Exposed", "grant": "", "magnitude_min": 1, "magnitude_max": 20, "magnitude_unit": UNIT_FLAT},
+	{"id": "fortify", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 20, "display": "Fortified", "grant": "support", "magnitude_min": 1, "magnitude_max": 20, "magnitude_unit": UNIT_FLAT},
+	{"id": "regen", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 10, "display": "Regenerating", "grant": "support", "magnitude_min": 1, "magnitude_max": 10, "magnitude_unit": UNIT_PCT_MAX_HP},
+	{"id": "poison", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 3, "stacking": STACK_POTENCY, "cap": 30, "display": "Poisoned", "grant": "", "magnitude_min": 1, "magnitude_max": 15, "magnitude_unit": UNIT_FLAT},
+	{"id": "burn", "kind": KIND_DEBUFF, "resistable": true, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 10, "display": "Burning", "grant": "", "magnitude_min": 1, "magnitude_max": 10, "magnitude_unit": UNIT_PCT_MAX_HP},
+	{"id": "empower", "kind": KIND_BUFF, "resistable": false, "default_rounds": 2, "stacking": REFRESH_MAX_DURATION, "cap": 25, "display": "Empowered", "grant": "", "magnitude_min": 1, "magnitude_max": 25, "magnitude_unit": UNIT_PCT},
+]
+
+# The row for `status`, or {} when unknown.
+static func row(status: String) -> Dictionary:
+	for r: Dictionary in ROWS:
+		if str(r["id"]) == status:
+			return r
+	return {}
+
+static func has(status: String) -> bool:
+	return not row(status).is_empty()
+
+static func ids() -> Array[String]:
+	var out: Array[String] = []
+	for r: Dictionary in ROWS:
+		out.append(str(r["id"]))
+	return out
+
+# Ids matching a kind (and optionally a grant source), in table order.
+static func ids_where(kind: String, resistable_only: bool = false, grant: String = "") -> Array[String]:
+	var out: Array[String] = []
+	for r: Dictionary in ROWS:
+		if not kind.is_empty() and str(r["kind"]) != kind:
+			continue
+		if resistable_only and not DictUtil.to_bool(r["resistable"]):
+			continue
+		if not grant.is_empty() and str(r["grant"]) != grant:
+			continue
+		out.append(str(r["id"]))
+	return out
+
+static func default_rounds(status: String) -> int:
+	return DictUtil.to_int(row(status).get("default_rounds", 1), 1)
+
+static func stacking_of(status: String) -> String:
+	return str(row(status).get("stacking", REFRESH_MAX_DURATION))
+
+static func cap_of(status: String) -> int:
+	return DictUtil.to_int(row(status).get("cap", 0))
+
+static func magnitude_min(status: String) -> int:
+	return DictUtil.to_int(row(status).get("magnitude_min", 0))
+
+# 0 = the status carries no magnitude (unknown statuses included).
+static func magnitude_max(status: String) -> int:
+	return DictUtil.to_int(row(status).get("magnitude_max", 0))
+
+static func magnitude_unit(status: String) -> String:
+	return str(row(status).get("magnitude_unit", UNIT_PCT))
+
+# Ids whose rows carry a magnitude range (magnitude_max > 0), in table order.
+static func magnitude_ids() -> Array[String]:
+	var out: Array[String] = []
+	for r: Dictionary in ROWS:
+		if DictUtil.to_int(r.get("magnitude_max", 0)) > 0:
+			out.append(str(r["id"]))
+	return out
+
+# Problems with a row set (used by the registry test and when adding rows): empty = valid.
+static func row_errors() -> Array[String]:
+	return errors_of(ROWS)
+
+# The row_errors rules for any row set (tests feed broken copies).
+static func errors_of(rows: Array[Dictionary]) -> Array[String]:
+	var errors: Array[String] = []
+	var seen: Array[String] = []
+	for r: Dictionary in rows:
+		var id: String = str(r.get("id", ""))
+		if id.is_empty() or seen.has(id):
+			errors.append("Duplicate or empty status id '%s'." % id)
+		seen.append(id)
+		if not [KIND_BUFF, KIND_DEBUFF].has(str(r.get("kind", ""))):
+			errors.append("%s: kind must be buff or debuff." % id)
+		if DictUtil.to_bool(r.get("resistable", false)) and str(r.get("kind", "")) != KIND_DEBUFF:
+			errors.append("%s: only debuffs can be resistable." % id)
+		if not RULES.has(str(r.get("stacking", ""))):
+			errors.append("%s: unknown stacking rule '%s'." % [id, str(r.get("stacking", ""))])
+		if DictUtil.to_int(r.get("default_rounds", 0)) < 1 or DictUtil.to_int(r.get("cap", 0)) < 0:
+			errors.append("%s: default_rounds must be 1+ and cap 0+." % id)
+		if str(r.get("display", "")).is_empty():
+			errors.append("%s: needs a display name." % id)
+		var grant: String = str(r.get("grant", ""))
+		var skill_grant: bool = grant == "support" or grant == "defend"
+		if (str(r.get("kind", "")) != KIND_BUFF and skill_grant) or not (skill_grant or grant.is_empty()):
+			errors.append("%s: buffs need grant support, defend or \"\" (no skill grants it), debuffs none." % id)
+		var mag_min: int = DictUtil.to_int(r.get("magnitude_min", 0))
+		var mag_max: int = DictUtil.to_int(r.get("magnitude_max", 0))
+		if mag_min < 0 or mag_min > 100:
+			errors.append("%s: magnitude_min must be 0-100." % id)
+		if mag_max < mag_min:
+			errors.append("%s: magnitude_max must be at least magnitude_min." % id)
+		if not UNITS.has(str(r.get("magnitude_unit", ""))):
+			errors.append("%s: magnitude_unit must be one of %s." % [id, ", ".join(UNITS)])
+	return errors
+
+# Combines an existing application (`existing_rounds` 0 = not present) with a new one under the
+# status's stacking rule. Returns {"rounds": int, "potency": int}. Rounds are at least 1 once present.
+# A status the registry does not know behaves as refresh_max_duration.
+static func stack(existing_rounds: int, existing_potency: int, new_rounds: int, new_potency: int, status: String) -> Dictionary:
+	return stack_with(stacking_of(status), cap_of(status), existing_rounds, existing_potency, new_rounds, new_potency)
+
+# The stacking math for an explicit `rule` and `cap` (stack() reads both from the registry row).
+static func stack_with(rule: String, cap: int, existing_rounds: int, existing_potency: int, new_rounds: int, new_potency: int) -> Dictionary:
+	var add_rounds: int = maxi(1, new_rounds)
+	var rounds: int = add_rounds
+	var potency: int = new_potency
+	if existing_rounds > 0:
+		match rule:
+			EXTEND_DURATION:
+				rounds = existing_rounds + add_rounds
+				potency = maxi(existing_potency, new_potency)
+			STACK_POTENCY:
+				rounds = maxi(existing_rounds, add_rounds)
+				potency = existing_potency + new_potency
+			NONE:
+				rounds = existing_rounds
+				potency = existing_potency
+			_:
+				rounds = maxi(existing_rounds, add_rounds)
+				potency = maxi(existing_potency, new_potency)
+	if cap > 0:
+		if rule == EXTEND_DURATION:
+			rounds = mini(rounds, cap)
+		else:
+			potency = mini(potency, cap)
+	return {"rounds": rounds, "potency": potency}

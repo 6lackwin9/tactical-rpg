@@ -213,6 +213,15 @@ Then three steps, in order:
 
 Each step needs the user's go-ahead before it starts; merging `engine` into `main` is part of step 2.
 
+Step 1 done (2026-10-19, user: frozen data copy, the entire project, a version note, a `legacy` branch):
+
+- `legacy/` holds the whole project of `main` at `7fa10da` (Release 2026-10-18 evening, #40) except `engine/`,
+  including a frozen copy of `data/`; `legacy/LEGACY.md` records the commit, Godot 4.7.2 and how to run it. Its own
+  gate passes (417 scripts, 1090 assertions); the root Godot project skips it (nested `project.godot`).
+- Branch `legacy` (on origin) forks `main` at the same commit, for resuming Godot work with the old workflow.
+- The parity tools (`export.sh`, `trace.sh`, `journey.sh`) run `legacy/`; their output is byte-identical to the
+  root project's, and `godot_commit.txt` records the commit from `LEGACY.md`.
+
 ## 9. Scope
 
 - **Target:** switch this game over to the engine. If that works and

@@ -1,0 +1,21 @@
+{
+	"kind": "items",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ember_brigandine",
+			"name": "Ember-Scale Brigandine",
+			"base_item": "arm_leather",
+			"description": "Leather studded with cooled slag scales.",
+			"history": "Forged from the keep's first fire; passed to every captain of the Wardens.",
+			"owner": "mara_voss",
+			"tuning": {
+				"mitigation": 2
+			},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": "ember_brigandine"
+		}
+	]
+}

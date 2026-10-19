@@ -1,0 +1,37 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Godot export binaries & packages
+# (root-level exports only to preserve addon binaries)
+/*.apk
+/*.aab
+/*.pck
+/*.zip
+/build/
+
+# Godot logs and crashes
+crash*.log
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# IDE and editor files
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.swp
+*~
+
+# Test outputs
+test_*.txt
+
+# Agent run checkpoints (resumable runs)
+.agent/
+
+# run.bat opt: branch the -opt worktree was opened from
+.opt_branch

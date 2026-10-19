@@ -1,0 +1,47 @@
+# Seeds
+
+Idempotent `ContentCatalog.upsert/remove` scripts that author game data. Rule: a seed leaves this folder in the cleanup pass after its task is merged (git history keeps it).
+
+## Archived seeds (CLN-2)
+
+Restore with `git show <hash>:data/seeds/<file>`.
+
+| Seed | Task | Merge commit |
+| --- | --- | --- |
+| `c1a1.gd` | C1-A1 (skill gating, priest proficiency, tome retype) | `11ffe67` |
+| `m2c2b_a.gd` | M2C2B (class skill families) | `b7c4016` |
+| `m2c2b_b.gd` | M2C2B | `b7c4016` |
+| `m2c2b_c.gd` | M2C2B | `b7c4016` |
+| `m2c2b_d.gd` | M2C2B | `b7c4016` |
+| `m2c2b_lib.gd` | M2C2B (shared helpers for m2c2b_a..d) | `b7c4016` |
+| `sk2.gd` | SK2-A (data step) | `9686a36` |
+| `sk2_schema.gd` | SK2-L (schema step) | `7bed659` |
+| `skill1_ranks.gd` | SKILL1 (ranked skills v2 migration) | `745962a` |
+| `item1_migrate.gd` | ITEM1-A (item families, items v2 migration) | pending merge |
+| `item1_tokens.gd` | ITEM1-A (number-quoting item descriptions to tokens) | pending merge |
+| `class1_migrate.gd` | CLASS1-M (class skill_path list to dict, units heal_below default) | pending merge |
+
+Example: `git show 11ffe67:data/seeds/c1a1.gd`
+
+## Active seeds
+
+| Seed | Task |
+| --- | --- |
+| `m4a.gd` | M4-A (quest templates, Ashlands loot, linked quests) |
+| `exp1a.gd` | EXP1-A (map templates, Ashlands exploration data) |
+| `trav1a.gd` | TRAV1-A (Ashlands old/high road, Iron Reaches south road, two world_map exit markers) |
+| `dlg1a.gd` | DLG1-A (service lines, Ashlands dialogues, keep shop, gold) |
+| `rep1a.gd` | REP1-A (quest reputation deltas, Hest rep-gated choice, ashlands:ember_patrol) |
+| `s14_a1.gd` | S14-A1 (first manifest rows: goblin_brawler alias, four sample file overrides; goblin_brawler art key) |
+| `ui1_start_party.gd` | UI1-A (Ashlands start party: warrior, ranger, rogue, mage; tidewrack inherits it) |
+| `s14_a2.gd` | S14-A2 (13 placeholder SFX blips + their manifest rows) |
+| `s12t.gd` | S12T-A (the 17 terrain rows) |
+| `s12s.gd` | S12S-A (crippling_shot, rend_armor, envenom, aegis, rejuvenate on class paths at level 6) |
+| `s12c.gd` | S12C-A (feint, opportunist on the rogue path at levels 6-7; crushing_blow on the brawler path at level 6) |
+| `bal3.gd` | BAL3-A (data levers: sweep_kick power 0.8/1.0/1.15; other levers gated off) |
+| `camp1_unit.gd` | CAMP1-A1 (goblin_warlord boss unit for the Ashlands finale; run before camp1_story) |
+| `camp1_story.gd` | CAMP1-A2 (Ashlands story: steel_for_the_gate, keep_one_fire_lit, Ashmaw Camp, wastes_track, wagon raid, Grakka and Orsa dialogues, steel choice, epilogue) |
+| `trav2a.gd` | TRAV2-A (Ashlands supplies: manifest start_supplies 10, hest_stores supply_price 2, chest supplies on stores / ruin_cache / camp_cache) |
+| `art2_a.gd` | ART2-A (manifest rows for intent chips, badge_foresight, chip_slay, chip_guest, overlay_objective_v0, sfx miss; run `tools/gen_art.py chips overlays` first) |
+| `itemuse1_a.gd` | ITEMUSE1-A (use_reach: con_heal_potion 1, con_focus_elixir 0, con_fire_bomb 3) |
+| `itemuse1_a2.gd` | ITEMUSE1-A2 (empty `pouch` on warrior, ranger, priest, mage classes; no free class potion) |

@@ -1,0 +1,34 @@
+{
+	"kind": "dialogue_services",
+	"version": 1,
+	"entries": [
+		{
+			"id": "greeting",
+			"text": "{npc} looks up."
+		},
+		{
+			"id": "offer",
+			"text": "About {quest}..."
+		},
+		{
+			"id": "accept",
+			"text": "We will do it."
+		},
+		{
+			"id": "decline",
+			"text": "Not now."
+		},
+		{
+			"id": "turn_in",
+			"text": "We finished: {quest}."
+		},
+		{
+			"id": "shop",
+			"text": "Show me your wares."
+		},
+		{
+			"id": "farewell",
+			"text": "Farewell."
+		}
+	]
+}

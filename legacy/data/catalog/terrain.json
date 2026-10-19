@@ -1,0 +1,176 @@
+{
+	"kind": "terrain",
+	"version": 1,
+	"entries": [
+		{
+			"id": "floor",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "grass",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "dirt",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "stone",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "sand",
+			"move_cost": 2,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "snow",
+			"move_cost": 2,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "shallow_water",
+			"move_cost": 2,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "deep_water",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "mud",
+			"move_cost": 2,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "lava",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "wall",
+			"move_cost": 1,
+			"cover_guard": 0.3,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "tree",
+			"move_cost": 1,
+			"cover_guard": 0.15,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "bridge",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "rubble",
+			"move_cost": 2,
+			"cover_guard": 0.15,
+			"hazard_status": "",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "burning_ground",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "burn",
+			"hazard_potency": 100,
+			"hazard_magnitude": 5,
+			"hazard_rounds": 1,
+			"hazard_on": "both"
+		},
+		{
+			"id": "toxic_bog",
+			"move_cost": 2,
+			"cover_guard": 0.0,
+			"hazard_status": "poison",
+			"hazard_potency": 80,
+			"hazard_magnitude": 4,
+			"hazard_rounds": 2,
+			"hazard_on": "both"
+		},
+		{
+			"id": "ice",
+			"move_cost": 1,
+			"cover_guard": 0.0,
+			"hazard_status": "slow",
+			"hazard_potency": 100,
+			"hazard_magnitude": 0,
+			"hazard_rounds": 1,
+			"hazard_on": "enter"
+		}
+	]
+}

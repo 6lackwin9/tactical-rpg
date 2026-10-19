@@ -1,0 +1,36 @@
+{
+	"kind": "locations",
+	"version": 1,
+	"entries": [
+		{
+			"id": "gull_harbour",
+			"name": "Gull Harbour",
+			"description": "A crooked port town built from ship timber.",
+			"kind": "town",
+			"region": "tidewrack_coast",
+			"exits": [
+				{
+					"to": "wreck_strand",
+					"label": "the tide road"
+				}
+			],
+			"encounters": [],
+			"tags": []
+		},
+		{
+			"id": "wreck_strand",
+			"name": "Wreck Strand",
+			"description": "A beach strewn with hulls, ideal cover for raiders.",
+			"kind": "wild",
+			"region": "tidewrack_coast",
+			"exits": [
+				{
+					"to": "gull_harbour",
+					"label": "back to port"
+				}
+			],
+			"encounters": [],
+			"tags": []
+		}
+	]
+}

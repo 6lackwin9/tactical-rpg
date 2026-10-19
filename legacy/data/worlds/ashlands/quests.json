@@ -1,0 +1,479 @@
+{
+	"kind": "quests",
+	"version": 1,
+	"entries": [
+		{
+			"id": "hold_the_courtyard",
+			"name": "Hold the Courtyard",
+			"description": "The Long Dry has come early, and the Horde with it. Mara needs the Courtyard held while the keep's gates are shored up.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Rally at Warden Keep",
+					"location": "warden_keep"
+				},
+				{
+					"text": "Drive the warband out of the Ruined Courtyard",
+					"location": "ruined_courtyard",
+					"encounter": "courtyard_skirmish"
+				}
+			],
+			"reward": "The Wardens' thanks, and a share of the keep's winter stores.",
+			"template": "reach_and_clear",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [
+				{
+					"key": "ashlands.courtyard_held",
+					"value": true
+				},
+				{
+					"key": "ashlands.muster_1",
+					"value": true
+				}
+			],
+			"auto_start": true,
+			"links": {
+				"leads_to": [
+					"cinder_gate_watch",
+					"warden_oath"
+				],
+				"related_characters": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"related_locations": [
+					"warden_keep",
+					"ruined_courtyard"
+				],
+				"related_factions": [
+					"ember_wardens",
+					"ashen_horde"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill",
+						"turn_in": "tev_quill",
+						"description": "Mara is gone. Tev holds the line in her place: clear the Courtyard."
+					}
+				}
+			],
+			"loot_pool": [
+				"keep_stores",
+				"wardens_drill",
+				"keep_ring"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 10
+			},
+			"tags": []
+		},
+		{
+			"id": "cinder_gate_watch",
+			"name": "Watch at the Cinder Gate",
+			"description": "Mara suspects the warband left scouts in the pass. Find them before they find the keep. Take someone from Toller's roll first; the pass is no place to walk alone.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [
+				"hold_the_courtyard"
+			],
+			"steps": [
+				{
+					"text": "Break the ambush at the Cinder Gate",
+					"encounter": "pass_ambush"
+				}
+			],
+			"reward": "The Wardens' thanks, and a pick from the keep.",
+			"template": "clear_site",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [
+				{
+					"key": "ashlands.pass_cleared",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"follows": [
+					"hold_the_courtyard"
+				],
+				"leads_to": [
+					"warden_oath"
+				],
+				"related_characters": [
+					"mara_voss"
+				],
+				"related_factions": [
+					"ashen_horde"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill",
+						"turn_in": "tev_quill",
+						"description": "Mara is gone. Tev means to finish what she started and clear the pass himself.",
+						"reward": "Tev's thanks and what the keep can spare.",
+						"rewards_from": "reach_and_clear",
+						"loot_pool": [
+							"keep_stores",
+							"rallying_cry"
+						]
+					}
+				}
+			],
+			"loot_pool": [
+				"wardens_drill",
+				"keep_ring",
+				"rallying_cry"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 10,
+				"ashen_horde": -10
+			},
+			"tags": []
+		},
+		{
+			"id": "warden_oath",
+			"name": "The Warden's Oath",
+			"description": "Once the pass is safe, Tev will speak for the party before the Wardens.",
+			"giver": "tev_quill",
+			"faction": "ember_wardens",
+			"region": "ashen_marches",
+			"requires": [
+				"hold_the_courtyard"
+			],
+			"steps": [
+				{
+					"text": "Wait for word that the Cinder Gate is clear",
+					"flag": "ashlands.pass_cleared",
+					"value": true
+				},
+				{
+					"text": "Return to Warden Keep and swear the oath",
+					"location": "warden_keep"
+				}
+			],
+			"reward": "A Warden's gift, and the oath.",
+			"template": "signal_and_return",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [
+				{
+					"key": "ashlands.oath_sworn",
+					"value": true
+				},
+				{
+					"key": "ashlands.muster_2",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"follows": [
+					"hold_the_courtyard",
+					"cinder_gate_watch"
+				],
+				"related_characters": [
+					"tev_quill",
+					"mara_voss"
+				],
+				"related_locations": [
+					"warden_keep"
+				],
+				"related_factions": [
+					"ember_wardens"
+				],
+				"leads_to": [
+					"steel_for_the_gate"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"description": "With Mara gone, Tev asks the party to swear the oath over her empty seat.",
+						"steps": {
+							"1": {
+								"text": "Swear the oath in the Ruined Courtyard where Mara fell",
+								"location": "ruined_courtyard"
+							}
+						}
+					}
+				},
+				{
+					"id": "tev_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.tev_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"available": false
+					}
+				}
+			],
+			"loot_pool": [
+				"rallying_cry",
+				"wardens_drill"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 15
+			},
+			"tags": []
+		},
+		{
+			"id": "ember_patrol",
+			"name": "Sweep the Ruins",
+			"description": "Hest wants the ruins swept of raiders before the next supply run.",
+			"giver": "hest_the_quartermaster",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Break a raiding party in the ruins",
+					"encounter": "ash_raiders"
+				}
+			],
+			"reward": "Hest's gratitude and a pick from the stores.",
+			"template": "clear_site",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "rep.ashlands.ember_wardens",
+					"op": ">=",
+					"value": 30
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "ashlands.ruins_swept",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"related_characters": [
+					"hest_the_quartermaster"
+				],
+				"related_locations": [
+					"ruined_courtyard",
+					"cinder_gate"
+				],
+				"related_factions": [
+					"ember_wardens",
+					"ashen_horde"
+				]
+			},
+			"variants": [],
+			"loot_pool": [
+				"keep_stores"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 5
+			},
+			"tags": []
+		},
+		{
+			"id": "steel_for_the_gate",
+			"name": "Steel for the Gate",
+			"description": "The Cinder Gate will not hold another Long Dry on timber. Mara sends you up the south road to Slag Gate for Orsa Tallow's steel.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "ashen_marches",
+			"requires": [
+				"warden_oath"
+			],
+			"steps": [
+				{
+					"text": "Load Orsa's steel at Slag Gate",
+					"flag": "ashlands.steel_loaded",
+					"value": true
+				},
+				{
+					"text": "Bring the steel to Warden Keep",
+					"location": "warden_keep"
+				}
+			],
+			"reward": "Hest's thanks and a pick from the stores.",
+			"template": "signal_and_return",
+			"turn_in": "hest_the_quartermaster",
+			"requires_flags": [],
+			"complete_flags": [
+				{
+					"key": "ashlands.steel_delivered",
+					"value": true
+				}
+			],
+			"auto_start": true,
+			"links": {
+				"follows": [
+					"warden_oath"
+				],
+				"leads_to": [
+					"keep_one_fire_lit"
+				],
+				"related_characters": [
+					"mara_voss",
+					"hest_the_quartermaster"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill"
+					}
+				}
+			],
+			"loot_pool": [
+				"keep_stores",
+				"keep_ring"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 10
+			},
+			"tags": []
+		},
+		{
+			"id": "keep_one_fire_lit",
+			"name": "Keep One Fire Lit",
+			"description": "Grakka Ashmaw has gathered the warbands past the Cinder Gate. Break him and the Horde scatters.",
+			"giver": "mara_voss",
+			"faction": "ember_wardens",
+			"region": "cinder_pass",
+			"requires": [
+				"steel_for_the_gate"
+			],
+			"steps": [
+				{
+					"text": "Find the Ashmaw Camp",
+					"location": "ashmaw_camp"
+				},
+				{
+					"text": "Break Grakka Ashmaw",
+					"encounter": "ashmaw_stand"
+				}
+			],
+			"reward": "The Wardens' gratitude and the chieftain's torc.",
+			"template": "reach_and_clear",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "ashlands.steel_spent",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "ashlands.horde_broken",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"follows": [
+					"steel_for_the_gate"
+				],
+				"related_characters": [
+					"mara_voss",
+					"grakka_ashmaw"
+				],
+				"related_locations": [
+					"ashmaw_camp"
+				]
+			},
+			"variants": [
+				{
+					"id": "mara_fallen",
+					"when_flags": [
+						{
+							"key": "ashlands.mara_fallen",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"giver": "tev_quill",
+						"turn_in": "tev_quill"
+					}
+				},
+				{
+					"id": "steel_to_gate",
+					"when_flags": [
+						{
+							"key": "ashlands.steel_to_gate",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"steps": {
+							"1": {
+								"text": "Break Grakka; the barred gate cut off his flankers",
+								"encounter": "ashmaw_stand_barred"
+							}
+						}
+					}
+				}
+			],
+			"loot_pool": [
+				"chieftains_torc",
+				"keep_ring",
+				"rallying_cry",
+				"wardens_drill"
+			],
+			"loot_picks": 1,
+			"reputation": {
+				"ember_wardens": 15,
+				"ashen_horde": -20
+			},
+			"tags": []
+		}
+	]
+}

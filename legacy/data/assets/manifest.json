@@ -1,0 +1,4734 @@
+{
+	"kind": "asset_manifest",
+	"version": 1,
+	"entries": [
+		{
+			"id": "unit/goblin_brawler/token",
+			"namespace": "unit",
+			"key": "goblin_brawler",
+			"variant": "token",
+			"path": "res://assets/art/unit/goblin_brawler_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/goblin_brawler/portrait",
+			"namespace": "unit",
+			"key": "goblin_brawler",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/goblin_brawler_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/warrior/token",
+			"namespace": "unit",
+			"key": "warrior",
+			"variant": "token",
+			"path": "res://assets/art/unit/warrior_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override: PNG export of the placeholder glyph layer"
+		},
+		{
+			"id": "unit/warrior/portrait",
+			"namespace": "unit",
+			"key": "warrior",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/warrior_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override: PNG export of the placeholder"
+		},
+		{
+			"id": "item/runed_staff/icon",
+			"namespace": "item",
+			"key": "runed_staff",
+			"variant": "icon",
+			"path": "res://assets/art/item/runed_staff_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override of a unique icon"
+		},
+		{
+			"id": "tile/rubble/v0",
+			"namespace": "tile",
+			"key": "rubble",
+			"variant": "v0",
+			"path": "res://assets/art/tile/rubble_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "system",
+			"note": "sample override; serves all four variants"
+		},
+		{
+			"id": "sfx/hit/stream",
+			"namespace": "sfx",
+			"key": "hit",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/hit.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/crit/stream",
+			"namespace": "sfx",
+			"key": "crit",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/crit.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/mitigated/stream",
+			"namespace": "sfx",
+			"key": "mitigated",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/mitigated.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/heal/stream",
+			"namespace": "sfx",
+			"key": "heal",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/heal.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/buff/stream",
+			"namespace": "sfx",
+			"key": "buff",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/buff.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/debuff/stream",
+			"namespace": "sfx",
+			"key": "debuff",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/debuff.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/defend/stream",
+			"namespace": "sfx",
+			"key": "defend",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/defend.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/move_step/stream",
+			"namespace": "sfx",
+			"key": "move_step",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/move_step.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/defeat/stream",
+			"namespace": "sfx",
+			"key": "defeat",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/defeat.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/ui_click/stream",
+			"namespace": "sfx",
+			"key": "ui_click",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/ui_click.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/ui_confirm/stream",
+			"namespace": "sfx",
+			"key": "ui_confirm",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/ui_confirm.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/ui_back/stream",
+			"namespace": "sfx",
+			"key": "ui_back",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/ui_back.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "sfx/ui_error/stream",
+			"namespace": "sfx",
+			"key": "ui_error",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/ui_error.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "placeholder blip (generated)"
+		},
+		{
+			"id": "music/menu_theme/stream",
+			"namespace": "music",
+			"key": "menu_theme",
+			"variant": "stream",
+			"path": "res://assets/audio/music/menu_theme.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/ashlands/stream",
+			"namespace": "music",
+			"key": "ashlands",
+			"variant": "stream",
+			"path": "res://assets/audio/music/ashlands.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/iron_reaches/stream",
+			"namespace": "music",
+			"key": "iron_reaches",
+			"variant": "stream",
+			"path": "res://assets/audio/music/iron_reaches.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/tidewrack/stream",
+			"namespace": "music",
+			"key": "tidewrack",
+			"variant": "stream",
+			"path": "res://assets/audio/music/tidewrack.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/combat/stream",
+			"namespace": "music",
+			"key": "combat",
+			"variant": "stream",
+			"path": "res://assets/audio/music/combat.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/town/stream",
+			"namespace": "music",
+			"key": "town",
+			"variant": "stream",
+			"path": "res://assets/audio/music/town.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/danger/stream",
+			"namespace": "music",
+			"key": "danger",
+			"variant": "stream",
+			"path": "res://assets/audio/music/danger.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/shop/stream",
+			"namespace": "music",
+			"key": "shop",
+			"variant": "stream",
+			"path": "res://assets/audio/music/shop.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/travel/stream",
+			"namespace": "music",
+			"key": "travel",
+			"variant": "stream",
+			"path": "res://assets/audio/music/travel.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "music/boss/stream",
+			"namespace": "music",
+			"key": "boss",
+			"variant": "stream",
+			"path": "res://assets/audio/music/boss.ogg",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated loop (MUSIC1)"
+		},
+		{
+			"id": "unit/archer/portrait",
+			"namespace": "unit",
+			"key": "archer",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/archer_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/archer/token",
+			"namespace": "unit",
+			"key": "archer",
+			"variant": "token",
+			"path": "res://assets/art/unit/archer_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_archer/portrait",
+			"namespace": "unit",
+			"key": "ash_archer",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ash_archer_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_archer/token",
+			"namespace": "unit",
+			"key": "ash_archer",
+			"variant": "token",
+			"path": "res://assets/art/unit/ash_archer_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_berserker/portrait",
+			"namespace": "unit",
+			"key": "ash_berserker",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ash_berserker_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_berserker/token",
+			"namespace": "unit",
+			"key": "ash_berserker",
+			"variant": "token",
+			"path": "res://assets/art/unit/ash_berserker_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_brawler/portrait",
+			"namespace": "unit",
+			"key": "ash_brawler",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ash_brawler_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_brawler/token",
+			"namespace": "unit",
+			"key": "ash_brawler",
+			"variant": "token",
+			"path": "res://assets/art/unit/ash_brawler_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_shaman/portrait",
+			"namespace": "unit",
+			"key": "ash_shaman",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ash_shaman_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_shaman/token",
+			"namespace": "unit",
+			"key": "ash_shaman",
+			"variant": "token",
+			"path": "res://assets/art/unit/ash_shaman_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_skirmisher/portrait",
+			"namespace": "unit",
+			"key": "ash_skirmisher",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ash_skirmisher_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_skirmisher/token",
+			"namespace": "unit",
+			"key": "ash_skirmisher",
+			"variant": "token",
+			"path": "res://assets/art/unit/ash_skirmisher_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_warchief/portrait",
+			"namespace": "unit",
+			"key": "ash_warchief",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ash_warchief_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ash_warchief/token",
+			"namespace": "unit",
+			"key": "ash_warchief",
+			"variant": "token",
+			"path": "res://assets/art/unit/ash_warchief_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/berserker/portrait",
+			"namespace": "unit",
+			"key": "berserker",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/berserker_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/berserker/token",
+			"namespace": "unit",
+			"key": "berserker",
+			"variant": "token",
+			"path": "res://assets/art/unit/berserker_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/bolg_redhand/portrait",
+			"namespace": "unit",
+			"key": "bolg_redhand",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/bolg_redhand_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/bolg_redhand/token",
+			"namespace": "unit",
+			"key": "bolg_redhand",
+			"variant": "token",
+			"path": "res://assets/art/unit/bolg_redhand_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/brawler/portrait",
+			"namespace": "unit",
+			"key": "brawler",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/brawler_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/brawler/token",
+			"namespace": "unit",
+			"key": "brawler",
+			"variant": "token",
+			"path": "res://assets/art/unit/brawler_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/dummy/portrait",
+			"namespace": "unit",
+			"key": "dummy",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/dummy_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/dummy/token",
+			"namespace": "unit",
+			"key": "dummy",
+			"variant": "token",
+			"path": "res://assets/art/unit/dummy_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/grakka_ashmaw/portrait",
+			"namespace": "unit",
+			"key": "grakka_ashmaw",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/grakka_ashmaw_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/grakka_ashmaw/token",
+			"namespace": "unit",
+			"key": "grakka_ashmaw",
+			"variant": "token",
+			"path": "res://assets/art/unit/grakka_ashmaw_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/gruk_smokecaller/portrait",
+			"namespace": "unit",
+			"key": "gruk_smokecaller",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/gruk_smokecaller_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/gruk_smokecaller/token",
+			"namespace": "unit",
+			"key": "gruk_smokecaller",
+			"variant": "token",
+			"path": "res://assets/art/unit/gruk_smokecaller_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/hest_the_quartermaster/portrait",
+			"namespace": "unit",
+			"key": "hest_the_quartermaster",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/hest_the_quartermaster_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/hest_the_quartermaster/token",
+			"namespace": "unit",
+			"key": "hest_the_quartermaster",
+			"variant": "token",
+			"path": "res://assets/art/unit/hest_the_quartermaster_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/mage/portrait",
+			"namespace": "unit",
+			"key": "mage",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/mage_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/mage/token",
+			"namespace": "unit",
+			"key": "mage",
+			"variant": "token",
+			"path": "res://assets/art/unit/mage_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/mara_voss/portrait",
+			"namespace": "unit",
+			"key": "mara_voss",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/mara_voss_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/mara_voss/token",
+			"namespace": "unit",
+			"key": "mara_voss",
+			"variant": "token",
+			"path": "res://assets/art/unit/mara_voss_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/nok_flamebow/portrait",
+			"namespace": "unit",
+			"key": "nok_flamebow",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/nok_flamebow_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/nok_flamebow/token",
+			"namespace": "unit",
+			"key": "nok_flamebow",
+			"variant": "token",
+			"path": "res://assets/art/unit/nok_flamebow_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/priest/portrait",
+			"namespace": "unit",
+			"key": "priest",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/priest_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/priest/token",
+			"namespace": "unit",
+			"key": "priest",
+			"variant": "token",
+			"path": "res://assets/art/unit/priest_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ranger/portrait",
+			"namespace": "unit",
+			"key": "ranger",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/ranger_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/ranger/token",
+			"namespace": "unit",
+			"key": "ranger",
+			"variant": "token",
+			"path": "res://assets/art/unit/ranger_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/rogue/portrait",
+			"namespace": "unit",
+			"key": "rogue",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/rogue_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/rogue/token",
+			"namespace": "unit",
+			"key": "rogue",
+			"variant": "token",
+			"path": "res://assets/art/unit/rogue_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/scout/portrait",
+			"namespace": "unit",
+			"key": "scout",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/scout_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/scout/token",
+			"namespace": "unit",
+			"key": "scout",
+			"variant": "token",
+			"path": "res://assets/art/unit/scout_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/shaman/portrait",
+			"namespace": "unit",
+			"key": "shaman",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/shaman_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/shaman/token",
+			"namespace": "unit",
+			"key": "shaman",
+			"variant": "token",
+			"path": "res://assets/art/unit/shaman_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/skarn_ironjaw/portrait",
+			"namespace": "unit",
+			"key": "skarn_ironjaw",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/skarn_ironjaw_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/skarn_ironjaw/token",
+			"namespace": "unit",
+			"key": "skarn_ironjaw",
+			"variant": "token",
+			"path": "res://assets/art/unit/skarn_ironjaw_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/skirmisher/portrait",
+			"namespace": "unit",
+			"key": "skirmisher",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/skirmisher_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/skirmisher/token",
+			"namespace": "unit",
+			"key": "skirmisher",
+			"variant": "token",
+			"path": "res://assets/art/unit/skirmisher_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/tev_quill/portrait",
+			"namespace": "unit",
+			"key": "tev_quill",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/tev_quill_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/tev_quill/token",
+			"namespace": "unit",
+			"key": "tev_quill",
+			"variant": "token",
+			"path": "res://assets/art/unit/tev_quill_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/vex_cutpurse/portrait",
+			"namespace": "unit",
+			"key": "vex_cutpurse",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/vex_cutpurse_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/vex_cutpurse/token",
+			"namespace": "unit",
+			"key": "vex_cutpurse",
+			"variant": "token",
+			"path": "res://assets/art/unit/vex_cutpurse_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/amulet/icon",
+			"namespace": "item",
+			"key": "amulet",
+			"variant": "icon",
+			"path": "res://assets/art/item/amulet_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/axe/icon",
+			"namespace": "item",
+			"key": "axe",
+			"variant": "icon",
+			"path": "res://assets/art/item/axe_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/bomb/icon",
+			"namespace": "item",
+			"key": "bomb",
+			"variant": "icon",
+			"path": "res://assets/art/item/bomb_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/bow/icon",
+			"namespace": "item",
+			"key": "bow",
+			"variant": "icon",
+			"path": "res://assets/art/item/bow_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/dagger/icon",
+			"namespace": "item",
+			"key": "dagger",
+			"variant": "icon",
+			"path": "res://assets/art/item/dagger_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/elixir/icon",
+			"namespace": "item",
+			"key": "elixir",
+			"variant": "icon",
+			"path": "res://assets/art/item/elixir_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/ember_brigandine/icon",
+			"namespace": "item",
+			"key": "ember_brigandine",
+			"variant": "icon",
+			"path": "res://assets/art/item/ember_brigandine_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/greatsword/icon",
+			"namespace": "item",
+			"key": "greatsword",
+			"variant": "icon",
+			"path": "res://assets/art/item/greatsword_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/hammer/icon",
+			"namespace": "item",
+			"key": "hammer",
+			"variant": "icon",
+			"path": "res://assets/art/item/hammer_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/knuckles/icon",
+			"namespace": "item",
+			"key": "knuckles",
+			"variant": "icon",
+			"path": "res://assets/art/item/knuckles_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/leather/icon",
+			"namespace": "item",
+			"key": "leather",
+			"variant": "icon",
+			"path": "res://assets/art/item/leather_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/misc/icon",
+			"namespace": "item",
+			"key": "misc",
+			"variant": "icon",
+			"path": "res://assets/art/item/misc_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/plate/icon",
+			"namespace": "item",
+			"key": "plate",
+			"variant": "icon",
+			"path": "res://assets/art/item/plate_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/potion/icon",
+			"namespace": "item",
+			"key": "potion",
+			"variant": "icon",
+			"path": "res://assets/art/item/potion_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/ring/icon",
+			"namespace": "item",
+			"key": "ring",
+			"variant": "icon",
+			"path": "res://assets/art/item/ring_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/robe/icon",
+			"namespace": "item",
+			"key": "robe",
+			"variant": "icon",
+			"path": "res://assets/art/item/robe_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/shield/icon",
+			"namespace": "item",
+			"key": "shield",
+			"variant": "icon",
+			"path": "res://assets/art/item/shield_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/shortsword/icon",
+			"namespace": "item",
+			"key": "shortsword",
+			"variant": "icon",
+			"path": "res://assets/art/item/shortsword_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/staff/icon",
+			"namespace": "item",
+			"key": "staff",
+			"variant": "icon",
+			"path": "res://assets/art/item/staff_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/sword/icon",
+			"namespace": "item",
+			"key": "sword",
+			"variant": "icon",
+			"path": "res://assets/art/item/sword_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/titan_warhammer/icon",
+			"namespace": "item",
+			"key": "titan_warhammer",
+			"variant": "icon",
+			"path": "res://assets/art/item/titan_warhammer_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/tome/icon",
+			"namespace": "item",
+			"key": "tome",
+			"variant": "icon",
+			"path": "res://assets/art/item/tome_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/wand/icon",
+			"namespace": "item",
+			"key": "wand",
+			"variant": "icon",
+			"path": "res://assets/art/item/wand_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "item/weapon/icon",
+			"namespace": "item",
+			"key": "weapon",
+			"variant": "icon",
+			"path": "res://assets/art/item/weapon_icon.png",
+			"alias_of": "",
+			"size": [
+				96,
+				96
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/bridge/v0",
+			"namespace": "tile",
+			"key": "bridge",
+			"variant": "v0",
+			"path": "res://assets/art/tile/bridge_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/bridge/v1",
+			"namespace": "tile",
+			"key": "bridge",
+			"variant": "v1",
+			"path": "res://assets/art/tile/bridge_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/bridge/v2",
+			"namespace": "tile",
+			"key": "bridge",
+			"variant": "v2",
+			"path": "res://assets/art/tile/bridge_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/bridge/v3",
+			"namespace": "tile",
+			"key": "bridge",
+			"variant": "v3",
+			"path": "res://assets/art/tile/bridge_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/burning_ground/v0",
+			"namespace": "tile",
+			"key": "burning_ground",
+			"variant": "v0",
+			"path": "res://assets/art/tile/burning_ground_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/burning_ground/v1",
+			"namespace": "tile",
+			"key": "burning_ground",
+			"variant": "v1",
+			"path": "res://assets/art/tile/burning_ground_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/burning_ground/v2",
+			"namespace": "tile",
+			"key": "burning_ground",
+			"variant": "v2",
+			"path": "res://assets/art/tile/burning_ground_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/burning_ground/v3",
+			"namespace": "tile",
+			"key": "burning_ground",
+			"variant": "v3",
+			"path": "res://assets/art/tile/burning_ground_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/deep_water/v0",
+			"namespace": "tile",
+			"key": "deep_water",
+			"variant": "v0",
+			"path": "res://assets/art/tile/deep_water_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/deep_water/v1",
+			"namespace": "tile",
+			"key": "deep_water",
+			"variant": "v1",
+			"path": "res://assets/art/tile/deep_water_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/deep_water/v2",
+			"namespace": "tile",
+			"key": "deep_water",
+			"variant": "v2",
+			"path": "res://assets/art/tile/deep_water_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/deep_water/v3",
+			"namespace": "tile",
+			"key": "deep_water",
+			"variant": "v3",
+			"path": "res://assets/art/tile/deep_water_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/dirt/v0",
+			"namespace": "tile",
+			"key": "dirt",
+			"variant": "v0",
+			"path": "res://assets/art/tile/dirt_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/dirt/v1",
+			"namespace": "tile",
+			"key": "dirt",
+			"variant": "v1",
+			"path": "res://assets/art/tile/dirt_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/dirt/v2",
+			"namespace": "tile",
+			"key": "dirt",
+			"variant": "v2",
+			"path": "res://assets/art/tile/dirt_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/dirt/v3",
+			"namespace": "tile",
+			"key": "dirt",
+			"variant": "v3",
+			"path": "res://assets/art/tile/dirt_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/floor/v0",
+			"namespace": "tile",
+			"key": "floor",
+			"variant": "v0",
+			"path": "res://assets/art/tile/floor_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/floor/v1",
+			"namespace": "tile",
+			"key": "floor",
+			"variant": "v1",
+			"path": "res://assets/art/tile/floor_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/floor/v2",
+			"namespace": "tile",
+			"key": "floor",
+			"variant": "v2",
+			"path": "res://assets/art/tile/floor_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/floor/v3",
+			"namespace": "tile",
+			"key": "floor",
+			"variant": "v3",
+			"path": "res://assets/art/tile/floor_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/grass/v0",
+			"namespace": "tile",
+			"key": "grass",
+			"variant": "v0",
+			"path": "res://assets/art/tile/grass_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/grass/v1",
+			"namespace": "tile",
+			"key": "grass",
+			"variant": "v1",
+			"path": "res://assets/art/tile/grass_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/grass/v2",
+			"namespace": "tile",
+			"key": "grass",
+			"variant": "v2",
+			"path": "res://assets/art/tile/grass_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/grass/v3",
+			"namespace": "tile",
+			"key": "grass",
+			"variant": "v3",
+			"path": "res://assets/art/tile/grass_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/ice/v0",
+			"namespace": "tile",
+			"key": "ice",
+			"variant": "v0",
+			"path": "res://assets/art/tile/ice_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/ice/v1",
+			"namespace": "tile",
+			"key": "ice",
+			"variant": "v1",
+			"path": "res://assets/art/tile/ice_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/ice/v2",
+			"namespace": "tile",
+			"key": "ice",
+			"variant": "v2",
+			"path": "res://assets/art/tile/ice_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/ice/v3",
+			"namespace": "tile",
+			"key": "ice",
+			"variant": "v3",
+			"path": "res://assets/art/tile/ice_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/lava/v0",
+			"namespace": "tile",
+			"key": "lava",
+			"variant": "v0",
+			"path": "res://assets/art/tile/lava_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/lava/v1",
+			"namespace": "tile",
+			"key": "lava",
+			"variant": "v1",
+			"path": "res://assets/art/tile/lava_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/lava/v2",
+			"namespace": "tile",
+			"key": "lava",
+			"variant": "v2",
+			"path": "res://assets/art/tile/lava_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/lava/v3",
+			"namespace": "tile",
+			"key": "lava",
+			"variant": "v3",
+			"path": "res://assets/art/tile/lava_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/mud/v0",
+			"namespace": "tile",
+			"key": "mud",
+			"variant": "v0",
+			"path": "res://assets/art/tile/mud_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/mud/v1",
+			"namespace": "tile",
+			"key": "mud",
+			"variant": "v1",
+			"path": "res://assets/art/tile/mud_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/mud/v2",
+			"namespace": "tile",
+			"key": "mud",
+			"variant": "v2",
+			"path": "res://assets/art/tile/mud_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/mud/v3",
+			"namespace": "tile",
+			"key": "mud",
+			"variant": "v3",
+			"path": "res://assets/art/tile/mud_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_chest_open/v0",
+			"namespace": "tile",
+			"key": "overlay_chest_open",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_chest_open_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_chest/v0",
+			"namespace": "tile",
+			"key": "overlay_chest",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_chest_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_encounter/v0",
+			"namespace": "tile",
+			"key": "overlay_encounter",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_encounter_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_exit_locked/v0",
+			"namespace": "tile",
+			"key": "overlay_exit_locked",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_exit_locked_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_exit/v0",
+			"namespace": "tile",
+			"key": "overlay_exit",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_exit_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_lore/v0",
+			"namespace": "tile",
+			"key": "overlay_lore",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_lore_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_npc/v0",
+			"namespace": "tile",
+			"key": "overlay_npc",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_npc_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_poi/v0",
+			"namespace": "tile",
+			"key": "overlay_poi",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_poi_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/overlay_roamer/v0",
+			"namespace": "tile",
+			"key": "overlay_roamer",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_roamer_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/rubble/v1",
+			"namespace": "tile",
+			"key": "rubble",
+			"variant": "v1",
+			"path": "res://assets/art/tile/rubble_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/rubble/v2",
+			"namespace": "tile",
+			"key": "rubble",
+			"variant": "v2",
+			"path": "res://assets/art/tile/rubble_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/rubble/v3",
+			"namespace": "tile",
+			"key": "rubble",
+			"variant": "v3",
+			"path": "res://assets/art/tile/rubble_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/sand/v0",
+			"namespace": "tile",
+			"key": "sand",
+			"variant": "v0",
+			"path": "res://assets/art/tile/sand_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/sand/v1",
+			"namespace": "tile",
+			"key": "sand",
+			"variant": "v1",
+			"path": "res://assets/art/tile/sand_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/sand/v2",
+			"namespace": "tile",
+			"key": "sand",
+			"variant": "v2",
+			"path": "res://assets/art/tile/sand_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/sand/v3",
+			"namespace": "tile",
+			"key": "sand",
+			"variant": "v3",
+			"path": "res://assets/art/tile/sand_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/shallow_water/v0",
+			"namespace": "tile",
+			"key": "shallow_water",
+			"variant": "v0",
+			"path": "res://assets/art/tile/shallow_water_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/shallow_water/v1",
+			"namespace": "tile",
+			"key": "shallow_water",
+			"variant": "v1",
+			"path": "res://assets/art/tile/shallow_water_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/shallow_water/v2",
+			"namespace": "tile",
+			"key": "shallow_water",
+			"variant": "v2",
+			"path": "res://assets/art/tile/shallow_water_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/shallow_water/v3",
+			"namespace": "tile",
+			"key": "shallow_water",
+			"variant": "v3",
+			"path": "res://assets/art/tile/shallow_water_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/snow/v0",
+			"namespace": "tile",
+			"key": "snow",
+			"variant": "v0",
+			"path": "res://assets/art/tile/snow_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/snow/v1",
+			"namespace": "tile",
+			"key": "snow",
+			"variant": "v1",
+			"path": "res://assets/art/tile/snow_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/snow/v2",
+			"namespace": "tile",
+			"key": "snow",
+			"variant": "v2",
+			"path": "res://assets/art/tile/snow_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/snow/v3",
+			"namespace": "tile",
+			"key": "snow",
+			"variant": "v3",
+			"path": "res://assets/art/tile/snow_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/stone/v0",
+			"namespace": "tile",
+			"key": "stone",
+			"variant": "v0",
+			"path": "res://assets/art/tile/stone_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/stone/v1",
+			"namespace": "tile",
+			"key": "stone",
+			"variant": "v1",
+			"path": "res://assets/art/tile/stone_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/stone/v2",
+			"namespace": "tile",
+			"key": "stone",
+			"variant": "v2",
+			"path": "res://assets/art/tile/stone_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/stone/v3",
+			"namespace": "tile",
+			"key": "stone",
+			"variant": "v3",
+			"path": "res://assets/art/tile/stone_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/toxic_bog/v0",
+			"namespace": "tile",
+			"key": "toxic_bog",
+			"variant": "v0",
+			"path": "res://assets/art/tile/toxic_bog_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/toxic_bog/v1",
+			"namespace": "tile",
+			"key": "toxic_bog",
+			"variant": "v1",
+			"path": "res://assets/art/tile/toxic_bog_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/toxic_bog/v2",
+			"namespace": "tile",
+			"key": "toxic_bog",
+			"variant": "v2",
+			"path": "res://assets/art/tile/toxic_bog_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/toxic_bog/v3",
+			"namespace": "tile",
+			"key": "toxic_bog",
+			"variant": "v3",
+			"path": "res://assets/art/tile/toxic_bog_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/tree/v0",
+			"namespace": "tile",
+			"key": "tree",
+			"variant": "v0",
+			"path": "res://assets/art/tile/tree_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/tree/v1",
+			"namespace": "tile",
+			"key": "tree",
+			"variant": "v1",
+			"path": "res://assets/art/tile/tree_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/tree/v2",
+			"namespace": "tile",
+			"key": "tree",
+			"variant": "v2",
+			"path": "res://assets/art/tile/tree_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/tree/v3",
+			"namespace": "tile",
+			"key": "tree",
+			"variant": "v3",
+			"path": "res://assets/art/tile/tree_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/wall/v0",
+			"namespace": "tile",
+			"key": "wall",
+			"variant": "v0",
+			"path": "res://assets/art/tile/wall_v0.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/wall/v1",
+			"namespace": "tile",
+			"key": "wall",
+			"variant": "v1",
+			"path": "res://assets/art/tile/wall_v1.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/wall/v2",
+			"namespace": "tile",
+			"key": "wall",
+			"variant": "v2",
+			"path": "res://assets/art/tile/wall_v2.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "tile/wall/v3",
+			"namespace": "tile",
+			"key": "wall",
+			"variant": "v3",
+			"path": "res://assets/art/tile/wall_v3.png",
+			"alias_of": "",
+			"size": [
+				108,
+				108
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/aegis/icon",
+			"namespace": "skill",
+			"key": "aegis",
+			"variant": "icon",
+			"path": "res://assets/art/skill/aegis_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/aimed_shot/icon",
+			"namespace": "skill",
+			"key": "aimed_shot",
+			"variant": "icon",
+			"path": "res://assets/art/skill/aimed_shot_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/arc_lance/icon",
+			"namespace": "skill",
+			"key": "arc_lance",
+			"variant": "icon",
+			"path": "res://assets/art/skill/arc_lance_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/arcane_bolt/icon",
+			"namespace": "skill",
+			"key": "arcane_bolt",
+			"variant": "icon",
+			"path": "res://assets/art/skill/arcane_bolt_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/assassinate/icon",
+			"namespace": "skill",
+			"key": "assassinate",
+			"variant": "icon",
+			"path": "res://assets/art/skill/assassinate_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/backflip/icon",
+			"namespace": "skill",
+			"key": "backflip",
+			"variant": "icon",
+			"path": "res://assets/art/skill/backflip_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/barbed_arrow/icon",
+			"namespace": "skill",
+			"key": "barbed_arrow",
+			"variant": "icon",
+			"path": "res://assets/art/skill/barbed_arrow_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/bleeding_cut/icon",
+			"namespace": "skill",
+			"key": "bleeding_cut",
+			"variant": "icon",
+			"path": "res://assets/art/skill/bleeding_cut_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/body_blow/icon",
+			"namespace": "skill",
+			"key": "body_blow",
+			"variant": "icon",
+			"path": "res://assets/art/skill/body_blow_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/charge_in/icon",
+			"namespace": "skill",
+			"key": "charge_in",
+			"variant": "icon",
+			"path": "res://assets/art/skill/charge_in_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/crippling_shot/icon",
+			"namespace": "skill",
+			"key": "crippling_shot",
+			"variant": "icon",
+			"path": "res://assets/art/skill/crippling_shot_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/crushing_blow/icon",
+			"namespace": "skill",
+			"key": "crushing_blow",
+			"variant": "icon",
+			"path": "res://assets/art/skill/crushing_blow_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/cyclone_kick/icon",
+			"namespace": "skill",
+			"key": "cyclone_kick",
+			"variant": "icon",
+			"path": "res://assets/art/skill/cyclone_kick_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/deadeye/icon",
+			"namespace": "skill",
+			"key": "deadeye",
+			"variant": "icon",
+			"path": "res://assets/art/skill/deadeye_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/envenom/icon",
+			"namespace": "skill",
+			"key": "envenom",
+			"variant": "icon",
+			"path": "res://assets/art/skill/envenom_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/feint/icon",
+			"namespace": "skill",
+			"key": "feint",
+			"variant": "icon",
+			"path": "res://assets/art/skill/feint_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/firebomb/icon",
+			"namespace": "skill",
+			"key": "firebomb",
+			"variant": "icon",
+			"path": "res://assets/art/skill/firebomb_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/focus/icon",
+			"namespace": "skill",
+			"key": "focus",
+			"variant": "icon",
+			"path": "res://assets/art/skill/focus_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/glacial_burst/icon",
+			"namespace": "skill",
+			"key": "glacial_burst",
+			"variant": "icon",
+			"path": "res://assets/art/skill/glacial_burst_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/greater_mend/icon",
+			"namespace": "skill",
+			"key": "greater_mend",
+			"variant": "icon",
+			"path": "res://assets/art/skill/greater_mend_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/guard/icon",
+			"namespace": "skill",
+			"key": "guard",
+			"variant": "icon",
+			"path": "res://assets/art/skill/guard_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/hamstring/icon",
+			"namespace": "skill",
+			"key": "hamstring",
+			"variant": "icon",
+			"path": "res://assets/art/skill/hamstring_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/haymaker/icon",
+			"namespace": "skill",
+			"key": "haymaker",
+			"variant": "icon",
+			"path": "res://assets/art/skill/haymaker_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/hex/icon",
+			"namespace": "skill",
+			"key": "hex",
+			"variant": "icon",
+			"path": "res://assets/art/skill/hex_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/inferno/icon",
+			"namespace": "skill",
+			"key": "inferno",
+			"variant": "icon",
+			"path": "res://assets/art/skill/inferno_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/intimidate/icon",
+			"namespace": "skill",
+			"key": "intimidate",
+			"variant": "icon",
+			"path": "res://assets/art/skill/intimidate_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/judgement/icon",
+			"namespace": "skill",
+			"key": "judgement",
+			"variant": "icon",
+			"path": "res://assets/art/skill/judgement_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/lacerate/icon",
+			"namespace": "skill",
+			"key": "lacerate",
+			"variant": "icon",
+			"path": "res://assets/art/skill/lacerate_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/leap_back/icon",
+			"namespace": "skill",
+			"key": "leap_back",
+			"variant": "icon",
+			"path": "res://assets/art/skill/leap_back_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/lunge/icon",
+			"namespace": "skill",
+			"key": "lunge",
+			"variant": "icon",
+			"path": "res://assets/art/skill/lunge_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/mend/icon",
+			"namespace": "skill",
+			"key": "mend",
+			"variant": "icon",
+			"path": "res://assets/art/skill/mend_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/move/icon",
+			"namespace": "skill",
+			"key": "move",
+			"variant": "icon",
+			"path": "res://assets/art/skill/move_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/offhand_jab/icon",
+			"namespace": "skill",
+			"key": "offhand_jab",
+			"variant": "icon",
+			"path": "res://assets/art/skill/offhand_jab_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/opportunist/icon",
+			"namespace": "skill",
+			"key": "opportunist",
+			"variant": "icon",
+			"path": "res://assets/art/skill/opportunist_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/pinning_shot/icon",
+			"namespace": "skill",
+			"key": "pinning_shot",
+			"variant": "icon",
+			"path": "res://assets/art/skill/pinning_shot_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/pounce/icon",
+			"namespace": "skill",
+			"key": "pounce",
+			"variant": "icon",
+			"path": "res://assets/art/skill/pounce_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/purify/icon",
+			"namespace": "skill",
+			"key": "purify",
+			"variant": "icon",
+			"path": "res://assets/art/skill/purify_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/quick_stab/icon",
+			"namespace": "skill",
+			"key": "quick_stab",
+			"variant": "icon",
+			"path": "res://assets/art/skill/quick_stab_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/rally/icon",
+			"namespace": "skill",
+			"key": "rally",
+			"variant": "icon",
+			"path": "res://assets/art/skill/rally_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/reckless_swing/icon",
+			"namespace": "skill",
+			"key": "reckless_swing",
+			"variant": "icon",
+			"path": "res://assets/art/skill/reckless_swing_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/rejuvenate/icon",
+			"namespace": "skill",
+			"key": "rejuvenate",
+			"variant": "icon",
+			"path": "res://assets/art/skill/rejuvenate_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/rend_armor/icon",
+			"namespace": "skill",
+			"key": "rend_armor",
+			"variant": "icon",
+			"path": "res://assets/art/skill/rend_armor_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/renewal/icon",
+			"namespace": "skill",
+			"key": "renewal",
+			"variant": "icon",
+			"path": "res://assets/art/skill/renewal_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/rest/icon",
+			"namespace": "skill",
+			"key": "rest",
+			"variant": "icon",
+			"path": "res://assets/art/skill/rest_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/riposte/icon",
+			"namespace": "skill",
+			"key": "riposte",
+			"variant": "icon",
+			"path": "res://assets/art/skill/riposte_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/shield_bash/icon",
+			"namespace": "skill",
+			"key": "shield_bash",
+			"variant": "icon",
+			"path": "res://assets/art/skill/shield_bash_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/shield_wall/icon",
+			"namespace": "skill",
+			"key": "shield_wall",
+			"variant": "icon",
+			"path": "res://assets/art/skill/shield_wall_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/shockwave/icon",
+			"namespace": "skill",
+			"key": "shockwave",
+			"variant": "icon",
+			"path": "res://assets/art/skill/shockwave_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/smite/icon",
+			"namespace": "skill",
+			"key": "smite",
+			"variant": "icon",
+			"path": "res://assets/art/skill/smite_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/staggered/icon",
+			"namespace": "skill",
+			"key": "staggered",
+			"variant": "icon",
+			"path": "res://assets/art/skill/staggered_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/strike/icon",
+			"namespace": "skill",
+			"key": "strike",
+			"variant": "icon",
+			"path": "res://assets/art/skill/strike_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/stunned/icon",
+			"namespace": "skill",
+			"key": "stunned",
+			"variant": "icon",
+			"path": "res://assets/art/skill/stunned_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/sunder/icon",
+			"namespace": "skill",
+			"key": "sunder",
+			"variant": "icon",
+			"path": "res://assets/art/skill/sunder_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/sweep_kick/icon",
+			"namespace": "skill",
+			"key": "sweep_kick",
+			"variant": "icon",
+			"path": "res://assets/art/skill/sweep_kick_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/switch_target/icon",
+			"namespace": "skill",
+			"key": "switch_target",
+			"variant": "icon",
+			"path": "res://assets/art/skill/switch_target_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/taunt_shout/icon",
+			"namespace": "skill",
+			"key": "taunt_shout",
+			"variant": "icon",
+			"path": "res://assets/art/skill/taunt_shout_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "skill/volley/icon",
+			"namespace": "skill",
+			"key": "volley",
+			"variant": "icon",
+			"path": "res://assets/art/skill/volley_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/bleed/icon",
+			"namespace": "status",
+			"key": "bleed",
+			"variant": "icon",
+			"path": "res://assets/art/status/bleed_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/burn/icon",
+			"namespace": "status",
+			"key": "burn",
+			"variant": "icon",
+			"path": "res://assets/art/status/burn_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/expose/icon",
+			"namespace": "status",
+			"key": "expose",
+			"variant": "icon",
+			"path": "res://assets/art/status/expose_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/fortify/icon",
+			"namespace": "status",
+			"key": "fortify",
+			"variant": "icon",
+			"path": "res://assets/art/status/fortify_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/haste/icon",
+			"namespace": "status",
+			"key": "haste",
+			"variant": "icon",
+			"path": "res://assets/art/status/haste_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/poison/icon",
+			"namespace": "status",
+			"key": "poison",
+			"variant": "icon",
+			"path": "res://assets/art/status/poison_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/regen/icon",
+			"namespace": "status",
+			"key": "regen",
+			"variant": "icon",
+			"path": "res://assets/art/status/regen_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/riposte/icon",
+			"namespace": "status",
+			"key": "riposte",
+			"variant": "icon",
+			"path": "res://assets/art/status/riposte_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/root/icon",
+			"namespace": "status",
+			"key": "root",
+			"variant": "icon",
+			"path": "res://assets/art/status/root_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/slow/icon",
+			"namespace": "status",
+			"key": "slow",
+			"variant": "icon",
+			"path": "res://assets/art/status/slow_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/stagger/icon",
+			"namespace": "status",
+			"key": "stagger",
+			"variant": "icon",
+			"path": "res://assets/art/status/stagger_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/stun/icon",
+			"namespace": "status",
+			"key": "stun",
+			"variant": "icon",
+			"path": "res://assets/art/status/stun_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/taunt/icon",
+			"namespace": "status",
+			"key": "taunt",
+			"variant": "icon",
+			"path": "res://assets/art/status/taunt_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "status/weaken/icon",
+			"namespace": "status",
+			"key": "weaken",
+			"variant": "icon",
+			"path": "res://assets/art/status/weaken_icon.png",
+			"alias_of": "",
+			"size": [
+				64,
+				64
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/ashlands_title/background",
+			"namespace": "ui",
+			"key": "ashlands_title",
+			"variant": "background",
+			"path": "res://assets/art/ui/ashlands_title_background.png",
+			"alias_of": "",
+			"size": [
+				1280,
+				360
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/ashlands_world_map/background",
+			"namespace": "ui",
+			"key": "ashlands_world_map",
+			"variant": "background",
+			"path": "res://assets/art/ui/ashlands_world_map_background.png",
+			"alias_of": "",
+			"size": [
+				1920,
+				1080
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/ashmaw_camp/background",
+			"namespace": "ui",
+			"key": "ashmaw_camp",
+			"variant": "background",
+			"path": "res://assets/art/ui/ashmaw_camp_background.png",
+			"alias_of": "",
+			"size": [
+				1280,
+				720
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/badge_quest/icon",
+			"namespace": "ui",
+			"key": "badge_quest",
+			"variant": "icon",
+			"path": "res://assets/art/ui/badge_quest_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/badge_ready/icon",
+			"namespace": "ui",
+			"key": "badge_ready",
+			"variant": "icon",
+			"path": "res://assets/art/ui/badge_ready_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/cinder_gate/background",
+			"namespace": "ui",
+			"key": "cinder_gate",
+			"variant": "background",
+			"path": "res://assets/art/ui/cinder_gate_background.png",
+			"alias_of": "",
+			"size": [
+				1280,
+				720
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/main_menu/background",
+			"namespace": "ui",
+			"key": "main_menu",
+			"variant": "background",
+			"path": "res://assets/art/ui/main_menu_background.png",
+			"alias_of": "",
+			"size": [
+				1920,
+				1080
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_camp/icon",
+			"namespace": "ui",
+			"key": "pin_camp",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_camp_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_fortress/icon",
+			"namespace": "ui",
+			"key": "pin_fortress",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_fortress_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_gate/icon",
+			"namespace": "ui",
+			"key": "pin_gate",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_gate_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_here/icon",
+			"namespace": "ui",
+			"key": "pin_here",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_here_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_ruin/icon",
+			"namespace": "ui",
+			"key": "pin_ruin",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_ruin_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_town/icon",
+			"namespace": "ui",
+			"key": "pin_town",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_town_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/pin_wild/icon",
+			"namespace": "ui",
+			"key": "pin_wild",
+			"variant": "icon",
+			"path": "res://assets/art/ui/pin_wild_icon.png",
+			"alias_of": "",
+			"size": [
+				24,
+				24
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_ash_floor_0/icon",
+			"namespace": "ui",
+			"key": "region_ash_floor_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_ash_floor_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_ash_floor_1/icon",
+			"namespace": "ui",
+			"key": "region_ash_floor_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_ash_floor_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_ash_floor_2/icon",
+			"namespace": "ui",
+			"key": "region_ash_floor_2",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_ash_floor_2_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_basalt_wall_0/icon",
+			"namespace": "ui",
+			"key": "region_basalt_wall_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_basalt_wall_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_basalt_wall_1/icon",
+			"namespace": "ui",
+			"key": "region_basalt_wall_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_basalt_wall_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_basalt_wall_2/icon",
+			"namespace": "ui",
+			"key": "region_basalt_wall_2",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_basalt_wall_2_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_door_0/icon",
+			"namespace": "ui",
+			"key": "region_door_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_door_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_lava_0/icon",
+			"namespace": "ui",
+			"key": "region_lava_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_lava_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_lava_1/icon",
+			"namespace": "ui",
+			"key": "region_lava_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_lava_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_road_0/icon",
+			"namespace": "ui",
+			"key": "region_road_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_road_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_road_1/icon",
+			"namespace": "ui",
+			"key": "region_road_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_road_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_rubble_0/icon",
+			"namespace": "ui",
+			"key": "region_rubble_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_rubble_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_rubble_1/icon",
+			"namespace": "ui",
+			"key": "region_rubble_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_rubble_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_scrub_0/icon",
+			"namespace": "ui",
+			"key": "region_scrub_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_scrub_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_scrub_1/icon",
+			"namespace": "ui",
+			"key": "region_scrub_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_scrub_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_water_0/icon",
+			"namespace": "ui",
+			"key": "region_water_0",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_water_0_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_water_1/icon",
+			"namespace": "ui",
+			"key": "region_water_1",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_water_1_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/region_water_2/icon",
+			"namespace": "ui",
+			"key": "region_water_2",
+			"variant": "icon",
+			"path": "res://assets/art/ui/region_water_2_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/ruined_courtyard/background",
+			"namespace": "ui",
+			"key": "ruined_courtyard",
+			"variant": "background",
+			"path": "res://assets/art/ui/ruined_courtyard_background.png",
+			"alias_of": "",
+			"size": [
+				1280,
+				720
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/warden_keep/background",
+			"namespace": "ui",
+			"key": "warden_keep",
+			"variant": "background",
+			"path": "res://assets/art/ui/warden_keep_background.png",
+			"alias_of": "",
+			"size": [
+				1280,
+				720
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/alda_wren/portrait",
+			"namespace": "unit",
+			"key": "alda_wren",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/alda_wren_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/alda_wren/token",
+			"namespace": "unit",
+			"key": "alda_wren",
+			"variant": "token",
+			"path": "res://assets/art/unit/alda_wren_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/brask_toller/portrait",
+			"namespace": "unit",
+			"key": "brask_toller",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/brask_toller_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/brask_toller/token",
+			"namespace": "unit",
+			"key": "brask_toller",
+			"variant": "token",
+			"path": "res://assets/art/unit/brask_toller_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/bryn_hale/portrait",
+			"namespace": "unit",
+			"key": "bryn_hale",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/bryn_hale_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/bryn_hale/token",
+			"namespace": "unit",
+			"key": "bryn_hale",
+			"variant": "token",
+			"path": "res://assets/art/unit/bryn_hale_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/dagny_coal/portrait",
+			"namespace": "unit",
+			"key": "dagny_coal",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/dagny_coal_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/dagny_coal/token",
+			"namespace": "unit",
+			"key": "dagny_coal",
+			"variant": "token",
+			"path": "res://assets/art/unit/dagny_coal_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/kit_vane/portrait",
+			"namespace": "unit",
+			"key": "kit_vane",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/kit_vane_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/kit_vane/token",
+			"namespace": "unit",
+			"key": "kit_vane",
+			"variant": "token",
+			"path": "res://assets/art/unit/kit_vane_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/oren_dusk/portrait",
+			"namespace": "unit",
+			"key": "oren_dusk",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/oren_dusk_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/oren_dusk/token",
+			"namespace": "unit",
+			"key": "oren_dusk",
+			"variant": "token",
+			"path": "res://assets/art/unit/oren_dusk_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/sella_marsh/portrait",
+			"namespace": "unit",
+			"key": "sella_marsh",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/sella_marsh_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/sella_marsh/token",
+			"namespace": "unit",
+			"key": "sella_marsh",
+			"variant": "token",
+			"path": "res://assets/art/unit/sella_marsh_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/wenn_tallow/portrait",
+			"namespace": "unit",
+			"key": "wenn_tallow",
+			"variant": "portrait",
+			"path": "res://assets/art/unit/wenn_tallow_portrait.png",
+			"alias_of": "",
+			"size": [
+				240,
+				240
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "unit/wenn_tallow/token",
+			"namespace": "unit",
+			"key": "wenn_tallow",
+			"variant": "token",
+			"path": "res://assets/art/unit/wenn_tallow_token.png",
+			"alias_of": "",
+			"size": [
+				104,
+				104
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART1)"
+		},
+		{
+			"id": "ui/intent_attack/icon",
+			"namespace": "ui",
+			"key": "intent_attack",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_attack_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_area/icon",
+			"namespace": "ui",
+			"key": "intent_area",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_area_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_support/icon",
+			"namespace": "ui",
+			"key": "intent_support",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_support_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_guard/icon",
+			"namespace": "ui",
+			"key": "intent_guard",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_guard_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_focus/icon",
+			"namespace": "ui",
+			"key": "intent_focus",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_focus_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_rest/icon",
+			"namespace": "ui",
+			"key": "intent_rest",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_rest_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_retreat/icon",
+			"namespace": "ui",
+			"key": "intent_retreat",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_retreat_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_move/icon",
+			"namespace": "ui",
+			"key": "intent_move",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_move_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_flee/icon",
+			"namespace": "ui",
+			"key": "intent_flee",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_flee_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_switch/icon",
+			"namespace": "ui",
+			"key": "intent_switch",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_switch_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_stunned/icon",
+			"namespace": "ui",
+			"key": "intent_stunned",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_stunned_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_act/icon",
+			"namespace": "ui",
+			"key": "intent_act",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_act_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/intent_arriving/icon",
+			"namespace": "ui",
+			"key": "intent_arriving",
+			"variant": "icon",
+			"path": "res://assets/art/ui/intent_arriving_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/badge_foresight/icon",
+			"namespace": "ui",
+			"key": "badge_foresight",
+			"variant": "icon",
+			"path": "res://assets/art/ui/badge_foresight_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/chip_slay/icon",
+			"namespace": "ui",
+			"key": "chip_slay",
+			"variant": "icon",
+			"path": "res://assets/art/ui/chip_slay_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "ui/chip_guest/icon",
+			"namespace": "ui",
+			"key": "chip_guest",
+			"variant": "icon",
+			"path": "res://assets/art/ui/chip_guest_icon.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "tile/overlay_objective/v0",
+			"namespace": "tile",
+			"key": "overlay_objective",
+			"variant": "v0",
+			"path": "res://assets/art/tile/overlay_objective_v0.png",
+			"alias_of": "",
+			"size": [
+				32,
+				32
+			],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		},
+		{
+			"id": "sfx/miss/stream",
+			"namespace": "sfx",
+			"key": "miss",
+			"variant": "stream",
+			"path": "res://assets/audio/sfx/miss.wav",
+			"alias_of": "",
+			"size": [],
+			"frames": 1,
+			"origin": "user",
+			"note": "generated placeholder (ART2)"
+		}
+	]
+}

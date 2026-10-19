@@ -1,0 +1,28 @@
+{
+	"kind": "disciplines",
+	"version": 1,
+	"entries": [
+		{
+			"id": "ember_blade",
+			"name": "Ember Blade",
+			"description": "The Wardens' close-order sword drill: short strokes, never overextend.",
+			"passives": [
+				"steady_nerves"
+			],
+			"teacher": "",
+			"faction": "ember_wardens",
+			"tags": []
+		},
+		{
+			"id": "cinder_archery",
+			"name": "Cinder Archery",
+			"description": "Shooting through smoke and heat shimmer; scouts learn to aim at the shape, not the glare.",
+			"passives": [
+				"keen_senses"
+			],
+			"teacher": "",
+			"faction": "ember_wardens",
+			"tags": []
+		}
+	]
+}

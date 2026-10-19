@@ -1,0 +1,66 @@
+{
+	"kind": "loot",
+	"version": 1,
+	"entries": [
+		{
+			"id": "wardens_drill",
+			"name": "Wardens' Drill",
+			"description": "Mara's drill against fear, taught to those who held the line.",
+			"reward_kind": "passive",
+			"ref": "steady_nerves",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "rallying_cry",
+			"name": "Rallying Cry",
+			"description": "The Wardens' call that steadies a wavering line.",
+			"reward_kind": "skill",
+			"ref": "rally",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "keep_ring",
+			"name": "Keep Ring",
+			"description": "A heavy ring from the keep's strongbox.",
+			"reward_kind": "item",
+			"ref": "acc_bear_ring",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [
+				{
+					"key": "ashlands.courtyard_held",
+					"value": true
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "keep_stores",
+			"name": "Keep Stores",
+			"description": "A satchel of the keep's healing draughts.",
+			"reward_kind": "item",
+			"ref": "con_heal_potion",
+			"count": 3,
+			"rarity": "common",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "chieftains_torc",
+			"name": "Chieftain's Torc",
+			"description": "",
+			"reward_kind": "item",
+			"ref": "acc_swift_amulet",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		}
+	]
+}

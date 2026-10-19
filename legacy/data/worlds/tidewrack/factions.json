@@ -1,0 +1,27 @@
+{
+	"kind": "factions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "harbour_guard",
+			"name": "Harbour Guard",
+			"motto": "Light the lamp.",
+			"description": "Lamp-keepers and pikes of the Tidewrack ports.",
+			"home": "",
+			"relations": {},
+			"tags": []
+		},
+		{
+			"id": "reef_raiders",
+			"name": "Reef Raiders",
+			"motto": "The tide takes, we collect.",
+			"description": "Goblin crews who strip wrecks and ports alike.",
+			"home": "",
+			"relations": {
+				"harbour_guard": "enemy"
+			},
+			"override": "ashlands:ashen_horde",
+			"tags": []
+		}
+	]
+}

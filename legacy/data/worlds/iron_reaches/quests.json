@@ -1,0 +1,56 @@
+{
+	"kind": "quests",
+	"version": 1,
+	"entries": [
+		{
+			"id": "iron_for_embers",
+			"name": "Iron for the Embers",
+			"description": "Escort a slag-steel shipment down the south road to Warden Keep.",
+			"giver": "orsa_tallow",
+			"faction": "forge_guild",
+			"region": "ore_highlands",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Meet Orsa at Slag Gate",
+					"location": "slag_gate"
+				},
+				{
+					"text": "Deliver the shipment to Warden Keep",
+					"location": "ashlands:warden_keep"
+				}
+			],
+			"reward": "A discount at the Guild forge.",
+			"template": "two_stop_delivery",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [
+				{
+					"key": "iron_reaches.shipment_delivered",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {
+				"related_characters": [
+					"orsa_tallow"
+				],
+				"related_locations": [
+					"slag_gate",
+					"ashlands:warden_keep"
+				],
+				"related_factions": [
+					"forge_guild",
+					"ashlands:ember_wardens"
+				]
+			},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {
+				"forge_guild": 10
+			},
+			"tags": []
+		}
+	]
+}
