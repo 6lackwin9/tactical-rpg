@@ -1,7 +1,7 @@
 //! The data the game loop reads: the content catalog, the world catalogs (WorldCatalog: lineage, merged entries,
 //! resolve with overrides), region map templates (MapCatalog), quest templates (QuestCatalog), service lines
-//! (ServiceCatalog) and the XP curve. Loaded from the Godot exports for now (parity/out: catalog.json, worlds.json,
-//! game_data.json); the data-independence port reads data/ directly later.
+//! (ServiceCatalog) and the XP curve. Read from the project's data/ folder by the engine's own loader (`source`), or
+//! from the Godot exports (parity/out: catalog.json, worlds.json, game_data.json) for parity checks.
 
 use crate::json::{self, empty, Dict};
 use aegis_data::Catalog;
@@ -53,6 +53,22 @@ fn dicts(v: &Value) -> Vec<Dict> {
 }
 
 impl Data {
+    /// A data folder read by the engine's own loader (`source`), or a Godot export folder (has catalog.json):
+    /// the data and the load problems (bad files or entries are skipped and reported, like Godot's load_errors).
+    pub fn open(dir: &Path) -> Result<(Self, Vec<String>)> {
+        if dir.join("catalog.json").is_file() {
+            return Ok((Self::load(dir)?, Vec::new()));
+        }
+        anyhow::ensure!(dir.join("catalog").is_dir(), "{} is neither a data folder (catalog/, worlds/, ...) nor a Godot export folder", dir.display());
+        let src = crate::source::load(dir);
+        Ok((Self::from_values(&src.catalog, &src.worlds, &src.game), src.errors))
+    }
+
+    /// The project's data/ folder above `start` (start itself, or a parent of it).
+    pub fn find_data_dir(start: &Path) -> Option<std::path::PathBuf> {
+        start.ancestors().map(|d| d.join("data")).find(|d| d.join("catalog").is_dir() && d.join("worlds").is_dir())
+    }
+
     /// From the Godot export folder (catalog.json, worlds.json, game_data.json).
     pub fn load(dir: &Path) -> Result<Self> {
         let catalog = read(&dir.join("catalog.json"))?;

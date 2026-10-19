@@ -1,7 +1,8 @@
 //! `aegis`: the engine's command line for agents and humans.
 //!   aegis sim duel [level] [seeds] [preset=balanced] [jitter=on|off] [json]   balance-sim duel matrix
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
-//! The catalog is the resolved export (engine/parity/out/catalog.json; `catalog=<path>` or $AEGIS_CATALOG).
+//! Data: the project's data/ folder (`data=<dir>`), read by the engine's own loader; `catalog=<path>` (or
+//! $AEGIS_CATALOG) reads a resolved Godot export instead.
 
 use aegis_battle::session::{EncounterDef, Phase, Session};
 use aegis_battle::sim::{fight, FightSpec};
@@ -45,27 +46,25 @@ impl Args {
     }
 }
 
-fn find_catalog(args: &Args) -> Result<PathBuf> {
-    if let Some(p) = args.keys.get("catalog").cloned().or_else(|| std::env::var("AEGIS_CATALOG").ok()) {
-        return Ok(PathBuf::from(p));
-    }
-    let mut dir = std::env::current_dir()?;
-    loop {
-        for rel in ["parity/out/catalog.json", "engine/parity/out/catalog.json"] {
-            let p = dir.join(rel);
-            if p.is_file() {
-                return Ok(p);
-            }
-        }
-        if !dir.pop() {
-            bail!("catalog.json not found: run engine/parity/export.sh or pass catalog=<path>");
-        }
-    }
-}
-
+/// The catalog: `catalog=<file>` (or $AEGIS_CATALOG) reads a resolved Godot export; otherwise `data=<dir>` or the
+/// project's data/ folder above the working directory, read by the engine's own loader (problems go to stderr).
 fn load_catalog(args: &Args) -> Result<Arc<Catalog>> {
-    let path = find_catalog(args)?;
-    Ok(Arc::new(Catalog::load_resolved(&path).with_context(|| format!("loading {}", path.display()))?))
+    if let Some(p) = args.keys.get("catalog").cloned().or_else(|| std::env::var("AEGIS_CATALOG").ok()) {
+        let path = PathBuf::from(p);
+        return Ok(Arc::new(Catalog::load_resolved(&path).with_context(|| format!("loading {}", path.display()))?));
+    }
+    let dir = match args.keys.get("data") {
+        Some(d) => PathBuf::from(d),
+        None => match aegis_world::Data::find_data_dir(&std::env::current_dir()?) {
+            Some(d) => d,
+            None => bail!("data folder not found: run from the project or pass data=<dir> (or catalog=<export file>)"),
+        },
+    };
+    let src = aegis_world::source::load(&dir);
+    for e in &src.errors {
+        eprintln!("data: {e}");
+    }
+    Ok(Arc::new(Catalog::from_value(&src.catalog)))
 }
 
 /// The sim's sandbox unit (SimRunner.define + _write): a class unit of `level`, hero tier, never flees.

@@ -81,6 +81,15 @@ pub fn defend_buffs() -> Vec<&'static str> {
     ROWS.iter().filter(|r| r.buff && r.grant == "defend").map(|r| r.id).collect()
 }
 
+/// StatusRegistry.magnitude_unit: "pct", "flat" (armor points; poison HP per round) or "pct_max_hp".
+pub fn magnitude_unit(status: &str) -> &'static str {
+    match status {
+        "expose" | "fortify" | "poison" => "flat",
+        "regen" | "burn" => "pct_max_hp",
+        _ => "pct",
+    }
+}
+
 pub fn has_magnitude(status: &str) -> bool {
     row_of(status).is_some_and(|r| r.magnitude_max > 0)
 }

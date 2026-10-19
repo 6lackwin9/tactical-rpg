@@ -1,6 +1,6 @@
 //! Scene Runner (scripts/ui/runner; dev only): the launcher of every scene, opened from the main menu's Tools. The
 //! combat arena takes any catalog or world encounter; the debug region and world maps play a world without saving and
-//! settle fights with Won / Fled / Lost buttons (DebugFight). Reload re-reads the Godot exports from disk.
+//! settle fights with Won / Fled / Lost buttons (DebugFight). Reload re-reads the data folder from disk.
 
 use crate::canvas::{rgb, rgba, Rect};
 use crate::screens::{show_errors, Cx, Nav, Screen};
@@ -90,10 +90,11 @@ impl SceneRunner {
             SAct::DebugRegion => self.debug_game(cx, false),
             SAct::DebugWorldMap => self.debug_game(cx, true),
             SAct::NextWorld => self.world += 1,
-            SAct::Reload => match aegis_world::Data::load(&cx.data_dir) {
-                Ok(d) => {
+            SAct::Reload => match aegis_world::Data::open(&cx.data_dir) {
+                Ok((d, problems)) => {
                     cx.data = Arc::new(d);
-                    cx.notice.push(format!("Reloaded the exports from {}.", cx.data_dir.display()));
+                    cx.notice.push(format!("Reloaded the data from {}.", cx.data_dir.display()));
+                    cx.notice.extend(problems);
                 }
                 Err(e) => show_errors(cx, vec![format!("Reload failed: {e:#}")]),
             },
@@ -148,7 +149,7 @@ impl Screen for SceneRunner {
             y += h + 4;
         }
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, INFO);
-        ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads catalog.json, worlds.json and game_data.json (run engine/parity/export.sh after a Godot change)."));
+        ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve)."));
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p aegis_world -p aegis_battle", SMALL, TEXT);
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 62.0, "Playtest recording: not ported yet.", SMALL, DIM);

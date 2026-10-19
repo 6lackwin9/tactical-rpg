@@ -191,7 +191,8 @@ against Godot.
 
 Status (2026-10-19): E1 to E5 done; E7 in progress: the game loop (aegis_world, journey parity) and every
 screen are ported (docs/SCREENS.md), and so are the battle rules (objectives, phases, morale, guests, deployments,
-start buffs, battle items; world and item traces); next is data independence; E6 not started.
+start buffs, battle items; world and item traces) and the data loader (the engine reads `data/` itself); E6 not
+started. Next: the transition (section 8.1), each step on the user's go-ahead.
 
 Godot keeps shipping during this. Each milestone re-runs parity against the
 latest `main` to catch drift.

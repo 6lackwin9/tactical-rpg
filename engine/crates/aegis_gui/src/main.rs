@@ -212,6 +212,8 @@ struct App {
     project: Option<PathBuf>,
     data: Arc<aegis_world::Data>,
     data_dir: PathBuf,
+    /// Problems the data loader reported (shown once as a notice).
+    load_errors: Vec<String>,
 }
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
@@ -266,7 +268,7 @@ impl ApplicationHandler for App {
             tuning: tuning::TuningFile::new(Some(engine.join("data/tuning.json"))),
             log: Vec::new(),
             nav: Vec::new(),
-            notice: Vec::new(),
+            notice: self.load_errors.clone(),
             shot_dir: engine.join("parity/out"),
             quit: false,
             encounter: arg(&self.args, "encounter").unwrap_or("goblin_skirmish").to_string(),
@@ -416,12 +418,13 @@ fn main() -> Result<()> {
             }
         }
     });
-    let data_dir = arg(&args, "data").map(PathBuf::from).or_else(|| engine_dir.as_ref().map(|d| d.join("parity/out"))).context("export folder not found: pass data=<dir>")?;
-    let data = Arc::new(aegis_world::Data::load(&data_dir).with_context(|| format!("loading the Godot exports in {} (run engine/parity/export.sh)", data_dir.display()))?);
+    let data_dir = arg(&args, "data").map(PathBuf::from).or_else(|| aegis_world::Data::find_data_dir(engine_dir.as_deref().unwrap_or(&cwd))).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
+    let (data, load_errors) = aegis_world::Data::open(&data_dir).with_context(|| format!("loading the data in {}", data_dir.display()))?;
+    let data = Arc::new(data);
     let project = art::find_project(engine_dir.as_deref().unwrap_or(&cwd));
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { shell: None, args, window: None, pixels: None, proxy, bridge: None, engine_dir, project, data, data_dir };
+    let mut app = App { shell: None, args, window: None, pixels: None, proxy, bridge: None, engine_dir, project, data, data_dir, load_errors };
     el.run_app(&mut app)?;
     Ok(())
 }

@@ -51,7 +51,8 @@ The rules behind every player screen come from `aegis_world`, checked against Go
 
 ## Order (done)
 
-1. Data: the Godot exports (`parity/export.sh`); reading `data/` directly is the later data-independence step.
+1. Data: the project's `data/` folder through the engine's own loader (`aegis_world::source`); the Godot exports
+   (`parity/export.sh`) are only for parity checks.
 2. Game state: GameState, NewGame, SaveGame (Godot saves load unchanged, every migration), party and progression rules.
 3. Game loop rules: exploration, travel, dialogue, shop, quests, rest and camp, world battles, results; checked with
    journeys replayed in both engines (state compared after every action).

@@ -13,7 +13,7 @@ const STANCES: Array[int] = [0, 1, 2, 3]   # CombatTypes.StanceType NEUTRAL, OFF
 const SLOTS: Array[String] = ["MAIN_HAND", "OFF_HAND", "HEAD", "BODY", "ACCESSORY_1", "ACCESSORY_2"]
 
 var out_dir: String = ""
-var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data", "saves"]
+var only: Array[String] = ["catalog", "units", "damage", "rng", "worlds", "game_data", "saves", "schema"]
 
 func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -46,7 +46,20 @@ func _initialize() -> void:
 		_write("game_data.json", _game_data())
 	if only.has("saves"):
 		_write("saves.json", _saves())
+	if only.has("schema"):
+		_write("schema.json", _schema())
 	quit()
+
+# The field tables the loaders normalize with (ContentSchema.fields per catalog kind, WorldSchema.fields per world kind
+# and the manifest), for the engine's own loader; engine/data/schema.json is the committed copy.
+func _schema() -> Dictionary:
+	var content: Dictionary = {}
+	for kind: String in KINDS + ["item_families"]:
+		content[kind] = ContentSchema.fields(kind)
+	var world: Dictionary = {"world": WorldSchema.fields("world")}
+	for kind: String in WorldSchema.KINDS:
+		world[kind] = WorldSchema.fields(kind)
+	return {"content": content, "world": world}
 
 # SaveGame.decode on every save fixture (scripts/tests/fixtures/saves, one per save version): ok, errors, warnings and
 # the loaded state's to_dict, for the engine's save-compatibility test.

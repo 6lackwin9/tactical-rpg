@@ -61,8 +61,9 @@ because the RNG is bit-exact.
   ones (677 fights, about 8 s).
 - Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
   goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).
-- Windows Smart App Control sometimes blocks a freshly linked test binary (`os error 4551`); touching the test file
-  and re-running relinks it and it runs.
+- Windows Smart App Control sometimes blocks a built binary (`os error 4551` from cargo test, "Permission denied" from
+  Git Bash), also one that ran before: touching the test file (or deleting the exe) relinks it and the next run
+  usually passes; `aegis-gui.exe` that Git Bash cannot start still starts with PowerShell `Start-Process`.
 
 ## Game loop (aegis_world, 2026-10-19)
 
@@ -96,3 +97,27 @@ map) must equal Godot's. Last run: 8 journeys, 5608 actions, all equal; includes
 `connects` world crossing.
 
 Not ported yet: content validation (`*_errors`, warnings), save import / export.
+
+## Data loader (aegis_world::source, 2026-10-19)
+
+The engine reads the project's `data/` folder itself; the Godot exports are only needed for parity checks.
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `content/content_catalog.gd` (`reload_from_disk`, `_read_kind`, `_read_ranked_skills`, `_read_items`) | `source::load_catalog` | `tests/data_source.rs` |
+| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `source::normalize`, `coerce`, field tables in `engine/data/schema.json` | `tests/data_source.rs` |
+| `content/skill_ranks.gd` (`expand`, `effective`, `resolve`), `content/skill_text.gd` (`render`, `token_value`) | `source::expand`, `render` | `tests/data_source.rs` (151 rank rows, every description) |
+| `core/specs/item_families.gd` (`derive`, hands, base), `item_modifiers.gd` (`resolve`, `legacy_tiers`), `item_text.gd` (`tier_desc`) | `source::derive_family`, `resolve_item` | `tests/data_source.rs` |
+| `world/world_catalog.gd` (`reload_from_disk`, `lineage`, `own_entries`) | `source::load_worlds` | `tests/data_source.rs` |
+| `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
+
+- `tests/data_source.rs` compares the loader's output with `catalog.json`, `worlds.json` and `game_data.json`: keys, key
+  order and int / float types exactly, floats to 1e-9 (Godot's `JSON.stringify` writes fewer digits than it computes
+  with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
+- Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)
+  still match Godot, and the CLI balance sim prints the same table.
+- `engine/data/schema.json` is the committed copy of Godot's field tables (`parity/export.sh only=schema` writes
+  `parity/out/schema.json`; the test fails when they drift). It carries labels, help, options and groups too, for
+  content editing in the engine later.
+- Not read: version 1 (flat) skills and items files, pre-CLASS1 class `skill_path` lists (the shipped data has none;
+  the loader reports them), and the load-time validation messages that only block saving in Godot.
