@@ -12,7 +12,7 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 
 ## Dispatch (planner skill step 2)
 
-1. Create worktrees for parallel lanes from clean `main`: `git worktree add ../ngp-<id> -b feat/<id>-<slug>`; one worktree per concurrent builder and one read-only `main` worktree for the balance agent. `git status` must be clean first. Give each agent its worktree path, branch and spec. Each worktree builds into its own folder (`tools/fc.sh` and `check_project.ps1` set `CARGO_TARGET_DIR=<target>-<folder>`), so its first build takes a few minutes.
+1. Create worktrees for parallel lanes from the latest `develop` (decision "Develop-first on desktop (user 2026-10-19)"): `git worktree add ../ngp-<id> -b claude/<id>-<slug> origin/develop`; one worktree per concurrent builder and one read-only `main` worktree for the balance agent. `git status` must be clean first. Give each agent its worktree path, branch and spec. Each worktree builds into its own folder (`tools/fc.sh` and `check_project.ps1` set `CARGO_TARGET_DIR=<target>-<folder>`), so its first build takes a few minutes. A planner-docs-only task needs no worktree: branch in the main checkout (`git checkout -b claude/<id>-<slug> origin/develop`) and return it to `main` afterwards (`run.bat` launches only from `main`).
 2. Run `tools/overlap.sh` while worktrees are active and before every merge (it lists files edited in more than one worktree).
 3. Builders never commit; they leave changes in their worktree and keep `.agent/progress.md`.
 4. Review fixes go to the SAME builder via `SendMessage` while it is resumable.
@@ -21,8 +21,17 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 ## Ship (planner skill step 3)
 
 1. Run `check_project.ps1 -Fast -Quiet` (~30 s warm: build every crate, run every test) and `tools/fc.sh docs`; the IDE Problems tab must show 0 errors and warnings (markdownlint compliant, see `.agents/rules/engine_workflow.md` section 6). Never pipe `fc.sh docs` into `tail` before `&& git commit`.
-2. If clean: commit in the worktree with the attribution trailer from the session's system reminder, fast-forward merge to `main`, push.
+2. If clean: commit on the task branch with the attribution trailer from the session's system reminder, then land it on `develop`: squash it onto the latest `origin/develop` (one commit titled with the task id, its body ending with `Review:` and `Gate:` lines as in `cloud.md` "Landing a task on `develop`") and push `develop`. Never commit to `main` or `engine`.
 3. Remove the worktree and branch: `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>` (OneDrive marks folders read-only; plain `git worktree remove` can fail).
+
+## Release (desktop Merge & Release)
+
+While no cloud threads run, the planner session is also the Merge & Release role (`cloud.md` "Batched release to `main`"; decision "Develop-first on desktop (user 2026-10-19)"):
+
+1. When the user asks for a release: `git fetch origin`, check that `main` is contained in `develop` (`git merge-base --is-ancestor origin/main origin/develop`; if not, a hotfix reached `main` outside a release: merge `origin/main` into `develop` first).
+2. Open the release PR `develop` -> `main` with the GitHub CLI (`gh pr create --base main --head develop --title "Release <date>: <task ids>"`, body one line per task with its review verdict). CI (`gate.yml`, required check `gate`) runs on it.
+3. CI green: merge with a merge commit (`gh pr merge --merge`), so `develop` and `main` keep a shared history; then fast-forward `develop` to the merge (`git push origin origin/main:develop`), so both are equal again. CI red: fix on a task branch, land it on `develop`, and the PR re-runs.
+4. `engine` is frozen at the transition (952f214) and `legacy` at 7fa10da: neither moves.
 
 ## Tools only on desktop
 
