@@ -15,13 +15,13 @@ use std::sync::Arc;
 pub enum SAct {
     MainMenu,
     Arena,
-    NextEncounter(i64),
+    PickEncounter(usize),
     ContentForge,
     WorldForge,
     Dojo,
     DebugRegion,
     DebugWorldMap,
-    NextWorld,
+    PickWorld(usize),
     Reload,
     Exit,
 }
@@ -67,10 +67,7 @@ impl SceneRunner {
     fn act(&mut self, cx: &mut Cx, a: SAct) {
         match a {
             SAct::MainMenu | SAct::Exit => cx.nav.push(Nav::Pop),
-            SAct::NextEncounter(step) => {
-                let n = Self::encounters(cx).len().max(1) as i64;
-                self.encounter = (self.encounter as i64 + step).rem_euclid(n) as usize;
-            }
+            SAct::PickEncounter(i) => self.encounter = i,
             SAct::Arena => {
                 let list = Self::encounters(cx);
                 if let Some((_, world, id)) = list.get(self.encounter) {
@@ -89,7 +86,7 @@ impl SceneRunner {
             }
             SAct::DebugRegion => self.debug_game(cx, false),
             SAct::DebugWorldMap => self.debug_game(cx, true),
-            SAct::NextWorld => self.world += 1,
+            SAct::PickWorld(i) => self.world = i,
             SAct::Reload => match emberwake_world::Data::open(&cx.data_dir) {
                 Ok((d, problems)) => {
                     cx.data = Arc::new(d);
@@ -110,7 +107,7 @@ impl Screen<GameCx> for SceneRunner {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgb(12, 16, 26));
-        ui.p.text(12.0, 8.0, "TACTICAL RPG  ·  SCENE RUNNER", 10.0, GOLD);
+        ui.p.text(12.0, 8.0, &format!("{}  ·  SCENE RUNNER", cx.manifest.title.to_uppercase()), 10.0, GOLD);
         ui.p.text(12.0, 27.0, "Launch any scene; Esc returns here.", SMALL, DIM);
         ui.button("runner.exit", Rect::new(W - 40, 6, 34, 13), "Exit", SAct::Exit, true);
         let left = Rect::new(12, 41, 383, 300);
@@ -121,7 +118,6 @@ impl Screen<GameCx> for SceneRunner {
         let encounters = Self::encounters(cx);
         self.encounter = self.encounter.min(encounters.len().saturating_sub(1));
         let worlds = new_game::playable_worlds(&cx.data);
-        let world_name = worlds.get(self.world % worlds.len().max(1)).map(|w| cx.world_name(w)).unwrap_or_default();
         let scenes: [(&str, &str, &str, SAct); 7] = [
             ("runner.main_menu", "Main Menu", "The player's front door: continue, new game, load and save slots, settings and the in-game hub.", SAct::MainMenu),
             ("runner.arena", "Combat Arena", "Plan and fight a battle: a catalog encounter or any world's battle (played with that world's characters).", SAct::Arena),
@@ -141,10 +137,11 @@ impl Screen<GameCx> for SceneRunner {
             ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 14.0, desc, SMALL, (r.w - 60) as f32, TEXT);
             ui.button(id, Rect::new(r.x + r.w - 50, r.y + 6, 45, 15), "Launch", act.clone(), true);
             if let SAct::Arena = act {
-                let label = encounters.get(self.encounter).map(|e| e.0.clone()).unwrap_or_default();
-                ui.dropdown("runner.arena.encounter", Rect::new(r.x + 5, r.y + 25, r.w - 60, 14), &label, SAct::NextEncounter(1), !encounters.is_empty(), tip("Encounter", "Click for the next one; right side of the list wraps."));
+                let labels: Vec<String> = encounters.iter().map(|e| e.0.clone()).collect();
+                ui.select("runner.arena.encounter", Rect::new(r.x + 5, r.y + 25, r.w - 60, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
             } else if extra {
-                ui.dropdown(&format!("{id}.world"), Rect::new(r.x + 5, r.y + 25, 160, 14), &world_name, SAct::NextWorld, worlds.len() > 1, Vec::new());
+                let names: Vec<String> = worlds.iter().map(|w| cx.world_name(w)).collect();
+                ui.select(&format!("{id}.world"), Rect::new(r.x + 5, r.y + 25, 160, 14), &names, self.world % worlds.len().max(1), SAct::PickWorld, worlds.len() > 1, Vec::new());
             }
             y += h + 4;
         }

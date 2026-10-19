@@ -28,6 +28,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | ARENA-EXIT | - | Exit button in Test Arena battles |
 | main session (no lane agents) | PARTY2-B | - | the character popup's detail pane on every stat, derived and level-up row |
 | main session (no lane agents) | DOJO2-B | - | gear dojo: skills (with ranks) and pouch slots listed; arrows checked |
+| main session (no lane agents) | UIKIT1 | - | engine: select with its choice list, draggable slider, info-row hover, agent `drag`; game: settings, Scene Runner, World Forge and turn-in use them |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

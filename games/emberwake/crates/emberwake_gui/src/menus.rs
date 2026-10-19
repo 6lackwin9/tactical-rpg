@@ -408,8 +408,10 @@ impl Screen<GameCx> for Slots {
 pub enum SetAct {
     Tab(usize),
     Toggle(&'static str),
-    Step(&'static str, f64),
-    Cycle(&'static str),
+    /// A slider value (volumes 0-100, speeds and scales 0.5-2.0).
+    Set(&'static str, f64),
+    /// A choice from CHOICES by index.
+    Pick(&'static str, usize),
     Apply,
     Defaults,
     Close,
@@ -448,16 +450,15 @@ impl SettingsScreen {
         match a {
             SetAct::Tab(t) => self.tab = t,
             SetAct::Toggle(k) => self.draft[k] = Value::Bool(!self.draft[k].as_bool().unwrap_or(false)),
-            SetAct::Step(k, d) => {
+            SetAct::Set(k, v) => {
                 let (lo, hi) = if k.ends_with("speed") || k.ends_with("scale") { (0.5, 2.0) } else { (0.0, 100.0) };
-                let v = (self.draft[k].as_f64().unwrap_or(0.0) + d).clamp(lo, hi);
+                let v = v.clamp(lo, hi);
                 self.draft[k] = if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) };
             }
-            SetAct::Cycle(k) => {
-                let opts = CHOICES.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(&[]);
-                let cur = self.draft[k].as_str().unwrap_or("");
-                let i = opts.iter().position(|o| *o == cur).map(|i| (i + 1) % opts.len()).unwrap_or(0);
-                self.draft[k] = json!(opts[i]);
+            SetAct::Pick(k, i) => {
+                if let Some(o) = choices(k).get(i) {
+                    self.draft[k] = json!(o);
+                }
             }
             SetAct::Apply => {
                 cx.settings.v = self.draft.clone();
@@ -498,14 +499,15 @@ impl Screen<GameCx> for SettingsScreen {
                 y += 20;
                 for (k, label) in [("master", "Master volume"), ("music", "Music volume"), ("effects", "Effects volume"), ("interface", "Interface volume")] {
                     ui.p.text(x as f32, y as f32 + 2.0, label, BODY, TEXT);
-                    ui.stepper(&format!("settings.{k}"), Rect::new(x + 125, y, 200, 13), (pct(k) / 100.0) as f32, &format!("{}%", pct(k)), SetAct::Step(static_key(k), -10.0), SetAct::Step(static_key(k), 10.0), true);
+                    let key = static_key(k);
+                    ui.slider(&format!("settings.{k}"), Rect::new(x + 125, y, 200, 13), (pct(k) / VOLUME_STEP).round() as usize, 21, &format!("{}%", pct(k)), |i| SetAct::Set(key, i as f64 * VOLUME_STEP), true);
                     y += 18;
                 }
             }
             1 => {
                 for (k, label) in [("window_mode", "Window mode"), ("window_size", "Window size")] {
                     ui.p.text(x as f32, y as f32 + 3.0, label, BODY, TEXT);
-                    ui.dropdown(&format!("settings.{k}"), Rect::new(x + 125, y, 150, 16), d[k].as_str().unwrap_or(""), SetAct::Cycle(static_key(k)), true, Vec::new());
+                    choice(&mut ui, static_key(k), Rect::new(x + 125, y, 150, 16), d[k].as_str().unwrap_or(""));
                     y += 22;
                 }
                 ui.p.text(x as f32, y as f32, "In use", BODY, TEXT);
@@ -514,16 +516,16 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
                 y += 20;
                 ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, TEXT);
-                ui.dropdown("settings.fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""), SetAct::Cycle("fps_cap"), true, Vec::new());
+                choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""));
                 y += 24;
                 ui.p.text(x as f32, y as f32 + 2.0, "Text size", BODY, TEXT);
                 let ts = pct("text_scale");
-                ui.stepper("settings.text_scale", Rect::new(x + 125, y, 200, 13), ((ts - 0.5) / 1.5) as f32, &format!("{ts:.2}x"), SetAct::Step("text_scale", -0.25), SetAct::Step("text_scale", 0.25), true);
+                ui.slider("settings.text_scale", Rect::new(x + 125, y, 200, 13), ((ts - 0.5) / SCALE_STEP).round() as usize, 7, &format!("{ts:.2}x"), |i| SetAct::Set("text_scale", 0.5 + i as f64 * SCALE_STEP), true);
             }
             2 => {
                 ui.p.text(x as f32, y as f32 + 2.0, "Animation speed", BODY, TEXT);
                 let a = pct("anim_speed");
-                ui.stepper("settings.anim_speed", Rect::new(x + 125, y, 200, 13), ((a - 0.5) / 1.5) as f32, &format!("{a:.2}x"), SetAct::Step("anim_speed", -0.25), SetAct::Step("anim_speed", 0.25), true);
+                ui.slider("settings.anim_speed", Rect::new(x + 125, y, 200, 13), ((a - 0.5) / SCALE_STEP).round() as usize, 7, &format!("{a:.2}x"), |i| SetAct::Set("anim_speed", 0.5 + i as f64 * SCALE_STEP), true);
                 ui.checkbox("settings.skip_anim", x + 300, y + 1, "Skip animations", d["skip_anim"].as_bool().unwrap_or(false), SetAct::Toggle("skip_anim"), true);
                 y += 22;
                 ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
@@ -551,6 +553,21 @@ impl Screen<GameCx> for SettingsScreen {
         json!({"tab": TABS[self.tab], "draft": self.draft})
     }
     widget_plumbing!();
+}
+
+/// Volume sliders move in steps of 5 (0-100); speed and text-size sliders in quarters (0.5-2.0).
+const VOLUME_STEP: f64 = 5.0;
+const SCALE_STEP: f64 = 0.25;
+
+fn choices(k: &str) -> &'static [&'static str] {
+    CHOICES.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(&[])
+}
+
+/// A settings choice (CHOICES) as a select with its option list.
+fn choice(ui: &mut Ui<SetAct>, k: &'static str, r: Rect, current: &str) {
+    let opts: Vec<String> = choices(k).iter().map(|o| o.to_string()).collect();
+    let at = opts.iter().position(|o| o == current).unwrap_or(0);
+    ui.select(&format!("settings.{k}"), r, &opts, at, |i| SetAct::Pick(k, i), true, Vec::new());
 }
 
 fn static_key(k: &str) -> &'static str {

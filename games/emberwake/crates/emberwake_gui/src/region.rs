@@ -31,7 +31,7 @@ pub enum RAct {
     Sell(String),
     CloseShop,
     TogglePick(String),
-    Recipient,
+    PickRecipient(usize),
     ConfirmTurnIn,
     CancelTurnIn,
     CloseLore,
@@ -413,10 +413,7 @@ impl RegionMap {
                     self.picks.push(id);
                 }
             }
-            RAct::Recipient => {
-                let n = cx.gs().party.members.len().max(1);
-                self.recipient = (self.recipient + 1) % n;
-            }
+            RAct::PickRecipient(i) => self.recipient = i,
             RAct::ConfirmTurnIn => {
                 let rec = cx.gs().party.members.get(self.recipient).map(|m| m.id.clone()).unwrap_or_default();
                 let picks = self.picks.clone();
@@ -866,9 +863,9 @@ impl RegionMap {
                 y += 14;
             }
         }
-        let rec = gs.party.members.get(self.recipient).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+        let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
         ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, DIM);
-        ui.dropdown("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &rec, RAct::Recipient, gs.party.members.len() > 1, Vec::new());
+        ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, RAct::PickRecipient, gs.party.members.len() > 1, Vec::new());
         ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", RAct::CancelTurnIn, true);
         ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", RAct::ConfirmTurnIn, self.picks.len() as i64 <= allowed);
     }
