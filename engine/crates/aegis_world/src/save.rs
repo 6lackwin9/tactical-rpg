@@ -1,14 +1,18 @@
-//! SaveGame and SaveMigrations (scripts/game_state/): one versioned JSON file per slot, the same files Godot
-//! writes ({format: "fc_save", version, saved_at, game_state}), slot 0 = autosave, 1..5 manual. Writes go to a temp
-//! file then rename; reads migrate then validate and never return a half-loaded state.
-//! Every migration is ported (1 -> 10); 2 -> 3 seeds rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
+//! SaveGame and SaveMigrations (scripts/game_state/), the game's side: the engine save framework (`aegis_save`) keeps
+//! the slot files, the envelope ({format: "fc_save", version, saved_at, game_state}), the atomic write and the
+//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 10). Slot
+//! 0 = autosave, 1..5 manual; reads migrate then validate and never return a half-loaded state. 2 -> 3 seeds
+//! rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
 
 use crate::data::Data;
 use crate::progression;
 use crate::state::{default_autoplay, GameState, SUPPLIES_START};
 use aegis_core::json::{self, int, Dict};
+use aegis_save::{Format, Peek};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+
+pub use aegis_save::{delete, exists, path_for};
 
 pub const VERSION: i64 = 10;
 pub const FORMAT: &str = "fc_save";
@@ -16,6 +20,7 @@ pub const AUTOSAVE_SLOT: i64 = 0;
 pub const LAST_SLOT: i64 = 5;
 const KEYS: [&str; 14] =
     ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses"];
+const SAVES: Format = Format { tag: FORMAT, version: VERSION, first_slot: AUTOSAVE_SLOT, last_slot: LAST_SLOT, keys: &KEYS };
 
 /// The Godot user save folder on this machine (user://saves of the project).
 pub fn default_dir() -> PathBuf {
@@ -23,59 +28,16 @@ pub fn default_dir() -> PathBuf {
     base.join("Godot").join("app_userdata").join("Tactical RPG").join("saves")
 }
 
-pub fn path_for(dir: &Path, slot: i64) -> PathBuf {
-    dir.join(format!("slot_{slot}.json"))
-}
-
-pub fn exists(dir: &Path, slot: i64) -> bool {
-    path_for(dir, slot).is_file()
-}
-
-pub fn delete(dir: &Path, slot: i64) -> bool {
-    exists(dir, slot) && std::fs::remove_file(path_for(dir, slot)).is_ok()
-}
-
-fn now() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
-}
-
 /// Problem strings; empty = written. `saved_at` > 0 keeps a given save time.
 pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) -> Vec<String> {
-    if !(AUTOSAVE_SLOT..=LAST_SLOT).contains(&slot) {
-        return vec!["Save slot must be 0-5.".into()];
-    }
-    let errors = state.validate(d);
-    if !errors.is_empty() {
-        return errors;
-    }
-    let envelope = json::obj([
-        ("format", FORMAT.into()),
-        ("version", int(VERSION)),
-        ("saved_at", int(if saved_at > 0 { saved_at } else { now() })),
-        ("game_state", state.to_value()),
-    ]);
-    if std::fs::create_dir_all(dir).is_err() && !dir.is_dir() {
-        return vec![format!("Can't create the save folder '{}'.", dir.display())];
-    }
-    let final_path = path_for(dir, slot);
-    let mut tmp = final_path.with_extension("json.fc_tmp");
-    let mut n = 1;
-    while tmp.exists() {
-        tmp = final_path.with_extension(format!("json.fc_tmp{n}"));
-        n += 1;
-    }
-    let mut buf = Vec::new();
-    let fmt = serde_json::ser::PrettyFormatter::with_indent(b"\t");
-    let mut ser = serde_json::Serializer::with_formatter(&mut buf, fmt);
-    if serde::Serialize::serialize(&json::sorted(&Value::Object(envelope)), &mut ser).is_err() || std::fs::write(&tmp, &buf).is_err() {
-        let _ = std::fs::remove_file(&tmp);
-        return vec![format!("Can't write '{}'.", final_path.display())];
-    }
-    if std::fs::rename(&tmp, &final_path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
-        return vec!["Can't move the save into place (the previous save was kept).".into()];
-    }
-    Vec::new()
+    aegis_save::write(&SAVES, dir, slot, saved_at, || {
+        let errors = state.validate(d);
+        if errors.is_empty() {
+            Ok(state.to_value())
+        } else {
+            Err(errors)
+        }
+    })
 }
 
 pub struct Loaded {
@@ -85,20 +47,12 @@ pub struct Loaded {
 }
 
 pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
-    if !exists(dir, slot) {
-        return Err(vec![format!("No save in slot {slot}.")]);
-    }
-    decode(d, &std::fs::read_to_string(path_for(dir, slot)).unwrap_or_default())
+    decode(d, &aegis_save::read(dir, slot)?)
 }
 
 /// A save file's text: parse, format check, migrate, validate.
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
-    let Ok(Value::Object(envelope)) = serde_json::from_str::<Value>(text) else {
-        return Err(vec!["Save file is corrupt or truncated.".into()]);
-    };
-    if json::s(&envelope, "format") != FORMAT {
-        return Err(vec![format!("Not a save file (format '{}').", json::s(&envelope, "format"))]);
-    }
+    let envelope = aegis_save::open(&SAVES, text)?;
     let (data, warnings) = migrate(d, &envelope)?;
     let state = GameState::from_dict(d, json::dget(&data, "game_state"));
     let errors = state.validate(d);
@@ -219,55 +173,29 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
     Some(out)
 }
 
-/// Brings an envelope to VERSION: (envelope, warnings) or the refusal.
+/// Brings an envelope to VERSION: (envelope, warnings) or the refusal. Each step reports the quest entries it dropped
+/// and a location_id it could not resolve.
 pub fn migrate(d: &Data, envelope: &Dict) -> Result<(Dict, Vec<String>), Vec<String>> {
-    let mut warnings = Vec::new();
-    let mut data = envelope.clone();
-    let raw_version = json::get(&data, "version");
-    if !raw_version.is_number() {
-        return Err(vec!["save has no version".into()]);
-    }
-    let mut version = json::to_int(raw_version);
-    if version > VERSION {
-        return Err(vec!["save is from a newer version".into()]);
-    }
-    if version < 1 {
-        return Err(vec![format!("save version {version} is invalid")]);
-    }
-    let mut state = json::dget(&data, "game_state").clone();
     let mut quests_int = false;
-    while version < VERSION {
+    aegis_save::migrate(&SAVES, envelope, |version, state, warnings| {
         if !state.get("quests").map_or(true, Value::is_object) {
             warnings.push("dropped invalid quests blob (not an object)".into());
         }
-        let before: Vec<String> = json::dget(&state, "quests").keys().cloned().collect();
-        let loc_before = json::s(&state, "location_id");
-        let Some(next) = step(d, version, &state, quests_int) else {
-            return Err(vec![format!("no migration from save version {version}")]);
-        };
-        state = next;
+        let before: Vec<String> = json::dget(state, "quests").keys().cloned().collect();
+        let loc_before = json::s(state, "location_id");
+        let next = step(d, version, state, quests_int)?;
         quests_int = quests_int || version == 1;
-        let after = json::dget(&state, "quests");
+        let after = json::dget(&next, "quests");
         for k in before {
             if !after.contains_key(&k) {
                 warnings.push(format!("dropped invalid quest entry '{k}'"));
             }
         }
-        if !loc_before.is_empty() && json::s(&state, "location_id").is_empty() {
+        if !loc_before.is_empty() && json::s(&next, "location_id").is_empty() {
             warnings.push(format!("cleared unresolved location_id '{loc_before}'"));
         }
-        version += 1;
-    }
-    let keys: Vec<String> = state.keys().cloned().collect();
-    for k in keys {
-        if !KEYS.contains(&k.as_str()) {
-            warnings.push(format!("dropped unknown game_state key '{k}'"));
-            state.shift_remove(&k);
-        }
-    }
-    data.insert("game_state".into(), Value::Object(state));
-    data.insert("version".into(), int(version));
-    Ok((data, warnings))
+        Some(next)
+    })
 }
 
 /// A slot header without loading: {exists, ok, slot, saved_at, version, world_id, location_id, party: [{id, base_unit,
@@ -284,24 +212,17 @@ pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
         ("party", Value::Array(Vec::new())),
         ("error", "".into()),
     ]);
-    if !json::b(&out, "exists", false) {
-        return out;
-    }
-    let text = std::fs::read_to_string(path_for(dir, slot)).unwrap_or_default();
-    let envelope = match serde_json::from_str::<Value>(&text) {
-        Ok(Value::Object(e)) if json::s(&e, "format") == FORMAT => e,
-        _ => {
+    let envelope = match aegis_save::peek(&SAVES, dir, slot) {
+        Peek::Missing => return out,
+        Peek::Unreadable => {
             out.insert("error".into(), "unreadable".into());
             return out;
         }
+        Peek::Found(e) => e,
     };
-    let version = json::get(&envelope, "version");
-    if !version.is_number() || json::to_int(version) < 1 {
-        out.insert("error".into(), "unreadable".into());
-        return out;
-    }
+    let version = json::to_int(json::get(&envelope, "version"));
     out.insert("saved_at".into(), int(json::i(&envelope, "saved_at", 0)));
-    out.insert("version".into(), int(json::to_int(version)));
+    out.insert("version".into(), int(version));
     let gs = json::dget(&envelope, "game_state");
     out.insert("world_id".into(), json::s(gs, "world_id").into());
     out.insert("location_id".into(), json::s(gs, "location_id").into());
@@ -312,7 +233,7 @@ pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
         party.push(Value::Object(json::obj([("id", json::s(m, "id").into()), ("base_unit", json::s(m, "base_unit").into()), ("level", int(level))])));
     }
     out.insert("party".into(), Value::Array(party));
-    if json::to_int(version) > VERSION {
+    if version > VERSION {
         out.insert("error".into(), "newer version".into());
         return out;
     }
@@ -322,13 +243,8 @@ pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
 
 /// The readable slot with the newest saved_at; -1 when none.
 pub fn newest_slot(d: &Data, dir: &Path) -> i64 {
-    let (mut best, mut best_at) = (-1, -1);
-    for slot in AUTOSAVE_SLOT..=LAST_SLOT {
+    aegis_save::newest_slot(&SAVES, |slot| {
         let head = peek(d, dir, slot);
-        if json::b(&head, "ok", false) && json::i(&head, "saved_at", 0) > best_at {
-            best = slot;
-            best_at = json::i(&head, "saved_at", 0);
-        }
-    }
-    best
+        json::b(&head, "ok", false).then(|| json::i(&head, "saved_at", 0))
+    })
 }

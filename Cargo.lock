@@ -108,6 +108,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis_save"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "aegis_world"
 version = "0.1.0"
 dependencies = [
@@ -115,9 +124,9 @@ dependencies = [
  "aegis_core",
  "aegis_data",
  "aegis_rules",
+ "aegis_save",
  "anyhow",
  "indexmap",
- "serde",
  "serde_json",
 ]
 
