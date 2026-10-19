@@ -8,6 +8,13 @@ use aegis_core::json::{self, int, strs, Dict};
 use emberwake_data::STATS;
 use indexmap::IndexMap;
 
+/// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)", the Godot gear dojo):
+/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (an orb or a tome:
+/// Equipment.is_focus, conflicts_with_main).
+pub fn off_hand_ok(main: Option<&emberwake_data::ItemDef>, off: &emberwake_data::ItemDef) -> bool {
+    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !matches!(off.weapon_type.as_str(), "orb" | "tome"))
+}
+
 /// ContentFactory.item_fits_slot with worn gear kept: equipment whose slot is `slot`, either accessory slot for an
 /// accessory, and a one-handed main-hand weapon in the off hand.
 pub fn item_fits_slot(item: &emberwake_data::ItemDef, slot: &str) -> bool {
@@ -225,6 +232,12 @@ impl UnitState {
                 errors.push(format!("{at}: unknown item '{item}' in {slot}."));
             } else if let Err(e) = self.can_wear(d, item, slot) {
                 errors.push(format!("{at}: {e}"));
+            }
+        }
+        let worn = |slot: &str| self.equipment.get(slot).and_then(|i| d.cat.items.get(i));
+        if let (Some(main), Some(off)) = (worn("main_hand"), worn("off_hand")) {
+            if !off_hand_ok(Some(main), off) {
+                errors.push(format!("{at}: {} can't be held with the two-handed {}.", off.name, main.name));
             }
         }
         for item in &self.carried {

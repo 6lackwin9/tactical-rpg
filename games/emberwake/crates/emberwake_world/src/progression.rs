@@ -172,6 +172,12 @@ pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built
             u.inventory.equip(Equipment::new(item), slot);
         }
     }
+    // The two-handed rule: a class default shield or focus is not held under a two-handed weapon (state::off_hand_ok).
+    if let (Some(main), Some(off)) = (u.inventory.get(Slot::MainHand), u.inventory.get(Slot::OffHand)) {
+        if !crate::state::off_hand_ok(Some(&main.item), &off.item) {
+            u.inventory.unequip(Slot::OffHand);
+        }
+    }
     u.inventory.pouch.clear();
     let mut unloaded = Vec::new();
     for id in &work.pouch {

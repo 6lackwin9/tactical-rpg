@@ -10,7 +10,7 @@ use aegis_core::json::{self, s_or};
 use emberwake_data::STATS;
 use emberwake_rules::damage;
 use emberwake_rules::Unit;
-use emberwake_world::state::{UnitState, LOADOUT_SLOTS, POUCH_MAX};
+use emberwake_world::state::{off_hand_ok, UnitState, LOADOUT_SLOTS, POUCH_MAX};
 use emberwake_world::{progression, Data};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
@@ -359,7 +359,7 @@ impl Character {
                     show_errors(cx, errors);
                 }
             }
-            PAct::Unequip(slot) => self.gear_move(cx, |_, work, stash| unequip(work, stash, &slot)),
+            PAct::Unequip(slot) => self.gear_move(cx, |d, work, stash| take_off(d, work, stash, &slot)),
             PAct::Equip(item) => self.gear_move(cx, |d, work, stash| equip(d, work, stash, &item, None)),
             PAct::PouchAdd(item) => self.gear_move(cx, |d, work, stash| pouch_put(d, work, stash, &item, None)),
             PAct::PouchRemove(i) => self.gear_move(cx, |_, work, stash| pouch_take(work, stash, i)),
@@ -434,10 +434,45 @@ fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Op
         None => *LOADOUT_SLOTS.iter().find(|s| fits(def, s) && !work.equipment.contains_key(**s)).or_else(|| LOADOUT_SLOTS.iter().find(|s| fits(def, s))).ok_or_else(|| format!("{} can't be worn.", def.name))?,
     };
     work.can_wear(d, item, slot)?;
+    if slot == "off_hand" {
+        if let Some(main) = main_weapon(d, work).filter(|m| !off_hand_ok(Some(m), def)) {
+            return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
+        }
+    }
     if let Some(old) = work.equipment.insert(slot.to_string(), item.to_string()) {
         give_one(stash, old);
     }
     take_one(stash, item);
+    if slot == "main_hand" && def.two_handed {
+        // A shield or focus goes back to the stash (the Godot dojo's "stowed: ... is 2-Handed").
+        if let Some(off) = work.equipment.get("off_hand").cloned().filter(|o| d.cat.items.get(o).is_some_and(|o| !off_hand_ok(Some(def), o))) {
+            work.equipment.shift_remove("off_hand");
+            give_one(stash, off);
+        }
+    }
+    Ok(())
+}
+
+/// The weapon the main hand holds: the worn one, else the class default the build gives.
+fn main_weapon(d: &Data, work: &UnitState) -> Option<emberwake_data::ItemDef> {
+    match work.equipment.get("main_hand") {
+        Some(id) => d.cat.items.get(id).cloned(),
+        None => progression::build_with(d, work, false).and_then(|b| b.unit.inventory.get(emberwake_rules::gear::Slot::MainHand).map(|e| e.item.clone())),
+    }
+}
+
+/// Takes off what `slot` holds; when the main hand's class default that comes back is two-handed, a shield or focus
+/// in the off hand goes to the stash too (the two-handed rule).
+fn take_off(d: &Data, work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
+    unequip(work, stash, slot)?;
+    if slot == "main_hand" {
+        let off = work.equipment.get("off_hand").and_then(|o| d.cat.items.get(o)).cloned();
+        if let (Some(main), Some(off)) = (main_weapon(d, work), off) {
+            if !off_hand_ok(Some(&main), &off) {
+                unequip(work, stash, "off_hand")?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -455,6 +490,13 @@ fn move_slot(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: 
     let def = d.cat.items.get(&item).ok_or_else(|| format!("Unknown item '{item}'."))?;
     if from == to || !fits(def, to) {
         return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(to).to_lowercase()));
+    }
+    if to == "off_hand" {
+        let mut rest = work.clone();
+        rest.equipment.shift_remove(from);
+        if let Some(main) = main_weapon(d, &rest).filter(|m| !off_hand_ok(Some(m), def)) {
+            return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
+        }
     }
     work.equipment.shift_remove(from);
     if let Some(old) = work.equipment.insert(to.to_string(), item) {
@@ -508,7 +550,7 @@ fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: 
     match (kind, target) {
         ("stash", "slot") => equip(d, work, stash, what, Some(at)),
         ("stash", "pouch") => pouch_put(d, work, stash, what, Some(index(at)?)),
-        ("equip", "stash") => unequip(work, stash, what),
+        ("equip", "stash") => take_off(d, work, stash, what),
         ("equip", "slot") => move_slot(d, work, stash, what, at),
         ("pouch", "stash") => pouch_take(work, stash, index(what)?),
         ("pouch", "pouch") => {
@@ -872,7 +914,7 @@ impl Character {
         let ok = if let Some(item) = hovered.id.strip_prefix("gear.stash.") {
             d.cat.items.get(item).is_some_and(|i| i.is_equipment()) && equip(d, &mut w, &mut st, item, None).is_ok()
         } else if let Some(slot) = hovered.id.strip_prefix("gear.slot.") {
-            unequip(&mut w, &mut st, slot).is_ok()
+            take_off(d, &mut w, &mut st, slot).is_ok()
         } else {
             false
         };
@@ -1048,6 +1090,52 @@ mod tests {
         assert!(err.contains("no training"), "{err}");
         m.equipment.insert("main_hand".into(), item);
         assert!(m.validate(&d).iter().any(|e| e.contains("no training")), "Confirm refuses it too");
+    }
+
+    /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)").
+    #[test]
+    fn a_two_handed_weapon_and_a_shield_exclude_each_other() {
+        let (d, mut m, mut st) = setup();
+        let pick = |m: &UnitState, slot: &str, two: bool, kind: &str| {
+            let mut ids: Vec<&String> = d.cat.items.iter().filter(|(id, i)| i.two_handed == two && i.item_type == kind && m.can_wear(&d, id, slot).is_ok()).map(|(id, _)| id).collect();
+            ids.sort();
+            ids.first().map(|s| s.to_string())
+        };
+        let (Some(great), Some(shield)) = (pick(&m, "main_hand", true, "WEAPON"), pick(&m, "off_hand", false, "SHIELD")) else { panic!("a 2H weapon and a shield this class can wear") };
+        drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand").unwrap();
+        let shields = st[&shield];
+        drop_move(&d, &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand").unwrap();
+        assert!(!m.equipment.contains_key("off_hand"), "the shield is stowed");
+        assert_eq!(st[&shield], shields + 1);
+        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand").unwrap_err();
+        assert!(err.contains("both hands"), "{err}");
+        let built = progression::build_with(&d, &m, false).unwrap();
+        assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none_or(|o| off_hand_ok(Some(&d.cat.items[&great]), &o.item)), "no default shield under the 2H weapon");
+        m.equipment.insert("off_hand".into(), shield);
+        assert!(m.validate(&d).iter().any(|e| e.contains("two-handed")), "validation refuses the pair");
+    }
+
+    /// The focus half of the rule: an orb or tome is not held under a two-handed staff (Equipment.is_focus).
+    #[test]
+    fn a_two_handed_weapon_and_a_focus_exclude_each_other() {
+        let (d, _, mut st) = setup();
+        let base = d.cat.units.values().filter(|u| u.class_id == "mage" && u.side == "party").map(|u| u.id.clone()).min().expect("a party mage");
+        let mut m = UnitState::create("test_mage", &base);
+        let wear = |m: &UnitState, slot: &str, f: &dyn Fn(&emberwake_data::ItemDef) -> bool| {
+            let mut ids: Vec<&String> = d.cat.items.iter().filter(|(id, i)| f(i) && m.can_wear(&d, id, slot).is_ok()).map(|(id, _)| id).collect();
+            ids.sort();
+            ids.first().map(|s| s.to_string())
+        };
+        let staff = wear(&m, "main_hand", &|i| i.two_handed && i.item_type == "WEAPON").expect("a 2H weapon a mage can wear");
+        let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
+        drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand").unwrap();
+        assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
+        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand").unwrap_err().contains("both hands"));
+        let built = progression::build_with(&d, &m, false).unwrap();
+        assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none(), "no default orb under the staff");
+        m.equipment.insert("off_hand".into(), focus);
+        assert!(m.validate(&d).iter().any(|e| e.contains("two-handed")));
     }
 
     #[test]

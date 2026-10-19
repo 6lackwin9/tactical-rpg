@@ -44,6 +44,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-19 | Godot web export (`export_presets.cfg`, `web.yml`) | deprecated (on the `legacy` branch) | none yet (a WebAssembly build of the engine would be a new task) | It exported the Godot project; deploys were already paused (2026-10-17) |
 | 2026-10-19 | CLN-17 (wire or drop the uncalled Godot dojo checks, split long Godot suites) and CLN-18 (Godot Forge widget cleanup) | dropped (obsolete) | - | They cleaned up Godot code that is now frozen in `legacy/`; the engine's dojo and Forge are new code without those leftovers (RESCOPE1, user 2026-10-19) |
 | 2026-10-20 | Planning-time rank choice for party heroes ("Skill model v2": every unlocked rank listed in the battle menu) | replaced (heroes only; enemies keep it) | The rank chosen per slot on the Skills tab (SKILLUI1, decision "SKILLUI1 answers") | User playtest 2026-10-20: the rank choice belongs to the player before the fight, like the loadout |
+| 2026-10-20 | A two-handed weapon with a shield or focus in the off hand (Godot character gear screen and member builds) | replaced | Decision "Two-handed weapon and the off hand (user 2026-10-20)" (GEAR2H1) | The Godot gear dojo already refused the pair; the user chose the dojo rule for the gear tab, validation and builds |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 
