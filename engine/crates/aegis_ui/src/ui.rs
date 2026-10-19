@@ -69,13 +69,17 @@ impl<A> Widget<A> {
     }
 }
 
-/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open and the drag in
-/// progress.
+/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open, the drag in
+/// progress and the offset of every scroll area (by id; cleared when a new stack starts, Nav::Reset).
 #[derive(Debug, Clone, Default)]
 pub struct Kit {
     pub open: Option<String>,
     pub drag: Option<Drag>,
+    pub scroll: std::collections::HashMap<String, i32>,
 }
+
+/// Pixels one wheel line scrolls a scroll area.
+pub const SCROLL_STEP: i32 = 12;
 
 /// A drag in progress (UIKIT2): the dragged widget's payload, id and text (the ghost under the cursor).
 #[derive(Debug, Clone)]
@@ -105,14 +109,20 @@ pub struct Ui<'a, A> {
     drag: Option<Drag>,
     /// Widgets and drawing are kept inside this rect (a window's body, `set_clip`).
     clip: Option<Rect>,
+    /// The clips `push_clip` replaced, restored by `pop_clip`.
+    clips: Vec<Option<Rect>>,
+    /// The scroll offsets at the start of the frame (`Kit::scroll`).
+    scroll: std::collections::HashMap<String, i32>,
+    /// How many scroll areas are open (`scroll_begin`), each closed by `scroll_end`.
+    scrolls: usize,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
         // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
-        let (open, drag) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None });
+        let (open, drag, scroll) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None }, g.kit.scroll.clone());
         g.canvas.clip = None;
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None }
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0 }
     }
 
     /// Keeps the drawing and the recorded widgets inside `r` (None: the whole canvas); a widget partly outside keeps
@@ -120,6 +130,46 @@ impl<'a, A: Clone> Ui<'a, A> {
     pub fn set_clip(&mut self, r: Option<Rect>) {
         self.clip = r;
         self.p.clip(r);
+    }
+
+    /// Narrows the clip to `r` (inside the current one); `pop_clip` restores the clip before it.
+    pub fn push_clip(&mut self, r: Rect) {
+        self.clips.push(self.clip);
+        let inner = self.clip.map_or(r, |c| c.intersect(r));
+        self.set_clip(Some(inner));
+    }
+
+    pub fn pop_clip(&mut self) {
+        let prev = self.clips.pop().flatten();
+        self.set_clip(prev);
+    }
+
+    /// Opens a scroll area (the kit keeps its offset; the wheel over it scrolls it): content `content_h` pixels tall
+    /// shown in `view`, with a scrollbar on the right when it does not fit. Returns the offset to draw the content at
+    /// (`view.y - offset` is the content's top); drawing and widgets are clipped to `view` until `scroll_end`.
+    pub fn scroll_begin(&mut self, id: &str, view: Rect, content_h: i32) -> i32 {
+        let max = (content_h - view.h).max(0);
+        let at = self.scroll.get(id).copied().unwrap_or(0).clamp(0, max);
+        // The area itself, under its content: the shell finds it for the wheel (`text` is the furthest offset).
+        self.push(id, "scroll", max.to_string(), view, true, false, None, Vec::new());
+        if max > 0 {
+            let bar = Rect::new(view.x + view.w - 3, view.y, 3, view.h);
+            self.p.fill(bar, rgba(40, 46, 60, 200));
+            let knob_h = (view.h * view.h / content_h.max(1)).max(8);
+            let knob_y = view.y + (view.h - knob_h) * at / max;
+            self.p.fill(Rect::new(bar.x, knob_y, 3, knob_h), rgb(150, 160, 180));
+        }
+        self.push_clip(view);
+        self.scrolls += 1;
+        at
+    }
+
+    /// Closes the scroll area `scroll_begin` opened (the clip before it comes back).
+    pub fn scroll_end(&mut self) {
+        if self.scrolls > 0 {
+            self.scrolls -= 1;
+            self.pop_clip();
+        }
     }
 
     /// Makes the last recorded widget draggable with payload `key` (UIKIT2): press and move picks it up, a press

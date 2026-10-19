@@ -100,6 +100,8 @@ impl<G: Context> Shell<G> {
                         }
                     }
                     Nav::Reset(s) => {
+                        // A new stack: scroll offsets start over (an overlay or a return keeps them).
+                        self.gfx.kit.scroll.clear();
                         self.stack.clear();
                         self.stack.push(s);
                     }
@@ -164,6 +166,27 @@ impl<G: Context> Shell<G> {
         let track = self.stack.iter().rev().find_map(|s| s.music(cx));
         cx.audio.music(track.as_deref());
         cx.audio.tick();
+    }
+
+    /// The wheel: the topmost scroll area under the mouse scrolls (a window above it stops the search), else the
+    /// screen gets the lines (`Screen::wheel`).
+    fn wheel(&mut self, lines: i32) {
+        // An open choice list closes rather than the area under it scrolling.
+        if self.gfx.kit.open.take().is_some() {
+            return;
+        }
+        let infos = self.stack.last().unwrap().widgets();
+        let under = infos.iter().rev().find(|w| (w["kind"] == "scroll" || w["kind"] == "backdrop") && info_rect(w).contains(self.mouse.0, self.mouse.1));
+        if let Some(area) = under.filter(|w| w["kind"] == "scroll") {
+            let id = area["id"].as_str().unwrap_or("").to_string();
+            let max = area["text"].as_str().and_then(|t| t.parse::<i32>().ok()).unwrap_or(0);
+            // An offset set past the end ("scroll to the end") counts from the end.
+            let at = self.gfx.kit.scroll.get(&id).copied().unwrap_or(0).clamp(0, max);
+            self.gfx.kit.scroll.insert(id, (at - lines * crate::ui::SCROLL_STEP).clamp(0, max));
+            return;
+        }
+        let cx = &mut self.cx;
+        self.stack.last_mut().unwrap().wheel(cx, lines);
     }
 
     /// Drops a press or drag in progress; true when there was one.
@@ -433,6 +456,25 @@ impl<G: Context> Shell<G> {
                     None => json!({"ok": false, "error": format!("no widget '{id}'")}),
                 }
             }
+            "scroll" => {
+                // {id, by: lines} (positive scrolls up like the wheel) or {id, to: offset}.
+                let id = body["id"].as_str().unwrap_or("");
+                let infos = self.stack.last().unwrap().widgets();
+                match infos.iter().find(|w| w["id"] == id && w["kind"] == "scroll") {
+                    Some(area) => {
+                        let max = area["text"].as_str().and_then(|t| t.parse::<i32>().ok()).unwrap_or(0);
+                        let at = self.gfx.kit.scroll.get(id).copied().unwrap_or(0).clamp(0, max);
+                        let next = match body["to"].as_i64() {
+                            Some(to) => to as i32,
+                            None => at - body["by"].as_i64().unwrap_or(0) as i32 * crate::ui::SCROLL_STEP,
+                        }
+                        .clamp(0, max);
+                        self.gfx.kit.scroll.insert(id.to_string(), next);
+                        json!({"ok": true, "offset": next, "max": max})
+                    }
+                    None => json!({"ok": false, "error": format!("no scroll area '{id}'")}),
+                }
+            }
             "windows" => match self.stack.last_mut().unwrap().desk() {
                 Some(d) => json!({"ok": true, "desk": d.info()}),
                 None => json!({"ok": false, "error": "this screen has no windows"}),
@@ -664,8 +706,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                         MouseScrollDelta::LineDelta(_, y) => y.round() as i32,
                         MouseScrollDelta::PixelDelta(p) => (p.y / 20.0).round() as i32,
                     };
-                    let cx = &mut s.cx;
-                    s.stack.last_mut().unwrap().wheel(cx, lines);
+                    s.wheel(lines);
                 }
             }
             WindowEvent::MouseInput { state: ElementState::Pressed, button, .. } => {
@@ -1119,6 +1160,99 @@ mod tests {
         let a_body = rect_of(&mut s, "a");
         let button = tree["widgets"].as_array().unwrap().iter().find(|w| w["id"] == "a.button").cloned().unwrap();
         assert!(button["rect"][0].as_i64().unwrap() + button["rect"][2].as_i64().unwrap() <= (a_body.x + a_body.w) as i64, "clipped to the window: {button}");
+        clean();
+    }
+
+    /// A list of 20 clickable rows (14 px each, 280 px of content) in a 100 px tall scroll area.
+    #[derive(Default)]
+    struct List {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    const ROWS: [&str; 20] = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "r16", "r17", "r18", "r19"];
+
+    impl List {
+        fn act(&mut self, cx: &mut Cx, a: &'static str) {
+            cx.app.log.push(format!("click {a}"));
+        }
+    }
+
+    impl Screen<App> for List {
+        fn id(&self) -> &'static str {
+            "list"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            let view = Rect::new(10, 20, 120, 100);
+            let off = ui.scroll_begin("list.rows", view, 14 * ROWS.len() as i32);
+            for (i, id) in ROWS.iter().enumerate() {
+                ui.row(id, Rect::new(view.x, view.y - off + i as i32 * 14, view.w, 14), id, TEXT, Some(*id), false, Vec::new());
+            }
+            ui.scroll_end();
+            self.w = ui.widgets;
+        }
+        fn wheel(&mut self, cx: &mut Cx, lines: i32) {
+            cx.app.log.push(format!("wheel {lines}"));
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    fn list() -> Shell<App> {
+        let mut s = shell();
+        s.stack = vec![Box::new(List::default())];
+        s.frame();
+        s
+    }
+
+    fn row_rect(s: &Shell<App>, id: &str) -> Rect {
+        s.stack.last().unwrap().widgets().iter().find(|w| w["id"] == id).map(info_rect).unwrap()
+    }
+
+    #[test]
+    fn the_wheel_scrolls_the_area_under_the_mouse_within_its_content() {
+        let mut s = list();
+        s.mouse = (20, 30);
+        s.wheel(-2);
+        s.frame();
+        assert_eq!(s.gfx.kit.scroll["list.rows"], 2 * crate::ui::SCROLL_STEP);
+        assert_eq!(row_rect(&s, "r2").y, 20 + 28 - 24);
+        s.wheel(-100);
+        assert_eq!(s.gfx.kit.scroll["list.rows"], 280 - 100, "stops at the end of the content");
+        s.wheel(100);
+        assert_eq!(s.gfx.kit.scroll["list.rows"], 0);
+        s.mouse = (300, 300);
+        s.wheel(-1);
+        assert_eq!(s.cx.app.log, ["wheel -1"], "outside any area the screen gets the wheel");
+    }
+
+    #[test]
+    fn rows_scrolled_out_of_view_cannot_be_clicked_and_visible_ones_can() {
+        let mut s = list();
+        assert_eq!(row_rect(&s, "r10").h, 0, "below the view: clipped to nothing");
+        assert_eq!(s.bridge(&json!({"cmd": "scroll", "id": "list.rows", "to": 140}))["offset"], json!(140));
+        s.frame();
+        let r = row_rect(&s, "r10");
+        assert!(r.h > 0 && r.y >= 20);
+        s.mouse = (r.x + 5, r.y + 3);
+        s.click();
+        assert_eq!(s.cx.app.log, ["click r10"]);
+        assert_eq!(row_rect(&s, "r0").h, 0, "above the view now");
+        assert_eq!(s.bridge(&json!({"cmd": "scroll", "id": "nope", "by": 1}))["ok"], json!(false));
+    }
+
+    #[test]
+    fn an_overlay_keeps_the_scroll_offsets_and_a_new_stack_clears_them() {
+        let mut s = desktop("wheel");
+        s.gfx.kit.scroll.insert("x".into(), 5);
+        s.cx.notice.push("an overlay".into());
+        s.settle();
+        assert_eq!(s.gfx.kit.scroll.get("x"), Some(&5), "a notice over the screen keeps them");
+        s.cx.nav.push(Nav::Pop);
+        s.settle();
+        assert_eq!(s.gfx.kit.scroll.get("x"), Some(&5), "and so does coming back");
+        s.cx.nav.push(Nav::Reset(Box::new(List::default())));
+        s.settle();
+        assert!(s.gfx.kit.scroll.is_empty(), "a new stack starts over");
         clean();
     }
 }

@@ -262,9 +262,9 @@ impl Desk {
             }
             if !w.collapsed {
                 if let Some(b) = self.body(&w.id) {
-                    ui.set_clip(Some(b));
+                    ui.push_clip(b);
                     body(ui, &w.id, b);
-                    ui.set_clip(None);
+                    ui.pop_clip();
                 }
                 let g = Rect::new(r.x + r.w - GRIP, r.y + r.h - GRIP, GRIP, GRIP);
                 let col = if ui.hover(g) { GOLD } else { rgb(110, 140, 196) };

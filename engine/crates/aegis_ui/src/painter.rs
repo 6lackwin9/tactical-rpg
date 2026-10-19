@@ -250,3 +250,168 @@ impl<'a> Painter<'a> {
         }
     }
 }
+
+/// A run of text in one style (`parse_markup`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Span {
+    pub text: String,
+    pub col: Rgba,
+    pub bold: bool,
+}
+
+fn hex_colour(hex: &str) -> Option<Rgba> {
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let ch = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    Some([ch(0)?, ch(2)?, ch(4)?, 255])
+}
+
+fn push_span(out: &mut Vec<Span>, cur: &mut String, col: Rgba, bold: bool) {
+    if !cur.is_empty() {
+        out.push(Span { text: std::mem::take(cur), col, bold });
+    }
+}
+
+/// Markup into spans: `[color=#rrggbb]..[/color]` and `[b]..[/b]`, nested; a tag it does not know (or a malformed one)
+/// stays as text, and `\n` stays in the text. `col` is the colour outside any tag.
+pub fn parse_markup(s: &str, col: Rgba) -> Vec<Span> {
+    let (mut out, mut cur, mut colours, mut bold) = (Vec::new(), String::new(), vec![col], 0usize);
+    let mut rest = s;
+    while let Some(ch) = rest.chars().next() {
+        if ch == '[' {
+            if let Some(end) = rest.find(']') {
+                let tag = &rest[1..end];
+                let top = *colours.last().unwrap();
+                let handled = if let Some(c) = tag.strip_prefix("color=#").and_then(hex_colour) {
+                    push_span(&mut out, &mut cur, top, bold > 0);
+                    colours.push(c);
+                    true
+                } else if tag == "/color" && colours.len() > 1 {
+                    push_span(&mut out, &mut cur, top, bold > 0);
+                    colours.pop();
+                    true
+                } else if tag == "b" || (tag == "/b" && bold > 0) {
+                    push_span(&mut out, &mut cur, top, bold > 0);
+                    if tag == "b" {
+                        bold += 1;
+                    } else {
+                        bold -= 1;
+                    }
+                    true
+                } else {
+                    false
+                };
+                if handled {
+                    rest = &rest[end + 1..];
+                    continue;
+                }
+            }
+        }
+        cur.push(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    push_span(&mut out, &mut cur, *colours.last().unwrap(), bold > 0);
+    out
+}
+
+/// The text of markup without its tags.
+pub fn strip_markup(s: &str) -> String {
+    parse_markup(s, [0, 0, 0, 255]).into_iter().map(|sp| sp.text).collect()
+}
+
+impl Painter<'_> {
+    /// Markup laid out in lines of at most `max_w` (words wrap; `\n` breaks a line).
+    pub fn rich_lines(&mut self, markup: &str, size: f32, max_w: f32, col: Rgba) -> Vec<Vec<Span>> {
+        let mut lines: Vec<Vec<Span>> = vec![Vec::new()];
+        let mut width = 0.0;
+        for sp in parse_markup(markup, col) {
+            // Words keep their trailing space; a newline is its own token.
+            let mut tokens: Vec<String> = Vec::new();
+            for (i, part) in sp.text.split('\n').enumerate() {
+                if i > 0 {
+                    tokens.push("\n".into());
+                }
+                tokens.extend(part.split_inclusive(' ').map(String::from));
+            }
+            for tok in tokens {
+                if tok == "\n" {
+                    lines.push(Vec::new());
+                    width = 0.0;
+                    continue;
+                }
+                let w = self.text_w(&tok, size);
+                if width > 0.0 && width + w > max_w {
+                    lines.push(Vec::new());
+                    width = 0.0;
+                }
+                let tok = if width == 0.0 { tok.trim_start().to_string() } else { tok };
+                width += self.text_w(&tok, size);
+                let line = lines.last_mut().unwrap();
+                match line.last_mut() {
+                    Some(last) if last.col == sp.col && last.bold == sp.bold => last.text.push_str(&tok),
+                    _ => line.push(Span { text: tok, col: sp.col, bold: sp.bold }),
+                }
+            }
+        }
+        lines
+    }
+
+    /// Draws markup at (x, y) wrapped to `max_w`; bold is drawn twice a pixel apart. Returns the height drawn.
+    pub fn rich(&mut self, x: f32, y: f32, max_w: f32, markup: &str, size: f32, col: Rgba) -> f32 {
+        let lh = self.line_h(size);
+        let lines = self.rich_lines(markup, size, max_w, col);
+        for (i, line) in lines.iter().enumerate() {
+            let mut pen = x;
+            let ly = y + i as f32 * lh;
+            for sp in line {
+                if sp.bold {
+                    self.text(pen + 1.0 / self.v.s, ly, &sp.text, size, sp.col);
+                }
+                pen = self.text(pen, ly, &sp.text, size, sp.col);
+            }
+        }
+        lines.len() as f32 * lh
+    }
+
+    /// The height `rich` would draw.
+    pub fn rich_height(&mut self, markup: &str, size: f32, max_w: f32) -> f32 {
+        self.rich_lines(markup, size, max_w, [0, 0, 0, 255]).len() as f32 * self.line_h(size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const W: Rgba = [255, 255, 255, 255];
+
+    #[test]
+    fn markup_becomes_styled_spans_and_unknown_tags_stay_text() {
+        let s = parse_markup("a [color=#ff0000]red [b]bold[/b][/color] [x] z", W);
+        assert_eq!(s.iter().map(|sp| (sp.text.as_str(), sp.col, sp.bold)).collect::<Vec<_>>(), [
+            ("a ", W, false),
+            ("red ", [255, 0, 0, 255], false),
+            ("bold", [255, 0, 0, 255], true),
+            (" [x] z", W, false),
+        ]);
+        assert_eq!(strip_markup("[b]RESULT: 7[/b] [color=#zzzzzz]x"), "RESULT: 7 [color=#zzzzzz]x");
+        assert_eq!(parse_markup("[/color][/b]x", W), [Span { text: "[/color][/b]x".into(), col: W, bold: false }], "closing tags without an opener are text");
+    }
+
+    #[test]
+    fn rich_text_wraps_to_the_width_and_breaks_on_newlines() {
+        let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        let mut canvas = crate::canvas::Canvas::new(640, 360);
+        let mut fonts = Fonts::new(&font);
+        let mut p = Painter { c: &mut canvas, v: View::fit(640, 360), fonts: &mut fonts };
+        let text = "one two three four five six seven eight nine ten\n[b]last[/b]";
+        let wide = p.rich_lines(text, 7.0, 600.0, W);
+        assert_eq!(wide.len(), 2);
+        assert!(wide[1][0].bold);
+        let narrow = p.rich_lines(text, 7.0, 40.0, W);
+        assert!(narrow.len() > 3);
+        assert!(narrow.iter().all(|l| l.first().is_none_or(|s| !s.text.starts_with(' '))), "no leading spaces");
+        assert_eq!(p.rich_height(text, 7.0, 600.0), 2.0 * p.line_h(7.0));
+    }
+}
