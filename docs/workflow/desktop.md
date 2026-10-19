@@ -35,6 +35,7 @@ While no cloud threads run, the planner session is also the Merge & Release role
 
 ## Tools only on desktop
 
+- Checkout: `C:\dev\tactical-rpg` (outside OneDrive since 2026-10-19: OneDrive's reparse points broke Git branch switches, decision "Repository outside OneDrive"); worktrees go next to it (`../ngp-<id>`), never under OneDrive.
 - Rust: rustup with the toolchain in `rust-toolchain.toml`; build output in `C:/Users/tusha/AppData/Local/Temp/aegis-target` (`.cargo/config.toml`, outside OneDrive). Godot 4.7.2 (`C:/Program Files/Godot/godot.exe` or `$GODOT`) is needed only for `tools/fc.sh parity` (the frozen reference in `legacy/`).
 - Scene Runner: `run.bat` pulls the latest `main`, builds the engine (release) and opens `aegis-gui screen=runner` (`run_dev.bat` or `run.bat dev`: latest `develop` from the sibling worktree `<checkout>-dev`, created on first use; it never switches branches; it launches without pulling when the checkout has local changes or is offline); from PowerShell `Start-Process .\run.bat`. Never kill processes you did not start (other agents run tests and sims).
 - IDE: rust-analyzer for the engine; a Godot language server left over from the Godot build reports false errors on `engine/parity/godot/*.gd` (they run inside `legacy/`): close any Godot editor open on the old root. Smart App Control was turned off on 2026-10-19 because it blocked freshly built engine binaries (skill `known-issues`).
