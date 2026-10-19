@@ -4,9 +4,9 @@
 //! Every migration is ported (1 -> 10); 2 -> 3 seeds rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
 
 use crate::data::Data;
-use crate::json::{self, int, Dict};
 use crate::progression;
 use crate::state::{default_autoplay, GameState, SUPPLIES_START};
+use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -176,7 +176,7 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
             out.insert("loot_claimed".into(), Value::Array(Vec::new()));
         }
         2 => {
-            let seed = (aegis_rules::ghash::string_hash(&state_text(state, quests_int)) & 0x7FFF_FFFF) as i64;
+            let seed = (aegis_core::ghash::string_hash(&state_text(state, quests_int)) & 0x7FFF_FFFF) as i64;
             out.insert("rng_seed".into(), int(seed));
             out.insert("position".into(), Value::Array(vec![int(-1), int(-1)]));
             out.insert("explore".into(), Value::Object(crate::state::default_explore()));

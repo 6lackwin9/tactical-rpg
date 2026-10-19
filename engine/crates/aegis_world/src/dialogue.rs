@@ -2,9 +2,9 @@
 //! texts of choices, and one conversation with one world character (services: quest offers, turn-ins, shops).
 
 use crate::data::Data;
-use crate::json::{self, int, Dict};
 use crate::state::{flag_key_ok, flag_value_ok, GameState};
 use crate::{new_game, progression, quest, shop};
+use aegis_core::json::{self, int, Dict};
 use indexmap::IndexMap;
 use serde_json::Value;
 

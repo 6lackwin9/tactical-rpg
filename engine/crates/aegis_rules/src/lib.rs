@@ -3,9 +3,6 @@
 
 pub mod damage;
 pub mod gear;
-pub mod ghash;
-pub mod rng;
-pub mod sort;
 pub mod stats;
 pub mod status;
 pub mod unit;

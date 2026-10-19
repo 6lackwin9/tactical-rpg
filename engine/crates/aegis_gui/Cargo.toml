@@ -8,6 +8,7 @@ name = "aegis-gui"
 path = "src/main.rs"
 
 [dependencies]
+aegis_core = { path = "../aegis_core" }
 aegis_data = { path = "../aegis_data" }
 aegis_rules = { path = "../aegis_rules" }
 aegis_battle = { path = "../aegis_battle" }

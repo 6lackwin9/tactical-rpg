@@ -3,8 +3,8 @@
 //! from_dict (damaged blobs are kept as load problems that `validate` reports, never coerced silently).
 
 use crate::data::{Data, PARTY_MAX};
-use crate::json::{self, int, strs, Dict};
 use crate::progression;
+use aegis_core::json::{self, int, strs, Dict};
 use aegis_data::STATS;
 use indexmap::IndexMap;
 use serde_json::Value;

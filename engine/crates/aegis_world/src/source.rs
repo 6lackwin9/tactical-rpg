@@ -7,7 +7,7 @@
 //! Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`). Like Godot, a bad file or entry is reported
 //! in `errors` and skipped, never fatal.
 
-use crate::json::{self, gstr, int, to_bool_or, to_float_or, to_int_or, Dict};
+use aegis_core::json::{self, gstr, int, to_bool_or, to_float_or, to_int_or, Dict};
 use aegis_rules::status;
 use serde_json::{Map, Value};
 use std::path::Path;

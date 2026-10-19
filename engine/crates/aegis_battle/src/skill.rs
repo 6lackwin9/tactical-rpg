@@ -265,8 +265,8 @@ pub fn exploit_match(entries: &[serde_json::Value], target: &Unit, skip: &[Strin
     let mut best = (String::new(), 1.0);
     for row in entries {
         let Some(o) = row.as_object() else { continue };
-        let status = aegis_data::value::string(o, "status", "");
-        let mult = aegis_data::value::float(o, "power_mult", 1.0);
+        let status = aegis_core::value::string(o, "status", "");
+        let mult = aegis_core::value::float(o, "power_mult", 1.0);
         if target.has_status(&status) && !skip.contains(&status) && mult > best.1 {
             best = (status, mult);
         }

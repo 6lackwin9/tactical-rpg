@@ -1,7 +1,7 @@
 //! CombatGrid, Terrain, CombatZones, CoverRules (scripts/combat/arena/). Units are battle indices; a unit keeps its
 //! tile after it falls (Godot leaves dead units in combatant_positions), and leaves the grid when it withdraws.
 
-use aegis_data::value;
+use aegis_core::value;
 use aegis_data::Catalog;
 use std::ops::{Add, Mul, Sub};
 

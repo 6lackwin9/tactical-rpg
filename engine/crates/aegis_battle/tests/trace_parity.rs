@@ -2,7 +2,7 @@
 //! are reproduced exactly, so a seeded duel should match step for step; the first divergence is reported.
 
 use aegis_battle::sim::{fight, FightSpec};
-use aegis_data::value;
+use aegis_core::value;
 use aegis_data::{Catalog, UnitDef};
 use indexmap::IndexMap;
 use serde_json::Value;

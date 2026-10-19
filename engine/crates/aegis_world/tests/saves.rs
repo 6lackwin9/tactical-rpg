@@ -3,7 +3,7 @@
 //! `engine/parity/export.sh only=saves`): ok, errors, warnings and the loaded state. A save the engine writes must also
 //! read back to the same state.
 
-use aegis_world::json;
+use aegis_core::json;
 use aegis_world::{save, Data};
 use serde_json::Value;
 use std::path::PathBuf;

@@ -4,8 +4,8 @@
 use crate::grid::{Grid, V2};
 use crate::session::{EncounterDef, Phase, Session};
 use crate::world::{UnitId, World};
+use aegis_core::rng::GodotRng;
 use aegis_data::{Catalog, UnitDef};
-use aegis_rules::rng::GodotRng;
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;

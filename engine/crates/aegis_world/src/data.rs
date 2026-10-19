@@ -3,7 +3,7 @@
 //! (ServiceCatalog) and the XP curve. Read from the project's data/ folder by the engine's own loader (`source`), or
 //! from the Godot exports (parity/out: catalog.json, worlds.json, game_data.json) for parity checks.
 
-use crate::json::{self, empty, Dict};
+use aegis_core::json::{self, empty, Dict};
 use aegis_data::Catalog;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;

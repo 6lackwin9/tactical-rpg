@@ -1,10 +1,10 @@
 //! GameRolls (scripts/game_state/game_rolls.gd): per-save deterministic streams. Roll n of stream s is one randi()
 //! of a RandomNumberGenerator seeded with hash([rng_seed, s, n]); every roll counts gs.rolls[s] up by one.
 
-use crate::json::{self, int};
 use crate::state::GameState;
-use aegis_rules::ghash::{hash, GVar};
-use aegis_rules::rng::GodotRng;
+use aegis_core::ghash::{hash, GVar};
+use aegis_core::json::{self, int};
+use aegis_core::rng::GodotRng;
 use serde_json::Value;
 
 pub const EXPLORE: &str = "explore";

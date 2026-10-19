@@ -8,8 +8,8 @@ use crate::plan::{cover_pref, expected, PlanEntry, PlanStep, SimState, Step, AI_
 use crate::plan::Plan;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{AiProfile, Role, TargetPref, UnitId, World};
+use aegis_core::sort::godot_sort;
 use aegis_rules::damage;
-use aegis_rules::sort::godot_sort;
 use aegis_rules::status;
 use std::collections::HashMap;
 

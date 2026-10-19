@@ -3,8 +3,8 @@
 //! (numbers compared as numbers, object key order ignored). The first difference of a journey is reported with
 //! its path; later steps of that journey are skipped (the states have diverged).
 
+use aegis_core::json::{self, int, Dict};
 use aegis_world::dialogue::{self, DialogueRunner};
-use aegis_world::json::{self, int, Dict};
 use aegis_world::{explore, new_game, progression, quest, shop, travel, Data, GameState};
 use serde_json::Value;
 use std::path::PathBuf;

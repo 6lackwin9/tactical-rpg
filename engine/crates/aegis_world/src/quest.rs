@@ -3,9 +3,9 @@
 
 use crate::data::Data;
 use crate::dialogue::rep;
-use crate::json::{self, int, strs, Dict};
 use crate::progression;
 use crate::state::{flag_key_ok, flag_value_ok, qid_ok, GameState, GOLD_MAX};
+use aegis_core::json::{self, int, strs, Dict};
 use serde_json::Value;
 
 pub const MAX_OBJECTIVES: i64 = 8;

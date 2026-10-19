@@ -2,11 +2,11 @@
 //! The gold roll has its own RandomNumberGenerator seeded from ("<qid>|<time>|<wins>").hash().
 
 use crate::data::Data;
-use crate::json::{self, int, Dict};
 use crate::quest;
 use crate::state::GameState;
-use aegis_rules::ghash::string_hash;
-use aegis_rules::rng::GodotRng;
+use aegis_core::ghash::string_hash;
+use aegis_core::json::{self, int, Dict};
+use aegis_core::rng::GodotRng;
 use serde_json::Value;
 
 pub const GOLD_CAP: i64 = 500;

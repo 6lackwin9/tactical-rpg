@@ -5,7 +5,7 @@ use crate::canvas::{rgba, Rect};
 use crate::screens::{default_settings, show_errors, title, Cx, Key, Nav, Screen};
 use crate::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
 use crate::widget_plumbing;
-use aegis_world::json::{self, s, s_or};
+use aegis_core::json::{self, s, s_or};
 use aegis_world::{new_game, progression, save};
 use serde_json::{json, Value};
 

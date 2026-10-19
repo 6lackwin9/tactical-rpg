@@ -6,8 +6,8 @@
 //! (tests/store.rs). Validation: ids, names, enum options and references by the schema, skill ranks, item families,
 //! and the whole data folder must still load without problems, else the files are put back as they were.
 
-use crate::json::{self, gstr, Dict};
 use crate::source::{self, content, copy, expand, fields, normalize, read, resolve_item, sget, RANK_KEYS};
+use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -432,7 +432,7 @@ pub fn upsert(data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, re
         }
     }
     let section = if world.is_some() { "world" } else { "content" };
-    let entry = crate::json::normalize_dict(entry);
+    let entry = aegis_core::json::normalize_dict(entry);
     let game = world.is_none() && game_kind(kind).is_some();
     let full = if world.is_some() { normalize(fields("world", kind), &entry, true) } else if game { game_storage(kind, &entry) } else { content(kind, &entry) };
     let errors = if game { field_errors("none", kind, &full) } else { field_errors(section, kind, &full) };

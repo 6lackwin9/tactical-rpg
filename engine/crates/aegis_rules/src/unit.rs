@@ -2,7 +2,7 @@
 
 use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
-use aegis_data::value::{self, to_int, to_str};
+use aegis_core::value::{self, to_int, to_str};
 use aegis_data::{Catalog, ClassDef, UnitDef, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;

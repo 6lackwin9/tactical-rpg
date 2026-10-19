@@ -2,8 +2,8 @@
 //! a saved member as a battle unit, and HP between battles (HEAL1-L).
 
 use crate::data::Data;
-use crate::json::{self, int, Dict};
 use crate::state::{GameState, PartyState, UnitState};
+use aegis_core::json::{self, int, Dict};
 use aegis_data::STATS;
 use aegis_rules::gear::{Equipment, Slot};
 use aegis_rules::stats::MAX_LEVEL;

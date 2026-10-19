@@ -3,8 +3,8 @@
 
 use crate::command::{hazard_round_end, CmdKind, Command};
 use crate::world::{UnitId, World};
-use aegis_rules::rng::GodotRng;
-use aegis_rules::sort::godot_sort;
+use aegis_core::rng::GodotRng;
+use aegis_core::sort::godot_sort;
 use aegis_rules::status;
 
 #[derive(Debug, Clone)]

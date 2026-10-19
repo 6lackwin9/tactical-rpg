@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "engine/crates/aegis_core",
     "engine/crates/aegis_data",
     "engine/crates/aegis_rules",
     "engine/crates/aegis_battle",

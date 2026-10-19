@@ -3,9 +3,9 @@
 //! runners apply the defeat and flee rules). Building the battle itself (GameEncounter) lives with the session.
 
 use crate::data::Data;
-use crate::json::{self, Dict};
 use crate::state::GameState;
 use crate::{progression, purse, quest};
+use aegis_core::json::{self, Dict};
 use serde_json::Value;
 
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];

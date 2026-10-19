@@ -5,7 +5,7 @@ These rules are written for the desktop IDE. In the cloud there is no IDE: the I
 ## 1. Static Typing & Code Standards
 
 - Rust is statically typed; the build has no compiler warnings (`tools/fc.sh build` shows them). Clippy (`tools/fc.sh clippy`) is advisory: fix what new code adds, leave old lints to cleanup tasks.
-- Follow the patterns in the skill `rust-conventions`: port comments name the Godot function a piece mirrors, JSON-shaped data goes through `aegis_world::json` (Godot Variant semantics), `serde_json` keeps insertion order (`shift_remove`, never `remove`).
+- Follow the patterns in the skill `rust-conventions`: port comments name the Godot function a piece mirrors, JSON-shaped data goes through `aegis_core::json` (Godot Variant semantics), `serde_json` keeps insertion order (`shift_remove`, never `remove`).
 - Game rules live in the library crates (`aegis_rules`, `aegis_battle`, `aegis_world`); `aegis_gui` only draws and calls the command API (`aegis_host`), so everything a player does is scriptable and testable without a window.
 
 ## 2. File Creation, Deletion & Rename Protocol

@@ -1,7 +1,7 @@
 //! Exact parity with the Godot reference: unit snapshots and DamageCalculator cases exported by
 //! `engine/parity/godot/export.gd` (run `engine/parity/export.sh` first; the fixtures are not committed).
 
-use aegis_data::value::{self, Obj};
+use aegis_core::value::{self, Obj};
 use aegis_data::{Catalog, UnitDef};
 use aegis_rules::damage::{self, HitInput};
 use aegis_rules::{build_unit, Stance, Unit};
@@ -155,7 +155,7 @@ fn damage_cases_match_godot() {
 
 #[test]
 fn rng_matches_godot() {
-    use aegis_rules::rng::GodotRng;
+    use aegis_core::rng::GodotRng;
     let path = out_dir().join("rng.json");
     let rows: Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("missing rng.json - run engine/parity/export.sh")).unwrap();
     let mut n = 0;
@@ -183,8 +183,8 @@ fn rng_matches_godot() {
 
 #[test]
 fn godot_hash_matches() {
-    use aegis_rules::ghash::{hash, GVar};
-    use aegis_rules::rng::GodotRng;
+    use aegis_core::ghash::{hash, GVar};
+    use aegis_core::rng::GodotRng;
     let rows: Value = serde_json::from_str(&std::fs::read_to_string(out_dir().join("hash.json")).expect("missing hash.json - run engine/parity/export.sh")).unwrap();
     let mut n = 0;
     for r in rows.as_array().unwrap() {

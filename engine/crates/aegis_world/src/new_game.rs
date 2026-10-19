@@ -2,9 +2,9 @@
 //! world party characters), plus the playable-world rule of the new-game screen.
 
 use crate::data::Data;
-use crate::json;
 use crate::state::{GameState, PartyState, UnitState, SEED_MAX};
 use crate::{dialogue, explore, travel};
+use aegis_core::json;
 
 /// A party member from a world character: id = its local id, lore_ref = its qid, passives from its lore.
 pub fn hero_from_character(d: &Data, world_id: &str, character_ref: &str) -> Option<UnitState> {

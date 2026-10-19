@@ -4,13 +4,11 @@
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
 //! Defaults below are the `ContentSchema` field defaults, so hand-written partial entries normalise the same way.
 
-pub mod value;
-
+use aegis_core::value::*;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::path::Path;
-use value::*;
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];

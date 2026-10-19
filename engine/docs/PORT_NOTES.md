@@ -8,11 +8,11 @@ because the RNG is bit-exact.
 
 | Godot behaviour | Rust |
 | :--- | :--- |
-| `RandomNumberGenerator` (PCG32, two-draw `randf`, bounded `randi_range`) | `aegis_rules::rng::GodotRng` (tested against exported draws) |
+| `RandomNumberGenerator` (PCG32, two-draw `randf`, bounded `randi_range`) | `aegis_core::rng::GodotRng` (tested against exported draws) |
 | `roundf` / `roundi` round half away from zero | `f64::round` (`stats::roundi`) |
-| `Array.sort_custom` is Godot's `SortArray` introsort (insertion sort at 16 or fewer, so stable there; unstable above) | `aegis_rules::sort::godot_sort` (port of `SortArray`) |
+| `Array.sort_custom` is Godot's `SortArray` introsort (insertion sort at 16 or fewer, so stable there; unstable above) | `aegis_core::sort::godot_sort` (port of `SortArray`) |
 | Dictionary iteration is insertion order | `IndexMap` everywhere order can matter |
-| JSON numbers come back as floats; `x is int` checks fail on parsed data | lenient `aegis_data::value` reads; checked by parity |
+| JSON numbers come back as floats; `x is int` checks fail on parsed data | lenient `aegis_core::value` reads; checked by parity |
 | Integer division truncates toward zero, `floori` floors | match per call site |
 
 ## Files
@@ -84,7 +84,7 @@ because the RNG is bit-exact.
 Godot behaviours found on the way:
 
 - `hash([...])` is murmur3 over the array (Variant ARRAY = 28), Thomas Wang 64 -> 32 for ints, djb2 for strings
-  (`aegis_rules::ghash`); `String.hash()` is djb2.
+  (`aegis_core::ghash`); `String.hash()` is djb2.
 - `JSON.stringify` sorts keys by default, so a Godot save round trip re-orders every dictionary (stash, flags,
   quests): engine saves sort keys too, and the journey replay's reload does the same.
 - `JSON.parse` makes every number a float and `stringify` writes it back as `3.0`; the 2 -> 3 save step hashes that

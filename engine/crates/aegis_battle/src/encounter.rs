@@ -5,7 +5,7 @@
 
 use crate::grid::V2;
 use crate::world::{AiProfile, Role, TargetPref, UnitId, World};
-use aegis_data::value::{self, Obj};
+use aegis_core::value::{self, Obj};
 use indexmap::IndexMap;
 use serde_json::Value;
 

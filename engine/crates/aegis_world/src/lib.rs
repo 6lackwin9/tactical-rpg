@@ -7,7 +7,6 @@ pub mod battle;
 pub mod data;
 pub mod dialogue;
 pub mod explore;
-pub mod json;
 pub mod new_game;
 pub mod progression;
 pub mod purse;

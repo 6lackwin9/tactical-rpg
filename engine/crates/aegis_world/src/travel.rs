@@ -3,9 +3,9 @@
 
 use crate::data::Data;
 use crate::explore::{self, SPAWN};
-use crate::json::{self, int, Dict};
 use crate::state::{GameState, PartyState};
 use crate::{quest, rolls};
+use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 
 pub const REPEAT_HALF: i64 = -1;

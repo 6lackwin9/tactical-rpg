@@ -104,6 +104,6 @@ fn upsert_and_remove_validate_write_and_roll_back() {
     let lore = json!({"id": "test_note", "name": "Test Note", "category": "history", "text": "A line."});
     store::upsert(&tmp, Some("ashlands"), "lore", lore.as_object().unwrap(), None).expect("world entry");
     let d = aegis_world::Data::open(&tmp).unwrap().0;
-    assert_eq!(aegis_world::json::s(d.resolve("ashlands", "lore", "test_note"), "text"), "A line.");
+    assert_eq!(aegis_core::json::s(d.resolve("ashlands", "lore", "test_note"), "text"), "A line.");
     let _ = std::fs::remove_dir_all(&tmp);
 }

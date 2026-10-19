@@ -3,9 +3,9 @@
 
 use crate::data::Data;
 use crate::dialogue::{self, rep};
-use crate::json::{self, int, Dict};
 use crate::quest;
 use crate::state::{GameState, GOLD_MAX, SUPPLIES_MAX};
+use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 
 pub const UNLIMITED: i64 = -1;

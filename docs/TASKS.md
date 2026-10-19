@@ -6,7 +6,6 @@ Transition to the Aegis engine (2026-10-19, decision "Engine transition (user 20
 
 | Id | Title | Lane | Depends on | Status | Spec | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
-| SPLIT1-2 | Engine core `aegis_core`: RNG, hash, sort, Variant helpers, field readers (size S; move only, gate and parity green) | logic | SPLIT1-1 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | engine/crates/aegis_core (new), aegis_rules, aegis_data, aegis_world |
 | SPLIT1-3 | Engine content layer `aegis_content`: schema-driven loader and writer, file format, world graph; Emberwake hooks for skill ranks and item families (size L; move only, gate and parity green) | logic | SPLIT1-2 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | engine/crates/aegis_content (new), aegis_world/src/{source,store,data}.rs |
 | SPLIT1-4 | Engine save framework `aegis_save`: envelope, versions, migration runner, slots; the game keeps its state shape and migrations (size M; move only, gate and parity green) | logic | SPLIT1-2 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | engine/crates/aegis_save (new), aegis_world/src/save.rs |
 | SPLIT1-5 | Engine UI `aegis_ui`: toolkit, art loader, tuning, agent link, screen stack, app loop; engine and game contexts split (size L; move only, gate and parity green) | logic | SPLIT1-2 | approved (user 2026-10-19, SPLIT1) | docs/specs/SPLIT1.md section 7 | engine/crates/aegis_ui (new), aegis_gui |

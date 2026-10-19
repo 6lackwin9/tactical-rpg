@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aegis_core = { path = "../aegis_core" }
 aegis_data = { path = "../aegis_data" }
 aegis_rules = { path = "../aegis_rules" }
 indexmap = { workspace = true }

@@ -152,7 +152,7 @@ impl Cx {
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.game.as_ref().is_some_and(|g| !aegis_world::json::deep_equal(&g.gs.to_value(), &g.clean))
+        self.game.as_ref().is_some_and(|g| !aegis_core::json::deep_equal(&g.gs.to_value(), &g.clean))
     }
 
     pub fn mark_saved(&mut self, slot: i64) {
@@ -222,15 +222,15 @@ impl Cx {
     }
 
     pub fn world_name(&self, world: &str) -> String {
-        aegis_world::json::s_or(self.data.manifest(world), "name", world)
+        aegis_core::json::s_or(self.data.manifest(world), "name", world)
     }
 
     pub fn location_name(&self, world: &str, loc: &str) -> String {
         if loc.is_empty() {
             return String::new();
         }
-        let hit = if self.data.has_world(world) { self.data.resolve(world, "locations", loc) } else { aegis_world::json::empty() };
-        aegis_world::json::s_or(hit, "name", loc)
+        let hit = if self.data.has_world(world) { self.data.resolve(world, "locations", loc) } else { aegis_core::json::empty() };
+        aegis_core::json::s_or(hit, "name", loc)
     }
 }
 

@@ -1,7 +1,7 @@
 //! Equipment (tiers, wield penalty, mitigation) and Inventory (scripts/core/inventory/).
 
 use crate::stats::{CharacterStats, Proficiency};
-use aegis_data::value::{self, Obj};
+use aegis_core::value::{self, Obj};
 use aegis_data::ItemDef;
 use indexmap::IndexMap;
 

@@ -11,7 +11,7 @@ use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
 use crate::world::{AiProfile, UnitId, World};
-use aegis_data::value::{self, Obj};
+use aegis_core::value::{self, Obj};
 use aegis_data::{Catalog, UnitDef};
 use aegis_rules::status;
 use aegis_rules::{build_unit, Unit};

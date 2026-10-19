@@ -28,6 +28,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "aegis_battle"
 version = "0.1.0"
 dependencies = [
+ "aegis_core",
  "aegis_data",
  "aegis_rules",
  "indexmap",
@@ -49,9 +50,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis_core"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
 name = "aegis_data"
 version = "0.1.0"
 dependencies = [
+ "aegis_core",
  "anyhow",
  "indexmap",
  "serde_json",
@@ -62,6 +72,7 @@ name = "aegis_gui"
 version = "0.1.0"
 dependencies = [
  "aegis_battle",
+ "aegis_core",
  "aegis_data",
  "aegis_host",
  "aegis_rules",
@@ -90,6 +101,7 @@ dependencies = [
 name = "aegis_rules"
 version = "0.1.0"
 dependencies = [
+ "aegis_core",
  "aegis_data",
  "indexmap",
  "serde_json",
@@ -100,6 +112,7 @@ name = "aegis_world"
 version = "0.1.0"
 dependencies = [
  "aegis_battle",
+ "aegis_core",
  "aegis_data",
  "aegis_rules",
  "anyhow",

@@ -1,9 +1,9 @@
 //! StatusRegistry + StatusEffects (scripts/combat/status/): the one status table, stacking, inflicting, round
 //! roll-over. Statuses inflicted this round become active next round; DEFEND buffs (riposte) are active at once.
 
-use crate::rng::GodotRng;
 use crate::stats::roundi;
 use crate::unit::Unit;
+use aegis_core::rng::GodotRng;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,12 +220,12 @@ pub fn grant_extras(target: &mut Unit, extras: &[Value], defend: bool, source: &
     let mut granted = Vec::new();
     for row in extras {
         let Some(o) = row.as_object() else { continue };
-        let status = aegis_data::value::string(o, "status", "");
+        let status = aegis_core::value::string(o, "status", "");
         if status.is_empty() {
             continue;
         }
-        let rounds = aegis_data::value::int(o, "rounds", 1);
-        let magnitude = aegis_data::value::int(o, "magnitude", 0);
+        let rounds = aegis_core::value::int(o, "rounds", 1);
+        let magnitude = aegis_core::value::int(o, "magnitude", 0);
         if defend && defend_buffs().contains(&status.as_str()) {
             grant_now(target, &status, rounds, magnitude, source);
         } else {

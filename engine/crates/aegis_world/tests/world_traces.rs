@@ -5,8 +5,8 @@
 //! (HP, AP, tile, stance, statuses, withdrawn) are compared after every step, the schedule every round, then the outcome.
 
 use aegis_battle::session::{EncounterDef, Phase, Session, StartGrant};
+use aegis_core::json;
 use aegis_world::battle::WorldRoster;
-use aegis_world::json;
 use aegis_world::Data;
 use serde_json::{json, Value};
 use std::path::PathBuf;

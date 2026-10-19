@@ -3,9 +3,9 @@
 //! battle on a `fight` event and calls after_fight; it writes the save on `autosave` (no I/O here).
 
 use crate::data::Data;
-use crate::json::{self, int, Dict};
 use crate::state::{GameState, HOME_WORLD_KEY, NO_POSITION, SUPPLIES_MAX};
 use crate::{dialogue, progression, quest, rolls, travel};
+use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 
 pub type Pos = (i64, i64);
