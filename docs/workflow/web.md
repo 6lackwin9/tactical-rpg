@@ -1,5 +1,10 @@
 # Web build (HTML5, GitHub Pages)
 
+**Retired 2026-10-19 with the Godot build (transition step 2).** This page describes the Godot web export: the preset
+(`export_presets.cfg`) and `.github/workflows/web.yml` are gone from `main` and stay on the `legacy` branch. The Aegis
+engine has no web build yet (a WebAssembly build of `aegis-gui` would be a new task); deploys were already paused
+(decision "Web deploy paused (user 2026-10-17)"). Kept as the record of how the Godot build was published.
+
 A browser build for cross-platform testing and porting checks (user 2026-10-17). It is a release build and less debug-friendly than the desktop runner; playtesting and debugging stay on desktop.
 
 ## How it is built

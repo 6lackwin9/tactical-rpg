@@ -1,18 +1,21 @@
 # Game Brief (agent-facing: read this instead of crawling the codebase)
 
-Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules engines are `RefCounted` (no scene dependency); scenes only render and call them.
+Tactical RPG on its own Rust engine, Aegis (`engine/`, since 2026-10-19), fully headless-testable: the rules live in library crates, the GUI only draws and sends command-API requests. The Godot 4.7 build it replaced is frozen in `legacy/` and is the parity reference.
+
+How to read the rest of this brief: the rules, numbers and system notes below were written against the Godot build and still hold, because the engine ports them step for step under the same names (`DamageCalculator` -> `aegis_rules::damage`, `CombatPlan` -> `aegis_battle::plan::Plan`, `ContentCatalog` -> `aegis_world::source` / `store`). A Godot class or `.gd` path below is found in the engine through the file table in `engine/docs/PORT_NOTES.md`; the Godot file itself is under `legacy/`. Godot-only tools named below (`ContentCatalog.upsert` seeds, `tools/fc.sh run`, scenes, suites in `scripts/tests/`) are replaced by `aegis content`, `aegis battle` / `aegis serve` and `engine/crates/*/tests/`.
 
 ## Layers (who owns what)
 
 | Layer | Owns | Entry points |
 | --- | --- | --- |
-| Base catalog (lore-free) | skills, items, passives, classes, units, encounters as JSON | `scripts/content/` (`ContentCatalog` store+validation, `ContentSchema` field defs, `ContentFactory` JSON -> engine objects), data in `data/catalog/*.json` |
-| World layer (lore) | worlds, regions, locations, factions, characters, named items, disciplines, quests, lore, encounters; inheritance between worlds | `scripts/world/` (`WorldCatalog`, `WorldSchema`, `WorldFactory`), data in `data/worlds/<id>/` |
-| Rules/specs | stat rules, classes, proficiency, passives, character stats | `scripts/core/specs/` |
-| Combat core | Combatant, damage formula, statuses, inventory/equipment | `scripts/core/combat/`, `scripts/core/inventory/`, `scripts/combat/status/` |
-| Planning + resolution | sequence planner, block resolver, AI, session | `scripts/combat/planning/` (`CombatPlan`, `SkillCatalog`), `actions/`, `ai/`, `session/` (`CombatSession`, `CatalogEncounter`, `WorldEncounter`) |
-| UI | arena panels, forges, dojo, runner | `scripts/ui/*`, scenes in `scenes/` |
-| Tests | headless suites | `scripts/tests/*`, dojo checks in `scenes/dojo/dojo_assertions.gd` (+ `dojo_session_assertions.gd`, `dojo_ui_assertions.gd`) |
+| Base catalog (lore-free) | skills, items, item families, passives, classes, units, encounters, terrain as JSON (`data/catalog/`) | loader `engine/crates/aegis_world/src/source.rs` (ContentCatalog read path, ContentSchema normalize with `engine/data/schema.json`, SkillRanks, ItemModifiers), writer `store.rs` (`aegis content`), typed rows `engine/crates/aegis_data/` |
+| World layer (lore) | worlds, regions, locations, factions, characters, named items, disciplines, quests, lore, encounters, loot, dialogues, shops, routes; inheritance between worlds (`data/worlds/`) | `aegis_world/src/data.rs` (WorldCatalog lineage, merged, resolve), `source.rs` / `store.rs`, `battle.rs` (WorldFactory character units) |
+| Rules/specs | stat rules, classes, proficiency, passives, character stats, gear, statuses, damage, Godot RNG and hash | `engine/crates/aegis_rules/src/` |
+| Planning + resolution | grid, paths, sequence planner, block resolver, commands, AI, encounter rules (objectives, phases, morale), session, sim | `engine/crates/aegis_battle/src/` (`plan.rs`, `resolver.rs`, `command.rs`, `ai.rs`, `encounter.rs`, `session.rs`, `sim.rs`) |
+| Game loop | game state, saves, new game, progression, exploration, quests, dialogue, shops, travel, purse, battle bridge | `engine/crates/aegis_world/src/` |
+| Command API | battle requests (state, plan, probe, confirm, step, items, ...) for CLI, GUI and tests | `engine/crates/aegis_host/`; CLI `aegis` in `engine/crates/aegis_cli/` |
+| UI | every screen and the dev tools (Scene Runner, Content and World Forge viewers, Gear Dojo), agent link | `engine/crates/aegis_gui/src/` (`engine/docs/SCREENS.md`) |
+| Tests | integration tests, most replaying the Godot reference | `engine/crates/*/tests/` (`engine/docs/PORT_NOTES.md` "Parity status") |
 
 ## Core rules (numbers that tests depend on)
 
@@ -34,7 +37,7 @@ Godot 4.7 tactical RPG, GDScript, strictly typed, fully headless-testable. Rules
 
 ## Where to look for X
 
-- Add/edit content data: `ContentCatalog.upsert` (never hand-edit JSON). Fields: `content_schema.gd` (API; tables in `SkillFields`, `ItemFields`, `ClassUnitFields`, `scripts/content/*_fields.gd`). Validation: dispatch in `content_catalog.gd` (`validate_entry`, `warnings_for`); rules per kind in `scripts/content/validators/` (`ClassUnitValidator.class_errors`/`unit_errors`, `ItemValidator.item_errors`, `SkillValidator.entry_errors`). Attack power has one source: `DamageCalculator.attack_power`. Skill hand/grade: `SkillDef.is_off_hand()`, `SkillDef.grade`.
+- Add/edit content data: `aegis content` (upsert, remove, `apply` a JSON seed; never hand-edit JSON; skill `patch-and-seed`). Fields: `engine/data/schema.json` (Godot's tables: `content_schema.gd`, `SkillFields`, `ItemFields`, `ClassUnitFields`). Godot-era detail of this bullet (validation dispatch): Validation: dispatch in `content_catalog.gd` (`validate_entry`, `warnings_for`); rules per kind in `scripts/content/validators/` (`ClassUnitValidator.class_errors`/`unit_errors`, `ItemValidator.item_errors`, `SkillValidator.entry_errors`). Attack power has one source: `DamageCalculator.attack_power`. Skill hand/grade: `SkillDef.is_off_hand()`, `SkillDef.grade`.
 - Battle report / per-unit fight numbers (BREPORT1): `scripts/combat/session/battle_metrics.gd` (counting, live attach with round checkpoints), `battle_report.gd` (report dict, columns, best moment); the sim's `tools/sim/sim_metrics.gd` extends it (KPI table only). BattleMetrics credits each applied status to its recorded applier (STATCRED1); unsourced statuses go to the entry's actor, boss-phase grants to their enemy recipient, and statuses applied after a round's last entry are credited when the round ends. Potion heals count as the target's heal_received only, not the user's heal_done.
 - Enemy morale (MORALE1): encounter fields `morale`, `morale_break`, `morale_leader`, `morale_groups`, `morale_text` (catalog and world); validator, leader rule and viewer summary in `scripts/combat/session/encounter_morale.gd` (`EncounterMorale.problems`, `leader_ref`, `groups_of`, `summary`); runtime `EncounterMorale.create` / `block_end` / `state_for` / `flee_for` / `crit_events`; `CatalogEncounter.on_block_end` (break and surrender via `CombatGrid.withdraw_in_place`), `on_action_resolved` (crit hook from `CombatSession._step_resolution`), `is_fearless`, `morale_state_of`, `morale_group_of`, `flee_ratio_of`; state in `objective_state()["morale"]`; intent fields `morale_state` / `morale_group`.
 - Encounter purse (PURSE1): encounter field `purse` {`gold_min`, `gold_max`, `loot`, `once`} (catalog and world, default `{}`); `PurseRules.GOLD_CAP` 500 (spec PURSE_GOLD_CAP), `GOLD_SOFT_CAP` 100; `read`, `problems`, `warnings`, `world_loot_check` in `scripts/exploration/purse_rules.gd` (`PurseRules`), called from `ContentCatalog._encounter_errors` / `warnings_for` and `WorldCatalog._encounter_errors` / `encounter_warnings`; runtime `PurseRules.roll` (pure; seed `("qid|time|paid").hash()`) / `pay` (from `BattleBridge.apply` on won; result `purse` {gold, loot, notes}) / `result_keys` (top-level `gold` / `loot` in `ExploreRunner` / `TravelRunner` / `DialogueRunner.after_fight`); state `GameState.purses` {encounter qid: wins} (save v10).

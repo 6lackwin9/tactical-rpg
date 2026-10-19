@@ -11,6 +11,12 @@ param (
 )
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+# A linked worktree (.git is a file) builds into its own folder, so parallel lanes never share cargo's build lock or
+# overwrite each other's binaries (engine/.cargo/config.toml names one folder for every checkout).
+if (-not $env:CARGO_TARGET_DIR -and (Test-Path (Join-Path $projectRoot ".git") -PathType Leaf)) {
+    $base = (Select-String -Path (Join-Path $projectRoot "engine\.cargo\config.toml") -Pattern '^target-dir = "(.*)"').Matches[0].Groups[1].Value
+    $env:CARGO_TARGET_DIR = "$base-$(Split-Path -Leaf $projectRoot)"
+}
 Set-Location (Join-Path $projectRoot "engine")
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {

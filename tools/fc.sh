@@ -14,6 +14,12 @@
 # Build output: engine/.cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 status=0
+# A linked worktree (.git is a file) builds into its own folder, so parallel lanes never share cargo's build lock or
+# overwrite each other's binaries (engine/.cargo/config.toml names one folder for every checkout).
+if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f .git ]; then
+  base=$(sed -n 's/^target-dir = "\(.*\)"/\1/p' engine/.cargo/config.toml)
+  export CARGO_TARGET_DIR="${base}-$(basename "$PWD")"
+fi
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).

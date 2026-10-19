@@ -61,9 +61,10 @@ because the RNG is bit-exact.
   ones (677 fights, about 8 s).
 - Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
   goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).
-- Windows Smart App Control sometimes blocks a built binary (`os error 4551` from cargo test, "Permission denied" from
-  Git Bash), also one that ran before: touching the test file (or deleting the exe) relinks it and the next run
-  usually passes; `aegis-gui.exe` that Git Bash cannot start still starts with PowerShell `Start-Process`.
+- Until 2026-10-19 Windows Smart App Control blocked built binaries at random (`os error 4551` from cargo test,
+  "Permission denied" from Git Bash), also ones that ran before; relinking helped only sometimes, PowerShell
+  `Start-Process` started a GUI build cmd could not. The user turned it off on 2026-10-19 (decision "Smart App Control
+  off"); the gates still relink a blocked test exe in case it is turned on again (skill `known-issues`).
 
 ## Game loop (aegis_world, 2026-10-19)
 

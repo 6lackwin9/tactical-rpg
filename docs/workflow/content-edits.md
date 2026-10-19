@@ -6,7 +6,7 @@ How game content (skills, items, classes, units, passives, encounters, world dat
 
 1. **Ask in plain words**, in the project chat or the matching area thread: "the archer hits too hard at range", "add a fire sword for act 1", "make the skirmisher flee earlier". The project chat routes it to the area thread (Balance for numbers, Assets & Audio for data rows, Gameplay for behaviour, Design for new ideas).
 2. **The thread sorts it** as a small tweak or new content (rules below).
-3. **Small tweak**: the asset-builder edits the data through `ContentCatalog.upsert` (a seed script, never raw JSON), the validation tests and the gate catch bad values, and the change lands on `develop` like any task. The thread's reply carries a before/after table of the changed fields, plus sim numbers when the sim rule below applies.
+3. **Small tweak**: the asset-builder edits the data through `aegis content` (an upsert or a JSON seed, never raw JSON), the writer's validation and the gate catch bad values, and the change lands on `develop` like any task. The thread's reply carries a before/after table of the changed fields, plus sim numbers when the sim rule below applies.
 4. **New content**: the design-brainstorm agent writes a short spec (what it is, numbers, where it appears), the thread posts it as one approval card, and building starts on approval. Data-only additions go to the asset-builder; anything needing new engine behaviour adds a logic task first.
 5. **Review in the game**: the user checks results in the read-only viewers (Scene Runner) or the itch.io build after the next release, not in the files.
 6. **Undo**: "undo that" means the thread reverts that task's squash commit on `develop` (`git revert`, never a force push) and says which commit it reverted; if the change already reached `main`, the revert ships with the next release.
@@ -25,10 +25,10 @@ When unsure, treat it as new content. Design or gameplay questions always go to 
 
 ## When a sim run is required
 
-The balance agent runs `tools/fc.sh sim` before landing when a tweak changes a balance-relevant value of a unit, class, skill, item or passive used in combat: damage, healing, HP, armor, speed or movement, range, cost, cooldown, status magnitude or duration, gear budget, or AI thresholds. Use the smallest mode that covers it (`duel` or `tier` for one unit or class, `party` or `role` for a skill or item shared by many), and put the before/after numbers in the reply. Text, icons, prices, drop weights and encounter placement need no sim. Systems not yet `balance-ready` (`docs/ROADMAP.md`) skip the sim and say so.
+The balance agent runs `tools/fc.sh sim duel` before landing when a tweak changes a balance-relevant value of a unit, class, skill, item or passive used in combat: damage, healing, HP, armor, speed or movement, range, cost, cooldown, status magnitude or duration, gear budget, or AI thresholds, and puts the before/after numbers in the reply. Only the duel mode exists on the engine so far; a tweak that needs another mode (`tier`, `party`, `role`) says so and waits for that mode's port (a logic task). Text, icons, prices, drop weights and encounter placement need no sim. Systems not yet `balance-ready` (`docs/ROADMAP.md`) skip the sim and say so.
 
 ## Rules
 
-- Agents edit content only through `ContentCatalog.upsert` seed scripts; the tools never save (TOOLS-RO).
-- Every save-time check the old tools ran is a test or gate check, so a bad value fails the gate, not the review.
+- Agents edit content only through `aegis content` (upsert, remove, `apply` of a JSON seed in `data/seeds/`); the viewers never save (TOOLS-RO).
+- Every save-time check the old tools ran is a writer check, a test or a gate check, so a bad value fails the gate, not the review. Checks the Godot Forge ran that the engine writer does not run yet (skill validator details, gear budget warnings, world reference rules) are listed in `engine/docs/PORT_NOTES.md` "Data writer"; reviewers check those by hand meanwhile.
 - One request is one task with one before/after table; the commit lines are the usual ones (`cloud.md` "Landing a task on `develop`").

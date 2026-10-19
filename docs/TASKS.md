@@ -2,6 +2,8 @@
 
 Statuses: `idea` (brainstorm only), `spec` (spec written, awaiting approval), `approved`, `in-progress`, `review`, `done`. Lanes: `logic`, `asset`, `design`, `balance`. A task may start when everything in `Depends on` is `done` (schema-first tasks release their asset lane as soon as the schema slice is merged). Done rows move to `docs/archive/TASKS_DONE.md` (cloud: as a `Done:` line in the task commit, written by the Merge & Release thread; decision "Shared logs"). An `in-progress` row names its branch in the Status cell, so either environment can resume it (`docs/workflow/README.md`).
 
+Transition to the Aegis engine (2026-10-19, decision "Engine transition (user 2026-10-19)"): rows written before it name Godot paths in Touches and specs (`scripts/**`, `scenes/**`, `.gd` files, `project.godot`). Those files are frozen in `legacy/`; the rules they name are ported to the engine (map: `engine/docs/PORT_NOTES.md`). When a row is picked up, the planner re-scopes its Touches and spec to the engine first (UI rows may need the engine screen they touch, `engine/docs/SCREENS.md`); statuses did not change.
+
 | Id | Title | Lane | Depends on | Status | Spec | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
 | UIR-3B | Character popup Gear tab leftovers from UIR-3: derived-stat delta (green/red) when a stash item is selected, item descriptions in the detail pane (needs a `{tierN.x}` template renderer) | logic | UIR-3 | approved (user 2026-10-17, UI-REVIEW1 all recs) | docs/specs/UI_REVIEW1.md section 2 Gear | scripts/ui/menus/{gear_view,gear_model,character_view}.gd, party_screen_test_suite |

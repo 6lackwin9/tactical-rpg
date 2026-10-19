@@ -1,9 +1,9 @@
 #!/bin/bash
-# SessionStart hook for Claude Code cloud sessions: installs the tools the commit gate needs
-# (Godot 4.7 Linux editor binary and PowerShell 7) so check_project.ps1 and tools/fc.sh run.
-# Local (Windows) sessions skip it. Idempotent: every step is skipped when already done, so
-# when the cloud environment's setup script already installed the tools (preferred: done once
-# and cached), this hook only links godot, exports $GODOT and imports a fresh checkout.
+# SessionStart hook for Claude Code cloud sessions: installs the tools the commit gate needs (Rust stable for the Aegis
+# engine; Godot 4.7 Linux editor binary for the parity reference in legacy/; PowerShell 7 for check_project.ps1) so
+# tools/fc.sh gate and check_project.ps1 run. Local (Windows) sessions skip it. Idempotent: every step is skipped when
+# already done, so when the cloud environment's setup script already installed the tools (preferred: done once and
+# cached), this hook only links godot, exports $GODOT and imports a fresh legacy/ checkout.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
@@ -18,6 +18,22 @@ SUDO=""
 
 log() { echo "[session-start] $*" >&2; }
 
+# --- Rust (rustup, stable): the engine gate ----------------------------------
+# engine/rust-toolchain.toml pins the desktop's Windows toolchain, and engine/.cargo/config.toml a Windows target
+# folder: on Linux both are overridden through the environment.
+if ! command -v cargo >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/cargo" ]; then
+  log "installing Rust (stable)"
+  curl -fsSL --retry 3 https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1 || \
+    log "WARNING: could not install Rust (sh.rustup.rs / static.rust-lang.org blocked?); the gate cannot run until cargo exists"
+fi
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  {
+    echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\""
+    echo "export RUSTUP_TOOLCHAIN=stable"
+    echo "export CARGO_TARGET_DIR=\"${CLAUDE_PROJECT_DIR:-$PWD}/engine/target\""
+  } >> "$CLAUDE_ENV_FILE"
+fi
+
 # --- PowerShell 7 (Microsoft apt repo) ---------------------------------------
 if ! command -v pwsh >/dev/null 2>&1; then
   log "installing PowerShell"
@@ -30,17 +46,18 @@ if ! command -v pwsh >/dev/null 2>&1; then
   $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y -qq powershell >/dev/null
 fi
 
-# --- Rendering a game window off-screen (Xvfb + Mesa software OpenGL) --------
-# Lets a session run the game for real and screenshot it:
-#   xvfb-run -s "-screen 0 1280x720x24" godot --rendering-driver opengl3 ...
+# --- Rendering a game window off-screen (Xvfb + Mesa software Vulkan / OpenGL) ---
+# Meant to let a session run aegis-gui and screenshot it through its agent link (not yet tried in a cloud container;
+# wgpu needs Mesa's software Vulkan or OpenGL there):
+#   xvfb-run -a -s "-screen 0 1280x720x24" "$CARGO_TARGET_DIR/release/aegis-gui" screen=runner
 if ! command -v xvfb-run >/dev/null 2>&1; then
   log "installing Xvfb and Mesa"
   $SUDO apt-get update -qq >/dev/null
   $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-    xvfb xauth libgl1-mesa-dri libglx-mesa0 libxcursor1 libxinerama1 libxi6 libxrandr2 >/dev/null
+    xvfb xauth libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers libxcursor1 libxinerama1 libxi6 libxrandr2 libxkbcommon-x11-0 >/dev/null
 fi
 
-# --- Godot editor (official Linux build) -------------------------------------
+# --- Godot editor (official Linux build): the frozen reference in legacy/ ------
 if [ ! -x "$GODOT_BIN" ]; then
   log "installing Godot ${GODOT_VERSION}"
   name="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
@@ -56,8 +73,8 @@ if [ ! -x "$GODOT_BIN" ]; then
   if [ "$ok" -ne 1 ]; then
     rm -rf "$tmp"
     log "WARNING: could not download Godot (github.com release assets and downloads.godotengine.org"
-    log "         are blocked by this environment's network policy). Allow one of those hosts in the"
-    log "         cloud environment's network settings; the gate cannot run until Godot is installed."
+    log "         are blocked by this environment's network policy). The engine gate still runs; the Godot parity"
+    log "         reference (tools/fc.sh parity, engine/parity/*.sh) needs one of those hosts allowed."
     exit 0
   fi
   python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$tmp/godot.zip" "$tmp"
@@ -66,18 +83,18 @@ if [ ! -x "$GODOT_BIN" ]; then
   rm -rf "$tmp"
 fi
 
-# check_project.ps1 looks for `godot` on PATH; tools/fc.sh reads $GODOT.
+# engine/parity/*.sh read $GODOT (else godot on PATH).
 $SUDO ln -sf "$GODOT_BIN" /usr/local/bin/godot
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export GODOT=\"${GODOT_BIN}\"" >> "$CLAUDE_ENV_FILE"
 fi
 
-# First headless editor run imports assets and builds .godot/ (class cache), which the parse
-# and suite runs need. Only on a fresh checkout.
-if [ ! -d "${CLAUDE_PROJECT_DIR:-.}/.godot" ]; then
-  log "importing project (first run)"
-  (cd "${CLAUDE_PROJECT_DIR:-.}" && timeout 300 "$GODOT_BIN" --headless --import >/dev/null 2>&1) || \
-    log "WARNING: initial import exited non-zero; run check_project.ps1 -Fast to see why"
+# The parity tools run the frozen Godot copy in legacy/; its first headless run builds legacy/.godot (class cache).
+LEGACY="${CLAUDE_PROJECT_DIR:-.}/legacy"
+if [ -f "$LEGACY/project.godot" ] && [ ! -d "$LEGACY/.godot" ]; then
+  log "importing legacy/ (first run)"
+  timeout 300 "$GODOT_BIN" --headless --path "$LEGACY" --import >/dev/null 2>&1 || \
+    log "WARNING: initial import of legacy/ exited non-zero; run engine/parity/export.sh to see why"
 fi
 
-log "ready: $("$GODOT_BIN" --version 2>/dev/null | head -1), $(pwsh -v)"
+log "ready: $("$GODOT_BIN" --version 2>/dev/null | head -1), $(pwsh -v), $("$HOME/.cargo/bin/cargo" --version 2>/dev/null || cargo --version 2>/dev/null || echo 'no cargo')"

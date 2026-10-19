@@ -1,23 +1,25 @@
 ---
 name: patch-and-seed
-description: Safe editing recipe for this Godot project. Use when changing code in several places or changing catalog/world data (classes, units, items, skills, passives).
+description: Safe editing recipe for the Aegis project. Use when changing engine code in several places or changing game data (classes, units, items, skills, passives, encounters, terrain, maps, quests, services, world entries).
 ---
 
 # Patch and seed
 
 ## Code edits
 
-- Use the Edit tool for exact single/multi-site changes; Write for new files. Do not use sed line ranges or shell heredocs containing GDScript strings (newline/escape corruption).
-- If many sites need the same change, a patch script (`extends SceneTree`, run via `tools/fc.sh run script.gd`) is fine, but every `find()` must be checked for -1 before slicing and the script must print `MISSING:` for unmatched text. Verify with `git diff --stat`.
-- After edits: `tools/fc.sh parse`, then `tools/fc.sh arena` or `dojo`.
+- Use the Edit tool for exact single/multi-site changes; Write for new files. Do not use sed line ranges, and do not write Rust or JSON through shell heredocs whose quoting can eat characters (backticks and `$` in `node -e "..."` / `bash -c "..."` strings are expanded by the shell).
+- If many sites need the same change, a small patch script is fine (Node in the scratchpad: read the file, replace each exact old text, print `MISSING:` and exit non-zero when one is not found, write once). Verify with `git diff --stat` and `tools/fc.sh build`.
+- After edits: `tools/fc.sh build`, then `tools/fc.sh test <filter>` for what you touched (skill `engine-checklist`).
 
-## Data edits (catalog or worlds)
+## Data edits (catalog, game data, worlds)
 
-- Shipped data changes go in an idempotent seed `data/seeds/<task>.gd` (left in the repo for the planner to re-run after a rebase). The scratchpad is only for throwaway experiments, never for shipped data.
-- The seed calls `ContentCatalog.reload_from_disk()`, `ContentCatalog.upsert(kind, entry)` per entry in dependency order (items, skills, passives, classes, units, encounters), prints any returned errors, then `validate_all()` (must print `{}`) and `save_all()` (0). System assets are edited inside `begin_system_edit()` / `end_system_edit()`.
-- Upsert is idempotent (replaces same id). Class/unit rules (`StatRules`, proficiency, SK2 unlock levels) are enforced: read the error, fix the data, do not loosen the rule.
-- World, quest, map and asset data use their own catalogs the same way (`WorldCatalog`, `QuestCatalog`, `MapCatalog`, `AssetCatalog`). Never hand-edit JSON.
+- Shipped data changes go through the engine's writer, never by hand: `aegis content upsert | remove`, or a seed `data/seeds/<task>.json` run with `aegis content apply` (left in the repo for the planner to re-run after a rebase; it is idempotent because an upsert replaces the entry with the same id). From `engine/`: `cargo run -q -p aegis_cli -- content <...>`; anywhere: `tools/fc.sh content <...>`.
+- A seed is `{"steps": [...]}`, one step per entry in dependency order (item families, items, skills, passives, classes, units, encounters; worlds after the catalog entries they use): `{"op": "upsert", "kind": "units", "entry": {...}}`, `{"op": "upsert", "kind": "lore", "world": "ashlands", "entry": {...}}`, `{"op": "remove", "kind": "units", "id": "..."}`; optional `"replace": "<old id>"` renames. Apply stops at the first failing step; earlier steps stay written, so fix and re-run.
+- Entries are given in their stored shape, as the data files hold them: a skill is one ranked entry (base fields plus `ranks` modifiers; ids, names and tiers of the ranks are derived), an item is `family` plus `modifiers` and `tiers` (the flat numbers are derived from the family). Print the current entry first (`data/catalog/<kind>.json`) and change only what the task asks.
+- Kinds: `classes`, `units`, `skills`, `items`, `item_families`, `passives`, `encounters`, `terrain`, `maps`, `quests`, `services`, and with `world=<id>` every world kind (`regions`, `locations`, `factions`, `characters`, `items`, `disciplines`, `quests`, `lore`, `encounters`, `loot`, `dialogues`, `shops`, `routes`).
+- The writer validates (id, name, enum options, references) and keeps a change only when the whole data folder still loads cleanly; otherwise it puts the file back and prints why. Read the error, fix the data, do not loosen a rule. Finish with `tools/fc.sh content check` (`data ok`).
+- Not covered by the writer yet: the asset manifest (`data/assets/manifest.json`) and world manifests (`world.json`). Changing them is a schema gap: report it to the planner instead of editing the file.
 
 ## Tests after data changes
 
-- Numbers in tests derive from rules; print real values with a scratch script before changing an expectation (the dojo checks derive the warrior's damage from `DamageCalculator`).
+- Numbers in tests derive from rules; print real values (`aegis battle <encounter> seed=N log`, `aegis serve` requests) before changing an expectation. The Godot parity suites read `legacy/data` and the frozen traces, so a data edit in `data/` never changes them; `tests/store.rs` checks the live `data/` loads and its references resolve.

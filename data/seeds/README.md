@@ -1,8 +1,17 @@
 # Seeds
 
-Idempotent `ContentCatalog.upsert/remove` scripts that author game data. Rule: a seed leaves this folder in the cleanup pass after its task is merged (git history keeps it).
+Idempotent data edits that author game data, applied with the engine's writer (since 2026-10-19):
+`aegis content apply data/seeds/<task>.json` (or `tools/fc.sh content apply ...`). A seed is
+`{"steps": [{"op": "upsert", "kind": "<kind>", "entry": {...}, "world": "<id>"?, "replace": "<old id>"?}, {"op": "remove", "kind": "<kind>", "id": "<id>"}]}`,
+steps in dependency order; format, kinds and rules: skill `patch-and-seed`. Rule: a seed leaves this folder in the
+cleanup pass after its task is merged (git history keeps it).
 
-## Archived seeds (CLN-2)
+The Godot-era seeds (`ContentCatalog.upsert` GDScript, `.gd`) ran on the Godot build; their effect is in the data, and
+the files are frozen in `legacy/data/seeds/` (and in git history). The tables below index them as they were.
+
+## Godot-era seeds
+
+### Archived seeds (CLN-2)
 
 Restore with `git show <hash>:data/seeds/<file>`.
 
@@ -23,7 +32,7 @@ Restore with `git show <hash>:data/seeds/<file>`.
 
 Example: `git show 11ffe67:data/seeds/c1a1.gd`
 
-## Active seeds
+### Seeds active when the Godot build was frozen (applied; files in `legacy/data/seeds/`)
 
 | Seed | Task |
 | --- | --- |

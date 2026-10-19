@@ -1,36 +1,42 @@
 # Workflow: build, test, iterate
 
+Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-era version of this page is in
+`legacy/docs/WORKFLOW.md`. The agent run log below is append-only and keeps its Godot-era rows.
+
 ## Bottlenecks seen so far and the fix
 
 | Bottleneck | Fix |
 | --- | --- |
-| Re-reading the codebase for context | `docs/GAME_BRIEF.md`, `ROADMAP.md`, `DECISIONS.md` (indexed from CLAUDE.md; index plus `docs/decisions/<system>.md`, read only the targeted system's file) |
-| Full check takes minutes and floods output | `tools/fc.sh`: `parse` (changed files only), `arena`/`dojo` (failures first), `run <script>` (scratch debug) |
-| Failures re-debugged from scratch | `godot-debug-checklist` skill known-issues table; add every new cause |
-| Ad-hoc patch scripts truncating files / data edits by hand | `patch-and-seed` skill: Edit tool for text, `ContentCatalog.upsert` scripts for data |
-| Stale IDE diagnostics after new `class_name` files | `tools/fc.sh parse` refreshes the class cache automatically |
-| Test numbers hard-coded, break on every data change | Derive expectations from rules/formulas; print real values first |
+| Re-reading the codebase for context | `docs/GAME_BRIEF.md`, `ROADMAP.md`, `DECISIONS.md` (indexed from CLAUDE.md; index plus `docs/decisions/<system>.md`, read only the targeted system's file); `engine/docs/PORT_NOTES.md` maps each Godot file to its engine module |
+| Full check floods output | `tools/fc.sh`: `build` (errors and warnings first), `test <filter>` (summary and failures only), `gate` (build + every test, ~30 s warm) |
+| Failures re-debugged from scratch | `known-issues` skill table; add every new cause |
+| Ad-hoc patch scripts truncating files / data edits by hand | `patch-and-seed` skill: Edit tool for text, `aegis content` (upsert, remove, JSON seeds) for data |
+| Test numbers hard-coded, break on every data change | Derive expectations from rules or the Godot reference; print real values first (`aegis battle ... log`, `aegis serve`) |
+| A rule change silently drifting from the released game | The Godot parity suites replay the frozen Godot build step for step; an intended divergence goes to the user (CLAUDE.md "Godot parity") |
 | Guessing at design/balance | Ask the user (options + trade-offs) after 2 failed fixes or any design choice |
 | Markdown lint warnings (MD060, MD022, MD032, MD012) | Pad table pipes (`\| --- \|`), single blank lines around headings/lists, no consecutive blanks |
 
 ## Loop for a change
 
 1. Read the brief; look up the relevant system in "Where to look for X".
-2. Edit (Edit tool; data via `ContentCatalog.upsert` seed script run with `tools/fc.sh run`).
-3. `tools/fc.sh parse`, then `tools/fc.sh arena` (or `dojo`); fix from the compact failure list.
-4. Before commit: `check_project.ps1 -Fast -Quiet` and `tools/fc.sh docs` clean, README + docs updated; on desktop also IDE Problems tab 0 errors/warnings (markdownlint compliant). Desktop vs cloud steps: `docs/workflow/`.
+2. Edit (Edit tool; data via `aegis content`, skill `patch-and-seed`).
+3. `tools/fc.sh build`, then `tools/fc.sh test <filter>`; fix from the compact failure list.
+4. Before commit: `check_project.ps1 -Fast -Quiet` (or `tools/fc.sh gate`) and `tools/fc.sh docs` clean, READMEs + docs updated; on desktop also IDE Problems tab 0 errors/warnings (markdownlint compliant). Desktop vs cloud steps: `docs/workflow/`.
 
 ## Agents and tools (built)
 
-(Skills: godot-debug-checklist, patch-and-seed, planner. Agents: design-brainstorm, logic-builder, asset-builder, balance, change-reviewer, housekeeper.)
+(Skills: engine-checklist, known-issues, rust-conventions, patch-and-seed, planner, planner-ops, pc-launch, patch-notes-write. Agents: design-brainstorm, logic-builder, asset-builder, balance, change-reviewer, housekeeper.)
 
 | Tool | Use |
 | --- | --- |
-| `tools/fc.sh parse / arena / dojo / run / sim / all / gate` | Compact checks and scratch scripts (see header of the script); `gate` is the commit gate in bash for Linux or cloud machines without PowerShell |
-| `tools/balance_sim.gd` (via `fc.sh sim duel\|tier\|levels [level]`) | Headless AI-vs-AI win-rate tables, sides swapped, 3 seeds. Duel at one level takes about 90 s |
+| `tools/fc.sh build / test / gate / clippy / docs / content / sim / parity` | Compact checks, data edits, the sim and the Godot reference (see the header of the script); `gate` is the commit gate in bash, `check_project.ps1` the same in PowerShell |
+| `aegis` (`engine/crates/aegis_cli`; `cargo run -q -p aegis_cli -- ...` in `engine/`) | `sim duel [level] [seeds]` (balance table, about a second per level), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `aegis-gui`), `content` (edit `data/`) |
+| `engine/parity/*.sh` (`tools/fc.sh parity`) | Record the frozen Godot build's reference from `legacy/` (exports, battle and world traces, journeys) for the parity suites; needs Godot 4.7.2 |
 | Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
-| Agent `change-reviewer` | Pre-commit review: fast checks, strict typing, docs/README, known-issues match; read-only |
-| Skills `godot-debug-checklist`, `patch-and-seed` | Known issues and safe editing |
+| Agent `change-reviewer` | Pre-commit review: the gate, code patterns, docs/README, known-issues match; read-only |
+| Skills `engine-checklist`, `known-issues`, `patch-and-seed` | Edit checklist, known issues and safe editing |
+
+The Godot build's sim (`tools/balance_sim.gd`, modes duel, tier, levels, group, party, role, sweep, campaign) stays in `legacy/`; only `duel` is ported (`aegis sim duel`, step for step against it).
 
 Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserker 80%, brawler 53%, scout 47%, ranger 20%, shaman 0% (cannot beat a minion of itself: stalemates). Hero loses 1v3 minions and 1v1 bosses; elite = mirror (50%). These are open balance questions, not decisions.
 

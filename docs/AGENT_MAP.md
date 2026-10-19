@@ -6,11 +6,17 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 Desktop: the planner keeps this section current. Cloud: the project's area-thread list is the live view (one standing thread per area, `docs/workflow/cloud.md` "Area threads"), so this section changes only at a handover between environments (`docs/workflow/README.md`); merged cloud tasks still get a finished-runs line.
 
-Dispatch mode: **standard**. No agents running (wind-down 2026-10-17 for the move to a cloud instance).
+No agents running (2026-10-19, desktop): the transition to the Aegis engine (steps 1-3) was done in one desktop engine session without lane agents; dispatch mode **interactive** (planner-ops). Before it: dispatch mode: **standard**. No agents running (wind-down 2026-10-17 for the move to a cloud instance).
 
 Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-2, CLN-1/2/4/5/10/11/15, AI2 (diagnosis), PLAN1, M4-L + M4-A, QUEST2, EXP1-L (commits 1-3) + EXP1-A, ITEM1-L (commits 1-3) + ITEM1-A, CLASS1-L + CLASS1-M, DLG1-L (commits 1-2) + DLG1-A, S14-L1 (commits 1-2). Open next: S14-L1 commit 3, S14-L2/L3, TRAV1, REP1, UI1-3, S12S/T/C, BAL3 spec (from BAL2-R), CLN-12/13/16, CLN-3b.
 
 ## Finished, by milestone (newest first)
+
+### Transition to the Aegis engine (2026-10-19, desktop engine session)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| main session (no lane agents) | engine battle items, data loader, transition steps 1-3 | - | `legacy/` + branch `legacy` (7fa10da), engine merged into `main` (e3f4d71), process docs switched |
 
 ### COMBAT-UI3-F: drafts fill empty blocks, hostile HP beside name, compact strip labels (2026-10-18, cloud)
 

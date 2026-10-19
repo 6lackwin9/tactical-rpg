@@ -1,5 +1,7 @@
 # Roadmap (agent-facing, high level)
 
+Transition (2026-10-19): the game now runs on the Aegis engine (Rust, `engine/`); `done` systems were built in the Godot build and reached step-for-step parity in the engine (`engine/docs/PORT_NOTES.md`, exceptions in `engine/docs/SCREENS.md` "Known gaps" and the balance sim's unported modes). Engine milestones and the transition itself: `engine/docs/ENGINE_SPEC.md`.
+
 Single source of truth for scope and status. Detailed per-system checklists remain in README "Roadmap". Do not delete entries: change the status and add the reason (see `docs/HISTORY.md` for deprecated ideas). Decided brainstorm options, answered questions and done plans (2026-10-15 brainstorm pass, plan v2, R1) are archived verbatim in `docs/archive/ROADMAP_2026-10.md` (CLN-11).
 
 **Status values**: `done` (implemented, tested) | `balance-ready` (done and frozen: the balance agent may fine-tune it) | `in-progress` (a milestone is building it) | `approved` (milestone approved by the user, not started) | `proposed` (idea from brainstorm, not approved) | `placeholder` (folder reserved in `docs/STRUCTURE.md`, nothing built) | `deprecated` (kept for history; see HISTORY.md).

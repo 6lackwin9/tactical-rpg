@@ -239,6 +239,24 @@ Step 2 (2026-10-19, user go-ahead): the code and tooling switch to Aegis.
 - Left for step 3 (process): `CLAUDE.md`, `.claude/` agents and skills, `.agents/rules`, `docs/workflow/*` (cloud and
   desktop flow, web deploy), `docs/STRUCTURE.md`, `data/seeds/README.md`, `assets/README.md`, and `develop` (still the
   pre-engine Godot branch with the SPRITE1-A work in progress).
+- Merged: `engine` fast-forwarded into `main` at e3f4d71 (user allowed the push).
+
+Step 3 (2026-10-19, user go-ahead: migration only, no new development, bugs found on the way fixed): the process
+switches to the engine.
+
+- `CLAUDE.md`, `.agents/rules/engine_workflow.md` (was `godot_workflow.md`), the six agents, and the skills: new
+  `engine-checklist`, `known-issues`, `rust-conventions` replace `godot-debug-checklist`, `godot-known-issues`,
+  `gdscript-typing` (those stay in `legacy/.claude/skills/`); `patch-and-seed`, `pc-launch`, `planner` updated.
+- `docs/workflow/*`, `docs/WORKFLOW.md`, `docs/STRUCTURE.md` (engine layout), `docs/EFFICIENCY.md` (engine timings
+  on top, Godot rows kept), `docs/GAME_BRIEF.md` (layers and a reading note; its rules still hold),
+  `data/seeds/README.md` (JSON seeds), `assets/README.md`; the cloud hook installs Rust and imports `legacy/`.
+- Decisions: "Engine transition", "Engine merged into main", "Godot parity divergence" (planner interim, awaiting the
+  user), "Smart App Control off"; "Content edits", "Typing", "Engine branch hold" and "Per-system gates" archived with
+  pointers; HISTORY rows for the Godot build, seeds, the arena gates and the web export.
+- Fixes found on the way: `branch-cleanup.yml` would have deleted the `legacy` branch (now skipped); every worktree
+  shared one cargo build folder (the gates now give a linked worktree its own); markdown lint in `pc-launch`.
+- Not ported, so not offered by the process: the balance sim's modes other than `duel`, content checks of the Godot
+  Forge beyond the writer's (PORT_NOTES "Data writer"), the asset manifest, a web build.
 
 ## 9. Scope
 

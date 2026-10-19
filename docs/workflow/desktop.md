@@ -12,7 +12,7 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 
 ## Dispatch (planner skill step 2)
 
-1. Create worktrees for parallel lanes from clean `main`: `git worktree add ../ngp-<id> -b feat/<id>-<slug>`; one worktree per concurrent builder and one read-only `main` worktree for the balance agent. `git status` must be clean first. Give each agent its worktree path, branch and spec.
+1. Create worktrees for parallel lanes from clean `main`: `git worktree add ../ngp-<id> -b feat/<id>-<slug>`; one worktree per concurrent builder and one read-only `main` worktree for the balance agent. `git status` must be clean first. Give each agent its worktree path, branch and spec. Each worktree builds into its own folder (`tools/fc.sh` and `check_project.ps1` set `CARGO_TARGET_DIR=<target>-<folder>`), so its first build takes a few minutes.
 2. Run `tools/overlap.sh` while worktrees are active and before every merge (it lists files edited in more than one worktree).
 3. Builders never commit; they leave changes in their worktree and keep `.agent/progress.md`.
 4. Review fixes go to the SAME builder via `SendMessage` while it is resumable.
@@ -20,13 +20,13 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 
 ## Ship (planner skill step 3)
 
-1. Run `check_project.ps1 -Fast -Quiet` (~32 s) and `tools/fc.sh docs`; the IDE Problems tab must show 0 errors and warnings (markdownlint compliant, see `.agents/rules/godot_workflow.md` section 6). Never pipe `fc.sh docs` into `tail` before `&& git commit`.
+1. Run `check_project.ps1 -Fast -Quiet` (~30 s warm: build every crate, run every test) and `tools/fc.sh docs`; the IDE Problems tab must show 0 errors and warnings (markdownlint compliant, see `.agents/rules/engine_workflow.md` section 6). Never pipe `fc.sh docs` into `tail` before `&& git commit`.
 2. If clean: commit in the worktree with the attribution trailer from the session's system reminder, fast-forward merge to `main`, push.
 3. Remove the worktree and branch: `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>` (OneDrive marks folders read-only; plain `git worktree remove` can fail).
 
 ## Tools only on desktop
 
-- Godot: `C:/Program Files/Godot/godot.exe` (or `$GODOT`).
-- Scene Runner: `run.bat` pulls the latest `main` and opens the GUI (`run_dev.bat` or `run.bat dev`: latest `develop` from the sibling worktree `<checkout>-dev`, created on first use; it never switches branches; it launches without pulling when the checkout has local changes or is offline); from PowerShell `Start-Process .\run.bat`. Never kill other `godot` processes (`Stop-Process -Name godot` stops other agents' suites and sims).
-- IDE language server: stale diagnostics after new `class_name` files clear after `godot --headless --import`; in a worktree, trust `tools/fc.sh parse` over the IDE.
+- Rust: rustup with the toolchain in `engine/rust-toolchain.toml`; build output in `C:/Users/tusha/AppData/Local/Temp/aegis-target` (`engine/.cargo/config.toml`, outside OneDrive). Godot 4.7.2 (`C:/Program Files/Godot/godot.exe` or `$GODOT`) is needed only for `tools/fc.sh parity` (the frozen reference in `legacy/`).
+- Scene Runner: `run.bat` pulls the latest `main`, builds the engine (release) and opens `aegis-gui screen=runner` (`run_dev.bat` or `run.bat dev`: latest `develop` from the sibling worktree `<checkout>-dev`, created on first use; it never switches branches; it launches without pulling when the checkout has local changes or is offline); from PowerShell `Start-Process .\run.bat`. Never kill processes you did not start (other agents run tests and sims).
+- IDE: rust-analyzer for the engine; a Godot language server left over from the Godot build reports false errors on `engine/parity/godot/*.gd` (they run inside `legacy/`): close any Godot editor open on the old root. Smart App Control was turned off on 2026-10-19 because it blocked freshly built engine binaries (skill `known-issues`).
 - Measured costs: 3 builders plus a reviewer on one machine slowed the gate to ~10 min (`docs/EFFICIENCY.md`); parallel full-suite runs can collide on `user://` sandbox names.
