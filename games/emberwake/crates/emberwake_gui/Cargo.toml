@@ -1,0 +1,20 @@
+[package]
+name = "emberwake_gui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "emberwake"
+path = "src/main.rs"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+emberwake_data = { path = "../emberwake_data" }
+emberwake_rules = { path = "../emberwake_rules" }
+emberwake_battle = { path = "../emberwake_battle" }
+emberwake_host = { path = "../emberwake_host" }
+emberwake_world = { path = "../emberwake_world" }
+aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
+indexmap = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

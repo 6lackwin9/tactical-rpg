@@ -21,7 +21,7 @@ Rule: when something fails, load `known-issues` and look the failure up there fi
 
 - Reproduce headlessly before reading code: `aegis battle <encounter> seed=N log` (`cargo run -q -p emberwake_host -- ...` from the repo root), or JSON lines into `aegis serve` (`state`, `plan`, `probe`, `confirm`, `step`, `log`; list in `crates/aegis_host/src/lib.rs`). Print the actual numbers, then compare with what the test assumes. Do not guess at numbers.
 - For a parity divergence, the test prints the first differing step (unit state before, Godot, engine): find the rule in PORT_NOTES' file table and compare the two implementations line by line.
-- GUI problems: run `aegis-gui` and drive it through the agent link (`aegis link '{"cmd":"ui_tree"}'`, `click`, `key`, `screenshot`; engine/README.md) instead of guessing at layout.
+- GUI problems: run `emberwake` and drive it through the agent link (`aegis link '{"cmd":"ui_tree"}'`, `click`, `key`, `screenshot`; engine/README.md) instead of guessing at layout.
 
 ## Known issues
 

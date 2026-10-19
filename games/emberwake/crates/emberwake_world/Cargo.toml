@@ -1,0 +1,16 @@
+[package]
+name = "emberwake_world"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_content = { path = "../../../../engine/crates/aegis_content" }
+aegis_save = { path = "../../../../engine/crates/aegis_save" }
+emberwake_data = { path = "../emberwake_data" }
+emberwake_rules = { path = "../emberwake_rules" }
+emberwake_content = { path = "../emberwake_content" }
+emberwake_battle = { path = "../emberwake_battle" }
+indexmap = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

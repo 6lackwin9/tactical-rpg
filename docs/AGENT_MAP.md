@@ -22,6 +22,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | SPLIT1-3 | - | engine content layer `aegis_content`: file format, schema, world graph, writer over game hooks |
 | main session (no lane agents) | SPLIT1-5 | - | engine UI `aegis_ui`: drawing, widget kit, art, tuning, agent link, screen stack, window shell |
 | main session (no lane agents) | SPLIT1-6 | - | engine protocol `aegis_host` and shell `aegis_cli`; game command set and `aegis` binary in `emberwake_host` |
+| main session (no lane agents) | SPLIT1-7 | - | game crates renamed `emberwake_*` under `games/emberwake/crates/`, `emberwake_content` carved out, GUI binary `emberwake` |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

@@ -7,9 +7,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 * **Original proposal (Markdown-as-language, superseded by the spec):** [ENGINE_PROPOSAL.md](ENGINE_PROPOSAL.md)
 * **Active Branch:** `engine`
 * **Toolchain:** Rust `stable-x86_64-pc-windows-gnullvm`, pinned in `rust-toolchain.toml`. The MinGW on PATH is llvm-mingw, and the plain `gnu` toolchain fails to link against it (`unable to find library -lgcc_eh`).
-* **Build output:** `.cargo/config.toml` puts it in `C:/Users/tusha/AppData/Local/Temp/aegis-target`, outside OneDrive (the folder is several GB). Binaries: `.../aegis-target/release/aegis.exe`, `aegis-gui.exe`.
+* **Build output:** `.cargo/config.toml` puts it in `C:/Users/tusha/AppData/Local/Temp/aegis-target`, outside OneDrive (the folder is several GB). Binaries: `.../aegis-target/release/aegis.exe`, `emberwake.exe`.
 * **Game data:** the project's `data/` folder (catalog, worlds, maps, quests, dialogue services, XP curve), read by the
-  engine's own loader (`aegis_world::source`) with the field tables in `engine/data/schema.json`; no Godot export is
+  engine's own loader (`emberwake_content::source`) with the field tables in `engine/data/schema.json`; no Godot export is
   needed to play. `data=<dir>` points the GUI or CLI at another data folder, or at a Godot export folder.
 * **Saves and settings:** `%APPDATA%/Aegis/saves` and `%APPDATA%/Aegis/settings.json` (outside the repo; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged.
 
@@ -20,16 +20,17 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_core/` | Engine core, game-agnostic (SPLIT1-2): Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`) |
 | `crates/aegis_content/` | Engine content layer, game-agnostic (SPLIT1-3): data file format, schema normalize and storage, content store and world graph, upsert / remove over the game's hooks |
 | `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers |
-| `crates/aegis_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
-| `crates/aegis_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
-| `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
-| `crates/aegis_world/` | The game's data loader and writer on `aegis_content` (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) and the game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
+| `../games/emberwake/crates/emberwake_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
+| `../games/emberwake/crates/emberwake_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
+| `../games/emberwake/crates/emberwake_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
+| `../games/emberwake/crates/emberwake_content/` | The game's data loader and writer on `aegis_content` (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) |
+| `../games/emberwake/crates/emberwake_world/` | The game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
-| `crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
+| `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
 | `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim duel`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
 | `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader, live tuning files, agent link, screen stack with the game's context, window shell and event loop |
-| `crates/aegis_gui/` | `aegis-gui`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo) on `aegis_ui`; agent link on port 47800 |
-| `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `aegis_gui`; in git history |
+| `../games/emberwake/crates/emberwake_gui/` | `emberwake`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo) on `aegis_ui`; agent link on port 47800 |
+| `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `emberwake_gui`; in git history |
 | `crates/aegis_core/` (old) | Retired 2026-10-19 with `aegis_app` (its only user); in git history. The name is reused by the engine core above (SPLIT1-2) |
 
 ## Parity with Godot
@@ -44,7 +45,7 @@ engine/parity/trace.sh mode=duel level=5    # record Godot sim fights step by st
 engine/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
 engine/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
 engine/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
-cargo test -p aegis_rules -p aegis_battle -p emberwake_host -p aegis_world
+cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world
     # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces, journeys (result, state and screen
     # views per action), saves
 cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table
@@ -55,7 +56,7 @@ Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
 ## Driving a battle from the CLI (agents)
 
 `aegis serve` reads one JSON request per line and answers one JSON line each (full list in
-`crates/emberwake_host/src/lib.rs`):
+`../games/emberwake/crates/emberwake_host/src/lib.rs`):
 
 ```bash
 printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \
@@ -66,11 +67,11 @@ printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \
 Every mutating request is recorded; `{"cmd":"history"}` returns them, and feeding them to a fresh `serve` replays the
 battle exactly.
 
-## The game (aegis-gui)
+## The game (emberwake)
 
 ```bash
-cargo run --release -p aegis_gui                       # the main menu; screen=runner (dev tools) or screen=arena
-cargo run --release -p aegis_gui -- screen=arena encounter=goblin_ambush seed=3
+cargo run --release -p emberwake_gui                       # the main menu; screen=runner (dev tools) or screen=arena
+cargo run --release -p emberwake_gui -- screen=arena encounter=goblin_ambush seed=3
 ```
 
 The main menu leads to New game (world cards), Continue / Load, Settings and Tools (the Scene Runner: Combat Arena on

@@ -57,7 +57,7 @@ pub trait Game {
 }
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
-aegis link '<json>' ... [port=47800]   (requests to a running aegis-gui)
+aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json>";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
@@ -199,11 +199,11 @@ fn serve(game: &impl Game, args: &Args) -> Result<()> {
     Ok(())
 }
 
-/// `aegis link '<json>' ...`: sends requests to a running aegis-gui (agent link) and prints each reply line.
+/// `aegis link '<json>' ...`: sends requests to a running game GUI (agent link) and prints each reply line.
 fn link(raw: &[String]) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
     let port = raw.iter().find_map(|a| a.strip_prefix("port=")).unwrap_or("47800");
-    let stream = std::net::TcpStream::connect(format!("127.0.0.1:{port}")).with_context(|| format!("no aegis-gui listening on port {port}"))?;
+    let stream = std::net::TcpStream::connect(format!("127.0.0.1:{port}")).with_context(|| format!("no GUI listening on port {port}"))?;
     let mut writer = stream.try_clone()?;
     let mut reader = BufReader::new(stream);
     for req in raw.iter().skip(1).filter(|a| !a.starts_with("port=")) {

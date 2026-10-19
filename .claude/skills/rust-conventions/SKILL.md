@@ -14,15 +14,16 @@ These describe how the engine is written today (transition 2026-10-19); follow t
 | `aegis_core` | engine core: Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`) | anything game-specific |
 | `aegis_content` | engine content layer: file format, schema normalize and storage, content store and world graph, upsert / remove over the game's `Hooks` | anything game-specific |
 | `aegis_save` | engine save framework: slots, envelope, atomic write, migration runner (the game gives its format and steps) | anything game-specific |
-| `aegis_data` | typed catalog rows (`UnitDef`, `SkillDef`, `ItemDef`, ...) built from resolved JSON | game rules |
-| `aegis_rules` | pure rules: stats, gear, unit building, damage, statuses | battle state, IO |
-| `aegis_battle` | grid, paths, commands, resolver, planner, AI, encounter rules, session, sim | world state, drawing |
-| `aegis_world` | the game's data loader (`source`) and writer (`store`) on `aegis_content`, game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
+| `emberwake_data` | typed catalog rows (`UnitDef`, `SkillDef`, `ItemDef`, ...) built from resolved JSON | game rules |
+| `emberwake_rules` | pure rules: stats, gear, unit building, damage, statuses | battle state, IO |
+| `emberwake_battle` | grid, paths, commands, resolver, planner, AI, encounter rules, session, sim | world state, drawing |
+| `emberwake_content` | the game's data loader (`source`) and writer (`store`) on `aegis_content` | drawing, game state |
+| `emberwake_world` | game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
 | `aegis_host` | engine command API protocol: request routing, history, step counter over the game's `Commands` | anything game-specific |
 | `emberwake_host` | the game's battle command set and CLI commands; the `aegis` binary | rules of its own |
 | `aegis_cli` | engine command line shell: arguments, serve, link, content over the game's `Game` | anything game-specific |
 | `aegis_ui` | engine UI: drawing, widget kit, art, live tuning, agent link, screen stack (`Cx<G>`), window shell | anything game-specific |
-| `aegis_gui` | the game's screens and dev tools on `aegis_ui`; every battle action goes through `emberwake_host` requests | game rules |
+| `emberwake_gui` | the game's screens and dev tools on `aegis_ui`; every battle action goes through `emberwake_host` requests | game rules |
 
 A rule lives in exactly one place; the GUI, the CLI and the tests call it (the Godot build's "rules engines own logic, scenes only render" rule).
 

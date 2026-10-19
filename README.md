@@ -24,7 +24,7 @@ run.bat dev        :: the same for develop, in the sibling folder <checkout>-dev
 run.bat opt a      :: a design-review option build (see the header of run.bat)
 ```
 
-Or directly from the repo root: `cargo run --release -p aegis_gui` (main menu) or `-- screen=runner`. Saves and settings
+Or directly from the repo root: `cargo run --release -p emberwake_gui` (main menu) or `-- screen=runner`. Saves and settings
 live in `%APPDATA%/Aegis`; Godot saves load in the engine unchanged. Controls, screens and the agent link (port 47800):
 [engine/README.md](engine/README.md).
 

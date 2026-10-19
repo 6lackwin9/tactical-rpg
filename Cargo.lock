@@ -25,17 +25,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "aegis_battle"
-version = "0.1.0"
-dependencies = [
- "aegis_core",
- "aegis_data",
- "aegis_rules",
- "indexmap",
- "serde_json",
-]
-
-[[package]]
 name = "aegis_cli"
 version = "0.1.0"
 dependencies = [
@@ -63,45 +52,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "aegis_data"
-version = "0.1.0"
-dependencies = [
- "aegis_core",
- "anyhow",
- "indexmap",
- "serde_json",
-]
-
-[[package]]
-name = "aegis_gui"
-version = "0.1.0"
-dependencies = [
- "aegis_battle",
- "aegis_core",
- "aegis_data",
- "aegis_rules",
- "aegis_ui",
- "aegis_world",
- "anyhow",
- "emberwake_host",
- "indexmap",
- "serde_json",
-]
-
-[[package]]
 name = "aegis_host"
 version = "0.1.0"
 dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "aegis_rules"
-version = "0.1.0"
-dependencies = [
- "aegis_core",
- "aegis_data",
- "indexmap",
  "serde_json",
 ]
 
@@ -124,21 +77,6 @@ dependencies = [
  "png",
  "serde_json",
  "winit",
-]
-
-[[package]]
-name = "aegis_world"
-version = "0.1.0"
-dependencies = [
- "aegis_battle",
- "aegis_content",
- "aegis_core",
- "aegis_data",
- "aegis_rules",
- "aegis_save",
- "anyhow",
- "indexmap",
- "serde_json",
 ]
 
 [[package]]
@@ -524,16 +462,90 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
+name = "emberwake_battle"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "emberwake_data",
+ "emberwake_rules",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "emberwake_content"
+version = "0.1.0"
+dependencies = [
+ "aegis_content",
+ "aegis_core",
+ "emberwake_rules",
+ "serde_json",
+]
+
+[[package]]
+name = "emberwake_data"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "anyhow",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "emberwake_gui"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "aegis_ui",
+ "anyhow",
+ "emberwake_battle",
+ "emberwake_data",
+ "emberwake_host",
+ "emberwake_rules",
+ "emberwake_world",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
 name = "emberwake_host"
 version = "0.1.0"
 dependencies = [
- "aegis_battle",
  "aegis_cli",
- "aegis_data",
  "aegis_host",
- "aegis_rules",
- "aegis_world",
  "anyhow",
+ "emberwake_battle",
+ "emberwake_content",
+ "emberwake_data",
+ "emberwake_rules",
+ "emberwake_world",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "emberwake_rules"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "emberwake_data",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "emberwake_world"
+version = "0.1.0"
+dependencies = [
+ "aegis_content",
+ "aegis_core",
+ "aegis_save",
+ "anyhow",
+ "emberwake_battle",
+ "emberwake_content",
+ "emberwake_data",
+ "emberwake_rules",
  "indexmap",
  "serde_json",
 ]

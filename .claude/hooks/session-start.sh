@@ -47,9 +47,9 @@ if ! command -v pwsh >/dev/null 2>&1; then
 fi
 
 # --- Rendering a game window off-screen (Xvfb + Mesa software Vulkan / OpenGL) ---
-# Meant to let a session run aegis-gui and screenshot it through its agent link (not yet tried in a cloud container;
+# Meant to let a session run the game GUI (emberwake) and screenshot it through its agent link (not yet tried in a cloud container;
 # wgpu needs Mesa's software Vulkan or OpenGL there):
-#   xvfb-run -a -s "-screen 0 1280x720x24" "$CARGO_TARGET_DIR/release/aegis-gui" screen=runner
+#   xvfb-run -a -s "-screen 0 1280x720x24" "$CARGO_TARGET_DIR/release/emberwake" screen=runner
 if ! command -v xvfb-run >/dev/null 2>&1; then
   log "installing Xvfb and Mesa"
   $SUDO apt-get update -qq >/dev/null

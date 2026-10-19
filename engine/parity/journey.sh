@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Records seeded random game-loop journeys from the Godot reference into engine/parity/out/journeys.json (journey.gd;
-# nothing is saved). Then: cargo test -p aegis_world --test journey
+# nothing is saved). Then: cargo test -p emberwake_world --test journey
 #   engine/parity/journey.sh [seeds=1,2] [steps=300]
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

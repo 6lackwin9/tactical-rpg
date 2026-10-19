@@ -1,5 +1,5 @@
 @echo off
-rem Opens the Scene Runner of the Aegis engine (aegis-gui screen=runner) on the latest code: launch any screen, battle,
+rem Opens the Scene Runner of the Aegis engine (emberwake screen=runner; aegis-gui on older branches) on the latest code: launch any screen, battle,
 rem forge or debug map. (Transition step 2, 2026-10-19: the Godot build is frozen in legacy\; see legacy\LEGACY.md.)
 rem   run.bat        latest main (released code) in this folder
 rem   run.bat dev    latest develop (finished tasks not yet released) in the sibling folder
@@ -179,10 +179,18 @@ setlocal EnableDelayedExpansion
   echo Building the engine into !TARGET! ...
   rem the workspace is at the repo root since SPLIT1-1; older engine branches keep it in engine\
   if exist "!DIR!\Cargo.toml" (pushd "!DIR!") else (pushd "!DIR!\engine")
-  rem the aegis binary lives in emberwake_host since SPLIT1-6 (aegis_cli before)
+  rem the aegis binary lives in emberwake_host since SPLIT1-6 (aegis_cli before); the game crates live in
+  rem games\emberwake\ since SPLIT1-7 (GUI emberwake_gui, binary emberwake.exe; aegis_gui and aegis-gui.exe before)
+  set "GUI=aegis_gui"
+  set "EXE=aegis-gui.exe"
   set "CLI=aegis_cli"
   if exist "!DIR!\engine\crates\emberwake_host" set "CLI=emberwake_host"
-  cargo build --release -q -p aegis_gui -p !CLI!
+  if exist "!DIR!\games\emberwake\crates\emberwake_gui" (
+    set "GUI=emberwake_gui"
+    set "EXE=emberwake.exe"
+    set "CLI=emberwake_host"
+  )
+  cargo build --release -q -p !GUI! -p !CLI!
   if errorlevel 1 echo The build failed: launching the last build if there is one.
   popd
   set "SHA=?"
@@ -192,14 +200,14 @@ setlocal EnableDelayedExpansion
   ) else (
     echo Running !CUR! at !SHA! from !DIR!
   )
-  if not exist "!TARGET!\release\aegis-gui.exe" (
+  if not exist "!TARGET!\release\!EXE!" (
     echo No build to launch: see the errors above.
     timeout /t 15 /nobreak >nul
     exit /b
   )
   rem Windows Smart App Control can block a freshly built exe started by cmd; PowerShell's Start-Process starts it
   rem (engine/docs/PORT_NOTES.md), retried a few times.
-  powershell -NoProfile -Command "$a = @{FilePath = '!TARGET!\release\aegis-gui.exe'; ArgumentList = 'screen=runner'; WorkingDirectory = '!DIR!\engine'}; for ($i = 1; $i -le 3; $i++) { try { Start-Process @a -ErrorAction Stop; exit 0 } catch { Start-Sleep 3 } }; Write-Host 'Windows blocked the engine build (Smart App Control). See engine/docs/PORT_NOTES.md.'; exit 1"
+  powershell -NoProfile -Command "$a = @{FilePath = '!TARGET!\release\!EXE!'; ArgumentList = 'screen=runner'; WorkingDirectory = '!DIR!\engine'}; for ($i = 1; $i -le 3; $i++) { try { Start-Process @a -ErrorAction Stop; exit 0 } catch { Start-Sleep 3 } }; Write-Host 'Windows blocked the engine build (Smart App Control). See engine/docs/PORT_NOTES.md.'; exit 1"
   timeout /t 4 /nobreak >nul
   exit /b
 )

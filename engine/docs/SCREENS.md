@@ -8,7 +8,7 @@ Reference shots: `engine/docs/screens/` (1280x720, captured from the Godot build
 `engine/parity/godot/screen_tour.gd` on a sandbox save folder; re-run it after Godot UI changes). The engine's own
 shots of the same screens are in `engine/docs/screens/engine/` (taken over the agent link).
 
-The rules behind every player screen come from `aegis_world`, checked against Godot by the journey replay
+The rules behind every player screen come from `emberwake_world`, checked against Godot by the journey replay
 (`tests/journey.rs`: result, state and the views these screens read, after every action) and the save fixtures
 (`tests/saves.rs`).
 
@@ -51,7 +51,7 @@ The rules behind every player screen come from `aegis_world`, checked against Go
 
 ## Order (done)
 
-1. Data: the project's `data/` folder through the engine's own loader (`aegis_world::source`); the Godot exports
+1. Data: the project's `data/` folder through the engine's own loader (`emberwake_content::source`); the Godot exports
    (`parity/export.sh`) are only for parity checks.
 2. Game state: GameState, NewGame, SaveGame (Godot saves load unchanged, every migration), party and progression rules.
 3. Game loop rules: exploration, travel, dialogue, shop, quests, rest and camp, world battles, results; checked with

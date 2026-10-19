@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Records Godot balance-sim fights step by step into engine/parity/out/traces_<mode>_l<level>.json (trace.gd; the shipped catalog is
-# only read, sim units live in a sandbox fork). Then: cargo test -p aegis_battle --test trace_parity
+# only read, sim units live in a sandbox fork). Then: cargo test -p emberwake_battle --test trace_parity
 #   engine/parity/trace.sh mode=duel level=5 seeds=2 [classes=warrior,mage] [preset=balanced] [jitter=on|off]
 #   engine/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   (battle items: traces_duel_l5_items.json)
 #   engine/parity/trace.sh mode=world seeds=2 preset=withdraw   (world battles: traces_world_withdraw.json)

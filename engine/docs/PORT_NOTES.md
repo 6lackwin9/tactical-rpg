@@ -19,24 +19,24 @@ because the RNG is bit-exact.
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `core/specs/stat_rules.gd`, `character_stats.gd`, `proficiency.gd`, `stat_modifier.gd` | `aegis_rules::stats` | unit snapshots |
-| `core/inventory/equipment.gd`, `inventory.gd` | `aegis_rules::gear` | unit snapshots |
-| `core/combat/combatant.gd` (build, skills, unlocks) | `aegis_rules::unit` | unit snapshots |
-| `content/content_factory.gd` (`unit`, `loadout_of`, `_equip`) | `aegis_rules::unit::build_unit` | unit snapshots |
+| `core/specs/stat_rules.gd`, `character_stats.gd`, `proficiency.gd`, `stat_modifier.gd` | `emberwake_rules::stats` | unit snapshots |
+| `core/inventory/equipment.gd`, `inventory.gd` | `emberwake_rules::gear` | unit snapshots |
+| `core/combat/combatant.gd` (build, skills, unlocks) | `emberwake_rules::unit` | unit snapshots |
+| `content/content_factory.gd` (`unit`, `loadout_of`, `_equip`) | `emberwake_rules::unit::build_unit` | unit snapshots |
 | `core/specs/passives.gd` (`apply_effects`) | `Unit::apply_effects` | unit snapshots (gear effects) |
-| `core/combat/damage_calculator.gd` | `aegis_rules::damage` | damage cases |
-| `combat/status/status_effects.gd`, `status_registry.gd` | `aegis_rules::status` | battle traces |
-| `combat/arena/combat_grid.gd`, `terrain.gd`, `combat_zones.gd` | `aegis_battle::grid`, `world` | battle traces |
-| `combat/arena/grid_path.gd` | `aegis_battle::path` | battle traces |
-| `combat/arena/cover_rules.gd`, `hazard_rules.gd`, `status/riposte_rules.gd`, `status/support_rules.gd` | `aegis_battle::command` | battle traces |
-| `core/combat/battle_command.gd`, `combat/actions/*` (with `item_command.gd`) | `aegis_battle::command` | battle traces, item traces |
-| `combat/arena/combat_resolver.gd` | `aegis_battle::resolver` | battle traces |
-| `combat/planning/combat_plan.gd`, `plan_step.gd`, `plan_entry.gd` (no options / UI probes yet) | `aegis_battle::plan` | battle traces |
-| `combat/planning/skill_def.gd`, `skill_catalog.gd`, `content/skill_kinds.gd` | `aegis_battle::skill` | battle traces |
-| `combat/ai/tactical_ai.gd` (with `_try_item`), `ai_profile.gd`, `plan_presets.gd` | `aegis_battle::ai`, `world` | battle traces, item traces |
-| `combat/session/combat_session.gd`, `catalog_encounter.gd`, `combat_encounter.gd` | `aegis_battle::session` | battle traces, world traces |
-| `combat/session/encounter_objectives.gd`, `encounter_phases.gd`, `encounter_morale.gd`, `world_encounter.gd` (guests, start buffs) | `aegis_battle::encounter`, `session`; `aegis_world::battle::WorldRoster` | world traces |
-| `tools/sim/sim_runner.gd` (`fight`, `apply_pouch`), `sim_variants.gd` (jitter) | `aegis_battle::sim` | battle traces |
+| `core/combat/damage_calculator.gd` | `emberwake_rules::damage` | damage cases |
+| `combat/status/status_effects.gd`, `status_registry.gd` | `emberwake_rules::status` | battle traces |
+| `combat/arena/combat_grid.gd`, `terrain.gd`, `combat_zones.gd` | `emberwake_battle::grid`, `world` | battle traces |
+| `combat/arena/grid_path.gd` | `emberwake_battle::path` | battle traces |
+| `combat/arena/cover_rules.gd`, `hazard_rules.gd`, `status/riposte_rules.gd`, `status/support_rules.gd` | `emberwake_battle::command` | battle traces |
+| `core/combat/battle_command.gd`, `combat/actions/*` (with `item_command.gd`) | `emberwake_battle::command` | battle traces, item traces |
+| `combat/arena/combat_resolver.gd` | `emberwake_battle::resolver` | battle traces |
+| `combat/planning/combat_plan.gd`, `plan_step.gd`, `plan_entry.gd` (no options / UI probes yet) | `emberwake_battle::plan` | battle traces |
+| `combat/planning/skill_def.gd`, `skill_catalog.gd`, `content/skill_kinds.gd` | `emberwake_battle::skill` | battle traces |
+| `combat/ai/tactical_ai.gd` (with `_try_item`), `ai_profile.gd`, `plan_presets.gd` | `emberwake_battle::ai`, `world` | battle traces, item traces |
+| `combat/session/combat_session.gd`, `catalog_encounter.gd`, `combat_encounter.gd` | `emberwake_battle::session` | battle traces, world traces |
+| `combat/session/encounter_objectives.gd`, `encounter_phases.gd`, `encounter_morale.gd`, `world_encounter.gd` (guests, start buffs) | `emberwake_battle::encounter`, `session`; `emberwake_world::battle::WorldRoster` | world traces |
+| `tools/sim/sim_runner.gd` (`fight`, `apply_pouch`), `sim_variants.gd` (jitter) | `emberwake_battle::sim` | battle traces |
 
 ## Parity status (2026-10-19)
 
@@ -50,14 +50,14 @@ because the RNG is bit-exact.
   `traces_<mode>_l<level>_items.json`): 120 duels at level 5 (potion, bomb, focus elixir), 24 team fights and 36
   group fights at level 7; 250 Healing Draught and 39 Throwing Fire Bomb uses, all step for step. Mutating the
   potion threshold or the bomb damage makes 8 to 12 fights diverge, so both item paths are checked.
-- World battles (`trace.sh mode=world preset=<p>`, `aegis_world/tests/world_traces.rs`): 240 fights over every
+- World battles (`trace.sh mode=world preset=<p>`, `emberwake_world/tests/world_traces.rs`): 240 fights over every
   world encounter plus synthetic variants (escape, centre deployment, morale, custom hold tiles, start buffs) with
   the balanced, aggressive, withdraw and defensive presets: hold, slay, escape, fled, lost and round-limit verdicts,
   boss phases (hp_below, round, waves, status, ai, enrage), morale breaks and surrenders, ambush and centre
   deployments, a protected guest and start buffs, all step for step.
 - Not covered yet: statuses expose, fortify, regen, poison, burn, empower, slow (the shipped classes rarely use
   them in these fights), terrain zones other than the stone arena and the two catalog ones.
-- Suite: `cargo test -p aegis_battle --test trace_parity` replays every `parity/out/traces*.json` except the world
+- Suite: `cargo test -p emberwake_battle --test trace_parity` replays every `parity/out/traces*.json` except the world
   ones (677 fights, about 8 s).
 - Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
   goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).
@@ -66,11 +66,11 @@ because the RNG is bit-exact.
   `Start-Process` started a GUI build cmd could not. The user turned it off on 2026-10-19 (decision "Smart App Control
   off"); the gates still relink a blocked test exe in case it is turned on again (skill `known-issues`).
 
-## Game loop (aegis_world, 2026-10-19)
+## Game loop (emberwake_world, 2026-10-19)
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `game_state/game_state.gd`, `progression/party_state.gd`, `unit_state.gd` | `aegis_world::state` | journeys (state after every action) |
+| `game_state/game_state.gd`, `progression/party_state.gd`, `unit_state.gd` | `emberwake_world::state` | journeys (state after every action) |
 | `game_state/new_game.gd`, `game_rolls.gd`, `json_util.gd` | `new_game`, `rolls`, `json` | journeys (start state, every roll) |
 | `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 |
 | `progression/xp_curve.gd`, `level_up.gd`, `party_builder.gd`, `heal_rules.gd` | `progression` | journeys (HP views, level-ups, camp) |
@@ -79,7 +79,7 @@ because the RNG is bit-exact.
 | `quests/quest_rules.gd` (runtime), `quest_runner.gd`, `reward_grant.gd` | `quest` | journeys (statuses, objectives, offers) |
 | `dialogue/rep_rules.gd`, `dialogue_rules.gd` (runtime), `dialogue_runner.gd`, `shop_rules.gd` (runtime) | `dialogue`, `shop` | journeys (dialogue and shop views) |
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
-| `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `aegis_gui::battle` (`BattleScreen::world`) | manual (GUI) |
+| `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `emberwake_gui::battle` (`BattleScreen::world`) | manual (GUI) |
 
 Godot behaviours found on the way:
 
@@ -99,7 +99,7 @@ map) must equal Godot's. Last run: 8 journeys, 5608 actions, all equal; includes
 
 Not ported yet: content validation (`*_errors`, warnings), save import / export.
 
-## Data loader (aegis_world::source, 2026-10-19)
+## Data loader (emberwake_content::source, 2026-10-19)
 
 The engine reads the project's `data/` folder itself; the Godot exports are only needed for parity checks.
 
@@ -123,7 +123,7 @@ The engine reads the project's `data/` folder itself; the Godot exports are only
 - Not read: version 1 (flat) skills and items files, pre-CLASS1 class `skill_path` lists (the shipped data has none;
   the loader reports them), and the load-time validation messages that only block saving in Godot.
 
-## Data writer (aegis_world::store, 2026-10-19)
+## Data writer (emberwake_content::store, 2026-10-19)
 
 Content is edited without Godot through `aegis content check | upsert | remove | apply` (shell `aegis_cli`, binary in `emberwake_host`, also
 `tools/fc.sh content`), which replaced `ContentCatalog.upsert` seeds when the Godot build moved to `legacy/`.

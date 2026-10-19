@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exports the Godot reference for the parity tests into engine/parity/out (about 4 s).
-#   engine/parity/export.sh            then: cargo test -p aegis_rules --test parity
+#   engine/parity/export.sh            then: cargo test -p emberwake_rules --test parity
 # Godot binary: $GODOT, else godot on PATH, else the default Windows install. Records the Godot commit it measured.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
