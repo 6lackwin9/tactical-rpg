@@ -109,7 +109,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         let border = if active || (hover && enabled) { GOLD } else if enabled { rgb(100, 130, 186) } else { BORDER };
         self.p.panel(r, fill, border, RADIUS);
         let col = if enabled { if active { GOLD } else { TEXT } } else { DIM };
-        let line = size * 1.28;
+        let line = self.p.line_h(size);
         let txt = self.p.fit(label, size, if r.w < 20 { r.w as f32 } else { r.w as f32 - 6.0 });
         self.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - line) / 2.0, &txt, size, col);
         self.push(id, "button", label, r, enabled, active, Some(action), t);
@@ -170,7 +170,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.p.panel(fill, rgb(200, 204, 214), rgb(200, 204, 214), 2.0);
         self.p.circle((fill.x + fill.w) as f32, bar.y as f32 + 2.0, 3.0, rgb(240, 242, 248));
         self.button(&format!("{id}.plus"), Rect::new(bar.x + bar.w + 3, r.y, 12, r.h), "+", plus, enabled);
-        self.p.text(bar.x as f32 + bar.w as f32 + 19.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, text, BODY, DIM);
+        self.p.text(bar.x as f32 + bar.w as f32 + 19.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, DIM);
         self.push(id, "slider", text, r, enabled, false, None, Vec::new());
     }
 
@@ -179,7 +179,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         let hover = enabled && self.hover(r);
         self.p.panel(r, if hover { PANEL_HI } else { rgb(30, 44, 74) }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
         let col = if enabled { TEXT } else { DIM };
-        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, label, BODY, r.w as f32 - 16.0, col);
+        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 16.0, col);
         let (cx, cy) = (r.x as f32 + r.w as f32 - 7.0, r.y as f32 + r.h as f32 / 2.0);
         self.p.line(cx - 2.5, cy - 1.2, cx, cy + 1.3, col, 0.0);
         self.p.line(cx, cy + 1.3, cx + 2.5, cy - 1.2, col, 0.0);
@@ -195,7 +195,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         let hover = enabled && (open || self.hover(r));
         self.p.panel(r, if hover { PANEL_HI } else { rgb(30, 44, 74) }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
         let col = if enabled { TEXT } else { DIM };
-        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, &label, BODY, r.w as f32 - 16.0, col);
+        self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, &label, BODY, r.w as f32 - 16.0, col);
         let (cx, cy, d) = (r.x as f32 + r.w as f32 - 7.0, r.y as f32 + r.h as f32 / 2.0, if open { -1.0 } else { 1.0 });
         self.p.line(cx - 2.5, cy - 1.2 * d, cx, cy + 1.3 * d, col, 0.0);
         self.p.line(cx, cy + 1.3 * d, cx + 2.5, cy - 1.2 * d, col, 0.0);
@@ -228,7 +228,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.p.panel(bar, rgb(40, 46, 60), rgb(40, 46, 60), 2.0);
         self.p.panel(Rect::new(bar.x, bar.y, (knob as i32 - bar.x).max(0), bar.h), rgb(200, 204, 214), rgb(200, 204, 214), 2.0);
         self.p.circle(knob, bar.y as f32 + 2.0, if hover { 4.0 } else { 3.0 }, if hover { GOLD } else if enabled { rgb(240, 242, 248) } else { DIM });
-        self.p.text(area.x as f32 + area.w as f32 + 6.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, text, BODY, DIM);
+        self.p.text(area.x as f32 + area.w as f32 + 6.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, DIM);
         self.push(id, "slider", text, area, enabled, false, None, Vec::new());
         let seg = bar.w as f32 / (steps - 1) as f32;
         for i in 0..steps {
@@ -281,7 +281,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         if selected || hover {
             self.p.panel(r, if selected { SELECTED } else { PANEL_HI }, if selected { GOLD } else { rgb(110, 140, 196) }, RADIUS);
         }
-        self.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, label, BODY, r.w as f32 - 8.0, col);
+        self.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 8.0, col);
         self.push(id, "row", label, r, true, selected, action, t);
     }
 }

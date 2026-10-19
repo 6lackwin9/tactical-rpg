@@ -43,12 +43,14 @@ impl View {
 pub struct Fonts {
     font: fontdue::Font,
     cache: HashMap<(char, u32), (fontdue::Metrics, Vec<u8>)>,
+    /// The text size factor (settings `text_scale`: 0.85 Small .. 1.3 Extra large); every text size is multiplied by it.
+    pub scale: f32,
 }
 
 impl Fonts {
     pub fn new(ttf: &[u8]) -> Self {
         let font = fontdue::Font::from_bytes(ttf, fontdue::FontSettings::default()).expect("valid TTF");
-        Self { font, cache: HashMap::new() }
+        Self { font, cache: HashMap::new(), scale: 1.0 }
     }
 
     fn glyph(&mut self, c: char, px: u32) -> &(fontdue::Metrics, Vec<u8>) {
@@ -74,7 +76,12 @@ fn mix(c: Rgba, a: f32) -> Rgba {
 
 impl<'a> Painter<'a> {
     fn px(&self, size: f32) -> u32 {
-        (size * self.v.s).round().max(6.0) as u32
+        (size * self.fonts.scale * self.v.s).round().max(6.0) as u32
+    }
+
+    /// The logical height of a line of text of `size` (at the current text size), for centering text in a box.
+    pub fn line_h(&self, size: f32) -> f32 {
+        size * 1.28 * self.fonts.scale
     }
 
     /// Logical width of `s` in a font of logical `size`.

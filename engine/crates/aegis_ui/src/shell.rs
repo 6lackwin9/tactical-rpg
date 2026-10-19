@@ -9,7 +9,7 @@ use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
 use crate::canvas::{rgb, Rect};
-use crate::ui::{Gfx, Kit, BG, BODY, GOLD, H, LINE, MODAL, PANEL_HI, RADIUS, TEXT, W};
+use crate::ui::{Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -21,7 +21,8 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WKey, NamedKey};
-use winit::window::{Window, WindowId};
+use winit::dpi::LogicalSize;
+use winit::window::{Fullscreen, Window, WindowId};
 
 /// The window the shell opens.
 pub struct Options {
@@ -304,6 +305,10 @@ struct App<G> {
     pixels: Option<Pixels<'static>>,
     proxy: EventLoopProxy<()>,
     bridge: Option<Receiver<bridge::Request>>,
+    /// The settings last applied to the window (None: not yet), and the frame interval the cap asks for (None:
+    /// unlimited).
+    applied: Option<Value>,
+    frame_every: Option<Duration>,
 }
 
 impl<G: Context> App<G> {
@@ -319,12 +324,49 @@ impl<G: Context> App<G> {
         if shell.cx.quit {
             std::process::exit(0);
         }
+        self.apply_settings();
+        let Some(shell) = self.shell.as_mut() else { return };
         if let Some(p) = self.pixels.as_mut() {
             if p.frame().len() == shell.gfx.canvas.px.len() {
                 p.frame_mut().copy_from_slice(&shell.gfx.canvas.px);
                 let _ = p.render();
             }
         }
+    }
+
+    /// Applies the engine's settings (DisplaySettings) when they changed since the last time: window mode (windowed
+    /// at the chosen size, borderless fullscreen, exclusive fullscreen at the monitor's best mode), vsync, the
+    /// frame-rate cap and the text size. The window size is set only when windowed and only when the mode or the size
+    /// setting changed, so a window the player resized keeps its size.
+    fn apply_settings(&mut self) {
+        let (Some(shell), Some(window)) = (self.shell.as_mut(), self.window.as_ref()) else { return };
+        let v = shell.cx.settings.v.clone();
+        if self.applied.as_ref() == Some(&v) {
+            return;
+        }
+        let was = |k: &str| self.applied.as_ref().map(|a| a[k].clone());
+        let mode = v["window_mode"].as_str().unwrap_or("Windowed");
+        if was("window_mode").as_ref() != Some(&v["window_mode"]) || was("window_size").as_ref() != Some(&v["window_size"]) {
+            match mode {
+                "Borderless" => window.set_fullscreen(Some(Fullscreen::Borderless(None))),
+                "Fullscreen" => {
+                    let best = window.current_monitor().and_then(|m| m.video_modes().max_by_key(|vm| (vm.size().width * vm.size().height, vm.refresh_rate_millihertz())));
+                    window.set_fullscreen(Some(best.map(Fullscreen::Exclusive).unwrap_or(Fullscreen::Borderless(None))));
+                }
+                _ => {
+                    window.set_fullscreen(None);
+                    if let Some((w, h)) = v["window_size"].as_str().and_then(|s| s.split_once('x')).and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?))) {
+                        let _ = window.request_inner_size(LogicalSize::new(w, h));
+                    }
+                }
+            }
+        }
+        if let Some(p) = self.pixels.as_mut() {
+            p.enable_vsync(v["vsync"].as_bool().unwrap_or(true));
+        }
+        self.frame_every = v["fps_cap"].as_str().and_then(|c| c.parse::<u64>().ok()).filter(|n| *n > 0).map(|n| Duration::from_micros(1_000_000 / n));
+        shell.gfx.fonts.scale = v["text_scale"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) as f32;
+        self.applied = Some(v);
     }
 }
 
@@ -359,7 +401,11 @@ impl<G: Context> ApplicationHandler for App<G> {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16)));
+        // The frame-rate cap paces the redraws; unlimited redraws as fast as presenting allows (vsync waits for the screen).
+        el.set_control_flow(match self.frame_every {
+            Some(every) => ControlFlow::WaitUntil(Instant::now() + every),
+            None => ControlFlow::Poll,
+        });
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -454,7 +500,7 @@ fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32)) {
             p.panel(*r, PANEL_HI, rgb(110, 140, 196), RADIUS);
         }
         let chosen = w["active"] == json!(true);
-        p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - LINE) / 2.0, w["text"].as_str().unwrap_or(""), BODY, r.w as f32 - 10.0, if chosen { GOLD } else { TEXT });
+        p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - p.line_h(BODY)) / 2.0, w["text"].as_str().unwrap_or(""), BODY, r.w as f32 - 10.0, if chosen { GOLD } else { TEXT });
     }
 }
 
@@ -479,7 +525,7 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
 pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None };
+    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)) };
     el.run_app(&mut app)?;
     Ok(())
 }
