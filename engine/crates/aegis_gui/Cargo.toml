@@ -12,7 +12,7 @@ aegis_core = { path = "../aegis_core" }
 aegis_data = { path = "../aegis_data" }
 aegis_rules = { path = "../aegis_rules" }
 aegis_battle = { path = "../aegis_battle" }
-aegis_host = { path = "../aegis_host" }
+emberwake_host = { path = "../emberwake_host" }
 aegis_world = { path = "../aegis_world" }
 aegis_ui = { path = "../aegis_ui" }
 indexmap = { workspace = true }

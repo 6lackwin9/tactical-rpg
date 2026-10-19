@@ -30,7 +30,7 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 | Tool | Use |
 | --- | --- |
 | `tools/fc.sh build / test / gate / clippy / docs / content / sim / parity` | Compact checks, data edits, the sim and the Godot reference (see the header of the script); `gate` is the commit gate in bash, `check_project.ps1` the same in PowerShell |
-| `aegis` (`engine/crates/aegis_cli`; `cargo run -q -p aegis_cli -- ...` in `engine/`) | `sim duel [level] [seeds]` (balance table, about a second per level), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `aegis-gui`), `content` (edit `data/`) |
+| `aegis` (shell `engine/crates/aegis_cli`, binary in `engine/crates/emberwake_host`; `cargo run -q -p emberwake_host -- ...` from the repo root) | `sim duel [level] [seeds]` (balance table, about a second per level), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `aegis-gui`), `content` (edit `data/`) |
 | `engine/parity/*.sh` (`tools/fc.sh parity`) | Record the frozen Godot build's reference from `legacy/` (exports, battle and world traces, journeys) for the parity suites; needs Godot 4.7.2 |
 | Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
 | Agent `change-reviewer` | Pre-commit review: the gate, code patterns, docs/README, known-issues match; read-only |

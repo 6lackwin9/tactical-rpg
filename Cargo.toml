@@ -12,6 +12,7 @@ members = [
     "engine/crates/aegis_cli",
     "engine/crates/aegis_host",
     "engine/crates/aegis_gui",
+    "engine/crates/emberwake_host",
 ]
 
 [workspace.package]

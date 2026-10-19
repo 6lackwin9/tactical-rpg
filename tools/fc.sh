@@ -71,7 +71,7 @@ gate() {
 }
 
 aegis() {  # the CLI, built on demand
-  cargo run -q -p aegis_cli -- "$@"
+  cargo run -q -p emberwake_host -- "$@"
 }
 
 case "$1" in

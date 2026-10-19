@@ -4,8 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aegis_data = { path = "../aegis_data" }
-aegis_rules = { path = "../aegis_rules" }
-aegis_battle = { path = "../aegis_battle" }
-indexmap = { workspace = true }
 serde_json = { workspace = true }

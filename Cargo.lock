@@ -39,11 +39,7 @@ dependencies = [
 name = "aegis_cli"
 version = "0.1.0"
 dependencies = [
- "aegis_battle",
- "aegis_data",
- "aegis_host",
- "aegis_rules",
- "aegis_world",
+ "aegis_content",
  "anyhow",
  "indexmap",
  "serde_json",
@@ -83,11 +79,11 @@ dependencies = [
  "aegis_battle",
  "aegis_core",
  "aegis_data",
- "aegis_host",
  "aegis_rules",
  "aegis_ui",
  "aegis_world",
  "anyhow",
+ "emberwake_host",
  "indexmap",
  "serde_json",
 ]
@@ -96,10 +92,6 @@ dependencies = [
 name = "aegis_host"
 version = "0.1.0"
 dependencies = [
- "aegis_battle",
- "aegis_data",
- "aegis_rules",
- "indexmap",
  "serde_json",
 ]
 
@@ -530,6 +522,21 @@ name = "dpi"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
+
+[[package]]
+name = "emberwake_host"
+version = "0.1.0"
+dependencies = [
+ "aegis_battle",
+ "aegis_cli",
+ "aegis_data",
+ "aegis_host",
+ "aegis_rules",
+ "aegis_world",
+ "anyhow",
+ "indexmap",
+ "serde_json",
+]
 
 [[package]]
 name = "equivalent"

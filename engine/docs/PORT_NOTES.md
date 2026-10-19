@@ -125,7 +125,7 @@ The engine reads the project's `data/` folder itself; the Godot exports are only
 
 ## Data writer (aegis_world::store, 2026-10-19)
 
-Content is edited without Godot through `aegis content check | upsert | remove | apply` (crate `aegis_cli`, also
+Content is edited without Godot through `aegis content check | upsert | remove | apply` (shell `aegis_cli`, binary in `emberwake_host`, also
 `tools/fc.sh content`), which replaced `ContentCatalog.upsert` seeds when the Godot build moved to `legacy/`.
 
 | Godot | Rust | Checked by |

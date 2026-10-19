@@ -1,6 +1,6 @@
 //! The battle screen (COMBAT-UI3 layout A). Two layers: the battlefield is pixel art scaled with nearest sampling;
 //! panels, text, hover cards and menus are drawn smooth at the window's real resolution (painter.rs). Every change goes
-//! through the command API (aegis_host), the same one `aegis serve` and the agent link use.
+//! through the command API (emberwake_host on aegis_host), the same one `aegis serve` and the agent link use.
 //! Two modes: the Test Arena (a catalog encounter, Restart / Play again) and a world battle (GameEncounter: the saved
 //! party at its stored HP against a world encounter; on Continue the HP is written back, the runner's after_fight
 //! settles the outcome and the results popup opens over the map).
@@ -21,7 +21,7 @@ use aegis_world::battle::WorldRoster;
 use aegis_battle::skill::Kind;
 use aegis_battle::world::AiProfile;
 use aegis_data::UnitDef;
-use aegis_host::Host;
+use emberwake_host::{Battle, Host};
 use aegis_world::{dialogue, explore, progression, travel};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -147,7 +147,7 @@ pub struct BattleScreen {
 impl BattleScreen {
     fn blank(cx: &Cx, mode: Mode) -> Self {
         Self {
-            host: Host::new(cx.data.cat.clone()),
+            host: Host::new(Battle::new(cx.data.cat.clone())),
             w: Vec::new(),
             mouse: (0, 0),
             selected: None,

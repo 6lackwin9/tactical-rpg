@@ -43,11 +43,11 @@ Content changes go through the engine's writer, which validates them and writes 
 without changes stays byte for byte the same):
 
 ```bash
-cargo run -q -p aegis_cli -- content check
-cargo run -q -p aegis_cli -- content upsert units '{"id": "goblin_scout", "name": "Goblin Scout", "class_id": "ranger", "side": "enemy"}'
-cargo run -q -p aegis_cli -- content upsert lore @entry.json world=ashlands
-cargo run -q -p aegis_cli -- content remove units goblin_scout
-cargo run -q -p aegis_cli -- content apply data/seeds/<task>.json   # {"steps": [{"op": "upsert", "kind", "entry", "world"?}, ...]}
+cargo run -q -p emberwake_host -- content check
+cargo run -q -p emberwake_host -- content upsert units '{"id": "goblin_scout", "name": "Goblin Scout", "class_id": "ranger", "side": "enemy"}'
+cargo run -q -p emberwake_host -- content upsert lore @entry.json world=ashlands
+cargo run -q -p emberwake_host -- content remove units goblin_scout
+cargo run -q -p emberwake_host -- content apply data/seeds/<task>.json   # {"steps": [{"op": "upsert", "kind", "entry", "world"?}, ...]}
 ```
 
 Kinds: the catalog kinds, `maps`, `quests` and `services`, and every world kind (with `world=<id>`). Entries are given in

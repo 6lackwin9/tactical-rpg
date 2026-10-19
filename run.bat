@@ -179,7 +179,10 @@ setlocal EnableDelayedExpansion
   echo Building the engine into !TARGET! ...
   rem the workspace is at the repo root since SPLIT1-1; older engine branches keep it in engine\
   if exist "!DIR!\Cargo.toml" (pushd "!DIR!") else (pushd "!DIR!\engine")
-  cargo build --release -q -p aegis_gui -p aegis_cli
+  rem the aegis binary lives in emberwake_host since SPLIT1-6 (aegis_cli before)
+  set "CLI=aegis_cli"
+  if exist "!DIR!\engine\crates\emberwake_host" set "CLI=emberwake_host"
+  cargo build --release -q -p aegis_gui -p !CLI!
   if errorlevel 1 echo The build failed: launching the last build if there is one.
   popd
   set "SHA=?"

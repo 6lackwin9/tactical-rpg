@@ -18,10 +18,11 @@ These describe how the engine is written today (transition 2026-10-19); follow t
 | `aegis_rules` | pure rules: stats, gear, unit building, damage, statuses | battle state, IO |
 | `aegis_battle` | grid, paths, commands, resolver, planner, AI, encounter rules, session, sim | world state, drawing |
 | `aegis_world` | the game's data loader (`source`) and writer (`store`) on `aegis_content`, game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
-| `aegis_host` | the JSON command API over a battle session | rules of its own |
-| `aegis_cli` | `aegis`: sim, battle, serve, link, content | rules of its own |
+| `aegis_host` | engine command API protocol: request routing, history, step counter over the game's `Commands` | anything game-specific |
+| `emberwake_host` | the game's battle command set and CLI commands; the `aegis` binary | rules of its own |
+| `aegis_cli` | engine command line shell: arguments, serve, link, content over the game's `Game` | anything game-specific |
 | `aegis_ui` | engine UI: drawing, widget kit, art, live tuning, agent link, screen stack (`Cx<G>`), window shell | anything game-specific |
-| `aegis_gui` | the game's screens and dev tools on `aegis_ui`; every battle action goes through `aegis_host` requests | game rules |
+| `aegis_gui` | the game's screens and dev tools on `aegis_ui`; every battle action goes through `emberwake_host` requests | game rules |
 
 A rule lives in exactly one place; the GUI, the CLI and the tests call it (the Godot build's "rules engines own logic, scenes only render" rule).
 

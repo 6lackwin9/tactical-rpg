@@ -227,7 +227,7 @@ pub fn manifest_text(data_dir: &Path, world: &str) -> Result<String, String> {
 // ---- Upsert / remove / check -------------------------------------------------------------------------------------
 
 /// The game's hooks for the engine writer.
-struct Emberwake;
+pub struct Emberwake;
 
 impl Hooks for Emberwake {
     fn kinds(&self, world: Option<&str>) -> &'static [&'static str] {

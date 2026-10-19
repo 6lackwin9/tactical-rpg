@@ -1,7 +1,7 @@
 //! The command log replays a battle exactly: the same requests on a fresh host give the same state.
 
 use aegis_data::Catalog;
-use aegis_host::Host;
+use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ fn catalog() -> Arc<Catalog> {
 #[test]
 fn history_replays_to_the_same_state() {
     let cat = catalog();
-    let mut host = Host::new(cat.clone());
+    let mut host = Host::new(Battle::new(cat.clone()));
     let script = [
         json!({"cmd": "new", "encounter": "goblin_ambush", "seed": 99}),
         json!({"cmd": "plan", "unit": 0, "steps": [{"mode": "self", "skill": "guard"}, {"mode": "engage", "skill": "strike", "target": "Goblin Brawler"}]}),
@@ -31,7 +31,7 @@ fn history_replays_to_the_same_state() {
     let end: Value = host.handle(&json!({"cmd": "state"}))["state"].clone();
     let history = host.handle(&json!({"cmd": "history"}))["history"].as_array().unwrap().clone();
     assert!(history.iter().all(|r| r["cmd"] != json!("state")), "read-only requests are not recorded");
-    let mut again = Host::new(cat);
+    let mut again = Host::new(Battle::new(cat));
     for r in &history {
         again.handle(r);
     }

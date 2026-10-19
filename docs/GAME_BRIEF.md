@@ -13,7 +13,7 @@ How to read the rest of this brief: the rules, numbers and system notes below we
 | Rules/specs | stat rules, classes, proficiency, passives, character stats, gear, statuses, damage | `engine/crates/aegis_rules/src/` (Godot RNG, hash, sort and Variant helpers: engine core `engine/crates/aegis_core/src/`) |
 | Planning + resolution | grid, paths, sequence planner, block resolver, commands, AI, encounter rules (objectives, phases, morale), session, sim | `engine/crates/aegis_battle/src/` (`plan.rs`, `resolver.rs`, `command.rs`, `ai.rs`, `encounter.rs`, `session.rs`, `sim.rs`) |
 | Game loop | game state, saves, new game, progression, exploration, quests, dialogue, shops, travel, purse, battle bridge | `engine/crates/aegis_world/src/` (saves on the engine save framework `engine/crates/aegis_save/`) |
-| Command API | battle requests (state, plan, probe, confirm, step, items, ...) for CLI, GUI and tests | `engine/crates/aegis_host/`; CLI `aegis` in `engine/crates/aegis_cli/` |
+| Command API | battle requests (state, plan, probe, confirm, step, items, ...) for CLI, GUI and tests | `engine/crates/emberwake_host/` (battle commands, CLI commands, the `aegis` binary) on the engine protocol `engine/crates/aegis_host/` and shell `engine/crates/aegis_cli/` |
 | UI | every screen and the dev tools (Scene Runner, Content and World Forge viewers, Gear Dojo), agent link | `engine/crates/aegis_gui/src/` on the engine UI `engine/crates/aegis_ui/src/` (`engine/docs/SCREENS.md`) |
 | Tests | integration tests, most replaying the Godot reference | `engine/crates/*/tests/` (`engine/docs/PORT_NOTES.md` "Parity status") |
 

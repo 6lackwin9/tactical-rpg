@@ -24,8 +24,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
 | `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
 | `crates/aegis_world/` | The game's data loader and writer on `aegis_content` (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) and the game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
-| `crates/aegis_host/` | The command API (JSON request in, JSON reply out): state, skills, plan, preset, confirm, step, resolve, advance, autoplay, history |
-| `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
+| `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
+| `crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
+| `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim duel`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
 | `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader, live tuning files, agent link, screen stack with the game's context, window shell and event loop |
 | `crates/aegis_gui/` | `aegis-gui`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo) on `aegis_ui`; agent link on port 47800 |
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `aegis_gui`; in git history |
@@ -43,10 +44,10 @@ engine/parity/trace.sh mode=duel level=5    # record Godot sim fights step by st
 engine/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
 engine/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
 engine/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
-cargo test -p aegis_rules -p aegis_battle -p aegis_host -p aegis_world
+cargo test -p aegis_rules -p aegis_battle -p emberwake_host -p aegis_world
     # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces, journeys (result, state and screen
     # views per action), saves
-cargo run --release -p aegis_cli -- sim duel 1 20   # the balance-sim duel table
+cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table
 ```
 
 Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
@@ -54,7 +55,7 @@ Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
 ## Driving a battle from the CLI (agents)
 
 `aegis serve` reads one JSON request per line and answers one JSON line each (full list in
-`crates/aegis_host/src/lib.rs`):
+`crates/emberwake_host/src/lib.rs`):
 
 ```bash
 printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \
