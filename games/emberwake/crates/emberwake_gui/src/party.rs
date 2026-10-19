@@ -74,6 +74,39 @@ fn derived(d: &Data, m: &UnitState) -> Vec<(&'static str, i64)> {
     ]
 }
 
+/// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
+fn stat_desc(st: &str) -> String {
+    use emberwake_rules::damage::{CRIT_DEX_FLOOR, CRIT_PER_DEX};
+    use emberwake_rules::stats::{HP_PER_CONS, KNOW_UNLOCK_BASE, KNOW_UNLOCK_STEP, MAX_UNLOCK_REDUCTION, RANGE_PERC_THRESHOLD};
+    match st {
+        "STR" => "Strength: power with STR weapons, +2 max HP per point, +1 armor per 4 points; unarmed hits use STR + DEX.".into(),
+        "DEX" => format!("Dexterity: speed (8 + DEX - gear burden), crit chance +{CRIT_PER_DEX}% per point above {CRIT_DEX_FLOOR}, power with DEX weapons and of shots without a ranged weapon."),
+        "INT" => "Intelligence: debuff resistance (2.5% per point) and power with INT weapons.".into(),
+        "CONS" => format!("Constitution: +{HP_PER_CONS} max HP per point."),
+        "PERC" => format!("Perception: at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further; power with PERC weapons."),
+        "KNOW" => format!("Knowledge: from {KNOW_UNLOCK_BASE}, every {KNOW_UNLOCK_STEP} points open skill families one level earlier (up to {MAX_UNLOCK_REDUCTION} levels)."),
+        _ => String::new(),
+    }
+}
+
+/// What a derived value (`derived` labels) means, for the detail pane.
+fn derived_desc(label: &str) -> String {
+    use emberwake_rules::damage::{ARMOR_K, CRIT_BASE, CRIT_DEX_FLOOR, CRIT_PER_DEX};
+    use emberwake_rules::stats::HP_PER_CONS;
+    match label {
+        "Max HP" => format!("Health: 60 + {HP_PER_CONS} per CONS + 2 per STR."),
+        "Speed" => "Initiative: 8 + DEX - the burden of worn gear; faster units act earlier and move further.".into(),
+        "Tiles per move" => "Tiles one move covers: (speed + 2) / 5, from 1 to 4; haste adds 1, slow takes 1.".into(),
+        "Crit %" => format!("Critical hit chance: {CRIT_BASE}% + {CRIT_PER_DEX}% per DEX above {CRIT_DEX_FLOOR}, plus the weapon proficiency bonus."),
+        "Melee power" => "Melee hit power: the weapon's power (with tier and proficiency bonuses) + its scaling stat x your proficiency scaling.".into(),
+        "Ranged power" => "Ranged hit power, the same way with a ranged weapon; without one, DEX alone.".into(),
+        "Armor" => format!("Armor rating: gear mitigation + STR / 4; it cuts damage taken by rating / (rating + {ARMOR_K})."),
+        "Debuff resist %" => "Chance to shake off a debuff: 2.5% per INT, plus the unit's own resistances.".into(),
+        "AP" => "Action points each round; a skill costs its level in AP.".into(),
+        _ => String::new(),
+    }
+}
+
 fn fits(item: &emberwake_data::ItemDef, slot: &str) -> bool {
     let up = slot.to_uppercase();
     item.is_equipment() && (item.slot == up || (up.starts_with("ACCESSORY") && item.slot.starts_with("ACCESSORY")) || (up == "OFF_HAND" && item.slot == "MAIN_HAND" && !item.two_handed && item.item_type == "WEAPON"))
@@ -478,14 +511,19 @@ impl Character {
             for (x, v) in [(126.0, base), (168.0, total - base - sp), (204.0, sp), (234.0, total)] {
                 ui.p.text_right(x, y, &v.to_string(), BODY + 1.0, TEXT);
             }
+            ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, 172, 14), true, false, None, tip(st, &stat_desc(st)));
         }
         for (i, (label, v)) in derived(d, m).iter().enumerate() {
             let y = 143.0 + i as f32 * 15.0;
             ui.p.text(250.0, y, label, BODY + 1.0, DIM);
             ui.p.text(325.0, y, &v.to_string(), BODY + 1.0, TEXT);
+            ui.push(format!("stats.derived.{label}"), "row", format!("{label} {v}"), Rect::new(248, y as i32 - 2, 100, 14), true, false, None, tip(label, &derived_desc(label)));
         }
         let names: Vec<String> = m.passives.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
-        ui.p.text_fit(68.0, 258.0, &format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") }), BODY + 1.0, 540.0, DIM);
+        let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
+        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, 540.0, DIM);
+        let about: Vec<String> = m.passives.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, 544, 13), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -508,11 +546,12 @@ impl Character {
             ui.p.text_right(125.0, y as f32 + 4.0, &now.to_string(), BODY + 1.0, TEXT);
             ui.p.text_right(158.0, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { GOLD } else { DIM });
             ui.p.text_right(187.0, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, TEXT);
-            ui.button(&format!("level.{st}.minus"), Rect::new(195, y, 23, 17), "-", PAct::Remove(st), add > 0);
-            ui.button(&format!("level.{st}.plus"), Rect::new(226, y, 23, 17), "+", PAct::Add(st), left > 0);
+            ui.push(format!("level.{st}"), "row", format!("{st} {now} + {add}"), Rect::new(68, y, 122, 17), true, false, None, tip(st, &stat_desc(st)));
+            ui.button_tip(&format!("level.{st}.minus"), Rect::new(195, y, 23, 17), "-", PAct::Remove(st), add > 0, tip(&format!("-1 {st}"), "Take back a drafted point. Nothing is spent until you Confirm."));
+            ui.button_tip(&format!("level.{st}.plus"), Rect::new(226, y, 23, 17), "+", PAct::Add(st), left > 0, tip(&format!("+1 {st}"), &stat_desc(st)));
         }
-        ui.button("level.auto", Rect::new(266, 121, 69, 17), "Auto", PAct::Auto, left > 0);
-        ui.button("level.revert", Rect::new(266, 145, 69, 17), "Revert", PAct::Revert, drafted > 0);
+        ui.button_tip("level.auto", Rect::new(266, 121, 69, 17), "Auto", PAct::Auto, left > 0, tip("Auto", "Spend the remaining points by the class growth weights."));
+        ui.button_tip("level.revert", Rect::new(266, 145, 69, 17), "Revert", PAct::Revert, drafted > 0, tip("Revert", "Clear the drafted points. Nothing is spent until you Confirm."));
         let mut work = m.clone();
         for (k, v) in &self.draft {
             *work.spend.entry(k.clone()).or_insert(0) += v;
@@ -523,6 +562,7 @@ impl Character {
             let old = before.get(i).map(|b| b.1).unwrap_or(*v);
             ui.p.text(352.0, y, label, BODY + 1.0, DIM);
             ui.p.text(427.0, y, &if old != *v { format!("{old} -> {v}") } else { v.to_string() }, BODY + 1.0, if old != *v { GOLD } else { TEXT });
+            ui.push(format!("level.derived.{label}"), "row", format!("{label} {v}"), Rect::new(350, y as i32 - 2, 130, 14), true, false, None, tip(label, &derived_desc(label)));
         }
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
     }
