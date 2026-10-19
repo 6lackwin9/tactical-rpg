@@ -195,6 +195,22 @@ screen are ported (docs/SCREENS.md); E6 not started.
 Godot keeps shipping during this. Each milestone re-runs parity against the
 latest `main` to catch drift.
 
+### 8.1 Transition (user, 2026-10-19)
+
+Godot code is locked in `main`. The only Godot work in progress (art asset rigging, partly done) moves to the engine
+instead of being finished in Godot. Before the transition, the engine work finishes: battle rules (objectives, phases,
+morale, guests, deployments, start buffs, battle items) and data independence (the engine reads `data/` itself).
+Then three steps, in order:
+
+1. **Legacy copy:** every Godot script, spec, doc and test is copied into a `legacy/` folder from which the current
+   Godot build still runs, so the reference game stays playable and parity tools keep working.
+2. **Switch the code:** the project's own code and tooling move from Godot to Aegis (entry points, launch scripts,
+   gates, data paths).
+3. **Switch the process:** the agent docs and other `.md` files (CLAUDE.md, workflow, roles, gates, skills) are
+   rewritten for development on the engine.
+
+Each step needs the user's go-ahead before it starts; merging `engine` into `main` is part of step 2.
+
 ## 9. Scope
 
 - **Target:** switch this game over to the engine. If that works and

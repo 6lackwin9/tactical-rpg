@@ -79,6 +79,10 @@ func _initialize() -> void:
 				classes.assign(kv[1].split(","))
 			"mode":
 				mode = kv[1]
+	if mode == "world":
+		_world_traces(seed_count, preset)
+		quit()
+		return
 	var args := SimArgs.new()
 	if not args.parse(PackedStringArray(["duel", str(level), str(seed_count), "jitter=%s" % jitter])):
 		print("§ trace: argument error: ", args.error)
@@ -172,6 +176,61 @@ func _initialize() -> void:
 	file.close()
 	print("§ trace: %d fights -> %s" % [fights.size(), path])
 	quit()
+
+# mode=world: every world's own encounters as WorldEncounter plays them (its own party of world characters, guests,
+# objectives, phases, morale; start buffs on when the encounter has any), both sides drafted by the AI with `preset`.
+# Seeds 1..seed_count replace the authored rng_seed. Nothing is written to the catalogs. Writes traces_world_l0.json:
+# {"world": true, "fights": [{world, encounter, seed, preset, start_buffs, start, rounds, result}]}.
+func _world_traces(seed_count: int, preset: String) -> void:
+	var recorder := Recorder.new()
+	var meta: Array = []
+	# Synthetic variants (the authored entry with a few fields replaced) cover the rules no shipped encounter uses yet.
+	var variants: Array[Dictionary] = [{}, {"objective": "escape", "objective_count": 1}, {"deployment": "centre"},
+		{"morale": true, "morale_break": 70}, {"objective": "hold", "objective_tiles": [[5, 3], [6, 5]], "objective_rounds": 2},
+		{"start_status": [{"status": "haste", "rounds": 2}, {"status": "fortify", "rounds": 3, "magnitude": 4}]}]
+	for w: String in WorldCatalog.world_ids():
+		for e: Dictionary in WorldCatalog.own_entries(w, "encounters"):
+			for v: int in range(variants.size()):
+				var over: Dictionary = variants[v]
+				if v > 0 and str(e["id"]) not in ["ash_patrol", "ash_raiders", "ashmaw_stand", "strand_clash"]:
+					continue
+				var def_entry: Dictionary = e.duplicate(true)
+				def_entry.merge(over, true)
+				var start_buffs: bool = not DictUtil.array_of(def_entry.get("start_status", [])).is_empty()
+				for s: int in range(1, seed_count + 1):
+					var enc := WorldEncounter.new(w, str(e["id"]))
+					enc.apply_definition(def_entry)
+					enc.rng_seed = s
+					enc.grant_all_start = start_buffs
+					var session := CombatSession.new(enc)
+					session.start()
+					recorder.on_start(session)
+					for _r: int in range(enc.max_rounds):
+						session.plan_apply_preset_all(preset)
+						if not session.confirm_plan():
+							break
+						for _i: int in range(600):
+							if session.phase == CombatSession.Phase.REPLAY:
+								break
+							session.step_next()
+							recorder.on_step(session)
+						if session.combat_over or not session.can_advance_round():
+							break
+						session.advance_round()
+					recorder.on_end(session, {"rounds": session.current_round})
+					meta.append({"world": w, "encounter": str(e["id"]), "override": over, "seed": s, "preset": preset, "start_buffs": start_buffs})
+					session.dispose()
+	var fights: Array = []
+	for i: int in range(recorder.fights.size()):
+		var f: Dictionary = recorder.fights[i]
+		f.merge(DictUtil.dict_of(meta[i]))
+		fights.append(f)
+	DirAccess.make_dir_recursive_absolute(out_dir)
+	var path: String = out_dir.path_join("traces_world_%s.json" % preset)
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify({"world": true, "fights": fights}, "", false))
+	file.close()
+	print("§ trace: %d world fights -> %s" % [fights.size(), path])
 
 func _clear_sandbox() -> void:
 	for kind: String in ContentSchema.KINDS:

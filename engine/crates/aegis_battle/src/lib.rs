@@ -2,6 +2,7 @@
 
 pub mod ai;
 pub mod command;
+pub mod encounter;
 pub mod grid;
 pub mod path;
 pub mod plan;

@@ -15,14 +15,14 @@ use crate::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
 use aegis_battle::command::CmdKind;
 use aegis_battle::grid::{V2, GRID_H, GRID_W};
 use aegis_battle::plan::expected;
-use aegis_battle::session::{EncounterDef, Phase, Prebuilt, Session};
+use aegis_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGrant};
+use aegis_world::battle::WorldRoster;
 use aegis_battle::skill::Kind;
 use aegis_battle::world::AiProfile;
 use aegis_data::UnitDef;
 use aegis_host::Host;
 use aegis_world::json::{self, s, Dict};
 use aegis_world::{dialogue, explore, progression, travel};
-use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -139,6 +139,8 @@ pub struct BattleScreen {
     /// Arena only: the world the encounter belongs to (played with that world's characters); None = catalog.
     arena_world: Option<String>,
     data: std::sync::Arc<aegis_world::Data>,
+    /// Session events already shown in the message bar.
+    events_seen: usize,
 }
 
 impl BattleScreen {
@@ -167,6 +169,7 @@ impl BattleScreen {
             seed: cx.seed,
             arena_world: None,
             data: cx.data.clone(),
+            events_seen: 0,
         }
     }
 
@@ -208,13 +211,11 @@ impl BattleScreen {
         if !zone.is_empty() {
             def.zone = zone;
         }
-        let mut units: IndexMap<String, UnitDef> = IndexMap::new();
-        for r in def.enemies.iter().chain(def.wave_units.iter()) {
-            let e = d.character_unit_entry(d.resolve(&world, "characters", r));
-            if !e.is_empty() {
-                units.insert(r.clone(), UnitDef::from_obj(&e));
-            }
-        }
+        def.id = format!("{world}:{}", s(hit, "id"));
+        // PACE1 rule 7 (GameEncounter): a start_status entry is granted when its requires_flags all hold.
+        let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| aegis_world::quest::condition_met(gs, json::dict(c)))).collect();
+        def.start_grant = StartGrant::Only(grants);
+        let roster = WorldRoster { d: &d, world: world.clone() };
         let mut party = Vec::new();
         let mut members = Vec::new();
         for m in active {
@@ -226,7 +227,7 @@ impl BattleScreen {
             party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base) });
             members.push(m.id.clone());
         }
-        let session = Session::start_with(d.cat.clone(), def, &units, party);
+        let session = Session::start_with(d.cat.clone(), def, &roster, party);
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
         b.host.session = Some(session);
         b.host.history.clear();
@@ -267,6 +268,11 @@ impl BattleScreen {
             }
         }
         self.last_hp = hps;
+        let (n, last) = { let s = self.session(); (s.events.len(), s.events.last().cloned()) };
+        if n > self.events_seen {
+            self.message = last.unwrap_or_default();
+            self.events_seen = n;
+        }
     }
 
     fn start_battle(&mut self) {
@@ -281,14 +287,9 @@ impl BattleScreen {
             if let Some(s) = self.seed {
                 def.rng_seed = s;
             }
-            let mut units: IndexMap<String, UnitDef> = IndexMap::new();
-            for r in def.party.iter().chain(def.enemies.iter()).chain(def.wave_units.iter()) {
-                let e = d.character_unit_entry(d.resolve(&world, "characters", r));
-                if !e.is_empty() {
-                    units.insert(r.clone(), UnitDef::from_obj(&e));
-                }
-            }
-            self.host.session = Some(Session::start(d.cat.clone(), def, &units));
+            def.id = format!("{world}:{}", self.encounter);
+            let roster = WorldRoster { d: &d, world: world.clone() };
+            self.host.session = Some(Session::start(d.cat.clone(), def, &roster));
             self.host.history.clear();
             self.after_start(&s(entry, "intro"));
             return;
@@ -314,7 +315,12 @@ impl BattleScreen {
         self.pending_next_round = false;
         self.floats.clear();
         self.log_scroll = 0;
-        self.message = if intro.is_empty() { "Plan your party's round, then confirm.".into() } else { intro.to_string() };
+        let (objective, n) = {
+            let s = self.session();
+            (aegis_battle::encounter::Objectives::text_of(&s.def.raw, |r| s.units_of_ref(r).first().map(|&c| s.w.units[c].name.clone()).unwrap_or_else(|| r.to_string())), s.events.len())
+        };
+        self.events_seen = n;
+        self.message = if intro.is_empty() { format!("{objective} Plan your round, then confirm.") } else { format!("{intro} {objective}") };
     }
 
     fn planning(&self) -> bool {

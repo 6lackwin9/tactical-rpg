@@ -48,7 +48,7 @@ fn first_divergence(g: &Value, r: &Value) -> Option<String> {
 #[test]
 fn battles_replay_godot_step_for_step() {
     let cat = Arc::new(Catalog::from_value(&load("catalog.json")));
-    let mut files: Vec<String> = std::fs::read_dir(out_dir()).expect("missing engine/parity/out").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("traces") && n.ends_with(".json")).collect();
+    let mut files: Vec<String> = std::fs::read_dir(out_dir()).expect("missing engine/parity/out").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("traces") && !n.starts_with("traces_world") && n.ends_with(".json")).collect();
     files.sort();
     assert!(!files.is_empty(), "no traces*.json - run engine/parity/trace.sh");
     let mut total = 0;
