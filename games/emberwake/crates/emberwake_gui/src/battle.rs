@@ -9,7 +9,9 @@
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::audio::Bus;
 use aegis_ui::painter::Painter;
 use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
 use emberwake_battle::command::CmdKind;
@@ -142,6 +144,8 @@ pub struct BattleScreen {
     data: std::sync::Arc<emberwake_world::Data>,
     /// Session events already shown in the message bar.
     events_seen: usize,
+    /// Resolver log lines already sounded.
+    log_seen: usize,
 }
 
 impl BattleScreen {
@@ -171,6 +175,7 @@ impl BattleScreen {
             arena_world: None,
             data: cx.data.clone(),
             events_seen: 0,
+            log_seen: 0,
         }
     }
 
@@ -263,12 +268,22 @@ impl BattleScreen {
                 if new < old {
                     self.floats.push(Float { unit: i, text: format!("-{}", old - new), color: cx.tuning.value.damage_color, born: now });
                     self.flashes.push((i, now));
+                    if new <= 0 {
+                        cx.audio.play(Bus::Sfx, "sfx/defeat.wav");
+                    }
                 } else if new > old {
                     self.floats.push(Float { unit: i, text: format!("+{}", new - old), color: cx.tuning.value.heal_color, born: now });
                 }
             }
         }
         self.last_hp = hps;
+        let log = &self.session().resolver.log;
+        for line in log.iter().skip(self.log_seen) {
+            if let Some(key) = sound_of(line) {
+                cx.audio.play(Bus::Sfx, &format!("sfx/{key}.wav"));
+            }
+        }
+        self.log_seen = log.len();
         let (n, last) = { let s = self.session(); (s.events.len(), s.events.last().cloned()) };
         if n > self.events_seen {
             self.message = last.unwrap_or_default();
@@ -309,6 +324,7 @@ impl BattleScreen {
 
     fn after_start(&mut self, intro: &str) {
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
+        self.log_seen = self.session().resolver.log.len();
         self.selected = self.session().w.allies.first().copied();
         self.popup = None;
         self.playing = false;
@@ -392,7 +408,16 @@ impl BattleScreen {
 
     // ---- Actions (all mutations are command-API requests) -----------------------------------------------------
 
+    /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     fn act(&mut self, cx: &mut Cx, a: Action) {
+        if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound) {
+            cx.audio.play(Bus::Ui, "sfx/ui_click.wav");
+        }
+        self.run(cx, a);
+    }
+
+    /// An action, from the player or chained by another action or autoplay.
+    fn run(&mut self, cx: &mut Cx, a: Action) {
         match a {
             Action::Select(u) => {
                 self.selected = Some(u);
@@ -449,7 +474,7 @@ impl BattleScreen {
                 self.auto = !self.auto;
                 if self.auto && self.planning() {
                     self.send(cx, json!({"cmd": "preset", "preset": TACTICS[self.party_tactic]}));
-                    self.act(cx, Action::Confirm);
+                    self.run(cx, Action::Confirm);
                 }
             }
             Action::PartyMenu => self.tactic_menu(true),
@@ -460,13 +485,13 @@ impl BattleScreen {
                     self.message = format!("Round {}: plan your party.", self.session().current_round);
                     if self.auto {
                         self.send(cx, json!({"cmd": "preset", "preset": TACTICS[self.party_tactic]}));
-                        self.act(cx, Action::Confirm);
+                        self.run(cx, Action::Confirm);
                     }
                 }
             }
             Action::Step => {
                 if self.session().phase == Phase::Replay {
-                    self.act(cx, Action::NextRound);
+                    self.run(cx, Action::NextRound);
                 } else {
                     self.send(cx, json!({"cmd": "step"}));
                 }
@@ -659,7 +684,7 @@ impl Screen<GameCx> for BattleScreen {
         if self.pending_next_round {
             if now >= self.next_at && self.session().phase == Phase::Replay {
                 self.pending_next_round = false;
-                self.act(cx, Action::NextRound);
+                self.run(cx, Action::NextRound);
             }
             return;
         }
@@ -752,7 +777,44 @@ impl Screen<GameCx> for BattleScreen {
         Some(reply)
     }
 
+    /// MUSIC1: boss when an enemy unit has the boss tier, else combat; scoped to the battle's world and location.
+    fn music(&self, cx: &Cx) -> Option<String> {
+        let ctx = if self.host.session.as_ref().is_some_and(boss_fight) { music::BOSS } else { music::COMBAT };
+        match &self.arena_world {
+            Some(w) => music::track(cx, ctx, w, ""),
+            None if self.world_mode() => music::game_track(cx, ctx),
+            None => music::track(cx, ctx, "", ""),
+        }
+    }
+
     aegis_ui::widget_plumbing!();
+}
+
+/// Whether any enemy unit has the boss tier (MusicDirector.combat_context). Wave and phase units are built when the
+/// battle starts (held in reserve), so they count from the first round like Godot's encounter refs.
+fn boss_fight(s: &Session) -> bool {
+    (0..s.w.units.len()).any(|c| !s.w.allies.contains(&c) && s.tier_of(c) == "boss")
+}
+
+/// The sound a resolver log line plays (scripts/audio/sound_events.gd FOR_PRESET); None: silent. The engine's log
+/// has no mitigation tag, so a hit for 0 plays mitigated; a status that is a buff plays nothing.
+fn sound_of(line: &str) -> Option<&'static str> {
+    let tag = line.split_once(']').map(|(t, _)| t.trim_start_matches('['))?;
+    match tag {
+        "Attack Miss" | "Area Miss" => Some("miss"),
+        "Attack" if line.contains(" CRIT") => Some("crit"),
+        "Attack" if line.contains(" for 0 ") => Some("mitigated"),
+        "Attack" => Some("hit"),
+        "Status" => {
+            let id = line.split_once("(inflicts ")?.1.split(')').next()?;
+            (!emberwake_rules::status::row_of(id).is_some_and(|r| r.buff)).then_some("debuff")
+        }
+        "Defend" if !line.contains("guard was broken") => Some("defend"),
+        "Focus" => Some("buff"),
+        "Support" => Some("heal"),
+        "Move" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
+        _ => None,
+    }
 }
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
@@ -1270,4 +1332,41 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     }
 
     g.w = ui.widgets;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{boss_fight, sound_of};
+    use emberwake_battle::session::{EncounterDef, Session};
+    use emberwake_world::battle::WorldRoster;
+    use emberwake_world::Data;
+
+    #[test]
+    fn a_boss_tier_enemy_makes_a_boss_fight() {
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let d = Data::open(&dir).expect("data").0;
+        let fight = |id: &str| {
+            let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", id));
+            boss_fight(&Session::start(d.cat.clone(), def, &WorldRoster { d: &d, world: "ashlands".into() }))
+        };
+        assert!(fight("ashmaw_stand"));
+        assert!(!fight("courtyard_skirmish"));
+    }
+
+    #[test]
+    fn log_lines_pick_their_sounds() {
+        assert_eq!(sound_of("[Attack] Rook struck Goblin for 7 (HP 3/10)"), Some("hit"));
+        assert_eq!(sound_of("[Attack] Rook struck Goblin for 14 CRIT (HP 0/10)"), Some("crit"));
+        assert_eq!(sound_of("[Attack] Rook struck Goblin for 0 (HP 10/10)"), Some("mitigated"));
+        assert_eq!(sound_of("[Attack Miss] Rook: target no longer in combat"), Some("miss"));
+        assert_eq!(sound_of("[Area Miss] Mage hit nobody"), Some("miss"));
+        assert_eq!(sound_of("[Status] Hex -> Goblin (inflicts poison)"), Some("debuff"));
+        assert_eq!(sound_of("[Status] Hex -> Goblin (resisted poison)"), None);
+        assert_eq!(sound_of("[Status] Bard -> Rook (inflicts haste)"), None);
+        assert_eq!(sound_of("[Defend] Rook raises guard (40% less damage)"), Some("defend"));
+        assert_eq!(sound_of("[Defend] Rook's guard was broken"), None);
+        assert_eq!(sound_of("[Support] Cleric used Mend on Rook: healed 6"), Some("heal"));
+        assert_eq!(sound_of("[Move] Rook moved 2 of 2 tiles to (3, 4)"), Some("move_step"));
+        assert_eq!(sound_of("[Rest] Rook AP 3/4"), None);
+    }
 }

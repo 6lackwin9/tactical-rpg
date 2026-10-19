@@ -11,6 +11,7 @@ mod dojo;
 mod forge;
 mod hub;
 mod menus;
+mod music;
 mod party;
 mod region;
 mod runner;
@@ -20,6 +21,7 @@ mod worldmap;
 
 use aegis_content::manifest::{self, Manifest};
 use aegis_ui::art;
+use aegis_ui::audio::Audio;
 use aegis_ui::screen::Settings;
 use aegis_ui::shell::Options;
 use aegis_ui::tuning::TuningFile;
@@ -95,6 +97,7 @@ fn main() -> Result<()> {
     let cx = Cx {
         settings: Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings()),
         art: art::Art::new(project),
+        audio: Audio::new(Some(home.join("assets/audio"))),
         nav: Vec::new(),
         notice: notices,
         shot_dir: home.join("parity/out"),

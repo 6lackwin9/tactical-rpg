@@ -3,6 +3,7 @@
 //! (HealRules.make_camp) and entering the location the party stands on. Esc / Back returns to the region map.
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
+use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
@@ -230,6 +231,10 @@ impl Screen<GameCx> for WorldMap {
 
     fn state(&self, cx: &Cx) -> Value {
         json!({"selected": self.selected, "view": travel::view(&cx.data, cx.gs())})
+    }
+
+    fn music(&self, cx: &Cx) -> Option<String> {
+        music::game_track(cx, music::TRAVEL)
     }
 
     widget_plumbing!();

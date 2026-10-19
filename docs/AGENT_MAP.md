@@ -30,6 +30,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | DOJO2-B | - | gear dojo: skills (with ranks) and pouch slots listed; arrows checked |
 | main session (no lane agents) | UIKIT1 | - | engine: select with its choice list, draggable slider, info-row hover, agent `drag`; game: settings, Scene Runner, World Forge and turn-in use them |
 | main session (no lane agents) | PORT-SETTINGS | - | engine owns and applies window mode, size, vsync, frame cap and text size; game: settings screen, Character popup and Settings tabs fit the text size |
+| main session (no lane agents) | PORT-AUDIO | - | engine: aegis_ui::audio on rodio (buses, voice pools, crossfaded looping music, volume previews), Screen::music, levels from the settings; game: MUSIC1 chooser per screen, battle sounds from the resolver log, settings volume samples |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

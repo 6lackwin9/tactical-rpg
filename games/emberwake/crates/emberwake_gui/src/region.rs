@@ -4,6 +4,7 @@
 //! a world-map exit opens the world map. Map-less locations show their exits as buttons.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, TITLE, W};
 use aegis_ui::widget_plumbing;
@@ -771,6 +772,12 @@ impl Screen<GameCx> for RegionMap {
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "lore": self.lore.as_ref().map(|l| l.0.clone())})
+    }
+
+    /// MUSIC2: shop while the shop is open, else the location's kind.
+    fn music(&self, cx: &Cx) -> Option<String> {
+        let shop = self.runner.as_ref().is_some_and(|r| !r.closed && !r.shop_qid.is_empty());
+        cx.game.as_ref().and_then(|g| music::game_track(cx, music::region_context(&cx.data, &g.gs, shop)))
     }
 
     widget_plumbing!();

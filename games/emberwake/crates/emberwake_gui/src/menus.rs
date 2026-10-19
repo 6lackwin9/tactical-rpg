@@ -1,7 +1,9 @@
 //! Main menu, New game, Load / Save slots and Settings (scripts/ui/menus: main_menu_model, new_game_model,
 //! save_slots_model, settings_model). Placeholder logic as in Godot; file import / export of saves is not ported yet.
 
+use aegis_ui::audio::Bus;
 use aegis_ui::canvas::{rgba, Rect};
+use crate::music;
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, WINDOW_MODES, WINDOW_SIZES};
@@ -111,6 +113,9 @@ impl Screen<GameCx> for MainMenu {
         }
     }
     fn back(&mut self, _cx: &mut Cx) {}
+    fn music(&self, cx: &Cx) -> Option<String> {
+        music::track(cx, music::MENU, "", "")
+    }
     widget_plumbing!();
 }
 
@@ -442,6 +447,17 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
     ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Screenshot", "F12")]),
 ];
 
+/// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
+fn preview_of(key: &str) -> Option<(Bus, &'static str)> {
+    match key {
+        "master" => Some((Bus::Ui, "sfx/ui_confirm.wav")),
+        "music" => Some((Bus::Music, "sfx/ui_confirm.wav")),
+        "effects" => Some((Bus::Sfx, "sfx/hit.wav")),
+        "interface" => Some((Bus::Ui, "sfx/ui_click.wav")),
+        _ => None,
+    }
+}
+
 impl SettingsScreen {
     pub fn new(cx: &Cx) -> Self {
         Self { tab: 0, draft: cx.settings.v.clone(), w: Vec::new() }
@@ -455,6 +471,10 @@ impl SettingsScreen {
                 let (lo, hi) = if k.ends_with("speed") || k.ends_with("scale") { (0.5, 2.0) } else { (0.0, 100.0) };
                 let v = v.clamp(lo, hi);
                 self.draft[k] = if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) };
+                if let Some((bus, sample)) = preview_of(k) {
+                    cx.audio.set_levels(&self.draft);
+                    cx.audio.preview(bus, sample);
+                }
             }
             SetAct::Pick(k, i) => {
                 if let Some(o) = choices(k).get(i) {
@@ -480,7 +500,9 @@ impl Screen<GameCx> for SettingsScreen {
     fn overlay(&self) -> bool {
         true
     }
-    fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        // The draft levels play while the popup is open; the shell puts the saved ones back each frame.
+        cx.audio.set_levels(&self.draft);
         let mut ui: Ui<SetAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 140));
         let r = Rect::new(95, 25, 450, 310);
