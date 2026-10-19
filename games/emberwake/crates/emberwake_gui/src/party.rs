@@ -4,7 +4,7 @@
 
 use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
 use emberwake_data::STATS;
@@ -53,14 +53,19 @@ pub struct Character {
     pending_switch: Option<(Option<String>, Option<&'static str>)>,
     /// First family row shown on the Skills tab (the wheel scrolls).
     scroll: usize,
+    /// First stash row shown on the Gear tab (the wheel scrolls).
+    gear_scroll: usize,
     detail: String,
     w: Vec<Widget<PAct>>,
 }
 
 /// PartyPreview.derived: [(label, value)] of a member built without auto-spend.
 fn derived(d: &Data, m: &UnitState) -> Vec<(&'static str, i64)> {
-    let Some(b) = progression::build_with(d, m, false) else { return Vec::new() };
-    let u: &Unit = &b.unit;
+    progression::build_with(d, m, false).map(|b| derived_of(&b.unit)).unwrap_or_default()
+}
+
+/// The derived values of a built unit.
+fn derived_of(u: &Unit) -> Vec<(&'static str, i64)> {
     vec![
         ("Max HP", u.max_hp as i64),
         ("Speed", u.speed as i64),
@@ -119,8 +124,7 @@ fn derived_desc(label: &str) -> String {
 }
 
 fn fits(item: &emberwake_data::ItemDef, slot: &str) -> bool {
-    let up = slot.to_uppercase();
-    item.is_equipment() && (item.slot == up || (up.starts_with("ACCESSORY") && item.slot.starts_with("ACCESSORY")) || (up == "OFF_HAND" && item.slot == "MAIN_HAND" && !item.two_handed && item.item_type == "WEAPON"))
+    emberwake_world::state::item_fits_slot(item, slot)
 }
 
 impl Character {
@@ -129,7 +133,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), using_default: true, skills_loaded: false, gear: None, pending_switch: None, scroll: 0, detail: String::new(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), using_default: true, skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -355,46 +359,10 @@ impl Character {
                     show_errors(cx, errors);
                 }
             }
-            PAct::Unequip(slot) => {
-                self.load_gear(cx);
-                let (work, stash) = self.gear.as_mut().unwrap();
-                if let Some(item) = work.equipment.shift_remove(&slot) {
-                    *stash.entry(item).or_insert(0) += 1;
-                } else {
-                    show_errors(cx, vec![format!("The {} slot already holds the class default.", slot.replace('_', " "))]);
-                }
-            }
-            PAct::Equip(item) => {
-                self.load_gear(cx);
-                let Some(def) = d.cat.items.get(&item).cloned() else { return };
-                let (work, stash) = self.gear.as_mut().unwrap();
-                let Some(slot) = LOADOUT_SLOTS.iter().find(|s| fits(&def, s) && !work.equipment.contains_key(**s)).or_else(|| LOADOUT_SLOTS.iter().find(|s| fits(&def, s))) else {
-                    show_errors(cx, vec![format!("{} can't be worn.", def.name)]);
-                    return;
-                };
-                if let Some(old) = work.equipment.insert(slot.to_string(), item.clone()) {
-                    *stash.entry(old).or_insert(0) += 1;
-                }
-                take_one(stash, &item);
-            }
-            PAct::PouchAdd(item) => {
-                self.load_gear(cx);
-                let (work, stash) = self.gear.as_mut().unwrap();
-                if work.pouch.len() >= POUCH_MAX {
-                    show_errors(cx, vec![format!("The pouch holds at most {POUCH_MAX} items.")]);
-                    return;
-                }
-                work.pouch.push(item.clone());
-                take_one(stash, &item);
-            }
-            PAct::PouchRemove(i) => {
-                self.load_gear(cx);
-                let (work, stash) = self.gear.as_mut().unwrap();
-                if i < work.pouch.len() {
-                    let item = work.pouch.remove(i);
-                    *stash.entry(item).or_insert(0) += 1;
-                }
-            }
+            PAct::Unequip(slot) => self.gear_move(cx, |_, work, stash| unequip(work, stash, &slot)),
+            PAct::Equip(item) => self.gear_move(cx, |d, work, stash| equip(d, work, stash, &item, None)),
+            PAct::PouchAdd(item) => self.gear_move(cx, |d, work, stash| pouch_put(d, work, stash, &item, None)),
+            PAct::PouchRemove(i) => self.gear_move(cx, |_, work, stash| pouch_take(work, stash, i)),
             PAct::ResetGear => self.gear = None,
             PAct::ConfirmGear => {
                 let Some((work, stash)) = self.gear.clone() else { return };
@@ -416,12 +384,144 @@ impl Character {
     }
 }
 
-fn take_one(stash: &mut IndexMap<String, i64>, item: &str) {
+impl Character {
+    /// One gear move on the draft (loaded first); a refused move shows its reason.
+    fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &mut UnitState, &mut Stash) -> Result<(), String>) {
+        self.load_gear(cx);
+        let d = cx.data.clone();
+        let (work, stash) = self.gear.as_mut().unwrap();
+        if let Err(e) = mv(&d, work, stash) {
+            show_errors(cx, vec![e]);
+        }
+    }
+
+    /// The draft after the drop of payload `from` on target `to` (GEARUI1 drag and drop), or why it can't be done.
+    fn after_drop(&self, d: &Data, from: &str, to: &str) -> Result<(UnitState, Stash), String> {
+        let (mut work, mut stash) = self.gear.clone().ok_or("No gear draft.")?;
+        drop_move(d, &mut work, &mut stash, from, to)?;
+        Ok((work, stash))
+    }
+}
+
+/// The party stash: item id -> count.
+type Stash = IndexMap<String, i64>;
+
+fn take_one(stash: &mut Stash, item: &str) {
     let left = stash.get(item).copied().unwrap_or(0) - 1;
     if left <= 0 {
         stash.shift_remove(item);
     } else {
         stash.insert(item.to_string(), left);
+    }
+}
+
+fn give_one(stash: &mut Stash, item: String) {
+    *stash.entry(item).or_insert(0) += 1;
+}
+
+// ---- Gear moves on a draft (GearModel equip / unequip / pouch): clicks, drops and the stat preview share them ----
+
+/// Wears `item` from the stash in `slot`, or (None) the first free slot it fits, else the first it fits; what the slot
+/// held goes back to the stash.
+fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Option<&str>) -> Result<(), String> {
+    let def = d.cat.items.get(item).ok_or_else(|| format!("Unknown item '{item}'."))?;
+    if stash.get(item).copied().unwrap_or(0) < 1 {
+        return Err(format!("There is no {} in the stash.", def.name));
+    }
+    let slot = match slot {
+        Some(s) if fits(def, s) => s,
+        Some(s) => return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(s).to_lowercase())),
+        None => *LOADOUT_SLOTS.iter().find(|s| fits(def, s) && !work.equipment.contains_key(**s)).or_else(|| LOADOUT_SLOTS.iter().find(|s| fits(def, s))).ok_or_else(|| format!("{} can't be worn.", def.name))?,
+    };
+    work.can_wear(d, item, slot)?;
+    if let Some(old) = work.equipment.insert(slot.to_string(), item.to_string()) {
+        give_one(stash, old);
+    }
+    take_one(stash, item);
+    Ok(())
+}
+
+/// Takes off what `slot` holds (the class default comes back).
+fn unequip(work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
+    let item = work.equipment.shift_remove(slot).ok_or_else(|| format!("The {} slot already holds the class default.", slot.replace('_', " ")))?;
+    give_one(stash, item);
+    Ok(())
+}
+
+/// Moves the item worn in `from` to `to` (it must fit there); what `to` held moves to `from` when it fits, else to the
+/// stash.
+fn move_slot(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str) -> Result<(), String> {
+    let item = work.equipment.get(from).cloned().ok_or("That slot holds the class default.")?;
+    let def = d.cat.items.get(&item).ok_or_else(|| format!("Unknown item '{item}'."))?;
+    if from == to || !fits(def, to) {
+        return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(to).to_lowercase()));
+    }
+    work.equipment.shift_remove(from);
+    if let Some(old) = work.equipment.insert(to.to_string(), item) {
+        if d.cat.items.get(&old).is_some_and(|o| fits(o, from)) {
+            work.equipment.insert(from.to_string(), old);
+        } else {
+            give_one(stash, old);
+        }
+    }
+    Ok(())
+}
+
+/// Puts a consumable from the stash in the pouch: in place of pouch slot `at` when it is filled (that item goes back),
+/// else at the end while there is room.
+fn pouch_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: Option<usize>) -> Result<(), String> {
+    let def = d.cat.items.get(item).ok_or_else(|| format!("Unknown item '{item}'."))?;
+    if def.item_type != "CONSUMABLE" {
+        return Err(format!("{} can't go in the battle pouch.", def.name));
+    }
+    if !def.offered_in_battle() {
+        return Err(format!("{} can't be used in battle.", def.name));
+    }
+    if stash.get(item).copied().unwrap_or(0) < 1 {
+        return Err(format!("There is no {} in the stash.", def.name));
+    }
+    match at.filter(|&i| i < work.pouch.len()) {
+        Some(i) => {
+            let old = std::mem::replace(&mut work.pouch[i], item.to_string());
+            give_one(stash, old);
+        }
+        None if work.pouch.len() >= POUCH_MAX => return Err(format!("The pouch holds at most {POUCH_MAX} items.")),
+        None => work.pouch.push(item.to_string()),
+    }
+    take_one(stash, item);
+    Ok(())
+}
+
+fn pouch_take(work: &mut UnitState, stash: &mut Stash, i: usize) -> Result<(), String> {
+    if i >= work.pouch.len() {
+        return Err("That pouch slot is empty.".into());
+    }
+    give_one(stash, work.pouch.remove(i));
+    Ok(())
+}
+
+/// A drop: payload `stash.<item>`, `equip.<slot>` or `pouch.<i>` on target `slot.<slot>`, `pouch.<i>` or `stash`.
+fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str) -> Result<(), String> {
+    let (kind, what) = from.split_once('.').unwrap_or((from, ""));
+    let (target, at) = to.split_once('.').unwrap_or((to, ""));
+    let index = |s: &str| s.parse::<usize>().map_err(|_| format!("Bad pouch slot '{s}'."));
+    match (kind, target) {
+        ("stash", "slot") => equip(d, work, stash, what, Some(at)),
+        ("stash", "pouch") => pouch_put(d, work, stash, what, Some(index(at)?)),
+        ("equip", "stash") => unequip(work, stash, what),
+        ("equip", "slot") => move_slot(d, work, stash, what, at),
+        ("pouch", "stash") => pouch_take(work, stash, index(what)?),
+        ("pouch", "pouch") => {
+            let (i, j) = (index(what)?, index(at)?);
+            if i == j || i >= work.pouch.len() {
+                return Err("Nothing to move.".into());
+            }
+            let item = work.pouch.remove(i);
+            let j = j.min(work.pouch.len());
+            work.pouch.insert(j, item);
+            Ok(())
+        }
+        _ => Err("That can't go there.".into()),
     }
 }
 
@@ -483,7 +583,21 @@ impl Screen<GameCx> for Character {
     }
 
     fn wheel(&mut self, _cx: &mut Cx, lines: i32) {
-        self.scroll = (self.scroll as i64 - lines as i64).max(0) as usize;
+        let at = if self.tab == "gear" { &mut self.gear_scroll } else { &mut self.scroll };
+        *at = (*at as i64 - lines as i64).max(0) as usize;
+    }
+
+    /// GEARUI1: a drop is valid when the move it makes is (the same rules as the clicks).
+    fn can_drop(&self, cx: &Cx, from: &str, to: &str) -> bool {
+        self.tab == "gear" && self.after_drop(&cx.data, from, to).is_ok()
+    }
+
+    fn accept_drop(&mut self, cx: &mut Cx, from: &str, to: &str) {
+        self.load_gear(cx);
+        match self.after_drop(&cx.data, from, to) {
+            Ok(draft) => self.gear = Some(draft),
+            Err(e) => show_errors(cx, vec![e]),
+        }
     }
 
     fn state(&self, cx: &Cx) -> Value {
@@ -636,63 +750,181 @@ impl Character {
         ui.button("skills.confirm", Rect::new(498, 312, 70, 18), "Confirm", PAct::ConfirmSkills, self.has_draft(cx));
     }
 
+    /// GEARUI1: three columns like the Godot gear dojo: the hero's stats with this gear (and the change a hovered or
+    /// dragged item would make), the equipped slots with the battle pouch under them, the party stash. Clicks and drag
+    /// and drop both ways (stash to a slot or the pouch equips, a slot or pouch item to the stash takes it off).
     fn draw_gear(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
         self.load_gear(cx);
         let d = &cx.data;
         let (work, stash) = self.gear.clone().unwrap();
         let built = progression::build_with(d, &work, false);
-        let mut y = 104;
-        for slot in LOADOUT_SLOTS {
-            let explicit = work.equipment.get(slot).cloned();
+        let head = BODY + 1.0;
+        // Middle: the equipped slots, then the pouch.
+        let (mx, mw) = (243, 185);
+        ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, INFO);
+        for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
+            let y = 116 + i as i32 * 15;
+            let explicit = work.equipment.get(*slot).cloned();
             let shown = explicit.clone().or_else(|| {
                 let s = emberwake_rules::gear::Slot::parse(slot)?;
                 built.as_ref().and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
             });
-            let name = shown.map(|i| d.item_name(&i)).unwrap_or_else(|| "empty".into());
-            let label = format!("{}: {name}{}", title_case(slot), if explicit.is_some() { "" } else { "" });
-            let act = explicit.as_ref().map(|_| PAct::Unequip(slot.to_string()));
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(64, y, 220, 14), &label, if explicit.is_some() { TEXT } else { DIM }, act, false, tip(&label, if explicit.is_some() { "Click to take it off (the class default comes back)." } else { "Class default gear." }));
-            y += 15;
+            let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
+            let label = format!("{}: {name}", title_case(slot));
+            let card = match (&explicit, &shown) {
+                (Some(item), _) => item_tip(d, item, "Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it."),
+                (None, Some(item)) => item_tip(d, item, "Class default gear: drag an item from the stash onto this slot to replace it."),
+                (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
+            };
+            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { TEXT } else { DIM }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            if explicit.is_some() {
+                ui.draggable(format!("equip.{slot}"));
+            }
+            ui.drop_target(format!("slot.{slot}"));
         }
-        y += 6;
-        ui.p.text(68.0, y as f32, "Battle pouch", BODY + 1.0, INFO);
-        y += 14;
+        ui.p.text(mx as f32 + 2.0, 210.0, "Battle pouch", head, INFO);
         for i in 0..POUCH_MAX {
-            let label = match work.pouch.get(i) {
+            let y = 224 + i as i32 * 15;
+            let item = work.pouch.get(i);
+            let label = match item {
                 Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
                 None => format!("{}. Empty", i + 1),
             };
-            let act = work.pouch.get(i).map(|_| PAct::PouchRemove(i));
-            ui.row(&format!("gear.pouch.{i}"), Rect::new(64, y, 220, 14), &label, TEXT, act, false, Vec::new());
-            y += 15;
-        }
-        ui.p.text(294.0, 104.0, "Stash", BODY + 1.0, INFO);
-        let mut sy = 118;
-        let mut ids: Vec<&String> = stash.keys().collect();
-        ids.sort();
-        if ids.is_empty() {
-            ui.p.text(294.0, sy as f32, "Empty", BODY + 1.0, DIM);
-        }
-        for id in ids {
-            let Some(def) = d.cat.items.get(id) else { continue };
-            let n = stash[id];
-            let (act, help) = if def.is_equipment() {
-                (Some(PAct::Equip(id.clone())), "Click to wear it.")
-            } else if def.item_type == "CONSUMABLE" {
-                (Some(PAct::PouchAdd(id.clone())), "Click to put one in the battle pouch.")
-            } else {
-                (None, "")
+            let card = match item {
+                Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
+                None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
             };
-            ui.row(&format!("gear.stash.{id}"), Rect::new(290, sy, 300, 14), &format!("{} x{n}", def.name), TEXT, act, false, tip(&def.name, help));
-            sy += 15;
-            if sy > 262 {
-                break;
+            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { TEXT } else { DIM }, item.map(|_| PAct::PouchRemove(i)), false, card);
+            if item.is_some() {
+                ui.draggable(format!("pouch.{i}"));
             }
+            ui.drop_target(format!("pouch.{i}"));
+        }
+        // Right: the party stash (the whole column takes items dropped back).
+        let (sx, sw) = (436, 179);
+        ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, INFO);
+        let area = Rect::new(sx, 114, sw, 156);
+        ui.p.panel(area, rgba(20, 28, 46, 160), BORDER, 2.0);
+        ui.push("gear.stash", "panel", "Party stash", area, true, false, None, tip("Party stash", "Drop a worn or pouch item here to take it off."));
+        ui.drop_target("stash");
+        let mut ids: Vec<&String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).collect();
+        ids.sort_by_key(|id| d.item_name(id));
+        const ROWS: usize = 10;
+        self.gear_scroll = self.gear_scroll.min(ids.len().saturating_sub(ROWS));
+        if ids.is_empty() {
+            ui.p.text(sx as f32 + 4.0, 118.0, "Empty", head, DIM);
+        }
+        for (row, id) in ids.iter().skip(self.gear_scroll).take(ROWS).enumerate() {
+            let def = &d.cat.items[*id];
+            let (act, help) = if def.is_equipment() {
+                (Some(PAct::Equip((*id).clone())), "Click to wear it, or drag it onto a slot.")
+            } else if def.item_type == "CONSUMABLE" {
+                (Some(PAct::PouchAdd((*id).clone())), "Click to put one in the battle pouch, or drag it onto a pouch slot.")
+            } else {
+                (None, "Not wearable.")
+            };
+            let movable = act.is_some();
+            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), TEXT, act, false, item_tip(d, id, help));
+            if movable {
+                ui.draggable(format!("stash.{id}"));
+            }
+        }
+        if ids.len() > ROWS {
+            let shown = format!("{}-{} of {} (wheel)", self.gear_scroll + 1, (self.gear_scroll + ROWS).min(ids.len()), ids.len());
+            ui.p.text_right((sx + sw - 4) as f32, 262.0, &shown, SMALL, DIM);
+        }
+        // Left: the stats with this gear, and the change of the dragged item over a target, else of the hovered item.
+        let preview = self.gear_preview(ui, d, &work, &stash);
+        let now = sheet(d, &work);
+        let then = preview.as_ref().map(|p| sheet(d, p));
+        let (lx, lw) = (25, 210);
+        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.cat.classes.get(&work.class_id(d)).map(|c| c.name.clone()).unwrap_or_default(), work.level(d)), head, INFO);
+        for (i, (label, v)) in now.iter().enumerate() {
+            let core = i < STATS.len();
+            let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + (i - STATS.len()) as i32 * 12, lw - 6) };
+            ui.p.text(x as f32, y as f32, label, BODY, DIM);
+            let right = (x + w - 26) as f32;
+            ui.p.text_right(right, y as f32, &v.to_string(), BODY, TEXT);
+            let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.1 - v).unwrap_or(0);
+            if delta != 0 {
+                ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { GOOD } else { FOE });
+            }
+            let desc = if core { stat_desc(label) } else { derived_desc(label) };
+            ui.push(format!("gear.stat.{label}"), "row", format!("{label} {v}"), Rect::new(x - 2, y - 1, w, 12), true, false, None, tip(label, &desc));
         }
         let dirty = &work != m || stash != cx.gs().party.stash;
         ui.button("gear.reset", Rect::new(68, 312, 70, 18), "Reset", PAct::ResetGear, dirty);
         ui.button("gear.confirm", Rect::new(498, 312, 70, 18), "Confirm", PAct::ConfirmGear, dirty);
     }
+}
+
+impl Character {
+    /// The draft a hovered or dragged item would make (UIR-3B stat change): a drag over a target it can drop on, else
+    /// a hovered stash item worn in its first slot, else a hovered worn item taken off; None otherwise.
+    fn gear_preview(&self, ui: &Ui<PAct>, d: &Data, work: &UnitState, stash: &Stash) -> Option<UnitState> {
+        let (mut w, mut st) = (work.clone(), stash.clone());
+        let mouse = ui.mouse;
+        if let Some(from) = ui.dragging() {
+            let to = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mouse.0, mouse.1))?.drop.clone()?;
+            return drop_move(d, &mut w, &mut st, from, &to).ok().map(|_| w);
+        }
+        let hovered = ui.widgets.iter().rev().find(|x| x.action.is_some() && ui.hover(x.rect))?;
+        let ok = if let Some(item) = hovered.id.strip_prefix("gear.stash.") {
+            d.cat.items.get(item).is_some_and(|i| i.is_equipment()) && equip(d, &mut w, &mut st, item, None).is_ok()
+        } else if let Some(slot) = hovered.id.strip_prefix("gear.slot.") {
+            unequip(&mut w, &mut st, slot).is_ok()
+        } else {
+            false
+        };
+        ok.then_some(w)
+    }
+}
+
+/// The Gear tab's stat list: the core stats with gear, then the derived values (`derived`).
+fn sheet(d: &Data, m: &UnitState) -> Vec<(String, i64)> {
+    let Some(b) = progression::build_with(d, m, false) else { return Vec::new() };
+    let mut out: Vec<(String, i64)> = STATS.iter().map(|st| (st.to_string(), b.unit.stats.stat(st, None) as i64)).collect();
+    out.extend(derived_of(&b.unit).into_iter().map(|(l, v)| (l.to_string(), v)));
+    out
+}
+
+/// An item's hover card: its name, then its description (tokens filled), its numbers and what a click or drag does.
+fn item_tip(d: &Data, id: &str, help: &str) -> aegis_ui::ui::Tip {
+    let Some(def) = d.cat.items.get(id) else { return tip(id, help) };
+    let desc = d.item_description(id);
+    let numbers = item_numbers(def);
+    let body: Vec<&str> = [desc.as_str(), numbers.as_str(), help].into_iter().filter(|s| !s.is_empty()).collect();
+    tip(&def.name, &body.join(" "))
+}
+
+/// An item's numbers in one sentence: power and range, mitigation, burden, bonuses, requirements, what it heals.
+fn item_numbers(def: &emberwake_data::ItemDef) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if def.item_type == "WEAPON" {
+        parts.push(format!("Power {}, range {}{}", def.base_power, def.base_range, if def.two_handed { ", two-handed" } else { "" }));
+    }
+    if def.mitigation != 0 {
+        parts.push(format!("mitigation {}", def.mitigation));
+    }
+    if def.burden != 0 {
+        parts.push(format!("burden {}", def.burden));
+    }
+    parts.extend(def.stat_bonuses.iter().map(|(s, v)| format!("{v:+} {s}")));
+    if !def.required_stats.is_empty() {
+        parts.push(format!("needs {}", def.required_stats.iter().map(|(s, v)| format!("{v} {s}")).collect::<Vec<_>>().join(", ")));
+    }
+    if def.heal > 0 {
+        parts.push(format!("heals {}", def.heal));
+    }
+    if def.damage > 0 {
+        parts.push(format!("{} damage", def.damage));
+    }
+    if parts.is_empty() {
+        return String::new();
+    }
+    let line = parts.join("; ");
+    let mut c = line.chars();
+    c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
 }
 
 fn title_case(slot: &str) -> String {
@@ -707,4 +939,129 @@ fn title_case(slot: &str) -> String {
 
 fn roman(n: i32) -> &'static str {
     ["-", "I", "II", "III", "IV", "V"].get(n.max(0) as usize).copied().unwrap_or("V+")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup() -> (Data, UnitState, Stash) {
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let d = Data::open(&dir).expect("data").0;
+        let gs = emberwake_world::new_game::create_for_world(&d, "ashlands", 1).expect("new game");
+        let m = gs.party.members[0].clone();
+        let mut stash = Stash::new();
+        for (id, def) in &d.cat.items {
+            if def.is_equipment() || def.item_type == "CONSUMABLE" {
+                stash.insert(id.clone(), 2);
+            }
+        }
+        (d, m, stash)
+    }
+
+    fn first(d: &Data, slot: &str) -> String {
+        let mut ids: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, slot)).map(|(id, _)| id).collect();
+        ids.sort();
+        ids[0].clone()
+    }
+
+    /// The first item (by id) the member's class can wear in `slot`.
+    fn wearable(d: &Data, m: &UnitState, slot: &str) -> String {
+        let mut ids: Vec<&String> = d.cat.items.keys().filter(|id| m.can_wear(d, id, slot).is_ok()).collect();
+        ids.sort();
+        ids[0].clone()
+    }
+
+    fn consumables(d: &Data) -> Vec<String> {
+        let mut ids: Vec<String> = d.cat.items.iter().filter(|(_, i)| i.item_type == "CONSUMABLE").map(|(id, _)| id.clone()).collect();
+        ids.sort();
+        ids
+    }
+
+    #[test]
+    fn a_stash_item_dropped_on_a_slot_it_fits_is_worn_and_the_old_one_returns() {
+        let (d, mut m, mut st) = setup();
+        let (a, sword) = (first(&d, "accessory_1"), first(&d, "main_hand"));
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
+        assert_eq!(m.equipment.get("accessory_1"), Some(&a));
+        assert_eq!(st[&a], 1);
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
+        assert_eq!(st[&a], 1, "the replaced copy came back");
+        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{sword}"), "slot.body").is_err(), "a weapon is not body armour");
+    }
+
+    #[test]
+    fn a_worn_item_dropped_on_the_stash_comes_off() {
+        let (d, mut m, mut st) = setup();
+        let a = first(&d, "accessory_1");
+        let before = st[&a];
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
+        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash").unwrap();
+        assert!(!m.equipment.contains_key("accessory_1"));
+        assert_eq!(st[&a], before);
+        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash").is_err(), "a class default can't come off");
+    }
+
+    #[test]
+    fn a_worn_item_moves_to_another_slot_it_fits() {
+        let (d, mut m, mut st) = setup();
+        let a = first(&d, "accessory_1");
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
+        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "slot.accessory_2").unwrap();
+        assert_eq!((m.equipment.get("accessory_1"), m.equipment.get("accessory_2")), (None, Some(&a)));
+        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_2", "slot.body").is_err());
+    }
+
+    #[test]
+    fn the_pouch_takes_consumables_replaces_reorders_and_stops_at_its_size() {
+        let (d, mut m, mut st) = setup();
+        m.pouch.clear();
+        let c = consumables(&d);
+        let wear = first(&d, "main_hand");
+        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{wear}"), "pouch.0").is_err(), "gear is not a consumable");
+        st.insert(c[0].clone(), 10);
+        for _ in 0..POUCH_MAX {
+            pouch_put(&d, &mut m, &mut st, &c[0], None).unwrap();
+        }
+        assert!(pouch_put(&d, &mut m, &mut st, &c[0], None).is_err(), "a full pouch");
+        let other = c.last().unwrap().clone();
+        let n = st[&c[0]];
+        drop_move(&d, &mut m, &mut st, &format!("stash.{other}"), "pouch.1").unwrap();
+        assert_eq!(m.pouch[1], other);
+        assert_eq!(st[&c[0]], n + 1, "the replaced one came back");
+        drop_move(&d, &mut m, &mut st, "pouch.1", "pouch.0").unwrap();
+        assert_eq!(m.pouch[0], other);
+        drop_move(&d, &mut m, &mut st, "pouch.0", "stash").unwrap();
+        assert_eq!(m.pouch.len(), POUCH_MAX - 1);
+    }
+
+    /// UnitState._gear_errors: a class without training in a weapon type can't wear it (clicks, drops and Confirm).
+    #[test]
+    fn a_class_without_training_cannot_wear_the_weapon() {
+        let (d, mut m, mut st) = setup();
+        let class = d.cat.classes.get(&m.class_id(&d)).unwrap().clone();
+        let prof = emberwake_rules::stats::Proficiency::from_class(&class);
+        let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
+        untrained.sort();
+        let item = untrained.first().expect("a weapon this class has no training in").to_string();
+        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand").unwrap_err();
+        assert!(err.contains("no training"), "{err}");
+        m.equipment.insert("main_hand".into(), item);
+        assert!(m.validate(&d).iter().any(|e| e.contains("no training")), "Confirm refuses it too");
+    }
+
+    #[test]
+    fn wearing_an_item_changes_the_stat_sheet_the_preview_shows() {
+        let (d, m, mut st) = setup();
+        let before = sheet(&d, &m);
+        let mut changed = false;
+        for slot in ["main_hand", "body", "accessory_1"] {
+            let mut w = m.clone();
+            let item = wearable(&d, &m, slot);
+            equip(&d, &mut w, &mut st, &item, Some(slot)).unwrap();
+            changed |= sheet(&d, &w) != before;
+        }
+        assert!(changed);
+        assert_eq!(before.len(), STATS.len() + derived(&d, &m).len());
+    }
 }

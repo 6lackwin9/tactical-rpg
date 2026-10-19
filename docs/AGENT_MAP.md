@@ -34,6 +34,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | ASSETORG1 | - | engine: art loader reads `<category>/<id>/<variant>.png` (get, token, portrait, tile); game: 296 PNGs moved to a folder per thing, call sites, layout test; tools: gen_art.py, export_units.py; READMEs and specs note the layout |
 | main session (no lane agents) | UIKIT2 | - | engine: drag and drop in the kit (draggable payloads, drop targets, can_drop and accept_drop, ghost and outlines, click on release without a move, Esc cancels, agent drag onto a widget id); 5 shell tests |
 | main session (no lane agents) | SKILLUI1 spec | design-brainstorm | Skills tab spec (games/emberwake/docs/specs/SKILLUI1.md): chosen rank per slot, drag list to slot, slot to slot and back, rank arrows; four questions answered by the user |
+| main session (no lane agents) | GEARUI1 | - | game: Gear tab in three columns, drag and drop both ways (stash, slots, pouch), green and red stat change for a hovered or dragged item, ItemText.render (item description tokens); folds in UIR-3B |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

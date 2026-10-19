@@ -111,6 +111,8 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
 | `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `games/emberwake/schema.json` | `tests/data_source.rs` |
 | `content/skill_ranks.gd` (`expand`, `effective`, `resolve`), `content/skill_text.gd` (`render`, `token_value`) | `source::expand`, `render` | `tests/data_source.rs` (151 rank rows, every description) |
 | `core/specs/item_families.gd` (`derive`, hands, base), `item_modifiers.gd` (`resolve`, `legacy_tiers`), `item_text.gd` (`tier_desc`) | `source::derive_family`, `resolve_item` | `tests/data_source.rs` |
+| `core/specs/item_text.gd` (`render`, `token_value`) | `emberwake_content::source::render_item`, `emberwake_world::Data::item_description` | `emberwake_world/tests/item_text.rs` |
+| `progression/unit_state.gd` (`_gear_errors`), `core/specs/proficiency.gd` (`can_use`), `ui/menus/gear_model.gd` (`equip`, `unequip`, `_pouch_problem`) | `UnitState::can_wear` and `validate`, `state::item_fits_slot`, `Proficiency::can_use`, `emberwake_gui::party` gear moves (plus slot to slot and pouch reorder, new in GEARUI1) | `emberwake_gui` party tests |
 | `world/world_catalog.gd` (`reload_from_disk`, `lineage`, `own_entries`) | `aegis_content::world::load` (over `source::WORLD_KINDS`) | `tests/data_source.rs` |
 | `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
 

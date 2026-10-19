@@ -114,6 +114,12 @@ impl Data {
         json::s_or(self.entry("items", id), "name", id)
     }
 
+    /// The item's description with its tokens filled from the resolved row (ItemText.render, as ContentFactory.item).
+    pub fn item_description(&self, id: &str) -> String {
+        let row = self.entry("items", id);
+        emberwake_content::source::render_item(&json::s(row, "description"), row)
+    }
+
     // ---- MapCatalog / QuestCatalog / ServiceCatalog ------------------------------------------------------------
 
     pub fn map(&self, id: &str) -> &Dict {
