@@ -10,8 +10,8 @@ build it replaced is frozen in `legacy/` and stays the reference the engine is c
 | Folder | What it holds |
 | :--- | :--- |
 | `engine/` | The Aegis engine: Rust workspace (rules, battle, world, data loader and writer, command API, CLI, GUI), parity tools, engine docs. Start at [engine/README.md](engine/README.md). |
-| `data/` | The game content: catalog (classes, units, skills, items, item families, passives, encounters, terrain), worlds, region maps, quests, dialogue services, XP curve, asset manifest. Edited only through `aegis content` (below). |
-| `assets/` | Art, audio and fonts (the engine reads the PNGs in `assets/art`). |
+| `games/emberwake/data/` | The game content: catalog (classes, units, skills, items, item families, passives, encounters, terrain), worlds, region maps, quests, dialogue services, XP curve, asset manifest. Edited only through `aegis content` (below). |
+| `games/emberwake/assets/` | Art, audio and fonts (the engine reads the PNGs in `games/emberwake/assets/art`). |
 | `docs/` | Game design: brief, roadmap, decisions, specs, balance reports, preferences, workflow. |
 | `legacy/` | The frozen Godot build: the whole project of `main` at 7fa10da with its own data copy ([legacy/LEGACY.md](legacy/LEGACY.md)). Branch `legacy` resumes Godot work if ever needed. |
 | `tools/` | `fc.sh` (gate, tests, content, sim, parity), art and music generators, worktree helpers. |
@@ -25,7 +25,7 @@ run.bat opt a      :: a design-review option build (see the header of run.bat)
 ```
 
 Or directly from the repo root: `cargo run --release -p emberwake_gui` (main menu) or `-- screen=runner`. Saves and settings
-live in `%APPDATA%/Aegis`; Godot saves load in the engine unchanged. Controls, screens and the agent link (port 47800):
+live in `%APPDATA%/Aegis/emberwake` (copied from `%APPDATA%/Aegis` on the first start after SPLIT1-8); Godot saves load in the engine unchanged. Controls, screens and the agent link (port 47800):
 [engine/README.md](engine/README.md).
 
 ## Checks
@@ -35,7 +35,7 @@ live in `%APPDATA%/Aegis`; Godot saves load in the engine unchanged. Controls, s
   `main` (`.github/workflows/gate.yml`, required check `gate`), after recording the Godot reference from `legacy/`.
 - `tools/fc.sh docs`: doc size and markdown lint.
 - `tools/fc.sh parity`: re-records the full Godot reference (battle traces, world battles, journeys) from `legacy/`
-  with Godot 4.7.2; the parity suites read it from `engine/parity/out`.
+  with Godot 4.7.2; the parity suites read it from `games/emberwake/parity/out`.
 
 ## Editing content
 
@@ -47,7 +47,7 @@ cargo run -q -p emberwake_host -- content check
 cargo run -q -p emberwake_host -- content upsert units '{"id": "goblin_scout", "name": "Goblin Scout", "class_id": "ranger", "side": "enemy"}'
 cargo run -q -p emberwake_host -- content upsert lore @entry.json world=ashlands
 cargo run -q -p emberwake_host -- content remove units goblin_scout
-cargo run -q -p emberwake_host -- content apply data/seeds/<task>.json   # {"steps": [{"op": "upsert", "kind", "entry", "world"?}, ...]}
+cargo run -q -p emberwake_host -- content apply games/emberwake/data/seeds/<task>.json   # {"steps": [{"op": "upsert", "kind", "entry", "world"?}, ...]}
 ```
 
 Kinds: the catalog kinds, `maps`, `quests` and `services`, and every world kind (with `world=<id>`). Entries are given in

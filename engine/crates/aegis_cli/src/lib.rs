@@ -2,8 +2,10 @@
 //! (`run(&game)`: its own commands, its data folder, its content hooks and its command host); the shell adds
 //!   aegis serve                                                                the game's command API over stdin / stdout
 //!   aegis link '<json>' ... [port=47800]                                       requests to a running GUI (agent link)
-//!   aegis content check | upsert | remove | apply                               edit the data folder (see `content`)
+//!   aegis content check | upsert | remove | apply | manifest                    edit the data folder (see `content`)
 
+use aegis_content::file::stringify;
+use aegis_content::manifest::Manifest;
 use aegis_content::store::{self, Hooks};
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
@@ -50,6 +52,8 @@ pub trait Game {
     fn run(&self, args: &Args) -> Option<Result<()>>;
     /// The data folder `content` edits.
     fn data_dir(&self, args: &Args) -> Result<PathBuf>;
+    /// The game manifest `content manifest` shows and edits (game.json).
+    fn manifest_path(&self, args: &Args) -> Result<PathBuf>;
     /// The content writer's hooks.
     fn content(&self) -> Self::Content;
     /// The command host `serve` answers with: one request in, one reply out.
@@ -58,7 +62,7 @@ pub trait Game {
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json>";
+aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json or @file>]";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
 pub fn run<G: Game>(game: &G) -> Result<()> {
@@ -114,6 +118,7 @@ fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Re
 ///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
 ///   remove <kind> <id> [world=<id>]                    remove one entry
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
+///   manifest [<json | @file>]                          show the game manifest, or merge fields into it (checked)
 fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     let dir = game.data_dir(args)?;
     let hooks = game.content();
@@ -174,7 +179,21 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             }
             Ok(())
         }
-        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json>"),
+        Some("manifest") => {
+            let path = game.manifest_path(args)?;
+            let Some(raw) = args.pos(2) else {
+                let m = Manifest::read(&path).map_err(anyhow::Error::msg)?;
+                print!("{}", stringify(&Value::Object(m.to_dict())));
+                return Ok(());
+            };
+            let patch = json_arg(raw)?;
+            let Some(patch) = patch.as_object() else { bail!("the manifest patch is a JSON object") };
+            match Manifest::set(&path, patch) {
+                Ok(_) => Ok(println!("wrote {}", path.display())),
+                Err(e) => fail(e),
+            }
+        }
+        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json | @file>]"),
     }
 }
 

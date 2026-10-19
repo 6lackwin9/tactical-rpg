@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 fn catalog() -> Arc<Catalog> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out/catalog.json");
-    Arc::new(Catalog::load_resolved(&p).expect("missing catalog.json - run engine/parity/export.sh"))
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out/catalog.json");
+    Arc::new(Catalog::load_resolved(&p).expect("missing catalog.json - run games/emberwake/parity/export.sh"))
 }
 
 #[test]

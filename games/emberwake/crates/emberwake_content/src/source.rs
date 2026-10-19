@@ -4,7 +4,7 @@
 //! validation stay out): ContentCatalog.reload_from_disk / _read_kind (SkillRanks.expand with SkillText.render,
 //! ItemModifiers.resolve, ItemFamilies.derive), WorldCatalog.reload_from_disk (the engine's world loader over
 //! WORLD_KINDS), MapCatalog / QuestCatalog / ServiceCatalog (normalize) and XpCurve.load_file. The field tables are
-//! engine/data/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
+//! games/emberwake/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
 //! Like Godot, a bad file or entry is reported in `errors` and skipped, never fatal.
 
 use aegis_content::file::{entries_of, read};
@@ -28,12 +28,12 @@ pub const CATALOG_KINDS: [&str; 7] = ["classes", "units", "skills", "items", "pa
 /// WorldSchema.KINDS.
 pub const WORLD_KINDS: [&str; 13] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"];
 
-const SCHEMA_TEXT: &str = include_str!("../../../../../engine/data/schema.json");
+const SCHEMA_TEXT: &str = include_str!("../../../schema.json");
 
-/// engine/data/schema.json: {"content": {kind: [field]}, "world": {kind: [field]}}.
+/// games/emberwake/schema.json: {"content": {kind: [field]}, "world": {kind: [field]}}.
 pub fn schema() -> &'static Value {
     static S: OnceLock<Value> = OnceLock::new();
-    S.get_or_init(|| serde_json::from_str(SCHEMA_TEXT).expect("engine/data/schema.json"))
+    S.get_or_init(|| serde_json::from_str(SCHEMA_TEXT).expect("games/emberwake/schema.json"))
 }
 
 pub(crate) fn fields(section: &str, kind: &str) -> &'static [Value] {

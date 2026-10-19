@@ -101,12 +101,12 @@ Not ported yet: content validation (`*_errors`, warnings), save import / export.
 
 ## Data loader (emberwake_content::source, 2026-10-19)
 
-The engine reads the project's `data/` folder itself; the Godot exports are only needed for parity checks.
+The engine reads the project's `games/emberwake/data/` folder itself; the Godot exports are only needed for parity checks.
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
 | `content/content_catalog.gd` (`reload_from_disk`, `_read_kind`, `_read_ranked_skills`, `_read_items`) | `source::load_catalog` | `tests/data_source.rs` |
-| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `engine/data/schema.json` | `tests/data_source.rs` |
+| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `games/emberwake/schema.json` | `tests/data_source.rs` |
 | `content/skill_ranks.gd` (`expand`, `effective`, `resolve`), `content/skill_text.gd` (`render`, `token_value`) | `source::expand`, `render` | `tests/data_source.rs` (151 rank rows, every description) |
 | `core/specs/item_families.gd` (`derive`, hands, base), `item_modifiers.gd` (`resolve`, `legacy_tiers`), `item_text.gd` (`tier_desc`) | `source::derive_family`, `resolve_item` | `tests/data_source.rs` |
 | `world/world_catalog.gd` (`reload_from_disk`, `lineage`, `own_entries`) | `aegis_content::world::load` (over `source::WORLD_KINDS`) | `tests/data_source.rs` |
@@ -117,7 +117,7 @@ The engine reads the project's `data/` folder itself; the Godot exports are only
   with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
 - Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)
   still match Godot, and the CLI balance sim prints the same table.
-- `engine/data/schema.json` is the committed copy of Godot's field tables (`parity/export.sh only=schema` writes
+- `games/emberwake/schema.json` is the committed copy of Godot's field tables (`parity/export.sh only=schema` writes
   `parity/out/schema.json`; the test fails when they drift). It carries labels, help, options and groups too, for
   content editing in the engine later.
 - Not read: version 1 (flat) skills and items files, pre-CLASS1 class `skill_path` lists (the shipped data has none;
@@ -143,6 +143,6 @@ Content is edited without Godot through `aegis content check | upsert | remove |
   them too; the first engine save of such a file does the same.
 - Validation: id (snake_case), name, enum options and catalog references by the schema; skill ranks and item families
   by construction; then the whole data folder must load without new problems, else the file is put back.
-- Not covered: the asset manifest (`data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
+- Not covered: the asset manifest (`games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
   sprite work), the Forge's richer checks (SkillValidator, item budgets, world reference rules); the gate's test
   suites and `content check` catch what a broken entry does to the game.

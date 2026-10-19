@@ -75,8 +75,8 @@ impl Screen<GameCx> for MainMenu {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<MenuAct> = Ui::new(g, mouse, live);
-        title(&mut ui, "Tactical RPG", 78);
-        ui.p.text_center(W as f32 / 2.0, 104.0, "A small campaign of tactical battles.", BODY + 1.0, DIM);
+        title(&mut ui, &cx.manifest.title, 78);
+        ui.p.text_center(W as f32 / 2.0, 104.0, &cx.manifest.subtitle, BODY + 1.0, DIM);
         let mut entries: Vec<(&str, &str, MenuAct)> = Vec::new();
         if save::newest_slot(&cx.data, &cx.save_dir) >= 0 {
             entries.push(("menu.continue", "Continue", MenuAct::Continue));

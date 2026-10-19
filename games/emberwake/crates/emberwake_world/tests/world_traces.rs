@@ -1,6 +1,6 @@
 //! World battles step for step: every world encounter (and the synthetic variants that cover escape, centre
 //! deployment, morale, custom hold tiles and start buffs) as Godot's WorldEncounter plays it, recorded by
-//! `engine/parity/trace.sh mode=world preset=<p>` into parity/out/traces_world_<p>.json. The Rust session runs the
+//! `games/emberwake/parity/trace.sh mode=world preset=<p>` into parity/out/traces_world_<p>.json. The Rust session runs the
 //! same roster (world characters with named items, passives and tuning), guests, objectives, phases and morale; units
 //! (HP, AP, tile, stance, statuses, withdrawn) are compared after every step, the schedule every round, then the outcome.
 
@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
 fn units_state(s: &Session) -> Value {
@@ -115,7 +115,7 @@ fn world_battles_replay_godot_step_for_step() {
     let mut files: Vec<String> = std::fs::read_dir(&dir).expect("parity/out").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("traces_world_")).collect();
     files.sort();
     if files.is_empty() {
-        eprintln!("no traces_world_*.json: run engine/parity/trace.sh mode=world");
+        eprintln!("no traces_world_*.json: run games/emberwake/parity/trace.sh mode=world");
         return;
     }
     let d = Data::load(&dir).expect("parity exports");

@@ -6,7 +6,7 @@ Set up 2026-10-18 at the user's ask (decision "Design review cycle (user 2026-10
 
 The ledger `docs/design/OPTION_BRANCHES.md` records the `develop` commit each review covered (`Reviewed at`). A review is due when one of these holds since that commit:
 
-1. At least **6 playable task commits** have landed: commits whose title starts with a task id and that change `engine/` or `data/` (count with `git log --oneline <reviewed-at>..origin/develop -- engine data`, then drop handover, cleanup-only and test-only commits; before the transition, 2026-10-19, the paths were `scripts`, `scenes` and `data`).
+1. At least **6 playable task commits** have landed: commits whose title starts with a task id and that change `engine/` or `games/emberwake/data/` (count with `git log --oneline <reviewed-at>..origin/develop -- engine data`, then drop handover, cleanup-only and test-only commits; before the transition, 2026-10-19, the paths were `scripts`, `scenes` and `data`).
 2. A roadmap system moved to `done` or `balance-ready` in `docs/ROADMAP.md`.
 3. At least **3 days** have passed and at least one playable commit landed.
 

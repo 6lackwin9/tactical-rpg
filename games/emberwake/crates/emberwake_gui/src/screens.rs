@@ -1,9 +1,10 @@
 //! The game's side of the screen stack (MenuRouter, on the engine's `aegis_ui::screen`): its half of the shared
-//! context (`GameCx`: the data, the game in play (CurrentGame), the save folder, the event log, the tuning), its
-//! settings defaults and entering a game. Screens use `Cx` (the engine context over `GameCx`) and queue navigation in
-//! `cx.nav`; they never call each other.
+//! context (`GameCx`: the data, the manifest, the game in play (CurrentGame), the save folder, the event log, the
+//! tuning), its settings defaults and entering a game. Screens use `Cx` (the engine context over `GameCx`) and queue
+//! navigation in `cx.nav`; they never call each other.
 
 use crate::tuning::Tuning;
+use aegis_content::manifest::Manifest;
 use aegis_ui::tuning::TuningFile;
 use emberwake_world::{save, Data, GameState};
 use serde_json::{json, Value};
@@ -33,6 +34,8 @@ pub struct Game {
 /// The game's half of the shared context.
 pub struct GameCx {
     pub data: Arc<Data>,
+    /// game.json: the id, and the title the window and the main menu show.
+    pub manifest: Manifest,
     pub game: Option<Game>,
     pub save_dir: PathBuf,
     pub tuning: TuningFile<Tuning>,

@@ -21,6 +21,45 @@ pub struct Format {
     pub keys: &'static [&'static str],
 }
 
+/// The engine's user folder: %APPDATA%/Aegis (the working folder when APPDATA is unset).
+pub fn app_dir() -> PathBuf {
+    std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(".")).join("Aegis")
+}
+
+/// A game's own user folder (its saves and settings): %APPDATA%/Aegis/<game id>.
+pub fn user_dir(game_id: &str) -> PathBuf {
+    app_dir().join(game_id)
+}
+
+/// A game's first start since saves moved under the game id (SPLIT1-8): when its user folder does not exist yet,
+/// copies the engine's shared folder into it (%APPDATA%/Aegis/saves/* and settings.json); the old files stay as they
+/// are. The copied paths (relative to the shared folder), or the problem.
+pub fn adopt_shared(game_id: &str) -> Result<Vec<String>, String> {
+    let (shared, own) = (app_dir(), user_dir(game_id));
+    if own.exists() {
+        return Ok(Vec::new());
+    }
+    let mut copied = Vec::new();
+    let mut copy = |rel: &Path| -> Result<(), String> {
+        if let Some(dir) = own.join(rel).parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
+        std::fs::copy(shared.join(rel), own.join(rel)).map_err(|e| format!("{}: {e}", shared.join(rel).display()))?;
+        copied.push(rel.display().to_string());
+        Ok(())
+    };
+    if let Ok(entries) = std::fs::read_dir(shared.join("saves")) {
+        for e in entries.flatten().filter(|e| e.path().is_file()) {
+            copy(&Path::new("saves").join(e.file_name()))?;
+        }
+    }
+    if shared.join("settings.json").is_file() {
+        copy(Path::new("settings.json"))?;
+    }
+    std::fs::create_dir_all(&own).map_err(|e| format!("{}: {e}", own.display()))?;
+    Ok(copied)
+}
+
 pub fn path_for(dir: &Path, slot: i64) -> PathBuf {
     dir.join(format!("slot_{slot}.json"))
 }
@@ -209,6 +248,24 @@ mod tests {
         assert!(delete(&dir, 2) && !exists(&dir, 2));
         assert_eq!(read(&dir, 2).unwrap_err(), vec!["No save in slot 2.".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn adopt_shared_copies_the_shared_folder_once() {
+        let base = temp_dir("adopt");
+        std::fs::create_dir_all(base.join("Aegis/saves")).unwrap();
+        std::fs::write(base.join("Aegis/saves/slot_1.json"), "{}").unwrap();
+        std::fs::write(base.join("Aegis/settings.json"), "{\"mute\": true}").unwrap();
+        std::env::set_var("APPDATA", &base);
+        let mut copied = adopt_shared("demo").unwrap();
+        copied.sort();
+        assert_eq!(copied, vec![Path::new("saves").join("slot_1.json").display().to_string(), "settings.json".to_string()]);
+        assert!(base.join("Aegis/demo/saves/slot_1.json").is_file() && base.join("Aegis/saves/slot_1.json").is_file());
+        std::fs::write(base.join("Aegis/saves/slot_2.json"), "{}").unwrap();
+        assert!(adopt_shared("demo").unwrap().is_empty());
+        assert!(!base.join("Aegis/demo/saves/slot_2.json").exists());
+        assert!(adopt_shared("other").unwrap().len() == 3 && user_dir("other").is_dir());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

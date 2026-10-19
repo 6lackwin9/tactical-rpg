@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Records seeded random game-loop journeys from the Godot reference into engine/parity/out/journeys.json (journey.gd;
+# Records seeded random game-loop journeys from the Godot reference into games/emberwake/parity/out/journeys.json (journey.gd;
 # nothing is saved). Then: cargo test -p emberwake_world --test journey
-#   engine/parity/journey.sh [seeds=1,2] [steps=300]
+#   games/emberwake/parity/journey.sh [seeds=1,2] [steps=300]
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-project="$(cd "$here/../../legacy" && pwd)"   # the frozen Godot reference (legacy/LEGACY.md)
+project="$(cd "$here/../../../legacy" && pwd)"   # the frozen Godot reference (legacy/LEGACY.md)
 GODOT="${GODOT:-$(command -v godot || echo "/c/Program Files/Godot/godot.exe")}"
 win() { if command -v cygpath >/dev/null; then cygpath -m "$1"; else echo "$1"; fi; }
 mkdir -p "$here/out"

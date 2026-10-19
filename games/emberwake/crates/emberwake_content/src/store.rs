@@ -289,5 +289,25 @@ pub fn check(data_dir: &Path) -> Vec<String> {
     };
     let cat = src.catalog.as_object().cloned().unwrap_or_default();
     out.extend(ref_problems(source::schema(), "content", &cat, ids));
+    out.extend(manifest_problems(data_dir, &src.worlds));
+    out
+}
+
+/// The manifest beside the data folder (games/emberwake/game.json), when there is one: its own problems, and its
+/// worlds against the world folders (the list is metadata; the loader reads the folders).
+fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
+    let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| p.is_file()) else { return Vec::new() };
+    let m = match aegis_content::manifest::Manifest::read(&path) {
+        Ok(m) => m,
+        Err(e) => return vec![e],
+    };
+    let mut out = m.problems();
+    let folders: Vec<String> = worlds.as_object().map(|w| w.keys().cloned().collect()).unwrap_or_default();
+    for w in m.worlds.iter().filter(|w| !folders.contains(w)) {
+        out.push(format!("game.json: world '{w}' has no folder in data/worlds/."));
+    }
+    for w in folders.iter().filter(|w| !m.worlds.contains(w)) {
+        out.push(format!("game.json: world folder '{w}' is not one of its worlds."));
+    }
     out
 }

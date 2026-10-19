@@ -29,6 +29,6 @@ The balance agent runs `tools/fc.sh sim duel` before landing when a tweak change
 
 ## Rules
 
-- Agents edit content only through `aegis content` (upsert, remove, `apply` of a JSON seed in `data/seeds/`); the viewers never save (TOOLS-RO).
+- Agents edit content only through `aegis content` (upsert, remove, `apply` of a JSON seed in `games/emberwake/data/seeds/`); the viewers never save (TOOLS-RO).
 - Every save-time check the old tools ran is a writer check, a test or a gate check, so a bad value fails the gate, not the review. Checks the Godot Forge ran that the engine writer does not run yet (skill validator details, gear budget warnings, world reference rules) are listed in `engine/docs/PORT_NOTES.md` "Data writer"; reviewers check those by hand meanwhile.
 - One request is one task with one before/after table; the commit lines are the usual ones (`cloud.md` "Landing a task on `develop`").

@@ -38,6 +38,12 @@ impl Game for Emberwake {
         data_dir(args)
     }
 
+    /// games/emberwake/game.json, beside the data folder.
+    fn manifest_path(&self, args: &Args) -> Result<PathBuf> {
+        let dir = data_dir(args)?;
+        dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).with_context(|| format!("{} has no game folder above it", dir.display()))
+    }
+
     fn content(&self) -> Self::Content {
         emberwake_content::store::Emberwake
     }
@@ -63,7 +69,7 @@ fn load_catalog(args: &Args) -> Result<Arc<Catalog>> {
     Ok(Arc::new(Catalog::from_value(&src.catalog)))
 }
 
-/// `data=<dir>`, else the project's data/ folder above the working directory.
+/// `data=<dir>`, else the game's data folder (games/emberwake/data) found from the working directory.
 fn data_dir(args: &Args) -> Result<PathBuf> {
     match args.keys.get("data") {
         Some(d) => Ok(PathBuf::from(d)),

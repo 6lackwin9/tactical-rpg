@@ -1,6 +1,6 @@
 //! Godot save files load unchanged: every save fixture (scripts/tests/fixtures/saves, one per save version) is
 //! decoded by the engine (migrations included) and must give Godot's result (parity/out/saves.json from
-//! `engine/parity/export.sh only=saves`): ok, errors, warnings and the loaded state. A save the engine writes must also
+//! `games/emberwake/parity/export.sh only=saves`): ok, errors, warnings and the loaded state. A save the engine writes must also
 //! read back to the same state.
 
 use aegis_core::json;
@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn godot_saves_load_the_same() {
     let dir = out_dir();
     let path = dir.join("saves.json");
     if !path.exists() {
-        eprintln!("no {}: run engine/parity/export.sh first", path.display());
+        eprintln!("no {}: run games/emberwake/parity/export.sh first", path.display());
         return;
     }
     let d = Data::load(&dir).expect("parity exports");

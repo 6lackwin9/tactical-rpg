@@ -1,7 +1,7 @@
 # ==============================================================================
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
 # Builds every engine crate, then runs every test: the rules, battle, world, data-loader, content-writer and Godot
-# parity suites (the parity suites skip themselves when engine/parity/out is missing; tools/fc.sh parity records it
+# parity suites (the parity suites skip themselves when games/emberwake/parity/out is missing; tools/fc.sh parity records it
 # from legacy/). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (

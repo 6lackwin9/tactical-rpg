@@ -15,10 +15,11 @@ rem                  kept in <opt folder>\.opt_branch, so run.bat with no args i
 rem                  reopens the same option on its newest commit; run_opt.bat does the same.
 rem Each folder builds into its own output folder (%LOCALAPPDATA%\Temp\aegis-target, -dev, -opt), so switching between
 rem main, dev and an option never rebuilds the others (a first build takes a few minutes, later ones seconds).
-rem The dev game also keeps its own saves and settings: the engine keeps them under %APPDATA%\Aegis,
-rem so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
-rem When a pull changed the code, it first copies that game's saves (%APPDATA%\Aegis\saves) to
-rem %APPDATA%\Aegis\save_backups\<date>-<old commit> and keeps the newest 10 (user 2026-10-17).
+rem The dev game also keeps its own saves and settings: the engine keeps them under %APPDATA%\Aegis\<game id>
+rem (%APPDATA%\Aegis before SPLIT1-8), so dev runs with APPDATA pointed at %APPDATA%\tactical-rpg-dev (user 2026-10-17).
+rem When a pull changed the code, it first copies that game's saves (%APPDATA%\Aegis\emberwake\saves, or
+rem %APPDATA%\Aegis\saves before the game has its own) to save_backups\<date>-<old commit> beside them and keeps the
+rem newest 10 (user 2026-10-17).
 rem Before launching it fetches and fast-forwards the branch (about 1-2 s when nothing changed)
 rem and rebuilds the engine (cargo build --release). It launches the copy on disk when offline, when
 rem the pull fails, when that folder has local changes or is on another branch (it never stashes,
@@ -160,8 +161,13 @@ setlocal EnableDelayedExpansion
   )
   set "NEW="
   for /f %%h in ('git rev-parse HEAD 2^>nul') do set "NEW=%%h"
+  rem saves live under the game id since SPLIT1-8 (%APPDATA%\Aegis\emberwake\saves; copied from Aegis\saves on first start)
   set "SAVES=!APPDATA!\Aegis\saves"
   set "BACKUPS=!APPDATA!\Aegis\save_backups"
+  if exist "!APPDATA!\Aegis\emberwake\saves\*" (
+    set "SAVES=!APPDATA!\Aegis\emberwake\saves"
+    set "BACKUPS=!APPDATA!\Aegis\emberwake\save_backups"
+  )
   if defined OLD if not "!OLD!"=="!NEW!" if exist "!SAVES!\*" (
     set "STAMP="
     for /f %%t in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "STAMP=%%t"

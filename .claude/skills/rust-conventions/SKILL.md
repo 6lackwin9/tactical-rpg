@@ -49,6 +49,6 @@ A rule lives in exactly one place; the GUI, the CLI and the tests call it (the G
 
 ## Tests
 
-- Integration tests live in `crates/<crate>/tests/*.rs`; most compare the engine with the Godot reference in `engine/parity/out` (recorded from `legacy/`) and return early with a message when it is missing.
+- Integration tests live in `crates/<crate>/tests/*.rs`; most compare the engine with the Godot reference in `games/emberwake/parity/out` (recorded from `legacy/`) and return early with a message when it is missing.
 - New behaviour gets a test whose expectation comes from a rule or from the Godot reference, never a number nobody printed.
-- A test that changes data works on a scratch copy (`std::env::temp_dir()`), never on the shipped `data/` (see `tests/store.rs`).
+- A test that changes data works on a scratch copy (`std::env::temp_dir()`), never on the shipped `games/emberwake/data/` (see `tests/store.rs`).

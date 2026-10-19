@@ -67,9 +67,10 @@ impl Data {
         Ok((Self::from_values(&src.catalog, &src.worlds, &src.game), src.errors))
     }
 
-    /// The project's data/ folder above `start` (start itself, or a parent of it).
+    /// The game's data/ folder (games/emberwake/data) found from `start` (the game folder, the repository, or a folder
+    /// inside either).
     pub fn find_data_dir(start: &Path) -> Option<std::path::PathBuf> {
-        start.ancestors().map(|d| d.join("data")).find(|d| d.join("catalog").is_dir() && d.join("worlds").is_dir())
+        aegis_content::manifest::find_game_dir(start, crate::GAME_ID).map(|g| g.join("data")).filter(|d| d.join("catalog").is_dir() && d.join("worlds").is_dir())
     }
 
     /// From the Godot export folder (catalog.json, worlds.json, game_data.json).

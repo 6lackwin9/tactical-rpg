@@ -5,7 +5,7 @@ engine has a working reference for each screen type before the transition. Look 
 (ENGINE_SPEC section 11).
 
 Reference shots: `engine/docs/screens/` (1280x720, captured from the Godot build by
-`engine/parity/godot/screen_tour.gd` on a sandbox save folder; re-run it after Godot UI changes). The engine's own
+`games/emberwake/parity/godot/screen_tour.gd` on a sandbox save folder; re-run it after Godot UI changes). The engine's own
 shots of the same screens are in `engine/docs/screens/engine/` (taken over the agent link).
 
 The rules behind every player screen come from `emberwake_world`, checked against Godot by the journey replay
@@ -19,7 +19,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | 00 | Main menu | `main_menu_model.gd`, `main_screen_view.gd` | `menus.rs` `MainMenu` | done: Continue (newest save), New game, Load, Settings, Tools, Quit (asks when dirty) |
 | 01 | New game (world cards) | `new_game_model.gd`, `new_game_view.gd` | `NewGameScreen` | done: playable worlds, party line, asks before replacing the autosave |
 | 02, 17 | Load / save slots | `save_slots_model.gd`, `save_slots_view.gd` | `Slots` | done: autosave + 5 slots, peek rows, load / save / delete with the Godot questions; file import / export not yet |
-| 03-06 | Settings (Sound, Display, Gameplay, Controls) | `settings_model.gd`, `settings_view.gd` | `SettingsScreen` | done as a draft-and-apply form saved to `%APPDATA%/Aegis/settings.json`; values not applied to the window or audio yet (no audio) |
+| 03-06 | Settings (Sound, Display, Gameplay, Controls) | `settings_model.gd`, `settings_view.gd` | `SettingsScreen` | done as a draft-and-apply form saved to `%APPDATA%/Aegis/emberwake/settings.json`; values not applied to the window or audio yet (no audio) |
 | 07 | Region map (exploration) | `region_map_view.gd` | `region.rs` `RegionMap` | done: 32 px tiles with a camera, markers with labels / badges / hover verbs, Here list, event log, click-to-walk, E interact, chests, lore, exits, fights |
 | 08 | Dialogue (bottom dock) | `dialogue_panel.gd` | `RegionMap` dock | done: portrait, faction band, choices with lock reasons and rep / stat prefixes, services, turn-in picker (loot picks, recipient), recruits, fights |
 | 09 | Shop | `shop_panel.gd` | `RegionMap::draw_shop` | done: buy / sell tabs, stock left, supplies x1 / x5, item detail line |
@@ -51,7 +51,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 
 ## Order (done)
 
-1. Data: the project's `data/` folder through the engine's own loader (`emberwake_content::source`); the Godot exports
+1. Data: the project's `games/emberwake/data/` folder through the engine's own loader (`emberwake_content::source`); the Godot exports
    (`parity/export.sh`) are only for parity checks.
 2. Game state: GameState, NewGame, SaveGame (Godot saves load unchanged, every migration), party and progression rules.
 3. Game loop rules: exploration, travel, dialogue, shop, quests, rest and camp, world battles, results; checked with

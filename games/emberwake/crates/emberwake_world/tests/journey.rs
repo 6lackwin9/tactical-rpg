@@ -1,4 +1,4 @@
-//! Replays the Godot journeys (engine/parity/journey.sh -> parity/out/journeys.json): every recorded action runs
+//! Replays the Godot journeys (games/emberwake/parity/journey.sh -> parity/out/journeys.json): every recorded action runs
 //! through the Rust game loop, and its result, the game state after it and the screen views must equal Godot's
 //! (numbers compared as numbers, object key order ignored). The first difference of a journey is reported with
 //! its path; later steps of that journey are skipped (the states have diverged).
@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
 /// The first path where `a` (Rust) and `b` (Godot) differ.
@@ -193,7 +193,7 @@ fn journeys_match_godot() {
     let dir = out_dir();
     let path = dir.join("journeys.json");
     if !path.exists() {
-        eprintln!("no {}: run engine/parity/journey.sh first", path.display());
+        eprintln!("no {}: run games/emberwake/parity/journey.sh first", path.display());
         return;
     }
     let d = Data::load(&dir).expect("parity exports");

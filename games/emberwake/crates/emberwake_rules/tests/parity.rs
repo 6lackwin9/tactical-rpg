@@ -1,5 +1,5 @@
 //! Exact parity with the Godot reference: unit snapshots and DamageCalculator cases exported by
-//! `engine/parity/godot/export.gd` (run `engine/parity/export.sh` first; the fixtures are not committed).
+//! `games/emberwake/parity/godot/export.gd` (run `games/emberwake/parity/export.sh` first; the fixtures are not committed).
 
 use aegis_core::value::{self, Obj};
 use emberwake_data::{Catalog, UnitDef};
@@ -10,13 +10,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
 fn load(name: &str) -> Value {
     let path = out_dir().join(name);
     let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|_| panic!("missing {} - run engine/parity/export.sh to export the Godot reference", path.display()));
+        .unwrap_or_else(|_| panic!("missing {} - run games/emberwake/parity/export.sh to export the Godot reference", path.display()));
     serde_json::from_str(&text).unwrap()
 }
 
@@ -157,7 +157,7 @@ fn damage_cases_match_godot() {
 fn rng_matches_godot() {
     use aegis_core::rng::GodotRng;
     let path = out_dir().join("rng.json");
-    let rows: Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("missing rng.json - run engine/parity/export.sh")).unwrap();
+    let rows: Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("missing rng.json - run games/emberwake/parity/export.sh")).unwrap();
     let mut n = 0;
     for row in rows.as_array().unwrap() {
         let seed = row["seed"].as_i64().unwrap();
@@ -185,7 +185,7 @@ fn rng_matches_godot() {
 fn godot_hash_matches() {
     use aegis_core::ghash::{hash, GVar};
     use aegis_core::rng::GodotRng;
-    let rows: Value = serde_json::from_str(&std::fs::read_to_string(out_dir().join("hash.json")).expect("missing hash.json - run engine/parity/export.sh")).unwrap();
+    let rows: Value = serde_json::from_str(&std::fs::read_to_string(out_dir().join("hash.json")).expect("missing hash.json - run games/emberwake/parity/export.sh")).unwrap();
     let mut n = 0;
     for r in rows.as_array().unwrap() {
         let want = r["hash"].as_u64().unwrap() as u32;

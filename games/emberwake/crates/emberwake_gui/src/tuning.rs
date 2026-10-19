@@ -1,4 +1,4 @@
-//! The game's feel tuning (engine/data/tuning.json): every timing, size and feedback colour the battle screen animates
+//! The game's feel tuning (games/emberwake/tuning.json): every timing, size and feedback colour the battle screen animates
 //! with, read by the engine's live tuning file (`aegis_ui::tuning::TuningFile`, reloaded when the file changes).
 
 use aegis_ui::canvas::{rgb, Rgba};

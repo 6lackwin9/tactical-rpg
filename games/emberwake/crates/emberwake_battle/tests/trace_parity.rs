@@ -1,4 +1,4 @@
-//! Step-by-step parity with Godot battle traces (engine/parity/godot/trace.gd). The RNG, sorts and dictionary order
+//! Step-by-step parity with Godot battle traces (games/emberwake/parity/godot/trace.gd). The RNG, sorts and dictionary order
 //! are reproduced exactly, so a seeded duel should match step for step; the first divergence is reported.
 
 use emberwake_battle::sim::{fight, FightSpec};
@@ -10,12 +10,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
 fn load(name: &str) -> Value {
     let p = out_dir().join(name);
-    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("missing {} - run engine/parity/trace.sh", p.display()))).unwrap()
+    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("missing {} - run games/emberwake/parity/trace.sh", p.display()))).unwrap()
 }
 
 /// First difference between the Godot trace and the Rust one, as a readable line.
@@ -48,11 +48,11 @@ fn first_divergence(g: &Value, r: &Value) -> Option<String> {
 #[test]
 fn battles_replay_godot_step_for_step() {
     let cat = Arc::new(Catalog::from_value(&load("catalog.json")));
-    let mut files: Vec<String> = std::fs::read_dir(out_dir()).expect("missing engine/parity/out").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("traces") && !n.starts_with("traces_world") && n.ends_with(".json")).collect();
+    let mut files: Vec<String> = std::fs::read_dir(out_dir()).expect("missing games/emberwake/parity/out").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("traces") && !n.starts_with("traces_world") && n.ends_with(".json")).collect();
     files.sort();
     if files.is_empty() {
-        // a fresh checkout (CI records only the exports): the traces come from engine/parity/trace.sh (tools/fc.sh parity)
-        eprintln!("no traces*.json: run engine/parity/trace.sh");
+        // a fresh checkout (CI records only the exports): the traces come from games/emberwake/parity/trace.sh (tools/fc.sh parity)
+        eprintln!("no traces*.json: run games/emberwake/parity/trace.sh");
         return;
     }
     let mut total = 0;

@@ -63,7 +63,7 @@ Done rows (R1) are archived in `docs/archive/ROADMAP_2026-10.md`.
 | CLN-9 | obsolete since the transition 2026-10-19 (it split a Godot file, `content_catalog.gd`, now frozen in `legacy/`; same reason as the CLN-17 / CLN-18 closures, RESCOPE1); was approved (user 2026-10-17, DECISIONS "Cleanup pass 1 answers"): split `content_catalog.gd` (1384 lines) validators by kind into `scripts/content/rules/*` so ITEM1 and CLASS1 stop colliding on one hub file (docs/specs/CLEANUP.md#CLN-9) | after BAL2-L merges, last item of the logic cleanup batch, before ITEM1 and CLASS1 | Pure move; assertion count equal |
 | CLN-10 | done 2026-10-17: `docs/DECISIONS.md` is an index; per-system files in `docs/decisions/`; superseded rows in `docs/decisions/archive.md` with "superseded by" pointers (docs/specs/CLEANUP.md#CLN-10) | done (docs only) | No row text changes; pointers in CLAUDE.md and agent files updated by the planner |
 | CLN-13 | done 2026-10-19 (user, RESCOPE1): the README overview was written at the transition; the Godot feature log is `legacy/README.md` | - | Planner owns README |
-| SPLIT1 | in-progress (user approved 2026-10-19; SPLIT1-1 to -7 done; SPLIT1-8 next): a game-agnostic engine core and the first game in `games/emberwake/` (docs/specs/SPLIT1.md; task rows SPLIT1-1..9) | before the PORT rows | move only: every stage keeps the gate and the parity suites green |
+| SPLIT1 | in-progress (user approved 2026-10-19; SPLIT1-1 to -8 done; SPLIT1-9 next): a game-agnostic engine core and the first game in `games/emberwake/` (docs/specs/SPLIT1.md; task rows SPLIT1-1..9) | before the PORT rows | move only: every stage keeps the gate and the parity suites green |
 
 ## BAL2 plan (done 2026-10-17; design-brainstorm 2026-10-17; details and options in `docs/specs/BAL2_PROPOSAL.md`)
 
@@ -72,7 +72,7 @@ Answers the BAL1 open issues. Root causes found by probe: a PERC >= 18 range bon
 | Milestone | Status | Goal | Lane split | Depends on | Balance-ready afterwards |
 | --- | --- | --- | --- | --- | --- |
 | BAL2-L | done | Sim reliability (continuous score, cap 10, smart_skills/loadout args, spend/distance/preset variants, stats and group modes; per-unit metrics, party-vs-encounter mode, role limit tests, composition sweep: docs/specs/BAL2_SIM.md), PERC range fix, unit gear sentinel `none`, elite/boss tier values | 1 logic branch, sim commit first | SKILL1-L merged (content hub files) | none |
-| BAL2-A | done | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
+| BAL2-A | done | Data pass: growth (CONS for damage classes, warrior CONS2 STR2), warrior kite shield, ranger/brawler L1 path skill, unit loadouts, goblin_shaman gear and text | 1 asset branch (seed `games/emberwake/data/seeds/bal2.gd`) | BAL2-L sentinel commit | none |
 | BAL2 | done (rerun 2026-10-17; clean rerun BAL2-R open, then BAL3, goal G3) | Rerun duel L1/3/5/7 on the continuous score, tiers, levels, group; one more small data round if a class is outside 40-60 | balance run on clean main | BAL2-L, BAL2-A | S2 and S4 (when every class is in bracket) |
 
 ## World systems baseline (approved: user accepted every recommendation, DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)")

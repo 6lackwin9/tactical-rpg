@@ -1,5 +1,5 @@
 //! Data independence: the engine's own loader (emberwake_content::source) reads a data folder and must build exactly what
-//! Godot's catalogs build from it, as recorded by engine/parity/export.sh from legacy/ (so the loader reads
+//! Godot's catalogs build from it, as recorded by games/emberwake/parity/export.sh from legacy/ (so the loader reads
 //! legacy/data): every catalog kind (skill ranks expanded, items resolved against their families), every world (manifest, lineage, own entries) and the game data
 //! (maps, quests, services, XP curve, item families). Keys, key order and int / float types must match; floats match
 //! to 1e-9 (Godot's JSON.stringify writes fewer digits than it computes with). The schema copy must match the export.
@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
 fn data_dir() -> PathBuf {
@@ -69,7 +69,7 @@ fn diff(at: &str, g: &Value, r: &Value) -> String {
 #[test]
 fn engine_loader_matches_godot_catalogs() {
     let Some(catalog) = read("catalog.json") else {
-        eprintln!("no parity/out/catalog.json: run engine/parity/export.sh");
+        eprintln!("no parity/out/catalog.json: run games/emberwake/parity/export.sh");
         return;
     };
     let src = source::load(&data_dir());

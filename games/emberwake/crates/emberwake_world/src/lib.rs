@@ -17,5 +17,8 @@ pub mod shop;
 pub mod state;
 pub mod travel;
 
+/// The game's id (games/emberwake/game.json `id`): its folder, crate prefix and save folder.
+pub const GAME_ID: &str = "emberwake";
+
 pub use data::Data;
 pub use state::{GameState, PartyState, UnitState};

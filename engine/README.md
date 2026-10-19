@@ -8,10 +8,10 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 * **Active Branch:** `engine`
 * **Toolchain:** Rust `stable-x86_64-pc-windows-gnullvm`, pinned in `rust-toolchain.toml`. The MinGW on PATH is llvm-mingw, and the plain `gnu` toolchain fails to link against it (`unable to find library -lgcc_eh`).
 * **Build output:** `.cargo/config.toml` puts it in `C:/Users/tusha/AppData/Local/Temp/aegis-target`, outside OneDrive (the folder is several GB). Binaries: `.../aegis-target/release/aegis.exe`, `emberwake.exe`.
-* **Game data:** the project's `data/` folder (catalog, worlds, maps, quests, dialogue services, XP curve), read by the
-  engine's own loader (`emberwake_content::source`) with the field tables in `engine/data/schema.json`; no Godot export is
+* **Game data:** the project's `games/emberwake/data/` folder (catalog, worlds, maps, quests, dialogue services, XP curve), read by the
+  engine's own loader (`emberwake_content::source`) with the field tables in `games/emberwake/schema.json`; no Godot export is
   needed to play. `data=<dir>` points the GUI or CLI at another data folder, or at a Godot export folder.
-* **Saves and settings:** `%APPDATA%/Aegis/saves` and `%APPDATA%/Aegis/settings.json` (outside the repo; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged.
+* **Saves and settings:** per game under its id, `%APPDATA%/Aegis/emberwake/saves` and `%APPDATA%/Aegis/emberwake/settings.json` (outside the repo; the first start after SPLIT1-8 copies the old shared `%APPDATA%/Aegis/saves` and `settings.json` there and leaves them; `saves=<dir>` points the GUI elsewhere). The files use Godot's save format: Godot saves load in the engine unchanged.
 
 ## Workspace
 
@@ -23,11 +23,11 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `../games/emberwake/crates/emberwake_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
 | `../games/emberwake/crates/emberwake_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
 | `../games/emberwake/crates/emberwake_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
-| `../games/emberwake/crates/emberwake_content/` | The game's data loader and writer on `aegis_content` (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) |
+| `../games/emberwake/crates/emberwake_content/` | The game's data loader and writer on `aegis_content` (`source` reads `games/emberwake/data/` like Godot's catalogs, `store` writes it like Godot's saves) |
 | `../games/emberwake/crates/emberwake_world/` | The game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
 | `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
-| `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim duel`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
+| `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim duel`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply) |
 | `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader, live tuning files, agent link, screen stack with the game's context, window shell and event loop |
 | `../games/emberwake/crates/emberwake_gui/` | `emberwake`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo) on `aegis_ui`; agent link on port 47800 |
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `emberwake_gui`; in git history |
@@ -40,11 +40,11 @@ The Godot game is the reference: the frozen copy in `legacy/` (main at 7fa10da, 
 no Godot file is edited):
 
 ```bash
-engine/parity/export.sh                      # catalog, worlds, game data, schema, unit snapshots, damage cases, RNG, save fixtures (~5 s)
-engine/parity/trace.sh mode=duel level=5    # record Godot sim fights step by step (duel | group | teams | encounters)
-engine/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
-engine/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
-engine/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
+games/emberwake/parity/export.sh                      # catalog, worlds, game data, schema, unit snapshots, damage cases, RNG, save fixtures (~5 s)
+games/emberwake/parity/trace.sh mode=duel level=5    # record Godot sim fights step by step (duel | group | teams | encounters)
+games/emberwake/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
+games/emberwake/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
+games/emberwake/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
 cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world
     # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces, journeys (result, state and screen
     # views per action), saves
@@ -89,7 +89,7 @@ description), Auto plays the battle out, Confirm resolves the round. The log (Ex
 or PageUp / PageDown. Keys: Enter confirm, Space step / next round, A autoplay, Z undo, L log, R restart (arena),
 F12 screenshot.
 
-Feel values (timings, floating numbers, hit flash, colours) live in `engine/data/tuning.json` and reload while the game
+Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the top screen's state and every
 widget with its id, text, rect, state and hover card), `click {id}`, `hover {id}`, `key {key}` (up / down / left /
 right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `game` (the full game state), and the

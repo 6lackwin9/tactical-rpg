@@ -496,7 +496,9 @@ dependencies = [
 name = "emberwake_gui"
 version = "0.1.0"
 dependencies = [
+ "aegis_content",
  "aegis_core",
+ "aegis_save",
  "aegis_ui",
  "anyhow",
  "emberwake_battle",
@@ -513,6 +515,7 @@ name = "emberwake_host"
 version = "0.1.0"
 dependencies = [
  "aegis_cli",
+ "aegis_content",
  "aegis_host",
  "anyhow",
  "emberwake_battle",

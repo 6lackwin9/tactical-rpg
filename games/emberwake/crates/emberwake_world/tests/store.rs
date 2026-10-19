@@ -7,7 +7,7 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 
 fn data_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../data")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data")
 }
 
 const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain"];
@@ -17,9 +17,9 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// must write every file of resave/after byte for byte (field order, storage form, empty kinds).
 #[test]
 fn writer_saves_exactly_what_godot_saves() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/parity/out/resave");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out/resave");
     if !root.join("after").is_dir() {
-        eprintln!("no parity/out/resave: run engine/parity/export.sh");
+        eprintln!("no parity/out/resave: run games/emberwake/parity/export.sh");
         return;
     }
     let dir = root.join("before");

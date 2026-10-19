@@ -15,6 +15,8 @@ emberwake_battle = { path = "../emberwake_battle" }
 emberwake_host = { path = "../emberwake_host" }
 emberwake_world = { path = "../emberwake_world" }
 aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
+aegis_content = { path = "../../../../engine/crates/aegis_content" }
+aegis_save = { path = "../../../../engine/crates/aegis_save" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

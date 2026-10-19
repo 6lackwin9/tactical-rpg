@@ -2,7 +2,7 @@
 
 System: S14. Status: placeholder art stays until the base game is done. Spec: docs/specs/S14_L1.md. See docs/STRUCTURE.md and docs/ROADMAP.md.
 
-Purpose: art, audio and font files. Since 2026-10-19 the Aegis engine reads the PNGs directly: `emberwake` loads `assets/art/<namespace>/<key>_<variant>.png` by key (`games/emberwake/crates/emberwake_gui/src/art.rs`), downsamples it to pixel scale and draws a simple fallback shape when a file is missing. There is no import step and no `.import` file (those were Godot's and stay with the Godot build in `legacy/`).
+Purpose: art, audio and font files. Since 2026-10-19 the Aegis engine reads the PNGs directly: `emberwake` loads `games/emberwake/assets/art/<namespace>/<key>_<variant>.png` by key (`games/emberwake/crates/emberwake_gui/src/art.rs`), downsamples it to pixel scale and draws a simple fallback shape when a file is missing. There is no import step and no `.import` file (those were Godot's and stay with the Godot build in `legacy/`).
 
 Folders (file names follow the pattern):
 
@@ -10,7 +10,7 @@ Folders (file names follow the pattern):
 - `audio/sfx/`: `<key>.ogg` or `.wav`; `audio/music/`: `<key>.ogg` (the engine plays no audio yet)
 - `fonts/`: web fallback fonts of the Godot build; the engine's GUI font is `engine/assets/fonts/`
 
-Manifest: `data/assets/manifest.json` holds the Godot build's file rows (`res://` paths, aliases); the engine does not read or write it yet. Its replacement comes with the engine's sprite work (the SPRITE1 rig work moves to the engine), so a new art key today is a file at the pattern path, plus a planner question when it needs an alias or a manifest row.
+Manifest: `games/emberwake/data/assets/manifest.json` holds the Godot build's file rows (`res://` paths, aliases); the engine does not read or write it yet. Its replacement comes with the engine's sprite work (the SPRITE1 rig work moves to the engine), so a new art key today is a file at the pattern path, plus a planner question when it needs an alias or a manifest row.
 
 Placeholder art (ART1-A): `python3 tools/gen_art.py [group ...]` (needs Pillow and numpy; deterministic) regenerates every placeholder PNG under `art/` (groups: characters classes items skills statuses terrain overlays region markers pins world_map backdrops menu; `--list` prints them). Swap a file by replacing the PNG at the same path (keep the size).
 

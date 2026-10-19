@@ -18,21 +18,19 @@ mod screens;
 mod tuning;
 mod worldmap;
 
+use aegis_content::manifest::{self, Manifest};
 use aegis_ui::art;
 use aegis_ui::screen::Settings;
 use aegis_ui::shell::Options;
 use aegis_ui::tuning::TuningFile;
 use anyhow::{Context, Result};
+use emberwake_world::GAME_ID;
 use screens::{default_settings, Cx, GameCx, Screen};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
     args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
-}
-
-fn app_dir() -> PathBuf {
-    std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(".")).join("Aegis")
 }
 
 fn main() -> Result<()> {
@@ -54,17 +52,40 @@ fn main() -> Result<()> {
             }
         }
     });
-    let data_dir = arg(&args, "data").map(PathBuf::from).or_else(|| emberwake_world::Data::find_data_dir(engine_dir.as_deref().unwrap_or(&cwd))).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
-    let (data, load_errors) = emberwake_world::Data::open(&data_dir).with_context(|| format!("loading the data in {}", data_dir.display()))?;
+    let start = engine_dir.clone().unwrap_or_else(|| cwd.clone());
+    let game_dir = manifest::find_game_dir(&start, GAME_ID);
+    let data_dir = arg(&args, "data").map(PathBuf::from).or_else(|| emberwake_world::Data::find_data_dir(&start)).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
+    let (data, mut notices) = emberwake_world::Data::open(&data_dir).with_context(|| format!("loading the data in {}", data_dir.display()))?;
     let data = Arc::new(data);
-    let project = art::find_project(engine_dir.as_deref().unwrap_or(&cwd));
+    let manifest = match game_dir.as_ref().map(|g| Manifest::read(&g.join(manifest::FILE))) {
+        Some(Ok(m)) => m,
+        found => {
+            notices.push(match found {
+                Some(Err(e)) => e,
+                _ => format!("Game folder games/{GAME_ID} (game.json) not found."),
+            });
+            Manifest { id: GAME_ID.into(), title: GAME_ID.into(), ..Manifest::default() }
+        }
+    };
+    let project = game_dir.clone().or_else(|| art::find_project(&start));
+    let home = game_dir.unwrap_or_else(|| PathBuf::from("."));
     let engine = engine_dir.unwrap_or_else(|| PathBuf::from("."));
-    let save_dir = arg(&args, "saves").map(PathBuf::from).unwrap_or_else(|| app_dir().join("saves"));
+    let save_dir = match arg(&args, "saves") {
+        Some(dir) => PathBuf::from(dir),
+        None => {
+            if let Err(e) = aegis_save::adopt_shared(GAME_ID) {
+                notices.push(format!("Copying the saves into {}: {e}", aegis_save::user_dir(GAME_ID).display()));
+            }
+            aegis_save::user_dir(GAME_ID).join("saves")
+        }
+    };
+    let title = format!("Aegis - {}", manifest.title);
     let game = GameCx {
         data,
+        manifest,
         game: None,
         save_dir,
-        tuning: TuningFile::new(Some(engine.join("data/tuning.json"))),
+        tuning: TuningFile::new(Some(home.join("tuning.json"))),
         log: Vec::new(),
         encounter: arg(&args, "encounter").unwrap_or("goblin_skirmish").to_string(),
         seed: arg(&args, "seed").and_then(|s| s.parse().ok()),
@@ -72,11 +93,11 @@ fn main() -> Result<()> {
         data_dir,
     };
     let cx = Cx {
-        settings: Settings::load(app_dir().join("settings.json"), default_settings()),
+        settings: Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings()),
         art: art::Art::new(project),
         nav: Vec::new(),
-        notice: load_errors,
-        shot_dir: engine.join("parity/out"),
+        notice: notices,
+        shot_dir: home.join("parity/out"),
         quit: false,
         answers: Vec::new(),
         app: game,
@@ -88,6 +109,6 @@ fn main() -> Result<()> {
         _ => {}
     }
     let port = arg(&args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
-    let options = Options { title: "Aegis - Tactical RPG".into(), font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port };
+    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port };
     aegis_ui::shell::run(cx, stack, options)
 }

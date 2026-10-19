@@ -23,8 +23,8 @@ file when a module, crate or folder is added. Since 2026-10-19 the game is the A
 | `engine/crates/aegis_ui/src/` | engine UI, game-agnostic (SPLIT1-5): drawing (`canvas.rs`, `painter.rs`, `ui.rs` widget kit, `art.rs` loader), `tuning.rs` (live tuning file), `bridge.rs` (agent link, port 47800), `screen.rs` (screen stack, `Cx<G>` over the game's context, ask and notice), `shell.rs` (window, event loop, agent commands) | done |
 | `games/emberwake/crates/emberwake_gui/src/` | `emberwake`: every screen (`menus.rs`, `region.rs`, `worldmap.rs`, `hub.rs`, `party.rs`, `battle.rs`) and dev tool (`runner.rs` Scene Runner, `forge.rs` Content and World Forge viewers, `dojo.rs`), `screens.rs` (the game half of the screen context, entering a game), `tuning.rs` (the battle feel values), `main.rs` (start-up), all on `aegis_ui` | done (look and feel after the transition: `engine/docs/SCREENS.md`) |
 | `engine/crates/<crate>/tests/`, `games/emberwake/crates/<crate>/tests/` | integration tests; most replay the Godot reference: `emberwake_battle/tests/trace_parity.rs`, `emberwake_world/tests/{journey,saves,world_traces,data_source,store}.rs`, `emberwake_rules/tests/parity.rs`, `emberwake_host/tests/replay.rs` | done |
-| `engine/data/` | `schema.json` (the field tables the loader and writer use; a copy of Godot's ContentSchema / WorldSchema), `tuning.json` (GUI feel values, live reload) | done |
-| `engine/parity/` | `export.sh`, `trace.sh`, `journey.sh` and `godot/*.gd`: record the frozen Godot build's reference from `legacy/` into `parity/out/` (gitignored) | done |
+| `games/emberwake/` | `game.json` (the game manifest: id, title, subtitle, worlds; written by `aegis content manifest`, SPLIT1-8), `schema.json` (the field tables the loader and writer use; a copy of Godot's ContentSchema / WorldSchema), `tuning.json` (GUI feel values, live reload) | done |
+| `games/emberwake/parity/` | `export.sh`, `trace.sh`, `journey.sh` and `godot/*.gd`: record the frozen Godot build's reference from `legacy/` into `parity/out/` (gitignored) | done |
 | `engine/docs/` | `ENGINE_SPEC.md` (direction, milestones, transition), `PORT_NOTES.md` (port map, parity status), `SCREENS.md` (screens, gaps), `screens/` (Godot reference shots) | done |
 | `engine/assets/fonts/` | the GUI font (Open Sans, OFL) | done |
 | `engine/web/` | an early JavaScript combat prototype; parked (ENGINE_SPEC "web/ player") | parked |
@@ -33,12 +33,12 @@ file when a module, crate or folder is added. Since 2026-10-19 the game is the A
 
 | Path | Purpose | Status |
 | --- | --- | --- |
-| `data/catalog/` | classes, units, skills (ranked, v2), items (family + modifiers, v2), item families, passives, encounters, terrain | in use |
-| `data/worlds/<id>/` | `world.json` manifest and one file per world kind (regions, locations, factions, characters, items, disciplines, quests, lore, encounters, loot, dialogues, shops, routes) | in use |
-| `data/maps/`, `data/quests/`, `data/dialogue/`, `data/progression/` | region map templates, quest templates, dialogue service lines, the XP curve | in use |
-| `data/assets/manifest.json` | art and sound file rows (Godot-era `res://` paths; not read or written by the engine yet: redefined with the engine's sprite work) | parked |
-| `data/seeds/` | JSON seeds of tasks in flight (`aegis content apply`); `README.md` indexes executed seeds; Godot-era `.gd` seeds are in `legacy/data/seeds/` | in use |
-| `assets/art/`, `assets/audio/`, `assets/fonts/` | art read by the engine (`assets/art/**/*.png`), audio and fonts (no audio in the engine yet) | in use |
+| `games/emberwake/data/catalog/` | classes, units, skills (ranked, v2), items (family + modifiers, v2), item families, passives, encounters, terrain | in use |
+| `games/emberwake/data/worlds/<id>/` | `world.json` manifest and one file per world kind (regions, locations, factions, characters, items, disciplines, quests, lore, encounters, loot, dialogues, shops, routes) | in use |
+| `games/emberwake/data/maps/`, `games/emberwake/data/quests/`, `games/emberwake/data/dialogue/`, `games/emberwake/data/progression/` | region map templates, quest templates, dialogue service lines, the XP curve | in use |
+| `games/emberwake/data/assets/manifest.json` | art and sound file rows (Godot-era `res://` paths; not read or written by the engine yet: redefined with the engine's sprite work) | parked |
+| `games/emberwake/data/seeds/` | JSON seeds of tasks in flight (`aegis content apply`); `README.md` indexes executed seeds; Godot-era `.gd` seeds are in `legacy/data/seeds/` | in use |
+| `games/emberwake/assets/art/`, `games/emberwake/assets/audio/`, `games/emberwake/assets/fonts/` | art read by the engine (`games/emberwake/assets/art/**/*.png`), audio and fonts (no audio in the engine yet) | in use |
 
 ## Tools, CI, process
 
@@ -56,7 +56,7 @@ file when a module, crate or folder is added. Since 2026-10-19 the game is the A
 | `legacy/` | the frozen Godot build (main at 7fa10da, `legacy/LEGACY.md`); never edited | frozen |
 
 Rules: game rules live in the library crates (`emberwake_rules`, `emberwake_battle`, `emberwake_world`); `emberwake_gui` only draws and
-sends command-API requests; data lives in `data/**` and changes only through `aegis content`; tests live in each crate's
+sends command-API requests; data lives in `games/emberwake/data/**` and changes only through `aegis content`; tests live in each crate's
 `tests/` folder. Code patterns: skill `rust-conventions`.
 
 ## Code conventions

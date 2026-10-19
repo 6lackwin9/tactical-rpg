@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Writes the pixel-art unit token and portrait files (SPRITE1-A) from the sprite rig's idle frame.
-#   python3 tools/sprites/export_units.py [--out DIR]   (default: assets/art/unit)
+#   python3 tools/sprites/export_units.py [--out DIR]   (default: games/emberwake/assets/art/unit)
 # Token = the 48 px figure at 2x in the 104 px inner square; portrait = a 24x24 head-and-shoulders crop at 10x (240 px).
 # The party classes and the named party characters that use them are listed in SPRITE_KEYS; tools/gen_art.py skips them.
 import argparse
@@ -36,7 +36,7 @@ def portrait(frame: Image.Image) -> Image.Image:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="assets/art/unit")
+    ap.add_argument("--out", default="games/emberwake/assets/art/unit")
     args = ap.parse_args()
     for cls, keys in SPRITE_KEYS.items():
         frame = classes.clips(cls)[0]["idle"][0]

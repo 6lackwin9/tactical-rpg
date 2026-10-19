@@ -74,7 +74,7 @@ if [ ! -x "$GODOT_BIN" ]; then
     rm -rf "$tmp"
     log "WARNING: could not download Godot (github.com release assets and downloads.godotengine.org"
     log "         are blocked by this environment's network policy). The engine gate still runs; the Godot parity"
-    log "         reference (tools/fc.sh parity, engine/parity/*.sh) needs one of those hosts allowed."
+    log "         reference (tools/fc.sh parity, games/emberwake/parity/*.sh) needs one of those hosts allowed."
     exit 0
   fi
   python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$tmp/godot.zip" "$tmp"
@@ -83,7 +83,7 @@ if [ ! -x "$GODOT_BIN" ]; then
   rm -rf "$tmp"
 fi
 
-# engine/parity/*.sh read $GODOT (else godot on PATH).
+# games/emberwake/parity/*.sh read $GODOT (else godot on PATH).
 $SUDO ln -sf "$GODOT_BIN" /usr/local/bin/godot
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export GODOT=\"${GODOT_BIN}\"" >> "$CLAUDE_ENV_FILE"
@@ -94,7 +94,7 @@ LEGACY="${CLAUDE_PROJECT_DIR:-.}/legacy"
 if [ -f "$LEGACY/project.godot" ] && [ ! -d "$LEGACY/.godot" ]; then
   log "importing legacy/ (first run)"
   timeout 300 "$GODOT_BIN" --headless --path "$LEGACY" --import >/dev/null 2>&1 || \
-    log "WARNING: initial import of legacy/ exited non-zero; run engine/parity/export.sh to see why"
+    log "WARNING: initial import of legacy/ exited non-zero; run games/emberwake/parity/export.sh to see why"
 fi
 
 log "ready: $("$GODOT_BIN" --version 2>/dev/null | head -1), $(pwsh -v), $("$HOME/.cargo/bin/cargo" --version 2>/dev/null || cargo --version 2>/dev/null || echo 'no cargo')"

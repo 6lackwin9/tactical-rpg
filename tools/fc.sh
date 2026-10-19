@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, then every test
-#                                (parity suites skip themselves when engine/parity/out is missing); `auto` is accepted and runs everything
+#                                (parity suites skip themselves when games/emberwake/parity/out is missing); `auto` is accepted and runs everything
 #   tools/fc.sh build            cargo build --workspace (warnings shown)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
 #   tools/fc.sh docs             warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint
-#   tools/fc.sh content <args>   edit data/ through the engine's writer: check | upsert | remove | apply (aegis content)
+#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim duel [level] [seeds] [preset=] [jitter=] [json])
 #   tools/fc.sh parity           re-record the Godot reference from legacy/ (export, traces, journeys; needs Godot 4.7.2)
 # The Godot-only commands (parse, parse-all, arena, dojo, run, replay, safe_delete, export_placeholder, gen_sfx, systems) live on
@@ -59,7 +59,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
   local md=() out
-  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md docs/preferences/*.md data/*/README.md \
+  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md docs/preferences/*.md games/*/data/*/README.md \
     .claude/agents/*.md .claude/skills/*/SKILL.md engine/README.md engine/docs/*.md legacy/LEGACY.md; do [ -f "$f" ] && md+=("$f"); done
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }
@@ -83,16 +83,16 @@ case "$1" in
   content) aegis content "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   parity)
-    engine/parity/export.sh || status=1
-    for m in duel; do for l in 1 5 10; do engine/parity/trace.sh mode=$m level=$l || status=1; done; done
-    engine/parity/trace.sh mode=group level=3 && engine/parity/trace.sh mode=group level=7 || status=1
-    for l in 3 5 7; do engine/parity/trace.sh mode=teams level=$l || status=1; done
-    engine/parity/trace.sh mode=encounters level=1 || status=1
-    engine/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb,con_focus_elixir || status=1
-    engine/parity/trace.sh mode=teams level=5 seeds=3 pouch=con_heal_potion,con_fire_bomb,con_heal_potion || status=1
-    engine/parity/trace.sh mode=group level=7 pouch=con_heal_potion,con_heal_potion,con_fire_bomb || status=1
-    for p in balanced aggressive withdraw defensive; do engine/parity/trace.sh mode=world seeds=2 preset=$p || status=1; done
-    engine/parity/journey.sh seeds=1,2,3,4 steps=700 || status=1
+    games/emberwake/parity/export.sh || status=1
+    for m in duel; do for l in 1 5 10; do games/emberwake/parity/trace.sh mode=$m level=$l || status=1; done; done
+    games/emberwake/parity/trace.sh mode=group level=3 && games/emberwake/parity/trace.sh mode=group level=7 || status=1
+    for l in 3 5 7; do games/emberwake/parity/trace.sh mode=teams level=$l || status=1; done
+    games/emberwake/parity/trace.sh mode=encounters level=1 || status=1
+    games/emberwake/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb,con_focus_elixir || status=1
+    games/emberwake/parity/trace.sh mode=teams level=5 seeds=3 pouch=con_heal_potion,con_fire_bomb,con_heal_potion || status=1
+    games/emberwake/parity/trace.sh mode=group level=7 pouch=con_heal_potion,con_heal_potion,con_fire_bomb || status=1
+    for p in balanced aggressive withdraw defensive; do games/emberwake/parity/trace.sh mode=world seeds=2 preset=$p || status=1; done
+    games/emberwake/parity/journey.sh seeds=1,2,3,4 steps=700 || status=1
     ;;
   parse|parse-all|arena|dojo|run|replay|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
