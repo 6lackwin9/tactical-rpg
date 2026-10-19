@@ -1,0 +1,9 @@
+[package]
+name = "aegis_content"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aegis_core = { path = "../aegis_core" }
+indexmap = { workspace = true }
+serde_json = { workspace = true }

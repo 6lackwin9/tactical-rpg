@@ -18,11 +18,12 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | Crate | Role |
 | :--- | :--- |
 | `crates/aegis_core/` | Engine core, game-agnostic (SPLIT1-2): Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`) |
+| `crates/aegis_content/` | Engine content layer, game-agnostic (SPLIT1-3): data file format, schema normalize and storage, content store and world graph, upsert / remove over the game's hooks |
 | `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers |
 | `crates/aegis_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
 | `crates/aegis_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
 | `crates/aegis_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, balance-sim fight |
-| `crates/aegis_world/` | The data loader and writer (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) and the game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
+| `crates/aegis_world/` | The game's data loader and writer on `aegis_content` (`source` reads `data/` like Godot's catalogs, `store` writes it like Godot's saves) and the game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | The command API (JSON request in, JSON reply out): state, skills, plan, preset, confirm, step, resolve, advance, autoplay, history |
 | `crates/aegis_cli/` | `aegis` command line: `sim duel`, `battle <encounter>`, `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `data/`: check, upsert, remove, apply) |
 | `crates/aegis_gui/` | `aegis-gui`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo); agent link on port 47800 |

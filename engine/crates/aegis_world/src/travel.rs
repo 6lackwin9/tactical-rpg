@@ -13,7 +13,7 @@ pub const STARVED_PCT: i64 = 150;
 pub const PCT_MAX: i64 = 100;
 
 fn world_of(qid: &str) -> String {
-    Data::split_qid(qid).map(|(w, _)| w).unwrap_or_default()
+    aegis_content::split_qid(qid).map(|(w, _)| w).unwrap_or_default()
 }
 
 /// The routes `w` travels on: its merged routes, then the two-way routes of other worlds that reach it with a

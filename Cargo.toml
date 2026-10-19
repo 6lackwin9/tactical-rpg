@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "engine/crates/aegis_core",
+    "engine/crates/aegis_content",
     "engine/crates/aegis_data",
     "engine/crates/aegis_save",
     "engine/crates/aegis_rules",

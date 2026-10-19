@@ -12,11 +12,12 @@ These describe how the engine is written today (transition 2026-10-19); follow t
 | Crate | Holds | Never |
 | --- | --- | --- |
 | `aegis_core` | engine core: Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`) | anything game-specific |
+| `aegis_content` | engine content layer: file format, schema normalize and storage, content store and world graph, upsert / remove over the game's `Hooks` | anything game-specific |
 | `aegis_save` | engine save framework: slots, envelope, atomic write, migration runner (the game gives its format and steps) | anything game-specific |
 | `aegis_data` | typed catalog rows (`UnitDef`, `SkillDef`, `ItemDef`, ...) built from resolved JSON | game rules |
 | `aegis_rules` | pure rules: stats, gear, unit building, damage, statuses | battle state, IO |
 | `aegis_battle` | grid, paths, commands, resolver, planner, AI, encounter rules, session, sim | world state, drawing |
-| `aegis_world` | data loader (`source`) and writer (`store`), game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
+| `aegis_world` | the game's data loader (`source`) and writer (`store`) on `aegis_content`, game state, saves, exploration, quests, dialogue, shops, travel, battle bridge | drawing |
 | `aegis_host` | the JSON command API over a battle session | rules of its own |
 | `aegis_cli` | `aegis`: sim, battle, serve, link, content | rules of its own |
 | `aegis_gui` | screens and dev tools; every battle action goes through `aegis_host` requests | game rules |

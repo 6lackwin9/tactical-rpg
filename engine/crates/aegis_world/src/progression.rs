@@ -110,7 +110,7 @@ pub fn auto_for(d: &Data, state: &mut UnitState) {
 
 /// The world character a member plays ({} when lore_ref is empty or unresolved).
 pub fn character_of<'a>(d: &'a Data, state: &UnitState) -> &'a Dict {
-    match Data::split_qid(&state.lore_ref) {
+    match aegis_content::split_qid(&state.lore_ref) {
         Some((w, _)) if d.has_world(&w) => d.resolve(&w, "characters", &state.lore_ref),
         _ => json::empty(),
     }

@@ -358,7 +358,7 @@ fn apply_sets(d: &Data, gs: &mut GameState, m: &Dict) -> Vec<String> {
 pub fn resolve_location<'a>(d: &'a Data, gs: &GameState, r: &str) -> &'a Dict {
     let hit = d.resolve(&gs.world_id, "locations", r);
     if hit.is_empty() && r.contains(':') {
-        if let Some((w, local)) = Data::split_qid(r) {
+        if let Some((w, local)) = aegis_content::split_qid(r) {
             if d.has_world(&w) {
                 return d.resolve(&w, "locations", &local);
             }

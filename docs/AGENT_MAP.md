@@ -19,6 +19,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | SPLIT1-1 | - | Cargo workspace at the repo root (7a8903f) |
 | main session (no lane agents) | SPLIT1-2 | - | engine core `aegis_core`: RNG, hash, sort, Variant helpers, field readers |
 | main session (no lane agents) | SPLIT1-4 | - | engine save framework `aegis_save`: slots, envelope, atomic write, migration runner |
+| main session (no lane agents) | SPLIT1-3 | - | engine content layer `aegis_content`: file format, schema, world graph, writer over game hooks |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

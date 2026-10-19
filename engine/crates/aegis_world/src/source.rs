@@ -1,13 +1,15 @@
-//! The engine's own data loader: reads the project's `data/` folder the way Godot's catalogs read it and builds the
-//! values the parity exports hold (catalog.json, worlds.json, game_data.json), so `Data` no longer needs Godot.
-//! Read paths only (editing and validation stay out): ContentCatalog.reload_from_disk / _read_kind
-//! (ContentSchema.normalize, SkillRanks.expand with SkillText.render, ItemModifiers.resolve, ItemFamilies.derive),
-//! WorldCatalog.reload_from_disk (WorldSchema.normalize, lineage, own_entries), MapCatalog / QuestCatalog /
-//! ServiceCatalog (normalize) and XpCurve.load_file. The field tables are engine/data/schema.json, exported once from
-//! Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`). Like Godot, a bad file or entry is reported
-//! in `errors` and skipped, never fatal.
+//! The game's data loader on the engine content layer (`aegis_content`: file format, schema normalize, world graph):
+//! reads the project's `data/` folder the way Godot's catalogs read it and builds the values the parity exports hold
+//! (catalog.json, worlds.json, game_data.json), so `Data` no longer needs Godot. Read paths only (editing and
+//! validation stay out): ContentCatalog.reload_from_disk / _read_kind (SkillRanks.expand with SkillText.render,
+//! ItemModifiers.resolve, ItemFamilies.derive), WorldCatalog.reload_from_disk (the engine's world loader over
+//! WORLD_KINDS), MapCatalog / QuestCatalog / ServiceCatalog (normalize) and XpCurve.load_file. The field tables are
+//! engine/data/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
+//! Like Godot, a bad file or entry is reported in `errors` and skipped, never fatal.
 
-use aegis_core::json::{self, gstr, int, to_bool_or, to_float_or, to_int_or, Dict};
+use aegis_content::file::{entries_of, read};
+use aegis_content::schema::{normalize, sget, snapped};
+use aegis_core::json::{self, gstr, int, to_float_or, to_int_or, Dict};
 use aegis_rules::status;
 use serde_json::{Map, Value};
 use std::path::Path;
@@ -34,14 +36,14 @@ pub fn schema() -> &'static Value {
     S.get_or_init(|| serde_json::from_str(SCHEMA_TEXT).expect("engine/data/schema.json"))
 }
 
-pub(crate) fn fields<'a>(section: &str, kind: &str) -> &'a [Value] {
-    schema()[section][kind].as_array().map(|a| a.as_slice()).unwrap_or(&[])
+pub(crate) fn fields(section: &str, kind: &str) -> &'static [Value] {
+    aegis_content::schema::fields(schema(), section, kind)
 }
 
 pub fn load(data_dir: &Path) -> Source {
     let mut errors = Vec::new();
     let catalog = load_catalog(data_dir, &mut errors);
-    let worlds = load_worlds(data_dir, &mut errors);
+    let worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
     let mut game = Dict::new();
     game.insert("maps".into(), Value::Array(load_list(&data_dir.join("maps/maps.json"), &mut errors, map_template)));
     game.insert("quests".into(), Value::Array(load_list(&data_dir.join("quests/quests.json"), &mut errors, quest_template)));
@@ -57,166 +59,7 @@ pub fn load(data_dir: &Path) -> Source {
     Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), errors }
 }
 
-// ---- Godot JSON and Variant semantics --------------------------------------------------------------------------
-
-/// JSON.parse: every number is a float.
-fn floats(v: Value) -> Value {
-    match v {
-        Value::Number(n) => Value::from(n.as_f64().unwrap_or(0.0)),
-        Value::Array(a) => Value::Array(a.into_iter().map(floats).collect()),
-        Value::Object(o) => Value::Object(o.into_iter().map(|(k, v)| (k, floats(v))).collect()),
-        other => other,
-    }
-}
-
-pub(crate) fn read(path: &Path, errors: &mut Vec<String>) -> Option<Value> {
-    let text = std::fs::read_to_string(path).ok()?;
-    match serde_json::from_str::<Value>(&text) {
-        Ok(v) => Some(floats(v)),
-        Err(e) => {
-            errors.push(format!("{}: JSON error on line {}: {e}", path.display(), e.line()));
-            None
-        }
-    }
-}
-
-/// A file's entry list: {"version", "entries": [...]} (or a bare list) -> (entries, version).
-pub(crate) fn entries_of(doc: Value) -> (Vec<Value>, i64) {
-    match doc {
-        Value::Object(mut o) => {
-            let version = to_int_or(json::get(&o, "version"), 1);
-            match o.shift_remove("entries") {
-                Some(Value::Array(a)) => (a, version),
-                _ => (Vec::new(), version),
-            }
-        }
-        Value::Array(a) => (a, 1),
-        _ => (Vec::new(), 1),
-    }
-}
-
-/// ContentSchema._json_ints: whole floats inside free-form values become ints.
-fn json_ints(v: &Value) -> Value {
-    match v {
-        Value::Number(n) if n.is_f64() => {
-            let x = n.as_f64().unwrap_or(0.0);
-            if x == x.floor() {
-                int(json::roundi(x))
-            } else {
-                v.clone()
-            }
-        }
-        Value::Array(a) => Value::Array(a.iter().map(json_ints).collect()),
-        Value::Object(o) => Value::Object(o.iter().map(|(k, v)| (k.clone(), json_ints(v))).collect()),
-        _ => v.clone(),
-    }
-}
-
-/// ContentSchema._copy: collections get whole numbers back as ints; scalars stay as they are.
-pub(crate) fn copy(v: &Value) -> Value {
-    if v.is_array() || v.is_object() {
-        json_ints(v)
-    } else {
-        v.clone()
-    }
-}
-
-pub(crate) fn strings(v: &Value) -> Vec<String> {
-    v.as_array().map(|a| a.iter().map(gstr).collect()).unwrap_or_default()
-}
-
-pub(crate) fn str_list(list: &[String]) -> Value {
-    Value::Array(list.iter().map(|s| Value::from(s.as_str())).collect())
-}
-
-pub(crate) fn sget(d: &Dict, key: &str, fallback: &str) -> String {
-    d.get(key).map(gstr).unwrap_or_else(|| fallback.to_string())
-}
-
-/// Math::snapped.
-fn snapped(x: f64, step: f64) -> f64 {
-    (x / step + 0.5).floor() * step
-}
-
-/// ContentSchema.coerce.
-fn coerce(f: &Dict, value: &Value) -> Value {
-    let fallback = json::get(f, "default");
-    match json::s(f, "type").as_str() {
-        "int" => {
-            let mut n = to_int_or(value, to_int_or(fallback, 0));
-            if let Some(min) = f.get("min") {
-                n = n.max(json::to_int(min));
-            }
-            if let Some(max) = f.get("max") {
-                n = n.min(json::to_int(max));
-            }
-            int(n)
-        }
-        "float" => {
-            let mut x = to_float_or(value, to_float_or(fallback, 0.0));
-            if let Some(min) = f.get("min") {
-                x = x.max(to_float_or(min, 0.0));
-            }
-            if let Some(max) = f.get("max") {
-                x = x.min(to_float_or(max, 0.0));
-            }
-            Value::from(snapped(x, 0.0001))
-        }
-        "bool" => Value::Bool(to_bool_or(value, to_bool_or(fallback, false))),
-        "refs" | "strings" | "multi_pick" => {
-            let list: Vec<String> = value.as_array().map(|a| a.iter().map(gstr).filter(|s| !s.is_empty()).collect()).unwrap_or_default();
-            str_list(&list)
-        }
-        "stats" => {
-            let mut stats = Dict::new();
-            if let Value::Object(src) = value {
-                for (k, raw) in src {
-                    if raw.is_number() {
-                        let amount = json::to_int(raw);
-                        if amount != 0 {
-                            stats.insert(k.clone(), int(amount));
-                        }
-                    }
-                }
-            }
-            Value::Object(stats)
-        }
-        "json" | "modifier_table" | "tier_table" | "hand_grid" => copy(if value.is_array() || value.is_object() { value } else { fallback }),
-        "table" => match value {
-            Value::Object(src) => Value::Object(src.iter().map(|(k, v)| (k.clone(), whole_level(v))).collect()),
-            Value::Array(_) => copy(value),
-            _ => copy(fallback),
-        },
-        "dict_pick" => copy(if value.is_object() { value } else { fallback }),
-        _ => Value::from(if value.is_null() { gstr(fallback) } else { gstr(value) }),
-    }
-}
-
-/// ClassArchetype.whole_level: a whole float becomes an int; anything else stays.
-fn whole_level(v: &Value) -> Value {
-    match v.as_f64() {
-        Some(x) if v.is_f64() && x == x.floor() => int(json::roundi(x)),
-        _ => v.clone(),
-    }
-}
-
-/// ContentSchema.normalize (`world` false) / WorldSchema.normalize (`world` true: "_" keys are dropped).
-pub(crate) fn normalize(fields: &[Value], entry: &Dict, world: bool) -> Dict {
-    let mut out = Dict::new();
-    for f in fields {
-        let f = json::dict(f);
-        let key = json::s(f, "key");
-        let value = entry.get(&key).unwrap_or_else(|| json::get(f, "default"));
-        out.insert(key, coerce(f, value));
-    }
-    for (k, v) in entry {
-        if !out.contains_key(k) && !(world && k.starts_with('_')) {
-            out.insert(k.clone(), copy(v));
-        }
-    }
-    out
-}
-
+/// ContentSchema.normalize of a catalog entry of `kind`.
 pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
     normalize(fields("content", kind), entry, false)
 }
@@ -484,7 +327,7 @@ fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
             }
         }
         "reach" => format_reach(i("reach_min", 0), i("reach_max", 0), bare),
-        "weapons" => strings(json::get(row, "weapon_types")).join("/"),
+        "weapons" => json::strings(json::get(row, "weapon_types")).join("/"),
         "proficiency" => {
             let level = i("min_proficiency", 0);
             if level > 0 {
@@ -523,7 +366,7 @@ fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
             }
         }
         "cleanse" => {
-            let list = strings(json::get(row, "cleanse_statuses"));
+            let list = json::strings(json::get(row, "cleanse_statuses"));
             if list.iter().any(|x| x == "all") {
                 "all statuses".into()
             } else {
@@ -589,7 +432,7 @@ pub(crate) fn hands_of(family: &Dict) -> Vec<String> {
     if !HAND_TYPES.contains(&item_type_of(family).as_str()) {
         return Vec::new();
     }
-    strings(json::get(family, "hands"))
+    json::strings(json::get(family, "hands"))
 }
 
 fn category(family: &Dict) -> &'static str {
@@ -692,7 +535,7 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if !hands.is_empty() {
         row.insert("slot".into(), Value::from(if hand == "off" { "OFF_HAND" } else { "MAIN_HAND" }));
     } else {
-        let slots = strings(json::get(family, "slots"));
+        let slots = json::strings(json::get(family, "slots"));
         if sget(entry, "slot", "").is_empty() && !slots.is_empty() {
             row.insert("slot".into(), Value::from(slots[0].clone()));
         }
@@ -700,7 +543,7 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     row.insert("two_handed".into(), Value::Bool(hand == "main_2h"));
     row.insert("off_hand_category".into(), Value::from(off_hand_category(family)));
     if t == "WEAPON" {
-        let scaling = strings(json::get(family, "scaling_stats"));
+        let scaling = json::strings(json::get(family, "scaling_stats"));
         if sget(entry, "scaling_stat", "").is_empty() {
             row.insert("scaling_stat".into(), Value::from(scaling.first().cloned().unwrap_or_else(|| "STR".into())));
         }
@@ -787,68 +630,6 @@ fn tier_desc(tier: &Dict) -> String {
     } else {
         format!("{label}: {text}")
     }
-}
-
-// ---- WorldCatalog ----------------------------------------------------------------------------------------------
-
-fn load_worlds(data_dir: &Path, errors: &mut Vec<String>) -> Value {
-    let root = data_dir.join("worlds");
-    let mut ids: Vec<String> = std::fs::read_dir(&root)
-        .map(|rd| rd.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().to_string()).collect())
-        .unwrap_or_default();
-    ids.retain(|id| !id.starts_with('.') && root.join(id).join("world.json").is_file());
-    ids.sort();
-    let mut manifests: Vec<(String, Dict)> = Vec::new();
-    let mut owns: Vec<Dict> = Vec::new();
-    for id in &ids {
-        let dir = root.join(id);
-        let header = read(&dir.join("world.json"), errors).and_then(|v| v.as_object().cloned()).unwrap_or_default();
-        let mut header = normalize(fields("world", "world"), &header, true);
-        header.insert("id".into(), Value::from(id.clone()));
-        let mut own = Dict::new();
-        for kind in WORLD_KINDS {
-            let rows: Vec<Value> = match read(&dir.join(format!("{kind}.json")), errors) {
-                Some(doc) => entries_of(doc).0,
-                None => Vec::new(),
-            };
-            let mut list = Vec::new();
-            for r in rows.iter().filter_map(Value::as_object) {
-                let mut e = normalize(fields("world", kind), r, true);
-                let local = sget(&e, "id", "");
-                e.insert("_world".into(), Value::from(id.clone()));
-                e.insert("_qid".into(), Value::from(format!("{id}:{local}")));
-                list.push(Value::Object(e));
-            }
-            own.insert(kind.into(), Value::Array(list));
-        }
-        manifests.push((id.clone(), header));
-        owns.push(own);
-    }
-    let mut out = Dict::new();
-    for (i, (id, manifest)) in manifests.iter().enumerate() {
-        let mut lineage = Vec::new();
-        visit(id, &manifests, &mut lineage, &mut Vec::new());
-        let mut w = Dict::new();
-        w.insert("manifest".into(), Value::Object(manifest.clone()));
-        w.insert("lineage".into(), str_list(&lineage));
-        w.insert("own".into(), Value::Object(owns[i].clone()));
-        out.insert(id.clone(), Value::Object(w));
-    }
-    Value::Object(out)
-}
-
-/// WorldCatalog._visit: ancestors first (parents in `extends` order), the world last.
-fn visit(id: &str, manifests: &[(String, Dict)], out: &mut Vec<String>, stack: &mut Vec<String>) {
-    let Some((_, m)) = manifests.iter().find(|(w, _)| w == id) else { return };
-    if out.iter().any(|x| x == id) || stack.iter().any(|x| x == id) {
-        return;
-    }
-    stack.push(id.to_string());
-    for parent in strings(json::get(m, "extends")) {
-        visit(&parent, manifests, out, stack);
-    }
-    stack.pop();
-    out.push(id.to_string());
 }
 
 // ---- MapCatalog / QuestCatalog / ServiceCatalog / XpCurve ------------------------------------------------------

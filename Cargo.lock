@@ -50,6 +50,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis_content"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
 name = "aegis_core"
 version = "0.1.0"
 dependencies = [
@@ -121,6 +130,7 @@ name = "aegis_world"
 version = "0.1.0"
 dependencies = [
  "aegis_battle",
+ "aegis_content",
  "aegis_core",
  "aegis_data",
  "aegis_rules",

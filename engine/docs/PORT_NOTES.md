@@ -74,7 +74,7 @@ because the RNG is bit-exact.
 | `game_state/new_game.gd`, `game_rolls.gd`, `json_util.gd` | `new_game`, `rolls`, `json` | journeys (start state, every roll) |
 | `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 |
 | `progression/xp_curve.gd`, `level_up.gd`, `party_builder.gd`, `heal_rules.gd` | `progression` | journeys (HP views, level-ups, camp) |
-| `world/world_catalog.gd` (lineage, merged, resolve, party rules), `world_factory.gd` (unit entry, passives) | `data` | journeys |
+| `world/world_catalog.gd` (lineage, merged, resolve, party rules), `world_factory.gd` (unit entry, passives) | `aegis_content::Catalogs` (lineage, merged, resolve), `data` (party rules, unit entry, passives) | journeys |
 | `exploration/map_rules.gd` (runtime), `explore_runner.gd`, `purse_rules.gd`, `battle_bridge.gd` (apply) | `explore`, `purse`, `battle` | journeys (marker views too) |
 | `quests/quest_rules.gd` (runtime), `quest_runner.gd`, `reward_grant.gd` | `quest` | journeys (statuses, objectives, offers) |
 | `dialogue/rep_rules.gd`, `dialogue_rules.gd` (runtime), `dialogue_runner.gd`, `shop_rules.gd` (runtime) | `dialogue`, `shop` | journeys (dialogue and shop views) |
@@ -106,10 +106,10 @@ The engine reads the project's `data/` folder itself; the Godot exports are only
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
 | `content/content_catalog.gd` (`reload_from_disk`, `_read_kind`, `_read_ranked_skills`, `_read_items`) | `source::load_catalog` | `tests/data_source.rs` |
-| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `source::normalize`, `coerce`, field tables in `engine/data/schema.json` | `tests/data_source.rs` |
+| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `engine/data/schema.json` | `tests/data_source.rs` |
 | `content/skill_ranks.gd` (`expand`, `effective`, `resolve`), `content/skill_text.gd` (`render`, `token_value`) | `source::expand`, `render` | `tests/data_source.rs` (151 rank rows, every description) |
 | `core/specs/item_families.gd` (`derive`, hands, base), `item_modifiers.gd` (`resolve`, `legacy_tiers`), `item_text.gd` (`tier_desc`) | `source::derive_family`, `resolve_item` | `tests/data_source.rs` |
-| `world/world_catalog.gd` (`reload_from_disk`, `lineage`, `own_entries`) | `source::load_worlds` | `tests/data_source.rs` |
+| `world/world_catalog.gd` (`reload_from_disk`, `lineage`, `own_entries`) | `aegis_content::world::load` (over `source::WORLD_KINDS`) | `tests/data_source.rs` |
 | `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
 
 - `tests/data_source.rs` compares the loader's output with `catalog.json`, `worlds.json` and `game_data.json`: keys, key
@@ -130,12 +130,12 @@ Content is edited without Godot through `aegis content check | upsert | remove |
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `upsert`, `remove`, `check` | `tests/store.rs` |
+| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors`, `ref_problems` | `tests/store.rs` |
 | `content/skill_ranks.gd` (`collapse`, `fold`), `skill_kinds.gd` (`has_field`) | `store::skill_storage` | `tests/store.rs` |
 | `core/specs/item_modifiers.gd` (`stored`) | `store::catalog_storage` (items) | `tests/store.rs` |
-| `world/world_catalog.gd` (`save_world`, `upsert`), `world_schema.gd` (`to_storage`) | `store::world_storage`, `manifest_text` | `tests/store.rs` |
+| `world/world_catalog.gd` (`save_world`, `upsert`), `world_schema.gd` (`to_storage`) | `aegis_content::schema::world_storage`, `store::manifest_text` | `tests/store.rs` |
 | `exploration/map_catalog.gd`, `quests/quest_catalog.gd`, `dialogue/service_catalog.gd` (`to_storage`, `save`) | `store::game_storage` | `tests/store.rs` |
-| `JSON.stringify(doc, "\t", false)` | `store::stringify` (14 significant digits for floats, Godot's escapes) | `tests/store.rs` |
+| `JSON.stringify(doc, "\t", false)` | `aegis_content::file::stringify` (14 significant digits for floats, Godot's escapes) | `tests/store.rs` |
 
 - `parity/export.sh only=resave` copies `legacy/data` (catalog, worlds, maps, quests, dialogue) to `out/resave/before`
   and lets Godot's own saves rewrite the copy into `out/resave/after`; the writer, given `before`, writes all 53 files

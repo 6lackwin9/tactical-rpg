@@ -1,8 +1,11 @@
-//! The data the game loop reads: the content catalog, the world catalogs (WorldCatalog: lineage, merged entries,
-//! resolve with overrides), region map templates (MapCatalog), quest templates (QuestCatalog), service lines
-//! (ServiceCatalog) and the XP curve. Read from the project's data/ folder by the engine's own loader (`source`), or
-//! from the Godot exports (parity/out: catalog.json, worlds.json, game_data.json) for parity checks.
+//! The data the game loop reads: the engine's content store and world graph (`aegis_content::Catalogs`:
+//! ContentCatalog entries, WorldCatalog lineage, merged entries, resolve with overrides; `Data` derefs to it), the
+//! typed catalog, region map templates (MapCatalog), quest templates (QuestCatalog), service lines (ServiceCatalog)
+//! and the XP curve, plus the game's world rules (party size, start party, world characters). Read from the
+//! project's data/ folder by the game's loader (`source`), or from the Godot exports (parity/out: catalog.json,
+//! worlds.json, game_data.json) for parity checks.
 
+use aegis_content::Catalogs;
 use aegis_core::json::{self, empty, Dict};
 use aegis_data::Catalog;
 use anyhow::{Context, Result};
@@ -12,13 +15,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub const PARTY_MAX: i64 = 4;
-
-#[derive(Debug, Clone, Default)]
-pub struct World {
-    pub manifest: Dict,
-    /// kind -> own entries (normalised, each with `_world` and `_qid`), file order.
-    pub own: IndexMap<String, Vec<Dict>>,
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct XpCurve {
@@ -34,9 +30,8 @@ pub struct XpCurve {
 #[derive(Debug, Clone)]
 pub struct Data {
     pub cat: Arc<Catalog>,
-    /// Raw content entries per kind (ContentCatalog.get_entry).
-    pub content: IndexMap<String, IndexMap<String, Dict>>,
-    pub worlds: IndexMap<String, World>,
+    /// Raw content entries per kind (item families included) and the worlds.
+    pub catalogs: Catalogs,
     pub maps: Vec<Dict>,
     pub quest_templates: Vec<Dict>,
     pub services: Vec<Dict>,
@@ -50,6 +45,14 @@ fn read(path: &Path) -> Result<Value> {
 
 fn dicts(v: &Value) -> Vec<Dict> {
     json::arr(v).iter().filter_map(|x| x.as_object().cloned()).collect()
+}
+
+impl std::ops::Deref for Data {
+    type Target = Catalogs;
+
+    fn deref(&self) -> &Catalogs {
+        &self.catalogs
+    }
 }
 
 impl Data {
@@ -78,29 +81,13 @@ impl Data {
     }
 
     pub fn from_values(catalog: &Value, worlds: &Value, game: &Value) -> Self {
-        let mut content: IndexMap<String, IndexMap<String, Dict>> = IndexMap::new();
-        for (kind, rows) in json::dict(catalog) {
-            let mut by_id = IndexMap::new();
-            for e in dicts(rows) {
-                by_id.insert(json::s(&e, "id"), e);
-            }
-            content.insert(kind.clone(), by_id);
-        }
-        let mut world_map = IndexMap::new();
-        for (id, w) in json::dict(worlds) {
-            let w = json::dict(w);
-            let mut own = IndexMap::new();
-            for (kind, rows) in json::dget(w, "own") {
-                own.insert(kind.clone(), dicts(rows));
-            }
-            world_map.insert(id.clone(), World { manifest: json::dget(w, "manifest").clone(), own });
-        }
+        let mut catalogs = Catalogs::from_values(catalog, worlds);
         let g = json::dict(game);
         let mut families = IndexMap::new();
         for e in dicts(json::get(g, "item_families")) {
             families.insert(json::s(&e, "id"), e);
         }
-        content.insert("item_families".into(), families);
+        catalogs.content.insert("item_families".into(), families);
         let curve = json::dget(g, "xp_curve");
         let kill = json::dget(curve, "kill_xp");
         let xp = XpCurve {
@@ -114,24 +101,12 @@ impl Data {
         };
         Self {
             cat: Arc::new(Catalog::from_value(catalog)),
-            content,
-            worlds: world_map,
+            catalogs,
             maps: dicts(json::get(g, "maps")),
             quest_templates: dicts(json::get(g, "quests")),
             services: dicts(json::get(g, "services")),
             xp,
         }
-    }
-
-    // ---- ContentCatalog ----------------------------------------------------------------------------------------
-
-    /// ContentCatalog.get_entry ({} when missing).
-    pub fn entry(&self, kind: &str, id: &str) -> &Dict {
-        self.content.get(kind).and_then(|m| m.get(id)).unwrap_or_else(|| empty())
-    }
-
-    pub fn has(&self, kind: &str, id: &str) -> bool {
-        self.content.get(kind).is_some_and(|m| m.contains_key(id))
     }
 
     pub fn item_name(&self, id: &str) -> String {
@@ -176,122 +151,7 @@ impl Data {
         }
     }
 
-    // ---- WorldCatalog ------------------------------------------------------------------------------------------
-
-    pub fn world_ids(&self) -> Vec<String> {
-        let mut out: Vec<String> = self.worlds.keys().cloned().collect();
-        out.sort();
-        out
-    }
-
-    pub fn has_world(&self, w: &str) -> bool {
-        self.worlds.contains_key(w)
-    }
-
-    pub fn manifest(&self, w: &str) -> &Dict {
-        self.worlds.get(w).map(|x| &x.manifest).unwrap_or_else(|| empty())
-    }
-
-    /// Load order: ancestors first (parents in `extends` order), the world last.
-    pub fn lineage(&self, w: &str) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut stack = Vec::new();
-        self.visit(w, &mut out, &mut stack);
-        out
-    }
-
-    fn visit(&self, w: &str, out: &mut Vec<String>, stack: &mut Vec<String>) {
-        if out.iter().any(|x| x == w) || stack.iter().any(|x| x == w) || !self.has_world(w) {
-            return;
-        }
-        stack.push(w.to_string());
-        for parent in json::sget(self.manifest(w), "extends") {
-            self.visit(&parent, out, stack);
-        }
-        stack.pop();
-        out.push(w.to_string());
-    }
-
-    pub fn own_entries(&self, w: &str, kind: &str) -> &[Dict] {
-        self.worlds.get(w).and_then(|x| x.own.get(kind)).map(|v| v.as_slice()).unwrap_or(&[])
-    }
-
-    /// Ancestors' entries then the world's own, minus entries an override replaced.
-    pub fn merged_entries(&self, w: &str, kind: &str) -> Vec<&Dict> {
-        let mut all = Vec::new();
-        let mut overridden: Vec<String> = Vec::new();
-        for lw in self.lineage(w) {
-            for e in self.own_entries(&lw, kind) {
-                all.push(e);
-                let ov = json::s(e, "override");
-                if !ov.is_empty() {
-                    overridden.push(ov);
-                }
-            }
-        }
-        all.into_iter().filter(|e| !overridden.contains(&json::s(e, "_qid"))).collect()
-    }
-
-    pub fn split_qid(r: &str) -> Option<(String, String)> {
-        let mut parts = r.splitn(2, ':').filter(|p| !p.is_empty());
-        let a = parts.next()?;
-        let b = parts.next()?;
-        Some((a.to_string(), b.to_string()))
-    }
-
-    fn own_by_id(&self, w: &str, kind: &str, local: &str) -> Option<&Dict> {
-        self.own_entries(w, kind).iter().find(|e| json::s(e, "id") == local)
-    }
-
-    /// The entry `r` names as seen from `w` ({} if none): unqualified refs resolve in the world then up the lineage;
-    /// overrides are followed (not for a connected world's entry).
-    pub fn resolve(&self, w: &str, kind: &str, r: &str) -> &Dict {
-        if r.is_empty() {
-            return empty();
-        }
-        let chain = self.lineage(w);
-        let found = if r.contains(':') {
-            let Some((tw, local)) = Self::split_qid(r) else { return empty() };
-            self.own_by_id(&tw, kind, &local)
-        } else {
-            chain.iter().rev().find_map(|lw| self.own_by_id(lw, kind, r))
-        };
-        let Some(mut found) = found else { return empty() };
-        if !chain.contains(&json::s(found, "_world")) {
-            return found;
-        }
-        let mut redirects: IndexMap<String, &Dict> = IndexMap::new();
-        for lw in &chain {
-            for e in self.own_entries(lw, kind) {
-                let ov = json::s(e, "override");
-                if !ov.is_empty() {
-                    redirects.insert(ov, e);
-                }
-            }
-        }
-        let mut guard = 0;
-        while let Some(next) = redirects.get(&json::s(found, "_qid")) {
-            if guard >= 16 {
-                break;
-            }
-            found = next;
-            guard += 1;
-        }
-        found
-    }
-
-    pub fn has_entry(&self, w: &str, kind: &str, r: &str) -> bool {
-        !self.resolve(w, kind, r).is_empty()
-    }
-
-    /// Is `other` visible from `w` (itself, an ancestor, or connected; connections are inherited)?
-    pub fn can_reach_world(&self, w: &str, other: &str) -> bool {
-        let chain = self.lineage(w);
-        if chain.iter().any(|x| x == other) {
-            return true;
-        }
-        chain.iter().any(|lw| json::sget(self.manifest(lw), "connects").iter().any(|c| c == other))
-    }
+    // ---- WorldCatalog (game rules) ------------------------------------------------------------------------------
 
     /// The nearest manifest in the lineage with `party_max` >= 1, else PARTY_MAX.
     pub fn party_max(&self, w: &str) -> i64 {
