@@ -1,5 +1,7 @@
 # M4-L: Quest and flag runtime (S8), structured quest schema
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: proposed (design answered: DECISIONS world-campaign "M4 quest answers" and "M4 variant answers + world loot rewards" (user 2026-10-17); one open question L1 below; approval by the user)
 Depends on: M3 (done: `GameState.flags`, opaque `GameState.quests`, `SaveGame` v1, `SaveMigrations`)
 Lane: logic (one branch; commit 1 is the schema slice that releases M4-A)

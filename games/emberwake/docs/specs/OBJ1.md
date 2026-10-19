@@ -1,5 +1,7 @@
 # OBJ1: Battle objectives and deployment variants (the centre ring returns)
 
+Status update (2026-10-20): approved and built except OBJ1-U (approved, queued). The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: decision world-campaign "DR1 design review answers (user 2026-10-18)" (all recommendations), review `games/emberwake/docs/specs/DESIGN_REVIEW1.md` 4.1 and 5.5)
 Depends on: BOSS1-L (shares the encounter and session files and reuses `is_reserved`); RECRUIT1-A before OBJ1-A (same encounter rows)
 Lane: both (OBJ1-L schema-first, then OBJ1-A data, then OBJ1-B balance probe; OBJ1-U on the UI/UX thread after COMBAT-UI2-L1)

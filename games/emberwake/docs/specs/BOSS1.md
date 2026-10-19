@@ -1,5 +1,7 @@
 # BOSS1: Boss phases from data triggers (Grakka's finale)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md); PHASEFOLD (out of scope here) approved 2026-10-20. The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: decision world-campaign "DR1 design review answers (user 2026-10-18)" (all recommendations), review `games/emberwake/docs/specs/DESIGN_REVIEW1.md` 5.6)
 Depends on: CAMP1-A2 (ashmaw_stand data on develop); nothing new for the logic part
 Lane: both (BOSS1-L schema-first, then BOSS1-A data, then BOSS1-B balance probe; BOSS1-U is a small UI/UX slice)

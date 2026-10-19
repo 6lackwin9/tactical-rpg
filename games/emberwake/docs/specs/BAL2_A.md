@@ -1,5 +1,7 @@
 # BAL2-A: growth and gear pass, L1 class skills, party loadouts, goblin shaman, brawler unarmed
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: spec (design-brainstorm 2026-10-17; user answers in DECISIONS "BAL2 answers" and "BAL2 role answers (user 2026-10-17)"; awaiting approval). Brawler compensation decided (option A, section 6). Section 7 (gear budget review) awaits the user's pick and gates commit A2 only.
 Depends on: BAL2-L commit 3 (unit gear `none` and gear-independent tests). A6 also needs BAL2-L commit 5 (trained fists, `UNARMED_VALUE` 15). A2 needs the section 7 answer.
 Lane: asset

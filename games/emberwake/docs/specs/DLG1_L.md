@@ -1,5 +1,7 @@
 # DLG1-L: Dialogue, quest services, NPC presence, shops and gold (S11)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: spec (rules approved: DECISIONS world-campaign "S9-S11 baseline answers (user 2026-10-17)"; this build spec awaits the user's approval)
 Depends on: EXP1-L merged (markers, `BattleBridge`, `ExploreRunner.wake`, save v3), M4-L merged
 Lane: logic (one branch; commit 1 is the schema slice that releases DLG1-A)

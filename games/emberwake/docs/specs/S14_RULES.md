@@ -1,5 +1,7 @@
 # S14-RULES: asset pipeline, animation, audio and asset-load tests (baseline)
 
+Status update (2026-10-20): answered and built (S14 rows done); the engine reads art by path since ASSETORG1. The status line below is the original.
+
 Status: proposed (design-brainstorm 2026-10-17; baseline rules so S14 can be specced and built later; nothing approved)
 Depends on: none for the art registry; S12-RULES status and terrain ids for their icons; UI_MENUS_RULES settings for volumes and animation speed
 Lane: design (this file); later logic and asset tasks listed in section 4

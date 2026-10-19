@@ -1,5 +1,7 @@
 # SPRITE1: Pixel-art sprites and battle animation
 
+Status update (2026-10-20): SPRITE1-L, SPRITE1-U and SPRITE1-A2 approved (user 2026-10-20). The status line below is the original.
+
 Status: SPRITE1-A (static idle sprites for the party) landed; SPRITE1-L, SPRITE1-U and SPRITE1-A2 below are a proposal awaiting the user's approval.
 Depends on: the sprite rig in `tools/sprites/` (rig and class clips signed off for the brawler base 2026-10-18; other classes follow the same rules), `AssetRegistry` / `AssetCatalog` (S14).
 Lane: asset, then logic, then logic (UI). Size M.

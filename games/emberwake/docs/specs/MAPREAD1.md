@@ -1,5 +1,7 @@
 # MAPREAD1: Readable region and world maps (points of interest easy to spot)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: decision world-campaign "DR1 design review answers (user 2026-10-18)" (5))
 Depends on: POI-FIX (e143307, on develop: hint line, bump notes, "Nothing to interact with there.", click to interact); aligns with UI/UX's planned full-screen Ashlands and world maps with placeholder art (no TASKS row yet)
 Lane: logic in two parts (MAPREAD1-L1 read-out and data keys, MAPREAD1-L2 drawing) plus a small asset slice (MAPREAD1-A)

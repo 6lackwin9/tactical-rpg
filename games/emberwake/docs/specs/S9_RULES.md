@@ -1,5 +1,7 @@
 # S9 baseline rules: region map and exploration
 
+Status update (2026-10-20): answered (decision "S9-S11 baseline answers (user 2026-10-17)") and built as EXP1. The status line below is the original.
+
 Status: proposed (baseline rules, design-brainstorm 2026-10-17; nothing approved; the open questions in section 3 block the EXP1 spec)
 Depends on: M4-L merged (`QuestRunner.on_location_reached` / `on_encounter_won`, `GameState.loot_claimed`, `RewardGrant`, save v2), M3 (`PartyState`, `PartyBuilder`, `LevelUp.award_encounter`)
 Lane: design (this file); later logic + asset (section 4)

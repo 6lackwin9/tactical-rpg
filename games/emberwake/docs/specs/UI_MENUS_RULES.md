@@ -1,5 +1,7 @@
 # UI-MENUS-RULES: main menu, new game, save/load, party screen, level-up, journal (baseline)
 
+Status update (2026-10-20): replaced in practice by UI_REVIEW1 and its decisions (games/emberwake/docs/specs/UI_REVIEW1.md); its open UIR rows are approved. The status line below is the original.
+
 Status: proposed (design-brainstorm 2026-10-17; baseline rules for the open UI parts of S7 and S13 so they can be specced later; nothing approved)
 Depends on: M3 (done: PartyState, UnitState, LevelUp, GameState, SaveGame, NewGame), M4-L (quest runtime and save v2, for the journal), S14-RULES (icons, sounds, animation speed; optional, placeholders work without it)
 Lane: design (this file); later logic and asset tasks listed in section 4

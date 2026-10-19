@@ -1,5 +1,7 @@
 # S12-RULES: advanced combat baseline (status expansion, terrain, combos, skill upgrades)
 
+Status update (2026-10-20): answered and built (S12 rows done); COMBO-A2 approved, spec needed. The status line below is the original.
+
 Status: proposed (design-brainstorm 2026-10-17; baseline rules so S12 can be specced and built later without design stalls; nothing approved)
 Depends on: S12-A (done), SKILL1 (done), BAL2-L (done; sim metrics), ITEM1-L and CLASS1-L (hub files, see section 4)
 Lane: design (this file); later logic and asset tasks listed in section 4

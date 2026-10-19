@@ -1,5 +1,7 @@
 # S10 baseline rules: world map and travel
 
+Status update (2026-10-20): answered (decision "S9-S11 baseline answers (user 2026-10-17)") and built as TRAV1. The status line below is the original.
+
 Status: proposed (baseline rules, design-brainstorm 2026-10-17; nothing approved; the open questions in section 3 block the TRAV1 spec)
 Depends on: EXP1-L (S9: location entry, `BattleBridge`, deterministic rolls, defeat rule, save v3), M4-L (flags, `QuestRunner.on_location_reached`)
 Lane: design (this file); later logic + asset (section 4)

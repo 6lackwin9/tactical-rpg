@@ -1,5 +1,7 @@
 # ITEMUSE1: Use pouch items in battle as a planner step
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: review `games/emberwake/docs/specs/DESIGN_REVIEW1.md` 3.1, decision world-campaign "DR1 design review answers (user 2026-10-18)")
 Depends on: AUTO1-L logic (merged on develop, save v7), COMBAT-UI2-L1 for the timeline row look (the item step uses the same row)
 Lane: logic first (ITEMUSE1-L, schema-first), then a small asset slice (ITEMUSE1-A); the sim key lands with L

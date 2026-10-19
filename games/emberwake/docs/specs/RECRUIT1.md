@@ -1,5 +1,7 @@
 # RECRUIT1: Warrior-only start, two story recruits, named heroes
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: proposed (spec 2026-10-18; approved direction: decision world-campaign "DR1 design review answers (user 2026-10-18)" (4), review `games/emberwake/docs/specs/DESIGN_REVIEW1.md` 3.4 and 3.5)
 Depends on: CAMP1-A2 (story data on develop), DLG1-L (choice effects), REP1-L (int flags with `op`)
 Lane: both (RECRUIT1-L schema-first, then RECRUIT1-A data, then RECRUIT1-B balance probe)

@@ -1,5 +1,7 @@
 # BAL2 proposal: answers to the BAL1 open issues (options, trade-offs, recommendation)
 
+Status update (2026-10-20): answered (BAL2 answers) and built as BAL2-A and BAL2-L; the rows are done. The status line below is the original.
+
 Status: proposed (design-brainstorm 2026-10-17; nothing here is approved)
 Input: `games/emberwake/docs/BALANCE_REPORT.md` run 2026-10-16 (BAL1), plus three read-only scratch probes on a sandbox fork (no repo code or data touched; scripts in the brainstorm agent's scratchpad).
 Target: every class 40-60% duel win rate at L1/3/5/7.

@@ -1,5 +1,7 @@
 # SKILLUI1: Skills tab drag and drop and rank choice
 
+Status update (2026-10-20): answered (section 9, decision "SKILLUI1 answers"); build rows SKILLUI1-L and SKILLUI1-U approved. The status line below is the original.
+
 Status: proposed (spec 2026-10-20; the user answers section 9 before the build)
 Depends on: UIKIT2 (engine drag and drop) for SKILLUI1-U; SKILLUI1-L has no dependency
 Lane: logic (two parts: SKILLUI1-L rules, state, save and battle; SKILLUI1-U the Skills tab). No asset part.

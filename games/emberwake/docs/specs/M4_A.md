@@ -1,5 +1,7 @@
 # M4-A: Sample campaign quests (S8)
 
+Status update (2026-10-20): approved and built; the rows are done (docs/archive/TASKS_DONE.md). The status line below is the original.
+
 Status: proposed (design answered: DECISIONS world-campaign "M4 quest answers" and "M4 variant answers + world loot rewards" (user 2026-10-17); M4-L open question L1 only changes check 8; approval by the user)
 Depends on: M4-L commit 1 merged (QuestCatalog, world quest fields, world kind `loot`, validation)
 Lane: asset (one branch, seed `data/seeds/m4_quests.gd`)
