@@ -12,6 +12,12 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 ## Finished, by milestone (newest first)
 
+### SPLIT1: a game-agnostic engine and the first game, Emberwake (2026-10-19, desktop)
+
+| Agent | Task | Tokens / min | Outcome |
+| --- | --- | --- | --- |
+| main session (no lane agents) | SPLIT1-1 | - | Cargo workspace at the repo root (7a8903f) |
+
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 
 | Agent | Task | Tokens / min | Outcome |
@@ -70,7 +76,8 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 
 | Agent | Task | Tokens / min | Outcome |
 | --- | --- | --- | --- |
-| asset-builder | MORALE1-A | 19k / 1 | seed ok | ; | change-reviewer | MORALE1-A | 16k / 1 | clean |
+| asset-builder | MORALE1-A | 19k / 1 | seed ok |
+| change-reviewer | MORALE1-A | 16k / 1 | clean |
 
 ### UIR-6: dialogue as a full-width bottom bar, shop as a popup, text scale (2026-10-18, cloud)
 

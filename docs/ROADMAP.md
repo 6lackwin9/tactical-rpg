@@ -63,7 +63,7 @@ Done rows (R1) are archived in `docs/archive/ROADMAP_2026-10.md`.
 | CLN-9 | obsolete since the transition 2026-10-19 (it split a Godot file, `content_catalog.gd`, now frozen in `legacy/`; same reason as the CLN-17 / CLN-18 closures, RESCOPE1); was approved (user 2026-10-17, DECISIONS "Cleanup pass 1 answers"): split `content_catalog.gd` (1384 lines) validators by kind into `scripts/content/rules/*` so ITEM1 and CLASS1 stop colliding on one hub file (docs/specs/CLEANUP.md#CLN-9) | after BAL2-L merges, last item of the logic cleanup batch, before ITEM1 and CLASS1 | Pure move; assertion count equal |
 | CLN-10 | done 2026-10-17: `docs/DECISIONS.md` is an index; per-system files in `docs/decisions/`; superseded rows in `docs/decisions/archive.md` with "superseded by" pointers (docs/specs/CLEANUP.md#CLN-10) | done (docs only) | No row text changes; pointers in CLAUDE.md and agent files updated by the planner |
 | CLN-13 | done 2026-10-19 (user, RESCOPE1): the README overview was written at the transition; the Godot feature log is `legacy/README.md` | - | Planner owns README |
-| SPLIT1 | approved (user 2026-10-19): a game-agnostic engine core and the first game in `games/emberwake/` (docs/specs/SPLIT1.md; task rows SPLIT1-1..9) | before the PORT rows | move only: every stage keeps the gate and the parity suites green |
+| SPLIT1 | in-progress (user approved 2026-10-19; SPLIT1-1 done 7a8903f, SPLIT1-2 next): a game-agnostic engine core and the first game in `games/emberwake/` (docs/specs/SPLIT1.md; task rows SPLIT1-1..9) | before the PORT rows | move only: every stage keeps the gate and the parity suites green |
 
 ## BAL2 plan (done 2026-10-17; design-brainstorm 2026-10-17; details and options in `docs/specs/BAL2_PROPOSAL.md`)
 
