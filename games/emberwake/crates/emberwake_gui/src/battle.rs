@@ -1181,14 +1181,21 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     ui.p.panel(Rect::new(2, 322, W - 4, 36), PANEL, BORDER, RADIUS);
     ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), TEXT)]);
     ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), TEXT)]);
+    // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end.
+    let ox = if g.world_mode() {
+        0
+    } else {
+        ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), TEXT)]);
+        32
+    };
     let phase = match s.phase {
         Phase::Planning => "Planning",
         Phase::Resolving => "Resolving",
         Phase::Replay => "Round over",
     };
-    ui.p.text(88.0, 326.0, &format!("Round {}/{}  {phase}", s.current_round, s.def.max_rounds), BODY, GOLD);
-    ui.p.text_fit(200.0, 326.0, &g.message, BODY, 430.0, TEXT);
-    ui.push("bar.status", "label", format!("Round {} {phase}: {}", s.current_round, g.message), Rect::new(88, 325, 540, 12), true, false, None, Vec::new());
+    ui.p.text((88 + ox) as f32, 326.0, &format!("Round {}/{}  {phase}", s.current_round, s.def.max_rounds), BODY, GOLD);
+    ui.p.text_fit((200 + ox) as f32, 326.0, &g.message, BODY, (430 - ox) as f32, TEXT);
+    ui.push("bar.status", "label", format!("Round {} {phase}: {}", s.current_round, g.message), Rect::new(88 + ox, 325, 540 - ox, 12), true, false, None, Vec::new());
     let last = s.resolver.log.last().cloned().unwrap_or_else(|| "No actions yet".into());
     let log_r = Rect::new(6, 341, W - 64, 14);
     ui.p.panel(log_r, CARD, BORDER, RADIUS);
