@@ -19,6 +19,7 @@ pub enum SAct {
     ContentForge,
     WorldForge,
     Dojo,
+    Gallery,
     DebugRegion,
     DebugWorldMap,
     PickWorld(usize),
@@ -80,6 +81,7 @@ impl SceneRunner {
                 let f = crate::forge::Forge::world(cx);
                 cx.nav.push(Nav::Push(Box::new(f)));
             }
+            SAct::Gallery => cx.nav.push(Nav::Push(Box::new(crate::gallery::Gallery::new()))),
             SAct::Dojo => {
                 let dj = crate::dojo::Dojo::new(cx);
                 cx.nav.push(Nav::Push(Box::new(dj)));
@@ -118,16 +120,21 @@ impl Screen<GameCx> for SceneRunner {
         let encounters = Self::encounters(cx);
         self.encounter = self.encounter.min(encounters.len().saturating_sub(1));
         let worlds = new_game::playable_worlds(&cx.data);
-        let scenes: [(&str, &str, &str, SAct); 7] = [
+        let scenes: [(&str, &str, &str, SAct); 8] = [
             ("runner.main_menu", "Main Menu", "The player's front door: continue, new game, load and save slots, settings and the in-game hub.", SAct::MainMenu),
             ("runner.arena", "Combat Arena", "Plan and fight a battle: a catalog encounter or any world's battle (played with that world's characters).", SAct::Arena),
             ("runner.content_forge", "Content Forge", "Read-only asset viewer: skills, items, classes, units and encounters with an engine summary.", SAct::ContentForge),
             ("runner.world_forge", "World Forge", "Read-only world viewer: regions, factions, characters, quests and encounters with their inheritance.", SAct::WorldForge),
             ("runner.dojo", "Gear & Skill Dojo", "Equip heroes and benchmark their damage against a training dummy.", SAct::Dojo),
+            ("runner.gallery", "UI Gallery", "UI panes one at a time on sample data (the battle timeline first), to judge and refine them on their own.", SAct::Gallery),
             ("runner.debug_region", "Region Map (debug)", "Walk a world's region maps with Won / Fled / Lost buttons instead of real battles (nothing is saved).", SAct::DebugRegion),
             ("runner.debug_world_map", "World Map (debug)", "Travel a world's route graph: road fights with debug outcomes, the world clock.", SAct::DebugWorldMap),
         ];
-        let mut y = left.y + 14;
+        // The list scrolls when the scenes outgrow the panel (the wheel over it).
+        let view = Rect::new(left.x, left.y + 14, left.w, left.h - 16);
+        let content: i32 = scenes.iter().map(|s| if matches!(s.3, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap) { 48 } else { 34 }).sum();
+        let off = ui.scroll_begin("runner.scenes", view, content);
+        let mut y = view.y - off;
         for (id, name, desc, act) in scenes {
             let extra = matches!(act, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap);
             let h = if extra { 44 } else { 30 };
@@ -145,6 +152,7 @@ impl Screen<GameCx> for SceneRunner {
             }
             y += h + 4;
         }
+        ui.scroll_end();
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, INFO);
         ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve)."));
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);

@@ -37,7 +37,8 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | 19 | Content Forge (catalog viewer) | `ui/forge/*` | `forge.rs` | read-only viewer: kinds, entries, every field, engine summary, used by; no search, validation or editing yet |
 | 20 | World Forge (world viewer) | `ui/world/*` | `forge.rs` | read-only viewer: world picker, overview (inheritance, connects, counts), merged entries with origin, used by |
 | 21 | Gear & Skill Dojo | `ui/dojo/*`, `scripts/dojo/*` | `dojo.rs` on `emberwake_battle::dojo` | done (PORT-DOJO): the Godot dojo on a desk of engine windows (party with the carry bar, unit inspector with stat allocation, derived stats, gear with the pouch and quick-setup presets, stash with filters, stage, console, test log with breakdowns), drag and drop between the stash, the slots and the pouch, Godot's three layouts saved per player |
-| 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, debug region and world maps with Won / Fled / Lost, data reload; playtest recording not yet |
+| 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, debug region and world maps with Won / Fled / Lost, UI Gallery, data reload; the scene list scrolls; playtest recording not yet |
+| - | UI Gallery | none (new) | `gallery.rs` | standalone panes to review one at a time (UIGALLERY1, first entry): the battle timeline on a live arena fight (all units' tracks by block, enemies masked while planning as "Plans in secret" with their tell, Reveal to show them, < > through past rounds, a block's snapshot of every unit, a segment's action detail) |
 
 ## Known gaps (function over form)
 

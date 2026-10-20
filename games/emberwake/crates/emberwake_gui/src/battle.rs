@@ -23,7 +23,7 @@ use emberwake_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGra
 use aegis_core::json::{self, s, Dict};
 use emberwake_world::battle::WorldRoster;
 use emberwake_battle::skill::Kind;
-use emberwake_battle::world::AiProfile;
+use emberwake_battle::world::{AiProfile, World};
 use emberwake_data::UnitDef;
 use emberwake_host::{Battle, Host};
 use emberwake_world::{dialogue, explore, progression, travel};
@@ -830,7 +830,7 @@ fn sound_of(line: &str) -> Option<&'static str> {
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
 
-fn kind_color(kind: &str) -> Rgba {
+pub(crate) fn kind_color(kind: &str) -> Rgba {
     match kind {
         "ATTACK" => rgb(160, 56, 56),
         "MOVE" => rgb(52, 92, 160),
@@ -879,9 +879,14 @@ fn stance_name(u: &emberwake_rules::Unit) -> &'static str {
 }
 
 /// The actions the resolver holds for `u` this round (after confirm): (start, end, name, kind, target name).
-fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<String>)> {
-    s.resolver
-        .scheduled
+pub(crate) fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<String>)> {
+    action_rows(&s.w, &s.resolver.scheduled, u)
+}
+
+/// Unit `u`'s actions among `actions` (this round's, or a past round's from the archive): (start, end, name, kind,
+/// target name).
+pub(crate) fn action_rows(w: &World, actions: &[emberwake_battle::resolver::ScheduledAction], u: usize) -> Vec<(i32, i32, String, String, Option<String>)> {
+    actions
         .iter()
         .filter(|a| a.unit == u)
         .map(|a| {
@@ -899,7 +904,7 @@ fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<Str
                 CmdKind::Disengage { .. } => ("DISENGAGE", None),
             };
             let name = if a.cancelled { format!("{} (cancelled)", a.command.name) } else { a.command.name.clone() };
-            (a.start, a.end, name, kind.to_string(), target.filter(|t| *t != u).map(|t| s.w.units[t].name.clone()))
+            (a.start, a.end, name, kind.to_string(), target.filter(|t| *t != u).map(|t| w.units[t].name.clone()))
         })
         .collect()
 }

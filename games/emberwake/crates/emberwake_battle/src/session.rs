@@ -131,6 +131,32 @@ pub struct Prebuilt {
     pub profile: AiProfile,
 }
 
+/// One unit at one point of a round (BlockSnapshot: the state the screens show).
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitSnap {
+    pub hp: i32,
+    pub max_hp: i32,
+    pub ap: i32,
+    pub pos: Option<V2>,
+    pub stance: emberwake_rules::Stance,
+    pub guard: f64,
+    pub attack_boost: f64,
+    pub active: bool,
+    pub withdrawn: bool,
+    pub statuses: Vec<String>,
+    pub pending: Vec<String>,
+}
+
+/// One round as it was played (the round archive: CombatSession.round_actions and round_snapshots): the scheduled
+/// actions (the enemies' drafts, then everyone's once the plan is confirmed; cancelled ones flagged as they resolve)
+/// and a snapshot of every unit at the round's start (index 0) and after each resolved block (index = block).
+#[derive(Debug, Clone)]
+pub struct RoundRecord {
+    pub round: i32,
+    pub actions: Vec<crate::resolver::ScheduledAction>,
+    pub snapshots: Vec<Vec<UnitSnap>>,
+}
+
 pub struct Session {
     pub def: EncounterDef,
     pub w: World,
@@ -145,6 +171,8 @@ pub struct Session {
     pub plan_confirmed: bool,
     /// The active enemies on the grid when this round's enemies were scheduled (IntentRules: idle vs arriving).
     pub on_grid_at_schedule: Vec<UnitId>,
+    /// Every round so far, the current one last (the round archive, for reviewing past rounds).
+    pub history: Vec<RoundRecord>,
     pub wave: Vec<UnitId>,
     pub reinforcements_spawned: bool,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
@@ -325,6 +353,7 @@ impl Session {
             outcome: String::new(),
             plan_confirmed: false,
             on_grid_at_schedule: Vec::new(),
+            history: Vec::new(),
             wave,
             reinforcements_spawned: false,
             art,
@@ -362,6 +391,43 @@ impl Session {
         self.plan_confirmed = false;
         self.on_grid_at_schedule = self.w.enemies.iter().copied().filter(|&e| self.w.units[e].is_active() && self.w.has(e)).collect();
         self.schedule_enemy_ai();
+        let start = self.snapshot();
+        self.history.push(RoundRecord { round, actions: self.resolver.scheduled.clone(), snapshots: vec![start] });
+    }
+
+    /// Every unit now (BlockSnapshot).
+    pub fn snapshot(&self) -> Vec<UnitSnap> {
+        self.w
+            .units
+            .iter()
+            .enumerate()
+            .map(|(i, u)| UnitSnap {
+                hp: u.hp,
+                max_hp: u.max_hp,
+                ap: u.ap,
+                pos: self.w.grid.pos(i),
+                stance: u.stance,
+                guard: u.guard,
+                attack_boost: u.attack_boost,
+                active: u.is_active(),
+                withdrawn: u.is_withdrawn,
+                statuses: u.st.active.iter().cloned().collect(),
+                pending: u.st.pending.iter().cloned().collect(),
+            })
+            .collect()
+    }
+
+    /// The archive's record of `round` (None before it starts; CombatSession.recorded_actions and snapshot_at).
+    pub fn round_record(&self, round: i32) -> Option<&RoundRecord> {
+        self.history.iter().find(|r| r.round == round)
+    }
+
+    /// CombatSession._refresh_archive: the current round's actions as scheduled now.
+    fn refresh_archive(&mut self) {
+        let actions = self.resolver.scheduled.clone();
+        if let Some(r) = self.history.last_mut() {
+            r.actions = actions;
+        }
     }
 
     /// CombatSession.is_planning: the party plans this round (not confirmed, the battle goes on).
@@ -582,6 +648,7 @@ impl Session {
         self.resolver.scheduled.clear();
         self.plan = Plan::new();
         self.schedule_enemy_ai();
+        self.refresh_archive();
     }
 
     /// CombatEncounter.schedule_enemy_ai: drafts every enemy on the field into one shared plan, re-drafts broken
@@ -676,6 +743,7 @@ impl Session {
         }
         self.plan.commit(&self.w, &mut self.resolver);
         self.plan_confirmed = true;
+        self.refresh_archive();
         true
     }
 
@@ -708,6 +776,12 @@ impl Session {
                 self.resolver.apply_round_end_effects(&mut self.w);
             }
             self.on_block_end();
+            // The archive: the actions as they resolved and the state after this block.
+            self.refresh_archive();
+            let snap = self.snapshot();
+            if let Some(r) = self.history.last_mut() {
+                r.snapshots.push(snap);
+            }
             self.outcome = self.verdict(end_of_round);
             let over = !self.outcome.is_empty();
             if over || end_of_round {
