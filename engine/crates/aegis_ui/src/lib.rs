@@ -11,6 +11,7 @@ pub mod canvas;
 pub mod painter;
 pub mod screen;
 pub mod shell;
+pub mod timeline;
 pub mod tuning;
 pub mod ui;
 pub mod window;

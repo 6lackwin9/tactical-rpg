@@ -1255,4 +1255,57 @@ mod tests {
         assert!(s.gfx.kit.scroll.is_empty(), "a new stack starts over");
         clean();
     }
+
+    /// A timeline of six blocks: a hero acting in blocks 2-4 and 5, a masked foe.
+    #[derive(Default)]
+    struct Plan {
+        w: Vec<Widget<String>>,
+    }
+
+    impl Plan {
+        fn act(&mut self, cx: &mut Cx, a: String) {
+            cx.app.log.push(a);
+        }
+    }
+
+    impl Screen<App> for Plan {
+        fn id(&self) -> &'static str {
+            "plan"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            use crate::timeline::{Section, Segment, Timeline, Track};
+            let mut ui: Ui<String> = Ui::new(g, mouse, live);
+            let seg = |key: &str, start, end| Segment { key: key.into(), start, end, label: key.into(), fill: rgb(60, 90, 140), dashed: false, tip: Vec::new() };
+            let t = Timeline {
+                blocks: 6,
+                playhead: 3,
+                selected_block: None,
+                selected_track: Some("hero".into()),
+                sections: vec![
+                    Section { title: "Allies".into(), colour: TEXT, tracks: vec![Track { key: "hero".into(), label: "Hero".into(), colour: TEXT, segments: vec![seg("slash", 2, 4), seg("guard", 5, 5)], masked: None }] },
+                    Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()) }] },
+                ],
+            };
+            t.draw(&mut ui, "tl", Rect::new(10, 10, 74 + 4 + 300, 120), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));
+            self.w = ui.widgets;
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    #[test]
+    fn a_timeline_draws_segments_over_their_blocks_masks_tracks_and_reports_clicks() {
+        let mut s = shell();
+        s.stack = vec![Box::new(Plan::default())];
+        s.frame();
+        let infos = s.stack.last().unwrap().widgets();
+        let rect = |id: &str| infos.iter().find(|w| w["id"] == id).map(info_rect);
+        let (b2, b4, slash) = (rect("tl.block.2").unwrap(), rect("tl.block.4").unwrap(), rect("tl.seg.hero.slash").unwrap());
+        assert!(slash.x >= b2.x - 1 && slash.x + slash.w <= b4.x + b4.w + 1 && slash.w > 2 * b2.w, "{slash:?} spans B2-B4");
+        assert!(rect("tl.seg.foe.hidden").is_none(), "a masked track hides its segments");
+        assert!(rect("tl.track.foe.masked").is_some());
+        for id in ["tl.block.4", "tl.track.foe", "tl.seg.hero.guard"] {
+            assert_eq!(s.bridge(&json!({"cmd": "click", "id": id}))["ok"], json!(true));
+        }
+        assert_eq!(s.cx.app.log, ["block 4", "track foe", "seg hero guard"]);
+    }
 }
