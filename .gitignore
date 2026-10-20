@@ -41,3 +41,4 @@ test_*.txt
 
 # Art session source images (large; the finished portraits are committed, not the sources)
 art_src/
+__pycache__/
