@@ -102,7 +102,9 @@ impl<G: Context> Shell<G> {
                     Nav::Push(s) => self.stack.push(s),
                     Nav::Pop => {
                         if self.stack.len() > 1 {
-                            self.stack.pop();
+                            if let Some(mut gone) = self.stack.pop() {
+                                gone.leave(&mut self.cx);
+                            }
                             let cx = &mut self.cx;
                             self.stack.last_mut().unwrap().resume(cx);
                         }
@@ -110,7 +112,9 @@ impl<G: Context> Shell<G> {
                     Nav::Reset(s) => {
                         // A new stack: scroll offsets start over (an overlay or a return keeps them).
                         self.gfx.kit.scroll.clear();
-                        self.stack.clear();
+                        while let Some(mut gone) = self.stack.pop() {
+                            gone.leave(&mut self.cx);
+                        }
                         self.stack.push(s);
                     }
                 }
@@ -119,6 +123,13 @@ impl<G: Context> Shell<G> {
                 let lines: Vec<String> = self.cx.notice.drain(..).collect();
                 self.stack.push(Box::new(Notice::new(lines)));
             }
+        }
+    }
+
+    /// Every screen leaves, top first (the app closes).
+    fn leave_all(&mut self) {
+        while let Some(mut gone) = self.stack.pop() {
+            gone.leave(&mut self.cx);
         }
     }
 
@@ -717,6 +728,7 @@ impl<G: Context> App<G> {
         }
         shell.frame();
         if shell.cx.quit {
+            shell.leave_all();
             std::process::exit(0);
         }
         self.apply_settings();
@@ -808,7 +820,13 @@ impl<G: Context> ApplicationHandler for App<G> {
 
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
         match ev {
-            WindowEvent::CloseRequested => el.exit(),
+            WindowEvent::CloseRequested => {
+                // Taken out first: no event after the close reaches a shell whose screens have left.
+                if let Some(mut shell) = self.shell.take() {
+                    shell.leave_all();
+                }
+                el.exit()
+            }
             WindowEvent::Resized(size) => {
                 let (w, h) = (size.width.max(1), size.height.max(1));
                 if let Some(p) = self.pixels.as_mut() {
@@ -1015,6 +1033,7 @@ mod tests {
             shot_dir: std::env::temp_dir(),
             quit: false,
             answers: Vec::new(),
+            playtest: crate::playtest::Playtests::off(),
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };

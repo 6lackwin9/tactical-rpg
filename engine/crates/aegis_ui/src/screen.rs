@@ -143,6 +143,8 @@ pub struct Cx<G> {
     pub quit: bool,
     /// Tags of questions answered Yes (ask_tag); the asking screen takes them on its next frame.
     pub answers: Vec<String>,
+    /// The playtest hub (recordings of this run: sessions, trail, notes).
+    pub playtest: crate::playtest::Playtests,
     pub app: G,
 }
 
@@ -220,6 +222,9 @@ pub trait Screen<G> {
     }
     /// Called when the screen becomes the top again.
     fn resume(&mut self, _cx: &mut Cx<G>) {}
+    /// Called when the screen leaves the stack (popped, a new stack, the window closing): its last chance to keep
+    /// what it holds (a playtest session).
+    fn leave(&mut self, _cx: &mut Cx<G>) {}
     /// An agent link command the shell does not know (the battle screen's command API); None when not handled.
     fn command(&mut self, _cx: &Cx<G>, _body: &Value) -> Option<Value> {
         None
