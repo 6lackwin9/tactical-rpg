@@ -94,3 +94,10 @@ Every step is shown on a review page before anything lands in the game; new file
 - Icons (2026-10-21): the 80 icons of the five sheets (57 skills, 7 fallbacks per kind and attack type, 16 item
   family and weapon icons) are kept as the first-pass baseline. All generated art is a baseline for an alpha build that
   other people play; the user gives asset feedback once the full game runs, so no further polish until then.
+- Closed at the baseline (2026-10-21): portraits and icons are in the game (86b38cf). Deferred until the alpha build's
+  feedback, as the user asked (no over-polish while systems are not final): the goblin variant on the class rig and
+  the per-character token variants, the dummy sprite, the six status icons, tile variants and NPC marker types, the
+  five interface images (main menu castle, Ruined Courtyard, Warden Keep, title, world map paths; app route), the
+  potion, elixir and bomb type variants (once the types exist). Drawing the icons on screens is ICONUI1 (idea).
+- The Worldbook (`games/emberwake/docs/WORLDBUILDING.md` and its page) is the base for the user's story revision;
+  art that no longer fits is revisited after it.
