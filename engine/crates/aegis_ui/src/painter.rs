@@ -226,6 +226,25 @@ impl<'a> Painter<'a> {
         lines
     }
 
+    /// A line from (x0, y0) to (x1, y1) with an arrowhead of `head` logical units at the end (`dash` > 0 dashes the
+    /// shaft, the head stays solid).
+    #[allow(clippy::too_many_arguments)]
+    pub fn arrow(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, col: Rgba, dash: f32, head: f32) {
+        let (dx, dy) = (x1 - x0, y1 - y0);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 0.5 {
+            return;
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        self.line(x0, y0, x1, y1, col, dash);
+        for side in [-1.0f32, 1.0] {
+            // The head's two strokes at +-30 degrees back from the tip.
+            let (c, s) = (0.866f32, 0.5 * side);
+            let (bx, by) = (-(ux * c - uy * s), -(uy * c + ux * s));
+            self.line(x1, y1, x1 + bx * head, y1 + by * head, col, 0.0);
+        }
+    }
+
     pub fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, col: Rgba, dash: f32) {
         let (a, b, c, d) = (self.v.x(x0), self.v.y(y0), self.v.x(x1), self.v.y(y1));
         let dash_px = (dash * self.v.s).round() as i32;
