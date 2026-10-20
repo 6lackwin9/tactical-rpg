@@ -91,3 +91,6 @@ Every step is shown on a review page before anything lands in the game; new file
 - Picks of 2026-10-20 (the Art Picks page): every named and generic portrait kept; Mara Voss's main portrait is the
   prompt image (S), the four variants kept beside it; recolours are good for mob variants; the priest's mace pose B3.
 - Icons next: skill and item icon sheets through the API (user 2026-10-20: "go ahead with icons generation").
+- Icons (2026-10-21): the 80 icons of the five sheets (57 skills, 7 fallbacks per kind and attack type, 16 item
+  family and weapon icons) are kept as the first-pass baseline. All generated art is a baseline for an alpha build that
+  other people play; the user gives asset feedback once the full game runs, so no further polish until then.
