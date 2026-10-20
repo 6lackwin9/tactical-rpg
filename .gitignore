@@ -38,3 +38,6 @@ test_*.txt
 
 # Rust build output when CARGO_TARGET_DIR points inside the checkout (CI, the cloud hook)
 /target/
+
+# Art session source images (large; the finished portraits are committed, not the sources)
+art_src/

@@ -188,8 +188,10 @@ def draw_weapon(f, u, P, kind, hand, a_deg, two=False, glow=0.0):
         tip = (hx + ux * L, hy + uy * L)
         f.limb((hx + ux * 2, hy + uy * 2), tip, 1.0, P['metal_hi']); f.limb((hx + ux * 2, hy + uy * 2), tip, 0.4, WHITE)
     elif kind == 'mace':
-        f.limb((hx - ux * 2, hy - uy * 2), (hx + ux * 8, hy + uy * 8), 0.8, P['wood'])
-        cx, cy = hx + ux * 9, hy + uy * 9
+        # gripped a third of the way up: the shaft shows below the fist, with a small pommel
+        f.limb((hx - ux * 4, hy - uy * 4), (hx + ux * 7.5, hy + uy * 7.5), 0.8, P['wood'])
+        f.disc(hx - ux * 4.4, hy - uy * 4.4, 0.8, P['metal_lo'])
+        cx, cy = hx + ux * 8.6, hy + uy * 8.6
         f.disc(cx, cy, 2.2, P['metal']); f.dot(cx - 1, cy - 1, P['metal_hi'])
         for k in range(4):
             a = math.radians(a_deg + k * 90 + 45); f.dot(cx + math.sin(a) * 2.8, cy - math.cos(a) * 2.8, P['metal_lo'])
@@ -298,7 +300,12 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
         if wbk == 'shield': draw_weapon(f, u, P, 'shield', (hfx, hfy), 0)
     else:
         if loose: draw_weapon(f, u, P, wf, loose[:2], loose[2]); f.disc(hfx, hfy, 1.4, P['skin'])
-        else: draw_weapon(f, u, P, wf, (hfx, hfy), wa, two, glow); f.disc(hfx, hfy, 1.6, P.get('glove', P['leather']))
+        else:
+            draw_weapon(f, u, P, wf, (hfx, hfy), wa, two, glow)
+            if wf == 'mace':  # a smaller fist round the shaft, knuckles shaded
+                f.disc(hfx, hfy, 1.3, P.get('glove', P['leather'])); f.dot(hfx + 0.6, hfy + 0.4, P.get('glove_lo', P['leather_lo']))
+            else:
+                f.disc(hfx, hfy, 1.6, P.get('glove', P['leather']))
     if loose_b and wbk: draw_weapon(f, u, P, wbk, loose_b[:2], loose_b[2])
     if slash:
         for i, (x, y) in enumerate(slash):
