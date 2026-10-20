@@ -76,3 +76,15 @@ The art session reviewed all 296 shipped images and the sprite rig's 54 animatio
 6. Tiles (variants for grass, trees, bridge; NPC overlays by type) and the six interface images.
 
 Every step is shown on a review page before anything lands in the game; new files land in the ASSETORG2 layout.
+
+## Portraits (2026-10-20)
+
+- Route: unique portraits are generated source art (Gemini 3 Pro Image through `tools/portraits/generate.py`, Mara Voss
+  as the style reference) run through `tools/portraits/pixelize.py` at the 96 px grid, 4 shades per colour family.
+- The cast of 18 is accepted as it stands (user 2026-10-20: "use the current set for now"): Mara Voss (five
+  variants), Bryn Hale, Tev Quill, Sella Marsh, Dagny Coal, Alda Wren, Kit Vane, Oren Dusk, Brask Toller, Hest the
+  Quartermaster, Wenn Tallow, Grakka Ashmaw, the Horde Warchief, Bolg Redhand, Skarn Ironjaw, Gruk Smokecaller, Nok
+  Flamebow, Vex the Cutpurse. Characters may be repurposed once the world is fleshed out. Sources: `art_src/` (LFS).
+- Generic portraits: one generated base per mob kind (six human class defaults, five goblin types, the dummy) with
+  faces no named character has; further mob variants are recolours of those bases (`tools/portraits/recolor.py`),
+  never of a named character's portrait.
