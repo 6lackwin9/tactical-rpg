@@ -5,6 +5,7 @@ pub mod command;
 pub mod dojo;
 pub mod encounter;
 pub mod grid;
+pub mod intent;
 pub mod path;
 pub mod plan;
 pub mod resolver;

@@ -10,7 +10,9 @@
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
+use crate::intent_text;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use emberwake_battle::intent::Intent;
 use aegis_ui::audio::Bus;
 use aegis_ui::painter::Painter;
 use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
@@ -732,6 +734,15 @@ impl Screen<GameCx> for BattleScreen {
             Key::Char('a') => self.act(cx, Action::Autoplay),
             Key::Char('z') => self.act(cx, Action::Undo),
             Key::Char('l') => self.act(cx, Action::ToggleLog),
+            Key::Char('i') => {
+                let on = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
+                cx.settings.v["show_tells"] = serde_json::Value::Bool(!on);
+                self.message = match cx.settings.save() {
+                    Err(e) => format!("Tells toggled but the setting was not saved: {e}"),
+                    Ok(()) if on => "Enemy tells hidden (I shows them).".into(),
+                    Ok(()) => "Enemy tells shown (I hides them).".into(),
+                };
+            }
             Key::Char('r') => self.act(cx, Action::Restart),
             _ => {}
         }
@@ -908,8 +919,8 @@ fn next_action(s: &Session, e: usize) -> String {
     }
 }
 
-/// Hover card of unit `i`.
-fn unit_tip(s: &Session, i: usize, sel: Option<usize>) -> Tip {
+/// Hover card of unit `i` (`tells`: the enemy intents while planning, INTENT1).
+fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent]) -> Tip {
     let w = &s.w;
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
@@ -923,7 +934,22 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>) -> Tip {
         t.push((format!("Next round: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), GOLD));
     }
     if !ally && u.is_active() {
-        t.push((format!("Next: {}", next_action(s, i)), GOLD));
+        match tells.iter().find(|r| r.unit == i) {
+            Some(r) => {
+                t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), GOLD));
+                if r.revealed {
+                    let head = if r.readers.is_empty() { "Enraged: its whole plan shows".to_string() } else { intent_text::read_by(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) };
+                    t.push((head, ALLY));
+                    for l in &r.plan {
+                        t.push((intent_text::plan_line(w, l), TEXT));
+                    }
+                }
+                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)) {
+                    t.push((f, FOE));
+                }
+            }
+            None => t.push((format!("Next: {}", next_action(s, i)), GOLD)),
+        }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
             let strike = w.book().lowest(Kind::Attack);
             t.push((format!("{} deals about {} with a Strike, takes about {}", w.units[h].name, expected(w, h, i, strike, None, 0.0, 1.0), expected(w, i, h, strike, None, 0.0, 1.0)), ALLY));
@@ -950,6 +976,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let w = &s.w;
     let planning = s.phase == Phase::Planning && !s.plan_confirmed;
     let sel = g.selected.filter(|u| w.allies.contains(u));
+    // INTENT1: the enemy tells while planning; their chips and arrows on the grid follow the Show enemy tells setting (I).
+    let tells: Vec<Intent> = s.enemy_intents();
+    let show_tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
 
     // -- Top strip: the selected hero's six blocks and the round controls.
     ui.p.panel(Rect::new(2, 2, W - 4, 24), PANEL, BORDER, RADIUS);
@@ -1038,7 +1067,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         hp_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 12, 108, 4), u.hp, u.max_hp, GOOD);
         ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, TEXT);
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 18.0, &format!("AP {}/{}", u.ap, u.max_ap), SMALL, ALLY);
-        let tip = unit_tip(s, a, sel);
+        let tip = unit_tip(s, a, sel, &tells);
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
         y += 33;
     }
@@ -1177,8 +1206,32 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         if Some(i) == sel {
             ui.p.panel(r, rgba(0, 0, 0, 0), GOLD, 2.0);
         }
-        let tip = unit_tip(s, i, sel);
+        let tip = unit_tip(s, i, sel, &tells);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
+    }
+    if show_tells {
+        for r in &tells {
+            let Some(from) = w.grid.pos(r.unit) else { continue };
+            let (fx, fy) = center(from);
+            let to = r.line.target.and_then(|t| w.grid.pos(t)).or((r.line.cell != emberwake_battle::grid::NO_CELL).then_some(r.line.cell));
+            if let Some(to) = to.filter(|c| *c != from) {
+                let (tx, ty) = center(to);
+                let (dx, dy) = (tx - fx, ty - fy);
+                let len = (dx * dx + dy * dy).sqrt().max(1.0);
+                // From the token's edge to just short of the target's.
+                let (sx, sy, ex, ey) = (fx + dx / len * 10.0, fy + dy / len * 10.0, tx - dx / len * 9.0, ty - dy / len * 9.0);
+                let dash = if matches!(r.line.kind, "move" | "flee") { 3.0 } else { 0.0 };
+                ui.p.arrow(sx, sy, ex, ey, rgba(240, 100, 92, 200), dash, 4.0);
+            }
+            let chip = Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10);
+            match cx.art.get("ui", &format!("intent_{}", if r.line.kind == emberwake_battle::intent::IDLE { "rest" } else { r.line.kind }), "icon", 10) {
+                Some(img) => ui.p.image(img, chip),
+                None => {
+                    ui.p.panel(chip, rgba(48, 28, 38, 230), FOE, 2.0);
+                    ui.p.text_center(chip.x as f32 + 5.0, chip.y as f32 + 1.0, &r.line.kind[..1].to_uppercase(), SMALL, TEXT);
+                }
+            }
+        }
     }
     for f in &g.floats {
         if let Some(pos) = w.grid.pos(f.unit) {
@@ -1214,13 +1267,20 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let col = if u.is_active() { FOE } else { DIM };
         ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 1.5, &short_name(&u.name), BODY, 70.0, col);
         ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { GOOD } else { DIM });
+        let tell = tells.iter().find(|t| t.unit == e);
         if u.is_active() {
-            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &format!("Next: {}", next_action(s, e)), SMALL, 110.0, GOLD);
+            let next = tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)));
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, if tell.is_some_and(|t| t.revealed) { 98.0 } else { 110.0 }, GOLD);
+            if tell.is_some_and(|t| t.revealed) {
+                if let Some(img) = cx.art.get("ui", "badge_foresight", "icon", 9) {
+                    ui.p.image(img, Rect::new(r.x + r.w - 11, r.y + 11, 9, 9));
+                }
+            }
         } else {
             ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, DIM);
         }
-        let tip = unit_tip(s, e, sel);
-        ui.push(format!("foe.{e}"), "card", format!("{} {}/{} next {}", u.name, u.hp, u.max_hp, next_action(s, e)), r, true, hover, Some(Action::UnitClick(e)), tip);
+        let tip = unit_tip(s, e, sel, &tells);
+        ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)))), r, true, hover, Some(Action::UnitClick(e)), tip);
         y += 24;
     }
     let detail_foe = hovered_foe.or_else(|| w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some()));
@@ -1228,7 +1288,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let r = Rect::new(right.x + 4, y + 2, 116, 318 - y - 6);
         ui.p.panel(r, CARD, FOE, RADIUS);
         let mut ly = r.y as f32 + 3.0;
-        for (i, (t, col)) in unit_tip(s, e, sel).into_iter().enumerate() {
+        for (i, (t, col)) in unit_tip(s, e, sel, &tells).into_iter().enumerate() {
             for part in ui.p.wrap(&t, if i == 0 { BODY } else { SMALL }, 108.0) {
                 if ly > (r.y + r.h) as f32 - 9.0 {
                     break;

@@ -40,7 +40,7 @@ pub struct FightResult {
     pub hp: f64,
     pub rounds: i32,
     pub outcome: String,
-    /// The step trace (when requested): {"start": [...], "rounds": [{"round", "actions", "steps"}]}.
+    /// The step trace (when requested): {"start": [...], "rounds": [{"round", "actions", "intents", "steps"}]}.
     pub trace: Option<Value>,
 }
 
@@ -166,6 +166,8 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
     let mut plan_fail = false;
     for round in 0..spec.cap {
         rounds = round + 1;
+        // The tells while planning (INTENT1), before the party's plan is confirmed.
+        let intents = record.then(|| crate::intent::trace(&s.w, &s.enemy_intents()));
         s.plan_apply_preset_all(&spec.preset);
         if !s.confirm_plan() {
             if spec.jitter && plan_skip(&s) {
@@ -190,7 +192,7 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
             }
         }
         if record {
-            trace_rounds.push(json!({"round": s.current_round, "actions": actions, "steps": steps}));
+            trace_rounds.push(json!({"round": s.current_round, "actions": actions, "intents": intents, "steps": steps}));
         }
         if s.combat_over || !s.can_advance_round() {
             break;

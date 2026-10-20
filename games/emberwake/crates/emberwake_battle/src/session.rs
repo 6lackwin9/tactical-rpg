@@ -143,6 +143,8 @@ pub struct Session {
     /// "" while the battle goes on, then "won", "lost" or "fled".
     pub outcome: String,
     pub plan_confirmed: bool,
+    /// The active enemies on the grid when this round's enemies were scheduled (IntentRules: idle vs arriving).
+    pub on_grid_at_schedule: Vec<UnitId>,
     pub wave: Vec<UnitId>,
     pub reinforcements_spawned: bool,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
@@ -322,6 +324,7 @@ impl Session {
             combat_over: false,
             outcome: String::new(),
             plan_confirmed: false,
+            on_grid_at_schedule: Vec::new(),
             wave,
             reinforcements_spawned: false,
             art,
@@ -357,7 +360,28 @@ impl Session {
         self.prepare_round(round);
         self.plan = Plan::new();
         self.plan_confirmed = false;
+        self.on_grid_at_schedule = self.w.enemies.iter().copied().filter(|&e| self.w.units[e].is_active() && self.w.has(e)).collect();
         self.schedule_enemy_ai();
+    }
+
+    /// CombatSession.is_planning: the party plans this round (not confirmed, the battle goes on).
+    pub fn is_planning(&self) -> bool {
+        self.phase == Phase::Planning && !self.combat_over && !self.plan_confirmed
+    }
+
+    /// CombatSession.enemy_intents (INTENT1): the enemy tells while planning (none otherwise), with each enemy's
+    /// morale state word and group (MORALE1 rule 13).
+    pub fn enemy_intents(&self) -> Vec<crate::intent::Intent> {
+        if !self.is_planning() {
+            return Vec::new();
+        }
+        let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
+        let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        for r in out.iter_mut() {
+            r.morale_state = self.morale_state_of(r.unit);
+            r.morale_group = self.morale_group_of(r.unit);
+        }
+        out
     }
 
     /// CatalogEncounter.prepare_round (+ WorldEncounter's start buffs at round 1): round phases and phases met after

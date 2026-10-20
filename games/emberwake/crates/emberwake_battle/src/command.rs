@@ -86,6 +86,8 @@ pub enum CmdKind {
         path: Vec<V2>,
         expected_start: V2,
         goal: V2,
+        /// The unit an Engage's approach walks toward (WalkCommand.approach_target; display only: the tells).
+        approach: Option<UnitId>,
         moved_tiles: i32,
         cut_short: bool,
     },

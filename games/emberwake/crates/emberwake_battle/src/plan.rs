@@ -198,7 +198,7 @@ impl PlanEntry {
                 c
             }
             Kind::Focus => Command::new(actor, 0, s.blocks, CmdKind::Focus { boost: s.boost, rounds: s.boost_rounds }),
-            Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, moved_tiles: 0, cut_short: false }),
+            Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, approach: self.target, moved_tiles: 0, cut_short: false }),
             Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false }),
             Kind::Target => Command::new(actor, 2, 1, CmdKind::Target { target: self.target }),
             Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: s.recover_ap }),

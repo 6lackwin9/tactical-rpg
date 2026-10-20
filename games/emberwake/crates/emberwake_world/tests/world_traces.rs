@@ -58,6 +58,7 @@ fn run(d: &Data, f: &serde_json::Map<String, Value>) -> Value {
     let start = units_state(&s);
     let mut rounds = Vec::new();
     for _ in 0..s.def.max_rounds {
+        let intents = emberwake_battle::intent::trace(&s.w, &s.enemy_intents());
         s.plan_apply_preset_all(&preset);
         if !s.confirm_plan() {
             break;
@@ -71,7 +72,7 @@ fn run(d: &Data, f: &serde_json::Map<String, Value>) -> Value {
             s.step_next();
             steps.push(json!({"block": s.current_block, "phase": phase_int(s.phase), "units": units_state(&s)}));
         }
-        rounds.push(json!({"round": s.current_round, "actions": actions, "steps": steps}));
+        rounds.push(json!({"round": s.current_round, "actions": actions, "intents": intents, "steps": steps}));
         if s.combat_over || !s.can_advance_round() {
             break;
         }
@@ -88,6 +89,10 @@ fn first_divergence(g: &Value, r: &Value) -> Option<String> {
     for (i, (a, b)) in gr.iter().zip(rr.iter()).enumerate() {
         if a["actions"] != b["actions"] {
             return Some(format!("round {} actions:\n  godot {}\n  rust  {}", i + 1, a["actions"], b["actions"]));
+        }
+        // The enemy tells while planning (INTENT1), when the reference recorded them.
+        if a.get("intents").is_some() && a["intents"] != b["intents"] {
+            return Some(format!("round {} intents:\n  godot {}\n  rust  {}", i + 1, a["intents"], b["intents"]));
         }
         let (gs, rs) = (a["steps"].as_array().unwrap(), b["steps"].as_array().unwrap());
         for (j, (x, y)) in gs.iter().zip(rs.iter()).enumerate() {

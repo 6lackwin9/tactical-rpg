@@ -28,6 +28,10 @@ fn first_divergence(g: &Value, r: &Value) -> Option<String> {
         if a["actions"] != b["actions"] {
             return Some(format!("round {} actions:\n  godot {}\n  rust  {}", i + 1, a["actions"], b["actions"]));
         }
+        // The enemy tells while planning (INTENT1), when the reference recorded them.
+        if a.get("intents").is_some() && a["intents"] != b["intents"] {
+            return Some(format!("round {} intents:\n  godot {}\n  rust  {}", i + 1, a["intents"], b["intents"]));
+        }
         let (gs, rs) = (a["steps"].as_array().unwrap(), b["steps"].as_array().unwrap());
         for (j, (x, y)) in gs.iter().zip(rs.iter()).enumerate() {
             if x != y {

@@ -46,6 +46,11 @@ because the RNG is bit-exact.
   Compared after every step: HP, AP, tile, stance, active and pending statuses; and every round's schedule.
   About 80 distinct skills appear (dashes, disengages, areas, heals, cleanses, taunts, buffs, Focus, riposte);
   statuses seen: stagger, stun, root, bleed, weaken, haste, taunt, riposte.
+- Enemy tells (PORT-INTENT): every round of every battle and world trace also compares the enemy tells read while
+  planning (`parity/godot/trace.gd` `intents_state`, recorded at `on_start` / `on_round`): 3088 rounds, 5352 tells
+  (kind, target, cell, blocks, skill, revealed, readers, plan, morale state and group), 15 of them Holding. The
+  traces hold no foresight holder, no enrage at planning and no arriving unit, so those rules are covered by
+  `emberwake_world/tests/intents.rs` instead. Re-recording added only the tells: every fight is otherwise identical.
 - Battle items (ITEMUSE1): 180 more sim fights with `pouch=` (`trace.sh ... pouch=<ids>`, written as
   `traces_<mode>_l<level>_items.json`): 120 duels at level 5 (potion, bomb, focus elixir), 24 team fights and 36
   group fights at level 7; 250 Healing Draught and 39 Throwing Fire Bomb uses, all step for step. Mutating the
@@ -81,6 +86,8 @@ because the RNG is bit-exact.
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
 | `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `emberwake_gui::battle` (`BattleScreen::world`) | manual (GUI) |
 | `audio/audio_director.gd` (buses, voice pools), `music_director.gd` (player: crossfade, loop), `volume_preview.gd` (throttle) | `aegis_ui::audio` (the master slider's sample plays on the interface bus and the music sample without the -6 dB, as in Godot) | unit tests (levels, wanted track); manual (GUI) |
+| `combat/session/intent_rules.gd`, `combat_session.gd` (`enemy_intents`, `_enemies_on_grid_at_schedule`), `walk_command.gd` (`approach_target`) | `emberwake_battle::intent`, `Session::enemy_intents`, `CmdKind::Walk.approach` | battle and world traces (every round's tells, `parity/godot/trace.gd` `intents_state`) |
+| `ui/combat/intent_text.gd`, the tells in `combat_grid_panel.gd`, `combat_enemy_card_panel.gd` and the hover card | `emberwake_gui::intent_text`, `battle.rs` | manual (GUI, agent link). Not ported: the timeline's masked enemy banner (the engine's strip shows the selected hero only; the UI Gallery's battle timeline masks enemy tracks instead). Intended: a revealed enemy with no reader (enraged) is headed "Enraged: its whole plan shows" (Godot printed an empty "Read by") |
 | `scripts/dojo/dojo_session.gd`, `dojo_breakdown.gd`, `dojo_loadouts.gd`, `dojo_log_entry.gd`; `core/inventory/party_carry.gd`; `inventory.gd` (`needs_weapon_switch`, `toggle_active_weapon`); DamageCalculator's explanation keys | `emberwake_battle::dojo`, `emberwake_rules::carry`, `gear::Inventory` (`off_active`), `damage::AttackPower` / `Hit` explanation fields | `emberwake_world/tests/dojo.rs` (rules-derived; the battle traces check the damage math is unchanged). Intended differences: the trained-fists breakdown names its weapon power (Godot printed 0), the stash is listed by item id (Godot: catalog order), arrows and multiplication signs are plain ASCII |
 | `ui/dojo/*.gd` panels (party, inspector, derived, gear, stash, stash filter, stage, console, log, carry bar, allocation) | `emberwake_gui::dojo` on `aegis_ui::window`, scroll areas and `Painter::rich` | manual (GUI, agent link) |
 | `ui/framework/ui_window.gd` (`_clamp_to_parent`, `commit_fraction`, title drag, grip resize, collapse), `ui/dojo/dojo_workspace.gd` (`LAYOUTS`, `apply_layout`, `save_layout`, `_load_layout`, window toggles) | `aegis_ui::window` (`Desk`, `Win`, `Layout`), the shell's desk handling (`desk_press`, `save_desk`) | unit and shell tests (window.rs, shell.rs) |
