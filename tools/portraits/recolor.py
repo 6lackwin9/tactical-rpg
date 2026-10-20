@@ -41,6 +41,23 @@ def recolor(fig, ramp, shades, regions):
     return out
 
 
+def recolor_families(fig, ramp, shades, moves):
+    """moves: {family index: (hue or None, lightness shift, saturation)}: every pixel of each family, wherever it is
+    (a goblin's skin, a war paint), moves to the new hue and saturation with its shading steps kept."""
+    out = fig.copy(); px = out.load()
+    remap = {}
+    for f, (hue, dl, sat) in moves.items():
+        for c in ramp[f * shades:(f + 1) * shades]:
+            h, l, _ = hls(c)
+            remap[c] = rgb(h if hue is None else hue, l + dl, sat)
+    for y in range(out.height):
+        for x in range(out.width):
+            c = px[x, y]
+            if c[3] and c[:3] in remap:
+                px[x, y] = remap[c[:3]] + (255,)
+    return out
+
+
 def look(src, regions, grid=96, crop=None, shades=4, families=10):
     fig, ramp = X.figure(src, grid, crop, shades, families)
     return X.finish(recolor(fig, ramp, shades, regions))
