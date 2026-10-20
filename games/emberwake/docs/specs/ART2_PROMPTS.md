@@ -178,3 +178,127 @@ Character: Vex the Cutpurse, Skirmisher. A female goblin skirmisher of the Ashen
 Mood: predatory, quick, cruel.
 Main colours: ash grey and dark rags with steel.
 ```
+
+## Generic base portraits
+
+One per mob kind, with faces no named character has; more mob variants are recolours of these (tools/portraits/recolor.py).
+
+## Ember Warden soldier (`warrior`)
+
+Generic base portrait (warrior). The game: Shared by every unnamed warrior.
+
+```text
+Character: Ember Warden soldier, a nameless warrior of the Wardens. An ordinary Warden foot soldier, a man in his thirties with a plain, forgettable, honest face and a short dark beard, an open-faced steel helmet. Plain red tabard over mail, a steel gorget, a kite shield rim behind the shoulder. Not a hero: nothing distinctive.
+Mood: dutiful, tired, steady.
+Main colours: red and steel grey with brass.
+```
+
+## Warden archer (`ranger`)
+
+Generic base portrait (ranger). The game: Shared by every unnamed ranger.
+
+```text
+Character: Warden archer, a nameless ranger. An ordinary Warden archer, a woman in her twenties with a plain face and tied-back brown hair, a brown leather hood down, a green cloak, a quiver strap and a longbow over the shoulder. Nothing distinctive.
+Mood: alert, quiet, plain.
+Main colours: green and brown leather with a red cord.
+```
+
+## Pit brawler (`brawler`)
+
+Generic base portrait (brawler). The game: Shared by every unnamed brawler.
+
+```text
+Character: Pit brawler, a nameless brawler. An ordinary brawler, a bald man with a flattened nose and a thick neck, cloth-wrapped fists raised in a guard, a sleeveless leather vest, a plain grey headband. Nothing distinctive.
+Mood: tough, wary, plain.
+Main colours: tan skin, grey cloth and brown leather.
+```
+
+## Warden acolyte (`priest`)
+
+Generic base portrait (priest). The game: Shared by every unnamed priest.
+
+```text
+Character: Warden acolyte, a nameless priest. An ordinary acolyte, a young woman with a round, plain face, a cream-white robe and cowl with a simple gold trim, a small mace head at the edge of the frame. Nothing distinctive.
+Mood: earnest, calm, plain.
+Main colours: cream white and gold.
+```
+
+## Cutpurse (`rogue`)
+
+Generic base portrait (rogue). The game: Shared by every unnamed rogue.
+
+```text
+Character: Cutpurse, a nameless rogue. An ordinary rogue, a lean woman with a narrow plain face half-hidden by a dark hood and a cloth mask over the nose, dark purple-grey leathers, a dagger at the shoulder. Nothing distinctive.
+Mood: shifty, watchful, plain.
+Main colours: dusk purple and charcoal.
+```
+
+## Hedge-mage (`mage`)
+
+Generic base portrait (mage). The game: Shared by every unnamed mage.
+
+```text
+Character: Hedge-mage, a nameless mage. An ordinary hedge-mage, an older bald man with a white stubble beard, a plain blue robe with a hood down, no hat, a short staff with a dim blue gem. Nothing distinctive.
+Mood: thoughtful, guarded, plain.
+Main colours: blue and grey with a pale gem blue.
+```
+
+## Horde brawler (`goblin_brawler`)
+
+Generic base portrait (goblin). The game: Shared by every unnamed goblin brawler of the Ashen Horde.
+
+```text
+Character: Horde brawler, a nameless goblin brawler. An ordinary goblin brawler of the Ashen Horde: ash-grey skin, long ears, a heavy brow, small yellow eyes, cloth-wrapped fists, a crude leather harness, soot smears. A common grunt, nothing distinctive.
+Mood: brutish, eager, plain.
+Main colours: ash grey and brown leather.
+```
+
+## Horde skirmisher (`goblin_skirmisher`)
+
+Generic base portrait (goblin). The game: Shared by every unnamed goblin skirmisher.
+
+```text
+Character: Horde skirmisher, a nameless goblin skirmisher. An ordinary goblin skirmisher of the Ashen Horde: ash-grey skin, long ears, a thin sharp face, a ragged grey hood, a crooked knife held close. A common raider, nothing distinctive.
+Mood: sneaky, quick, plain.
+Main colours: ash grey and dark rags.
+```
+
+## Horde archer (`goblin_archer`)
+
+Generic base portrait (goblin). The game: Shared by every unnamed goblin archer.
+
+```text
+Character: Horde archer, a nameless goblin archer. An ordinary goblin archer of the Ashen Horde: ash-grey skin, long ears, squinting eyes, a crude short bow over the shoulder, a quiver of black-fletched arrows, a soot-stained hide jerkin. Head and shoulders. A common archer, nothing distinctive.
+Mood: wary, sly, plain.
+Main colours: ash grey and black hide.
+```
+
+## Horde shaman (`goblin_shaman`)
+
+Generic base portrait (goblin). The game: Shared by every unnamed goblin shaman.
+
+```text
+Character: Horde shaman, a nameless goblin shaman. An ordinary goblin shaman of the Ashen Horde: ash-grey skin, long ears, an ash-white painted face, a few bone beads, a short crooked staff topped with a small skull. Less ornate than a named shaman.
+Mood: mystic, sly, plain.
+Main colours: ash grey and bone white.
+```
+
+## Horde berserker (`goblin_berserker`)
+
+Generic base portrait (goblin). The game: Shared by every unnamed goblin berserker.
+
+```text
+Character: Horde berserker, a nameless goblin berserker. An ordinary goblin berserker of the Ashen Horde: ash-grey skin, long ears, a snarling open mouth, red war paint stripes, bare scarred shoulders under a scrap of fur. A common berserker, nothing distinctive.
+Mood: furious, wild, plain.
+Main colours: ash grey and red paint with fur.
+```
+
+## Training dummy (`dummy`)
+
+Generic base portrait (prop). The game: The training dummy of the Gear Dojo and the arena.
+
+```text
+Character: Training dummy, the yard's straw target. Not a person: a battered training dummy of straw and sackcloth on a wooden post, a painted red target circle on the chest, a dented old helmet on its head, straw poking out of slashes, a rope belt.
+Mood: battered, patient, comic.
+Main colours: straw yellow, sackcloth brown and faded red.
+```
