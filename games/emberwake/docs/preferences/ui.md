@@ -38,4 +38,4 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 
 ## Text size (user 2026-10-20)
 
-- Text size works the Godot way: four levels (Small 0.85, Normal 1.0, Large 1.15, Extra large 1.3), every font scales, and layouts grow with the text; screens that still overflow are fixed one by one (TEXTFIT1), with positions and widths computed from text widths rather than fixed.
+- Text size works the Godot way: four levels (Small 0.85, Normal 1.0, Large 1.15, Extra large 1.3), every font scales, and layouts grow with the text; screens that still overflow are fixed one by one (TEXTFIT1), with positions and widths computed from text widths rather than fixed. Checked with the agent link's `text_audit` at each size (TEXTFIT1, 2026-10-21); a list row's one-line description and a timeline span may shorten (the full text is on hover or click).
