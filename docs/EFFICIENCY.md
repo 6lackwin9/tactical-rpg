@@ -10,6 +10,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | First build of a checkout or worktree (debug, every crate) | a few minutes; `run.bat` release build of the GUI and CLI likewise | once per folder; each worktree has its own build folder (fc.sh) |
 | `tools/fc.sh docs` | 16 s (129 files) | fine |
 | `aegis sim duel <level> 2` (120 fights, debug build) | 0.6 s | the Godot sim took ~90 s for the same table |
+| `aegis sim <mode>` (release build), the 20 recorded parity runs (`emberwake_sim` test `sim_parity`) | about 6 s in all | Godot took about 25 minutes for the same runs (`games/emberwake/parity/sim.sh`) |
 | `tools/fc.sh parity` (Godot 4.7.2 on `legacy/`) | export ~5 s, each trace mode about a minute or less, journeys ~4 min | only when the reference must be re-recorded (a fresh checkout, CI records the exports only) |
 | Windows Smart App Control blocking freshly built binaries (2026-10-19) | random test exes and GUI launches refused (`os error 4551`); retries and relinks did not always clear it | turned off by the user; the gates still relink a blocked exe (skill `known-issues`) |
 

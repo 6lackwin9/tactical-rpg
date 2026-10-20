@@ -25,7 +25,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 
 | Crate | Role |
 | :--- | :--- |
-| `crates/aegis_core/` | Engine core, game-agnostic (SPLIT1-2): Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`) |
+| `crates/aegis_core/` | Engine core, game-agnostic (SPLIT1-2): Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`), Godot number formatting (`fmt::fixed`: `%.Nf` with ties away from zero) |
 | `crates/aegis_content/` | Engine content layer, game-agnostic (SPLIT1-3): data file format, schema normalize and storage, content store and world graph, upsert / remove over the game's hooks |
 | `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers |
 | `../games/emberwake/crates/emberwake_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
@@ -34,8 +34,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `../games/emberwake/crates/emberwake_content/` | The game's data loader and writer on `aegis_content` (`source` reads `games/emberwake/data/` like Godot's catalogs, `store` writes it like Godot's saves) |
 | `../games/emberwake/crates/emberwake_world/` | The game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
+| `../games/emberwake/crates/emberwake_sim/` | The balance simulator (PORT-SIM): sandbox units, the nine modes (duel, tier, levels, group, stats, party, role, sweep, campaign), scenarios, roles, targets and KPI tables; `aegis sim <mode>` prints its lines |
 | `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
-| `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim duel`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply) |
+| `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`): the game's `sim <mode>`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply) |
 | `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader (`assets/art/<category>/<id>/<variant>.png`, one folder per thing), live tuning files, agent link, screen stack with the game's context, window shell and event loop |
 | `../games/emberwake/crates/emberwake_gui/` | `emberwake`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo, UI Gallery) on `aegis_ui`; agent link on port 47800 |
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `emberwake_gui`; in git history |
@@ -53,10 +54,11 @@ games/emberwake/parity/trace.sh mode=duel level=5    # record Godot sim fights s
 games/emberwake/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
 games/emberwake/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
 games/emberwake/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
-cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world
-    # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces, journeys (result, state and screen
-    # views per action), saves
-cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table
+games/emberwake/parity/sim.sh                         # record the Godot balance sim's tables for 20 command lines (~25 min)
+cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world -p emberwake_sim
+    # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces (with their action logs,
+    # metrics and reports), journeys (result, state and screen views per action), saves, the sim's printed tables
+cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table (sim help: every mode and key)
 ```
 
 Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).

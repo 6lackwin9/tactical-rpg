@@ -48,6 +48,44 @@ pub struct PlanStep {
 pub type Step = Rc<PlanStep>;
 
 impl PlanStep {
+    /// PlanStep.title: "⚔ Strike → Wolf", "➜ Move →2", "Use Potion → Bryn" (the sim's PLAN FAIL lines).
+    pub fn title(&self, w: &World) -> String {
+        let label = self.skill.map_or_else(String::new, |sid| {
+            let s = &w.cat.skills[sid];
+            let icon = match s.kind.as_str() {
+                "ATTACK" => "⚔",
+                "DEFEND" => "🛡",
+                "FOCUS" => "✦",
+                "SUPPORT" => "+",
+                "DISENGAGE" => "⤴",
+                "MOVE" => "➜",
+                "TARGET" => "🎯",
+                "STATUS" => "✖",
+                _ => "💤",
+            };
+            format!("{icon} {}", s.name)
+        });
+        let target = |t: Option<UnitId>| t.map_or_else(|| "?".to_string(), |t| w.units[t].name.clone());
+        match self.mode {
+            Mode::Engage | Mode::Ally => format!("{label} → {}", target(self.target)),
+            Mode::Move => {
+                let arrow = match (self.direction.x, self.direction.y) {
+                    (1, 0) => "→",
+                    (-1, 0) => "←",
+                    (0, -1) => "↑",
+                    (0, 1) => "↓",
+                    _ => "·",
+                };
+                format!("{label} {arrow}{}", self.tiles)
+            }
+            Mode::Goto => format!("{label} to {}", self.cell.get()),
+            Mode::Area => format!("{label} at {}", self.cell.get()),
+            Mode::Withdraw => "🏃 Withdraw".into(),
+            Mode::Item => format!("Use {} → {}", w.cat.items.get(&self.item_id).map_or_else(|| self.item_id.clone(), |i| i.name.clone()), target(self.target)),
+            Mode::SelfCast => label,
+        }
+    }
+
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
         Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new() })
     }

@@ -1,7 +1,7 @@
 //! Emberwake's command set on the engine's command API protocol (`aegis_host`: one JSON request in, one JSON reply
 //! out, history and step counter): the battle commands. The CLI serves it over stdin / stdout (`aegis serve`), the
 //! GUI's battle screen and agent link call the same `Host::handle`, so a log of the requests replays a battle exactly.
-//! Also the game's own CLI commands (`cli`: `sim duel`, `battle`).
+//! Also the game's own CLI commands (`cli`: `sim <mode>`, `battle`).
 //!
 //! Requests (`cmd`; `history` is the protocol's own):
 //!   new {encounter, seed?}                     start a catalog encounter

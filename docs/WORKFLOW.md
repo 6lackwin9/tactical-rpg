@@ -30,13 +30,13 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 | Tool | Use |
 | --- | --- |
 | `tools/fc.sh build / test / gate / clippy / docs / content / sim / parity` | Compact checks, data edits, the sim and the Godot reference (see the header of the script); `gate` is the commit gate in bash, `check_project.ps1` the same in PowerShell |
-| `aegis` (shell `engine/crates/aegis_cli`, binary in `games/emberwake/crates/emberwake_host`; `cargo run -q -p emberwake_host -- ...` from the repo root) | `sim duel [level] [seeds]` (balance table, about a second per level), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `emberwake`), `content` (edit `games/emberwake/data/`) |
+| `aegis` (shell `engine/crates/aegis_cli`, binary in `games/emberwake/crates/emberwake_host`; `cargo run -q -p emberwake_host -- ...` from the repo root) | `sim <mode> [level] [seeds] [key=value ...]` (the balance sim: duel, tier, levels, group, stats, party, role, sweep, campaign; `sim help` lists the keys; a duel table in under a second), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `emberwake`), `content` (edit `games/emberwake/data/`) |
 | `games/emberwake/parity/*.sh` (`tools/fc.sh parity`) | Record the frozen Godot build's reference from `legacy/` (exports, battle and world traces, journeys) for the parity suites; needs Godot 4.7.2 |
 | Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
 | Agent `change-reviewer` | Pre-commit review: the gate, code patterns, docs/README, known-issues match; read-only |
 | Skills `engine-checklist`, `known-issues`, `patch-and-seed` | Edit checklist, known issues and safe editing |
 
-The Godot build's sim (`tools/balance_sim.gd`, modes duel, tier, levels, group, party, role, sweep, campaign) stays in `legacy/`; only `duel` is ported (`aegis sim duel`, step for step against it).
+The Godot build's sim (`tools/balance_sim.gd`, modes duel, tier, levels, group, stats, party, role, sweep, campaign) stays in `legacy/`; every mode is ported (`aegis sim <mode>`, crate `emberwake_sim`, PORT-SIM) and prints the same lines for the recorded command lines (`games/emberwake/parity/sim.sh`, test `emberwake_sim/tests/sim_parity.rs`).
 
 Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserker 80%, brawler 53%, scout 47%, ranger 20%, shaman 0% (cannot beat a minion of itself: stalemates). Hero loses 1v3 minions and 1v1 bosses; elite = mirror (50%). These are open balance questions, not decisions.
 

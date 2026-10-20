@@ -65,7 +65,7 @@ fn units_state(w: &World) -> Value {
 }
 
 /// SimVariants.shuffled: a seeded Fisher-Yates copy.
-fn shuffled(ids: &[String], rng: &mut GodotRng) -> Vec<String> {
+pub fn shuffled(ids: &[String], rng: &mut GodotRng) -> Vec<String> {
     let mut out = ids.to_vec();
     let mut i = out.len();
     while i > 1 {
@@ -78,7 +78,7 @@ fn shuffled(ids: &[String], rng: &mut GodotRng) -> Vec<String> {
 
 /// SimVariants.jitter_start: each deployed unit (left side first) moves to a seeded pick of its own tile and its free
 /// neighbours on the same half.
-fn jitter_start(w: &mut World, rng: &mut GodotRng) {
+pub fn jitter_start(w: &mut World, rng: &mut GodotRng) {
     let units: Vec<UnitId> = w.allies.iter().chain(w.enemies.iter()).copied().collect();
     for c in units {
         if !w.has(c) {
@@ -104,7 +104,8 @@ fn jitter_start(w: &mut World, rng: &mut GodotRng) {
     }
 }
 
-fn side_hp_frac(w: &World, units: &[UnitId]) -> f64 {
+/// SimRunner.side_hp_frac: remaining HP over max HP of a side (inactive units count 0).
+pub fn side_hp_frac(w: &World, units: &[UnitId]) -> f64 {
     let hp: f64 = units.iter().map(|&c| if w.units[c].is_active() { w.units[c].hp as f64 } else { 0.0 }).sum();
     let max: f64 = units.iter().map(|&c| w.units[c].max_hp as f64).sum();
     hp / max.max(1.0)
@@ -343,7 +344,7 @@ pub fn apply_pouch(w: &mut World, ids: &[String]) {
 }
 
 /// SimRunner.is_reach_error / _plan_skip: every invalid ally plan failed because its target is out of reach.
-fn plan_skip(s: &Session) -> bool {
+pub fn plan_skip(s: &Session) -> bool {
     let mut any = false;
     for &a in &s.w.allies {
         if !s.w.units[a].is_active() {

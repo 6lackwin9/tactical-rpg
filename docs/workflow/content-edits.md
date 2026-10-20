@@ -25,7 +25,7 @@ When unsure, treat it as new content. Design or gameplay questions always go to 
 
 ## When a sim run is required
 
-The balance agent runs `tools/fc.sh sim duel` before landing when a tweak changes a balance-relevant value of a unit, class, skill, item or passive used in combat: damage, healing, HP, armor, speed or movement, range, cost, cooldown, status magnitude or duration, gear budget, or AI thresholds, and puts the before/after numbers in the reply. Only the duel mode exists on the engine so far; a tweak that needs another mode (`tier`, `party`, `role`) says so and waits for that mode's port (a logic task). Text, icons, prices, drop weights and encounter placement need no sim. Systems not yet `balance-ready` (`games/emberwake/docs/ROADMAP.md`) skip the sim and say so.
+The balance agent runs `tools/fc.sh sim duel` before landing when a tweak changes a balance-relevant value of a unit, class, skill, item or passive used in combat: damage, healing, HP, armor, speed or movement, range, cost, cooldown, status magnitude or duration, gear budget, or AI thresholds, and puts the before/after numbers in the reply. Every Godot sim mode runs on the engine (`tier`, `party`, `role`, `sweep`, `campaign` and the rest: `tools/fc.sh sim help`); a tweak that needs one uses it. Text, icons, prices, drop weights and encounter placement need no sim. Systems not yet `balance-ready` (`games/emberwake/docs/ROADMAP.md`) skip the sim and say so.
 
 ## Rules
 

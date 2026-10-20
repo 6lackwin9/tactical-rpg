@@ -659,6 +659,7 @@ dependencies = [
  "emberwake_content",
  "emberwake_data",
  "emberwake_rules",
+ "emberwake_sim",
  "emberwake_world",
  "indexmap",
  "serde_json",
@@ -670,6 +671,19 @@ version = "0.1.0"
 dependencies = [
  "aegis_core",
  "emberwake_data",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "emberwake_sim"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "emberwake_battle",
+ "emberwake_data",
+ "emberwake_rules",
+ "emberwake_world",
  "indexmap",
  "serde_json",
 ]
