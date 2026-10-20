@@ -69,13 +69,83 @@ impl<A> Widget<A> {
     }
 }
 
-/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open and the drag in
-/// progress.
+/// Widget state that outlives a frame, kept by the shell: the select whose choice list is open, the drag in
+/// progress, the offset of every scroll area (by id; cleared when a new stack starts, Nav::Reset) and the keyboard focus.
 #[derive(Debug, Clone, Default)]
 pub struct Kit {
     pub open: Option<String>,
     pub drag: Option<Drag>,
+    pub scroll: std::collections::HashMap<String, i32>,
+    /// The focused widget (PORT-FOCUS), and whether its ring shows: the keyboard moved the focus since the last click.
+    pub focus: Option<String>,
+    pub focus_visible: bool,
+    /// The text field being typed into (its text and caret live here while it edits).
+    pub edit: Option<Edit>,
 }
+
+/// A text field being edited: its id, the text so far, the caret (a character index) and whether Enter adds a line.
+/// The shell types into it and hands every change to the screen (`Screen::text_changed`), which owns the value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Edit {
+    pub id: String,
+    pub text: String,
+    pub caret: usize,
+    pub multiline: bool,
+}
+
+impl Edit {
+    /// Editing `text` with the caret at its end.
+    pub fn new(id: &str, text: &str, multiline: bool) -> Self {
+        Self { id: id.into(), text: text.into(), caret: text.chars().count(), multiline }
+    }
+
+    fn byte_at(&self, caret: usize) -> usize {
+        self.text.char_indices().nth(caret).map_or(self.text.len(), |(i, _)| i)
+    }
+
+    /// Inserts typed text at the caret (control characters dropped; a newline only in a multiline field).
+    pub fn insert(&mut self, s: &str) {
+        for ch in s.chars().filter(|c| !c.is_control() || (*c == '\n' && self.multiline)) {
+            let at = self.byte_at(self.caret);
+            self.text.insert(at, ch);
+            self.caret += 1;
+        }
+    }
+
+    pub fn backspace(&mut self) {
+        if self.caret > 0 {
+            let at = self.byte_at(self.caret - 1);
+            self.text.remove(at);
+            self.caret -= 1;
+        }
+    }
+
+    pub fn delete(&mut self) {
+        if self.caret < self.text.chars().count() {
+            let at = self.byte_at(self.caret);
+            self.text.remove(at);
+        }
+    }
+
+    pub fn left(&mut self) {
+        self.caret = self.caret.saturating_sub(1);
+    }
+
+    pub fn right(&mut self) {
+        self.caret = (self.caret + 1).min(self.text.chars().count());
+    }
+
+    pub fn home(&mut self) {
+        self.caret = 0;
+    }
+
+    pub fn end(&mut self) {
+        self.caret = self.text.chars().count();
+    }
+}
+
+/// Pixels one wheel line scrolls a scroll area.
+pub const SCROLL_STEP: i32 = 12;
 
 /// A drag in progress (UIKIT2): the dragged widget's payload, id and text (the ghost under the cursor).
 #[derive(Debug, Clone)]
@@ -103,13 +173,128 @@ pub struct Ui<'a, A> {
     open: Option<String>,
     /// The drag in progress (`Kit::drag`, read at the start of the frame).
     drag: Option<Drag>,
+    /// Widgets and drawing are kept inside this rect (a window's body, `set_clip`).
+    clip: Option<Rect>,
+    /// The clips `push_clip` replaced, restored by `pop_clip`.
+    clips: Vec<Option<Rect>>,
+    /// The scroll offsets at the start of the frame (`Kit::scroll`).
+    scroll: std::collections::HashMap<String, i32>,
+    /// How many scroll areas are open (`scroll_begin`), each closed by `scroll_end`.
+    scrolls: usize,
+    /// The text field being edited (`Kit::edit`, read at the start of the frame; only the live screen sees it).
+    edit: Option<Edit>,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
         // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
-        let (open, drag) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None });
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag }
+        let (open, drag, scroll) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None }, g.kit.scroll.clone());
+        let edit = if live { g.kit.edit.clone() } else { None };
+        g.canvas.clip = None;
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit }
+    }
+
+    /// A text field (`multiline`: a text area, Enter adds a line). Clicking it starts editing: the shell types into it
+    /// and hands each change to the screen's `text_changed(id, text)`; `value` is the screen's text otherwise. While it
+    /// edits, a caret shows; the field scrolls to keep the caret's line in view.
+    pub fn text_field(&mut self, id: &str, r: Rect, value: &str, multiline: bool, enabled: bool) {
+        let editing = self.edit.as_ref().filter(|e| e.id == id).cloned();
+        let hover = enabled && self.hover(r);
+        let border = if editing.is_some() { GOLD } else if hover { rgb(110, 140, 196) } else if enabled { rgb(100, 130, 186) } else { BORDER };
+        self.p.panel(r, rgb(22, 30, 48), border, RADIUS);
+        let text = editing.as_ref().map_or(value, |e| e.text.as_str()).to_string();
+        let line = self.p.line_h(BODY);
+        let max_w = r.w as f32 - 10.0;
+        let lines = |p: &mut Painter, s: &str| -> Vec<String> {
+            let mut out = Vec::new();
+            for para in s.split('\n') {
+                let wrapped = p.wrap(para, BODY, max_w);
+                if wrapped.is_empty() {
+                    out.push(String::new());
+                } else {
+                    out.extend(wrapped);
+                }
+            }
+            out
+        };
+        let shown = if multiline { lines(&mut self.p, &text) } else { vec![text.clone()] };
+        // The caret: the line and x of the text before it.
+        let caret = editing.as_ref().map(|e| {
+            let before: String = e.text.chars().take(e.caret).collect();
+            let ls = if multiline { lines(&mut self.p, &before) } else { vec![before] };
+            let last = ls.last().cloned().unwrap_or_default();
+            (ls.len().saturating_sub(1), self.p.text_w(&last, BODY))
+        });
+        let rows = ((r.h as f32 - 6.0) / line).floor().max(1.0) as usize;
+        let first = caret.map_or(0, |(l, _)| l.saturating_sub(rows - 1));
+        let col = if enabled { TEXT } else { DIM };
+        let clip = Rect::new(r.x + 3, r.y + 2, r.w - 6, r.h - 4);
+        self.push_clip(clip);
+        for (i, l) in shown.iter().skip(first).take(rows).enumerate() {
+            let y = r.y as f32 + 3.0 + i as f32 * line;
+            if multiline {
+                self.p.text(r.x as f32 + 5.0, y, l, BODY, col);
+            } else {
+                // A single line keeps its end (the caret) in view.
+                let w = self.p.text_w(l, BODY);
+                self.p.text(r.x as f32 + 5.0 - (w - max_w).max(0.0), y, l, BODY, col);
+            }
+        }
+        if let Some((l, x)) = caret {
+            let shift = if multiline { 0.0 } else { (self.p.text_w(&text, BODY) - max_w).max(0.0) };
+            let cx = r.x as f32 + 5.0 + x - shift + 0.5;
+            let cy = r.y as f32 + 3.0 + (l - first) as f32 * line;
+            self.p.line(cx, cy, cx, cy + line - 1.0, GOLD, 0.0);
+        }
+        self.pop_clip();
+        self.push(id, if multiline { "textarea" } else { "text" }, text, r, enabled, editing.is_some(), None, Vec::new());
+    }
+
+    /// Keeps the drawing and the recorded widgets inside `r` (None: the whole canvas); a widget partly outside keeps
+    /// only its visible part, so it can't be clicked outside the window that shows it (UIKIT3).
+    pub fn set_clip(&mut self, r: Option<Rect>) {
+        self.clip = r;
+        self.p.clip(r);
+    }
+
+    /// Narrows the clip to `r` (inside the current one); `pop_clip` restores the clip before it.
+    pub fn push_clip(&mut self, r: Rect) {
+        self.clips.push(self.clip);
+        let inner = self.clip.map_or(r, |c| c.intersect(r));
+        self.set_clip(Some(inner));
+    }
+
+    pub fn pop_clip(&mut self) {
+        let prev = self.clips.pop().flatten();
+        self.set_clip(prev);
+    }
+
+    /// Opens a scroll area (the kit keeps its offset; the wheel over it scrolls it): content `content_h` pixels tall
+    /// shown in `view`, with a scrollbar on the right when it does not fit. Returns the offset to draw the content at
+    /// (`view.y - offset` is the content's top); drawing and widgets are clipped to `view` until `scroll_end`.
+    pub fn scroll_begin(&mut self, id: &str, view: Rect, content_h: i32) -> i32 {
+        let max = (content_h - view.h).max(0);
+        let at = self.scroll.get(id).copied().unwrap_or(0).clamp(0, max);
+        // The area itself, under its content: the shell finds it for the wheel (`text` is the furthest offset).
+        self.push(id, "scroll", max.to_string(), view, true, false, None, Vec::new());
+        if max > 0 {
+            let bar = Rect::new(view.x + view.w - 3, view.y, 3, view.h);
+            self.p.fill(bar, rgba(40, 46, 60, 200));
+            let knob_h = (view.h * view.h / content_h.max(1)).max(8);
+            let knob_y = view.y + (view.h - knob_h) * at / max;
+            self.p.fill(Rect::new(bar.x, knob_y, 3, knob_h), rgb(150, 160, 180));
+        }
+        self.push_clip(view);
+        self.scrolls += 1;
+        at
+    }
+
+    /// Closes the scroll area `scroll_begin` opened (the clip before it comes back).
+    pub fn scroll_end(&mut self) {
+        if self.scrolls > 0 {
+            self.scrolls -= 1;
+            self.pop_clip();
+        }
     }
 
     /// Makes the last recorded widget draggable with payload `key` (UIKIT2): press and move picks it up, a press
@@ -141,11 +326,17 @@ impl<'a, A: Clone> Ui<'a, A> {
         if kind == "row" && action.is_none() && tip.len() > 1 && self.hover(rect) {
             self.p.panel(rect, rgba(0, 0, 0, 0), rgb(110, 140, 196), RADIUS);
         }
+        let rect = match self.clip {
+            // An open select's options are drawn over everything by the shell: not cut to a window body.
+            Some(c) if kind != "option" => rect.intersect(c),
+            _ => rect,
+        };
         self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip, drag: None, drop: None });
     }
 
+    /// The mouse is over `r` (and inside the clip, so a widget scrolled out of its window shows no hover).
     pub fn hover(&self, r: Rect) -> bool {
-        self.live && r.contains(self.mouse.0, self.mouse.1)
+        self.live && r.contains(self.mouse.0, self.mouse.1) && self.clip.is_none_or(|c| c.contains(self.mouse.0, self.mouse.1))
     }
 
     /// A plain button; `active` draws it selected (gold).
@@ -377,5 +568,29 @@ pub fn by_id<A: Clone>(widgets: &[Widget<A>], id: &str) -> Result<A, String> {
         Some(w) if w.enabled && w.action.is_some() => Ok(w.action.clone().unwrap()),
         Some(_) => Err(format!("widget '{id}' is disabled or not clickable")),
         None => Err(format!("no widget '{id}'")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Edit;
+
+    #[test]
+    fn an_edit_types_deletes_and_moves_the_caret_by_characters() {
+        let mut e = Edit::new("t", "héllo", false);
+        assert_eq!(e.caret, 5);
+        e.insert("!");
+        e.left();
+        e.left();
+        e.backspace();
+        assert_eq!((e.text.as_str(), e.caret), ("hélo!", 3), "keeps the multibyte é");
+        e.home();
+        e.delete();
+        e.end();
+        e.insert("\n x\t");
+        assert_eq!(e.text, "élo! x", "a single-line field drops the newline and the tab");
+        let mut m = Edit::new("m", "a", true);
+        m.insert("\nb");
+        assert_eq!((m.text.as_str(), m.caret), ("a\nb", 3));
     }
 }

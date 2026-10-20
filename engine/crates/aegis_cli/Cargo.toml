@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aegis_host = { path = "../aegis_host" }
 aegis_content = { path = "../aegis_content" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }

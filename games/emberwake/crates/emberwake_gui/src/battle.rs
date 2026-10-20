@@ -10,7 +10,9 @@
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
+use crate::intent_text;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use emberwake_battle::intent::Intent;
 use aegis_ui::audio::Bus;
 use aegis_ui::painter::Painter;
 use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
@@ -21,7 +23,7 @@ use emberwake_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGra
 use aegis_core::json::{self, s, Dict};
 use emberwake_world::battle::WorldRoster;
 use emberwake_battle::skill::Kind;
-use emberwake_battle::world::AiProfile;
+use emberwake_battle::world::{AiProfile, World};
 use emberwake_data::UnitDef;
 use emberwake_host::{Battle, Host};
 use emberwake_world::{dialogue, explore, progression, travel};
@@ -141,17 +143,30 @@ pub struct BattleScreen {
     seed: Option<i64>,
     /// Arena only: the world the encounter belongs to (played with that world's characters); None = catalog.
     arena_world: Option<String>,
-    data: std::sync::Arc<emberwake_world::Data>,
     /// Session events already shown in the message bar.
     events_seen: usize,
     /// Resolver log lines already sounded.
     log_seen: usize,
+    /// Where the playtest hub keeps this battle's session (None until first saved).
+    slot: Option<usize>,
+    /// (requests, checkpoints) of the session at its last save.
+    saved: (usize, usize),
+    /// Playtest trail events of the battle (plan edits, confirms, the end), handed to the hub on the next tick.
+    trail_out: Vec<Value>,
+    /// The battle's end is in the trail.
+    end_logged: bool,
+    /// Sessions an agent-link `new` ended before the hub could be reached (saved on the next tick).
+    parked: Vec<(Option<usize>, aegis_host::playtest::Session)>,
+    /// A playback of a recorded session (Scene Runner Playtests): watched, not recorded again.
+    viewing: bool,
+    /// A take-over: where its session branched off (recording id, battle, request), kept in its `end`.
+    parent: Value,
 }
 
 impl BattleScreen {
     fn blank(cx: &Cx, mode: Mode) -> Self {
         Self {
-            host: Host::new(Battle::new(cx.data.cat.clone())),
+            host: Host::new(Battle::with_data(cx.data.clone())),
             w: Vec::new(),
             mouse: (0, 0),
             selected: None,
@@ -173,10 +188,86 @@ impl BattleScreen {
             encounter: cx.encounter.clone(),
             seed: cx.seed,
             arena_world: None,
-            data: cx.data.clone(),
             events_seen: 0,
             log_seen: 0,
+            slot: None,
+            saved: (0, 0),
+            parked: Vec::new(),
+            trail_out: Vec::new(),
+            end_logged: false,
+            viewing: false,
+            parent: Value::Null,
         }
+    }
+
+    /// A session worth recording: it starts with `new`, so it replays (a party battle of the world map starts outside
+    /// it: PLAYTEST2).
+    fn recordable(&self) -> bool {
+        !self.viewing && self.host.history.first().is_some_and(|r| r["cmd"] == json!("new"))
+    }
+
+    /// Hands the battle's command-host session to the playtest hub when it changed since the last save (the hub saves
+    /// it in place while the battle runs).
+    fn save_session(&mut self, cx: &mut Cx) {
+        for (mut slot, s) in self.parked.drain(..) {
+            cx.playtest.put_session(&mut slot, s);
+        }
+        if let Some(s) = self.host.session.as_ref().filter(|s| s.combat_over && !self.end_logged) {
+            self.end_logged = true;
+            self.trail_out.push(json!({"type": "battle_end", "round": s.current_round, "result": s.outcome}));
+        }
+        for e in self.trail_out.drain(..) {
+            cx.playtest.trail(e);
+        }
+        let now = (self.host.history.len(), self.host.checkpoints.len());
+        if !self.recordable() || now == self.saved {
+            return;
+        }
+        self.saved = now;
+        let s = self.recorded();
+        cx.playtest.put_session(&mut self.slot, s);
+    }
+
+    /// The command-host session as the recording keeps it (a take-over names its parent in `end`).
+    fn recorded(&self) -> aegis_host::playtest::Session {
+        let mut s = aegis_host::playtest::Session::of(&self.host);
+        if !self.parent.is_null() {
+            s.end["parent"] = self.parent.clone();
+        }
+        s
+    }
+
+    /// The playtest trail events of one request the player made: plan edits (add, undo, clear, plan, preset,
+    /// preset_all with the unit and round) and confirms (ok, or refused with the reason).
+    fn trail_of(&mut self, req: &Value, reply: &Value) {
+        let Some(s) = self.host.session.as_ref() else { return };
+        let ok = reply["ok"] == json!(true);
+        let kind = match req["cmd"].as_str().unwrap_or("") {
+            "add_step" => "add",
+            "undo" => "undo",
+            "clear" => "clear",
+            "plan" => "plan",
+            "preset" if req.get("unit").is_some() => "preset",
+            "preset" => "preset_all",
+            "confirm" => {
+                let reason = if ok { String::new() } else { reply["error"].as_str().unwrap_or("refused").to_string() };
+                self.trail_out.push(json!({"type": "confirm", "ok": ok, "reason": reason, "round": s.current_round}));
+                return;
+            }
+            _ => return,
+        };
+        if ok {
+            self.trail_out.push(json!({"type": "plan_edit", "kind": kind, "unit": req.get("unit").cloned().unwrap_or(Value::Null), "round": s.current_round}));
+        }
+    }
+
+    /// A new battle starts a new session.
+    fn new_session(&mut self) {
+        self.slot = None;
+        self.saved = (0, 0);
+        self.end_logged = false;
+        self.viewing = false;
+        self.parent = Value::Null;
     }
 
     /// The Test Arena: the catalog encounter given on the command line (goblin_skirmish by default).
@@ -193,6 +284,43 @@ impl BattleScreen {
         b.encounter = encounter.to_string();
         b.arena_world = world;
         b.start_battle();
+        b
+    }
+
+    /// A recorded battle replayed into the arena (Scene Runner Playtests). `take_over` None plays it back to its end
+    /// to watch (not recorded again); Some((parent, at)) stops after `at` requests and hands the battle to the player
+    /// as a new session that names `parent` (recording id, battle, request) in its end. Restart then starts the
+    /// encounter afresh with the recorded seed. The message says whether every checkpoint replayed as recorded.
+    pub fn playback(cx: &Cx, session: &aegis_host::playtest::Session, take_over: Option<(Value, usize)>) -> Self {
+        let mut b = Self::blank(cx, Mode::Arena);
+        let first = session.requests.first().cloned().unwrap_or(Value::Null);
+        let encounter = first["encounter"].as_str().unwrap_or("").to_string();
+        (b.arena_world, b.encounter) = match encounter.split_once(':') {
+            Some((w, e)) => (Some(w.to_string()), e.to_string()),
+            None => (None, encounter),
+        };
+        b.seed = first["seed"].as_i64();
+        let until = take_over.as_ref().map(|(_, at)| *at);
+        let report = aegis_host::playtest::replay(&mut b.host, session, until);
+        if b.host.session.is_none() {
+            b.message = match &report.broken {
+                Some((i, e)) => format!("The recording does not replay: request {} was refused ({e}).", i + 1),
+                None => "The recording has no battle.".into(),
+            };
+            return b;
+        }
+        let verdict = match (&report.broken, report.matched()) {
+            (Some((i, e)), _) => format!("Replay stopped at request {}: {e}.", i + 1),
+            (None, true) => format!("Replayed {} requests as recorded.", report.sent),
+            (None, false) => format!("Replayed {} requests; the battle diverged from the recording (the data changed?).", report.sent),
+        };
+        b.new_session();
+        match take_over {
+            None => b.viewing = true,
+            Some((parent, _)) => b.parent = parent,
+        }
+        b.after_start("");
+        b.message = format!("{verdict} {}", if b.viewing { "Watching (not recorded); Restart plays it afresh." } else { "Your battle from here." });
         b
     }
 
@@ -230,13 +358,13 @@ impl BattleScreen {
             unit.hp = progression::start_hp(unit.max_hp as i64, m.hp_lost) as i32;
             let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
             let art = if !base.art.is_empty() { base.art.clone() } else { d.cat.classes.get(&base.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) };
-            party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base) });
+            party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() });
             members.push((m.id.clone(), built.pouch_unloaded));
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
-        b.host.session = Some(session);
-        b.host.history.clear();
+        b.host.begin(session);
+        b.host.restart();
         b.after_start(&s(entry, "intro"));
         cx.set_busy(true);
         Ok(b)
@@ -253,6 +381,9 @@ impl BattleScreen {
     /// Sends one request through the command API and turns HP changes into floating numbers.
     fn send(&mut self, cx: &Cx, req: Value) -> Value {
         let reply = self.host.handle(&req);
+        if cx.playtest.on {
+            self.trail_of(&req, &reply);
+        }
         if reply["ok"] != json!(true) {
             self.message = reply["error"].as_str().unwrap_or("refused").to_string();
         }
@@ -291,26 +422,13 @@ impl BattleScreen {
         }
     }
 
+    /// Starts the arena's encounter through the command host (a world one as "<world>:<id>"), so the session replays.
     fn start_battle(&mut self) {
-        if let Some(world) = self.arena_world.clone() {
-            let d = self.data.clone();
-            let entry = d.resolve(&world, "encounters", &self.encounter);
-            if entry.is_empty() {
-                self.message = format!("Unknown encounter '{}' in {world}.", self.encounter);
-                return;
-            }
-            let mut def = EncounterDef::from_obj(entry);
-            if let Some(s) = self.seed {
-                def.rng_seed = s;
-            }
-            def.id = format!("{world}:{}", self.encounter);
-            let roster = WorldRoster { d: &d, world: world.clone() };
-            self.host.session = Some(Session::start(d.cat.clone(), def, &roster));
-            self.host.history.clear();
-            self.after_start(&s(entry, "intro"));
-            return;
-        }
-        let mut req = json!({"cmd": "new", "encounter": self.encounter});
+        let encounter = match &self.arena_world {
+            Some(world) => format!("{world}:{}", self.encounter),
+            None => self.encounter.clone(),
+        };
+        let mut req = json!({"cmd": "new", "encounter": encounter});
         if let Some(s) = self.seed {
             req["seed"] = json!(s);
         }
@@ -319,7 +437,8 @@ impl BattleScreen {
             self.message = reply["error"].as_str().unwrap_or("could not start").to_string();
             return;
         }
-        self.after_start("");
+        self.new_session();
+        self.after_start(reply["intro"].as_str().unwrap_or(""));
     }
 
     fn after_start(&mut self, intro: &str) {
@@ -498,6 +617,7 @@ impl BattleScreen {
             }
             Action::Restart => {
                 if !self.world_mode() {
+                    self.save_session(cx);
                     self.start_battle();
                 }
             }
@@ -667,6 +787,21 @@ impl Screen<GameCx> for BattleScreen {
         draw(self, cx, g, mouse, live);
     }
 
+    fn leave(&mut self, cx: &mut Cx) {
+        self.save_session(cx);
+    }
+
+    /// A playtest note over the battle records its session (the recording's battle index), round, block and phase.
+    fn note_context(&self, _cx: &Cx) -> Value {
+        let Some(s) = self.host.session.as_ref() else { return Value::Null };
+        let phase = match s.phase {
+            Phase::Planning => "planning",
+            Phase::Resolving => "resolving",
+            Phase::Replay => "replay",
+        };
+        json!({"battle": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
+    }
+
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
         if now.duration_since(self.tuning_checked) > Duration::from_millis(500) {
@@ -678,6 +813,11 @@ impl Screen<GameCx> for BattleScreen {
         let t = cx.tuning.value.clone();
         self.floats.retain(|f| now.duration_since(f.born) < Duration::from_millis(t.float_ms));
         self.flashes.retain(|f| now.duration_since(f.1) < Duration::from_millis(t.hit_flash_ms));
+        // The playtest session is saved after every concluded round (and once more at the end).
+        let ended = self.host.session.as_ref().is_some_and(|s| s.combat_over) && !self.end_logged;
+        if self.host.checkpoints.len() != self.saved.1 || !self.parked.is_empty() || !self.trail_out.is_empty() || ended {
+            self.save_session(cx);
+        }
         if self.host.session.is_none() {
             return;
         }
@@ -732,6 +872,15 @@ impl Screen<GameCx> for BattleScreen {
             Key::Char('a') => self.act(cx, Action::Autoplay),
             Key::Char('z') => self.act(cx, Action::Undo),
             Key::Char('l') => self.act(cx, Action::ToggleLog),
+            Key::Char('i') => {
+                let on = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
+                cx.settings.v["show_tells"] = serde_json::Value::Bool(!on);
+                self.message = match cx.settings.save() {
+                    Err(e) => format!("Tells toggled but the setting was not saved: {e}"),
+                    Ok(()) if on => "Enemy tells hidden (I shows them).".into(),
+                    Ok(()) => "Enemy tells shown (I hides them).".into(),
+                };
+            }
             Key::Char('r') => self.act(cx, Action::Restart),
             _ => {}
         }
@@ -770,7 +919,15 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
+        // An agent-link `new` ends this session: park it for the hub (saved on the next tick), then start a new one.
+        let restart = body["cmd"] == json!("new");
+        if restart && self.recordable() {
+            self.parked.push((self.slot, self.recorded()));
+        }
         let reply = self.host.handle(body);
+        if restart && reply["ok"] == json!(true) {
+            self.new_session();
+        }
         if self.host.session.is_some() {
             self.after_change(cx);
         }
@@ -812,14 +969,14 @@ fn sound_of(line: &str) -> Option<&'static str> {
         "Defend" if !line.contains("guard was broken") => Some("defend"),
         "Focus" => Some("buff"),
         "Support" => Some("heal"),
-        "Move" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
+        "Move" | "Move Cut Short" | "Withdrawal" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
         _ => None,
     }
 }
 
 // ---- Drawing ------------------------------------------------------------------------------------------------------
 
-fn kind_color(kind: &str) -> Rgba {
+pub(crate) fn kind_color(kind: &str) -> Rgba {
     match kind {
         "ATTACK" => rgb(160, 56, 56),
         "MOVE" => rgb(52, 92, 160),
@@ -868,9 +1025,14 @@ fn stance_name(u: &emberwake_rules::Unit) -> &'static str {
 }
 
 /// The actions the resolver holds for `u` this round (after confirm): (start, end, name, kind, target name).
-fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<String>)> {
-    s.resolver
-        .scheduled
+pub(crate) fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<String>)> {
+    action_rows(&s.w, &s.resolver.scheduled, u)
+}
+
+/// Unit `u`'s actions among `actions` (this round's, or a past round's from the archive): (start, end, name, kind,
+/// target name).
+pub(crate) fn action_rows(w: &World, actions: &[emberwake_battle::resolver::ScheduledAction], u: usize) -> Vec<(i32, i32, String, String, Option<String>)> {
+    actions
         .iter()
         .filter(|a| a.unit == u)
         .map(|a| {
@@ -888,7 +1050,7 @@ fn committed(s: &Session, u: usize) -> Vec<(i32, i32, String, String, Option<Str
                 CmdKind::Disengage { .. } => ("DISENGAGE", None),
             };
             let name = if a.cancelled { format!("{} (cancelled)", a.command.name) } else { a.command.name.clone() };
-            (a.start, a.end, name, kind.to_string(), target.filter(|t| *t != u).map(|t| s.w.units[t].name.clone()))
+            (a.start, a.end, name, kind.to_string(), target.filter(|t| *t != u).map(|t| w.units[t].name.clone()))
         })
         .collect()
 }
@@ -908,8 +1070,8 @@ fn next_action(s: &Session, e: usize) -> String {
     }
 }
 
-/// Hover card of unit `i`.
-fn unit_tip(s: &Session, i: usize, sel: Option<usize>) -> Tip {
+/// Hover card of unit `i` (`tells`: the enemy intents while planning, INTENT1).
+fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent]) -> Tip {
     let w = &s.w;
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
@@ -923,7 +1085,22 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>) -> Tip {
         t.push((format!("Next round: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), GOLD));
     }
     if !ally && u.is_active() {
-        t.push((format!("Next: {}", next_action(s, i)), GOLD));
+        match tells.iter().find(|r| r.unit == i) {
+            Some(r) => {
+                t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), GOLD));
+                if r.revealed {
+                    let head = if r.readers.is_empty() { "Enraged: its whole plan shows".to_string() } else { intent_text::read_by(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) };
+                    t.push((head, ALLY));
+                    for l in &r.plan {
+                        t.push((intent_text::plan_line(w, l), TEXT));
+                    }
+                }
+                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)) {
+                    t.push((f, FOE));
+                }
+            }
+            None => t.push((format!("Next: {}", next_action(s, i)), GOLD)),
+        }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
             let strike = w.book().lowest(Kind::Attack);
             t.push((format!("{} deals about {} with a Strike, takes about {}", w.units[h].name, expected(w, h, i, strike, None, 0.0, 1.0), expected(w, i, h, strike, None, 0.0, 1.0)), ALLY));
@@ -950,6 +1127,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let w = &s.w;
     let planning = s.phase == Phase::Planning && !s.plan_confirmed;
     let sel = g.selected.filter(|u| w.allies.contains(u));
+    // INTENT1: the enemy tells while planning; their chips and arrows on the grid follow the Show enemy tells setting (I).
+    let tells: Vec<Intent> = s.enemy_intents();
+    let show_tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
 
     // -- Top strip: the selected hero's six blocks and the round controls.
     ui.p.panel(Rect::new(2, 2, W - 4, 24), PANEL, BORDER, RADIUS);
@@ -1038,7 +1218,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         hp_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 12, 108, 4), u.hp, u.max_hp, GOOD);
         ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, TEXT);
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 18.0, &format!("AP {}/{}", u.ap, u.max_ap), SMALL, ALLY);
-        let tip = unit_tip(s, a, sel);
+        let tip = unit_tip(s, a, sel, &tells);
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
         y += 33;
     }
@@ -1177,8 +1357,32 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         if Some(i) == sel {
             ui.p.panel(r, rgba(0, 0, 0, 0), GOLD, 2.0);
         }
-        let tip = unit_tip(s, i, sel);
+        let tip = unit_tip(s, i, sel, &tells);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
+    }
+    if show_tells {
+        for r in &tells {
+            let Some(from) = w.grid.pos(r.unit) else { continue };
+            let (fx, fy) = center(from);
+            let to = r.line.target.and_then(|t| w.grid.pos(t)).or((r.line.cell != emberwake_battle::grid::NO_CELL).then_some(r.line.cell));
+            if let Some(to) = to.filter(|c| *c != from) {
+                let (tx, ty) = center(to);
+                let (dx, dy) = (tx - fx, ty - fy);
+                let len = (dx * dx + dy * dy).sqrt().max(1.0);
+                // From the token's edge to just short of the target's.
+                let (sx, sy, ex, ey) = (fx + dx / len * 10.0, fy + dy / len * 10.0, tx - dx / len * 9.0, ty - dy / len * 9.0);
+                let dash = if matches!(r.line.kind, "move" | "flee") { 3.0 } else { 0.0 };
+                ui.p.arrow(sx, sy, ex, ey, rgba(240, 100, 92, 200), dash, 4.0);
+            }
+            let chip = Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10);
+            match cx.art.get("ui", &format!("intent_{}", if r.line.kind == emberwake_battle::intent::IDLE { "rest" } else { r.line.kind }), "icon", 10) {
+                Some(img) => ui.p.image(img, chip),
+                None => {
+                    ui.p.panel(chip, rgba(48, 28, 38, 230), FOE, 2.0);
+                    ui.p.text_center(chip.x as f32 + 5.0, chip.y as f32 + 1.0, &r.line.kind[..1].to_uppercase(), SMALL, TEXT);
+                }
+            }
+        }
     }
     for f in &g.floats {
         if let Some(pos) = w.grid.pos(f.unit) {
@@ -1214,13 +1418,20 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let col = if u.is_active() { FOE } else { DIM };
         ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 1.5, &short_name(&u.name), BODY, 70.0, col);
         ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { GOOD } else { DIM });
+        let tell = tells.iter().find(|t| t.unit == e);
         if u.is_active() {
-            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &format!("Next: {}", next_action(s, e)), SMALL, 110.0, GOLD);
+            let next = tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)));
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, if tell.is_some_and(|t| t.revealed) { 98.0 } else { 110.0 }, GOLD);
+            if tell.is_some_and(|t| t.revealed) {
+                if let Some(img) = cx.art.get("ui", "badge_foresight", "icon", 9) {
+                    ui.p.image(img, Rect::new(r.x + r.w - 11, r.y + 11, 9, 9));
+                }
+            }
         } else {
             ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, DIM);
         }
-        let tip = unit_tip(s, e, sel);
-        ui.push(format!("foe.{e}"), "card", format!("{} {}/{} next {}", u.name, u.hp, u.max_hp, next_action(s, e)), r, true, hover, Some(Action::UnitClick(e)), tip);
+        let tip = unit_tip(s, e, sel, &tells);
+        ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)))), r, true, hover, Some(Action::UnitClick(e)), tip);
         y += 24;
     }
     let detail_foe = hovered_foe.or_else(|| w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some()));
@@ -1228,7 +1439,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let r = Rect::new(right.x + 4, y + 2, 116, 318 - y - 6);
         ui.p.panel(r, CARD, FOE, RADIUS);
         let mut ly = r.y as f32 + 3.0;
-        for (i, (t, col)) in unit_tip(s, e, sel).into_iter().enumerate() {
+        for (i, (t, col)) in unit_tip(s, e, sel, &tells).into_iter().enumerate() {
             for part in ui.p.wrap(&t, if i == 0 { BODY } else { SMALL }, 108.0) {
                 if ly > (r.y + r.h) as f32 - 9.0 {
                     break;

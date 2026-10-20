@@ -43,7 +43,6 @@ pub enum MenuAct {
 #[derive(Default)]
 pub struct MainMenu {
     w: Vec<Widget<MenuAct>>,
-    focus: usize,
 }
 
 impl MainMenu {
@@ -91,26 +90,16 @@ impl Screen<GameCx> for MainMenu {
             ("menu.tools", "Tools (Forge, Dojo, Test Arena)", MenuAct::Tools),
             ("menu.quit", "Quit", MenuAct::Quit),
         ]);
-        self.focus = self.focus.min(entries.len() - 1);
         for (i, (id, label, a)) in entries.iter().enumerate() {
             let r = Rect::new(240, 139 + i as i32 * 24, 160, 18);
-            ui.button_full(id, r, label, *a, true, i == self.focus, BODY + 1.0, Vec::new());
+            ui.button_full(id, r, label, *a, true, false, BODY + 1.0, Vec::new());
         }
         ui.p.text_right(616.0, 309.0, "Version dev · Aegis engine", SMALL, DIM);
         self.w = ui.widgets;
     }
-    fn key(&mut self, cx: &mut Cx, k: Key) {
-        let n = self.w.iter().filter(|w| w.kind == "button").count().max(1);
-        match k {
-            Key::Up => self.focus = (self.focus + n - 1) % n,
-            Key::Down | Key::Tab => self.focus = (self.focus + 1) % n,
-            Key::Enter | Key::Space => {
-                if let Some(a) = self.w.get(self.focus).and_then(|w| w.action) {
-                    self.act(cx, a);
-                }
-            }
-            _ => {}
-        }
+    /// The menu starts with the first entry focused (the kit's focus: arrows, Tab, Enter).
+    fn auto_focus(&self) -> bool {
+        true
     }
     fn back(&mut self, _cx: &mut Cx) {}
     fn music(&self, cx: &Cx) -> Option<String> {
@@ -438,8 +427,9 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         &[
             ("Confirm / press the focused button", "Enter, Space"),
             ("Back / close the top panel", "Escape"),
-            ("Focus the next control", "Tab"),
-            ("Move focus", "Up, Down"),
+            ("Focus the next / previous control", "Tab, Shift+Tab"),
+            ("Move focus", "Arrow keys (not on the map)"),
+            ("Step a focused slider", "Left, Right"),
             ("Back / close (mouse)", "Right click"),
         ],
     ),

@@ -4,12 +4,12 @@
 //! the data files hold: ranked skill entries, items as family + modifiers) and written in Godot's storage form
 //! (ContentSchema.to_storage, SkillRanks.collapse, ItemModifiers.stored, WorldSchema.to_storage) and file format, so a
 //! file the writer rewrites without changes stays byte-identical (tests/store.rs). This module is the game's side:
-//! its kinds and files, the storage rules of skills, items and game-data files, and the check (load problems plus
-//! schema references); the whole data folder must still check cleanly, else the files are put back as they were.
+//! its kinds and files, the storage rules of skills, items and game-data files, and the check (every hard problem the
+//! content checks find, `check`); a write that adds a problem is put back as it was.
 
 use crate::source::{self, content, expand, fields, resolve_item, RANK_KEYS};
 use aegis_content::file::{self, raw_entries, read, stringify};
-use aegis_content::schema::{copy, field_errors, has_field, normalize, ref_problems, sget, to_storage};
+use aegis_content::schema::{copy, field_errors, has_field, normalize, sget, to_storage};
 use aegis_content::store::Hooks;
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
@@ -263,6 +263,14 @@ impl Hooks for Emberwake {
     fn check(&self, data_dir: &Path) -> Vec<String> {
         check(data_dir)
     }
+
+    fn blocking(&self, data_dir: &Path) -> Vec<String> {
+        blocking(data_dir)
+    }
+
+    fn warnings(&self, data_dir: &Path) -> Vec<String> {
+        warnings(data_dir)
+    }
 }
 
 /// ContentCatalog.upsert / WorldCatalog.upsert: validates `entry` (stored shape), replaces the entry with its id (or
@@ -276,20 +284,57 @@ pub fn remove(data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Res
     aegis_content::store::remove(&Emberwake, data_dir, world, kind, id)
 }
 
-/// Load problems of the data folder plus references (schema `ref` / `refs` fields) that name no catalog entry.
+/// The checks view of a data folder: the loaded catalog and worlds, the art keys of its asset manifest, whether it has
+/// a terrain file, and the load problems.
+pub fn view(data_dir: &Path) -> crate::check::View {
+    view_of(data_dir, &source::load(data_dir))
+}
+
+fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
+    let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, source::art_keys(data_dir));
+    view.terrain_file = data_dir.join("catalog/terrain.json").is_file();
+    view.load_errors = src.errors.clone();
+    view
+}
+
+fn lines(report: crate::check::Report) -> impl Iterator<Item = String> {
+    report.into_iter().flat_map(|(key, found)| found.into_iter().map(move |m| format!("{key}: {m}")))
+}
+
+/// Every hard problem of the data folder, one "<key>: <message>" line each: the catalog (ContentCatalog.validate_all,
+/// load problems under "load"), the worlds (WorldCatalog.validate_all) and the game manifest.
 pub fn check(data_dir: &Path) -> Vec<String> {
     let src = source::load(data_dir);
-    let mut out = src.errors;
-    let ids = |kind: &str| -> Option<Vec<String>> {
-        if !source::CATALOG_KINDS.contains(&kind) && kind != "item_families" {
-            return None;
-        }
-        let rows = if kind == "item_families" { &src.game["item_families"] } else { &src.catalog[kind] };
-        Some(rows.as_array().map(|a| a.iter().map(|e| json::s(json::dict(e), "id")).collect()).unwrap_or_default())
-    };
-    let cat = src.catalog.as_object().cloned().unwrap_or_default();
-    out.extend(ref_problems(source::schema(), "content", &cat, ids));
+    let view = view_of(data_dir, &src);
+    let mut out: Vec<String> = lines(crate::check::validate_all(&view)).chain(lines(crate::check::world::validate_all(&view))).collect();
     out.extend(manifest_problems(data_dir, &src.worlds));
+    out
+}
+
+/// The problems that refuse a write: the catalog's (ContentCatalog.upsert validates the entry), the world entries'
+/// blocking ones only (WorldCatalog.upsert: unresolved references do not block) and the game manifest's.
+pub fn blocking(data_dir: &Path) -> Vec<String> {
+    let src = source::load(data_dir);
+    let view = view_of(data_dir, &src);
+    let mut out: Vec<String> = lines(crate::check::validate_all(&view)).collect();
+    for w in view.worlds.world_ids() {
+        for kind in crate::check::world::KINDS {
+            for e in view.worlds.own_entries(&w, kind) {
+                let id = json::s(e, "id");
+                out.extend(crate::check::world::blocking_errors(&view, &w, kind, e, &id).into_iter().map(|m| format!("{w}/{kind}:{id}: {m}")));
+            }
+        }
+    }
+    out.extend(manifest_problems(data_dir, &src.worlds));
+    out
+}
+
+/// Every soft problem of the data folder, one line each (ContentCatalog.warnings_all as "<key>: <message>",
+/// WorldCatalog.warnings_all, whose lines name their entry): never blocking.
+pub fn warnings(data_dir: &Path) -> Vec<String> {
+    let view = view(data_dir);
+    let mut out: Vec<String> = lines(crate::check::warnings_all(&view)).collect();
+    out.extend(crate::check::world::warnings_all(&view).into_values().flatten());
     out
 }
 

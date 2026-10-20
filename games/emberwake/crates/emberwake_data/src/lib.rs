@@ -293,6 +293,8 @@ pub struct ItemDef {
     pub duration: i32,
     pub use_blocks: i32,
     pub use_reach: i32,
+    /// Carry weight (PartyCarry; Item.weight, 1 when unset).
+    pub weight: f64,
     pub raw: Obj,
 }
 
@@ -324,6 +326,7 @@ impl ItemDef {
             duration: int(o, "duration", 0),
             use_blocks: int(o, "use_blocks", 1),
             use_reach: int(o, "use_reach", -1),
+            weight: float(o, "weight", 1.0),
             raw: o.clone(),
         }
     }

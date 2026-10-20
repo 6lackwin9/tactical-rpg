@@ -14,6 +14,7 @@ because the RNG is bit-exact.
 | Dictionary iteration is insertion order | `IndexMap` everywhere order can matter |
 | JSON numbers come back as floats; `x is int` checks fail on parsed data | lenient `aegis_core::value` reads; checked by parity |
 | Integer division truncates toward zero, `floori` floors | match per call site |
+| A float total starts at 0.0 (Rust's `Iterator::sum` of no floats is -0.0, which prints "-0.0") | `fold(0.0, ...)` where a total is printed |
 
 ## Files
 
@@ -46,6 +47,21 @@ because the RNG is bit-exact.
   Compared after every step: HP, AP, tile, stance, active and pending statuses; and every round's schedule.
   About 80 distinct skills appear (dashes, disengages, areas, heals, cleanses, taunts, buffs, Focus, riposte);
   statuses seen: stagger, stun, root, bleed, weaken, haste, taunt, riposte.
+- Action messages (PORT-BREPORT): chase, dash (and its blocked lines), walk, disengage, area attack, support and
+  terrain hazard texts now use Godot's wording, since the log entries carry them as detail text.
+- Enemy tells (PORT-INTENT): every round of every battle and world trace also compares the enemy tells read while
+  planning (`parity/godot/trace.gd` `intents_state`, recorded at `on_start` / `on_round`): 3088 rounds, 5352 tells
+  (kind, target, cell, blocks, skill, revealed, readers, plan, morale state and group), 15 of them Holding. The
+  traces hold no foresight holder, no enrage at planning and no arriving unit, so those rules are covered by
+  `emberwake_world/tests/intents.rs` instead. Re-recording added only the tells: every fight is otherwise identical.
+- Battle metrics, report and action log (PORT-BREPORT): every battle and world trace also carries what a BattleMetrics
+  following the fight in sim mode counted (per-unit records, report detail, fight record, self-checks), the
+  BattleReport built from it and the session's action log (`parity/godot/trace.gd`, recorded at `on_end`). All
+  677 battle fights and 240 world fights compare equal: 32475 log entries (category, actor, target, skill,
+  subtype, value, damage, outcome, detail and status text), every record field, every detail, the fight record, the
+  report and no METRIC FAIL. One tolerance (decision "Exact number parsing"): an attack line's "Skill x" multiplier
+  may print one cent apart, because Godot's JSON reader parses some decimals one ulp off. Re-recording added only
+  these keys: every fight is otherwise identical.
 - Battle items (ITEMUSE1): 180 more sim fights with `pouch=` (`trace.sh ... pouch=<ids>`, written as
   `traces_<mode>_l<level>_items.json`): 120 duels at level 5 (potion, bomb, focus elixir), 24 team fights and 36
   group fights at level 7; 250 Healing Draught and 39 Throwing Fire Bomb uses, all step for step. Mutating the
@@ -81,6 +97,18 @@ because the RNG is bit-exact.
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
 | `exploration/game_encounter.gd` (saved party in battle, HP and pouch write-back, start-status flags) | `emberwake_gui::battle` (`BattleScreen::world`) | manual (GUI) |
 | `audio/audio_director.gd` (buses, voice pools), `music_director.gd` (player: crossfade, loop), `volume_preview.gd` (throttle) | `aegis_ui::audio` (the master slider's sample plays on the interface bus and the music sample without the -6 dB, as in Godot) | unit tests (levels, wanted track); manual (GUI) |
+| `combat/session/intent_rules.gd`, `combat_session.gd` (`enemy_intents`, `_enemies_on_grid_at_schedule`), `walk_command.gd` (`approach_target`) | `emberwake_battle::intent`, `Session::enemy_intents`, `CmdKind::Walk.approach` | battle and world traces (every round's tells, `parity/godot/trace.gd` `intents_state`) |
+| `core/events/action_log_entry.gd`, `combat/session/combat_log_builder.gd` (`from_action`, `riposte_entry`, `chase_entry`, `dash_entry`), the encounters' event entries (phase, morale break, wave, start buff) | `emberwake_battle::log` (`Entry`, `from_action`, `riposte_entry`, `move_note_entry`, `Entry::event`), `Session::log` | battle and world traces (every entry). Not ported: `format_resolver_message` (the BBCode text feed; the battle screen keeps its own log lines), `ref_tag` only as a method, no breakdown text on attack entries (the dojo has the breakdown) |
+| `combat/session/battle_metrics.gd` (sim mode and live mode), `combatant.gd` (`health_changed`), `combat_resolver.gd` (`combo_resolved`, `last_round_end_steps`) | `emberwake_battle::metrics` (`BattleMetrics`), `World::damage` / `World::heal` and `World::hp_journal`, `Resolver::combos` / `round_end_steps`, `Session::attach_metrics` / `metrics_step` / `metrics_round` / `metrics_end` | battle and world traces; `emberwake_world/tests/report.rs` (live equals sim, no self-check fails, a fight is unchanged by a collector; a scripted round for combos, the best finish and regen credit, which no trace holds). Not yet wired: the battle screen attaches no collector (BREPORT1-U). Intended: no round checkpoints (the engine has no round reset yet; port them with it); signals become session feed points in Godot's order |
+| `combat/session/battle_report.gd`, `combat_encounter.gd` (`hero_key`), `game_encounter.gd` (`hero_key`) | `emberwake_battle::report` (`Report::build`, `columns_for`, `best_moment`, tips, `problems`), `Session::hero_key`, `Roster::lore_ref`, `Prebuilt::key` | battle and world traces; `emberwake_world/tests/report.rs` (the Godot suite's column, tip, best-moment and validation cases) |
+| `ui/combat/intent_text.gd`, the tells in `combat_grid_panel.gd`, `combat_enemy_card_panel.gd` and the hover card | `emberwake_gui::intent_text`, `battle.rs` | manual (GUI, agent link). Not ported: the timeline's masked enemy banner (the engine's strip shows the selected hero only; the UI Gallery's battle timeline masks enemy tracks instead). Intended: a revealed enemy with no reader (enraged) is headed "Enraged: its whole plan shows" (Godot printed an empty "Read by") |
+| `scripts/dojo/dojo_session.gd`, `dojo_breakdown.gd`, `dojo_loadouts.gd`, `dojo_log_entry.gd`; `core/inventory/party_carry.gd`; `inventory.gd` (`needs_weapon_switch`, `toggle_active_weapon`); DamageCalculator's explanation keys | `emberwake_battle::dojo`, `emberwake_rules::carry`, `gear::Inventory` (`off_active`), `damage::AttackPower` / `Hit` explanation fields | `emberwake_world/tests/dojo.rs` (rules-derived; the battle traces check the damage math is unchanged). Intended differences: the trained-fists breakdown names its weapon power (Godot printed 0), the stash is listed by item id (Godot: catalog order), arrows and multiplication signs are plain ASCII |
+| `combat/arena/block_snapshot.gd`; `combat_session.gd` (`round_actions`, `round_snapshots`, `_refresh_archive`) | `Session::history` (`RoundRecord`, `UnitSnap`), `snapshot`, `round_record` (`recorded_actions`, `snapshot_at`) | `emberwake_world/tests/history.rs` (rule test; the traces do not record the archive). Intended: while planning the archive holds the enemies' drafts only (Godot added the party's unsent plan and refreshed on every plan edit; the UI Gallery draws the live plan instead); the archived actions keep their cancelled flags and are refreshed at every block end (Godot's copies dropped them); `UnitSnap` is the display part of BlockSnapshot (no pouches, targets, status rounds, magnitudes or sources, boost rounds, objective, phase or morale state), so it cannot restore a round |
+| `ui/timeline_modal.gd` (TimelineModal), `ui/combat/combat_timeline_panel.gd` (the round timeline) | `aegis_ui::timeline` (engine widget) and the UI Gallery's battle timeline (`emberwake_gui::gallery`) | manual (GUI, agent link); not yet on the battle screen |
+| `tools/balance_sim.gd`, `tools/sim/*.gd` (SimArgs, SimRunner, SimVariants, SimMetrics, SimTargets, SimScenarios, SimWorld, SimParty, SimRoles, SimRoleMode, SimCampaign) | `emberwake_sim` (`aegis sim <mode>`) | `emberwake_sim/tests/sim_parity.rs`: 20 recorded command lines over every mode, 469 printed lines equal (`games/emberwake/parity/sim.sh`). Kept as recorded: the striker's "prio down rnd" KPI reads the test unit's own down round (Godot's match hit that arm first). Not ported: the sandbox catalog fork (the units are built in memory) and the upsert's refusal lines (the sim's units are always valid) |
+| Godot Control focus (`ui_focus_next` / `ui_focus_prev`, `ui_up` .. `ui_right`, `ui_accept`, `grab_focus` on menus) | `aegis_ui::focus`, the shell's `focus_key` / `settle_focus`, `Screen::arrow_focus` / `auto_focus` | `aegis_ui` unit and shell tests (Tab order, arrows, an opted-out screen, a choice list and a slider from the keys, a new screen); manual (agent link). Intended: focus comes from the widget list each frame (no per-control focus neighbours); a click hides the ring |
+| `ui/dojo/*.gd` panels (party, inspector, derived, gear, stash, stash filter, stage, console, log, carry bar, allocation) | `emberwake_gui::dojo` on `aegis_ui::window`, scroll areas and `Painter::rich` | manual (GUI, agent link) |
+| `ui/framework/ui_window.gd` (`_clamp_to_parent`, `commit_fraction`, title drag, grip resize, collapse), `ui/dojo/dojo_workspace.gd` (`LAYOUTS`, `apply_layout`, `save_layout`, `_load_layout`, window toggles) | `aegis_ui::window` (`Desk`, `Win`, `Layout`), the shell's desk handling (`desk_press`, `save_desk`) | unit and shell tests (window.rs, shell.rs) |
 | `audio/music_director.gd` (choice: contexts, candidates, scopes, kind and combat context), `sound_events.gd` | `emberwake_gui::music`, `battle` (`sound_of`, from the resolver log; a hit for 0 plays mitigated, the engine log has no mitigation tag) | unit tests (chains, every shipped file decodes, log lines) |
 
 Godot behaviours found on the way:
@@ -134,7 +162,7 @@ Content is edited without Godot through `aegis content check | upsert | remove |
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors`, `ref_problems` | `tests/store.rs` |
+| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors` (`ref_problems`, the writer's reference check until PORT-CHECKS, is unused since) | `tests/store.rs` |
 | `content/skill_ranks.gd` (`collapse`, `fold`), `skill_kinds.gd` (`has_field`) | `store::skill_storage` | `tests/store.rs` |
 | `core/specs/item_modifiers.gd` (`stored`) | `store::catalog_storage` (items) | `tests/store.rs` |
 | `world/world_catalog.gd` (`save_world`, `upsert`), `world_schema.gd` (`to_storage`) | `aegis_content::schema::world_storage`, `store::manifest_text` | `tests/store.rs` |
@@ -146,7 +174,86 @@ Content is edited without Godot through `aegis content check | upsert | remove |
   of `after` byte for byte. Nine shipped files are older than their schema (field order), so Godot's save reorders
   them too; the first engine save of such a file does the same.
 - Validation: id (snake_case), name, enum options and catalog references by the schema; skill ranks and item families
-  by construction; then the whole data folder must load without new problems, else the file is put back.
+  by construction; then the whole data folder must not check with new problems (the content checks below, since
+  PORT-CHECKS), else the file is put back.
 - Not covered: the asset manifest (`games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
-  sprite work), the Forge's richer checks (SkillValidator, item budgets, world reference rules); the gate's test
-  suites and `content check` catch what a broken entry does to the game.
+  sprite work; the checks read its unit and item keys). The Forge's richer checks (SkillValidator, item budgets, world
+  reference rules) are ported since PORT-CHECKS (next section).
+
+## Content checks (emberwake_content::check, PORT-CHECKS, 2026-10-20)
+
+`aegis content check` reports what the Forge's validators reported: soft warnings (printed as `warning:` lines, never
+failing), then hard errors; every `upsert` / `remove` refuses a write that adds a blocking one (see Writes below).
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `content/content_catalog.gd` (`validate_entry`, `_prepare`, `warnings_for`, `validate_all`, `warnings_all`), `content_schema.gd` (`field_errors`, `options_of`, `passes_filter`) | `check` (`View`, `validate_entry`, `warnings_for`, `validate_all`, `warnings_all`) | checks parity |
+| `content/validators/skill_validator.gd`, `skill_kinds.gd`, `skill_ranks.gd` (`fold`, `collapse`), `skill_text.gd` (`validate`, warnings) | `check::skill` | checks parity |
+| `content/validators/class_unit_validator.gd`, `core/specs/stat_rules.gd` (`validate_class`, `validate_spend`) | `check::unit` | checks parity |
+| `content/validators/item_validator.gd`, `core/specs/item_modifiers.gd` (`collapse`, `stored`, `stable_order`), `item_families.gd`, `item_text.gd` | `check::item` | checks parity |
+| `core/specs/gear_budget.gd` | `emberwake_rules::budget` | checks parity |
+| `content/validators/terrain_validator.gd`, `core/specs/passives.gd` (`validate_effects`) | `check::simple` | checks parity |
+| `combat/session/encounter_phases.gd`, `encounter_objectives.gd`, `encounter_morale.gd` (`problems`, pace, start buffs), `exploration/purse_rules.gd` | `check::encounter` | checks parity |
+| `world/world_catalog.gd` (`validate_entry`, `manifest_errors`, `validate_world`, `validate_all`, `world_warnings`, `warnings_all`) | `check::world` | world cases, lint |
+| `quests/quest_rules.gd`, `dialogue/rep_rules.gd` (value rule, key lint) | `check::quest` | world cases, lint |
+| `dialogue/dialogue_rules.gd` (trees, conditions, effects, service lines, tree and gone-NPC lints) | `check::dialogue` | world cases, lint |
+| `dialogue/shop_rules.gd`, `travel/travel_rules.gd` (with the route graph), `exploration/map_rules.gd` (location rules, lints) | `check::shop`, `travel`, `map` | world cases, lint |
+| `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | `source::art_keys` | checks parity |
+
+- Recording: `games/emberwake/parity/checks.sh` runs `parity/godot/checks.gd` on `legacy/` and writes
+  `parity/out/checks.json`; `cargo test -p emberwake_content --test checks_parity` replays it on `legacy/data`.
+- Catalog: 5166 cases (three entries of every kind and sub-kind, each field set to a few wrong values in the shape
+  it holds, plus hand-made cases for the rules across fields: skill families, combos, item modifiers, tiers and
+  text, family changes, encounter phases, objectives, morale and purse) and the shipped catalog's reports (0 errors,
+  18 warning keys) match message for message, errors and warnings.
+- Worlds: 1555 cases (own entries of every kind in every world, fields set wrong) and the shipped worlds' reports
+  match; a lint set (14 entries upserted into ashlands in memory: a dialogue tree, two quests, a location with
+  markers and bindings, a shop, a route, a character, regions, a faction, an item, loot and an encounter with start
+  buffs) matches with its 196 errors and 26 warning lines over every world.
+- Godot divergence: a family band with `min` but no `max` stops Godot's `ItemValidator.family_warnings` with a script
+  error; the engine prints the warning with an empty max (the recording leaves that shape out).
+- Writes: a write is refused when it adds a blocking problem (`Hooks::blocking`): every catalog error
+  (ContentCatalog.upsert validates the entry) and the world entries' `WorldCatalog.blocking_errors` (id, name, enums,
+  overrides, json shapes; also recorded and compared per world case). Unresolved world references do not block, as in
+  Godot (worlds are full of mutual references); `content check` reports them.
+- Not ported: the Forge's per-field problem records ({field, index}); the checks return the message texts.
+
+## Playtests (aegis_host::playtest, PORT-PLAYTEST, 2026-10-20)
+
+The engine records and replays what Godot's PLAYTEST1 did, on the command API instead of plans and RNG states:
+every battle runs through the command host, so its request log replays it exactly (the engine has no live round
+redo, the reason Godot stored `rng_state` per round). Recordings are version 2 of the `playtest` format; version 1
+files (the Godot build's) are refused with that reason.
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `scripts/playtest/playtest_record.gd`, `playtest_store.gd` (ids, list, atomic save) | `aegis_host::playtest` (`Recording`, `new_id`, `list`, `save`) | unit tests |
+| `playtest_recorder.gd` (rounds, outcomes) | `Host` checkpoints (`Commands::checkpoint`; Emberwake: the round outcome after a concluded round) and `Session::of` | `emberwake_host/tests/replay.rs` |
+| `playtest_replayer.gd` (match, diverge, unverified, take-over) | `playtest::replay` (with `until`) | unit tests, `replay.rs` |
+| `tools/replay.gd` (`--battle`, `--json`, `--variant`, `--then`, `--write`, `--seeds`, `--fallback`) | `aegis replay` (`aegis_cli`) | the tests above, by hand |
+| `playtest_sweep.gd` | `playtest::sweep_one`, `parse_seeds` | unit tests |
+| `content_fingerprint.gd` | `aegis_content::fingerprint` (on `aegis_core::sha256`) | unit tests |
+| `scripts/ui/playtest/playtest_hub.gd` (one recording per run) | `aegis_ui::playtest::Playtests` on `Cx`, the screens' `leave` hook | unit test |
+| `scripts/ui/playtest/ui_trail.gd` (screen, panel / modal, button, key, hover, click) | the shell (`click`, `back`, `key`, `settle`, `track_hover`), the battle screen (plan_edit, confirm, battle_end) | shell test |
+| `scripts/playtest/playtest_logger.gd` (errors), `AssetRegistry.resolve_observer` (asset fallbacks) | `aegis_ui::playtest::report_error` with a panic hook, `report_asset` from the art loader | hub test |
+| `scripts/playtest/trail_report.gd` (`--trail-report`) | `aegis_host::trail` (`build`, `lines`), `aegis replay <file> trail-report` | unit test (acceptance 12 and 13) |
+| `scripts/ui/playtest/note_dialog.gd` (F8: screenshot, text, tags) | `aegis_ui::notes::NoteBox`, the shell's `note` (stamp + `Screen::note_context`), `Playtests::add_note`, `aegis_ui::jpeg` (baseline encoder, std only), the kit's text field (`Ui::text_field`, `Kit.edit`) | shell test |
+| `scripts/ui/runner` Playtests panel, `playtest_store.gd` (`copy_to_repo`, inbox folders) | `aegis_ui::recordings::Recordings` (kit screen; the game gives the launcher), `playtest::copy_to`, `image_dir`, `list` of `<id>/<id>.json`; `BattleScreen::playback` | shell test, by hand on the agent link |
+
+- A variant is a request patch ({at, remove, requests, then}), not a plan patch: any request can change.
+- Ids use UTC (std has no local time zone).
+- The trail: controls are the engine kit's widget infos (path = widget id, cls = widget kind); overlays open and close
+  as modals, other screens are screen changes (leaked is always 0: the engine keeps no node tree). Keys typed into a
+  text field are not logged.
+- The report differs from `trail_report.gd` only in names and one count: `scene` events and fields are `screen`, the
+  leak line says "left" (no node tree), `asset_templates` is not counted (the engine draws no template placeholders
+  through the loader). A right click (back) always counts as handled. A panic that ends the process is reported but
+  not written (no frame follows it); panics the process survives are.
+- Notes: the screenshot is a JPEG (quality 85) from the engine's own encoder; the stamp has the screen, mouse,
+  viewport, the control under the mouse and the battle's slot, round, block and phase.
+- Playback differs from Godot's: Play back replays the battle to its end and shows the final state (the battle's
+  own replay of the last round and its log), not a round-by-round viewer with a notes drop-down (PLAYBACK2). Take
+  over picks Round 1 or After round N; the new session's `end.parent` names {recording, battle, at}. Scenarios (H)
+  are not listed (none exist).
+- Recording can be turned on and off while the app runs (the browser's toggle; the setting is now the engine's).
+- Not ported yet: party battles of the world map (PLAYTEST2).

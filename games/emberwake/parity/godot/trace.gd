@@ -5,7 +5,10 @@ extends SceneTree
 # seed. Works on a sandbox fork of the catalog like tools/balance_sim.gd; the shipped catalog is never written.
 #   godot --headless --path <project> -s <abs path> -- out=<abs dir> [mode=duel|group|teams] [level=1] [seeds=2] [classes=warrior,mage]
 #     [preset=balanced] [jitter=on|off]
-# Writes traces_<mode>_l<level>.json: {"units": {id: entry}, "fights": [{left, right, seed, preset, start, rounds: [...], result}]}.
+# Writes traces_<mode>_l<level>.json: {"units": {id: entry}, "fights": [{left, right, seed, preset, start, rounds: [...], result,
+#   metrics, report, log}]}. Every fight also carries what a BattleMetrics following it in sim mode counted (per-unit
+#   records and report detail, the fight record, self-checks), the BattleReport built from it and the session's action
+#   log entries (PORT-BREPORT).
 # Modes: duel (every class pair), group (hero vs 3 of its class at low tiers), teams (mixed trios).
 
 const SimArgs = preload("res://tools/sim/sim_args.gd")
@@ -16,10 +19,20 @@ class Recorder extends Observer:
 	var fights: Array = []
 	var current: Dictionary = {}
 	var last_round: int = -1
+	var pending_intents: Array = []   # the tells read while the round was being planned (INTENT1)
+	var metrics: BattleMetrics = null   # PORT-BREPORT: a sim-mode collector following the same fight
 
 	func on_start(session: CombatSession) -> void:
 		current = {"start": Recorder.units_state(session), "rounds": []}
 		last_round = -1
+		pending_intents = Recorder.intents_state(session)
+		metrics = BattleMetrics.new()
+		metrics.quiet = true
+		metrics.on_start(session)
+
+	func on_round(session: CombatSession) -> void:
+		metrics.on_round(session)
+		pending_intents = Recorder.intents_state(session)
 
 	func on_step(session: CombatSession) -> void:
 		if session.current_round != last_round:
@@ -28,16 +41,46 @@ class Recorder extends Observer:
 			for a: CombatResolver.ScheduledAction in session.resolver.scheduled_actions:
 				actions.append([a.combatant.name, a.command.command_name, a.start_block, a.end_block, a.command.ap_cost, a.command.stance_switch_cost])
 			var round_list: Array = current["rounds"]
-			round_list.append({"round": session.current_round, "actions": actions, "steps": []})
+			round_list.append({"round": session.current_round, "actions": actions, "intents": pending_intents, "steps": []})
 		var rounds: Array = current["rounds"]
 		var step: Dictionary = {"block": session.current_block, "phase": int(session.phase), "units": Recorder.units_state(session)}
 		var rd: Dictionary = rounds[rounds.size() - 1]
 		var steps: Array = rd["steps"]
 		steps.append(step)
+		metrics.on_step(session)
 
 	func on_end(session: CombatSession, result: Dictionary) -> void:
 		current["result"] = {"l": result.get("l", 0.0), "r": result.get("r", 0.0), "rounds": result.get("rounds", 0), "outcome": session.outcome}
+		metrics.on_end(session, result)
+		current["metrics"] = {"units": metrics.units, "detail": metrics.detail, "fight": metrics.fight_record, "checks": metrics.checks, "fails": metrics.fail_lines}
+		current["report"] = BattleReport.build(metrics, session, session.outcome)
+		var entries: Array = []
+		for e: ActionLogEntry in session.log_entries:
+			entries.append([e.round_num, e.block_num, e.category, e.actor_name, e.actor_is_ally, e.target_name, e.target_is_ally, e.skill_name, e.skill_subtype, e.value_num, e.damage, e.outcome_tag, e.detail_text, e.status_text])
+		current["log"] = entries
 		fights.append(current)
+
+	# The enemy tells (CombatSession.enemy_intents) in the engine's trace shape (emberwake_battle::intent::trace): per
+	# enemy [name, line, revealed, enraged, [reader names], [plan lines], morale state, morale group]; a line is
+	# [kind, target name or "", cell x, cell y, start block, end block, skill].
+	static func intents_state(session: CombatSession) -> Array:
+		var out: Array = []
+		for r: Dictionary in session.enemy_intents():
+			var readers: Array = []
+			for c: Combatant in r["readers"]:
+				readers.append(c.name)
+			var plan: Array = []
+			for p: Dictionary in r["plan"]:
+				plan.append(Recorder.intent_line(p))
+			var unit: Combatant = r["unit"]
+			out.append([unit.name, Recorder.intent_line(r), r["revealed"], r["enraged"], readers, plan, r.get("morale_state", ""), r.get("morale_group", -1)])
+		return out
+
+	static func intent_line(r: Dictionary) -> Array:
+		var target: Combatant = r["target"]
+		var cell: Vector2i = r["cell"]
+		var blocks: Vector2i = r["blocks"]
+		return [r["kind"], target.name if target != null else "", cell.x, cell.y, blocks.x, blocks.y, r["skill"]]
 
 	static func units_state(session: CombatSession) -> Array:
 		var out: Array = []
@@ -223,6 +266,7 @@ func _world_traces(seed_count: int, preset: String) -> void:
 						if session.combat_over or not session.can_advance_round():
 							break
 						session.advance_round()
+						recorder.on_round(session)
 					recorder.on_end(session, {"rounds": session.current_round})
 					meta.append({"world": w, "encounter": str(e["id"]), "override": over, "seed": s, "preset": preset, "start_buffs": start_buffs})
 					session.dispose()

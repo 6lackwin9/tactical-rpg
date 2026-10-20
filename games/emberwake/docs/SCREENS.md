@@ -28,7 +28,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | 12-15 | Character: Stats, Level up, Skills, Gear | `party_model.gd`, `stats_model.gd`, `level_up_model.gd`, `loadout_model.gd`, `gear_model.gd` | `party.rs` `Character` | done: active toggle, stat table and derived block, level-up draft with before / after and the permanent-spend question, loadout slots, gear and battle pouch drafts, discard questions; the Gear tab in three columns (GEARUI1: stats with this gear and the green / red change a hovered or dragged item would make, equipped slots with the pouch under them, the party stash; drag and drop both ways, clicks kept, item descriptions with their tokens filled; the stash is sorted by item name, Godot sorted by id; gear the class has no training in is refused as in Godot) |
 | 16 | Quest journal | `journal_model.gd`, `journal_view.gd` | `hub.rs` `Journal` | done: groups, resolved text, progress, current step, rewards, loot choices |
 | 18 | Battle results | `battle_results_model.gd`, `battle_results_view.gd` | `hub.rs` `Results` | done: headline and note, XP rows with bars, gold / loot / quest lines, level-up prompt; battle report table not yet |
-| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement |
+| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement; enemy tells while planning (PORT-INTENT: kind chips and arrows on the grid, "Next:" on the hostile cards, Intent, revealed plan and forecast in the hover card; I toggles, the Show enemy tells setting); the timeline's masked enemy banner is not drawn (the engine's strip shows the selected hero only) |
 
 ## Dev tools (dev-only, never in the real game)
 
@@ -36,8 +36,9 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | :--- | :--- | :--- | :--- | :--- |
 | 19 | Content Forge (catalog viewer) | `ui/forge/*` | `forge.rs` | read-only viewer: kinds, entries, every field, engine summary, used by; no search, validation or editing yet |
 | 20 | World Forge (world viewer) | `ui/world/*` | `forge.rs` | read-only viewer: world picker, overview (inheritance, connects, counts), merged entries with origin, used by |
-| 21 | Gear & Skill Dojo | `ui/dojo/*` | `dojo.rs` | unit / level / per-slot gear, attributes, proficiency, derived stats, damage vs the training dummy; no windowed workbench or test console yet |
-| 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, debug region and world maps with Won / Fled / Lost, data reload; playtest recording not yet |
+| 21 | Gear & Skill Dojo | `ui/dojo/*`, `scripts/dojo/*` | `dojo.rs` on `emberwake_battle::dojo` | done (PORT-DOJO): the Godot dojo on a desk of engine windows (party with the carry bar, unit inspector with stat allocation, derived stats, gear with the pouch and quick-setup presets, stash with filters, stage, console, test log with breakdowns), drag and drop between the stash, the slots and the pouch, Godot's three layouts saved per player |
+| 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, debug region and world maps with Won / Fled / Lost, UI Gallery, data reload; the scene list scrolls; playtest recording not yet |
+| - | UI Gallery | none (new) | `gallery.rs` | standalone panes to review one at a time (UIGALLERY1, first entry): the battle timeline on a live arena fight (all units' tracks by block, enemies masked while planning as "Plans in secret" with their tell, Reveal to show them, < > through past rounds, a block's snapshot of every unit, a segment's action detail) |
 
 ## Known gaps (function over form)
 
@@ -47,7 +48,8 @@ The rules behind every player screen come from `emberwake_world`, checked agains
   characters with named items and tuning) and battle items (pick a unit, then "Use `<item>` (`<n>` left)"; unused items
   go back to the saved pouch). The battle screen shows the objective and phase / morale events in the message bar;
   Godot's centred phase banner (BOSS1-U) is look-and-feel work for after the transition.
-- Keyboard focus navigation exists on the main menu only; other screens are mouse + shortcuts.
+- Keyboard focus works on every screen (PORT-FOCUS: Tab / Shift+Tab, arrows except on the region map and the journal,
+  Enter / Space); the look of the ring is not final, and the window toolbars and title bars take no focus yet.
 
 ## Order (done)
 

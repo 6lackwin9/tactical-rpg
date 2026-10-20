@@ -301,19 +301,11 @@ fn format_reach(lo: i64, hi: i64, bare: bool) -> String {
 }
 
 fn format_magnitude(st: &str, magnitude: i64) -> String {
-    if magnitude <= 0 || !status::has_magnitude(st) {
-        return String::new();
-    }
-    match status::magnitude_unit(st) {
-        "flat" if st == "poison" => format!("{magnitude} HP"),
-        "flat" => format!("{magnitude} armor"),
-        "pct_max_hp" => format!("{magnitude}% max HP"),
-        _ => format!("{magnitude}%"),
-    }
+    status::format_magnitude(st, magnitude as i32)
 }
 
 /// SkillText.token_value.
-fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
+pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
     let bare = suffix == "n";
     let i = |k: &str, fb: i64| to_int_or(json::get(row, k), fb);
     let f = |k: &str, fb: f64| to_float_or(json::get(row, k), fb);
@@ -441,7 +433,7 @@ pub(crate) fn hands_of(family: &Dict) -> Vec<String> {
     json::strings(json::get(family, "hands"))
 }
 
-fn category(family: &Dict) -> &'static str {
+pub(crate) fn category(family: &Dict) -> &'static str {
     let hands = hands_of(family);
     if hands.is_empty() {
         return "";
@@ -456,7 +448,7 @@ fn category(family: &Dict) -> &'static str {
     }
 }
 
-fn off_hand_category(family: &Dict) -> String {
+pub(crate) fn off_hand_category(family: &Dict) -> String {
     let id = sget(family, "id", "");
     if category(family) == "off" && OFF_CATEGORIES.contains(&id.as_str()) {
         id
@@ -465,7 +457,7 @@ fn off_hand_category(family: &Dict) -> String {
     }
 }
 
-fn default_hand(family: &Dict) -> String {
+pub(crate) fn default_hand(family: &Dict) -> String {
     let hands = hands_of(family);
     let wanted = sget(family, "default_hand", "");
     if hands.contains(&wanted) {
@@ -593,7 +585,7 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
 }
 
 /// One row of ItemModifiers.legacy_tiers.
-fn legacy_tier(tier: &Dict) -> Dict {
+pub(crate) fn legacy_tier(tier: &Dict) -> Dict {
     let when = json::dget(tier, "when").clone();
     let is_stat = sget(&when, "type", "") == "stat_at_least";
     let bonus = json::dget(tier, "bonus").clone();
@@ -664,7 +656,7 @@ pub fn render_item(template: &str, row: &Dict) -> String {
 }
 
 /// ItemText.tier_desc: "<label>: <bonus text>".
-fn tier_desc(tier: &Dict) -> String {
+pub(crate) fn tier_desc(tier: &Dict) -> String {
     let label = sget(tier, "label", "").trim().to_string();
     let bonus = json::dget(tier, "bonus");
     let mut parts = Vec::new();
@@ -794,4 +786,34 @@ fn xp_problems(doc: &Dict) -> Vec<String> {
         }
     }
     errors
+}
+
+// ---- AssetRegistry (the keys the content checks read) ----------------------------------------------------------
+
+/// UnitArt.CLASS_KEYS: the unit keys with a generated template.
+const UNIT_TEMPLATE_KEYS: [&str; 12] = ["warrior", "ranger", "archer", "scout", "brawler", "berserker", "shaman", "skirmisher", "dummy", "priest", "mage", "rogue"];
+/// ItemArt.TEMPLATE_KEYS: the item icon keys with a generated template.
+const ITEM_TEMPLATE_KEYS: [&str; 24] = [
+    "sword", "greatsword", "shortsword", "dagger", "hammer", "axe", "bow", "staff", "wand", "tome", "knuckles", "shield", "plate", "leather", "robe", "ring", "amulet", "potion", "elixir", "bomb", "weapon", "misc", "titan_warhammer", "runed_staff",
+];
+
+/// AssetRegistry.keys for "unit" and "item": the template keys plus the keys of the asset manifest
+/// (data/assets/manifest.json), sorted, unique.
+pub fn art_keys(data_dir: &Path) -> indexmap::IndexMap<String, Vec<String>> {
+    let mut errors = Vec::new();
+    let manifest = read(&data_dir.join("assets/manifest.json"), &mut errors).unwrap_or(Value::Null);
+    let rows = json::aget(json::dict(&manifest), "entries");
+    let mut out = indexmap::IndexMap::new();
+    for (ns, templates) in [("unit", &UNIT_TEMPLATE_KEYS[..]), ("item", &ITEM_TEMPLATE_KEYS[..])] {
+        let mut keys: Vec<String> = templates.iter().map(|k| k.to_string()).collect();
+        for row in rows.iter().map(json::dict).filter(|r| json::s(r, "namespace") == ns) {
+            let key = json::s(row, "key");
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        keys.sort();
+        out.insert(ns.to_string(), keys);
+    }
+    out
 }

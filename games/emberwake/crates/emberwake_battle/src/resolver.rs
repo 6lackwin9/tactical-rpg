@@ -16,6 +16,27 @@ pub struct ScheduledAction {
     pub cancelled: bool,
 }
 
+/// A combo an action resolved (CombatResolver.combo_resolved): "exploit", "break" or "flow".
+#[derive(Debug, Clone, PartialEq)]
+pub struct Combo {
+    pub kind: &'static str,
+    pub actor: UnitId,
+    pub target: UnitId,
+    /// The exploited status ("" for a break or a flow).
+    pub status: String,
+    pub skill: String,
+    pub killed: bool,
+}
+
+/// One round-end status step (last_round_end_steps): bleed, poison and burn record the HP lost, regen the HP gained.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RoundEndStep {
+    pub unit: UnitId,
+    pub status: &'static str,
+    pub amount: i32,
+    pub source: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Resolver {
     pub scheduled: Vec<ScheduledAction>,
@@ -24,11 +45,18 @@ pub struct Resolver {
     pub total_blocks: i32,
     pub rng: GodotRng,
     pub log: Vec<String>,
+    /// Combos resolved since the session last took them (in emit order).
+    pub combos: Vec<Combo>,
+    /// Start notes of commands (action index, message: a chase or dash) since the session last took them.
+    pub notes: Vec<(usize, String)>,
+    /// The last apply_round_end_effects call's steps, and how many calls there were (a new call = new steps).
+    pub round_end_steps: Vec<RoundEndStep>,
+    pub round_end_calls: u32,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new() }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0 }
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -89,6 +117,7 @@ impl Resolver {
             }
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
             if !msg.is_empty() {
+                self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
         }
@@ -119,10 +148,18 @@ impl Resolver {
         }
     }
 
-    /// Stance breaks end the broken units' running guards; a flow move then enters its end stance for free.
+    /// Stance breaks end the broken units' running guards; a flow move then enters its end stance for free. The combos
+    /// are recorded: exploits, then breaks, then the flow.
     fn apply_combo(&mut self, w: &mut World, idx: usize) {
         let end = self.scheduled[idx].end;
         let broken = self.scheduled[idx].command.broken_targets.clone();
+        let (actor, skill) = (self.scheduled[idx].unit, self.scheduled[idx].command.name.clone());
+        for (victim, status) in &self.scheduled[idx].command.exploited {
+            self.combos.push(Combo { kind: "exploit", actor, target: *victim, status: status.clone(), skill: skill.clone(), killed: !w.units[*victim].is_alive() });
+        }
+        for &b in &broken {
+            self.combos.push(Combo { kind: "break", actor, target: b, status: String::new(), skill: skill.clone(), killed: !w.units[b].is_alive() });
+        }
         for b in broken {
             for other in self.scheduled.iter_mut() {
                 let running = other.start <= end && other.end >= end;
@@ -136,6 +173,7 @@ impl Resolver {
         let a = &self.scheduled[idx];
         if let Some(s) = a.command.stance_on_end {
             if !a.command.failed && w.units[a.unit].is_active() {
+                self.combos.push(Combo { kind: "flow", actor, target: actor, status: String::new(), skill, killed: false });
                 w.units[a.unit].set_stance(s);
             }
         }
@@ -143,27 +181,46 @@ impl Resolver {
 
     /// Round end per unit in registered order: bleed, poison, burn, regen; then round-end hazards.
     pub fn apply_round_end_effects(&mut self, w: &mut World) {
+        self.round_end_steps.clear();
+        self.round_end_calls += 1;
         for &c in &self.registered.clone() {
-            if w.units[c].is_active() && w.units[c].has_status("bleed") {
-                let dmg = status::bleed_damage(&w.units[c]);
-                w.units[c].take_damage(dmg, true);
-            }
-            if w.units[c].is_active() && w.units[c].has_status("poison") && status::poison_damage(&w.units[c]) > 0 {
-                let dmg = status::poison_damage(&w.units[c]);
-                w.units[c].take_damage(dmg, true);
-            }
-            if w.units[c].is_active() && w.units[c].has_status("burn") {
-                let dmg = status::burn_damage(&w.units[c]);
-                w.units[c].take_damage(dmg, true);
+            for st in ["bleed", "poison", "burn"] {
+                let u = &w.units[c];
+                if !u.is_active() || !u.has_status(st) {
+                    continue;
+                }
+                let dmg = match st {
+                    "bleed" => status::bleed_damage(u),
+                    "poison" => status::poison_damage(u),
+                    _ => status::burn_damage(u),
+                };
+                if st == "poison" && dmg <= 0 {
+                    continue;
+                }
+                let before = u.hp;
+                w.damage(c, dmg, true);
+                self.step(w, c, st, before - w.units[c].hp);
             }
             if w.units[c].is_active() && w.units[c].has_status("regen") {
-                let u = &mut w.units[c];
+                let u = &w.units[c];
+                let before = u.hp;
                 let amount = status::regen_amount(u).min(u.max_hp - u.hp);
-                u.heal(amount);
+                w.heal(c, amount);
+                let healed = w.units[c].hp - before;
+                if healed > 0 {
+                    self.step(w, c, "regen", healed);
+                }
             }
         }
         let units = self.registered.clone();
-        hazard_round_end(w, &mut self.rng, &units);
+        let lines = hazard_round_end(w, &mut self.rng, &units);
+        self.log.extend(lines);
+    }
+
+    /// _record_round_end: the step row with the status's recorded source.
+    fn step(&mut self, w: &World, c: UnitId, status: &'static str, amount: i32) {
+        let source = w.units[c].st.sources.get(status).cloned().unwrap_or_default();
+        self.round_end_steps.push(RoundEndStep { unit: c, status, amount, source });
     }
 
     pub fn finish_round(&mut self, w: &mut World) {

@@ -190,17 +190,41 @@ impl Equipment {
     }
 }
 
+/// ContentFactory.item_fits_slot with worn gear kept: equipment whose slot is `slot` (a slot key like "main_hand"),
+/// either accessory slot for an accessory, and a one-handed main-hand weapon in the off hand.
+pub fn item_fits_slot(item: &ItemDef, slot: &str) -> bool {
+    let up = slot.to_uppercase();
+    item.is_equipment() && (item.slot == up || (up.starts_with("ACCESSORY") && item.slot.starts_with("ACCESSORY")) || (up == "OFF_HAND" && item.slot == "MAIN_HAND" && !item.two_handed && item.item_type == "WEAPON"))
+}
+
+/// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)", the Godot gear dojo):
+/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (an orb or a tome:
+/// Equipment.is_focus, conflicts_with_main).
+pub fn off_hand_ok(main: Option<&ItemDef>, off: &ItemDef) -> bool {
+    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !matches!(off.weapon_type.as_str(), "orb" | "tome"))
+}
+
+/// ClassArchetype.can_equip_gear: accessories always; gear with no weapon type, or a class with no proficiency list,
+/// too; otherwise the class must have training (level 1) in the gear type (`class` is the class's own proficiency,
+/// Proficiency::from_class, without passive bonuses).
+pub fn class_can_equip(class: &crate::stats::Proficiency, item: &ItemDef) -> bool {
+    item.item_type == "ACCESSORY" || item.slot.starts_with("ACCESSORY") || item.weapon_type.is_empty() || class.entries.is_empty() || class.base_level(&item.weapon_type) >= 1
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Inventory {
     /// Equipped gear in equip order (Godot iterates its slot dictionary in insertion order).
     pub equipped: Vec<(Slot, Equipment)>,
     pub pouch: Vec<ItemDef>,
     pub max_pouch_slots: usize,
+    /// The off-hand weapon is the ready one (Inventory.active_weapon_slot == OFF_HAND); only meaningful while a
+    /// two-handed main weapon is paired with an off-hand weapon (`needs_weapon_switch`).
+    pub off_active: bool,
 }
 
 impl Inventory {
     pub fn new() -> Self {
-        Self { equipped: Vec::new(), pouch: Vec::new(), max_pouch_slots: 3 }
+        Self { equipped: Vec::new(), pouch: Vec::new(), max_pouch_slots: 3, off_active: false }
     }
 
     pub fn equip(&mut self, eq: Equipment, slot: Slot) {
@@ -208,16 +232,51 @@ impl Inventory {
             Some(entry) => entry.1 = eq,
             None => self.equipped.push((slot, eq)),
         }
+        self.normalize_active_weapon();
     }
 
     /// Removes and returns what `slot` holds (the slot leaves the equip order).
     pub fn unequip(&mut self, slot: Slot) -> Option<Equipment> {
         let i = self.equipped.iter().position(|(s, _)| *s == slot)?;
-        Some(self.equipped.remove(i).1)
+        let eq = self.equipped.remove(i).1;
+        self.normalize_active_weapon();
+        Some(eq)
+    }
+
+    /// Inventory._normalize_active_weapon: without a 2H pair the main hand is the ready one.
+    fn normalize_active_weapon(&mut self) {
+        if !self.needs_weapon_switch() {
+            self.off_active = false;
+        }
     }
 
     pub fn get(&self, slot: Slot) -> Option<&Equipment> {
         self.equipped.iter().find(|(s, _)| *s == slot).map(|(_, e)| e)
+    }
+
+    /// Inventory.needs_weapon_switch: a two-handed main weapon paired with an off-hand weapon share one ready slot.
+    pub fn needs_weapon_switch(&self) -> bool {
+        self.main_weapon().is_some_and(|m| m.item.two_handed) && self.offhand_weapon().is_some()
+    }
+
+    /// Inventory.is_offhand_active.
+    pub fn is_offhand_active(&self) -> bool {
+        self.needs_weapon_switch() && self.off_active
+    }
+
+    /// Inventory.get_active_weapon: the ready weapon (the off-hand one while it is active).
+    pub fn active_weapon(&self) -> Option<&Equipment> {
+        if self.is_offhand_active() { self.offhand_weapon() } else { self.main_weapon() }
+    }
+
+    /// Inventory.toggle_active_weapon: swaps the ready weapon; false (and the main hand ready) when nothing switches.
+    pub fn toggle_active_weapon(&mut self) -> bool {
+        if !self.needs_weapon_switch() {
+            self.off_active = false;
+            return false;
+        }
+        self.off_active = !self.off_active;
+        true
     }
 
     pub fn main_weapon(&self) -> Option<&Equipment> {

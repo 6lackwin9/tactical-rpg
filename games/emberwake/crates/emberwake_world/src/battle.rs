@@ -31,6 +31,12 @@ impl emberwake_battle::session::Roster for WorldRoster<'_> {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         json::s_or(&e, "tier", "standard")
     }
+
+    /// WorldFactory: lore_ref = the character's qualified id, else its id.
+    fn lore_ref(&self, _cat: &emberwake_data::Catalog, r: &str) -> String {
+        let c = self.d.resolve(&self.world, "characters", r);
+        json::s_or(c, "_qid", &json::s(c, "id"))
+    }
 }
 
 /// WorldFactory.named_item: the base item with the named item's name, story, tuning deltas and extra stat bonuses.

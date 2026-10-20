@@ -48,6 +48,44 @@ pub struct PlanStep {
 pub type Step = Rc<PlanStep>;
 
 impl PlanStep {
+    /// PlanStep.title: "⚔ Strike → Wolf", "➜ Move →2", "Use Potion → Bryn" (the sim's PLAN FAIL lines).
+    pub fn title(&self, w: &World) -> String {
+        let label = self.skill.map_or_else(String::new, |sid| {
+            let s = &w.cat.skills[sid];
+            let icon = match s.kind.as_str() {
+                "ATTACK" => "⚔",
+                "DEFEND" => "🛡",
+                "FOCUS" => "✦",
+                "SUPPORT" => "+",
+                "DISENGAGE" => "⤴",
+                "MOVE" => "➜",
+                "TARGET" => "🎯",
+                "STATUS" => "✖",
+                _ => "💤",
+            };
+            format!("{icon} {}", s.name)
+        });
+        let target = |t: Option<UnitId>| t.map_or_else(|| "?".to_string(), |t| w.units[t].name.clone());
+        match self.mode {
+            Mode::Engage | Mode::Ally => format!("{label} → {}", target(self.target)),
+            Mode::Move => {
+                let arrow = match (self.direction.x, self.direction.y) {
+                    (1, 0) => "→",
+                    (-1, 0) => "←",
+                    (0, -1) => "↑",
+                    (0, 1) => "↓",
+                    _ => "·",
+                };
+                format!("{label} {arrow}{}", self.tiles)
+            }
+            Mode::Goto => format!("{label} to {}", self.cell.get()),
+            Mode::Area => format!("{label} at {}", self.cell.get()),
+            Mode::Withdraw => "🏃 Withdraw".into(),
+            Mode::Item => format!("Use {} → {}", w.cat.items.get(&self.item_id).map_or_else(|| self.item_id.clone(), |i| i.name.clone()), target(self.target)),
+            Mode::SelfCast => label,
+        }
+    }
+
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
         Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new() })
     }
@@ -191,15 +229,15 @@ impl PlanEntry {
                 c
             }
             Kind::Status => Command::new(actor, 0, 1, CmdKind::StatusBlock { status: self.status_name.clone() }),
-            Kind::Support => Command::new(actor, 0, s.blocks, CmdKind::Support { target: self.target.unwrap_or(actor), skill: self.skill, last_heal: 0 }),
+            Kind::Support => Command::new(actor, 0, s.blocks, CmdKind::Support { target: self.target.unwrap_or(actor), skill: self.skill, last_heal: 0, last_status: String::new(), last_cleansed: Vec::new() }),
             Kind::Defend => {
                 let mut c = Command::new(actor, 1, s.blocks, CmdKind::Defend { mitigation: s.mitigation, grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
                 c.status_magnitude = s.status_magnitude;
                 c
             }
             Kind::Focus => Command::new(actor, 0, s.blocks, CmdKind::Focus { boost: s.boost, rounds: s.boost_rounds }),
-            Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, moved_tiles: 0, cut_short: false }),
-            Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false }),
+            Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, approach: self.target, moved_tiles: 0, cut_short: false, blocked_by: String::new() }),
+            Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false, moved_tiles: 0 }),
             Kind::Target => Command::new(actor, 2, 1, CmdKind::Target { target: self.target }),
             Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: s.recover_ap }),
         };

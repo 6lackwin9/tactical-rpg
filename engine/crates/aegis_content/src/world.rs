@@ -136,7 +136,8 @@ impl Catalogs {
         all.into_iter().filter(|e| !overridden.contains(&json::s(e, "_qid"))).collect()
     }
 
-    fn own_by_id(&self, w: &str, kind: &str, local: &str) -> Option<&Dict> {
+    /// The world's own entry `local` of `kind` (no lineage, no overrides).
+    pub fn own_by_id(&self, w: &str, kind: &str, local: &str) -> Option<&Dict> {
         self.own_entries(w, kind).iter().find(|e| json::s(e, "id") == local)
     }
 

@@ -64,6 +64,11 @@ pub const TERRAIN_IDS: [&str; 17] = [
 ];
 const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
 const BLOCKED: [usize; 4] = [7, 9, 10, 11]; // deep water, lava, wall, tree
+
+/// Terrain.is_walkable of a terrain type id (an unknown id is walkable).
+pub fn terrain_walkable(id: &str) -> bool {
+    TERRAIN_IDS.iter().position(|t| *t == id).is_none_or(|i| !BLOCKED.contains(&i))
+}
 const SLOW: [usize; 5] = [4, 5, 6, 8, 13]; // sand, snow, shallow water, mud, rubble
 
 #[derive(Debug, Clone, PartialEq)]
@@ -120,6 +125,9 @@ impl TerrainTable {
         Self { rows }
     }
 }
+
+/// CombatZones.zone_ids: the zones in table order.
+pub const ZONE_IDS: [&str; 8] = ["stone_arena", "forest_clearing", "river_crossing", "ruined_courtyard", "desert_outpost", "frozen_pass", "lava_cavern", "swamp_bog"];
 
 /// CombatZones.ZONES (glyph rows).
 pub fn zone_rows(zone: &str) -> Option<[&'static str; 9]> {
@@ -233,5 +241,18 @@ impl Grid {
     /// get_position: (-1, -1) when the unit has no tile.
     pub fn position(&self, u: usize) -> V2 {
         self.positions[u].unwrap_or(NO_CELL)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_zone_id_has_rows() {
+        for id in ZONE_IDS {
+            assert!(zone_rows(id).is_some(), "{id} has no rows");
+        }
+        assert!(zone_rows("zz_unknown").is_none());
     }
 }

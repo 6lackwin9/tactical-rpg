@@ -2,5 +2,6 @@
 //! and SkillText, item families and modifiers, the game-data lists and the XP curve) and the writer's hooks and
 //! storage rules (`store`: skills, items, game-data files, the folder check).
 
+pub mod check;
 pub mod source;
 pub mod store;

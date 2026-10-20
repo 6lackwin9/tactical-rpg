@@ -13,6 +13,11 @@ Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Content (items, uni
 
 ## Characters
 
+- The token is the in-game image for combat and exploration (the sprite); the portrait is separate, more detailed art (2026-10-20).
+- Playable characters, important NPCs, elites and bosses each get a unique portrait; mob characters, friendly or hostile, share portraits (2026-10-20).
+- Sprites may be borrowed: a class body is the default for every member, with variants inside the class (human, goblin) and minor per-character adjustments (2026-10-20).
+- Items and skills fall back on a base icon per weapon type and per skill kind until they get unique art (2026-10-20).
+- Layers: the engine ships generic baseline assets (terrain tiles first), the RPG kit the reusable gear, skill and unit art, the game only its named assets (Ashlands tiles, named characters); a missing asset falls back game, kit, engine (2026-10-20, decision "Asset layers and reuse groups").
 - Animation set per class: idle, walk, hurt, death plus one attack per skill kind, reused per weapon family with per-skill effects layered on top; stance clips (defend, guarded idle, guarded hit) show defensive stances (2026-10-18).
 - Death drops the weapon; a unit without a weapon (brawler) breaks the guard first, arms flung up, then falls back limp, starting from idle (2026-10-18).
 - A guarded hit differs from a normal hit, and the defend glow shows in the guarded idle (2026-10-18).

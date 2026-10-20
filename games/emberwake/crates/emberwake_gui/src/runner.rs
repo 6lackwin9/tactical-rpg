@@ -19,10 +19,12 @@ pub enum SAct {
     ContentForge,
     WorldForge,
     Dojo,
+    Gallery,
     DebugRegion,
     DebugWorldMap,
     PickWorld(usize),
     Reload,
+    Playtests,
     Exit,
 }
 
@@ -80,6 +82,7 @@ impl SceneRunner {
                 let f = crate::forge::Forge::world(cx);
                 cx.nav.push(Nav::Push(Box::new(f)));
             }
+            SAct::Gallery => cx.nav.push(Nav::Push(Box::new(crate::gallery::Gallery::new()))),
             SAct::Dojo => {
                 let dj = crate::dojo::Dojo::new(cx);
                 cx.nav.push(Nav::Push(Box::new(dj)));
@@ -87,6 +90,13 @@ impl SceneRunner {
             SAct::DebugRegion => self.debug_game(cx, false),
             SAct::DebugWorldMap => self.debug_game(cx, true),
             SAct::PickWorld(i) => self.world = i,
+            SAct::Playtests => {
+                let home = cx.data_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+                let repo = vec![home.join("playtests/inbox"), home.join("playtests/repro")];
+                let launch: aegis_ui::recordings::Launch<GameCx> = |cx, session, take| Some(Box::new(crate::battle::BattleScreen::playback(cx, session, take)));
+                let r = aegis_ui::recordings::Recordings::new(cx, launch, |cx| aegis_content::fingerprint::of(&cx.data_dir), repo);
+                cx.nav.push(Nav::Push(Box::new(r)));
+            }
             SAct::Reload => match emberwake_world::Data::open(&cx.data_dir) {
                 Ok((d, problems)) => {
                     cx.data = Arc::new(d);
@@ -118,16 +128,21 @@ impl Screen<GameCx> for SceneRunner {
         let encounters = Self::encounters(cx);
         self.encounter = self.encounter.min(encounters.len().saturating_sub(1));
         let worlds = new_game::playable_worlds(&cx.data);
-        let scenes: [(&str, &str, &str, SAct); 7] = [
+        let scenes: [(&str, &str, &str, SAct); 8] = [
             ("runner.main_menu", "Main Menu", "The player's front door: continue, new game, load and save slots, settings and the in-game hub.", SAct::MainMenu),
             ("runner.arena", "Combat Arena", "Plan and fight a battle: a catalog encounter or any world's battle (played with that world's characters).", SAct::Arena),
             ("runner.content_forge", "Content Forge", "Read-only asset viewer: skills, items, classes, units and encounters with an engine summary.", SAct::ContentForge),
             ("runner.world_forge", "World Forge", "Read-only world viewer: regions, factions, characters, quests and encounters with their inheritance.", SAct::WorldForge),
             ("runner.dojo", "Gear & Skill Dojo", "Equip heroes and benchmark their damage against a training dummy.", SAct::Dojo),
+            ("runner.gallery", "UI Gallery", "UI panes one at a time on sample data (the battle timeline first), to judge and refine them on their own.", SAct::Gallery),
             ("runner.debug_region", "Region Map (debug)", "Walk a world's region maps with Won / Fled / Lost buttons instead of real battles (nothing is saved).", SAct::DebugRegion),
             ("runner.debug_world_map", "World Map (debug)", "Travel a world's route graph: road fights with debug outcomes, the world clock.", SAct::DebugWorldMap),
         ];
-        let mut y = left.y + 14;
+        // The list scrolls when the scenes outgrow the panel (the wheel over it).
+        let view = Rect::new(left.x, left.y + 14, left.w, left.h - 16);
+        let content: i32 = scenes.iter().map(|s| if matches!(s.3, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap) { 48 } else { 34 }).sum();
+        let off = ui.scroll_begin("runner.scenes", view, content);
+        let mut y = view.y - off;
         for (id, name, desc, act) in scenes {
             let extra = matches!(act, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap);
             let h = if extra { 44 } else { 30 };
@@ -145,13 +160,14 @@ impl Screen<GameCx> for SceneRunner {
             }
             y += h + 4;
         }
+        ui.scroll_end();
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, INFO);
         ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve)."));
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, TEXT);
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 62.0, "Playtest recording: not ported yet.", SMALL, DIM);
+        ui.button_tip("runner.playtests", Rect::new(right.x + 6, right.y + 58, 70, 14), "Playtests", SAct::Playtests, true, tip("Playtests", "Recordings of played battles with their notes (F8): play back, take over at a round, copy to the repo inbox; the recording toggle."));
+        ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { GOOD } else { DIM });
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, DIM);
-        let _ = GOOD;
         self.w = ui.widgets;
     }
 

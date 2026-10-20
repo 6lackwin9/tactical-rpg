@@ -17,7 +17,8 @@ pub use aegis_ui::screen::{show_errors, title, Key, Screen};
 pub type Cx = aegis_ui::Cx<GameCx>;
 pub type Nav = aegis_ui::Nav<GameCx>;
 
-/// The game's own settings keys and defaults (sound, display and text size are the engine's: `Settings::engine_defaults`).
+/// The game's own settings keys and defaults (sound, display, text size and playtest recording are the
+/// engine's: `Settings::engine_defaults`).
 pub fn default_settings() -> Value {
     json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true})
 }

@@ -27,7 +27,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; UI1-L menus, 5 shared slots + autosave, SAVE-IO export / import) | S7 | |
 | S14 | Audio, animation and asset pipeline, asset-load tests | in-progress (S14-L1, S14-L2 presenter, S14-L3 audio, S14-A1, S14-A2 done; MUSIC1 music by scene context, games/emberwake/docs/specs/MUSIC1.md) | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `games/emberwake/docs/BALANCE_REPORT.md` |
-| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2 |
+| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2. On the engine (PORT-PLAYTEST): arena battles record and replay; party battles of the world map wait for PLAYTEST2, so G1's "one full run replays headless" needs it too |
 | LEVERS1 | Role-feel levers: brawler spin, priest Ward (DR2 4B) | approved (user 2026-10-18 14:26) | BAL5-L, BAL5-A | `games/emberwake/docs/specs/LEVERS1.md`; Bodyguard deferred, boss acts twice not built |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
@@ -97,6 +97,11 @@ Rules and open questions: `games/emberwake/docs/specs/S12_RULES.md` (S12S status
 | --- | --- | --- | --- |
 | S12S | S12S-L and S12S-A done (2026-10-17) | ITEM1-L, CLASS1-L | status slice (goal G2), then S12T terrain and S12C combos in sequence (shared skill and plan files; goal G5, after G1) |
 | S14-1 | done (S14-L1, S14-L2, S14-L3, S14-A1, S14-A2 done 2026-10-17) | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
+| ASSETORG2 | approved (user 2026-10-20, all eight recommendations) | ASSETORG1 (done) | assets grouped by reuse in three layers (engine baseline, RPG kit `kits/rpg/`, game named assets), fallback game, kit, engine, drawn shape; class bodies with variants, palettes, the token from the sprite, portraits by tier; spec `docs/specs/ASSETORG2.md`, rows ASSETORG2-E, -G, -D, -K, -B, -T |
+| SPRITE1 | approved (user 2026-10-18 proposal, approved 2026-10-20) | ASSETORG2-T, ASSETORG2-E | animated battle tokens: one sheet per class body (SPRITE1-S2 spec update), then SPRITE1-A2, -L, -U |
+| PORTRAIT1-A | proposed | ASSETORG2-G | unique 240x240 Style A portraits for the eight heroes, the named lieutenants and the Ash Warchief (elites), Gruk and `goblin_warlord`; one art review session with the user first |
+| PALETTE1-A | proposed | ASSETORG2-G, SPRITE1-A2 | party palettes so characters of one class differ (minor adjustments on the class body) |
+| ICONS1-A | proposed | ASSETORG2-K | kit base icons for the types without one yet (mace, orb, crossbow, material, quest) |
 | PLAYTEST2 | idea | PLAYTEST1, UI1-L | overworld and dialogue exact replay |
 | UI1 | done (UI1-L, UI1-A, UI2-L, UI3-L and SAVE-IO done 2026-10-17) | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
 

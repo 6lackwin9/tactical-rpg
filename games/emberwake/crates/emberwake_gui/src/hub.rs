@@ -198,6 +198,10 @@ impl Journal {
 }
 
 impl Screen<GameCx> for Journal {
+    /// Up / Down pick the quest (the list's own keys).
+    fn arrow_focus(&self) -> bool {
+        false
+    }
     fn id(&self) -> &'static str {
         "journal"
     }

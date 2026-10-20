@@ -1,6 +1,6 @@
 //! The content writer (ContentCatalog.upsert / WorldCatalog.upsert, without Godot): an entry is given in its stored
 //! shape, checked by the game, put into its file (replacing the entry with its id, or `replace_id`, else appended)
-//! and kept only when the whole data folder still checks cleanly, else the file is put back as it was. The game's
+//! and kept only when it adds no blocking problem to the data folder, else the file is put back as it was. The game's
 //! `Hooks` say which kinds exist, where they live, how an entry is checked and how a file is written.
 
 use crate::file::raw_entries;
@@ -19,8 +19,17 @@ pub trait Hooks {
     fn validate(&self, world: Option<&str>, kind: &str, entry: &Dict) -> Result<Dict, Vec<String>>;
     /// The file text for `entries` (stored shape) of `kind`.
     fn file_text(&self, data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -> Result<String, String>;
-    /// Every problem of the data folder (load problems, broken references).
+    /// Every hard problem of the data folder (load problems, broken references, the game's content rules).
     fn check(&self, data_dir: &Path) -> Vec<String>;
+    /// The problems that refuse a write (a write may not add one); `check` unless the game blocks on less (Godot's
+    /// worlds take unresolved references, since worlds are full of mutual ones).
+    fn blocking(&self, data_dir: &Path) -> Vec<String> {
+        self.check(data_dir)
+    }
+    /// The soft problems of the data folder (never blocking a write); none unless the game has lints.
+    fn warnings(&self, _data_dir: &Path) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// What an upsert or remove did.
@@ -30,7 +39,7 @@ pub struct Outcome {
 }
 
 /// Validates `entry` (stored shape), replaces the entry with its id (or `replace_id`) or appends it, writes the file,
-/// and keeps it only when the whole data folder still checks cleanly.
+/// and keeps it only when it adds no blocking problem to the data folder.
 pub fn upsert(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, replace_id: Option<&str>) -> Result<Outcome, Vec<String>> {
     let known = hooks.kinds(world);
     if !known.contains(&kind) {
@@ -63,7 +72,7 @@ pub fn upsert(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
     Ok(outcome)
 }
 
-/// Removes the entry `id` of `kind` (no reference check beyond the data folder still checking cleanly).
+/// Removes the entry `id` of `kind` (kept only when it adds no blocking problem).
 pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Result<Outcome, Vec<String>> {
     let file = hooks.file_of(data_dir, world, kind);
     let mut entries = raw_entries(&file);
@@ -78,10 +87,10 @@ pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
 fn commit(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -> Result<(), Vec<String>> {
     let path = hooks.file_of(data_dir, world, kind);
     let before = std::fs::read_to_string(&path).ok();
-    let old_problems = hooks.check(data_dir);
+    let old_problems = hooks.blocking(data_dir);
     let text = hooks.file_text(data_dir, world, kind, entries).map_err(|e| vec![e])?;
     std::fs::write(&path, text).map_err(|e| vec![format!("{}: {e}", path.display())])?;
-    let new: Vec<String> = hooks.check(data_dir).into_iter().filter(|p| !old_problems.contains(p)).collect();
+    let new: Vec<String> = hooks.blocking(data_dir).into_iter().filter(|p| !old_problems.contains(p)).collect();
     if !new.is_empty() {
         match before {
             Some(t) => std::fs::write(&path, t).ok(),

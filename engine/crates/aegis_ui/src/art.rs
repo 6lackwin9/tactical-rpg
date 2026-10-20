@@ -46,7 +46,12 @@ impl Art {
     pub fn get(&mut self, category: &str, id: &str, variant: &str, size: i32) -> Option<&Image> {
         let key = (category.to_string(), id.to_string(), variant.to_string(), size);
         if !self.cache.contains_key(&key) {
-            let img = self.root.as_ref().and_then(|r| load_png(&Self::path(r, category, id, variant))).map(|i| i.downsample(size, size));
+            let path = self.root.as_ref().map(|r| Self::path(r, category, id, variant));
+            let img = path.as_ref().and_then(|p| load_png(p)).map(|i| i.downsample(size, size));
+            if let (None, Some(p)) = (&img, &path) {
+                // The caller draws its fallback; the playtest trail notes which art was missing.
+                crate::playtest::report_asset(category, id, variant, if p.exists() { "load_failed" } else { "missing_file" });
+            }
             self.cache.insert(key.clone(), img);
         }
         self.cache.get(&key).and_then(|i| i.as_ref())

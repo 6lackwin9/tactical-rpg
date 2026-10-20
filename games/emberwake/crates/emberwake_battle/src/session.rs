@@ -10,6 +10,7 @@ use crate::encounter::{self, Morale, Objectives, Phases, LEADER_TIERS};
 use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
+use crate::metrics::BattleMetrics;
 use crate::world::{AiProfile, UnitId, World};
 use aegis_core::value::{self, Obj};
 use emberwake_data::{Catalog, UnitDef};
@@ -116,6 +117,10 @@ pub trait Roster {
     fn tier(&self, cat: &Catalog, r: &str) -> String {
         self.entry(cat, r).map(|e| e.tier).unwrap_or_default()
     }
+    /// The world character a ref plays (Combatant.lore_ref; "" = none): a hero's stable key across battles.
+    fn lore_ref(&self, _cat: &Catalog, _r: &str) -> String {
+        String::new()
+    }
 }
 
 impl Roster for IndexMap<String, UnitDef> {
@@ -129,6 +134,34 @@ pub struct Prebuilt {
     pub unit: emberwake_rules::Unit,
     pub art: String,
     pub profile: AiProfile,
+    /// The party member id (GameEncounter.hero_key).
+    pub key: String,
+}
+
+/// One unit at one point of a round (BlockSnapshot: the state the screens show).
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitSnap {
+    pub hp: i32,
+    pub max_hp: i32,
+    pub ap: i32,
+    pub pos: Option<V2>,
+    pub stance: emberwake_rules::Stance,
+    pub guard: f64,
+    pub attack_boost: f64,
+    pub active: bool,
+    pub withdrawn: bool,
+    pub statuses: Vec<String>,
+    pub pending: Vec<String>,
+}
+
+/// One round as it was played (the round archive: CombatSession.round_actions and round_snapshots): the scheduled
+/// actions (the enemies' drafts, then everyone's once the plan is confirmed; cancelled ones flagged as they resolve)
+/// and a snapshot of every unit at the round's start (index 0) and after each resolved block (index = block).
+#[derive(Debug, Clone)]
+pub struct RoundRecord {
+    pub round: i32,
+    pub actions: Vec<crate::resolver::ScheduledAction>,
+    pub snapshots: Vec<Vec<UnitSnap>>,
 }
 
 pub struct Session {
@@ -143,6 +176,10 @@ pub struct Session {
     /// "" while the battle goes on, then "won", "lost" or "fled".
     pub outcome: String,
     pub plan_confirmed: bool,
+    /// The active enemies on the grid when this round's enemies were scheduled (IntentRules: idle vs arriving).
+    pub on_grid_at_schedule: Vec<UnitId>,
+    /// Every round so far, the current one last (the round archive, for reviewing past rounds).
+    pub history: Vec<RoundRecord>,
     pub wave: Vec<UnitId>,
     pub reinforcements_spawned: bool,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
@@ -158,6 +195,12 @@ pub struct Session {
     pub units_by_ref: IndexMap<String, Vec<UnitId>>,
     /// Encounter events (wave, phases, morale breaks, start buffs) as lines, oldest first.
     pub events: Vec<String>,
+    /// The action log (CombatSession.log_entries): every resolved action, riposte, chase, dash and encounter event.
+    pub log: Vec<crate::log::Entry>,
+    /// The battle metrics following this fight (attach_metrics), fed at the session's signal points.
+    pub metrics: Option<Box<BattleMetrics>>,
+    /// Unit -> its hero key (a party member id or a world character), when it has one.
+    hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
     units_by_key: IndexMap<String, UnitId>,
     unit_tiers: IndexMap<UnitId, String>,
@@ -213,8 +256,10 @@ impl Session {
         let mut profiles = IndexMap::new();
         let mut art = Vec::new();
         let mut units_by_ref: IndexMap<String, Vec<UnitId>> = IndexMap::new();
+        let mut hero_keys: IndexMap<UnitId, String> = IndexMap::new();
         for p in party {
             profiles.insert(built.len(), p.profile);
+            hero_keys.insert(built.len(), p.key);
             art.push(p.art);
             built.push(p.unit);
         }
@@ -228,6 +273,7 @@ impl Session {
             art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });
             built.push(u);
             units_by_ref.entry(r.to_string()).or_default().push(id);
+            hero_keys.insert(id, roster.lore_ref(&cat, r));
             id
         };
         let n_party_ids = party_ids.len();
@@ -264,7 +310,7 @@ impl Session {
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_zone(&def.zone);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -322,6 +368,8 @@ impl Session {
             combat_over: false,
             outcome: String::new(),
             plan_confirmed: false,
+            on_grid_at_schedule: Vec::new(),
+            history: Vec::new(),
             wave,
             reinforcements_spawned: false,
             art,
@@ -332,6 +380,9 @@ impl Session {
             morale,
             units_by_ref,
             events: Vec::new(),
+            log: Vec::new(),
+            metrics: None,
+            hero_keys,
             unit_keys,
             units_by_key,
             unit_tiers,
@@ -357,7 +408,123 @@ impl Session {
         self.prepare_round(round);
         self.plan = Plan::new();
         self.plan_confirmed = false;
+        self.on_grid_at_schedule = self.w.enemies.iter().copied().filter(|&e| self.w.units[e].is_active() && self.w.has(e)).collect();
         self.schedule_enemy_ai();
+        let start = self.snapshot();
+        self.history.push(RoundRecord { round, actions: self.resolver.scheduled.clone(), snapshots: vec![start] });
+        self.feed(|m, s| if m.live { m.round_started(s) });
+    }
+
+    /// CombatEncounter.hero_key: a party unit's stable key across battles (the member id, else the world character it
+    /// plays, else its name); guests have none.
+    pub fn hero_key(&self, c: UnitId) -> String {
+        if self.guests.contains(&c) {
+            return String::new();
+        }
+        match self.hero_keys.get(&c) {
+            Some(k) if !k.is_empty() => k.clone(),
+            _ => self.w.units[c].name.clone(),
+        }
+    }
+
+    /// _append_entry: adds a log cell (the metrics read it).
+    fn append(&mut self, e: crate::log::Entry) {
+        self.log.push(e);
+        let idx = self.log.len() - 1;
+        self.feed(|m, s| m.on_log(s, idx));
+    }
+
+    /// The metrics hear the HP changes since the last call (in order), then `f`.
+    fn feed(&mut self, f: impl FnOnce(&mut BattleMetrics, &Session)) {
+        let Some(mut m) = self.metrics.take() else { return };
+        if m.is_following() {
+            let changes = self.w.hp_journal.as_mut().map(std::mem::take).unwrap_or_default();
+            for (c, hp) in changes {
+                m.on_health(self, c, hp);
+            }
+            f(&mut m, self);
+        }
+        self.metrics = Some(m);
+    }
+
+    /// Starts `m` following this fight from now (BattleMetrics.on_start; live = the session closes rounds itself, as
+    /// the game does; otherwise the driver calls metrics_step / metrics_round / metrics_end like the sim).
+    pub fn attach_metrics(&mut self, mut m: BattleMetrics, live: bool) {
+        m.live = live;
+        self.w.hp_journal = Some(Vec::new());
+        m.on_start(self);
+        self.metrics = Some(Box::new(m));
+    }
+
+    /// The sim's observer hook after each step.
+    pub fn metrics_step(&mut self) {
+        self.feed(|m, s| m.on_step(s));
+    }
+
+    /// The sim's observer hook after a new round began.
+    pub fn metrics_round(&mut self) {
+        self.feed(|m, s| m.on_round(s));
+    }
+
+    /// The fight is over (the sim's result; a live battle passes the default): the records close and stop listening.
+    pub fn metrics_end(&mut self, result: crate::metrics::EndResult) {
+        self.feed(|m, s| if m.live { m.finish(s) } else { m.on_end(s, result) });
+        self.w.hp_journal = None;
+    }
+
+    /// Every unit now (BlockSnapshot).
+    pub fn snapshot(&self) -> Vec<UnitSnap> {
+        self.w
+            .units
+            .iter()
+            .enumerate()
+            .map(|(i, u)| UnitSnap {
+                hp: u.hp,
+                max_hp: u.max_hp,
+                ap: u.ap,
+                pos: self.w.grid.pos(i),
+                stance: u.stance,
+                guard: u.guard,
+                attack_boost: u.attack_boost,
+                active: u.is_active(),
+                withdrawn: u.is_withdrawn,
+                statuses: u.st.active.iter().cloned().collect(),
+                pending: u.st.pending.iter().cloned().collect(),
+            })
+            .collect()
+    }
+
+    /// The archive's record of `round` (None before it starts; CombatSession.recorded_actions and snapshot_at).
+    pub fn round_record(&self, round: i32) -> Option<&RoundRecord> {
+        self.history.iter().find(|r| r.round == round)
+    }
+
+    /// CombatSession._refresh_archive: the current round's actions as scheduled now.
+    fn refresh_archive(&mut self) {
+        let actions = self.resolver.scheduled.clone();
+        if let Some(r) = self.history.last_mut() {
+            r.actions = actions;
+        }
+    }
+
+    /// CombatSession.is_planning: the party plans this round (not confirmed, the battle goes on).
+    pub fn is_planning(&self) -> bool {
+        self.phase == Phase::Planning && !self.combat_over && !self.plan_confirmed
+    }
+
+    /// CombatSession.enemy_intents (INTENT1): the enemy tells while planning (none otherwise), with each enemy's
+    /// morale state word and group (MORALE1 rule 13).
+    pub fn enemy_intents(&self) -> Vec<crate::intent::Intent> {
+        if !self.is_planning() {
+            return Vec::new();
+        }
+        let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
+        let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        for r in out.iter_mut() {
+            r.morale_state = self.morale_state_of(r.unit);
+            r.morale_group = self.morale_group_of(r.unit);
+        }
+        out
     }
 
     /// CatalogEncounter.prepare_round (+ WorldEncounter's start buffs at round 1): round phases and phases met after
@@ -369,6 +536,7 @@ impl Session {
             self.fire_phase(&id, round, 0);
         }
         for line in self.morale.take_lines(0) {
+            self.morale_entry(round, 0, &line);
             self.events.push(line);
         }
         self.apply_phase_profiles(round);
@@ -400,6 +568,9 @@ impl Session {
             }
             if !names.is_empty() {
                 let text = value::string(sb, "text", "");
+                let shown = status::label_with_magnitude(&st, status::magnitude_or_min(&st, value::int(sb, "magnitude", 0)));
+                let name = self.def.name.clone();
+                self.append(crate::log::Entry::event(1, 0, &name, true, &status::display_name(&st), "Start", "START", &text, &shown));
                 self.events.push(if text.is_empty() { format!("{} for the party.", status::display_name(&st)) } else { text });
             }
         }
@@ -420,6 +591,13 @@ impl Session {
     /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, then marked fired.
     fn fire_phase(&mut self, id: &str, round: i32, block: i32) {
         let Some(p) = self.phases.phase(id).cloned() else { return };
+        // The actor: an hp_below trigger's unit, else the encounter.
+        let mut actor = self.def.name.clone();
+        if value::string(&p.trigger, "kind", "") == "hp_below" {
+            if let Some(c) = self.first_of_ref(&value::string(&p.trigger, "unit", "")) {
+                actor = self.w.units[c].name.clone();
+            }
+        }
         let mut parts: Vec<String> = Vec::new();
         for fx in p.effects_of("wave") {
             let units = self.phases.units_of(id);
@@ -461,7 +639,11 @@ impl Session {
                 parts.push("Enraged".into());
             }
         }
+        if p.effects_of("ai").next().is_some() {
+            parts.push(if block > 0 { "new tactics from the next round" } else { "new tactics" }.into());
+        }
         let line = p.effects_of("line").last().map(|fx| value::string(fx, "text", "")).unwrap_or_default();
+        self.append(crate::log::Entry::event(round, block, &actor, false, &p.name, "Phase", "PHASE", &line, &parts.join(", ")));
         self.events.push(format!("{}: {}{}", p.name, line, if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) }));
         self.phases.mark_fired(id, round, block);
     }
@@ -558,6 +740,7 @@ impl Session {
         self.resolver.scheduled.clear();
         self.plan = Plan::new();
         self.schedule_enemy_ai();
+        self.refresh_archive();
     }
 
     /// CombatEncounter.schedule_enemy_ai: drafts every enemy on the field into one shared plan, re-drafts broken
@@ -652,6 +835,7 @@ impl Session {
         }
         self.plan.commit(&self.w, &mut self.resolver);
         self.plan_confirmed = true;
+        self.refresh_archive();
         true
     }
 
@@ -673,22 +857,53 @@ impl Session {
                 return;
             }
             self.pending = self.resolver.prepare_block(&mut self.w, self.current_block).into();
+            // A chase or dash as an attack started gets its own cell.
+            let (round, block) = (self.current_round, self.current_block);
+            for (i, note) in std::mem::take(&mut self.resolver.notes) {
+                if let Some(e) = crate::log::move_note_entry(&self.w, &self.resolver.scheduled[i], round, block, &note) {
+                    self.append(e);
+                }
+            }
         }
         if let Some(idx) = self.pending.pop_front() {
             self.resolver.execute_single(&mut self.w, idx);
+            for k in std::mem::take(&mut self.resolver.combos) {
+                self.feed(|m, s| m.on_combo(s, &k));
+            }
             self.on_action_resolved(idx);
+            let (round, block) = (self.current_round, self.current_block);
+            let a = self.resolver.scheduled[idx].clone();
+            // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it).
+            self.append(crate::log::from_action(&self.w, &a, round, block));
+            for r in &a.command.reactions {
+                self.append(crate::log::riposte_entry(&self.w, r, round, block));
+            }
         }
         if self.pending.is_empty() {
+            let block = self.current_block;
+            self.feed(|m, s| m.on_block_completed(s, block));
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
                 self.resolver.apply_round_end_effects(&mut self.w);
             }
             self.on_block_end();
+            // The archive: the actions as they resolved and the state after this block.
+            self.refresh_archive();
+            let snap = self.snapshot();
+            if let Some(r) = self.history.last_mut() {
+                r.snapshots.push(snap);
+            }
             self.outcome = self.verdict(end_of_round);
             let over = !self.outcome.is_empty();
             if over || end_of_round {
                 self.combat_over = over;
                 self.phase = Phase::Replay;
+                self.feed(|m, s| {
+                    m.on_round_closed(s);
+                    if m.live {
+                        m.round_concluded(s);
+                    }
+                });
                 return;
             }
             self.current_block += 1;
@@ -705,6 +920,7 @@ impl Session {
         }
         let broke = self.morale.take_lines(1);
         if let Some(line) = broke.into_iter().next() {
+            self.morale_entry(round, block, &line);
             self.events.push(line);
             return true;
         }
@@ -720,8 +936,16 @@ impl Session {
         self.w.place_leftovers(&wave, false, &deployment);
         self.form_morale_group(&wave, "wave");
         let names: Vec<String> = wave.iter().filter(|&&c| self.w.grid.positions[c].is_some()).map(|&c| self.w.units[c].name.clone()).collect();
+        let label = self.def.wave_label.clone();
+        self.append(crate::log::Entry::event(round, block, "Reinforcements", false, &label, "Wave", "ARRIVED", &format!("{} join the battle.", names.join(", ")), &format!("{} more hostiles", names.len())));
         self.events.push(format!("{}: {} join the battle.", self.def.wave_label, names.join(", ")));
         true
+    }
+
+    /// MORALE1 rule 12: a break's EVENT cell (actor = the leader, else the encounter).
+    fn morale_entry(&mut self, round: i32, block: i32, line: &str) {
+        let actor = self.units_by_key.get(&self.morale.leader).map_or_else(|| self.def.name.clone(), |&c| self.w.units[c].name.clone());
+        self.append(crate::log::Entry::event(round, block, &actor, false, "Morale", "Morale", "MORALE", line, ""));
     }
 
     /// MORALE1 rule 6: the crits an action dealt (attacks, area attacks, then provoked ripostes).

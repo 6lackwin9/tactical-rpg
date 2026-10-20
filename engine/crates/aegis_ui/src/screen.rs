@@ -22,8 +22,12 @@ pub enum Key {
     Space,
     Esc,
     Tab,
+    /// Shift+Tab.
+    BackTab,
     PageUp,
     PageDown,
+    /// Ctrl+Enter (submit a form, e.g. save a note).
+    CtrlEnter,
     Char(char),
 }
 
@@ -38,11 +42,32 @@ impl Key {
             "space" => Key::Space,
             "esc" | "escape" => Key::Esc,
             "tab" => Key::Tab,
+            "backtab" | "shift+tab" => Key::BackTab,
             "pageup" => Key::PageUp,
             "pagedown" => Key::PageDown,
+            "ctrl+enter" => Key::CtrlEnter,
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
             _ => return None,
         })
+    }
+
+    /// The key's name, as `parse` reads it ("up", "shift+tab", "a").
+    pub fn name(self) -> String {
+        match self {
+            Key::Up => "up".into(),
+            Key::Down => "down".into(),
+            Key::Left => "left".into(),
+            Key::Right => "right".into(),
+            Key::Enter => "enter".into(),
+            Key::Space => "space".into(),
+            Key::Esc => "esc".into(),
+            Key::Tab => "tab".into(),
+            Key::BackTab => "shift+tab".into(),
+            Key::PageUp => "pageup".into(),
+            Key::PageDown => "pagedown".into(),
+            Key::CtrlEnter => "ctrl+enter".into(),
+            Key::Char(c) => c.to_string(),
+        }
     }
 
     /// A step direction for the arrow keys and W A S D.
@@ -83,7 +108,7 @@ impl Settings {
     /// The engine's keys and their defaults.
     pub fn engine_defaults() -> Value {
         json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "window_mode": "Windowed", "window_size": "1280x720",
-            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0})
+            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions)})
     }
 
     /// Every default: the engine's keys, then the game's own (`game_defaults`).
@@ -140,6 +165,8 @@ pub struct Cx<G> {
     pub quit: bool,
     /// Tags of questions answered Yes (ask_tag); the asking screen takes them on its next frame.
     pub answers: Vec<String>,
+    /// The playtest hub (recordings of this run: sessions, trail, notes).
+    pub playtest: crate::playtest::Playtests,
     pub app: G,
 }
 
@@ -192,6 +219,15 @@ pub trait Screen<G> {
     fn click_id(&mut self, cx: &mut Cx<G>, id: &str) -> Result<(), String>;
     fn widget_rect(&self, id: &str) -> Option<(Rect, Vec<String>)>;
     fn key(&mut self, _cx: &mut Cx<G>, _k: Key) {}
+    /// Whether the arrow keys move the keyboard focus (PORT-FOCUS); a screen that walks or steers with them says no
+    /// (Tab and Shift+Tab still move it).
+    fn arrow_focus(&self) -> bool {
+        true
+    }
+    /// Whether the first widget takes a visible focus as the screen appears (a menu meant for the keyboard).
+    fn auto_focus(&self) -> bool {
+        false
+    }
     /// Right click (and Esc unless `escape` says otherwise).
     fn back(&mut self, cx: &mut Cx<G>) {
         cx.nav.push(Nav::Pop);
@@ -208,6 +244,15 @@ pub trait Screen<G> {
     }
     /// Called when the screen becomes the top again.
     fn resume(&mut self, _cx: &mut Cx<G>) {}
+    /// A text field of this screen changed while being typed into (`Ui::text_field`): the screen keeps the text.
+    fn text_changed(&mut self, _cx: &mut Cx<G>, _id: &str, _text: &str) {}
+    /// What a playtest note taken over this screen records about it (a battle: its session, round, block, phase).
+    fn note_context(&self, _cx: &Cx<G>) -> Value {
+        Value::Null
+    }
+    /// Called when the screen leaves the stack (popped, a new stack, the window closing): its last chance to keep
+    /// what it holds (a playtest session).
+    fn leave(&mut self, _cx: &mut Cx<G>) {}
     /// An agent link command the shell does not know (the battle screen's command API); None when not handled.
     fn command(&mut self, _cx: &Cx<G>, _body: &Value) -> Option<Value> {
         None
@@ -224,6 +269,11 @@ pub trait Screen<G> {
     }
     /// Payload `from` was released over target `to` (only when `can_drop` allowed it).
     fn accept_drop(&mut self, _cx: &mut Cx<G>, _from: &str, _to: &str) {}
+    /// The screen's windows (UIKIT3), when it keeps a desk: the shell moves, resizes, raises, opens and closes them and
+    /// saves the desk; the screen draws it (`Desk::draw`, `Desk::toolbar`).
+    fn desk(&mut self) -> Option<&mut crate::window::Desk> {
+        None
+    }
 }
 
 /// The widget plumbing every screen shares: its `w` list and `act(cx, action)`. The context type is `Cx` as named

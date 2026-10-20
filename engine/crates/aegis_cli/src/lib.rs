@@ -2,6 +2,7 @@
 //! (`run(&game)`: its own commands, its data folder, its content hooks and its command host); the shell adds
 //!   aegis serve                                                                the game's command API over stdin / stdout
 //!   aegis link '<json>' ... [port=47800]                                       requests to a running GUI (agent link)
+//!   aegis replay <recording.json> ...                                          replay a playtest recording (see `replay`)
 //!   aegis content check | upsert | remove | apply | manifest                    edit the data folder (see `content`)
 
 use aegis_content::file::stringify;
@@ -58,9 +59,12 @@ pub trait Game {
     fn content(&self) -> Self::Content;
     /// The command host `serve` answers with: one request in, one reply out.
     fn host(&self, args: &Args) -> Result<Box<dyn FnMut(&Value) -> Value>>;
+    /// A fresh command host as a replay drives it (`replay`: one per run).
+    fn driver(&self, args: &Args) -> Result<Box<dyn aegis_host::Driver>>;
 }
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
+aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json or @file>]";
 
@@ -74,6 +78,7 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
     match (args.pos(0), args.pos(1)) {
         (Some("serve"), _) => serve(game, &args),
         (Some("link"), _) => link(&raw),
+        (Some("replay"), Some(_)) => replay(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
         _ => {
             println!("{}\n{USAGE}", G::USAGE);
@@ -114,7 +119,7 @@ fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Re
 
 /// `aegis content ...`: the data folder edited through the engine's writer (`aegis_content::store` with the game's
 /// hooks), never by hand.
-///   check                                              load problems and broken references (exit 1 when any)
+///   check                                              the game's warnings, then every problem (exit 1 when any)
 ///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
 ///   remove <kind> <id> [world=<id>]                    remove one entry
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
@@ -130,6 +135,9 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     };
     match args.pos(1) {
         Some("check") => {
+            for w in hooks.warnings(&dir) {
+                println!("warning: {w}");
+            }
             let problems = hooks.check(&dir);
             for p in &problems {
                 println!("{p}");
@@ -230,6 +238,167 @@ fn link(raw: &[String]) -> Result<()> {
         let mut line = String::new();
         reader.read_line(&mut line)?;
         print!("{line}");
+    }
+    Ok(())
+}
+
+/// `aegis replay <recording.json>`: replays a playtest recording's sessions on fresh command hosts (PLAYTEST1 on the
+/// engine). Lines start with `§`. Exit 0 when every checkpoint matches (stale content only warns), 1 on a divergence or
+/// a broken request, 2 when the recording does not load.
+///   battle=K            only session K (default every one)
+///   until=N             stop after N requests (what a take-over replays before the player goes on)
+///   json                one JSON report instead of the lines
+///   variant=<file>      {"at", "remove"?, "requests": [...], "then"?: "stop" | "recorded"}: run the session with
+///                       those requests in place of the recorded ones, print every `DIFF <at> <path> <recorded> ->
+///                       <variant>`; write=<dir> saves the variant run as a recording (origin agent)
+///   trail-report        the UI trail's flags (dead clicks, repeats, long hovers, refused confirms, errors, panels)
+///   seeds=a..b | a,b    re-run the recorded requests under each seed (at most 200; seed_key=seed names the starting
+///                       request's key); a failed request ends the run as broken@<index>, or with fallback=<json> sends
+///                       that request instead; prints each result and the counts
+fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
+    use aegis_host::playtest::{self, Recording, Variant, Verdict};
+    let path = PathBuf::from(args.pos(1).context("usage: aegis replay <recording.json>")?);
+    let rec = match Recording::load(&path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("§ load error: {e}");
+            std::process::exit(2);
+        }
+    };
+    let changes = game.data_dir(args).map(|d| aegis_content::fingerprint::changes(&rec.content, &aegis_content::fingerprint::of(&d))).unwrap_or(Value::Null);
+    let changed: Vec<String> = ["added", "removed", "changed"].iter().flat_map(|k| changes[*k].as_array().cloned().unwrap_or_default().into_iter().map(move |p| format!("{k} {}", p.as_str().unwrap_or("")))).collect();
+    let only: Option<usize> = args.keys.get("battle").map(|b| b.parse()).transpose().context("battle=K")?;
+    let picked: Vec<(usize, &playtest::Session)> = rec.battles.iter().enumerate().filter(|(i, _)| only.is_none_or(|k| k == *i)).collect();
+    if picked.is_empty() {
+        eprintln!("§ load error: the recording has no battle {}", only.map(|k| k.to_string()).unwrap_or_default());
+        std::process::exit(2);
+    }
+    let json_out = args.flag("json");
+    if !json_out {
+        let content = if rec.content["total"].as_str().unwrap_or("").is_empty() {
+            "unknown (no fingerprint)".to_string()
+        } else if changes.is_null() {
+            "unknown (no data folder to compare)".to_string()
+        } else if changed.is_empty() {
+            "current".to_string()
+        } else {
+            let more = if changed.len() > 8 { format!(" and {} more", changed.len() - 8) } else { String::new() };
+            format!("stale: {}{more}", changed[..changed.len().min(8)].join(", "))
+        };
+        println!("§ recording {} ({} battles, {} notes), content {content}", rec.id, rec.battles.len(), rec.notes.len());
+    }
+    if args.flag("trail-report") {
+        let report = aegis_host::trail::build(&rec.trail, rec.trail_dropped, &rec.notes);
+        if json_out {
+            println!("{report}");
+        } else {
+            for line in aegis_host::trail::lines(&report) {
+                println!("§ {line}");
+            }
+        }
+        return Ok(());
+    }
+    let mut failed = false;
+    if args.keys.contains_key("until") && (args.keys.contains_key("seeds") || args.keys.contains_key("variant")) {
+        bail!("until= applies to a plain replay, not to seeds= or variant=");
+    }
+    if args.keys.contains_key("variant") && picked.len() > 1 {
+        bail!("a variant patches one battle: name it with battle=K");
+    }
+    if let Some(seeds) = args.keys.get("seeds") {
+        let seeds = playtest::parse_seeds(seeds, 200).map_err(anyhow::Error::msg)?;
+        let key = args.key("seed_key", "seed");
+        let fallback = match args.keys.get("fallback").map(String::as_str) {
+            None | Some("stop") => None,
+            Some(raw) => Some(json_arg(raw)?),
+        };
+        let mut out = Vec::new();
+        for (i, s) in &picked {
+            let mut counts: IndexMap<String, usize> = IndexMap::new();
+            for &seed in &seeds {
+                let result = playtest::sweep_one(game.driver(args)?.as_mut(), s, &key, seed, fallback.as_ref());
+                if !json_out {
+                    println!("§ battle {i} seed {seed}: {result}");
+                }
+                *counts.entry(result.clone()).or_default() += 1;
+                out.push(json!({"battle": i, "seed": seed, "result": result}));
+            }
+            if !json_out {
+                println!("§ battle {i} summary: {}", counts.iter().map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(", "));
+            }
+        }
+        if json_out {
+            println!("{}", json!({"recording": rec.id, "stale": changes, "sweep": out}));
+        }
+        return Ok(());
+    }
+    if let Some(file) = args.keys.get("variant") {
+        let variant = Variant::from_json(&json_arg(&format!("@{file}"))?).map_err(anyhow::Error::msg)?;
+        let mut runs = Vec::new();
+        for (i, s) in &picked {
+            let run = playtest::run_variant(game.driver(args)?.as_mut(), s, &variant);
+            if !json_out {
+                for d in &run.diffs {
+                    println!("§ battle {i} {d}");
+                }
+                if let Some((at, e)) = &run.broken {
+                    println!("§ battle {i} broken at request {at}: {e}");
+                }
+                println!("§ battle {i} end: recorded {} -> variant {}", s.result(), run.session.result());
+            }
+            failed |= run.broken.is_some();
+            runs.push((*i, run));
+        }
+        if let Some(dir) = args.keys.get("write") {
+            let dir = PathBuf::from(dir);
+            let mut out = Recording::new(&playtest::new_id(&dir, playtest::now_secs()), "agent", rec.content.clone());
+            out.parent = json!({"id": rec.id, "battle": runs.first().map(|(i, _)| *i).unwrap_or(0), "at": variant.at});
+            out.battles = runs.iter().map(|(_, r)| r.session.clone()).collect();
+            let p = out.save(&dir).map_err(anyhow::Error::msg)?;
+            println!("§ wrote {}", p.display());
+        }
+        if json_out {
+            let rows: Vec<Value> = runs.iter().map(|(i, r)| json!({"battle": i, "diffs": r.diffs, "broken": r.broken.as_ref().map(|(a, e)| json!({"at": a, "error": e})), "end": r.session.end})).collect();
+            println!("{}", json!({"recording": rec.id, "stale": changes, "variant": rows}));
+        }
+        if failed {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    let until: Option<usize> = args.keys.get("until").map(|n| n.parse()).transpose().context("until=N")?;
+    let mut rows = Vec::new();
+    for (i, s) in &picked {
+        let report = playtest::replay(game.driver(args)?.as_mut(), s, until);
+        let checks: Vec<Value> = report
+            .checks
+            .iter()
+            .map(|c| match &c.verdict {
+                Verdict::Match => json!({"at": c.at, "verdict": "match"}),
+                Verdict::Unverified => json!({"at": c.at, "verdict": "unverified"}),
+                Verdict::Diverge { path, recorded, replayed } => json!({"at": c.at, "verdict": "diverge", "path": path, "recorded": recorded, "replayed": replayed}),
+            })
+            .collect();
+        if !json_out {
+            for c in &checks {
+                match c["verdict"].as_str() {
+                    Some("diverge") => println!("§ battle {i} at {}: diverge {} {} -> {}", c["at"], c["path"].as_str().unwrap_or(""), c["recorded"], c["replayed"]),
+                    other => println!("§ battle {i} at {}: {}", c["at"], other.unwrap_or("")),
+                }
+            }
+            if let Some((at, e)) = &report.broken {
+                println!("§ battle {i} broken at request {at}: {e}");
+            }
+            println!("§ battle {i}: {} ({} requests, recorded end {})", if report.matched() { "match" } else { "differs" }, report.sent, s.result());
+        }
+        failed |= !report.matched();
+        rows.push(json!({"battle": i, "match": report.matched(), "sent": report.sent, "checks": checks, "broken": report.broken.as_ref().map(|(a, e)| json!({"at": a, "error": e})), "end": s.end}));
+    }
+    if json_out {
+        println!("{}", json!({"recording": rec.id, "stale": changes, "battles": rows}));
+    }
+    if failed {
+        std::process::exit(1);
     }
     Ok(())
 }

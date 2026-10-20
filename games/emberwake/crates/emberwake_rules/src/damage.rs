@@ -38,12 +38,28 @@ pub struct AttackPower {
     pub weapon_power: f64,
     pub unit_power: f64,
     pub attack_power: i32,
+    // The explanation (DamageCalculator.attack_power's keys, for breakdowns): the weapon's name ("" unarmed), its base
+    // power, tier and training bonuses and their total, the wield-deficit ratio and amount, the stat used, its value
+    // and the unit scaling.
+    pub weapon: String,
+    pub base_w_power: i32,
+    pub tier_boost: i32,
+    pub training_pwr: i32,
+    pub total_w_power: i32,
+    pub pen_ratio: f64,
+    pub def_amount: i32,
+    pub stat_name: String,
+    pub stat_val: i32,
+    pub unit_scaling: f64,
 }
 
 pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
     let mut res = AttackPower::default();
     if u.power_override > 0 {
         res.authored = true;
+        res.weapon = weapon_for(u, offhand).map(|w| w.item.name.clone()).unwrap_or_default();
+        res.stat_name = "authored".into();
+        res.unit_scaling = 1.0;
         res.unit_power = u.power_override as f64;
         res.attack_power = u.power_override;
         return res;
@@ -54,16 +70,25 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
     match w {
         None => {
             let sd = u.stats.stat("STR", ctx) + u.stats.stat("DEX", ctx);
+            res.stat_name = "STR+DEX".into();
+            res.stat_val = sd;
+            res.unit_scaling = 1.0;
             res.unit_power = sd as f64;
             if !offhand && trained_fists(u) {
+                let training = u.stats.proficiency.power_bonus(FIST);
                 res.trained_fists = true;
-                res.weapon_power = (UNARMED_BASE_POWER + u.stats.proficiency.power_bonus(FIST)) as f64;
+                res.base_w_power = UNARMED_BASE_POWER;
+                res.training_pwr = training;
+                res.total_w_power = UNARMED_BASE_POWER + training;
+                res.weapon_power = (UNARMED_BASE_POWER + training) as f64;
             }
         }
         Some(w) => {
             let fits = (ranged && w.is_ranged_weapon()) || (!ranged && w.is_melee_weapon());
             res.weapon_fits = fits;
+            res.weapon = w.item.name.clone();
             let scaling = u.stats.proficiency.scaling_of(w.weapon_type());
+            res.unit_scaling = scaling;
             let stat_name = if fits {
                 w.item.scaling_stat.as_str()
             } else if ranged {
@@ -72,11 +97,18 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                 "STR"
             };
             if fits {
-                let total = w.item.base_power + w.tier_power_boost(&u.stats) + u.stats.proficiency.power_bonus(w.weapon_type());
+                let (tier, training) = (w.tier_power_boost(&u.stats), u.stats.proficiency.power_bonus(w.weapon_type()));
+                let total = w.item.base_power + tier + training;
                 let pen = w.wield_penalty(&u.stats);
+                (res.base_w_power, res.tier_boost, res.training_pwr, res.total_w_power) = (w.item.base_power, tier, training, total);
+                if pen.penalized {
+                    (res.pen_ratio, res.def_amount) = (pen.ratio, pen.deficit);
+                }
                 res.weapon_power = total as f64 * (1.0 - if pen.penalized { pen.ratio } else { 0.0 });
             }
-            res.unit_power = u.stats.stat(stat_name, ctx) as f64 * scaling;
+            res.stat_name = stat_name.to_string();
+            res.stat_val = u.stats.stat(stat_name, ctx);
+            res.unit_power = res.stat_val as f64 * scaling;
         }
     }
     res.attack_power = roundi((res.weapon_power + res.unit_power) * u.power_scale).max(1);
@@ -144,10 +176,22 @@ pub struct Hit {
     pub stance_factor: f64,
     pub armor_rating: i32,
     pub final_dmg: i32,
+    // The explanation (DamageCalculator.compute's keys): the attack power's own explanation, the Focus multiplier,
+    // the skill multiplier, the guard ratio and the guard-and-cover multiplier, the armor's share, the crit multiplier and the attack power
+    // after Focus.
+    pub power: AttackPower,
+    pub buff_mult: f64,
+    pub skill_mult: f64,
+    pub mit_ratio: f64,
+    pub mit_mult: f64,
+    pub armor_ratio: f64,
+    pub crit_mult: f64,
+    pub final_attack_power: i32,
 }
 
 pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
-    let power = power_of(attacker, h.ranged, h.offhand);
+    let explained = attack_power(attacker, h.ranged, h.offhand);
+    let power = explained.attack_power;
     let buff = attacker.attack_boost.max(1.0);
     let stance = h.attacker_stance.unwrap_or(attacker.stance);
     let stance_factor = stance.matchup(target.stance);
@@ -158,5 +202,20 @@ pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
     let guard_term = GUARD_CAP.min(guard + h.cover.max(0.0));
     let rating = armor_rating(target);
     let gross = power as f64 * buff * h.skill_mult * stance_factor * crit_mult * (1.0 - guard_term) * (1.0 - armor_reduction(rating));
-    Hit { attack_power: power, is_crit, crit_rate: chance, stance_factor, armor_rating: rating, final_dmg: roundi(gross).max(1) }
+    Hit {
+        attack_power: power,
+        is_crit,
+        crit_rate: chance,
+        stance_factor,
+        armor_rating: rating,
+        final_dmg: roundi(gross).max(1),
+        power: explained,
+        buff_mult: buff,
+        skill_mult: h.skill_mult,
+        mit_ratio: guard,
+        mit_mult: 1.0 - guard_term,
+        armor_ratio: armor_reduction(rating),
+        crit_mult,
+        final_attack_power: roundi(power as f64 * buff),
+    }
 }
