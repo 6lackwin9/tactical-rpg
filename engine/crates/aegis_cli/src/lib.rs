@@ -114,7 +114,7 @@ fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Re
 
 /// `aegis content ...`: the data folder edited through the engine's writer (`aegis_content::store` with the game's
 /// hooks), never by hand.
-///   check                                              load problems and broken references (exit 1 when any)
+///   check                                              the game's warnings, then every problem (exit 1 when any)
 ///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
 ///   remove <kind> <id> [world=<id>]                    remove one entry
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
@@ -130,6 +130,9 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     };
     match args.pos(1) {
         Some("check") => {
+            for w in hooks.warnings(&dir) {
+                println!("warning: {w}");
+            }
             let problems = hooks.check(&dir);
             for p in &problems {
                 println!("{p}");
