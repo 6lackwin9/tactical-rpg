@@ -151,6 +151,10 @@ pub struct BattleScreen {
     slot: Option<usize>,
     /// (requests, checkpoints) of the session at its last save.
     saved: (usize, usize),
+    /// Playtest trail events of the battle (plan edits, confirms, the end), handed to the hub on the next tick.
+    trail_out: Vec<Value>,
+    /// The battle's end is in the trail.
+    end_logged: bool,
     /// Sessions an agent-link `new` ended before the hub could be reached (saved on the next tick).
     parked: Vec<(Option<usize>, aegis_host::playtest::Session)>,
 }
@@ -185,6 +189,8 @@ impl BattleScreen {
             slot: None,
             saved: (0, 0),
             parked: Vec::new(),
+            trail_out: Vec::new(),
+            end_logged: false,
         }
     }
 
@@ -200,6 +206,13 @@ impl BattleScreen {
         for (mut slot, s) in self.parked.drain(..) {
             cx.playtest.put_session(&mut slot, s);
         }
+        if let Some(s) = self.host.session.as_ref().filter(|s| s.combat_over && !self.end_logged) {
+            self.end_logged = true;
+            self.trail_out.push(json!({"type": "battle_end", "round": s.current_round, "result": s.outcome}));
+        }
+        for e in self.trail_out.drain(..) {
+            cx.playtest.trail(e);
+        }
         let now = (self.host.history.len(), self.host.checkpoints.len());
         if !self.recordable() || now == self.saved {
             return;
@@ -208,10 +221,35 @@ impl BattleScreen {
         cx.playtest.put_session(&mut self.slot, aegis_host::playtest::Session::of(&self.host));
     }
 
+    /// The playtest trail events of one request the player made: plan edits (add, undo, clear, plan, preset,
+    /// preset_all with the unit and round) and confirms (ok, or refused with the reason).
+    fn trail_of(&mut self, req: &Value, reply: &Value) {
+        let Some(s) = self.host.session.as_ref() else { return };
+        let ok = reply["ok"] == json!(true);
+        let kind = match req["cmd"].as_str().unwrap_or("") {
+            "add_step" => "add",
+            "undo" => "undo",
+            "clear" => "clear",
+            "plan" => "plan",
+            "preset" if req.get("unit").is_some() => "preset",
+            "preset" => "preset_all",
+            "confirm" => {
+                let reason = if ok { String::new() } else { reply["error"].as_str().unwrap_or("refused").to_string() };
+                self.trail_out.push(json!({"type": "confirm", "ok": ok, "reason": reason, "round": s.current_round}));
+                return;
+            }
+            _ => return,
+        };
+        if ok {
+            self.trail_out.push(json!({"type": "plan_edit", "kind": kind, "unit": req.get("unit").cloned().unwrap_or(Value::Null), "round": s.current_round}));
+        }
+    }
+
     /// A new battle starts a new session.
     fn new_session(&mut self) {
         self.slot = None;
         self.saved = (0, 0);
+        self.end_logged = false;
     }
 
     /// The Test Arena: the catalog encounter given on the command line (goblin_skirmish by default).
@@ -288,6 +326,9 @@ impl BattleScreen {
     /// Sends one request through the command API and turns HP changes into floating numbers.
     fn send(&mut self, cx: &Cx, req: Value) -> Value {
         let reply = self.host.handle(&req);
+        if cx.playtest.on {
+            self.trail_of(&req, &reply);
+        }
         if reply["ok"] != json!(true) {
             self.message = reply["error"].as_str().unwrap_or("refused").to_string();
         }
@@ -707,7 +748,8 @@ impl Screen<GameCx> for BattleScreen {
         self.floats.retain(|f| now.duration_since(f.born) < Duration::from_millis(t.float_ms));
         self.flashes.retain(|f| now.duration_since(f.1) < Duration::from_millis(t.hit_flash_ms));
         // The playtest session is saved after every concluded round (and once more at the end).
-        if self.host.checkpoints.len() != self.saved.1 || !self.parked.is_empty() {
+        let ended = self.host.session.as_ref().is_some_and(|s| s.combat_over) && !self.end_logged;
+        if self.host.checkpoints.len() != self.saved.1 || !self.parked.is_empty() || !self.trail_out.is_empty() || ended {
             self.save_session(cx);
         }
         if self.host.session.is_none() {
