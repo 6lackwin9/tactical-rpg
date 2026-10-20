@@ -48,7 +48,8 @@ The rules behind every player screen come from `emberwake_world`, checked agains
   characters with named items and tuning) and battle items (pick a unit, then "Use `<item>` (`<n>` left)"; unused items
   go back to the saved pouch). The battle screen shows the objective and phase / morale events in the message bar;
   Godot's centred phase banner (BOSS1-U) is look-and-feel work for after the transition.
-- Keyboard focus navigation exists on the main menu only; other screens are mouse + shortcuts.
+- Keyboard focus works on every screen (PORT-FOCUS: Tab / Shift+Tab, arrows except on the region map and the journal,
+  Enter / Space); the look of the ring is not final, and the window toolbars and title bars take no focus yet.
 
 ## Order (done)
 

@@ -461,6 +461,10 @@ fn region_key(ch: char, x: i64, y: i64) -> Option<String> {
 }
 
 impl Screen<GameCx> for RegionMap {
+    /// The arrow keys walk the party.
+    fn arrow_focus(&self) -> bool {
+        false
+    }
     fn id(&self) -> &'static str {
         "region_map"
     }
