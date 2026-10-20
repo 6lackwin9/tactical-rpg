@@ -301,15 +301,7 @@ fn format_reach(lo: i64, hi: i64, bare: bool) -> String {
 }
 
 fn format_magnitude(st: &str, magnitude: i64) -> String {
-    if magnitude <= 0 || !status::has_magnitude(st) {
-        return String::new();
-    }
-    match status::magnitude_unit(st) {
-        "flat" if st == "poison" => format!("{magnitude} HP"),
-        "flat" => format!("{magnitude} armor"),
-        "pct_max_hp" => format!("{magnitude}% max HP"),
-        _ => format!("{magnitude}%"),
-    }
+    status::format_magnitude(st, magnitude as i32)
 }
 
 /// SkillText.token_value.

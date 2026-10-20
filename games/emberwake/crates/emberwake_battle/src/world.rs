@@ -126,9 +126,33 @@ pub struct World {
     pub enemies: Vec<UnitId>,
     pub profiles: IndexMap<UnitId, AiProfile>,
     pub total_blocks: i32,
+    /// Every HP change in order while someone follows them (Combatant.health_changed): (unit, HP after). None = off;
+    /// a battle's metrics switch it on and drain it. Battle code changes HP only through `damage` and `heal`.
+    pub hp_journal: Option<Vec<(UnitId, i32)>>,
 }
 
 impl World {
+    /// Combatant.take_damage on unit `c` (journaled). Returns the damage dealt.
+    pub fn damage(&mut self, c: UnitId, amount: i32, mitigated: bool) -> i32 {
+        let dealt = self.units[c].take_damage(amount, mitigated);
+        self.journal(c);
+        dealt
+    }
+
+    /// Combatant.heal on unit `c` (journaled; a downed unit is not healed and nothing is recorded).
+    pub fn heal(&mut self, c: UnitId, amount: i32) {
+        if self.units[c].is_alive() {
+            self.units[c].heal(amount);
+            self.journal(c);
+        }
+    }
+
+    fn journal(&mut self, c: UnitId) {
+        if let Some(j) = self.hp_journal.as_mut() {
+            j.push((c, self.units[c].hp));
+        }
+    }
+
     pub fn book(&self) -> Book<'_> {
         Book { cat: &self.cat }
     }

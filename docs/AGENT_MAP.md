@@ -40,6 +40,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | PORT-DOJO | - | engine: scroll areas, nested clips, rich text; game: DojoSession (strikes, skills, dummy, rounds, stances, pouch, benchmark, gear, presets, weapon switch, allocation), PartyCarry, damage explanation, the dojo desk of windows; 12 session tests |
 | main session (no lane agents) | PORT-INTENT | - | engine: Painter::arrow; game: IntentRules port, enemy tells on the battle screen, Godot trace recorder extended (tells in every round, 3088 rounds compared), 4 rule tests |
 | main session (no lane agents) | TIMELINE1, ROUNDHIST1 | - | engine: aegis_ui::timeline widget; game: the round archive in the session, the UI Gallery scene with the battle timeline (past rounds, block snapshots), the runner list scrolls |
+| main session (no lane agents) | PORT-BREPORT | - | rules: buff list, magnitude labels; game: the action log, World HP journal, combo and round-end events, BattleMetrics, BattleReport, hero keys, Godot message wording; Godot trace recorder extended (metrics, report and log of every fight), report rule tests |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

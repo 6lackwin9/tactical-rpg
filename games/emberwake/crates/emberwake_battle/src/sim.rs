@@ -1,7 +1,10 @@
 //! The balance-sim fight (tools/sim/sim_runner.gd `fight`, sim_variants.gd jitter): one AI-vs-AI battle with the
-//! seeded start jitter, scored like the reference. Optionally records a step trace in the Godot exporter's shape.
+//! seeded start jitter, scored like the reference. Optionally records a step trace in the Godot exporter's shape, with
+//! what a BattleMetrics following the fight counted, the battle report and the action log (PORT-BREPORT).
 
 use crate::grid::{Grid, V2};
+use crate::metrics::{BattleMetrics, EndResult};
+use crate::report::Report;
 use crate::session::{EncounterDef, Phase, Session};
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
@@ -40,8 +43,11 @@ pub struct FightResult {
     pub hp: f64,
     pub rounds: i32,
     pub outcome: String,
-    /// The step trace (when requested): {"start": [...], "rounds": [{"round", "actions", "intents", "steps"}]}.
+    /// The step trace (when requested): {"start": [...], "rounds": [{"round", "actions", "intents", "steps"}],
+    /// "metrics", "report", "log"}.
     pub trace: Option<Value>,
+    /// The fight's metrics (when a trace was requested).
+    pub metrics: Option<Box<BattleMetrics>>,
 }
 
 fn units_state(w: &World) -> Value {
@@ -162,6 +168,9 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
     }
     let mut trace_rounds: Vec<Value> = Vec::new();
     let start = record.then(|| units_state(&s.w));
+    if record {
+        s.attach_metrics(BattleMetrics::new(), false);
+    }
     let mut rounds = 0;
     let mut plan_fail = false;
     for round in 0..spec.cap {
@@ -187,6 +196,7 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
                 break;
             }
             s.step_next();
+            s.metrics_step();
             if record {
                 steps.push(json!({"block": s.current_block, "phase": s.phase as i32, "units": units_state(&s.w)}));
             }
@@ -198,10 +208,16 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
             break;
         }
         s.advance_round();
+        s.metrics_round();
     }
     let l = side_hp_frac(&s.w, &s.w.allies);
     let r = side_hp_frac(&s.w, &s.w.enemies);
     let won = s.outcome == "won";
+    s.metrics_end(EndResult { cleared: r <= 0.0, rounds, l, r, hp: if won { 1.0 } else { hp_score(l, r) } });
+    let mut trace = record.then(|| json!({"start": start, "rounds": trace_rounds}));
+    if let Some(t) = trace.as_mut() {
+        merge(t, metrics_trace(&s));
+    }
     FightResult {
         ok: true,
         plan_fail,
@@ -212,8 +228,101 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         hp: if won { 1.0 } else { hp_score(l, r) },
         rounds,
         outcome: s.outcome.clone(),
-        trace: record.then(|| json!({"start": start, "rounds": trace_rounds})),
+        trace,
+        metrics: s.metrics.take(),
     }
+}
+
+fn merge(t: &mut Value, more: Value) {
+    if let (Some(o), Value::Object(m)) = (t.as_object_mut(), more) {
+        o.extend(m);
+    }
+}
+
+/// The trace's {"metrics", "report", "log"} of a finished fight whose metrics followed it.
+pub fn metrics_trace(s: &Session) -> Value {
+    let Some(m) = s.metrics.as_deref() else { return json!({}) };
+    json!({"metrics": m.to_json(), "report": Report::build(m, s, &s.outcome).to_json(), "log": s.log.iter().map(|e| e.trace()).collect::<Vec<_>>()})
+}
+
+/// Equal as data: numbers within 1e-9, objects regardless of key order.
+pub fn json_close(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => (x.as_f64().unwrap_or(0.0) - y.as_f64().unwrap_or(0.0)).abs() <= 1e-9,
+        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| json_close(p, q)),
+        (Value::Object(x), Value::Object(y)) => x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| json_close(v, w))),
+        _ => a == b,
+    }
+}
+
+/// Two log rows are the same, except that an attack's "Skill x<multiplier>" may be a cent apart: Godot's JSON reader
+/// parses some decimals one unit in the last place off (0.7 reads as 0.7000000000000001), so a multiplier on a
+/// rounding tie prints one cent higher there (intended: the engine parses decimals exactly; the damage is the same).
+fn same_entry(x: &Value, y: &Value) -> bool {
+    if json_close(x, y) {
+        return true;
+    }
+    let (Some(a), Some(b)) = (x.as_array(), y.as_array()) else { return false };
+    let detail = 12;
+    if a.len() != b.len() || a.len() <= detail || a.iter().zip(b).enumerate().any(|(i, (p, q))| i != detail && !json_close(p, q)) {
+        return false;
+    }
+    let (Some(p), Some(q)) = (a[detail].as_str(), b[detail].as_str()) else { return false };
+    let split = |s: &str| -> Option<(String, f64, String)> {
+        let at = s.find("Skill x")? + "Skill x".len();
+        let len = s[at..].find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(s.len() - at);
+        Some((s[..at].to_string(), s[at..at + len].parse().ok()?, s[at + len..].to_string()))
+    };
+    match (split(p), split(q)) {
+        (Some((p0, pn, p1)), Some((q0, qn, q1))) => p0 == q0 && p1 == q1 && (pn - qn).abs() <= 0.010_000_1,
+        _ => false,
+    }
+}
+
+/// The first difference in the metrics, report or log of a Godot fight record and a Rust trace (None = the same).
+/// A record without them comes from before PORT-BREPORT: re-record it (games/emberwake/parity/trace.sh).
+pub fn metrics_divergence(g: &Value, r: &Value) -> Option<String> {
+    if g.get("metrics").is_none() {
+        return Some("the Godot record has no metrics, report or log: re-record the traces".into());
+    }
+    let (gl, rl) = (g["log"].as_array().cloned().unwrap_or_default(), r["log"].as_array().cloned().unwrap_or_default());
+    for (i, (x, y)) in gl.iter().zip(&rl).enumerate() {
+        if !same_entry(x, y) {
+            return Some(format!("log entry {i}:\n  godot {x}\n  rust  {y}"));
+        }
+    }
+    if gl.len() != rl.len() {
+        return Some(format!("log length: godot {} rust {}", gl.len(), rl.len()));
+    }
+    let (gm, rm) = (&g["metrics"], &r["metrics"]);
+    for (name, rec) in gm["units"].as_object().into_iter().flatten() {
+        let diffs: Vec<String> = rec
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(field, v)| !json_close(v, &rm["units"][name][field.as_str()]))
+            .map(|(field, v)| format!("{field} godot {v} rust {}", rm["units"][name][field.as_str()]))
+            .collect();
+        if !diffs.is_empty() {
+            return Some(format!("metrics {name}: {}", diffs.join(", ")));
+        }
+    }
+    for key in ["units", "detail", "fight", "checks", "fails"] {
+        if !json_close(&gm[key], &rm[key]) {
+            return Some(format!("metrics {key}:\n  godot {}\n  rust  {}", gm[key], rm[key]));
+        }
+    }
+    if !json_close(&g["report"], &r["report"]) {
+        return Some(format!("report:\n  godot {}\n  rust  {}", g["report"], r["report"]));
+    }
+    // The status counts' order is the Effects tip's order.
+    let keys = |row: &Value| row["status_counts"].as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
+    for (x, y) in g["report"]["rows"].as_array().into_iter().flatten().zip(r["report"]["rows"].as_array().into_iter().flatten()) {
+        if keys(x) != keys(y) {
+            return Some(format!("report row {} status order: godot {:?} rust {:?}", x["name"], keys(x), keys(y)));
+        }
+    }
+    None
 }
 
 /// SimRunner.apply_pouch (ITEMUSE1 rule 9): every party unit's battle pouch becomes `ids` (catalog consumables,

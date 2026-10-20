@@ -232,7 +232,7 @@ impl BattleScreen {
             unit.hp = progression::start_hp(unit.max_hp as i64, m.hp_lost) as i32;
             let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
             let art = if !base.art.is_empty() { base.art.clone() } else { d.cat.classes.get(&base.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) };
-            party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base) });
+            party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() });
             members.push((m.id.clone(), built.pouch_unloaded));
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
@@ -823,7 +823,7 @@ fn sound_of(line: &str) -> Option<&'static str> {
         "Defend" if !line.contains("guard was broken") => Some("defend"),
         "Focus" => Some("buff"),
         "Support" => Some("heal"),
-        "Move" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
+        "Move" | "Move Cut Short" | "Withdrawal" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
         _ => None,
     }
 }

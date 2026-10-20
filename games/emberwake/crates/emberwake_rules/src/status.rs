@@ -72,6 +72,34 @@ pub fn display_name(status: &str) -> String {
     row_of(status).map(|r| r.display.to_string()).unwrap_or_else(|| status.to_string())
 }
 
+/// SkillText.format_magnitude: "20%", "4 armor", "3 HP" (poison), "5% max HP"; "" for no magnitude.
+pub fn format_magnitude(st: &str, magnitude: i32) -> String {
+    if magnitude <= 0 || !has_magnitude(st) {
+        return String::new();
+    }
+    match magnitude_unit(st) {
+        "flat" if st == "poison" => format!("{magnitude} HP"),
+        "flat" => format!("{magnitude} armor"),
+        "pct_max_hp" => format!("{magnitude}% max HP"),
+        _ => format!("{magnitude}%"),
+    }
+}
+
+/// StatusEffects.label_with_magnitude: "Fortify 4 armor", or the name alone.
+pub fn label_with_magnitude(st: &str, magnitude: i32) -> String {
+    let shown = format_magnitude(st, magnitude);
+    if shown.is_empty() {
+        display_name(st)
+    } else {
+        format!("{} {shown}", display_name(st))
+    }
+}
+
+/// Buff ids in table order (StatusEffects.buffs).
+pub fn buffs() -> Vec<&'static str> {
+    ROWS.iter().filter(|r| r.buff).map(|r| r.id).collect()
+}
+
 /// Debuff ids in table order (cleanse lists follow it).
 pub fn debuffs() -> Vec<&'static str> {
     ROWS.iter().filter(|r| !r.buff).map(|r| r.id).collect()

@@ -1,7 +1,8 @@
 //! Step-by-step parity with Godot battle traces (games/emberwake/parity/godot/trace.gd). The RNG, sorts and dictionary order
-//! are reproduced exactly, so a seeded duel should match step for step; the first divergence is reported.
+//! are reproduced exactly, so a seeded duel should match step for step; the first divergence is reported. Each fight's
+//! action log, metrics and battle report are compared too (PORT-BREPORT).
 
-use emberwake_battle::sim::{fight, FightSpec};
+use emberwake_battle::sim::{fight, metrics_divergence, FightSpec};
 use aegis_core::value;
 use emberwake_data::{Catalog, UnitDef};
 use indexmap::IndexMap;
@@ -77,7 +78,8 @@ fn replay_file(cat: &Arc<Catalog>, name: &str) -> usize {
         let fo = f.as_object().unwrap();
         let spec = FightSpec { left: value::strings(fo, "left"), right: value::strings(fo, "right"), seed: f["seed"].as_i64().unwrap(), preset: value::string(fo, "preset", "balanced"), cap: 10, jitter, base: f.get("base").and_then(|b| b.as_object()).filter(|b| !b.is_empty()).cloned(), pouch: pouch.clone() };
         let res = fight(cat.clone(), &units, &spec, true);
-        if let Some(d) = first_divergence(f, res.trace.as_ref().unwrap()) {
+        let trace = res.trace.as_ref().unwrap();
+        if let Some(d) = first_divergence(f, trace).or_else(|| metrics_divergence(f, trace)) {
             failures.push(format!("{:?} vs {:?} seed {}: {d}", spec.left, spec.right, spec.seed));
         }
     }
