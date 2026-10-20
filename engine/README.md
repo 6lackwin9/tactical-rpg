@@ -145,7 +145,10 @@ I enemy tells, F12 screenshot.
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every
 widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `type {text}` (into the text field being edited), `note` (F8), `key {key}` (up / down / left /
-right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `game` (the full game state), and the
+right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
+frame of the top screen at a text size, the mouse off the canvas, reporting the text `text_fit` or a button shortened
+(cut), text past the canvas (edge), texts drawn over each other (overlap) and text running out of its control (spill);
+text in a scroll area or under a later panel is skipped; `shot` saves that frame), `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 
 ```bash

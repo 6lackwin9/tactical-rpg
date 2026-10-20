@@ -238,7 +238,12 @@ impl<G: Context> Shell<G> {
         for i in base..n {
             let live = i == n - 1;
             let mouse = if live { self.mouse } else { (-1, -1) };
+            // the text audit records the top screen only (what lies under a popup is covered, not cramped)
+            let paused = if live { None } else { self.gfx.fonts.audit.take() };
             self.stack[i].draw(&mut self.cx, &mut self.gfx, mouse, live);
+            if paused.is_some() {
+                self.gfx.fonts.audit = paused;
+            }
         }
         self.gfx.canvas.clip = None;
         self.settle_focus();
@@ -654,6 +659,41 @@ impl<G: Context> Shell<G> {
         self.settle();
     }
 
+    /// TEXTFIT1: draws one frame with the painter's text audit on, the mouse off the canvas (no hover card) and the text
+    /// size at `scale` when given; reports the screen, the scale and `text_audit::issues` (saving that frame to `shot`
+    /// when given), then draws again as it was.
+    fn text_audit(&mut self, scale: Option<f32>, shot: Option<&Path>) -> Value {
+        let (old_scale, old_mouse) = (self.gfx.fonts.scale, self.mouse);
+        if let Some(s) = scale {
+            self.gfx.fonts.scale = s;
+        }
+        self.mouse = (-500, -500);
+        self.gfx.fonts.audit = Some(Vec::new());
+        self.frame();
+        let recs = self.gfx.fonts.audit.take().unwrap_or_default();
+        let screen = self.stack.last().map(|s| s.id()).unwrap_or("");
+        let boxes: Vec<(String, f32, f32, f32, f32)> = self.stack.last().map(|s| s.widgets()).unwrap_or_default().iter()
+            .filter(|w| w["kind"] != "scroll")
+            .map(|w| {
+                let r = info_rect(w);
+                (w["id"].as_str().unwrap_or("").to_string(), r.x as f32, r.y as f32, r.w as f32, r.h as f32)
+            })
+            .collect();
+        let mut out = crate::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+        out["screen"] = json!(screen);
+        out["scale"] = json!(self.gfx.fonts.scale);
+        if let Some(path) = shot {
+            out["shot"] = match save_png(&self.gfx.canvas, path, 1280) {
+                Ok(()) => json!(path.display().to_string()),
+                Err(e) => json!(format!("not saved: {e}")),
+            };
+        }
+        self.gfx.fonts.scale = old_scale;
+        self.mouse = old_mouse;
+        self.frame();
+        out
+    }
+
     fn shot(&mut self, path: &Path, max_w: i32) -> Result<()> {
         save_png(&self.gfx.canvas, path, max_w)
     }
@@ -826,6 +866,14 @@ impl<G: Context> Shell<G> {
                 } else {
                     json!({"ok": false, "error": self.cx.notice.last().cloned().unwrap_or_else(|| "no note box".into())})
                 }
+            }
+            // TEXTFIT1: one frame drawn with the text audit on (at `scale` when given, the saved text size after)
+            "text_audit" => {
+                let scale = body.get("scale").and_then(Value::as_f64).map(|s| s.clamp(0.5, 2.0) as f32);
+                let shot = body.get("shot").and_then(Value::as_str).map(PathBuf::from);
+                let mut out = self.text_audit(scale, shot.as_deref());
+                out["ok"] = json!(true);
+                out
             }
             "screenshot" => {
                 let path = body.get("path").and_then(Value::as_str).map(PathBuf::from).unwrap_or_else(|| self.cx.shot_dir.join("gui_shot.png"));
@@ -1304,6 +1352,43 @@ mod tests {
     fn press(s: &mut Shell<App>, k: Key) {
         s.key(k);
         s.frame();
+    }
+
+    /// A screen with one label that fits at Normal text size and is cut at Extra large (TEXTFIT1 audit).
+    #[derive(Default)]
+    struct Cramped {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    impl Cramped {
+        fn act(&mut self, _cx: &mut Cx, _a: &'static str) {}
+    }
+
+    impl Screen<App> for Cramped {
+        fn id(&self) -> &'static str {
+            "cramped"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            let label = "Twelve letters";
+            let fit_at_normal = ui.p.text_w(label, BODY) / ui.p.fonts.scale + 2.0;
+            ui.p.text_fit(10.0, 10.0, label, BODY, fit_at_normal, TEXT);
+            self.w = ui.widgets;
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    #[test]
+    fn the_text_audit_finds_a_label_cut_only_at_a_larger_text_size() {
+        let mut s = shell();
+        s.stack = vec![Box::new(Cramped::default())];
+        s.frame();
+        let normal = s.bridge(&json!({"cmd": "text_audit", "scale": 1.0}));
+        assert_eq!((normal["ok"].clone(), normal["screen"].clone(), normal["counts"]["cut"].clone()), (json!(true), json!("cramped"), json!(0)), "{normal}");
+        let large = s.bridge(&json!({"cmd": "text_audit", "scale": 1.3}));
+        assert_eq!(large["counts"]["cut"], json!(1), "{large}");
+        assert_eq!(large["cut"][0]["text"], json!("Twelve letters"));
+        assert!((s.gfx.fonts.scale - 1.0).abs() < 1e-6 && s.gfx.fonts.audit.is_none(), "the audit leaves the text size and the recorder as they were");
     }
 
     /// A screen whose only button opens a notice.

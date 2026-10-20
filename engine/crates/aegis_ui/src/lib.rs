@@ -18,6 +18,7 @@ pub mod recordings;
 pub mod screen;
 pub mod shell;
 pub mod timeline;
+pub mod text_audit;
 pub mod tuning;
 pub mod ui;
 pub mod window;
