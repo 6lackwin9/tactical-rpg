@@ -48,6 +48,24 @@ impl Key {
         })
     }
 
+    /// The key's name, as `parse` reads it ("up", "shift+tab", "a").
+    pub fn name(self) -> String {
+        match self {
+            Key::Up => "up".into(),
+            Key::Down => "down".into(),
+            Key::Left => "left".into(),
+            Key::Right => "right".into(),
+            Key::Enter => "enter".into(),
+            Key::Space => "space".into(),
+            Key::Esc => "esc".into(),
+            Key::Tab => "tab".into(),
+            Key::BackTab => "shift+tab".into(),
+            Key::PageUp => "pageup".into(),
+            Key::PageDown => "pagedown".into(),
+            Key::Char(c) => c.to_string(),
+        }
+    }
+
     /// A step direction for the arrow keys and W A S D.
     pub fn dir(self) -> Option<(i64, i64)> {
         match self {

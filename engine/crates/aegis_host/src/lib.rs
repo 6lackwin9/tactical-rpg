@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use std::ops::{Deref, DerefMut};
 
 pub mod playtest;
+pub mod trail;
 
 /// A game's command set.
 pub trait Commands {

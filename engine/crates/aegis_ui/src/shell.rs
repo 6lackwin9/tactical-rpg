@@ -48,6 +48,8 @@ struct Shell<G> {
     win_drag: Option<(String, Grab, (i32, i32))>,
     /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
     open_focus: Option<String>,
+    /// Playtest trail: the control under the pointer, since when, and its trail form.
+    hover: Option<(String, std::time::Instant, Value)>,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -80,6 +82,19 @@ fn info_at(infos: &[Value], pos: (i32, i32)) -> Option<&Value> {
     infos.iter().rev().filter(|w| w["kind"] == "option").find(under).or_else(|| infos.iter().rev().find(under))
 }
 
+/// A widget's agent info as a playtest trail control: {path (its id), cls (its kind), text (40 chars), tip (60),
+/// interactive}.
+fn trail_ctl(w: &Value) -> Value {
+    let cut = |v: &Value, n: usize| v.as_str().unwrap_or("").chars().take(n).collect::<String>();
+    let tip = w["tip"].as_array().and_then(|t| t.first()).cloned().unwrap_or(Value::Null);
+    json!({"path": w["id"], "cls": w["kind"], "text": cut(&w["text"], 40), "tip": cut(&tip, 60), "interactive": w["clickable"] == json!(true)})
+}
+
+/// A screen as a trail control (overlays open and close as modals).
+fn screen_ctl(id: &str) -> Value {
+    json!({"path": id, "cls": "screen", "text": "", "tip": "", "interactive": false})
+}
+
 impl<G: Context> Shell<G> {
     /// Applies queued navigation and notices (a screen change closes an open choice list).
     fn settle(&mut self) {
@@ -99,11 +114,18 @@ impl<G: Context> Shell<G> {
             let navs: Vec<Nav<G>> = self.cx.nav.drain(..).collect();
             for n in navs {
                 match n {
-                    Nav::Push(s) => self.stack.push(s),
+                    Nav::Push(s) => {
+                        // Playtest trail: an overlay opens as a modal, any other screen is a screen change.
+                        let event = if s.overlay() { json!({"type": "modal", "ctl": screen_ctl(s.id()), "open": true}) } else { json!({"type": "screen", "path": s.id(), "leaked": 0}) };
+                        self.cx.playtest.trail(event);
+                        self.stack.push(s);
+                    }
                     Nav::Pop => {
                         if self.stack.len() > 1 {
                             if let Some(mut gone) = self.stack.pop() {
                                 gone.leave(&mut self.cx);
+                                let event = if gone.overlay() { json!({"type": "modal", "ctl": screen_ctl(gone.id()), "open": false}) } else { json!({"type": "screen", "path": self.stack.last().map(|t| t.id()).unwrap_or(""), "leaked": 0}) };
+                                self.cx.playtest.trail(event);
                             }
                             let cx = &mut self.cx;
                             self.stack.last_mut().unwrap().resume(cx);
@@ -115,12 +137,14 @@ impl<G: Context> Shell<G> {
                         while let Some(mut gone) = self.stack.pop() {
                             gone.leave(&mut self.cx);
                         }
+                        self.cx.playtest.trail(json!({"type": "screen", "path": s.id(), "leaked": 0}));
                         self.stack.push(s);
                     }
                 }
             }
             if !self.cx.notice.is_empty() {
                 let lines: Vec<String> = self.cx.notice.drain(..).collect();
+                self.cx.playtest.trail(json!({"type": "modal", "ctl": screen_ctl("notice"), "open": true}));
                 self.stack.push(Box::new(Notice::new(lines)));
             }
         }
@@ -131,10 +155,34 @@ impl<G: Context> Shell<G> {
         while let Some(mut gone) = self.stack.pop() {
             gone.leave(&mut self.cx);
         }
+        self.cx.playtest.tick();
+        self.cx.playtest.save();
+    }
+
+    /// Playtest trail: a hover is logged when the pointer leaves a control it rested on for HOVER_MS or longer.
+    fn track_hover(&mut self) {
+        if !self.cx.playtest.on {
+            return;
+        }
+        let infos = self.stack.last().unwrap().widgets();
+        let under = info_at(&infos, self.mouse).map(|w| (w["id"].as_str().unwrap_or("").to_string(), trail_ctl(w)));
+        let same = matches!((&self.hover, &under), (Some((a, _, _)), Some((b, _))) if a == b);
+        if same {
+            return;
+        }
+        if let Some((_, since, ctl)) = self.hover.take() {
+            let ms = since.elapsed().as_millis() as u64;
+            if ms >= crate::playtest::HOVER_MS {
+                self.cx.playtest.trail(json!({"type": "hover", "ctl": ctl, "ms": ms}));
+            }
+        }
+        self.hover = under.map(|(id, ctl)| (id, std::time::Instant::now(), ctl));
     }
 
     fn frame(&mut self) {
         self.settle();
+        self.cx.playtest.tick();
+        self.track_hover();
         self.gfx.canvas.clip = None;
         // The saved sound levels; a screen may play draft ones for this frame (the settings popup).
         self.cx.audio.set_levels(&self.cx.settings.v);
@@ -246,6 +294,7 @@ impl<G: Context> Shell<G> {
     }
 
     fn key(&mut self, k: Key) {
+        self.cx.playtest.trail(json!({"type": "key", "key": k.name(), "mods": ""}));
         // Any key drops a press or drag in progress (what it changes could move the target); Esc does only that.
         let cancelled = self.cancel_drag();
         if k == Key::Esc && cancelled {
@@ -346,8 +395,33 @@ impl<G: Context> Shell<G> {
         true
     }
 
-    /// A left click: opens or closes a choice list, picks from it, starts a slider drag, or clicks the widget.
+    /// A left click with its playtest trail events, logged before the click runs (as Godot's `pressed` comes before the
+    /// panel it opens): `click` (the control; `handled` set once the click ran) and `button` when the click goes to a
+    /// clickable widget (not a click that only closes an open list or starts a drag).
     fn click(&mut self) {
+        if !self.cx.playtest.on {
+            self.click_inner();
+            return;
+        }
+        let infos = self.stack.last().unwrap().widgets();
+        let at = info_at(&infos, self.mouse).cloned();
+        let ctl = at.as_ref().map(trail_ctl).unwrap_or(Value::Null);
+        let list_open = self.gfx.kit.open.is_some();
+        let to_widget = at.as_ref().is_some_and(|w| w["clickable"] == json!(true) && !w["drag"].is_string() && (!list_open || w["kind"] == "option"));
+        let at_click = self.cx.playtest.trail(json!({"type": "click", "button": "left", "pos": [self.mouse.0, self.mouse.1], "ctl": ctl, "handled": at.is_some()}));
+        if to_widget {
+            self.cx.playtest.trail(json!({"type": "button", "ctl": ctl}));
+        }
+        if self.click_inner() && at.is_none() {
+            if let Some(i) = at_click {
+                self.cx.playtest.set_trail(i, "handled", json!(true));
+            }
+        }
+    }
+
+    /// A left click: opens or closes a choice list, picks from it, starts a slider drag, or clicks the widget; true
+    /// when something took it.
+    fn click_inner(&mut self) -> bool {
         // A press or drag whose release was lost (focus moved away mid-drag) ends here.
         self.cancel_drag();
         let pos = self.mouse;
@@ -363,14 +437,14 @@ impl<G: Context> Shell<G> {
                 self.stack.last_mut().unwrap().click(cx, pos);
             }
             self.settle();
-            return;
+            return true;
         }
         let id = at.as_ref().map(|w| w["id"].as_str().unwrap_or("").to_string()).unwrap_or_default();
         if at.as_ref().is_some_and(|w| focus::focusable(w, false)) {
             self.gfx.kit.focus = Some(id.clone());
         }
         if self.desk_press(&id, pos) {
-            return;
+            return true;
         }
         // A press on a window's content brings the window to the front (the content still gets the click).
         if let Some(d) = self.stack.last_mut().unwrap().desk() {
@@ -380,13 +454,13 @@ impl<G: Context> Shell<G> {
         }
         if kind == "select" {
             self.gfx.kit.open = Some(id);
-            return;
+            return true;
         }
         if let Some(key) = at.as_ref().and_then(|w| w["drag"].as_str()) {
             // A draggable widget: a move picks it up (`drag_to`), a release without one clicks it (`release`).
             let text = at.as_ref().and_then(|w| w["text"].as_str()).unwrap_or("").to_string();
             self.press = Some(Press { id, key: key.to_string(), text, at: pos });
-            return;
+            return true;
         }
         if kind == "slider_step" {
             if let Some((slider, _)) = id.rsplit_once(".step.") {
@@ -394,8 +468,9 @@ impl<G: Context> Shell<G> {
             }
         }
         let cx = &mut self.cx;
-        self.stack.last_mut().unwrap().click(cx, pos);
+        let handled = self.stack.last_mut().unwrap().click(cx, pos);
         self.settle();
+        handled
     }
 
     /// The mouse moved: a press on a draggable widget becomes a drag once it moved DRAG_START pixels; a slider drag
@@ -516,6 +591,11 @@ impl<G: Context> Shell<G> {
     }
 
     fn back(&mut self) {
+        if self.cx.playtest.on {
+            let infos = self.stack.last().unwrap().widgets();
+            let ctl = info_at(&infos, self.mouse).map(trail_ctl).unwrap_or(Value::Null);
+            self.cx.playtest.trail(json!({"type": "click", "button": "right", "pos": [self.mouse.0, self.mouse.1], "ctl": ctl, "handled": true}));
+        }
         if self.cancel_drag() || self.gfx.kit.open.take().is_some() {
             return;
         }
@@ -790,7 +870,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -1037,7 +1117,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None };
         s.frame();
         s
     }
@@ -1111,6 +1191,95 @@ mod tests {
     fn press(s: &mut Shell<App>, k: Key) {
         s.key(k);
         s.frame();
+    }
+
+    /// A screen whose only button opens a notice.
+    #[derive(Default)]
+    struct Opener {
+        w: Vec<Widget<&'static str>>,
+    }
+
+    impl Opener {
+        fn act(&mut self, cx: &mut Cx, _a: &'static str) {
+            cx.notice.push("Opened.".into());
+        }
+    }
+
+    impl Screen<App> for Opener {
+        fn id(&self) -> &'static str {
+            "opener"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            ui.button("open", Rect::new(10, 10, 40, 14), "Open", "open", true);
+            self.w = ui.widgets;
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// A click that opens an overlay is in the trail before the overlay (so the report reads it as prompted), and a
+    /// click that only closes an open choice list presses no button.
+    #[test]
+    fn a_click_comes_before_what_it_opens() {
+        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("aegis_shell_open_{}", std::process::id()));
+        let mut s = shell();
+        s.stack = vec![Box::new(Opener::default())];
+        s.frame();
+        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.mouse = (20, 17);
+        s.click();
+        s.frame();
+        let trail = s.cx.playtest.current().unwrap().trail.clone();
+        let types: Vec<&str> = trail.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        assert_eq!(types, ["click", "button", "modal"], "{trail:?}");
+        let report = aegis_host::trail::build(&trail[..3], 0, &[]);
+        assert_eq!((report["counts"]["unprompted_open"].clone(), report["counts"]["slow_open"].clone()), (json!(0), json!(0)), "{report}");
+
+        let mut f = form(Form::default());
+        f.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        f.mouse = (30, 47);
+        f.click();
+        f.frame();
+        f.mouse = (30, 17);
+        f.click();
+        let trail = f.cx.playtest.current().unwrap().trail.clone();
+        let types: Vec<&str> = trail.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        assert_eq!(types, ["click", "button", "click"], "the click closing the list presses nothing: {trail:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PORT-PLAYTEST trail: with recording on, the shell logs clicks (the control and whether anything took it), the
+    /// widget a click pressed, keys and a notice opening as a modal; leaving writes the recording.
+    #[test]
+    fn the_shell_feeds_the_playtest_trail() {
+        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("aegis_shell_trail_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = form(Form::default());
+        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.mouse = (30, 17);
+        s.click();
+        s.frame();
+        s.mouse = (500, 500);
+        s.click();
+        press(&mut s, Key::Tab);
+        s.cx.notice.push("Saved.".into());
+        s.frame();
+        let trail = s.cx.playtest.current().unwrap().trail.clone();
+        let types: Vec<&str> = trail.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        assert_eq!(types, ["click", "button", "click", "key", "modal"], "{trail:?}");
+        assert_eq!((trail[0]["ctl"]["path"].clone(), trail[0]["handled"].clone()), (json!("ok"), json!(true)));
+        assert_eq!((trail[2]["ctl"].clone(), trail[2]["handled"].clone()), (Value::Null, json!(false)), "a click on nothing");
+        assert_eq!(trail[3]["key"], json!("tab"));
+        assert_eq!(trail[4]["ctl"]["path"], json!("notice"));
+        // The notice opened in the same millisecond would count as a reaction: the report reads the clicks and key.
+        let report = aegis_host::trail::build(&trail[..4], 0, &[]);
+        assert_eq!(report["counts"]["dead_click"], json!(1), "{report}");
+        s.leave_all();
+        let id = s.cx.playtest.current().unwrap().id.clone();
+        assert_eq!(aegis_host::playtest::Recording::load(&s.cx.playtest.path_of(&id)).unwrap().trail.len(), 5);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

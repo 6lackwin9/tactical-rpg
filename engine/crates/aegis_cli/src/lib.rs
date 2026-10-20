@@ -64,7 +64,7 @@ pub trait Game {
 }
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
-aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>]
+aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json or @file>]";
 
@@ -251,6 +251,7 @@ fn link(raw: &[String]) -> Result<()> {
 ///   variant=<file>      {"at", "remove"?, "requests": [...], "then"?: "stop" | "recorded"}: run the session with
 ///                       those requests in place of the recorded ones, print every `DIFF <at> <path> <recorded> ->
 ///                       <variant>`; write=<dir> saves the variant run as a recording (origin agent)
+///   trail-report        the UI trail's flags (dead clicks, repeats, long hovers, refused confirms, errors, panels)
 ///   seeds=a..b | a,b    re-run the recorded requests under each seed (at most 200; seed_key=seed names the starting
 ///                       request's key); a failed request ends the run as broken@<index>, or with fallback=<json> sends
 ///                       that request instead; prints each result and the counts
@@ -285,6 +286,17 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
             format!("stale: {}{more}", changed[..changed.len().min(8)].join(", "))
         };
         println!("§ recording {} ({} battles, {} notes), content {content}", rec.id, rec.battles.len(), rec.notes.len());
+    }
+    if args.flag("trail-report") {
+        let report = aegis_host::trail::build(&rec.trail, rec.trail_dropped, &rec.notes);
+        if json_out {
+            println!("{report}");
+        } else {
+            for line in aegis_host::trail::lines(&report) {
+                println!("§ {line}");
+            }
+        }
+        return Ok(());
     }
     let mut failed = false;
     if args.keys.contains_key("until") && (args.keys.contains_key("seeds") || args.keys.contains_key("variant")) {
