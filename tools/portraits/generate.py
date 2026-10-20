@@ -3,11 +3,13 @@
 # style reference image attached; pixelize.py then makes the game portrait. The key comes from the GEMINI_API_KEY
 # environment variable and is sent as a header, never printed or written anywhere. Standard library only.
 #   python generate.py models                      the models this key can use that make images
-#   python generate.py run <model> <id>... [--n N] generate N images (default 1) per character id
+#   python generate.py run <model> <id>... [--n N] [--file icons] [--no-ref]
+#       N images (default 1) per id; --file icons reads ART2_ICONS.md (whole sheet prompts); --no-ref sends no reference
 import base64, json, os, pathlib, re, sys, time, urllib.error, urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "games/emberwake/docs/specs/ART2_PROMPTS.md"
+ICONS = ROOT / "games/emberwake/docs/specs/ART2_ICONS.md"
 SRC = ROOT / "art_src"
 REFERENCE = SRC / "mara_voss.png"
 API = "https://generativelanguage.googleapis.com/v1beta"
@@ -41,20 +43,24 @@ def models():
             return out
 
 
-def prompts():
-    """id -> the full prompt (style block + the character block) from ART2_PROMPTS.md."""
-    text = PROMPTS.read_text(encoding="utf-8")
+def prompts(path=PROMPTS):
+    """id -> the full prompt. ART2_PROMPTS.md: the shared style block + each character block; ART2_ICONS.md: each
+    block is a whole sheet prompt."""
+    text = path.read_text(encoding="utf-8")
     blocks = re.findall(r"```text\n(.*?)```", text, re.S)
-    style, rest = blocks[0].strip(), blocks[1:]
-    ids = re.findall(r"^## .*\(`([a-z_]+)`\)", text, re.M)
-    return {i: f"{style}\n\n{b.strip()}" for i, b in zip(ids, rest)}
+    ids = re.findall(r"^## .*\(`([a-z_0-9]+)`\)", text, re.M)
+    if path == PROMPTS:
+        style, rest = blocks[0].strip(), blocks[1:]
+        return {i: f"{style}\n\n{b.strip()}" for i, b in zip(ids, rest)}
+    return {i: b.strip() for i, b in zip(ids, blocks)}
 
 
-def generate(model, cid, prompt, n):
-    ref = base64.b64encode(REFERENCE.read_bytes()).decode()
+def generate(model, cid, prompt, n, use_ref=True):
+    ref = base64.b64encode(REFERENCE.read_bytes()).decode() if use_ref else None
     saved = []
     for k in range(n):
-        body = {"contents": [{"parts": [{"inline_data": {"mime_type": "image/png", "data": ref}}, {"text": prompt}]}],
+        parts = ([{"inline_data": {"mime_type": "image/png", "data": ref}}] if ref else []) + [{"text": prompt}]
+        body = {"contents": [{"parts": parts}],
                 "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}
         reply = call(f"models/{model}:generateContent", body)
         parts = [p for c in reply.get("candidates", []) for p in c.get("content", {}).get("parts", [])]
@@ -79,15 +85,19 @@ if __name__ == "__main__":
             if "image" in name or "imagen" in name:
                 print(name, "|", m.get("displayName", ""), "|", ",".join(m.get("supportedGenerationMethods", [])))
     else:
-        args = sys.argv[2:]; n = 1
+        args = sys.argv[2:]; n = 1; src = PROMPTS; use_ref = True
         if "--n" in args:
             i = args.index("--n"); n = int(args[i + 1]); del args[i:i + 2]
+        if "--file" in args:
+            i = args.index("--file"); src = ICONS if args[i + 1] == "icons" else pathlib.Path(args[i + 1]); del args[i:i + 2]
+        if "--no-ref" in args:
+            args.remove("--no-ref"); use_ref = False
         model, ids = args[0], args[1:]
-        P = prompts()
+        P = prompts(src)
         for cid in ids:
             if cid not in P:
-                print(f"{cid}: no prompt in {PROMPTS.name}"); continue
+                print(f"{cid}: no prompt in {src.name}"); continue
             try:
-                generate(model, cid, P[cid], n)
+                generate(model, cid, P[cid], n, use_ref)
             except RuntimeError as e:
                 print(f"{cid}: {e}")
