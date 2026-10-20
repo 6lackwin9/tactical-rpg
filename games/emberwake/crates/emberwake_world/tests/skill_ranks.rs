@@ -294,3 +294,18 @@ fn rank_lines_list_only_changing_fields() {
     let l3 = locked.iter().find(|l| l.tier == 3).unwrap();
     assert!(!l3.unlocked && l3.text == format!("unlocks at Lv {}", l3.unlock_level), "{l3:?}");
 }
+
+#[test]
+fn rank_texts_read_naturally() {
+    let d = data();
+    // Shield Bash ranks change power and the stagger chance; stagger has no magnitude and lasts 1 round
+    let mut m = UnitState::at_level(&d, "warrior", TOP_LEVEL, "bryn");
+    m.loadout_class = vec!["shield_bash".into()];
+    let u = built(&d, &m);
+    let lines = skill_text::rank_lines(&d.cat, &u, "shield_bash");
+    let open: Vec<&skill_text::RankLine> = lines.iter().filter(|l| l.unlocked).collect();
+    assert!(!open.is_empty());
+    for l in open {
+        assert!(l.text.contains("stagger") && !l.text.contains("(0)") && !l.text.contains("1 rounds"), "{}", l.text);
+    }
+}

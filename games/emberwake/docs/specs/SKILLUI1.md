@@ -80,6 +80,8 @@ the highest unlocked rank (clamped down).
   blocks and only the fields that differ between the family's rows, using the table below; a locked rank's text is
   `"unlocks at Lv {n}"` (`skill_unlock_level`).
 
+As built (2026-10-21): `rounds` reads `1 round` / `{n} rounds`, and a zero `status_magnitude` shows no `({magnitude})`.
+
 | Field(s) | Text |
 | --- | --- |
 | `power_mult` | `power x{:.2}` |

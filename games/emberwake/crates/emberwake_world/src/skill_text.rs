@@ -14,6 +14,10 @@ pub struct RankLine {
     pub text: String,
 }
 
+fn rounds(n: i32) -> String {
+    format!("{n} round{}", if n == 1 { "" } else { "s" })
+}
+
 /// Every rank of `family` for `unit`, ascending.
 pub fn rank_lines(cat: &Catalog, unit: &Unit, family: &str) -> Vec<RankLine> {
     let rows = cat.family_rows(family);
@@ -22,9 +26,15 @@ pub fn rank_lines(cat: &Catalog, unit: &Unit, family: &str) -> Vec<RankLine> {
     let fields: [&dyn Fn(&SkillDef) -> String; 9] = [
         &|s| if s.power_mult > 0.0 { format!("power x{:.2}", s.power_mult) } else { String::new() },
         &|s| if s.heal_base > 0 || s.heal_mult > 0.0 { format!("heal {} + {:.2} x {}", s.heal_base, s.heal_mult, s.heal_stat) } else { String::new() },
-        &|s| if s.status_effect.is_empty() { String::new() } else { format!("{} {} ({}) for {} rounds", s.status_effect, s.status_potency, s.status_magnitude, s.status_rounds) },
+        &|s| {
+            if s.status_effect.is_empty() {
+                return String::new();
+            }
+            let magnitude = if s.status_magnitude > 0 { format!(" ({})", s.status_magnitude) } else { String::new() };
+            format!("{} {}{magnitude} for {}", s.status_effect, s.status_potency, rounds(s.status_rounds))
+        },
         &|s| if s.mitigation > 0.0 { format!("blocks {}% damage", (s.mitigation * 100.0).round() as i32) } else { String::new() },
-        &|s| if s.boost > 0.0 { format!("attack x{:.2} for {} rounds", s.boost, s.boost_rounds) } else { String::new() },
+        &|s| if s.boost > 0.0 { format!("attack x{:.2} for {}", s.boost, rounds(s.boost_rounds)) } else { String::new() },
         &|s| match (s.grant_status.is_empty(), s.extra_grants.len()) {
             (true, 0) => String::new(),
             (true, n) => format!("+{n} effects"),
