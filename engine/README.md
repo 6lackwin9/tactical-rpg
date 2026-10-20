@@ -128,8 +128,8 @@ cargo run --release -p emberwake_gui -- screen=arena encounter=goblin_ambush see
 ```
 
 The main menu leads to New game (world cards), Continue / Load, Settings and Tools (the Scene Runner: Combat Arena on
-any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, debug region and world maps with
-Won / Fled / Lost buttons, and the UI Gallery of standalone panes). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
+any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, Exploration (a world from any location or its world map,
+nothing saved, a fight skipped as a win at no cost or fought), and the UI Gallery: the kit's widgets, every screen and the battle's panels one at a time). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
 (or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Talking opens the dialogue
 dock (1-9 choose); shops, turn-ins and lore open as popups; a world-map exit opens the world map (click a node, Travel,
 Make camp, Enter). Fights open the battle screen with the saved party; Continue settles the outcome and shows the
@@ -145,7 +145,10 @@ I enemy tells, F12 screenshot.
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every
 widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `type {text}` (into the text field being edited), `note` (F8), `key {key}` (up / down / left /
-right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `game` (the full game state), and the
+right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
+frame of the top screen at a text size, the mouse off the canvas, reporting the text `text_fit` or a button shortened
+(cut), text past the canvas (edge), texts drawn over each other (overlap) and text running out of its control (spill);
+text in a scroll area or under a later panel is skipped; `shot` saves that frame), `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 
 ```bash

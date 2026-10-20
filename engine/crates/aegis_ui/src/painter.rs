@@ -9,7 +9,7 @@ pub const LW: f32 = 640.0;
 pub const LH: f32 = 360.0;
 
 /// Logical -> physical mapping (uniform scale, letterboxed and centred).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct View {
     pub s: f32,
     pub ox: f32,
@@ -45,12 +45,35 @@ pub struct Fonts {
     cache: HashMap<(char, u32), (fontdue::Metrics, Vec<u8>)>,
     /// The text size factor (settings `text_scale`: 0.85 Small .. 1.3 Extra large); every text size is multiplied by it.
     pub scale: f32,
+    /// TEXTFIT1 text audit: while Some, every text drawn is recorded here (the shell's `text_audit` turns it on for
+    /// one frame and reports what is cut, off the canvas or overlapping).
+    pub audit: Option<Vec<TextRec>>,
 }
+
+/// One text drawn during an audited frame, in logical units.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextRec {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub text: String,
+    /// The text lies partly or wholly outside the clip in force (a scroll area): not a layout problem.
+    pub clipped: bool,
+    /// The full text when `text_fit` had to shorten it.
+    pub cut: Option<String>,
+    /// A near-opaque fill or panel drawn later covers the text's first letter or most of it (a dialog over the
+    /// screen): hidden, so not a layout problem.
+    pub covered: bool,
+}
+
+/// The fill alpha from which a fill or panel hides the audited text beneath it.
+pub const COVER_ALPHA: u8 = 200;
 
 impl Fonts {
     pub fn new(ttf: &[u8]) -> Self {
         let font = fontdue::Font::from_bytes(ttf, fontdue::FontSettings::default()).expect("valid TTF");
-        Self { font, cache: HashMap::new(), scale: 1.0 }
+        Self { font, cache: HashMap::new(), scale: 1.0, audit: None }
     }
 
     fn glyph(&mut self, c: char, px: u32) -> &(fontdue::Metrics, Vec<u8>) {
@@ -93,6 +116,21 @@ impl<'a> Painter<'a> {
     pub fn fill(&mut self, r: Rect, col: Rgba) {
         let pr = self.v.rect(r);
         self.c.fill(pr, col);
+        self.cover(r, col[3]);
+    }
+
+    /// TEXTFIT1: marks the audited texts so far that `r` (filled at `alpha`) hides.
+    fn cover(&mut self, r: Rect, alpha: u8) {
+        let Some(a) = self.fonts.audit.as_mut().filter(|_| alpha >= COVER_ALPHA) else { return };
+        let (x0, y0, x1, y1) = (r.x as f32, r.y as f32, (r.x + r.w) as f32, (r.y + r.h) as f32);
+        for t in a.iter_mut().filter(|t| !t.covered) {
+            let mid = t.y + t.h / 2.0;
+            if mid < y0 || mid > y1 {
+                continue;
+            }
+            let shared = (t.x + t.w).min(x1) - t.x.max(x0);
+            t.covered = (t.x + 1.0 >= x0 && t.x + 1.0 <= x1) || shared > t.w / 2.0;
+        }
     }
 
     /// Draws only inside the logical rect `r` from now on (None: everywhere).
@@ -127,6 +165,7 @@ impl<'a> Painter<'a> {
                 }
             }
         }
+        self.cover(r, fill[3]);
     }
 
     /// Pixel-art image scaled into logical `r` with nearest sampling.
@@ -168,13 +207,36 @@ impl<'a> Painter<'a> {
             }
             pen += m.advance_width;
         }
-        (pen - self.v.ox) / self.v.s
+        let end = (pen - self.v.ox) / self.v.s;
+        if self.fonts.audit.is_some() && !s.trim().is_empty() {
+            let h = self.line_h(size);
+            let clipped = self.c.clip.is_some_and(|c| {
+                let (cx0, cy0) = ((c.x as f32 - self.v.ox) / self.v.s, (c.y as f32 - self.v.oy) / self.v.s);
+                let (cx1, cy1) = (cx0 + c.w as f32 / self.v.s, cy0 + c.h as f32 / self.v.s);
+                x < cx0 - 0.5 || y < cy0 - 0.5 || end > cx1 + 0.5 || y + h > cy1 + 0.5
+            });
+            if let Some(a) = self.fonts.audit.as_mut() {
+                a.push(TextRec { x, y, w: end - x, h, text: s.to_string(), clipped, cut: None, covered: false });
+            }
+        }
+        end
     }
 
     /// Text shortened with "..." to fit `max_w` logical units.
     pub fn text_fit(&mut self, x: f32, y: f32, s: &str, size: f32, max_w: f32, col: Rgba) {
         let t = self.fit(s, size, max_w);
         self.text(x, y, &t, size, col);
+        if t != s {
+            self.mark_cut(s);
+        }
+    }
+
+    /// TEXTFIT1: the text just drawn was `full` shortened (for the audit; drawing that shortens text with `fit`
+    /// itself calls this after drawing).
+    pub fn mark_cut(&mut self, full: &str) {
+        if let Some(last) = self.fonts.audit.as_mut().and_then(|a| a.last_mut()) {
+            last.cut = Some(full.to_string());
+        }
     }
 
     pub fn fit(&mut self, s: &str, size: f32, max_w: f32) -> String {
@@ -198,7 +260,7 @@ impl<'a> Painter<'a> {
         self.text(cx - w / 2.0, y, s, size, col);
     }
 
-    /// Word wrap to `max_w` logical units (long words are cut).
+    /// Word wrap to `max_w` logical units (a word wider than a line breaks across lines, wherever it falls).
     pub fn wrap(&mut self, s: &str, size: f32, max_w: f32) -> Vec<String> {
         let mut lines = Vec::new();
         let mut cur = String::new();
@@ -206,18 +268,18 @@ impl<'a> Painter<'a> {
             let candidate = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
             if self.text_w(&candidate, size) <= max_w || cur.is_empty() {
                 cur = candidate;
-                while self.text_w(&cur, size) > max_w && cur.chars().count() > 1 {
-                    let mut head = cur.clone();
-                    let mut tail = String::new();
-                    while self.text_w(&head, size) > max_w && head.chars().count() > 1 {
-                        tail.insert(0, head.pop().unwrap());
-                    }
-                    lines.push(head);
-                    cur = tail;
-                }
             } else {
                 lines.push(std::mem::take(&mut cur));
                 cur = word.to_string();
+            }
+            while self.text_w(&cur, size) > max_w && cur.chars().count() > 1 {
+                let mut head = cur.clone();
+                let mut tail = String::new();
+                while self.text_w(&head, size) > max_w && head.chars().count() > 1 {
+                    tail.insert(0, head.pop().unwrap());
+                }
+                lines.push(head);
+                cur = tail;
             }
         }
         if !cur.is_empty() {
@@ -432,5 +494,40 @@ mod tests {
         assert!(narrow.len() > 3);
         assert!(narrow.iter().all(|l| l.first().is_none_or(|s| !s.text.starts_with(' '))), "no leading spaces");
         assert_eq!(p.rich_height(text, 7.0, 600.0), 2.0 * p.line_h(7.0));
+    }
+
+    /// TEXTFIT1: a word wider than the line breaks across lines after another word too (raw JSON in the forges).
+    #[test]
+    fn wrap_breaks_a_long_word_wherever_it_falls() {
+        let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        let mut canvas = crate::canvas::Canvas::new(640, 360);
+        let mut fonts = Fonts::new(&font);
+        let mut p = Painter { c: &mut canvas, v: View::fit(640, 360), fonts: &mut fonts };
+        let long = "{\"id\":\"signpost\",\"kind\":\"exit\",\"anchor\":\"road\",\"to\":\"world_map\"}";
+        for s in [long.to_string(), format!("[ {long}"), format!("short words {long} end")] {
+            let lines = p.wrap(&s, 7.0, 80.0);
+            assert!(lines.len() > 2, "{lines:?}");
+            assert!(lines.iter().all(|l| p.text_w(l, 7.0) <= 80.0), "every line fits: {lines:?}");
+            assert_eq!(lines.concat().replace(' ', ""), s.replace(' ', ""), "nothing is lost");
+        }
+    }
+    /// TEXTFIT1: a near-opaque panel drawn after a text hides it from the audit; a see-through one, a panel drawn
+    /// before the text (a button behind its label) or one past the text does not.
+    #[test]
+    fn a_later_opaque_panel_covers_the_audited_text_beneath_it() {
+        let font = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        let mut canvas = crate::canvas::Canvas::new(640, 360);
+        let mut fonts = Fonts::new(&font);
+        fonts.audit = Some(Vec::new());
+        let mut p = Painter { c: &mut canvas, v: View::fit(640, 360), fonts: &mut fonts };
+        p.panel(Rect::new(8, 98, 120, 14), [20, 20, 20, 255], W, 2.0);
+        for (i, s) in ["Under the dialog", "Under the dim", "Beside the dialog", "On its button"].iter().enumerate() {
+            p.text(if i == 2 { 400.0 } else { 10.0 }, 10.0 + 30.0 * i as f32, s, 8.0, W);
+        }
+        p.fill(Rect::new(0, 0, 200, 20), [20, 20, 20, 240]);
+        p.fill(Rect::new(0, 30, 200, 20), [0, 0, 0, 120]);
+        p.panel(Rect::new(0, 60, 200, 20), [20, 20, 20, 255], W, 4.0);
+        let covered: Vec<bool> = p.fonts.audit.as_ref().unwrap().iter().map(|t| t.covered).collect();
+        assert_eq!(covered, [true, false, false, false]);
     }
 }

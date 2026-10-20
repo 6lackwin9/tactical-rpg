@@ -3,3 +3,8 @@
 
 # Windows batch files need CRLF: cmd misreads labels and blocks in LF-only files.
 *.bat text eol=crlf
+
+# Art session source images (full-size masters) live in Git LFS (user 2026-10-20); CI checkout skips LFS files.
+art_src/**/*.png filter=lfs diff=lfs merge=lfs -text
+art_src/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+art_src/**/*.webp filter=lfs diff=lfs merge=lfs -text

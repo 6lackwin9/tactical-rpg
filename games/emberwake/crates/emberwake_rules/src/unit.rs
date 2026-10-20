@@ -104,6 +104,10 @@ pub struct Unit {
     pub riposted: Vec<usize>,
     pub ap_cost_modifier: i32,
     pub loadout_locked: bool,
+    /// SKILLUI1: the rank chosen per family on the Skills tab. `None` = the rule is off (catalog units, enemies,
+    /// guests, sims: every unlocked tier stays usable); `Some` = a hero built from member state, who uses only the
+    /// effective rank of each slotted family (`effective_rank`).
+    pub rank_choice: Option<IndexMap<String, i32>>,
 }
 
 impl Unit {
@@ -157,6 +161,7 @@ impl Unit {
             riposted: Vec::new(),
             ap_cost_modifier: 0,
             loadout_locked: false,
+            rank_choice: None,
         }
     }
 
@@ -485,6 +490,11 @@ impl Unit {
     }
 }
 
+/// A skill rank as the game writes it: I to V (SKILLUI1 rank texts and refusals).
+pub fn rank_numeral(rank: i32) -> &'static str {
+    ["-", "I", "II", "III", "IV", "V"].get(rank.max(0) as usize).copied().unwrap_or("V+")
+}
+
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a staff or wand; "heal" = a support heal.
 pub fn skill_in_group(s: &emberwake_data::SkillDef, group: &str) -> bool {
     match group {
@@ -771,9 +781,43 @@ impl Unit {
         self.stats.level >= self.skill_unlock_level(cat, skill)
     }
 
-    /// Known, unlocked, and trained for (min_proficiency in the hand's weapon type).
+    /// SKILLUI1 R1: the tiers of `family` this unit owns and has unlocked, ascending (a class hero owns whole
+    /// ladders, so 1..top; a learned row gives only its own tier).
+    pub fn selectable_ranks(&self, cat: &Catalog, family: &str) -> Vec<i32> {
+        let mut out: Vec<i32> = cat.family_rows(family).into_iter().filter(|s| self.owns_skill(cat, &s.id) && self.tier_unlocked(cat, s)).map(|s| s.tier).collect();
+        out.dedup();
+        out
+    }
+
+    /// SKILLUI1 R2: the rank the unit uses: no entry, the highest selectable rank; an entry `c`, the highest
+    /// selectable rank <= `c`, else the lowest; `None` when nothing is selectable (the family is locked).
+    pub fn effective_rank(&self, cat: &Catalog, family: &str) -> Option<i32> {
+        let ranks = self.selectable_ranks(cat, family);
+        let chosen = self.rank_choice.as_ref().and_then(|m| m.get(family).copied());
+        match chosen {
+            None => ranks.last().copied(),
+            Some(c) => ranks.iter().rev().find(|&&r| r <= c).or(ranks.first()).copied(),
+        }
+    }
+
+    /// SKILLUI1 R3: the rank rule of `can_use`: off without a rank choice, for basics, engine and always-active
+    /// skills and for families outside a set loadout (they fail `knows_skill` anyway); otherwise, with a loadout or
+    /// without one (every owned family is then active), only the family's effective rank is usable.
+    pub fn rank_allowed(&self, cat: &Catalog, skill: &emberwake_data::SkillDef) -> bool {
+        if self.rank_choice.is_none() || skill.system || skill.basic || cat.is_always_active(&skill.id) {
+            return true;
+        }
+        let fam = skill.family_id();
+        let active = self.active_families();
+        if !active.is_empty() && !active.iter().any(|f| f == fam) {
+            return true;
+        }
+        self.effective_rank(cat, fam) == Some(skill.tier)
+    }
+
+    /// Known, unlocked, at the chosen rank (SKILLUI1 R3), and trained for (min_proficiency in the hand's weapon type).
     pub fn can_use(&self, cat: &Catalog, skill: &emberwake_data::SkillDef) -> bool {
-        if !self.knows_skill(cat, &skill.id) || !self.tier_unlocked(cat, skill) {
+        if !self.knows_skill(cat, &skill.id) || !self.tier_unlocked(cat, skill) || !self.rank_allowed(cat, skill) {
             return false;
         }
         if self.known_skills.is_empty() || skill.min_proficiency <= 0 {

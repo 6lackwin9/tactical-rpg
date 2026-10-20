@@ -465,6 +465,13 @@ impl Catalog {
         self.skill(skill_id).map(SkillDef::family_id).unwrap_or(skill_id)
     }
 
+    /// The family's rows sorted by tier (SKILLUI1: the ranks a Skills tab slot steps over).
+    pub fn family_rows(&self, family: &str) -> Vec<&SkillDef> {
+        let mut rows: Vec<&SkillDef> = self.skills.iter().filter(|s| s.family_id() == family).collect();
+        rows.sort_by_key(|s| s.tier);
+        rows
+    }
+
     /// Basic, non-system skills in catalog order (every unit owns them from level 1).
     pub fn basic_ids(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();

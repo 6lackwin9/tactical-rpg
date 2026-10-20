@@ -56,7 +56,7 @@ pub struct RegionMap {
     geo: (i32, i32, i32),
 }
 
-/// Starts a world fight: the battle screen, or the Won / Fled / Lost popup in a debug game.
+/// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
 pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
     if cx.debug {
         cx.nav.push(Nav::Push(Box::new(crate::runner::DebugFight::new(fight, runner))));
@@ -206,7 +206,8 @@ impl RegionMap {
         }
     }
 
-    fn talk(&mut self, cx: &mut Cx, character: &str) {
+    /// Opens the conversation with `character` (also the UI Gallery's dialogue and shop entries).
+    pub fn talk(&mut self, cx: &mut Cx, character: &str) {
         let d = cx.data.clone();
         let r = DialogueRunner::open(&d, cx.gs_mut(), character);
         if r.closed {

@@ -1,6 +1,6 @@
 //! SaveGame and SaveMigrations (scripts/game_state/), the game's side: the engine save framework (`aegis_save`) keeps
 //! the slot files, the envelope ({format: "fc_save", version, saved_at, game_state}), the atomic write and the
-//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 10). Slot
+//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 11). Slot
 //! 0 = autosave, 1..5 manual; reads migrate then validate and never return a half-loaded state. 2 -> 3 seeds
 //! rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
 
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 pub use aegis_save::{delete, exists, path_for};
 
-pub const VERSION: i64 = 10;
+pub const VERSION: i64 = 11;
 pub const FORMAT: &str = "fc_save";
 pub const AUTOSAVE_SLOT: i64 = 0;
 pub const LAST_SLOT: i64 = 5;
@@ -168,6 +168,9 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
         9 => {
             out.insert("purses".into(), Value::Object(Dict::new()));
         }
+        // SKILLUI1: members may carry `loadout.ranks`; nothing to add (absent = the highest unlocked rank). The
+        // bump makes an older build refuse such a save ("newer version") instead of dropping the ranks.
+        10 => {}
         _ => return None,
     }
     Some(out)

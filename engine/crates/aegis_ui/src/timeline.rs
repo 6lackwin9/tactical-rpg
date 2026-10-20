@@ -12,7 +12,7 @@ use crate::ui::{tip, Tip, Ui, BODY, BORDER, CARD, DIM, GOLD, PANEL_HI, RADIUS, S
 pub const RULER_H: i32 = 13;
 pub const HEADER_H: i32 = 11;
 pub const ROW_H: i32 = 15;
-/// Width of the track labels' column.
+/// Width of the track labels' column at the least; it grows to the longest label (up to a quarter of the pane).
 pub const LABEL_W: i32 = 74;
 
 /// One span of blocks on a track (an action).
@@ -74,8 +74,10 @@ impl Timeline {
     /// Draws the timeline in `r`. Widget ids: `<id>.block.<b>`, `<id>.track.<track>`, `<id>.seg.<track>.<segment>`;
     /// `on_block(b)`, `on_track(track)` and `on_segment(track, segment)` make the actions they carry.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, id: &str, r: Rect, on_block: impl Fn(i32) -> A, on_track: impl Fn(&str) -> A, on_segment: impl Fn(&str, &str) -> A) {
-        let lane_x = r.x + LABEL_W;
-        let lane_w = (r.w - LABEL_W - 4).max(self.blocks.max(1));
+        let longest = self.sections.iter().flat_map(|s| &s.tracks).map(|t| ui.p.text_w(&t.label, BODY).ceil() as i32 + 9).max().unwrap_or(0);
+        let label_w = longest.clamp(LABEL_W, (r.w / 4).max(LABEL_W));
+        let lane_x = r.x + label_w;
+        let lane_w = (r.w - label_w - 4).max(self.blocks.max(1));
         // The ruler: one tick per block, the playhead filled, the selected block outlined.
         ui.p.fill(Rect::new(r.x, r.y, r.w, RULER_H), rgba(16, 22, 36, 255));
         ui.p.text(r.x as f32 + 3.0, r.y as f32 + 2.5, "Block", SMALL, DIM);
@@ -113,7 +115,7 @@ impl Timeline {
     #[allow(clippy::too_many_arguments)]
     fn draw_track<A: Clone>(&self, ui: &mut Ui<A>, id: &str, t: &Track, row: Rect, lane_x: i32, lane_w: i32, on_track: &impl Fn(&str) -> A, on_segment: &impl Fn(&str, &str) -> A) {
         let selected = self.selected_track.as_deref() == Some(t.key.as_str());
-        let label = Rect::new(row.x + 1, row.y + 1, LABEL_W - 3, ROW_H - 2);
+        let label = Rect::new(row.x + 1, row.y + 1, lane_x - row.x - 3, ROW_H - 2);
         if selected || ui.hover(label) {
             ui.p.panel(label, if selected { rgba(86, 68, 22, 250) } else { PANEL_HI }, if selected { GOLD } else { BORDER }, 2.0);
         }

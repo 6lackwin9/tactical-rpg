@@ -160,9 +160,11 @@ impl Screen<GameCx> for WorldMap {
                 ui.p.text(x + 5.0, y - 15.0, "!", 8.0, GOLD);
             }
             let label = s(n, "name");
+            // TEXTFIT1: the second line sits a line below the name at any text size, and the node's box holds both.
+            let line = ui.p.line_h(BODY);
             ui.p.text(x + 9.0, y - 6.0, &label, BODY, if is_here { GOLD } else if json::b(n, "visited", false) { TEXT } else { DIM });
             if is_here {
-                ui.p.text(x + 9.0, y + 3.0, "You are here", BODY, GOLD);
+                ui.p.text(x + 9.0, y - 6.0 + line, "You are here", BODY, GOLD);
             }
             let trip = travel::trip(&d, &gs, &here, &q);
             let mut t = tip(&label, &format!("{}{}", s(n, "region"), if json::b(n, "visited", false) { "" } else { " (not visited)" }));
@@ -172,8 +174,10 @@ impl Screen<GameCx> for WorldMap {
             for step in travel::quest_steps_at(&d, &gs, &q) {
                 t.push((format!("Quest: {step}"), GOLD));
             }
-            let lw = ui.p.text_w(&s(n, "name"), BODY) as i32;
-            ui.push(format!("node.{}", q.replace(':', ".")), "node", label, Rect::new(r.x - 2, r.y - 2, 18 + lw, 18), true, sel, Some(WAct::Node(q.clone())), t);
+            let lw = ui.p.text_w(&s(n, "name"), BODY).max(if is_here { ui.p.text_w("You are here", BODY) } else { 0.0 }).ceil() as i32;
+            let bottom = (y - 6.0 + line * if is_here { 2.0 } else { 1.0 }).ceil() as i32;
+            let top = (r.y - 2).min((y - 6.0).floor() as i32);
+            ui.push(format!("node.{}", q.replace(':', ".")), "node", label, Rect::new(r.x - 2, top, 18 + lw, (r.y + 16).max(bottom) - top), true, sel, Some(WAct::Node(q.clone())), t);
         }
         // -- Legend
         let lg = Rect::new(4, 238, 76, 100);
@@ -193,8 +197,9 @@ impl Screen<GameCx> for WorldMap {
         ui.p.text(lg.x as f32 + 17.0, ly, "Closed road", SMALL, TEXT);
         // -- Top bar
         ui.p.fill(Rect::new(0, 0, 500, 20), rgba(10, 14, 22, 230));
-        ui.button("world_map.back", Rect::new(3, 3, 26, 14), "Back", WAct::Back, true);
-        ui.p.text(34.0, 5.0, &format!("{}   Time {}   Supplies {} / 99", cx.location_name(&gs.world_id, &here), gs.time, gs.party.supplies), SMALL, TEXT);
+        let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
+        ui.button("world_map.back", Rect::new(3, 3, back_w, 14), "Back", WAct::Back, true);
+        ui.p.text(back_w as f32 + 8.0, 5.0, &format!("{}   Time {}   Supplies {} / 99", cx.location_name(&gs.world_id, &here), gs.time, gs.party.supplies), SMALL, TEXT);
         ui.button("world_map.menu", Rect::new(586, 5, 50, 16), "Menu", WAct::Menu, true);
         // -- Side panel: actions and the log
         let sx = 504;

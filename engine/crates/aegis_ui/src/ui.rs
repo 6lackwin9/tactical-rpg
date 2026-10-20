@@ -350,6 +350,9 @@ impl<'a, A: Clone> Ui<'a, A> {
         let line = self.p.line_h(size);
         let txt = self.p.fit(label, size, if r.w < 20 { r.w as f32 } else { r.w as f32 - 6.0 });
         self.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - line) / 2.0, &txt, size, col);
+        if txt != label {
+            self.p.mark_cut(label);
+        }
         self.push(id, "button", label, r, enabled, active, Some(action), t);
     }
 

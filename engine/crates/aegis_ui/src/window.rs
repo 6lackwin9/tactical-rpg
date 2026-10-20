@@ -257,7 +257,20 @@ impl Desk {
                 let b = Rect::new(bar.x + bar.w - (i as i32 + 1) * (BUTTON + 1), bar.y + 1, BUTTON, BUTTON - 1);
                 let hover = ui.hover(b);
                 ui.p.panel(b, if hover { PANEL_HI } else { rgba(0, 0, 0, 0) }, if hover { GOLD } else { rgba(0, 0, 0, 0) }, 2.0);
-                ui.p.text_center((b.x + b.w / 2) as f32, b.y as f32 + 0.5, label, BODY, if hover { GOLD } else { DIM });
+                // Drawn as strokes, not text, so the text size never pushes them out of the bar (TEXTFIT1).
+                let (col, cx, cy, d) = (if hover { GOLD } else { DIM }, b.x as f32 + b.w as f32 / 2.0, b.y as f32 + b.h as f32 / 2.0, 2.5);
+                match label {
+                    "x" => {
+                        ui.p.line(cx - d, cy - d, cx + d, cy + d, col, 0.0);
+                        ui.p.line(cx - d, cy + d, cx + d, cy - d, col, 0.0);
+                    }
+                    _ => {
+                        ui.p.line(cx - d, cy, cx + d, cy, col, 0.0);
+                        if label == "+" {
+                            ui.p.line(cx, cy - d, cx, cy + d, col, 0.0);
+                        }
+                    }
+                }
                 ui.push(format!("win.{}.{part}", w.id), "win_button", label, b, true, false, None, tip(label, help));
             }
             if !w.collapsed {

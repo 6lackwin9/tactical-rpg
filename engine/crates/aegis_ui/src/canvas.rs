@@ -83,14 +83,21 @@ pub struct Canvas {
     pub px: Vec<u8>,
     /// Pixels outside this rect are not drawn (a window's body, UIKIT3); None draws everywhere.
     pub clip: Option<Rect>,
+    /// An outer limit the drawing code cannot lift (a preview's box, UIGALLERY1): `clip` is set and reset freely by
+    /// the screen being drawn, this one only by its owner.
+    pub bounds: Option<Rect>,
 }
 
 impl Canvas {
     pub fn new(w: i32, h: i32) -> Self {
-        Self { w, h, px: vec![0; (w * h * 4) as usize], clip: None }
+        Self { w, h, px: vec![0; (w * h * 4) as usize], clip: None, bounds: None }
     }
 
+    /// Fills the whole canvas (only `bounds` when set: a screen drawn in a preview clears its box).
     pub fn clear(&mut self, c: Rgba) {
+        if let Some(b) = self.bounds {
+            return self.fill(b, [c[0], c[1], c[2], 255]);
+        }
         for p in self.px.chunks_exact_mut(4) {
             p.copy_from_slice(&c);
         }
@@ -98,7 +105,7 @@ impl Canvas {
 
     #[inline]
     pub fn blend(&mut self, x: i32, y: i32, c: Rgba) {
-        if x < 0 || y < 0 || x >= self.w || y >= self.h || c[3] == 0 || self.clip.is_some_and(|r| !r.contains(x, y)) {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h || c[3] == 0 || self.clip.is_some_and(|r| !r.contains(x, y)) || self.bounds.is_some_and(|r| !r.contains(x, y)) {
             return;
         }
         let i = ((y * self.w + x) * 4) as usize;

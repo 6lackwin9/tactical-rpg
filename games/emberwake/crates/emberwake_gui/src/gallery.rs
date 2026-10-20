@@ -1,21 +1,60 @@
-//! UI Gallery (UIGALLERY1, Scene Runner): UI panes one at a time, each on sample data, so they can be judged and
-//! refined on their own; some may never be used by the game (they flesh out the engine's kit). Entries so far:
-//! the battle timeline (TIMELINE1: every unit's track over the round's blocks on the engine's `timeline` widget, fed
-//! by a live Test Arena battle; past rounds from the round archive, a block's state from its snapshot).
+//! UI Gallery (UIGALLERY1, Scene Runner; decision "UIGALLERY1 answers"): the UI one element at a time, each on sample
+//! data and named, so each can be judged and refined on its own. Three groups:
+//! - Kit: the engine's widgets in their states (`aegis_ui::specimens`).
+//! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
+//!   first playable world that saving refuses); Open shows the screen itself to try it.
+//! - Battle panels: each panel of the battle screen enlarged on its own (the battle records its panels' rects while it
+//!   draws), and the battle timeline (TIMELINE1: every unit's track over the round's blocks, fed by a live Test Arena
+//!   battle; past rounds from the round archive, a block's state from its snapshot).
 
-use crate::battle::{action_rows, kind_color};
+use crate::battle::{action_rows, kind_color, BattleScreen};
 use crate::intent_text;
-use crate::screens::{Cx, GameCx, Nav, Screen};
+use crate::screens::{Cx, Game, GameCx, Nav, Screen};
+use aegis_core::json;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
+use aegis_ui::preview;
+use aegis_ui::specimens::{KitAct, Specimens};
 use aegis_ui::timeline::{Section, Segment, Timeline, Track};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, SMALL, TEXT, TITLE, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
 use aegis_ui::widget_plumbing;
 use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
 use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
-const ENTRIES: [(&str, &str); 1] = [("timeline", "Battle timeline")];
+/// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
+const ENTRIES: [(&str, &str, &str, &str); 26] = [
+    ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
+    ("main_menu", "Main menu", "Screens", "The player's front door."),
+    ("new_game", "New game", "Screens", "World cards and the start."),
+    ("settings", "Settings", "Screens", "Sound, display and gameplay tabs."),
+    ("save", "Save slots", "Screens", "Saving from the game menu."),
+    ("load", "Load slots", "Screens", "Loading from the main menu or the game menu."),
+    ("region", "Region map", "Screens", "Walking a location: the map, the Here list, the log."),
+    ("dialogue", "Dialogue", "Screens", "A conversation over the region map (the first person met)."),
+    ("shop", "Shop", "Screens", "A shop counter over the region map (the first trader met)."),
+    ("hub", "Game menu", "Screens", "The in-game menu over the map."),
+    ("journal", "Journal", "Screens", "Quests and notes."),
+    ("stats", "Character: Stats", "Screens", "The character popup's Stats tab."),
+    ("level_up", "Character: Level up", "Screens", "The character popup's Level up tab."),
+    ("skills", "Character: Skills", "Screens", "The character popup's Skills tab."),
+    ("gear", "Character: Gear", "Screens", "The character popup's Gear tab."),
+    ("world_map", "World map", "Screens", "Travel between locations."),
+    ("results", "Battle results", "Screens", "After a fight: outcome, XP, rewards."),
+    ("battle", "Battle (whole)", "Screens", "The whole battle screen, planning (the Test Arena's encounter)."),
+    ("strip", "Plan strip", "Battle panels", "The selected hero's blocks and the round controls."),
+    ("party", "Party list", "Battle panels", "The heroes' cards."),
+    ("hero", "Hero inspector", "Battle panels", "The selected hero's details and plan."),
+    ("grid", "Battlefield", "Battle panels", "The grid: terrain, units, intents, the plan ghost."),
+    ("hostiles", "Hostile list", "Battle panels", "The enemies' cards with what each does next."),
+    ("intel", "Threat intel", "Battle panels", "The hovered (or first) enemy's details and threat."),
+    ("bar", "Status and log", "Battle panels", "Playback buttons, round and status, the reduced log."),
+    ("timeline", "Battle timeline", "Battle panels", "Every unit's track over the round's blocks (live battle, round archive)."),
+];
+/// Screens a preview cannot show without a game.
+const NEEDS_GAME: [&str; 12] = ["region", "dialogue", "shop", "hub", "journal", "stats", "level_up", "skills", "gear", "world_map", "results", "save"];
+/// Where a preview's mouse is (off every widget).
+const OFF: (i32, i32) = (-10_000, -10_000);
 const ALLY: Rgba = [110, 170, 255, 255];
 const FOE: Rgba = [240, 100, 92, 255];
 /// The strip under the timeline: an action's details or a block's snapshot.
@@ -24,6 +63,9 @@ const DETAIL_H: i32 = 64;
 #[derive(Debug, Clone)]
 pub enum GAct {
     Entry(usize),
+    Kit(KitAct),
+    /// Shows the previewed screen itself.
+    Open,
     Exit,
     Restart,
     AutoPlan,
@@ -49,9 +91,28 @@ struct Demo {
     detail: Vec<(String, Rgba)>,
 }
 
+/// A previewed screen and the clicks still to make on it (to open a dialogue or a shop).
+struct Shown {
+    id: &'static str,
+    screen: Box<dyn Screen<GameCx>>,
+    steps: Vec<Step>,
+    tries: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Step {
+    /// Pick the open dialogue's choice of this service.
+    Service(&'static str),
+}
+
 pub struct Gallery {
     entry: usize,
     demo: Option<Demo>,
+    kit: Specimens,
+    shown: Option<Shown>,
+    battle: Option<BattleScreen>,
+    /// The sample game is the gallery's (it goes when the gallery does), with the debug flag it found.
+    own_game: Option<bool>,
     w: Vec<Widget<GAct>>,
 }
 
@@ -63,7 +124,135 @@ impl Default for Gallery {
 
 impl Gallery {
     pub fn new() -> Self {
-        Self { entry: 0, demo: None, w: Vec::new() }
+        Self { entry: 0, demo: None, kit: Specimens::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
+    }
+
+    /// The sample game for the screen entries: a debug game (nothing saved) of the first playable world.
+    fn ensure_game(&mut self, cx: &mut Cx) -> bool {
+        if cx.game.is_some() {
+            return true;
+        }
+        let worlds = emberwake_world::new_game::playable_worlds(&cx.data);
+        let Some(w) = worlds.first() else { return false };
+        let Ok(gs) = emberwake_world::new_game::create_for_world(&cx.data, w, 1) else { return false };
+        let clean = gs.to_value();
+        cx.game = Some(Game { gs, slot: -1, clean, busy: false, sample: true });
+        self.own_game = Some(cx.debug);
+        cx.debug = true;
+        true
+    }
+
+    fn build(cx: &mut Cx, id: &str) -> Option<(Box<dyn Screen<GameCx>>, Vec<Step>)> {
+        let member = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.id.clone()).unwrap_or_default();
+        let screen: Box<dyn Screen<GameCx>> = match id {
+            "main_menu" => Box::new(crate::menus::MainMenu::default()),
+            "new_game" => Box::new(crate::menus::NewGameScreen::new(cx)),
+            "settings" => Box::new(crate::menus::SettingsScreen::new(cx)),
+            "save" => Box::new(crate::menus::Slots::new(true)),
+            "load" => Box::new(crate::menus::Slots::new(false)),
+            "region" => Box::new(crate::region::RegionMap::new(cx)),
+            "dialogue" | "shop" => Box::new(Self::talking(cx, id == "shop")),
+            "hub" => Box::new(crate::hub::Hub::default()),
+            "journal" => Box::new(crate::hub::Journal::default()),
+            "stats" | "level_up" | "skills" | "gear" => Box::new(crate::party::Character::new(cx, &member, id)),
+            "world_map" => Box::new(crate::worldmap::WorldMap::new()),
+            "results" => {
+                let level = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.level(&cx.data)).unwrap_or(1);
+                let mut xp = json::Dict::new();
+                xp.insert(member.clone(), json!({"xp": 24, "old_level": level, "new_level": level, "levels_gained": 0, "unspent": 0}));
+                let res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30))]);
+                Box::new(crate::hub::Results::new(&res, "won", &json::Dict::new()))
+            }
+            _ => return None,
+        };
+        let steps = if id == "shop" { vec![Step::Service("shop")] } else { Vec::new() };
+        Some((screen, steps))
+    }
+
+    /// A region map in conversation with the first person here (`shop`: the first who offers a shop).
+    fn talking(cx: &mut Cx, shop: bool) -> crate::region::RegionMap {
+        let people: Vec<String> = match cx.game.as_ref() {
+            Some(g) => {
+                let loc = cx.data.resolve(&g.gs.world_id, "locations", &g.gs.location_id);
+                emberwake_world::explore::markers_of(loc).iter().filter(|m| json::s(m, "kind") == "npc").map(|m| json::s(m, "character")).collect()
+            }
+            None => Vec::new(),
+        };
+        let mut found = None;
+        for who in &people {
+            let mut m = crate::region::RegionMap::new(cx);
+            m.talk(cx, who);
+            let offers = Self::services(&m.state(cx));
+            if !offers.is_empty() && (!shop || offers.iter().any(|c| c == "shop")) {
+                found = Some(m);
+                break;
+            }
+        }
+        // a preview's conversation never ends, so it must not hold the game busy
+        cx.set_busy(false);
+        found.unwrap_or_else(|| crate::region::RegionMap::new(cx))
+    }
+
+    /// The services of the open dialogue's choices in a region map's state (none when no dialogue is open).
+    fn services(st: &Value) -> Vec<String> {
+        json::aget(json::dict(&st["dialogue"]), "choices").iter().map(|c| json::s(json::dict(c), "service")).collect()
+    }
+
+    /// One scripted click on the previewed screen per frame (its widgets exist once it has drawn).
+    fn script(&mut self, cx: &mut Cx) {
+        let Some(sh) = self.shown.as_mut() else { return };
+        let Some(step) = sh.steps.first().copied() else { return };
+        sh.tries += 1;
+        if sh.tries > 60 {
+            sh.steps.clear();
+            return;
+        }
+        let open = Self::services(&sh.screen.state(cx));
+        match step {
+            Step::Service(svc) => {
+                if let Some(k) = open.iter().position(|c| c == svc) {
+                    if sh.screen.click_id(cx, &format!("choice.{k}")).is_ok() {
+                        sh.steps.remove(0);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The battle the panel entries show: a Test Arena battle with the Balanced plan drafted.
+    fn battle(&mut self, cx: &Cx) -> &mut BattleScreen {
+        self.battle.get_or_insert_with(|| {
+            let mut b = BattleScreen::arena(cx, None, &cx.encounter.clone());
+            if let Some(s) = b.host.session.as_mut() {
+                s.plan_apply_preset_all("balanced");
+            }
+            b
+        })
+    }
+
+    /// Draws entry `id` into `r`: a screen shrunk, or a battle panel enlarged.
+    fn preview(&mut self, cx: &mut Cx, g: &mut Gfx, id: &'static str, r: Rect) {
+        if id == "battle" || ENTRIES.iter().any(|e| e.0 == id && e.2 == "Battle panels") {
+            let b = self.battle(cx);
+            let whole = Rect::new(0, 0, W, aegis_ui::ui::H);
+            let src = if id == "battle" { whole } else { b.panels.iter().find(|p| p.0 == id).map(|p| p.1).unwrap_or(whole) };
+            // a panel is enlarged at most twice, centred in the box
+            let k = (r.w as f32 / src.w.max(1) as f32).min(r.h as f32 / src.h.max(1) as f32).min(2.0);
+            let (w, h) = ((src.w as f32 * k) as i32, (src.h as f32 * k) as i32);
+            let target = Rect::new(r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h);
+            preview::region_in(g, target, src, |g| b.draw(cx, g, OFF, false));
+            return;
+        }
+        if NEEDS_GAME.contains(&id) && !self.ensure_game(cx) {
+            return;
+        }
+        if self.shown.as_ref().is_none_or(|sh| sh.id != id) {
+            self.shown = Self::build(cx, id).map(|(screen, steps)| Shown { id, screen, steps, tries: 0 });
+        }
+        if let Some(sh) = self.shown.as_mut() {
+            preview::screen_in(g, r, |g| sh.screen.draw(cx, g, OFF, false));
+        }
+        self.script(cx);
     }
 
     fn demo(&mut self, cx: &Cx) -> &mut Demo {
@@ -80,7 +269,23 @@ impl Gallery {
 
     fn act(&mut self, cx: &mut Cx, a: GAct) {
         match a {
-            GAct::Entry(i) => self.entry = i,
+            GAct::Entry(i) => {
+                self.entry = i;
+                self.shown = None;
+            }
+            GAct::Kit(k) => self.kit.act(k),
+            GAct::Open => {
+                let id = ENTRIES[self.entry].0;
+                if id == "battle" || ENTRIES[self.entry].2 == "Battle panels" {
+                    let b = BattleScreen::arena(cx, None, &cx.encounter.clone());
+                    cx.nav.push(Nav::Push(Box::new(b)));
+                } else if id != "kit" && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
+                    // a fresh one, so the preview keeps its own state
+                    if let Some((screen, _)) = Self::build(cx, id) {
+                        cx.nav.push(Nav::Push(screen));
+                    }
+                }
+            }
             GAct::Exit => cx.nav.push(Nav::Pop),
             GAct::Restart => self.demo = None,
             a => {
@@ -242,14 +447,44 @@ impl Screen<GameCx> for Gallery {
         ui.p.fill(Rect::new(0, 0, W, aegis_ui::ui::H), rgb(12, 16, 26));
         ui.p.text(6.0, 4.0, "UI GALLERY", BODY, GOLD);
         ui.button("gallery.exit", Rect::new(W - 36, 3, 32, 12), "Exit", GAct::Exit, true);
-        let mut y = 22;
-        for (i, (id, name)) in ENTRIES.iter().enumerate() {
-            ui.card(&format!("gallery.entry.{id}"), Rect::new(4, y, 100, 16), &[(name.to_string(), if i == self.entry { GOLD } else { TEXT })], Some(GAct::Entry(i)), i == self.entry, true, tip(name, "Show this pane."));
-            y += 18;
+        // The entries by group; the list scrolls (the wheel over it).
+        let list = Rect::new(4, 20, 102, aegis_ui::ui::H - 24);
+        let row_h = (ui.p.line_h(BODY) + 2.0).ceil() as i32;
+        let head_h = (ui.p.line_h(SMALL) + 3.0).ceil() as i32;
+        let groups = ENTRIES.iter().enumerate().filter(|(i, e)| *i == 0 || ENTRIES[i - 1].2 != e.2).count() as i32;
+        let content = ENTRIES.len() as i32 * (row_h + 1) + groups * head_h + 4;
+        let off = ui.scroll_begin("gallery.entries", list, content);
+        let mut y = list.y - off;
+        for (i, (id, name, group, about)) in ENTRIES.iter().enumerate() {
+            if i == 0 || ENTRIES[i - 1].2 != *group {
+                ui.p.text(list.x as f32 + 2.0, y as f32 + 2.0, group, SMALL, INFO);
+                y += head_h;
+            }
+            ui.row(&format!("gallery.entry.{id}"), Rect::new(list.x, y, list.w - 4, row_h), name, if i == self.entry { GOLD } else { TEXT }, Some(GAct::Entry(i)), i == self.entry, tip(name, about));
+            y += row_h + 1;
         }
+        ui.scroll_end();
         let pane = Rect::new(110, 20, W - 114, aegis_ui::ui::H - 24);
         ui.p.panel(pane, rgb(18, 24, 38), BORDER, 2.0);
-        if ENTRIES[self.entry].0 == "timeline" {
+        let (id, name, _, about) = ENTRIES[self.entry];
+        if id == "kit" {
+            self.kit.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), GAct::Kit);
+        } else if id != "timeline" {
+            // A screen or a battle panel: its name, what it is, Open, and the preview under them.
+            ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, GOLD);
+            let ow = (ui.p.text_w("Open", SMALL) + 12.0).ceil() as i32;
+            let nw = ui.p.text_w(name, TITLE).ceil() as i32;
+            ui.p.text_fit((pane.x + 14 + nw) as f32, pane.y as f32 + 5.0, about, SMALL, (pane.w - nw - ow - 28) as f32, DIM);
+            ui.button_full("gallery.open", Rect::new(pane.x + pane.w - ow - 4, pane.y + 3, ow, 12), "Open", GAct::Open, true, false, SMALL, tip("Open", "Shows the screen itself to try it."));
+            let top = pane.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+            let shown = Rect::new(pane.x + 4, top, pane.w - 8, pane.y + pane.h - 4 - top);
+            ui.p.fill(shown, rgb(6, 8, 14));
+            self.w = std::mem::take(&mut ui.widgets);
+            drop(ui);
+            self.preview(cx, g, id, shown);
+            return;
+        }
+        if id == "timeline" {
             let d = self.demo.as_ref().unwrap();
             let Some(s) = d.host.session.as_ref() else {
                 ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 6.0, "No battle (the arena encounter did not start).", BODY, DIM);
@@ -318,10 +553,59 @@ impl Screen<GameCx> for Gallery {
         let d = self.demo.as_ref();
         let s = d.and_then(|d| d.host.session.as_ref());
         json!({
-            "entry": ENTRIES[self.entry].0, "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
+            "entry": ENTRIES[self.entry].0, "shown": self.shown.as_ref().map(|sh| sh.screen.id()), "steps_left": self.shown.as_ref().map(|sh| sh.steps.len()), "kit_last": self.kit.last, "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
             "selected_block": d.and_then(|d| d.block), "planning": s.map(|s| s.phase == Phase::Planning && !s.plan_confirmed), "rounds_archived": s.map(|s| s.history.len()),
         })
     }
 
+    /// The sample game goes with the gallery, only while it is still the one in play (a game started or loaded from an
+    /// opened screen replaces it before the gallery is left).
+    fn leave(&mut self, cx: &mut Cx) {
+        if let Some(debug) = self.own_game.take() {
+            if cx.game.as_ref().is_some_and(|g| g.sample) {
+                cx.game = None;
+                cx.debug = debug;
+                cx.log.clear();
+            }
+        }
+    }
+
+    /// Back from an opened screen: the previews are built again (a setting may have changed).
+    fn resume(&mut self, _cx: &mut Cx) {
+        self.shown = None;
+    }
+
+    fn can_drop(&self, _cx: &Cx, from: &str, to: &str) -> bool {
+        ENTRIES[self.entry].0 == "kit" && self.kit.can_drop(from, to)
+    }
+
+    fn accept_drop(&mut self, _cx: &mut Cx, from: &str, to: &str) {
+        self.kit.accept_drop(from, to);
+    }
+
+    fn text_changed(&mut self, _cx: &mut Cx, id: &str, text: &str) {
+        self.kit.text_changed(id, text);
+    }
+
     widget_plumbing!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every battle panel entry names a panel the battle screen records, and every recorded panel has an entry.
+    #[test]
+    fn the_battle_panel_entries_are_the_battle_screens_panels() {
+        let mut entries: Vec<&str> = ENTRIES.iter().filter(|e| e.2 == "Battle panels" && e.0 != "timeline").map(|e| e.0).collect();
+        let mut panels = crate::battle::PANELS.to_vec();
+        entries.sort();
+        panels.sort();
+        assert_eq!(entries, panels);
+        let mut ids: Vec<&str> = ENTRIES.iter().map(|e| e.0).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), ENTRIES.len(), "entry ids are unique");
+        assert!(NEEDS_GAME.iter().all(|n| ENTRIES.iter().any(|e| e.0 == *n)), "every game-needing id is an entry");
+    }
 }

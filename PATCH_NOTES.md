@@ -2,7 +2,37 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 260ad9f -->
+<!-- last: fa131b1 -->
+
+## 2026-10-21
+
+In the game:
+
+- **Skills tab**: the loadout is fixed slots (5 class, 3 extra) beside your skill list. Drag a skill onto a slot, between slots or back to the list (clicks still work), right click a slot to empty it, or Clear all. Each filled slot has < > arrows over the ranks the hero has unlocked; the rank you pick is saved and is the only rank of that skill the hero uses in battle.
+- **Text size**: every screen now fits at Small, Normal, Large and Extra large. The battle's top bar sizes its buttons to their text, enemy cards wrap their "Next:" line, the world map's labels and Back button fit, and the Character Stats passives row no longer spills.
+- **Portraits and icons**: the first-pass art is in: 36 portraits (the named cast and shared ones for common enemies), 57 skill icons and 16 item icons.
+- **For testers (Scene Runner)**: one **Exploration** entry replaces the two debug maps: pick a world and a start (any location, or the world map). In a fight, **Skip** settles it as a win with every enemy's XP, the gold and quest progress, at no cost; Fled, Lost and Fight it are still there. The **UI Gallery** now shows the kit's widgets (try them), every screen on a sample game (Open to try one), and each battle panel on its own.
+
+Every change that touched the game:
+
+- UIGALLERY1 (game): the UI Gallery's kit, screens and battle panels (8248ede)
+- UIGALLERY1 (engine): screen and region previews, the kit specimens page (051e5fa)
+- RUNNER2 (game): one Exploration scene; a skipped fight settles as a win at no cost (a244790)
+- TEXTFIT1 (game): every screen fits at the four text sizes (a873f67)
+- TEXTFIT1 (engine): the text_audit agent command, long-word wrap, stroke window buttons (5d2d4c2)
+- SKILLUI1-U (game): the Skills tab on fixed slots, drag and drop, rank arrows, right click to take out (3a1ea34)
+- SKILLUI1-L (game): the skill rank chosen per member, the only rank a party hero uses in battle (b21a2dc)
+- ART2 (game): the baseline art in the game: 36 portraits (18 named, 18 generic shared by mob units), 57 skill icons, 16 item icons (8 new family folders) (86b38cf)
+
+Under the hood:
+
+- Planner: UIGALLERY1 done (SCREENS, STRUCTURE, README, task archive); known issue: leave() on a Reset (fa131b1)
+- Planner: RUNNER2 done (README, SCREENS, HISTORY row, task archive) (2b49d74)
+- Planner: TEXTFIT1 done; DRAG1 candidate list; SKILLTEXT2 idea row (a127895)
+- Planner: SPRITE2, sprites for the non-party characters (goblins, Grakka, the NPCs, the dummy) (user 2026-10-21) (4602ce0)
+- ART2: closed at the baseline; the remaining art waits for alpha feedback (user 2026-10-21) (eea1df6)
+- WORLDBUILDING.md and RPG_KIT_CATALOG.md, written from the game data by tools/worldbook.py (review copies for the user) (9a906f2)
+- ART2: the 80 icons kept as the first-pass baseline; generated art is an alpha baseline, feedback after the full game runs (user 2026-10-21) (c29a106)
 
 ## 2026-10-20
 
@@ -65,6 +95,24 @@ Every change that touched the game:
 
 Under the hood:
 
+- ART2: icon sheets (4 skill sheets, 1 item sheet: 80 icons) and sheets.py (sheet prompts, slicer); generate.py reads the icon prompts (7b04f11)
+- Planner: REWARD1 approved (all eight recommendations), build rows approved, PURSE1-A/B superseded; ART2 picks recorded (ec000f5)
+- Preferences: one-off images can go the Gemini app route (prompt from the agent, image from the user) (48ef735)
+- Preferences: the image API is agreed per run, suggested where it beats code; small assets as sheets; portrait baseline stands (f819e0c)
+- ART2: recolor_families (whole shade families, for mob variants: goblin tribes) (19a812a)
+- ART2: 12 generic base portraits (six human class defaults, five Ashen Horde goblins, the dummy) and their prompts (97f28a5)
+- ART2: the portrait cast of 18 accepted (user 2026-10-20); generic portraits from generated bases plus recolours (3df6a92)
+- ART2: portrait sources for 15 more characters (Gemini 3 Pro Image, Mara Voss as the style reference) (0b7a6ba)
+- ART2: art source images in Git LFS (art_src/: Mara Voss and her variant sheet, Bryn Hale) (67bd74f)
+- ART2: pixelize reduces by the most common colour per cell, so pixel-art sources keep clean clusters (8a308b3)
+- ART2: generate.py, portrait source art from the Gemini API into art_src/ (key from GEMINI_API_KEY, never printed) (41451e2)
+- Tidy: Python caches out of git (__pycache__ ignored) (59ddcc6)
+- ART2: portrait tools (portrait rig, pixelize, recolor), priest mace pick B3, portrait prompts and preferences (f60623c)
+- ART2: the art review of 2026-10-20 as a worklist (the user's marks and notes); task row (fd08a4f)
+- REWARD1: spec, the user's answers (divisor, weight, key loot, drop rates) and its build rows (75cb1cf)
+- Planner: rewards per defeated enemy (user 2026-10-20); REWARD1 spec row (17fb51a)
+- Planner: RUNNER2 and UIGALLERY1 answers (user 2026-10-20); LAYOUT1 idea row (5887c54)
+- Planner: known issue, Python writes CRLF on Windows (44ecfce)
 - Planner: PORT-PLAYTEST done; PLAYBACK2 and ARTTOOL1 rows; art tools decision (260ad9f)
 - Planner: UIKIT3 engine windows before PORT-DOJO; the port goal decision (dc88260)
 - CI: install ALSA on the Linux gate (rodio's cpal needs it) (f8ca4d9)

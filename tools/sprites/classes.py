@@ -27,7 +27,8 @@ UNITS = {
                             glove=(236, 226, 206), glove_lo=(214, 204, 184), glove_hi=(255, 250, 240), boot=(150, 100, 68), boot_lo=(120, 80, 54))),
     'priest': dict(leg=8.2, arm=5.4, tl=10.0, head='cowl', torso='robe', legs='robe', weapon='mace',
                    pal=pal(main=(226, 220, 200), main_lo=(176, 168, 148), main_hi=(250, 246, 232), accent=(220, 180, 60), accent_lo=(170, 130, 40),
-                           sleeve=(226, 220, 200), sleeve_lo=(176, 168, 148), leg=(176, 168, 148), leg_lo=(140, 132, 116), glove=(217, 166, 121))),
+                           sleeve=(226, 220, 200), sleeve_lo=(176, 168, 148), fore=(226, 220, 200), fore_lo=(176, 168, 148),  # robe sleeves to the wrist
+                           leg=(176, 168, 148), leg_lo=(140, 132, 116), glove=(217, 166, 121))),
     'rogue': dict(leg=8.3, arm=5.4, tl=9.6, head='hood', mask=True, torso='leather', legs='trousers', weapon='dagger', offhand='dagger', back='cape',
                   pal=pal(main=(70, 62, 86), main_lo=(46, 40, 60), main_hi=(110, 100, 130), accent=(120, 40, 60), accent_lo=(80, 26, 42),
                           sleeve=(70, 62, 86), sleeve_lo=(46, 40, 60), leg=(52, 46, 62), leg_lo=(36, 32, 44), glove=(46, 40, 60), glove_lo=(36, 32, 44))),
@@ -146,8 +147,8 @@ def clips(name, variant=''):
         put('idle_focus', (fr, [150] * 8))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(31, 43, 90)))
     elif name == 'priest':  # mace overhead smash
-        rd = dict(wa=150, hand_f=(4.5, 7))
-        put('idle', idle(u, **rd)); put('walk', walk(u, wa=140, swing=0.8))
+        rd = dict(wa=30, hand_f=(5, 6.5))  # mace raised forward, head up (user 2026-10-20, ART2 pick B3)
+        put('idle', idle(u, **rd)); put('walk', walk(u, wa=35, swing=0.8))
         st = dict(fb=(-5.5, 0), ff=(4.5, 0))
         put('attack', ([pose(u, bob=0.8, lean=-1.0, wa=-10, hand_f=(1, -6), hand_b=(-1, -3), **st),
                         pose(u, bob=1.2, lean=-2.0, dx=-1, wa=-40, hand_f=(-1, -7.5), hand_b=(-2, -4), **st),

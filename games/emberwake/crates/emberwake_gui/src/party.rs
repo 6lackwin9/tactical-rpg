@@ -17,6 +17,18 @@ use serde_json::{json, Value};
 
 const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
 
+/// A Skills tab draft: class slots, extra slots, the chosen rank per slotted family.
+type SkillDraft = (Vec<String>, Vec<String>, IndexMap<String, i64>);
+
+/// SKILLUI1 R2 on the draft: no entry, the highest selectable rank; an entry `c`, the highest selectable rank <= `c`,
+/// else the lowest; 0 when nothing is selectable.
+fn draft_rank(selectable: &[i32], chosen: Option<i32>) -> i32 {
+    match chosen {
+        None => selectable.last().copied().unwrap_or(0),
+        Some(c) => selectable.iter().rev().find(|&&r| r <= c).or(selectable.first()).copied().unwrap_or(0),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum PAct {
     Member(i64),
@@ -30,6 +42,9 @@ pub enum PAct {
     ConfirmLevel,
     Slot(String),
     Unslot(bool, usize),
+    /// SKILLUI1: step a filled slot (class?, index) to the previous (-1) or next (+1) selectable rank.
+    RankStep(bool, usize, i32),
+    ClearAll,
     UseDefault,
     ResetSkills,
     ConfirmSkills,
@@ -47,7 +62,11 @@ pub struct Character {
     draft: IndexMap<String, i64>,
     class_slots: Vec<String>,
     extra_slots: Vec<String>,
+    /// SKILLUI1: the draft's chosen rank per slotted family (family -> rank).
+    ranks: IndexMap<String, i64>,
     using_default: bool,
+    /// The mouse at the last draw (a right click unslots the slot under it).
+    mouse: (i32, i32),
     skills_loaded: bool,
     gear: Option<(UnitState, IndexMap<String, i64>)>,
     pending_switch: Option<(Option<String>, Option<&'static str>)>,
@@ -133,7 +152,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), using_default: true, skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -146,7 +165,7 @@ impl Character {
             "skills" => {
                 let m = self.m(cx);
                 let (c, e) = if self.using_default { (Vec::new(), Vec::new()) } else { (self.class_slots.clone(), self.extra_slots.clone()) };
-                self.skills_loaded && (c != m.loadout_class || e != m.loadout_extra)
+                self.skills_loaded && (c != m.loadout_class || e != m.loadout_extra || self.ranks != m.loadout_ranks)
             }
             "gear" => self.gear.as_ref().is_some_and(|(w, st)| w != self.m(cx) || *st != cx.gs().party.stash),
             _ => false,
@@ -171,7 +190,97 @@ impl Character {
             self.class_slots = m.loadout_class.clone();
             self.extra_slots = m.loadout_extra.clone();
         }
+        self.ranks = m.loadout_ranks.clone();
         self.skills_loaded = true;
+    }
+
+    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A).
+    fn path_families(&self, cx: &Cx) -> Vec<String> {
+        let d = &cx.data;
+        let m = self.m(cx);
+        d.cat.classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
+    }
+
+    /// The highest rank of `family` the member has unlocked (with confirmed gear): what a newly slotted skill stores.
+    fn top_rank(&self, cx: &Cx, family: &str) -> Option<i64> {
+        progression::build_with(&cx.data, self.m(cx), false).and_then(|b| b.unit.selectable_ranks(&cx.data.cat, family).last().map(|&r| r as i64))
+    }
+
+    /// The draft after dropping payload `from` (`skill.<f>` from the list, `slot.<g>.<i>` from a slot) on target `to`
+    /// (`slot.<g>.<i>` or `list`), or why it can't be done (SKILLUI1 section 4 drop table).
+    fn skills_after_drop(&self, cx: &Cx, from: &str, to: &str) -> Result<SkillDraft, String> {
+        let path = self.path_families(cx);
+        let (mut class, mut extra, mut ranks) = (self.class_slots.clone(), self.extra_slots.clone(), self.ranks.clone());
+        let slot_of = |key: &str| -> Option<(bool, usize)> {
+            let rest = key.strip_prefix("slot.")?;
+            let (g, i) = rest.split_once('.')?;
+            Some((g == "class", i.parse().ok()?))
+        };
+        let fits = |fam: &str, class_group: bool| !class_group || path.iter().any(|p| p == fam);
+        if let Some(fam) = from.strip_prefix("skill.") {
+            let (to_class, i) = slot_of(to).ok_or("Drop a skill on a slot.")?;
+            // A family already slotted moves from its own slot (the slot-to-slot rules: swap or move, never a shifted
+            // index), whether it was dragged from the list or from its slot.
+            if let Some(j) = class.iter().position(|f| f == fam) {
+                return self.skills_after_drop(cx, &format!("slot.class.{j}"), to);
+            }
+            if let Some(j) = extra.iter().position(|f| f == fam) {
+                return self.skills_after_drop(cx, &format!("slot.extra.{j}"), to);
+            }
+            if !fits(fam, to_class) {
+                return Err("Class slots take class path skills only.".into());
+            }
+            let list = if to_class { &mut class } else { &mut extra };
+            match list.get(i).cloned() {
+                Some(old) => {
+                    list[i] = fam.to_string();
+                    ranks.shift_remove(&old);
+                }
+                None => {
+                    let cap = if to_class { emberwake_rules::stats::MAX_CLASS_SLOTS } else { emberwake_rules::stats::MAX_EXTRA_SLOTS };
+                    if list.len() >= cap {
+                        return Err("That group is full.".into());
+                    }
+                    list.push(fam.to_string());
+                }
+            }
+            // the user's Q2 answer: a newly slotted skill stores its highest unlocked rank now
+            if let Some(r) = self.top_rank(cx, fam) {
+                ranks.insert(fam.to_string(), r);
+            }
+            return Ok((class, extra, ranks));
+        }
+        let (from_class, i) = slot_of(from).ok_or("That can't go there.")?;
+        let fam = (if from_class { &class } else { &extra }).get(i).cloned().ok_or("That slot is empty.")?;
+        if to == "list" {
+            (if from_class { &mut class } else { &mut extra }).remove(i);
+            ranks.shift_remove(&fam);
+            return Ok((class, extra, ranks));
+        }
+        let (to_class, j) = slot_of(to).ok_or("That can't go there.")?;
+        if (from_class, i) == (to_class, j) {
+            return Err("Same slot.".into());
+        }
+        let other = (if to_class { &class } else { &extra }).get(j).cloned();
+        if !fits(&fam, to_class) || other.as_ref().is_some_and(|o| !fits(o, from_class)) {
+            return Err("Class slots take class path skills only.".into());
+        }
+        match other {
+            Some(o) => {
+                (if from_class { &mut class } else { &mut extra })[i] = o;
+                (if to_class { &mut class } else { &mut extra })[j] = fam;
+            }
+            None => {
+                let cap = if to_class { emberwake_rules::stats::MAX_CLASS_SLOTS } else { emberwake_rules::stats::MAX_EXTRA_SLOTS };
+                (if from_class { &mut class } else { &mut extra }).remove(i);
+                let list = if to_class { &mut class } else { &mut extra };
+                if list.len() >= cap {
+                    return Err("That group is full.".into());
+                }
+                list.push(fam);
+            }
+        }
+        Ok((class, extra, ranks))
     }
 
     fn fill_default(&mut self, cx: &Cx) {
@@ -310,19 +419,33 @@ impl Character {
                 }
             }
             PAct::Slot(fam) => {
+                // SKILLUI1 click path: the first free slot of the family's group (a class path family may use a free
+                // extra slot when the class slots are full, Q3 A); a full group says how to make room.
                 self.load_skills(cx);
-                self.using_default = false;
-                let path: Vec<String> = {
-                    let m = self.m(cx);
-                    let arch = d.cat.classes.get(&m.class_id(&d));
-                    arch.map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
-                };
-                self.class_slots.retain(|f| *f != fam);
-                self.extra_slots.retain(|f| *f != fam);
-                if path.contains(&fam) {
-                    self.class_slots.push(fam);
+                if self.class_slots.contains(&fam) || self.extra_slots.contains(&fam) {
+                    return;
+                }
+                let on_path = self.path_families(cx).contains(&fam);
+                let class_free = self.class_slots.len() < emberwake_rules::stats::MAX_CLASS_SLOTS;
+                let extra_free = self.extra_slots.len() < emberwake_rules::stats::MAX_EXTRA_SLOTS;
+                let to_class = if on_path && class_free {
+                    true
+                } else if extra_free {
+                    false
                 } else {
-                    self.extra_slots.push(fam);
+                    let group = if on_path { "Class" } else { "Extra" };
+                    cx.notice.push(format!("{group} slots are full: drag onto a slot to replace one, or right click a slot to take it out."));
+                    return;
+                };
+                self.using_default = false;
+                if to_class {
+                    self.class_slots.push(fam.clone());
+                } else {
+                    self.extra_slots.push(fam.clone());
+                }
+                // the user's Q2 answer: a newly slotted skill stores its highest unlocked rank now
+                if let Some(r) = self.top_rank(cx, &fam) {
+                    self.ranks.insert(fam, r);
                 }
             }
             PAct::Unslot(class, i) => {
@@ -330,12 +453,33 @@ impl Character {
                 self.using_default = false;
                 let list = if class { &mut self.class_slots } else { &mut self.extra_slots };
                 if i < list.len() {
-                    list.remove(i);
+                    let fam = list.remove(i);
+                    self.ranks.shift_remove(&fam);
                 }
+            }
+            PAct::RankStep(class, i, step) => {
+                self.load_skills(cx);
+                let Some(fam) = (if class { &self.class_slots } else { &self.extra_slots }).get(i).cloned() else { return };
+                let Some(b) = progression::build_with(&d, self.m(cx), false) else { return };
+                let ranks = b.unit.selectable_ranks(&d.cat, &fam);
+                let now = draft_rank(&ranks, self.ranks.get(&fam).map(|&r| r as i32));
+                let at = ranks.iter().position(|&r| r == now).unwrap_or(ranks.len().saturating_sub(1)) as i32;
+                if let Some(&next) = ranks.get((at + step).max(0) as usize).filter(|_| at + step >= 0) {
+                    self.ranks.insert(fam, next as i64);
+                }
+            }
+            PAct::ClearAll => {
+                self.load_skills(cx);
+                self.using_default = false;
+                self.class_slots.clear();
+                self.extra_slots.clear();
+                self.ranks.clear();
             }
             PAct::UseDefault => {
                 self.using_default = true;
                 self.fill_default(cx);
+                let keep: Vec<String> = self.class_slots.iter().chain(&self.extra_slots).cloned().collect();
+                self.ranks.retain(|f, _| keep.contains(f));
             }
             PAct::ResetSkills => self.skills_loaded = false,
             PAct::ConfirmSkills => {
@@ -347,12 +491,17 @@ impl Character {
                     work.loadout_class = self.class_slots.clone();
                     work.loadout_extra = self.extra_slots.clone();
                 }
+                // ranks for the slotted families only; every slotted family gets an entry (the user's Q2 answer)
+                let slotted: Vec<String> = self.class_slots.iter().chain(&self.extra_slots).cloned().collect();
+                work.loadout_ranks = self.ranks.iter().filter(|(f, _)| slotted.contains(f)).map(|(f, r)| (f.clone(), *r)).collect();
                 let errors = work.loadout_errors(&d, &format!("Unit '{}'", work.id));
                 if errors.is_empty() {
+                    progression::pin_ranks(&d, &mut work);
                     let id = self.member.clone();
                     if let Some(m) = cx.gs_mut().party.member_mut(&id) {
                         m.loadout_class = work.loadout_class;
                         m.loadout_extra = work.loadout_extra;
+                        m.loadout_ranks = work.loadout_ranks;
                     }
                     self.skills_loaded = false;
                 } else {
@@ -598,6 +747,7 @@ impl Screen<GameCx> for Character {
             ui.tab(&format!("character.tab.{id}"), Rect::new(174 + i as i32 * 74, 78, 70, 18), &label, PAct::Tab(id), self.tab == *id);
         }
         self.detail.clear();
+        self.mouse = mouse;
         match self.tab {
             "stats" => self.draw_stats(&mut ui, cx, &m),
             "level_up" => self.draw_level(&mut ui, cx, &m),
@@ -606,7 +756,9 @@ impl Screen<GameCx> for Character {
         }
         let dbox = Rect::new(25, 275, 590, 31);
         ui.p.panel(dbox, rgba(20, 28, 46, 255), BORDER, 2.0);
-        let hovered = ui.widgets.iter().rev().find(|w| w.rect.contains(mouse.0, mouse.1) && w.tip.len() > 1).map(|w| w.tip[1].0.clone());
+        // while dragging on the Skills tab the pane says where the skill can go (SKILLUI1), not the hovered card
+        let dragging_skill = self.tab == "skills" && ui.dragging().is_some() && !self.detail.is_empty();
+        let hovered = ui.widgets.iter().rev().find(|w| !dragging_skill && w.rect.contains(mouse.0, mouse.1) && w.tip.len() > 1).map(|w| w.tip[1].0.clone());
         let text = hovered.unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
         ui.para(30, 279, 580, &text, BODY, TEXT);
         self.w = ui.widgets;
@@ -620,7 +772,25 @@ impl Screen<GameCx> for Character {
         }
     }
 
+    /// Esc always closes (the right-click unslot of `back` is for the mouse only, SKILLUI1 Q4).
+    fn escape(&mut self, cx: &mut Cx) {
+        self.act(cx, PAct::Close);
+    }
+
+    /// A right click: on the Skills tab over a filled slot it takes the skill out (SKILLUI1 Q4); anywhere else it closes.
     fn back(&mut self, cx: &mut Cx) {
+        if self.tab == "skills" {
+            let (mx, my) = self.mouse;
+            let over = self.w.iter().rev().find(|w| w.rect.contains(mx, my) && (w.id.starts_with("skills.class.") || w.id.starts_with("skills.extra.")));
+            if let Some(w) = over {
+                let class = w.id.starts_with("skills.class.");
+                let i: usize = w.id.rsplit('.').next().and_then(|s| s.parse().ok()).unwrap_or(usize::MAX);
+                if i < (if class { self.class_slots.len() } else { self.extra_slots.len() }) {
+                    self.act(cx, PAct::Unslot(class, i));
+                }
+                return;
+            }
+        }
         self.act(cx, PAct::Close);
     }
 
@@ -629,12 +799,27 @@ impl Screen<GameCx> for Character {
         *at = (*at as i64 - lines as i64).max(0) as usize;
     }
 
-    /// GEARUI1: a drop is valid when the move it makes is (the same rules as the clicks).
+    /// GEARUI1 and SKILLUI1: a drop is valid when the move it makes is (the same rules as the clicks).
     fn can_drop(&self, cx: &Cx, from: &str, to: &str) -> bool {
-        self.tab == "gear" && self.after_drop(&cx.data, from, to).is_ok()
+        match self.tab {
+            "gear" => self.after_drop(&cx.data, from, to).is_ok(),
+            "skills" => self.skills_after_drop(cx, from, to).is_ok(),
+            _ => false,
+        }
     }
 
     fn accept_drop(&mut self, cx: &mut Cx, from: &str, to: &str) {
+        if self.tab == "skills" {
+            self.load_skills(cx);
+            match self.skills_after_drop(cx, from, to) {
+                Ok((class, extra, ranks)) => {
+                    (self.class_slots, self.extra_slots, self.ranks) = (class, extra, ranks);
+                    self.using_default = false;
+                }
+                Err(e) => show_errors(cx, vec![e]),
+            }
+            return;
+        }
         self.load_gear(cx);
         match self.after_drop(&cx.data, from, to) {
             Ok(draft) => self.gear = Some(draft),
@@ -643,7 +828,14 @@ impl Screen<GameCx> for Character {
     }
 
     fn state(&self, cx: &Cx) -> Value {
-        json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx)})
+        let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx)});
+        if self.tab == "skills" {
+            out["class"] = json!(self.class_slots);
+            out["extra"] = json!(self.extra_slots);
+            out["ranks"] = Value::Object(self.ranks.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
+            out["using_default"] = json!(self.using_default);
+        }
+        out
     }
 
     widget_plumbing!();
@@ -694,7 +886,8 @@ impl Character {
         let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
         ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, DIM);
         let about: Vec<String> = m.passives.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
-        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, 13), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
+        let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
+        ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
     }
 
     fn draw_level(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
@@ -749,46 +942,113 @@ impl Character {
         let cat = &d.cat;
         let Some(b) = progression::build_with(d, m, false) else { return };
         let u = &b.unit;
-        ui.p.text(68.0, 104.0, if self.using_default { "Default loadout (picked by the class)" } else { "Custom loadout" }, BODY + 1.0, DIM);
         let fam_name = |f: &str| cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
-        let mut y = 118;
-        for (class, list, limit) in [(true, self.class_slots.clone(), emberwake_rules::stats::MAX_CLASS_SLOTS), (false, self.extra_slots.clone(), emberwake_rules::stats::MAX_EXTRA_SLOTS)] {
-            if !class && list.is_empty() && u.owned_families(cat).iter().all(|f| self.class_slots.contains(f)) {
-                continue;
+        let row_of = |f: &str, rank: i32| cat.family_rows(f).into_iter().find(|s| s.tier == rank);
+        let path = self.path_families(cx);
+        let max_class = emberwake_rules::stats::MAX_CLASS_SLOTS;
+        let max_extra = emberwake_rules::stats::MAX_EXTRA_SLOTS;
+        // Left: the fixed slots, five class and three extra (SKILLUI1 section 4).
+        ui.p.text(64.0, 104.0, &format!("Class slots {} / {max_class}", self.class_slots.len()), BODY + 1.0, INFO);
+        ui.p.text(150.0, 104.0, if self.using_default { "Default loadout" } else { "Custom loadout" }, BODY, DIM);
+        ui.p.text(64.0, 205.0, &format!("Extra slots {} / {max_extra}", self.extra_slots.len()), BODY + 1.0, INFO);
+        for (class, top_y, count) in [(true, 116, max_class), (false, 216, max_extra)] {
+            let list = if class { self.class_slots.clone() } else { self.extra_slots.clone() };
+            let g = if class { "class" } else { "extra" };
+            for i in 0..count {
+                let r = Rect::new(64, top_y + i as i32 * 17, 236, 15);
+                let id = format!("skills.{g}.{i}");
+                let Some(f) = list.get(i) else {
+                    ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
+                    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, DIM);
+                    let label = if class { "class" } else { "extra" };
+                    ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
+                    ui.drop_target(format!("slot.{g}.{i}"));
+                    continue;
+                };
+                let ranks = u.selectable_ranks(cat, f);
+                let top = ranks.last().copied().unwrap_or(0);
+                let chosen = self.ranks.get(f).map(|&r| r as i32);
+                let rank = draft_rank(&ranks, chosen);
+                let at = ranks.iter().position(|&x| x == rank).unwrap_or(0);
+                let row = row_of(f, rank);
+                let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
+                let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+                ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
+                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, TEXT);
+                let card = vec![(fam_name(f), GOLD), (desc.clone(), TEXT), ("Drag to another slot or back to the list. Right click takes it out.".into(), DIM)];
+                ui.push(id, "row", fam_name(f), r, true, false, None, card);
+                ui.draggable(format!("slot.{g}.{i}"));
+                ui.drop_target(format!("slot.{g}.{i}"));
+                // < Rank >: step over the unlocked ranks; GOLD when kept below the highest unlocked rank
+                let lines = emberwake_world::skill_text::rank_lines(cat, u, f);
+                let step_tip = |to: Option<i32>| -> aegis_ui::ui::Tip {
+                    let Some(t) = to else { return Vec::new() };
+                    let line = lines.iter().find(|l| l.tier == t).map(|l| l.text.clone()).unwrap_or_default();
+                    let to_ap = lines.iter().find(|l| l.tier == t).map(|l| l.ap).unwrap_or(ap);
+                    let cost = match to_ap.cmp(&ap) {
+                        std::cmp::Ordering::Less => format!("Cheaper: {to_ap} AP (now {ap})"),
+                        std::cmp::Ordering::Greater => format!("Stronger: {to_ap} AP (now {ap})"),
+                        std::cmp::Ordering::Equal => format!("Same cost: {ap} AP"),
+                    };
+                    vec![(format!("Rank {}", roman(t)), GOLD), (line, TEXT), (cost, DIM)]
+                };
+                let down = at.checked_sub(1).and_then(|k| ranks.get(k).copied());
+                let up = ranks.get(at + 1).copied();
+                ui.button_full(&format!("skills.rank.{g}.{i}.down"), Rect::new(r.x + 120, r.y + 1, 13, 13), "<", PAct::RankStep(class, i, -1), down.is_some(), false, BODY, step_tip(down));
+                let mut num_tip = vec![(format!("{}: Rank {} of {}", fam_name(f), roman(rank), roman(top)), GOLD)];
+                num_tip.extend(lines.iter().map(|l| (format!("{}: {}{}", roman(l.tier), l.text, if l.tier == rank { " (chosen)" } else { "" }), if l.unlocked { TEXT } else { DIM })));
+                num_tip.push((if chosen.is_some() { "Stays at this rank when new ranks unlock; change it with < and >." } else { "Follows the top rank until you confirm; from then on it stays put." }.into(), DIM));
+                ui.p.text(r.x as f32 + 136.0, r.y as f32 + 3.0, roman(rank), BODY, if rank < top { GOLD } else { TEXT });
+                ui.push(format!("skills.rank.{g}.{i}"), "row", roman(rank), Rect::new(r.x + 134, r.y, 22, 15), true, false, None, num_tip);
+                ui.button_full(&format!("skills.rank.{g}.{i}.up"), Rect::new(r.x + 157, r.y + 1, 13, 13), ">", PAct::RankStep(class, i, 1), up.is_some(), false, BODY, step_tip(up));
+                ui.p.text(r.x as f32 + 176.0, r.y as f32 + 3.0, &format!("{ap} AP"), BODY, DIM);
             }
-            ui.p.text(68.0, y as f32, &format!("{} slots {} / {limit}", if class { "Class" } else { "Extra" }, list.len()), BODY + 1.0, INFO);
-            y += 13;
-            let mut x = 68;
-            for (i, f) in list.iter().enumerate() {
-                let label = format!("{}  x", fam_name(f));
-                let w = ui.p.text_w(&label, BODY) as i32 + 12;
-                ui.button_tip(&format!("skills.chip.{f}"), Rect::new(x, y, w, 16), &label, PAct::Unslot(class, i), true, tip(&fam_name(f), "Click to take it out of the loadout."));
-                x += w + 3;
-            }
-            y += 21;
         }
+        // Right: the owned skills; the whole column takes slots dropped back (recorded under the rows).
+        let list_area = Rect::new(310, 114, 294, 156);
+        ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, INFO);
+        ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
+        ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
-        let rows = ((262 - y) / 22).max(1) as usize;
-        self.scroll = self.scroll.min(owned.len().saturating_sub(rows));
-        if self.scroll > 0 || owned.len() > rows {
-            ui.p.text_right(604.0, y as f32 - 12.0, &format!("{}-{} of {} (wheel scrolls)", self.scroll + 1, (self.scroll + rows).min(owned.len()), owned.len()), SMALL, DIM);
+        const ROWS: usize = 6;
+        self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
+        if self.scroll > 0 || owned.len() > ROWS {
+            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, DIM);
         }
-        for f in owned.iter().skip(self.scroll).take(rows) {
-            let mut tiers: Vec<&emberwake_data::SkillDef> = cat.skills.iter().filter(|s| cat.family_of(&s.id) == f).collect();
-            tiers.sort_by_key(|s| s.tier);
-            let active = tiers.iter().filter(|s| u.tier_unlocked(cat, s)).last().copied();
+        for (k, f) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
+            let y = 118 + k as i32 * 22;
+            let top = u.selectable_ranks(cat, f).last().copied().unwrap_or(0);
+            let row = row_of(f, top);
             let slotted = self.class_slots.contains(f) || self.extra_slots.contains(f);
-            ui.button(&format!("skills.slot.{f}"), Rect::new(68, y, 60, 16), if slotted { "Slotted" } else { "Slot" }, PAct::Slot(f.clone()), !slotted);
-            let grade: String = tiers.first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
-            let rank = active.map(|s| s.tier).unwrap_or(0);
-            let desc = active.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
-            ui.p.text(134.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(rank)), BODY, TEXT);
-            ui.p.text_fit(134.0, y as f32 + 10.0, &desc, SMALL, 470.0, DIM);
-            ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(134, y, 470, 20), true, slotted, None, tip(&fam_name(f), &desc));
-            y += 22;
+            let on_path = path.contains(f);
+            let full = !slotted && self.extra_slots.len() >= max_extra && (!on_path || self.class_slots.len() >= max_class);
+            ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
+            let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
+            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, TEXT);
+            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, DIM);
+            ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
+            ui.draggable(format!("skill.{f}"));
+        }
+        // While a skill is dragged the pane says where it can go.
+        if let Some(from) = ui.dragging().map(String::from) {
+            let (mx, my) = ui.mouse;
+            let target = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mx, my)).and_then(|x| x.drop.clone());
+            self.detail = match target.as_deref().and_then(|t| t.strip_prefix("slot.")).and_then(|t| t.split_once('.')) {
+                Some((g, i)) if self.skills_after_drop(cx, &from, &format!("slot.{g}.{i}")).is_ok() => {
+                    let list = if g == "class" { &self.class_slots } else { &self.extra_slots };
+                    match list.get(i.parse::<usize>().unwrap_or(usize::MAX)) {
+                        Some(old) if from.strip_prefix("skill.").is_some_and(|f| !self.class_slots.iter().chain(&self.extra_slots).any(|x| x == f)) => format!("Replaces {}.", fam_name(old)),
+                        Some(old) => format!("Swaps with {}.", fam_name(old)),
+                        None => "Drop to slot it here.".into(),
+                    }
+                }
+                _ => "Drop on a class slot (class path skills) or an extra slot; drop on the list to take it out.".into(),
+            };
         }
         ui.button("skills.reset", Rect::new(68, 312, 70, 18), "Reset", PAct::ResetSkills, true);
         ui.button("skills.default", Rect::new(144, 312, 70, 18), "Use default", PAct::UseDefault, !self.using_default);
+        ui.button_tip("skills.clear", Rect::new(220, 312, 70, 18), "Clear all", PAct::ClearAll, !self.class_slots.is_empty() || !self.extra_slots.is_empty(), tip("Clear all", "Empties every class and extra slot in the draft (an empty loadout means the class default)."));
         ui.button("skills.confirm", Rect::new(498, 312, 70, 18), "Confirm", PAct::ConfirmSkills, self.has_draft(cx));
     }
 

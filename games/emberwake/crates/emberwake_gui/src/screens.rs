@@ -30,6 +30,8 @@ pub struct Game {
     pub clean: Value,
     /// A battle, conversation or shop is open (saving and leaving wait).
     pub busy: bool,
+    /// The UI Gallery's sample game (never saved; the gallery drops it when it goes, and only it).
+    pub sample: bool,
 }
 
 /// The game's half of the shared context.
@@ -44,7 +46,7 @@ pub struct GameCx {
     pub log: Vec<String>,
     pub encounter: String,
     pub seed: Option<i64>,
-    /// A debug game (Scene Runner): fights get Won / Fled / Lost buttons and nothing is saved.
+    /// A debug game (Scene Runner): fights get Skip / Fled / Lost buttons and nothing is saved.
     pub debug: bool,
     /// The Godot export folder the data was loaded from (Reload re-reads it).
     pub data_dir: PathBuf,
@@ -150,7 +152,7 @@ impl aegis_ui::Context for GameCx {
 /// Starts playing `gs` (a new game or a loaded save) and shows the region map.
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
     let clean = gs.to_value();
-    cx.game = Some(Game { gs, slot, clean, busy: false });
+    cx.game = Some(Game { gs, slot, clean, busy: false, sample: false });
     cx.log.clear();
     if !warnings.is_empty() {
         cx.notice = warnings;
