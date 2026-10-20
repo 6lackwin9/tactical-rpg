@@ -2,7 +2,133 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: c5d9544 -->
+<!-- last: 260ad9f -->
+
+## 2026-10-20
+
+In the game:
+
+- **Gear tab**: three columns, like the gear dojo: the hero's stats (green or red for the item you point at or drag), the equipped slots with the battle pouch under them, and the party stash. Drag from the stash onto a gear or pouch slot to equip, drag a worn item back to unequip, or click as before; gear the class cannot use is refused. Two-handed weapons now take the off hand too, so equipping one removes an off-hand item and the other way round.
+- **Settings now work**: window mode (windowed, borderless, fullscreen), window size, vsync, frame cap and text size (Small to Extra large) apply as soon as you pick them; the Character popup and Settings tabs re-flow for bigger text. Dropdowns open as lists and volume controls are sliders you can drag.
+- **Sound and music**: each screen has its music (menu, map, combat and a boss track for boss fights) with crossfades; battles play hit, crit, miss, heal, defend, move and defeat sounds; volume sliders play a sample as you move them.
+- **Keyboard play**: every screen works with Tab / Shift+Tab, the arrow keys and Enter, with a visible focus ring; dropdown lists and sliders work from the keyboard too.
+- **Enemy intent**: in combat planning, enemies show what they plan to do again (chips, arrows and a short line), as before the engine move.
+- **Battle log and report**: the action log, combo and round-end lines, and the battle report with its metrics are back.
+- **Character popup**: every row (stats, derived values, level-up rows) shows its details in the side pane when you point at it.
+- **Test Arena**: an Exit button leaves a battle.
+- **Saves and settings** now live in the game's own folder (`%APPDATA%/Aegis/emberwake`); your old saves and settings are copied there the first time you start.
+- **For testers (Scene Runner)**: the Gear & Skill Dojo is back as a sandbox of movable, resizable windows; the UI Gallery shows panes on their own, starting with the battle timeline; Playtests lists your recorded battles with Play back, Take over at a round, notes and Copy to repo, plus the recording toggle; press **F8** anywhere while recording to leave a note with a screenshot and tags (mechanic, ui, ux, bug).
+
+Every change that touched the game:
+
+- PORT-PLAYTEST C (game): Scene Runner Playtests, battle playback and take-over (7696d7d)
+- PORT-PLAYTEST C (engine): F8 notes and the recordings browser (2096500)
+- ASSETORG2: asset layers and reuse groups (decision and spec), PORT-PLAYTEST B docs (408c1bc)
+- PORT-PLAYTEST B (game): battle events in the playtest trail (4b745e5)
+- PORT-PLAYTEST B (engine): the UI trail and its report (cd0f412)
+- PORT-PLAYTEST A (game): arena battles are recorded and replay (a295018)
+- PORT-PLAYTEST A (engine): playtest recordings and replay on the command API (23f49c4)
+- PORT-CHECKS (game): the Forge's content checks, message for message (3a7cd5e)
+- PORT-CHECKS (engine): blocking and warning hooks for the content writer (a9cd6c9)
+- PORT-FOCUS (game): the screens on the kit's keyboard focus (814d137)
+- PORT-FOCUS (engine): keyboard focus on every screen (ba41988)
+- PORT-SIM (game): every balance sim mode on the engine (8dc993e)
+- PORT-SIM (engine): Godot number formatting in aegis_core (55ae4a3)
+- PORT-BREPORT (game): battle metrics, the battle report and the action log (1b56559)
+- TIMELINE1, ROUNDHIST1 (game): round archive and the UI Gallery's battle timeline (ff62fa6)
+- TIMELINE1 (engine): block timeline widget in the UI kit (0e97eed)
+- PORT-INTENT (game): enemy intent tells (1fd2f71)
+- PORT-INTENT (engine): Painter::arrow (588f4a9)
+- PORT-DOJO (game): the gear dojo's sandbox on a desk of windows (236011b)
+- PORT-DOJO (engine): scroll areas, nested clips and rich text in the UI kit (c19a9a4)
+- UIKIT3 (engine): windows in the UI kit (ba4054a)
+- GEAR2H1 (game): a two-handed weapon and the off hand exclude each other (1473492)
+- GEARUI1 (game): Gear tab in three columns with drag and drop both ways (26cbd8c)
+- UIKIT2 (engine): drag and drop in the UI kit (93ab0ea)
+- ASSETORG1 (game): Emberwake art in a folder per thing (0c73dea)
+- ASSETORG1 (engine): art loader reads one folder per thing (a655c52)
+- PORT-AUDIO (game): Emberwake music, battle sounds and volume samples (61683e8)
+- PORT-AUDIO (engine): sound and music in aegis_ui (a28d8f8)
+- PORT-SETTINGS (game): settings screen on the engine's choices; layouts follow the text size (221e2cd)
+- PORT-SETTINGS (engine): the engine owns and applies display and text-size settings (b402d14)
+- UIKIT2: drag and drop is an engine row the screens borrow (user 2026-10-20) (bce945f)
+- UIKIT1 (game): settings, Scene Runner, World Forge and turn-in use the select and slider (062dfcf)
+- UIKIT1 (engine): a select with its choice list, a draggable slider, hover outline on info rows (ec9ae0e)
+- PORT-DOJO: the Godot gear dojo's sandbox as a task row (user 2026-10-20) (54b658f)
+- DOJO2-B: the gear dojo lists the unit's skills and pouch slots (d3fd76b)
+- PARTY2-B: every row of the character popup fills the detail pane (a748ebc)
+- ARENA-EXIT: an Exit button in Test Arena battles (7115038)
+- DRAG1: drag and drop both ways on the gear tab, then on other screens (403c7cf)
+- PLAYTEST1: user playtest of 2026-10-20 as task rows and decisions (1f865cf)
+- SPLIT1-9: process by layer; the game's design docs move to games/emberwake/docs/ (d8415fd)
+- SPLIT1-8: games/emberwake/ holds the game; game.json; saves and settings under the game id (70b9083)
+
+Under the hood:
+
+- Planner: PORT-PLAYTEST done; PLAYBACK2 and ARTTOOL1 rows; art tools decision (260ad9f)
+- Planner: UIKIT3 engine windows before PORT-DOJO; the port goal decision (dc88260)
+- CI: install ALSA on the Linux gate (rodio's cpal needs it) (f8ca4d9)
+- Planner: approve SPRITE1 and PHASEFOLD; status notes on stale specs (1c8293c)
+- Planner: SKILLUI1 spec and answers, RUNNER2 and UIGALLERY1 rows (21b5e5e)
+- CI1: the gate fails on compiler warnings; gates stay on main only (60a9764)
+
+## 2026-10-19
+
+In the game:
+
+- **The game moved to its own engine.** Emberwake now runs on Aegis, a Rust engine built for it, instead of Godot. Every screen was rebuilt (menus, region and world maps, dialogue, shop, game menu, character, journal, results and combat), your saves load as before, and battles play out step for step the same as in the Godot build. The interface is drawn smoothly at your screen's resolution, with hover cards, tactic dropdowns and a scrolling battle log; battle items and reinforcement waves work as before.
+
+Every change that touched the game:
+
+- SPLIT1-7: game crates renamed emberwake_* and moved to games/emberwake/crates/ (fcf201a)
+- SPLIT1-6: engine command API protocol and CLI shell; Emberwake registers its commands (82927f5)
+- SPLIT1-5: engine UI aegis_ui (drawing, widget kit, art, tuning, agent link, screen stack, shell) (ff7771a)
+- SPLIT1-3: engine content layer aegis_content (file format, schema, world graph, writer hooks) (f891b71)
+- SPLIT1-4: engine save framework aegis_save (slots, envelope, migration runner) (898ae6a)
+- SPLIT1-2: engine core aegis_core (RNG, hash, sort, Variant helpers, field readers) (e85f6a6)
+- SPLIT1-1: the Cargo workspace moves to the repo root (7a8903f)
+- SPLIT1: a game-agnostic engine and the first game, Emberwake (spec approved) (908e671)
+- SPRITE1-A: the pixel-art party sprites reach main (from develop) (3d19060)
+- feat(transition): step 2b, the Godot project leaves the root (e3f4d71)
+- feat(transition): step 2a, engine tooling replaces Godot's (1412c1f)
+- feat(transition): step 1, frozen legacy copy of the Godot project (d8b8587)
+- feat(engine): read data/ directly, verified against Godot's catalogs (2c84faf)
+- feat(engine): battle items with Godot trace parity (cce2e84)
+- feat(engine): encounter rules with world battle parity (f85caa3)
+- feat(engine): every Godot screen on the engine, with save compatibility (3e8d911)
+- feat(engine): aegis_world game loop with Godot journey parity (a81379d)
+- feat(engine): Godot hash() port and world/game-data exports (5aa17fe)
+- feat(engine): smooth UI layer, hover cards, tactic dropdowns, scrolling log (3f529ae)
+- feat(engine): aegis-gui battle screen with agent link and live tuning (2c0b84a)
+- feat(engine): command API (aegis_host) and aegis serve (1b2be79)
+- feat(engine): aegis CLI, reinforcement waves, encounter traces (50a4f20)
+- test(engine): group and team battle traces; replay every saved trace (7445497)
+- feat(engine): battle sim port replays Godot duels step for step (3198f63)
+- feat(engine): bit-exact Godot RandomNumberGenerator (PCG32) port (f89bb25)
+- feat(engine): rules port with exact Godot parity for units and damage (337476d)
+- fix(engine): keep engine files inside engine/, pin gnullvm toolchain (37c2243)
+- feat(engine): achieve Godot combat feature parity in aegis_app and web tactical GUI (26068d7)
+- feat(engine): implement aegis_app WGPU desktop presentation shell with Taffy UI and web player interface (69f16d5)
+- feat(engine): implement aegis_game standalone game instance runner with autosave and catalog loading (cb75d1c)
+- feat(engine): implement aegis_bench comparing world generation, UI layout, and combat simulation (3637709)
+- feat(engine): align simulation unit stats with reference game catalog data (9ff0a7f)
+- feat(engine): implement aegis_sim headless Monte Carlo balance simulation harness (25d3b3c)
+- feat(engine): implement aegis_vm execution engine and deterministic combat simulation (13e10f6)
+- feat(engine): scaffold Project Aegis Rust engine with Markdown-first architecture and gd2md migration bridge (e29cde2)
+
+Under the hood:
+
+- TIDY1: SPLIT1-1 row archived, SPLIT1 in progress, lint fixes (2f97441)
+- REPO-MOVE1: the checkout moves out of OneDrive (user 2026-10-19) (e427afd)
+- RESCOPE1: task queue re-scoped to the engine; engine gaps as PORT rows (7d0c977)
+- WORKFLOW-DEV1: develop-first on desktop (user 2026-10-19) (0ec760f)
+- fix(ci): parity tests on a fresh checkout (952f214)
+- docs: Godot parity is a migration check (user 2026-10-19) (623a32d)
+- docs(transition): step 3, the process switches to the engine (a81e6fd)
+- docs(engine): reference shots of every Godot screen and the replication plan (e6ed039)
+- chore(engine): retire Markdown-language crates and old placeholder sim (1c43bbc)
+- docs(engine): record user decisions on parity, scope and Godot boundary (8f295d1)
+- docs(engine): add agent-native engine spec, supersede Markdown-as-language proposal (0eddf1f)
 
 ## 2026-10-18
 
