@@ -31,6 +31,8 @@ use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
 const TILE: i32 = 32;
+/// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
+pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
 const GRID_X: i32 = 128;
 const GRID_Y: i32 = 30;
 const TACTICS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
@@ -149,6 +151,9 @@ pub struct BattleScreen {
     log_seen: usize,
     /// Where the playtest hub keeps this battle's session (None until first saved).
     slot: Option<usize>,
+    /// The panels of the last frame by name (UIGALLERY1: the UI Gallery shows each one on its own), named from
+    /// `PANELS`.
+    pub panels: Vec<(&'static str, Rect)>,
     /// (requests, checkpoints) of the session at its last save.
     saved: (usize, usize),
     /// Playtest trail events of the battle (plan edits, confirms, the end), handed to the hub on the next tick.
@@ -191,6 +196,7 @@ impl BattleScreen {
             events_seen: 0,
             log_seen: 0,
             slot: None,
+            panels: Vec::new(),
             saved: (0, 0),
             parked: Vec::new(),
             trail_out: Vec::new(),
@@ -1132,6 +1138,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let show_tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
 
     // -- Top strip: the selected hero's six blocks and the round controls.
+    g.panels = vec![("strip", Rect::new(2, 2, W - 4, 24)), ("grid", Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4)), ("bar", Rect::new(2, 322, W - 4, 36))];
     ui.p.panel(Rect::new(2, 2, W - 4, 24), PANEL, BORDER, RADIUS);
     let hero_name = sel.map(|u| w.units[u].name.clone()).unwrap_or_else(|| "No hero".into());
     ui.p.text_fit(8.0, 9.0, &format!("{hero_name} plan"), TITLE, 80.0, GOLD);
@@ -1239,9 +1246,11 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
         y += 33;
     }
+    g.panels.push(("party", Rect::new(2, 28, 124, y - 26)));
     if let Some(h) = sel {
         let u = &w.units[h];
         let r = Rect::new(6, y + 2, 116, 318 - y - 6);
+        g.panels.push(("hero", r));
         ui.p.panel(r, CARD, BORDER, RADIUS);
         ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &u.name, BODY, 64.0, GOLD);
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 2.0, stance_name(u), SMALL, DIM);
@@ -1462,9 +1471,12 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, next), r, true, hover, Some(Action::UnitClick(e)), tip);
         y += r.h + 2;
     }
+    g.panels.push(("hostiles", Rect::new(right.x, 28, right.w, y - 26)));
+    debug_assert!(g.panels.iter().all(|p| PANELS.contains(&p.0)), "a panel recorded under a name PANELS lacks");
     let detail_foe = hovered_foe.or_else(|| w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some()));
     if let Some(e) = detail_foe {
         let r = Rect::new(right.x + 4, y + 2, 116, 318 - y - 6);
+        g.panels.push(("intel", r));
         ui.p.panel(r, CARD, FOE, RADIUS);
         let mut ly = r.y as f32 + 3.0;
         for (i, (t, col)) in unit_tip(s, e, sel, &tells).into_iter().enumerate() {

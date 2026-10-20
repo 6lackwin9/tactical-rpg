@@ -30,6 +30,8 @@ pub struct Game {
     pub clean: Value,
     /// A battle, conversation or shop is open (saving and leaving wait).
     pub busy: bool,
+    /// The UI Gallery's sample game (never saved; the gallery drops it when it goes, and only it).
+    pub sample: bool,
 }
 
 /// The game's half of the shared context.
@@ -150,7 +152,7 @@ impl aegis_ui::Context for GameCx {
 /// Starts playing `gs` (a new game or a loaded save) and shows the region map.
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
     let clean = gs.to_value();
-    cx.game = Some(Game { gs, slot, clean, busy: false });
+    cx.game = Some(Game { gs, slot, clean, busy: false, sample: false });
     cx.log.clear();
     if !warnings.is_empty() {
         cx.notice = warnings;

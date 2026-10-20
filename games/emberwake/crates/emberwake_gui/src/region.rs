@@ -206,7 +206,8 @@ impl RegionMap {
         }
     }
 
-    fn talk(&mut self, cx: &mut Cx, character: &str) {
+    /// Opens the conversation with `character` (also the UI Gallery's dialogue and shop entries).
+    pub fn talk(&mut self, cx: &mut Cx, character: &str) {
         let d = cx.data.clone();
         let r = DialogueRunner::open(&d, cx.gs_mut(), character);
         if r.closed {

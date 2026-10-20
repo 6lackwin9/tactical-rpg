@@ -332,6 +332,9 @@ impl Slots {
 }
 
 fn save_now(cx: &mut Cx, slot: i64) {
+    if cx.game.as_ref().is_some_and(|g| g.sample) {
+        return show_errors(cx, vec!["The UI Gallery's sample game is not saved.".into()]);
+    }
     let errors = save::write(&cx.data, &cx.save_dir, cx.gs(), slot, 0);
     if errors.is_empty() {
         cx.mark_saved(slot);
