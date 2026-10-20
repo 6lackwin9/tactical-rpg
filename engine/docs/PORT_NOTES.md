@@ -88,7 +88,7 @@ because the RNG is bit-exact.
 | :--- | :--- | :--- |
 | `game_state/game_state.gd`, `progression/party_state.gd`, `unit_state.gd` | `emberwake_world::state` | journeys (state after every action) |
 | `game_state/new_game.gd`, `game_rolls.gd`, `json_util.gd` | `new_game`, `rolls`, `json` | journeys (start state, every roll) |
-| `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 |
+| `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10; the engine adds 10 -> 11, SKILLUI1 rank choice, with no Godot counterpart) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 |
 | `progression/xp_curve.gd`, `level_up.gd`, `party_builder.gd`, `heal_rules.gd` | `progression` | journeys (HP views, level-ups, camp) |
 | `world/world_catalog.gd` (lineage, merged, resolve, party rules), `world_factory.gd` (unit entry, passives) | `aegis_content::Catalogs` (lineage, merged, resolve), `data` (party rules, unit entry, passives) | journeys |
 | `exploration/map_rules.gd` (runtime), `explore_runner.gd`, `purse_rules.gd`, `battle_bridge.gd` (apply) | `explore`, `purse`, `battle` | journeys (marker views too) |

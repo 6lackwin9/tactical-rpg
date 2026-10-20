@@ -41,6 +41,9 @@ pub struct UnitState {
     pub passives: Vec<String>,
     pub loadout_class: Vec<String>,
     pub loadout_extra: Vec<String>,
+    /// SKILLUI1: family -> the rank chosen on the Skills tab; a family without an entry uses its highest unlocked
+    /// rank. Saved as `loadout.ranks`, only when non-empty.
+    pub loadout_ranks: IndexMap<String, i64>,
     pub equipment: IndexMap<String, String>,
     pub carried: Vec<String>,
     pub pouch: Vec<String>,
@@ -113,6 +116,10 @@ impl UnitState {
         for (k, v) in &self.equipment {
             equipment.insert(k.clone(), Value::String(v.clone()));
         }
+        let mut loadout = json::obj([("class", strs(&self.loadout_class)), ("extra", strs(&self.loadout_extra))]);
+        if !self.loadout_ranks.is_empty() {
+            loadout.insert("ranks".into(), Value::Object(self.loadout_ranks.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         Value::Object(json::obj([
             ("id", Value::String(self.id.clone())),
             ("base_unit", Value::String(self.base_unit.clone())),
@@ -121,7 +128,7 @@ impl UnitState {
             ("spend", Value::Object(clean)),
             ("learned_skills", strs(&self.learned_skills)),
             ("passives", strs(&self.passives)),
-            ("loadout", Value::Object(json::obj([("class", strs(&self.loadout_class)), ("extra", strs(&self.loadout_extra))]))),
+            ("loadout", Value::Object(loadout)),
             ("equipment", Value::Object(equipment)),
             ("carried", strs(&self.carried)),
             ("pouch", strs(&self.pouch)),
@@ -161,6 +168,7 @@ impl UnitState {
             passives: json::sget(d, "passives"),
             loadout_class: json::sget(lo, "class"),
             loadout_extra: json::sget(lo, "extra"),
+            loadout_ranks: lo.get("ranks").filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             equipment,
             carried: json::sget(d, "carried"),
             pouch: json::sget(d, "pouch"),
@@ -262,6 +270,16 @@ impl UnitState {
             seen.push(fam);
             if !owned.contains(fam) {
                 errors.push(format!("{at}: loadout family '{fam}' is not owned."));
+            }
+        }
+        // SKILLUI1 V1 and V2: a rank entry names an owned, non-basic family and one of its tiers.
+        for (fam, rank) in &self.loadout_ranks {
+            if d.cat.is_basic_family(fam) {
+                errors.push(format!("{at}: rank set for family '{fam}', which is a basic family (basics have one rank)."));
+            } else if !owned.contains(fam) {
+                errors.push(format!("{at}: rank set for family '{fam}' that is not owned."));
+            } else if !d.cat.family_rows(fam).iter().any(|s| s.tier as i64 == *rank) {
+                errors.push(format!("{at}: family '{fam}' has no rank {rank}."));
             }
         }
         errors

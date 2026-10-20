@@ -195,7 +195,24 @@ pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built
             warnings.push(format!("Unit '{}': stored loadout ignored ({err}).", work.id));
         }
     }
+    // SKILLUI1 R4: a hero built from member state uses the ranks chosen on the Skills tab (set after gear, passives
+    // and the loadout, so every unlock is final; fixed for the battle like the loadout).
+    u.rank_choice = Some(work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect());
     Some(Built { unit: u, pouch_unloaded: unloaded, warnings })
+}
+
+/// SKILLUI1 (the user's answer to Q2): every slotted family without a rank entry gets its highest unlocked rank now,
+/// so the slot stays there when new ranks unlock (the Skills tab calls this on slotting and on Confirm). Slotted
+/// means the built unit's active families, so the class default loadout (stored empty) is pinned too.
+pub fn pin_ranks(d: &Data, state: &mut UnitState) {
+    let Some(b) = build_with(d, state, false) else { return };
+    for fam in &b.unit.active_families() {
+        if !state.loadout_ranks.contains_key(fam) {
+            if let Some(&r) = b.unit.selectable_ranks(&d.cat, fam).last() {
+                state.loadout_ranks.insert(fam.clone(), r as i64);
+            }
+        }
+    }
 }
 
 // ---- HealRules -----------------------------------------------------------------------------------------------

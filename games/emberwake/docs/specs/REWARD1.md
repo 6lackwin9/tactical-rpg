@@ -181,7 +181,7 @@ Result `rewards` (always present on an `ok` result): `{foes: int, defeated: {sla
 
 ## 8. Save impact
 
-- Next save version (v10 -> v11 today; the builder takes the next free number). Step: `reward_paid` = `{}`, then for every `purses[qid] >= 1` whose encounter resolves and has a `once: true` purse, every roster key of that encounter (a story fight won before REWARD1 does not pay again). `save.rs` `KEYS` gains `reward_paid`.
+- Next save version (v11 -> v12 today: SKILLUI1-L took 11; the builder takes the next free number). Step: `reward_paid` = `{}`, then for every `purses[qid] >= 1` whose encounter resolves and has a `once: true` purse, every roster key of that encounter (a story fight won before REWARD1 does not pay again). `save.rs` `KEYS` gains `reward_paid`.
 - Validation: `reward_paid` must be a dictionary of string arrays; anything else is a load problem (as the other keys).
 - `rolls["loot"]` and the new meaning of `purses` need no shape change. Key loot uses `loot_claimed`, as today.
 
@@ -190,7 +190,7 @@ Result `rewards` (always present on an `ok` result): `{foes: int, defeated: {sla
 Godot paid XP and the purse only on `won`, for every enemy ref, and nothing on `lost` / `fled` (`BattleBridge.apply`). The journey replay passes no tally, so the default tally (section 2 rule 5) gives Godot's numbers: won = every enemy, lost and fled = none; the journeys keep comparing XP, quests, flags, shops and travel. The Godot exports the journeys and saves load have no `loot`, `key_loot` or `objective_reward`, so no drop or key loot appears there. Retired, by name:
 
 1. `games/emberwake/crates/emberwake_world/tests/journey.rs`: the after-fight result key `rewards` and the state key `reward_paid` are not compared (Godot has neither). The diff skips exactly these two keys.
-2. `games/emberwake/crates/emberwake_world/tests/saves.rs`: the loaded state of a Godot fixture is compared without `reward_paid` (the v11 step adds it).
+2. `games/emberwake/crates/emberwake_world/tests/saves.rs`: the loaded state of a Godot fixture is compared without `reward_paid` (the v12 step adds it).
 3. No battle trace or world battle parity changes: `Session::fates` only reads the session.
 
 HISTORY rows (for the planner):
@@ -223,7 +223,7 @@ Save: `reward_paid` not a dictionary of string arrays: "reward_paid must map enc
 - Objective reward: paid on a hold win, not on fled or lost; `once` pays the second win nothing.
 - Skip: RUNNER2's skipped fight pays the full purse, every drop roll, key loot and the objective reward.
 - Determinism: a shipped playtest recording replays with identical `RoundOutcome`s; the same save, fight and tally give the same gold and drops.
-- Save: `reward_paid` round-trips; the v10 -> v11 step gives `{}`, or every roster key for a `once` purse already won.
+- Save: `reward_paid` round-trips; the v11 -> v12 step gives `{}`, or every roster key for a `once` purse already won.
 - Results: the text lines of section 7 for won, fled and lost, with and without defeated foes.
 - Validation: each message of section 10 fires for its bad entry; shipped data is clean.
 - Parity: journeys and Godot saves pass with exactly the section 9 keys skipped.

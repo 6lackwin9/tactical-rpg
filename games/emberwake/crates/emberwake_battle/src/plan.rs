@@ -480,6 +480,13 @@ impl Plan {
             if !u.tier_unlocked(&w.cat, s) {
                 return format!("{} unlocks at unit level {}.", s.name, u.skill_unlock_level(&w.cat, s));
             }
+            if !u.rank_allowed(&w.cat, s) {
+                // SKILLUI1 R3: a hero uses only the rank chosen on the Skills tab
+                let fam = s.family_id();
+                let fam_name = w.cat.tier_one(fam).map(|t| t.name.as_str()).unwrap_or(fam);
+                let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
+                return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, emberwake_rules::unit::rank_numeral(rank));
+            }
             if skill::kind(s) == Kind::Disengage {
                 return self.apply_disengage(w, c, st, step, index);
             }

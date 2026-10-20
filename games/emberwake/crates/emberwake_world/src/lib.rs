@@ -14,6 +14,7 @@ pub mod quest;
 pub mod rolls;
 pub mod save;
 pub mod shop;
+pub mod skill_text;
 pub mod state;
 pub mod travel;
 
