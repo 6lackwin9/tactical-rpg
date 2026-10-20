@@ -64,9 +64,11 @@ games/emberwake/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire
 games/emberwake/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
 games/emberwake/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
 games/emberwake/parity/sim.sh                         # record the Godot balance sim's tables for 20 command lines (~25 min)
-cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world -p emberwake_sim
+games/emberwake/parity/checks.sh                      # record the Godot content checks: broken entries, world lints, reports (~10 s)
+cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world -p emberwake_sim -p emberwake_content
     # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces (with their action logs,
-    # metrics and reports), journeys (result, state and screen views per action), saves, the sim's printed tables
+    # metrics and reports), journeys (result, state and screen views per action), saves, the sim's printed tables,
+    # the content checks (errors and warnings, message for message)
 cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table (sim help: every mode and key)
 ```
 

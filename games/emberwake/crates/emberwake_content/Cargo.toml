@@ -7,4 +7,7 @@ edition = "2021"
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 aegis_content = { path = "../../../../engine/crates/aegis_content" }
 emberwake_rules = { path = "../emberwake_rules" }
+emberwake_data = { path = "../emberwake_data" }
 serde_json = { workspace = true }
+indexmap = { workspace = true }
+emberwake_battle = { path = "../emberwake_battle" }

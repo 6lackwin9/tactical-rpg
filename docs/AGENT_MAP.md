@@ -43,6 +43,7 @@ Merged 2026-10-17: SKILL1, BAL1, BAL2-L (run 1 + 1b), BAL2-A, cleanup batches 1-
 | main session (no lane agents) | PORT-BREPORT | - | rules: buff list, magnitude labels; game: the action log, World HP journal, combo and round-end events, BattleMetrics, BattleReport, hero keys, Godot message wording; Godot trace recorder extended (metrics, report and log of every fight), report rule tests |
 | main session (no lane agents) | PORT-SIM | - | engine: aegis_core::fmt (Godot number formatting); game: emberwake_sim (all nine sim modes and their keys), `aegis sim <mode>`, parity sim.sh with 20 recorded Godot runs compared line for line |
 | main session (no lane agents) | PORT-FOCUS | - | engine: aegis_ui::focus and the shell's keyboard focus (Tab, Shift+Tab, arrows, Enter, choice lists, sliders, ring, agent link); game: main menu on the kit focus, region map and journal keep their arrows, controls help |
+| main session (no lane agents) | PORT-CHECKS | - | engine: Hooks::warnings and `content check` warning lines, World own_by_id; game: emberwake_content::check (catalog and world content checks, warnings, reports), emberwake_rules::budget, art keys, the writer refuses new problems; parity checks.sh with 6721 cases, a world lint set and the reports |
 
 ### Transition to the Aegis engine (2026-10-19, desktop engine session)
 

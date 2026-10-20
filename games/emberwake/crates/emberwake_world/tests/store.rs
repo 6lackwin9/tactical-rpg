@@ -78,7 +78,7 @@ fn copy_dir(from: &Path, to: &Path) {
 fn upsert_and_remove_validate_write_and_roll_back() {
     let tmp = std::env::temp_dir().join(format!("aegis_store_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
+    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression", "assets"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
     let units = store::file_of(&tmp, None, "units");
@@ -105,5 +105,21 @@ fn upsert_and_remove_validate_write_and_roll_back() {
     store::upsert(&tmp, Some("ashlands"), "lore", lore.as_object().unwrap(), None).expect("world entry");
     let d = emberwake_world::Data::open(&tmp).unwrap().0;
     assert_eq!(aegis_core::json::s(d.resolve("ashlands", "lore", "test_note"), "text"), "A line.");
+
+    // A ported content rule refuses a catalog write: a class whose base stats miss the class budget.
+    let mut class = d.entry("classes", "warrior").clone();
+    class.insert("id".into(), json!("test_class"));
+    class.insert("base_stats".into(), json!({"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}));
+    let errors = store::upsert(&tmp, None, "classes", &class, None).err().expect("over budget refused");
+    assert!(errors.iter().any(|e| e.contains("Base stats total 108")), "{errors:?}");
+
+    // A world write may name an entry that does not exist yet (WorldCatalog.upsert: worlds are full of mutual
+    // references); the check still reports it.
+    let region = json!({"id": "test_region", "name": "Test Region", "faction": "test_faction"});
+    store::upsert(&tmp, Some("ashlands"), "regions", region.as_object().unwrap(), None).expect("forward reference kept");
+    assert!(store::check(&tmp).iter().any(|p| p.contains("unknown faction 'test_faction'")));
+    let bad_shape = json!({"id": "test_band", "name": "Test Band", "relations": {"ember_wardens": "friendly"}});
+    let errors = store::upsert(&tmp, Some("ashlands"), "factions", bad_shape.as_object().unwrap(), None).err().expect("bad stance refused");
+    assert!(errors.iter().any(|e| e.contains("Relation stance 'friendly'")), "{errors:?}");
     let _ = std::fs::remove_dir_all(&tmp);
 }

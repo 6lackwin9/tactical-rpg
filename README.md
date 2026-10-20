@@ -52,7 +52,9 @@ cargo run -q -p emberwake_host -- content apply games/emberwake/data/seeds/<task
 
 Kinds: the catalog kinds, `maps`, `quests` and `services`, and every world kind (with `world=<id>`). Entries are given in
 their stored shape (ranked skills, items as family + modifiers). A change is kept only when the whole data folder still
-loads cleanly and its references resolve; otherwise the file is put back. `tools/fc.sh content ...` is the same.
+checks cleanly: `content check` runs the Forge's content checks (every catalog and world rule, ported from Godot; its
+warnings print as `warning:` lines and never fail), and a write that adds a problem is put back. `tools/fc.sh content
+...` is the same.
 
 ## History
 

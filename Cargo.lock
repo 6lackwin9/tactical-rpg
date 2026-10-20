@@ -615,7 +615,10 @@ version = "0.1.0"
 dependencies = [
  "aegis_content",
  "aegis_core",
+ "emberwake_battle",
+ "emberwake_data",
  "emberwake_rules",
+ "indexmap",
  "serde_json",
 ]
 

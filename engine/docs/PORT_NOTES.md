@@ -14,6 +14,7 @@ because the RNG is bit-exact.
 | Dictionary iteration is insertion order | `IndexMap` everywhere order can matter |
 | JSON numbers come back as floats; `x is int` checks fail on parsed data | lenient `aegis_core::value` reads; checked by parity |
 | Integer division truncates toward zero, `floori` floors | match per call site |
+| A float total starts at 0.0 (Rust's `Iterator::sum` of no floats is -0.0, which prints "-0.0") | `fold(0.0, ...)` where a total is printed |
 
 ## Files
 
@@ -161,7 +162,7 @@ Content is edited without Godot through `aegis content check | upsert | remove |
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors`, `ref_problems` | `tests/store.rs` |
+| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors` (`ref_problems`, the writer's reference check until PORT-CHECKS, is unused since) | `tests/store.rs` |
 | `content/skill_ranks.gd` (`collapse`, `fold`), `skill_kinds.gd` (`has_field`) | `store::skill_storage` | `tests/store.rs` |
 | `core/specs/item_modifiers.gd` (`stored`) | `store::catalog_storage` (items) | `tests/store.rs` |
 | `world/world_catalog.gd` (`save_world`, `upsert`), `world_schema.gd` (`to_storage`) | `aegis_content::schema::world_storage`, `store::manifest_text` | `tests/store.rs` |
@@ -173,7 +174,46 @@ Content is edited without Godot through `aegis content check | upsert | remove |
   of `after` byte for byte. Nine shipped files are older than their schema (field order), so Godot's save reorders
   them too; the first engine save of such a file does the same.
 - Validation: id (snake_case), name, enum options and catalog references by the schema; skill ranks and item families
-  by construction; then the whole data folder must load without new problems, else the file is put back.
+  by construction; then the whole data folder must not check with new problems (the content checks below, since
+  PORT-CHECKS), else the file is put back.
 - Not covered: the asset manifest (`games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
-  sprite work), the Forge's richer checks (SkillValidator, item budgets, world reference rules); the gate's test
-  suites and `content check` catch what a broken entry does to the game.
+  sprite work; the checks read its unit and item keys). The Forge's richer checks (SkillValidator, item budgets, world
+  reference rules) are ported since PORT-CHECKS (next section).
+
+## Content checks (emberwake_content::check, PORT-CHECKS, 2026-10-20)
+
+`aegis content check` reports what the Forge's validators reported: soft warnings (printed as `warning:` lines, never
+failing), then hard errors; every `upsert` / `remove` refuses a write that adds a blocking one (see Writes below).
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `content/content_catalog.gd` (`validate_entry`, `_prepare`, `warnings_for`, `validate_all`, `warnings_all`), `content_schema.gd` (`field_errors`, `options_of`, `passes_filter`) | `check` (`View`, `validate_entry`, `warnings_for`, `validate_all`, `warnings_all`) | checks parity |
+| `content/validators/skill_validator.gd`, `skill_kinds.gd`, `skill_ranks.gd` (`fold`, `collapse`), `skill_text.gd` (`validate`, warnings) | `check::skill` | checks parity |
+| `content/validators/class_unit_validator.gd`, `core/specs/stat_rules.gd` (`validate_class`, `validate_spend`) | `check::unit` | checks parity |
+| `content/validators/item_validator.gd`, `core/specs/item_modifiers.gd` (`collapse`, `stored`, `stable_order`), `item_families.gd`, `item_text.gd` | `check::item` | checks parity |
+| `core/specs/gear_budget.gd` | `emberwake_rules::budget` | checks parity |
+| `content/validators/terrain_validator.gd`, `core/specs/passives.gd` (`validate_effects`) | `check::simple` | checks parity |
+| `combat/session/encounter_phases.gd`, `encounter_objectives.gd`, `encounter_morale.gd` (`problems`, pace, start buffs), `exploration/purse_rules.gd` | `check::encounter` | checks parity |
+| `world/world_catalog.gd` (`validate_entry`, `manifest_errors`, `validate_world`, `validate_all`, `world_warnings`, `warnings_all`) | `check::world` | world cases, lint |
+| `quests/quest_rules.gd`, `dialogue/rep_rules.gd` (value rule, key lint) | `check::quest` | world cases, lint |
+| `dialogue/dialogue_rules.gd` (trees, conditions, effects, service lines, tree and gone-NPC lints) | `check::dialogue` | world cases, lint |
+| `dialogue/shop_rules.gd`, `travel/travel_rules.gd` (with the route graph), `exploration/map_rules.gd` (location rules, lints) | `check::shop`, `travel`, `map` | world cases, lint |
+| `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | `source::art_keys` | checks parity |
+
+- Recording: `games/emberwake/parity/checks.sh` runs `parity/godot/checks.gd` on `legacy/` and writes
+  `parity/out/checks.json`; `cargo test -p emberwake_content --test checks_parity` replays it on `legacy/data`.
+- Catalog: 5166 cases (three entries of every kind and sub-kind, each field set to a few wrong values in the shape
+  it holds, plus hand-made cases for the rules across fields: skill families, combos, item modifiers, tiers and
+  text, family changes, encounter phases, objectives, morale and purse) and the shipped catalog's reports (0 errors,
+  18 warning keys) match message for message, errors and warnings.
+- Worlds: 1555 cases (own entries of every kind in every world, fields set wrong) and the shipped worlds' reports
+  match; a lint set (14 entries upserted into ashlands in memory: a dialogue tree, two quests, a location with
+  markers and bindings, a shop, a route, a character, regions, a faction, an item, loot and an encounter with start
+  buffs) matches with its 196 errors and 26 warning lines over every world.
+- Godot divergence: a family band with `min` but no `max` stops Godot's `ItemValidator.family_warnings` with a script
+  error; the engine prints the warning with an empty max (the recording leaves that shape out).
+- Writes: a write is refused when it adds a blocking problem (`Hooks::blocking`): every catalog error
+  (ContentCatalog.upsert validates the entry) and the world entries' `WorldCatalog.blocking_errors` (id, name, enums,
+  overrides, json shapes; also recorded and compared per world case). Unresolved world references do not block, as in
+  Godot (worlds are full of mutual references); `content check` reports them.
+- Not ported: the Forge's per-field problem records ({field, index}); the checks return the message texts.
