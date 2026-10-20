@@ -26,6 +26,8 @@ pub enum Key {
     BackTab,
     PageUp,
     PageDown,
+    /// Ctrl+Enter (submit a form, e.g. save a note).
+    CtrlEnter,
     Char(char),
 }
 
@@ -43,6 +45,7 @@ impl Key {
             "backtab" | "shift+tab" => Key::BackTab,
             "pageup" => Key::PageUp,
             "pagedown" => Key::PageDown,
+            "ctrl+enter" => Key::CtrlEnter,
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
             _ => return None,
         })
@@ -62,6 +65,7 @@ impl Key {
             Key::BackTab => "shift+tab".into(),
             Key::PageUp => "pageup".into(),
             Key::PageDown => "pagedown".into(),
+            Key::CtrlEnter => "ctrl+enter".into(),
             Key::Char(c) => c.to_string(),
         }
     }
@@ -104,7 +108,7 @@ impl Settings {
     /// The engine's keys and their defaults.
     pub fn engine_defaults() -> Value {
         json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "window_mode": "Windowed", "window_size": "1280x720",
-            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0})
+            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions)})
     }
 
     /// Every default: the engine's keys, then the game's own (`game_defaults`).
@@ -240,6 +244,12 @@ pub trait Screen<G> {
     }
     /// Called when the screen becomes the top again.
     fn resume(&mut self, _cx: &mut Cx<G>) {}
+    /// A text field of this screen changed while being typed into (`Ui::text_field`): the screen keeps the text.
+    fn text_changed(&mut self, _cx: &mut Cx<G>, _id: &str, _text: &str) {}
+    /// What a playtest note taken over this screen records about it (a battle: its session, round, block, phase).
+    fn note_context(&self, _cx: &Cx<G>) -> Value {
+        Value::Null
+    }
     /// Called when the screen leaves the stack (popped, a new stack, the window closing): its last chance to keep
     /// what it holds (a playtest session).
     fn leave(&mut self, _cx: &mut Cx<G>) {}

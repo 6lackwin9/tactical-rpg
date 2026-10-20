@@ -237,15 +237,23 @@ files (the Godot build's) are refused with that reason.
 | `scripts/ui/playtest/ui_trail.gd` (screen, panel / modal, button, key, hover, click) | the shell (`click`, `back`, `key`, `settle`, `track_hover`), the battle screen (plan_edit, confirm, battle_end) | shell test |
 | `scripts/playtest/playtest_logger.gd` (errors), `AssetRegistry.resolve_observer` (asset fallbacks) | `aegis_ui::playtest::report_error` with a panic hook, `report_asset` from the art loader | hub test |
 | `scripts/playtest/trail_report.gd` (`--trail-report`) | `aegis_host::trail` (`build`, `lines`), `aegis replay <file> trail-report` | unit test (acceptance 12 and 13) |
+| `scripts/ui/playtest/note_dialog.gd` (F8: screenshot, text, tags) | `aegis_ui::notes::NoteBox`, the shell's `note` (stamp + `Screen::note_context`), `Playtests::add_note`, `aegis_ui::jpeg` (baseline encoder, std only), the kit's text field (`Ui::text_field`, `Kit.edit`) | shell test |
+| `scripts/ui/runner` Playtests panel, `playtest_store.gd` (`copy_to_repo`, inbox folders) | `aegis_ui::recordings::Recordings` (kit screen; the game gives the launcher), `playtest::copy_to`, `image_dir`, `list` of `<id>/<id>.json`; `BattleScreen::playback` | shell test, by hand on the agent link |
 
 - A variant is a request patch ({at, remove, requests, then}), not a plan patch: any request can change.
 - Ids use UTC (std has no local time zone).
 - The trail: controls are the engine kit's widget infos (path = widget id, cls = widget kind); overlays open and close
-  as modals, other screens are screen changes (leaked is always 0: the engine keeps no node tree). Keys inside a text
-  field are not skipped yet (there is no text field until the notes).
+  as modals, other screens are screen changes (leaked is always 0: the engine keeps no node tree). Keys typed into a
+  text field are not logged.
 - The report differs from `trail_report.gd` only in names and one count: `scene` events and fields are `screen`, the
   leak line says "left" (no node tree), `asset_templates` is not counted (the engine draws no template placeholders
   through the loader). A right click (back) always counts as handled. A panic that ends the process is reported but
   not written (no frame follows it); panics the process survives are.
-- Not ported yet: F8 notes and the Scene Runner panel with playback and take-over (the next slice of PORT-PLAYTEST);
-  party battles of the world map (PLAYTEST2).
+- Notes: the screenshot is a JPEG (quality 85) from the engine's own encoder; the stamp has the screen, mouse,
+  viewport, the control under the mouse and the battle's slot, round, block and phase.
+- Playback differs from Godot's: Play back replays the battle to its end and shows the final state (the battle's
+  own replay of the last round and its log), not a round-by-round viewer with a notes drop-down (PLAYBACK2). Take
+  over picks Round 1 or After round N; the new session's `end.parent` names {recording, battle, at}. Scenarios (H)
+  are not listed (none exist).
+- Recording can be turned on and off while the app runs (the browser's toggle; the setting is now the engine's).
+- Not ported yet: party battles of the world map (PLAYTEST2).

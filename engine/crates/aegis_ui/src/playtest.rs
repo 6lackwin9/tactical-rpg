@@ -7,16 +7,20 @@ use aegis_host::playtest::{self, Recording, Session};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 use std::time::{Duration, Instant};
 
 /// A hub with recording on exists in this process (the report functions do nothing otherwise).
 static RECORDING: AtomicBool = AtomicBool::new(false);
+/// The panic hook goes in once per process (recording may be turned off and on again).
+static HOOK: Once = Once::new();
 
 /// How often a changed trail is written (sessions and notes save at once).
 pub const TRAIL_SAVE_EVERY: Duration = Duration::from_secs(5);
 /// A hover is logged when the pointer rested this long on one control.
 pub const HOVER_MS: u64 = 700;
+/// The note tags (PLAYTEST1: mechanic, ui, ux, bug).
+pub const TAGS: [&str; 4] = ["mechanic", "ui", "ux", "bug"];
 /// Errors kept per recording.
 pub const ERRORS_MAX: usize = 500;
 
@@ -89,8 +93,9 @@ pub struct Playtests {
 
 impl Playtests {
     pub fn new(dir: PathBuf, on: bool, content: Value) -> Self {
-        if on && !RECORDING.swap(true, Ordering::Relaxed) {
-            hook_panics();
+        if on {
+            RECORDING.store(true, Ordering::Relaxed);
+            HOOK.call_once(hook_panics);
         }
         Self { dir, on, content, rec: None, started: Instant::now(), error: String::new(), dirty: false, last_save: Instant::now(), errors: 0, screen: String::new() }
     }
@@ -147,6 +152,33 @@ impl Playtests {
         Self::new(PathBuf::new(), false, Value::Null)
     }
 
+    /// Turns recording on or off while the app runs (the Scene Runner): on takes the content fingerprint when the hub
+    /// has none (`content` runs only then); off saves the open recording first, and a new one opens once recording is
+    /// back on.
+    pub fn set_on(&mut self, on: bool, content: impl FnOnce() -> Value) {
+        if on == self.on {
+            return;
+        }
+        if on {
+            if self.content.is_null() {
+                self.content = content();
+            }
+            RECORDING.store(true, Ordering::Relaxed);
+            HOOK.call_once(hook_panics);
+            self.on = true;
+        } else {
+            self.save();
+            self.rec = None;
+            self.on = false;
+            RECORDING.store(false, Ordering::Relaxed);
+        }
+    }
+
+    /// The recording was made on other data than this run's (its fingerprint differs; an unknown one counts as current).
+    pub fn stale(&self, rec: &Recording) -> bool {
+        !rec.content.is_null() && !self.content.is_null() && rec.content != self.content
+    }
+
     /// Milliseconds since the hub started (trail and note times).
     pub fn ms(&self) -> u64 {
         self.started.elapsed().as_millis() as u64
@@ -181,6 +213,39 @@ impl Playtests {
             }
         }
         self.save();
+    }
+
+    /// Adds a note (F8) to this run's recording: `note` carries the stamp, text and tags; `n` (1-based), `t`,
+    /// `origin` and `image` are set here. The screenshot (width, height, RGBA) goes to `<dir>/<id>/note_<n>.jpg`
+    /// (JPEG quality 85); without one, `image` is "". Saves; returns `n`.
+    pub fn add_note(&mut self, mut note: Value, shot: Option<(usize, usize, Vec<u8>)>) -> Result<usize, String> {
+        if !self.on {
+            return Err("Playtest recording is off.".into());
+        }
+        let t = self.ms();
+        let dir = self.dir.clone();
+        let rec = self.open();
+        let n = rec.notes.len() + 1;
+        let mut image = String::new();
+        if let Some((w, h, px)) = shot {
+            let folder = dir.join(&rec.id);
+            let file = format!("note_{n}.jpg");
+            std::fs::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+            std::fs::write(folder.join(&file), crate::jpeg::encode_rgba(w, h, &px, 85)).map_err(|e| format!("{file}: {e}"))?;
+            image = file;
+        }
+        note["n"] = json!(n);
+        note["t"] = json!(t);
+        note["origin"] = json!("user");
+        note["image"] = json!(image);
+        rec.notes.push(note);
+        self.trail(json!({"type": "note", "n": n}));
+        self.save();
+        if self.error.is_empty() {
+            Ok(n)
+        } else {
+            Err(self.error.clone())
+        }
     }
 
     /// Writes the open recording (nothing when none is open or recording is off).
@@ -259,6 +324,21 @@ mod tests {
         assert!(off.current().is_none(), "a hub with recording off drains nothing");
         off.put_session(&mut None, session(3));
         assert!(off.current().is_none() && !dir.join("off").exists(), "recording off writes nothing");
+        // Toggled while running: on fingerprints once, off saves and closes, back on opens a new recording.
+        off.set_on(true, || json!({"total": "abc"}));
+        off.put_session(&mut None, session(2));
+        let first = off.current().unwrap().id.clone();
+        off.set_on(false, || unreachable!());
+        assert!(off.current().is_none() && Recording::load(&off.path_of(&first)).is_ok());
+        off.set_on(true, || unreachable!("the fingerprint is kept"));
+        off.put_session(&mut None, session(1));
+        assert_ne!(off.current().unwrap().id, first);
+        assert!(!off.stale(&saved));
+        let mut other = saved.clone();
+        other.content = json!({"total": "def"});
+        assert!(off.stale(&other));
+        off.set_on(false, || Value::Null);
+        RECORDING.store(true, Ordering::Relaxed);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

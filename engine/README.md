@@ -98,6 +98,17 @@ not), widget presses, keys, hovers of 700 ms or more, screen changes, overlays a
 battle's end, errors and panics, and missing art (`aegis_host::trail` reads it). Party battles of the world map
 start outside `new`, so their replay waits for PLAYTEST2.
 
+F8 (recording on) takes a note: the screen as it was goes to `<id>/note_<n>.jpg`, and a box asks for the text (types
+at once) and tags (mechanic, ui, ux, bug); Ctrl+Enter saves, Esc cancels. The note stamps the screen, mouse, control
+and the battle's round, block and phase. The kit's text field (`Ui::text_field`, single or multi-line) edits through
+the shell (`Kit.edit`, `Screen::text_changed`).
+
+The Scene Runner's **Playtests** (`aegis_ui::recordings`, a kit screen the game opens with its own launcher) toggles
+recording and lists the user folder's recordings and the game's repo folders (`playtests/inbox`, `playtests/repro`,
+badge `repo`) with a stale badge: per battle Play back (watch it to its end, not recorded) or Take over at a round
+(replayed, then played on as a new session whose `end.parent` names the recording, battle and request), the notes,
+Open folder and Copy to repo (the recording and its images into `playtests/inbox/<id>/`).
+
 ```bash
 aegis replay <recording.json>                       # every battle: each checkpoint match / diverge (path, values) / unverified
 aegis replay <file> battle=0 until=12 json          # stop after 12 requests (what a take-over replays), JSON report
@@ -133,7 +144,7 @@ I enemy tells, F12 screenshot.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every
-widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `key {key}` (up / down / left /
+widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `type {text}` (into the text field being edited), `note` (F8), `key {key}` (up / down / left /
 right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 

@@ -207,15 +207,53 @@ pub fn new_id(dir: &Path, secs: i64) -> String {
     id
 }
 
-/// The recordings in `dir`, newest first (by id), with what failed to load.
+/// The recordings in `dir` (a flat `<id>.json`, or a shared folder `<id>/<id>.json`), newest first (by id), with what
+/// failed to load.
 pub fn list(dir: &Path) -> Vec<(PathBuf, Result<Recording, String>)> {
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect()).unwrap_or_default();
-    paths.sort();
-    paths.reverse();
+    let entry = |p: PathBuf| -> Option<PathBuf> {
+        if p.is_dir() {
+            let inner = p.join(format!("{}.json", p.file_name()?.to_string_lossy()));
+            inner.is_file().then_some(inner)
+        } else {
+            p.extension().is_some_and(|x| x == "json").then_some(p)
+        }
+    };
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().filter_map(|e| entry(e.path())).collect()).unwrap_or_default();
+    paths.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
     paths.into_iter().map(|p| {
         let r = Recording::load(&p);
         (p, r)
     }).collect()
+}
+
+/// Where the note images of the recording at `path` are: `<dir>/<id>/` beside a flat `<dir>/<id>.json`, the folder
+/// itself for a shared `<id>/<id>.json`.
+pub fn image_dir(path: &Path) -> PathBuf {
+    let id = path.file_stem().map(|s| s.to_os_string()).unwrap_or_default();
+    let parent = path.parent().unwrap_or(Path::new(""));
+    if parent.file_name() == Some(id.as_os_str()) {
+        parent.to_path_buf()
+    } else {
+        parent.join(id)
+    }
+}
+
+/// Copies the recording at `path` and its note images into `<dest_root>/<id>/` (the repo inbox a run from source can
+/// write: the user pushes it and names the id); returns that folder.
+pub fn copy_to(path: &Path, dest_root: &Path) -> Result<PathBuf, String> {
+    let id = path.file_stem().ok_or_else(|| format!("{}: not a recording file", path.display()))?;
+    let dest = dest_root.join(id);
+    std::fs::create_dir_all(&dest).map_err(|e| format!("Cannot create {}: {e}", dest.display()))?;
+    std::fs::copy(path, dest.join(path.file_name().unwrap_or(id))).map_err(|e| format!("Cannot copy {}: {e}", path.display()))?;
+    let images = image_dir(path);
+    if images != dest {
+        for f in std::fs::read_dir(&images).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect::<Vec<_>>()).unwrap_or_default() {
+            if let Some(name) = f.file_name() {
+                std::fs::copy(&f, dest.join(name)).map_err(|e| format!("Cannot copy {}: {e}", f.display()))?;
+            }
+        }
+    }
+    Ok(dest)
 }
 
 // ---- comparing states --------------------------------------------------------------------------------------------
@@ -504,6 +542,17 @@ mod tests {
         assert_eq!(back.battles[0], s);
         assert_eq!(back.extra["future_key"], json!(7));
         assert_eq!(new_id(&dir, 0), "19700101-000000");
+        // Copy to repo: the recording and its images land in <inbox>/<id>/, which lists like the flat file.
+        std::fs::create_dir_all(image_dir(&path)).unwrap();
+        std::fs::write(image_dir(&path).join("note_1.jpg"), b"jpg").unwrap();
+        let inbox = dir.join("inbox");
+        let dest = copy_to(&path, &inbox).unwrap();
+        assert_eq!(dest, inbox.join("20261020-120000"));
+        assert!(dest.join("20261020-120000.json").is_file() && dest.join("note_1.jpg").is_file());
+        let shared = list(&inbox);
+        assert_eq!(shared.len(), 1);
+        assert!(shared[0].1.is_ok());
+        assert_eq!(image_dir(&shared[0].0), dest, "a shared recording keeps its images beside it");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

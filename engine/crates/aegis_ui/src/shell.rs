@@ -11,7 +11,7 @@ use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
 use crate::canvas::{rgb, rgba, Rect};
 use crate::window::Grab;
-use crate::ui::{Drag, Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
+use crate::ui::{Drag, Edit, Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -109,6 +109,7 @@ impl<G: Context> Shell<G> {
             // The keyboard focus starts over on the new top, hidden unless that screen asks for it (auto_focus): a
             // screen's own Enter / Space (confirm, continue, yes) stay its own.
             self.gfx.kit.focus = None;
+            self.gfx.kit.edit = None;
             self.gfx.kit.focus_visible = false;
             self.open_focus = None;
             let navs: Vec<Nav<G>> = self.cx.nav.drain(..).collect();
@@ -157,6 +158,45 @@ impl<G: Context> Shell<G> {
         }
         self.cx.playtest.tick();
         self.cx.playtest.save();
+    }
+
+    /// Types into the text field being edited (`f` changes its text or caret) and hands a change to the screen.
+    fn edit(&mut self, f: impl FnOnce(&mut Edit)) {
+        let Some(e) = self.gfx.kit.edit.as_mut() else { return };
+        let before = e.text.clone();
+        f(e);
+        if e.text != before {
+            let (id, text) = (e.id.clone(), e.text.clone());
+            let cx = &mut self.cx;
+            self.stack.last_mut().unwrap().text_changed(cx, &id, &text);
+        }
+    }
+
+    /// F8: a playtest note. The screen is captured first, then the note box opens over it with its text field typing
+    /// (recording off: a notice says so).
+    fn note(&mut self) {
+        if !self.cx.playtest.on {
+            self.cx.notice.push("Playtest recording is off: turn it on (Scene Runner) to take notes with F8.".into());
+            self.settle();
+            return;
+        }
+        if self.stack.last().is_some_and(|t| t.id() == crate::notes::ID) {
+            return;
+        }
+        let c = &self.gfx.canvas;
+        let shot = Some((c.w as usize, c.h as usize, c.px.clone()));
+        let top = self.stack.last().unwrap();
+        let infos = top.widgets();
+        let ctl = info_at(&infos, self.mouse).map(trail_ctl).unwrap_or(Value::Null);
+        let mut stamp = json!({"scene": top.id(), "battle": -1, "round": 0, "block": 0, "phase": "", "mouse": [self.mouse.0, self.mouse.1], "viewport": [W, H], "ctl": ctl});
+        if let Some(ctx) = top.note_context(&self.cx).as_object() {
+            for (k, v) in ctx {
+                stamp[k] = v.clone();
+            }
+        }
+        self.cx.nav.push(Nav::Push(Box::new(crate::notes::NoteBox::new(shot, stamp))));
+        self.settle();
+        self.gfx.kit.edit = Some(Edit::new(crate::notes::TEXT_ID, "", true));
     }
 
     /// Playtest trail: a hover is logged when the pointer leaves a control it rested on for HOVER_MS or longer.
@@ -294,7 +334,10 @@ impl<G: Context> Shell<G> {
     }
 
     fn key(&mut self, k: Key) {
-        self.cx.playtest.trail(json!({"type": "key", "key": k.name(), "mods": ""}));
+        // Keys typed into a text field are not part of the trail (PLAYTEST1: skipped while a text field has focus).
+        if self.gfx.kit.edit.is_none() {
+            self.cx.playtest.trail(json!({"type": "key", "key": k.name(), "mods": ""}));
+        }
         // Any key drops a press or drag in progress (what it changes could move the target); Esc does only that.
         let cancelled = self.cancel_drag();
         if k == Key::Esc && cancelled {
@@ -428,6 +471,13 @@ impl<G: Context> Shell<G> {
         let infos = self.stack.last().unwrap().widgets();
         let at = info_at(&infos, pos).cloned();
         let kind = at.as_ref().map(|w| w["kind"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        // A text field starts editing on a click (the caret at the end); a click anywhere else ends an edit.
+        if (kind == "text" || kind == "textarea") && at.as_ref().is_some_and(|w| w["enabled"] == json!(true)) {
+            let w = at.as_ref().unwrap();
+            self.gfx.kit.edit = Some(Edit::new(w["id"].as_str().unwrap_or(""), w["text"].as_str().unwrap_or(""), kind == "textarea"));
+            return true;
+        }
+        self.gfx.kit.edit = None;
         self.gfx.kit.focus_visible = false;
         self.open_focus = None;
         if self.gfx.kit.open.take().is_some() {
@@ -757,6 +807,26 @@ impl<G: Context> Shell<G> {
                 self.back();
                 json!({"ok": true})
             }
+            // The text field being edited (a click on it starts one; F8 starts the note's) takes `text` as typed.
+            "type" => match (self.gfx.kit.edit.is_some(), body.get("text").and_then(Value::as_str)) {
+                (true, Some(t)) => {
+                    let t = t.to_string();
+                    self.edit(|e| e.insert(&t));
+                    json!({"ok": true})
+                }
+                (false, _) => json!({"ok": false, "error": "no text field is being edited: click one first"}),
+                (true, None) => json!({"ok": false, "error": "type needs text"}),
+            },
+            // F8: a playtest note on the screen as it is (recording on).
+            "note" => {
+                self.note();
+                let open = self.stack.last().is_some_and(|t| t.id() == crate::notes::ID);
+                if open {
+                    json!({"ok": true})
+                } else {
+                    json!({"ok": false, "error": self.cx.notice.last().cloned().unwrap_or_else(|| "no note box".into())})
+                }
+            }
             "screenshot" => {
                 let path = body.get("path").and_then(Value::as_str).map(PathBuf::from).unwrap_or_else(|| self.cx.shot_dir.join("gui_shot.png"));
                 let max_w = body.get("max_w").and_then(Value::as_u64).unwrap_or(1280) as i32;
@@ -795,6 +865,8 @@ struct App<G> {
     frame_every: Option<Duration>,
     /// Shift is held (Shift+Tab).
     shift: bool,
+    /// Ctrl is held (Ctrl+Enter).
+    ctrl: bool,
 }
 
 impl<G: Context> App<G> {
@@ -919,7 +991,10 @@ impl<G: Context> ApplicationHandler for App<G> {
                 }
             }
             WindowEvent::RedrawRequested => self.redraw(),
-            WindowEvent::ModifiersChanged(m) => self.shift = m.state().shift_key(),
+            WindowEvent::ModifiersChanged(m) => {
+                self.shift = m.state().shift_key();
+                self.ctrl = m.state().control_key();
+            }
             WindowEvent::Focused(false) => {
                 // The release may never arrive (alt-tab mid-drag): drop the drag.
                 if let Some(s) = self.shell.as_mut() {
@@ -954,13 +1029,51 @@ impl<G: Context> ApplicationHandler for App<G> {
                     s.release();
                 }
             }
-            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Pressed, .. }, .. } => {
+            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, text, state: ElementState::Pressed, .. }, .. } => {
                 let Some(s) = self.shell.as_mut() else { return };
+                if s.gfx.kit.edit.is_some() {
+                    // A text field types: the editing keys and the typed text go to it, not to the screen. Ctrl+Enter
+                    // still submits; Enter (one line), Esc and Tab end the edit and reach the screen.
+                    let multiline = s.gfx.kit.edit.as_ref().is_some_and(|e| e.multiline);
+                    match logical_key {
+                        WKey::Named(NamedKey::Backspace) => s.edit(Edit::backspace),
+                        WKey::Named(NamedKey::Delete) => s.edit(Edit::delete),
+                        WKey::Named(NamedKey::ArrowLeft) => s.edit(Edit::left),
+                        WKey::Named(NamedKey::ArrowRight) => s.edit(Edit::right),
+                        WKey::Named(NamedKey::Home) => s.edit(Edit::home),
+                        WKey::Named(NamedKey::End) => s.edit(Edit::end),
+                        WKey::Named(NamedKey::Enter) if self.ctrl => s.key(Key::CtrlEnter),
+                        WKey::Named(NamedKey::Enter) if multiline => s.edit(|e| e.insert("\n")),
+                        WKey::Named(named @ (NamedKey::Enter | NamedKey::Escape | NamedKey::Tab)) => {
+                            s.gfx.kit.edit = None;
+                            s.key(match named {
+                                NamedKey::Enter => Key::Enter,
+                                NamedKey::Escape => Key::Esc,
+                                _ if self.shift => Key::BackTab,
+                                _ => Key::Tab,
+                            });
+                        }
+                        WKey::Named(NamedKey::F8) => {}
+                        // Ctrl+letter types a control character (dropped by the field); AltGr reports Ctrl+Alt and
+                        // types the character its layout gives.
+                        _ => {
+                            if let Some(t) = text {
+                                s.edit(|e| e.insert(&t));
+                            }
+                        }
+                    }
+                    return;
+                }
                 let k = match logical_key {
                     WKey::Named(NamedKey::ArrowUp) => Some(Key::Up),
                     WKey::Named(NamedKey::ArrowDown) => Some(Key::Down),
                     WKey::Named(NamedKey::ArrowLeft) => Some(Key::Left),
                     WKey::Named(NamedKey::ArrowRight) => Some(Key::Right),
+                    WKey::Named(NamedKey::Enter) if self.ctrl => Some(Key::CtrlEnter),
+                    WKey::Named(NamedKey::F8) => {
+                        s.note();
+                        None
+                    }
                     WKey::Named(NamedKey::Enter) => Some(Key::Enter),
                     WKey::Named(NamedKey::Space) => Some(Key::Space),
                     WKey::Named(NamedKey::Escape) => Some(Key::Esc),
@@ -1035,7 +1148,7 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
 pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), shift: false };
+    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), shift: false, ctrl: false };
     el.run_app(&mut app)?;
     Ok(())
 }
@@ -1246,6 +1359,95 @@ mod tests {
         let trail = f.cx.playtest.current().unwrap().trail.clone();
         let types: Vec<&str> = trail.iter().map(|e| e["type"].as_str().unwrap()).collect();
         assert_eq!(types, ["click", "button", "click"], "the click closing the list presses nothing: {trail:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PORT-PLAYTEST notes: F8 captures the screen and opens the note box with its field typing (keys typed there stay
+    /// out of the trail); Ctrl+Enter saves the note (stamp, text, tags, a JPEG next to the recording) and closes it.
+    #[test]
+    fn f8_takes_a_note_with_a_screenshot() {
+        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("aegis_shell_note_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = form(Form::default());
+        s.note();
+        assert!(s.stack.iter().all(|t| t.id() != crate::notes::ID), "recording off: no note box");
+        s.cx.notice.clear();
+        s.stack.truncate(1);
+        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.mouse = (30, 17);
+        s.note();
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), crate::notes::ID);
+        assert_eq!(s.gfx.kit.edit.as_ref().map(|e| e.id.as_str()), Some(crate::notes::TEXT_ID), "the text field types at once");
+        s.edit(|e| e.insert("The OK button is hard to read"));
+        s.key(Key::CtrlEnter);
+        s.frame();
+        assert_ne!(s.stack.last().unwrap().id(), crate::notes::ID, "saved and closed");
+        let rec = s.cx.playtest.current().unwrap().clone();
+        let note = &rec.notes[0];
+        assert_eq!((note["n"].clone(), note["text"].clone(), note["scene"].clone(), note["ctl"]["path"].clone()), (json!(1), json!("The OK button is hard to read"), json!("form"), json!("ok")));
+        let image = s.cx.playtest.dir.join(&rec.id).join(note["image"].as_str().unwrap());
+        assert_eq!(&std::fs::read(&image).unwrap()[..2], &[0xff, 0xd8], "a JPEG");
+        assert!(rec.trail.iter().any(|e| e["type"] == "note" && e["n"] == json!(1)));
+        assert!(!rec.trail.iter().any(|e| e["type"] == "key" && e["key"] == "ctrl+enter"), "the save key was typed in the field");
+        // The agent link takes notes the same way.
+        assert_eq!(s.bridge(&json!({"cmd": "type", "text": "x"}))["ok"], json!(false), "nothing is being edited");
+        assert_eq!(s.bridge(&json!({"cmd": "note"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(s.bridge(&json!({"cmd": "type", "text": "Agent note"}))["ok"], json!(true));
+        assert_eq!(s.bridge(&json!({"cmd": "key", "key": "ctrl+enter"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(s.cx.playtest.current().unwrap().notes[1]["text"], json!("Agent note"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// What the recordings browser handed the game's launcher: (requests, take-over).
+    static LAUNCHED: std::sync::Mutex<Vec<(usize, Option<(Value, usize)>)>> = std::sync::Mutex::new(Vec::new());
+
+    fn launch(_cx: &mut Cx, session: &aegis_host::playtest::Session, take: Option<(Value, usize)>) -> Option<Box<dyn Screen<App>>> {
+        LAUNCHED.lock().unwrap().push((session.requests.len(), take));
+        Some(Box::new(Opener::default()))
+    }
+
+    /// PORT-PLAYTEST playback: the browser lists the run's recording, takes over at a picked round (the parent named),
+    /// plays back to the end, and copies the recording to the repo inbox, where it lists with the repo badge.
+    #[test]
+    fn the_recordings_browser_plays_back_takes_over_and_copies() {
+        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("aegis_shell_recordings_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = shell();
+        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, json!({"total": "a"}));
+        let session = aegis_host::playtest::Session {
+            requests: vec![json!({"cmd": "x"}); 6],
+            checkpoints: vec![json!({"at": 3, "state": {"round": 1, "over": false}}), json!({"at": 6, "state": {"round": 2, "over": true}})],
+            end: json!({"result": "won", "at": 6}),
+        };
+        s.cx.playtest.put_session(&mut None, session);
+        let id = s.cx.playtest.current().unwrap().id.clone();
+        let inbox = dir.join("inbox");
+        let browser = crate::recordings::Recordings::new(&s.cx, launch, |_| Value::Null, vec![inbox.clone()]);
+        s.stack.push(Box::new(browser));
+        s.frame();
+        LAUNCHED.lock().unwrap().clear();
+        for id in ["recordings.round", "recordings.round.opt.1", "recordings.take_over"] {
+            assert_eq!(s.bridge(&json!({"cmd": "click", "id": id}))["ok"], json!(true), "{id}");
+            s.frame();
+        }
+        assert_eq!(s.stack.last().unwrap().id(), "opener", "the launched screen is on top");
+        s.stack.pop();
+        s.frame();
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.play"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(*LAUNCHED.lock().unwrap(), vec![(6, Some((json!({"recording": id, "battle": 0, "at": 3}), 3))), (6, None)]);
+        s.stack.pop();
+        s.frame();
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.copy"}))["ok"], json!(true));
+        s.frame();
+        assert!(inbox.join(&id).join(format!("{id}.json")).is_file());
+        let state = s.stack.last().unwrap().state(&s.cx);
+        assert_eq!(state["recordings"].as_array().map(Vec::len), Some(2), "the user copy and the repo copy: {state}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
