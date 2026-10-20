@@ -29,6 +29,7 @@ name = "aegis_cli"
 version = "0.1.0"
 dependencies = [
  "aegis_content",
+ "aegis_host",
  "anyhow",
  "indexmap",
  "serde_json",
@@ -71,6 +72,7 @@ dependencies = [
 name = "aegis_ui"
 version = "0.1.0"
 dependencies = [
+ "aegis_host",
  "anyhow",
  "fontdue",
  "pixels",
@@ -638,6 +640,7 @@ version = "0.1.0"
 dependencies = [
  "aegis_content",
  "aegis_core",
+ "aegis_host",
  "aegis_save",
  "aegis_ui",
  "anyhow",
@@ -656,6 +659,7 @@ version = "0.1.0"
 dependencies = [
  "aegis_cli",
  "aegis_content",
+ "aegis_core",
  "aegis_host",
  "anyhow",
  "emberwake_battle",

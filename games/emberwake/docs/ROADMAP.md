@@ -27,7 +27,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S13 | Save/load and game state, new-game flow, main menu | done (M3 schema and save I/O; UI1-L menus, 5 shared slots + autosave, SAVE-IO export / import) | S7 | |
 | S14 | Audio, animation and asset pipeline, asset-load tests | in-progress (S14-L1, S14-L2 presenter, S14-L3 audio, S14-A1, S14-A2 done; MUSIC1 music by scene context, games/emberwake/docs/specs/MUSIC1.md) | - | README Test Suite 2 |
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `games/emberwake/docs/BALANCE_REPORT.md` |
-| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2 |
+| S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2. On the engine (PORT-PLAYTEST): arena battles record and replay; party battles of the world map wait for PLAYTEST2, so G1's "one full run replays headless" needs it too |
 | LEVERS1 | Role-feel levers: brawler spin, priest Ward (DR2 4B) | approved (user 2026-10-18 14:26) | BAL5-L, BAL5-A | `games/emberwake/docs/specs/LEVERS1.md`; Bodyguard deferred, boss acts twice not built |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)

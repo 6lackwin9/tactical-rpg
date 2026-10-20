@@ -48,9 +48,35 @@ impl Game for Emberwake {
     }
 
     fn host(&self, args: &Args) -> Result<Box<dyn FnMut(&Value) -> Value>> {
-        let mut host = Host::new(Battle::new(load_catalog(args)?));
+        let mut host = battle_host(args)?;
         Ok(Box::new(move |req| host.handle(req)))
     }
+
+    fn driver(&self, args: &Args) -> Result<Box<dyn aegis_host::Driver>> {
+        Ok(Box::new(battle_host(args)?))
+    }
+}
+
+/// The battle host: on a resolved Godot export (`catalog=`) catalog encounters only, else on the data folder with its
+/// worlds (world encounters "<world>:<id>" too).
+fn battle_host(args: &Args) -> Result<Host> {
+    if args.keys.contains_key("catalog") || std::env::var("AEGIS_CATALOG").is_ok() {
+        return Ok(Host::new(Battle::new(load_catalog(args)?)));
+    }
+    Ok(Host::new(Battle::with_data(world_data(args)?)))
+}
+
+/// The data folder with its worlds, loaded once per process (a seed sweep asks for a fresh host per seed).
+fn world_data(args: &Args) -> Result<Arc<emberwake_world::Data>> {
+    static DATA: std::sync::OnceLock<Arc<emberwake_world::Data>> = std::sync::OnceLock::new();
+    if let Some(d) = DATA.get() {
+        return Ok(d.clone());
+    }
+    let (d, problems) = emberwake_world::Data::open(&data_dir(args)?)?;
+    for p in problems {
+        eprintln!("data: {p}");
+    }
+    Ok(DATA.get_or_init(|| Arc::new(d)).clone())
 }
 
 /// The catalog: `catalog=<file>` (or $AEGIS_CATALOG) reads a resolved Godot export; otherwise `data=<dir>` or the

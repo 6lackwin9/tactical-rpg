@@ -217,3 +217,25 @@ failing), then hard errors; every `upsert` / `remove` refuses a write that adds 
   overrides, json shapes; also recorded and compared per world case). Unresolved world references do not block, as in
   Godot (worlds are full of mutual references); `content check` reports them.
 - Not ported: the Forge's per-field problem records ({field, index}); the checks return the message texts.
+
+## Playtests (aegis_host::playtest, PORT-PLAYTEST, 2026-10-20)
+
+The engine records and replays what Godot's PLAYTEST1 did, on the command API instead of plans and RNG states:
+every battle runs through the command host, so its request log replays it exactly (the engine has no live round
+redo, the reason Godot stored `rng_state` per round). Recordings are version 2 of the `playtest` format; version 1
+files (the Godot build's) are refused with that reason.
+
+| Godot | Rust | Checked by |
+| :--- | :--- | :--- |
+| `scripts/playtest/playtest_record.gd`, `playtest_store.gd` (ids, list, atomic save) | `aegis_host::playtest` (`Recording`, `new_id`, `list`, `save`) | unit tests |
+| `playtest_recorder.gd` (rounds, outcomes) | `Host` checkpoints (`Commands::checkpoint`; Emberwake: the round outcome after a concluded round) and `Session::of` | `emberwake_host/tests/replay.rs` |
+| `playtest_replayer.gd` (match, diverge, unverified, take-over) | `playtest::replay` (with `until`) | unit tests, `replay.rs` |
+| `tools/replay.gd` (`--battle`, `--json`, `--variant`, `--then`, `--write`, `--seeds`, `--fallback`) | `aegis replay` (`aegis_cli`) | the tests above, by hand |
+| `playtest_sweep.gd` | `playtest::sweep_one`, `parse_seeds` | unit tests |
+| `content_fingerprint.gd` | `aegis_content::fingerprint` (on `aegis_core::sha256`) | unit tests |
+| `scripts/ui/playtest/playtest_hub.gd` (one recording per run) | `aegis_ui::playtest::Playtests` on `Cx`, the screens' `leave` hook | unit test |
+
+- A variant is a request patch ({at, remove, requests, then}), not a plan patch: any request can change.
+- Ids use UTC (std has no local time zone).
+- Not ported yet: the UI trail and its report, F8 notes, the Scene Runner panel with playback and take-over (next
+  slices of PORT-PLAYTEST); party battles of the world map (PLAYTEST2).

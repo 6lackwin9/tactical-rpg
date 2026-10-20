@@ -143,17 +143,22 @@ pub struct BattleScreen {
     seed: Option<i64>,
     /// Arena only: the world the encounter belongs to (played with that world's characters); None = catalog.
     arena_world: Option<String>,
-    data: std::sync::Arc<emberwake_world::Data>,
     /// Session events already shown in the message bar.
     events_seen: usize,
     /// Resolver log lines already sounded.
     log_seen: usize,
+    /// Where the playtest hub keeps this battle's session (None until first saved).
+    slot: Option<usize>,
+    /// (requests, checkpoints) of the session at its last save.
+    saved: (usize, usize),
+    /// Sessions an agent-link `new` ended before the hub could be reached (saved on the next tick).
+    parked: Vec<(Option<usize>, aegis_host::playtest::Session)>,
 }
 
 impl BattleScreen {
     fn blank(cx: &Cx, mode: Mode) -> Self {
         Self {
-            host: Host::new(Battle::new(cx.data.cat.clone())),
+            host: Host::new(Battle::with_data(cx.data.clone())),
             w: Vec::new(),
             mouse: (0, 0),
             selected: None,
@@ -175,10 +180,38 @@ impl BattleScreen {
             encounter: cx.encounter.clone(),
             seed: cx.seed,
             arena_world: None,
-            data: cx.data.clone(),
             events_seen: 0,
             log_seen: 0,
+            slot: None,
+            saved: (0, 0),
+            parked: Vec::new(),
         }
+    }
+
+    /// A session worth recording: it starts with `new`, so it replays (a party battle of the world map starts outside
+    /// it: PLAYTEST2).
+    fn recordable(&self) -> bool {
+        self.host.history.first().is_some_and(|r| r["cmd"] == json!("new"))
+    }
+
+    /// Hands the battle's command-host session to the playtest hub when it changed since the last save (the hub saves
+    /// it in place while the battle runs).
+    fn save_session(&mut self, cx: &mut Cx) {
+        for (mut slot, s) in self.parked.drain(..) {
+            cx.playtest.put_session(&mut slot, s);
+        }
+        let now = (self.host.history.len(), self.host.checkpoints.len());
+        if !self.recordable() || now == self.saved {
+            return;
+        }
+        self.saved = now;
+        cx.playtest.put_session(&mut self.slot, aegis_host::playtest::Session::of(&self.host));
+    }
+
+    /// A new battle starts a new session.
+    fn new_session(&mut self) {
+        self.slot = None;
+        self.saved = (0, 0);
     }
 
     /// The Test Arena: the catalog encounter given on the command line (goblin_skirmish by default).
@@ -237,8 +270,8 @@ impl BattleScreen {
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
-        b.host.session = Some(session);
-        b.host.history.clear();
+        b.host.begin(session);
+        b.host.restart();
         b.after_start(&s(entry, "intro"));
         cx.set_busy(true);
         Ok(b)
@@ -293,26 +326,13 @@ impl BattleScreen {
         }
     }
 
+    /// Starts the arena's encounter through the command host (a world one as "<world>:<id>"), so the session replays.
     fn start_battle(&mut self) {
-        if let Some(world) = self.arena_world.clone() {
-            let d = self.data.clone();
-            let entry = d.resolve(&world, "encounters", &self.encounter);
-            if entry.is_empty() {
-                self.message = format!("Unknown encounter '{}' in {world}.", self.encounter);
-                return;
-            }
-            let mut def = EncounterDef::from_obj(entry);
-            if let Some(s) = self.seed {
-                def.rng_seed = s;
-            }
-            def.id = format!("{world}:{}", self.encounter);
-            let roster = WorldRoster { d: &d, world: world.clone() };
-            self.host.session = Some(Session::start(d.cat.clone(), def, &roster));
-            self.host.history.clear();
-            self.after_start(&s(entry, "intro"));
-            return;
-        }
-        let mut req = json!({"cmd": "new", "encounter": self.encounter});
+        let encounter = match &self.arena_world {
+            Some(world) => format!("{world}:{}", self.encounter),
+            None => self.encounter.clone(),
+        };
+        let mut req = json!({"cmd": "new", "encounter": encounter});
         if let Some(s) = self.seed {
             req["seed"] = json!(s);
         }
@@ -321,7 +341,8 @@ impl BattleScreen {
             self.message = reply["error"].as_str().unwrap_or("could not start").to_string();
             return;
         }
-        self.after_start("");
+        self.new_session();
+        self.after_start(reply["intro"].as_str().unwrap_or(""));
     }
 
     fn after_start(&mut self, intro: &str) {
@@ -500,6 +521,7 @@ impl BattleScreen {
             }
             Action::Restart => {
                 if !self.world_mode() {
+                    self.save_session(cx);
                     self.start_battle();
                 }
             }
@@ -669,6 +691,10 @@ impl Screen<GameCx> for BattleScreen {
         draw(self, cx, g, mouse, live);
     }
 
+    fn leave(&mut self, cx: &mut Cx) {
+        self.save_session(cx);
+    }
+
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
         if now.duration_since(self.tuning_checked) > Duration::from_millis(500) {
@@ -680,6 +706,10 @@ impl Screen<GameCx> for BattleScreen {
         let t = cx.tuning.value.clone();
         self.floats.retain(|f| now.duration_since(f.born) < Duration::from_millis(t.float_ms));
         self.flashes.retain(|f| now.duration_since(f.1) < Duration::from_millis(t.hit_flash_ms));
+        // The playtest session is saved after every concluded round (and once more at the end).
+        if self.host.checkpoints.len() != self.saved.1 || !self.parked.is_empty() {
+            self.save_session(cx);
+        }
         if self.host.session.is_none() {
             return;
         }
@@ -781,7 +811,15 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
+        // An agent-link `new` ends this session: park it for the hub (saved on the next tick), then start a new one.
+        let restart = body["cmd"] == json!("new");
+        if restart && self.recordable() {
+            self.parked.push((self.slot, aegis_host::playtest::Session::of(&self.host)));
+        }
         let reply = self.host.handle(body);
+        if restart && reply["ok"] == json!(true) {
+            self.new_session();
+        }
         if self.host.session.is_some() {
             self.after_change(cx);
         }

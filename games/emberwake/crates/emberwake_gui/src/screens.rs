@@ -19,7 +19,7 @@ pub type Nav = aegis_ui::Nav<GameCx>;
 
 /// The game's own settings keys and defaults (sound, display and text size are the engine's: `Settings::engine_defaults`).
 pub fn default_settings() -> Value {
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true})
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "record_playtests": cfg!(debug_assertions)})
 }
 
 /// The game in play (CurrentGame): the state, the slot it came from and its copy at the last save or load.

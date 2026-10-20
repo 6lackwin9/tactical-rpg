@@ -4,7 +4,8 @@
 //! Also the game's own CLI commands (`cli`: `sim <mode>`, `battle`).
 //!
 //! Requests (`cmd`; `history` is the protocol's own):
-//!   new {encounter, seed?}                     start a catalog encounter
+//!   new {encounter, seed?}                     start a catalog encounter, or a world one ("<world>:<id>", when the
+//!                                              host has the world data)
 //!   state                                      round, block, phase, outcome, units, grid
 //!   intents                                    every scheduled action this round (enemies included)
 //!   skills {unit}                              the skills the unit can plan now
@@ -20,7 +21,8 @@
 //!   advance                                    start the next round
 //!   autoplay {preset?, rounds?}                draft, confirm and resolve rounds until the battle ends
 //!   log {since?}                               resolution log lines
-//!   history                                    the mutating requests so far (feed them back to replay)
+//!   history                                    the mutating requests so far (feed them back to replay) and the
+//!                                              checkpoints: the round outcome after every concluded round
 //! Step shapes: {"mode": "engage", "skill", "target"}, {"mode": "self", "skill"}, {"mode": "ally", "skill",
 //! "target"}, {"mode": "area", "skill", "cell": [x, y]}, {"mode": "goto", "cell"}, {"mode": "move", "dir": [dx, dy],
 //! "tiles"}, {"mode": "withdraw"}, {"mode": "item", "item", "target"}. Units are referred to by index (as in `state`)
@@ -39,10 +41,14 @@ use std::sync::Arc;
 
 pub mod cli;
 
-/// The battle command set: the catalog and the battle in progress.
+/// The battle command set: the catalog (and the worlds, for world encounters) and the battle in progress.
 pub struct Battle {
     pub cat: Arc<Catalog>,
+    pub data: Option<Arc<emberwake_world::Data>>,
     pub session: Option<Session>,
+    /// Rounds checkpointed so far (a checkpoint per concluded round, one more when the battle ends).
+    checkpointed: i32,
+    ended: bool,
 }
 
 /// The game's command host (the engine protocol over the battle command set; derefs to `Battle`).
@@ -61,6 +67,18 @@ impl aegis_host::Commands for Battle {
         cmd == "new"
     }
 
+    fn checkpoint(&mut self) -> Option<Value> {
+        let s = self.session.as_ref()?;
+        let concluded = s.phase == Phase::Replay && s.current_round > self.checkpointed;
+        let ended = s.combat_over && !self.ended;
+        if !concluded && !ended {
+            return None;
+        }
+        self.checkpointed = self.checkpointed.max(s.current_round);
+        self.ended = s.combat_over;
+        Some(outcome_of(s))
+    }
+
     fn handle(&mut self, cmd: &str, req: &Value) -> Value {
         match cmd {
             "new" => self.new_battle(req),
@@ -74,11 +92,27 @@ impl aegis_host::Commands for Battle {
 
 impl Battle {
     pub fn new(cat: Arc<Catalog>) -> Self {
-        Self { cat, session: None }
+        Self { cat, data: None, session: None, checkpointed: 0, ended: false }
+    }
+
+    /// A battle host that also starts world encounters ("<world>:<id>").
+    pub fn with_data(data: Arc<emberwake_world::Data>) -> Self {
+        Self { cat: data.cat.clone(), data: Some(data), session: None, checkpointed: 0, ended: false }
+    }
+
+    /// Puts a battle started outside `new` in place (a party battle of the world map); the caller restarts the
+    /// host's history.
+    pub fn begin(&mut self, s: Session) {
+        self.session = Some(s);
+        self.checkpointed = 0;
+        self.ended = false;
     }
 
     fn new_battle(&mut self, req: &Value) -> Value {
         let Some(id) = req.get("encounter").and_then(Value::as_str) else { return err("new needs an encounter id") };
+        if let Some((world, local)) = id.split_once(':') {
+            return self.new_world_battle(world, local, req);
+        }
         let Some(entry) = self.cat.encounters.get(id) else {
             return err(format!("unknown encounter '{id}'; known: {}", self.cat.encounters.keys().cloned().collect::<Vec<_>>().join(", ")));
         };
@@ -88,8 +122,26 @@ impl Battle {
         }
         let s = Session::start(self.cat.clone(), def, &IndexMap::new());
         let state = state_of(&s);
-        self.session = Some(s);
+        self.begin(s);
         json!({"ok": true, "state": state})
+    }
+
+    fn new_world_battle(&mut self, world: &str, local: &str, req: &Value) -> Value {
+        let Some(d) = self.data.clone() else { return err("this host has no world data: world encounters need the GUI or a data folder") };
+        let entry = d.resolve(world, "encounters", local);
+        if entry.is_empty() {
+            return err(format!("unknown encounter '{local}' in world '{world}'"));
+        }
+        let mut def = EncounterDef::from_obj(entry);
+        if let Some(seed) = req.get("seed").and_then(Value::as_i64) {
+            def.rng_seed = seed;
+        }
+        def.id = format!("{world}:{local}");
+        let roster = emberwake_world::battle::WorldRoster { d: &d, world: world.to_string() };
+        let s = Session::start(d.cat.clone(), def, &roster);
+        let state = state_of(&s);
+        self.begin(s);
+        json!({"ok": true, "state": state, "intro": aegis_core::json::s(entry, "intro")})
     }
 
     fn battle_cmd(cat: &Catalog, s: &mut Session, cmd: &str, req: &Value) -> Value {
@@ -211,6 +263,20 @@ fn phase_name(p: Phase) -> &'static str {
 
 fn stance_name(u: &emberwake_rules::Unit) -> &'static str {
     ["neutral", "offensive", "defensive", "tactical"][u.stance as usize]
+}
+
+/// The checkpoint after a request that concluded a round (or ended the battle): what a replay compares (PLAYTEST1 round
+/// outcome): round, over, result (won, lost, fled, or timeout at the round limit; "" while it goes on), the log
+/// length and every unit's HP, AP, tile, stance, statuses (active and pending), alive and withdrawn.
+pub fn outcome_of(s: &Session) -> Value {
+    let state = state_of(s);
+    let keep = ["id", "hp", "ap", "pos", "stance", "statuses", "pending", "alive", "withdrawn"];
+    let units: Vec<Value> = state["units"]
+        .as_array()
+        .map(|a| a.iter().map(|u| Value::Object(keep.iter().map(|k| (k.to_string(), u[*k].clone())).collect())).collect())
+        .unwrap_or_default();
+    let result = if !s.outcome.is_empty() { s.outcome.clone() } else if s.combat_over { "timeout".into() } else { String::new() };
+    json!({"round": s.current_round, "over": s.combat_over, "result": result, "log_count": s.resolver.log.len(), "units": units})
 }
 
 /// The battle as the agent sees it: everything the GUI would draw, as data.

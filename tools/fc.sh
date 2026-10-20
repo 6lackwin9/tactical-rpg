@@ -8,8 +8,9 @@
 #   tools/fc.sh docs             warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
+#   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
 #   tools/fc.sh parity           re-record the Godot reference from legacy/ (export, traces, journeys, sim runs, content checks; needs Godot 4.7.2)
-# The Godot-only commands (parse, parse-all, arena, dojo, run, replay, safe_delete, export_placeholder, gen_sfx, systems) live on
+# The Godot-only commands (parse, parse-all, arena, dojo, run, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
@@ -86,6 +87,7 @@ case "$1" in
   docs) docs_check || status=1 ;;
   content) aegis content "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
+  replay) aegis replay "${@:2}" || status=1 ;;
   parity)
     games/emberwake/parity/export.sh || status=1
     for m in duel; do for l in 1 5 10; do games/emberwake/parity/trace.sh mode=$m level=$l || status=1; done; done
@@ -102,7 +104,7 @@ case "$1" in
     games/emberwake/parity/sim.sh || status=1
     games/emberwake/parity/checks.sh || status=1
     ;;
-  parse|parse-all|arena|dojo|run|replay|safe_delete|export_placeholder|gen_sfx|systems|all)
+  parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
   *) sed -n '2,13p' "$0"; status=1 ;;
 esac

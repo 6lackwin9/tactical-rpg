@@ -96,8 +96,13 @@ fn main() -> Result<()> {
         debug: false,
         data_dir,
     };
+    let settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
+    let record = settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
+    // The data fingerprint a recording carries; hashed only while recording is on.
+    let content = if record { aegis_content::fingerprint::of(&game.data_dir) } else { serde_json::Value::Null };
     let cx = Cx {
-        settings: Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings()),
+        playtest: aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content),
+        settings,
         art: art::Art::new(project),
         audio: Audio::new(Some(home.join("assets/audio"))),
         nav: Vec::new(),
