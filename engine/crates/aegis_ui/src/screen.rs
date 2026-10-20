@@ -22,6 +22,8 @@ pub enum Key {
     Space,
     Esc,
     Tab,
+    /// Shift+Tab.
+    BackTab,
     PageUp,
     PageDown,
     Char(char),
@@ -38,6 +40,7 @@ impl Key {
             "space" => Key::Space,
             "esc" | "escape" => Key::Esc,
             "tab" => Key::Tab,
+            "backtab" | "shift+tab" => Key::BackTab,
             "pageup" => Key::PageUp,
             "pagedown" => Key::PageDown,
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
@@ -192,6 +195,15 @@ pub trait Screen<G> {
     fn click_id(&mut self, cx: &mut Cx<G>, id: &str) -> Result<(), String>;
     fn widget_rect(&self, id: &str) -> Option<(Rect, Vec<String>)>;
     fn key(&mut self, _cx: &mut Cx<G>, _k: Key) {}
+    /// Whether the arrow keys move the keyboard focus (PORT-FOCUS); a screen that walks or steers with them says no
+    /// (Tab and Shift+Tab still move it).
+    fn arrow_focus(&self) -> bool {
+        true
+    }
+    /// Whether the first widget takes a visible focus as the screen appears (a menu meant for the keyboard).
+    fn auto_focus(&self) -> bool {
+        false
+    }
     /// Right click (and Esc unless `escape` says otherwise).
     fn back(&mut self, cx: &mut Cx<G>) {
         cx.nav.push(Nav::Pop);

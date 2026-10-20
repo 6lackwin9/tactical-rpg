@@ -70,12 +70,15 @@ impl<A> Widget<A> {
 }
 
 /// Widget state that outlives a frame, kept by the shell: the select whose choice list is open, the drag in
-/// progress and the offset of every scroll area (by id; cleared when a new stack starts, Nav::Reset).
+/// progress, the offset of every scroll area (by id; cleared when a new stack starts, Nav::Reset) and the keyboard focus.
 #[derive(Debug, Clone, Default)]
 pub struct Kit {
     pub open: Option<String>,
     pub drag: Option<Drag>,
     pub scroll: std::collections::HashMap<String, i32>,
+    /// The focused widget (PORT-FOCUS), and whether its ring shows: the keyboard moved the focus since the last click.
+    pub focus: Option<String>,
+    pub focus_visible: bool,
 }
 
 /// Pixels one wheel line scrolls a scroll area.

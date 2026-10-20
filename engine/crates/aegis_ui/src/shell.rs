@@ -5,6 +5,7 @@
 //! screen; F12 takes a screenshot; right click goes back.
 
 use crate::bridge;
+use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
@@ -45,6 +46,8 @@ struct Shell<G> {
     press: Option<Press>,
     /// A window being moved or resized (UIKIT3): its id, the grab and the last mouse position.
     win_drag: Option<(String, Grab, (i32, i32))>,
+    /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
+    open_focus: Option<String>,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -88,6 +91,11 @@ impl<G: Context> Shell<G> {
             self.press = None;
             self.win_drag = None;
             self.gfx.kit.drag = None;
+            // The keyboard focus starts over on the new top, hidden unless that screen asks for it (auto_focus): a
+            // screen's own Enter / Space (confirm, continue, yes) stay its own.
+            self.gfx.kit.focus = None;
+            self.gfx.kit.focus_visible = false;
+            self.open_focus = None;
             let navs: Vec<Nav<G>> = self.cx.nav.drain(..).collect();
             for n in navs {
                 match n {
@@ -134,7 +142,15 @@ impl<G: Context> Shell<G> {
             self.stack[i].draw(&mut self.cx, &mut self.gfx, mouse, live);
         }
         self.gfx.canvas.clip = None;
+        self.settle_focus();
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
+        if self.gfx.kit.focus_visible && self.gfx.kit.open.is_none() {
+            let infos = self.stack[n - 1].widgets();
+            if let Some(w) = focus::live(&infos, self.gfx.kit.focus.as_deref(), false) {
+                let r = info_rect(w);
+                p.panel(Rect::new(r.x - 2, r.y - 2, r.w + 4, r.h + 4), rgba(0, 0, 0, 0), rgb(255, 255, 255), RADIUS + 1.0);
+            }
+        }
         if self.gfx.kit.open.is_some() {
             // The open choice list goes over everything the screen drew; no hover card while it is open.
             let infos = self.stack[n - 1].widgets();
@@ -142,7 +158,8 @@ impl<G: Context> Shell<G> {
             if opts.is_empty() {
                 self.gfx.kit.open = None;
             } else {
-                draw_options(&mut p, &opts, self.mouse);
+                let keyed = self.gfx.kit.focus_visible.then(|| self.gfx.kit.focus.clone()).flatten();
+                draw_options(&mut p, &opts, self.mouse, keyed.as_deref());
             }
         } else if let Some(d) = &self.gfx.kit.drag {
             // Dragging: valid targets outlined (the one under the cursor in gold) and the ghost; no hover card.
@@ -166,6 +183,24 @@ impl<G: Context> Shell<G> {
         let track = self.stack.iter().rev().find_map(|s| s.music(cx));
         cx.audio.music(track.as_deref());
         cx.audio.tick();
+    }
+
+    /// After the top screen drew: a focus whose widget is gone moves to the first one (when it was showing), an open
+    /// list the keyboard opened focuses its picked option, a screen that wants it starts with a visible focus.
+    fn settle_focus(&mut self) {
+        let top = self.stack.last().unwrap();
+        let infos = top.widgets();
+        let open = self.gfx.kit.open.is_some();
+        if open && self.open_focus.is_some() && !self.gfx.kit.focus.as_deref().is_some_and(|f| infos.iter().any(|w| w["id"] == f && w["kind"] == "option")) {
+            let picked = infos.iter().find(|w| w["kind"] == "option" && w["active"] == json!(true)).and_then(|w| w["id"].as_str()).map(String::from);
+            self.gfx.kit.focus = picked.or_else(|| focus::step(&infos, None, focus::Move::Next, true));
+            return;
+        }
+        let present = focus::live(&infos, self.gfx.kit.focus.as_deref(), open).is_some();
+        if !present && (self.gfx.kit.focus_visible || (top.auto_focus() && self.gfx.kit.focus.is_none())) {
+            self.gfx.kit.focus = focus::step(&infos, None, focus::Move::Next, open);
+            self.gfx.kit.focus_visible = self.gfx.kit.focus.is_some();
+        }
     }
 
     /// The wheel: the topmost scroll area under the mouse scrolls (a window above it stops the search), else the
@@ -202,7 +237,21 @@ impl<G: Context> Shell<G> {
     fn key(&mut self, k: Key) {
         // Any key drops a press or drag in progress (what it changes could move the target); Esc does only that.
         let cancelled = self.cancel_drag();
-        if k == Key::Esc && (cancelled || self.gfx.kit.open.take().is_some()) {
+        if k == Key::Esc && cancelled {
+            return;
+        }
+        if k == Key::Esc {
+            if let Some(field) = self.gfx.kit.open.take() {
+                // Back on the field the list belongs to.
+                self.open_focus = None;
+                if self.gfx.kit.focus_visible {
+                    self.gfx.kit.focus = Some(field);
+                }
+                return;
+            }
+        }
+        if k != Key::Esc && self.focus_key(k) {
+            self.settle();
             return;
         }
         let cx = &mut self.cx;
@@ -215,6 +264,77 @@ impl<G: Context> Shell<G> {
         self.settle();
     }
 
+    /// The keyboard focus (PORT-FOCUS): Tab / Shift+Tab move it, the arrows too unless the screen steers with them
+    /// (`Screen::arrow_focus`; inside an open choice list they always do), Enter or Space on a visible focus presses
+    /// the widget (a choice field opens its list, an option is picked), Left / Right step a focused slider. True when
+    /// the key was used here (the screen does not get it).
+    fn focus_key(&mut self, k: Key) -> bool {
+        let infos = self.stack.last().unwrap().widgets();
+        let open = self.gfx.kit.open.is_some();
+        let kind_of = |id: &str| infos.iter().find(|w| w["id"] == id).and_then(|w| w["kind"].as_str()).unwrap_or("").to_string();
+        let current = focus::live(&infos, self.gfx.kit.focus.as_deref(), open).and_then(|w| w["id"].as_str()).map(String::from);
+        let visible = self.gfx.kit.focus_visible && current.is_some();
+        let slider = current.as_deref().filter(|f| visible && !open && kind_of(f) == "slider").map(String::from);
+        if let (Some(id), Key::Left | Key::Right) = (slider, k) {
+            // The step beside the active one.
+            let prefix = format!("{id}.step.");
+            let steps: Vec<&Value> = infos.iter().filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with(&prefix))).collect();
+            let at = steps.iter().position(|w| w["active"] == json!(true)).unwrap_or(0);
+            let to = if k == Key::Left { at.saturating_sub(1) } else { (at + 1).min(steps.len().saturating_sub(1)) };
+            if let Some(step) = steps.get(to).and_then(|w| w["id"].as_str()).map(String::from) {
+                let cx = &mut self.cx;
+                let _ = self.stack.last_mut().unwrap().click_id(cx, &step);
+            }
+            return true;
+        }
+        let arrows = open || self.stack.last().unwrap().arrow_focus();
+        let m = match k {
+            Key::Tab => Some(focus::Move::Next),
+            Key::BackTab => Some(focus::Move::Prev),
+            Key::Up if arrows => Some(focus::Move::Dir(0, -1)),
+            Key::Down if arrows => Some(focus::Move::Dir(0, 1)),
+            Key::Left if arrows => Some(focus::Move::Dir(-1, 0)),
+            Key::Right if arrows => Some(focus::Move::Dir(1, 0)),
+            _ => None,
+        };
+        if let Some(m) = m {
+            // The first key only shows where the focus is.
+            let from = if visible { current.as_deref() } else { None };
+            let next = match (from, current.as_deref()) {
+                (None, Some(c)) if !matches!(m, focus::Move::Next | focus::Move::Prev) => Some(c.to_string()),
+                _ => focus::step(&infos, from, m, open),
+            };
+            if next.is_some() {
+                self.gfx.kit.focus = next;
+                self.gfx.kit.focus_visible = true;
+                return true;
+            }
+            return false;
+        }
+        if !matches!(k, Key::Enter | Key::Space) || !visible {
+            return false;
+        }
+        let id = current.unwrap();
+        match kind_of(&id).as_str() {
+            "select" => {
+                self.gfx.kit.open = Some(id.clone());
+                self.gfx.kit.focus = None;
+                self.open_focus = Some(id);
+            }
+            "slider" => {}
+            kind => {
+                let picked = kind == "option";
+                let cx = &mut self.cx;
+                let _ = self.stack.last_mut().unwrap().click_id(cx, &id);
+                if picked {
+                    // Back on the field the list belongs to.
+                    self.gfx.kit.focus = self.gfx.kit.open.take().or(self.open_focus.take());
+                }
+            }
+        }
+        true
+    }
+
     /// A left click: opens or closes a choice list, picks from it, starts a slider drag, or clicks the widget.
     fn click(&mut self) {
         // A press or drag whose release was lost (focus moved away mid-drag) ends here.
@@ -223,6 +343,8 @@ impl<G: Context> Shell<G> {
         let infos = self.stack.last().unwrap().widgets();
         let at = info_at(&infos, pos).cloned();
         let kind = at.as_ref().map(|w| w["kind"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        self.gfx.kit.focus_visible = false;
+        self.open_focus = None;
         if self.gfx.kit.open.take().is_some() {
             // An open list: a pick goes through, any other click only closes it.
             if kind == "option" {
@@ -233,6 +355,9 @@ impl<G: Context> Shell<G> {
             return;
         }
         let id = at.as_ref().map(|w| w["id"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        if at.as_ref().is_some_and(|w| focus::focusable(w, false)) {
+            self.gfx.kit.focus = Some(id.clone());
+        }
         if self.desk_press(&id, pos) {
             return;
         }
@@ -400,12 +525,18 @@ impl<G: Context> Shell<G> {
                 let cx = &self.cx;
                 let top = self.stack.last().unwrap();
                 json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": [W, H], "mouse": [self.mouse.0, self.mouse.1],
-                    "music": cx.audio.wanted_music(), "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets()})
+                    "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets()})
             }
             "click" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
                 let infos = self.stack.last().unwrap().widgets();
                 let target = infos.iter().find(|w| w["id"] == id).cloned();
+                // As a mouse click: the ring hides, the clicked widget takes the focus.
+                self.gfx.kit.focus_visible = false;
+                self.open_focus = None;
+                if target.as_ref().is_some_and(|w| focus::focusable(w, false)) {
+                    self.gfx.kit.focus = Some(id.to_string());
+                }
                 if target.as_ref().is_some_and(|w| w["kind"].as_str().is_some_and(|k| k.starts_with("win_") || k == "desk_button")) {
                     // A window or toolbar control: what the press does (no window drag through a click).
                     let r = target.as_ref().map(info_rect).unwrap_or_default();
@@ -529,7 +660,7 @@ impl<G: Context> Shell<G> {
                     self.key(k);
                     json!({"ok": true})
                 }
-                None => json!({"ok": false, "error": "key needs one of up, down, left, right, enter, space, esc, tab, pageup, pagedown or a character"}),
+                None => json!({"ok": false, "error": "key needs one of up, down, left, right, enter, space, esc, tab, backtab, pageup, pagedown or a character"}),
             },
             "back" => {
                 self.back();
@@ -571,6 +702,8 @@ struct App<G> {
     /// unlimited).
     applied: Option<Value>,
     frame_every: Option<Duration>,
+    /// Shift is held (Shift+Tab).
+    shift: bool,
 }
 
 impl<G: Context> App<G> {
@@ -645,7 +778,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -688,6 +821,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                 }
             }
             WindowEvent::RedrawRequested => self.redraw(),
+            WindowEvent::ModifiersChanged(m) => self.shift = m.state().shift_key(),
             WindowEvent::Focused(false) => {
                 // The release may never arrive (alt-tab mid-drag): drop the drag.
                 if let Some(s) = self.shell.as_mut() {
@@ -732,7 +866,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                     WKey::Named(NamedKey::Enter) => Some(Key::Enter),
                     WKey::Named(NamedKey::Space) => Some(Key::Space),
                     WKey::Named(NamedKey::Escape) => Some(Key::Esc),
-                    WKey::Named(NamedKey::Tab) => Some(Key::Tab),
+                    WKey::Named(NamedKey::Tab) => Some(if self.shift { Key::BackTab } else { Key::Tab }),
                     WKey::Named(NamedKey::PageUp) => Some(Key::PageUp),
                     WKey::Named(NamedKey::PageDown) => Some(Key::PageDown),
                     WKey::Named(NamedKey::F12) => {
@@ -766,14 +900,16 @@ fn draw_ghost(p: &mut Painter, text: &str, mouse: (i32, i32)) {
 }
 
 /// An open select's choice list, over the screen: one row per option, the chosen one in gold, the hovered one lit.
-fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32)) {
+/// The open choice list; the option under the mouse or the keyboard's (`keyed`) is highlighted, the keyboard's ringed.
+fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32), keyed: Option<&str>) {
     let rects: Vec<Rect> = opts.iter().map(|w| info_rect(w)).collect();
     let (x0, y0) = (rects.iter().map(|r| r.x).min().unwrap_or(0), rects.iter().map(|r| r.y).min().unwrap_or(0));
     let (x1, y1) = (rects.iter().map(|r| r.x + r.w).max().unwrap_or(0), rects.iter().map(|r| r.y + r.h).max().unwrap_or(0));
     p.panel(Rect::new(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2), MODAL, GOLD, RADIUS);
     for (w, r) in opts.iter().zip(&rects) {
-        if r.contains(mouse.0, mouse.1) {
-            p.panel(*r, PANEL_HI, rgb(110, 140, 196), RADIUS);
+        let on_key = keyed.is_some_and(|k| w["id"] == k);
+        if r.contains(mouse.0, mouse.1) || on_key {
+            p.panel(*r, PANEL_HI, if on_key { rgb(255, 255, 255) } else { rgb(110, 140, 196) }, RADIUS);
         }
         let chosen = w["active"] == json!(true);
         p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - p.line_h(BODY)) / 2.0, w["text"].as_str().unwrap_or(""), BODY, r.w as f32 - 10.0, if chosen { GOLD } else { TEXT });
@@ -801,7 +937,7 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
 pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)) };
+    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), shift: false };
     el.run_app(&mut app)?;
     Ok(())
 }
@@ -882,7 +1018,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None };
         s.frame();
         s
     }
@@ -897,6 +1033,162 @@ mod tests {
             s.frame();
         }
         s.release();
+    }
+
+    /// Two buttons, a choice field and a slider (PORT-FOCUS); `steer` says the screen walks with the arrows.
+    #[derive(Default)]
+    struct Form {
+        w: Vec<Widget<(&'static str, usize)>>,
+        pick: usize,
+        vol: usize,
+        steer: bool,
+        keyboard: bool,
+    }
+
+    impl Form {
+        fn act(&mut self, cx: &mut Cx, a: (&'static str, usize)) {
+            match a.0 {
+                "pick" => self.pick = a.1,
+                "vol" => self.vol = a.1,
+                _ => {}
+            }
+            cx.app.log.push(format!("{} {}", a.0, a.1));
+        }
+    }
+
+    impl Screen<App> for Form {
+        fn id(&self) -> &'static str {
+            "form"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<(&'static str, usize)> = Ui::new(g, mouse, live);
+            ui.button("ok", Rect::new(10, 10, 40, 14), "OK", ("ok", 0), true);
+            ui.button("no", Rect::new(60, 10, 40, 14), "No", ("no", 0), true);
+            ui.button("off", Rect::new(110, 10, 40, 14), "Off", ("off", 0), false);
+            let opts: Vec<String> = ["one", "two", "three"].iter().map(|s| s.to_string()).collect();
+            ui.select("pick", Rect::new(10, 40, 60, 14), &opts, self.pick, |i| ("pick", i), true, Vec::new());
+            ui.slider("vol", Rect::new(10, 80, 140, 14), self.vol, 5, "vol", |i| ("vol", i), true);
+            self.w = ui.widgets;
+        }
+        fn key(&mut self, cx: &mut Cx, k: Key) {
+            cx.app.log.push(format!("key {k:?}"));
+        }
+        fn arrow_focus(&self) -> bool {
+            !self.steer
+        }
+        fn auto_focus(&self) -> bool {
+            self.keyboard
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    fn form(f: Form) -> Shell<App> {
+        let mut s = shell();
+        s.stack = vec![Box::new(f)];
+        s.frame();
+        s
+    }
+
+    fn press(s: &mut Shell<App>, k: Key) {
+        s.key(k);
+        s.frame();
+    }
+
+    #[test]
+    fn tab_moves_the_focus_and_enter_presses_it() {
+        let mut s = form(Form::default());
+        assert_eq!(s.gfx.kit.focus, None, "no focus until a key moves it");
+        press(&mut s, Key::Tab);
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ok"), true));
+        press(&mut s, Key::Tab);
+        press(&mut s, Key::Tab);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("pick"), "the disabled button is skipped");
+        press(&mut s, Key::BackTab);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("no"));
+        press(&mut s, Key::Enter);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("no 0"), "Enter presses the focused button");
+        assert!(!s.cx.app.log.iter().any(|l| l.starts_with("key")), "the screen got none of these keys");
+        let tree = s.bridge(&json!({"cmd": "ui_tree"}));
+        assert_eq!(tree["focus"], json!("no"));
+        // A click hides the ring and focuses what it hit; Enter then goes to the screen.
+        s.mouse = (30, 17);
+        s.click();
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ok"), false));
+        press(&mut s, Key::Enter);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("key Enter"));
+    }
+
+    #[test]
+    fn arrows_move_the_focus_unless_the_screen_steers() {
+        let mut s = form(Form::default());
+        press(&mut s, Key::Down);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("ok"), "the first arrow shows the focus");
+        press(&mut s, Key::Right);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("no"));
+        press(&mut s, Key::Down);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("pick"));
+        let mut s = form(Form { steer: true, ..Form::default() });
+        press(&mut s, Key::Down);
+        assert_eq!(s.gfx.kit.focus, None);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("key Down"), "a steering screen keeps its arrows");
+        press(&mut s, Key::Tab);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("ok"), "Tab still moves the focus");
+    }
+
+    #[test]
+    fn a_choice_field_and_a_slider_work_from_the_keyboard() {
+        let mut s = form(Form::default());
+        for _ in 0..3 {
+            press(&mut s, Key::Tab);
+        }
+        press(&mut s, Key::Enter);
+        assert_eq!(s.gfx.kit.open.as_deref(), Some("pick"), "Enter opens the list");
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("pick.opt.0"), "on the chosen option");
+        press(&mut s, Key::Down);
+        press(&mut s, Key::Down);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("pick.opt.2"));
+        press(&mut s, Key::Enter);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("pick 2"));
+        assert_eq!((s.gfx.kit.open.as_deref(), s.gfx.kit.focus.as_deref()), (None, Some("pick")), "closed, back on the field");
+        press(&mut s, Key::Tab);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("vol"));
+        press(&mut s, Key::Right);
+        press(&mut s, Key::Right);
+        press(&mut s, Key::Left);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("vol 1"), "Left / Right step the slider");
+    }
+
+    #[test]
+    fn a_keyboard_screen_starts_focused_and_another_screen_keeps_its_keys() {
+        let mut s = form(Form { keyboard: true, ..Form::default() });
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ok"), true));
+        press(&mut s, Key::Tab);
+        s.cx.nav.push(Nav::Push(Box::new(Form::default())));
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (None, false), "the focus does not carry over");
+        press(&mut s, Key::Enter);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("key Enter"), "the new screen's Enter is its own");
+        s.cx.nav.push(Nav::Pop);
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ok"), true), "back on a keyboard screen: focused again");
+    }
+
+    #[test]
+    fn esc_closes_a_keyboard_list_back_to_its_field_and_a_link_click_hides_the_ring() {
+        let mut s = form(Form::default());
+        for _ in 0..3 {
+            press(&mut s, Key::Tab);
+        }
+        press(&mut s, Key::Enter);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("pick.opt.0"));
+        press(&mut s, Key::Esc);
+        assert_eq!((s.gfx.kit.open.as_deref(), s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (None, Some("pick"), true));
+        s.bridge(&json!({"cmd": "click", "id": "no"}));
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("no"), false), "the link's click is a click");
+        press(&mut s, Key::Space);
+        assert_eq!(s.cx.app.log.last().map(String::as_str), Some("key Space"), "no ring: the screen gets Space");
     }
 
     #[test]
