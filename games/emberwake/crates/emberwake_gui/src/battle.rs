@@ -157,6 +157,10 @@ pub struct BattleScreen {
     end_logged: bool,
     /// Sessions an agent-link `new` ended before the hub could be reached (saved on the next tick).
     parked: Vec<(Option<usize>, aegis_host::playtest::Session)>,
+    /// A playback of a recorded session (Scene Runner Playtests): watched, not recorded again.
+    viewing: bool,
+    /// A take-over: where its session branched off (recording id, battle, request), kept in its `end`.
+    parent: Value,
 }
 
 impl BattleScreen {
@@ -191,13 +195,15 @@ impl BattleScreen {
             parked: Vec::new(),
             trail_out: Vec::new(),
             end_logged: false,
+            viewing: false,
+            parent: Value::Null,
         }
     }
 
     /// A session worth recording: it starts with `new`, so it replays (a party battle of the world map starts outside
     /// it: PLAYTEST2).
     fn recordable(&self) -> bool {
-        self.host.history.first().is_some_and(|r| r["cmd"] == json!("new"))
+        !self.viewing && self.host.history.first().is_some_and(|r| r["cmd"] == json!("new"))
     }
 
     /// Hands the battle's command-host session to the playtest hub when it changed since the last save (the hub saves
@@ -218,7 +224,17 @@ impl BattleScreen {
             return;
         }
         self.saved = now;
-        cx.playtest.put_session(&mut self.slot, aegis_host::playtest::Session::of(&self.host));
+        let s = self.recorded();
+        cx.playtest.put_session(&mut self.slot, s);
+    }
+
+    /// The command-host session as the recording keeps it (a take-over names its parent in `end`).
+    fn recorded(&self) -> aegis_host::playtest::Session {
+        let mut s = aegis_host::playtest::Session::of(&self.host);
+        if !self.parent.is_null() {
+            s.end["parent"] = self.parent.clone();
+        }
+        s
     }
 
     /// The playtest trail events of one request the player made: plan edits (add, undo, clear, plan, preset,
@@ -250,6 +266,8 @@ impl BattleScreen {
         self.slot = None;
         self.saved = (0, 0);
         self.end_logged = false;
+        self.viewing = false;
+        self.parent = Value::Null;
     }
 
     /// The Test Arena: the catalog encounter given on the command line (goblin_skirmish by default).
@@ -266,6 +284,43 @@ impl BattleScreen {
         b.encounter = encounter.to_string();
         b.arena_world = world;
         b.start_battle();
+        b
+    }
+
+    /// A recorded battle replayed into the arena (Scene Runner Playtests). `take_over` None plays it back to its end
+    /// to watch (not recorded again); Some((parent, at)) stops after `at` requests and hands the battle to the player
+    /// as a new session that names `parent` (recording id, battle, request) in its end. Restart then starts the
+    /// encounter afresh with the recorded seed. The message says whether every checkpoint replayed as recorded.
+    pub fn playback(cx: &Cx, session: &aegis_host::playtest::Session, take_over: Option<(Value, usize)>) -> Self {
+        let mut b = Self::blank(cx, Mode::Arena);
+        let first = session.requests.first().cloned().unwrap_or(Value::Null);
+        let encounter = first["encounter"].as_str().unwrap_or("").to_string();
+        (b.arena_world, b.encounter) = match encounter.split_once(':') {
+            Some((w, e)) => (Some(w.to_string()), e.to_string()),
+            None => (None, encounter),
+        };
+        b.seed = first["seed"].as_i64();
+        let until = take_over.as_ref().map(|(_, at)| *at);
+        let report = aegis_host::playtest::replay(&mut b.host, session, until);
+        if b.host.session.is_none() {
+            b.message = match &report.broken {
+                Some((i, e)) => format!("The recording does not replay: request {} was refused ({e}).", i + 1),
+                None => "The recording has no battle.".into(),
+            };
+            return b;
+        }
+        let verdict = match (&report.broken, report.matched()) {
+            (Some((i, e)), _) => format!("Replay stopped at request {}: {e}.", i + 1),
+            (None, true) => format!("Replayed {} requests as recorded.", report.sent),
+            (None, false) => format!("Replayed {} requests; the battle diverged from the recording (the data changed?).", report.sent),
+        };
+        b.new_session();
+        match take_over {
+            None => b.viewing = true,
+            Some((parent, _)) => b.parent = parent,
+        }
+        b.after_start("");
+        b.message = format!("{verdict} {}", if b.viewing { "Watching (not recorded); Restart plays it afresh." } else { "Your battle from here." });
         b
     }
 
@@ -736,6 +791,17 @@ impl Screen<GameCx> for BattleScreen {
         self.save_session(cx);
     }
 
+    /// A playtest note over the battle records its session (the recording's battle index), round, block and phase.
+    fn note_context(&self, _cx: &Cx) -> Value {
+        let Some(s) = self.host.session.as_ref() else { return Value::Null };
+        let phase = match s.phase {
+            Phase::Planning => "planning",
+            Phase::Resolving => "resolving",
+            Phase::Replay => "replay",
+        };
+        json!({"battle": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
+    }
+
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
         if now.duration_since(self.tuning_checked) > Duration::from_millis(500) {
@@ -856,7 +922,7 @@ impl Screen<GameCx> for BattleScreen {
         // An agent-link `new` ends this session: park it for the hub (saved on the next tick), then start a new one.
         let restart = body["cmd"] == json!("new");
         if restart && self.recordable() {
-            self.parked.push((self.slot, aegis_host::playtest::Session::of(&self.host)));
+            self.parked.push((self.slot, self.recorded()));
         }
         let reply = self.host.handle(body);
         if restart && reply["ok"] == json!(true) {

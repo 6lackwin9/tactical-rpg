@@ -24,6 +24,7 @@ pub enum SAct {
     DebugWorldMap,
     PickWorld(usize),
     Reload,
+    Playtests,
     Exit,
 }
 
@@ -89,6 +90,13 @@ impl SceneRunner {
             SAct::DebugRegion => self.debug_game(cx, false),
             SAct::DebugWorldMap => self.debug_game(cx, true),
             SAct::PickWorld(i) => self.world = i,
+            SAct::Playtests => {
+                let home = cx.data_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+                let repo = vec![home.join("playtests/inbox"), home.join("playtests/repro")];
+                let launch: aegis_ui::recordings::Launch<GameCx> = |cx, session, take| Some(Box::new(crate::battle::BattleScreen::playback(cx, session, take)));
+                let r = aegis_ui::recordings::Recordings::new(cx, launch, |cx| aegis_content::fingerprint::of(&cx.data_dir), repo);
+                cx.nav.push(Nav::Push(Box::new(r)));
+            }
             SAct::Reload => match emberwake_world::Data::open(&cx.data_dir) {
                 Ok((d, problems)) => {
                     cx.data = Arc::new(d);
@@ -157,9 +165,9 @@ impl Screen<GameCx> for SceneRunner {
         ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve)."));
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, TEXT);
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 62.0, "Playtest recording: not ported yet.", SMALL, DIM);
+        ui.button_tip("runner.playtests", Rect::new(right.x + 6, right.y + 58, 70, 14), "Playtests", SAct::Playtests, true, tip("Playtests", "Recordings of played battles with their notes (F8): play back, take over at a round, copy to the repo inbox; the recording toggle."));
+        ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { GOOD } else { DIM });
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, DIM);
-        let _ = GOOD;
         self.w = ui.widgets;
     }
 
