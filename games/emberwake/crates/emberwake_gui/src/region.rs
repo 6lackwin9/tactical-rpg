@@ -56,7 +56,7 @@ pub struct RegionMap {
     geo: (i32, i32, i32),
 }
 
-/// Starts a world fight: the battle screen, or the Won / Fled / Lost popup in a debug game.
+/// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
 pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
     if cx.debug {
         cx.nav.push(Nav::Push(Box::new(crate::runner::DebugFight::new(fight, runner))));

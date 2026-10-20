@@ -44,7 +44,7 @@ pub struct GameCx {
     pub log: Vec<String>,
     pub encounter: String,
     pub seed: Option<i64>,
-    /// A debug game (Scene Runner): fights get Won / Fled / Lost buttons and nothing is saved.
+    /// A debug game (Scene Runner): fights get Skip / Fled / Lost buttons and nothing is saved.
     pub debug: bool,
     /// The Godot export folder the data was loaded from (Reload re-reads it).
     pub data_dir: PathBuf,
