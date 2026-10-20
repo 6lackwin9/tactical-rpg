@@ -34,3 +34,5 @@ Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Content (items, uni
 
 - Asset work starts as one heavy review session with Tushar; once the base is signed off, the rest runs as a background task (2026-10-18 12:00).
 - One world first: per-world art and audio wait until the Ashlands are complete (2026-10-18).
+- The image API (Gemini, `tools/portraits/generate.py`) may make other assets too, but every run is agreed with Tushar first (what, how many images, which model); the agent suggests the API wherever it beats code or SVG. Small assets go several to one prompt as a sheet that a tool slices. Colour and small pixel fixes are code, never the API (2026-10-20).
+- The portrait baseline (18 named characters, 12 generic bases, recolours for mob variants) stands for now; characters may be repurposed as the world fills out (2026-10-20).
