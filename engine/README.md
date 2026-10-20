@@ -128,8 +128,8 @@ cargo run --release -p emberwake_gui -- screen=arena encounter=goblin_ambush see
 ```
 
 The main menu leads to New game (world cards), Continue / Load, Settings and Tools (the Scene Runner: Combat Arena on
-any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, debug region and world maps with
-Won / Fled / Lost buttons, and the UI Gallery of standalone panes). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
+any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, Exploration (a world from any location or its world map,
+nothing saved, a fight skipped as a win at no cost or fought), and the UI Gallery of standalone panes). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
 (or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Talking opens the dialogue
 dock (1-9 choose); shops, turn-ins and lore open as popups; a world-map exit opens the world map (click a node, Travel,
 Make camp, Enter). Fights open the battle screen with the saved party; Continue settles the outcome and shows the
