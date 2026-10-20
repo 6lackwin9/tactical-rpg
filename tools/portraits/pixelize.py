@@ -48,6 +48,32 @@ def cut_background(im):
     return im
 
 
+def mode_reduce(im, grid, colors=64):
+    """Reduces to `grid` x `grid` by the most common colour of each cell (not the mean), so a pixel-art source keeps
+    clean, flat clusters instead of blurring its pixels together; a cell mostly background stays clear."""
+    w, h = im.size
+    alpha = im.getchannel("A")
+    q = im.convert("RGB").quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+    pal = q.getpalette(); qp = q.load(); ap = alpha.load()
+    out = Image.new("RGBA", (grid, grid), (0, 0, 0, 0)); op = out.load()
+    for gy in range(grid):
+        y0, y1 = gy * h // grid, (gy + 1) * h // grid
+        for gx in range(grid):
+            x0, x1 = gx * w // grid, (gx + 1) * w // grid
+            count, clear = {}, 0
+            for y in range(y0, y1, 2):
+                for x in range(x0, x1, 2):
+                    if ap[x, y] < 128:
+                        clear += 1
+                    else:
+                        i = qp[x, y]; count[i] = count.get(i, 0) + 1
+            if not count or clear > sum(count.values()):
+                continue
+            i = max(count, key=count.get)
+            op[gx, gy] = tuple(pal[i * 3:i * 3 + 3]) + (255,)
+    return out
+
+
 def ramps(colors, families=7, shades=4):
     """Groups the colours into hue families (greys apart) and gives each family `shades` evenly spaced lightness
     levels at its mean hue and saturation: the ramps the figure is snapped to."""
@@ -92,7 +118,7 @@ def figure(src, grid=96, crop=None, shades=4, families=10):
     if crop:
         im = im.crop(crop)
     im = cut_background(clear_corner(im))
-    small = im.resize((grid, grid), Image.BOX)
+    small = mode_reduce(im, grid)
     px = small.load()
     # the figure's own colours, then its ramps
     opaque = Image.new("RGB", (grid, grid))
