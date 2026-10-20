@@ -26,6 +26,7 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 ## Test tools
 
 - Dev-only UI appears only in test scenes (Forge, scenario scenes), never over the real game; the Scene Runner pill follows this (2026-10-18).
+- The UI Gallery is where every UI element is judged on its own, screen by screen and panel by panel, then shared panels; the aim is screens composed from those fixed elements, laid out in the engine with resizable elements and described to the AI in words (2026-10-20, LAYOUT1).
 
 ## Character popup (user playtest 2026-10-20)
 
