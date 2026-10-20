@@ -97,6 +97,11 @@ Rules and open questions: `games/emberwake/docs/specs/S12_RULES.md` (S12S status
 | --- | --- | --- | --- |
 | S12S | S12S-L and S12S-A done (2026-10-17) | ITEM1-L, CLASS1-L | status slice (goal G2), then S12T terrain and S12C combos in sequence (shared skill and plan files; goal G5, after G1) |
 | S14-1 | done (S14-L1, S14-L2, S14-L3, S14-A1, S14-A2 done 2026-10-17) | - | AssetCatalog manifest, key resolution, placeholder icons, asset-load suite; then presenter (S14-2) and audio (S14-3) |
+| ASSETORG2 | approved (user 2026-10-20, all eight recommendations) | ASSETORG1 (done) | assets grouped by reuse in three layers (engine baseline, RPG kit `kits/rpg/`, game named assets), fallback game, kit, engine, drawn shape; class bodies with variants, palettes, the token from the sprite, portraits by tier; spec `docs/specs/ASSETORG2.md`, rows ASSETORG2-E, -G, -D, -K, -B, -T |
+| SPRITE1 | approved (user 2026-10-18 proposal, approved 2026-10-20) | ASSETORG2-T, ASSETORG2-E | animated battle tokens: one sheet per class body (SPRITE1-S2 spec update), then SPRITE1-A2, -L, -U |
+| PORTRAIT1-A | proposed | ASSETORG2-G | unique 240x240 Style A portraits for the eight heroes, the named lieutenants and the Ash Warchief (elites), Gruk and `goblin_warlord`; one art review session with the user first |
+| PALETTE1-A | proposed | ASSETORG2-G, SPRITE1-A2 | party palettes so characters of one class differ (minor adjustments on the class body) |
+| ICONS1-A | proposed | ASSETORG2-K | kit base icons for the types without one yet (mace, orb, crossbow, material, quest) |
 | PLAYTEST2 | idea | PLAYTEST1, UI1-L | overworld and dialogue exact replay |
 | UI1 | done (UI1-L, UI1-A, UI2-L, UI3-L and SAVE-IO done 2026-10-17) | M4-L | menu router, main menu, new game, save slots; then UI2 party screen and level-up, UI3 journal |
 

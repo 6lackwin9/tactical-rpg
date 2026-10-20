@@ -234,8 +234,18 @@ files (the Godot build's) are refused with that reason.
 | `playtest_sweep.gd` | `playtest::sweep_one`, `parse_seeds` | unit tests |
 | `content_fingerprint.gd` | `aegis_content::fingerprint` (on `aegis_core::sha256`) | unit tests |
 | `scripts/ui/playtest/playtest_hub.gd` (one recording per run) | `aegis_ui::playtest::Playtests` on `Cx`, the screens' `leave` hook | unit test |
+| `scripts/ui/playtest/ui_trail.gd` (screen, panel / modal, button, key, hover, click) | the shell (`click`, `back`, `key`, `settle`, `track_hover`), the battle screen (plan_edit, confirm, battle_end) | shell test |
+| `scripts/playtest/playtest_logger.gd` (errors), `AssetRegistry.resolve_observer` (asset fallbacks) | `aegis_ui::playtest::report_error` with a panic hook, `report_asset` from the art loader | hub test |
+| `scripts/playtest/trail_report.gd` (`--trail-report`) | `aegis_host::trail` (`build`, `lines`), `aegis replay <file> trail-report` | unit test (acceptance 12 and 13) |
 
 - A variant is a request patch ({at, remove, requests, then}), not a plan patch: any request can change.
 - Ids use UTC (std has no local time zone).
-- Not ported yet: the UI trail and its report, F8 notes, the Scene Runner panel with playback and take-over (next
-  slices of PORT-PLAYTEST); party battles of the world map (PLAYTEST2).
+- The trail: controls are the engine kit's widget infos (path = widget id, cls = widget kind); overlays open and close
+  as modals, other screens are screen changes (leaked is always 0: the engine keeps no node tree). Keys inside a text
+  field are not skipped yet (there is no text field until the notes).
+- The report differs from `trail_report.gd` only in names and one count: `scene` events and fields are `screen`, the
+  leak line says "left" (no node tree), `asset_templates` is not counted (the engine draws no template placeholders
+  through the loader). A right click (back) always counts as handled. A panic that ends the process is reported but
+  not written (no frame follows it); panics the process survives are.
+- Not ported yet: F8 notes and the Scene Runner panel with playback and take-over (the next slice of PORT-PLAYTEST);
+  party battles of the world map (PLAYTEST2).

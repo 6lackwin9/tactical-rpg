@@ -93,14 +93,17 @@ every concluded round), and feeding them to a fresh `serve` replays the battle e
 While recording is on (the setting `record_playtests`, on in debug builds), the GUI keeps one recording per run in
 `%APPDATA%/Aegis/<game>/playtests/<id>.json`: every arena battle's command-host session (its requests from `new`
 and the checkpoints), saved when the battle ends, restarts or the screen closes, with the content fingerprint of the
-data folder (`aegis_host::playtest`, the hub `aegis_ui::playtest`). Party battles of the world map start outside
-`new`, so their replay waits for PLAYTEST2.
+data folder (`aegis_host::playtest`, the hub `aegis_ui::playtest`), and the UI trail: clicks (the widget, handled or
+not), widget presses, keys, hovers of 700 ms or more, screen changes, overlays as modals, plan edits, confirms, the
+battle's end, errors and panics, and missing art (`aegis_host::trail` reads it). Party battles of the world map
+start outside `new`, so their replay waits for PLAYTEST2.
 
 ```bash
 aegis replay <recording.json>                       # every battle: each checkpoint match / diverge (path, values) / unverified
 aegis replay <file> battle=0 until=12 json          # stop after 12 requests (what a take-over replays), JSON report
 aegis replay <file> variant=patch.json write=out/   # {"at", "remove", "requests", "then": "stop"|"recorded"}: DIFF lines, saved run
 aegis replay <file> seeds=1..50 fallback='{"cmd":"autoplay","preset":"balanced"}'   # results under other seeds
+aegis replay <file> trail-report                    # the UI trail's flags: dead or repeated clicks, long hovers, errors, panels
 ```
 
 Exit 0 when everything matches (changed data files only warn: "content stale"), 1 on a divergence or a refused
