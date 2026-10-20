@@ -9,7 +9,7 @@ pub const LW: f32 = 640.0;
 pub const LH: f32 = 360.0;
 
 /// Logical -> physical mapping (uniform scale, letterboxed and centred).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct View {
     pub s: f32,
     pub ox: f32,
