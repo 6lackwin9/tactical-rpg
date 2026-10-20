@@ -88,3 +88,6 @@ Every step is shown on a review page before anything lands in the game; new file
 - Generic portraits: one generated base per mob kind (six human class defaults, five goblin types, the dummy) with
   faces no named character has; further mob variants are recolours of those bases (`tools/portraits/recolor.py`),
   never of a named character's portrait.
+- Picks of 2026-10-20 (the Art Picks page): every named and generic portrait kept; Mara Voss's main portrait is the
+  prompt image (S), the four variants kept beside it; recolours are good for mob variants; the priest's mace pose B3.
+- Icons next: skill and item icon sheets through the API (user 2026-10-20: "go ahead with icons generation").
