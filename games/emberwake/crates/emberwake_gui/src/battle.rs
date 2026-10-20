@@ -1135,7 +1135,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     ui.p.panel(Rect::new(2, 2, W - 4, 24), PANEL, BORDER, RADIUS);
     let hero_name = sel.map(|u| w.units[u].name.clone()).unwrap_or_else(|| "No hero".into());
     ui.p.text_fit(8.0, 9.0, &format!("{hero_name} plan"), TITLE, 80.0, GOLD);
-    ui.push("strip.title", "label", format!("{hero_name} plan"), Rect::new(8, 8, 80, 10), true, false, None, Vec::new());
+    ui.push("strip.title", "label", format!("{hero_name} plan"), Rect::new(8, 8, 80, ui.p.line_h(TITLE).ceil() as i32), true, false, None, Vec::new());
     let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
         Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
         Some(u) if w.units[u].is_active() => s
@@ -1150,7 +1150,31 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             .collect(),
         _ => Vec::new(),
     };
-    let (bx, bw) = (92, 34);
+    // TEXTFIT1: the controls right of the blocks take their text's width; the blocks give up width first (34 down to
+    // 26 each), then the two dropdowns, the wider first (their text cuts).
+    let party_label = format!("Party: {}", TACTIC_LABELS[g.party_tactic]);
+    let hero_label = format!("Hero: {}", TACTIC_LABELS[g.hero_tactic]);
+    let (label, action, enabled) = if planning {
+        ("Confirm round", Action::Confirm, true)
+    } else if s.phase == Phase::Replay && s.can_advance_round() {
+        ("Next round", Action::NextRound, !g.pending_next_round)
+    } else {
+        (if s.combat_over { "Battle over" } else if s.phase == Phase::Replay { "Round limit" } else { "Resolving" }, Action::NextRound, false)
+    };
+    let mut fit_w = |text: &str, pad: f32, min: i32| ((ui.p.text_w(text, BODY) + pad).ceil() as i32).max(min);
+    let (mut party_w, mut hero_w) = (fit_w(&party_label, 18.0, 82), fit_w(&hero_label, 18.0, 80));
+    let (auto_w, clear_w, confirm_w) = (fit_w("Auto", 10.0, 34), fit_w("Clear", 10.0, 34), fit_w(label, 12.0, 60));
+    let bx = 92;
+    let blocks = s.def.total_blocks.max(1);
+    let room = W - 6 - bx - 6 - 8 - auto_w - clear_w - confirm_w;
+    let bw = ((room - party_w - hero_w) / blocks).clamp(26, 34);
+    let mut over = blocks * bw + party_w + hero_w - room;
+    while over > 0 && (party_w > 82 || hero_w > 80) {
+        let (big, floor) = if party_w - 82 >= hero_w - 80 { (&mut party_w, 82) } else { (&mut hero_w, 80) };
+        let cut = over.min(*big - floor);
+        *big -= cut;
+        over -= cut;
+    }
     let live_block = if !planning && s.phase == Phase::Resolving { s.current_block } else { 0 };
     for b in 1..=s.def.total_blocks {
         let r = Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16);
@@ -1185,22 +1209,15 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.p.panel(r, kind_color(&e.3), if live { GOLD } else { rgba(255, 255, 255, 50) }, RADIUS);
         ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, TEXT);
     }
-    let mut x = bx + 6 * bw + 6;
-    ui.dropdown("strip.party", Rect::new(x, 6, 82, 16), &format!("Party: {}", TACTIC_LABELS[g.party_tactic]), Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
-    x += 84;
-    ui.dropdown("strip.hero", Rect::new(x, 6, 80, 16), &format!("Hero: {}", TACTIC_LABELS[g.hero_tactic]), Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), GOLD), ("AI-drafts the selected hero only.".into(), TEXT)]);
-    x += 82;
-    ui.button_full("strip.auto", Rect::new(x, 6, 34, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), GOLD), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), TEXT)]);
-    x += 36;
-    ui.button_full("strip.clear", Rect::new(x, 6, 34, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![("Clears the selected hero's steps.".into(), TEXT)]);
-    x += 36;
-    let (label, action, enabled) = if planning {
-        ("Confirm round", Action::Confirm, true)
-    } else if s.phase == Phase::Replay && s.can_advance_round() {
-        ("Next round", Action::NextRound, !g.pending_next_round)
-    } else {
-        (if s.combat_over { "Battle over" } else if s.phase == Phase::Replay { "Round limit" } else { "Resolving" }, Action::NextRound, false)
-    };
+    let mut x = bx + blocks * bw + 6;
+    ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
+    x += party_w + 2;
+    ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), GOLD), ("AI-drafts the selected hero only.".into(), TEXT)]);
+    x += hero_w + 2;
+    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), GOLD), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), TEXT)]);
+    x += auto_w + 2;
+    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![("Clears the selected hero's steps.".into(), TEXT)]);
+    x += clear_w + 2;
     ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, planning, BODY, vec![(label.into(), GOLD)]);
 
     // -- Left: party cards and the selected hero.
@@ -1409,7 +1426,13 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         if y > 206 {
             break;
         }
-        let r = Rect::new(right.x + 4, y, 116, 22);
+        // TEXTFIT1: the Next line wraps to a second line when it does not fit (the card grows).
+        let tell = tells.iter().find(|t| t.unit == e);
+        let next = tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)));
+        let next_w = if tell.is_some_and(|t| t.revealed) { 98.0 } else { 110.0 };
+        let next_lines = if u.is_active() { ui.p.wrap(&next, SMALL, next_w) } else { Vec::new() };
+        let two = next_lines.len() > 1;
+        let r = Rect::new(right.x + 4, y, 116, if two { 22 + ui.p.line_h(SMALL).ceil() as i32 } else { 22 });
         let hover = ui.hover(r) || w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p)));
         if hover {
             hovered_foe = Some(e);
@@ -1418,10 +1441,15 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let col = if u.is_active() { FOE } else { DIM };
         ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 1.5, &short_name(&u.name), BODY, 70.0, col);
         ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { GOOD } else { DIM });
-        let tell = tells.iter().find(|t| t.unit == e);
         if u.is_active() {
-            let next = tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)));
-            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, if tell.is_some_and(|t| t.revealed) { 98.0 } else { 110.0 }, GOLD);
+            if two {
+                ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, &next_lines[0], SMALL, GOLD);
+                // the rest of the line as written (a word `wrap` broke mid-word stays whole)
+                let rest = next.get(next_lines[0].len()..).unwrap_or("").trim_start();
+                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5 + ui.p.line_h(SMALL), rest, SMALL, next_w, GOLD);
+            } else {
+                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, next_w, GOLD);
+            }
             if tell.is_some_and(|t| t.revealed) {
                 if let Some(img) = cx.art.get("ui", "badge_foresight", "icon", 9) {
                     ui.p.image(img, Rect::new(r.x + r.w - 11, r.y + 11, 9, 9));
@@ -1431,8 +1459,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, DIM);
         }
         let tip = unit_tip(s, e, sel, &tells);
-        ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, tell.map(|t| intent_text::card_line(w, &t.line)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)))), r, true, hover, Some(Action::UnitClick(e)), tip);
-        y += 24;
+        ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, next), r, true, hover, Some(Action::UnitClick(e)), tip);
+        y += r.h + 2;
     }
     let detail_foe = hovered_foe.or_else(|| w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some()));
     if let Some(e) = detail_foe {

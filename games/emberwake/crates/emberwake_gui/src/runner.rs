@@ -138,25 +138,39 @@ impl Screen<GameCx> for SceneRunner {
             ("runner.debug_region", "Region Map (debug)", "Walk a world's region maps with Won / Fled / Lost buttons instead of real battles (nothing is saved).", SAct::DebugRegion),
             ("runner.debug_world_map", "World Map (debug)", "Travel a world's route graph: road fights with debug outcomes, the world clock.", SAct::DebugWorldMap),
         ];
-        // The list scrolls when the scenes outgrow the panel (the wheel over it).
+        // The list scrolls when the scenes outgrow the panel (the wheel over it). TEXTFIT1: each card is as tall as its
+        // name, its wrapped description and its picker.
         let view = Rect::new(left.x, left.y + 14, left.w, left.h - 16);
-        let content: i32 = scenes.iter().map(|s| if matches!(s.3, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap) { 48 } else { 34 }).sum();
+        let desc_w = (left.w - 70) as f32;
+        let (name_h, line_h) = (ui.p.line_h(BODY), ui.p.line_h(SMALL));
+        let cards: Vec<(Vec<String>, bool, i32)> = scenes
+            .iter()
+            .map(|s| {
+                let lines = ui.p.wrap(s.2, SMALL, desc_w);
+                let extra = matches!(s.3, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap);
+                let h = (3.0 + name_h + 1.0 + lines.len() as f32 * line_h + if extra { 16.0 } else { 0.0 } + 3.0).ceil() as i32;
+                (lines, extra, h.max(30))
+            })
+            .collect();
+        let content: i32 = cards.iter().map(|c| c.2 + 4).sum();
         let off = ui.scroll_begin("runner.scenes", view, content);
         let mut y = view.y - off;
-        for (id, name, desc, act) in scenes {
-            let extra = matches!(act, SAct::Arena | SAct::DebugRegion | SAct::DebugWorldMap);
-            let h = if extra { 44 } else { 30 };
+        for ((id, name, _, act), (lines, extra, h)) in scenes.into_iter().zip(cards) {
             let r = Rect::new(left.x + 5, y, left.w - 10, h);
             ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
             ui.p.text(r.x as f32 + 5.0, r.y as f32 + 3.0, name, BODY, INFO);
-            ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 14.0, desc, SMALL, (r.w - 60) as f32, TEXT);
+            let top = r.y as f32 + 3.0 + name_h + 1.0;
+            for (i, line) in lines.iter().enumerate() {
+                ui.p.text(r.x as f32 + 5.0, top + i as f32 * line_h, line, SMALL, TEXT);
+            }
+            let pick_y = (top + lines.len() as f32 * line_h + 1.0).round() as i32;
             ui.button(id, Rect::new(r.x + r.w - 50, r.y + 6, 45, 15), "Launch", act.clone(), true);
             if let SAct::Arena = act {
                 let labels: Vec<String> = encounters.iter().map(|e| e.0.clone()).collect();
-                ui.select("runner.arena.encounter", Rect::new(r.x + 5, r.y + 25, r.w - 60, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
+                ui.select("runner.arena.encounter", Rect::new(r.x + 5, pick_y, r.w - 60, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
             } else if extra {
                 let names: Vec<String> = worlds.iter().map(|w| cx.world_name(w)).collect();
-                ui.select(&format!("{id}.world"), Rect::new(r.x + 5, r.y + 25, 160, 14), &names, self.world % worlds.len().max(1), SAct::PickWorld, worlds.len() > 1, Vec::new());
+                ui.select(&format!("{id}.world"), Rect::new(r.x + 5, pick_y, 160, 14), &names, self.world % worlds.len().max(1), SAct::PickWorld, worlds.len() > 1, Vec::new());
             }
             y += h + 4;
         }

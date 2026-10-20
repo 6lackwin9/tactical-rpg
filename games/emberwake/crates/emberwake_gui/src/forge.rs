@@ -43,13 +43,15 @@ pub struct Forge {
     selected: String,
     list_scroll: usize,
     field_scroll: usize,
+    /// The list's width at the last draw (from its labels; the wheel scrolls the list left of it).
+    list_w: i32,
     mouse: (i32, i32),
     w: Vec<Widget<FAct>>,
 }
 
 impl Forge {
     pub fn content() -> Self {
-        Self { world_forge: false, world: String::new(), tab: 0, selected: String::new(), list_scroll: 0, field_scroll: 0, mouse: (0, 0), w: Vec::new() }
+        Self { world_forge: false, world: String::new(), tab: 0, selected: String::new(), list_scroll: 0, field_scroll: 0, list_w: 135, mouse: (0, 0), w: Vec::new() }
     }
 
     pub fn world(cx: &Cx) -> Self {
@@ -281,18 +283,24 @@ impl Screen<GameCx> for Forge {
         }
         ui.button("forge.exit", Rect::new(W - 34, 3, 30, 12), "Exit", FAct::Exit, true);
         let top = ty + 16;
-        let (list, mid, right) = (Rect::new(5, top, 135, H - top - 5), Rect::new(144, top, 286, H - top - 5), Rect::new(434, top, 201, H - top - 5));
+        let rows = self.rows(cx);
+        // TEXTFIT1: the list is as wide as its longest label (135 to 200), the fields panel gives up the width; rows,
+        // field lines and summary lines are spaced by the text size.
+        let list_w = rows.iter().map(|r| ui.p.text_w(&r.1, BODY).ceil() as i32 + 14).max().unwrap_or(0).clamp(135, 200);
+        let mid_w = 286 - (list_w - 135);
+        self.list_w = list_w;
+        let (list, mid, right) = (Rect::new(5, top, list_w, H - top - 5), Rect::new(list_w + 9, top, mid_w, H - top - 5), Rect::new(434, top, 201, H - top - 5));
         for r in [list, mid, right] {
             ui.p.panel(r, rgba(18, 24, 38, 255), BORDER, 2.0);
         }
-        let rows = self.rows(cx);
         if self.selected.is_empty() || !rows.iter().any(|r| r.0 == self.selected) {
             self.selected = rows.first().map(|r| r.0.clone()).unwrap_or_default();
         }
-        let fit = ((list.h - 8) / 13) as usize;
+        let row_h = (ui.p.line_h(BODY) + 2.5).ceil().max(12.0) as i32;
+        let fit = ((list.h - 8) / (row_h + 1)) as usize;
         self.list_scroll = self.list_scroll.min(rows.len().saturating_sub(fit));
         for (i, (id, label, _)) in rows.iter().enumerate().skip(self.list_scroll).take(fit) {
-            let r = Rect::new(list.x + 3, list.y + 4 + (i - self.list_scroll) as i32 * 13, list.w - 6, 12);
+            let r = Rect::new(list.x + 3, list.y + 4 + (i - self.list_scroll) as i32 * (row_h + 1), list.w - 6, row_h);
             ui.row(&format!("forge.entry.{}", id.replace(':', ".")), r, label, if *id == self.selected { GOLD } else { TEXT }, Some(FAct::Select(id.clone())), *id == self.selected, Vec::new());
         }
         if let Some((id, label, e)) = rows.iter().find(|r| r.0 == self.selected) {
@@ -303,40 +311,45 @@ impl Screen<GameCx> for Forge {
                     lines.push((k.clone(), value_text(v)));
                 }
             }
+            let key_w = lines.iter().map(|(k, _)| ui.p.text_w(k, SMALL)).fold(80.0_f32, f32::max).min(120.0).ceil();
+            let value_x = 5.0 + key_w + 7.0;
             let mut wrapped: Vec<(String, String)> = Vec::new();
             for (k, v) in &lines {
-                for (n, part) in ui.p.wrap(v, SMALL, (mid.w - 100) as f32).into_iter().enumerate() {
+                for (n, part) in ui.p.wrap(v, SMALL, mid.w as f32 - value_x - 5.0).into_iter().enumerate() {
                     wrapped.push((if n == 0 { k.clone() } else { String::new() }, part));
                 }
             }
-            let fit = ((mid.h - 22) / 9) as usize;
+            let (line_h, head_h) = (ui.p.line_h(SMALL).max(9.0), ui.p.line_h(BODY) + 5.0);
+            let fit = ((mid.h as f32 - head_h - 5.0) / line_h) as usize;
             self.field_scroll = self.field_scroll.min(wrapped.len().saturating_sub(fit));
             for (i, (k, v)) in wrapped.iter().skip(self.field_scroll).take(fit).enumerate() {
-                let y = mid.y as f32 + 17.0 + i as f32 * 9.0;
-                ui.p.text(mid.x as f32 + 5.0, y, k, SMALL, DIM);
-                ui.p.text(mid.x as f32 + 92.0, y, v, SMALL, if v == "(none)" { DIM } else { TEXT });
+                let y = mid.y as f32 + head_h + i as f32 * line_h;
+                ui.p.text_fit(mid.x as f32 + 5.0, y, k, SMALL, key_w, DIM);
+                ui.p.text(mid.x as f32 + value_x, y, v, SMALL, if v == "(none)" { DIM } else { TEXT });
             }
             ui.p.text(right.x as f32 + 5.0, right.y as f32 + 4.0, if self.world_forge { "WHAT IT MEANS" } else { "ENGINE SUMMARY" }, SMALL, INFO);
-            let mut y = right.y as f32 + 16.0;
+            let step = ui.p.line_h(SMALL).max(8.5);
+            let foot = (right.y + right.h) as f32 - 4.0 - step;
+            let mut y = right.y as f32 + 4.0 + step + 3.0;
             for (t, col) in self.summary(cx, id, e) {
                 for part in ui.p.wrap(&t, SMALL, (right.w - 10) as f32) {
-                    if y > (right.y + right.h) as f32 - 18.0 {
+                    if y + step > foot - 2.0 {
                         break;
                     }
                     ui.p.text(right.x as f32 + 5.0, y, &part, SMALL, col);
-                    y += 8.5;
+                    y += step;
                 }
                 if t.is_empty() {
                     y += 4.0;
                 }
             }
-            ui.p.text(right.x as f32 + 5.0, (right.y + right.h) as f32 - 12.0, "Validation: run it in Godot's Forge for now.", SMALL, GOOD);
+            ui.p.text_fit(right.x as f32 + 5.0, foot, "Validation: run it in Godot's Forge for now.", SMALL, (right.w - 10) as f32, GOOD);
         }
         self.w = ui.widgets;
     }
 
     fn wheel(&mut self, _cx: &mut Cx, lines: i32) {
-        let target = if self.mouse.0 < 142 { &mut self.list_scroll } else { &mut self.field_scroll };
+        let target = if self.mouse.0 < self.list_w + 7 { &mut self.list_scroll } else { &mut self.field_scroll };
         *target = (*target as i64 - lines as i64 * 3).max(0) as usize;
     }
 
