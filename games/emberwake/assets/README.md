@@ -24,5 +24,24 @@ Which file an entry shows is decided by the lookup chains in `games/emberwake/cr
 checked by the asset checks A1-A6 (`check/assets.rs`). The Godot-era asset manifest is retired (the folders are the
 truth); Godot's copy stays in `legacy/data/assets/`.
 
-Generated art: do not run `tools/gen_art.py` or `tools/sprites/export_units.py` until ASSETORG2-T: they still write the old
-`assets/art/` layout, which the layout test refuses. Source images of generated portraits and icons are in `art_src/` (Git LFS).
+## Regenerating
+
+The generators write the layered tree directly (ASSETORG2-T): each file goes to its layer's root (this folder, the
+kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy (on Windows the full path
+`$LOCALAPPDATA/Programs/Python/Python312/python.exe`; the `python` alias is a stub).
+
+- `python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite]`: placeholder art
+  (ART1-A). Groups (`--list`): bodies, portraits, items, skills, statuses, terrain, overlays, region, markers, pins,
+  chips, world_map, backdrops, menu. Here: named bodies (one-frame `sheet.png` + `clips.json`), unique portraits,
+  skill family icons, the named items, the Ashlands tiles and the backgrounds. An existing file is kept unless
+  `--overwrite`: the committed portraits and skill and item icons are ART2 art from `art_src/` (Git LFS, made by
+  `tools/portraits/`), which the placeholders must not replace.
+- `python tools/sprites/export_units.py [class ...] [--root DIR] [--clips idle|all]`: the six class bodies of the kit
+  from the sprite rig (`units/<class>/base/`; `idle` = the one-frame 104 px sheet, `all` = every clip at 48 px,
+  SPRITE1-A2), with the rig's base colours as palette slots.
+- `python tools/gen_music.py [track ...] [--layer kit|game] [--root DIR] [--list]`: the music (numpy and ffmpeg);
+  `menu_theme` and the world tracks land here, the mood loops in the kit.
+- Check a regeneration without touching the committed files: run `gen_art.py --root DIR` and
+  `export_units.py --root DIR` into an empty folder `DIR`, then `gen_art.py --compare DIR [--spot OUT]`. It lists
+  missing or extra paths and PNG size differences (pixels may drift with numpy and Pillow, so bytes are not compared
+  as a rule) and `--spot` writes committed | regenerated body sheets side by side.

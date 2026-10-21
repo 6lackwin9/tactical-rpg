@@ -22,5 +22,16 @@ What is here (`assets/`):
 - `skills/kinds/<kind>.png`, `statuses/<id>.png`, `map/markers/<marker>.png`, `ui/{pins,intents,badges,chips}/`.
 - `audio/sfx/` (combat sounds) and `audio/music/` (mood music: combat, boss, town, shop, danger, travel).
 
-Placeholder and baseline art (ART1-A generators, the sprite rig, ART2) comes from the repository's `tools/`; the
-tools write the layered tree from ASSETORG2-T on.
+Placeholder and baseline art comes from the repository's `tools/`, which write the layered tree (ASSETORG2-T):
+
+- `python tools/sprites/export_units.py [class ...] [--clips idle|all]`: the six class bodies (`units/<class>/base/`)
+  from the sprite rig, with the rig's base colours as `clips.json` palette slots.
+- `python tools/gen_art.py [group ...] --layer kit [--overwrite]`: the goblin variant and dummy bodies, common
+  portraits, item bases and variants, skill kind icons, statuses, map markers and the UI pins, intents, badges and
+  chips. Existing files are kept without `--overwrite` (the portraits and skill and item icons are ART2 art from
+  `art_src/`, made by `tools/portraits/`).
+- `python tools/gen_music.py --layer kit`: the mood music (numpy and ffmpeg).
+
+To check a regeneration, write it into an empty folder (`--root DIR`) and compare it with the committed tree
+(`tools/gen_art.py --compare DIR`). `tools/sprites/export_units.py` always rewrites the six class bodies (the rig owns
+them; no keep rule).
