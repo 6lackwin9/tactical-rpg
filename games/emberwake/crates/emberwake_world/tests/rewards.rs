@@ -262,7 +262,12 @@ fn a_loot_table_drops_one_row_by_its_share_of_the_hundred() {
 
 #[test]
 fn defeated_foes_roll_their_tables_into_the_stash() {
-    let (_s, d) = scratch("drops", &[(None, "units", "goblin_brawler", json!({"loot": [{"item": "con_heal_potion", "chance": 100, "count": 2}]}))]);
+    let (_s, d) = scratch("drops", &[
+        (None, "units", "goblin_brawler", json!({"loot": [{"item": "con_heal_potion", "chance": 100, "count": 2}]})),
+        // the scouts' units without tables, whatever the shipped data gives them
+        (None, "units", "goblin_skirmisher", json!({"loot": []})),
+        (None, "units", "goblin_archer", json!({"loot": []})),
+    ]);
     let qid = "ashlands:ash_raiders";
     let mut gs = game(&d);
     let before = gs.party.stash.get("con_heal_potion").copied().unwrap_or(0);

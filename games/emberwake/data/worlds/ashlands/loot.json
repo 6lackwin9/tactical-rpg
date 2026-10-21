@@ -61,6 +61,17 @@
 			"rarity": "unique",
 			"requires_flags": [],
 			"tags": []
+		},
+		{
+			"id": "warchiefs_axe",
+			"name": "Warchief's Axe",
+			"description": "A notched Horde axe, still warm from the warchief's grip.",
+			"reward_kind": "item",
+			"ref": "wpn_battle_axe",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [],
+			"tags": []
 		}
 	]
 }

@@ -39,7 +39,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "ranger",
@@ -78,7 +79,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "dojo_warrior",
@@ -114,7 +116,8 @@
 			"pouch": [
 				"con_heal_potion",
 				"con_fire_bomb"
-			]
+			],
+			"loot": []
 		},
 		{
 			"id": "dojo_ranger",
@@ -150,7 +153,8 @@
 			"pouch": [
 				"con_focus_elixir",
 				"con_heal_potion"
-			]
+			],
+			"loot": []
 		},
 		{
 			"id": "goblin_brawler",
@@ -183,7 +187,24 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": [
+				{
+					"item": "wpn_knuckles",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "arm_leather",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "con_heal_potion",
+					"chance": 2,
+					"count": 1
+				}
+			]
 		},
 		{
 			"id": "goblin_skirmisher",
@@ -219,7 +240,24 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": [
+				{
+					"item": "wpn_stiletto",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "arm_leather",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "con_heal_potion",
+					"chance": 2,
+					"count": 1
+				}
+			]
 		},
 		{
 			"id": "goblin_archer",
@@ -252,7 +290,24 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": [
+				{
+					"item": "wpn_shortbow",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "arm_leather",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "con_heal_potion",
+					"chance": 2,
+					"count": 1
+				}
+			]
 		},
 		{
 			"id": "goblin_shaman",
@@ -287,6 +342,23 @@
 			"accessory_2": "",
 			"pouch": [
 				"none"
+			],
+			"loot": [
+				{
+					"item": "wpn_cleric_mace",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "arm_robe",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "con_focus_elixir",
+					"chance": 2,
+					"count": 1
+				}
 			]
 		},
 		{
@@ -320,7 +392,24 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": [
+				{
+					"item": "wpn_hand_axe",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "arm_leather",
+					"chance": 3,
+					"count": 1
+				},
+				{
+					"item": "con_heal_potion",
+					"chance": 2,
+					"count": 1
+				}
+			]
 		},
 		{
 			"id": "enemy_brawler",
@@ -356,7 +445,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "fleeing_scout",
@@ -389,7 +479,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "ambush_berserker",
@@ -422,7 +513,24 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": [
+				{
+					"item": "wpn_hand_axe",
+					"chance": 8,
+					"count": 1
+				},
+				{
+					"item": "shd_buckler",
+					"chance": 6,
+					"count": 1
+				},
+				{
+					"item": "con_heal_potion",
+					"chance": 6,
+					"count": 1
+				}
+			]
 		},
 		{
 			"id": "training_dummy",
@@ -458,7 +566,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "rogue",
@@ -497,7 +606,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "mage",
@@ -536,7 +646,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "goblin_warlord",
@@ -569,7 +680,24 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": [
+				{
+					"item": "wpn_broadsword",
+					"chance": 25,
+					"count": 1
+				},
+				{
+					"item": "shd_kite",
+					"chance": 20,
+					"count": 1
+				},
+				{
+					"item": "con_focus_elixir",
+					"chance": 15,
+					"count": 1
+				}
+			]
 		},
 		{
 			"id": "priest",
@@ -608,7 +736,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		},
 		{
 			"id": "brawler",
@@ -647,7 +776,8 @@
 			"body": "",
 			"accessory_1": "",
 			"accessory_2": "",
-			"pouch": []
+			"pouch": [],
+			"loot": []
 		}
 	]
 }

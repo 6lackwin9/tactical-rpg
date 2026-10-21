@@ -9,6 +9,12 @@ cleanup pass after its task is merged (git history keeps it).
 The Godot-era seeds (`ContentCatalog.upsert` GDScript, `.gd`) ran on the Godot build; their effect is in the data, and
 the files are frozen in `legacy/data/seeds/` (and in git history). The tables below index them as they were.
 
+## Engine-era seeds
+
+| Seed | Task | Note |
+| --- | --- | --- |
+| `reward1.json` | REWARD1-A (loot tables, Ashlands purses, key loot, objective reward) | full entries: regenerate it before a re-run on data other tasks changed since |
+
 ## Godot-era seeds
 
 ### Archived seeds (CLN-2)
