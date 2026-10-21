@@ -146,6 +146,7 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
 | `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
 
 - `tests/data_source.rs` compares the loader's output with `catalog.json`, `worlds.json` and `game_data.json`: keys, key
+- PHASEFOLD (2026-10-22) retired part of `data_source` and `store`: the loader diff folds Godot's catalog and world encounter rows with `source::fold_legacy_waves`, drops Godot's four `wave_*` schema rows per encounters section and skips the two `phases` help rows (`HELP_CHANGED`); the resave check reprints Godot's encounters files folded through the document writer (their data and key order still compared, Godot's byte formatting of those two files no longer). The reinforcement wave is an arrival phase in the engine; Godot's legacy rows replay through the fold (every battle trace, world trace, sim, journey and save unchanged).
   order and int / float types exactly, floats to 1e-9 (Godot's `JSON.stringify` writes fewer digits than it computes
   with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
 - Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)

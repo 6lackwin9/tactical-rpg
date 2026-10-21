@@ -124,7 +124,7 @@ Party of three (warrior + two recruits, the BAL4-ATTR comps) at the campaign lev
 
 ## Out of scope
 
-Debuffs or damage on the party from a phase, phases that remove units or end the battle, chained conditions (phase B only after phase A), triggers on the party side, enemies re-planning mid-round, moving the existing `wave_*` fields into `phases` (a later cleanup row), new art or sound, enemy morale (MORALE1), a "slay the chief" win (OBJ1), any sim tool change.
+Debuffs or damage on the party from a phase, phases that remove units or end the battle, chained conditions (phase B only after phase A), triggers on the party side, enemies re-planning mid-round, moving the existing `wave_*` fields into `phases` (a later cleanup row) (done: PHASEFOLD, `games/emberwake/docs/specs/PHASEFOLD.md`), new art or sound, enemy morale (MORALE1), a "slay the chief" win (OBJ1), any sim tool change.
 
 ## Overlap with other specs (files shared; run in sequence, not in parallel)
 
