@@ -199,6 +199,17 @@ with it. Godot's copy stays in `legacy/data/`.
 - Acceptance: running both tools into an empty folder reproduces every generated file of the three roots byte for
   byte (so the move in section 9 is reproducible).
 
+## 8b. Tools as built (ASSETORG2-T, 2026-10-22)
+
+- `gen_art.py` and `export_units.py` take `--root DIR` (a workspace root to write into); `gen_art.py` takes `--layer`.
+- `gen_art.py` keeps an existing file unless `--overwrite` (the ART2 portraits and icons from `art_src/` would
+  otherwise be replaced by placeholders); `export_units.py` always rewrites the six class bodies.
+- Palette slots in a class body's `clips.json` = the rig's base colours present in the sheet (no `_lo` / `_hi` shades).
+- Acceptance as built (user 2026-10-22: paths and pixel sizes, not bytes): an empty-folder regeneration gives the same
+  307 paths (285 PNGs, 22 `clips.json`) and the same sizes; 180 of the 285 PNGs are pixel-identical; the rest are the
+  ART2 art (104) and the priest body (1: the rig's raised mace, ART2 pick B3, never re-exported; SPRITE1-A2 re-exports
+  it).
+
 ## 9. Move table (296 PNGs on develop today; E = `engine/assets/`, K = `kits/rpg/assets/`, G = `games/emberwake/assets/`)
 
 Paths on the left are under `games/emberwake/assets/art/`. Moves are `git mv` (history kept).

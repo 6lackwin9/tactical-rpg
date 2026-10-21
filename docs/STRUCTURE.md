@@ -64,8 +64,8 @@ workspace is the repo root (`Cargo.toml` members `engine/crates/*` and `games/*/
 | `check_project.ps1`, `check_project.bat` | the desktop commit gate: build every crate, run every test | done |
 | `run.bat`, `run_dev.bat`, `run_opt.bat` | launch the Scene Runner from main, develop or a design option (pull, build, save backups) | done |
 | `tools/fc.sh` | `gate`, `build`, `test`, `clippy`, `docs`, `content`, `sim`, `parity` | done |
-| `tools/md_lint.awk`, `tools/overlap.sh`, `tools/wt_remove.ps1`, `tools/patch_notes.py`, `tools/gen_art.py`, `tools/gen_music.py` | markdown lint subset, worktree overlap, worktree removal, patch notes, placeholder art and music generators | done |
-| `tools/sprites/` | SPRITE1-A pixel-art rig (`rig.py`), class animations (`classes.py`), token and portrait export (`export_units.py`; `python3 tools/sprites/export_units.py`) | in use (strips and battle playback: SPRITE1-A2 / -L / -U) |
+| `tools/md_lint.awk`, `tools/overlap.sh`, `tools/wt_remove.ps1`, `tools/patch_notes.py`, `tools/gen_art.py`, `tools/gen_music.py` | markdown lint subset, worktree overlap, worktree removal, patch notes, placeholder art and music generators on the ASSETORG2 layered tree (`--layer`, `--root`; `gen_art.py --compare DIR` checks a regeneration) | done |
+| `tools/sprites/` | SPRITE1-A pixel-art rig (`rig.py`), class animations (`classes.py`), class body sheets for the kit (`export_units.py`: `units/<class>/base/sheet.png` + `clips.json` with palette slots; `--clips idle\|all`, `--root DIR`) | in use (strips and battle playback: SPRITE1-A2 / -L / -U) |
 | `.github/workflows/gate.yml` | CI: docs lint, Godot reference from `legacy/`, then `tools/fc.sh gate` on PRs into `main` (required check `gate`) and pushes to `main` | done |
 | `.github/workflows/branch-cleanup.yml` | daily deletion of remote task branches already on `develop` (never `main`, `develop`, `engine`, `legacy`) | done |
 | `.claude/` (agents, skills, hooks), `.agents/rules/engine_workflow.md`, `CLAUDE.md` | agent setup and rules | done |

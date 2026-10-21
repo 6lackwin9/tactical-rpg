@@ -39,7 +39,8 @@ ASSETORG2 (approved 2026-10-20, built 2026-10-22) replaced the per-clip strips a
 body is one sheet plus its clip list (`docs/specs/ASSETORG2.md` section 4.1). This section supersedes the file layout
 of SPRITE1-A2 and the manifest work of SPRITE1-L; section 2's clips and SPRITE1-U's behaviour stand.
 
-- **SPRITE1-A2 (asset):** `tools/sprites/export_units.py` writes each class's clips into the class body:
+- **SPRITE1-A2 (asset):** `tools/sprites/export_units.py --clips all` (the writer exists since ASSETORG2-T) writes each
+  class's clips into the class body:
   `kits/rpg/assets/units/<class>/base/sheet.png` (one row per clip in `clips.json` order, frames left to right, each
   48x48, nearest filter, transparent) and `clips.json` (`frame` [48, 48]; `palette` = the rig's colour slots, so a
   palette file can recolour the body; `clips` = `idle`, `walk`, `hurt`, `death`, the class's attack clips, `defend`,
