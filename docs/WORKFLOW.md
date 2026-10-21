@@ -36,7 +36,7 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 | Agent `change-reviewer` | Pre-commit review: the gate, code patterns, docs/README, known-issues match; read-only |
 | Skills `engine-checklist`, `known-issues`, `patch-and-seed` | Edit checklist, known issues and safe editing |
 
-The Godot build's sim (`tools/balance_sim.gd`, modes duel, tier, levels, group, stats, party, role, sweep, campaign) stays in `legacy/`; every mode is ported (`aegis sim <mode>`, crate `emberwake_sim`, PORT-SIM) and prints the same lines for the recorded command lines (`games/emberwake/parity/sim.sh`, test `emberwake_sim/tests/sim_parity.rs`).
+The Godot build's sim (`tools/balance_sim.gd`, modes duel, tier, levels, group, stats, party, role, sweep, campaign) stays in `legacy/`; every mode is ported (`aegis sim <mode>`, crate `emberwake_sim`, PORT-SIM) and prints the same lines for the recorded command lines (`games/emberwake/parity/sim.sh`, test `emberwake_sim/tests/sim_parity.rs`). The key `rewards=on` (REWARD1-S, off by default and left out of the help text, which is parity) adds what the defeated enemies pay: in `party` a line per encounter (defeated of roster with slain / surrendered / fled, XP per hero at the sim level, the purse share at the range mean, the expected drop value, key loot per fight), in `campaign` a line per run and the per-run means per steel choice.
 
 Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserker 80%, brawler 53%, scout 47%, ranger 20%, shaman 0% (cannot beat a minion of itself: stalemates). Hero loses 1v3 minions and 1v1 bosses; elite = mirror (50%). These are open balance questions, not decisions.
 
