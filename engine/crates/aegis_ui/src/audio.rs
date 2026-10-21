@@ -130,15 +130,12 @@ impl Audio {
     }
 
     /// The four levels and mute from the settings (the engine's keys: master, music, effects, interface 0-100, mute).
+    /// The music tracks take them at the next `tick`: the shell sets the saved levels and a screen may set draft ones
+    /// in the same frame, and setting the sinks on each call made the music flip between both levels every frame.
     pub fn set_levels(&self, settings: &Value) {
         let level = |k: &str| (settings[k].as_f64().unwrap_or(100.0) / 100.0).clamp(0.0, 1.0) as f32;
         let mute = settings["mute"].as_bool().unwrap_or(false);
-        let mut st = self.state.borrow_mut();
-        st.levels = Levels { master: if mute { 0.0 } else { level("master") }, music: level("music"), sfx: level("effects"), ui: level("interface") };
-        let music = st.levels.of(Bus::Music) * MUSIC_GAIN;
-        for t in &st.tracks {
-            t.sink.set_volume(t.gain * music);
-        }
+        self.state.borrow_mut().levels = Levels { master: if mute { 0.0 } else { level("master") }, music: level("music"), sfx: level("effects"), ui: level("interface") };
     }
 
     /// Plays `rel` once on `bus` at that bus's level; a missing file is silent.
