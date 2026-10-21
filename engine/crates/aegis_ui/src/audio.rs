@@ -99,7 +99,12 @@ impl Audio {
 
     /// The files without a device: nothing plays, the choices and checks still work (tests, tools).
     pub fn offline(root: Option<PathBuf>) -> Self {
-        Self { roots: root.into_iter().collect(), device: None, state: RefCell::new(State::new()) }
+        Self::offline_layered(root.into_iter().collect())
+    }
+
+    /// Several audio folders without a device (tests, tools over the asset layers).
+    pub fn offline_layered(roots: Vec<PathBuf>) -> Self {
+        Self { roots, device: None, state: RefCell::new(State::new()) }
     }
 
     /// The first folder's file at `rel`.
