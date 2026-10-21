@@ -1,5 +1,94 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## REWARD1-B 2026-10-22 (rewards per defeated enemy)
+
+Measured build: `main` 18f3893 (REWARD1-L, REWARD1-A and REWARD1-S merged), clean checkout, no code or data changed. Sim: `tools/fc.sh sim party 5 10 comp=<comp> enc=world:<id>,... rewards=on` (10 seeds, authored foe levels, jitter on) and `tools/fc.sh sim campaign 5 3 heal=rally rest=3 extra=4:ash_raiders rewards=on` (the HEAL1 chain, 3 seeds, all ten trios, 300 fights: 0 PLAN FAIL, 0 METRIC FAIL). Rule coverage: `cargo test -p emberwake_world --test rewards` passes (15 of 15).
+
+Read this first (what `rewards=on` is): the sim's gold is an expected value (mean purse x defeated weight share), with no floor, no `once` purse and no `reward_paid` state; key loot counts a kill in a won fight every time, with no claimed-once rule; the drop column is the expected item value (chance x `value` x count, buy value; the shop pays `sell_mult` 0.5 of it). A campaign or party run that repeats an encounter overcounts every once-only source (story purses, the courtyard objective, the Warchief's Axe). The sim also never models the party fleeing (only enemies flee), so "fled" pay below is derived from the rules and from lost fights, not simulated. The run totals below are my own tally from the sim's per-encounter means plus the authored sources, not a sim output. (Do not pass `elevel=0` to a party run: it re-levels the foes to the party level and doubles their XP; all numbers here use the authored levels.)
+
+### Result against the targets
+
+| Target | Number | Verdict |
+| --- | --- | --- |
+| Gold per run 550-650 | 568-571 with no mob fights, 603-606 at 6 mob wins, 627-630 at 10, 650-653 at 14, 674-677 at 18 | In band up to about 13 mob wins; no recorded run says how many a player gets (see issue 1) |
+| Drops per run 3-5 | 2.1 (no mobs), 3.4 (6 mob wins), 4.2 (10), 5.0 (14), 5.8 (18); the Warchief's Axe adds 1 | In band at 6-14 mob wins; below 3 with 0-3 mob wins; 5.2 at 10 wins if the axe counts |
+| Sell value 40-70 | 36 (no mobs), 57 (6 wins), 70 (10), 84 (14), 98 (18); the axe (value 57) would add about 28 if sold | In band at 3-10 mob wins; over at 12+ |
+| Potions and elixirs at most 2 | expected 0.6-1.5 per run; chance of 3 or more 5% (6 wins), 9% (10), 13% (14) | Pass on average; 1 run in 11 breaks the cap at 10 wins |
+| Lost or fled pays at most half of a win | lost fights 5-36% of a win in gold and XP, drop value up to 45% (table below); a flee after most kills can pay more than half | Pass for losses; exception for flees by rule |
+| Lost mob fight pays at most 6 gold | scouts at most 3 (1 of 2 foes), raiders at most 6 (2 of 3), straggler 4 (only if its one foe dies in a lost fight) | Pass |
+| XP within one level of win-only at the finale | chain XP per hero 353-383 (new) vs 356-383 (win-only, same wins) | Pass, difference at most 5% (about 0.1 level) |
+| Flee loop never pays above `gold_max` on a `once` purse | engine tests pass (`a_once_purse_pays_each_foe_once_per_save`); the sim cannot show it | Pass by test only |
+
+### Gold per full Ashlands run
+
+Authored sources are unchanged from PURSE1 section 2 and re-read from data: start gold 100 (`world.json`), quest gold 180 (templates: reach_and_clear 30 x2, clear_site 40 x2, signal_and_return 20 x2), chests 90 (10, 25, 15, 40), dialogue gifts 35 (Mara 20, Tev 15; a bomb sale for 20 is a trade and left out) = 405. Fight sources are sim means for a trio at level 5 (warrior, ranger, priest), all at full clear unless noted:
+
+| Source | Sim gold per win | Notes |
+| --- | --- | --- |
+| courtyard_skirmish | 17.5 + 10 (objective, once) | purse 15-20 |
+| pass_ambush | 27.5 | purse 25-30; wave units count in the divisor |
+| wagon_raid | 27.5 | purse 25-30 |
+| ashmaw_stand (arms) | 50.3 (defeated 4.2 of 6) | purse 50-60; the unspawned wave and fled foes cost about 4.7 against the 55 mean |
+| ashmaw_stand_barred (gate) | 53.5 (defeated 2.5 of 3) | |
+| ash_patrol (2 marker roamers, fought once each) | 15.0 each | purse 12-18, not `once` but each marker roamer is fought once |
+| ash_scouts / ash_raiders / ash_straggler | 4.5 / 7.0 / 3.0 | mob mean about 5.9 at a 45/55 scouts to raiders mix |
+
+Story fights plus patrols give 164.5 (arms), so a run without mob fights ends at 568 (arms) or 571 (gate): already inside the band, and each mob win adds 5.9 on average. Mob wins per run are the open variable: the road legs give about 1-2 random fights per run (encounter_pct 15, 25, 30 on the first crossing, half on repeats) plus the scripted first raid; the zone steps (`steps_min`/`steps_max` 10-20 per fight in three zones) decide the rest, so 6-14 is a plausible range and the PURSE1 estimate of 10 (+59 gold) sits in the middle. A mob purse mean of 5.9 is about one camp (6 gold), as PURSE1 intended.
+
+### Drops per run
+
+Data: minions 8% per defeated unit (a potion or elixir is 2% of it), the Horde Warchief (`ambush_berserker`) 20% (potion 6%), Grakka 60% (elixir 15%). Expected drops = 0.08 x minion defeats + 0.20 x 2 (one warchief in each marker patrol) + 0.60 (Grakka). A run holds about 14 minion defeats without mob fights (courtyard 2, pass 4, wagon 3, stand 3.2, patrols 2) and about 2.55 more per mob win. The counts above are expectations; the spread at 10 mob wins is 18% of runs under 3 drops and 23% over 5 (58% in 3-5); at 6 wins 31% under 3 and 11% over 5; at 14 wins 10% under and 38% over. The sim's `drops` column per encounter (value, trio, win): courtyard 4.95, pass 10.70, wagon 7.55, stand 30.27 (arms) or 25.79 (gate), patrol 9.26, scouts 6.00, raiders 7.55, straggler 2.10; sell value is half of these.
+
+A drop sells for 14 on average (item values 15-57, halved). The shipped tables hold weapons and armour at 3% each and a potion or elixir at 2% on minions, so about a quarter of drops are consumables and the rest are gear a trio may already own (arm_leather, value 40, is on four of the five minion tables).
+
+### Flee and loss pay against a win
+
+Lost fights are simulated by weak parties (rows with 0% clear are all losses). Pay as a share of the same encounter's win by a trio:
+
+| Encounter | Win (gold / XP per hero / drop value) | Lost fight | Share of a win |
+| --- | --- | --- | --- |
+| pass_ambush | 27.5 / 36 / 10.70 | solo warrior, 0% clear: 8.3 / 10.8 / 3.04 | 30% / 30% / 28% |
+| ashmaw_stand (arms) | 50.3 / 259 / 30.27 | warrior+mage, 0% clear: 6.8 / 23.4 / 7.23 | 14% / 9% / 24% |
+| ashmaw_stand (arms) | same | warrior+rogue, 0% clear: 3.7 / 12.6 / 3.83 | 7% / 5% / 13% |
+| ash_patrol | 15.0 / 35 / 9.26 | solo warrior, 20% clear, losses derived: about 3.3 / 6.8 / 3.3 | about 22% / 19% / 36% |
+| ash_raiders | 7.0 / 27 / 7.55 | solo warrior, 80% clear, losses derived: about 2.3 / 9 / 3.4 (1.0 foe of 3 defeated) | about 33% / 33% / 45% |
+
+All lost fights stay under half of a win for gold and XP; drop value reaches 36-45% (units that surrender or flee still roll the table) and is the closest to the limit. Campaign check: in the 8 of 60 runs where the party fell at the finale (7 arms, 1 gate; all at battle 4) the chain still paid 117-144 XP per hero and 82-90 gold, against 347-383 XP and 124-134 gold when it won (a fall keeps 33-40% of the XP and 65-70% of the gold, because the first three fights are won in both).
+
+Party flight is not in the sim, so the rule gives the bound: a flee pays the defeated weight share of the purse and the kill XP of the defeated, and nothing of key loot or the objective. That is not capped at half. Examples at the current rosters: ash_scouts after 1 of 2 kills 50% (gold 2.3, XP 9), ash_raiders after 2 of 3 kills 67% (gold 4.7, XP 18), ash_patrol after the warchief alone 71% of gold (10.6) and 74% of XP, ashmaw_stand after Grakka alone 76% of gold (about 38 against the 50 win) and 84% of XP (230 of 275), but never the key loot or the courtyard objective. So "at most half" holds for losses and for flights after killing about half the weight, and is exceeded by flights after most of the kills; this follows from the spec's rule (pay what you killed), not from a bug.
+
+### XP pace
+
+New rule against win-only on the same fights (HEAL1 chain, per hero at level 5; XP counts each defeated enemy once, so a win that defeats the whole roster pays the same under both):
+
+| Chain | REWARD1 mean (3 seeds, 10 trios) | Win-only maximum (every roster foe) | Difference |
+| --- | --- | --- | --- |
+| steel arms | 365 (range 347-383, winning runs) | 383 | minus 5% (waves that never came, fled foes in part of the runs) |
+| steel gate | 353 (range 347-356, winning runs) | 356 | minus 1% |
+
+Only runs that fell gain against the old rule (a lost finale pays XP where win-only paid 0 for it). One fight is most of the chain: Grakka is 230 of 275 XP per hero in the stand. Per-win XP at level 5 is courtyard 18, pass 36, wagon 27, patrol 35, scouts 18, raiders 27, straggler 9, stand 244-259; level 5 to 6 needs 220, so quests (380 XP over six) plus the three early fights (81) put a hero near level 6-7 before the finale at 6-14 mob wins, while the campaign sim holds the party at level 5 for all five fights: its finale numbers are conservative for the party level.
+
+### Farm checks
+
+- Once-only sources (story purses, the courtyard objective, key loot): bounded by `reward_paid` and the claimed key loot; 15 engine tests pass, including a once purse paid per roster key per save and key loot needing the kill and the win. The sim cannot test this by design.
+- Mob fights (purse not once; XP and drops too): per win 4.5-7.0 gold (about one camp, 6), 18-27 XP per hero at level 5, drop value 6.0-7.55 (sell 3.0-3.8). A mob fight ends with party HP 0.94-0.98 on average (scouts, raiders), so a rest is often not due: a repeated mob win nets about 9 gold-equivalent. Reaching one needs travel or zone steps (10-20 steps per fight; route legs 15-30% on the first crossing, half on repeats). XP falls with party level through the level-delta factor (a level 3 minion is worth 9 at level 5, 7 at level 6, 5 at level 7), so XP grinding self-limits; gold does not. Not a strong exploit, not zero; whether it is acceptable is a design call.
+- Flee loop on ash_raiders: not simulated. By the rules the loop pays at most what a win pays (pay follows kills; a mob win adds nothing beyond its kills), so it cannot beat winning per fight, and per round it equals the kill rate. Nothing found that pays above a win.
+- Surrender and flight on their own count as defeated (Q8 A): ash_scouts defeats 2.0 of 2.0 with 1.0 surrendered, raiders 1.7 slain and 1.1 surrendered of 3.0, so a morale break pays the full purse and full drop rolls. This matches MORALE1 rule 11 (a break win pays the full rout).
+
+### Comparison with the previous run
+
+First run under REWARD1; no earlier gold, drops or XP measurement exists. The PURSE1 estimates (gold about 600, drops about 4 at about 67 sell) hold: gold 568-571 without mobs and 627 at 10 mob wins, drops 4.2 and sell 70 at 10 mob wins (the top of the 40-70 target). New: the Warchief's Axe is a drop outside that budget.
+
+### Issues for the brainstorm agent
+
+1. Mob wins per run are unmeasured (6-14 moves gold from 603 to 653, drops 3.4 to 5.0, sell 57 to 84). A recorded run (DR2 item 9, approved, not done) or a zone-step model would settle it; above about 13 mob wins gold passes 650, above about 10 sell passes 70. Candidate levers if needed: the mob purse ranges (data), the minion drop chance (8%), `sell_mult`.
+2. The Warchief's Axe (sell 28, a fourth drop) is outside the drop budget: with it drops reach 5.2 and sell about 99 at 10 mob wins. Decide whether key loot counts against the 3-5 and 40-70 targets.
+3. Drop mix: most drops are gear rows at 3% each, and `arm_leather` (40) is on four of five minion tables; a copy the trio already owns is only a sale. Candidate lever: the table rows per unit.
+4. Consumable cap: 1 run in 11 exceeds two potions or elixirs at 10 mob wins (13% at 14); the expected number is 1.1. Raise the cap or lower the 2% rows.
+5. Flee pay can exceed half of a win after most kills (up to 84% of the finale XP and 76% of its gold, without the win's key loot or objective). Decide whether "at most half" is a rule or only a lost-fight limit.
+6. Mob fights repeat at almost no cost (party HP 0.94-0.98 afterwards; about 9 gold-equivalent and 18-27 XP each at level 5). XP falls off through level delta, gold does not. Decide whether a non-`once` mob purse needs a farm limit or stays an accepted slow income.
+7. Sim gaps for a possible follow-up: no party flight (flee pay and flee loops untested), no `once` / claimed state under `rewards=on`, drops in buy value not sell value, `elevel=0` re-levels foes instead of meaning "authored", and the campaign holds the party at level 5 although XP puts the finale at level 6-7.
+
 ## Trio bands 2026-10-18 (approved 17:06)
 
 Tushar chose "Re-set targets" (17:03): new clear bands for the generated L5 trio sweep (warrior + two, 10 comps, 10 seeds), set from BAL5-R, with no game change. They replace only the sweep clear bands of "BAL2 role answers" (2); story bands (stand, HEAL1 arms and gate), role KPIs and the PACE1 round bands stay as they are. Each band is centred on today's mean and wide enough that a small lever moves a cell in or out.
