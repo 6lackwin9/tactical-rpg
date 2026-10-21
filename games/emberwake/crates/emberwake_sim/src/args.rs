@@ -50,6 +50,9 @@ pub struct SimArgs {
     pub score: String,
     pub quick: bool,
     pub metrics: bool,
+    /// REWARD1-S: party and campaign print what the defeated enemies pay (fates, XP, purse share, drops, key loot).
+    /// Not in the help text: the help is printed after an argument error, and those lines are Godot parity.
+    pub rewards: bool,
     pub band_lo: i32,
     pub band_hi: i32,
     pub comp: Vec<String>,
@@ -100,6 +103,7 @@ impl Default for SimArgs {
             score: "both".into(),
             quick: false,
             metrics: false,
+            rewards: false,
             band_lo: 30,
             band_hi: 70,
             comp: strings(&DEFAULT_COMP),
@@ -295,6 +299,12 @@ impl SimArgs {
                     return Err(format!("metrics must be on or off (got '{value}')"));
                 }
                 self.metrics = value == "on";
+            }
+            "rewards" => {
+                if value != "on" && value != "off" {
+                    return Err(format!("rewards must be on or off (got '{value}')"));
+                }
+                self.rewards = value == "on";
             }
             "quick" => self.quick = true,
             "band" => {
