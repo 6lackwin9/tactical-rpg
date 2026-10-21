@@ -20,7 +20,9 @@ use emberwake_battle::command::CmdKind;
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::plan::expected;
 use emberwake_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGrant};
+use aegis_core::assets::ClipPlayer;
 use aegis_core::json::{self, s, Dict};
+use emberwake_rules::Stance;
 use emberwake_world::battle::WorldRoster;
 use emberwake_battle::skill::Kind;
 use emberwake_battle::world::{AiProfile, World};
@@ -113,6 +115,131 @@ struct Float {
     born: Instant,
 }
 
+/// What a unit was when its token last caught up with the battle (SPRITE1-U).
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Seen {
+    pos: Option<V2>,
+    hp: i32,
+    alive: bool,
+    guarded: bool,
+}
+
+/// One unit's token animation (SPRITE1-U): its clips, a slide to a new tile, its fall. Times are on the battle's
+/// animation clock (`BattleScreen::anim_ms`, scaled by the animation speed setting).
+#[derive(Debug, Clone, Default)]
+struct UnitAnim {
+    player: ClipPlayer,
+    /// An action clip to start (candidates best first, `action_clips`) and when; the draw picks the first the body has.
+    want: Option<(Vec<&'static str>, u64)>,
+    /// The tile it slides from and when the slide started.
+    slide: Option<(V2, u64)>,
+    /// When it fell (the death clip plays and holds, then the dead marker shows); None while it stands.
+    fell: Option<u64>,
+    seen: Seen,
+}
+
+/// The battle's token animations (SPRITE1-U): one per unit, the last popped action already animated and the action
+/// log length last seen.
+#[derive(Debug, Clone, Default)]
+struct Tokens {
+    anims: Vec<UnitAnim>,
+    popped_seen: Option<(i32, i32, usize)>,
+    log_len_seen: usize,
+}
+
+impl Tokens {
+    /// The tokens catch up with `s` at `now` (the animation clock). While the battle moves forward (the action log
+    /// does not shrink) a unit that moved slides there playing `walk` for `walk_ms`, a hit plays `hurt` (`hurt_guarded` while it
+    /// guards), a fall plays `death`, raising a guard plays `defend`, and the action just resolved plays its actor's
+    /// attack clip (`action_clips`); the base loop is `idle_guarded` while it guards, else `idle`. Anything else (a new
+    /// battle, another session) only takes the new state; `instant` (the skip setting) takes the end state at once.
+    fn catch_up(&mut self, s: &Session, now: u64, instant: bool, walk_ms: u64) {
+        let n = s.w.units.len();
+        let animate = self.anims.len() == n && s.log.len() >= self.log_len_seen;
+        if self.anims.len() != n {
+            self.anims = vec![UnitAnim::default(); n];
+        }
+        for (i, u) in s.w.units.iter().enumerate() {
+            let pos = s.w.grid.pos(i);
+            let guarded = u.guard > 0.0 || u.stance == Stance::Defensive;
+            let seen = Seen { pos, hp: u.hp, alive: u.is_alive(), guarded };
+            let a = &mut self.anims[i];
+            if animate {
+                let was = &a.seen;
+                if let (Some(from), Some(to)) = (was.pos, pos) {
+                    if from != to && !instant && walk_ms > 0 {
+                        a.slide = Some((from, now));
+                        a.player.play_for("walk", now, walk_ms);
+                    }
+                }
+                if was.alive && !seen.alive {
+                    a.fell = Some(now);
+                    a.slide = None;
+                    if !instant {
+                        a.player.play_and_hold("death", now);
+                    }
+                } else if seen.alive && seen.hp < was.hp && !instant {
+                    a.player.play(if guarded { "hurt_guarded" } else { "hurt" }, now);
+                } else if seen.alive && guarded && !was.guarded && !instant {
+                    a.player.play("defend", now);
+                }
+            } else {
+                a.player.stop();
+                a.want = None;
+                a.slide = None;
+                // Fallen before this view: the dead marker at once.
+                a.fell = if seen.alive { None } else { Some(0) };
+            }
+            if seen.alive && a.fell.is_some() {
+                a.fell = None;
+                a.player.stop();
+            }
+            a.player.set_base(if guarded { "idle_guarded" } else { "idle" }, now);
+            a.seen = seen;
+        }
+        // Only this round's pop: `scheduled` is rebuilt each round, so an older index names another action.
+        let popped = s.last_popped.filter(|p| animate && !instant && Some(*p) != self.popped_seen && p.0 == s.current_round);
+        if let Some(act) = popped.and_then(|(_, _, idx)| s.resolver.scheduled.get(idx)) {
+            let kind = match act.command.kind {
+                CmdKind::Attack { .. } => "attack",
+                CmdKind::Area { .. } => "area",
+                CmdKind::Support { .. } => "support",
+                _ => "",
+            };
+            let u = &s.w.units[act.unit];
+            if !kind.is_empty() && !act.cancelled && u.is_alive() {
+                let skill = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.id.as_str());
+                let weapon = u.inventory.main_weapon().map_or("", |w| w.weapon_type());
+                self.anims[act.unit].want = Some((action_clips(skill, kind, weapon), now));
+            }
+        }
+        self.popped_seen = s.last_popped;
+        self.log_len_seen = s.log.len();
+    }
+}
+
+/// Skills with a clip of their own on the sprite rig (SPRITE1 section 2; ids from tools/sprites/classes.py).
+const SKILL_CLIPS: [(&str, &str); 5] = [("shield_bash", "shield_bash"), ("offhand_jab", "jab"), ("haymaker", "haymaker"), ("sweep_kick", "sweep_kick"), ("cyclone_kick", "sweep_kick")];
+/// Weapon types that fight with fists (the brawler's jab and kicks).
+const FIST_WEAPONS: [&str; 3] = ["", "fist", "unarmed"];
+
+/// SPRITE1-U: the clips an action's actor may play, best first (the first one its body has is played; none: no clip).
+/// `kind` is the command's: "attack" (one target), "area" or "support"; `weapon` the actor's main weapon type ("" =
+/// none). A skill with its own rig clip plays it; fists jab one target and sweep an area; any other attack plays
+/// `attack`; a support skill plays `cast` (no rig clip yet).
+fn action_clips(skill: &str, kind: &str, weapon: &str) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = SKILL_CLIPS.iter().filter(|(s, _)| *s == skill).map(|(_, c)| *c).collect();
+    let fists = FIST_WEAPONS.contains(&weapon);
+    match kind {
+        "attack" if fists => out.extend(["jab", "attack"]),
+        "area" if fists => out.extend(["sweep_kick", "kick", "jab", "attack"]),
+        "attack" | "area" => out.push("attack"),
+        "support" => out.push("cast"),
+        _ => {}
+    }
+    out
+}
+
 enum Mode {
     Arena,
     /// A world fight: the fight dict, the runner that settles it (explore / travel / dialogue) and the member ids of
@@ -166,6 +293,11 @@ pub struct BattleScreen {
     viewing: bool,
     /// A take-over: where its session branched off (recording id, battle, request), kept in its `end`.
     parent: Value,
+    /// SPRITE1-U: the token animations, the animation clock (ms, advanced at the animation speed setting) and when it
+    /// last advanced.
+    tokens: Tokens,
+    anim_ms: f64,
+    anim_at: Instant,
 }
 
 impl BattleScreen {
@@ -203,6 +335,9 @@ impl BattleScreen {
             end_logged: false,
             viewing: false,
             parent: Value::Null,
+            tokens: Tokens::default(),
+            anim_ms: 0.0,
+            anim_at: Instant::now(),
         }
     }
 
@@ -434,6 +569,15 @@ impl BattleScreen {
             self.message = last.unwrap_or_default();
             self.events_seen = n;
         }
+        self.sync_anims(cx);
+    }
+
+    /// SPRITE1-U: the tokens catch up with the battle (`Tokens::catch_up`; the skip animations setting applies).
+    fn sync_anims(&mut self, cx: &Cx) {
+        let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+        if let Some(s) = self.host.session.as_ref() {
+            self.tokens.catch_up(s, self.anim_ms as u64, instant, cx.tuning.value.walk_ms);
+        }
     }
 
     /// Starts the arena's encounter through the command host (a world one as "<world>:<id>"), so the session replays.
@@ -456,6 +600,7 @@ impl BattleScreen {
     }
 
     fn after_start(&mut self, intro: &str) {
+        self.tokens = Tokens::default();
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
         self.log_seen = self.session().resolver.log.len();
         self.selected = self.session().w.allies.first().copied();
@@ -820,6 +965,10 @@ impl Screen<GameCx> for BattleScreen {
 
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
+        // SPRITE1-U: the token animations run on their own clock at the animation speed setting (FxSettings 0.5-2x).
+        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
+        self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
+        self.anim_at = now;
         if now.duration_since(self.tuning_checked) > Duration::from_millis(500) {
             self.tuning_checked = now;
             if cx.tuning.reload_if_changed() {
@@ -943,6 +1092,7 @@ impl Screen<GameCx> for BattleScreen {
         let reply = self.host.handle(body);
         if restart && reply["ok"] == json!(true) {
             self.new_session();
+            self.tokens = Tokens::default();
         }
         if self.host.session.is_some() {
             self.after_change(cx);
@@ -1364,35 +1514,82 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             }
         }
     }
+    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims); the selected
+    // hero's sprite has a gold outline, a hovered unit's a faint white one. A unit without a body keeps the letter.
+    let anim_now = g.anim_ms as u64;
+    let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+    let still = UnitAnim::default();
     for i in 0..w.units.len() {
         let Some(pos) = w.grid.pos(i) else { continue };
         let u = &w.units[i];
         let r = cell_rect(pos);
         let ally = w.allies.contains(&i);
+        let body = cx.art.first_body(&emberwake_content::art::body_chain(&s.art[i]));
+        let palette = s.palettes.get(i).map_or("", |p| p.as_str());
+        if let (Some(a), Some(b)) = (g.tokens.anims.get_mut(i), body.as_deref()) {
+            // An action clip starts with the first candidate the body has.
+            if let Some((cands, t0)) = a.want.take() {
+                if let Some(c) = cands.into_iter().find(|c| cx.art.has_clip(b, c)) {
+                    a.player.play(c, t0);
+                }
+            }
+        }
+        let a = g.tokens.anims.get(i).unwrap_or(&still);
         if !u.is_alive() {
-            ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
-            continue;
+            // A fall plays the death clip and holds its last frame for a while; then (or with no clip) the marker.
+            let dying = match (body.as_deref(), a.fell) {
+                (Some(b), Some(_)) if !instant && cx.art.has_clip(b, "death") => {
+                    cx.art.clips(b).is_some_and(|clips| a.player.playing(clips, anim_now) == "death" && a.player.held_for(clips, anim_now).is_none_or(|h| h < tuning.death_hold_ms))
+                }
+                _ => false,
+            };
+            if !dying {
+                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
+                continue;
+            }
         }
         let flash = g.flashes.iter().any(|f| f.0 == i);
         let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30) % 2 == 0 { 1.0 } else { -1.0 } } else { 0.0 };
         let tp = tuning.token_px;
-        let tr = Rect::new(r.x + (TILE - tp) / 2 + shake as i32, r.y + (TILE - tp) / 2, tp, tp);
+        // A moving unit slides from its old tile.
+        let (mut dx, mut dy) = (0, 0);
+        if let Some((from, t0)) = a.slide {
+            let t = anim_now.saturating_sub(t0);
+            if t < tuning.walk_ms && !instant {
+                let k = 1.0 - t as f32 / tuning.walk_ms.max(1) as f32;
+                dx = ((from.x - pos.x) as f32 * TILE as f32 * k).round() as i32;
+                dy = ((from.y - pos.y) as f32 * TILE as f32 * k).round() as i32;
+            }
+        }
+        let tr = Rect::new(r.x + (TILE - tp) / 2 + shake as i32 + dx, r.y + (TILE - tp) / 2 + dy, tp, tp);
         let ring = if ally { ALLY } else { FOE };
-        ui.p.circle(r.x as f32 + 16.0 + shake, r.y as f32 + 16.0, tp as f32 / 2.0 + 0.5, ring);
-        match cx.art.first_token(&emberwake_content::art::body_chain(&s.art[i]), s.palettes.get(i).map_or("", |p| p.as_str()), tp) {
-            Some(img) => ui.p.image(img, tr),
-            None => {
-                ui.p.panel(tr.inset(4), ring, ring, 6.0);
-                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, &u.name.chars().next().unwrap_or('?').to_string(), BODY, BG);
+        if u.is_alive() {
+            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
+        }
+        let hover = ui.hover(r) && g.popup.is_none();
+        let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
+        let frame = body.as_deref().and_then(|b| cx.art.played(b, palette, &a.player, anim_now, tp).map(|(f, img)| {
+            ui.p.image(img, tr);
+            f
+        }));
+        match (frame, body.as_deref()) {
+            (Some(f), Some(b)) => {
+                if let Some(o) = outline.and_then(|col| cx.art.body_outline(b, palette, &f.clip, f.frame, tp, col)) {
+                    ui.p.image(o, Rect::new(tr.x - 1, tr.y - 1, tp + 2, tp + 2));
+                }
+            }
+            _ => {
+                ui.p.panel(tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
+                ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, BG);
             }
         }
         if flash {
             ui.p.fill(tr, rgba(255, 255, 255, 110));
         }
-        hp_bar(&mut ui.p, Rect::new(r.x + 3, r.y + TILE - 3, TILE - 6, 2), u.hp, u.max_hp, if ally { GOOD } else { FOE });
-        if Some(i) == sel {
-            ui.p.panel(r, rgba(0, 0, 0, 0), GOLD, 2.0);
+        if !u.is_alive() {
+            continue;
         }
+        hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), u.hp, u.max_hp, if ally { GOOD } else { FOE });
         let tip = unit_tip(s, i, sel, &tells);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
@@ -1597,10 +1794,106 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
 
 #[cfg(test)]
 mod tests {
-    use super::{boss_fight, sound_of};
-    use emberwake_battle::session::{EncounterDef, Session};
+    use super::{action_clips, boss_fight, sound_of, Tokens};
+    use aegis_core::assets::Clips;
+    use emberwake_battle::session::{EncounterDef, Phase, Session};
+    use emberwake_host::{Battle, Host};
+    use emberwake_rules::Stance;
     use emberwake_world::battle::WorldRoster;
     use emberwake_world::Data;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    #[test]
+    fn an_action_picks_the_rig_clip_of_its_skill_kind_and_weapon() {
+        assert_eq!(action_clips("shield_bash", "attack", "sword"), ["shield_bash", "attack"], "a skill with its own clip first");
+        assert_eq!(action_clips("cyclone_kick", "area", ""), ["sweep_kick", "sweep_kick", "kick", "jab", "attack"]);
+        assert_eq!(action_clips("strike", "attack", "fist"), ["jab", "attack"], "fists jab");
+        assert_eq!(action_clips("strike", "attack", "bow"), ["attack"]);
+        assert_eq!(action_clips("volley", "area", "bow"), ["attack"]);
+        assert_eq!(action_clips("mend", "support", "mace"), ["cast"]);
+        assert!(action_clips("guard", "", "sword").is_empty(), "guards play through the stance, moves through the slide");
+    }
+
+    /// Every rig clip (SPRITE1 section 2), one frame each, looping as the export writes them.
+    fn rig_clips() -> Clips {
+        let ids = ["idle", "walk", "attack", "jab", "sweep_kick", "kick", "shield_bash", "haymaker", "hurt", "death", "defend", "idle_guarded", "hurt_guarded"];
+        let clips: Vec<_> = ids.iter().map(|id| {
+            let looped = ["idle", "walk", "idle_guarded"].contains(id);
+            json!({"id": id, "frames": 1, "ms": [100], "loop": looped})
+        }).collect();
+        Clips::parse(&json!({"frame": [48, 48], "clips": clips})).unwrap()
+    }
+
+    /// SPRITE1-U: played step by step, every token follows its unit: a move slides and walks, a hit plays hurt (guarded
+    /// while it guards), a fall plays death, the resolved attack queues its actor's clip; skip plays nothing.
+    #[test]
+    fn tokens_follow_the_battle_step_by_step() {
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let mut host = Host::new(Battle::with_data(Arc::new(Data::open(&dir).expect("data").0)));
+        assert_eq!(host.handle(&json!({"cmd": "new", "encounter": "goblin_skirmish", "seed": 3}))["ok"], json!(true));
+        let clips = rig_clips();
+        let (mut t, mut skip) = (Tokens::default(), Tokens::default());
+        let mut now = 0u64;
+        t.catch_up(host.session.as_ref().unwrap(), now, false, 300);
+        skip.catch_up(host.session.as_ref().unwrap(), now, true, 300);
+        assert!(t.anims.iter().all(|a| a.player.playing(&clips, now).is_empty() && a.slide.is_none()), "a new battle plays nothing");
+        let (mut moves, mut hits, mut falls, mut attacks) = (0, 0, 0, 0);
+        for _ in 0..600 {
+            let s = host.session.as_ref().unwrap();
+            if s.combat_over {
+                break;
+            }
+            if s.phase == Phase::Replay {
+                if !s.can_advance_round() {
+                    break;
+                }
+                host.handle(&json!({"cmd": "advance"}));
+            }
+            if host.session.as_ref().unwrap().is_planning() {
+                host.handle(&json!({"cmd": "preset", "preset": "aggressive"}));
+            }
+            let before: Vec<_> = t.anims.iter().map(|a| a.seen.clone()).collect();
+            let popped = host.session.as_ref().unwrap().last_popped;
+            assert_eq!(host.handle(&json!({"cmd": "step"}))["ok"], json!(true));
+            now += 1000;
+            let s = host.session.as_ref().unwrap();
+            t.catch_up(s, now, false, 300);
+            skip.catch_up(s, now, true, 300);
+            for (i, u) in s.w.units.iter().enumerate() {
+                let (a, was) = (&t.anims[i], &before[i]);
+                let guarded = u.guard > 0.0 || u.stance == Stance::Defensive;
+                let playing = a.player.playing(&clips, now);
+                if was.alive && !u.is_alive() {
+                    falls += 1;
+                    assert_eq!((a.fell, playing), (Some(now), "death"), "{} fell", u.name);
+                } else if u.is_alive() && u.hp < was.hp {
+                    hits += 1;
+                    assert_eq!(playing, if guarded { "hurt_guarded" } else { "hurt" }, "{} was hit", u.name);
+                } else if u.is_alive() && guarded && !was.guarded {
+                    assert_eq!(playing, "defend", "{} raised a guard", u.name);
+                } else if was.pos.is_some() && s.w.grid.pos(i).is_some() && was.pos != s.w.grid.pos(i) {
+                    moves += 1;
+                    assert_eq!((a.slide, playing), (Some((was.pos.unwrap(), now)), "walk"), "{} moved", u.name);
+                }
+                assert_eq!(a.player.base(), if guarded { "idle_guarded" } else { "idle" });
+                let k = &skip.anims[i];
+                assert!(k.player.playing(&clips, now).is_empty() && k.slide.is_none() && k.want.is_none(), "skip: the end state at once");
+                assert_eq!(k.fell.is_some(), !u.is_alive());
+            }
+            if let Some((_, _, idx)) = s.last_popped.filter(|p| Some(*p) != popped) {
+                let act = &s.resolver.scheduled[idx];
+                let attack = matches!(act.command.kind, emberwake_battle::command::CmdKind::Attack { .. } | emberwake_battle::command::CmdKind::Area { .. });
+                if attack && !act.cancelled && s.w.units[act.unit].is_alive() {
+                    attacks += 1;
+                    let want = t.anims[act.unit].want.as_ref().expect("the attacker queues its clip");
+                    assert_eq!(want.1, now);
+                    assert!(want.0.last() == Some(&"attack"), "{:?} ends with the generic attack", want.0);
+                }
+            }
+        }
+        assert!(moves > 0 && hits > 0 && falls > 0 && attacks > 0, "moves {moves}, hits {hits}, falls {falls}, attacks {attacks}");
+    }
 
     #[test]
     fn a_boss_tier_enemy_makes_a_boss_fight() {
