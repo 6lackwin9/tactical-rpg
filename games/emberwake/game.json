@@ -3,7 +3,7 @@
 	"title": "Emberwake",
 	"subtitle": "A small campaign of tactical battles.",
 	"version": "0.1.0",
-	"kit": "",
+	"kit": "rpg",
 	"engine": ">=0.1",
 	"worlds": [
 		"ashlands",
