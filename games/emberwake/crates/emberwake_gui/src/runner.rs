@@ -281,9 +281,10 @@ impl DebugFight {
                 let d = cx.data.clone();
                 let gs = cx.gs_mut();
                 let res = match self.runner.as_str() {
-                    "travel" => travel::after_fight(&d, gs, &self.fight, outcome),
-                    "dialogue" => dialogue::after_fight(&d, gs, &self.fight, outcome),
-                    _ => explore::after_fight(&d, gs, &self.fight, outcome),
+                    // no battle: the default tally (a skip = every enemy killed, REWARD1 2.5)
+                    "travel" => travel::after_fight(&d, gs, &self.fight, outcome, None),
+                    "dialogue" => dialogue::after_fight(&d, gs, &self.fight, outcome, None),
+                    _ => explore::after_fight(&d, gs, &self.fight, outcome, None),
                 };
                 cx.set_busy(false);
                 crate::region::log_events(cx, json::aget(&res, "events"));

@@ -164,6 +164,32 @@ pub struct RoundRecord {
     pub snapshots: Vec<Vec<UnitSnap>>,
 }
 
+/// REWARD1 2.2: how a battle left an enemy-side unit. Killed (HP 0, whoever dealt the blow), surrendered (MORALE1: a
+/// broken group withdraws in place), fled (withdrew on its own), standing (still there, or never came).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fate {
+    Killed,
+    Surrendered,
+    Fled,
+    Standing,
+}
+
+impl Fate {
+    /// Killed, surrendered or fled: it pays its common rewards.
+    pub fn defeated(self) -> bool {
+        self != Fate::Standing
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Fate::Killed => "killed",
+            Fate::Surrendered => "surrendered",
+            Fate::Fled => "fled",
+            Fate::Standing => "standing",
+        }
+    }
+}
+
 pub struct Session {
     pub def: EncounterDef,
     pub w: World,
@@ -586,6 +612,37 @@ impl Session {
 
     pub fn is_reserved(&self, c: UnitId) -> bool {
         self.phases.is_reserved(c)
+    }
+
+    /// REWARD1 2.4: every enemy-side unit in spawn order (enemies, reinforcements, phase waves) with its roster ref and
+    /// how the battle left it (a wave that never came, a reserved phase wave: standing).
+    pub fn fates(&self) -> Vec<(String, Fate)> {
+        let mut ref_of: IndexMap<UnitId, &str> = IndexMap::new();
+        for (r, list) in &self.units_by_ref {
+            for &c in list {
+                ref_of.insert(c, r);
+            }
+        }
+        self.w
+            .enemies
+            .iter()
+            .filter_map(|&c| {
+                let r = ref_of.get(&c)?;
+                let u = &self.w.units[c];
+                let fate = if !u.is_alive() {
+                    Fate::Killed
+                } else if u.is_withdrawn {
+                    if self.unit_keys.get(&c).is_some_and(|k| self.morale.surrendered.contains(k)) {
+                        Fate::Surrendered
+                    } else {
+                        Fate::Fled
+                    }
+                } else {
+                    Fate::Standing
+                };
+                Some((r.to_string(), fate))
+            })
+            .collect()
     }
 
     /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, then marked fired.

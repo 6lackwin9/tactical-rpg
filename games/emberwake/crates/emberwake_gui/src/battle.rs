@@ -495,6 +495,8 @@ impl BattleScreen {
             return;
         }
         let d = cx.data.clone();
+        // REWARD1: how the battle left each enemy, for the rewards per defeated enemy
+        let tally = emberwake_world::battle::Tally::from_session(self.session());
         let units: Vec<(i64, i64, bool, Vec<String>)> = self.session().w.allies.iter().map(|a| {
             let u = &self.session().w.units[*a];
             (u.hp as i64, u.max_hp as i64, u.is_alive(), u.inventory.pouch.iter().map(|p| p.id.clone()).collect())
@@ -516,9 +518,9 @@ impl BattleScreen {
             }
         }
         let res = match runner.as_str() {
-            "travel" => travel::after_fight(&d, gs, fight, &outcome),
-            "dialogue" => dialogue::after_fight(&d, gs, fight, &outcome),
-            _ => explore::after_fight(&d, gs, fight, &outcome),
+            "travel" => travel::after_fight(&d, gs, fight, &outcome, Some(&tally)),
+            "dialogue" => dialogue::after_fight(&d, gs, fight, &outcome, Some(&tally)),
+            _ => explore::after_fight(&d, gs, fight, &outcome, Some(&tally)),
         };
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {

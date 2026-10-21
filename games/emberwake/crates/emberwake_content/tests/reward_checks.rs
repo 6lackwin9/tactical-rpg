@@ -117,3 +117,9 @@ fn purse_loot_is_retired_on_catalog_and_world_encounters() {
     assert!(check::validate_entry(&v, "encounters", &e, &id).contains(&moved));
     assert!(encounter_errors(&v, "purse", json!({"gold_min": 5, "gold_max": 9, "once": false})).is_empty(), "the gold keys stay");
 }
+
+#[test]
+fn an_objective_reward_once_is_a_flag() {
+    let v = view();
+    assert!(encounter_errors(&v, "objective_reward", json!({"gold": 5, "once": "yes"})).contains(&"Objective reward once must be true or false.".to_string()));
+}

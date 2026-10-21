@@ -799,9 +799,10 @@ impl DialogueRunner {
     }
 }
 
-/// After a dialogue fight: BattleBridge.apply, plus the wake on lost. {ok, errors, xp, advanced, events, gold?, loot?}.
-pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str) -> Dict {
-    let applied = crate::battle::apply(d, gs, &json::s(fight, "encounter"), outcome);
+/// After a dialogue fight: BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), plus the
+/// wake on lost. {ok, errors, xp, advanced, events, rewards, gold?}.
+pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, tally: Option<&crate::battle::Tally>) -> Dict {
+    let applied = crate::battle::settle(d, gs, &json::s(fight, "encounter"), outcome, tally);
     if !json::b(&applied, "ok", false) {
         let mut out = json::ok_result(false, &json::sget(&applied, "errors"));
         out.insert("xp".into(), Value::Object(Dict::new()));
@@ -818,7 +819,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str) ->
     out.insert("xp".into(), applied["xp"].clone());
     out.insert("advanced".into(), applied["advanced"].clone());
     out.insert("events".into(), Value::Array(events));
-    for (k, v) in crate::purse::result_keys(json::dget(&applied, "purse")) {
+    for (k, v) in crate::battle::result_keys(&applied) {
         out.insert(k, v);
     }
     out

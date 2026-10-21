@@ -111,9 +111,10 @@ impl Journey<'_> {
                 let f = json::dget(act, "fight");
                 let outcome = s("outcome");
                 match s("runner").as_str() {
-                    "explore" => explore::after_fight(d, gs, f, &outcome),
-                    "travel" => travel::after_fight(d, gs, f, &outcome),
-                    _ => dialogue::after_fight(d, gs, f, &outcome),
+                    // no tally: the default one gives Godot's win-only numbers (REWARD1 section 9)
+                    "explore" => explore::after_fight(d, gs, f, &outcome, None),
+                    "travel" => travel::after_fight(d, gs, f, &outcome, None),
+                    _ => dialogue::after_fight(d, gs, f, &outcome, None),
                 }
             }
             "travel" => travel::travel(d, gs, &s("to")),

@@ -16,11 +16,11 @@ fn strings(v: &Value) -> Vec<String> {
     v.as_array().map(|a| a.iter().map(|s| s.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default()
 }
 
-/// Retired parity (REWARD1, HISTORY 2026-10-21): `purse.loot` moved to the encounter's `key_loot`. Recorded cases that
-/// set it are not compared, and the messages about it are left out of the whole-catalog and world reports on both
-/// sides (Godot's "Purse loot ..." checks, the engine's refusal of the key).
-fn sets_purse_loot(entry: &serde_json::Map<String, Value>) -> bool {
-    entry.get("purse").and_then(Value::as_object).is_some_and(|p| p.contains_key("loot"))
+/// Retired parity (REWARD1, HISTORY 2026-10-21): `purse.loot` moved to the encounter's `key_loot`. The messages about
+/// it are left out on both sides (Godot's "Purse loot ..." checks, the engine's refusal of the key), in the recorded
+/// cases and in the whole-catalog and world reports; every other message of those cases is still compared.
+fn kept(messages: Vec<String>) -> Vec<String> {
+    messages.into_iter().filter(|m| !retired(m)).collect()
 }
 
 fn retired(message: &str) -> bool {
@@ -56,12 +56,9 @@ fn checks_report_what_godot_reported() {
             continue;
         }
         let entry = c["entry"].as_object().unwrap();
-        if sets_purse_loot(entry) {
-            continue;
-        }
         let current = c["current"].as_str().unwrap();
-        let (errors, warnings) = (check::validate_entry(&view, kind, entry, current), check::warnings_for(&view, kind, entry));
-        let ok = errors == strings(&c["errors"]) && warnings == strings(&c["warnings"]);
+        let (errors, warnings) = (kept(check::validate_entry(&view, kind, entry, current)), kept(check::warnings_for(&view, kind, entry)));
+        let ok = errors == kept(strings(&c["errors"])) && warnings == kept(strings(&c["warnings"]));
         let slot = per_kind.entry(kind.to_string()).or_default();
         slot.0 += 1;
         if !ok {
@@ -120,14 +117,11 @@ fn world_checks_match_godot() {
     for c in doc["cases"].as_array().unwrap().iter().filter(|c| c["world"] != "") {
         let (w, kind) = (c["world"].as_str().unwrap(), c["kind"].as_str().unwrap());
         let (entry, current) = (c["entry"].as_object().unwrap(), c["current"].as_str().unwrap());
-        if sets_purse_loot(entry) {
-            continue;
-        }
-        let errors = check::world::validate_entry(&view, w, kind, entry, current);
-        let blocking = check::world::blocking_errors(&view, w, kind, entry, current);
+        let errors = kept(check::world::validate_entry(&view, w, kind, entry, current));
+        let blocking = kept(check::world::blocking_errors(&view, w, kind, entry, current));
         let slot = per_kind.entry(kind.to_string()).or_default();
         slot.0 += 1;
-        if errors != strings(&c["errors"]) || blocking != strings(&c["blocking"]) {
+        if errors != kept(strings(&c["errors"])) || blocking != kept(strings(&c["blocking"])) {
             slot.1 += 1;
             if slot.1 <= show {
                 failures.push(format!("{w} {kind} {}:\n  godot {:?}\n  rust  {errors:?}\n  godot blocking {:?}\n  rust  blocking {blocking:?}", c["current"], strings(&c["errors"]), strings(&c["blocking"])));

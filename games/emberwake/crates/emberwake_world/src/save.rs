@@ -179,7 +179,7 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
             let mut paid = Dict::new();
             for (qid, wins) in json::dget(&out, "purses").clone() {
                 let enc = d.resolve("", "encounters", &qid);
-                if json::to_int(&wins) < 1 || enc.is_empty() || !crate::purse::read(enc).is_some_and(|p| p.3) {
+                if json::to_int(&wins) < 1 || enc.is_empty() || !crate::purse::read(enc).is_some_and(|p| p.2) {
                     continue;
                 }
                 let keys: Vec<String> = crate::battle::roster(d, &json::s(enc, "_world"), &qid).into_iter().map(|f| f.key).collect();

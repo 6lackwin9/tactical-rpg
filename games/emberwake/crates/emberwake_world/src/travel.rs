@@ -478,8 +478,9 @@ pub fn complete_leg(d: &Data, gs: &mut GameState, route_qid: &str, to: &str) -> 
 }
 
 /// won: apply, scripted done flag and sets_flags, then the leg completes; fled: nothing; lost: wake at the start.
-pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str) -> Dict {
-    let applied = crate::battle::apply(d, gs, &json::s(fight, "encounter"), outcome);
+/// REWARD1: `tally` from the battle (None = settled without one); every outcome pays its defeated enemies.
+pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, tally: Option<&crate::battle::Tally>) -> Dict {
+    let applied = crate::battle::settle(d, gs, &json::s(fight, "encounter"), outcome, tally);
     let base = |ok: bool, errors: &[String], events: Vec<Value>, xp: Value, adv: Value| {
         let mut out = json::ok_result(ok, errors);
         out.insert("events".into(), Value::Array(events));
@@ -534,7 +535,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str) ->
         _ => {}
     }
     let mut out = base(true, &[], events, applied["xp"].clone(), applied["advanced"].clone());
-    for (k, v) in crate::purse::result_keys(json::dget(&applied, "purse")) {
+    for (k, v) in crate::battle::result_keys(&applied) {
         out.insert(k, v);
     }
     out

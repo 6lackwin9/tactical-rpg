@@ -703,7 +703,8 @@ pub fn purse_warnings(e: &Dict) -> Vec<String> {
     if hi > GOLD_SOFT_CAP {
         out.push(format!("Purse gold above {GOLD_SOFT_CAP}: check the budget."));
     }
-    if hi <= 0 {
+    // a purse that still holds the retired loot is refused (purse_problems), not called empty
+    if hi <= 0 && !p.contains_key("loot") {
         out.push("Empty purse.".into());
     }
     out

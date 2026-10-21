@@ -1,11 +1,14 @@
-//! BattleBridge (scripts/exploration/battle_bridge.gd): the shared way out of a battle into the game state.
-//! won: XP to every active member, the quest hook, the encounter purse; lost / fled change nothing here (the
-//! runners apply the defeat and flee rules). Building the battle itself (GameEncounter) lives with the session.
+//! BattleBridge (scripts/exploration/battle_bridge.gd): the shared way out of a battle into the game state. REWARD1
+//! (rewards per defeated enemy): on any outcome every enemy killed, surrendered or fled on its own pays its XP, its
+//! share of the encounter purse and a roll on its unit type's loot table; a win also runs the quest hook and pays key
+//! loot (its unit killed) and the objective reward. The runners apply the defeat and flee rules. Building the battle
+//! itself (GameEncounter) lives with the session.
 
 use crate::data::Data;
 use crate::state::GameState;
-use crate::{progression, purse, quest};
-use aegis_core::json::{self, Dict};
+use crate::{progression, purse, quest, rolls};
+use aegis_core::json::{self, int, Dict};
+use emberwake_battle::session::{Fate, Session};
 use serde_json::Value;
 
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
@@ -124,6 +127,8 @@ pub fn apply_character(d: &Data, cat: &emberwake_data::Catalog, character: &Dict
 pub struct RosterFoe {
     pub key: String,
     pub unit_ref: String,
+    /// The character's name.
+    pub name: String,
     pub unit: String,
     pub level: i64,
     pub tier: String,
@@ -153,7 +158,7 @@ pub fn roster(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<RosterFoe> {
         let n = out.iter().filter(|f| f.unit_ref == r).count();
         let (level, tier) = (json::i(&entry, "level", 1), json::s_or(&entry, "tier", "standard"));
         let weight = progression::kill_weight(d, level, &tier);
-        out.push(RosterFoe { key: format!("{r}#{n}"), unit: json::s(&entry, "id"), unit_ref: r, level, tier, weight });
+        out.push(RosterFoe { key: format!("{r}#{n}"), name: json::s(&entry, "name"), unit: json::s(&entry, "id"), unit_ref: r, level, tier, weight });
     }
     out
 }
@@ -163,8 +168,86 @@ pub fn enemy_levels(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<(i64, 
     roster(d, world_id, encounter_qid).into_iter().map(|f| (f.level, f.tier)).collect()
 }
 
-/// {ok, errors, xp: member id -> award, advanced, purse?}.
-pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str) -> Dict {
+/// One roster enemy's fate in a fight (REWARD1 2.4).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Foe {
+    pub key: String,
+    pub unit_ref: String,
+    pub fate: Fate,
+}
+
+/// How a fight left each roster enemy. Built from a battle (`from_session`), or `None` in `after_fight` for a fight
+/// settled without one (the default tally).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Tally {
+    pub foes: Vec<Foe>,
+}
+
+impl Tally {
+    /// The session's enemies keyed `ref#n` in spawn order (REWARD1 2.1).
+    pub fn from_session(s: &Session) -> Self {
+        let mut foes: Vec<Foe> = Vec::new();
+        for (r, fate) in s.fates() {
+            let n = foes.iter().filter(|f| f.unit_ref == r).count();
+            foes.push(Foe { key: format!("{r}#{n}"), unit_ref: r, fate });
+        }
+        Tally { foes }
+    }
+
+    /// REWARD1 2.5, no battle: won = every roster enemy killed; lost and fled = every one standing.
+    pub fn default_for(d: &Data, world: &str, encounter_qid: &str, outcome: &str) -> Self {
+        let fate = if outcome == "won" { Fate::Killed } else { Fate::Standing };
+        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect() }
+    }
+
+    /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster.
+    pub fn fates_of(&self, roster: &[RosterFoe]) -> (Vec<Fate>, Vec<String>) {
+        let fates = roster.iter().map(|r| self.foes.iter().find(|f| f.key == r.key).map_or(Fate::Standing, |f| f.fate)).collect();
+        let notes = self.foes.iter().filter(|f| !roster.iter().any(|r| r.key == f.key)).map(|f| format!("Tally foe '{}' is not in the encounter.", f.key)).collect();
+        (fates, notes)
+    }
+}
+
+/// The loot table row a draw `r` (0..99) lands on: rows in order, each taking `chance` of the hundred; past every
+/// row nothing drops.
+pub fn loot_row(rows: &[Value], mut r: i64) -> Option<&Dict> {
+    for row in rows.iter().filter_map(Value::as_object) {
+        let chance = json::i(row, "chance", 0).max(0);
+        if r < chance {
+            return Some(row);
+        }
+        r -= chance;
+    }
+    None
+}
+
+/// Grants one world loot entry and claims it: "" or why it was not.
+fn grant_loot(d: &Data, gs: &mut GameState, lqid: &str) -> String {
+    let entry = d.resolve(&gs.world_id, "loot", lqid).clone();
+    let granted = quest::reward_apply(d, gs, &Dict::new(), "", std::slice::from_ref(&entry));
+    if !json::b(&granted, "ok", false) {
+        return json::sget(&granted, "errors").join("; ");
+    }
+    quest::claim_loot(gs, lqid)
+}
+
+/// The world loot entry `r` as an unclaimed item reward whose flags hold: its qid, else "" (claimed or gated: skipped).
+fn claimable(d: &Data, gs: &GameState, world: &str, r: &str) -> String {
+    let loot = d.resolve(world, "loot", r);
+    if r.is_empty() || loot.is_empty() || json::s_or(loot, "reward_kind", "item") != "item" {
+        return String::new();
+    }
+    let lqid = json::s(loot, "_qid");
+    if gs.loot_claimed.contains(&lqid) || !quest::all_hold(gs, json::get(loot, "requires_flags")) {
+        return String::new();
+    }
+    lqid
+}
+
+/// REWARD1 section 6: {ok, errors, xp: member id -> award, advanced, rewards}. `rewards` = {foes, defeated: {slain,
+/// surrendered, fled}, gold (the purse share), drops: [{item, count, from}], key_loot: [loot qid], key_missed:
+/// [{loot, kill}], objective: {gold, loot}, notes}; `gold` = share + objective gold, paid in one go.
+pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: &Tally) -> Dict {
     let done = |ok: bool, errors: &[String], xp: Dict, advanced: &[String]| {
         let mut out = json::ok_result(ok, errors);
         out.insert("xp".into(), Value::Object(xp));
@@ -174,16 +257,127 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str) -
     if !OUTCOMES.contains(&outcome) {
         return done(false, &[format!("Unknown battle outcome '{outcome}' (use won, lost or fled).")], Dict::new(), &[]);
     }
-    if outcome != "won" {
-        return done(true, &[], Dict::new(), &[]);
+    let won = outcome == "won";
+    let world = gs.world_id.clone();
+    let enc = d.resolve(&world, "encounters", encounter_qid).clone();
+    let enc_world = json::s_or(&enc, "_world", &world);
+    let roster = roster(d, &world, encounter_qid);
+    let (fates, mut notes) = tally.fates_of(&roster);
+    let defeated: Vec<bool> = fates.iter().map(|f| f.defeated()).collect();
+    // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
+    // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
+    let levels: Vec<(i64, String)> = roster.iter().zip(&defeated).filter(|(_, d)| **d).map(|(f, _)| (f.level, f.tier.clone())).collect();
+    let xp = if levels.is_empty() && !(won && roster.is_empty()) { Dict::new() } else { progression::award_encounter(d, &mut gs.party, &levels) };
+    // 3. the quest hook
+    let advanced = if won { quest::on_encounter_won(d, gs, encounter_qid) } else { Vec::new() };
+    // 4. the purse share
+    let share = purse::share(gs, &enc, &roster, &defeated);
+    // 5. loot-table rolls, roster order
+    let mut drops: Vec<Value> = Vec::new();
+    for (f, _) in roster.iter().zip(&defeated).filter(|(_, d)| **d) {
+        let rows = json::aget(d.entry("units", &f.unit), "loot").to_vec();
+        if rows.is_empty() {
+            continue;
+        }
+        let r = rolls::range_i(gs, rolls::LOOT, 0, 99);
+        if let Some(row) = loot_row(&rows, r) {
+            let (item, count) = (json::s(row, "item"), json::i(row, "count", 1).max(1));
+            gs.party.add_to_stash(&item, count);
+            drops.push(json::obj([("item", item.into()), ("count", int(count)), ("from", f.name.clone().into())]).into());
+        }
     }
-    let enemies = enemy_levels(d, &gs.world_id, encounter_qid);
-    let xp = progression::award_encounter(d, &mut gs.party, &enemies);
-    let advanced = quest::on_encounter_won(d, gs, encounter_qid);
+    // 6. key loot: a win with every unit of its ref killed
+    let (mut key_loot, mut key_missed): (Vec<String>, Vec<Value>) = (Vec::new(), Vec::new());
+    for row in json::aget(&enc, "key_loot").iter().filter_map(Value::as_object) {
+        let (loot, kill) = (json::s(row, "loot"), json::s(row, "kill"));
+        let lqid = claimable(d, gs, &enc_world, &loot);
+        if lqid.is_empty() {
+            continue;
+        }
+        let of_ref: Vec<Fate> = roster.iter().zip(&fates).filter(|(f, _)| f.unit_ref == kill).map(|(_, x)| *x).collect();
+        if won && !of_ref.is_empty() && of_ref.iter().all(|x| *x == Fate::Killed) {
+            let why = grant_loot(d, gs, &lqid);
+            if why.is_empty() {
+                key_loot.push(lqid);
+            } else {
+                notes.push(format!("Key loot '{lqid}' skipped: {why}"));
+            }
+        } else {
+            key_missed.push(json::obj([("loot", lqid.into()), ("kill", kill.into())]).into());
+        }
+    }
+    // 7. the objective reward
+    let qid = json::s(&enc, "_qid");
+    let mut objective = Dict::new();
+    let reward = json::dget(&enc, "objective_reward").clone();
+    let once = reward.get("once").and_then(Value::as_bool).unwrap_or(true);
+    let paid_before = json::aget(&gs.reward_paid, &qid).iter().any(|k| json::gstr(k) == "objective");
+    if won && !reward.is_empty() && !(once && paid_before) {
+        let gold = json::i(&reward, "gold", 0).clamp(0, purse::GOLD_CAP);
+        let lqid = claimable(d, gs, &enc_world, &json::s(&reward, "loot"));
+        let mut got = String::new();
+        if !lqid.is_empty() {
+            let why = grant_loot(d, gs, &lqid);
+            if why.is_empty() {
+                got = lqid;
+            } else {
+                notes.push(format!("Objective loot '{lqid}' skipped: {why}"));
+            }
+        }
+        if once {
+            let mut keys = json::aget(&gs.reward_paid, &qid).to_vec();
+            keys.push("objective".into());
+            gs.reward_paid.insert(qid.clone(), Value::Array(keys));
+        }
+        objective = json::obj([("gold", int(gold)), ("loot", got.into())]);
+    }
+    // 8. gold: the share and the objective's, in one go
+    let gold = share + json::i(&objective, "gold", 0);
+    let mut paid_gold = 0;
+    if gold > 0 {
+        let granted = quest::reward_apply(d, gs, &json::obj([("gold", int(gold))]), "", &[]);
+        notes.extend(json::sget(&granted, "notes"));
+        notes.extend(json::sget(&granted, "errors"));
+        paid_gold = json::i(json::dget(&granted, "granted"), "gold", 0);
+    }
+    let count = |f: Fate| fates.iter().filter(|x| **x == f).count() as i64;
+    let rewards = json::obj([
+        ("foes", int(roster.len() as i64)),
+        ("defeated", json::obj([("slain", int(count(Fate::Killed))), ("surrendered", int(count(Fate::Surrendered))), ("fled", int(count(Fate::Fled)))]).into()),
+        ("gold", int(share)),
+        ("drops", Value::Array(drops)),
+        ("key_loot", json::strs(&key_loot)),
+        ("key_missed", Value::Array(key_missed)),
+        ("objective", Value::Object(objective)),
+        ("notes", json::strs(&notes)),
+    ]);
     let mut out = done(true, &[], xp, &advanced);
-    let paid = purse::pay(d, gs, encounter_qid);
-    if !paid.is_empty() {
-        out.insert("purse".into(), Value::Object(paid));
+    out.insert("rewards".into(), Value::Object(rewards));
+    if paid_gold > 0 {
+        out.insert("gold".into(), int(paid_gold));
+    }
+    out
+}
+
+/// `apply` with `tally`, or with the default tally when the fight was settled without a battle (REWARD1 2.5).
+pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: Option<&Tally>) -> Dict {
+    match tally {
+        Some(t) => apply(d, gs, encounter_qid, outcome, t),
+        None => {
+            let t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
+            apply(d, gs, encounter_qid, outcome, &t)
+        }
+    }
+}
+
+/// The keys an `after_fight` result carries from `apply`: `rewards`, and `gold` when some was paid.
+pub fn result_keys(applied: &Dict) -> Dict {
+    let mut out = Dict::new();
+    if let Some(r) = applied.get("rewards") {
+        out.insert("rewards".into(), r.clone());
+    }
+    if json::i(applied, "gold", 0) > 0 {
+        out.insert("gold".into(), int(json::i(applied, "gold", 0)));
     }
     out
 }
