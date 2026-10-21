@@ -96,13 +96,62 @@ impl Manifest {
             d.insert(k, v);
         }
         let m = Self::from_dict(&d);
-        let problems = m.problems();
+        let mut problems = m.problems();
+        problems.extend(path.parent().and_then(|g| kit_problem(g, &m.kit)));
         if !problems.is_empty() {
             return Err(problems);
         }
         std::fs::write(path, stringify(&Value::Object(m.to_dict()))).map_err(|e| vec![format!("{}: {e}", path.display())])?;
         Ok(m)
     }
+}
+
+/// The workspace of the game in `game_dir`: its first ancestor holding `engine/assets/` (ASSETORG2).
+pub fn workspace_of(game_dir: &Path) -> Option<PathBuf> {
+    game_dir.ancestors().skip(1).find(|d| d.join("engine/assets").is_dir()).map(Path::to_path_buf)
+}
+
+/// None, or why `kit` cannot be the kit of the game in `game_dir`: "" (no kit) or a folder `kits/<kit>/` holding
+/// kit.json in the game's workspace.
+pub fn kit_problem(game_dir: &Path, kit: &str) -> Option<String> {
+    if kit.is_empty() {
+        return None;
+    }
+    if !is_id(kit) {
+        return Some(format!("game.json: kit '{kit}' must be a kit id (lowercase snake_case)."));
+    }
+    let found = workspace_of(game_dir).is_some_and(|ws| ws.join("kits").join(kit).join(KIT_FILE).is_file());
+    (!found).then(|| format!("game.json: kit '{kit}' has no kits/{kit}/{KIT_FILE}."))
+}
+
+pub const KIT_FILE: &str = "kit.json";
+
+/// Merges `patch` into the kit manifest at `path` (`kits/<id>/kit.json`; a new one when there is none), checks it
+/// (`aegis_core::assets::kit_problems`: the id is the folder name) and writes it in `KIT_KEYS` order.
+pub fn set_kit(path: &Path, patch: &Dict) -> Result<Dict, Vec<String>> {
+    let folder = path.parent().and_then(Path::file_name).map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let mut d: Dict = if path.is_file() {
+        let mut errors = Vec::new();
+        match read(path, &mut errors) {
+            Some(Value::Object(o)) => o,
+            _ => return Err(vec![errors.pop().unwrap_or_else(|| format!("{}: not an object", path.display()))]),
+        }
+    } else {
+        Dict::new()
+    };
+    for (k, v) in json::normalize_dict(patch) {
+        d.insert(k, v);
+    }
+    let problems = aegis_core::assets::kit_problems(&d, &folder);
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+    let ordered: Dict = aegis_core::assets::KIT_KEYS.iter().map(|k| (k.to_string(), d.get(*k).cloned().unwrap_or_else(|| Value::from("")))).collect();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| vec![format!("{}: {e}", dir.display())])?;
+    }
+    std::fs::write(path, stringify(&Value::Object(ordered.clone()))).map_err(|e| vec![format!("{}: {e}", path.display())])?;
+    Ok(ordered)
 }
 
 /// The folder of game `id` from `start`: `start` or an ancestor when it is that game's folder (holds game.json and is
@@ -141,6 +190,27 @@ mod tests {
         assert_eq!(find_game_dir(&game.join("data"), "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "other"), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_kit_must_exist_and_its_manifest_names_its_folder() {
+        let root = std::env::temp_dir().join(format!("aegis_kit_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("engine/assets")).unwrap();
+        let game = root.join("games").join("demo");
+        std::fs::create_dir_all(&game).unwrap();
+        let path = game.join(FILE);
+        let patch = |v: Value| v.as_object().cloned().unwrap();
+        Manifest::set(&path, &patch(serde_json::json!({"id": "demo", "title": "Demo"}))).unwrap();
+        assert_eq!(Manifest::set(&path, &patch(serde_json::json!({"kit": "rpg"}))).unwrap_err(), ["game.json: kit 'rpg' has no kits/rpg/kit.json."]);
+        let kit = root.join("kits/rpg").join(KIT_FILE);
+        assert!(set_kit(&kit, &patch(serde_json::json!({"id": "rpg", "title": "RPG kit", "version": "0.1"}))).is_err(), "semver and engine refused");
+        assert!(!kit.exists());
+        let written = set_kit(&kit, &patch(serde_json::json!({"engine": ">=0.1", "id": "rpg", "title": "RPG kit", "version": "0.1.0"}))).unwrap();
+        assert_eq!(written.keys().cloned().collect::<Vec<_>>(), aegis_core::assets::KIT_KEYS.to_vec(), "written in key order");
+        assert_eq!(Manifest::set(&path, &patch(serde_json::json!({"kit": "rpg"}))).unwrap().kit, "rpg");
+        assert!(set_kit(&kit, &patch(serde_json::json!({"id": "other"}))).unwrap_err()[0].contains("folder name 'rpg'"));
         let _ = std::fs::remove_dir_all(&root);
     }
 }

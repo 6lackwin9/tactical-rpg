@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 aegis_host = { path = "../aegis_host" }
+aegis_core = { path = "../aegis_core" }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 winit = "0.30.5"
