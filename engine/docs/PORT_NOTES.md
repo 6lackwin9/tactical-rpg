@@ -176,7 +176,7 @@ Content is edited without Godot through `aegis content check | upsert | remove |
 - Validation: id (snake_case), name, enum options and catalog references by the schema; skill ranks and item families
   by construction; then the whole data folder must not check with new problems (the content checks below, since
   PORT-CHECKS), else the file is put back.
-- Not covered: the asset manifest (`games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
+- Not covered (retired by ASSETORG2-G on 2026-10-22: the folders are the truth): the asset manifest (formerly `games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
   sprite work; the checks read its unit and item keys). The Forge's richer checks (SkillValidator, item budgets, world
   reference rules) are ported since PORT-CHECKS (next section).
 
@@ -198,7 +198,7 @@ failing), then hard errors; every `upsert` / `remove` refuses a write that adds 
 | `quests/quest_rules.gd`, `dialogue/rep_rules.gd` (value rule, key lint) | `check::quest` | world cases, lint |
 | `dialogue/dialogue_rules.gd` (trees, conditions, effects, service lines, tree and gone-NPC lints) | `check::dialogue` | world cases, lint |
 | `dialogue/shop_rules.gd`, `travel/travel_rules.gd` (with the route graph), `exploration/map_rules.gd` (location rules, lints) | `check::shop`, `travel`, `map` | world cases, lint |
-| `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | `source::art_keys` | checks parity |
+| `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | none since ASSETORG2-G (2026-10-22): the asset checks A1-A6 read the asset layers (`check::assets`) | retired (HISTORY 2026-10-22) |
 
 - Recording: `games/emberwake/parity/checks.sh` runs `parity/godot/checks.gd` on `legacy/` and writes
   `parity/out/checks.json`; `cargo test -p emberwake_content --test checks_parity` replays it on `legacy/data`.

@@ -124,7 +124,7 @@ A burnt frontier on the edge of the old empire. The Ember Wardens hold the passe
 - Background: Raised in the keep's kitchens, Mara earned her captaincy by holding the Courtyard alone for two nights. She trusts drills over speeches.
 - Personality: dry, stubborn, protective
 - disciplines ember_blade; named items ember_brigandine; dialogue `mara_talk`; leaves the story on `ashlands.mara_fallen`
-- Art: token on the warrior body (own file), portrait unique (`assets/art/unit/mara_voss/`)
+- Art: body `warrior` (the base unit's), portrait unique (`portraits/heroes/mara_voss.png`)
 
 **Tev Quill**, Scout of the Pass (`tev_quill`)
 
@@ -132,136 +132,136 @@ A burnt frontier on the edge of the old empire. The Ember Wardens hold the passe
 - Background: A quiet orphan of the Marches who reads smoke like other people read books.
 - Personality: watchful, wry
 - disciplines cinder_archery; dialogue `tev_talk`; leaves the story on `ashlands.tev_fallen`
-- Art: token on the ranger body (own file), portrait unique (`assets/art/unit/tev_quill/`)
+- Art: body `ranger` (the base unit's), portrait unique (`portraits/heroes/tev_quill.png`)
 
 **Hest the Quartermaster**, Keeper of the Stores (`hest_the_quartermaster`)
 
 - important NPC; warrior class on unit `warrior` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Counts every arrow twice and every soldier three times.
 - dialogue `hest_talk`
-- Art: token on the warrior body (own file), portrait unique (`assets/art/unit/hest_the_quartermaster/`)
+- Art: body `warrior/hest_the_quartermaster` (its own), portrait unique (`portraits/npcs/hest_the_quartermaster.png`)
 
 **Skarn Ironjaw**, Brawler of the Horde (`skarn_ironjaw`)
 
 - enemy; brawler class on unit `goblin_brawler` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Cracked his jaw on a Warden shield and never stopped grinning about it.
-- Art: token on the brawler body (own file), portrait unique (`assets/art/unit/skarn_ironjaw/`)
+- Art: body `brawler/skarn_ironjaw` (its own), portrait unique (`portraits/elites/skarn_ironjaw.png`)
 
 **Vex the Cutpurse**, Skirmisher (`vex_cutpurse`)
 
 - enemy; rogue class on unit `goblin_skirmisher` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Goes for whoever bleeds first.
-- Art: token on the rogue body (own file), portrait unique (`assets/art/unit/vex_cutpurse/`)
+- Art: body `rogue/vex_cutpurse` (its own), portrait unique (`portraits/elites/vex_cutpurse.png`)
 
 **Nok Flamebow**, Horde Archer (`nok_flamebow`)
 
 - enemy; ranger class on unit `goblin_archer` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Fires pitch-tipped arrows from the ridgeline and runs when anyone gets close.
-- Art: token on the ranger body (own file), portrait unique (`assets/art/unit/nok_flamebow/`)
+- Art: body `ranger/nok_flamebow` (its own), portrait unique (`portraits/elites/nok_flamebow.png`)
 
 **Gruk Smokecaller**, Warband Shaman (`gruk_smokecaller`)
 
 - enemy; priest class on unit `goblin_shaman` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Claims the ash talks to him. It mostly says 'attack'.
-- Art: token on the priest body (own file), portrait unique (`assets/art/unit/gruk_smokecaller/`)
+- Art: body `priest/goblin` (the base unit's), portrait unique (`portraits/elites/gruk_smokecaller.png`)
 
 **Bolg Redhand**, Berserker (`bolg_redhand`)
 
 - enemy; brawler class on unit `goblin_berserker` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Has never retreated, mostly because he forgets there is a direction for it.
-- Art: token on the brawler body (own file), portrait unique (`assets/art/unit/bolg_redhand/`)
+- Art: body `brawler/bolg_redhand` (its own), portrait unique (`portraits/elites/bolg_redhand.png`)
 
 **Horde Brawler**, Warband Muscle (`ash_brawler`)
 
 - enemy; brawler class on unit `goblin_brawler` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: One of many who fight for whoever feeds them.
-- Art: token on the brawler body (own file), portrait unique (`assets/art/unit/ash_brawler/`)
+- Art: body `brawler/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Horde Skirmisher**, Warband Runner (`ash_skirmisher`)
 
 - enemy; rogue class on unit `goblin_skirmisher` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Fast, light and never alone.
-- Art: token on the rogue body (own file), portrait unique (`assets/art/unit/ash_skirmisher/`)
+- Art: body `rogue/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Horde Archer**, Warband Bow (`ash_archer`)
 
 - enemy; ranger class on unit `goblin_archer` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Shoots from the ridges and runs.
-- Art: token on the ranger body (own file), portrait unique (`assets/art/unit/ash_archer/`)
+- Art: body `ranger/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Horde Smokecaller**, Warband Shaman (`ash_shaman`)
 
 - enemy; priest class on unit `goblin_shaman` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Mutters at the ash and patches the wounded.
-- Art: token on the priest body (own file), portrait unique (`assets/art/unit/ash_shaman/`)
+- Art: body `priest/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Horde Berserker**, Warband Berserker (`ash_berserker`)
 
 - enemy; brawler class on unit `goblin_berserker` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Screams first, thinks never.
-- Art: token on the brawler body (own file), portrait unique (`assets/art/unit/ash_berserker/`)
+- Art: body `brawler/goblin_berserker` (the base unit's), portrait shared (the body's common portrait)
 
 **Horde Warchief**, Patrol Leader (`ash_warchief`)
 
 - enemy; brawler class on unit `ambush_berserker` (tier standard, level 4); faction `ashen_horde`; home `-`
 - Background: Leads the patrols that circle the ruins.
-- Art: token on the brawler body (own file), portrait unique (`assets/art/unit/ash_warchief/`)
+- Art: body `brawler/ash_warchief` (its own), portrait unique (`portraits/elites/ash_warchief.png`)
 
 **Grakka Ashmaw**, Chieftain of the Horde (`grakka_ashmaw`)
 
 - enemy; warrior class on unit `goblin_warlord` (tier boss, level 6); faction `ashen_horde`; home `-`
 - Background: Wears a crown of rusted nails, one for every Warden post he burned.
 - dialogue `grakka_parley`; leaves the story on `quest.ashlands.keep_one_fire_lit.ready`, `ashlands.horde_broken`
-- Art: token on the warrior body (own file), portrait unique (`assets/art/unit/grakka_ashmaw/`)
+- Art: body `warrior/grakka_ashmaw` (its own), portrait unique (`portraits/bosses/grakka_ashmaw.png`)
 
 **Bryn Hale**, Warden Recruit (`bryn_hale`)
 
 - playable hero; warrior class on unit `warrior` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: A Warden's son from the burned post at Emberfall; carries his father's shield and his temper.
-- Art: token on the warrior body (own file), portrait unique (`assets/art/unit/bryn_hale/`)
+- Art: body `warrior` (the base unit's), portrait unique (`portraits/heroes/bryn_hale.png`)
 
 **Sella Marsh**, Archer of the North Wall (`sella_marsh`)
 
 - playable hero; ranger class on unit `ranger` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Hunts ash-hares in the wastes and counts every arrow twice.
-- Art: token on the ranger body (own file), portrait unique (`assets/art/unit/sella_marsh/`)
+- Art: body `ranger` (the base unit's), portrait unique (`portraits/heroes/sella_marsh.png`)
 
 **Kit Vane**, Oathbound Cutpurse (`kit_vane`)
 
 - playable hero; rogue class on unit `rogue` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Stole from the Wardens once, got caught, and stayed.
-- Art: token on the rogue body (own file), portrait unique (`assets/art/unit/kit_vane/`)
+- Art: body `rogue` (the base unit's), portrait unique (`portraits/heroes/kit_vane.png`)
 
 **Oren Dusk**, Hedge-Mage of the Forge (`oren_dusk`)
 
 - playable hero; mage class on unit `mage` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Reads embers the way Tev reads smoke; nobody asks where he learned fire.
-- Art: token on the mage body (own file), portrait unique (`assets/art/unit/oren_dusk/`)
+- Art: body `mage` (the base unit's), portrait unique (`portraits/heroes/oren_dusk.png`)
 
 **Alda Wren**, Hearth-Keeper (`alda_wren`)
 
 - playable hero; priest class on unit `priest` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Tends the keep's one fire and every Warden who comes back from the pass.
-- Art: token on the priest body (own file), portrait unique (`assets/art/unit/alda_wren/`)
+- Art: body `priest` (the base unit's), portrait unique (`portraits/heroes/alda_wren.png`)
 
 **Dagny Coal**, Pit Fighter of Slag Gate (`dagny_coal`)
 
 - playable hero; brawler class on unit `brawler` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Fought for coin in the slag pits until the Horde burned them; fists are what she kept.
-- Art: token on the brawler body (own file), portrait unique (`assets/art/unit/dagny_coal/`)
+- Art: body `brawler` (the base unit's), portrait unique (`portraits/heroes/dagny_coal.png`)
 
 **Brask Toller**, Muster Sergeant of the Wardens (`brask_toller`)
 
 - important NPC; warrior class on unit `warrior` (tier hero, level 5); faction `ember_wardens`; home `warden_keep`
 - Background: Keeps the duty roll in his head and the names of the dead on his belt.
 - dialogue `muster_talk`
-- Art: token on the warrior body (own file), portrait unique (`assets/art/unit/brask_toller/`)
+- Art: body `warrior/brask_toller` (its own), portrait unique (`portraits/npcs/brask_toller.png`)
 
 **Wenn Tallow**, Orsa's Carter (`wenn_tallow`)
 
 - important NPC; ranger class on unit `ranger` (tier hero, level 5); faction `-`; home `-`
 - Background: Orsa's nephew; drives the steel wagon and swears he can shoot.
-- Art: token on the ranger body (own file), portrait unique (`assets/art/unit/wenn_tallow/`)
+- Art: body `ranger/wenn_tallow` (its own), portrait unique (`portraits/npcs/wenn_tallow.png`)
 
 ### Questlines
 
@@ -397,6 +397,7 @@ Grakka Ashmaw has gathered the warbands past the Cinder Gate. Break him and the 
 - **Keep Ring** (item `acc_bear_ring`, rare): A heavy ring from the keep's strongbox.
 - **Keep Stores** (item `con_heal_potion`, common): A satchel of the keep's healing draughts.
 - **Chieftain's Torc** (item `acc_swift_amulet`, unique): 
+- **Warchief's Axe** (item `wpn_battle_axe`, rare): A notched Horde axe, still warm from the warchief's grip.
 - **Ember-Scale Brigandine** (item `ember_brigandine`): Leather studded with cooled slag scales.
 
 ## The Iron Reaches (`iron_reaches`)
@@ -439,7 +440,7 @@ A mining highland that does not inherit the Ashlands but is linked to them: its 
 - important NPC; warrior class on unit `warrior` (tier hero, level 5); faction `forge_guild`; home `slag_gate`
 - Background: Sells the Wardens steel at cost and never says why.
 - dialogue `orsa_talk`
-- Art: token on the warrior body (class default), portrait none (`assets/art/unit/orsa_tallow/`)
+- Art: body `warrior` (the base unit's), portrait shared (the body's common portrait)
 
 ### Questlines
 
@@ -499,44 +500,44 @@ A salt-bitten coast where the old Warden order is a harbour guard and the Horde'
 - Background: A former ship's bosun who now keeps Gull Harbour's lamp lit and its raiders out. Mara Voss's counterpart in this world: she plays exactly like her.
 - Personality: loud, loyal
 - disciplines ember_blade; named items ember_brigandine
-- Art: token on the warrior body (class default), portrait none (`assets/art/unit/ilse_marrow/`)
+- Art: body `warrior` (the base unit's), portrait shared (the body's common portrait)
 
 **Pell Driftwood**, Beachcomber Scout (`pell_driftwood`)
 
 - playable hero; ranger class on unit `ranger` (tier hero, level 5); faction `harbour_guard`; home `gull_harbour`
 - Background: Reads tides the way Tev reads smoke.
 - disciplines cinder_archery
-- Art: token on the ranger body (class default), portrait none (`assets/art/unit/pell_driftwood/`)
+- Art: body `ranger` (the base unit's), portrait shared (the body's common portrait)
 
 **Brannoch Saltfist**, Reef Brawler (`brannoch_saltfist`)
 
 - enemy; brawler class on unit `goblin_brawler` (tier minion, level 3); faction `reef_raiders`; home `-`
 - Background: Hauls his catch with one hand and punches with the other.
-- Art: token on the brawler body (class default), portrait none (`assets/art/unit/brannoch_saltfist/`)
+- Art: body `brawler/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Captain Dredge**, Reef Raider Captain (`captain_dredge`)
 
 - enemy; brawler class on unit `goblin_berserker` (tier minion, level 3); faction `reef_raiders`; home `-`
 - Background: A berserker with a ship. Tougher than the Horde's Bolg on purpose: the Forge shows exactly how.
-- Art: token on the brawler body (class default), portrait none (`assets/art/unit/captain_dredge/`)
+- Art: body `brawler/goblin_berserker` (the base unit's), portrait shared (the body's common portrait)
 
 **Salt-Eyed Sniper**, Mast Archer (`salt_archer`)
 
 - enemy; ranger class on unit `goblin_archer` (tier minion, level 3); faction `reef_raiders`; home `-`
 - Background: Perches in rigging and shoots anyone who looks up.
-- Art: token on the ranger body (class default), portrait none (`assets/art/unit/salt_archer/`)
+- Art: body `ranger/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Tide-Whisper**, Reef Shaman (`tide_shaman`)
 
 - enemy; priest class on unit `goblin_shaman` (tier minion, level 3); faction `reef_raiders`; home `-`
 - Background: Listens to the surf for omens.
-- Art: token on the priest body (class default), portrait none (`assets/art/unit/tide_shaman/`)
+- Art: body `priest/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 **Gull-Hand**, Raider (`gull_skirmisher`)
 
 - enemy; rogue class on unit `goblin_skirmisher` (tier minion, level 3); faction `reef_raiders`; home `-`
 - Background: Quick, light and never where you aimed.
-- Art: token on the rogue body (class default), portrait none (`assets/art/unit/gull_skirmisher/`)
+- Art: body `rogue/goblin` (the base unit's), portrait shared (the body's common portrait)
 
 ### Story fights
 

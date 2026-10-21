@@ -308,3 +308,29 @@ from their class), ICONS1-A (kit bases for mace, orb, crossbow, material, quest)
    the kind icon?
 7. Kit id and path: `rpg`, `kits/rpg/` (default)?
 8. Statuses, intent chips, pins and badges in the kit (default) or in the game?
+
+## 9b. Move table as built (ASSETORG2-G, 2026-10-22, after ART2)
+
+ART2 (2026-10-21) changed the tree after section 9 was written: 36 portraits (18 named, 18 generic), 57 skill icons and
+16 item icons (8 new family folders). The move was recomputed from the files present by `tools/assetorg2_move.py`
+(`plan` prints the table, `apply` moves), which checks that every PNG is moved or deleted once, that no two land on
+one path, and that every deletion is pixel-identical to the file that stays (or is an approved Q3 placeholder).
+Result: 304 PNGs, 285 moves (114 to kit folders, 103 game, 68 engine) and 19 deletions; 22 bodies with a one-frame
+`clips.json` (frame [104, 104]). Differences from section 9, all keeping what the player sees:
+
+- The eight party characters' and Gruk's portraits are now unique (ART2): they move to `portraits/heroes/<id>.png` and
+  `portraits/elites/gruk_smokecaller.png`; only their tokens (identical to their class's or the shaman's) are deleted.
+- The `ash_*` mob characters: tokens deleted (unchanged near-copies, Q3); their portraits are identical to the goblin
+  variants' shared portraits and are deleted too.
+- No skill icon is deleted: after ART2 every family icon is unique. The nine kind icons move to `skills/kinds/`.
+- Items: `fist`, `cloth`, `mace`, `orb`, `crossbow`, `material`, `quest` have ART2 base icons (`items/<family>/base.png`);
+  `knuckles` and `robe` become variants (`items/fist/knuckles.png`, `items/cloth/robe.png`); `battle_axe` goes to
+  `items/axe/battle_axe.png`. The section 10 rows giving mace, orb and crossbow another family's folder are dropped,
+  and `wpn_battle_axe` gets `icon_id` `battle_axe`.
+- Unit folders are named by their ASSETORG1 art keys (`archer`, `skirmisher`, `shaman`, `berserker`, `scout`,
+  `goblin_brawler`), mapped to the section 9 bodies (`ranger/goblin`, `rogue/goblin`, `priest/goblin`,
+  `brawler/goblin_berserker`, `rogue/goblin_scout`, `brawler/goblin`).
+- The asset checks skip the generic enum check of `options_from` `body` / `body_inherit` fields (A1 checks them with its
+  own message); no schema row carries an `identity` flag (nothing reads one).
+- Palettes reach battles through `UnitDef.palette` and `Session::palettes` (party heroes: none yet).
+
