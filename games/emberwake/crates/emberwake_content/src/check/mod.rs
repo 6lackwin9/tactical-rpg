@@ -8,6 +8,7 @@ pub mod encounter;
 pub mod item;
 pub mod map;
 pub mod quest;
+pub mod reward;
 pub mod shop;
 pub mod simple;
 pub mod skill;
@@ -244,7 +245,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, false, false)),
         "terrain" => errors.extend(simple::terrain_errors(&e)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
-        "units" => errors.extend(unit::unit_errors(v, &e)),
+        "units" => {
+            errors.extend(unit::unit_errors(v, &e));
+            errors.extend(reward::loot_errors(v, &e));
+        }
         "encounters" => errors.extend(encounter::errors(v, &e)),
         "items" => errors.extend(item::item_errors(v, &e, item::family_of(v, &e), item::inherit(v))),
         "item_families" => errors.extend(item::family_errors(v, &e, current_id)),
@@ -288,7 +292,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
     match kind {
         "skills" => skill::warnings(entry, &e),
         "classes" => unit::class_warnings(v, &e),
-        "units" => unit::unit_warnings(v, &e),
+        "units" => unit::unit_warnings(v, &e).into_iter().chain(reward::loot_warnings(v, &e)).collect(),
         "encounters" => encounter::warnings(v, &e),
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),

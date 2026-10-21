@@ -468,6 +468,9 @@ pub struct GameState {
     pub time: i64,
     pub autoplay: Dict,
     pub purses: Dict,
+    /// REWARD1: {encounter qid: [roster key `ref#n`, or "objective"]} whose `once` purse share or objective reward
+    /// was paid.
+    pub reward_paid: Dict,
     /// Raw type problems from from_dict (not saved; validate reports them).
     pub load_problems: Vec<String>,
 }
@@ -503,6 +506,7 @@ impl Default for GameState {
             time: 0,
             autoplay: default_autoplay(),
             purses: Dict::new(),
+            reward_paid: Dict::new(),
             load_problems: Vec::new(),
         }
     }
@@ -575,6 +579,7 @@ impl GameState {
             ("time", int(self.time)),
             ("autoplay", Value::Object(self.autoplay.clone())),
             ("purses", Value::Object(self.purses.clone())),
+            ("reward_paid", Value::Object(self.reward_paid.clone())),
         ]))
     }
 
@@ -618,16 +623,19 @@ impl GameState {
         let mut shops = Dict::new();
         let mut autoplay = default_autoplay();
         let mut purses = Dict::new();
+        let mut reward_paid = Dict::new();
         take_dict("explore", "explore must be {steps, next_at, loc_steps, last_safe, last_rest}.", &mut explore);
         take_dict("rolls", "rolls must be an object {stream: count}.", &mut rolls);
         take_dict("shops", "shops must be an object {shop qid: {item id: sold count}}.", &mut shops);
         take_dict("autoplay", "autoplay must be {on, party, heroes}.", &mut autoplay);
         take_dict("purses", "purses must be an object {encounter qid: wins}.", &mut purses);
+        take_dict("reward_paid", "reward_paid must map encounter ids to lists of keys.", &mut reward_paid);
         g.explore = explore;
         g.rolls = rolls;
         g.shops = shops;
         g.autoplay = autoplay;
         g.purses = purses;
+        g.reward_paid = reward_paid;
         let whole = |key: &str, problem: &str, g: &mut GameState| -> i64 {
             let raw = json::normalize(d.get(key).unwrap_or(&int(0)));
             if json::is_int(&raw) {
@@ -702,6 +710,9 @@ impl GameState {
             if !qid_ok(k) || !json::is_int(v) || json::to_int(v) < 0 {
                 errors.push(format!("purses: '{k}' must be a qualified encounter id world:id with a win count >= 0."));
             }
+        }
+        if self.reward_paid.values().any(|v| !v.as_array().is_some_and(|a| a.iter().all(Value::is_string))) {
+            errors.push("reward_paid must map encounter ids to lists of keys.".into());
         }
         errors
     }

@@ -1,5 +1,6 @@
-//! PurseRules runtime (scripts/exploration/purse_rules.gd): an encounter's gold range and loot paid on a win.
-//! The gold roll has its own RandomNumberGenerator seeded from ("<qid>|<time>|<wins>").hash().
+//! PurseRules runtime (scripts/exploration/purse_rules.gd): an encounter's gold range. The gold roll has its own
+//! RandomNumberGenerator seeded from ("<qid>|<time>|<paid>").hash(). REWARD1 retired `purse.loot` (key loot is
+//! `key_loot` on the encounter).
 
 use crate::data::Data;
 use crate::quest;
@@ -11,7 +12,7 @@ use serde_json::Value;
 
 pub const GOLD_CAP: i64 = 500;
 
-/// {gold_min, gold_max, loot, once}; None = no purse.
+/// (gold_min, gold_max, loot, once); None = no purse. `loot` stays "" since REWARD1 (validation refuses the key).
 pub fn read(entry: &Dict) -> Option<(i64, i64, String, bool)> {
     let p = entry.get("purse")?.as_object()?;
     if p.is_empty() {
@@ -22,7 +23,7 @@ pub fn read(entry: &Dict) -> Option<(i64, i64, String, bool)> {
         Some(Value::Bool(b)) => *b,
         _ => true,
     };
-    Some((lo, json::i(p, "gold_max", lo), json::s(p, "loot"), once))
+    Some((lo, json::i(p, "gold_max", lo), String::new(), once))
 }
 
 pub fn seed_of(qid: &str, time: i64, paid: i64) -> u32 {

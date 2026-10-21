@@ -14,12 +14,14 @@ use std::path::{Path, PathBuf};
 
 pub use aegis_save::{delete, exists, path_for};
 
-pub const VERSION: i64 = 11;
+pub const VERSION: i64 = 12;
 pub const FORMAT: &str = "fc_save";
 pub const AUTOSAVE_SLOT: i64 = 0;
 pub const LAST_SLOT: i64 = 5;
-const KEYS: [&str; 14] =
-    ["world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses"];
+const KEYS: [&str; 15] = [
+    "world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses",
+    "reward_paid",
+];
 const SAVES: Format = Format { tag: FORMAT, version: VERSION, first_slot: AUTOSAVE_SLOT, last_slot: LAST_SLOT, keys: &KEYS };
 
 /// The Godot user save folder on this machine (user://saves of the project).
@@ -171,6 +173,20 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
         // SKILLUI1: members may carry `loadout.ranks`; nothing to add (absent = the highest unlocked rank). The
         // bump makes an older build refuse such a save ("newer version") instead of dropping the ranks.
         10 => {}
+        // REWARD1: `reward_paid` = {}, then every roster key of a `once` purse already paid (a story fight won before
+        // REWARD1 does not pay again).
+        11 => {
+            let mut paid = Dict::new();
+            for (qid, wins) in json::dget(&out, "purses").clone() {
+                let enc = d.resolve("", "encounters", &qid);
+                if json::to_int(&wins) < 1 || enc.is_empty() || !crate::purse::read(enc).is_some_and(|p| p.3) {
+                    continue;
+                }
+                let keys: Vec<String> = crate::battle::roster(d, &json::s(enc, "_world"), &qid).into_iter().map(|f| f.key).collect();
+                paid.insert(qid, json::strs(&keys));
+            }
+            out.insert("reward_paid".into(), Value::Object(paid));
+        }
         _ => return None,
     }
     Some(out)

@@ -450,7 +450,9 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
     errors.extend(encounter::morale_problems(e));
     errors.extend(encounter::start_status_problems(e.get("start_status").unwrap_or(&Value::Array(Vec::new()))));
-    errors.extend(encounter::purse_problems(e, &|r: &str| encounter::world_loot_check(v, w, r)));
+    errors.extend(encounter::purse_problems(e));
+    errors.extend(super::reward::key_loot_problems(v, w, e));
+    errors.extend(super::reward::objective_reward_problems(v, w, e));
     match json::get(e, "exits") {
         Value::Array(list) => {
             for x in list {
@@ -638,7 +640,8 @@ pub fn validate_all(v: &View) -> super::Report {
     problems
 }
 
-/// WorldCatalog.encounter_warnings: a boss fight without an enrage phase and the purse warnings, per own encounter.
+/// WorldCatalog.encounter_warnings: a boss fight without an enrage phase, the purse warnings and the REWARD1 key loot
+/// and objective reward warnings, per own encounter.
 fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
     let tier_of = |r: &str| {
         let c = v.worlds.resolve(w, "characters", r);
@@ -647,7 +650,8 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
     let mut out = Vec::new();
     for e in v.worlds.own_entries(w, "encounters") {
         let id = json::s(e, "id");
-        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)) {
+        let reward = super::reward::key_loot_warnings(v, w, e).into_iter().chain(super::reward::objective_reward_warnings(e));
+        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward) {
             out.push(format!("{w}:{id}: {warning}"));
         }
     }

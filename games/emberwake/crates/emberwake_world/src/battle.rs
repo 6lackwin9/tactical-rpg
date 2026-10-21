@@ -118,8 +118,21 @@ pub fn apply_character(d: &Data, cat: &emberwake_data::Catalog, character: &Dict
     }
 }
 
-/// (level, tier) of the encounter's enemies, reinforcements and phase waves, seen from `world_id`.
-pub fn enemy_levels(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<(i64, String)> {
+/// One enemy of an encounter's roster (REWARD1 2.1): its key `ref#n` (n counts that ref's earlier roster entries),
+/// its ref, its base unit's id, level and tier, and its weight in the purse (`progression::kill_weight`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RosterFoe {
+    pub key: String,
+    pub unit_ref: String,
+    pub unit: String,
+    pub level: i64,
+    pub tier: String,
+    pub weight: i64,
+}
+
+/// The encounter's roster seen from `world_id`: `enemies`, `wave_units`, then the units of every phase's `wave`
+/// effects (phase order, effect order), keeping only refs that resolve to a unit (the refs the battle spawns).
+pub fn roster(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<RosterFoe> {
     let enc = d.resolve(world_id, "encounters", encounter_qid);
     let mut refs = json::sget(enc, "enemies");
     refs.extend(json::sget(enc, "wave_units"));
@@ -131,15 +144,23 @@ pub fn enemy_levels(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<(i64, 
             }
         }
     }
-    let mut out = Vec::new();
+    let mut out: Vec<RosterFoe> = Vec::new();
     for r in refs {
         let entry = d.character_unit_entry(d.resolve(world_id, "characters", &r));
         if entry.is_empty() {
             continue;
         }
-        out.push((json::i(&entry, "level", 1), json::s_or(&entry, "tier", "standard")));
+        let n = out.iter().filter(|f| f.unit_ref == r).count();
+        let (level, tier) = (json::i(&entry, "level", 1), json::s_or(&entry, "tier", "standard"));
+        let weight = progression::kill_weight(d, level, &tier);
+        out.push(RosterFoe { key: format!("{r}#{n}"), unit: json::s(&entry, "id"), unit_ref: r, level, tier, weight });
     }
     out
+}
+
+/// (level, tier) of the encounter's enemies, reinforcements and phase waves, seen from `world_id` (the roster).
+pub fn enemy_levels(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<(i64, String)> {
+    roster(d, world_id, encounter_qid).into_iter().map(|f| (f.level, f.tier)).collect()
 }
 
 /// {ok, errors, xp: member id -> award, advanced, purse?}.

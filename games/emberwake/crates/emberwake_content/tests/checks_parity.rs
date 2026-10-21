@@ -16,6 +16,24 @@ fn strings(v: &Value) -> Vec<String> {
     v.as_array().map(|a| a.iter().map(|s| s.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default()
 }
 
+/// Retired parity (REWARD1, HISTORY 2026-10-21): `purse.loot` moved to the encounter's `key_loot`. Recorded cases that
+/// set it are not compared, and the messages about it are left out of the whole-catalog and world reports on both
+/// sides (Godot's "Purse loot ..." checks, the engine's refusal of the key).
+fn sets_purse_loot(entry: &serde_json::Map<String, Value>) -> bool {
+    entry.get("purse").and_then(Value::as_object).is_some_and(|p| p.contains_key("loot"))
+}
+
+fn retired(message: &str) -> bool {
+    message.starts_with("Purse loot '") || message == "Purse key 'loot' moved to key_loot (REWARD1)."
+}
+
+fn without_retired(r: check::Report) -> check::Report {
+    r.into_iter()
+        .map(|(k, l)| (k, l.into_iter().filter(|m| !retired(m)).collect::<Vec<_>>()))
+        .filter(|(_, l)| !l.is_empty())
+        .collect()
+}
+
 #[test]
 fn checks_report_what_godot_reported() {
     let path = root().join("games/emberwake/parity/out/checks.json");
@@ -38,6 +56,9 @@ fn checks_report_what_godot_reported() {
             continue;
         }
         let entry = c["entry"].as_object().unwrap();
+        if sets_purse_loot(entry) {
+            continue;
+        }
         let current = c["current"].as_str().unwrap();
         let (errors, warnings) = (check::validate_entry(&view, kind, entry, current), check::warnings_for(&view, kind, entry));
         let ok = errors == strings(&c["errors"]) && warnings == strings(&c["warnings"]);
@@ -74,6 +95,7 @@ fn catalog_reports_match_godot() {
     let mut view = View::new(&src.catalog, &src.worlds, &src.game, art);
     view.terrain_file = root().join("legacy/data/catalog/terrain.json").exists();
     for (name, ours, theirs) in [("errors", check::validate_all(&view), report(&doc["catalog"]["errors"])), ("warnings", check::warnings_all(&view), report(&doc["catalog"]["warnings"]))] {
+        let (ours, theirs) = (without_retired(ours), without_retired(theirs));
         let keys: Vec<&String> = theirs.keys().chain(ours.keys()).collect();
         let diffs: Vec<String> = keys.iter().filter(|k| ours.get(**k) != theirs.get(**k)).map(|k| format!("{k}:\n  godot {:?}\n  rust  {:?}", theirs.get(*k), ours.get(*k))).collect();
         eprintln!("catalog {name}: {} godot keys, {} differ", theirs.len(), diffs.len());
@@ -98,6 +120,9 @@ fn world_checks_match_godot() {
     for c in doc["cases"].as_array().unwrap().iter().filter(|c| c["world"] != "") {
         let (w, kind) = (c["world"].as_str().unwrap(), c["kind"].as_str().unwrap());
         let (entry, current) = (c["entry"].as_object().unwrap(), c["current"].as_str().unwrap());
+        if sets_purse_loot(entry) {
+            continue;
+        }
         let errors = check::world::validate_entry(&view, w, kind, entry, current);
         let blocking = check::world::blocking_errors(&view, w, kind, entry, current);
         let slot = per_kind.entry(kind.to_string()).or_default();
@@ -114,6 +139,7 @@ fn world_checks_match_godot() {
     }
     assert!(per_kind.values().all(|(_, bad)| *bad == 0), "{}", failures.join("\n"));
     for (name, ours, theirs) in [("errors", check::world::validate_all(&view), report(&doc["worlds"]["errors"])), ("warnings", check::world::warnings_all(&view), report(&doc["worlds"]["warnings"]))] {
+        let (ours, theirs) = (without_retired(ours), without_retired(theirs));
         let keys: Vec<&String> = theirs.keys().chain(ours.keys()).collect();
         let diffs: Vec<String> = keys.iter().filter(|k| ours.get(**k) != theirs.get(**k)).map(|k| format!("{k}:\n  godot {:?}\n  rust  {:?}", theirs.get(*k), ours.get(*k))).collect();
         eprintln!("world {name}: {} godot keys, {} differ", theirs.len(), diffs.len());
@@ -143,6 +169,7 @@ fn world_lint_matches_godot() {
         }
     }
     for (name, ours, theirs) in [("errors", check::world::validate_all(&view), report(&lint["errors"])), ("warnings", check::world::warnings_all(&view), report(&lint["warnings"]))] {
+        let (ours, theirs) = (without_retired(ours), without_retired(theirs));
         let keys: Vec<&String> = theirs.keys().chain(ours.keys()).collect();
         let mut diffs: Vec<String> = Vec::new();
         for k in keys {

@@ -13,6 +13,10 @@ fn out_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
+/// Retired parity (REWARD1, HISTORY 2026-10-21): keys Godot never had, skipped when only Rust has them: the state's
+/// `reward_paid` and the after-fight result's `rewards`.
+const RETIRED: [&str; 2] = ["reward_paid", "rewards"];
+
 /// The first path where `a` (Rust) and `b` (Godot) differ.
 fn diff(a: &Value, b: &Value, at: &str) -> Option<String> {
     match (a, b) {
@@ -27,7 +31,7 @@ fn diff(a: &Value, b: &Value, at: &str) -> Option<String> {
                     }
                 }
             }
-            x.keys().find(|k| !y.contains_key(*k)).map(|k| format!("{at}.{k}: extra in Rust ({})", short(&x[k])))
+            x.keys().find(|k| !y.contains_key(*k) && !RETIRED.contains(&k.as_str())).map(|k| format!("{at}.{k}: extra in Rust ({})", short(&x[k])))
         }
         (Value::Array(x), Value::Array(y)) => {
             for (i, (p, q)) in x.iter().zip(y).enumerate() {
