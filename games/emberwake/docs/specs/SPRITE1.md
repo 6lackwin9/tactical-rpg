@@ -2,6 +2,10 @@
 
 Status update (2026-10-20): SPRITE1-L, SPRITE1-U and SPRITE1-A2 approved (user 2026-10-20). The status line below is the original.
 
+Status update (2026-10-22, user): SPRITE1-U drops the side-coloured disc behind the token: a flat foot ellipse in the
+side's colour (ally, foe) under every unit, a 1px gold outline around the selected unit's sprite and a faint white
+outline on hover. Battle first; the region map's sprites come with the playtest UI work (PLAYUI1).
+
 Status update (2026-10-22): SPRITE1-S2 done: section 4 gives the sheet layout on ASSETORG2 (one sheet per body, no strips,
 no manifest).
 
