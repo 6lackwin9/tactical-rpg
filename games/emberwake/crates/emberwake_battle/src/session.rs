@@ -133,6 +133,8 @@ impl Roster for IndexMap<String, UnitDef> {
 pub struct Prebuilt {
     pub unit: emberwake_rules::Unit,
     pub art: String,
+    /// The palette its body wears (ASSETORG2; "" = none).
+    pub palette: String,
     pub profile: AiProfile,
     /// The party member id (GameEncounter.hero_key).
     pub key: String,
@@ -210,6 +212,8 @@ pub struct Session {
     pub reinforcements_spawned: bool,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
     pub art: Vec<String>,
+    /// Palette per unit (ASSETORG2; "" = none).
+    pub palettes: Vec<String>,
     /// Party-side extras (also in allies): planned with Balanced, never saved.
     pub guests: Vec<UnitId>,
     /// Guests that must live.
@@ -281,12 +285,14 @@ impl Session {
         let mut built: Vec<Unit> = Vec::new();
         let mut profiles = IndexMap::new();
         let mut art = Vec::new();
+        let mut palettes: Vec<String> = Vec::new();
         let mut units_by_ref: IndexMap<String, Vec<UnitId>> = IndexMap::new();
         let mut hero_keys: IndexMap<UnitId, String> = IndexMap::new();
         for p in party {
             profiles.insert(built.len(), p.profile);
             hero_keys.insert(built.len(), p.key);
             art.push(p.art);
+            palettes.push(p.palette);
             built.push(p.unit);
         }
         let mut spawn = |r: &str, name: &str, built: &mut Vec<Unit>| -> UnitId {
@@ -297,6 +303,7 @@ impl Session {
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));
             art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });
+            palettes.push(e.palette.clone());
             built.push(u);
             units_by_ref.entry(r.to_string()).or_default().push(id);
             hero_keys.insert(id, roster.lore_ref(&cat, r));
@@ -399,6 +406,7 @@ impl Session {
             wave,
             reinforcements_spawned: false,
             art,
+            palettes,
             guests,
             protected,
             objective,

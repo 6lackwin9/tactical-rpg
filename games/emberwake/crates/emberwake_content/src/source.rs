@@ -787,33 +787,3 @@ fn xp_problems(doc: &Dict) -> Vec<String> {
     }
     errors
 }
-
-// ---- AssetRegistry (the keys the content checks read) ----------------------------------------------------------
-
-/// UnitArt.CLASS_KEYS: the unit keys with a generated template.
-const UNIT_TEMPLATE_KEYS: [&str; 12] = ["warrior", "ranger", "archer", "scout", "brawler", "berserker", "shaman", "skirmisher", "dummy", "priest", "mage", "rogue"];
-/// ItemArt.TEMPLATE_KEYS: the item icon keys with a generated template.
-const ITEM_TEMPLATE_KEYS: [&str; 24] = [
-    "sword", "greatsword", "shortsword", "dagger", "hammer", "axe", "bow", "staff", "wand", "tome", "knuckles", "shield", "plate", "leather", "robe", "ring", "amulet", "potion", "elixir", "bomb", "weapon", "misc", "titan_warhammer", "runed_staff",
-];
-
-/// AssetRegistry.keys for "unit" and "item": the template keys plus the keys of the asset manifest
-/// (data/assets/manifest.json), sorted, unique.
-pub fn art_keys(data_dir: &Path) -> indexmap::IndexMap<String, Vec<String>> {
-    let mut errors = Vec::new();
-    let manifest = read(&data_dir.join("assets/manifest.json"), &mut errors).unwrap_or(Value::Null);
-    let rows = json::aget(json::dict(&manifest), "entries");
-    let mut out = indexmap::IndexMap::new();
-    for (ns, templates) in [("unit", &UNIT_TEMPLATE_KEYS[..]), ("item", &ITEM_TEMPLATE_KEYS[..])] {
-        let mut keys: Vec<String> = templates.iter().map(|k| k.to_string()).collect();
-        for row in rows.iter().map(json::dict).filter(|r| json::s(r, "namespace") == ns) {
-            let key = json::s(row, "key");
-            if !keys.contains(&key) {
-                keys.push(key);
-            }
-        }
-        keys.sort();
-        out.insert(ns.to_string(), keys);
-    }
-    out
-}

@@ -291,7 +291,7 @@ pub fn view(data_dir: &Path) -> crate::check::View {
 }
 
 fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
-    let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, source::art_keys(data_dir));
+    let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, data_dir.parent().map(aegis_core::assets::Layers::for_game).unwrap_or_default());
     view.terrain_file = data_dir.join("catalog/terrain.json").is_file();
     view.load_errors = src.errors.clone();
     view

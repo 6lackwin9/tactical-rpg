@@ -217,6 +217,10 @@ impl Data {
         if !art.is_empty() {
             entry.insert("art".into(), Value::String(art));
         }
+        let palette = json::s(character, "palette");
+        if !palette.is_empty() {
+            entry.insert("palette".into(), Value::String(palette));
+        }
         let role = json::s(character, "role");
         if role == "party" || role == "enemy" {
             entry.insert("side".into(), Value::String(role));

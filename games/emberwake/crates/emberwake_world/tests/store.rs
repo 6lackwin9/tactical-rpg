@@ -12,9 +12,10 @@ fn data_dir() -> PathBuf {
 
 const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain"];
 
-/// Retired parity (REWARD1, HISTORY 2026-10-21): fields added after the Godot freeze, written with their empty
-/// defaults by the engine's writer: a unit's `loot`, a world encounter's `key_loot` and `objective_reward`.
-const AFTER_GODOT: [&str; 3] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}"];
+/// Retired parity: fields added after the Godot freeze, written with their empty defaults by the engine's writer:
+/// REWARD1 (HISTORY 2026-10-21) a unit's `loot`, a world encounter's `key_loot` and `objective_reward`; ASSETORG2
+/// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`.
+const AFTER_GODOT: [&str; 5] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\""];
 
 /// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).
 fn at_freeze(text: &str) -> String {
@@ -108,7 +109,7 @@ fn copy_dir(from: &Path, to: &Path) {
 fn upsert_and_remove_validate_write_and_roll_back() {
     let tmp = std::env::temp_dir().join(format!("aegis_store_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression", "assets"] {
+    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
     let units = store::file_of(&tmp, None, "units");

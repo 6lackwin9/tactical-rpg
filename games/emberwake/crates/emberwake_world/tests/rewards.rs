@@ -36,7 +36,7 @@ impl Drop for Scratch {
 fn scratch(name: &str, edits: &[(Option<&str>, &str, &str, Value)]) -> (Scratch, Data) {
     let tmp = std::env::temp_dir().join(format!("aegis_rewards_{name}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression", "assets"] {
+    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
     for (world, kind, id, fields) in edits {

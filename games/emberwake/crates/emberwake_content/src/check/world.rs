@@ -92,7 +92,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
     if json::s(&e, "name").trim().is_empty() {
         errors.push("Name is required.".into());
     }
-    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum") {
+    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum" && super::enum_checked(f)) {
         let value = json::s(&e, &json::s(f, "key"));
         let options = super::options_of(v, f);
         if !options.contains(&value) {
@@ -134,7 +134,7 @@ pub fn blocking_errors(v: &View, w: &str, kind: &str, entry: &Dict, current_id: 
     if json::s(&e, "name").trim().is_empty() {
         errors.push("Name is required.".into());
     }
-    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum") {
+    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum" && super::enum_checked(f)) {
         let value = json::s(&e, &json::s(f, "key"));
         let options = super::options_of(v, f);
         if !options.contains(&value) {
@@ -345,6 +345,7 @@ fn character_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         errors.push("Choose the base unit this character plays as.".into());
     }
     errors.extend(tuning_errors(json::get(e, "tuning"), &TUNING_KEYS, "Character"));
+    errors.extend(super::assets::body_errors(v, &json::s(e, "art")));
     match e.get("gone_flags").unwrap_or(&Value::Array(Vec::new())) {
         gone @ Value::Array(_) => errors.extend(quest::condition_errors(gone, "Gone flags")),
         _ => errors.push(GONE_FLAGS_NOT_LIST.into()),
@@ -669,6 +670,19 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(quest::reward_warnings(v, w));
     out.extend(quest::rep_key_warnings(v, w));
     out.extend(encounter_warnings(v, w));
+    out.extend(character_asset_warnings(v, w));
+    out
+}
+
+/// ASSETORG2 A3-A5 for the world's own characters: unique portraits, common portraits, palettes.
+fn character_asset_warnings(v: &View, w: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for c in v.worlds.own_entries(w, "characters") {
+        let unit = v.get("units", &json::s(c, "base_unit"));
+        for warning in super::assets::portrait_and_palette_warnings(v, c, unit) {
+            out.push(format!("{w}:{}: {warning}", json::s(c, "id")));
+        }
+    }
     out
 }
 

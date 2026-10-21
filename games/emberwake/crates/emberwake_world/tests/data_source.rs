@@ -19,10 +19,29 @@ fn data_dir() -> PathBuf {
 
 /// Retired parity: fields added after the Godot freeze, by (schema section, kind, key). They are taken off the engine's
 /// side (catalog rows, world entries, schema rows) before comparing; each is named in docs/HISTORY.md. REWARD1
-/// (2026-10-21): the unit loot table and a world encounter's key loot and objective reward.
-const AFTER_GODOT: [(&str, &str, &str); 3] = [("content", "units", "loot"), ("world", "encounters", "key_loot"), ("world", "encounters", "objective_reward")];
-/// Schema rows whose help text changed after the freeze (their help is not compared). REWARD1: the purse rows.
-const HELP_CHANGED: [(&str, &str, &str); 2] = [("content", "encounters", "purse"), ("world", "encounters", "purse")];
+/// (2026-10-21): the unit loot table and a world encounter's key loot and objective reward. ASSETORG2 (2026-10-22): a
+/// unit's and a character's palette and portrait tier.
+const AFTER_GODOT: [(&str, &str, &str); 7] = [
+    ("content", "units", "loot"),
+    ("world", "encounters", "key_loot"),
+    ("world", "encounters", "objective_reward"),
+    ("content", "units", "palette"),
+    ("content", "units", "portrait_tier"),
+    ("world", "characters", "palette"),
+    ("world", "characters", "portrait_tier"),
+];
+/// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
+/// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
+/// the item icon rows.
+const HELP_CHANGED: [(&str, &str, &str); 7] = [
+    ("content", "encounters", "purse"),
+    ("world", "encounters", "purse"),
+    ("content", "classes", "art"),
+    ("content", "units", "art"),
+    ("world", "characters", "art"),
+    ("content", "item_families", "art"),
+    ("content", "items", "icon_id"),
+];
 
 /// `v` without the AFTER_GODOT keys of `section`: on every object in an array under a key named after the kind.
 fn strip_after_godot(v: &mut Value, section: &str) {
@@ -62,6 +81,7 @@ fn unhelp(schema: &mut Value) {
         if let Some(Value::Array(rows)) = schema.get_mut(section).and_then(|s| s.get_mut(kind)) {
             for r in rows.iter_mut().filter(|r| r["key"] == key).filter_map(Value::as_object_mut) {
                 r.shift_remove("help");
+                r.shift_remove("options_from");
             }
         }
     }

@@ -451,16 +451,6 @@ impl RegionMap {
     }
 }
 
-fn region_key(ch: char, x: i64, y: i64) -> Option<String> {
-    let base = match ch {
-        '.' => "region_ash_floor",
-        '#' => "region_basalt_wall",
-        '~' => "region_water",
-        _ => return None,
-    };
-    Some(format!("{base}_{}", (x * 7 + y * 13).rem_euclid(3)))
-}
-
 impl Screen<GameCx> for RegionMap {
     /// The arrow keys walk the party.
     fn arrow_focus(&self) -> bool {
@@ -498,14 +488,19 @@ impl Screen<GameCx> for RegionMap {
             let ox = cam(map_area.x, map_area.w, gs.position.0, mw);
             let oy = cam(map_area.y, map_area.h, gs.position.1, mh);
             self.geo = (ox, oy, ts);
+            // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
+            let mut lineage = d.lineage(&gs.world_id);
+            lineage.reverse();
+            let sets = emberwake_content::art::region_sets(&lineage);
+            let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
             for (y, row) in explore::rows_of(t).iter().enumerate() {
                 for (x, ch) in row.iter().enumerate() {
                     let r = Rect::new(ox + x as i32 * ts, oy + y as i32 * ts, ts, ts);
                     if r.y + r.h <= map_area.y || r.y >= map_area.y + map_area.h || r.x + r.w <= map_area.x || r.x >= map_area.x + map_area.w {
                         continue;
                     }
-                    let key = region_key(*ch, x as i64, y as i64);
-                    match key.and_then(|k| cx.art.get("ui", &k, "icon", ts)) {
+                    let tile = emberwake_content::art::region_tile(*ch);
+                    match tile.and_then(|t| cx.art.tile_in(&set_refs, t, x as i32, y as i32, ts)) {
                         Some(img) => ui.p.image(img, r),
                         None => ui.p.fill(r, match ch {
                             '.' => rgb(70, 90, 64),
@@ -540,10 +535,10 @@ impl Screen<GameCx> for RegionMap {
                 let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
-                    let art = s(who, "art");
+                    let (body, palette, _) = crate::screens::character_art(&d, who);
                     ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
                     let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
-                    match cx.art.token(&art, tok.w).or(None) {
+                    match cx.art.first_token(&emberwake_content::art::body_chain(&body), &palette, tok.w) {
                         Some(img) => ui.p.image(img, tok),
                         None => ui.p.text_center(cx_, cy_ - 4.0, &s(who, "name").chars().next().unwrap_or('?').to_string(), BODY, rgb(20, 20, 20)),
                     }
@@ -640,8 +635,8 @@ impl Screen<GameCx> for RegionMap {
             let pbox = Rect::new(6, 208, 93, 120);
             ui.p.panel(pbox, rgb(22, 30, 48), BORDER, 2.0);
             let speaker = d.resolve(&gs.world_id, "characters", &s(&view, "speaker"));
-            let art = s(speaker, "art");
-            match cx.art.portrait(&art, 89) {
+            let (_, _, portraits) = crate::screens::character_art(&d, speaker);
+            match cx.art.first(&portraits, 89, 89) {
                 Some(img) => ui.p.image(img, Rect::new(8, 214, 89, 89)),
                 None => ui.p.text_center(52.0, 250.0, &s(&view, "speaker_name").chars().next().unwrap_or('?').to_string(), 20.0, GOLD),
             }
@@ -901,33 +896,57 @@ pub fn item_line(cx: &Cx, item: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::region_key;
-    use aegis_ui::art::Art;
+    use aegis_core::assets::Layers;
     use std::path::Path;
 
-    /// ASSETORG1: every PNG sits in a folder per thing, assets/art/<category>/<id>/<variant>.png.
+    /// ASSETORG2 section 3: every file under the game's assets matches a pattern of the layered tree (README.md files
+    /// aside), and the region map's tiles of the Ashlands are there.
     #[test]
-    fn art_is_one_folder_per_thing() {
+    fn the_assets_follow_the_layered_tree() {
         let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let art = game.join("assets/art");
+        let root = game.join("assets");
         let mut stray = Vec::new();
-        let mut walk = vec![(art.clone(), 0)];
-        while let Some((dir, depth)) = walk.pop() {
+        let mut walk = vec![root.clone()];
+        while let Some(dir) = walk.pop() {
             for e in std::fs::read_dir(&dir).unwrap().flatten() {
                 let p = e.path();
                 if p.is_dir() {
-                    walk.push((p, depth + 1));
-                } else if p.extension().is_some_and(|x| x == "png") && depth != 2 {
-                    stray.push(p.strip_prefix(&art).unwrap().display().to_string());
+                    walk.push(p);
+                    continue;
+                }
+                let rel = p.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+                if !layout_ok(&rel) {
+                    stray.push(rel);
                 }
             }
         }
-        assert!(stray.is_empty(), "art outside <category>/<id>/<variant>.png: {stray:?}");
-        for (x, y) in [(0, 0), (1, 0), (2, 0)] {
-            for ch in ['.', '#', '~'] {
-                let id = region_key(ch, x, y).unwrap();
-                assert!(Art::path(&game, "ui", &id, "icon").is_file(), "ui/{id}/icon.png");
-            }
+        assert!(stray.is_empty(), "files outside the layered tree (docs/specs/ASSETORG2.md section 3): {stray:?}");
+        let layers = Layers::for_game(&game);
+        for t in ["floor", "wall", "shallow_water"] {
+            assert_eq!(layers.variants(&format!("tilesets/ashlands/{t}")), 3, "{t}");
+        }
+    }
+
+    /// One path of the section 3 tree (game, kit or engine root).
+    fn layout_ok(rel: &str) -> bool {
+        let p: Vec<&str> = rel.split('/').collect();
+        let png = |s: &str| s.ends_with(".png");
+        let v = |s: &str| s.starts_with('v') && s.trim_start_matches('v').trim_end_matches(".png").parse::<u32>().is_ok() && png(s);
+        if p.last() == Some(&"README.md") || matches!(p.as_slice(), ["fonts", ..]) {
+            return true;
+        }
+        match p.as_slice() {
+            ["units", _, _, "sheet.png" | "clips.json"] => true,
+            ["units", _, _, "palettes", f] => f.ends_with(".json"),
+            ["portraits", "common" | "heroes" | "npcs" | "elites" | "bosses", f] => png(f),
+            ["items", _, f] => png(f),
+            ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
+            ["ui", "pins" | "badges" | "chips" | "intents", f] => png(f),
+            ["tilesets", _, _, f] => v(f),
+            ["backgrounds", "menu" | "title" | "world_map" | "location", f] => png(f),
+            ["audio", "sfx", f] => f.ends_with(".wav"),
+            ["audio", "music", f] => f.ends_with(".ogg"),
+            _ => false,
         }
     }
 }
