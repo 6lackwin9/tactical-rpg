@@ -75,6 +75,62 @@ impl Image {
         }
         Image { w, h, px }
     }
+
+    /// The `w` x `h` part at (`x`, `y`) (outside the image: transparent).
+    pub fn crop(&self, x: i32, y: i32, w: i32, h: i32) -> Image {
+        let mut px = vec![0u8; (w.max(0) * h.max(0) * 4) as usize];
+        for yy in 0..h {
+            for xx in 0..w {
+                let (sx, sy) = (x + xx, y + yy);
+                if sx < 0 || sy < 0 || sx >= self.w || sy >= self.h {
+                    continue;
+                }
+                let (i, o) = (((sy * self.w + sx) * 4) as usize, ((yy * w + xx) * 4) as usize);
+                px[o..o + 4].copy_from_slice(&self.px[i..i + 4]);
+            }
+        }
+        Image { w, h, px }
+    }
+
+    /// Each pixel `k` x `k` (nearest neighbour), for pixel art drawn larger.
+    pub fn scale_nearest(&self, k: i32) -> Image {
+        let k = k.max(1);
+        let (w, h) = (self.w * k, self.h * k);
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let (i, o) = ((((y / k) * self.w + x / k) * 4) as usize, ((y * w + x) * 4) as usize);
+                px[o..o + 4].copy_from_slice(&self.px[i..i + 4]);
+            }
+        }
+        Image { w, h, px }
+    }
+
+    /// Every pixel of exactly a `from` colour (any alpha) takes its `to` colour (ASSETORG2 palettes).
+    pub fn swap_colours(&mut self, pairs: &[([u8; 3], [u8; 3])]) {
+        for p in self.px.chunks_exact_mut(4) {
+            if let Some((_, to)) = pairs.iter().find(|(from, _)| p[..3] == from[..]) {
+                p[..3].copy_from_slice(to);
+            }
+        }
+    }
+
+    /// `self` on a transparent `size` x `size` square: centred across, standing on the bottom edge.
+    pub fn on_square(&self, size: i32) -> Image {
+        let mut px = vec![0u8; (size * size * 4) as usize];
+        let (ox, oy) = ((size - self.w) / 2, size - self.h);
+        for y in 0..self.h {
+            for x in 0..self.w {
+                let (dx, dy) = (ox + x, oy + y);
+                if dx < 0 || dy < 0 || dx >= size || dy >= size {
+                    continue;
+                }
+                let (i, o) = (((y * self.w + x) * 4) as usize, ((dy * size + dx) * 4) as usize);
+                px[o..o + 4].copy_from_slice(&self.px[i..i + 4]);
+            }
+        }
+        Image { w: size, h: size, px }
+    }
 }
 
 pub struct Canvas {

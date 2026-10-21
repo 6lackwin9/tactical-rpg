@@ -1,0 +1,7047 @@
+{
+  "format": "playtest",
+  "version": 2,
+  "id": "20261021-193519",
+  "origin": "user",
+  "created": "2026-10-21T19:35:19Z",
+  "engine": "aegis 0.1.0",
+  "source_rev": "",
+  "scenario": "",
+  "parent": null,
+  "content": {
+    "algo": "sha256-12",
+    "total": "d65b414f4aae",
+    "files": {
+      "catalog/classes.json": "41f8fc292773",
+      "catalog/encounters.json": "6fa9cbe1b0ca",
+      "catalog/item_families.json": "79141dec15b0",
+      "catalog/items.json": "e02d921a7c1d",
+      "catalog/passives.json": "7ff5546f7341",
+      "catalog/skills.json": "2eca982be793",
+      "catalog/terrain.json": "19b58af1474c",
+      "catalog/units.json": "fd70c35e6024",
+      "dialogue/services.json": "2d46a14bb6d4",
+      "maps/maps.json": "6f3caabc4dec",
+      "progression/xp_curve.json": "0a033e698e9b",
+      "quests/quests.json": "650c0eecf7e8",
+      "seeds/assetorg2.json": "234b06d60625",
+      "seeds/reward1.json": "be4eea13c9b9",
+      "worlds/ashlands/characters.json": "92b8d780d412",
+      "worlds/ashlands/dialogues.json": "30664475df60",
+      "worlds/ashlands/disciplines.json": "9e311d18d1d4",
+      "worlds/ashlands/encounters.json": "8a161eb449b9",
+      "worlds/ashlands/factions.json": "e398a073d930",
+      "worlds/ashlands/items.json": "66cf7efea2c1",
+      "worlds/ashlands/locations.json": "e410fe4baf0e",
+      "worlds/ashlands/loot.json": "2ed5311d66e6",
+      "worlds/ashlands/lore.json": "6afefe6f4056",
+      "worlds/ashlands/quests.json": "681c36e572f0",
+      "worlds/ashlands/regions.json": "23956d3e749a",
+      "worlds/ashlands/routes.json": "b7d91729962a",
+      "worlds/ashlands/shops.json": "fa81e8137582",
+      "worlds/ashlands/world.json": "7eaf6e5d0cbf",
+      "worlds/iron_reaches/characters.json": "f66495409282",
+      "worlds/iron_reaches/dialogues.json": "066aca1e5c63",
+      "worlds/iron_reaches/disciplines.json": "e0a96eddfd09",
+      "worlds/iron_reaches/encounters.json": "83dd4617fbdc",
+      "worlds/iron_reaches/factions.json": "12f98fddfeab",
+      "worlds/iron_reaches/items.json": "7d317956248d",
+      "worlds/iron_reaches/locations.json": "c1b825822a36",
+      "worlds/iron_reaches/loot.json": "7f58314650b3",
+      "worlds/iron_reaches/lore.json": "9702a9f092ec",
+      "worlds/iron_reaches/quests.json": "68b3502b2272",
+      "worlds/iron_reaches/regions.json": "9c1665e882fa",
+      "worlds/iron_reaches/routes.json": "c8394d8dda64",
+      "worlds/iron_reaches/shops.json": "0628971b088e",
+      "worlds/iron_reaches/world.json": "da83c0436acb",
+      "worlds/tidewrack/characters.json": "1f9eaeda688f",
+      "worlds/tidewrack/disciplines.json": "e0a96eddfd09",
+      "worlds/tidewrack/encounters.json": "ffea40de29d9",
+      "worlds/tidewrack/factions.json": "ab5f281d57d6",
+      "worlds/tidewrack/items.json": "7d317956248d",
+      "worlds/tidewrack/locations.json": "f591ec88a505",
+      "worlds/tidewrack/lore.json": "862903448e6e",
+      "worlds/tidewrack/quests.json": "ce14a73cc86f",
+      "worlds/tidewrack/regions.json": "385350066cf4",
+      "worlds/tidewrack/world.json": "99cc74461090"
+    }
+  },
+  "battles": [
+    {
+      "index": 0,
+      "requests": [
+        {
+          "cmd": "new",
+          "encounter": "goblin_skirmish"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        }
+      ],
+      "checkpoints": [
+        {
+          "at": 30,
+          "state": {
+            "round": 1,
+            "over": false,
+            "result": "",
+            "log_count": 27,
+            "units": [
+              {
+                "id": 0,
+                "hp": 202,
+                "ap": 4,
+                "pos": [
+                  5,
+                  4
+                ],
+                "stance": "defensive",
+                "statuses": [],
+                "pending": [
+                  "taunt",
+                  "stagger"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 1,
+                "hp": 128,
+                "ap": 3,
+                "pos": [
+                  4,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [
+                  "root"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 49,
+                "ap": 5,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [
+                  "stagger"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 43,
+                "ap": 0,
+                "pos": [
+                  5,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 4,
+                "hp": 0,
+                "ap": 4,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 77,
+                "ap": 5,
+                "pos": [
+                  7,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 108,
+                "ap": 3,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 53,
+          "state": {
+            "round": 2,
+            "over": false,
+            "result": "",
+            "log_count": 46,
+            "units": [
+              {
+                "id": 0,
+                "hp": 127,
+                "ap": 4,
+                "pos": [
+                  5,
+                  4
+                ],
+                "stance": "defensive",
+                "statuses": [
+                  "taunt",
+                  "stagger"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 1,
+                "hp": 128,
+                "ap": 0,
+                "pos": [
+                  4,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "root"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 35,
+                "ap": 5,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "stagger"
+                ],
+                "pending": [
+                  "root"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 0,
+                "ap": 3,
+                "pos": [
+                  5,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 4,
+                "hp": 0,
+                "ap": 8,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 77,
+                "ap": 3,
+                "pos": [
+                  7,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 108,
+                "ap": 0,
+                "pos": [
+                  5,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 70,
+          "state": {
+            "round": 3,
+            "over": false,
+            "result": "",
+            "log_count": 61,
+            "units": [
+              {
+                "id": 0,
+                "hp": 53,
+                "ap": 3,
+                "pos": [
+                  5,
+                  4
+                ],
+                "stance": "defensive",
+                "statuses": [
+                  "taunt",
+                  "riposte"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 1,
+                "hp": 128,
+                "ap": 2,
+                "pos": [
+                  3,
+                  3
+                ],
+                "stance": "tactical",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 4,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "root"
+                ],
+                "pending": [
+                  "weaken"
+                ],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 0,
+                "ap": 7,
+                "pos": [
+                  5,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 4,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 77,
+                "ap": 1,
+                "pos": [
+                  7,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 78,
+                "ap": 2,
+                "pos": [
+                  5,
+                  5
+                ],
+                "stance": "tactical",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 82,
+          "state": {
+            "round": 4,
+            "over": false,
+            "result": "",
+            "log_count": 67,
+            "units": [
+              {
+                "id": 0,
+                "hp": 41,
+                "ap": 1,
+                "pos": null,
+                "stance": "defensive",
+                "statuses": [
+                  "taunt",
+                  "riposte"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 1,
+                "hp": 128,
+                "ap": 3,
+                "pos": [
+                  3,
+                  3
+                ],
+                "stance": "tactical",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 8,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "weaken"
+                ],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 0,
+                "ap": 11,
+                "pos": [
+                  5,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 4,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 77,
+                "ap": 1,
+                "pos": [
+                  7,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 0,
+                "ap": 3,
+                "pos": [
+                  5,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 90,
+          "state": {
+            "round": 5,
+            "over": true,
+            "result": "won",
+            "log_count": 71,
+            "units": [
+              {
+                "id": 0,
+                "hp": 41,
+                "ap": 5,
+                "pos": null,
+                "stance": "defensive",
+                "statuses": [
+                  "riposte"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 1,
+                "hp": 128,
+                "ap": 0,
+                "pos": [
+                  5,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "weaken"
+                ],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  5,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 4,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 0,
+                "ap": -1,
+                "pos": [
+                  4,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 0,
+                "ap": 7,
+                "pos": [
+                  5,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              }
+            ]
+          }
+        }
+      ],
+      "end": {
+        "result": "won",
+        "at": 90
+      }
+    }
+  ],
+  "trail": [
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        622,
+        15
+      ],
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 104744
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 104744
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 104744
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1117,
+      "t": 104745
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.scenes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 711,
+      "t": 107388
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        366,
+        248
+      ],
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 107930
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 107930
+    },
+    {
+      "type": "screen",
+      "path": "ui_gallery",
+      "leaked": 0,
+      "t": 107930
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 110339
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.cancel",
+        "cls": "button",
+        "text": "Cancel",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1486,
+      "t": 111884
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        384,
+        258
+      ],
+      "ctl": {
+        "path": "note.cancel",
+        "cls": "button",
+        "text": "Cancel",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 114806
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.cancel",
+        "cls": "button",
+        "text": "Cancel",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 114806
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 114806
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        51,
+        119
+      ],
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 116563
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "t": 116563
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "ms": 1483,
+      "t": 117574
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        46,
+        92
+      ],
+      "ctl": {
+        "path": "gallery.entry.save",
+        "cls": "row",
+        "text": "Save slots",
+        "tip": "Save slots",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 124631
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.save",
+        "cls": "row",
+        "text": "Save slots",
+        "tip": "Save slots",
+        "interactive": true
+      },
+      "t": 124631
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.save",
+        "cls": "row",
+        "text": "Save slots",
+        "tip": "Save slots",
+        "interactive": true
+      },
+      "ms": 802,
+      "t": 125178
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 126932
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1342,
+      "t": 128335
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        242,
+        220
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 128828
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 128828
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 768,
+      "t": 129413
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        246,
+        140
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 130903
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        349,
+        125
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Save screen Ui needs improvement\n1. The ",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 242927
+    },
+    {
+      "type": "note",
+      "n": 1,
+      "t": 254241
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 254241
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 254241
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 124828,
+      "t": 254241
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        411,
+        191
+      ],
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 258394
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 258394
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 258394
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1375,
+      "t": 258394
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        78,
+        112
+      ],
+      "ctl": {
+        "path": "gallery.entry.load",
+        "cls": "row",
+        "text": "Load slots",
+        "tip": "Load slots",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 259926
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.load",
+        "cls": "row",
+        "text": "Load slots",
+        "tip": "Load slots",
+        "interactive": true
+      },
+      "t": 259926
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.load",
+        "cls": "row",
+        "text": "Load slots",
+        "tip": "Load slots",
+        "interactive": true
+      },
+      "ms": 1534,
+      "t": 260802
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        62,
+        117
+      ],
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 265084
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "t": 265084
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "ms": 1617,
+      "t": 266281
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 268894
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        236,
+        224
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 273503
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 273503
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 705,
+      "t": 273860
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        229,
+        143
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 274221
+    },
+    {
+      "type": "note",
+      "n": 2,
+      "t": 681122
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 681122
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 681122
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 407262,
+      "t": 681122
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        438,
+        191
+      ],
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 683612
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 683612
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 683612
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 718,
+      "t": 683613
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        39,
+        135
+      ],
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 684575
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "t": 684575
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "ms": 1358,
+      "t": 685687
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        58,
+        142
+      ],
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 718144
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "t": 718144
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "ms": 2326,
+      "t": 720288
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        54,
+        132
+      ],
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 721044
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "t": 721044
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "ms": 993,
+      "t": 721661
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        48,
+        145
+      ],
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 721906
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "t": 721906
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "ms": 2353,
+      "t": 724014
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        47,
+        132
+      ],
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 724501
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "t": 724501
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "ms": 1513,
+      "t": 725528
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        18,
+        141
+      ],
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 729103
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "t": 729103
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "ms": 1592,
+      "t": 729839
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        28,
+        124
+      ],
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 730138
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "t": 730138
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.region",
+        "cls": "row",
+        "text": "Region map",
+        "tip": "Region map",
+        "interactive": true
+      },
+      "ms": 886,
+      "t": 730725
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        28,
+        130
+      ],
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 730965
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "t": 730965
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "ms": 1278,
+      "t": 732065
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        306,
+        134
+      ],
+      "ctl": null,
+      "handled": true,
+      "t": 739402
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 739402
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.scenes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1396,
+      "t": 740799
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        381,
+        251
+      ],
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 741554
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 741554
+    },
+    {
+      "type": "screen",
+      "path": "ui_gallery",
+      "leaked": 0,
+      "t": 741554
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        59,
+        126
+      ],
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 743469
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.dialogue",
+        "cls": "row",
+        "text": "Dialogue",
+        "tip": "Dialogue",
+        "interactive": true
+      },
+      "t": 743469
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.results",
+        "cls": "row",
+        "text": "Battle results",
+        "tip": "Battle results",
+        "interactive": true
+      },
+      "ms": 1494,
+      "t": 748213
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 751049
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1758,
+      "t": 752877
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        243,
+        220
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 753229
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 753229
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        246,
+        169
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 753820
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 152554,
+      "t": 906009
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        295,
+        117
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 906719
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        285,
+        121
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 907907
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        275,
+        149
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 912256
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 6382,
+      "t": 912820
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        262,
+        149
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 915342
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 774,
+      "t": 915692
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        228,
+        143
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 917978
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 3957,
+      "t": 920006
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.cancel",
+        "cls": "button",
+        "text": "Cancel",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 767,
+      "t": 921125
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        273,
+        147
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 922466
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        291,
+        156
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller in height ",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 1026247
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller\nPut the ch",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 163783,
+      "t": 1085893
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        373,
+        165
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller in height ",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 1089047
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        445,
+        197
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller in height ",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 1366185
+    },
+    {
+      "type": "note",
+      "n": 3,
+      "t": 1520126
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 1520127
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 1520127
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Make the dialogue box smaller in height ",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 434089,
+      "t": 1520127
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        420,
+        195
+      ],
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1523147
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 1523147
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 1523147
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        417,
+        111
+      ],
+      "ctl": null,
+      "handled": true,
+      "t": 1531116
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 1531116
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "ms": 755,
+      "t": 1531873
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        363,
+        245
+      ],
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1533368
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 1533368
+    },
+    {
+      "type": "screen",
+      "path": "ui_gallery",
+      "leaked": 0,
+      "t": 1533368
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        49,
+        166
+      ],
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1535844
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "t": 1535844
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "ms": 1304,
+      "t": 1536601
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        56,
+        151
+      ],
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1537910
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "t": 1537910
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "ms": 6365,
+      "t": 1542966
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        77,
+        143
+      ],
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1551481
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "t": 1551481
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "ms": 2444,
+      "t": 1552440
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "ms": 1553,
+      "t": 1553994
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.shop",
+        "cls": "row",
+        "text": "Shop",
+        "tip": "Shop",
+        "interactive": true
+      },
+      "ms": 838,
+      "t": 1593243
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        327,
+        130
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 1601627
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 1602588
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 3264,
+      "t": 1605936
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        252,
+        219
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1606685
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 1606685
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 751,
+      "t": 1607189
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        255,
+        144
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Shop",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 1607523
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Shop",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 386151,
+      "t": 1993591
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "Shop should show your stash and the shop",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1265,
+      "t": 1995197
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        452,
+        258
+      ],
+      "ctl": {
+        "path": "note.save",
+        "cls": "button",
+        "text": "Save",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1996464
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.save",
+        "cls": "button",
+        "text": "Save",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 1996464
+    },
+    {
+      "type": "note",
+      "n": 4,
+      "t": 1996525
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 1996526
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 1996526
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.save",
+        "cls": "button",
+        "text": "Save",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 988,
+      "t": 1996527
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        419,
+        193
+      ],
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 1998124
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 1998124
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 1998124
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        508,
+        293
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 1999760
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        507,
+        291
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2000651
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        620,
+        28
+      ],
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2002034
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "t": 2002034
+    },
+    {
+      "type": "screen",
+      "path": "region_map",
+      "leaked": 0,
+      "t": 2002035
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "choice.1",
+        "cls": "choice",
+        "text": "2  What do the stores need?",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1023,
+      "t": 2004500
+    },
+    {
+      "type": "key",
+      "key": "up",
+      "mods": "",
+      "t": 2005518
+    },
+    {
+      "type": "key",
+      "key": "up",
+      "mods": "",
+      "t": 2006031
+    },
+    {
+      "type": "key",
+      "key": "up",
+      "mods": "",
+      "t": 2006065
+    },
+    {
+      "type": "key",
+      "key": "up",
+      "mods": "",
+      "t": 2006066
+    },
+    {
+      "type": "key",
+      "key": "up",
+      "mods": "",
+      "t": 2006275
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        443,
+        236
+      ],
+      "ctl": {
+        "path": "choice.1",
+        "cls": "choice",
+        "text": "2  What do the stores need?",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2008559
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "choice.1",
+        "cls": "choice",
+        "text": "2  What do the stores need?",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2008559
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        457,
+        217
+      ],
+      "ctl": {
+        "path": "dialogue.continue",
+        "cls": "button",
+        "text": "Continue",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2009478
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "dialogue.continue",
+        "cls": "button",
+        "text": "Continue",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2009478
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        455,
+        282
+      ],
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2010616
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2010616
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.close",
+        "cls": "button",
+        "text": "Close",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 925,
+      "t": 2014447
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.shd_buckler.1",
+        "cls": "button",
+        "text": "Duelist Buckler x1 - 30 gold  (1 left)",
+        "tip": "Duelist Buckler",
+        "interactive": true
+      },
+      "ms": 2700,
+      "t": 2019818
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.con_focus_elixir.1",
+        "cls": "button",
+        "text": "Elixir of Focus x1 - 25 gold  (5 left)",
+        "tip": "Elixir of Focus",
+        "interactive": true
+      },
+      "ms": 2577,
+      "t": 2022505
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.con_heal_potion.1",
+        "cls": "button",
+        "text": "Healing Draught x1 - 30 gold",
+        "tip": "Healing Draught",
+        "interactive": true
+      },
+      "ms": 1531,
+      "t": 2024092
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.supplies.5",
+        "cls": "button",
+        "text": "Supplies x5 - 10 gold",
+        "tip": "Supplies",
+        "interactive": true
+      },
+      "ms": 1229,
+      "t": 2028517
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.arm_leather.1",
+        "cls": "button",
+        "text": "Leather Brigandine x1 - 40 gold  (1 left",
+        "tip": "Leather Brigandine",
+        "interactive": true
+      },
+      "ms": 1645,
+      "t": 2030335
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.con_fire_bomb.1",
+        "cls": "button",
+        "text": "Throwing Fire Bomb x1 - 40 gold  (3 left",
+        "tip": "Throwing Fire Bomb",
+        "interactive": true
+      },
+      "ms": 4867,
+      "t": 2035477
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        480,
+        297
+      ],
+      "ctl": {
+        "path": "shop.close",
+        "cls": "button",
+        "text": "Close",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2040149
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "shop.close",
+        "cls": "button",
+        "text": "Close",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2040149
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.close",
+        "cls": "button",
+        "text": "Close",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 3906,
+      "t": 2040185
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "choice.4",
+        "cls": "choice",
+        "text": "5  Farewell.",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 724,
+      "t": 2040910
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        468,
+        286
+      ],
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2089786
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2089786
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        326,
+        118
+      ],
+      "ctl": {
+        "path": "shop.offer.con_heal_potion.1",
+        "cls": "button",
+        "text": "Healing Draught x1 - 30 gold",
+        "tip": "Healing Draught",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2092336
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "shop.offer.con_heal_potion.1",
+        "cls": "button",
+        "text": "Healing Draught x1 - 30 gold",
+        "tip": "Healing Draught",
+        "interactive": true
+      },
+      "t": 2092336
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        326,
+        120
+      ],
+      "ctl": {
+        "path": "shop.offer.con_heal_potion.1",
+        "cls": "button",
+        "text": "Healing Draught x1 - 30 gold",
+        "tip": "Healing Draught",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2095786
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "shop.offer.con_heal_potion.1",
+        "cls": "button",
+        "text": "Healing Draught x1 - 30 gold",
+        "tip": "Healing Draught",
+        "interactive": true
+      },
+      "t": 2095786
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.con_heal_potion.1",
+        "cls": "button",
+        "text": "Healing Draught x1 - 30 gold",
+        "tip": "Healing Draught",
+        "interactive": true
+      },
+      "ms": 7278,
+      "t": 2097994
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.con_focus_elixir.1",
+        "cls": "button",
+        "text": "Elixir of Focus x1 - 25 gold  (5 left)",
+        "tip": "Elixir of Focus",
+        "interactive": true
+      },
+      "ms": 1032,
+      "t": 2099789
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.shd_buckler.1",
+        "cls": "button",
+        "text": "Duelist Buckler x1 - 30 gold  (1 left)",
+        "tip": "Duelist Buckler",
+        "interactive": true
+      },
+      "ms": 1441,
+      "t": 2101830
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        392,
+        128
+      ],
+      "ctl": null,
+      "handled": true,
+      "t": 2102156
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        454,
+        277
+      ],
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2104781
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2104781
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1543,
+      "t": 2104840
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.con_focus_elixir.1",
+        "cls": "button",
+        "text": "Elixir of Focus x1 - 25 gold  (5 left)",
+        "tip": "Elixir of Focus",
+        "interactive": true
+      },
+      "ms": 865,
+      "t": 2106899
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        365,
+        179
+      ],
+      "ctl": {
+        "path": "shop.offer.shd_buckler.1",
+        "cls": "button",
+        "text": "Duelist Buckler x1 - 30 gold  (1 left)",
+        "tip": "Duelist Buckler",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2109887
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "shop.offer.shd_buckler.1",
+        "cls": "button",
+        "text": "Duelist Buckler x1 - 30 gold  (1 left)",
+        "tip": "Duelist Buckler",
+        "interactive": true
+      },
+      "t": 2109887
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "shop.offer.shd_buckler.1",
+        "cls": "button",
+        "text": "Duelist Buckler x1 - 30 gold  (1 left)",
+        "tip": "Duelist Buckler",
+        "interactive": true
+      },
+      "ms": 1773,
+      "t": 2109944
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        364,
+        201
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2113405
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        306,
+        179
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2123769
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        494,
+        294
+      ],
+      "ctl": {
+        "path": "shop.close",
+        "cls": "button",
+        "text": "Close",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2126953
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "shop.close",
+        "cls": "button",
+        "text": "Close",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2126953
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        422,
+        90
+      ],
+      "ctl": null,
+      "handled": true,
+      "t": 2127306
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1815,
+      "t": 2129152
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 704,
+      "t": 2130168
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "marker.tev",
+        "cls": "marker",
+        "text": "Tev Quill",
+        "tip": "Tev Quill",
+        "interactive": true
+      },
+      "ms": 1107,
+      "t": 2131890
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        288,
+        85
+      ],
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2133942
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2133942
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 4068,
+      "t": 2136295
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        223,
+        30
+      ],
+      "ctl": {
+        "path": "marker.hest",
+        "cls": "marker",
+        "text": "Hest the Quartermaster",
+        "tip": "Hest the Quartermaster",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2136607
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "marker.hest",
+        "cls": "marker",
+        "text": "Hest the Quartermaster",
+        "tip": "Hest the Quartermaster",
+        "interactive": true
+      },
+      "t": 2136607
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 752,
+      "t": 2137389
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        444,
+        282
+      ],
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2139232
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "choice.3",
+        "cls": "choice",
+        "text": "4  Show me your wares.",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2139232
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        618,
+        17
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2141272
+    },
+    {
+      "type": "key",
+      "key": "esc",
+      "mods": "",
+      "t": 2142526
+    },
+    {
+      "type": "key",
+      "key": "esc",
+      "mods": "",
+      "t": 2142984
+    },
+    {
+      "type": "key",
+      "key": "esc",
+      "mods": "",
+      "t": 2143469
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "hub",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2143469
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        156,
+        309
+      ],
+      "ctl": {
+        "path": "hub.return",
+        "cls": "button",
+        "text": "Return to map",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2144934
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "hub.return",
+        "cls": "button",
+        "text": "Return to map",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2144934
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "hub",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 2144934
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        406,
+        160
+      ],
+      "ctl": {
+        "path": "map",
+        "cls": "map",
+        "text": "Warden Keep",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2145480
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "hub",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2145480
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        150,
+        313
+      ],
+      "ctl": {
+        "path": "hub.return",
+        "cls": "button",
+        "text": "Return to map",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2146989
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "hub.return",
+        "cls": "button",
+        "text": "Return to map",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2146989
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "hub",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 2146989
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        613,
+        47
+      ],
+      "ctl": {
+        "path": "here.gate",
+        "cls": "row",
+        "text": "To The Ruined Courtyard",
+        "tip": "To The Ruined Courtyard",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2148863
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "here.gate",
+        "cls": "row",
+        "text": "To The Ruined Courtyard",
+        "tip": "To The Ruined Courtyard",
+        "interactive": true
+      },
+      "t": 2148863
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "here.gate",
+        "cls": "row",
+        "text": "To The Ruined Courtyard",
+        "tip": "To The Ruined Courtyard",
+        "interactive": true
+      },
+      "ms": 1721,
+      "t": 2149525
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        623,
+        8
+      ],
+      "ctl": {
+        "path": "region.menu",
+        "cls": "button",
+        "text": "Menu",
+        "tip": "Game menu (Esc)",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2150047
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "region.menu",
+        "cls": "button",
+        "text": "Menu",
+        "tip": "Game menu (Esc)",
+        "interactive": true
+      },
+      "t": 2150047
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "hub",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2150047
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        415,
+        198
+      ],
+      "ctl": {
+        "path": "hub.quit",
+        "cls": "button",
+        "text": "Quit to main menu",
+        "tip": "Quit to main menu",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2151989
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "hub.quit",
+        "cls": "button",
+        "text": "Quit to main menu",
+        "tip": "Quit to main menu",
+        "interactive": true
+      },
+      "t": 2151989
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "ask",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2151989
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        414,
+        194
+      ],
+      "ctl": {
+        "path": "ask.yes",
+        "cls": "button",
+        "text": "Yes",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2153398
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "ask.yes",
+        "cls": "button",
+        "text": "Yes",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2153398
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "ask",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 2153398
+    },
+    {
+      "type": "screen",
+      "path": "main_menu",
+      "leaked": 0,
+      "t": 2153398
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        421,
+        246
+      ],
+      "ctl": null,
+      "handled": true,
+      "t": 2155026
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        356,
+        224
+      ],
+      "ctl": {
+        "path": "menu.tools",
+        "cls": "button",
+        "text": "Tools (Forge, Dojo, Test Arena)",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2155735
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "menu.tools",
+        "cls": "button",
+        "text": "Tools (Forge, Dojo, Test Arena)",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2155735
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 2155735
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        354,
+        242
+      ],
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2159781
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.gallery",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2159781
+    },
+    {
+      "type": "screen",
+      "path": "ui_gallery",
+      "leaked": 0,
+      "t": 2159781
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        54,
+        56
+      ],
+      "ctl": {
+        "path": "gallery.entry.main_menu",
+        "cls": "row",
+        "text": "Main menu",
+        "tip": "Main menu",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2164930
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.main_menu",
+        "cls": "row",
+        "text": "Main menu",
+        "tip": "Main menu",
+        "interactive": true
+      },
+      "t": 2164930
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.main_menu",
+        "cls": "row",
+        "text": "Main menu",
+        "tip": "Main menu",
+        "interactive": true
+      },
+      "ms": 1018,
+      "t": 2165592
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        48,
+        347
+      ],
+      "ctl": {
+        "path": "gallery.entry.timeline",
+        "cls": "row",
+        "text": "Battle timeline",
+        "tip": "Battle timeline",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2167687
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.timeline",
+        "cls": "row",
+        "text": "Battle timeline",
+        "tip": "Battle timeline",
+        "interactive": true
+      },
+      "t": 2167687
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.timeline",
+        "cls": "row",
+        "text": "Battle timeline",
+        "tip": "Battle timeline",
+        "interactive": true
+      },
+      "ms": 1221,
+      "t": 2168690
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1814,
+      "t": 2170627
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        296,
+        73
+      ],
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2171657
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "t": 2171657
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "ms": 1384,
+      "t": 2172408
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        375,
+        69
+      ],
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.2",
+        "cls": "row",
+        "text": "Intimidate > Goblin Archer",
+        "tip": "Intimidate",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2172649
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.2",
+        "cls": "row",
+        "text": "Intimidate > Goblin Archer",
+        "tip": "Intimidate",
+        "interactive": true
+      },
+      "t": 2172649
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.track.u2.masked",
+        "cls": "row",
+        "text": "Plans in secret. Next: Lunge on Warrior ",
+        "tip": "Goblin Brawler",
+        "interactive": false
+      },
+      "ms": 1274,
+      "t": 2176758
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.autoplan",
+        "cls": "button",
+        "text": "Auto plan",
+        "tip": "Auto plan",
+        "interactive": true
+      },
+      "ms": 1111,
+      "t": 2178229
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        456,
+        27
+      ],
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Reveal enemies",
+        "tip": "Reveal enemies",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2179867
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Reveal enemies",
+        "tip": "Reveal enemies",
+        "interactive": true
+      },
+      "t": 2179867
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Reveal enemies",
+        "tip": "Reveal enemies",
+        "interactive": true
+      },
+      "ms": 2339,
+      "t": 2181767
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u3.1",
+        "cls": "row",
+        "text": "Move",
+        "tip": "Move",
+        "interactive": true
+      },
+      "ms": 2111,
+      "t": 2184528
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u3.0",
+        "cls": "row",
+        "text": "Move",
+        "tip": "Move",
+        "interactive": true
+      },
+      "ms": 837,
+      "t": 2185410
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        289,
+        71
+      ],
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2186547
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "t": 2186547
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "ms": 3280,
+      "t": 2189434
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u6.0",
+        "cls": "row",
+        "text": "Move",
+        "tip": "Move",
+        "interactive": true
+      },
+      "ms": 914,
+      "t": 2193955
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u6.1",
+        "cls": "row",
+        "text": "Move",
+        "tip": "Move",
+        "interactive": true
+      },
+      "ms": 2125,
+      "t": 2196080
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u4.0",
+        "cls": "row",
+        "text": "Move",
+        "tip": "Move",
+        "interactive": true
+      },
+      "ms": 915,
+      "t": 2198008
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.seg.u0.1",
+        "cls": "row",
+        "text": "Taunt Shout III",
+        "tip": "Taunt Shout III",
+        "interactive": true
+      },
+      "ms": 1250,
+      "t": 2199823
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        438,
+        29
+      ],
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Hide enemies",
+        "tip": "Hide enemies",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2200776
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Hide enemies",
+        "tip": "Hide enemies",
+        "interactive": true
+      },
+      "t": 2200776
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        438,
+        29
+      ],
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Reveal enemies",
+        "tip": "Reveal enemies",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2201575
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Reveal enemies",
+        "tip": "Reveal enemies",
+        "interactive": true
+      },
+      "t": 2201575
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.reveal",
+        "cls": "button",
+        "text": "Hide enemies",
+        "tip": "Hide enemies",
+        "interactive": true
+      },
+      "ms": 1850,
+      "t": 2202193
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.confirm",
+        "cls": "button",
+        "text": "Confirm",
+        "tip": "Confirm",
+        "interactive": true
+      },
+      "ms": 706,
+      "t": 2203332
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        261,
+        29
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2204291
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        118,
+        31
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2205403
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        230,
+        43
+      ],
+      "ctl": {
+        "path": "gallery.timeline.block.1",
+        "cls": "button",
+        "text": "B1",
+        "tip": "Block 1",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2206365
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.block.1",
+        "cls": "button",
+        "text": "B1",
+        "tip": "Block 1",
+        "interactive": true
+      },
+      "t": 2206365
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.block.1",
+        "cls": "button",
+        "text": "B1",
+        "tip": "Block 1",
+        "interactive": true
+      },
+      "ms": 1119,
+      "t": 2207008
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        288,
+        46
+      ],
+      "ctl": {
+        "path": "gallery.timeline.block.2",
+        "cls": "button",
+        "text": "B2",
+        "tip": "Block 2",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2207308
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.block.2",
+        "cls": "button",
+        "text": "B2",
+        "tip": "Block 2",
+        "interactive": true
+      },
+      "t": 2207308
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.block.2",
+        "cls": "button",
+        "text": "B2",
+        "tip": "Block 2",
+        "interactive": true
+      },
+      "ms": 1079,
+      "t": 2208087
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        364,
+        43
+      ],
+      "ctl": {
+        "path": "gallery.timeline.block.3",
+        "cls": "button",
+        "text": "B3",
+        "tip": "Block 3",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2208620
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.block.3",
+        "cls": "button",
+        "text": "B3",
+        "tip": "Block 3",
+        "interactive": true
+      },
+      "t": 2208620
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.block.3",
+        "cls": "button",
+        "text": "B3",
+        "tip": "Block 3",
+        "interactive": true
+      },
+      "ms": 885,
+      "t": 2208973
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        210,
+        44
+      ],
+      "ctl": {
+        "path": "gallery.timeline.block.1",
+        "cls": "button",
+        "text": "B1",
+        "tip": "Block 1",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2209327
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.timeline.block.1",
+        "cls": "button",
+        "text": "B1",
+        "tip": "Block 1",
+        "interactive": true
+      },
+      "t": 2209327
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.timeline.block.1",
+        "cls": "button",
+        "text": "B1",
+        "tip": "Block 1",
+        "interactive": true
+      },
+      "ms": 805,
+      "t": 2209823
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        37,
+        334
+      ],
+      "ctl": {
+        "path": "gallery.entry.bar",
+        "cls": "row",
+        "text": "Status and log",
+        "tip": "Status and log",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2210804
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.bar",
+        "cls": "row",
+        "text": "Status and log",
+        "tip": "Status and log",
+        "interactive": true
+      },
+      "t": 2210804
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.bar",
+        "cls": "row",
+        "text": "Status and log",
+        "tip": "Status and log",
+        "interactive": true
+      },
+      "ms": 1102,
+      "t": 2211642
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        608,
+        197
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2213258
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        607,
+        203
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2213580
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.intel",
+        "cls": "row",
+        "text": "Threat intel",
+        "tip": "Threat intel",
+        "interactive": true
+      },
+      "ms": 906,
+      "t": 2215691
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        187,
+        189
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2216483
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        140,
+        184
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2217267
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        625,
+        30
+      ],
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2219618
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "t": 2219618
+    },
+    {
+      "type": "screen",
+      "path": "test_arena",
+      "leaked": 0,
+      "t": 2219639
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "ms": 1286,
+      "t": 2219640
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        605,
+        346
+      ],
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Expand",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2221401
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Expand",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "t": 2221401
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        605,
+        346
+      ],
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Close",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2222656
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Close",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "t": 2222656
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        605,
+        346
+      ],
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Expand",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2223121
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Expand",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "t": 2223121
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        605,
+        346
+      ],
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Close",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2223558
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Close",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "t": 2223558
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "bar.log",
+        "cls": "button",
+        "text": "Expand",
+        "tip": "Full combat log (L); the wheel scrolls",
+        "interactive": true
+      },
+      "ms": 3017,
+      "t": 2224037
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "tile.6.6",
+        "cls": "tile",
+        "text": "floor",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 924,
+      "t": 2226766
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        467,
+        12
+      ],
+      "ctl": null,
+      "handled": false,
+      "t": 2228461
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        482,
+        12
+      ],
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2228972
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "t": 2228972
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 1,
+      "t": 2228986
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 1,
+      "t": 2228986
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 2,
+      "t": 2241184
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 2,
+      "t": 2241184
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 3,
+      "t": 2250328
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 3,
+      "t": 2250328
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 4,
+      "t": 2256946
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 4,
+      "t": 2256946
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 5,
+      "t": 2261647
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 5,
+      "t": 2261647
+    },
+    {
+      "type": "battle_end",
+      "round": 5,
+      "result": "won",
+      "t": 2263538
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        364,
+        182
+      ],
+      "ctl": {
+        "path": "banner.leave",
+        "cls": "button",
+        "text": "Leave",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2264757
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "banner.leave",
+        "cls": "button",
+        "text": "Leave",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2264757
+    },
+    {
+      "type": "screen",
+      "path": "ui_gallery",
+      "leaked": 0,
+      "t": 2264757
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 759,
+      "t": 2267532
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        68,
+        325
+      ],
+      "ctl": {
+        "path": "gallery.entry.intel",
+        "cls": "row",
+        "text": "Threat intel",
+        "tip": "Threat intel",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2268562
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.intel",
+        "cls": "row",
+        "text": "Threat intel",
+        "tip": "Threat intel",
+        "interactive": true
+      },
+      "t": 2268562
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.intel",
+        "cls": "row",
+        "text": "Threat intel",
+        "tip": "Threat intel",
+        "interactive": true
+      },
+      "ms": 2303,
+      "t": 2270547
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hostiles",
+        "cls": "row",
+        "text": "Hostile list",
+        "tip": "Hostile list",
+        "interactive": true
+      },
+      "ms": 1065,
+      "t": 2271612
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.grid",
+        "cls": "row",
+        "text": "Battlefield",
+        "tip": "Battlefield",
+        "interactive": true
+      },
+      "ms": 2303,
+      "t": 2273916
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        48,
+        305
+      ],
+      "ctl": {
+        "path": "gallery.entry.hostiles",
+        "cls": "row",
+        "text": "Hostile list",
+        "tip": "Hostile list",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2274272
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.hostiles",
+        "cls": "row",
+        "text": "Hostile list",
+        "tip": "Hostile list",
+        "interactive": true
+      },
+      "t": 2274272
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hostiles",
+        "cls": "row",
+        "text": "Hostile list",
+        "tip": "Hostile list",
+        "interactive": true
+      },
+      "ms": 1582,
+      "t": 2275498
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        51,
+        292
+      ],
+      "ctl": {
+        "path": "gallery.entry.grid",
+        "cls": "row",
+        "text": "Battlefield",
+        "tip": "Battlefield",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2281878
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.grid",
+        "cls": "row",
+        "text": "Battlefield",
+        "tip": "Battlefield",
+        "interactive": true
+      },
+      "t": 2281878
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.grid",
+        "cls": "row",
+        "text": "Battlefield",
+        "tip": "Battlefield",
+        "interactive": true
+      },
+      "ms": 10057,
+      "t": 2285556
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        57,
+        284
+      ],
+      "ctl": {
+        "path": "gallery.entry.hero",
+        "cls": "row",
+        "text": "Hero inspector",
+        "tip": "Hero inspector",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2286008
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.hero",
+        "cls": "row",
+        "text": "Hero inspector",
+        "tip": "Hero inspector",
+        "interactive": true
+      },
+      "t": 2286008
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hero",
+        "cls": "row",
+        "text": "Hero inspector",
+        "tip": "Hero inspector",
+        "interactive": true
+      },
+      "ms": 1864,
+      "t": 2287420
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        61,
+        273
+      ],
+      "ctl": {
+        "path": "gallery.entry.party",
+        "cls": "row",
+        "text": "Party list",
+        "tip": "Party list",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2287676
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.party",
+        "cls": "row",
+        "text": "Party list",
+        "tip": "Party list",
+        "interactive": true
+      },
+      "t": 2287676
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.party",
+        "cls": "row",
+        "text": "Party list",
+        "tip": "Party list",
+        "interactive": true
+      },
+      "ms": 1628,
+      "t": 2289049
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        66,
+        258
+      ],
+      "ctl": {
+        "path": "gallery.entry.strip",
+        "cls": "row",
+        "text": "Plan strip",
+        "tip": "Plan strip",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2291946
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.strip",
+        "cls": "row",
+        "text": "Plan strip",
+        "tip": "Plan strip",
+        "interactive": true
+      },
+      "t": 2291946
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.strip",
+        "cls": "row",
+        "text": "Plan strip",
+        "tip": "Plan strip",
+        "interactive": true
+      },
+      "ms": 4610,
+      "t": 2293660
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        69,
+        233
+      ],
+      "ctl": {
+        "path": "gallery.entry.battle",
+        "cls": "row",
+        "text": "Battle (whole)",
+        "tip": "Battle (whole)",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2295736
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.battle",
+        "cls": "row",
+        "text": "Battle (whole)",
+        "tip": "Battle (whole)",
+        "interactive": true
+      },
+      "t": 2295736
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.battle",
+        "cls": "row",
+        "text": "Battle (whole)",
+        "tip": "Battle (whole)",
+        "interactive": true
+      },
+      "ms": 1025,
+      "t": 2296324
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        69,
+        224
+      ],
+      "ctl": {
+        "path": "gallery.entry.results",
+        "cls": "row",
+        "text": "Battle results",
+        "tip": "Battle results",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2297078
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.results",
+        "cls": "row",
+        "text": "Battle results",
+        "tip": "Battle results",
+        "interactive": true
+      },
+      "t": 2297078
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.results",
+        "cls": "row",
+        "text": "Battle results",
+        "tip": "Battle results",
+        "interactive": true
+      },
+      "ms": 1533,
+      "t": 2297857
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        70,
+        214
+      ],
+      "ctl": {
+        "path": "gallery.entry.world_map",
+        "cls": "row",
+        "text": "World map",
+        "tip": "World map",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2299323
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.world_map",
+        "cls": "row",
+        "text": "World map",
+        "tip": "World map",
+        "interactive": true
+      },
+      "t": 2299323
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.world_map",
+        "cls": "row",
+        "text": "World map",
+        "tip": "World map",
+        "interactive": true
+      },
+      "ms": 2093,
+      "t": 2299950
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        70,
+        204
+      ],
+      "ctl": {
+        "path": "gallery.entry.gear",
+        "cls": "row",
+        "text": "Character: Gear",
+        "tip": "Character: Gear",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2300600
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.gear",
+        "cls": "row",
+        "text": "Character: Gear",
+        "tip": "Character: Gear",
+        "interactive": true
+      },
+      "t": 2300600
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.gear",
+        "cls": "row",
+        "text": "Character: Gear",
+        "tip": "Character: Gear",
+        "interactive": true
+      },
+      "ms": 1291,
+      "t": 2301242
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        72,
+        192
+      ],
+      "ctl": {
+        "path": "gallery.entry.skills",
+        "cls": "row",
+        "text": "Character: Skills",
+        "tip": "Character: Skills",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2301806
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.skills",
+        "cls": "row",
+        "text": "Character: Skills",
+        "tip": "Character: Skills",
+        "interactive": true
+      },
+      "t": 2301806
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.skills",
+        "cls": "row",
+        "text": "Character: Skills",
+        "tip": "Character: Skills",
+        "interactive": true
+      },
+      "ms": 1616,
+      "t": 2302858
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "ms": 702,
+      "t": 2303703
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        69,
+        182
+      ],
+      "ctl": {
+        "path": "gallery.entry.level_up",
+        "cls": "row",
+        "text": "Character: Level up",
+        "tip": "Character: Level up",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2303916
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.level_up",
+        "cls": "row",
+        "text": "Character: Level up",
+        "tip": "Character: Level up",
+        "interactive": true
+      },
+      "t": 2303916
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        67,
+        168
+      ],
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2304579
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "t": 2304579
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "ms": 721,
+      "t": 2305102
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        61,
+        148
+      ],
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2305561
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        61,
+        155
+      ],
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2306147
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "t": 2306147
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "ms": 1195,
+      "t": 2307146
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        61,
+        142
+      ],
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2307462
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "t": 2307462
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "ms": 14417,
+      "t": 2321564
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 6961,
+      "t": 2328591
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "ms": 34676,
+      "t": 2364526
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        54,
+        164
+      ],
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2364844
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "t": 2364844
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.stats",
+        "cls": "row",
+        "text": "Character: Stats",
+        "tip": "Character: Stats",
+        "interactive": true
+      },
+      "ms": 2804,
+      "t": 2367331
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        51,
+        175
+      ],
+      "ctl": {
+        "path": "gallery.entry.level_up",
+        "cls": "row",
+        "text": "Character: Level up",
+        "tip": "Character: Level up",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2368822
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.level_up",
+        "cls": "row",
+        "text": "Character: Level up",
+        "tip": "Character: Level up",
+        "interactive": true
+      },
+      "t": 2368822
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.level_up",
+        "cls": "row",
+        "text": "Character: Level up",
+        "tip": "Character: Level up",
+        "interactive": true
+      },
+      "ms": 1952,
+      "t": 2369283
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        46,
+        193
+      ],
+      "ctl": {
+        "path": "gallery.entry.skills",
+        "cls": "row",
+        "text": "Character: Skills",
+        "tip": "Character: Skills",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2369685
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.skills",
+        "cls": "row",
+        "text": "Character: Skills",
+        "tip": "Character: Skills",
+        "interactive": true
+      },
+      "t": 2369685
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.skills",
+        "cls": "row",
+        "text": "Character: Skills",
+        "tip": "Character: Skills",
+        "interactive": true
+      },
+      "ms": 766,
+      "t": 2370116
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        45,
+        200
+      ],
+      "ctl": {
+        "path": "gallery.entry.gear",
+        "cls": "row",
+        "text": "Character: Gear",
+        "tip": "Character: Gear",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2370328
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.gear",
+        "cls": "row",
+        "text": "Character: Gear",
+        "tip": "Character: Gear",
+        "interactive": true
+      },
+      "t": 2370328
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.gear",
+        "cls": "row",
+        "text": "Character: Gear",
+        "tip": "Character: Gear",
+        "interactive": true
+      },
+      "ms": 928,
+      "t": 2371045
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        46,
+        173
+      ],
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2372371
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        46,
+        170
+      ],
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2372885
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "t": 2372885
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        49,
+        155
+      ],
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2373617
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "t": 2373617
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.hub",
+        "cls": "row",
+        "text": "Game menu",
+        "tip": "Game menu",
+        "interactive": true
+      },
+      "ms": 972,
+      "t": 2374321
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        44,
+        171
+      ],
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2375481
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "t": 2375481
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.journal",
+        "cls": "row",
+        "text": "Journal",
+        "tip": "Journal",
+        "interactive": true
+      },
+      "ms": 1838,
+      "t": 2377062
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        40,
+        125
+      ],
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2377632
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 873,
+      "t": 2378194
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        613,
+        33
+      ],
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2379399
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.open",
+        "cls": "button",
+        "text": "Open",
+        "tip": "Open",
+        "interactive": true
+      },
+      "t": 2379399
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "journal",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2379399
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        96,
+        331
+      ],
+      "ctl": {
+        "path": "journal.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2380777
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "journal.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2380777
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "journal",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 2380777
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        43,
+        149
+      ],
+      "ctl": {
+        "path": "gallery.entries",
+        "cls": "scroll",
+        "text": "13",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2382272
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.entry.strip",
+        "cls": "row",
+        "text": "Plan strip",
+        "tip": "Plan strip",
+        "interactive": true
+      },
+      "ms": 712,
+      "t": 2384181
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        622,
+        9
+      ],
+      "ctl": {
+        "path": "gallery.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2387723
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "gallery.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2387723
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 2387723
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "gallery.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 751,
+      "t": 2387723
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "ms": 715,
+      "t": 2391295
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        457,
+        104
+      ],
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2397287
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "t": 2397287
+    },
+    {
+      "type": "screen",
+      "path": "recordings",
+      "leaked": 0,
+      "t": 2397289
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "ms": 1871,
+      "t": 2397289
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 6624,
+      "t": 2404914
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.item.0",
+        "cls": "row",
+        "text": "20261021-193519  1 battles, 4 notes",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 783,
+      "t": 2406235
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        619,
+        16
+      ],
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2408823
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2408823
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 2408823
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        437,
+        105
+      ],
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2411006
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "t": 2411006
+    },
+    {
+      "type": "screen",
+      "path": "recordings",
+      "leaked": 0,
+      "t": 2411008
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "ms": 1399,
+      "t": 2411008
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        366,
+        149
+      ],
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2411827
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1701,
+      "t": 2413198
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.open_folder",
+        "cls": "button",
+        "text": "Open folder",
+        "tip": "Open folder",
+        "interactive": true
+      },
+      "ms": 7041,
+      "t": 2420872
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1385,
+      "t": 2422258
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        623,
+        15
+      ],
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2424643
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2424643
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 2424643
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2427739
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.save",
+        "cls": "button",
+        "text": "Save",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 284613,
+      "t": 2712404
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        239,
+        226
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2713694
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2713694
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1114,
+      "t": 2714302
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        214,
+        161
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "For Shop maybe just click should be fine",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2714813
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        223,
+        138
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "For Shop maybe just click should be fine",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2716740
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 2716740
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "For Shop maybe just click should be fine",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 2438,
+      "t": 2716741
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.scenes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 2391,
+      "t": 2719133
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        454,
+        104
+      ],
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2720054
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "t": 2720054
+    },
+    {
+      "type": "screen",
+      "path": "recordings",
+      "leaked": 0,
+      "t": 2720056
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 5922,
+      "t": 2726627
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 2728800
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1511,
+      "t": 2728800
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1571,
+      "t": 2730420
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        236,
+        220
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 2730830
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 2730830
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        242,
+        139
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 2731536
+    },
+    {
+      "type": "note",
+      "n": 5,
+      "t": 3081293
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 3081295
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 3081305
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 350170,
+      "t": 3081305
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        423,
+        184
+      ],
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 3083808
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 3083808
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 3083808
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 2119,
+      "t": 3085930
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.copy",
+        "cls": "button",
+        "text": "Copy to repo",
+        "tip": "Copy to repo",
+        "interactive": true
+      },
+      "ms": 6836,
+      "t": 3092811
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        564,
+        34
+      ],
+      "ctl": {
+        "path": "recordings.refresh",
+        "cls": "button",
+        "text": "Refresh",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 3094102
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.refresh",
+        "cls": "button",
+        "text": "Refresh",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 3094102
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.refresh",
+        "cls": "button",
+        "text": "Refresh",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1386,
+      "t": 3095036
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        420,
+        79
+      ],
+      "ctl": {
+        "path": "recordings.battle",
+        "cls": "select",
+        "text": "1. goblin_skirmish: won, 5 rounds",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 3095840
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.battle",
+        "cls": "select",
+        "text": "1. goblin_skirmish: won, 5 rounds",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 3095840
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.battle",
+        "cls": "select",
+        "text": "1. goblin_skirmish: won, 5 rounds",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 961,
+      "t": 3096624
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        504,
+        40
+      ],
+      "ctl": null,
+      "handled": true,
+      "t": 3097156
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        610,
+        13
+      ],
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 3099748
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 3099748
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 3099748
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1721,
+      "t": 3099749
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 709,
+      "t": 3100458
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 2863,
+      "t": 3104756
+    }
+  ],
+  "trail_dropped": 0,
+  "notes": [
+    {
+      "scene": "ui_gallery",
+      "battle": -1,
+      "round": 0,
+      "block": 0,
+      "phase": "",
+      "mouse": [
+        212,
+        191
+      ],
+      "viewport": [
+        640,
+        360
+      ],
+      "ctl": null,
+      "text": "Save screen Ui needs improvement\n1. The save select should be anywhere on the slot, add 2 bottons(icons)  to lock and delete save on upper right corner",
+      "tags": [
+        "ui"
+      ],
+      "n": 1,
+      "t": 254184,
+      "origin": "user",
+      "image": "note_1.jpg"
+    },
+    {
+      "scene": "ui_gallery",
+      "battle": -1,
+      "round": 0,
+      "block": 0,
+      "phase": "",
+      "mouse": [
+        342,
+        277
+      ],
+      "viewport": [
+        640,
+        360
+      ],
+      "ctl": null,
+      "text": "The legend for region map needs to be collapsible\nThe NPC icon should have some description or diffrent icon for game system NPC (Store, Recruit, Tavern, Quest etc)\nInstead of using boxes, use icons for legend instead\nConsider seperating log from legend as its own pane\nUse sprite for characters instead of token\nDisplay the name of charcter on hower instead of floating text (maybe have as a menu option)\nAdd buildings and other assets in region instead of just the tiles and NPC/interactibles",
+      "tags": [
+        "ui"
+      ],
+      "n": 2,
+      "t": 681058,
+      "origin": "user",
+      "image": "note_2.jpg"
+    },
+    {
+      "scene": "ui_gallery",
+      "battle": -1,
+      "round": 0,
+      "block": 0,
+      "phase": "",
+      "mouse": [
+        301,
+        205
+      ],
+      "viewport": [
+        640,
+        360
+      ],
+      "ctl": null,
+      "text": "Make the dialogue box smaller in height and width and have it be centered\nPut the character name below the potrait\nBreak the dialogue box into 2 section - the NPC dialouge on Top and the player response options beliow\nThe character and NPC should be vsible in the screen during dialouge, by keeping them centered in screen, add walls/blocked at the region edge to provide space in the edges of the region map\nThe Shop menu should not overlap with dialogue bar and its ok to centre and focus on screen\nUse Icons instead of text for Main Menu, Party, Journal , Stash buttons and display gold and supplies in the top right Bar, remove help text and supplies from top left bar only keep region name",
+      "tags": [
+        "ui"
+      ],
+      "n": 3,
+      "t": 1520064,
+      "origin": "user",
+      "image": "note_3.jpg"
+    },
+    {
+      "scene": "ui_gallery",
+      "battle": -1,
+      "round": 0,
+      "block": 0,
+      "phase": "",
+      "mouse": [
+        327,
+        130
+      ],
+      "viewport": [
+        640,
+        360
+      ],
+      "ctl": null,
+      "text": "Shop should show your stash and the shop together (Shop items on left, stash on right)\nThe player should be able to move things around by dragging and dropping things from shop to satsh to buy and from stash to shop to sell\nFor stacked items it should have a counter with up and down arrows with stock on the side in <X> of <Stock> format where X is canbe changed and then be dragged and added to other side for trade, open to other suggestion for selecting quantity from stack\nAt the bottom the total gold value of trade is calculated after all exchange and only allowed if the party gold is higher than the trade value",
+      "tags": [
+        "ui"
+      ],
+      "n": 4,
+      "t": 1996464,
+      "origin": "user",
+      "image": "note_4.jpg"
+    },
+    {
+      "scene": "recordings",
+      "battle": -1,
+      "round": 0,
+      "block": 0,
+      "phase": "",
+      "mouse": [
+        456,
+        175
+      ],
+      "viewport": [
+        640,
+        360
+      ],
+      "ctl": {
+        "path": "recordings.notes",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "text": "For shop maybe click to buy/sell is fine instead of drag and drop\nHave 3 columns for shop (left), trade (middle) and stash (right)\nShould have +5 and +10 buttons to allow buying/selling multiples in one click\nTrade should have 2 columsn for Item bought (X), gold value (-ve for buy, +ve for sell), at bottom should have trade value to and confirming the trade requires enough gold, the items are coloured diffrently in trade for items bought and sold, clicking item in trade window should return it back to shop/stash\nPlaytest notes need better text editor with ability to move up/down and maybe copy/paste values",
+      "tags": [
+        "ui"
+      ],
+      "n": 5,
+      "t": 3081238,
+      "origin": "user",
+      "image": "note_5.jpg"
+    }
+  ]
+}

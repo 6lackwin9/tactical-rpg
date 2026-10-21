@@ -74,21 +74,42 @@ struct Device {
 }
 
 pub struct Audio {
-    root: Option<PathBuf>,
+    /// The audio folders in lookup order (ASSETORG2: the game's, its kit's, the engine's `assets/audio`).
+    roots: Vec<PathBuf>,
     device: Option<Device>,
     state: RefCell<State>,
 }
 
 impl Audio {
-    /// The game's audio folder (`root`) on the default output device; silent when there is none.
+    /// One audio folder (`root`) on the default output device; silent when there is none.
     pub fn new(root: Option<PathBuf>) -> Self {
+        Self::layered(root.into_iter().collect())
+    }
+
+    /// The audio folders `roots` (the first holding a file wins) on the default output device.
+    pub fn layered(roots: Vec<PathBuf>) -> Self {
         let device = OutputStream::try_default().ok().map(|(stream, handle)| Device { _stream: stream, handle });
-        Self { root, device, state: RefCell::new(State::new()) }
+        Self { roots, device, state: RefCell::new(State::new()) }
+    }
+
+    /// The audio folders of asset `layers` (each root's `audio/`).
+    pub fn of_layers(layers: &aegis_core::assets::Layers) -> Self {
+        Self::layered(layers.roots.iter().map(|r| r.join("audio")).collect())
     }
 
     /// The files without a device: nothing plays, the choices and checks still work (tests, tools).
     pub fn offline(root: Option<PathBuf>) -> Self {
-        Self { root, device: None, state: RefCell::new(State::new()) }
+        Self::offline_layered(root.into_iter().collect())
+    }
+
+    /// Several audio folders without a device (tests, tools over the asset layers).
+    pub fn offline_layered(roots: Vec<PathBuf>) -> Self {
+        Self { roots, device: None, state: RefCell::new(State::new()) }
+    }
+
+    /// The first folder's file at `rel`.
+    fn find(&self, rel: &str) -> Option<PathBuf> {
+        self.roots.iter().map(|r| r.join(rel)).find(|p| p.is_file())
     }
 
     /// Whether `rel` reads and decodes (a format the engine plays: WAV or Ogg Vorbis).
@@ -103,7 +124,7 @@ impl Audio {
         if let Some(&hit) = self.state.borrow().found.get(rel) {
             return hit;
         }
-        let hit = self.root.as_ref().is_some_and(|r| r.join(rel).is_file());
+        let hit = self.find(rel).is_some();
         self.state.borrow_mut().found.insert(rel.to_string(), hit);
         hit
     }
@@ -210,7 +231,7 @@ impl Audio {
         if let Some(hit) = self.state.borrow().cache.get(rel) {
             return hit.clone();
         }
-        let read = self.root.as_ref().and_then(|r| std::fs::read(r.join(rel)).ok()).map(Arc::from);
+        let read = self.find(rel).and_then(|p| std::fs::read(p).ok()).map(Arc::from);
         self.state.borrow_mut().cache.insert(rel.to_string(), read.clone());
         read
     }
@@ -271,5 +292,19 @@ mod tests {
         assert!(a.has("sfx/hit.wav"));
         assert!(!a.has("sfx/none.wav"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn layered_folders_resolve_in_order() {
+        let base = std::env::temp_dir().join(format!("aegis_audio_layers_{}", std::process::id()));
+        let (game, engine) = (base.join("game"), base.join("engine"));
+        for (dir, file) in [(&game, "music/town.ogg"), (&engine, "sfx/ui_click.wav"), (&engine, "music/town.ogg")] {
+            std::fs::create_dir_all(dir.join(file).parent().unwrap()).unwrap();
+            std::fs::write(dir.join(file), dir.to_string_lossy().as_bytes()).unwrap();
+        }
+        let a = Audio { roots: vec![game.clone(), engine.clone()], device: None, state: RefCell::new(State::new()) };
+        assert!(a.has("sfx/ui_click.wav") && a.has("music/town.ogg") && !a.has("sfx/none.wav"));
+        assert_eq!(a.bytes("music/town.ogg").as_deref(), Some(game.to_string_lossy().as_bytes()), "the game's file wins");
+        let _ = std::fs::remove_dir_all(base);
     }
 }

@@ -9,6 +9,8 @@ use serde_json::Value;
 
 pub const EXPLORE: &str = "explore";
 pub const TRAVEL: &str = "travel";
+/// REWARD1: one draw 0..99 per defeated unit whose base unit has a loot table.
+pub const LOOT: &str = "loot";
 
 pub fn roll(gs: &mut GameState, stream: &str) -> i64 {
     let n = gs.rolls.get(stream).map(json::to_int).unwrap_or(0);

@@ -37,8 +37,13 @@ fn godot_saves_load_the_same() {
                 if l.warnings != json::sget(row, "warnings") {
                     failures.push(format!("{file}: warnings {:?} vs Godot {:?}", l.warnings, json::sget(row, "warnings")));
                 }
-                if !json::deep_equal(&l.state.to_value(), json::get(row, "state")) {
-                    failures.push(format!("{file}: state differs\n  engine {}\n  godot  {}", l.state.to_value(), json::get(row, "state")));
+                // Retired parity (REWARD1, HISTORY 2026-10-21): the v12 step adds `reward_paid`, which Godot saves never had.
+                let mut state = l.state.to_value();
+                if let Some(o) = state.as_object_mut() {
+                    o.shift_remove("reward_paid");
+                }
+                if !json::deep_equal(&state, json::get(row, "state")) {
+                    failures.push(format!("{file}: state differs\n  engine {state}\n  godot  {}", json::get(row, "state")));
                 }
                 // Round trip through an engine save.
                 let tmp = std::env::temp_dir().join(format!("aegis_save_test_{}", std::process::id()));

@@ -62,6 +62,10 @@ struct Run {
     hp: Vec<f64>,
     /// 1-based battle where a jitter PLAN SKIP dropped the run.
     skipped: Option<usize>,
+    /// REWARD1-S: what this run's fights paid (one RewardSum entry per fight, all outcomes).
+    rewards: scenarios::RewardSum,
+    /// Gold of the run's purse shares at each range's mean.
+    gold: f64,
 }
 
 /// True when fight `i` is the first entry of its story battle (rest is taken once, before the extras).
@@ -75,6 +79,7 @@ fn run_party(r: &mut Runner, ids: &[String], fights: &[Enc], seed: i64) -> Run {
     let (mut wins, mut fell_at, mut fell_fight) = (0, 0, -1);
     let mut hp_after = Vec::new();
     let mut story_no = 0;
+    let (mut rewards, mut gold) = (scenarios::RewardSum::default(), 0.0);
     for (i, enc) in fights.iter().enumerate() {
         if !enc.extra {
             story_no += 1;
@@ -100,7 +105,13 @@ fn run_party(r: &mut Runner, ids: &[String], fights: &[Enc], seed: i64) -> Run {
         r.start_hp.clear();
         r.rounds_override = 0;
         if res.skipped {
-            return Run { wins, fell_at: 0, fell_fight: -1, hp: hp_after, skipped: Some(i + 1) };
+            return Run { wins, fell_at: 0, fell_fight: -1, hp: hp_after, skipped: Some(i + 1), rewards, gold };
+        }
+        if res.ok {
+            rewards.add(&res.reward, res.won, &enc.key_kills);
+            if res.reward.total > 0 {
+                gold += res.reward.weight as f64 / res.reward.total as f64 * enc.purse.map_or(0.0, |(lo, hi)| (lo + hi) as f64 / 2.0);
+            }
         }
         if !res.ok {
             fell_at = this_no;
@@ -127,7 +138,7 @@ fn run_party(r: &mut Runner, ids: &[String], fights: &[Enc], seed: i64) -> Run {
         }
         apply_heal(&mut state, &a.heal);
     }
-    Run { wins, fell_at, fell_fight, hp: hp_after, skipped: None }
+    Run { wins, fell_at, fell_fight, hp: hp_after, skipped: None, rewards, gold }
 }
 
 fn fights_for(r: &mut Runner, steel: &str) -> Vec<Enc> {
@@ -173,6 +184,7 @@ pub fn campaign_mode(r: &mut Runner) {
             let fights = fights_for(r, steel);
             let total = fights.len();
             let (mut wins_sum, mut clears, mut runs) = (0.0, 0, 0usize);
+            let (mut run_xp, mut run_gold, mut run_drops, mut run_keys) = (0.0, 0.0, 0.0, 0.0);
             let mut fell: IndexMap<i32, i32> = IndexMap::new();
             let (mut hp_sum, mut hp_n): (Vec<f64>, Vec<i32>) = (Vec::new(), Vec::new());
             for s in a.seeds() {
@@ -200,6 +212,26 @@ pub fn campaign_mode(r: &mut Runner) {
                 }
                 let outcome = if run.fell_at == 0 { "cleared the campaign".to_string() } else { format!("fell at battle {} ({})", run.fell_at, fights[run.fell_fight as usize].label) };
                 r.print(format!("  {name} steel {steel} seed {s}: survived {}/{total}, {outcome}, party hp% after each battle [{}]", run.wins, hp_text.join(", ")));
+                if a.rewards {
+                    let w = &run.rewards;
+                    r.print(format!(
+                        "    rewards over {} fights: defeated {}/{} (slain {}, surr {}, fled {}), xp/hero {}, gold {}, drops {}, key {}",
+                        w.fights,
+                        w.slain + w.surrendered + w.fled,
+                        w.roster,
+                        w.slain,
+                        w.surrendered,
+                        w.fled,
+                        w.xp,
+                        fixed(run.gold, 1),
+                        fixed(w.drop_value, 2),
+                        w.keys
+                    ));
+                    run_xp += w.xp;
+                    run_gold += run.gold;
+                    run_drops += w.drop_value;
+                    run_keys += w.keys;
+                }
             }
             let avg_hp: Vec<String> = hp_sum.iter().zip(&hp_n).map(|(s, n)| ((s / (*n).max(1) as f64).round() as i64).to_string()).collect();
             let fell_text: Vec<String> = (1..=total as i32).filter_map(|b| fell.get(&b).map(|n| format!("b{b} x{n}"))).collect();
@@ -210,6 +242,15 @@ pub fn campaign_mode(r: &mut Runner) {
                 if fell_text.is_empty() { "never".to_string() } else { fell_text.join(", ") },
                 avg_hp.join(", ")
             ));
+            if a.rewards {
+                r.print(format!(
+                    "{name:<24} steel {steel:<4} rewards per run: xp/hero {}, gold {}, drops {}, key {}",
+                    fixed(run_xp / seeds_n, 1),
+                    fixed(run_gold / seeds_n, 1),
+                    fixed(run_drops / seeds_n, 2),
+                    fixed(run_keys / seeds_n, 2)
+                ));
+            }
             overall_wins += wins_sum;
             overall_total += (total * runs) as f64;
             overall_runs += runs;

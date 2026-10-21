@@ -109,6 +109,9 @@ pub fn boss_phase_for(boss: &str) -> Value {
 /// One encounter of a fight set: enemy ids, encounter fields, label; max_rounds (world encounters; 0 = the cap).
 #[derive(Debug, Clone, Default)]
 pub struct Enc {
+    /// REWARD1-S (world encounters): the purse range and the sim ids of the key loot kills.
+    pub purse: Option<(i64, i64)>,
+    pub key_kills: Vec<String>,
     pub enemies: Vec<String>,
     pub base: Map<String, Value>,
     pub label: String,
@@ -269,6 +272,63 @@ pub struct FightSet {
     pub refs_won: Acc,
     pub cap: i32,
     pub baseline_survivors: f64,
+    /// REWARD1-S: the fights' reward sums and the encounter's purse mean (0 = none).
+    pub rewards: RewardSum,
+    pub purse_mean: f64,
+}
+
+/// REWARD1-S: what a set of fights' defeated enemies paid, summed (means are over `fights`).
+#[derive(Debug, Clone, Default)]
+pub struct RewardSum {
+    pub fights: f64,
+    pub roster: f64,
+    pub slain: f64,
+    pub surrendered: f64,
+    pub fled: f64,
+    pub xp: f64,
+    /// Sum of the purse share fractions (defeated weight / roster weight).
+    pub share: f64,
+    pub drop_value: f64,
+    pub keys: f64,
+}
+
+impl RewardSum {
+    /// Adds one fight; `key_kills` = the key loot rows' kill ids (a row pays on a win with all its units killed).
+    pub fn add(&mut self, rec: &crate::runner::RewardRec, won: bool, key_kills: &[String]) {
+        self.fights += 1.0;
+        self.roster += rec.roster as f64;
+        self.slain += rec.slain as f64;
+        self.surrendered += rec.surrendered as f64;
+        self.fled += rec.fled as f64;
+        self.xp += rec.xp as f64;
+        self.share += if rec.total > 0 { rec.weight as f64 / rec.total as f64 } else { 0.0 };
+        self.drop_value += rec.drop_value_x100 as f64 / 100.0;
+        for kill in key_kills {
+            let of: Vec<&emberwake_battle::session::Fate> = rec.fates.iter().filter(|f| &f.0 == kill).map(|f| &f.1).collect();
+            if won && !of.is_empty() && of.iter().all(|f| **f == emberwake_battle::session::Fate::Killed) {
+                self.keys += 1.0;
+            }
+        }
+    }
+
+    /// "defeated 3.0/4.0 (slain 2.5, surr 0.5, fled 0.0), xp/hero 27.0, gold 12.4, drops 1.85, key 0.40" (means over the
+    /// fights; gold = the mean share fraction x the purse mean, no floor or once rule: an expected value).
+    pub fn line(&self, purse_mean: f64) -> String {
+        let n = self.fights.max(1.0);
+        let m = |v: f64| aegis_core::fmt::fixed(v / n, 1);
+        format!(
+            "defeated {}/{} (slain {}, surr {}, fled {}), xp/hero {}, gold {}, drops {}, key {}",
+            m(self.slain + self.surrendered + self.fled),
+            m(self.roster),
+            m(self.slain),
+            m(self.surrendered),
+            m(self.fled),
+            m(self.xp),
+            aegis_core::fmt::fixed(self.share / n * purse_mean, 1),
+            aegis_core::fmt::fixed(self.drop_value / n, 2),
+            aegis_core::fmt::fixed(self.keys / n, 2)
+        )
+    }
 }
 
 /// Runs `left` vs `enemies` for every seed with the runner's spend variant and preset; adds fight and per-unit sums
@@ -284,6 +344,8 @@ pub fn run_seeds(r: &mut Runner, left: &[String], enemies: &[String], base: &Map
             continue;
         }
         let f = r.metrics.fight_record.clone().unwrap_or_default();
+        let kills = r.key_kills.clone();
+        acc.rewards.add(&res.reward, res.won, &kills);
         acc.fights += 1.0;
         if f.cleared {
             acc.cleared += 1.0;

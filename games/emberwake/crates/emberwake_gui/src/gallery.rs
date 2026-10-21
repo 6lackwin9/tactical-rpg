@@ -171,6 +171,8 @@ impl Gallery {
 
     /// A region map in conversation with the first person here (`shop`: the first who offers a shop).
     fn talking(cx: &mut Cx, shop: bool) -> crate::region::RegionMap {
+        // a region map first: a new sample game enters its start location there
+        let first = crate::region::RegionMap::new(cx);
         let people: Vec<String> = match cx.game.as_ref() {
             Some(g) => {
                 let loc = cx.data.resolve(&g.gs.world_id, "locations", &g.gs.location_id);
@@ -190,7 +192,7 @@ impl Gallery {
         }
         // a preview's conversation never ends, so it must not hold the game busy
         cx.set_busy(false);
-        found.unwrap_or_else(|| crate::region::RegionMap::new(cx))
+        found.unwrap_or(first)
     }
 
     /// The services of the open dialogue's choices in a region map's state (none when no dialogue is open).

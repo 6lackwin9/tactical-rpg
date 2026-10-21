@@ -11,9 +11,10 @@ build it replaced is frozen in `legacy/` and stays the reference the engine is c
 | :--- | :--- |
 | `engine/` | The Aegis engine: Rust workspace (rules, battle, world, data loader and writer, command API, CLI, GUI), parity tools, engine docs. Start at [engine/README.md](engine/README.md). |
 | `games/emberwake/data/` | The game content: catalog (classes, units, skills, items, item families, passives, encounters, terrain), worlds, region maps, quests, dialogue services, XP curve, asset manifest. Edited only through `aegis content` (below). |
-| `games/emberwake/assets/` | Art, audio and fonts (the engine reads the PNGs in `games/emberwake/assets/art`). |
+| `games/emberwake/assets/` | The game's asset layer: bodies, portraits, icons, tiles, backgrounds, UI files and audio (ASSETORG2; the engine reads them over the game, kit and engine layers; `games/emberwake/assets/README.md`). |
 | `docs/` | Game design: brief, roadmap, decisions, specs, balance reports, preferences, workflow. |
 | `legacy/` | The frozen Godot build: the whole project of `main` at 7fa10da with its own data copy ([legacy/LEGACY.md](legacy/LEGACY.md)). Branch `legacy` resumes Godot work if ever needed. |
+| `kits/` | Shared asset kits: `kits/rpg/` (reusable RPG art and sound, ASSETORG2; [kits/rpg/README.md](kits/rpg/README.md)). |
 | `tools/` | `fc.sh` (gate, tests, content, sim, parity), art and music generators, worktree helpers. |
 
 ## Playing

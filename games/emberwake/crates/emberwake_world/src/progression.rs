@@ -42,6 +42,14 @@ pub fn kill_xp(d: &Data, enemy_level: i64, enemy_tier: &str, member_level: i64) 
     json::roundi(raw).max(1)
 }
 
+/// REWARD1 3.1: an enemy's weight in its encounter's purse, its kill XP at equal level in integer points:
+/// round(100 x (base + per_level x level) x tier_mult), at least 1.
+pub fn kill_weight(d: &Data, level: i64, tier: &str) -> i64 {
+    let k = &d.xp;
+    let tier_mult = k.tier_mult.get(tier).copied().unwrap_or(1.0);
+    json::roundi(100.0 * (k.base + k.per_level * level as f64) * tier_mult).max(1)
+}
+
 /// `enemies`: (level, tier) per defeated enemy.
 pub fn encounter_xp(d: &Data, enemies: &[(i64, String)], member_level: i64) -> i64 {
     enemies.iter().map(|(l, t)| kill_xp(d, *l, t, member_level)).sum()

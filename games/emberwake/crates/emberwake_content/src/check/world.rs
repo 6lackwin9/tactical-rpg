@@ -92,7 +92,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
     if json::s(&e, "name").trim().is_empty() {
         errors.push("Name is required.".into());
     }
-    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum") {
+    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum" && super::enum_checked(f)) {
         let value = json::s(&e, &json::s(f, "key"));
         let options = super::options_of(v, f);
         if !options.contains(&value) {
@@ -134,7 +134,7 @@ pub fn blocking_errors(v: &View, w: &str, kind: &str, entry: &Dict, current_id: 
     if json::s(&e, "name").trim().is_empty() {
         errors.push("Name is required.".into());
     }
-    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum") {
+    for f in fields("world", kind).iter().map(json::dict).filter(|f| json::s(f, "type") == "enum" && super::enum_checked(f)) {
         let value = json::s(&e, &json::s(f, "key"));
         let options = super::options_of(v, f);
         if !options.contains(&value) {
@@ -345,6 +345,7 @@ fn character_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         errors.push("Choose the base unit this character plays as.".into());
     }
     errors.extend(tuning_errors(json::get(e, "tuning"), &TUNING_KEYS, "Character"));
+    errors.extend(super::assets::body_errors(v, &json::s(e, "art")));
     match e.get("gone_flags").unwrap_or(&Value::Array(Vec::new())) {
         gone @ Value::Array(_) => errors.extend(quest::condition_errors(gone, "Gone flags")),
         _ => errors.push(GONE_FLAGS_NOT_LIST.into()),
@@ -450,7 +451,9 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
     errors.extend(encounter::morale_problems(e));
     errors.extend(encounter::start_status_problems(e.get("start_status").unwrap_or(&Value::Array(Vec::new()))));
-    errors.extend(encounter::purse_problems(e, &|r: &str| encounter::world_loot_check(v, w, r)));
+    errors.extend(encounter::purse_problems(e));
+    errors.extend(super::reward::key_loot_problems(v, w, e));
+    errors.extend(super::reward::objective_reward_problems(v, w, e));
     match json::get(e, "exits") {
         Value::Array(list) => {
             for x in list {
@@ -638,7 +641,8 @@ pub fn validate_all(v: &View) -> super::Report {
     problems
 }
 
-/// WorldCatalog.encounter_warnings: a boss fight without an enrage phase and the purse warnings, per own encounter.
+/// WorldCatalog.encounter_warnings: a boss fight without an enrage phase, the purse warnings and the REWARD1 key loot
+/// and objective reward warnings, per own encounter.
 fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
     let tier_of = |r: &str| {
         let c = v.worlds.resolve(w, "characters", r);
@@ -647,7 +651,8 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
     let mut out = Vec::new();
     for e in v.worlds.own_entries(w, "encounters") {
         let id = json::s(e, "id");
-        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)) {
+        let reward = super::reward::key_loot_warnings(v, w, e).into_iter().chain(super::reward::objective_reward_warnings(e));
+        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward) {
             out.push(format!("{w}:{id}: {warning}"));
         }
     }
@@ -665,6 +670,19 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(quest::reward_warnings(v, w));
     out.extend(quest::rep_key_warnings(v, w));
     out.extend(encounter_warnings(v, w));
+    out.extend(character_asset_warnings(v, w));
+    out
+}
+
+/// ASSETORG2 A3-A5 for the world's own characters: unique portraits, common portraits, palettes.
+fn character_asset_warnings(v: &View, w: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for c in v.worlds.own_entries(w, "characters") {
+        let unit = v.get("units", &json::s(c, "base_unit"));
+        for warning in super::assets::portrait_and_palette_warnings(v, c, unit) {
+            out.push(format!("{w}:{}: {warning}", json::s(c, "id")));
+        }
+    }
     out
 }
 

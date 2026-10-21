@@ -149,6 +149,18 @@ impl aegis_ui::Context for GameCx {
     }
 }
 
+/// ASSETORG2 section 4: a world character's body key, palette and portrait chain (`emberwake_content::art`).
+pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, String, Vec<String>) {
+    use emberwake_content::art;
+    let unit = d.entry("units", &aegis_core::json::s(character, "base_unit"));
+    let class = d.entry("classes", &aegis_core::json::s(unit, "class_id"));
+    let body = art::body_of(character, unit, class);
+    let palette = art::palette_of(character, unit);
+    let tier = art::portrait_tier(character, unit);
+    let portraits = art::portrait_chain(&tier, &aegis_core::json::s(character, "id"), &body);
+    (body, palette, portraits)
+}
+
 /// Starts playing `gs` (a new game or a loaded save) and shows the region map.
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
     let clean = gs.to_value();

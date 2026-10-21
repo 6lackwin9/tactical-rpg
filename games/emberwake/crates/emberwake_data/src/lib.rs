@@ -83,7 +83,10 @@ impl ClassDef {
 pub struct UnitDef {
     pub id: String,
     pub name: String,
+    /// The body key (ASSETORG2: `<class>` or `<class>/<variant>`; "" = the class's).
     pub art: String,
+    /// The palette the body wears (ASSETORG2; "" = none).
+    pub palette: String,
     pub side: String,
     pub class_id: String,
     pub level: i32,
@@ -118,6 +121,7 @@ impl UnitDef {
             id: string(o, "id", ""),
             name: string(o, "name", "New Unit"),
             art: string(o, "art", ""),
+            palette: string(o, "palette", ""),
             side: string(o, "side", "enemy"),
             class_id: string(o, "class_id", ""),
             level: int(o, "level", 1),

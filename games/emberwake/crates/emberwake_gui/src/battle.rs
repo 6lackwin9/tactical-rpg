@@ -363,8 +363,16 @@ impl BattleScreen {
             let mut unit = built.unit;
             unit.hp = progression::start_hp(unit.max_hp as i64, m.hp_lost) as i32;
             let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
-            let art = if !base.art.is_empty() { base.art.clone() } else { d.cat.classes.get(&base.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) };
-            party.push(Prebuilt { unit, art, profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() });
+            // ASSETORG2: the member's character's body and palette (its base unit's, its class's when it has none)
+            let character = d.resolve(&world, "characters", &m.lore_ref);
+            let (art, palette, _) = if character.is_empty() {
+                let unit = d.entry("units", &m.base_unit);
+                let class = d.entry("classes", &base.class_id);
+                (emberwake_content::art::body_of(&Default::default(), unit, class), emberwake_content::art::palette_of(&Default::default(), unit), Vec::new())
+            } else {
+                crate::screens::character_art(&d, character)
+            };
+            party.push(Prebuilt { unit, art, palette, profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() });
             members.push((m.id.clone(), built.pouch_unloaded));
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
@@ -495,6 +503,8 @@ impl BattleScreen {
             return;
         }
         let d = cx.data.clone();
+        // REWARD1: how the battle left each enemy, for the rewards per defeated enemy
+        let tally = emberwake_world::battle::Tally::from_session(self.session());
         let units: Vec<(i64, i64, bool, Vec<String>)> = self.session().w.allies.iter().map(|a| {
             let u = &self.session().w.units[*a];
             (u.hp as i64, u.max_hp as i64, u.is_alive(), u.inventory.pouch.iter().map(|p| p.id.clone()).collect())
@@ -516,9 +526,9 @@ impl BattleScreen {
             }
         }
         let res = match runner.as_str() {
-            "travel" => travel::after_fight(&d, gs, fight, &outcome),
-            "dialogue" => dialogue::after_fight(&d, gs, fight, &outcome),
-            _ => explore::after_fight(&d, gs, fight, &outcome),
+            "travel" => travel::after_fight(&d, gs, fight, &outcome, Some(&tally)),
+            "dialogue" => dialogue::after_fight(&d, gs, fight, &outcome, Some(&tally)),
+            _ => explore::after_fight(&d, gs, fight, &outcome, Some(&tally)),
         };
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {
@@ -1311,7 +1321,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             let c = V2::new(gx, gy);
             let r = cell_rect(c);
             let tid = w.grid.terrain_id(c);
-            match cx.art.tile(tid, gx, gy, TILE) {
+            match cx.art.tile_in(&emberwake_content::art::BATTLE_SETS, tid, gx, gy, TILE) {
                 Some(img) => ui.p.image(img, r),
                 None => ui.p.fill(r, terrain_color(tid)),
             }
@@ -1369,7 +1379,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let tr = Rect::new(r.x + (TILE - tp) / 2 + shake as i32, r.y + (TILE - tp) / 2, tp, tp);
         let ring = if ally { ALLY } else { FOE };
         ui.p.circle(r.x as f32 + 16.0 + shake, r.y as f32 + 16.0, tp as f32 / 2.0 + 0.5, ring);
-        match cx.art.token(&s.art[i], tp) {
+        match cx.art.first_token(&emberwake_content::art::body_chain(&s.art[i]), s.palettes.get(i).map_or("", |p| p.as_str()), tp) {
             Some(img) => ui.p.image(img, tr),
             None => {
                 ui.p.panel(tr.inset(4), ring, ring, 6.0);
@@ -1401,7 +1411,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 ui.p.arrow(sx, sy, ex, ey, rgba(240, 100, 92, 200), dash, 4.0);
             }
             let chip = Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10);
-            match cx.art.get("ui", &format!("intent_{}", if r.line.kind == emberwake_battle::intent::IDLE { "rest" } else { r.line.kind }), "icon", 10) {
+            match cx.art.image(&emberwake_content::art::intent(r.line.kind), 10, 10) {
                 Some(img) => ui.p.image(img, chip),
                 None => {
                     ui.p.panel(chip, rgba(48, 28, 38, 230), FOE, 2.0);
@@ -1460,7 +1470,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, next_w, GOLD);
             }
             if tell.is_some_and(|t| t.revealed) {
-                if let Some(img) = cx.art.get("ui", "badge_foresight", "icon", 9) {
+                if let Some(img) = cx.art.image(&emberwake_content::art::badge("foresight"), 9, 9) {
                     ui.p.image(img, Rect::new(r.x + r.w - 11, r.y + 11, 9, 9));
                 }
             }

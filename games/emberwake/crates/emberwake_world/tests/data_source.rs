@@ -17,6 +17,76 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../legacy/data")
 }
 
+/// Retired parity: fields added after the Godot freeze, by (schema section, kind, key). They are taken off the engine's
+/// side (catalog rows, world entries, schema rows) before comparing; each is named in docs/HISTORY.md. REWARD1
+/// (2026-10-21): the unit loot table and a world encounter's key loot and objective reward. ASSETORG2 (2026-10-22): a
+/// unit's and a character's palette and portrait tier.
+const AFTER_GODOT: [(&str, &str, &str); 7] = [
+    ("content", "units", "loot"),
+    ("world", "encounters", "key_loot"),
+    ("world", "encounters", "objective_reward"),
+    ("content", "units", "palette"),
+    ("content", "units", "portrait_tier"),
+    ("world", "characters", "palette"),
+    ("world", "characters", "portrait_tier"),
+];
+/// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
+/// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
+/// the item icon rows.
+const HELP_CHANGED: [(&str, &str, &str); 7] = [
+    ("content", "encounters", "purse"),
+    ("world", "encounters", "purse"),
+    ("content", "classes", "art"),
+    ("content", "units", "art"),
+    ("world", "characters", "art"),
+    ("content", "item_families", "art"),
+    ("content", "items", "icon_id"),
+];
+
+/// `v` without the AFTER_GODOT keys of `section`: on every object in an array under a key named after the kind.
+fn strip_after_godot(v: &mut Value, section: &str) {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o.iter_mut() {
+                let keys: Vec<&str> = AFTER_GODOT.iter().filter(|(s, kind, _)| *s == section && kind == k).map(|t| t.2).collect();
+                if let (false, Value::Array(rows)) = (keys.is_empty(), &mut *x) {
+                    for row in rows.iter_mut().filter_map(Value::as_object_mut) {
+                        for key in &keys {
+                            row.shift_remove(*key);
+                        }
+                    }
+                }
+                strip_after_godot(x, section);
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| strip_after_godot(x, section)),
+        _ => {}
+    }
+}
+
+/// The schema without the AFTER_GODOT rows and the HELP_CHANGED help texts.
+fn schema_at_freeze(schema: &Value) -> Value {
+    let mut out = schema.clone();
+    for (section, kind, key) in AFTER_GODOT {
+        if let Some(Value::Array(rows)) = out.get_mut(section).and_then(|s| s.get_mut(kind)) {
+            rows.retain(|r| r["key"] != key);
+        }
+    }
+    unhelp(&mut out);
+    out
+}
+
+fn unhelp(schema: &mut Value) {
+    for (section, kind, key) in HELP_CHANGED {
+        if let Some(Value::Array(rows)) = schema.get_mut(section).and_then(|s| s.get_mut(kind)) {
+            for r in rows.iter_mut().filter(|r| r["key"] == key).filter_map(Value::as_object_mut) {
+                r.shift_remove("help");
+                r.shift_remove("options_from");
+            }
+        }
+    }
+}
+
 fn read(name: &str) -> Option<Value> {
     let text = std::fs::read_to_string(out_dir().join(name)).ok()?;
     Some(serde_json::from_str(&text).unwrap())
@@ -72,8 +142,10 @@ fn engine_loader_matches_godot_catalogs() {
         eprintln!("no parity/out/catalog.json: run games/emberwake/parity/export.sh");
         return;
     };
-    let src = source::load(&data_dir());
+    let mut src = source::load(&data_dir());
     assert!(src.errors.is_empty(), "load errors: {:?}", src.errors);
+    strip_after_godot(&mut src.catalog, "content");
+    strip_after_godot(&mut src.worlds, "world");
     let mut problems = Vec::new();
     for kind in source::CATALOG_KINDS {
         problems.push(diff(&format!("catalog.{kind}"), &catalog[kind], &src.catalog[kind]));
@@ -84,8 +156,9 @@ fn engine_loader_matches_godot_catalogs() {
     for key in ["maps", "quests", "services", "xp_curve", "xp_for_level", "item_families"] {
         problems.push(diff(&format!("game.{key}"), &game[key], &src.game[key]));
     }
-    if let Some(schema) = read("schema.json") {
-        problems.push(diff("schema", &schema, source::schema()));
+    if let Some(mut schema) = read("schema.json") {
+        unhelp(&mut schema);
+        problems.push(diff("schema", &schema, &schema_at_freeze(source::schema())));
     }
     problems.retain(|p| !p.is_empty());
     let rows: usize = source::CATALOG_KINDS.iter().map(|k| src.catalog[*k].as_array().map_or(0, |a| a.len())).sum();

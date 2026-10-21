@@ -88,10 +88,10 @@ because the RNG is bit-exact.
 | :--- | :--- | :--- |
 | `game_state/game_state.gd`, `progression/party_state.gd`, `unit_state.gd` | `emberwake_world::state` | journeys (state after every action) |
 | `game_state/new_game.gd`, `game_rolls.gd`, `json_util.gd` | `new_game`, `rolls`, `json` | journeys (start state, every roll) |
-| `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10; the engine adds 10 -> 11, SKILLUI1 rank choice, with no Godot counterpart) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 |
+| `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10; the engine adds 10 -> 11, SKILLUI1 rank choice, and 11 -> 12, REWARD1 `reward_paid`, with no Godot counterpart) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 (the loaded state without REWARD1's `reward_paid`) |
 | `progression/xp_curve.gd`, `level_up.gd`, `party_builder.gd`, `heal_rules.gd` | `progression` | journeys (HP views, level-ups, camp) |
 | `world/world_catalog.gd` (lineage, merged, resolve, party rules), `world_factory.gd` (unit entry, passives) | `aegis_content::Catalogs` (lineage, merged, resolve), `data` (party rules, unit entry, passives) | journeys |
-| `exploration/map_rules.gd` (runtime), `explore_runner.gd`, `purse_rules.gd`, `battle_bridge.gd` (apply) | `explore`, `purse`, `battle` | journeys (marker views too) |
+| `exploration/map_rules.gd` (runtime), `explore_runner.gd`, `purse_rules.gd`, `battle_bridge.gd` (apply) | `explore`, `purse`, `battle` (REWARD1 replaced the win-only apply and `PurseRules.roll` / `pay` with rewards per defeated enemy: `battle::apply` with a tally, `purse::share`) | journeys (marker views too; they pass no tally, so the default one gives Godot's win-only numbers, and the extra keys `rewards` and `reward_paid` are skipped) |
 | `quests/quest_rules.gd` (runtime), `quest_runner.gd`, `reward_grant.gd` | `quest` | journeys (statuses, objectives, offers) |
 | `dialogue/rep_rules.gd`, `dialogue_rules.gd` (runtime), `dialogue_runner.gd`, `shop_rules.gd` (runtime) | `dialogue`, `shop` | journeys (dialogue and shop views) |
 | `travel/travel_rules.gd` (runtime), `travel_runner.gd` | `travel` | journeys (world map view) |
@@ -162,7 +162,7 @@ Content is edited without Godot through `aegis content check | upsert | remove |
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors` (`ref_problems`, the writer's reference check until PORT-CHECKS, is unused since) | `tests/store.rs` |
+| `content/content_catalog.gd` (`save`, `upsert`), `content_schema.gd` (`to_storage`, `is_visible`, `field_errors`) | `store::catalog_storage`, `check` on `aegis_content::store::upsert`, `remove` (hooks) and `aegis_content::schema::to_storage`, `visible`, `field_errors` (`ref_problems`, the writer's reference check until PORT-CHECKS, is unused since) | `tests/store.rs` (the writer parity leaves out the empty defaults of the fields added since the freeze, REWARD1; `tests/data_source.rs` AFTER_GODOT does the same for the loader) |
 | `content/skill_ranks.gd` (`collapse`, `fold`), `skill_kinds.gd` (`has_field`) | `store::skill_storage` | `tests/store.rs` |
 | `core/specs/item_modifiers.gd` (`stored`) | `store::catalog_storage` (items) | `tests/store.rs` |
 | `world/world_catalog.gd` (`save_world`, `upsert`), `world_schema.gd` (`to_storage`) | `aegis_content::schema::world_storage`, `store::manifest_text` | `tests/store.rs` |
@@ -176,7 +176,7 @@ Content is edited without Godot through `aegis content check | upsert | remove |
 - Validation: id (snake_case), name, enum options and catalog references by the schema; skill ranks and item families
   by construction; then the whole data folder must not check with new problems (the content checks below, since
   PORT-CHECKS), else the file is put back.
-- Not covered: the asset manifest (`games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
+- Not covered (retired by ASSETORG2-G on 2026-10-22: the folders are the truth): the asset manifest (formerly `games/emberwake/data/assets/manifest.json`, rows of `res://` paths: redefined with the engine's
   sprite work; the checks read its unit and item keys). The Forge's richer checks (SkillValidator, item budgets, world
   reference rules) are ported since PORT-CHECKS (next section).
 
@@ -193,12 +193,12 @@ failing), then hard errors; every `upsert` / `remove` refuses a write that adds 
 | `content/validators/item_validator.gd`, `core/specs/item_modifiers.gd` (`collapse`, `stored`, `stable_order`), `item_families.gd`, `item_text.gd` | `check::item` | checks parity |
 | `core/specs/gear_budget.gd` | `emberwake_rules::budget` | checks parity |
 | `content/validators/terrain_validator.gd`, `core/specs/passives.gd` (`validate_effects`) | `check::simple` | checks parity |
-| `combat/session/encounter_phases.gd`, `encounter_objectives.gd`, `encounter_morale.gd` (`problems`, pace, start buffs), `exploration/purse_rules.gd` | `check::encounter` | checks parity |
+| `combat/session/encounter_phases.gd`, `encounter_objectives.gd`, `encounter_morale.gd` (`problems`, pace, start buffs), `exploration/purse_rules.gd` | `check::encounter` (REWARD1: `purse.loot` refused; the loot tables, key loot and objective rewards in `check::reward`, new) | checks parity (the purse loot messages left out on both sides) |
 | `world/world_catalog.gd` (`validate_entry`, `manifest_errors`, `validate_world`, `validate_all`, `world_warnings`, `warnings_all`) | `check::world` | world cases, lint |
 | `quests/quest_rules.gd`, `dialogue/rep_rules.gd` (value rule, key lint) | `check::quest` | world cases, lint |
 | `dialogue/dialogue_rules.gd` (trees, conditions, effects, service lines, tree and gone-NPC lints) | `check::dialogue` | world cases, lint |
 | `dialogue/shop_rules.gd`, `travel/travel_rules.gd` (with the route graph), `exploration/map_rules.gd` (location rules, lints) | `check::shop`, `travel`, `map` | world cases, lint |
-| `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | `source::art_keys` | checks parity |
+| `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | none since ASSETORG2-G (2026-10-22): the asset checks A1-A6 read the asset layers (`check::assets`) | retired (HISTORY 2026-10-22) |
 
 - Recording: `games/emberwake/parity/checks.sh` runs `parity/godot/checks.gd` on `legacy/` and writes
   `parity/out/checks.json`; `cargo test -p emberwake_content --test checks_parity` replays it on `legacy/data`.

@@ -53,7 +53,7 @@ fn battle(d: &Data, m: &UnitState) -> (Session, usize) {
     let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", "courtyard_skirmish"));
     let roster = WorldRoster { d, world: "ashlands".into() };
     let base = d.cat.units.get("priest").unwrap().clone();
-    let hero = Prebuilt { unit: built(d, m), art: String::new(), profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() };
+    let hero = Prebuilt { unit: built(d, m), art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() };
     let s = Session::start_with(d.cat.clone(), def, &roster, vec![hero]);
     let u = s.w.allies[0];
     (s, u)

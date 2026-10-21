@@ -356,10 +356,7 @@ pub fn prepare(v: &View, raw: &Dict, old: &Dict) -> Dict {
 /// ItemValidator.item_errors of a resolved row (`family` its family row, {} when unknown; `inherit` = families exist).
 pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<String> {
     let mut out = Vec::new();
-    let icon = json::s(e, "icon_id");
-    if !icon.is_empty() && !v.has_art("item", &icon) {
-        out.push(format!("Icon '{icon}' isn't a known item icon key."));
-    }
+    out.extend(super::assets::icon_errors(v, e, family));
     if !inherit {
         out.extend(legacy_errors(v, e));
         return out;

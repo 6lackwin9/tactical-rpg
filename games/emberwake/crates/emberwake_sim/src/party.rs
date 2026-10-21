@@ -27,7 +27,8 @@ pub fn run_comp(r: &mut Runner, comp: &[String], enc_id: &str) -> FightSet {
     };
     r.objective_wins = is_world;
     r.rounds_override = enc.max_rounds;
-    let mut acc = FightSet::default();
+    r.key_kills = enc.key_kills.clone();
+    let mut acc = FightSet { purse_mean: enc.purse.map_or(0.0, |(lo, hi)| (lo + hi) as f64 / 2.0), ..FightSet::default() };
     for sv in a.spend_variants() {
         r.spend_variant = sv;
         for pv in a.preset_variants() {
@@ -39,6 +40,7 @@ pub fn run_comp(r: &mut Runner, comp: &[String], enc_id: &str) -> FightSet {
     r.preset = "balanced".into();
     r.objective_wins = false;
     r.rounds_override = 0;
+    r.key_kills.clear();
     acc.party_ids = party;
     acc
 }
@@ -96,6 +98,9 @@ pub fn party_mode(r: &mut Runner) {
         r.print(line);
         if acc.skipped > 0.0 {
             r.print(format!("  {enc_id}: {} fights skipped (PLAN SKIP, jitter); the cell is over {} fights", acc.skipped.round() as i64, acc.fights.round() as i64));
+        }
+        if a.rewards {
+            r.print(format!("  {enc_id} rewards: {}", acc.rewards.line(acc.purse_mean)));
         }
         if a.metrics {
             print_units(r, &acc);

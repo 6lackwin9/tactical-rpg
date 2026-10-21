@@ -12,6 +12,36 @@ fn data_dir() -> PathBuf {
 
 const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain"];
 
+/// Retired parity: fields added after the Godot freeze, written with their empty defaults by the engine's writer:
+/// REWARD1 (HISTORY 2026-10-21) a unit's `loot`, a world encounter's `key_loot` and `objective_reward`; ASSETORG2
+/// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`.
+const AFTER_GODOT: [&str; 5] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\""];
+
+/// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).
+fn at_freeze(text: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for line in text.lines() {
+        let t = line.trim();
+        let field = t.trim_end_matches(',');
+        if AFTER_GODOT.contains(&field) {
+            if !t.ends_with(',') {
+                if let Some(prev) = out.last_mut() {
+                    if prev.ends_with(',') {
+                        prev.pop();
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(line.to_string());
+    }
+    let mut s = out.join("\n");
+    if text.ends_with('\n') {
+        s.push('\n');
+    }
+    s
+}
+
 /// Godot's saves of the same files: `parity/export.sh only=resave` copies the catalog and worlds to resave/before and
 /// has ContentCatalog.save_all / WorldCatalog.save_all write them into resave/after. The writer, given resave/before,
 /// must write every file of resave/after byte for byte (field order, storage form, empty kinds).
@@ -32,7 +62,8 @@ fn writer_saves_exactly_what_godot_saves() {
         let want = std::fs::read_to_string(after.join(&rel)).unwrap_or_default().replace("\r\n", "\n");
         match text {
             Err(e) => diffs.push(format!("{}: {e}", path.display())),
-            Ok(t) if t != want => {
+            Ok(t) if at_freeze(&t) != want => {
+                let t = at_freeze(&t);
                 let line = t.lines().zip(want.lines()).position(|(a, b)| a != b).unwrap_or(0);
                 diffs.push(format!("{} line {}:\n  file   {:?}\n  writer {:?}", path.display(), line + 1, want.lines().nth(line), t.lines().nth(line)));
             }
@@ -78,10 +109,12 @@ fn copy_dir(from: &Path, to: &Path) {
 fn upsert_and_remove_validate_write_and_roll_back() {
     let tmp = std::env::temp_dir().join(format!("aegis_store_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression", "assets"] {
+    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
     let units = store::file_of(&tmp, None, "units");
+    // the copy in the writer's own form first (a schema field added since the data was last written shows up here)
+    std::fs::write(&units, store::resave_text(&tmp, None, "units").unwrap()).unwrap();
     let original = std::fs::read_to_string(&units).unwrap();
 
     let unit = json!({"id": "test_recruit", "name": "Test Recruit", "side": "party", "class_id": "warrior", "level": 2});

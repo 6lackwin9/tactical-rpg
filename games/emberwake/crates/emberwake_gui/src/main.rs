@@ -103,8 +103,9 @@ fn main() -> Result<()> {
     let cx = Cx {
         playtest: aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content),
         settings,
-        art: art::Art::new(project),
-        audio: Audio::new(Some(home.join("assets/audio"))),
+        art: art::Art::new(project.clone()),
+        // ASSETORG2: sounds and music over the same layers as the art (game, kit, engine)
+        audio: Audio::of_layers(&project.map(|p| aegis_core::assets::Layers::for_game(&p)).unwrap_or_default()),
         nav: Vec::new(),
         notice: notices,
         shot_dir: home.join("parity/out"),

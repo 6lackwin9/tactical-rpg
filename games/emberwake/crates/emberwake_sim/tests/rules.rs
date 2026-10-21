@@ -99,3 +99,25 @@ fn modes_run_clean_on_the_shipped_data() {
         assert!(out.iter().any(|l| l.starts_with("plan checks: 0 PLAN FAIL")), "{line}: {out:?}");
     }
 }
+
+/// REWARD1-S: rewards=on adds a rewards line per party encounter and per campaign run (and per-run totals); off (the
+/// default) prints exactly as before. A won ash_patrol with both foes slain pays their XP, the purse mean and the
+/// Warchief's Axe (key loot).
+#[test]
+fn rewards_on_prints_what_the_defeated_foes_pay() {
+    let d = data();
+    let err = SimArgs::parse(&d, &argv("party 5 1 rewards=yes")).err().unwrap_or_default();
+    assert_eq!(err, "rewards must be on or off (got 'yes')");
+    let off = emberwake_sim::run(&d, &argv("party 5 1 comp=warrior,priest,mage enc=world:ash_patrol metrics=off"));
+    assert!(!off.iter().any(|l| l.contains("rewards")), "off by default: {off:?}");
+    let on = emberwake_sim::run(&d, &argv("party 5 1 comp=warrior,priest,mage enc=world:ash_patrol metrics=off rewards=on"));
+    let line = on.iter().find(|l| l.contains("world:ash_patrol rewards:")).expect("a rewards line");
+    let purse = emberwake_world::purse::read(d.resolve("ashlands", "encounters", "ash_patrol")).expect("ash_patrol has a purse");
+    assert!(line.contains("defeated 2.0/2.0 (slain 2.0"), "the trio slays both foes on seed 1: {line}");
+    let gold = aegis_core::fmt::fixed((purse.0 + purse.1) as f64 / 2.0, 1);
+    let xp = emberwake_world::progression::kill_xp(&d, 4, "standard", 5) + emberwake_world::progression::kill_xp(&d, 3, "minion", 5);
+    assert!(line.contains(&format!("gold {gold},")) && line.contains("key 1.00") && line.contains(&format!("xp/hero {xp}.0")), "{line}");
+    let camp = emberwake_sim::run(&d, &argv("campaign 5 1 comp=warrior,priest,mage heal=rally rewards=on"));
+    assert!(camp.iter().any(|l| l.trim_start().starts_with("rewards over ")), "a line per run");
+    assert!(camp.iter().any(|l| l.contains("rewards per run: xp/hero")), "the per-run totals");
+}

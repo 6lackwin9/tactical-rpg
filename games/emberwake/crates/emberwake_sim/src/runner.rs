@@ -10,7 +10,7 @@ use aegis_core::rng::GodotRng;
 use emberwake_battle::encounter::Phases;
 use emberwake_battle::grid::NO_CELL;
 use emberwake_battle::metrics::{BattleMetrics, EndResult};
-use emberwake_battle::session::{EncounterDef, Phase, Roster, Session};
+use emberwake_battle::session::{EncounterDef, Fate, Phase, Roster, Session};
 use emberwake_battle::sim::{binary_score, hp_score, jitter_start, plan_skip, shuffled, side_hp_frac, JITTER_SALT, MAX_STEPS_PER_ROUND};
 use emberwake_data::{Catalog, UnitDef};
 use emberwake_world::Data;
@@ -40,6 +40,30 @@ impl Def {
     }
 }
 
+/// REWARD1-S: how one fight left its enemies and what the defeated ones are worth (rewards per defeated enemy).
+#[derive(Debug, Clone, Default)]
+pub struct RewardRec {
+    pub roster: i32,
+    pub slain: i32,
+    pub surrendered: i32,
+    pub fled: i32,
+    /// Kill XP per hero at the sim's party level, over the defeated enemies.
+    pub xp: i64,
+    /// Kill weight of the defeated enemies and of the whole roster: the purse share is weight / total.
+    pub weight: i64,
+    pub total: i64,
+    /// Expected item value of the defeated enemies' loot rolls, in gold x100.
+    pub drop_value_x100: i64,
+    /// (sim unit id, fate) per enemy, spawn order.
+    pub fates: Vec<(String, Fate)>,
+}
+
+impl RewardRec {
+    pub fn defeated(&self) -> i32 {
+        self.slain + self.surrendered + self.fled
+    }
+}
+
 /// What one fight gives back (SimRunner.fight's record).
 #[derive(Debug, Clone, Default)]
 pub struct FightRes {
@@ -59,6 +83,7 @@ pub struct FightRes {
     /// Party unit name -> HP and max HP at the end.
     pub party_hp: IndexMap<String, i32>,
     pub party_max: IndexMap<String, i32>,
+    pub reward: RewardRec,
 }
 
 /// Mean scores of a matchup: bin, hp, n (fights counted).
@@ -114,6 +139,8 @@ pub struct Runner<'a> {
     pub rounds_override: i32,
     /// An objective win (hold, escape, slay) counts as cleared.
     pub objective_wins: bool,
+    /// REWARD1-S: the sim ids of the encounter's key loot kills (one per key loot row), for the key loot count.
+    pub key_kills: Vec<String>,
     /// The printed lines (the "§" lines of the Godot sim, without the mark).
     pub out: Vec<String>,
 }
@@ -138,6 +165,7 @@ impl<'a> Runner<'a> {
             start_hp: IndexMap::new(),
             rounds_override: 0,
             objective_wins: false,
+            key_kills: Vec::new(),
             out: Vec::new(),
         }
     }
@@ -289,11 +317,44 @@ impl<'a> Runner<'a> {
             plan_fail: plan_failed,
             party_hp: s.w.allies.iter().map(|&c| (s.w.units[c].name.clone(), s.w.units[c].hp)).collect(),
             party_max: s.w.allies.iter().map(|&c| (s.w.units[c].name.clone(), s.w.units[c].max_hp)).collect(),
+            reward: self.reward_of(&s),
         };
         s.metrics_end(EndResult { cleared: res.cleared, rounds, l, r, hp: res.hp });
         self.metrics = *s.metrics.take().unwrap_or_default();
         self.fights += 1;
         res
+    }
+
+    /// REWARD1-S: the fates of the session's enemies, their kill XP for a hero at the sim level, their kill weights and
+    /// the expected value of their loot rolls (the base unit's table: chance x item value x count).
+    fn reward_of(&self, s: &Session) -> RewardRec {
+        let d = self.d;
+        let mut rec = RewardRec { fates: s.fates(), ..RewardRec::default() };
+        let fates = rec.fates.clone();
+        for (id, fate) in &fates {
+            // a sim def (a level copy, a world character), else the catalog unit itself
+            let def = self.defs.get(id);
+            let entry = d.entry("units", id);
+            let level = def.map_or_else(|| json::i(entry, "level", 1), |x| x.level as i64);
+            let tier = def.map_or_else(|| json::s_or(entry, "tier", "standard"), |x| x.tier.clone());
+            let weight = emberwake_world::progression::kill_weight(d, level, &tier);
+            rec.roster += 1;
+            rec.total += weight;
+            match fate {
+                Fate::Killed => rec.slain += 1,
+                Fate::Surrendered => rec.surrendered += 1,
+                Fate::Fled => rec.fled += 1,
+                Fate::Standing => continue,
+            }
+            rec.weight += weight;
+            rec.xp += emberwake_world::progression::kill_xp(d, level, &tier, self.args.level as i64);
+            let base = def.map(|x| x.copy_of.clone()).filter(|c| !c.is_empty()).unwrap_or_else(|| id.clone());
+            for row in json::aget(d.entry("units", &base), "loot").iter().filter_map(serde_json::Value::as_object) {
+                let value = json::i(d.entry("items", &json::s(row, "item")), "value", 0);
+                rec.drop_value_x100 += json::i(row, "chance", 0) * value * json::i(row, "count", 1);
+            }
+        }
+        rec
     }
 
     /// SimRunner._prepare (after start): enemy presets, the seeded jitter, the start distance and the enemy block,

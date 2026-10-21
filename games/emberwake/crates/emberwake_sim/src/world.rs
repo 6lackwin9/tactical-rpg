@@ -193,5 +193,7 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
             }
         }
     }
-    Some(Enc { enemies, base, label: id.into(), max_rounds: json::i(&entry, "max_rounds", 0) as i32, extra: false })
+    let purse = emberwake_world::purse::read(&entry).map(|(lo, hi, _)| (lo, hi));
+    let key_kills: Vec<String> = json::aget(&entry, "key_loot").iter().map(|k| map_ref(r, &ctx, &json::s(json::dict(k), "kill"))).collect();
+    Some(Enc { purse, key_kills, enemies, base, label: id.into(), max_rounds: json::i(&entry, "max_rounds", 0) as i32, extra: false })
 }

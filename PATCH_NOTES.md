@@ -2,12 +2,44 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: fa131b1 -->
+<!-- last: 0353423 -->
+
+## 2026-10-22
+
+In the game:
+
+- **Art and sound files**: everything moved into three layers: the game's own files, a shared RPG kit (class bodies,
+  common portraits, item and status icons, map markers, combat sounds, mood music) and the engine's baseline (the
+  common tile set, interface sounds). Nothing should look or sound different; report any missing or changed art.
+
+Every change that touched the game:
+
+- ASSETORG2-K/B (game): the layout and music tests walk the game, kit and engine layers; asset READMEs (2eeaafa)
+- ASSETORG2-K (kit): kits/rpg with kit.json; the shared bodies, portraits, icons, markers, chips, combat sounds and mood music move to the kit; game.json names it (a6ae779)
+- ASSETORG2-B (engine): engine/assets holds the common tile set and the interface sounds; Audio::offline_layered (9061075)
+- ASSETORG2-G (game): Cargo.lock for emberwake_gui's dependency on emberwake_content (e25413e)
+- ASSETORG2-D (game data): body keys, portrait tiers and item icons; the Godot asset manifest retired (297e11a)
+- ASSETORG2-G (game): every asset on the layered tree; lookup chains, schema and the asset checks (842d786)
+- ASSETORG2-G (engine): art by chains only, existence checks cached (17cc42c)
+- ASSETORG2-E (engine): asset layers, body sheets and palettes, art and audio over the layers (c92d9e4)
+
+Under the hood:
+
+- Planner: user decisions 2026-10-22 (ASSETORG2-T acceptance by paths and sizes, PHASEFOLD-S spec first, REWARDXW1 stays an idea); playtest 20261021-193519 to the inbox (5 UI notes) (0353423)
+- Planner: SPRITE1-S2 done (task archive) (52f01bb)
+- Planner: ASSETORG2-K and -B done (STRUCTURE, README, task archive, agent map); SPRITE1 S2 sheet layout; known issue: staged renames ride along (86e96fe)
+- Planner: ASSETORG2-G and -D done; spec 9b (the move as built), HISTORY rows, docs on the layered tree (7da4590)
+- Planner: ASSETORG2-E done (README, STRUCTURE, task archive) (a3c47d6)
 
 ## 2026-10-21
 
 In the game:
 
+- **Battle rewards**: every enemy you defeat (slain, surrendered or fled) pays its share, whatever the fight's outcome:
+  XP by its level and tier, its part of the encounter's gold and a roll on its loot table. Enemies still standing pay
+  nothing, and a beaten or fleeing party keeps what it earned. The results screen shows the count ("Foes defeated: 2
+  of 3"), the gold and the drops. The Ashlands encounters have loot tables and gold; the Warchief's Axe drops only when
+  you kill its bearer and win, and the courtyard objective pays 10 gold once.
 - **Skills tab**: the loadout is fixed slots (5 class, 3 extra) beside your skill list. Drag a skill onto a slot, between slots or back to the list (clicks still work), right click a slot to empty it, or Clear all. Each filled slot has < > arrows over the ranks the hero has unlocked; the rank you pick is saved and is the only rank of that skill the hero uses in battle.
 - **Text size**: every screen now fits at Small, Normal, Large and Extra large. The battle's top bar sizes its buttons to their text, enemy cards wrap their "Next:" line, the world map's labels and Back button fit, and the Character Stats passives row no longer spills.
 - **Portraits and icons**: the first-pass art is in: 36 portraits (the named cast and shared ones for common enemies), 57 skill icons and 16 item icons.
@@ -15,6 +47,10 @@ In the game:
 
 Every change that touched the game:
 
+- REWARD1-S (game): the sim prints what the defeated enemies pay (rewards=on) (8956341)
+- REWARD1-A (game data): loot tables, Ashlands purses, key loot and the courtyard objective reward (6cca4c7)
+- REWARD1-L commit 2 (game): rewards per defeated enemy (16da125)
+- REWARD1-L commit 1 (game): schema slice for rewards per defeated enemy (6db403e)
 - UIGALLERY1 (game): the UI Gallery's kit, screens and battle panels (8248ede)
 - UIGALLERY1 (engine): screen and region previews, the kit specimens page (051e5fa)
 - RUNNER2 (game): one Exploration scene; a skipped fight settles as a win at no cost (a244790)
@@ -26,6 +62,9 @@ Every change that touched the game:
 
 Under the hood:
 
+- Planner: REWARD1-S done; the sim key in WORKFLOW; REWARD1-B notes the sim's expected values (994ee3f)
+- Planner: REWARD1-A done; seeds README lists the engine-era seed (d8eb52f)
+- Planner: REWARD1-L done; HISTORY rows (win-only rewards, no kill loot, purse loot); REWARDXW1 idea row (fecf455)
 - Planner: UIGALLERY1 done (SCREENS, STRUCTURE, README, task archive); known issue: leave() on a Reset (fa131b1)
 - Planner: RUNNER2 done (README, SCREENS, HISTORY row, task archive) (2b49d74)
 - Planner: TEXTFIT1 done; DRAG1 candidate list; SKILLTEXT2 idea row (a127895)

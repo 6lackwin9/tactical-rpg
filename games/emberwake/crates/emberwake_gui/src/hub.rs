@@ -311,8 +311,72 @@ pub struct Results {
     advanced: Vec<String>,
     outcome: String,
     gold: i64,
-    loot: String,
+    /// REWARD1: what the defeated enemies paid (`battle::apply`'s `rewards`).
+    rewards: Dict,
     w: Vec<Widget<ResAct>>,
+}
+
+/// REWARD1 section 7: the tally line ("Foes defeated: 3 of 5 (2 slain, 1 surrendered)."), the outcome's note, and the
+/// reward lines (share gold, objective bonus, drops merged by item, key loot, missed key loot); `name(kind, id)` gives
+/// an item's, a loot entry's or a character's name.
+pub fn reward_text(rewards: &Dict, outcome: &str, name: &dyn Fn(&str, &str) -> String) -> (String, String, Vec<String>) {
+    let foes = json::i(rewards, "foes", 0);
+    let d = json::dget(rewards, "defeated");
+    let (slain, surr, fled) = (json::i(d, "slain", 0), json::i(d, "surrendered", 0), json::i(d, "fled", 0));
+    let defeated = slain + surr + fled;
+    let tally = if foes == 0 {
+        String::new()
+    } else {
+        let parts: Vec<String> = [(slain, "slain"), (surr, "surrendered"), (fled, "fled")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
+        if defeated == slain {
+            format!("Foes defeated: {defeated} of {foes}.")
+        } else {
+            format!("Foes defeated: {defeated} of {foes} ({}).", parts.join(", "))
+        }
+    };
+    let note = match (outcome, defeated > 0) {
+        ("lost", true) => "The party was beaten, but keeps the rewards of the foes it defeated.",
+        ("lost", false) => "The party was beaten before it defeated a foe. No rewards.",
+        ("fled", true) => "The party got away with the rewards of the foes it defeated.",
+        ("fled", false) => "The party got away. No foe was defeated, so no rewards.",
+        _ => "",
+    };
+    let mut lines = Vec::new();
+    let gold = json::i(rewards, "gold", 0);
+    if gold > 0 {
+        lines.push(format!("Gold +{gold}"));
+    }
+    let objective = json::dget(rewards, "objective");
+    let mut bonus = Vec::new();
+    if json::i(objective, "gold", 0) > 0 {
+        bonus.push(format!("Gold +{}", json::i(objective, "gold", 0)));
+    }
+    if !json::s(objective, "loot").is_empty() {
+        bonus.push(name("loot", &json::s(objective, "loot")));
+    }
+    if !bonus.is_empty() {
+        lines.push(format!("Objective bonus: {}", bonus.join(", ")));
+    }
+    let mut merged: Vec<(String, i64)> = Vec::new();
+    for x in json::aget(rewards, "drops").iter().filter_map(Value::as_object) {
+        let (item, n) = (json::s(x, "item"), json::i(x, "count", 1));
+        match merged.iter_mut().find(|m| m.0 == item) {
+            Some(m) => m.1 += n,
+            None => merged.push((item, n)),
+        }
+    }
+    if !merged.is_empty() {
+        let parts: Vec<String> = merged.iter().map(|(item, n)| if *n > 1 { format!("{} x{n}", name("items", item)) } else { name("items", item) }).collect();
+        lines.push(format!("Dropped: {}", parts.join(", ")));
+    }
+    let keys: Vec<String> = json::sget(rewards, "key_loot").iter().map(|k| name("loot", k)).collect();
+    if !keys.is_empty() {
+        lines.push(format!("Key loot: {}", keys.join(", ")));
+    }
+    for x in json::aget(rewards, "key_missed").iter().filter_map(Value::as_object) {
+        lines.push(format!("Missed: {} (slay {} and win)", name("loot", &json::s(x, "loot")), name("characters", &json::s(x, "kill"))));
+    }
+    (tally, note.to_string(), lines)
 }
 
 impl Results {
@@ -322,7 +386,7 @@ impl Results {
             advanced: json::sget(res, "advanced"),
             outcome: outcome.to_string(),
             gold: json::i(res, "gold", 0),
-            loot: s(res, "loot"),
+            rewards: json::dget(res, "rewards").clone(),
             w: Vec::new(),
         }
     }
@@ -355,15 +419,21 @@ impl Screen<GameCx> for Results {
             o => o,
         };
         ui.p.text(24.0, 24.0, head, aegis_ui::ui::HEAD + 4.0, GOLD);
-        let note = match self.outcome.as_str() {
-            "lost" => "The party woke at the last safe place, fully healed. No XP.",
-            "fled" => "The party got away. No XP.",
-            _ => "",
+        let world = gs.world_id.clone();
+        let name = |kind: &str, id: &str| -> String {
+            match kind {
+                "items" => d.item_name(id),
+                _ => s_or(d.resolve(&world, kind, id), "name", id),
+            }
         };
+        let (tally, note, reward_lines) = reward_text(&self.rewards, &self.outcome, &name);
+        let line = (ui.p.line_h(BODY + 1.0) + 3.0).ceil() as i32;
         let mut y = 50;
-        if !note.is_empty() {
-            ui.p.text(24.0, y as f32, note, BODY + 1.0, DIM);
-            y += 16;
+        for (text, col) in [(&tally, TEXT), (&note, DIM)] {
+            if !text.is_empty() {
+                ui.p.text(24.0, y as f32, text, BODY + 1.0, col);
+                y += line;
+            }
         }
         let mut prompt = false;
         for m in &gs.party.members {
@@ -387,13 +457,7 @@ impl Screen<GameCx> for Results {
         }
         ui.p.text(24.0, (y + 4) as f32, "Rewards", SMALL, INFO);
         y += 16;
-        let mut lines = Vec::new();
-        if self.gold > 0 {
-            lines.push(format!("Gold +{}", self.gold));
-        }
-        if !self.loot.is_empty() {
-            lines.push(format!("Loot: {}", s_or(d.resolve(&gs.world_id, "loot", &self.loot), "name", &self.loot)));
-        }
+        let mut lines = reward_lines;
         if !self.advanced.is_empty() {
             let names: Vec<String> = self.advanced.iter().map(|q| s_or(&quest::resolved(&d, &gs, q), "name", q)).collect();
             lines.push(format!("Quests advanced: {}", names.join(", ")));
@@ -402,8 +466,8 @@ impl Screen<GameCx> for Results {
             lines.push("No other rewards.".into());
         }
         for l in lines {
-            ui.p.text(24.0, y as f32, &l, BODY + 1.0, if l.starts_with("No other") { DIM } else { TEXT });
-            y += 14;
+            ui.p.text(24.0, y as f32, &l, BODY + 1.0, if l.starts_with("No other") || l.starts_with("Missed") { DIM } else { TEXT });
+            y += line;
         }
         if prompt {
             ui.button("results.level_up", Rect::new(24, y + 10, 90, 18), "Level up now", ResAct::LevelUp, true);
@@ -417,7 +481,61 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "loot": self.loot})
+        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards})
     }
     widget_plumbing!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn name(kind: &str, id: &str) -> String {
+        match (kind, id) {
+            ("items", "wpn_shortbow") => "Shortbow".into(),
+            ("items", "con_heal_potion") => "Healing Potion".into(),
+            ("loot", "ashlands:warchiefs_axe") => "Warchief's Axe".into(),
+            ("loot", "ashlands:keep_ring") => "Keep Ring".into(),
+            ("characters", "ash_warchief") => "Horde Warchief".into(),
+            _ => id.into(),
+        }
+    }
+
+    fn rewards(slain: i64, surr: i64, fled: i64, extra: Value) -> Dict {
+        let mut r = json::obj([("foes", json!(5)), ("defeated", json!({"slain": slain, "surrendered": surr, "fled": fled})), ("gold", json!(0))]);
+        for (k, v) in extra.as_object().unwrap() {
+            r.insert(k.clone(), v.clone());
+        }
+        r
+    }
+
+    /// REWARD1 section 7: the tally line, each outcome's note, and the reward lines in order.
+    #[test]
+    fn the_results_say_what_the_defeated_foes_paid() {
+        let (tally, note, lines) = reward_text(&rewards(2, 1, 0, json!({})), "lost", &name);
+        assert_eq!(tally, "Foes defeated: 3 of 5 (2 slain, 1 surrendered).");
+        assert_eq!(note, "The party was beaten, but keeps the rewards of the foes it defeated.");
+        assert!(lines.is_empty());
+        assert_eq!(reward_text(&rewards(5, 0, 0, json!({})), "won", &name).0, "Foes defeated: 5 of 5.");
+        assert_eq!(reward_text(&rewards(0, 0, 1, json!({})), "fled", &name).0, "Foes defeated: 1 of 5 (1 fled).");
+        assert_eq!(reward_text(&rewards(0, 0, 0, json!({})), "lost", &name).1, "The party was beaten before it defeated a foe. No rewards.");
+        assert_eq!(reward_text(&rewards(1, 0, 0, json!({})), "fled", &name).1, "The party got away with the rewards of the foes it defeated.");
+        assert_eq!(reward_text(&rewards(0, 0, 0, json!({})), "fled", &name).1, "The party got away. No foe was defeated, so no rewards.");
+        assert_eq!(reward_text(&rewards(5, 0, 0, json!({})), "won", &name).1, "");
+        assert_eq!(reward_text(&json::obj([("foes", json!(0))]), "won", &name).0, "", "no roster, no tally line");
+        let full = rewards(5, 0, 0, json!({
+            "gold": 12,
+            "objective": {"gold": 10, "loot": "ashlands:keep_ring"},
+            "drops": [{"item": "wpn_shortbow", "count": 1}, {"item": "con_heal_potion", "count": 1}, {"item": "con_heal_potion", "count": 1}],
+            "key_loot": ["ashlands:warchiefs_axe"],
+            "key_missed": [{"loot": "ashlands:warchiefs_axe", "kill": "ash_warchief"}],
+        }));
+        assert_eq!(reward_text(&full, "won", &name).2, [
+            "Gold +12",
+            "Objective bonus: Gold +10, Keep Ring",
+            "Dropped: Shortbow, Healing Potion x2",
+            "Key loot: Warchief's Axe",
+            "Missed: Warchief's Axe (slay Horde Warchief and win)",
+        ]);
+    }
 }

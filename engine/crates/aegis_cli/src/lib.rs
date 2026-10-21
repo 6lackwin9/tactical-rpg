@@ -66,7 +66,7 @@ pub trait Game {
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
 aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json or @file>]";
+aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>]";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
 pub fn run<G: Game>(game: &G) -> Result<()> {
@@ -124,6 +124,7 @@ fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Re
 ///   remove <kind> <id> [world=<id>]                    remove one entry
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
 ///   manifest [<json | @file>]                          show the game manifest, or merge fields into it (checked)
+///   manifest --kit <id> [<json | @file>]               show or write a kit manifest, kits/<id>/kit.json (ASSETORG2)
 fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     let dir = game.data_dir(args)?;
     let hooks = game.content();
@@ -187,6 +188,27 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             }
             Ok(())
         }
+        Some("manifest") if args.pos(2) == Some("--kit") => {
+            // ASSETORG2: a kit's manifest, kits/<id>/kit.json in the game's workspace
+            let game_json = game.manifest_path(args)?;
+            let Some(id) = args.pos(3) else { bail!("usage: aegis content manifest --kit <id> [<json | @file>]") };
+            if !aegis_content::schema::is_id(id) {
+                bail!("kit '{id}' must be a kit id (lowercase snake_case)");
+            }
+            let Some(ws) = game_json.parent().and_then(aegis_content::manifest::workspace_of) else { bail!("no engine/assets above {}", game_json.display()) };
+            let path = ws.join("kits").join(id).join(aegis_content::manifest::KIT_FILE);
+            let Some(raw) = args.pos(4) else {
+                let text = std::fs::read_to_string(&path).with_context(|| format!("{}", path.display()))?;
+                print!("{text}");
+                return Ok(());
+            };
+            let patch = json_arg(raw)?;
+            let Some(patch) = patch.as_object() else { bail!("the kit manifest patch is a JSON object") };
+            match aegis_content::manifest::set_kit(&path, patch) {
+                Ok(_) => Ok(println!("wrote {}", path.display())),
+                Err(e) => fail(e),
+            }
+        }
         Some("manifest") => {
             let path = game.manifest_path(args)?;
             let Some(raw) = args.pos(2) else {
@@ -201,7 +223,7 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
                 Err(e) => fail(e),
             }
         }
-        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json | @file>]"),
+        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json | @file>] | manifest --kit <id> [<json | @file>]"),
     }
 }
 

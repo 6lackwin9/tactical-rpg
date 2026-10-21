@@ -72,6 +72,7 @@ dependencies = [
 name = "aegis_ui"
 version = "0.1.0"
 dependencies = [
+ "aegis_core",
  "aegis_host",
  "anyhow",
  "fontdue",
@@ -645,6 +646,7 @@ dependencies = [
  "aegis_ui",
  "anyhow",
  "emberwake_battle",
+ "emberwake_content",
  "emberwake_data",
  "emberwake_host",
  "emberwake_rules",

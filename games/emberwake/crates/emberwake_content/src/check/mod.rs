@@ -3,11 +3,13 @@
 //! per entry and over the whole catalog, message for message. They read the loaded catalog (`source::load`: flat skill
 //! rows, resolved items, derived item families).
 
+pub mod assets;
 pub mod dialogue;
 pub mod encounter;
 pub mod item;
 pub mod map;
 pub mod quest;
+pub mod reward;
 pub mod shop;
 pub mod simple;
 pub mod skill;
@@ -28,8 +30,9 @@ use serde_json::Value;
 /// ("item_families", "quest_templates", "maps", "services").
 pub struct View {
     rows: IndexMap<String, Vec<Dict>>,
-    /// The art keys per namespace ("unit", "item": AssetRegistry.keys), sorted.
-    pub art: IndexMap<String, Vec<String>>,
+    /// The asset layers of the checked data's game (ASSETORG2: the game's, its kit's, the engine's; empty: the asset
+    /// checks are skipped).
+    pub assets: aegis_core::assets::Layers,
     /// The same catalog typed (classes, the skill families: ClassArchetype, SkillCatalog).
     pub typed: emberwake_data::Catalog,
     /// The worlds over the catalog (WorldCatalog.resolve: a catalog encounter's qualified purse loot).
@@ -48,7 +51,7 @@ pub const ORIGIN_SYSTEM: &str = "system";
 impl View {
     /// From the loader's catalog, worlds and game values (the families, quest templates, maps and services sit with
     /// the game data).
-    pub fn new(catalog: &Value, worlds: &Value, game: &Value, art: IndexMap<String, Vec<String>>) -> Self {
+    pub fn new(catalog: &Value, worlds: &Value, game: &Value, assets: aegis_core::assets::Layers) -> Self {
         let mut rows: IndexMap<String, Vec<Dict>> = IndexMap::new();
         for (kind, list) in catalog.as_object().into_iter().flatten() {
             rows.insert(kind.clone(), json::arr(list).iter().map(|e| json::dict(e).clone()).collect());
@@ -56,12 +59,7 @@ impl View {
         for (name, key) in [("item_families", "item_families"), ("quest_templates", "quests"), ("maps", "maps"), ("services", "services")] {
             rows.insert(name.into(), json::arr(&game[key]).iter().map(|e| json::dict(e).clone()).collect());
         }
-        Self { rows, art, typed: emberwake_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new() }
-    }
-
-    /// AssetRegistry.has_key.
-    pub fn has_art(&self, ns: &str, key: &str) -> bool {
-        !key.is_empty() && self.art.get(ns).is_some_and(|k| k.iter().any(|x| x == key))
+        Self { rows, assets, typed: emberwake_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new() }
     }
 
     pub fn entries(&self, kind: &str) -> &[Dict] {
@@ -78,18 +76,25 @@ impl View {
     }
 }
 
+/// Whether a field's enum value is checked against its options: not the body fields (ASSETORG2: A1 checks `art`
+/// against the asset layers with its own message).
+pub fn enum_checked(f: &Dict) -> bool {
+    !matches!(json::s(f, "options_from").as_str(), "body" | "body_inherit")
+}
+
 /// ContentSchema.options_of: a field's options, or the list its `options_from` names.
 pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
-    let art = |inherit: bool| {
+    // ASSETORG2: the bodies across the asset layers
+    let bodies = |inherit: bool| {
         let mut out: Vec<String> = if inherit { vec![String::new()] } else { Vec::new() };
-        out.extend(v.art.get("unit").cloned().unwrap_or_default());
+        out.extend(v.assets.bodies());
         out
     };
     let s = |l: &[&str]| l.iter().map(|x| x.to_string()).collect::<Vec<String>>();
     match json::s(f, "options_from").as_str() {
         "zones" => s(&emberwake_battle::grid::ZONE_IDS),
-        "art" => art(false),
-        "art_inherit" => art(true),
+        "body" => bodies(false),
+        "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(emberwake_rules::status::debuffs().into_iter().map(String::from)).collect(),
         "status_buff" => std::iter::once(String::new()).chain(emberwake_rules::status::ROWS.iter().filter(|r| r.buff && !r.grant.is_empty()).map(|r| r.id.to_string())).collect(),
         "weapon_types" => skill::GEAR_TYPES.iter().map(|g| g.to_string()).chain(std::iter::once("unarmed".to_string())).collect(),
@@ -130,7 +135,7 @@ pub fn field_errors(v: &View, kind: &str, e: &Dict) -> Vec<String> {
         let key = json::s(f, "key");
         let label = json::s(f, "label");
         let text = gstr(json::get(e, &key));
-        if json::s(f, "type") == "enum" && visible(f, e) {
+        if json::s(f, "type") == "enum" && visible(f, e) && enum_checked(f) {
             let options = options_of(v, f);
             if !options.contains(&text) {
                 errors.push(format!("{label}: '{text}' is not one of {}.", options.join(", ")));
@@ -244,7 +249,11 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, false, false)),
         "terrain" => errors.extend(simple::terrain_errors(&e)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
-        "units" => errors.extend(unit::unit_errors(v, &e)),
+        "units" => {
+            errors.extend(unit::unit_errors(v, &e));
+            errors.extend(assets::body_errors(v, &json::s(&e, "art")));
+            errors.extend(reward::loot_errors(v, &e));
+        }
         "encounters" => errors.extend(encounter::errors(v, &e)),
         "items" => errors.extend(item::item_errors(v, &e, item::family_of(v, &e), item::inherit(v))),
         "item_families" => errors.extend(item::family_errors(v, &e, current_id)),
@@ -288,7 +297,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
     match kind {
         "skills" => skill::warnings(entry, &e),
         "classes" => unit::class_warnings(v, &e),
-        "units" => unit::unit_warnings(v, &e),
+        "units" => unit::unit_warnings(v, &e).into_iter().chain(reward::loot_warnings(v, &e)).chain(assets::portrait_and_palette_warnings(v, &Dict::new(), &e)).collect(),
         "encounters" => encounter::warnings(v, &e),
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),

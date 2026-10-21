@@ -173,10 +173,12 @@ fn path_errors(v: &View, raw: &Value) -> Vec<String> {
 /// ClassUnitValidator.class_errors of a normalized class row.
 pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = validate_class(&json::ints(json::get(e, "base_stats")), &json::ints(json::get(e, "growth")));
+    // a class always names its body (A1; "" inherits only on units and characters)
     let art = json::s(e, "art");
-    if !v.has_art("unit", &art) {
-        errors.push(format!("Art '{art}' isn't a known token/portrait key."));
+    if art.is_empty() && !v.assets.roots.is_empty() {
+        errors.push("Art '' isn't a body (units/<class>/<variant>/ in the game, kit or engine).".into());
     }
+    errors.extend(super::assets::body_errors(v, &art));
     match json::get(e, "proficiency").as_object().filter(|p| !p.is_empty()) {
         None => errors.push("A class needs a gear proficiency dictionary.".into()),
         Some(prof) => {

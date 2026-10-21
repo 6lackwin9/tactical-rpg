@@ -16,6 +16,38 @@ fn strings(v: &Value) -> Vec<String> {
     v.as_array().map(|a| a.iter().map(|s| s.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default()
 }
 
+/// Retired parity (REWARD1, HISTORY 2026-10-21): `purse.loot` moved to the encounter's `key_loot`. The messages about
+/// it are left out on both sides (Godot's "Purse loot ..." checks, the engine's refusal of the key), in the recorded
+/// cases and in the whole-catalog and world reports; every other message of those cases is still compared.
+fn kept(messages: Vec<String>) -> Vec<String> {
+    messages.into_iter().filter(|m| !retired(m)).collect()
+}
+
+fn retired(message: &str) -> bool {
+    message.starts_with("Purse loot '") || message == "Purse key 'loot' moved to key_loot (REWARD1)." || art_retired(message)
+}
+
+/// Retired parity (ASSETORG2, HISTORY 2026-10-22): the art checks read the asset layers now, not Godot's asset manifest
+/// keys. Godot's "Art '<k>' isn't a known token/portrait key." and "Icon '<k>' isn't a known item icon key." leave the
+/// comparison, and the engine's view of the frozen data has no asset layers (its A1-A6 checks are off here).
+fn art_retired(message: &str) -> bool {
+    (message.starts_with("Art '") && message.ends_with("' isn't a known token/portrait key."))
+        || (message.starts_with("Icon '") && message.ends_with("' isn't a known item icon key."))
+        || (message.starts_with("Art: '") && message.contains("' is not one of"))
+}
+
+/// The frozen data's checks view: no asset layers (ASSETORG2 retired the art keys).
+fn frozen_view(src: &source::Source) -> View {
+    View::new(&src.catalog, &src.worlds, &src.game, aegis_core::assets::Layers::default())
+}
+
+fn without_retired(r: check::Report) -> check::Report {
+    r.into_iter()
+        .map(|(k, l)| (k, l.into_iter().filter(|m| !retired(m)).collect::<Vec<_>>()))
+        .filter(|(_, l)| !l.is_empty())
+        .collect()
+}
+
 #[test]
 fn checks_report_what_godot_reported() {
     let path = root().join("games/emberwake/parity/out/checks.json");
@@ -26,8 +58,7 @@ fn checks_report_what_godot_reported() {
     let doc: Value = serde_json::from_str(&text).unwrap();
     let src = source::load(&root().join("legacy/data"));
     assert!(src.errors.is_empty(), "legacy/data loads cleanly: {:?}", src.errors);
-    let art = doc["art_keys"].as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), strings(v))).collect()).unwrap_or_default();
-    let view = View::new(&src.catalog, &src.worlds, &src.game, art);
+    let view = frozen_view(&src);
     let show: usize = std::env::var("CHECKS_SHOW").ok().and_then(|s| s.parse().ok()).unwrap_or(2);
     let kinds: Vec<&str> = check::PORTED.to_vec();
     let mut failures = Vec::new();
@@ -39,8 +70,8 @@ fn checks_report_what_godot_reported() {
         }
         let entry = c["entry"].as_object().unwrap();
         let current = c["current"].as_str().unwrap();
-        let (errors, warnings) = (check::validate_entry(&view, kind, entry, current), check::warnings_for(&view, kind, entry));
-        let ok = errors == strings(&c["errors"]) && warnings == strings(&c["warnings"]);
+        let (errors, warnings) = (kept(check::validate_entry(&view, kind, entry, current)), kept(check::warnings_for(&view, kind, entry)));
+        let ok = errors == kept(strings(&c["errors"])) && warnings == kept(strings(&c["warnings"]));
         let slot = per_kind.entry(kind.to_string()).or_default();
         slot.0 += 1;
         if !ok {
@@ -69,11 +100,10 @@ fn catalog_reports_match_godot() {
     };
     let doc: Value = serde_json::from_str(&text).unwrap();
     let src = source::load(&root().join("legacy/data"));
-    let art = doc["art_keys"].as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), strings(v))).collect()).unwrap_or_default();
-    assert_eq!(emberwake_content::source::art_keys(&root().join("legacy/data")), art, "art keys = AssetRegistry.keys");
-    let mut view = View::new(&src.catalog, &src.worlds, &src.game, art);
+    let mut view = frozen_view(&src);
     view.terrain_file = root().join("legacy/data/catalog/terrain.json").exists();
     for (name, ours, theirs) in [("errors", check::validate_all(&view), report(&doc["catalog"]["errors"])), ("warnings", check::warnings_all(&view), report(&doc["catalog"]["warnings"]))] {
+        let (ours, theirs) = (without_retired(ours), without_retired(theirs));
         let keys: Vec<&String> = theirs.keys().chain(ours.keys()).collect();
         let diffs: Vec<String> = keys.iter().filter(|k| ours.get(**k) != theirs.get(**k)).map(|k| format!("{k}:\n  godot {:?}\n  rust  {:?}", theirs.get(*k), ours.get(*k))).collect();
         eprintln!("catalog {name}: {} godot keys, {} differ", theirs.len(), diffs.len());
@@ -90,19 +120,18 @@ fn world_checks_match_godot() {
     };
     let doc: Value = serde_json::from_str(&text).unwrap();
     let src = source::load(&root().join("legacy/data"));
-    let art = doc["art_keys"].as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), strings(v))).collect()).unwrap_or_default();
-    let view = View::new(&src.catalog, &src.worlds, &src.game, art);
+    let view = frozen_view(&src);
     let show: usize = std::env::var("CHECKS_SHOW").ok().and_then(|s| s.parse().ok()).unwrap_or(2);
     let mut per_kind: indexmap::IndexMap<String, (usize, usize)> = indexmap::IndexMap::new();
     let mut failures = Vec::new();
     for c in doc["cases"].as_array().unwrap().iter().filter(|c| c["world"] != "") {
         let (w, kind) = (c["world"].as_str().unwrap(), c["kind"].as_str().unwrap());
         let (entry, current) = (c["entry"].as_object().unwrap(), c["current"].as_str().unwrap());
-        let errors = check::world::validate_entry(&view, w, kind, entry, current);
-        let blocking = check::world::blocking_errors(&view, w, kind, entry, current);
+        let errors = kept(check::world::validate_entry(&view, w, kind, entry, current));
+        let blocking = kept(check::world::blocking_errors(&view, w, kind, entry, current));
         let slot = per_kind.entry(kind.to_string()).or_default();
         slot.0 += 1;
-        if errors != strings(&c["errors"]) || blocking != strings(&c["blocking"]) {
+        if errors != kept(strings(&c["errors"])) || blocking != kept(strings(&c["blocking"])) {
             slot.1 += 1;
             if slot.1 <= show {
                 failures.push(format!("{w} {kind} {}:\n  godot {:?}\n  rust  {errors:?}\n  godot blocking {:?}\n  rust  blocking {blocking:?}", c["current"], strings(&c["errors"]), strings(&c["blocking"])));
@@ -114,6 +143,7 @@ fn world_checks_match_godot() {
     }
     assert!(per_kind.values().all(|(_, bad)| *bad == 0), "{}", failures.join("\n"));
     for (name, ours, theirs) in [("errors", check::world::validate_all(&view), report(&doc["worlds"]["errors"])), ("warnings", check::world::warnings_all(&view), report(&doc["worlds"]["warnings"]))] {
+        let (ours, theirs) = (without_retired(ours), without_retired(theirs));
         let keys: Vec<&String> = theirs.keys().chain(ours.keys()).collect();
         let diffs: Vec<String> = keys.iter().filter(|k| ours.get(**k) != theirs.get(**k)).map(|k| format!("{k}:\n  godot {:?}\n  rust  {:?}", theirs.get(*k), ours.get(*k))).collect();
         eprintln!("world {name}: {} godot keys, {} differ", theirs.len(), diffs.len());
@@ -132,8 +162,7 @@ fn world_lint_matches_godot() {
     let doc: Value = serde_json::from_str(&text).unwrap();
     let lint = &doc["lint"];
     let src = source::load(&root().join("legacy/data"));
-    let art = doc["art_keys"].as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), strings(v))).collect()).unwrap_or_default();
-    let mut view = View::new(&src.catalog, &src.worlds, &src.game, art);
+    let mut view = frozen_view(&src);
     let w = lint["world"].as_str().unwrap();
     for e in lint["entries"].as_array().unwrap() {
         if strings(&e["refused"]).is_empty() {
@@ -143,6 +172,7 @@ fn world_lint_matches_godot() {
         }
     }
     for (name, ours, theirs) in [("errors", check::world::validate_all(&view), report(&lint["errors"])), ("warnings", check::world::warnings_all(&view), report(&lint["warnings"]))] {
+        let (ours, theirs) = (without_retired(ours), without_retired(theirs));
         let keys: Vec<&String> = theirs.keys().chain(ours.keys()).collect();
         let mut diffs: Vec<String> = Vec::new();
         for k in keys {

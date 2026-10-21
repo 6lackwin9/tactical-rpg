@@ -62,7 +62,7 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     }));
     errors.extend(objective_problems(v, e, &|_: &str| true));
     errors.extend(morale_problems(e));
-    errors.extend(purse_problems(e, &|r: &str| world_loot_check(v, "", r)));
+    errors.extend(purse_problems(e));
     if e.contains_key("start_status") {
         errors.push("Start buffs (start_status) are for world encounters only.".into());
     }
@@ -640,7 +640,7 @@ fn group_problems(groups: &[Value], enemy_count: usize) -> Vec<String> {
 
 const GOLD_CAP: i64 = 500;
 const GOLD_SOFT_CAP: i64 = 100;
-const PURSE_KEYS: [&str; 4] = ["gold_min", "gold_max", "loot", "once"];
+const PURSE_KEYS: [&str; 3] = ["gold_min", "gold_max", "once"];
 
 /// PurseRules.world_loot_check: "" when `ref` resolves from `world` to an item reward, "missing" or "kind" otherwise
 /// (a catalog encounter has no world: only a qualified `world:id` resolves).
@@ -655,21 +655,23 @@ pub fn world_loot_check(v: &View, world: &str, r: &str) -> &'static str {
     }
 }
 
-/// PurseRules.problems: the purse object. `loot_check(ref)` as world_loot_check.
-pub fn purse_problems(e: &Dict, loot_check: &dyn Fn(&str) -> &'static str) -> Vec<String> {
+/// PurseRules.problems: the purse object. REWARD1 moved `loot` to the encounter's `key_loot`.
+pub fn purse_problems(e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(raw) = e.get("purse") else {
         return errors;
     };
     let Some(p) = raw.as_object() else {
-        errors.push("Purse must be an object {gold_min, gold_max, loot, once}.".into());
+        errors.push("Purse must be an object {gold_min, gold_max, once}.".into());
         return errors;
     };
     if p.is_empty() {
         return errors;
     }
     for key in p.keys() {
-        if !PURSE_KEYS.contains(&key.as_str()) {
+        if key == "loot" {
+            errors.push("Purse key 'loot' moved to key_loot (REWARD1).".into());
+        } else if !PURSE_KEYS.contains(&key.as_str()) {
             errors.push(format!("Purse key '{key}' is not allowed."));
         }
     }
@@ -682,17 +684,6 @@ pub fn purse_problems(e: &Dict, loot_check: &dyn Fn(&str) -> &'static str) -> Ve
     if let Some(hi) = p.get("gold_max") {
         if !whole(hi) || json::to_int(hi) < lo || json::to_int(hi) > GOLD_CAP {
             errors.push(format!("Purse gold_max must be gold_min..{GOLD_CAP}."));
-        }
-    }
-    if let Some(loot) = p.get("loot") {
-        match loot {
-            Value::String(r) if !r.is_empty() => match loot_check(r) {
-                "missing" => errors.push(format!("Purse loot '{r}' does not resolve.")),
-                "kind" => errors.push(format!("Purse loot '{r}' must be an item reward.")),
-                _ => {}
-            },
-            Value::String(_) => {}
-            other => errors.push(format!("Purse loot '{}' must be an item id.", gstr(other))),
         }
     }
     if p.get("once").is_some_and(|o| !o.is_boolean()) {
@@ -712,7 +703,8 @@ pub fn purse_warnings(e: &Dict) -> Vec<String> {
     if hi > GOLD_SOFT_CAP {
         out.push(format!("Purse gold above {GOLD_SOFT_CAP}: check the budget."));
     }
-    if hi <= 0 && json::s(p, "loot").is_empty() {
+    // a purse that still holds the retired loot is refused (purse_problems), not called empty
+    if hi <= 0 && !p.contains_key("loot") {
         out.push("Empty purse.".into());
     }
     out

@@ -48,6 +48,16 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 15,
+				"gold_max": 20,
+				"once": true
+			},
+			"key_loot": [],
+			"objective_reward": {
+				"gold": 10,
+				"once": true
+			},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -101,6 +111,13 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 25,
+				"gold_max": 30,
+				"once": true
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -151,6 +168,13 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "The last scout drops its blade in the ash.",
+			"purse": {
+				"gold_min": 3,
+				"gold_max": 6,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -202,6 +226,13 @@
 			"morale_leader": "ash_shaman",
 			"morale_groups": [],
 			"morale_text": "With the smokecaller down, the raiders throw down their arms.",
+			"purse": {
+				"gold_min": 5,
+				"gold_max": 9,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -252,6 +283,18 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 12,
+				"gold_max": 18,
+				"once": false
+			},
+			"key_loot": [
+				{
+					"loot": "warchiefs_axe",
+					"kill": "ash_warchief"
+				}
+			],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -349,6 +392,13 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 50,
+				"gold_max": 60,
+				"once": true
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -457,6 +507,13 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 50,
+				"gold_max": 60,
+				"once": true
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -506,6 +563,13 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 2,
+				"gold_max": 4,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [],
 			"protect": [],
 			"tags": []
@@ -557,6 +621,13 @@
 			"morale_leader": "",
 			"morale_groups": [],
 			"morale_text": "",
+			"purse": {
+				"gold_min": 25,
+				"gold_max": 30,
+				"once": true
+			},
+			"key_loot": [],
+			"objective_reward": {},
 			"guests": [
 				"wenn_tallow"
 			],

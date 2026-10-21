@@ -10,7 +10,7 @@ import json, pathlib, re
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GAME = ROOT / "games/emberwake"
 DATA = GAME / "data"
-ART = GAME / "assets/art"
+ASSETS = GAME / "assets"  # the game layer (ASSETORG2); kit and engine layers sit beside it
 
 
 def entries(path):
@@ -40,8 +40,9 @@ def flags(fl):
     return ", ".join(f"`{f['key']}`" + ("" if f.get("value", True) is True else f"={f['value']}") for f in fl or []) or "-"
 
 
-def art_of(category, key, variant):
-    return (ART / category / key / f"{variant}.png").exists()
+def art_of(rel):
+    """Whether the game, kit or engine asset layer holds `rel` (ASSETORG2)."""
+    return any((root / rel).exists() for root in (ASSETS, GAME.parent.parent / "kits" / "rpg" / "assets", GAME.parent.parent / "engine" / "assets"))
 
 
 def world_ids():
@@ -74,7 +75,7 @@ def world_section(wid, units):
         for l in locs:
             npcs = [name.get(m.get("character"), m.get("character")) for m in l.get("markers", []) if m.get("kind") == "npc"]
             kinds = sorted({m.get("kind") for m in l.get("markers", [])} - {"npc"})
-            bg = "yes" if art_of("ui", l["id"], "background") else "no"
+            bg = "yes" if art_of(f"backgrounds/location/{l['id']}.png") else "no"
             out += [f"**{l['name']}** (`{l['id']}`, {l.get('kind', '')}, region `{l.get('region', '')}`). {l.get('description', '')}", "",
                     f"- People here: {', '.join(npcs) or '-'}; markers: {', '.join(kinds) or '-'}; exits: {', '.join(e.get('to', '') for e in l.get('exits', [])) or '-'}",
                     f"- Fights here: {', '.join(e if isinstance(e, str) else str(e) for e in l.get('encounters', [])) or '-'}; rest place: {'yes' if l.get('rest') else 'no'}; map `{l.get('map', '')}`; background art: {bg}", ""]
@@ -90,8 +91,9 @@ def world_section(wid, units):
         for c in chars:
             u = units.get(c.get("base_unit"), {})
             role = {"party": "playable hero", "npc": "important NPC", "enemy": "enemy"}.get(c.get("role"), c.get("role", ""))
-            key = c.get("art") or c["id"]
-            portrait = "unique" if art_of("unit", key, "portrait") and key == c["id"] else ("shared" if art_of("unit", key, "portrait") else "none")
+            body = c.get("art") or u.get("art") or u.get("class_id", "?")
+            own = next((f"portraits/{f}/{c['id']}.png" for f in ("heroes", "npcs", "elites", "bosses") if art_of(f"portraits/{f}/{c['id']}.png")), "")
+            portrait = f"unique (`{own}`)" if own else "shared (the body's common portrait)"
             line = [f"**{c['name']}**" + (f", {c['title']}" if c.get("title") else "") + f" (`{c['id']}`)", "",
                     f"- {role}; {u.get('class_id', '?')} class on unit `{c.get('base_unit', '')}` (tier {u.get('tier', '?')}, level {u.get('level', '?')}); faction `{c.get('faction') or '-'}`; home `{c.get('home') or '-'}`"]
             if c.get("background"): line.append(f"- Background: {c['background']}")
@@ -102,7 +104,7 @@ def world_section(wid, units):
             if c.get("dialogue"): extra.append(f"dialogue `{c['dialogue']}`")
             if c.get("gone_flags"): extra.append("leaves the story on " + flags(c["gone_flags"]))
             if extra: line.append("- " + "; ".join(extra))
-            line.append(f"- Art: token on the {u.get('class_id', '?')} body ({'own file' if art_of('unit', key, 'token') else 'class default'}), portrait {portrait} (`assets/art/unit/{key}/`)")
+            line.append(f"- Art: body `{body}` ({'its own' if c.get('art') else 'the base unit' + chr(39) + 's'}), portrait {portrait}")
             out += line + [""]
     if quests:
         out += ["### Questlines", ""]
@@ -280,23 +282,22 @@ def write_kit():
         out.append(f"| {cell(c['name'])} | {cell(c.get('description'))} | {cell(prof)} | {len(c.get('skill_path', {}))} skills | body and clips on the sprite rig; generic portrait | kit |")
     out += ["", "## Skills", "", "| Skill | Kind | Classes (unlock level) | What it does | Icon | Layer |", "| --- | --- | --- | --- | --- | --- |"]
     for s in skills:
-        out.append(f"| {cell(s['name'])} (`{s['id']}`) | {s.get('kind', '')} | {cell(', '.join(owner.get(s['id'], [])) or 'everyone')} | {cell(plain(s.get('description'), s.get('name')))} | {'yes' if art_of('skill', s['id'], 'icon') else 'no'} | {kit_layer(s['id'], s.get('name'))} |")
+        out.append(f"| {cell(s['name'])} (`{s['id']}`) | {s.get('kind', '')} | {cell(', '.join(owner.get(s['id'], [])) or 'everyone')} | {cell(plain(s.get('description'), s.get('name')))} | {'yes' if art_of(f"skills/{s['id']}.png") else ('kind icon' if art_of(f"skills/kinds/{s.get('kind', '').lower()}.png") else 'no')} | {kit_layer(s['id'], s.get('name'))} |")
     out += ["", "Fallback icons per kind (from the ART2 sheets, in `art_src/skills_4.png`): any attack, ranged attack, spell, support, defence, disengage, status.", ""]
     out += ["## Statuses", "", "| Status | Type | Shown as | Effect | Icon | Layer |", "| --- | --- | --- | --- | --- | --- |"]
-    out += [f"| `{s}` | {t} | {d} | {e} | {'yes' if art_of('status', s, 'icon') else 'no'} | kit |" for s, t, d, e in STATUSES] + [""]
+    out += [f"| `{s}` | {t} | {d} | {e} | {'yes' if art_of(f'statuses/{s}.png') else 'no'} | kit |" for s, t, d, e in STATUSES] + [""]
     out += ["## Passives", "", "| Passive | Effect | Layer |", "| --- | --- | --- |"]
     out += [f"| {cell(p['name'])} (`{p['id']}`) | {cell(plain(p.get('description'), p.get('name')))} | {kit_layer(p['id'], p.get('name'))} |" for p in passives] + [""]
     out += ["## Item families", "", "| Family | Hands | Icon | Layer |", "| --- | --- | --- | --- |"]
     for f in fams:
-        key = {"fist": "fist", "accessory": "ring"}.get(f["id"], f["id"])
-        out.append(f"| {cell(f['name'])} (`{f['id']}`) | {cell(', '.join(f.get('hands') or []) or '-')} | {'yes' if art_of('item', key, 'icon') else 'no'} | kit |")
+        out.append(f"| {cell(f['name'])} (`{f['id']}`) | {cell(', '.join(f.get('hands') or []) or '-')} | {'yes' if art_of(f"items/{f.get('art') or f['id']}/base.png") else 'no'} | kit |")
     out += ["", "## Items", "", "| Item | Family | What it is | Layer |", "| --- | --- | --- | --- |"]
     out += [f"| {cell(i['name'])} (`{i['id']}`) | {i.get('family') or '-'} | {cell(plain(i.get('description'), i.get('name'))[:140])} | {kit_layer(i['id'], i.get('name'))} |" for i in items]
     out += [f"| {cell(i['name'])} (`{i['id']}`, world {w}) | {i.get('family') or '-'} | {cell(plain(i.get('description'), i.get('name'))[:140])} | game |" for w, i in world_items] + [""]
     out += ["## Terrain", "", "| Terrain | Move cost | Cover | Hazard | Tile art | Layer |", "| --- | --- | --- | --- | --- | --- |"]
     for t in terrain:
         hz = f"{t['hazard_status']} ({t.get('hazard_on', '')})" if t.get("hazard_status") else "-"
-        out.append(f"| `{t['id']}` | {t.get('move_cost')} | {t.get('cover_guard')} | {hz} | {'yes' if (ART / 'tile' / t['id']).exists() else 'no'} | kit (engine baseline for the common set) |")
+        out.append(f"| `{t['id']}` | {t.get('move_cost')} | {t.get('cover_guard')} | {hz} | {'yes' if art_of(f"tilesets/common/{t['id']}/v0.png") else 'no'} | kit (engine baseline for the common set) |")
     out += ["", "## Unit templates", "", "| Unit | Side | Class | Tier | Level | Layer |", "| --- | --- | --- | --- | --- | --- |"]
     out += [f"| {cell(u['name'])} (`{u['id']}`) | {u.get('side')} | {u.get('class_id')} | {u.get('tier', '')} | {u.get('level')} | {kit_layer(u['id'], u.get('name'))} |" for u in units] + [""]
     counts = (f"{len(classes)} classes, {len(skills)} skills, {len(STATUSES)} statuses, {len(passives)} passives, "
