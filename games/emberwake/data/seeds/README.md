@@ -14,6 +14,7 @@ the files are frozen in `legacy/data/seeds/` (and in git history). The tables be
 | Seed | Task | Note |
 | --- | --- | --- |
 | `reward1.json` | REWARD1-A (loot tables, Ashlands purses, key loot, objective reward) | full entries: regenerate it before a re-run on data other tasks changed since |
+| `assetorg2.json` | ASSETORG2-D (body keys, portrait tiers, item icons) | full entries, as above |
 
 ## Godot-era seeds
 
