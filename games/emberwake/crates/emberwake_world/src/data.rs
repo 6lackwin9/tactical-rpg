@@ -73,11 +73,13 @@ impl Data {
         aegis_content::manifest::find_game_dir(start, crate::GAME_ID).map(|g| g.join("data")).filter(|d| d.join("catalog").is_dir() && d.join("worlds").is_dir())
     }
 
-    /// From the Godot export folder (catalog.json, worlds.json, game_data.json).
+    /// From the Godot export folder (catalog.json, worlds.json, game_data.json); encounters with the retired `wave_*`
+    /// fields are folded (PHASEFOLD 1.4), as the loader folds them.
     pub fn load(dir: &Path) -> Result<Self> {
-        let catalog = read(&dir.join("catalog.json"))?;
-        let worlds = read(&dir.join("worlds.json"))?;
+        let mut catalog = read(&dir.join("catalog.json"))?;
+        let mut worlds = read(&dir.join("worlds.json"))?;
         let game = read(&dir.join("game_data.json"))?;
+        emberwake_content::source::fold_legacy_waves(&mut catalog, &mut worlds);
         Ok(Self::from_values(&catalog, &worlds, &game))
     }
 

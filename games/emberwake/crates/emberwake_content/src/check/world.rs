@@ -79,7 +79,7 @@ fn check_ref(v: &View, w: &str, f: &Dict, ref_kind: &str, r: &str) -> Vec<String
 /// WorldCatalog.validate_entry: every problem of `entry` as a `kind` entry of world `w` (`current_id`: the id it
 /// replaces).
 pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let e = normalize(kind, entry);
+    let e = normalize(kind, &crate::source::folded(kind, entry));
     let mut errors = Vec::new();
     let id = json::s(&e, "id");
     if id.is_empty() {
@@ -121,7 +121,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
 /// WorldCatalog.blocking_errors: the problems that refuse a world write (id, name, enums, overrides, the shape of the
 /// json fields). Unresolved references and incomplete entries do not block: worlds are full of mutual references.
 pub fn blocking_errors(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let e = normalize(kind, entry);
+    let e = normalize(kind, &crate::source::folded(kind, entry));
     let mut errors = Vec::new();
     let id = json::s(&e, "id");
     if id.is_empty() {
@@ -220,31 +220,43 @@ fn shape_errors(kind: &str, e: &Dict) -> Vec<String> {
 /// WorldCatalog._ref_errors: every ref field of the kind (lists without dupes unless allowed).
 fn entry_ref_errors(v: &View, w: &str, kind: &str, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
+    // PHASEFOLD 1.3: the arrival's units are checked as the retired wave_units field (after enemies) was.
+    let arrival = if kind == "encounters" { encounter::arrival_units(e) } else { None };
     for f in fields("world", kind).iter().map(json::dict) {
-        let ref_kind = json::s(f, "ref");
-        if ref_kind.is_empty() {
-            continue;
+        errors.extend(field_ref_errors(v, w, f, json::get(e, &json::s(f, "key"))));
+        if let (Some(units), "enemies") = (&arrival, json::s(f, "key").as_str()) {
+            errors.extend(field_ref_errors(v, w, encounter::wave_field(true), units));
         }
-        let mut values: Vec<String> = Vec::new();
-        match json::get(e, &json::s(f, "key")) {
-            Value::Array(list) => {
-                values = list.iter().map(gstr).collect();
-                if !json::b(f, "dupes", false) {
-                    let mut seen: Vec<&String> = Vec::new();
-                    for x in &values {
-                        if seen.contains(&x) {
-                            errors.push(format!("{} lists '{x}' twice.", json::s(f, "label")));
-                        }
-                        seen.push(x);
+    }
+    errors
+}
+
+/// The reference problems of one ref field holding `value`: listed twice, then each ref (`check_ref`).
+fn field_ref_errors(v: &View, w: &str, f: &Dict, value: &Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    let ref_kind = json::s(f, "ref");
+    if ref_kind.is_empty() {
+        return errors;
+    }
+    let mut values: Vec<String> = Vec::new();
+    match value {
+        Value::Array(list) => {
+            values = list.iter().map(gstr).collect();
+            if !json::b(f, "dupes", false) {
+                let mut seen: Vec<&String> = Vec::new();
+                for x in &values {
+                    if seen.contains(&x) {
+                        errors.push(format!("{} lists '{x}' twice.", json::s(f, "label")));
                     }
+                    seen.push(x);
                 }
             }
-            raw if !gstr(raw).is_empty() && !raw.is_null() => values.push(gstr(raw)),
-            _ => {}
         }
-        for x in values {
-            errors.extend(check_ref(v, w, f, &ref_kind, &x));
-        }
+        raw if !gstr(raw).is_empty() && !raw.is_null() => values.push(gstr(raw)),
+        _ => {}
+    }
+    for x in values {
+        errors.extend(check_ref(v, w, f, &ref_kind, &x));
     }
     errors
 }
@@ -437,17 +449,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     if json::aget(e, "enemies").is_empty() {
         errors.push("Add at least one enemy.".into());
     }
-    if !json::aget(e, "wave_units").is_empty() {
-        let total = json::i(e, "total_blocks", 0);
-        if json::i(e, "wave_block", 0) > total {
-            errors.push(format!("The wave block is past the end of the round ({total} blocks)."));
-        }
-        if json::i(e, "wave_round", 0) > json::i(e, "max_rounds", 0) {
-            errors.push("The wave round is after the last round.".into());
-        }
-    }
-    let wave_field = field("encounters", "wave_units");
-    errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, wave_field, "characters", r).is_empty()));
+    errors.extend(encounter::arrival_errors(e));
+    errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty()));
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
     errors.extend(encounter::morale_problems(e));
     errors.extend(encounter::start_status_problems(e.get("start_status").unwrap_or(&Value::Array(Vec::new()))));

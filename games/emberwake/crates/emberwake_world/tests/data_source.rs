@@ -32,8 +32,8 @@ const AFTER_GODOT: [(&str, &str, &str); 7] = [
 ];
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
-/// the item icon rows.
-const HELP_CHANGED: [(&str, &str, &str); 7] = [
+/// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger).
+const HELP_CHANGED: [(&str, &str, &str); 9] = [
     ("content", "encounters", "purse"),
     ("world", "encounters", "purse"),
     ("content", "classes", "art"),
@@ -41,7 +41,24 @@ const HELP_CHANGED: [(&str, &str, &str); 7] = [
     ("world", "characters", "art"),
     ("content", "item_families", "art"),
     ("content", "items", "icon_id"),
+    ("content", "encounters", "phases"),
+    ("world", "encounters", "phases"),
 ];
+
+/// Retired parity (PHASEFOLD, HISTORY 2026-10-22): the single reinforcement wave became an arrival phase. Godot's
+/// encounter rows (catalog and worlds) are folded by the engine's `fold_legacy_wave` before comparing (the four
+/// `wave_*` keys become the arrival phase at the front of `phases`), and Godot's four wave schema rows per section
+/// leave its schema; every other key, row and value is still compared.
+const FOLDED_SCHEMA_ROWS: [&str; 4] = emberwake_battle::encounter::LEGACY_WAVE_KEYS;
+
+/// Godot's schema without the folded wave rows of both encounter sections.
+fn godot_schema_folded(schema: &mut Value) {
+    for section in ["content", "world"] {
+        if let Some(Value::Array(rows)) = schema.get_mut(section).and_then(|s| s.get_mut("encounters")) {
+            rows.retain(|r| !FOLDED_SCHEMA_ROWS.iter().any(|k| r["key"] == *k));
+        }
+    }
+}
 
 /// `v` without the AFTER_GODOT keys of `section`: on every object in an array under a key named after the kind.
 fn strip_after_godot(v: &mut Value, section: &str) {
@@ -138,7 +155,7 @@ fn diff(at: &str, g: &Value, r: &Value) -> String {
 
 #[test]
 fn engine_loader_matches_godot_catalogs() {
-    let Some(catalog) = read("catalog.json") else {
+    let Some(mut catalog) = read("catalog.json") else {
         eprintln!("no parity/out/catalog.json: run games/emberwake/parity/export.sh");
         return;
     };
@@ -146,17 +163,19 @@ fn engine_loader_matches_godot_catalogs() {
     assert!(src.errors.is_empty(), "load errors: {:?}", src.errors);
     strip_after_godot(&mut src.catalog, "content");
     strip_after_godot(&mut src.worlds, "world");
+    let mut worlds = read("worlds.json").unwrap();
+    source::fold_legacy_waves(&mut catalog, &mut worlds);
     let mut problems = Vec::new();
     for kind in source::CATALOG_KINDS {
         problems.push(diff(&format!("catalog.{kind}"), &catalog[kind], &src.catalog[kind]));
     }
-    let worlds = read("worlds.json").unwrap();
     problems.push(diff("worlds", &worlds, &src.worlds));
     let game = read("game_data.json").unwrap();
     for key in ["maps", "quests", "services", "xp_curve", "xp_for_level", "item_families"] {
         problems.push(diff(&format!("game.{key}"), &game[key], &src.game[key]));
     }
     if let Some(mut schema) = read("schema.json") {
+        godot_schema_folded(&mut schema);
         unhelp(&mut schema);
         problems.push(diff("schema", &schema, &schema_at_freeze(source::schema())));
     }

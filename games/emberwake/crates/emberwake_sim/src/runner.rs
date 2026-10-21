@@ -235,9 +235,11 @@ impl<'a> Runner<'a> {
     /// One battle of `left` (party) vs `right` (enemies); `base` replaces encounter defaults (zone, arena, exits,
     /// blocks, AP, waves, phases, objective...); party, enemies, max_rounds and rng_seed are the sim's.
     pub fn fight(&mut self, left: &[String], right: &[String], seed: i64, base: &Map<String, Value>) -> FightRes {
-        let mut waves: Vec<String> = json::aget(base, "wave_units").iter().chain(json::aget(base, "guests")).map(json::gstr).collect();
-        let phases: Vec<Value> = json::aget(base, "phases").to_vec();
-        for p in &Phases::create(&phases).phases {
+        // The arrival's units (PHASEFOLD: the reinforcement wave), the guests, then the other phase waves.
+        let phases = Phases::create(json::aget(base, "phases")).phases;
+        let mut waves: Vec<String> = phases.iter().filter(|p| p.is_arrival()).flat_map(|p| p.wave_refs()).collect();
+        waves.extend(json::aget(base, "guests").iter().map(json::gstr));
+        for p in phases.iter().filter(|p| !p.is_arrival()) {
             waves.extend(p.wave_refs());
         }
         for id in left.iter().chain(right).chain(&waves) {
