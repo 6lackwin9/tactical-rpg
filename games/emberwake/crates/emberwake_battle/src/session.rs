@@ -229,6 +229,9 @@ pub struct Session {
     pub log: Vec<crate::log::Entry>,
     /// The battle metrics following this fight (attach_metrics), fed at the session's signal points.
     pub metrics: Option<Box<BattleMetrics>>,
+    /// The action the last resolving step popped: (round, block, index into `resolver.scheduled`); kept until the next
+    /// one. Not in Godot; for the screens (SPRITE1-U: the actor plays its attack clip); no rule reads it.
+    pub last_popped: Option<(i32, i32, usize)>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -416,6 +419,7 @@ impl Session {
             events: Vec::new(),
             log: Vec::new(),
             metrics: None,
+            last_popped: None,
             hero_keys,
             unit_keys,
             units_by_key,
@@ -931,6 +935,7 @@ impl Session {
             }
         }
         if let Some(idx) = self.pending.pop_front() {
+            self.last_popped = Some((self.current_round, self.current_block, idx));
             self.resolver.execute_single(&mut self.w, idx);
             for k in std::mem::take(&mut self.resolver.combos) {
                 self.feed(|m, s| m.on_combo(s, &k));
