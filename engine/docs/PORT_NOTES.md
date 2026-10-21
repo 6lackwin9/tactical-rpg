@@ -110,6 +110,7 @@ because the RNG is bit-exact.
 | `ui/dojo/*.gd` panels (party, inspector, derived, gear, stash, stash filter, stage, console, log, carry bar, allocation) | `emberwake_gui::dojo` on `aegis_ui::window`, scroll areas and `Painter::rich` | manual (GUI, agent link) |
 | `ui/framework/ui_window.gd` (`_clamp_to_parent`, `commit_fraction`, title drag, grip resize, collapse), `ui/dojo/dojo_workspace.gd` (`LAYOUTS`, `apply_layout`, `save_layout`, `_load_layout`, window toggles) | `aegis_ui::window` (`Desk`, `Win`, `Layout`), the shell's desk handling (`desk_press`, `save_desk`) | unit and shell tests (window.rs, shell.rs) |
 | `audio/music_director.gd` (choice: contexts, candidates, scopes, kind and combat context), `sound_events.gd` | `emberwake_gui::music`, `battle` (`sound_of`, from the resolver log; a hit for 0 plays mitigated, the engine log has no mitigation tag) | unit tests (chains, every shipped file decodes, log lines) |
+| none (Godot showed static tokens; its FxSettings speed and instant flags) | `aegis_core::assets::ClipPlayer`, `aegis_ui::art` `played` / `body_outline`, `Image::outline`, `Painter::ellipse` (SPRITE1-L, 2026-10-22); the battle honours the settings `anim_speed` and `skip_anim` | new in the engine, not a port |
 
 Godot behaviours found on the way:
 

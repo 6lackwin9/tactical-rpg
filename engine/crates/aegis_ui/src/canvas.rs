@@ -36,6 +36,9 @@ impl Rect {
     }
 }
 
+/// The alpha from which a pixel counts as part of a sprite's silhouette (`Image::outline`).
+pub const OUTLINE_ALPHA: u8 = 128;
+
 /// An RGBA image (sprites, tiles).
 #[derive(Debug, Clone)]
 pub struct Image {
@@ -113,6 +116,30 @@ impl Image {
                 p[..3].copy_from_slice(to);
             }
         }
+    }
+
+    /// The silhouette outline of `self` (SPRITE1-L): an image one pixel larger on every side ((w + 2) x (h + 2), drawn
+    /// one pixel up and left of `self`) holding `col` on every pixel that is not solid (alpha below `OUTLINE_ALPHA`)
+    /// but touches a solid one of `self`, sides or corners; the rest is transparent.
+    pub fn outline(&self, col: Rgba) -> Image {
+        let (w, h) = (self.w + 2, self.h + 2);
+        let solid = |x: i32, y: i32| x >= 0 && y >= 0 && x < self.w && y < self.h && self.px[((y * self.w + x) * 4 + 3) as usize] >= OUTLINE_ALPHA;
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                // (x, y) of the outline is (x - 1, y - 1) of self.
+                let (sx, sy) = (x - 1, y - 1);
+                if solid(sx, sy) {
+                    continue;
+                }
+                let touches = (-1..=1).any(|dy| (-1..=1).any(|dx| (dx != 0 || dy != 0) && solid(sx + dx, sy + dy)));
+                if touches {
+                    let o = ((y * w + x) * 4) as usize;
+                    px[o..o + 4].copy_from_slice(&col);
+                }
+            }
+        }
+        Image { w, h, px }
     }
 
     /// `self` on a transparent `size` x `size` square: centred across, standing on the bottom edge.

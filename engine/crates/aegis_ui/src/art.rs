@@ -2,10 +2,12 @@
 //! read-only, scaled to pixel size and cached. A file is named by its path relative to a layer root (`image`), a
 //! body by its key (`<class>` or `<class>/<variant>`: a sheet of clips, `body_frame`, `body_token`, with an optional
 //! palette), a tile by its set chain (`tile_in`, variants by the files present). The game names the files through
-//! its own lookup chains (ASSETORG2 section 4).
+//! its own lookup chains (ASSETORG2 section 4). SPRITE1-L: a body's clips play by time (`played` over an
+//! `aegis_core::assets::ClipPlayer`), a frame's silhouette outline is cached (`body_outline`, highlights) and a body
+//! is checked frame by frame (`body_problems`).
 
-use crate::canvas::Image;
-use aegis_core::assets::{self, Clips, Layers};
+use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
+use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -15,6 +17,9 @@ struct Body {
     clips: Clips,
 }
 
+/// (body key, palette id, clip, frame, size, colour) of a cached outline.
+type OutlineKey = (String, String, String, u32, i32, Rgba);
+
 pub struct Art {
     layers: Layers,
     /// (rel, w, h) -> the scaled image.
@@ -23,6 +28,8 @@ pub struct Art {
     bodies: HashMap<(String, String), Option<Body>>,
     /// (body key, palette id, clip, frame, size) -> the scaled frame.
     frames: HashMap<(String, String, String, u32, i32), Option<Image>>,
+    /// (body key, palette id, clip, frame, size, colour) -> the frame's silhouette outline.
+    outlines: HashMap<OutlineKey, Option<Image>>,
     /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
     present: HashMap<String, bool>,
     variant_counts: HashMap<String, usize>,
@@ -55,7 +62,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -185,6 +192,60 @@ impl Art {
         self.body_clip(key, palette, "idle", 0, size)
     }
 
+    /// The first body of `keys` that loads (a body chain).
+    pub fn first_body(&mut self, keys: &[String]) -> Option<String> {
+        keys.iter().find(|k| self.has_body(k)).cloned()
+    }
+
+    /// Body `key`'s clips (None: the body does not load).
+    pub fn clips(&mut self, key: &str) -> Option<&Clips> {
+        self.body(key, "").map(|b| &b.clips)
+    }
+
+    /// Whether body `key` has its own clip `clip` (no fallback).
+    pub fn has_clip(&mut self, key: &str, clip: &str) -> bool {
+        self.clips(key).is_some_and(|c| c.row(clip).is_some())
+    }
+
+    /// The frame `player` shows at `now` (SPRITE1-L: the shot or the base loop, missing clips falling back to `idle`),
+    /// fitted to a `size` square like `body_clip`, and which frame it is.
+    pub fn played(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32) -> Option<(ClipFrame, &Image)> {
+        let f = player.frame(self.clips(key)?, now)?;
+        let img = self.body_clip(key, palette, &f.clip, f.frame, size)?;
+        Some((f, img))
+    }
+
+    /// The silhouette outline (`Image::outline`, `col`) of frame `n` of `clip` in a `size` square; (size + 2) square,
+    /// drawn one pixel up and left of the frame. Cached.
+    pub fn body_outline(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col);
+        if !self.outlines.contains_key(&k) {
+            let img = self.body_clip(key, palette, clip, n, size).map(|f| f.outline(col));
+            self.outlines.insert(k.clone(), img);
+        }
+        self.outlines.get(&k).and_then(|i| i.as_ref())
+    }
+
+    /// What is wrong with body `key` (empty: it loads and every clip frame holds pixels): clips.json problems, a sheet
+    /// too small for the clips, frames with no solid pixel (`blank_frames`).
+    pub fn body_problems(&mut self, key: &str) -> Vec<String> {
+        let Some(v) = assets::read_json(&self.layers, &assets::body_file(key, "clips.json")) else {
+            return vec![format!("{} is missing or not JSON.", assets::body_file(key, "clips.json"))];
+        };
+        let clips = match Clips::parse(&v) {
+            Ok(c) => c,
+            Err(p) => return p,
+        };
+        let Some(sheet) = self.layers.find(&assets::body_file(key, "sheet.png")).and_then(|p| load_png(&p)) else {
+            return vec![format!("{} is missing or not a PNG.", assets::body_file(key, "sheet.png"))];
+        };
+        let size = clips.sheet_problem(sheet.w as u32, sheet.h as u32);
+        if !size.is_empty() {
+            return vec![size];
+        }
+        blank_frames(&clips, &sheet).into_iter().map(|(clip, n)| format!("clip '{clip}' frame {n} is empty.")).collect()
+    }
+
     /// Tile `tile` from the first set of `sets` a layer holds (`tilesets/<set>/<tile>/v0.png`); the variant is
     /// (x x 7 + y x 13) mod n over that layer's v0..v(n-1).
     pub fn tile_in(&mut self, sets: &[&str], tile: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
@@ -193,6 +254,21 @@ impl Art {
         self.image(&format!("{dir}/v{v}.png"), size, size)
     }
 
+}
+
+/// The frames of `sheet` (laid out by `clips`) with no pixel at `OUTLINE_ALPHA` or above: (clip, frame), sheet order.
+pub fn blank_frames(clips: &Clips, sheet: &Image) -> Vec<(String, u32)> {
+    let (w, h) = (clips.frame.0 as i32, clips.frame.1 as i32);
+    let mut out = Vec::new();
+    for (row, c) in clips.clips.iter().enumerate() {
+        for n in 0..c.frames {
+            let f = sheet.crop(n as i32 * w, row as i32 * h, w, h);
+            if !f.px.iter().skip(3).step_by(4).any(|a| *a >= OUTLINE_ALPHA) {
+                out.push((c.id.clone(), n));
+            }
+        }
+    }
+    out
 }
 
 /// The game folder at or above `start` (the first holding game.json and assets/).
