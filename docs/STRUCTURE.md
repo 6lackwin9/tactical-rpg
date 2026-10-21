@@ -6,8 +6,8 @@ file when a module, crate or folder is added. Since 2026-10-19 the game is the A
 `legacy/docs/STRUCTURE.md`. Which Godot file each engine module ports: `engine/docs/PORT_NOTES.md`.
 
 Layers (SPLIT1, `docs/specs/SPLIT1.md`): the engine (`engine/`) is game-agnostic and never names a game; each game lives
-in `games/<id>/` (today one, `emberwake`) with its crates, content, assets and design docs; kits (`kits/`) come later,
-when a second game shares rules. A task row's Layer (`docs/TASKS.md`) says which side its change lands on. The Cargo
+in `games/<id>/` (today one, `emberwake`) with its crates, content, assets and design docs; kits (`kits/`) hold shared
+assets (since ASSETORG2-K: `kits/rpg/`, files and a manifest, no code); kit code comes when a second game shares rules. A task row's Layer (`docs/TASKS.md`) says which side its change lands on. The Cargo
 workspace is the repo root (`Cargo.toml` members `engine/crates/*` and `games/*/crates/*`, `Cargo.lock`,
 `rust-toolchain.toml`, `.cargo/config.toml`, SPLIT1-1).
 
@@ -23,7 +23,8 @@ workspace is the repo root (`Cargo.toml` members `engine/crates/*` and `games/*/
 | `engine/crates/aegis_cli/src/lib.rs` | command line shell (SPLIT1-6): arguments, `serve`, `link`, `content` (incl. `manifest`), `replay` (playtest recordings); the game registers its own commands (`Game`) | done |
 | `engine/crates/<crate>/tests/` | engine tests (unit tests sit beside the code: `aegis_core`, `aegis_save`, `aegis_content`) | done |
 | `engine/docs/` | `ENGINE_SPEC.md` (direction, milestones, transition), `PORT_NOTES.md` (port map, parity status) | done |
-| `engine/assets/fonts/` | the GUI font (Open Sans, OFL) | done |
+| `engine/assets/` | the engine's baseline asset layer (ASSETORG2-B): `fonts/` (the GUI font, Open Sans, OFL), `tilesets/common/` (the generic terrain), `audio/sfx/ui_*.wav` (interface sounds); README | done |
+| `kits/rpg/` | the RPG kit (ASSETORG2-K): `kit.json` (written by `aegis content manifest --kit rpg`), README, `assets/` (class bodies and goblin variants, common portraits, item family icons, skill kind icons, statuses, map markers, UI chips, combat sounds, mood music) | done |
 | `engine/web/` | an early JavaScript combat prototype; parked (ENGINE_SPEC "web/ player") | parked |
 
 ## Game: Emberwake (`games/emberwake/`)
