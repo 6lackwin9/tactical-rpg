@@ -166,15 +166,19 @@ mod tests {
 
     #[test]
     fn every_shipped_sound_decodes_and_every_context_has_a_track() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/audio");
-        let audio = Audio::offline(Some(root.clone()));
+        // ASSETORG2: the game's, the kit's and the engine's audio folders
+        let game = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let roots: Vec<std::path::PathBuf> = aegis_core::assets::Layers::for_game(&game).roots.iter().map(|r| r.join("audio")).collect();
+        let audio = Audio::offline_layered(roots.clone());
         let mut n = 0;
-        for folder in ["music", "sfx"] {
-            for e in std::fs::read_dir(root.join(folder)).unwrap().flatten() {
-                let name = e.file_name().to_string_lossy().to_string();
-                if name.ends_with(".ogg") || name.ends_with(".wav") {
-                    audio.check(&format!("{folder}/{name}")).unwrap();
-                    n += 1;
+        for root in &roots {
+            for folder in ["music", "sfx"] {
+                for e in std::fs::read_dir(root.join(folder)).into_iter().flatten().flatten() {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if name.ends_with(".ogg") || name.ends_with(".wav") {
+                        audio.check(&format!("{folder}/{name}")).unwrap();
+                        n += 1;
+                    }
                 }
             }
         }

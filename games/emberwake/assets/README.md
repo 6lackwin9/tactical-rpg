@@ -5,7 +5,9 @@ System: S14. Status: placeholder art stays until the base game is done. Spec: ga
 Purpose: the game's art and audio. The Aegis engine reads them over three asset layers (ASSETORG2,
 docs/specs/ASSETORG2.md): this folder (the game), the RPG kit's `kits/rpg/assets/` and the engine's `engine/assets/`;
 the first layer holding a file wins, so a file here overrides the same path in the kit or engine. Since ASSETORG2-G the
-kit- and engine-bound folders still sit here; ASSETORG2-K and -B move them out (pure moves).
+kit-bound files moved to `kits/rpg/assets/` (ASSETORG2-K) and the engine baseline (the common tileset, the interface
+sounds) to `engine/assets/` (ASSETORG2-B); what stays here is the game's own: named bodies and portraits, its skill
+family icons, the named items' icons, the Ashlands tiles, backgrounds and the world music.
 
 Tree (section 3 of the spec; a test keeps every file on these patterns):
 

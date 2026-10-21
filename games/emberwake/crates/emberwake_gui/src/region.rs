@@ -899,14 +899,26 @@ mod tests {
     use aegis_core::assets::Layers;
     use std::path::Path;
 
-    /// ASSETORG2 section 3: every file under the game's assets matches a pattern of the layered tree (README.md files
-    /// aside), and the region map's tiles of the Ashlands are there.
+    /// ASSETORG2 section 3: every file under each asset root (the game's, its kit's, the engine's) matches a pattern of
+    /// the layered tree (README.md files aside), and the region map's tiles of the Ashlands are there.
     #[test]
     fn the_assets_follow_the_layered_tree() {
         let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let root = game.join("assets");
+        let layers = Layers::for_game(&game);
+        assert_eq!(layers.roots.len(), 3, "game, kit and engine roots: {:?}", layers.notices);
         let mut stray = Vec::new();
-        let mut walk = vec![root.clone()];
+        for root in &layers.roots {
+            stray.extend(strays(root));
+        }
+        assert!(stray.is_empty(), "files outside the layered tree (docs/specs/ASSETORG2.md section 3): {stray:?}");
+        for t in ["floor", "wall", "shallow_water"] {
+            assert_eq!(layers.variants(&format!("tilesets/ashlands/{t}")), 3, "{t}");
+        }
+    }
+
+    fn strays(root: &Path) -> Vec<String> {
+        let mut stray = Vec::new();
+        let mut walk = vec![root.to_path_buf()];
         while let Some(dir) = walk.pop() {
             for e in std::fs::read_dir(&dir).unwrap().flatten() {
                 let p = e.path();
@@ -914,17 +926,13 @@ mod tests {
                     walk.push(p);
                     continue;
                 }
-                let rel = p.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+                let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
                 if !layout_ok(&rel) {
-                    stray.push(rel);
+                    stray.push(format!("{}: {rel}", root.display()));
                 }
             }
         }
-        assert!(stray.is_empty(), "files outside the layered tree (docs/specs/ASSETORG2.md section 3): {stray:?}");
-        let layers = Layers::for_game(&game);
-        for t in ["floor", "wall", "shallow_water"] {
-            assert_eq!(layers.variants(&format!("tilesets/ashlands/{t}")), 3, "{t}");
-        }
+        stray
     }
 
     /// One path of the section 3 tree (game, kit or engine root).
