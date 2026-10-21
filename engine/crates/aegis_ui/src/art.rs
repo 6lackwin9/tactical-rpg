@@ -1,8 +1,8 @@
 //! Art over the asset layers (ASSETORG2: the game's assets, its kit's, the engine's; `aegis_core::assets::Layers`),
 //! read-only, scaled to pixel size and cached. A file is named by its path relative to a layer root (`image`), a
 //! body by its key (`<class>` or `<class>/<variant>`: a sheet of clips, `body_frame`, `body_token`, with an optional
-//! palette), a tile by its set chain (`tile_in`, variants by the files present). The ASSETORG1 tree
-//! (`art/<category>/<id>/<variant>.png` in the game root) is still read by `get` until the game moves its files.
+//! palette), a tile by its set chain (`tile_in`, variants by the files present). The game names the files through
+//! its own lookup chains (ASSETORG2 section 4).
 
 use crate::canvas::Image;
 use aegis_core::assets::{self, Clips, Layers};
@@ -17,13 +17,15 @@ struct Body {
 
 pub struct Art {
     layers: Layers,
-    cache: HashMap<(String, String, String, i32), Option<Image>>,
     /// (rel, w, h) -> the scaled image.
     files: HashMap<(String, i32, i32), Option<Image>>,
     /// (body key, palette id) -> the body.
     bodies: HashMap<(String, String), Option<Body>>,
     /// (body key, palette id, clip, frame, size) -> the scaled frame.
     frames: HashMap<(String, String, String, u32, i32), Option<Image>>,
+    /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
+    present: HashMap<String, bool>,
+    variant_counts: HashMap<String, usize>,
 }
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
@@ -53,37 +55,30 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, cache: HashMap::new(), files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
         &self.layers
     }
 
-    /// The ASSETORG1 path of `variant` of thing `id` in `category`, relative to a layer: art/<category>/<id>/<variant>.png.
-    pub fn rel(category: &str, id: &str, variant: &str) -> String {
-        format!("art/{category}/{id}/{variant}.png")
-    }
-
-    /// The file of `variant` of thing `id` in `category` under the game folder `root` (ASSETORG1 tree).
-    pub fn path(root: &Path, category: &str, id: &str, variant: &str) -> PathBuf {
-        root.join("assets").join(Self::rel(category, id, variant))
-    }
-
-    /// `variant` of `id` in `category` (e.g. "unit", "warrior", "token") at `size` x `size` pixels (ASSETORG1 tree).
-    pub fn get(&mut self, category: &str, id: &str, variant: &str, size: i32) -> Option<&Image> {
-        let key = (category.to_string(), id.to_string(), variant.to_string(), size);
-        if !self.cache.contains_key(&key) {
-            let rel = Self::rel(category, id, variant);
-            let path = self.layers.find(&rel);
-            let img = path.as_ref().and_then(|p| load_png(p)).map(|i| i.downsample(size, size));
-            if img.is_none() && !self.layers.roots.is_empty() {
-                // The caller draws its fallback; the playtest trail notes which art was missing.
-                crate::playtest::report_asset(category, id, variant, if path.is_some() { "load_failed" } else { "missing_file" });
-            }
-            self.cache.insert(key.clone(), img);
+    /// Whether a layer holds `rel` (cached: screens ask every frame).
+    pub fn has(&mut self, rel: &str) -> bool {
+        if let Some(&hit) = self.present.get(rel) {
+            return hit;
         }
-        self.cache.get(&key).and_then(|i| i.as_ref())
+        let hit = self.layers.has(rel);
+        self.present.insert(rel.to_string(), hit);
+        hit
+    }
+
+    fn variants(&mut self, dir: &str) -> usize {
+        if let Some(&n) = self.variant_counts.get(dir) {
+            return n;
+        }
+        let n = self.layers.variants(dir);
+        self.variant_counts.insert(dir.to_string(), n);
+        n
     }
 
     /// The file at `rel` (in the first layer holding it) downsampled to `w` x `h`.
@@ -100,10 +95,24 @@ impl Art {
         self.files.get(&key).and_then(|i| i.as_ref())
     }
 
-    /// The first of `rels` a layer holds (a lookup chain), downsampled to `w` x `h`; no missing-art report.
+    /// The first of `rels` a layer holds (a lookup chain), downsampled to `w` x `h`; when none is there, the trail
+    /// notes the first (the caller draws its placeholder).
     pub fn first(&mut self, rels: &[String], w: i32, h: i32) -> Option<&Image> {
-        let rel = rels.iter().find(|r| self.layers.has(r))?.clone();
-        self.image(&rel, w, h)
+        match rels.iter().find(|r| self.has(r)).cloned() {
+            Some(rel) => self.image(&rel, w, h),
+            None => {
+                if let (Some(rel), false) = (rels.first(), self.layers.roots.is_empty()) {
+                    crate::playtest::report_asset("file", rel, "", "missing_file");
+                }
+                None
+            }
+        }
+    }
+
+    /// The token of the first body of `keys` that loads (a body chain), with `palette`.
+    pub fn first_token(&mut self, keys: &[String], palette: &str, size: i32) -> Option<&Image> {
+        let key = keys.iter().find(|k| self.has_body(k))?.clone();
+        self.body_token(&key, palette, size)
     }
 
     /// Body `key` with `palette` ("" = none): its sheet with the palette's slots swapped and its clips.
@@ -112,7 +121,8 @@ impl Art {
         if !self.bodies.contains_key(&k) {
             let body = self.load_body(key, palette);
             if body.is_none() && !self.layers.roots.is_empty() {
-                crate::playtest::report_asset("body", key, palette, "missing_file");
+                let there = self.layers.has(&assets::body_file(key, "clips.json"));
+                crate::playtest::report_asset("body", key, palette, if there { "load_failed" } else { "missing_file" });
             }
             self.bodies.insert(k.clone(), body);
         }
@@ -178,33 +188,18 @@ impl Art {
     /// Tile `tile` from the first set of `sets` a layer holds (`tilesets/<set>/<tile>/v0.png`); the variant is
     /// (x x 7 + y x 13) mod n over that layer's v0..v(n-1).
     pub fn tile_in(&mut self, sets: &[&str], tile: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
-        let (dir, n) = sets.iter().map(|s| format!("tilesets/{s}/{tile}")).map(|d| (d.clone(), self.layers.variants(&d))).find(|(_, n)| *n > 0)?;
+        let (dir, n) = sets.iter().map(|s| format!("tilesets/{s}/{tile}")).map(|d| (d.clone(), self.variants(&d))).find(|(_, n)| *n > 0)?;
         let v = (x * 7 + y * 13).rem_euclid(n as i32);
         self.image(&format!("{dir}/v{v}.png"), size, size)
     }
 
-    /// A unit's token (unit/<art>/token).
-    pub fn token(&mut self, art: &str, size: i32) -> Option<&Image> {
-        self.get("unit", art, "token", size)
-    }
-
-    /// A unit's portrait (unit/<art>/portrait).
-    pub fn portrait(&mut self, art: &str, size: i32) -> Option<&Image> {
-        self.get("unit", art, "portrait", size)
-    }
-
-    /// Terrain tile `id` (tile/<id>/v<n>, the variant chosen by the cell, like TileArt).
-    pub fn tile(&mut self, id: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
-        let v = ((x * 7 + y * 13) % 4 + 4) % 4;
-        self.get("tile", id, &format!("v{v}"), size)
-    }
 }
 
-/// The project folder above `start` (the first ancestor holding assets/art; the ASSETORG1 tree).
+/// The game folder at or above `start` (the first holding game.json and assets/).
 pub fn find_project(start: &Path) -> Option<PathBuf> {
     let mut dir = start.to_path_buf();
     loop {
-        if dir.join("assets/art").is_dir() {
+        if dir.join("game.json").is_file() && dir.join("assets").is_dir() {
             return Some(dir);
         }
         if !dir.pop() {
@@ -263,6 +258,24 @@ mod tests {
         let at = |x: i32, y: i32| &t.px[((y * 20 + x) * 4) as usize..((y * 20 + x) * 4 + 4) as usize];
         assert_eq!((at(0, 19)[3], at(2, 4), at(3, 5), at(10, 3)[3]), (0, &[0xe0, 0xb4, 0x3c, 255][..], &[0xe0, 0xb4, 0x3c, 255][..], 0));
         assert!(art.has_body("knight") && !art.has_body("rogue"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn chains_take_the_first_file_or_body_present() {
+        let root = body_tree("chains");
+        write_png(&root.join("portraits/common/knight_base.png"), 2, 2, &[7u8; 16]);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let chain = vec!["portraits/heroes/nobody.png".to_string(), "portraits/common/knight_base.png".to_string()];
+        assert_eq!(art.first(&chain, 2, 2).map(|i| i.px[0]), Some(7), "the second of the chain");
+        assert!(art.first(&["portraits/heroes/nobody.png".to_string()], 2, 2).is_none());
+        let bodies = vec!["knight/goblin".to_string(), "knight".to_string()];
+        assert_eq!(art.first_token(&bodies, "", 8).map(|i| (i.w, i.h)), Some((8, 8)), "a missing variant falls back to its class body");
+        assert!(art.has("units/knight/base/sheet.png") && !art.has("units/knight/goblin/sheet.png"));
+        let game = root.join("games/demo");
+        std::fs::create_dir_all(game.join("assets/units")).unwrap();
+        std::fs::write(game.join("game.json"), "{}").unwrap();
+        assert_eq!(find_project(&game.join("assets/units")).as_deref(), Some(game.as_path()));
         let _ = std::fs::remove_dir_all(&root);
     }
 
