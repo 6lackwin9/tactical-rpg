@@ -29,10 +29,6 @@
 				"skarn_ironjaw",
 				"vex_cutpurse"
 			],
-			"wave_units": [],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"pace": "auto",
 			"start_status": [],
@@ -89,14 +85,28 @@
 				"skarn_ironjaw",
 				"vex_cutpurse"
 			],
-			"wave_units": [
-				"nok_flamebow",
-				"gruk_smokecaller"
+			"phases": [
+				{
+					"id": "reinforcements",
+					"name": "Reinforcements",
+					"trigger": {
+						"kind": "arrival",
+						"round": 1,
+						"block": 4
+					},
+					"effects": [
+						{
+							"type": "wave",
+							"units": [
+								"nok_flamebow",
+								"gruk_smokecaller"
+							],
+							"label": "The warband springs the ambush!"
+						}
+					],
+					"pause_autoplay": false
+				}
 			],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "The warband springs the ambush!",
-			"phases": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -149,10 +159,6 @@
 				"ash_skirmisher",
 				"ash_archer"
 			],
-			"wave_units": [],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"pace": "auto",
 			"start_status": [],
@@ -207,10 +213,6 @@
 				"ash_skirmisher",
 				"ash_shaman"
 			],
-			"wave_units": [],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"pace": "auto",
 			"start_status": [],
@@ -264,10 +266,6 @@
 				"ash_warchief",
 				"ash_berserker"
 			],
-			"wave_units": [],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"pace": "auto",
 			"start_status": [],
@@ -327,15 +325,28 @@
 				"ash_shaman",
 				"ash_archer"
 			],
-			"wave_units": [
-				"ash_berserker",
-				"ash_brawler",
-				"ash_skirmisher"
-			],
-			"wave_round": 2,
-			"wave_block": 1,
-			"wave_label": "The flankers pour out of the gorge!",
 			"phases": [
+				{
+					"id": "reinforcements",
+					"name": "Reinforcements",
+					"trigger": {
+						"kind": "arrival",
+						"round": 2,
+						"block": 1
+					},
+					"effects": [
+						{
+							"type": "wave",
+							"units": [
+								"ash_berserker",
+								"ash_brawler",
+								"ash_skirmisher"
+							],
+							"label": "The flankers pour out of the gorge!"
+						}
+					],
+					"pause_autoplay": false
+				},
 				{
 					"id": "crown_of_nails",
 					"name": "Crown of Nails",
@@ -431,10 +442,6 @@
 				"ash_shaman",
 				"ash_archer"
 			],
-			"wave_units": [],
-			"wave_round": 2,
-			"wave_block": 1,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [
 				{
 					"id": "crown_of_nails",
@@ -544,10 +551,6 @@
 			"enemies": [
 				"ash_brawler"
 			],
-			"wave_units": [],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"pace": "auto",
 			"start_status": [],
@@ -602,10 +605,6 @@
 				"ash_skirmisher",
 				"ash_shaman"
 			],
-			"wave_units": [],
-			"wave_round": 1,
-			"wave_block": 4,
-			"wave_label": "Reinforcements arrive!",
 			"phases": [],
 			"pace": "auto",
 			"start_status": [],
