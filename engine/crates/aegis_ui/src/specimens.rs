@@ -38,6 +38,8 @@ pub struct Specimens {
     pub card: usize,
     pub row: usize,
     pub text: String,
+    /// The text area's sample (the kit's text editor, PLAYUI1-T).
+    pub area: String,
     /// The icon buttons' lock (on: the delete icon is disabled) and whether the section is open.
     pub locked: bool,
     pub open: bool,
@@ -58,6 +60,7 @@ impl Default for Specimens {
             card: 0,
             row: 1,
             text: "Type here".into(),
+            area: "A text area wraps its lines and scrolls. Shift with the arrows selects, so does a drag; a double click takes a word.\nCtrl with Left or Right jumps by word; Ctrl+Z undoes, Ctrl+Y redoes.".into(),
             locked: false,
             open: true,
             left: vec!["Sword".into(), "Shield".into()],
@@ -119,8 +122,10 @@ impl Specimens {
     }
 
     pub fn text_changed(&mut self, id: &str, text: &str) {
-        if id == "kit.text" {
-            self.text = text.to_string();
+        match id {
+            "kit.text" => self.text = text.to_string(),
+            "kit.area" => self.area = text.to_string(),
+            _ => {}
         }
     }
 
@@ -171,6 +176,10 @@ impl Specimens {
         y = head(ui, x1, y, "Text field (click to type)");
         ui.text_field("kit.text", Rect::new(x1, y, col_w.min(180), 14), &self.text, false, true);
         y += 14 + gap;
+        y = head(ui, x1, y, "Text area: Up / Down, Shift selects, Ctrl+arrows by word, Ctrl+A, C, X, V, Z, Y");
+        let ah = (ui.p.line_h(BODY) * 4.0).ceil() as i32 + 6;
+        ui.text_field("kit.area", Rect::new(x1, y, col_w, ah), &self.area, true, true);
+        y += ah + gap;
         y = head(ui, x1, y, "Frame, paragraph and close button");
         let fr = Rect::new(x1, y, col_w.min(200), (r.y + r.h - 18 - y).clamp(46, 70));
         let body_y = ui.frame(fr, "Frame", false);

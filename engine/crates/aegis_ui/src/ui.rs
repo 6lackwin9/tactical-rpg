@@ -83,66 +83,9 @@ pub struct Kit {
     pub edit: Option<Edit>,
 }
 
-/// A text field being edited: its id, the text so far, the caret (a character index) and whether Enter adds a line.
-/// The shell types into it and hands every change to the screen (`Screen::text_changed`), which owns the value.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Edit {
-    pub id: String,
-    pub text: String,
-    pub caret: usize,
-    pub multiline: bool,
-}
-
-impl Edit {
-    /// Editing `text` with the caret at its end.
-    pub fn new(id: &str, text: &str, multiline: bool) -> Self {
-        Self { id: id.into(), text: text.into(), caret: text.chars().count(), multiline }
-    }
-
-    fn byte_at(&self, caret: usize) -> usize {
-        self.text.char_indices().nth(caret).map_or(self.text.len(), |(i, _)| i)
-    }
-
-    /// Inserts typed text at the caret (control characters dropped; a newline only in a multiline field).
-    pub fn insert(&mut self, s: &str) {
-        for ch in s.chars().filter(|c| !c.is_control() || (*c == '\n' && self.multiline)) {
-            let at = self.byte_at(self.caret);
-            self.text.insert(at, ch);
-            self.caret += 1;
-        }
-    }
-
-    pub fn backspace(&mut self) {
-        if self.caret > 0 {
-            let at = self.byte_at(self.caret - 1);
-            self.text.remove(at);
-            self.caret -= 1;
-        }
-    }
-
-    pub fn delete(&mut self) {
-        if self.caret < self.text.chars().count() {
-            let at = self.byte_at(self.caret);
-            self.text.remove(at);
-        }
-    }
-
-    pub fn left(&mut self) {
-        self.caret = self.caret.saturating_sub(1);
-    }
-
-    pub fn right(&mut self) {
-        self.caret = (self.caret + 1).min(self.text.chars().count());
-    }
-
-    pub fn home(&mut self) {
-        self.caret = 0;
-    }
-
-    pub fn end(&mut self) {
-        self.caret = self.text.chars().count();
-    }
-}
+/// The text editor's model, layout, keys and clipboard live in `edit` (PLAYUI1-T); re-exported here for the kit's
+/// callers.
+pub use crate::edit::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, word_end, word_start, Edit, EditKey, Layout, VLine, FIELD_PAD_X, FIELD_PAD_Y, UNDO_MAX, UNDO_PAUSE_MS};
 
 /// Pixels one wheel line scrolls a scroll area.
 pub const SCROLL_STEP: i32 = 12;
@@ -182,21 +125,32 @@ pub struct Ui<'a, A> {
     /// How many scroll areas are open (`scroll_begin`), each closed by `scroll_end`.
     scrolls: usize,
     /// The text field being edited (`Kit::edit`, read at the start of the frame; only the live screen sees it).
-    edit: Option<Edit>,
+    edit: Option<EditView>,
+}
+
+/// What a frame draws of the text field being edited: its id, text, caret and selection anchor (not its history).
+#[derive(Debug, Clone)]
+struct EditView {
+    id: String,
+    text: String,
+    caret: usize,
+    anchor: Option<usize>,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
         // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
         let (open, drag, scroll) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None }, g.kit.scroll.clone());
-        let edit = if live { g.kit.edit.clone() } else { None };
+        let edit = g.kit.edit.as_ref().filter(|_| live).map(|e| EditView { id: e.id.clone(), text: e.text.clone(), caret: e.caret, anchor: e.anchor });
         g.canvas.clip = None;
         Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit }
     }
 
-    /// A text field (`multiline`: a text area, Enter adds a line). Clicking it starts editing: the shell types into it
-    /// and hands each change to the screen's `text_changed(id, text)`; `value` is the screen's text otherwise. While it
-    /// edits, a caret shows; the field scrolls to keep the caret's line in view.
+    /// A text field (`multiline`: a text area, Enter adds a line). Clicking it starts editing (the caret where the click
+    /// was): the shell types into it and hands each change to the screen's `text_changed(id, text)`; `value` is the
+    /// screen's text otherwise. While it edits, the caret and the selection show. A text area wraps at spaces and
+    /// scrolls (the wheel, a scroll bar when the text is taller; the shell keeps the caret's line in view); a one-line
+    /// field slides to keep the caret in view (PLAYUI1-T).
     pub fn text_field(&mut self, id: &str, r: Rect, value: &str, multiline: bool, enabled: bool) {
         let editing = self.edit.as_ref().filter(|e| e.id == id).cloned();
         let hover = enabled && self.hover(r);
@@ -204,49 +158,46 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.p.panel(r, rgb(22, 30, 48), border, RADIUS);
         let text = editing.as_ref().map_or(value, |e| e.text.as_str()).to_string();
         let line = self.p.line_h(BODY);
-        let max_w = r.w as f32 - 10.0;
-        let lines = |p: &mut Painter, s: &str| -> Vec<String> {
-            let mut out = Vec::new();
-            for para in s.split('\n') {
-                let wrapped = p.wrap(para, BODY, max_w);
-                if wrapped.is_empty() {
-                    out.push(String::new());
-                } else {
-                    out.extend(wrapped);
+        let lay = field_layout(&mut self.p, &text, r, multiline);
+        let chars: Vec<char> = text.chars().collect();
+        let caret = editing.as_ref().map_or(chars.len(), |e| e.caret.min(chars.len()));
+        let selection = editing.as_ref().and_then(|e| e.anchor.map(|a| a.min(chars.len()))).filter(|a| *a != caret).map(|a| (a.min(caret), a.max(caret)));
+        // Where the text's top left is drawn: a text area scrolls down by its offset, a one-line field slides left.
+        let (dx, off) = if multiline {
+            let off = self.scroll_begin(&field_scroll_id(id), r, field_content_h(lay.lines.len(), line));
+            (0.0, off)
+        } else {
+            (field_shift(&lay, caret, r), 0)
+        };
+        let (tx, ty) = (r.x as f32 + FIELD_PAD_X - dx, r.y as f32 + FIELD_PAD_Y - off as f32);
+        let col = if enabled { TEXT } else { DIM };
+        self.push_clip(Rect::new(r.x + 3, r.y + 2, r.w - 6, r.h - 4));
+        for (i, l) in lay.lines.iter().enumerate() {
+            let y = ty + i as f32 * line;
+            if y + line < r.y as f32 || y > (r.y + r.h) as f32 {
+                continue;
+            }
+            if let Some((a, b)) = selection {
+                let (lo, hi) = (a.max(l.start), b.min(l.end));
+                // A selection that goes on past the line's end also marks the break.
+                let tail = if b > l.end && a <= l.end { 3.0 } else { 0.0 };
+                if lo < hi || tail > 0.0 {
+                    let (x0, x1) = (l.xs[lo - l.start], l.xs[hi - l.start] + tail);
+                    self.p.fill(Rect::new((tx + x0).floor() as i32, y.floor() as i32, ((x1 - x0).ceil() as i32).max(1), line.ceil() as i32), rgba(74, 110, 180, 170));
                 }
             }
-            out
-        };
-        let shown = if multiline { lines(&mut self.p, &text) } else { vec![text.clone()] };
-        // The caret: the line and x of the text before it.
-        let caret = editing.as_ref().map(|e| {
-            let before: String = e.text.chars().take(e.caret).collect();
-            let ls = if multiline { lines(&mut self.p, &before) } else { vec![before] };
-            let last = ls.last().cloned().unwrap_or_default();
-            (ls.len().saturating_sub(1), self.p.text_w(&last, BODY))
-        });
-        let rows = ((r.h as f32 - 6.0) / line).floor().max(1.0) as usize;
-        let first = caret.map_or(0, |(l, _)| l.saturating_sub(rows - 1));
-        let col = if enabled { TEXT } else { DIM };
-        let clip = Rect::new(r.x + 3, r.y + 2, r.w - 6, r.h - 4);
-        self.push_clip(clip);
-        for (i, l) in shown.iter().skip(first).take(rows).enumerate() {
-            let y = r.y as f32 + 3.0 + i as f32 * line;
-            if multiline {
-                self.p.text(r.x as f32 + 5.0, y, l, BODY, col);
-            } else {
-                // A single line keeps its end (the caret) in view.
-                let w = self.p.text_w(l, BODY);
-                self.p.text(r.x as f32 + 5.0 - (w - max_w).max(0.0), y, l, BODY, col);
-            }
+            let s: String = chars[l.start..l.end].iter().collect();
+            self.p.text(tx, y, &s, BODY, col);
         }
-        if let Some((l, x)) = caret {
-            let shift = if multiline { 0.0 } else { (self.p.text_w(&text, BODY) - max_w).max(0.0) };
-            let cx = r.x as f32 + 5.0 + x - shift + 0.5;
-            let cy = r.y as f32 + 3.0 + (l - first) as f32 * line;
+        if editing.is_some() {
+            let cx = tx + lay.x_of(caret) + 0.5;
+            let cy = ty + lay.line_of(caret) as f32 * line;
             self.p.line(cx, cy, cx, cy + line - 1.0, GOLD, 0.0);
         }
         self.pop_clip();
+        if multiline {
+            self.scroll_end();
+        }
         self.push(id, if multiline { "textarea" } else { "text" }, text, r, enabled, editing.is_some(), None, Vec::new());
     }
 
@@ -726,29 +677,5 @@ pub fn by_id<A: Clone>(widgets: &[Widget<A>], id: &str) -> Result<A, String> {
         Some(w) if w.enabled && w.action.is_some() => Ok(w.action.clone().unwrap()),
         Some(_) => Err(format!("widget '{id}' is disabled or not clickable")),
         None => Err(format!("no widget '{id}'")),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Edit;
-
-    #[test]
-    fn an_edit_types_deletes_and_moves_the_caret_by_characters() {
-        let mut e = Edit::new("t", "héllo", false);
-        assert_eq!(e.caret, 5);
-        e.insert("!");
-        e.left();
-        e.left();
-        e.backspace();
-        assert_eq!((e.text.as_str(), e.caret), ("hélo!", 3), "keeps the multibyte é");
-        e.home();
-        e.delete();
-        e.end();
-        e.insert("\n x\t");
-        assert_eq!(e.text, "élo! x", "a single-line field drops the newline and the tab");
-        let mut m = Edit::new("m", "a", true);
-        m.insert("\nb");
-        assert_eq!((m.text.as_str(), m.caret), ("a\nb", 3));
     }
 }
