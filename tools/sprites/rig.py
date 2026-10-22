@@ -265,6 +265,89 @@ def draw_weapon(f, u, P, kind, hand, a_deg, two=False, glow=0.0):
         for i in range(len(face)): g.limb(rot(face[i]), rot(face[(i + 1) % len(face)]), 0.45, P['metal_hi'] if i in (0, 5) else P['metal'])
         g.limb(rot((0, -5.5)), rot((0, 6.0)), 0.6, P.get('emblem', WHITE)); g.limb(rot((-2.6, -2.2)), rot((2.6, -2.2)), 0.6, P.get('emblem', WHITE))
         g.outline(); f.im.alpha_composite(g.im); f.px = f.im.load()
+    elif kind == 'buckler':  # a small round fist-shield strapped over the far hand: leather face, iron rim and boss
+        g = F(); cx, cy = hx + 1.0, hy
+        g.disc(cx, cy, 3.6, P['metal']); g.disc(cx, cy, 2.8, P['leather'])
+        g.poly([(cx + 0.4, cy - 2.6), (cx + 2.6, cy - 1.0), (cx + 2.6, cy + 1.0), (cx + 0.4, cy + 2.6)], P['leather_lo'])  # shaded far half
+        g.dot(cx - 2.6, cy - 2.0, P['metal_hi']); g.dot(cx - 3.2, cy - 0.8, P['metal_hi'])
+        g.disc(cx, cy, 1.1, P['metal']); g.dot(cx - 0.4, cy - 0.5, P['metal_hi'])
+        g.outline(); f.im.alpha_composite(g.im); f.px = f.im.load()
+    elif kind in DRAWERS:
+        DRAWERS[kind](f, P, (hx, hy), (ux, uy))
+
+
+# ------------------------------------------------------------------ weapon drawers (WAR2H1)
+# Each drawer gets the (upper) hand and the weapon's direction u; on the 2H grip the lower hand holds the grip `GRIP2`
+# px behind it (pose(grip2=...)). n = (-uy, ux) is the side the head faces: forward when held upright, and the
+# direction of travel in a forward (clockwise) swing, so an axe's edge leads the chop. Only rig palette colours
+# (no new slots). DRAWERS names them for unit['weapon'].
+GRIP2 = 3.2
+
+
+def _at(h, u, s, n=(0.0, 0.0), k=0.0):
+    return (h[0] + u[0] * s + n[0] * k, h[1] + u[1] * s + n[1] * k)
+
+
+def _haft(f, P, h, u, back, fwd):
+    f.limb(_at(h, u, -back), _at(h, u, fwd), 0.75, P['leather'])
+    f.limb(_at(h, u, -back), _at(h, u, -1.0), 0.75, P['leather_lo'])  # the wrapped grip
+    f.disc(*_at(h, u, -back - 0.4), 0.8, P['metal_lo'])                # butt cap
+
+
+def _greatsword(f, P, h, u):
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -5.5), _at(h, u, 0.5), 0.8, P['leather_lo'])      # a grip long enough for two hands
+    f.disc(*_at(h, u, -6.1), 1.1, P['trim'])
+    f.limb(_at(h, u, 1.0, n, -3.0), _at(h, u, 1.0, n, 3.0), 0.7, P['trim'])
+    f.limb(_at(h, u, 2.0), _at(h, u, 16.0), 1.2, P['metal_hi']); f.limb(_at(h, u, 2.0), _at(h, u, 15.5), 0.45, WHITE)
+    f.dot(*_at(h, u, 16.8), P['metal_hi'])
+
+
+def _battle_axe(f, P, h, u):
+    n = (-u[1], u[0])
+    _haft(f, P, h, u, 5.0, 13.5)
+    f.poly([_at(h, u, 8.6, n, 0.8), _at(h, u, 7.0, n, 4.6), _at(h, u, 10.8, n, 5.6), _at(h, u, 14.6, n, 4.6), _at(h, u, 13.0, n, 0.8)], P['metal'])
+    for a, b in ((_at(h, u, 7.0, n, 4.6), _at(h, u, 10.8, n, 5.6)), (_at(h, u, 10.8, n, 5.6), _at(h, u, 14.6, n, 4.6))):
+        f.limb(a, b, 0.45, P['metal_hi'])                                   # the honed edge
+    f.limb(_at(h, u, 9.4, n, 1.4), _at(h, u, 12.2, n, 1.4), 0.4, P['metal_lo'])
+    f.poly([_at(h, u, 9.8, n, -0.6), _at(h, u, 11.0, n, -3.4), _at(h, u, 12.2, n, -0.6)], P['metal_lo'])  # back spike
+    f.dot(*_at(h, u, 14.0), P['metal_lo'])
+
+
+def _warhammer(f, P, h, u):
+    n = (-u[1], u[0])
+    _haft(f, P, h, u, 5.0, 12.0)
+    f.poly([_at(h, u, 10.0, n, -3.0), _at(h, u, 10.0, n, 3.8), _at(h, u, 13.4, n, 3.8), _at(h, u, 13.4, n, -3.0)], P['metal'])
+    f.limb(_at(h, u, 10.0, n, 4.2), _at(h, u, 13.4, n, 4.2), 0.5, P['metal_hi'])   # the striking face
+    f.limb(_at(h, u, 10.4, n, -0.4), _at(h, u, 13.0, n, -0.4), 0.4, P['metal_lo'])
+    f.poly([_at(h, u, 10.6, n, -3.0), _at(h, u, 11.7, n, -5.4), _at(h, u, 12.8, n, -3.0)], P['metal_lo'])  # back spike
+    f.limb(_at(h, u, 13.4), _at(h, u, 15.0), 0.6, P['metal'])           # top spike
+
+
+def _double_axe(f, P, h, u):
+    """A two-handed double-bitted axe: two broad crescent heads, one each side of the haft, read at 28 px."""
+    n = (-u[1], u[0])
+    _haft(f, P, h, u, 5.0, 15.0)
+    for k in (1.0, -1.0):
+        f.poly([_at(h, u, 8.4, n, 0.8 * k), _at(h, u, 6.4, n, 5.4 * k), _at(h, u, 10.9, n, 6.4 * k), _at(h, u, 15.4, n, 5.4 * k),
+                _at(h, u, 13.4, n, 0.8 * k)], P['metal'])
+        for a, b in ((_at(h, u, 6.4, n, 5.4 * k), _at(h, u, 10.9, n, 6.5 * k)), (_at(h, u, 10.9, n, 6.5 * k), _at(h, u, 15.4, n, 5.4 * k))):
+            f.limb(a, b, 0.5, P['metal_hi'])                                # both edges honed
+        f.limb(_at(h, u, 9.4, n, 2.2 * k), _at(h, u, 12.4, n, 2.2 * k), 0.4, P['metal_lo'])
+    f.poly([_at(h, u, 9.6, n, -1.1), _at(h, u, 9.6, n, 1.1), _at(h, u, 12.2, n, 1.1), _at(h, u, 12.2, n, -1.1)], P['metal_lo'])  # socket
+    f.limb(_at(h, u, 13.4), _at(h, u, 16.4), 0.6, P['metal'])           # top spike
+
+
+def _hand_axe(f, P, h, u):
+    """A one-handed hatchet: a short haft and a small bearded head."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -2.5), _at(h, u, 9.5), 0.7, P['leather']); f.limb(_at(h, u, -2.5), _at(h, u, 0.5), 0.7, P['leather_lo'])
+    f.poly([_at(h, u, 6.4, n, 0.6), _at(h, u, 5.2, n, 3.6), _at(h, u, 7.8, n, 4.3), _at(h, u, 10.2, n, 3.6), _at(h, u, 9.2, n, 0.6)], P['metal'])
+    f.limb(_at(h, u, 5.2, n, 3.7), _at(h, u, 7.8, n, 4.4), 0.45, P['metal_hi']); f.limb(_at(h, u, 7.8, n, 4.4), _at(h, u, 10.2, n, 3.7), 0.45, P['metal_hi'])
+    f.poly([_at(h, u, 7.2, n, -0.6), _at(h, u, 7.9, n, -1.9), _at(h, u, 8.6, n, -0.6)], P['metal_lo'])
+
+
+DRAWERS = {'greatsword': _greatsword, 'battle_axe': _battle_axe, 'warhammer': _warhammer, 'double_axe': _double_axe, 'hand_axe': _hand_axe}
 
 
 def draw_bow(f, P, hand, bow_a, pull_hand=None, nock=False):
@@ -283,15 +366,18 @@ def draw_bow(f, P, hand, bow_a, pull_hand=None, nock=False):
 # ------------------------------------------------------------------ the pose
 def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, hand_b=None, wa=25.0, wb=None,
          head_dy=0.0, hurt=0.0, fall=0.0, flash=False, two=False, loose=None, loose_b=None, fx=None, slash=None,
-         bow_a=0.0, pull=0.0, nock=False, arrow=None, glow=0.0, fist_f=False, fist_b=False, tails=0.0, swap=False, leg_trail=None):
+         bow_a=0.0, pull=0.0, nock=False, arrow=None, glow=0.0, fist_f=False, fist_b=False, tails=0.0, swap=False, leg_trail=None,
+         grip2=0.0):
     """hand_f/hand_b: hand targets relative to the shoulder (None = rest pose). wa/wb: weapon angles
-    (0 up, 90 forward, 180 down). ff/fb: foot offsets (x from pelvis, lift). loose: (x, y, angle) of a dropped weapon."""
+    (0 up, 90 forward, 180 down). ff/fb: foot offsets (x from pelvis, lift). loose: (x, y, angle) of a dropped weapon.
+    grip2 > 0 (WAR2H1, a two-handed weapon): the far hand holds the grip grip2 px behind the near hand, along the
+    weapon (hand_b is ignored), and is drawn over the grip."""
     P = u['pal']; L, A, T = u['leg'], u['arm'], u['tl']
     s = u.get('scale', 1.0)  # a body variant's size against its class (goblins ~0.83, a warlord ~1.1): every offset scales
     if s != 1.0:
         sc = lambda p: None if p is None else (p[0] * s, p[1] * s)
         about = lambda x, y: (20 + (x - 20) * s, GY - (GY - y) * s)  # absolute effect positions scale about the feet
-        bob, lean, dx, head_dy = bob * s, lean * s, dx * s, head_dy * s
+        bob, lean, dx, head_dy, grip2 = bob * s, lean * s, dx * s, head_dy * s, grip2 * s
         fb, ff, hand_f, hand_b = sc(fb), sc(ff), sc(hand_f), sc(hand_b)
         fx = [about(x, y) + (r, c) for x, y, r, c in fx] if fx else fx
         slash = [about(x, y) for x, y in slash] if slash else slash
@@ -321,6 +407,8 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
         ef, hf = ik((sh[0] + 2, sh[1] - 0.5), A, A, (sh[0] + 4.5 * s, sh[1] + 3 * s) if hand_b is None else (sh[0] + hand_b[0] + 2 * s, sh[1] + hand_b[1]), -1)
     else:
         ef, hf = ik((sh[0] + 2, sh[1] - 0.5), A, A, hf, u.get('fbend', -1))
+        if grip2 and not loose:
+            gx, gy = udir(wa); hb = (hf[0] - gx * grip2, hf[1] - gy * grip2)
         eb, hb = ik((sh[0] - 2, sh[1] - 0.5), A, A, hb, 1)
     wf, wbk = u['weapon'], u.get('offhand')
     sleeve, sleeve_lo, fore, fore_lo = P.get('sleeve', P['main']), P.get('sleeve_lo', P['main_lo']), P.get('fore', P['skin']), P.get('fore_lo', P['skin_lo'])
@@ -331,6 +419,11 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     if swap and not loose: draw_weapon(f, u, P, wf, R(hb), wa, two, glow)
     f.limb(R((sh[0] - 2, sh[1])), R(eb), 1.7, sleeve_lo); f.limb(R(eb), R(hb), 1.5, fore_lo)
     f.disc(*R(hb), 1.9 if fist_b else 1.5, P.get('glove_lo', fore_lo))
+    # WAR2H1 grips ('2h', 'buckler'): a weapon pointing back (a wind-up, a low guard) goes behind the head and body
+    back2 = u.get('grip') in ('2h', 'buckler') and not loose and wa < 0
+    if back2:
+        draw_weapon(f, u, P, wf, R(hf), wa, two, glow)
+        if grip2: f.disc(*R(hb), 1.5, P.get('glove_lo', P['leather_lo']))
 
     f.limb(R((px - 1, py)), R(kb), 2.2, P['leg_lo']); f.limb(R(kb), R(fbp), 2.0, P['leg_lo'])
     f.rect(*R((fbp[0] - 1, fbp[1] - 1)), *R((fbp[0] + 3, fbp[1])), P['boot_lo'])
@@ -345,6 +438,8 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     draw_robe_skirt(f, u, P, R, px, py, kb, kf, fbp, ffp)
     if wbk == 'shield' and not loose_b and not swap:  # shield on the far arm, carried in front of the chest
         draw_weapon(f, u, P, 'shield', R(hb), math.degrees(ang) if fall else 0)
+    elif wbk == 'buckler' and not loose_b and not swap:  # buckler strapped over the far fist, in front of the chest
+        draw_weapon(f, u, P, 'buckler', R(hb), 0)
     # front arm + weapon
     f.limb(R((sh[0] + 2, sh[1])), R(ef), 1.9, sleeve); f.limb(R(ef), R(hf), 1.7, fore)
     hfx, hfy = R(hf)
@@ -363,7 +458,10 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     else:
         if loose: draw_weapon(f, u, P, wf, loose[:2], loose[2]); f.disc(hfx, hfy, 1.4, P['skin'])
         else:
-            draw_weapon(f, u, P, wf, (hfx, hfy), wa, two, glow)
+            if not back2:
+                draw_weapon(f, u, P, wf, (hfx, hfy), wa, two, glow)
+            if grip2 and not back2:  # the far hand over the lower grip, in shade
+                f.disc(*R(hb), 1.5, P.get('glove_lo', P['leather_lo']))
             if wf == 'mace':  # a smaller fist round the shaft, knuckles shaded
                 f.disc(hfx, hfy, 1.3, P.get('glove', P['leather'])); f.dot(hfx + 0.6, hfy + 0.4, P.get('glove_lo', P['leather_lo']))
             else:

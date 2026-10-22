@@ -41,6 +41,53 @@ def goblin(cls, hat, pal, scale=0.84, **kw):
     return u
 
 
+# WAR2H1 look matrix (DIR4 section 7.1, W1: bake every look). A look is a grip (a pose set) plus a weapon drawing.
+# TWO_HANDED: item family -> its 2H drawing (rig.DRAWERS). LOOKS: class -> the looks the exporter bakes for the class
+# base, each a body of its own at units/<class>/<look>/ in the base's layer: `1h_buckler` (the base's one-hand weapon
+# and a buckler) and `2h_<family>`; the base's own sheet is its 1H + kite shield look. Every look of a body shares the
+# body's palette slots and palette files (DIR4 L3). The game picks the look from the equipped gear
+# (emberwake_content::art::gear_body_chain). A new family on the 2H grip: one drawer in rig.DRAWERS, one entry here.
+TWO_HANDED = {'sword': 'greatsword', 'axe': 'battle_axe', 'hammer': 'warhammer'}
+LOOKS = {'warrior': ('1h_buckler', '2h_sword', '2h_axe', '2h_hammer')}
+
+
+def two_handed(u, family, drawing=None):
+    """Unit `u` on the 2H grip with `family`'s drawing (or `drawing`, a rig.DRAWERS key) and no off-hand."""
+    u = copy.deepcopy(u)
+    u.update(grip='2h', weapon=drawing or TWO_HANDED[family], offhand=None)
+    return u
+
+
+def with_buckler(u, weapon=None):
+    """Unit `u` on the buckler grip: its one-hand weapon (or `weapon`, a rig drawing) and a buckler on the far fist."""
+    u = copy.deepcopy(u)
+    u.update(grip='buckler', offhand='buckler')
+    if weapon:
+        u['weapon'] = weapon
+    return u
+
+
+def look_unit(u, look):
+    """Unit `u` wearing look `look` (a LOOKS id)."""
+    if look == '1h_buckler':
+        return with_buckler(u)
+    return two_handed(u, look[len('2h_'):])
+
+
+def looks():
+    """Look body key -> (base body key, look id)."""
+    return {'%s/%s' % (cls, look): (cls, look) for cls, ids in LOOKS.items() for look in ids}
+
+
+def look_base(key):
+    """The body a look belongs to (None: `key` is not a look)."""
+    return looks().get(key, (None, None))[0]
+
+
+# The named warrior bodies (WAR2H1, user 2026-10-23): one look each, the gear they wield (their gear in the data follows in a seed):
+# Hest, Brask and Orsa a hatchet (wpn_hand_axe) and a buckler; Grakka a two-handed double-bitted axe, no shield.
+
+
 # Ash goblins of the Horde (ASSETORG2: the ash_* mobs wear the goblin bodies): ashen skin, soot cloth, ember trim.
 ASH = dict(skin=(132, 138, 114), skin_lo=(96, 102, 82), main=(70, 64, 66), main_lo=(50, 46, 48), main_hi=(98, 92, 94),
            accent=(214, 104, 42), accent_lo=(150, 66, 28), leg=(64, 58, 58), leg_lo=(46, 42, 42), leather=(84, 66, 52),
@@ -75,36 +122,37 @@ BODIES = {
         trim=(226, 216, 186), sleeve=(106, 78, 126), sleeve_lo=(76, 54, 94), fore=(106, 78, 126), fore_lo=(76, 54, 94),
         leg=(76, 54, 94), leg_lo=(58, 40, 72), glove=(110, 150, 70))), GOBLIN_SLOTS),
     # ---- game: named bodies
-    # Grakka Ashmaw, Chieftain of the Horde: a large goblin warlord in dark iron, a crown of rusted nails, a red cape
-    'warrior/grakka_ashmaw': ('game', 'warrior', goblin('warrior', 'crown', dict(
+    # Grakka Ashmaw, Chieftain of the Horde: a large goblin warlord in dark iron, a crown of rusted nails, a red cape;
+    # a two-handed double-bitted axe, no shield (WAR2H1)
+    'warrior/grakka_ashmaw': ('game', 'warrior', two_handed(goblin('warrior', 'crown', dict(
         skin=(94, 128, 60), skin_lo=(66, 92, 42), metal=(104, 108, 116), metal_hi=(156, 162, 172), metal_lo=(66, 68, 76),
         main=(140, 36, 30), main_lo=(96, 24, 22), main_hi=(176, 60, 48), accent=(140, 36, 30), accent_lo=(96, 24, 22),
         sleeve=(140, 36, 30), sleeve_lo=(96, 24, 22), fore=(104, 108, 116), fore_lo=(66, 68, 76),
         leg=(104, 108, 116), leg_lo=(66, 68, 76), glove=(70, 54, 40), glove_lo=(50, 38, 28),
-        shield=(84, 66, 52), shield_lo=(60, 46, 36), emblem=(200, 64, 44)), scale=1.1, girth=1.0, neck=5.0, back='cape', weapon='sword2'), None),
+        shield=(84, 66, 52), shield_lo=(60, 46, 36), emblem=(200, 64, 44)), scale=1.1, girth=1.0, neck=5.0, back='cape'), 'axe', 'double_axe'), None),
     # the Horde Warchief (patrol leader): a big ash goblin brawler, horned iron cap, iron gauntlets, a shoulder plate
     'brawler/ash_warchief': ('game', 'brawler', goblin('brawler', 'horns', dict(
         ASH, main=(132, 138, 114), main_lo=(96, 102, 82), sleeve=(118, 124, 102), sleeve_lo=(104, 110, 90),
         fore=(112, 118, 128), fore_lo=(80, 86, 96), glove=(112, 118, 128), glove_lo=(90, 96, 106), glove_hi=(160, 166, 176),
         metal=(72, 74, 84), metal_hi=(122, 126, 138), metal_lo=(50, 52, 60), boot=(58, 52, 50), boot_lo=(44, 40, 38)),
         scale=0.97, girth=0.7, pauldron=True), None),
-    # NPCs: class bodies in their own outfit and colours
-    'warrior/brask_toller': ('game', 'warrior', variant('warrior', 1.0, dict(
+    # NPCs: class bodies in their own outfit and colours (the warrior NPCs: a hatchet and a buckler, WAR2H1)
+    'warrior/brask_toller': ('game', 'warrior', with_buckler(variant('warrior', 1.0, dict(
         main=(58, 82, 128), main_lo=(40, 56, 92), main_hi=(84, 110, 160), accent=(58, 82, 128), accent_lo=(40, 56, 92),
         sleeve=(58, 82, 128), sleeve_lo=(40, 56, 92), hair=(104, 72, 46), beard=(112, 78, 50),
-        shield=(58, 82, 128), shield_lo=(40, 56, 92), emblem=(224, 180, 60)), head='kettle', beard=True), HUMAN_SLOTS),
-    'warrior/hest_the_quartermaster': ('game', 'warrior', variant('warrior', 1.0, dict(
+        shield=(58, 82, 128), shield_lo=(40, 56, 92), emblem=(224, 180, 60)), head='kettle', beard=True), 'hand_axe'), HUMAN_SLOTS),
+    'warrior/hest_the_quartermaster': ('game', 'warrior', with_buckler(variant('warrior', 1.0, dict(
         main=(112, 86, 58), main_lo=(80, 60, 40), main_hi=(144, 114, 80), accent=(96, 104, 70), accent_lo=(70, 76, 50),
         sleeve=(112, 86, 58), sleeve_lo=(80, 60, 40), fore=(217, 166, 121), fore_lo=(176, 126, 88),
         leg=(92, 84, 70), leg_lo=(66, 60, 50), hair=(184, 180, 172), beard=(226, 222, 212), cap=(96, 70, 46), cap_lo=(70, 50, 32),
         cap_hi=(124, 94, 64), shield=(110, 84, 56), shield_lo=(80, 60, 40), emblem=(96, 104, 70)),
-        head='cap', beard=True, torso='leather'), HUMAN_SLOTS),
-    'warrior/orsa_tallow': ('game', 'warrior', variant('warrior', 1.0, dict(
+        head='cap', beard=True, torso='leather'), 'hand_axe'), HUMAN_SLOTS),
+    'warrior/orsa_tallow': ('game', 'warrior', with_buckler(variant('warrior', 1.0, dict(
         metal=(178, 188, 200), metal_hi=(230, 236, 244), metal_lo=(112, 122, 136), main=(48, 98, 82), main_lo=(32, 68, 56),
         main_hi=(76, 130, 110), accent=(48, 98, 82), accent_lo=(32, 68, 56), sleeve=(48, 98, 82), sleeve_lo=(32, 68, 56),
         fore=(178, 188, 200), fore_lo=(112, 122, 136), leg=(178, 188, 200), leg_lo=(112, 122, 136),
         hair=(150, 72, 42), hair_lo=(110, 50, 30), shield=(48, 98, 82), shield_lo=(32, 68, 56), emblem=(224, 180, 60)),
-        head='bare', braid=True), HUMAN_SLOTS),
+        head='bare', braid=True), 'hand_axe'), HUMAN_SLOTS),
     'ranger/wenn_tallow': ('game', 'ranger', variant('ranger', 1.0, dict(
         main=(152, 122, 80), main_lo=(112, 88, 56), main_hi=(184, 154, 106), accent=(176, 58, 46), accent_lo=(120, 40, 32),
         sleeve=(152, 122, 80), sleeve_lo=(112, 88, 56), leg=(84, 76, 96), leg_lo=(60, 54, 70), hair=(122, 82, 46)),
@@ -202,17 +250,24 @@ def clips(key):
         _, fn, pal = PROPS[key]
         A, T = fn()
         return A, T, pal, tuple(pal)
+    if key in looks():  # the exporter gives a look its base body's palette slots
+        cls, look = looks()[key]
+        u = look_unit(classes.UNITS[cls], look)
+        A, T = classes.clips(cls, unit=u)
+        return A, T, u['pal'], None
     _, cls, u, slots = BODIES[key]
     A, T = classes.clips(cls, unit=u)
     return A, T, u['pal'], slots
 
 
 def layer(key):
+    if key in looks():
+        return 'kit'  # a class base's looks live with the class base, in the kit
     return (BODIES.get(key) or PROPS[key])[0]
 
 
 def all_bodies():
-    return list(BODIES) + list(PROPS)
+    return list(BODIES) + list(looks()) + list(PROPS)
 
 
 if __name__ == "__main__":

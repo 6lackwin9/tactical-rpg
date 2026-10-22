@@ -14,6 +14,9 @@
 # Palette slots: a class body's are the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in
 # the sheet; a variant lists its own (shades included, the first key wins when two share a colour); at most 16
 # (aegis_core::assets). A palette file may only name its body's slots (checked here and by content check A4).
+# Looks (WAR2H1, variants.LOOKS): a class base's looks are bodies of their own (units/<class>/1h_buckler/ and
+# units/<class>/2h_<family>/, kit); a look's clips.json palette is its body's, exactly (DIR4 L3; the export exits when a look adds a slot colour), and the
+# body's palette files are written into each look's folder too.
 # --review OUT: per body a contact sheet (every clip's frames at 3x, one row per clip), GIFs of idle and the first attack
 #   clip, and per palette file the idle frame recoloured; for the review page (nothing is written under OUT otherwise).
 import argparse
@@ -90,7 +93,21 @@ def body(key: str, mode: str):
         for c, fr in enumerate(frames[n]):
             sheet.paste(fr, (c * w, r * w))
         clips.append({"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING})
-    return layer, folder, frames, sheet, {"frame": [w, w], "palette": palette_slots(key, pal, keys, sheet), "clips": clips}
+    return layer, folder, frames, sheet, {"frame": [w, w], "palette": look_slots(key, pal, keys, sheet), "clips": clips}
+
+
+def look_slots(key: str, pal: dict, keys, sheet: Image.Image) -> dict:
+    """A body's palette slots; a look (WAR2H1) takes its base body's, exactly (DIR4 L3), and may not add a colour the
+    slot rule would make a slot."""
+    own = palette_slots(key, pal, keys, sheet)
+    base = variants.look_base(key)
+    if base is None:
+        return own
+    slots = body(base, "all")[4]["palette"]
+    extra = {k: v for k, v in own.items() if slots.get(k) != v}
+    if extra:
+        sys.exit("export_units: look %s adds palette colours its body %s lacks: %s" % (key, base, extra))
+    return slots
 
 
 def recolour(im: Image.Image, body_slots: dict, slots: dict) -> Image.Image:
@@ -171,7 +188,7 @@ def main() -> None:
         print("wrote %s:units/%s (%d clips, %d palette slots)" % (layer, folder, len(clips["clips"]), len(clips["palette"])))
         pals = []
         for (pal_layer, pal_body, pid), colours in variants.PALETTES.items():
-            if pal_body != key:
+            if pal_body not in (key, variants.look_base(key)):  # a body's palette files recolour its looks too
                 continue
             slots = {k: hexc(v) for k, v in colours.items() if k in clips["palette"]}
             missing = [k for k in colours if k not in clips["palette"]]
