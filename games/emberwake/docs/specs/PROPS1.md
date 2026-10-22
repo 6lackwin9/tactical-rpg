@@ -15,8 +15,8 @@ Sources: PLAYUI1 2.5 and 9b; preferences `assets-world.md` (Style A, 16-colour p
 `games/emberwake/data/maps/maps.json` and their checks (`emberwake_content::check::map`); `region.rs` as it is on
 2026-10-22 (16 logical px tiles, tiles then markers then the party, no sort).
 
-
 Status update (2026-10-22, user): approved, section 10 answered: Q1 A (standing props only on existing walls and the map border; flat decals elsewhere), Q2 A (props have no interaction; a sign's text comes from a marker beside it), Q3 A (three image-API sheets, each asked first), Q4 the party's outline shows behind a roof. Q5 (building roles) not asked: the spec's names stand until the user renames them.
+
 ## Goal
 
 Region maps read as places: the Warden Keep yard has its keep, barracks, forge and storehouse, the Ashmaw Camp its
