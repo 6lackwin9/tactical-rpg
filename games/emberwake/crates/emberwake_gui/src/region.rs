@@ -1,13 +1,14 @@
 //! The region map (scripts/ui/overworld/region_map_view.gd + dialogue_panel.gd + shop_panel.gd): walking a
 //! location's map over the game state (ExploreRunner) under the HUD bar, the floating "Here" legend and the event log
 //! ticker (PLAYUI1-M: the full-width map, a camera centred on the party with walls drawn past the edge), the dialogue
-//! box at the bottom centre (DialogueRunner; PLAYUI1-D: the camera keeps both speakers above it), the shop popup over a
-//! dimmed map (ShopRules), the turn-in picker and lore pages. Fights start the battle screen; a world-map exit opens
+//! box at the bottom centre (DialogueRunner; PLAYUI1-D: the camera keeps both speakers above it), the shop's trade over
+//! a dimmed map (`shop.rs`, PLAYUI1-P), the turn-in picker and lore pages. Fights start the battle screen; a world-map exit opens
 //! the world map. Map-less locations show their exits as buttons.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
+use crate::shop::{ShopAct, ShopPane};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
 use aegis_ui::painter::Painter;
@@ -15,7 +16,7 @@ use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::explore::{self, Pos};
-use emberwake_world::{quest, shop};
+use emberwake_world::quest;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -48,9 +49,9 @@ pub enum RAct {
     Choose(i64),
     Advance,
     Farewell,
-    ShopTab(bool),
-    Buy(String, String, i64),
-    Sell(String),
+    /// A click in the shop's trade (PLAYUI1-P, `shop.rs`).
+    Shop(ShopAct),
+    /// Leaves the shop for the conversation (the trade is empty or discarded).
     CloseShop,
     TogglePick(String),
     PickRecipient(usize),
@@ -68,8 +69,8 @@ pub struct RegionMap {
     mouse: (i32, i32),
     facing: Pos,
     runner: Option<DialogueRunner>,
-    shop_buy: bool,
-    shop_detail: String,
+    /// The open shop's trade (PLAYUI1-P).
+    shop: ShopPane,
     pending: Option<Dict>,
     picks: Vec<String>,
     recipient: usize,
@@ -143,8 +144,7 @@ impl RegionMap {
             mouse: (0, 0),
             facing: (0, 1),
             runner: None,
-            shop_buy: true,
-            shop_detail: String::new(),
+            shop: ShopPane::default(),
             pending: None,
             picks: Vec::new(),
             recipient: 0,
@@ -160,6 +160,11 @@ impl RegionMap {
 
     fn talking(&self) -> bool {
         self.runner.as_ref().is_some_and(|r| !r.closed)
+    }
+
+    /// The open shop of the conversation ("" when none).
+    fn shop_qid(&self) -> String {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default()
     }
 
     fn modal(&self) -> bool {
@@ -255,6 +260,7 @@ impl RegionMap {
     fn end_talk(&mut self, cx: &mut Cx) {
         self.runner = None;
         self.pending = None;
+        self.shop = ShopPane::default();
         cx.set_busy(false);
     }
 
@@ -418,26 +424,14 @@ impl RegionMap {
                     None => self.end_talk(cx),
                 }
             }
-            RAct::ShopTab(buy) => self.shop_buy = buy,
-            RAct::Buy(kind, id, n) => {
-                let Some(sq) = self.runner.as_ref().map(|r| r.shop_qid.clone()) else { return };
-                let res = shop::buy(&d, cx.gs_mut(), &sq, &kind, &id, n);
-                if json::b(&res, "ok", false) {
-                    cx.log(format!("Bought for {} gold.", json::i(&res, "price", 0)));
-                } else {
-                    show_errors(cx, json::sget(&res, "errors"));
-                }
-            }
-            RAct::Sell(item) => {
-                let Some(sq) = self.runner.as_ref().map(|r| r.shop_qid.clone()) else { return };
-                let res = shop::sell(&d, cx.gs_mut(), &sq, &item, 1);
-                if json::b(&res, "ok", false) {
-                    cx.log(format!("Sold {} for {} gold.", d.item_name(&item), json::i(&res, "gold", 0)));
-                } else {
-                    show_errors(cx, json::sget(&res, "errors"));
+            RAct::Shop(a) => {
+                let sq = self.shop_qid();
+                if !sq.is_empty() && self.shop.act(cx, &sq, a) {
+                    self.act(cx, RAct::CloseShop);
                 }
             }
             RAct::CloseShop => {
+                self.shop = ShopPane::default();
                 let Some(r) = self.runner.as_mut() else { return };
                 let res = r.close_shop(&d, cx.gs_mut());
                 self.dialogue_result(cx, res);
@@ -505,6 +499,10 @@ impl Screen<GameCx> for RegionMap {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
+        // Yes to "Discard this trade?" (PLAYUI1-P): back to the conversation
+        if cx.take_answer(crate::shop::DISCARD) {
+            self.act(cx, RAct::CloseShop);
+        }
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top
@@ -521,7 +519,7 @@ impl Screen<GameCx> for RegionMap {
         let t = explore::template_of(&d, loc);
         let talking = self.talking();
         let modal = self.modal();
-        let shop_qid = self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default();
+        let shop_qid = self.shop_qid();
         // measured before the map: the camera keeps both speakers above the box (also while the shop hides it, so the
         // map does not jump when the shop opens or closes)
         let talk_box = talk_view.as_ref().map(|v| talk_layout(&mut ui.p, v));
@@ -677,7 +675,7 @@ impl Screen<GameCx> for RegionMap {
                 draw_talk(&mut ui, cx, view, b, self.pending.is_some());
             } else {
                 ui.p.fill(map_area, SHOP_DIM);
-                self.draw_shop(&mut ui, cx, &shop_qid);
+                self.shop.draw(&mut ui, cx, &shop_qid, RAct::Shop);
             }
         }
         if let Some(p) = self.pending.clone().filter(|_| self.talking()) {
@@ -761,8 +759,8 @@ impl Screen<GameCx> for RegionMap {
             self.lore = None;
         } else if self.pending.is_some() {
             self.act(cx, RAct::CancelTurnIn);
-        } else if self.runner.as_ref().is_some_and(|r| !r.shop_qid.is_empty()) {
-            self.act(cx, RAct::CloseShop);
+        } else if !self.shop_qid().is_empty() {
+            self.act(cx, RAct::Shop(ShopAct::Close));
         } else if self.talking() {
             self.act(cx, RAct::Farewell);
         } else {
@@ -777,7 +775,8 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
-            "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open})
+            "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
+            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -819,67 +818,6 @@ impl RegionMap {
             }
         }
         None
-    }
-
-    fn draw_shop(&mut self, ui: &mut Ui<RAct>, cx: &Cx, sq: &str) {
-        let d = &cx.data;
-        let gs = cx.gs();
-        let sh = shop::shop_of(d, gs, sq);
-        // centred under the HUD bar (spec PLAYUI1 3.3; PLAYUI1-P makes it the three-column trade)
-        let (fw, fh) = (373, 266);
-        let fr = Rect::new((W - fw) / 2, HUD_H + (H - HUD_H - fh) / 2, fw, fh);
-        ui.p.panel(fr, aegis_ui::ui::MODAL, FRAME_LINE, 4.0);
-        ui.push("shop", "panel", s_or(sh, "name", sq), fr, true, false, None, Vec::new());
-        ui.p.text(fr.x as f32 + 9.0, fr.y as f32 + 7.0, &s_or(sh, "name", sq), 10.0, GOLD);
-        ui.p.text_right((fr.x + fr.w) as f32 - 9.0, fr.y as f32 + 9.0, &format!("Gold: {}  Supplies: {}/99", gs.party.gold, gs.party.supplies), BODY, TEXT);
-        let fq = shop::keeper_faction(d, gs, sh);
-        if !fq.is_empty() {
-            ui.p.text(fr.x as f32 + 9.0, fr.y as f32 + 25.0, &format!("{}: {}", s(d.resolve(&gs.world_id, "factions", &fq), "name"), shop::keeper_band(d, gs, sh)), BODY, DIM);
-        }
-        ui.tab("shop.buy", Rect::new(fr.x + 9, fr.y + 40, 28, 17), "Buy", RAct::ShopTab(true), self.shop_buy);
-        ui.tab("shop.sell", Rect::new(fr.x + 39, fr.y + 40, 28, 17), "Sell", RAct::ShopTab(false), !self.shop_buy);
-        let mut y = fr.y + 62;
-        if self.shop_buy {
-            for o in shop::offers(d, gs, sq) {
-                let kind = s(&o, "kind");
-                let left = json::i(&o, "left", -1);
-                let (label, id, item) = if kind == shop::SUPPLIES { ("Supplies".to_string(), shop::SUPPLIES.to_string(), String::new()) } else { (d.item_name(&s(&o, "item")), s(&o, "id"), s(&o, "item")) };
-                let price = json::i(&o, "price", 0);
-                let counts: &[i64] = if kind == shop::SUPPLIES { &[1, 5] } else { &[1] };
-                for &n in counts {
-                    let mut text = format!("{label} x{} - {} gold", if kind == "loot" { json::i(&o, "count", 1) } else { n }, price * n);
-                    if left >= 0 && kind != shop::SUPPLIES {
-                        text = format!("{text}  ({left} left)");
-                    }
-                    let rr = Rect::new(fr.x + 9, y, fr.w - 18, 17);
-                    let ok = left != 0 && gs.party.gold >= price * n;
-                    ui.button_full(&format!("shop.offer.{id}.{n}"), rr, &text, RAct::Buy(kind.clone(), id.clone(), n), ok, false, BODY, tip(&label, &item_line(cx, &item)));
-                    if ui.hover(rr) && !item.is_empty() {
-                        self.shop_detail = item.clone();
-                    }
-                    y += 21;
-                }
-            }
-        } else {
-            let list = shop::sell_list(d, gs, sq);
-            if list.is_empty() {
-                ui.p.text(fr.x as f32 + 9.0, y as f32, "Nothing here the shop buys.", BODY, DIM);
-            }
-            for r in list {
-                let item = s(&r, "item");
-                let rr = Rect::new(fr.x + 9, y, fr.w - 18, 17);
-                ui.button_full(&format!("shop.sell.{item}"), rr, &format!("{} x{} - {} gold each", d.item_name(&item), json::i(&r, "count", 0), json::i(&r, "price", 0)), RAct::Sell(item.clone()), true, false, BODY, tip(&d.item_name(&item), &item_line(cx, &item)));
-                if ui.hover(rr) {
-                    self.shop_detail = item.clone();
-                }
-                y += 21;
-            }
-        }
-        if !self.shop_detail.is_empty() {
-            ui.p.text_fit(fr.x as f32 + 9.0, (fr.y + fr.h) as f32 - 36.0, &format!("{}: {}", d.item_name(&self.shop_detail), item_line(cx, &self.shop_detail)), BODY, (fr.w - 18) as f32, INFO);
-        }
-        ui.p.text(fr.x as f32 + 9.0, (fr.y + fr.h) as f32 - 17.0, "Esc or right click: close", SMALL, DIM);
-        ui.button("shop.close", Rect::new(fr.x + fr.w - 44, fr.y + fr.h - 22, 35, 17), "Close", RAct::CloseShop, true);
     }
 
     fn draw_turn_in(&mut self, ui: &mut Ui<RAct>, cx: &Cx, p: &Dict) {
@@ -1276,22 +1214,6 @@ fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, view: &Dict, b: &TalkBox, busy: boo
         ry += rep.h + 2;
     }
     ui.scroll_end();
-}
-
-/// "+90 HP · Owned 2 · Anyone can use it" style detail of an item.
-pub fn item_line(cx: &Cx, item: &str) -> String {
-    if item.is_empty() {
-        return "Travel supplies: one per day on the road.".into();
-    }
-    let e = cx.data.entry("items", item);
-    let owned = cx.game.as_ref().map(|g| g.gs.party.stash.get(item).copied().unwrap_or(0)).unwrap_or(0);
-    let mut parts = Vec::new();
-    let desc = s(e, "description");
-    if !desc.is_empty() {
-        parts.push(desc);
-    }
-    parts.push(format!("{} · Owned {owned}", s_or(e, "item_type", "ITEM").to_lowercase()));
-    parts.join(" · ")
 }
 
 /// The region map's controls (the Help button's hover card and popup).

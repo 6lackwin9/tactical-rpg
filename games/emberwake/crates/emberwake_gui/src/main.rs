@@ -19,6 +19,7 @@ mod party;
 mod region;
 mod runner;
 mod screens;
+mod shop;
 mod tuning;
 mod worldmap;
 
