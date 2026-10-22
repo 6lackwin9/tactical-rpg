@@ -20,6 +20,9 @@ What is here (`assets/`):
 - `items/<family>/base.png` and generic variants (`sword/greatsword`, `accessory/amulet`, `consumable/bomb`, ...);
   `items/any/`.
 - `skills/kinds/<kind>.png`, `statuses/<id>.png`, `map/markers/<marker>.png`, `ui/{pins,intents,badges,chips}/`.
+- `ui/hud/` (gold, supplies, party, journal, stash, menu), `ui/markers/` (npc, chest, chest_open, lore, exit,
+  world_map, encounter, roamer, point) and `ui/services/` (shop, recruit): the PLAYUI1 icons (32x32, made by
+  `tools/portraits/sheets.py ui` from `art_src/ui_1.png`).
 - `audio/sfx/` (combat sounds) and `audio/music/` (mood music: combat, boss, town, shop, danger, travel).
 
 Placeholder and baseline art comes from the repository's `tools/`, which write the layered tree (ASSETORG2-T):
