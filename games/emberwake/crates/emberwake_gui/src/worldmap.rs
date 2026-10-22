@@ -4,7 +4,8 @@
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
-use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
+use crate::region::{hud_bar, hud_key, hud_open, Hud};
+use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s};
@@ -20,8 +21,12 @@ pub enum WAct {
     Enter,
     Camp,
     Back,
-    Menu,
+    /// A HUD bar button (PLAYUI1-H; Menu is one of them).
+    Hud(Hud),
 }
+
+/// The world map's controls (the Help button's hover card and popup).
+const WORLD_HELP: [&str; 4] = ["Click a place to pick it, then Travel", "Enter (button): go into the place the party is at", "P: party   J: journal   I: stash", "Esc: back to the region map"];
 
 #[derive(Default)]
 pub struct WorldMap {
@@ -86,7 +91,7 @@ impl WorldMap {
                 crate::region::log_events(cx, json::aget(&res, "events"));
             }
             WAct::Back => cx.nav.push(Nav::Pop),
-            WAct::Menu => cx.nav.push(Nav::Push(Box::new(crate::hub::Hub::default()))),
+            WAct::Hud(h) => hud_open(cx, h, &WORLD_HELP),
         }
     }
 }
@@ -195,16 +200,16 @@ impl Screen<GameCx> for WorldMap {
         ly += 10.0;
         ui.p.line(lg.x as f32 + 4.0, ly + 4.0, lg.x as f32 + 14.0, ly + 4.0, rgb(200, 90, 100), 2.0);
         ui.p.text(lg.x as f32 + 17.0, ly, "Closed road", SMALL, TEXT);
-        // -- Top bar
-        ui.p.fill(Rect::new(0, 0, 500, 20), rgba(10, 14, 22, 230));
+        // -- HUD bar (PLAYUI1-H): Back and the location name; gold, supplies and the icon buttons at the right
         let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
+        let here_name = cx.location_name(&gs.world_id, &here);
+        hud_bar(&mut ui, cx, back_w + 8, &here_name, ("world_map.menu", ""), "", &WORLD_HELP, WAct::Hud);
         ui.button("world_map.back", Rect::new(3, 3, back_w, 14), "Back", WAct::Back, true);
-        ui.p.text(back_w as f32 + 8.0, 5.0, &format!("{}   Time {}   Supplies {} / 99", cx.location_name(&gs.world_id, &here), gs.time, gs.party.supplies), SMALL, TEXT);
-        ui.button("world_map.menu", Rect::new(586, 5, 50, 16), "Menu", WAct::Menu, true);
-        // -- Side panel: actions and the log
+        // -- Side panel: the time, actions and the log
         let sx = 504;
         let mut y = 28;
         ui.p.text(sx as f32, y as f32, "World map", BODY, INFO);
+        ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, TEXT);
         y += 14;
         if !self.selected.is_empty() {
             let name = cx.location_name(&gs.world_id, &self.selected);
@@ -232,6 +237,13 @@ impl Screen<GameCx> for WorldMap {
             }
         }
         self.w = ui.widgets;
+    }
+
+    /// P, J, I and ? open the HUD bar's popups (PLAYUI1-H).
+    fn key(&mut self, cx: &mut Cx, k: Key) {
+        if let Some(h) = hud_key(k) {
+            self.act(cx, WAct::Hud(h));
+        }
     }
 
     fn state(&self, cx: &Cx) -> Value {
