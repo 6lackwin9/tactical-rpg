@@ -15,6 +15,12 @@ Sources: PLAYUI1 2.5 and 9b; preferences `assets-world.md` (Style A, 16-colour p
 `games/emberwake/data/maps/maps.json` and their checks (`emberwake_content::check::map`); `region.rs` as it is on
 2026-10-22 (16 logical px tiles, tiles then markers then the party, no sort).
 
+Status update (2026-10-23): PROPS1-T built `tools/portraits/sheets.py props-prompts` and `props` (alias `slice-props`)
+with three differences from section 7: the sheets use a flat magenta key (the ART2 and PLAYUI1 form; a dark ground
+still cuts by the edge flood), reduction is the most common colour per block rather than plain nearest neighbour, and
+flat props are centred rather than bottom-centred. Whether flat decals keep the dark outline (`GROUND_OUTLINE`) is asked
+with the first prop sheet (PROPS1-A2).
+
 Status update (2026-10-22, user): approved, section 10 answered: Q1 A (standing props only on existing walls and the map border; flat decals elsewhere), Q2 A (props have no interaction; a sign's text comes from a marker beside it), Q3 A (three image-API sheets, each asked first), Q4 the party's outline shows behind a roof. Q5 (building roles) not asked: the spec's names stand until the user renames them.
 
 ## Goal
