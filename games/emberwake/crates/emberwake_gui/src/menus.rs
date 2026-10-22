@@ -5,7 +5,7 @@ use aegis_ui::audio::Bus;
 use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{Gfx, Ui, Widget, BODY, DIM, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, DIM, GOLD, H, INFO, PANEL_HI, SMALL, TEXT, W};
 use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, WINDOW_MODES, WINDOW_SIZES};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
@@ -257,17 +257,56 @@ impl Screen<GameCx> for NewGameScreen {
 
 // ---- Load / Save slots ---------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotAct {
     Load(i64),
     Save(i64),
     Delete(i64),
+    /// Lock (true) or unlock (false) a manual slot's save.
+    Lock(i64, bool),
     Back,
 }
 
 pub struct Slots {
     saving: bool,
     w: Vec<Widget<SlotAct>>,
+}
+
+/// What a slot row offers (PLAYUI1 section 1): the row's click (or why there is none, its hover card) and the icons in
+/// its top-right corner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotRow {
+    pub action: Option<SlotAct>,
+    /// The hover card's line: what a click does, or why the row takes no click.
+    pub why: String,
+    /// The lock icon shows (an existing manual save).
+    pub lock: bool,
+    /// The delete icon shows (any existing save).
+    pub delete: bool,
+}
+
+/// The rules of a slot row: save mode saves into a manual slot that is not locked (`no_save` is why the running game
+/// can't be saved now, "" when it can); load mode loads a readable save; the lock never shows on the autosave.
+pub fn slot_row(saving: bool, slot: i64, exists: bool, ok: bool, locked: bool, no_save: &str) -> SlotRow {
+    let manual = slot != save::AUTOSAVE_SLOT;
+    let (action, why) = if saving {
+        if !manual {
+            (None, "The game writes the autosave.".to_string())
+        } else if locked {
+            (None, "Locked: unlock it to save over it.".to_string())
+        } else if !no_save.is_empty() {
+            (None, no_save.to_string())
+        } else {
+            (Some(SlotAct::Save(slot)), if exists { "Save over this save." } else { "Save here." }.to_string())
+        }
+    } else if ok {
+        (Some(SlotAct::Load(slot)), "Load this save.".to_string())
+    } else if exists {
+        (None, "This save can't be loaded.".to_string())
+    } else {
+        (None, "Empty slot.".to_string())
+    };
+    SlotRow { action, why, lock: manual && exists, delete: exists }
 }
 
 impl Slots {
@@ -312,6 +351,8 @@ impl Slots {
                     show_errors(cx, vec!["There is no game to save.".into()]);
                 } else if cx.busy() {
                     show_errors(cx, vec!["You can't save during a battle, a conversation or while a shop is open.".into()]);
+                } else if save::is_locked(&cx.save_dir, slot) {
+                    show_errors(cx, vec![format!("Slot {slot} is locked.")]);
                 } else if save::exists(&cx.save_dir, slot) {
                     let what = Self::describe(cx, slot);
                     cx.ask(format!("Overwrite slot {slot}{}?", if what.is_empty() { String::new() } else { format!(": {what}") }), move |cx| save_now(cx, slot));
@@ -320,13 +361,32 @@ impl Slots {
                 }
             }
             SlotAct::Delete(slot) => {
+                if save::is_locked(&cx.save_dir, slot) {
+                    return show_errors(cx, vec!["Unlock the save to delete it.".into()]);
+                }
                 let what = Self::describe(cx, slot);
                 cx.ask(format!("Delete the save in slot {slot}{}?", if what.is_empty() { String::new() } else { format!(" ({what})") }), move |cx| {
-                    if !save::delete(&cx.save_dir, slot) {
-                        show_errors(cx, vec![format!("Slot {slot} could not be deleted.")]);
+                    if let Err(e) = save::delete(&cx.save_dir, slot) {
+                        show_errors(cx, vec![e]);
                     }
                 });
             }
+            SlotAct::Lock(slot, on) => {
+                if let Err(e) = save::set_locked(&cx.save_dir, slot, on) {
+                    show_errors(cx, vec![e]);
+                }
+            }
+        }
+    }
+
+    /// Why the running game can't be saved now ("" when it can).
+    fn no_save(cx: &Cx) -> &'static str {
+        if !cx.has_game() {
+            "There is no game to save."
+        } else if cx.busy() {
+            "You can't save during a battle, a conversation or while a shop is open."
+        } else {
+            ""
         }
     }
 }
@@ -379,19 +439,32 @@ impl Screen<GameCx> for Slots {
             } else {
                 "Empty".into()
             };
-            ui.p.panel(r, rgba(26, 36, 58, 250), aegis_ui::ui::BORDER, 2.0);
-            ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, if ok { TEXT } else { DIM });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, 340.0, if ok { INFO } else { DIM });
-            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, true, false, None, Vec::new());
-            let mut bx = r.x + r.w - 62;
-            if exists {
-                ui.button(&format!("slot.{slot}.delete"), Rect::new(bx, r.y + 7, 56, 17), "Delete", SlotAct::Delete(slot), true);
-                bx -= 60;
+            // The whole row is the click (PLAYUI1 section 1); lock and delete are icons in its top-right corner.
+            let locked = save::is_locked(&cx.save_dir, slot);
+            let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
+            let hover = row.action.is_some() && ui.hover(r);
+            ui.p.panel(r, if hover { PANEL_HI } else { rgba(26, 36, 58, 250) }, if hover { GOLD } else { aegis_ui::ui::BORDER }, 2.0);
+            let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { TEXT } else { DIM });
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, if ok { INFO } else { DIM });
+            let enabled = row.action.is_some();
+            ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, enabled, false, row.action, tip(&label, &row.why));
+            let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
+            let px = ui.icon_px(del);
+            if row.lock {
+                let lr = Rect::new(del.x - 18, del.y, 16, 16);
+                let (label, card, glyph, file) = if locked {
+                    ("Unlock", "Unlock", Glyph::Lock, "ui/lock.png")
+                } else {
+                    ("Lock", "Lock (protect from overwrite and delete)", Glyph::Unlock, "ui/unlock.png")
+                };
+                let img = cx.art.image(file, px, px).cloned();
+                ui.icon_button(&format!("slot.{slot}.lock"), lr, label, img.as_ref(), glyph, SlotAct::Lock(slot, !locked), true, locked, tip(card, ""));
             }
-            if self.saving && slot != save::AUTOSAVE_SLOT {
-                ui.button(&format!("slot.{slot}.save"), Rect::new(bx, r.y + 7, 56, 17), "Save here", SlotAct::Save(slot), cx.has_game() && !cx.busy());
-            } else if !self.saving && ok {
-                ui.button(&format!("slot.{slot}.load"), Rect::new(bx, r.y + 7, 56, 17), "Load", SlotAct::Load(slot), true);
+            if row.delete {
+                let img = cx.art.image("ui/delete.png", px, px).cloned();
+                let card = if locked { tip("Delete", "Unlock the save to delete it.") } else { tip("Delete", "") };
+                ui.icon_button(&format!("slot.{slot}.delete"), del, "Delete", img.as_ref(), Glyph::Delete, SlotAct::Delete(slot), !locked, false, card);
             }
         }
         ui.button("slots.back", Rect::new(70, 292, 70, 18), "Back", SlotAct::Back, true);
@@ -424,6 +497,8 @@ pub struct SettingsScreen {
 const TABS: [&str; 4] = ["Sound", "Display", "Gameplay", "Controls"];
 /// The display choices are the engine's (aegis_ui::screen).
 const CHOICES: [(&str, &[&str]); 3] = [("window_mode", &WINDOW_MODES), ("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
+/// PLAYUI1-M: the region map's marker names (value, label); the first is the default.
+pub const MAP_NAMES: [(&str, &str); 2] = [("hover", "On hover"), ("always", "Always")];
 const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
     (
         "Menus",
@@ -436,7 +511,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
             ("Back / close (mouse)", "Right click"),
         ],
     ),
-    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9")]),
+    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
     ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Screenshot", "F12")]),
 ];
 
@@ -467,6 +542,11 @@ impl SettingsScreen {
                 if let Some((bus, sample)) = preview_of(k) {
                     cx.audio.set_levels(&self.draft);
                     cx.audio.preview(bus, sample);
+                }
+            }
+            SetAct::Pick("map_names", i) => {
+                if let Some((v, _)) = MAP_NAMES.get(i) {
+                    self.draft["map_names"] = json!(v);
                 }
             }
             SetAct::Pick(k, i) => {
@@ -554,6 +634,12 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
                 y += 18;
                 ui.checkbox("settings.warn_missing", x + 3, y, "Warn about missing actions", d["warn_missing"].as_bool().unwrap_or(true), SetAct::Toggle("warn_missing"), true);
+                y += 20;
+                ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, TEXT);
+                let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();
+                let at = MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0);
+                let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
+                ui.select("settings.map_names", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_names", i), true, t);
             }
             _ => {
                 for (head, rows) in CONTROLS {
@@ -595,4 +681,158 @@ fn choice(ui: &mut Ui<SetAct>, k: &'static str, r: Rect, current: &str) {
 
 fn static_key(k: &str) -> &'static str {
     ["master", "music", "effects", "interface", "window_mode", "window_size", "fps_cap"].into_iter().find(|x| *x == k).unwrap_or("master")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::screens::{Game, GameCx};
+    use aegis_ui::canvas::Canvas;
+    use aegis_ui::painter::{Fonts, View};
+    use aegis_ui::ui::Kit;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+
+    /// PLAYUI1 section 1 rules 1 and 3: which rows click and which icons show, by mode and slot state.
+    #[test]
+    fn a_slot_row_clicks_only_where_its_action_applies() {
+        let row = |saving, slot, exists, ok, locked| slot_row(saving, slot, exists, ok, locked, "");
+        assert_eq!(row(true, 0, true, true, false).action, None, "the game writes the autosave");
+        assert_eq!(row(true, 0, true, true, false).why, "The game writes the autosave.");
+        assert!(!row(true, 0, true, true, false).lock && row(true, 0, true, true, false).delete, "the autosave has delete, never a lock");
+        assert_eq!(row(true, 2, false, false, false).action, Some(SlotAct::Save(2)));
+        assert!(!row(true, 2, false, false, false).lock && !row(true, 2, false, false, false).delete, "an empty slot has no icons");
+        assert_eq!(row(true, 2, true, true, false).action, Some(SlotAct::Save(2)), "a filled slot saves (the screen asks first)");
+        assert_eq!(row(true, 2, true, true, true).action, None);
+        assert_eq!(row(true, 2, true, true, true).why, "Locked: unlock it to save over it.");
+        assert_eq!(slot_row(true, 2, false, false, false, "There is no game to save.").why, "There is no game to save.");
+        assert_eq!(row(false, 2, true, true, true).action, Some(SlotAct::Load(2)), "a locked save still loads");
+        assert_eq!(row(false, 0, true, true, false).action, Some(SlotAct::Load(0)));
+        assert_eq!((row(false, 3, false, false, false).action, row(false, 3, false, false, false).why.as_str()), (None, "Empty slot."));
+        let broken = row(false, 3, true, false, false);
+        assert!(broken.action.is_none() && broken.lock && broken.delete, "an unreadable manual save can still be locked or deleted");
+    }
+
+    fn cx(save_dir: PathBuf) -> Cx {
+        let data_dir = emberwake_world::Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let data = emberwake_world::Data::open(&data_dir).expect("data").0;
+        let world = new_game::playable_worlds(&data).first().cloned().expect("a playable world");
+        let gs = new_game::create_for_world(&data, &world, 1).expect("a new game");
+        let clean = gs.to_value();
+        let app = GameCx {
+            data: Arc::new(data),
+            manifest: Default::default(),
+            game: Some(Game { gs, slot: -1, clean, busy: false, sample: false }),
+            save_dir,
+            tuning: aegis_ui::tuning::TuningFile::new(None),
+            log: Vec::new(),
+            encounter: String::new(),
+            seed: None,
+            debug: false,
+            data_dir,
+        };
+        aegis_ui::Cx {
+            settings: Settings::load(std::env::temp_dir().join("emberwake_slots_no_settings.json"), default_settings()),
+            art: aegis_ui::art::Art::new(None),
+            audio: aegis_ui::audio::Audio::offline(None),
+            nav: Vec::new(),
+            notice: Vec::new(),
+            shot_dir: std::env::temp_dir(),
+            quit: false,
+            answers: Vec::new(),
+            playtest: aegis_ui::playtest::Playtests::off(),
+            app,
+        }
+    }
+
+    fn gfx() -> Gfx {
+        let font = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+        Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() }
+    }
+
+    /// The screen's widget infos after a frame.
+    fn frame(s: &mut Slots, cx: &mut Cx, g: &mut Gfx) -> Vec<Value> {
+        s.draw(cx, g, (-1, -1), true);
+        s.widgets()
+    }
+
+    fn get<'a>(w: &'a [Value], id: &str) -> Option<&'a Value> {
+        w.iter().find(|x| x["id"] == id)
+    }
+
+    fn n(v: &Value, i: usize) -> i32 {
+        v["rect"][i].as_i64().unwrap() as i32
+    }
+
+    fn centre(v: &Value) -> (i32, i32) {
+        (n(v, 0) + n(v, 2) / 2, n(v, 1) + n(v, 3) / 2)
+    }
+
+    /// Runs the Yes of the question the last click asked.
+    fn answer_yes(cx: &mut Cx, g: &mut Gfx) {
+        let Some(Nav::Push(mut ask)) = cx.nav.pop() else { panic!("a question was asked") };
+        ask.draw(cx, g, (-1, -1), true);
+        ask.click_id(cx, "ask.yes").unwrap();
+        cx.nav.clear();
+    }
+
+    /// PLAYUI1 section 1 acceptance over the screen's widgets (the agent link's ids): `slot.2` saves an empty slot at
+    /// once and asks on a filled one; `slot.2.lock` locks it, after which `slot.2` and its delete take no click and
+    /// their cards name the lock; the autosave has no lock; the load screen loads a locked save; unlock, delete.
+    #[test]
+    fn the_save_screen_rows_and_icons_follow_the_slot_rules() {
+        let dir = std::env::temp_dir().join(format!("emberwake_slots_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut cx = cx(dir.clone());
+        let mut g = gfx();
+        let mut s = Slots::new(true);
+        let w = frame(&mut s, &mut cx, &mut g);
+        assert_eq!(get(&w, "slot.0").unwrap()["enabled"], false);
+        assert_eq!(get(&w, "slot.0").unwrap()["tip"][1], "The game writes the autosave.");
+        assert!(get(&w, "slot.2.lock").is_none() && get(&w, "slot.2.delete").is_none(), "an empty slot shows no icons");
+
+        s.click_id(&mut cx, "slot.2").unwrap();
+        assert!(cx.nav.is_empty() && save::exists(&dir, 2), "an empty slot saves at once");
+        let w = frame(&mut s, &mut cx, &mut g);
+        assert!(get(&w, "slot.2.lock").is_some() && get(&w, "slot.2.delete").is_some());
+        s.click_id(&mut cx, "slot.2").unwrap();
+        assert!(matches!(cx.nav.last(), Some(Nav::Push(_))), "a filled slot asks before overwriting");
+        cx.nav.clear();
+
+        // The icons sit 4 px from the row's top and right edges, right to left: delete, lock.
+        let (row, del, lock) = (get(&w, "slot.2").unwrap(), get(&w, "slot.2.delete").unwrap(), get(&w, "slot.2.lock").unwrap());
+        assert_eq!((n(del, 0) + n(del, 2), n(del, 1)), (n(row, 0) + n(row, 2) - 4, n(row, 1) + 4));
+        assert_eq!((n(del, 2), n(del, 3)), (16, 16));
+        assert!(n(lock, 0) + n(lock, 2) <= n(del, 0), "the lock is left of delete");
+
+        s.click_id(&mut cx, "slot.2.lock").unwrap();
+        assert!(save::is_locked(&dir, 2) && cx.notice.is_empty());
+        let w = frame(&mut s, &mut cx, &mut g);
+        let (row, lock, del) = (get(&w, "slot.2").unwrap(), get(&w, "slot.2.lock").unwrap(), get(&w, "slot.2.delete").unwrap());
+        assert_eq!((row["enabled"].as_bool(), row["tip"][1].as_str()), (Some(false), Some("Locked: unlock it to save over it.")));
+        assert_eq!((lock["active"].as_bool(), lock["tip"][0].as_str()), (Some(true), Some("Unlock")));
+        assert_eq!((del["enabled"].as_bool(), del["tip"][1].as_str()), (Some(false), Some("Unlock the save to delete it.")));
+        assert!(s.click_id(&mut cx, "slot.2").is_err(), "a locked slot takes no save click");
+        assert!(!s.click(&mut cx, centre(del)), "a click on the disabled delete does nothing");
+        assert!(cx.nav.is_empty() && save::exists(&dir, 2));
+
+        // The autosave: delete, never a lock. The load screen loads a locked save.
+        assert!(save::write(&cx.data, &dir, cx.gs(), save::AUTOSAVE_SLOT, 0).is_empty());
+        let mut load = Slots::new(false);
+        let w = frame(&mut load, &mut cx, &mut g);
+        assert!(get(&w, "slot.0.lock").is_none() && get(&w, "slot.0.delete").is_some());
+        assert_eq!(get(&w, "slot.1").unwrap()["tip"][1], "Empty slot.");
+        assert_eq!(get(&w, "slot.2").unwrap()["enabled"], true, "a locked save loads");
+        assert!(!load.click(&mut cx, centre(get(&w, "slot.2.delete").unwrap())), "the disabled delete does not load either");
+
+        s.click_id(&mut cx, "slot.2.lock").unwrap();
+        assert!(!save::is_locked(&dir, 2));
+        let w = frame(&mut s, &mut cx, &mut g);
+        assert_eq!(get(&w, "slot.2.lock").unwrap()["tip"][0], "Lock (protect from overwrite and delete)");
+        s.click_id(&mut cx, "slot.2.delete").unwrap();
+        assert!(save::exists(&dir, 2), "delete asks first");
+        answer_yes(&mut cx, &mut g);
+        assert!(!save::exists(&dir, 2) && cx.notice.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -110,6 +110,8 @@ because the RNG is bit-exact.
 | `ui/dojo/*.gd` panels (party, inspector, derived, gear, stash, stash filter, stage, console, log, carry bar, allocation) | `emberwake_gui::dojo` on `aegis_ui::window`, scroll areas and `Painter::rich` | manual (GUI, agent link) |
 | `ui/framework/ui_window.gd` (`_clamp_to_parent`, `commit_fraction`, title drag, grip resize, collapse), `ui/dojo/dojo_workspace.gd` (`LAYOUTS`, `apply_layout`, `save_layout`, `_load_layout`, window toggles) | `aegis_ui::window` (`Desk`, `Win`, `Layout`), the shell's desk handling (`desk_press`, `save_desk`) | unit and shell tests (window.rs, shell.rs) |
 | `audio/music_director.gd` (choice: contexts, candidates, scopes, kind and combat context), `sound_events.gd` | `emberwake_gui::music`, `battle` (`sound_of`, from the resolver log; a hit for 0 plays mitigated, the engine log has no mitigation tag) | unit tests (chains, every shipped file decodes, log lines) |
+| none (Godot showed static tokens; its FxSettings speed and instant flags) | `aegis_core::assets::ClipPlayer`, `aegis_ui::art` `played` / `body_outline` (with `flip` for mirrored frames, `body_clip_flipped`, SPRITE2), `Image::outline`, `Painter::ellipse` (SPRITE1-L, 2026-10-22); the battle honours the settings `anim_speed` and `skip_anim` | new in the engine, not a port |
+| none (Godot had no map props) | `aegis_ui::depth::DepthList`, `Art::varied` / `pick` / `size_of` / `image_mirrored`, `Image::mirrored` (PROPS1-E, 2026-10-23); `emberwake_content` `check::map::prop_errors` (P1-P12), `check::assets::prop_warnings` (A7-A10) (PROPS1-L1) | new in the engine, not a port; parity retired in part: the writer's `"props": []` line and the loader's `props` key on map templates (HISTORY 2026-10-23) |
 
 Godot behaviours found on the way:
 
@@ -145,6 +147,7 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
 | `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
 
 - `tests/data_source.rs` compares the loader's output with `catalog.json`, `worlds.json` and `game_data.json`: keys, key
+- PHASEFOLD (2026-10-22) retired part of `data_source` and `store`: the loader diff folds Godot's catalog and world encounter rows with `source::fold_legacy_waves`, drops Godot's four `wave_*` schema rows per encounters section and skips the two `phases` help rows (`HELP_CHANGED`); the resave check reprints Godot's encounters files folded through the document writer (their data and key order still compared, Godot's byte formatting of those two files no longer). The reinforcement wave is an arrival phase in the engine; Godot's legacy rows replay through the fold (every battle trace, world trace, sim, journey and save unchanged).
   order and int / float types exactly, floats to 1e-9 (Godot's `JSON.stringify` writes fewer digits than it computes
   with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
 - Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)
@@ -236,6 +239,7 @@ files (the Godot build's) are refused with that reason.
 | `scripts/ui/playtest/playtest_hub.gd` (one recording per run) | `aegis_ui::playtest::Playtests` on `Cx`, the screens' `leave` hook | unit test |
 | `scripts/ui/playtest/ui_trail.gd` (screen, panel / modal, button, key, hover, click) | the shell (`click`, `back`, `key`, `settle`, `track_hover`), the battle screen (plan_edit, confirm, battle_end) | shell test |
 | `scripts/playtest/playtest_logger.gd` (errors), `AssetRegistry.resolve_observer` (asset fallbacks) | `aegis_ui::playtest::report_error` with a panic hook, `report_asset` from the art loader | hub test |
+| `ui/playtest/note_box.gd` (the F8 note text box), Godot's `TextEdit` | `aegis_ui::edit` (PLAYUI1-T: the kit text editor), the taller note box, `recordings::NoteView` (a note's full text with Copy) | engine-only additions past Godot (no parity suite) |
 | `scripts/playtest/trail_report.gd` (`--trail-report`) | `aegis_host::trail` (`build`, `lines`), `aegis replay <file> trail-report` | unit test (acceptance 12 and 13) |
 | `scripts/ui/playtest/note_dialog.gd` (F8: screenshot, text, tags) | `aegis_ui::notes::NoteBox`, the shell's `note` (stamp + `Screen::note_context`), `Playtests::add_note`, `aegis_ui::jpeg` (baseline encoder, std only), the kit's text field (`Ui::text_field`, `Kit.edit`) | shell test |
 | `scripts/ui/runner` Playtests panel, `playtest_store.gd` (`copy_to_repo`, inbox folders) | `aegis_ui::recordings::Recordings` (kit screen; the game gives the launcher), `playtest::copy_to`, `image_dir`, `list` of `<id>/<id>.json`; `BattleScreen::playback` | shell test, by hand on the agent link |

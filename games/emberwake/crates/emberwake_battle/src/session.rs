@@ -58,11 +58,7 @@ pub struct EncounterDef {
     pub protect: Vec<String>,
     pub deployment: String,
     pub objective: String,
-    /// One reinforcement wave: off the field until it enters before `wave_block` of `wave_round`.
-    pub wave_units: Vec<String>,
-    pub wave_round: i32,
-    pub wave_block: i32,
-    pub wave_label: String,
+    /// Boss phases and the reinforcement wave (PHASEFOLD: an `arrival` phase, first in the list).
     pub phases: Vec<Value>,
     pub start_status: Vec<Value>,
     pub start_grant: StartGrant,
@@ -71,8 +67,12 @@ pub struct EncounterDef {
 }
 
 impl EncounterDef {
-    /// ContentSchema "encounters" defaults applied to a (possibly partial) entry.
+    /// ContentSchema "encounters" defaults applied to a (possibly partial) entry; a row with the retired `wave_*`
+    /// fields is folded first (PHASEFOLD 1.4).
     pub fn from_obj(o: &Obj) -> Self {
+        let mut folded = o.clone();
+        encounter::fold_legacy_wave(&mut folded);
+        let o = &folded;
         let exits = match o.get("exits") {
             Some(Value::Array(a)) => a.iter().filter_map(|p| p.as_array()).filter(|p| p.len() == 2).map(|p| V2::new(value::to_int(&p[0], 0), value::to_int(&p[1], 0))).collect(),
             _ => vec![V2::new(11, 4)],
@@ -95,10 +95,6 @@ impl EncounterDef {
             protect: value::strings(o, "protect"),
             deployment: if ["standard", "ambush", "centre"].contains(&deployment.as_str()) { deployment } else { "standard".into() },
             objective: value::string(o, "objective", "rout"),
-            wave_units: value::strings(o, "wave_units"),
-            wave_round: value::int(o, "wave_round", 1),
-            wave_block: value::int(o, "wave_block", 4),
-            wave_label: value::string(o, "wave_label", "Reinforcements arrive!"),
             phases: value::array(o, "phases").to_vec(),
             start_status: value::array(o, "start_status").to_vec(),
             start_grant: StartGrant::None,
@@ -208,8 +204,6 @@ pub struct Session {
     pub on_grid_at_schedule: Vec<UnitId>,
     /// Every round so far, the current one last (the round archive, for reviewing past rounds).
     pub history: Vec<RoundRecord>,
-    pub wave: Vec<UnitId>,
-    pub reinforcements_spawned: bool,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
     pub art: Vec<String>,
     /// Palette per unit (ASSETORG2; "" = none).
@@ -229,6 +223,9 @@ pub struct Session {
     pub log: Vec<crate::log::Entry>,
     /// The battle metrics following this fight (attach_metrics), fed at the session's signal points.
     pub metrics: Option<Box<BattleMetrics>>,
+    /// The action the last resolving step popped: (round, block, index into `resolver.scheduled`); kept until the next
+    /// one. Not in Godot; for the screens (SPRITE1-U: the actor plays its attack clip); no rule reads it.
+    pub last_popped: Option<(i32, i32, usize)>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -250,7 +247,6 @@ impl Session {
         let has = |id: &String| roster.entry(&cat, id).is_some();
         let party_ids: Vec<String> = if party.is_empty() { def.party.iter().filter(|id| has(id)).cloned().collect() } else { Vec::new() };
         let enemy_ids: Vec<String> = def.enemies.iter().filter(|id| has(id)).cloned().collect();
-        let wave_ids: Vec<String> = def.wave_units.iter().filter(|id| has(id)).cloned().collect();
         let mut guest_ids: Vec<String> = Vec::new();
         for id in def.guests.iter().filter(|id| has(id)) {
             if !guest_ids.contains(id) && guest_ids.len() < encounter::MAX_GUESTS {
@@ -258,16 +254,17 @@ impl Session {
             }
         }
         let mut phases = Phases::create(&def.phases);
-        let mut phase_ids: Vec<(String, String)> = Vec::new(); // (ref, phase id)
+        // (ref, phase id, arrival) in phase order: the arrival comes first, so its units follow the enemies (PHASEFOLD).
+        let mut phase_ids: Vec<(String, String, bool)> = Vec::new();
         for p in &phases.phases {
             for r in p.wave_refs() {
                 if has(&r) {
-                    phase_ids.push((r, p.id.clone()));
+                    phase_ids.push((r, p.id.clone(), p.is_arrival()));
                 }
             }
         }
-        // _display_names over party + enemies + wave + phase waves + guests (guests last: names unchanged).
-        let roster_order: Vec<String> = party_ids.iter().chain(&enemy_ids).chain(&wave_ids).cloned().chain(phase_ids.iter().map(|p| p.0.clone())).chain(guest_ids.iter().cloned()).collect();
+        // _display_names over party + enemies + phase waves (the arrival first) + guests (guests last: names unchanged).
+        let roster_order: Vec<String> = party_ids.iter().chain(&enemy_ids).cloned().chain(phase_ids.iter().map(|p| p.0.clone())).chain(guest_ids.iter().cloned()).collect();
         let mut seen: IndexMap<String, i32> = IndexMap::new();
         let names: Vec<String> = roster_order
             .iter()
@@ -313,7 +310,7 @@ impl Session {
         for (i, r) in party_ids.iter().enumerate() {
             spawn(r, &names[i], &mut built);
         }
-        let guest_slot = party_ids.len() + enemy_ids.len() + wave_ids.len() + phase_ids.len();
+        let guest_slot = party_ids.len() + enemy_ids.len() + phase_ids.len();
         let mut guests = Vec::new();
         let mut protected = Vec::new();
         for (k, r) in guest_ids.iter().enumerate() {
@@ -330,14 +327,13 @@ impl Session {
             deployed.push(spawn(r, &names[slot], &mut built));
             slot += 1;
         }
-        let mut wave = Vec::new();
-        for r in &wave_ids {
-            wave.push(spawn(r, &names[slot], &mut built));
-            slot += 1;
-        }
-        for (r, pid) in &phase_ids {
+        for (r, pid, arrival) in &phase_ids {
             let c = spawn(r, &names[slot], &mut built);
-            phases.reserve(pid, c);
+            if *arrival {
+                phases.track(pid, c);
+            } else {
+                phases.reserve(pid, c);
+            }
             slot += 1;
         }
         let count = built.len();
@@ -403,8 +399,6 @@ impl Session {
             plan_confirmed: false,
             on_grid_at_schedule: Vec::new(),
             history: Vec::new(),
-            wave,
-            reinforcements_spawned: false,
             art,
             palettes,
             guests,
@@ -416,6 +410,7 @@ impl Session {
             events: Vec::new(),
             log: Vec::new(),
             metrics: None,
+            last_popped: None,
             hero_keys,
             unit_keys,
             units_by_key,
@@ -931,6 +926,7 @@ impl Session {
             }
         }
         if let Some(idx) = self.pending.pop_front() {
+            self.last_popped = Some((self.current_round, self.current_block, idx));
             self.resolver.execute_single(&mut self.w, idx);
             for k in std::mem::take(&mut self.resolver.combos) {
                 self.feed(|m, s| m.on_combo(s, &k));
@@ -975,8 +971,8 @@ impl Session {
         }
     }
 
-    /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the wave enters;
-    /// each takes the step (the block resolves on the next one).
+    /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the arrival (the
+    /// reinforcement wave) enters; each takes the step (the block resolves on the next one).
     fn on_block_start(&mut self) -> bool {
         let (round, block) = (self.current_round, self.current_block);
         if let Some(id) = self.phases.next_due() {
@@ -989,22 +985,24 @@ impl Session {
             self.events.push(line);
             return true;
         }
-        if self.wave.is_empty() || self.reinforcements_spawned {
-            return false;
-        }
-        if round != self.def.wave_round || block != self.def.wave_block {
-            return false;
-        }
-        self.reinforcements_spawned = true;
-        let wave = self.wave.clone();
+        let Some(id) = self.phases.arrival_due(round, block) else { return false };
+        self.fire_arrival(&id, round, block);
+        true
+    }
+
+    /// PHASEFOLD rule 4: the arrival's units take the free tiles nearest the middle of the enemy half, form the morale
+    /// group "wave" and get the Wave cell and event line (actor = the phase name); no other effect, banner or pause.
+    fn fire_arrival(&mut self, id: &str, round: i32, block: i32) {
+        let Some(p) = self.phases.phase(id).cloned() else { return };
+        let wave = self.phases.units_of(id);
         let deployment = self.def.deployment.clone();
         self.w.place_leftovers(&wave, false, &deployment);
         self.form_morale_group(&wave, "wave");
         let names: Vec<String> = wave.iter().filter(|&&c| self.w.grid.positions[c].is_some()).map(|&c| self.w.units[c].name.clone()).collect();
-        let label = self.def.wave_label.clone();
-        self.append(crate::log::Entry::event(round, block, "Reinforcements", false, &label, "Wave", "ARRIVED", &format!("{} join the battle.", names.join(", ")), &format!("{} more hostiles", names.len())));
-        self.events.push(format!("{}: {} join the battle.", self.def.wave_label, names.join(", ")));
-        true
+        let label = p.effects_of("wave").next().map(|fx| value::string(fx, "label", "")).unwrap_or_default();
+        self.append(crate::log::Entry::event(round, block, &p.name, false, &label, "Wave", "ARRIVED", &format!("{} join the battle.", names.join(", ")), &format!("{} more hostiles", names.len())));
+        self.events.push(format!("{label}: {} join the battle.", names.join(", ")));
+        self.phases.mark_fired(id, round, block);
     }
 
     /// MORALE1 rule 12: a break's EVENT cell (actor = the leader, else the encounter).

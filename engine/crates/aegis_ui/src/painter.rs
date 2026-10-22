@@ -316,6 +316,25 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// A filled, anti-aliased ellipse centred on logical (`cx`, `cy`) with radii `rx` and `ry` (a unit's foot shadow).
+    pub fn ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
+        let (x0, y0, x1, y1) = ((x - prx - 1.0).floor() as i32, (y - pry - 1.0).floor() as i32, (x + prx + 1.0).ceil() as i32, (y + pry + 1.0).ceil() as i32);
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let (ux, uy) = (px as f32 + 0.5 - x, py as f32 + 0.5 - y);
+                let k = ((ux / prx).powi(2) + (uy / pry).powi(2)).sqrt();
+                // Distance to the edge in physical pixels: the implicit function over its gradient's length.
+                let grad = ((ux / (prx * prx)).powi(2) + (uy / (pry * pry)).powi(2)).sqrt() / k.max(1e-6);
+                let d = if k <= 1e-6 { -prx.min(pry) } else { (k - 1.0) / grad.max(1e-6) };
+                let cover = (0.5 - d).clamp(0.0, 1.0);
+                if cover > 0.0 {
+                    self.c.blend(px, py, mix(col, cover));
+                }
+            }
+        }
+    }
+
     pub fn circle(&mut self, cx: f32, cy: f32, r: f32, col: Rgba) {
         let (x, y, pr) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, r * self.v.s);
         let t = (self.v.s * 0.5).max(1.0);

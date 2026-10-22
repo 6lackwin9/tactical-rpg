@@ -14,8 +14,9 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 
 /// Retired parity: fields added after the Godot freeze, written with their empty defaults by the engine's writer:
 /// REWARD1 (HISTORY 2026-10-21) a unit's `loot`, a world encounter's `key_loot` and `objective_reward`; ASSETORG2
-/// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`.
-const AFTER_GODOT: [&str; 5] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\""];
+/// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`; PROPS1 (HISTORY 2026-10-23) a map
+/// template's `props`.
+const AFTER_GODOT: [&str; 6] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\"", "\"props\": []"];
 
 /// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).
 fn at_freeze(text: &str) -> String {
@@ -42,6 +43,26 @@ fn at_freeze(text: &str) -> String {
     s
 }
 
+/// Retired parity (PHASEFOLD, HISTORY 2026-10-22): the single reinforcement wave became an arrival phase, so the
+/// writer stores no `wave_*` keys. Godot's saved encounters files are parsed, every entry folded by the engine's
+/// `fold_legacy_wave` and printed by the same document writer before comparing; every other file stays byte for byte.
+fn godot_encounters_folded(text: &str) -> String {
+    let doc: serde_json::Value = serde_json::from_str(text).expect("Godot's encounters file");
+    let kind = doc["kind"].as_str().unwrap_or("encounters").to_string();
+    let version = doc["version"].as_i64().unwrap_or(1);
+    let (entries, _) = aegis_content::file::entries_of(doc);
+    let folded = entries
+        .into_iter()
+        .map(|mut e| {
+            if let Some(o) = e.as_object_mut() {
+                emberwake_battle::encounter::fold_legacy_wave(o);
+            }
+            e
+        })
+        .collect();
+    aegis_content::file::document(&kind, version, folded)
+}
+
 /// Godot's saves of the same files: `parity/export.sh only=resave` copies the catalog and worlds to resave/before and
 /// has ContentCatalog.save_all / WorldCatalog.save_all write them into resave/after. The writer, given resave/before,
 /// must write every file of resave/after byte for byte (field order, storage form, empty kinds).
@@ -59,7 +80,10 @@ fn writer_saves_exactly_what_godot_saves() {
     let mut compare = |path: PathBuf, text: Result<String, String>| {
         files += 1;
         let rel = path.strip_prefix(&dir).unwrap().to_path_buf();
-        let want = std::fs::read_to_string(after.join(&rel)).unwrap_or_default().replace("\r\n", "\n");
+        let mut want = std::fs::read_to_string(after.join(&rel)).unwrap_or_default().replace("\r\n", "\n");
+        if rel.file_name().is_some_and(|n| n == "encounters.json") && !want.is_empty() {
+            want = godot_encounters_folded(&want);
+        }
         match text {
             Err(e) => diffs.push(format!("{}: {e}", path.display())),
             Ok(t) if at_freeze(&t) != want => {
@@ -154,5 +178,51 @@ fn upsert_and_remove_validate_write_and_roll_back() {
     let bad_shape = json!({"id": "test_band", "name": "Test Band", "relations": {"ember_wardens": "friendly"}});
     let errors = store::upsert(&tmp, Some("ashlands"), "factions", bad_shape.as_object().unwrap(), None).err().expect("bad stance refused");
     assert!(errors.iter().any(|e| e.contains("Relation stance 'friendly'")), "{errors:?}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// PROPS1 1-2: a map template's `props` through the writer, on a test-only template in a scratch copy: no `props`
+/// loads and stores as `[]`, a prop given with only id, art, x and y is stored whole in key order, and an upsert whose
+/// standing prop lies on an open tile (P9) is refused and leaves maps.json as it was.
+#[test]
+fn map_props_are_stored_whole_and_checked_on_upsert() {
+    let tmp = std::env::temp_dir().join(format!("aegis_store_props_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
+        copy_dir(&data_dir().join(sub), &tmp.join(sub));
+    }
+    let maps = store::file_of(&tmp, None, "maps");
+    std::fs::write(&maps, store::resave_text(&tmp, None, "maps").unwrap()).unwrap();
+    let original = std::fs::read_to_string(&maps).unwrap();
+    let rows = ["########", "#......#", "#......#", "#......#", "#......#", "#......#", "#......#", "########"];
+    let base = json!({"id": "test_props_map", "name": "Test Props", "rows": rows, "zones": [], "zone_legend": {}, "anchors": [{"id": "spawn", "x": 3, "y": 3}], "paths": {}, "tags": []});
+    let stored = |dir: &Path| -> serde_json::Value {
+        let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(store::file_of(dir, None, "maps")).unwrap()).unwrap();
+        doc["entries"].as_array().unwrap().iter().find(|e| e["id"] == "test_props_map").cloned().expect("stored")
+    };
+    store::upsert(&tmp, None, "maps", base.as_object().unwrap(), None).expect("a template without props");
+    let loaded = source::load(&tmp).game["maps"].as_array().unwrap().iter().find(|e| e["id"] == "test_props_map").cloned().unwrap();
+    assert_eq!(loaded["props"], json!([]));
+    let keys: Vec<String> = stored(&tmp).as_object().unwrap().keys().cloned().collect();
+    assert_eq!(keys, ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "tags"]);
+
+    let mut with_post = base.clone();
+    with_post["props"] = json!([{"y": 0, "x": 2, "art": "signpost", "id": "road_sign"}]);
+    store::upsert(&tmp, None, "maps", with_post.as_object().unwrap(), None).expect("a prop on the wall");
+    let prop = stored(&tmp)["props"][0].clone();
+    let prop_keys: Vec<String> = prop.as_object().unwrap().keys().cloned().collect();
+    assert_eq!(prop_keys, source::PROP_KEYS);
+    assert_eq!(prop, json!({"id": "road_sign", "art": "signpost", "x": 2, "y": 0, "w": 1, "h": 1, "layer": "sort", "variant": -1, "flip": false}));
+
+    let before = std::fs::read_to_string(&maps).unwrap();
+    let mut on_floor = base.clone();
+    on_floor["props"] = json!([{"id": "road_sign", "art": "signpost", "x": 2, "y": 1}]);
+    let errors = store::upsert(&tmp, None, "maps", on_floor.as_object().unwrap(), None).err().expect("P9 refused");
+    let p9 = "Prop 'road_sign': a standing prop needs wall tiles under its whole footprint; (2, 1) is '.'.";
+    assert!(errors.iter().any(|e| e.contains(p9)), "{errors:?}");
+    assert_eq!(std::fs::read_to_string(&maps).unwrap(), before, "a refused upsert leaves maps.json unchanged");
+
+    store::remove(&tmp, None, "maps", "test_props_map").expect("remove");
+    assert_eq!(std::fs::read_to_string(&maps).unwrap(), original, "upsert + remove leaves the file as it was");
     let _ = std::fs::remove_dir_all(&tmp);
 }

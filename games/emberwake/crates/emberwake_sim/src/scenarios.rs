@@ -6,6 +6,7 @@ use crate::kpi::Acc;
 use crate::roles;
 use crate::runner::{Def, Runner};
 use aegis_core::json;
+use emberwake_battle::encounter;
 use emberwake_battle::metrics::accumulate;
 use emberwake_rules::stats::MAX_LEVEL;
 use indexmap::IndexMap;
@@ -157,28 +158,41 @@ pub fn encounter(r: &mut Runner, id: &str, level: i32, elevel: i32, elevel_set: 
     if let Some((enemies, wave)) = generated(id) {
         let foes = define_enemies(r, enemies, foe_level, 1, elite, boss);
         let mut base = Map::new();
+        let mut phases: Vec<Value> = Vec::new();
         if !wave.is_empty() {
             let wave_ids = define_enemies(r, wave, foe_level, foes.len() + 1, elite, boss);
-            base.insert("wave_units".into(), json!(wave_ids));
-            base.insert("wave_round".into(), json!(WAVE_ROUND));
-            base.insert("wave_block".into(), json!(WAVE_BLOCK));
+            phases.push(encounter::arrival_phase(&wave_ids, WAVE_ROUND, WAVE_BLOCK, encounter::ARRIVAL_LABEL));
         }
         if boss_phase && id == "boss" {
-            base.insert("phases".into(), json!([boss_phase_for(&foes[0])]));
+            phases.push(boss_phase_for(&foes[0]));
+        }
+        if !phases.is_empty() {
+            base.insert("phases".into(), Value::Array(phases));
         }
         return Enc { enemies: foes, base, label: id.into(), ..Enc::default() };
     }
     let entry = r.d.entry("encounters", id).clone();
     let mut base = Map::new();
-    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen", "wave_round", "wave_block", "wave_label"] {
+    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen"] {
         if let Some(v) = entry.get(key) {
             base.insert(key.into(), v.clone());
         }
     }
     let enemies = catalog_ids(r, &json::sget(&entry, "enemies"), foe_level, elevel_set);
-    let wave = catalog_ids(r, &json::sget(&entry, "wave_units"), foe_level, elevel_set);
-    base.insert("wave_units".into(), json!(wave));
+    // PHASEFOLD rule 7: the arrival phase only (the other phases stay out), its units as sandbox ids.
+    if let Some(mut arrival) = arrival_of(&entry) {
+        for fx in arrival.get_mut("effects").and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut).filter(|fx| fx.contains_key("units")) {
+            let units = catalog_ids(r, &json::sget(fx, "units"), foe_level, elevel_set);
+            fx.insert("units".into(), json!(units));
+        }
+        base.insert("phases".into(), json!([arrival]));
+    }
     Enc { enemies, base, label: id.into(), ..Enc::default() }
+}
+
+/// PHASEFOLD: the encounter's arrival phase (the reinforcement wave; first in a valid list), if it has one.
+pub fn arrival_of(entry: &Map<String, Value>) -> Option<Value> {
+    json::aget(entry, "phases").iter().find(|p| json::s(json::dget(json::dict(p), "trigger"), "kind") == encounter::ARRIVAL).cloned()
 }
 
 /// Catalog roster ids, or level-shifted sandbox copies simc_<id> when elevel was given.

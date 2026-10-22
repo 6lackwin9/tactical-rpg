@@ -83,6 +83,7 @@
 				}
 			],
 			"paths": {},
+			"props": [],
 			"tags": []
 		},
 		{
@@ -220,6 +221,7 @@
 					]
 				]
 			},
+			"props": [],
 			"tags": []
 		},
 		{
@@ -343,6 +345,118 @@
 				}
 			],
 			"paths": {},
+			"props": [
+				{
+					"id": "keep_hall",
+					"art": "keep_hall",
+					"x": 4,
+					"y": 3,
+					"w": 10,
+					"h": 6,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "barracks",
+					"art": "barracks",
+					"x": 34,
+					"y": 3,
+					"w": 10,
+					"h": 6,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "forge",
+					"art": "forge",
+					"x": 4,
+					"y": 17,
+					"w": 9,
+					"h": 7,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "storehouse",
+					"art": "storehouse",
+					"x": 35,
+					"y": 17,
+					"w": 9,
+					"h": 7,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cistern",
+					"art": "cistern",
+					"x": 21,
+					"y": 13,
+					"w": 7,
+					"h": 5,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "gatepost_w",
+					"art": "gatepost",
+					"x": 23,
+					"y": 29,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "gatepost_e",
+					"art": "gatepost",
+					"x": 25,
+					"y": 29,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": true
+				},
+				{
+					"id": "road_sign",
+					"art": "signpost",
+					"x": 0,
+					"y": 27,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "stores_crates",
+					"art": "crate_stack",
+					"x": 1,
+					"y": 0,
+					"w": 2,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "muster_banner",
+					"art": "banner_pole",
+					"x": 47,
+					"y": 11,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				}
+			],
 			"tags": [
 				"ashlands"
 			]
@@ -558,6 +672,173 @@
 					]
 				]
 			},
+			"props": [
+				{
+					"id": "pillar_1",
+					"art": "broken_pillar",
+					"x": 14,
+					"y": 6,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "pillar_2",
+					"art": "broken_pillar",
+					"x": 22,
+					"y": 6,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "pillar_3",
+					"art": "broken_pillar",
+					"x": 30,
+					"y": 6,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "pillar_4",
+					"art": "broken_pillar",
+					"x": 14,
+					"y": 21,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "pillar_5",
+					"art": "broken_pillar",
+					"x": 22,
+					"y": 21,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "pillar_6",
+					"art": "broken_pillar",
+					"x": 30,
+					"y": 21,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "pillar_7",
+					"art": "broken_pillar",
+					"x": 38,
+					"y": 21,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "fallen_column",
+					"art": "fallen_column",
+					"x": 18,
+					"y": 10,
+					"w": 3,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "rubble_a",
+					"art": "rubble_wall",
+					"x": 25,
+					"y": 10,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "rubble_b",
+					"art": "rubble_wall",
+					"x": 18,
+					"y": 17,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": true
+				},
+				{
+					"id": "cobbles_a",
+					"art": "cobbles",
+					"x": 16,
+					"y": 12,
+					"w": 4,
+					"h": 3,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cobbles_b",
+					"art": "cobbles",
+					"x": 24,
+					"y": 13,
+					"w": 4,
+					"h": 3,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cobbles_c",
+					"art": "cobbles",
+					"x": 31,
+					"y": 16,
+					"w": 4,
+					"h": 3,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "scorch_a",
+					"art": "scorch_mark",
+					"x": 9,
+					"y": 17,
+					"w": 2,
+					"h": 2,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "scorch_b",
+					"art": "scorch_mark",
+					"x": 40,
+					"y": 9,
+					"w": 2,
+					"h": 2,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				}
+			],
 			"tags": [
 				"ashlands"
 			]
@@ -757,6 +1038,250 @@
 					]
 				]
 			},
+			"props": [
+				{
+					"id": "cliff_1",
+					"art": "cliff_face",
+					"x": 0,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_2",
+					"art": "cliff_face",
+					"x": 4,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_3",
+					"art": "cliff_face",
+					"x": 8,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_4",
+					"art": "cliff_face",
+					"x": 12,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_5",
+					"art": "cliff_face",
+					"x": 16,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_6",
+					"art": "cliff_face",
+					"x": 20,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_7",
+					"art": "cliff_face",
+					"x": 24,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_8",
+					"art": "cliff_face",
+					"x": 28,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_9",
+					"art": "cliff_face",
+					"x": 32,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_10",
+					"art": "cliff_face",
+					"x": 36,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_11",
+					"art": "cliff_face",
+					"x": 40,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "cliff_12",
+					"art": "cliff_face",
+					"x": 44,
+					"y": 8,
+					"w": 4,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "boulder_1",
+					"art": "boulder",
+					"x": 9,
+					"y": 9,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "boulder_2",
+					"art": "boulder",
+					"x": 15,
+					"y": 9,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "boulder_3",
+					"art": "boulder",
+					"x": 33,
+					"y": 9,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "boulder_4",
+					"art": "boulder",
+					"x": 39,
+					"y": 9,
+					"w": 2,
+					"h": 2,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "spire_n",
+					"art": "rock_spire",
+					"x": 23,
+					"y": 9,
+					"w": 2,
+					"h": 4,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "spire_s1",
+					"art": "rock_spire",
+					"x": 25,
+					"y": 18,
+					"w": 2,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "spire_s2",
+					"art": "rock_spire",
+					"x": 35,
+					"y": 18,
+					"w": 2,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": true
+				},
+				{
+					"id": "spire_s3",
+					"art": "rock_spire",
+					"x": 41,
+					"y": 18,
+					"w": 2,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "boulder_5",
+					"art": "boulder",
+					"x": 17,
+					"y": 18,
+					"w": 2,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "toll_arch",
+					"art": "toll_arch",
+					"x": 43,
+					"y": 12,
+					"w": 2,
+					"h": 5,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				}
+			],
 			"tags": [
 				"ashlands"
 			]
@@ -988,6 +1513,184 @@
 					]
 				]
 			},
+			"props": [
+				{
+					"id": "war_tent",
+					"art": "war_tent",
+					"x": 26,
+					"y": 4,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_1",
+					"art": "tent",
+					"x": 8,
+					"y": 8,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_2",
+					"art": "tent",
+					"x": 12,
+					"y": 11,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_3",
+					"art": "tent",
+					"x": 34,
+					"y": 11,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_4",
+					"art": "tent",
+					"x": 23,
+					"y": 13,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_5",
+					"art": "tent",
+					"x": 18,
+					"y": 18,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_6",
+					"art": "tent",
+					"x": 30,
+					"y": 18,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_7",
+					"art": "tent",
+					"x": 12,
+					"y": 22,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "tent_8",
+					"art": "tent",
+					"x": 38,
+					"y": 22,
+					"w": 3,
+					"h": 3,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "fire_1",
+					"art": "fire_pit",
+					"x": 16,
+					"y": 15,
+					"w": 1,
+					"h": 1,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "fire_2",
+					"art": "fire_pit",
+					"x": 28,
+					"y": 16,
+					"w": 1,
+					"h": 1,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "fire_3",
+					"art": "fire_pit",
+					"x": 22,
+					"y": 10,
+					"w": 1,
+					"h": 1,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "fire_4",
+					"art": "fire_pit",
+					"x": 36,
+					"y": 20,
+					"w": 1,
+					"h": 1,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "banner_n",
+					"art": "banner_pole",
+					"x": 0,
+					"y": 12,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": false
+				},
+				{
+					"id": "banner_s",
+					"art": "banner_pole",
+					"x": 0,
+					"y": 17,
+					"w": 1,
+					"h": 1,
+					"layer": "sort",
+					"variant": -1,
+					"flip": true
+				},
+				{
+					"id": "scorch",
+					"art": "scorch_mark",
+					"x": 20,
+					"y": 6,
+					"w": 2,
+					"h": 2,
+					"layer": "ground",
+					"variant": -1,
+					"flip": false
+				}
+			],
 			"tags": [
 				"ashlands"
 			]

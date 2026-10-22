@@ -42,8 +42,9 @@ pub(crate) fn fields(section: &str, kind: &str) -> &'static [Value] {
 
 pub fn load(data_dir: &Path) -> Source {
     let mut errors = Vec::new();
-    let catalog = load_catalog(data_dir, &mut errors);
-    let worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
+    let mut catalog = load_catalog(data_dir, &mut errors);
+    let mut worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
+    fold_legacy_waves(&mut catalog, &mut worlds);
     let mut game = Dict::new();
     game.insert("maps".into(), Value::Array(load_list(&data_dir.join("maps/maps.json"), &mut errors, map_template)));
     game.insert("quests".into(), Value::Array(load_list(&data_dir.join("quests/quests.json"), &mut errors, quest_template)));
@@ -62,6 +63,30 @@ pub fn load(data_dir: &Path) -> Source {
 /// ContentSchema.normalize of a catalog entry of `kind`.
 pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
     normalize(fields("content", kind), entry, false)
+}
+
+/// PHASEFOLD 1.4: an encounter row as the game reads it (`fold_legacy_wave`: the retired `wave_*` fields as an arrival
+/// phase); any other kind as it is.
+pub fn folded(kind: &str, entry: &Dict) -> Dict {
+    let mut e = entry.clone();
+    if kind == "encounters" {
+        emberwake_battle::encounter::fold_legacy_wave(&mut e);
+    }
+    e
+}
+
+/// PHASEFOLD 1.4: every catalog encounter ({kind: [entry]}) and every world's own encounters ({world: {own: {kind:
+/// [entry]}}}) folded in place (the loader's values and Godot's exports have this shape).
+pub fn fold_legacy_waves(catalog: &mut Value, worlds: &mut Value) {
+    let fold_all = |list: Option<&mut Value>| {
+        for e in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
+            emberwake_battle::encounter::fold_legacy_wave(e);
+        }
+    };
+    fold_all(catalog.get_mut("encounters"));
+    for w in worlds.as_object_mut().into_iter().flat_map(|o| o.values_mut()) {
+        fold_all(w.get_mut("own").and_then(|o| o.get_mut("encounters")));
+    }
 }
 
 // ---- ContentCatalog --------------------------------------------------------------------------------------------
@@ -706,10 +731,43 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
     out
 }
 
-/// MapRules.normalize_template.
+/// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`).
 pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
-    template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("tags", a)])
+    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("props", a.clone()), ("tags", a)]);
+    if let Some(Value::Array(list)) = t.get("props") {
+        let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(prop_full(o)))).collect();
+        t.insert("props".into(), Value::Array(full));
+    }
+    t
+}
+
+/// A map prop's keys in stored order (PROPS1 1).
+pub const PROP_KEYS: [&str; 9] = ["id", "art", "x", "y", "w", "h", "layer", "variant", "flip"];
+
+/// A map prop with its defaults (`w` 1, `h` 1, `layer` sort, `variant` -1, `flip` false) in `PROP_KEYS` order; the
+/// required keys (`id`, `art`, `x`, `y`) stay missing when missing and unknown keys follow (the checks name both).
+pub fn prop_full(p: &Dict) -> Dict {
+    let p = json::normalize_dict(p);
+    let fallback = |k: &str| match k {
+        "w" | "h" => Some(int(1)),
+        "layer" => Some(Value::from("sort")),
+        "variant" => Some(int(-1)),
+        "flip" => Some(Value::Bool(false)),
+        _ => None,
+    };
+    let mut out = Dict::new();
+    for k in PROP_KEYS {
+        if let Some(v) = p.get(k).cloned().or_else(|| fallback(k)) {
+            out.insert(k.to_string(), v);
+        }
+    }
+    for (k, v) in &p {
+        if !out.contains_key(k) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    out
 }
 
 /// QuestCatalog.normalize.

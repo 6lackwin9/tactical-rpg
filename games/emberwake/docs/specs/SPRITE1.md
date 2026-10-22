@@ -2,6 +2,19 @@
 
 Status update (2026-10-20): SPRITE1-L, SPRITE1-U and SPRITE1-A2 approved (user 2026-10-20). The status line below is the original.
 
+Status update (2026-10-23): SPRITE2 done: goblin variants of each class body, the dummy, Grakka, the Horde Warchief and
+the NPC bodies on the rig with every clip; ash and named goblins as palette files (seed `sprite2.json`). Foes face the
+party: a foe's token frame and its outline are drawn mirrored (the sheets face right); allies as drawn (`token_frame` in
+`battle.rs`).
+
+Status update (2026-10-22): SPRITE1-A2, SPRITE1-L and SPRITE1-U done. The attack clip by skill and weapon is the
+`SKILL_CLIPS` / `FIST_WEAPONS` table in `emberwake_gui/src/battle.rs` (a skill's own rig clip, else jab or kick with
+fists, else `attack`); `walk` slides the token to its new tile (`walk_ms`, 0 = off); `idle_focus` is not played yet.
+
+Status update (2026-10-22, user): SPRITE1-U drops the side-coloured disc behind the token: a flat foot ellipse in the
+side's colour (ally, foe) under every unit, a 1px gold outline around the selected unit's sprite and a faint white
+outline on hover. Battle first; the region map's sprites come with the playtest UI work (PLAYUI1).
+
 Status update (2026-10-22): SPRITE1-S2 done: section 4 gives the sheet layout on ASSETORG2 (one sheet per body, no strips,
 no manifest).
 
@@ -35,7 +48,8 @@ ASSETORG2 (approved 2026-10-20, built 2026-10-22) replaced the per-clip strips a
 body is one sheet plus its clip list (`docs/specs/ASSETORG2.md` section 4.1). This section supersedes the file layout
 of SPRITE1-A2 and the manifest work of SPRITE1-L; section 2's clips and SPRITE1-U's behaviour stand.
 
-- **SPRITE1-A2 (asset):** `tools/sprites/export_units.py` writes each class's clips into the class body:
+- **SPRITE1-A2 (asset):** `tools/sprites/export_units.py --clips all` (the writer exists since ASSETORG2-T) writes each
+  class's clips into the class body:
   `kits/rpg/assets/units/<class>/base/sheet.png` (one row per clip in `clips.json` order, frames left to right, each
   48x48, nearest filter, transparent) and `clips.json` (`frame` [48, 48]; `palette` = the rig's colour slots, so a
   palette file can recolour the body; `clips` = `idle`, `walk`, `hurt`, `death`, the class's attack clips, `defend`,

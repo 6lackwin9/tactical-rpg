@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # Writes the generated music loops (MUSIC1-A): original tracks synthesized from notes, no samples.
-#   python3 tools/gen_music.py [track ...] [--out DIR]      (default: every track, DIR = games/emberwake/assets/audio/music)
+#   python tools/gen_music.py [track ...] [--layer kit|game ...] [--root DIR] [--list]   (default: every track)
+# Each track lands at its ASSETORG2 layer's audio/music/<key>.ogg: the mood loops (combat, boss, town, shop, danger,
+# travel) in the RPG kit (kits/rpg/assets/), the menu and world tracks in the game (games/emberwake/assets/). DIR is a
+# workspace root (default: this repository); --list prints the paths without rendering (no ffmpeg needed).
 # Needs numpy and ffmpeg (libvorbis). Each track renders as one circular buffer, so notes, reverb and
 # noise beds that run past the end wrap onto the start and the loop has no seam. Prints "§ wrote <path> <s>s".
 import argparse
@@ -543,6 +546,18 @@ def boss() -> np.ndarray:
 TRACKS = {"menu_theme": menu_theme, "ashlands": ashlands, "iron_reaches": iron_reaches,
           "tidewrack": tidewrack, "combat": combat,
           "town": town, "danger": danger, "shop": shop, "travel": travel, "boss": boss}
+# ASSETORG2 layers: the kit's mood loops; every other track is the game's
+WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
+KIT_TRACKS = {"combat", "boss", "town", "shop", "danger", "travel"}
+
+
+def layer_of(name: str) -> str:
+    return "kit" if name in KIT_TRACKS else "game"
+
+
+def track_path(root: str, name: str) -> str:
+    return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", "music", name + ".ogg"))
 
 
 def write_ogg(stereo: np.ndarray, path: str) -> None:
@@ -561,18 +576,27 @@ def write_ogg(stereo: np.ndarray, path: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("tracks", nargs="*")
-    ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "games", "emberwake", "assets", "audio", "music"))
+    ap.add_argument("--layer", action="append", choices=list(LAYERS), help="only the tracks of these layers (default all)")
+    ap.add_argument("--root", default=WORKSPACE, help="workspace root holding kits/rpg/assets and games/emberwake/assets")
+    ap.add_argument("--list", action="store_true", help="print each track's layer and path, render nothing")
     args = ap.parse_args()
-    if shutil.which("ffmpeg") is None:
-        print("§ ffmpeg not found")
-        return 1
     names = args.tracks or list(TRACKS)
     for name in names:
         if name not in TRACKS:
             print("§ unknown track %s (known: %s)" % (name, ", ".join(TRACKS)))
             return 2
+    names = [n for n in names if layer_of(n) in (args.layer or list(LAYERS))]
+    if args.list:
+        for name in names:
+            print("%s %s %s" % (name, layer_of(name), track_path(args.root, name)))
+        return 0
+    if shutil.which("ffmpeg") is None:
+        print("§ ffmpeg not found")
+        return 1
+    for name in names:
         stereo = TRACKS[name]()
-        path = os.path.normpath(os.path.join(args.out, name + ".ogg"))
+        path = track_path(args.root, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         write_ogg(stereo, path)
         print("§ wrote %s %.1fs" % (path, stereo.shape[1] / SR))
     return 0

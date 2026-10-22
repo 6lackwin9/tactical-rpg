@@ -46,7 +46,8 @@ pub fn reward_lines(cx: &Cx, rewards: &Dict) -> Vec<String> {
 
 const GROUPS: [(&str, &str); 4] = [("ready", "Ready to turn in"), ("active", "Active"), ("blocked", "On hold"), ("completed", "Completed")];
 
-fn has_quests(cx: &Cx) -> bool {
+/// Whether the journal has anything to show (the Hub's and the HUD bar's Journal buttons).
+pub fn has_quests(cx: &Cx) -> bool {
     GROUPS.iter().any(|(st, _)| !quest::quests_with(&cx.data, cx.gs(), st).is_empty())
 }
 

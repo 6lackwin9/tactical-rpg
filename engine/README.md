@@ -36,7 +36,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | :--- | :--- |
 | `crates/aegis_core/` | Engine core, game-agnostic (SPLIT1-2): Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`), Godot number formatting (`fmt::fixed`: `%.Nf` with ties away from zero) |
 | `crates/aegis_content/` | Engine content layer, game-agnostic (SPLIT1-3): data file format, schema normalize and storage, content store and world graph, upsert / remove over the game's hooks |
-| `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers |
+| `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers; slot locks (PLAYUI1-S): `is_locked` / `set_locked(fmt, dir, slot, on)` in `<save dir>/locks.json` `{"locked": [..]}` (sorted, manual slots only, an entry counts only while its save exists); `write` and `delete` refuse a locked slot (`Slot <n> is locked.`), the autosave is never locked. A disabled kit icon button swallows its click, so a row under it never fires (`ui::hit`) |
 | `../games/emberwake/crates/emberwake_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
 | `../games/emberwake/crates/emberwake_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
 | `../games/emberwake/crates/emberwake_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, action log, battle metrics and report, balance-sim fight |
@@ -46,7 +46,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `../games/emberwake/crates/emberwake_sim/` | The balance simulator (PORT-SIM): sandbox units, the nine modes (duel, tier, levels, group, stats, party, role, sweep, campaign), scenarios, roles, targets and KPI tables; `aegis sim <mode>` prints its lines |
 | `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
 | `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`; `content manifest --kit <id>` writes a kit's kit.json, ASSETORG2): the game's `sim <mode>`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply) |
-| `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader over the asset layers (ASSETORG2: the game's `assets/`, its kit's `kits/<kit>/assets/`, the engine's `engine/assets/`, first hit wins; files by relative path, bodies as clip sheets with `clips.json` and palettes, the token = the idle clip's first frame, tiles by the variant files present), audio over the same layers, live tuning files, agent link, screen stack with the game's context, window shell and event loop |
+| `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader over the asset layers (ASSETORG2: the game's `assets/`, its kit's `kits/<kit>/assets/`, the engine's `engine/assets/`, first hit wins; files by relative path, bodies as clip sheets with `clips.json` and palettes, the token = the idle clip's first frame, tiles by the variant files present), audio over the same layers, live tuning files, agent link, screen stack with the game's context, window shell and event loop; clip playback (SPRITE1-L): `aegis_core::assets::ClipPlayer` (a base loop plus one shot, a missing clip falls back to `idle`, then the first frame) drawn by `Art::played` (`flip`: mirrored left to right, cached apart; `body_clip_flipped`; `body_outline` takes the same `flip`, SPRITE2), cached silhouette outlines (`Art::body_outline`, `Image::outline`), body checks frame by frame (`Art::body_problems`), `Painter::ellipse`; PROPS1-E: `aegis_ui::depth::DepthList` (sort by feet, then group, then x, then push order), `Image::mirrored` / `Art::image_mirrored`, `Art::size_of` (a PNG's own size), `Art::varied` / `Art::pick` (the first folder with `v0.png`, an explicit variant or the position pick; `tile_in` wraps it) |
 | `../games/emberwake/crates/emberwake_gui/` | `emberwake`: every game screen (menus, region map, dialogue, shop, world map, game menu, character, journal, results, battle) and the dev tools (Scene Runner, Content Forge, World Forge, Gear Dojo, UI Gallery) on `aegis_ui`; agent link on port 47800 |
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `emberwake_gui`; in git history |
 | `crates/aegis_core/` (old) | Retired 2026-10-19 with `aegis_app` (its only user); in git history. The name is reused by the engine core above (SPLIT1-2) |
@@ -101,13 +101,19 @@ start outside `new`, so their replay waits for PLAYTEST2.
 F8 (recording on) takes a note: the screen as it was goes to `<id>/note_<n>.jpg`, and a box asks for the text (types
 at once) and tags (mechanic, ui, ux, bug); Ctrl+Enter saves, Esc cancels. The note stamps the screen, mouse, control
 and the battle's round, block and phase. The kit's text field (`Ui::text_field`, single or multi-line) edits through
-the shell (`Kit.edit`, `Screen::text_changed`).
+the shell (`Kit.edit`, `Screen::text_changed`) with a full editor (PLAYUI1-T, `aegis_ui::edit`, re-exported from `ui`):
+it wraps at spaces and scrolls (`<id>.scroll`); Up/Down by visual line (sticky column), Home/End, Ctrl+Home/End,
+Page Up/Down, Ctrl+Left/Right, Ctrl+Backspace/Delete, Shift selects, mouse drag, Shift+click, double click selects a
+word, Ctrl+A/C/X/V, Ctrl+Z/Y; undo groups a typing run (a 1 s pause, a move or a delete ends it; 100 steps); the
+clipboard goes through `arboard` with an in-app fallback. The F8 note box is a full-height text area. The kit also has
+an icon button (`Ui::icon_button`: an image from the asset layers or a drawn `Glyph`, hover card, focus, toggled and
+disabled states) and a collapsible section header (`Ui::section`) (PLAYUI1-K).
 
 The Scene Runner's **Playtests** (`aegis_ui::recordings`, a kit screen the game opens with its own launcher) toggles
 recording and lists the user folder's recordings and the game's repo folders (`playtests/inbox`, `playtests/repro`,
 badge `repo`) with a stale badge: per battle Play back (watch it to its end, not recorded) or Take over at a round
-(replayed, then played on as a new session whose `end.parent` names the recording, battle and request), the notes,
-Open folder and Copy to repo (the recording and its images into `playtests/inbox/<id>/`).
+(replayed, then played on as a new session whose `end.parent` names the recording, battle and request), the notes
+(click a note's row, `recordings.note.<i>`, to read it whole in `recordings.note_view` with Copy), Open folder and Copy to repo (the recording and its images into `playtests/inbox/<id>/`).
 
 ```bash
 aegis replay <recording.json>                       # every battle: each checkpoint match / diverge (path, values) / unverified
@@ -130,7 +136,9 @@ cargo run --release -p emberwake_gui -- screen=arena encounter=goblin_ambush see
 The main menu leads to New game (world cards), Continue / Load, Settings and Tools (the Scene Runner: Combat Arena on
 any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, Exploration (a world from any location or its world map,
 nothing saved, a fight skipped as a win at no cost or fought), and the UI Gallery: the kit's widgets, every screen and the battle's panels one at a time). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
-(or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Talking opens the dialogue
+(or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Both maps have a HUD bar
+(PLAYUI1-H): the place name top left; gold, supplies and icon buttons top right (P party, J journal, I stash = the
+Character popup's Gear tab, ? help, Menu), off while a conversation, shop, turn-in or lore page is open. Talking opens the dialogue
 dock (1-9 choose); shops, turn-ins and lore open as popups; a world-map exit opens the world map (click a node, Travel,
 Make camp, Enter). Fights open the battle screen with the saved party; Continue settles the outcome and shows the
 results. The screen list and what is left: [games/emberwake/docs/SCREENS.md](../games/emberwake/docs/SCREENS.md).
@@ -145,7 +153,9 @@ I enemy tells, F12 screenshot.
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every
 widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `type {text}` (into the text field being edited), `note` (F8), `key {key}` (up / down / left /
-right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
+right / enter / space / esc / a letter; while a field edits also home, end, backspace, delete, `shift+...` and
+`ctrl+a/c/x/v/z/y`, and enter, esc and tab end the edit; `ui_tree` then reports `edit` {id, caret, selection, selected,
+undo}), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
 frame of the top screen at a text size, the mouse off the canvas, reporting the text `text_fit` or a button shortened
 (cut), text past the canvas (edge), texts drawn over each other (overlap) and text running out of its control (spill);
 text in a scroll area or under a later panel is skipped; `shot` saves that frame), `game` (the full game state), and the

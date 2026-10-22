@@ -1,6 +1,7 @@
 //! The encounter rules a battle runs under (scripts/combat/session/): EncounterObjectives (rout, hold, escape, slay,
 //! guests and protect), EncounterPhases (boss phases: hp_below and round triggers, line / wave / status / ai /
-//! enrage effects) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
+//! enrage effects; PHASEFOLD: the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
+//! fields) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
 
 use crate::grid::V2;
@@ -138,7 +139,7 @@ impl Objectives {
 pub struct PhaseDef {
     pub id: String,
     pub name: String,
-    /// kind, unit, pct, or_round | round
+    /// kind, unit, pct, or_round | round | round, block (arrival)
     pub trigger: Obj,
     /// Parsed effects with their defaults.
     pub effects: Vec<Obj>,
@@ -152,9 +153,69 @@ impl PhaseDef {
     pub fn wave_refs(&self) -> Vec<String> {
         self.effects_of("wave").flat_map(|fx| value::strings(fx, "units")).collect()
     }
+
+    /// PHASEFOLD: an `arrival` trigger, the reinforcement wave (never due, never reserved; not a boss phase).
+    pub fn is_arrival(&self) -> bool {
+        value::string(&self.trigger, "kind", "") == ARRIVAL
+    }
 }
 
-/// EncounterPhases.parse: typed phases with defaults (status rounds 2, enrage power 20).
+/// PHASEFOLD: the trigger kind of the reinforcement wave and its defaults (the four retired `wave_*` fields' defaults).
+pub const ARRIVAL: &str = "arrival";
+pub const ARRIVAL_ID: &str = "reinforcements";
+pub const ARRIVAL_NAME: &str = "Reinforcements";
+pub const ARRIVAL_ROUND: i32 = 1;
+pub const ARRIVAL_BLOCK: i32 = 4;
+pub const ARRIVAL_LABEL: &str = "Reinforcements arrive!";
+/// The retired fields, as the encounter rows wrote them before PHASEFOLD.
+pub const LEGACY_WAVE_KEYS: [&str; 4] = ["wave_units", "wave_round", "wave_block", "wave_label"];
+
+/// PHASEFOLD 1.4: the arrival phase of a reinforcement wave (`units` enter before `block` of `round`).
+pub fn arrival_phase(units: &[String], round: i32, block: i32, label: &str) -> Value {
+    serde_json::json!({
+        "id": ARRIVAL_ID, "name": ARRIVAL_NAME,
+        "trigger": {"kind": ARRIVAL, "round": round, "block": block},
+        "effects": [{"type": "wave", "units": units, "label": label}],
+        "pause_autoplay": false,
+    })
+}
+
+/// PHASEFOLD 1.4: a row written before PHASEFOLD (`wave_units`, `wave_round`, `wave_block`, `wave_label`) as an arrival
+/// phase at the front of `phases`; the four keys are removed (a row without wave units only loses them). Runs on every
+/// encounter before anything reads it; a row already folded is left as it is. The round and block are clamped to the
+/// retired fields' ranges (1..30, 1..10), as the schema normalize clamped them before.
+pub fn fold_legacy_wave(entry: &mut Obj) {
+    if !LEGACY_WAVE_KEYS.iter().any(|k| entry.contains_key(*k)) {
+        return;
+    }
+    if entry.get("phases").is_some_and(|p| !p.is_array()) {
+        return;
+    }
+    let units: Vec<String> = value::strings(entry, "wave_units").into_iter().filter(|u| !u.is_empty()).collect();
+    let round = value::int(entry, "wave_round", ARRIVAL_ROUND).clamp(1, 30);
+    let block = value::int(entry, "wave_block", ARRIVAL_BLOCK).clamp(1, 10);
+    let label = value::string(entry, "wave_label", ARRIVAL_LABEL);
+    for k in LEGACY_WAVE_KEYS {
+        entry.shift_remove(k);
+    }
+    if units.is_empty() {
+        return;
+    }
+    let mut phase = arrival_phase(&units, round, block, &label);
+    let Value::Array(list) = entry.entry("phases").or_insert_with(|| Value::Array(Vec::new())) else { return };
+    let taken = |id: &str| list.iter().any(|p| p.get("id").and_then(Value::as_str) == Some(id));
+    let mut id = ARRIVAL_ID.to_string();
+    let mut n = 2;
+    while taken(&id) {
+        id = format!("{ARRIVAL_ID}_{n}");
+        n += 1;
+    }
+    phase["id"] = Value::from(id);
+    list.insert(0, phase);
+}
+
+/// EncounterPhases.parse: typed phases with defaults (status rounds 2, enrage power 20; an arrival: round 1, block 4,
+/// wave label "Reinforcements arrive!").
 pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
     raw.iter()
         .filter_map(Value::as_object)
@@ -169,7 +230,11 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                 trigger.insert("or_round".into(), Value::from(value::int(&t, "or_round", 0)));
             } else if kind == "round" {
                 trigger.insert("round".into(), Value::from(value::int(&t, "round", 0)));
+            } else if kind == ARRIVAL {
+                trigger.insert("round".into(), Value::from(value::int(&t, "round", ARRIVAL_ROUND)));
+                trigger.insert("block".into(), Value::from(value::int(&t, "block", ARRIVAL_BLOCK)));
             }
+            let default_label = if kind == ARRIVAL { ARRIVAL_LABEL } else { "" };
             let effects = value::array(src, "effects")
                 .iter()
                 .filter_map(Value::as_object)
@@ -183,7 +248,7 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                         }
                         "wave" => {
                             out.insert("units".into(), Value::from(value::strings(fx, "units")));
-                            out.insert("label".into(), Value::from(value::string(fx, "label", "")));
+                            out.insert("label".into(), Value::from(value::string(fx, "label", default_label)));
                         }
                         "status" => {
                             out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
@@ -239,6 +304,19 @@ impl Phases {
         self.reserved.insert(c, id.to_string());
     }
 
+    /// PHASEFOLD rule 2: an arrival unit is tracked with its phase but never reserved (it counts as a foe from the start).
+    pub fn track(&mut self, id: &str, c: UnitId) {
+        self.wave_units.entry(id.to_string()).or_default().push(c);
+    }
+
+    /// PHASEFOLD rule 4: the arrival phase that enters before `block` of `round` (not fired yet, at least one unit).
+    pub fn arrival_due(&self, round: i32, block: i32) -> Option<String> {
+        self.phases
+            .iter()
+            .find(|p| p.is_arrival() && !self.fired.contains_key(&p.id) && value::int(&p.trigger, "round", 0) == round && value::int(&p.trigger, "block", 0) == block && !self.units_of(&p.id).is_empty())
+            .map(|p| p.id.clone())
+    }
+
     pub fn is_reserved(&self, c: UnitId) -> bool {
         self.reserved.get(&c).is_some_and(|id| !self.fired.contains_key(id))
     }
@@ -265,7 +343,8 @@ impl Phases {
         }
     }
 
-    /// Round phases due at their round start; hp_below phases at their or_round.
+    /// Round phases due at their round start; hp_below phases at their or_round. An arrival is never due (it enters at
+    /// its block start, `arrival_due`).
     pub fn mark_round(&mut self, round: i32) {
         for p in &self.phases {
             if self.fired.contains_key(&p.id) || self.dropped.contains(&p.id) || self.due.contains(&p.id) {
@@ -286,7 +365,7 @@ impl Phases {
         let mut out: Vec<String> = Vec::new();
         for (id, at) in &self.fired {
             if Self::applies(*at, round) {
-                if let Some(p) = self.phase(id) {
+                if let Some(p) = self.phase(id).filter(|p| !p.is_arrival()) {
                     for fx in p.effects_of("enrage") {
                         let u = value::string(fx, "unit", "");
                         if !out.contains(&u) {
@@ -313,7 +392,7 @@ impl Phases {
         let mut settings: Vec<Obj> = Vec::new();
         for (id, at) in &self.fired {
             if Self::applies(*at, round) {
-                if let Some(p) = self.phase(id) {
+                if let Some(p) = self.phase(id).filter(|p| !p.is_arrival()) {
                     settings.extend(p.effects_of("ai").cloned());
                 }
             }

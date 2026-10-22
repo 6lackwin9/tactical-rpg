@@ -2,6 +2,8 @@
 //! resolves in the game's `assets/`, then its kit's (`kits/<kit>/assets/`, named by `game.json` `kit`), then the
 //! engine's (`engine/assets/`); the first layer holding the file wins, so a game overrides a kit or engine file by
 //! putting its own at the same path. Bodies are sheets: one row per clip of `clips.json`, frames left to right.
+//! Playback (SPRITE1-L): `Clips::frame_at` picks a clip's frame by time (looping or holding the last frame, a missing
+//! clip falling back to `idle`), `ClipPlayer` keeps a base loop with one shot at a time over it.
 
 use crate::json::{self, Dict};
 use indexmap::IndexMap;
@@ -249,6 +251,178 @@ impl Clips {
         } else {
             String::new()
         }
+    }
+
+    /// The clip `id`.
+    pub fn clip(&self, id: &str) -> Option<&Clip> {
+        self.clips.iter().find(|c| c.id == id)
+    }
+
+    /// The row played for `id` (SPRITE1-L): the clip itself, else `idle`, else the first clip; None for no clips.
+    pub fn resolve(&self, id: &str) -> Option<usize> {
+        self.row(id).or_else(|| self.row("idle")).or(if self.clips.is_empty() { None } else { Some(0) })
+    }
+
+    /// Which frame shows `ms` after clip `id` started (fallback as `resolve`). A clip that is not `id` or `idle` (a
+    /// body without idle) shows its first frame, still.
+    pub fn frame_at(&self, id: &str, ms: u64) -> Option<ClipFrame> {
+        let row = self.resolve(id)?;
+        let c = &self.clips[row];
+        let (frame, done) = if c.id == id || c.id == "idle" { c.frame_at(ms) } else { (0, true) };
+        Some(ClipFrame { row, clip: c.id.clone(), frame, done })
+    }
+}
+
+/// One frame of a sheet chosen by time: its row, the clip that row holds (after fallback), the frame, and whether a
+/// one-shot clip has reached its end (always false for a looping one).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClipFrame {
+    pub row: usize,
+    pub clip: String,
+    pub frame: u32,
+    pub done: bool,
+}
+
+impl Clip {
+    /// The clip's length: the sum of its frames' durations.
+    pub fn total_ms(&self) -> u64 {
+        self.ms.iter().map(|m| *m as u64).sum()
+    }
+
+    /// The frame shown `ms` after the clip started and whether it is over: a looping clip wraps around (never over);
+    /// a one-shot clip holds its last frame once its durations have run.
+    pub fn frame_at(&self, ms: u64) -> (u32, bool) {
+        let total = self.total_ms();
+        if total == 0 || self.ms.is_empty() {
+            return (0, !self.looped);
+        }
+        let t = if self.looped {
+            ms % total
+        } else if ms >= total {
+            return (self.ms.len() as u32 - 1, true);
+        } else {
+            ms
+        };
+        let mut acc = 0u64;
+        for (i, m) in self.ms.iter().enumerate() {
+            acc += *m as u64;
+            if t < acc {
+                return (i as u32, false);
+            }
+        }
+        (self.ms.len() as u32 - 1, !self.looped)
+    }
+}
+
+/// What a `ClipPlayer` plays over its base loop.
+#[derive(Debug, Clone, PartialEq)]
+struct Shot {
+    clip: String,
+    since: u64,
+    /// Play for this long (looping the clip) instead of once.
+    for_ms: Option<u64>,
+    /// Keep the last frame when the clip is over (a death).
+    hold: bool,
+}
+
+/// Plays a body's clips on a clock the caller keeps (SPRITE1-L; milliseconds, scaled by the caller for animation
+/// speed): a base loop (`idle`, a stance's idle) and over it one shot at a time (an attack, a hit, a walk for a set
+/// time, a death that holds its last frame). Clips the body lacks fall back as `Clips::frame_at` does.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClipPlayer {
+    base: String,
+    base_since: u64,
+    shot: Option<Shot>,
+}
+
+impl Default for ClipPlayer {
+    fn default() -> Self {
+        Self::new("idle")
+    }
+}
+
+impl ClipPlayer {
+    pub fn new(base: &str) -> Self {
+        Self { base: base.to_string(), base_since: 0, shot: None }
+    }
+
+    /// The base loop.
+    pub fn base(&self) -> &str {
+        &self.base
+    }
+
+    /// Loops `clip` between shots from `now` (unchanged when it already does).
+    pub fn set_base(&mut self, clip: &str, now: u64) {
+        if self.base != clip {
+            self.base = clip.to_string();
+            self.base_since = now;
+        }
+    }
+
+    /// Plays `clip` once from `now`, then the base loop again.
+    pub fn play(&mut self, clip: &str, now: u64) {
+        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: None, hold: false });
+    }
+
+    /// Plays `clip` (looping) for `ms` from `now`, then the base loop again.
+    pub fn play_for(&mut self, clip: &str, now: u64, ms: u64) {
+        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: Some(ms), hold: false });
+    }
+
+    /// Plays `clip` once from `now` and keeps its last frame.
+    pub fn play_and_hold(&mut self, clip: &str, now: u64) {
+        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: None, hold: true });
+    }
+
+    /// Drops the shot: the base loop shows.
+    pub fn stop(&mut self) {
+        self.shot = None;
+    }
+
+    /// The shot playing at `now` ("" when the base loop shows).
+    pub fn playing(&self, clips: &Clips, now: u64) -> &str {
+        match &self.shot {
+            Some(s) if s.hold || !self.shot_over(clips, s, now) => &s.clip,
+            _ => "",
+        }
+    }
+
+    fn shot_end(clips: &Clips, s: &Shot) -> u64 {
+        let len = s.for_ms.unwrap_or_else(|| clips.resolve(&s.clip).map_or(0, |r| clips.clips[r].total_ms()));
+        s.since.saturating_add(len)
+    }
+
+    fn shot_over(&self, clips: &Clips, s: &Shot, now: u64) -> bool {
+        now >= Self::shot_end(clips, s)
+    }
+
+    /// How long a held shot has shown its last frame at `now` (None: no held shot, or still running).
+    pub fn held_for(&self, clips: &Clips, now: u64) -> Option<u64> {
+        let s = self.shot.as_ref().filter(|s| s.hold)?;
+        let end = Self::shot_end(clips, s);
+        (now >= end).then(|| now - end)
+    }
+
+    /// The frame to draw at `now`: the shot while it runs (a held one for good), else the base loop.
+    pub fn frame(&self, clips: &Clips, now: u64) -> Option<ClipFrame> {
+        if let Some(s) = &self.shot {
+            let t = now.saturating_sub(s.since);
+            if s.hold && self.shot_over(clips, s, now) {
+                let mut f = clips.frame_at(&s.clip, u64::MAX)?;
+                if let Some(c) = clips.clip(&f.clip).filter(|c| c.looped) {
+                    // A held clip that loops (or the idle fallback) stops on its last frame.
+                    f.frame = c.frames.saturating_sub(1);
+                }
+                f.done = true;
+                return Some(f);
+            }
+            if !self.shot_over(clips, s, now) {
+                let mut f = clips.frame_at(&s.clip, t)?;
+                f.done = false;
+                return Some(f);
+            }
+        }
+        clips.frame_at(&self.base, now.saturating_sub(self.base_since))
     }
 }
 

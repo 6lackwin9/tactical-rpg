@@ -84,19 +84,68 @@ def udir(a_deg):  # 0 = up, 90 = forward (right), 180 = down
 # ------------------------------------------------------------------ outfit parts
 def draw_head(f, u, P, hx, hy, hurt, tilt=0.0):
     h = u['head']
-    if h == 'goblin':
-        for k in range(6): f.disc(hx - 2.5 - k * 0.9, hy - 0.6 - k * 0.45, 1.3 - k * 0.15, P['skin'] if k < 5 else P['skin_lo'])
-        f.disc(hx, hy, 3.4, P['skin']); f.rect(hx - 3, hy + 1.5, hx + 2, hy + 3, P['skin_lo'])
-        f.rect(hx + 2, hy + 0.5, hx + 4.2, hy + 1.6, P['skin']); f.dot(hx + 4.2, hy + 1.6, P['skin_lo'])
-        f.dot(hx + 1.6, hy - 0.6, OUT if hurt else P['eye']); f.dot(hx + 2.3, hy - 0.6, OUT)
-        f.dot(hx + 2.2, hy + 2.4, WHITE); f.dot(hx + 0.8, hy + 2.6, WHITE)
-        f.rect(hx - 2.5, hy - 3.8, hx + 1.2, hy - 2.8, P['accent']); f.dot(hx - 3.6, hy - 2.2, P['accent']); f.dot(hx - 4.2, hy - 1.6, P['accent_lo'])
+    if h == 'goblin':   # SPRITE2: big skull, long ear swept back, hooked nose, tusked underbite; u['hat'] adds headgear
+        hat = u.get('hat')
+        if hat == 'hood':  # the hood goes on first; the ear pokes out through it
+            f.disc(hx - 0.6, hy - 0.5, 3.9, P['main']); f.rect(hx - 4.2, hy - 0.5, hx - 2.6, hy + 3.5, P['main_lo'])
+        else:
+            f.disc(hx, hy, 3.4, P['skin'])
+        f.disc(hx + 0.9, hy + 0.5, 2.7, P['skin'])
+        for k in range(7):  # ear: from behind the skull, back and up to a point
+            f.disc(hx - 2.0 - k * 0.95, hy - 0.4 - k * 0.62, 1.5 - k * 0.16, P['skin'] if k < 5 else P['skin_lo'])
+        f.dot(hx - 2.6, hy - 0.5, P['skin_lo']); f.dot(hx - 3.5, hy - 1.0, P['skin_lo'])
+        f.rect(hx - 2.0, hy + 1.8, hx + 2.6, hy + 3.2, P['skin_lo'])                       # heavy jaw
+        f.rect(hx + 2.2, hy + 0.0, hx + 4.4, hy + 1.0, P['skin']); f.dot(hx + 4.6, hy + 1.4, P['skin_lo'])  # hooked nose
+        f.rect(hx + 0.6, hy - 1.6, hx + 2.6, hy - 1.6, P['skin_lo'])                      # brow
+        f.dot(hx + 1.5, hy - 0.6, OUT if hurt else P['eye']); f.dot(hx + 2.4, hy - 0.6, OUT)
+        f.dot(hx + 2.4, hy + 1.8, WHITE); f.dot(hx + 1.0, hy + 2.0, WHITE)                  # tusks
+        if hat == 'band':      # headband with trailing tails
+            f.rect(hx - 2.8, hy - 2.6, hx + 2.8, hy - 1.9, P['accent'])
+            for k in range(3): f.dot(hx - 3.6 - k, hy - 2.0 + k * 0.7 + math.sin(tilt + k) * 0.5, P['accent'] if k < 2 else P['accent_lo'])
+        elif hat == 'bandana':  # cloth tied over the skull, knot at the back
+            f.poly([(hx - 3.4, hy - 0.8), (hx - 2.8, hy - 3.2), (hx - 0.4, hy - 4.2), (hx + 2.0, hy - 3.6), (hx + 3.0, hy - 1.8), (hx - 1.0, hy - 1.6)], P['accent'])
+            f.rect(hx - 0.6, hy - 2.1, hx + 2.8, hy - 1.8, P['accent_lo'])
+            f.dot(hx - 3.6, hy - 1.0, P['accent_lo']); f.dot(hx - 4.2, hy - 0.2 + math.sin(tilt) * 0.5, P['accent'])
+        elif hat == 'hood':
+            f.dot(hx + 1.0, hy - 3.4, P['main_hi']); f.dot(hx - 0.2, hy - 3.8, P['main_hi'])
+        elif hat == 'mohawk':  # a crest of spikes front to back
+            for k in range(5):
+                x0 = hx + 1.4 - k * 1.1
+                f.limb((x0, hy - 2.8), (x0 - 0.9, hy - 5.6 + abs(k - 1.5) * 0.45), 0.55, P['hair'] if k % 2 == 0 else P['hair_lo'])
+        elif hat == 'skull':   # an animal skull worn as a cap, horns back, a feather
+            f.disc(hx - 0.2, hy - 2.4, 2.7, P['bone']); f.rect(hx + 1.0, hy - 2.2, hx + 3.4, hy - 1.4, P['bone'])
+            f.dot(hx + 1.6, hy - 2.6, OUT); f.dot(hx - 0.6, hy - 3.6, P['bone_lo'])
+            f.limb((hx - 2.0, hy - 3.6), (hx - 4.4, hy - 5.8), 0.6, P['bone']); f.dot(hx - 4.8, hy - 6.4, P['bone_lo'])
+            f.limb((hx - 2.8, hy - 2.2), (hx - 5.0, hy - 1.0), 0.5, P['accent'])
+        elif hat == 'horns':   # iron cap with two curved horns
+            f.poly([(hx - 3.6, hy - 1.0), (hx - 2.9, hy - 3.4), (hx - 0.4, hy - 4.5), (hx + 2.1, hy - 3.8), (hx + 3.2, hy - 1.6), (hx + 3.2, hy - 1.0)], P['metal'])
+            f.rect(hx - 3.6, hy - 1.6, hx + 3.2, hy - 1.0, P['metal_lo']); f.dot(hx + 0.4, hy - 3.6, P['metal_hi'])
+            f.limb((hx - 2.2, hy - 2.6), (hx - 4.6, hy - 4.6), 0.75, P['bone']); f.limb((hx - 4.6, hy - 4.6), (hx - 4.4, hy - 7.0), 0.55, P['bone'])
+            f.limb((hx + 1.6, hy - 3.0), (hx + 3.2, hy - 5.2), 0.75, P['bone']); f.limb((hx + 3.2, hy - 5.2), (hx + 2.6, hy - 7.4), 0.55, P['bone_lo'])
+        elif hat == 'crown':   # an iron band with a crown of rusted nails
+            f.rect(hx - 3.2, hy - 2.9, hx + 2.9, hy - 1.9, P['metal_lo'])
+            for k in range(6):
+                x0 = hx - 2.8 + k * 1.15; f.limb((x0, hy - 2.9), (x0 + 0.3 * (k - 2.5) / 2.5, hy - 5.2 - (0.6 if k in (2, 3) else 0)), 0.4, P['rust'] if k % 2 else P['metal'])
+            f.dot(hx - 0.3, hy - 2.4, P['trim'])
         return
     # a face every human head shares
     f.disc(hx, hy, 3.4, P['skin'])
     f.rect(hx - 3, hy + 1.2, hx - 1.5, hy + 3, P['skin_lo'])
     f.dot(hx + 2, hy + 0.2, OUT if hurt else P['eye']); f.dot(hx + 3.2, hy + 1.6, P['skin_lo'])
-    if h == 'helm':      # warrior: full helm, visor slit, plume
+    if h in ('bare', 'kettle', 'cap'):  # SPRITE2 named humans: hair, an iron kettle hat or a leather cap, beard, braid
+        f.rect(hx - 3, hy - 3.6, hx + 2.5, hy - 2.2, P['hair']); f.rect(hx - 3.5, hy - 2.2, hx - 2.3, hy + 0.8, P['hair'])
+        if u.get('braid'):
+            for k in range(5): f.disc(hx - 3.8 - k * 0.3, hy + 1.2 + k * 1.3, 1.0 - k * 0.08, P['hair'] if k % 2 == 0 else P['hair_lo'])
+        if h == 'kettle':
+            f.rect(hx - 2.8, hy - 5.0, hx + 2.6, hy - 2.6, P['metal']); f.dot(hx + 1.2, hy - 4.4, P['metal_hi']); f.dot(hx - 2.2, hy - 3.2, P['metal_lo'])
+            f.rect(hx - 4.8, hy - 2.6, hx + 4.8, hy - 1.9, P['metal_lo'])
+        elif h == 'cap':
+            f.rect(hx - 3.2, hy - 4.2, hx + 2.4, hy - 2.0, P['cap']); f.rect(hx + 1.6, hy - 2.4, hx + 4.4, hy - 1.8, P['cap_lo'])
+            f.dot(hx - 0.6, hy - 3.8, P.get('cap_hi', P['cap']))
+        if u.get('beard'):
+            f.rect(hx + 0.4, hy + 1.8, hx + 3.2, hy + 3.8, P['beard']); f.rect(hx - 1.4, hy + 0.6, hx - 0.2, hy + 3.2, P['beard'])
+            f.dot(hx + 1.8, hy + 4.4, P['beard']); f.dot(hx + 2.8, hy + 1.6, OUT)
+    elif h == 'helm':      # warrior: full helm, visor slit, plume
         f.disc(hx, hy - 0.2, 3.7, P['metal']); f.rect(hx - 3, hy + 0.6, hx + 3, hy + 3, P['skin'])
         f.rect(hx + 0.5, hy - 0.5, hx + 3.6, hy + 0.5, OUT); f.dot(hx + 2, hy + 1.8, OUT if hurt else WHITE)
         f.dot(hx - 1, hy - 2, P['metal_hi']); f.dot(hx, hy - 2.6, P['metal_hi']); f.rect(hx - 3, hy - 0.5, hx - 2, hy + 2.5, P['metal_lo'])
@@ -129,6 +178,7 @@ def draw_torso(f, u, P, R, px, py, lx, T):
     for i in range(12):
         t = i / 11.0; cx = px + lx * t; cy = py - T * t
         w0, w1 = -4.2 + t * 0.5, 3.8 - t * 0.3
+        if u.get('girth'): w0, w1 = w0 - u['girth'], w1 + u['girth'] * (0.6 + 0.4 * t)  # a broader chest (SPRITE2 warlords)
         if t_ == 'plate':   c = P['metal'] if t > 0.55 else P['accent']
         elif t_ == 'leather': c = P['main'] if t > 0.25 else P['leg']
         elif t_ == 'bare':  c = P['skin'] if t > 0.22 else P['leg']; w0 -= 0.6; w1 += 0.6
@@ -237,8 +287,20 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     """hand_f/hand_b: hand targets relative to the shoulder (None = rest pose). wa/wb: weapon angles
     (0 up, 90 forward, 180 down). ff/fb: foot offsets (x from pelvis, lift). loose: (x, y, angle) of a dropped weapon."""
     P = u['pal']; L, A, T = u['leg'], u['arm'], u['tl']
+    s = u.get('scale', 1.0)  # a body variant's size against its class (goblins ~0.83, a warlord ~1.1): every offset scales
+    if s != 1.0:
+        sc = lambda p: None if p is None else (p[0] * s, p[1] * s)
+        about = lambda x, y: (20 + (x - 20) * s, GY - (GY - y) * s)  # absolute effect positions scale about the feet
+        bob, lean, dx, head_dy = bob * s, lean * s, dx * s, head_dy * s
+        fb, ff, hand_f, hand_b = sc(fb), sc(ff), sc(hand_f), sc(hand_b)
+        fx = [about(x, y) + (r, c) for x, y, r, c in fx] if fx else fx
+        slash = [about(x, y) for x, y in slash] if slash else slash
+        arrow = about(*arrow) if arrow else arrow
+        loose = about(loose[0], loose[1]) + (loose[2],) if loose else loose
+        loose_b = about(loose_b[0], loose_b[1]) + (loose_b[2],) if loose_b else loose_b
+        leg_trail = [sc(p) for p in leg_trail] if leg_trail else leg_trail
     f = F()
-    px, py = 20 + dx + fall * 10, GY - 2 * L + bob
+    px, py = 20 + dx + fall * 10 * s, GY - 2 * L + bob
     lx = lean + hurt * -2.5
     sh = (px + lx, py - T + fall * 3)
     head = (sh[0] + 1 + lx * 0.3 - fall * 3, sh[1] - u.get('neck', 6) + head_dy + fall * 2)
@@ -252,11 +314,11 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     if fall: foot_b, foot_f = (px - 3, GY), (px + 3, GY)
     kb, fbp = ik((px - 1, py), L, L, foot_b, -1)
     kf, ffp = ik((px + 1, py), L, L, foot_f, -1)
-    hf = (sh[0] + 4, sh[1] + 6.5) if hand_f is None else (sh[0] + hand_f[0], sh[1] + hand_f[1] + bob * 0.0)
-    hb = (sh[0] - 2.5, sh[1] + 8.5 - hurt * 2) if hand_b is None else (sh[0] + hand_b[0], sh[1] + hand_b[1])
+    hf = (sh[0] + 4 * s, sh[1] + 6.5 * s) if hand_f is None else (sh[0] + hand_f[0], sh[1] + hand_f[1] + bob * 0.0)
+    hb = (sh[0] - 2.5 * s, sh[1] + 8.5 * s - hurt * 2 * s) if hand_b is None else (sh[0] + hand_b[0], sh[1] + hand_b[1])
     if swap:  # main weapon in the far hand (behind the body), off-hand item (shield) in the near hand
         eb, hb = ik((sh[0] - 2, sh[1] - 0.5), A, A, hf, 1)
-        ef, hf = ik((sh[0] + 2, sh[1] - 0.5), A, A, (sh[0] + 4.5, sh[1] + 3) if hand_b is None else (sh[0] + hand_b[0] + 2, sh[1] + hand_b[1]), -1)
+        ef, hf = ik((sh[0] + 2, sh[1] - 0.5), A, A, (sh[0] + 4.5 * s, sh[1] + 3 * s) if hand_b is None else (sh[0] + hand_b[0] + 2 * s, sh[1] + hand_b[1]), -1)
     else:
         ef, hf = ik((sh[0] + 2, sh[1] - 0.5), A, A, hf, u.get('fbend', -1))
         eb, hb = ik((sh[0] - 2, sh[1] - 0.5), A, A, hb, 1)

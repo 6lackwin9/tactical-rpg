@@ -18,6 +18,14 @@ pub struct Tuning {
     pub crit_color: Rgba,
     pub intent_arrows: bool,
     pub token_px: i32,
+    /// SPRITE1-U: how long a moving unit slides to its new tile playing `walk` (0: it jumps).
+    pub walk_ms: u64,
+    /// SPRITE1-U: how long a fallen unit shows the death clip's last frame before the dead marker.
+    pub death_hold_ms: u64,
+    /// SPRITE1-U: the opacity (0-255) of the side-coloured ellipse under a unit's feet.
+    pub foot_alpha: u8,
+    /// SPRITE1-U: the opacity of the white outline around the hovered unit's sprite.
+    pub hover_outline_alpha: u8,
 }
 
 impl Default for Tuning {
@@ -34,6 +42,10 @@ impl Default for Tuning {
             crit_color: rgb(255, 210, 60),
             intent_arrows: true,
             token_px: 28,
+            walk_ms: 360,
+            death_hold_ms: 600,
+            foot_alpha: 110,
+            hover_outline_alpha: 110,
         }
     }
 }
@@ -62,6 +74,10 @@ impl Tuned for Tuning {
             crit_color: v.get("crit_color").map(|c| color(c, d.crit_color)).unwrap_or(d.crit_color),
             intent_arrows: v.get("intent_arrows").and_then(Value::as_bool).unwrap_or(d.intent_arrows),
             token_px: i("token_px", d.token_px).clamp(8, 32),
+            walk_ms: u("walk_ms", d.walk_ms).min(2000),
+            death_hold_ms: u("death_hold_ms", d.death_hold_ms).min(5000),
+            foot_alpha: u("foot_alpha", d.foot_alpha as u64).min(255) as u8,
+            hover_outline_alpha: u("hover_outline_alpha", d.hover_outline_alpha as u64).min(255) as u8,
         }
     }
 }

@@ -1,13 +1,27 @@
 #!/usr/bin/env python3
-# Writes the generated placeholder art (ART1-A): flat-shaded shapes with dark outlines in an Ashlands palette.
-#   python3 tools/gen_art.py [group ...] [--out DIR] [--list]   (default: every group, DIR = games/emberwake/assets/art)
-# Groups: characters classes items skills statuses terrain overlays region markers pins world_map backdrops menu.
-# Needs Pillow and numpy. Output is deterministic (seeded noise), so re-running rewrites identical files.
-# It writes PNGs under games/emberwake/assets/art, one folder per thing (<category>/<id>/<variant>.png, ASSETORG1),
-# which the engine reads directly. Character art keys and map templates are data edits
-# (`aegis content`); manifest rows (games/emberwake/data/assets/manifest.json) are not writable by the engine yet. Prints "wrote <path>" per group.
+# Writes the generated placeholder art (ART1-A) on the ASSETORG2 layered tree (docs/specs/ASSETORG2.md section 3):
+# flat-shaded shapes with dark outlines in an Ashlands palette.
+#   python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite] [--list]
+#   python tools/gen_art.py --compare DIR [--spot OUT]
+# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu.
+# Layers (default all): engine = engine/assets/ (the common tileset), kit = kits/rpg/assets/ (class variant bodies,
+# common portraits, item bases and generic variants, skill kind icons, statuses, map markers, UI pins, intents, badges
+# and chips), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
+# Ashlands tiles, backgrounds). DIR is a workspace root (default: this repository); the three asset roots sit under it.
+# An existing file is kept (printed "kept"): the committed art includes ART2 portraits and icons made from art_src/
+# by tools/portraits/, which these placeholders must not replace; --overwrite rewrites them.
+# The six class bodies (units/<class>/base/) and every body of tools/sprites/variants.py (SPRITE2: the goblin variants,
+# the dummy, Grakka, the Warchief, the NPCs) belong to the sprite rig (tools/sprites/export_units.py) and are never
+# written here; a body drawn here (none since SPRITE2) is a one-frame sheet.png (the 104 px figure) plus clips.json.
+# Portraits go to portraits/ (every portrait, rig body or not).
+# --compare DIR checks a regeneration (this tool and export_units.py run with --root DIR into an empty folder): the
+# same PNG paths and pixel sizes as the committed files, every body with its clips.json; --spot OUT writes committed |
+# regenerated pictures of a few bodies side by side. Pixels may drift with numpy and Pillow versions.
+# Needs Pillow and numpy. Output is deterministic (seeded noise). Prints "wrote <layer>:<path>" per file.
 import argparse
 import hashlib
+import importlib
+import json
 import math
 import os
 import sys
@@ -33,7 +47,11 @@ WOOD = "#8a6a44"
 BONE = "#e8e0c8"
 SKIN = "#d9a679"
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "games", "emberwake", "assets", "art")
+WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+GAME, KIT = "emberwake", "rpg"
+LAYERS = {"engine": ("engine", "assets"), "kit": ("kits", KIT, "assets"), "game": ("games", GAME, "assets")}
+# a placeholder body: one 104 px frame (ASSETORG2 section 8; SPRITE1-A2 replaces the class bodies with rig sheets)
+BODY_CLIPS = {"frame": [104, 104], "clips": [{"id": "idle", "frames": 1, "ms": [1000]}]}
 
 
 def rgb(h: str, a: int = 255):
@@ -98,11 +116,41 @@ class Cv:
         return self.im.resize((self.w, self.h), Image.LANCZOS)
 
 
-def save(img: Image.Image, rel: str, out: str) -> None:
-    path = os.path.join(out, rel)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    img.save(path, optimize=True)
-    print("wrote", rel)
+def layer_root(root: str, layer: str) -> str:
+    return os.path.join(root, *LAYERS[layer])
+
+
+class Out:
+    # Where files go: a workspace root, the layers to write, and whether existing files are replaced.
+    def __init__(self, root: str, layers, overwrite: bool):
+        self.root, self.layers, self.overwrite = root, set(layers), overwrite
+
+    def target(self, layer: str, rel: str):
+        if layer not in self.layers:
+            return None
+        path = os.path.join(layer_root(self.root, layer), rel)
+        if os.path.exists(path) and not self.overwrite:
+            print("kept %s:%s" % (layer, rel))
+            return None
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+
+def save(img: Image.Image, layer: str, rel: str, out: Out) -> None:
+    path = out.target(layer, rel)
+    if path:
+        img.save(path, optimize=True)
+        print("wrote %s:%s" % (layer, rel))
+
+
+def save_body(img: Image.Image, layer: str, body: str, out: Out) -> None:
+    # A placeholder body: units/<class>/<variant>/sheet.png (one idle frame) and its clips.json.
+    save(img, layer, "units/%s/sheet.png" % body, out)
+    path = out.target(layer, "units/%s/clips.json" % body)
+    if path:
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(BODY_CLIPS) + "\n")
+        print("wrote %s:units/%s/clips.json" % (layer, body))
 
 
 # ------------------------------------------------------------------------------
@@ -303,34 +351,75 @@ def figure(c: Cv, s: dict) -> None:
         c.line([(40, 96), (56, 96)], OUT, w=0.9, ol=None)
 
 
-# Keys drawn as pixel-art sprites by tools/sprites/export_units.py (SPRITE1-A); this generator leaves them alone.
-# Keep in step with SPRITE_KEYS in tools/sprites/export_units.py and the SPRITE1-A rows of games/emberwake/data/assets/manifest.json
-# (written by the Godot seed sprite1_a.gd, kept on the sprite1-a-godot branch).
-SPRITE_KEYS = {"warrior", "ranger", "brawler", "priest", "rogue", "mage", "mara_voss", "bryn_hale", "tev_quill",
-               "sella_marsh", "dagny_coal", "alda_wren", "kit_vane", "oren_dusk"}
+# Where each drawing goes on the ASSETORG2 tree (spec sections 3 and 9b; tools/assetorg2_move.py made the same move).
+# The six class bodies (<class>/base) are the sprite rig's (tools/sprites/export_units.py): only their common portraits
+# are drawn here. Party heroes and Gruk use a class or variant body: only their portraits are drawn.
+RIG_CLASSES = ("warrior", "ranger", "brawler", "priest", "rogue", "mage")
+# kit variant bodies: drawing key -> body (<class>/<variant>); their portraits are portraits/common/<class>_<variant>.png
+VARIANT_BODIES = {"goblin_brawler": "brawler/goblin", "skirmisher": "rogue/goblin", "archer": "ranger/goblin", "shaman": "priest/goblin",
+                  "berserker": "brawler/goblin_berserker", "scout": "rogue/goblin_scout", "dummy": "dummy/base"}
+# the game's named bodies: character -> class (body <class>/<character>); all on the rig since SPRITE2 (the named goblins
+# Skarn, Vex, Nok and Bolg wear their goblin body with a palette and have no body of their own)
+NAMED_BODIES = {"hest_the_quartermaster": "warrior", "brask_toller": "warrior", "wenn_tallow": "ranger", "ash_warchief": "brawler",
+                "grakka_ashmaw": "warrior"}
+# the game's unique portraits: character -> portraits/<folder>/<character>.png
+PORTRAIT_FOLDER = {"mara_voss": "heroes", "bryn_hale": "heroes", "tev_quill": "heroes", "sella_marsh": "heroes", "kit_vane": "heroes",
+                   "oren_dusk": "heroes", "alda_wren": "heroes", "dagny_coal": "heroes", "hest_the_quartermaster": "npcs",
+                   "brask_toller": "npcs", "wenn_tallow": "npcs", "skarn_ironjaw": "elites", "vex_cutpurse": "elites",
+                   "nok_flamebow": "elites", "gruk_smokecaller": "elites", "bolg_redhand": "elites", "ash_warchief": "elites",
+                   "grakka_ashmaw": "bosses"}
+# ASSETORG2 open question 3: the ash_* mobs show the goblin variants; their drawings are not written
+RETIRED = {"ash_brawler", "ash_skirmisher", "ash_archer", "ash_shaman", "ash_berserker"}
 
 
-def unit_pair(key: str, spec: dict, out: str) -> None:
-    if key in SPRITE_KEYS:
-        return
-    for variant, size in (("token", 104), ("portrait", 240)):
-        c = Cv(size)
-        if spec is None:
-            dummy(c)
-        else:
-            figure(c, spec)
-        save(c.done(), "unit/%s/%s.png" % (key, variant), out)
+def draw_figure(spec, size: int) -> Image.Image:
+    c = Cv(size)
+    if spec is None:
+        dummy(c)
+    else:
+        figure(c, spec)
+    return c.done()
 
 
-def g_characters(out: str) -> None:
-    for key, spec in CHARACTERS.items():
-        unit_pair(key, spec, out)
+def drawings():
+    # (key, spec) of every figure drawing: the characters, the class and variant figures, the dummy (spec None).
+    return list(CHARACTERS.items()) + list(CLASSES.items()) + [("dummy", None)]
 
 
-def g_classes(out: str) -> None:
-    for key, spec in CLASSES.items():
-        unit_pair(key, spec, out)
-    unit_pair("dummy", None, out)
+def check_figure_tables() -> None:
+    for key, _ in drawings():
+        known = key in RIG_CLASSES or key in VARIANT_BODIES or key in PORTRAIT_FOLDER or key in RETIRED
+        if not known:
+            sys.exit("gen_art: no ASSETORG2 place for the drawing '%s' (add it to the tables above figure())" % key)
+
+
+def rig_bodies() -> set:
+    # SPRITE2: the bodies the sprite rig writes (tools/sprites/variants.py), never written here
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprites"))
+    variants = importlib.import_module("variants")  # the rig's body list (tools/sprites/; needs Pillow like this tool)
+    return set(variants.all_bodies())
+
+
+def g_bodies(out: Out) -> None:
+    check_figure_tables()
+    rig = rig_bodies()
+    for key, spec in drawings():
+        if key in VARIANT_BODIES and VARIANT_BODIES[key] not in rig:
+            save_body(draw_figure(spec, 104), "kit", VARIANT_BODIES[key], out)
+        elif key in NAMED_BODIES and "%s/%s" % (NAMED_BODIES[key], key) not in rig:
+            save_body(draw_figure(spec, 104), "game", "%s/%s" % (NAMED_BODIES[key], key), out)
+
+
+def g_portraits(out: Out) -> None:
+    check_figure_tables()
+    for key, spec in drawings():
+        if key in RIG_CLASSES:
+            save(draw_figure(spec, 240), "kit", "portraits/common/%s_base.png" % key, out)
+        elif key in VARIANT_BODIES:
+            cls, var = VARIANT_BODIES[key].split("/")
+            save(draw_figure(spec, 240), "kit", "portraits/common/%s_%s.png" % (cls, var), out)
+        elif key in PORTRAIT_FOLDER:
+            save(draw_figure(spec, 240), "game", "portraits/%s/%s.png" % (PORTRAIT_FOLDER[key], key), out)
 
 
 # ------------------------------------------------------------------------------
@@ -592,12 +681,18 @@ SKILL_KIND = {
     "purify": "SUPPORT", "backflip": "DISENGAGE", "leap_back": "DISENGAGE", "greater_mend": "SUPPORT", "renewal": "SUPPORT",
     "shield_wall": "DEFEND", "aegis": "SUPPORT", "rejuvenate": "SUPPORT",
 }
+# the basic skills whose icon is the kit's kind icon (skills/kinds/<kind>.png); every other family is the game's
+SKILL_KIND_ICON = {"strike": "attack", "guard": "defend", "focus": "focus", "mend": "support", "backflip": "disengage", "rest": "rest",
+                   "move": "move", "switch_target": "target", "staggered": "status"}
 
 
-def g_skills(out: str) -> None:
+def g_skills(out: Out) -> None:
     for fam, glyph in SKILL_GLYPH.items():
         col = SKILL_KIND_COL[SKILL_KIND.get(fam, "ATTACK")]
-        save(glyph_icon(64, glyph, col), "skill/%s/icon.png" % fam, out)
+        if fam in SKILL_KIND_ICON:
+            save(glyph_icon(64, glyph, col), "kit", "skills/kinds/%s.png" % SKILL_KIND_ICON[fam], out)
+        else:
+            save(glyph_icon(64, glyph, col), "game", "skills/%s.png" % fam, out)
 
 
 STATUS_GLYPH = {
@@ -607,7 +702,7 @@ STATUS_GLYPH = {
 }
 
 
-def g_statuses(out: str) -> None:
+def g_statuses(out: Out) -> None:
     for sid, (glyph, kind) in STATUS_GLYPH.items():
         col = "#58b36a" if kind == "good" else "#c9503f"
         img = glyph_icon(64, glyph, col)
@@ -619,7 +714,7 @@ def g_statuses(out: str) -> None:
             gi = g.done().resize((46, 46), Image.LANCZOS)
             img = c.done()
             img.alpha_composite(gi, (9, 9))
-        save(img, "status/%s/icon.png" % sid, out)
+        save(img, "kit", "statuses/%s.png" % sid, out)
 
 
 # ------------------------------------------------------------------------------
@@ -765,14 +860,76 @@ def it_ember_brigandine(c):
         c.poly([(x, y - 6), (x + 6, y), (x, y + 6), (x - 6, y)], EMBER, w=1.4)
 
 
+# Family bases that ART2 added (their committed icons are ART2's; these placeholders fill an empty tree).
+def it_fist(c): gl_fist(c)
+
+
+def it_cloth(c):
+    c.poly([(22, 22), (40, 14), (60, 14), (78, 22), (72, 44), (70, 84), (30, 84), (28, 44)], "#6a5a7a", w=2.6)
+    c.line([(40, 14), (50, 30), (60, 14)], "#3f344a", w=3, ol=None)
+    c.rect(32, 52, 68, 58, "#c9b27a", w=1.4)
+
+
+def it_mace(c):
+    c.line([(28, 88), (60, 38)], WOOD, w=5)
+    c.ell(66, 30, 16, 16, STEEL2, w=2.4)
+    for dx, dy in ((0, -20), (20, 0), (0, 20), (-20, 0)):
+        c.poly([(66 + dx * 0.6 - 4, 30 + dy * 0.6), (66 + dx, 30 + dy), (66 + dx * 0.6 + 4, 30 + dy * 0.6)], STEEL, w=1.4)
+
+
+def it_orb(c):
+    c.poly([(34, 88), (40, 70), (60, 70), (66, 88)], WOOD, w=2.2)
+    c.ell(50, 44, 26, 26, "#5a7fd0", w=2.6)
+    c.ell(42, 36, 8, 8, "#bfe9ff", ol=None)
+
+
+def it_crossbow(c):
+    c.line([(20, 80), (70, 30)], WOOD, w=7)
+    c.arc(66, 34, 30, 135, 315, STEEL2, w=5)
+    c.line([(45, 13), (87, 55)], BONE, w=1.6, ol=None)
+    c.line([(54, 46), (84, 16)], "#c9d2dc", w=2.6)
+
+
+def it_material(c):
+    c.poly([(16, 70), (30, 42), (70, 42), (84, 70), (70, 84), (30, 84)], "#8a8a92", w=2.4)
+    c.poly([(30, 42), (70, 42), (62, 56), (38, 56)], "#b0b0b8", ol=None)
+    c.ell(56, 66, 6, 5, GOLD, ol=None)
+
+
+def it_quest(c):
+    c.rect(24, 22, 76, 78, "#e6dcc0", w=2.4, r=3)
+    c.ell(24, 50, 8, 28, "#cbbf9f", w=2)
+    c.ell(76, 50, 8, 28, "#cbbf9f", w=2)
+    c.ell(50, 62, 9, 9, BLOOD, w=1.6)
+    for y in (34, 44):
+        c.line([(36, y), (64, y)], "#6a5a46", w=2, ol=None)
+
+
+def it_battle_axe(c):
+    c.line([(28, 88), (64, 28)], WOOD, w=5)
+    c.poly([(54, 14), (82, 22), (78, 50), (60, 40)], STEEL, w=1.8)
+    c.poly([(54, 14), (40, 30), (48, 52), (60, 40)], STEEL2, w=1.8)
+
+
 ITEM_KEYS = ["sword", "greatsword", "shortsword", "dagger", "hammer", "axe", "bow", "staff", "wand", "tome", "knuckles", "shield", "plate",
-             "leather", "robe", "ring", "amulet", "potion", "elixir", "bomb", "weapon", "misc", "titan_warhammer", "runed_staff", "ember_brigandine"]
+             "leather", "robe", "ring", "amulet", "potion", "elixir", "bomb", "weapon", "misc", "titan_warhammer", "runed_staff", "ember_brigandine",
+             "fist", "cloth", "mace", "orb", "crossbow", "material", "quest", "battle_axe"]
 ITEM_FRAME = {"titan_warhammer": GOLD, "runed_staff": "#9a7fe0", "ember_brigandine": EMBER, "potion": "#8a4a4a", "elixir": "#4a6a8a"}
+# drawing -> (layer, path under items/ without .png): family bases, the kit's generic variants, the game's named items
+ITEM_PATHS = {k: ("kit", k + "/base") for k in ("sword", "dagger", "hammer", "axe", "bow", "staff", "wand", "tome", "shield", "plate",
+                                                 "leather", "fist", "cloth", "mace", "orb", "crossbow", "material", "quest")}
+ITEM_PATHS.update({k: ("kit", v) for k, v in {
+    "knuckles": "fist/knuckles", "robe": "cloth/robe", "greatsword": "sword/greatsword", "shortsword": "sword/shortsword",
+    "battle_axe": "axe/battle_axe", "ring": "accessory/base", "amulet": "accessory/amulet", "potion": "consumable/base",
+    "elixir": "consumable/elixir", "bomb": "consumable/bomb", "weapon": "any/weapon", "misc": "any/base"}.items()})
+ITEM_PATHS.update({"titan_warhammer": ("game", "hammer/titan_warhammer"), "runed_staff": ("game", "staff/runed_staff"),
+                   "ember_brigandine": ("game", "leather/ember_brigandine")})
 
 
-def g_items(out: str) -> None:
+def g_items(out: Out) -> None:
     for k in ITEM_KEYS:
-        save(item_img(globals()["it_" + k], ITEM_FRAME.get(k, "#6d7684")), "item/%s/icon.png" % k, out)
+        layer, rel = ITEM_PATHS[k]
+        save(item_img(globals()["it_" + k], ITEM_FRAME.get(k, "#6d7684")), layer, "items/%s.png" % rel, out)
 
 
 # ------------------------------------------------------------------------------
@@ -887,10 +1044,10 @@ def terrain_tile(name: str, v: int) -> Image.Image:
     return img
 
 
-def g_terrain(out: str) -> None:
+def g_terrain(out: Out) -> None:
     for name in TERRAIN:
         for v in range(4):
-            save(terrain_tile(name, v), "tile/%s/v%d.png" % (name, v), out)
+            save(terrain_tile(name, v), "engine", "tilesets/common/%s/v%d.png" % (name, v), out)
 
 
 def marker(kind: str, size: int = 32) -> Image.Image:
@@ -949,14 +1106,14 @@ def marker(kind: str, size: int = 32) -> Image.Image:
 OVERLAYS = ["npc", "chest", "chest_open", "lore", "exit", "exit_locked", "encounter", "roamer", "poi", "objective"]
 
 
-def g_overlays(out: str) -> None:
+def g_overlays(out: Out) -> None:
     for k in OVERLAYS:
-        save(marker(k), "tile/overlay_%s/v0.png" % k, out)
+        save(marker(k), "kit", "map/markers/%s.png" % k, out)
 
 
-def g_markers(out: str) -> None:
+def g_markers(out: Out) -> None:
     for k in ("quest", "ready"):
-        save(marker("badge_" + k), "ui/badge_%s/icon.png" % k, out)
+        save(marker("badge_" + k), "kit", "ui/badges/%s.png" % k, out)
 
 
 # ART2-A: intent kind chips (hostile-red rim), foresight/slay/guest chips, one 32 px each (ui namespace).
@@ -1029,13 +1186,13 @@ def flee_chip(size: int = 32) -> Image.Image:
     return base
 
 
-def g_chips(out: str) -> None:
+def g_chips(out: Out) -> None:
     for k, fn in CHIP_GLYPHS.items():
         img = flee_chip() if k == "flee" else chip(fn, HOSTILE)
-        save(img, "ui/intent_%s/icon.png" % k, out)
-    save(chip(gl_eye, GOLD, "#1d1810"), "ui/badge_foresight/icon.png", out)
-    save(chip(cg_crown, GOLD, "#1d1810"), "ui/chip_slay/icon.png", out)
-    save(chip(cg_guest, "#4f9ad0", "#101a22"), "ui/chip_guest/icon.png", out)
+        save(img, "kit", "ui/intents/%s.png" % k, out)
+    save(chip(gl_eye, GOLD, "#1d1810"), "kit", "ui/badges/foresight.png", out)
+    save(chip(cg_crown, GOLD, "#1d1810"), "kit", "ui/chips/slay.png", out)
+    save(chip(cg_guest, "#4f9ad0", "#101a22"), "kit", "ui/chips/guest.png", out)
 
 
 # ------------------------------------------------------------------------------
@@ -1089,9 +1246,13 @@ def region_tiles() -> dict:
     return t
 
 
-def g_region(out: str) -> None:
+REGION_TILE_NAMES = {"ash_floor": "floor", "basalt_wall": "wall", "water": "shallow_water"}   # region map characters . # ~
+
+
+def g_region(out: Out) -> None:
     for k, im in region_tiles().items():
-        save(im, "ui/region_%s/icon.png" % k, out)
+        name, n = k.rsplit("_", 1)
+        save(im, "game", "tilesets/ashlands/%s/v%s.png" % (REGION_TILE_NAMES.get(name, name), n), out)
 
 
 # ------------------------------------------------------------------------------
@@ -1123,9 +1284,9 @@ def pin(kind: str) -> Image.Image:
     return c.done()
 
 
-def g_pins(out: str) -> None:
+def g_pins(out: Out) -> None:
     for k in ("fortress", "town", "camp", "ruin", "gate", "wild", "here"):
-        save(pin(k), "ui/pin_%s/icon.png" % k, out)
+        save(pin(k), "kit", "ui/pins/%s.png" % k, out)
 
 
 # ------------------------------------------------------------------------------
@@ -1206,7 +1367,7 @@ def tent(d, x, y, s, col="#6a5240"):
     d.polygon([(x - 8 * s, y), (x, y - 22 * s), (x + 8 * s, y)], fill=rgb("#1a120c"))
 
 
-def g_world_map(out: str) -> None:
+def g_world_map(out: Out) -> None:
     rng = np.random.default_rng(seed_of("world"))
     W, H = 1920, 1080
     img = to_img(vgrad(W, H, "#3a3a3e", "#2a2420"))
@@ -1253,14 +1414,14 @@ def g_world_map(out: str) -> None:
         d.line([(x, y), (x + int(rng.integers(-6, 6)), y - int(rng.integers(8, 18)))], fill=rgb("#14100c", 160), width=2)
     embers(img, rng, 90)
     img = vignette(img, 0.6)
-    save(img, "ui/ashlands_world_map/background.png", out)
+    save(img, "game", "backgrounds/world_map/ashlands.png", out)
 
 
 def sky(w, h, top, bot, rng):
     return blotch(to_img(vgrad(w, h, top, bot)), rng, 14)
 
 
-def g_backdrops(out: str) -> None:
+def g_backdrops(out: Out) -> None:
     W, H = 1280, 720
     # Warden Keep: stone hall with a hearth
     rng = np.random.default_rng(1)
@@ -1281,7 +1442,7 @@ def g_backdrops(out: str) -> None:
         d.polygon([(bx, 80), (bx + 120, 80), (bx + 120, 300), (bx + 60, 340), (bx, 300)], fill=rgb(BLOOD), outline=rgb(OUT))
         d.ellipse([bx + 40, 150, bx + 80, 190], fill=rgb(EMBER))
     embers(img, rng, 40)
-    save(vignette(img, 0.7), "ui/warden_keep/background.png", out)
+    save(vignette(img, 0.7), "game", "backgrounds/location/warden_keep.png", out)
     # Ruined courtyard: broken arches under an ember sky
     rng = np.random.default_rng(2)
     img = sky(W, H, "#3a2a2a", "#7a4a30", rng)
@@ -1301,7 +1462,7 @@ def g_backdrops(out: str) -> None:
         d.polygon([(x, y), (x + 30, y - 6), (x + 36, y + 14), (x + 4, y + 18)], fill=rgb("#3a3532"), outline=rgb(OUT))
     glow(img, 900, 160, 200, EMBER, 100)
     embers(img, rng, 70)
-    save(vignette(img, 0.6), "ui/ruined_courtyard/background.png", out)
+    save(vignette(img, 0.6), "game", "backgrounds/location/ruined_courtyard.png", out)
     # Cinder Gate: collapsed toll arch over the gorge
     rng = np.random.default_rng(3)
     img = sky(W, H, "#241c26", "#8a4a2a", rng)
@@ -1317,7 +1478,7 @@ def g_backdrops(out: str) -> None:
         d.polygon([(x, y), (x + 40, y - 10), (x + 48, y + 20), (x + 6, y + 26)], fill=rgb("#3a3538"), outline=rgb(OUT))
     glow(img, 640, 640, 220, EMBER, 120)
     embers(img, rng, 60)
-    save(vignette(img, 0.6), "ui/cinder_gate/background.png", out)
+    save(vignette(img, 0.6), "game", "backgrounds/location/cinder_gate.png", out)
     # Ashmaw Camp: hide tents around fires on the wastes
     rng = np.random.default_rng(4)
     img = sky(W, H, "#2a2224", "#6a4230", rng)
@@ -1335,10 +1496,10 @@ def g_backdrops(out: str) -> None:
         d.line([(px, 380), (px, 560)], fill=rgb("#3a2a1e"), width=6)
         d.polygon([(px, 380), (px + 60, 394), (px, 420)], fill=rgb(BLOOD))
     embers(img, rng, 90)
-    save(vignette(img, 0.6), "ui/ashmaw_camp/background.png", out)
+    save(vignette(img, 0.6), "game", "backgrounds/location/ashmaw_camp.png", out)
 
 
-def g_menu(out: str) -> None:
+def g_menu(out: Out) -> None:
     rng = np.random.default_rng(7)
     W, H = 1920, 1080
     img = sky(W, H, "#120f16", "#4a2418", rng)
@@ -1350,7 +1511,7 @@ def g_menu(out: str) -> None:
     ridge(img, rng, 850, 50, "#100d10", 90, None)
     ridge(img, rng, 980, 30, "#0a080b", 80, None)
     embers(img, rng, 220)
-    save(vignette(img, 0.7), "ui/main_menu/background.png", out)
+    save(vignette(img, 0.7), "game", "backgrounds/menu/main_menu.png", out)
     # title card
     rng = np.random.default_rng(8)
     img = sky(1280, 360, "#160f14", "#3a1a12", rng)
@@ -1371,29 +1532,118 @@ def g_menu(out: str) -> None:
     sub = "The Ember Wardens"
     sw = d.textlength(sub, font=small)
     d.text(((1280 - sw) / 2, 250), sub, font=small, fill=rgb(EMBER2))
-    save(img, "ui/ashlands_title/background.png", out)
+    save(img, "game", "backgrounds/title/ashlands.png", out)
 
 
 GROUPS = {
-    "characters": g_characters, "classes": g_classes, "items": g_items, "skills": g_skills, "statuses": g_statuses,
+    "bodies": g_bodies, "portraits": g_portraits, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
     "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
 }
 
 
+# ------------------------------------------------------------------------------
+# Regeneration check (ASSETORG2-T): paths and pixel sizes of a regenerated tree against the committed one
+# ------------------------------------------------------------------------------
+
+SPOT_BODIES = ["kit:units/warrior/base", "kit:units/mage/base", "kit:units/brawler/goblin", "game:units/warrior/grakka_ashmaw"]
+
+
+def generated_files(root: str) -> dict:
+    # "<layer>:<rel>" -> what must match: a PNG's pixel size, a clips.json's frame and clip ids with frame counts.
+    found = {}
+    for layer in LAYERS:
+        base = layer_root(root, layer)
+        for dp, _, fn in os.walk(base):
+            for f in fn:
+                p = os.path.join(dp, f)
+                rel = os.path.relpath(p, base).replace(os.sep, "/")
+                if f.endswith(".png"):
+                    with Image.open(p) as im:
+                        found[layer + ":" + rel] = im.size
+                elif f == "clips.json":
+                    with open(p, encoding="utf-8") as fh:
+                        c = json.load(fh)
+                    found[layer + ":" + rel] = (tuple(c["frame"]), tuple((k["id"], k["frames"]) for k in c["clips"]))
+    return found
+
+
+def same_bytes(a: str, b: str) -> bool:
+    with open(a, "rb") as fa, open(b, "rb") as fb:
+        return fa.read() == fb.read()
+
+
+def same_pixels(a: str, b: str) -> bool:
+    with Image.open(a) as ia, Image.open(b) as ib:
+        pa, pb = ia.convert("RGBA"), ib.convert("RGBA")
+        return pa.size == pb.size and pa.tobytes() == pb.tobytes()
+
+
+def spot(regen: str, folder: str) -> None:
+    # committed | regenerated, each body's sheet at 3x on the rig's preview background
+    os.makedirs(folder, exist_ok=True)
+    for key in SPOT_BODIES:
+        layer, rel = key.split(":")
+        pics = []
+        for root in (WORKSPACE, regen):
+            p = os.path.join(layer_root(root, layer), rel, "sheet.png")
+            pics.append(Image.open(p).convert("RGBA") if os.path.exists(p) else Image.new("RGBA", (104, 104), (90, 0, 0, 255)))
+        w = max(p.width for p in pics) * 3
+        h = max(p.height for p in pics) * 3
+        board = Image.new("RGBA", (w * 2 + 24, h + 16), rgb("#2e342c"))
+        for i, p in enumerate(pics):
+            board.alpha_composite(p.resize((p.width * 3, p.height * 3), Image.NEAREST), (8 + i * (w + 8), 8))
+        path = os.path.join(folder, "spot_%s.png" % rel.replace("units/", "").replace("/", "_"))
+        board.save(path)
+        print("spot", path)
+
+
+def compare(regen: str) -> int:
+    want, got = generated_files(WORKSPACE), generated_files(regen)
+    missing = sorted(set(want) - set(got))
+    extra = sorted(set(got) - set(want))
+    both = sorted(set(want) & set(got))
+    sizes = [k for k in both if want[k] != got[k]]
+    pngs = [k for k in both if k.endswith(".png")]
+    pairs = [(os.path.join(layer_root(WORKSPACE, k.split(":")[0]), k.split(":", 1)[1]),
+              os.path.join(layer_root(regen, k.split(":")[0]), k.split(":", 1)[1])) for k in pngs]
+    identical = sum(1 for a, b in pairs if same_bytes(a, b))
+    pixels = sum(1 for a, b in pairs if same_pixels(a, b))
+    for k in missing:
+        print("missing (committed, not regenerated):", k)
+    for k in extra:
+        print("extra (regenerated, not committed):", k)
+    for k in sizes:
+        print("differs:", k, "committed", want[k], "regenerated", got[k])
+    print("committed %d, regenerated %d: paths %s (%d missing, %d extra), sizes %s (%d differ); of %d PNGs %d pixel-identical, "
+          "%d byte-identical (the rest: ART2 art over the placeholders, or drift)"
+          % (len(want), len(got), "match" if not missing and not extra else "DIFFER", len(missing), len(extra),
+             "match" if not sizes else "DIFFER", len(sizes), len(pngs), pixels, identical))
+    return 1 if missing or extra or sizes else 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("groups", nargs="*")
-    ap.add_argument("--out", default=ROOT)
+    ap.add_argument("--layer", action="append", choices=list(LAYERS), help="write only these layers (default all)")
+    ap.add_argument("--root", default=WORKSPACE, help="workspace root holding engine/assets, kits/rpg/assets, games/emberwake/assets")
+    ap.add_argument("--overwrite", action="store_true", help="replace existing files (default: keep them)")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--compare", metavar="DIR", help="check a regenerated workspace root against the committed files")
+    ap.add_argument("--spot", metavar="OUT", help="with --compare: write committed | regenerated body sheets to OUT")
     a = ap.parse_args()
     if a.list:
         print(" ".join(GROUPS))
         return
+    if a.compare:
+        if a.spot:
+            spot(a.compare, a.spot)
+        sys.exit(compare(a.compare))
+    out = Out(a.root, a.layer or list(LAYERS), a.overwrite)
     for g in a.groups or list(GROUPS):
         if g not in GROUPS:
             sys.exit("unknown group " + g)
-        GROUPS[g](a.out)
+        GROUPS[g](out)
 
 
 if __name__ == "__main__":

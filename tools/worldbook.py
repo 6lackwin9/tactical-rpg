@@ -119,8 +119,11 @@ def world_section(wid, units):
         out += ["### Story fights", "", "| Fight | Where | With the party | Against | Objective | Notes |", "| --- | --- | --- | --- | --- | --- |"]
         for e in encs:
             notes = []
-            if e.get("phases"): notes.append(f"{len(e['phases'])} phases")
-            if e.get("wave_units"): notes.append("reinforcements")
+            # PHASEFOLD: the reinforcement wave is an "arrival" phase (rows not yet re-saved still hold wave_units)
+            arrival = [p for p in e.get("phases", []) if isinstance(p, dict) and (p.get("trigger") or {}).get("kind") == "arrival"]
+            boss = len(e.get("phases", [])) - len(arrival)
+            if boss: notes.append(f"{boss} phases")
+            if e.get("wave_units") or arrival: notes.append("reinforcements")
             if e.get("morale"): notes.append("morale")
             if e.get("guests"): notes.append("guests " + ", ".join(name.get(g, g) for g in e["guests"]))
             obj = e.get("objective") or "defeat"

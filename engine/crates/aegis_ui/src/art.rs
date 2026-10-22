@@ -2,10 +2,14 @@
 //! read-only, scaled to pixel size and cached. A file is named by its path relative to a layer root (`image`), a
 //! body by its key (`<class>` or `<class>/<variant>`: a sheet of clips, `body_frame`, `body_token`, with an optional
 //! palette), a tile by its set chain (`tile_in`, variants by the files present). The game names the files through
-//! its own lookup chains (ASSETORG2 section 4).
+//! its own lookup chains (ASSETORG2 section 4). SPRITE1-L: a body's clips play by time (`played` over an
+//! `aegis_core::assets::ClipPlayer`), a frame's silhouette outline is cached (`body_outline`, highlights) and a body
+//! is checked frame by frame (`body_problems`); `played`, `body_outline` and `body_clip_flipped` take a `flip` to
+//! show a frame mirrored (a sheet facing right drawn facing left). PROPS1-E: a file's own size (`size_of`), mirrored images
+//! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps).
 
-use crate::canvas::Image;
-use aegis_core::assets::{self, Clips, Layers};
+use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
+use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -15,14 +19,25 @@ struct Body {
     clips: Clips,
 }
 
+/// (body key, palette id, clip, frame, size, flipped) of a cached fitted frame.
+type FrameKey = (String, String, String, u32, i32, bool);
+/// (body key, palette id, clip, frame, size, colour, flipped) of a cached outline.
+type OutlineKey = (String, String, String, u32, i32, Rgba, bool);
+
 pub struct Art {
     layers: Layers,
     /// (rel, w, h) -> the scaled image.
     files: HashMap<(String, i32, i32), Option<Image>>,
     /// (body key, palette id) -> the body.
     bodies: HashMap<(String, String), Option<Body>>,
-    /// (body key, palette id, clip, frame, size) -> the scaled frame.
-    frames: HashMap<(String, String, String, u32, i32), Option<Image>>,
+    /// (body key, palette id, clip, frame, size, flipped) -> the scaled frame (mirrored left to right when flipped).
+    frames: HashMap<FrameKey, Option<Image>>,
+    /// (body key, palette id, clip, frame, size, colour, flipped) -> the frame's silhouette outline.
+    outlines: HashMap<OutlineKey, Option<Image>>,
+    /// (rel, w, h) -> the scaled image mirrored left to right.
+    mirrors: HashMap<(String, i32, i32), Option<Image>>,
+    /// rel -> the PNG's own size.
+    sizes: HashMap<String, Option<(i32, i32)>>,
     /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
     present: HashMap<String, bool>,
     variant_counts: HashMap<String, usize>,
@@ -55,7 +70,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -93,6 +108,26 @@ impl Art {
             self.files.insert(key.clone(), img);
         }
         self.files.get(&key).and_then(|i| i.as_ref())
+    }
+
+    /// `image` mirrored left to right (cached apart).
+    pub fn image_mirrored(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
+        let key = (rel.to_string(), w, h);
+        if !self.mirrors.contains_key(&key) {
+            let img = self.image(rel, w, h).map(|i| i.mirrored());
+            self.mirrors.insert(key.clone(), img);
+        }
+        self.mirrors.get(&key).and_then(|i| i.as_ref())
+    }
+
+    /// The pixel size of the PNG at `rel` (in the first layer holding it) as stored, read from its header; cached.
+    pub fn size_of(&mut self, rel: &str) -> Option<(i32, i32)> {
+        if let Some(&s) = self.sizes.get(rel) {
+            return s;
+        }
+        let size = self.layers.find(rel).and_then(|p| png_size(&p));
+        self.sizes.insert(rel.to_string(), size);
+        size
     }
 
     /// The first of `rels` a layer holds (a lookup chain), downsampled to `w` x `h`; when none is there, the trail
@@ -163,8 +198,19 @@ impl Art {
     /// Frame `n` of `clip` fitted to a `size` square (spec 4.1): scaled by k = floor(size / max(w, h)) with nearest
     /// pixels (downsampled when k is 0), centred across and standing on the bottom edge.
     pub fn body_clip(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32) -> Option<&Image> {
-        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size);
+        self.body_clip_flipped(key, palette, clip, n, size, false)
+    }
+
+    /// `body_clip`, mirrored left to right when `flip` (a sheet drawn facing one way shown facing the other; the
+    /// fitted square is mirrored, so the figure stays on its spot). Cached apart.
+    pub fn body_clip_flipped(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, flip: bool) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, flip);
         if !self.frames.contains_key(&k) {
+            if flip {
+                let img = self.body_clip_flipped(key, palette, clip, n, size, false).map(|f| f.mirrored());
+                self.frames.insert(k.clone(), img);
+                return self.frames.get(&k).and_then(|i| i.as_ref());
+            }
             let img = self.body_frame(key, palette, clip, n).map(|f| {
                 let scale = size / f.w.max(f.h).max(1);
                 let fitted = if scale >= 1 {
@@ -185,14 +231,111 @@ impl Art {
         self.body_clip(key, palette, "idle", 0, size)
     }
 
-    /// Tile `tile` from the first set of `sets` a layer holds (`tilesets/<set>/<tile>/v0.png`); the variant is
-    /// (x x 7 + y x 13) mod n over that layer's v0..v(n-1).
-    pub fn tile_in(&mut self, sets: &[&str], tile: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
-        let (dir, n) = sets.iter().map(|s| format!("tilesets/{s}/{tile}")).map(|d| (d.clone(), self.variants(&d))).find(|(_, n)| *n > 0)?;
-        let v = (x * 7 + y * 13).rem_euclid(n as i32);
-        self.image(&format!("{dir}/v{v}.png"), size, size)
+    /// The first body of `keys` that loads (a body chain).
+    pub fn first_body(&mut self, keys: &[String]) -> Option<String> {
+        keys.iter().find(|k| self.has_body(k)).cloned()
     }
 
+    /// Body `key`'s clips (None: the body does not load).
+    pub fn clips(&mut self, key: &str) -> Option<&Clips> {
+        self.body(key, "").map(|b| &b.clips)
+    }
+
+    /// Whether body `key` has its own clip `clip` (no fallback).
+    pub fn has_clip(&mut self, key: &str, clip: &str) -> bool {
+        self.clips(key).is_some_and(|c| c.row(clip).is_some())
+    }
+
+    /// The frame `player` shows at `now` (SPRITE1-L: the shot or the base loop, missing clips falling back to `idle`),
+    /// fitted to a `size` square like `body_clip` (mirrored left to right when `flip`), and which frame it is.
+    pub fn played(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, flip: bool) -> Option<(ClipFrame, &Image)> {
+        let f = player.frame(self.clips(key)?, now)?;
+        let img = self.body_clip_flipped(key, palette, &f.clip, f.frame, size, flip)?;
+        Some((f, img))
+    }
+
+    /// The silhouette outline (`Image::outline`, `col`) of frame `n` of `clip` in a `size` square; (size + 2) square,
+    /// drawn one pixel up and left of the frame; of the mirrored frame when `flip` (as `played` draws it). Cached.
+    #[allow(clippy::too_many_arguments)]
+    pub fn body_outline(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba, flip: bool) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col, flip);
+        if !self.outlines.contains_key(&k) {
+            let img = self.body_clip_flipped(key, palette, clip, n, size, flip).map(|f| f.outline(col));
+            self.outlines.insert(k.clone(), img);
+        }
+        self.outlines.get(&k).and_then(|i| i.as_ref())
+    }
+
+    /// What is wrong with body `key` (empty: it loads and every clip frame holds pixels): clips.json problems, a sheet
+    /// too small for the clips, frames with no solid pixel (`blank_frames`).
+    pub fn body_problems(&mut self, key: &str) -> Vec<String> {
+        let Some(v) = assets::read_json(&self.layers, &assets::body_file(key, "clips.json")) else {
+            return vec![format!("{} is missing or not JSON.", assets::body_file(key, "clips.json"))];
+        };
+        let clips = match Clips::parse(&v) {
+            Ok(c) => c,
+            Err(p) => return p,
+        };
+        let Some(sheet) = self.layers.find(&assets::body_file(key, "sheet.png")).and_then(|p| load_png(&p)) else {
+            return vec![format!("{} is missing or not a PNG.", assets::body_file(key, "sheet.png"))];
+        };
+        let size = clips.sheet_problem(sheet.w as u32, sheet.h as u32);
+        if !size.is_empty() {
+            return vec![size];
+        }
+        blank_frames(&clips, &sheet).into_iter().map(|(clip, n)| format!("clip '{clip}' frame {n} is empty.")).collect()
+    }
+
+    /// The file a variant pick over `dirs` names: the first folder holding `v0.png` in any layer, then `variant`
+    /// (at or above that layer's count n: `v0`) or, with None, (x x 7 + y x 13) mod n (Euclidean). None: no folder
+    /// has a `v0.png`.
+    pub fn pick(&mut self, dirs: &[&str], variant: Option<u32>, x: i32, y: i32) -> Option<String> {
+        let (dir, n) = dirs.iter().map(|d| (*d, self.variants(d))).find(|(_, n)| *n > 0)?;
+        let v = match variant {
+            Some(v) if (v as usize) < n => v as i32,
+            Some(_) => 0,
+            None => (x * 7 + y * 13).rem_euclid(n as i32),
+        };
+        Some(format!("{dir}/v{v}.png"))
+    }
+
+    /// The image of `pick` (`dirs`, `variant`, `x`, `y`) downsampled to `w` x `h`.
+    pub fn varied(&mut self, dirs: &[&str], variant: Option<u32>, x: i32, y: i32, w: i32, h: i32) -> Option<&Image> {
+        let rel = self.pick(dirs, variant, x, y)?;
+        self.image(&rel, w, h)
+    }
+
+    /// Tile `tile` from the first set of `sets` a layer holds (`tilesets/<set>/<tile>/v0.png`); the variant is
+    /// (x x 7 + y x 13) mod n over that layer's v0..v(n-1) (`varied` by position).
+    pub fn tile_in(&mut self, sets: &[&str], tile: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
+        let dirs: Vec<String> = sets.iter().map(|s| format!("tilesets/{s}/{tile}")).collect();
+        let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+        self.varied(&dirs, None, x, y, size, size)
+    }
+
+}
+
+/// A PNG's width and height from its header (None: not a readable PNG).
+pub fn png_size(path: &Path) -> Option<(i32, i32)> {
+    let file = std::fs::File::open(path).ok()?;
+    let reader = png::Decoder::new(std::io::BufReader::new(file)).read_info().ok()?;
+    let info = reader.info();
+    Some((info.width as i32, info.height as i32))
+}
+
+/// The frames of `sheet` (laid out by `clips`) with no pixel at `OUTLINE_ALPHA` or above: (clip, frame), sheet order.
+pub fn blank_frames(clips: &Clips, sheet: &Image) -> Vec<(String, u32)> {
+    let (w, h) = (clips.frame.0 as i32, clips.frame.1 as i32);
+    let mut out = Vec::new();
+    for (row, c) in clips.clips.iter().enumerate() {
+        for n in 0..c.frames {
+            let f = sheet.crop(n as i32 * w, row as i32 * h, w, h);
+            if !f.px.iter().skip(3).step_by(4).any(|a| *a >= OUTLINE_ALPHA) {
+                out.push((c.id.clone(), n));
+            }
+        }
+    }
+    out
 }
 
 /// The game folder at or above `start` (the first holding game.json and assets/).

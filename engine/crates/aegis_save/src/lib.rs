@@ -2,7 +2,8 @@
 //! per slot ({format, version, saved_at, game_state}). Writes go to a temp file then rename; reads parse, check the
 //! format tag and run the migration runner, which brings an older envelope up to the current version one step at a
 //! time. The game supplies its `Format` (tag, version, slots, state keys) and the steps; the engine knows nothing of
-//! the state's shape (docs/specs/SPLIT1.md section 2).
+//! the state's shape (docs/specs/SPLIT1.md section 2). Engine-only addition (PLAYUI1 section 1): slot locks in a
+//! `locks.json` beside the saves; `write` and `delete` refuse a locked slot.
 
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
@@ -68,8 +69,69 @@ pub fn exists(dir: &Path, slot: i64) -> bool {
     path_for(dir, slot).is_file()
 }
 
-pub fn delete(dir: &Path, slot: i64) -> bool {
-    exists(dir, slot) && std::fs::remove_file(path_for(dir, slot)).is_ok()
+/// Deletes a slot's save; refused while the slot is locked (`set_locked`).
+pub fn delete(dir: &Path, slot: i64) -> Result<(), String> {
+    if !exists(dir, slot) {
+        return Err(format!("No save in slot {slot}."));
+    }
+    if is_locked(dir, slot) {
+        return Err(locked_text(slot));
+    }
+    std::fs::remove_file(path_for(dir, slot)).map_err(|_| format!("Slot {slot} could not be deleted."))
+}
+
+// ---- Slot locks (PLAYUI1 section 1): a sidecar file beside the saves, so a lock never rewrites a save ----------
+
+/// The lock file in a save folder: `{"locked": [<slot>, ...]}` (sorted, unique, manual slots only).
+pub const LOCKS_FILE: &str = "locks.json";
+
+fn locked_text(slot: i64) -> String {
+    format!("Slot {slot} is locked.")
+}
+
+/// The slots listed in `<dir>/locks.json`; a missing or unreadable file lists none.
+fn listed_locks(dir: &Path) -> Vec<i64> {
+    let text = std::fs::read_to_string(dir.join(LOCKS_FILE)).unwrap_or_default();
+    match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(o)) => json::aget(&o, "locked").iter().filter(|v| v.is_number()).map(json::to_int).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Whether `slot` is locked: listed in the lock file while its save file exists (a stale entry counts for nothing).
+pub fn is_locked(dir: &Path, slot: i64) -> bool {
+    exists(dir, slot) && listed_locks(dir).contains(&slot)
+}
+
+/// Locks or unlocks a manual slot's save. Locking needs a save in the slot; the autosave (`fmt.first_slot`) is never
+/// locked. Every write of the lock file drops stale entries (slots without a save, slots outside the manual range);
+/// `write` into an empty slot drops that slot's stale entry too.
+pub fn set_locked(fmt: &Format, dir: &Path, slot: i64, on: bool) -> Result<(), String> {
+    if slot == fmt.first_slot {
+        return Err("The autosave can't be locked.".into());
+    }
+    if !(fmt.first_slot + 1..=fmt.last_slot).contains(&slot) {
+        return Err(format!("Save slot must be {}-{}.", fmt.first_slot + 1, fmt.last_slot));
+    }
+    if on && !exists(dir, slot) {
+        return Err(format!("No save in slot {slot}."));
+    }
+    let mut locked: Vec<i64> = listed_locks(dir).into_iter().filter(|s| *s != slot && (fmt.first_slot + 1..=fmt.last_slot).contains(s) && exists(dir, *s)).collect();
+    if on {
+        locked.push(slot);
+    }
+    locked.sort_unstable();
+    locked.dedup();
+    if locked.is_empty() && !dir.join(LOCKS_FILE).exists() {
+        return Ok(());
+    }
+    let text = serde_json::to_string_pretty(&serde_json::json!({ "locked": locked })).unwrap_or_default();
+    let (path, tmp) = (dir.join(LOCKS_FILE), dir.join(format!("{LOCKS_FILE}.fc_tmp")));
+    if std::fs::write(&tmp, text).is_err() || std::fs::rename(&tmp, &path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("Can't write '{}'.", path.display()));
+    }
+    Ok(())
 }
 
 fn now() -> i64 {
@@ -82,10 +144,18 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
     if !(fmt.first_slot..=fmt.last_slot).contains(&slot) {
         return vec![format!("Save slot must be {}-{}.", fmt.first_slot, fmt.last_slot)];
     }
+    // The autosave is never locked, even by a hand-edited lock file.
+    if slot != fmt.first_slot && is_locked(dir, slot) {
+        return vec![locked_text(slot)];
+    }
     let state = match state() {
         Ok(state) => state,
         Err(errors) => return errors,
     };
+    // A stale lock (its save went outside the engine) must not lock the new save: drop it first.
+    if !exists(dir, slot) && slot != fmt.first_slot && listed_locks(dir).contains(&slot) {
+        let _ = set_locked(fmt, dir, slot, false);
+    }
     let envelope = json::obj([
         ("format", fmt.tag.into()),
         ("version", int(fmt.version)),
@@ -245,7 +315,8 @@ mod tests {
         assert_eq!(open(&FMT, "{\"format\": \"other\"}").unwrap_err(), vec!["Not a save file (format 'other').".to_string()]);
         assert_eq!(open(&FMT, "{").unwrap_err(), vec!["Save file is corrupt or truncated.".to_string()]);
         assert_eq!(newest_slot(&FMT, |s| if let Peek::Found(e) = peek(&FMT, &dir, s) { Some(json::i(&e, "saved_at", 0)) } else { None }), 2);
-        assert!(delete(&dir, 2) && !exists(&dir, 2));
+        assert!(delete(&dir, 2).is_ok() && !exists(&dir, 2));
+        assert_eq!(delete(&dir, 2), Err("No save in slot 2.".to_string()));
         assert_eq!(read(&dir, 2).unwrap_err(), vec!["No save in slot 2.".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }

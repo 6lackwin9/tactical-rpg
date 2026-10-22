@@ -12,7 +12,7 @@ use aegis_save::{Format, Peek};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-pub use aegis_save::{delete, exists, path_for};
+pub use aegis_save::{delete, exists, is_locked, path_for};
 
 pub const VERSION: i64 = 12;
 pub const FORMAT: &str = "fc_save";
@@ -40,6 +40,12 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
             Err(errors)
         }
     })
+}
+
+/// Locks or unlocks a manual slot's save (`aegis_save::set_locked`: the autosave is never locked; a locked slot
+/// refuses `write` and `delete`).
+pub fn set_locked(dir: &Path, slot: i64, on: bool) -> Result<(), String> {
+    aegis_save::set_locked(&SAVES, dir, slot, on)
 }
 
 pub struct Loaded {

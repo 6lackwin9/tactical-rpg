@@ -2,8 +2,8 @@
 //! judged on its own (a UI Gallery's "Kit widgets" entry). Game-agnostic: the gallery screen keeps a `Specimens`,
 //! wraps `KitAct` in its own action and forwards drops and text changes to it.
 
-use crate::canvas::{Rect, Rgba};
-use crate::ui::{tip, Ui, BODY, DIM, GOLD, GOOD, INFO, SMALL, TEXT};
+use crate::canvas::{Image, Rect, Rgba};
+use crate::ui::{tip, Glyph, Ui, BODY, DIM, GOLD, GOOD, INFO, SMALL, TEXT};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KitAct {
@@ -16,6 +16,11 @@ pub enum KitAct {
     Card(usize),
     Row(usize),
     Close,
+    /// The lock icon button (toggles), any other icon button (its name).
+    Lock,
+    Icon(&'static str),
+    /// The collapsible section header.
+    Fold,
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
@@ -33,6 +38,11 @@ pub struct Specimens {
     pub card: usize,
     pub row: usize,
     pub text: String,
+    /// The text area's sample (the kit's text editor, PLAYUI1-T).
+    pub area: String,
+    /// The icon buttons' lock (on: the delete icon is disabled) and whether the section is open.
+    pub locked: bool,
+    pub open: bool,
     /// The drag and drop specimen: the chips in its two boxes.
     pub left: Vec<String>,
     pub right: Vec<String>,
@@ -50,6 +60,9 @@ impl Default for Specimens {
             card: 0,
             row: 1,
             text: "Type here".into(),
+            area: "A text area wraps its lines and scrolls. Shift with the arrows selects, so does a drag; a double click takes a word.\nCtrl with Left or Right jumps by word; Ctrl+Z undoes, Ctrl+Y redoes.".into(),
+            locked: false,
+            open: true,
             left: vec!["Sword".into(), "Shield".into()],
             right: vec!["Potion".into()],
             last: "nothing yet".into(),
@@ -69,6 +82,9 @@ impl Specimens {
             KitAct::Card(i) => format!("card {}", i + 1),
             KitAct::Row(i) => format!("row {}", i + 1),
             KitAct::Close => "close".into(),
+            KitAct::Lock => format!("lock {}", if self.locked { "off" } else { "on" }),
+            KitAct::Icon(what) => format!("icon {what}"),
+            KitAct::Fold => format!("section {}", if self.open { "folded" } else { "opened" }),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -78,7 +94,9 @@ impl Specimens {
             KitAct::Slide(i) => self.slide = i.min(SLIDER_STEPS - 1),
             KitAct::Card(i) => self.card = i,
             KitAct::Row(i) => self.row = i,
-            KitAct::Press(_) | KitAct::Close => {}
+            KitAct::Lock => self.locked = !self.locked,
+            KitAct::Fold => self.open = !self.open,
+            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) => {}
         }
     }
 
@@ -104,8 +122,10 @@ impl Specimens {
     }
 
     pub fn text_changed(&mut self, id: &str, text: &str) {
-        if id == "kit.text" {
-            self.text = text.to_string();
+        match id {
+            "kit.text" => self.text = text.to_string(),
+            "kit.area" => self.area = text.to_string(),
+            _ => {}
         }
     }
 
@@ -156,6 +176,10 @@ impl Specimens {
         y = head(ui, x1, y, "Text field (click to type)");
         ui.text_field("kit.text", Rect::new(x1, y, col_w.min(180), 14), &self.text, false, true);
         y += 14 + gap;
+        y = head(ui, x1, y, "Text area: Up / Down, Shift selects, Ctrl+arrows by word, Ctrl+A, C, X, V, Z, Y");
+        let ah = (ui.p.line_h(BODY) * 4.0).ceil() as i32 + 6;
+        ui.text_field("kit.area", Rect::new(x1, y, col_w, ah), &self.area, true, true);
+        y += ah + gap;
         y = head(ui, x1, y, "Frame, paragraph and close button");
         let fr = Rect::new(x1, y, col_w.min(200), (r.y + r.h - 18 - y).clamp(46, 70));
         let body_y = ui.frame(fr, "Frame", false);
@@ -195,6 +219,30 @@ impl Specimens {
             }
         }
         y += bh + gap;
+        y = head(ui, x2, y, "Icon buttons: image, drawn shapes (file missing), toggled, disabled");
+        let ib = |i: i32| Rect::new(x2 + i * 19, y, 16, 16);
+        let px = ui.icon_px(ib(0));
+        let sample = sample_icon(px);
+        ui.icon_button("kit.icon.image", ib(0), "Image icon", Some(&sample), Glyph::Letter('i'), wrap(KitAct::Icon("image")), true, false, tip("Image icon", "An image from the asset layers; a drawn shape stands in while the file is missing."));
+        let (lock, lock_tip) = if self.locked { ("Unlock", "Unlock") } else { ("Lock", "Lock (protect from overwrite and delete)") };
+        ui.icon_button("kit.icon.lock", ib(1), lock, None, if self.locked { Glyph::Lock } else { Glyph::Unlock }, wrap(KitAct::Lock), true, self.locked, tip(lock_tip, ""));
+        let del_tip = if self.locked { tip("Delete", "Unlock it to delete it.") } else { Vec::new() };
+        ui.icon_button("kit.icon.delete", ib(2), "Delete", None, Glyph::Delete, wrap(KitAct::Icon("delete")), !self.locked, false, del_tip);
+        ui.icon_button("kit.icon.help", ib(3), "Help", None, Glyph::Help, wrap(KitAct::Icon("help")), true, false, tip("Help (?)", "A hover card can list the keys."));
+        ui.icon_button("kit.icon.menu", ib(4), "Menu", None, Glyph::Menu, wrap(KitAct::Icon("menu")), true, false, Vec::new());
+        ui.icon_button("kit.icon.letter", ib(5), "Party", None, Glyph::Letter('P'), wrap(KitAct::Icon("party")), true, false, tip("Party (P)", "A letter stands in for an icon with no shape of its own."));
+        ui.icon_button("kit.icon.off", ib(6), "Disabled", Some(&sample), Glyph::Letter('i'), wrap(KitAct::Icon("disabled")), false, false, tip("Disabled", "Dimmed; takes no click."));
+        y += 16 + gap;
+        y = head(ui, x2, y, "Section header (click to fold)");
+        let open = ui.section("kit.section", Rect::new(x2, y, col_w, 14), "Section", "2 rows", self.open, wrap(KitAct::Fold), tip("Section", "A click folds or opens it; the screen keeps the state."));
+        y += 14 + 1;
+        if open {
+            for i in 0..2 {
+                ui.row(&format!("kit.section.row.{i}"), Rect::new(x2 + 8, y, col_w - 8, 12), &format!("Content row {}", i + 1), TEXT, None, false, Vec::new());
+                y += 13;
+            }
+        }
+        y += gap - 1;
         y = head(ui, x2, y, "Scroll area (the wheel over it)");
         let view = Rect::new(x2, y, col_w, (r.y + r.h - 18 - y).max(24));
         ui.p.panel(view, crate::ui::CARD, crate::ui::BORDER, 2.0);
@@ -207,6 +255,21 @@ impl Specimens {
 
         ui.p.text_fit(x1 as f32, (r.y + r.h - 12) as f32, &format!("Last: {}", self.last), SMALL, (r.w - 12) as f32, GOOD);
     }
+}
+
+/// The image icon specimen: a gold diamond with a dark outline, `n` pixels square (an icon as the art would give it).
+fn sample_icon(n: i32) -> Image {
+    let n = n.max(4);
+    let mut px = vec![0u8; (n * n * 4) as usize];
+    let c = (n - 1) as f32 / 2.0;
+    for y in 0..n {
+        for x in 0..n {
+            let d = (x as f32 - c).abs() + (y as f32 - c).abs();
+            let col = if d <= c * 0.7 { [244, 198, 84, 255] } else if d <= c * 0.95 { [70, 52, 20, 255] } else { [0, 0, 0, 0] };
+            px[((y * n + x) * 4) as usize..((y * n + x) * 4 + 4) as usize].copy_from_slice(&col);
+        }
+    }
+    Image { w: n, h: n, px }
 }
 
 fn label_key(id: &str) -> &'static str {

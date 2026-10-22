@@ -196,6 +196,7 @@ fn is_gear_field(kind: &str, key: &str) -> bool {
 /// ContentCatalog.validate_entry: the hard errors of `entry` (any shape the catalog stores) as entry `current_id`
 /// ("" = a new entry).
 pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
+    let entry = &crate::source::folded(kind, entry);
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
         "items" => item::prepare(v, entry, v.get(kind, &old_id)),
@@ -207,40 +208,13 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if id != current_id && v.has(kind, &id) {
         errors.push(format!("ID '{id}' is already used by another {} entry.", singular(kind)));
     }
+    // PHASEFOLD 1.3: the arrival's units are checked as the retired wave_units field (after enemies) was.
+    let arrival = if kind == "encounters" { encounter::arrival_units(&e) } else { None };
     for f in fields("content", kind) {
         let f = json::dict(f);
-        let ref_kind = json::s(f, "ref");
-        if ref_kind.is_empty() || !visible(f, &e) {
-            continue;
-        }
-        let key = json::s(f, "key");
-        let label = json::s(f, "label");
-        let value = json::get(&e, &key);
-        let mut targets: Vec<String> = Vec::new();
-        if let Value::Array(list) = value {
-            targets = list.iter().map(gstr).collect();
-            if !json::b(f, "dupes", false) {
-                let mut seen: Vec<&String> = Vec::new();
-                for t in &targets {
-                    if seen.contains(&t) {
-                        errors.push(format!("{label} lists '{t}' twice."));
-                    }
-                    seen.push(t);
-                }
-            }
-        } else if !gstr(value).is_empty() {
-            targets.push(gstr(value));
-        }
-        for t in targets {
-            if t == NO_ITEM && is_gear_field(kind, &key) {
-                continue;
-            }
-            let target = v.get(&ref_kind, &t);
-            if target.is_empty() {
-                errors.push(format!("{label}: unknown {} '{t}'.", singular(&ref_kind)));
-            } else if !passes_filter(f, target) {
-                errors.push(format!("{label}: '{t}' can't be used here."));
-            }
+        errors.extend(ref_field_errors(v, kind, f, json::get(&e, &json::s(f, "key")), &e));
+        if let (Some(units), "enemies") = (&arrival, json::s(f, "key").as_str()) {
+            errors.extend(ref_field_errors(v, kind, encounter::wave_field(false), units, &e));
         }
     }
     let has_skill = |id: &str| v.has("skills", id);
@@ -260,6 +234,45 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         _ => {}
     }
     errors.extend(no_item_errors(kind, &e));
+    errors
+}
+
+/// The reference problems of one ref field holding `value` (ContentCatalog.validate_entry's ref loop): listed twice,
+/// unknown, filtered out.
+fn ref_field_errors(v: &View, kind: &str, f: &Dict, value: &Value, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let ref_kind = json::s(f, "ref");
+    if ref_kind.is_empty() || !visible(f, e) {
+        return errors;
+    }
+    let key = json::s(f, "key");
+    let label = json::s(f, "label");
+    let mut targets: Vec<String> = Vec::new();
+    if let Value::Array(list) = value {
+        targets = list.iter().map(gstr).collect();
+        if !json::b(f, "dupes", false) {
+            let mut seen: Vec<&String> = Vec::new();
+            for t in &targets {
+                if seen.contains(&t) {
+                    errors.push(format!("{label} lists '{t}' twice."));
+                }
+                seen.push(t);
+            }
+        }
+    } else if !gstr(value).is_empty() {
+        targets.push(gstr(value));
+    }
+    for t in targets {
+        if t == NO_ITEM && is_gear_field(kind, &key) {
+            continue;
+        }
+        let target = v.get(&ref_kind, &t);
+        if target.is_empty() {
+            errors.push(format!("{label}: unknown {} '{t}'.", singular(&ref_kind)));
+        } else if !passes_filter(f, target) {
+            errors.push(format!("{label}: '{t}' can't be used here."));
+        }
+    }
     errors
 }
 
@@ -293,6 +306,7 @@ fn no_item_errors(kind: &str, e: &Dict) -> Vec<String> {
 
 /// ContentCatalog.warnings_for: the soft problems of one entry (never blocking).
 pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
+    let entry = &crate::source::folded(kind, entry);
     let e = content(kind, entry);
     match kind {
         "skills" => skill::warnings(entry, &e),
@@ -311,8 +325,9 @@ pub const KINDS: [&str; 8] = ["skills", "items", "item_families", "passives", "c
 /// A whole-catalog report: {"kind:id" (or "kind:required", "skills:fold", "terrain:missing", "load"): [messages]}.
 pub type Report = IndexMap<String, Vec<String>>;
 
-/// ContentCatalog.validate_all: every entry's errors, then the rules across entries (required skills, one family per
-/// gear token, skill families that fold, a row per terrain type) and the load problems.
+/// ContentCatalog.validate_all: every entry's errors, the map templates' prop checks (PROPS1, `maps:<id>`), then the
+/// rules across entries (required skills, one family per gear token, skill families that fold, a row per terrain
+/// type) and the load problems.
 pub fn validate_all(v: &View) -> Report {
     let mut problems = Report::new();
     for kind in KINDS {
@@ -322,6 +337,13 @@ pub fn validate_all(v: &View) -> Report {
             if !errors.is_empty() {
                 problems.insert(format!("{kind}:{id}"), errors);
             }
+        }
+    }
+    // PROPS1 2: the map templates' prop checks (engine-only; Godot's MapCatalog had no props)
+    for t in v.entries("maps") {
+        let errors = map::prop_errors(t);
+        if !errors.is_empty() {
+            problems.insert(format!("maps:{}", json::s(t, "id")), errors);
         }
     }
     let mut add = |key: &str, list: Vec<String>| {

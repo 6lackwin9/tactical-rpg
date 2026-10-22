@@ -2,7 +2,8 @@
 //! sampling and the UI is drawn smooth at native resolution. The agent link (TCP, `aegis link`) sees and drives
 //! exactly what the player sees: ui_tree, click, drag, hover, key, back, screenshot, game, plus whatever the top screen
 //! answers (`Screen::command`). Keys: arrows, Enter, Space, Esc, Tab, Page Up / Down and characters go to the top
-//! screen; F12 takes a screenshot; right click goes back.
+//! screen; F12 takes a screenshot; right click goes back. While a text field edits (PLAYUI1-T) the editing keys, the
+//! clipboard keys, clicks and drags in it go to the field (`ui::Edit`).
 
 use crate::bridge;
 use crate::focus;
@@ -11,7 +12,7 @@ use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
 use crate::canvas::{rgb, rgba, Rect};
 use crate::window::Grab;
-use crate::ui::{Drag, Edit, Gfx, Kit, BG, BODY, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
+use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, BG, BODY, FIELD_PAD_X, FIELD_PAD_Y, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -50,6 +51,14 @@ struct Shell<G> {
     open_focus: Option<String>,
     /// Playtest trail: the control under the pointer, since when, and its trail form.
     hover: Option<(String, std::time::Instant, Value)>,
+    /// Shift is held (a Shift+click in a text field extends its selection).
+    shift: bool,
+    /// The left button went down in the text field being edited: moving the mouse selects (PLAYUI1-T).
+    text_press: bool,
+    /// The last click in a text field (when and where), to tell a double click (it selects a word).
+    text_click: Option<(Instant, (i32, i32))>,
+    /// When the shell started: the clock a text field's undo groups typing by (`Edit::now_ms`).
+    born: Instant,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -62,6 +71,9 @@ struct Press {
 
 /// How far (canvas pixels) the mouse moves from the press before a draggable widget is picked up.
 const DRAG_START: i32 = 3;
+/// A second click in a text field this soon (milliseconds) and this near (canvas pixels) is a double click.
+const DOUBLE_CLICK_MS: u128 = 400;
+const DOUBLE_CLICK_PX: i32 = 3;
 
 /// The drop key under `pos`: the topmost enabled widget that is a drop target or a window's backdrop (a window covers
 /// what lies under it), when it is a target.
@@ -160,15 +172,67 @@ impl<G: Context> Shell<G> {
         self.cx.playtest.save();
     }
 
-    /// Types into the text field being edited (`f` changes its text or caret) and hands a change to the screen.
+    /// Types into the text field being edited (`f` changes its text, caret or selection), hands a change to the screen
+    /// and scrolls the field to keep the caret's line in view.
     fn edit(&mut self, f: impl FnOnce(&mut Edit)) {
+        let now = self.born.elapsed().as_millis() as u64;
         let Some(e) = self.gfx.kit.edit.as_mut() else { return };
+        e.now_ms = now;
         let before = e.text.clone();
         f(e);
         if e.text != before {
             let (id, text) = (e.id.clone(), e.text.clone());
             let cx = &mut self.cx;
             self.stack.last_mut().unwrap().text_changed(cx, &id, &text);
+        }
+        self.reveal();
+    }
+
+    /// The text field being edited as the top screen last drew it: its layout, its rect and its line height. None when
+    /// nothing edits or the field is not drawn (yet).
+    fn edit_geometry(&mut self) -> Option<(Layout, Rect, f32)> {
+        let (id, text, multiline) = self.gfx.kit.edit.as_ref().map(|e| (e.id.clone(), e.text.clone(), e.multiline))?;
+        let infos = self.stack.last()?.widgets();
+        let r = infos.iter().find(|w| w["id"] == id.as_str() && (w["kind"] == "text" || w["kind"] == "textarea")).map(info_rect)?;
+        let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
+        let line = p.line_h(BODY);
+        Some((field_layout(&mut p, &text, r, multiline), r, line))
+    }
+
+    /// Scrolls the text area being edited so the caret's line shows.
+    fn reveal(&mut self) {
+        let Some((lay, r, line)) = self.edit_geometry() else { return };
+        let Some(e) = self.gfx.kit.edit.as_ref().filter(|e| e.multiline) else { return };
+        let id = field_scroll_id(&e.id);
+        let off = self.gfx.kit.scroll.get(&id).copied().unwrap_or(0);
+        let to = reveal_offset(off, lay.line_of(e.caret), line, r.h, field_content_h(lay.lines.len(), line));
+        self.gfx.kit.scroll.insert(id, to);
+    }
+
+    /// The caret position under canvas point `pos` in the text field being edited (as drawn: scrolled or slid).
+    fn caret_at(&mut self, pos: (i32, i32)) -> Option<usize> {
+        let (lay, r, line) = self.edit_geometry()?;
+        let e = self.gfx.kit.edit.as_ref()?;
+        let (dx, off) = if e.multiline {
+            let max = (field_content_h(lay.lines.len(), line) - r.h).max(0);
+            (0.0, self.gfx.kit.scroll.get(&field_scroll_id(&e.id)).copied().unwrap_or(0).clamp(0, max))
+        } else {
+            (field_shift(&lay, e.caret, r), 0)
+        };
+        Some(lay.pos_at(pos.0 as f32 - r.x as f32 - FIELD_PAD_X + dx, pos.1 as f32 - r.y as f32 - FIELD_PAD_Y + off as f32, line))
+    }
+
+    /// An editing key in the text field being edited (PLAYUI1-T): moves, selection, deletes, undo and the clipboard.
+    fn edit_key(&mut self, k: EditKey, ctrl: bool, shift: bool) {
+        let (lay, rows) = match self.edit_geometry() {
+            Some((lay, r, line)) => (lay, ((r.h as f32 - 2.0 * FIELD_PAD_Y) / line).floor().max(1.0) as usize),
+            // Not drawn yet: one line of the text as it is (no wrapping).
+            None => (self.gfx.kit.edit.as_ref().map(|e| Layout::new(&e.text, f32::MAX, false, &mut |_| 1.0)).unwrap_or_default(), 1),
+        };
+        let mut copied = None;
+        self.edit(|e| copied = e.key(k, ctrl, shift, &lay, rows, clipboard::get));
+        if let Some(t) = copied {
+            clipboard::set(&t);
         }
     }
 
@@ -330,6 +394,7 @@ impl<G: Context> Shell<G> {
 
     /// Drops a press or drag in progress; true when there was one.
     fn cancel_drag(&mut self) -> bool {
+        self.text_press = false;
         let moved = self.win_drag.take().is_some();
         if moved {
             self.save_desk();
@@ -476,10 +541,30 @@ impl<G: Context> Shell<G> {
         let infos = self.stack.last().unwrap().widgets();
         let at = info_at(&infos, pos).cloned();
         let kind = at.as_ref().map(|w| w["kind"].as_str().unwrap_or("").to_string()).unwrap_or_default();
-        // A text field starts editing on a click (the caret at the end); a click anywhere else ends an edit.
+        // A text field starts editing on a click, the caret where the click was (Shift+click in the field being edited
+        // extends the selection, a double click selects a word, a drag from the press selects); a click anywhere else
+        // ends an edit.
         if (kind == "text" || kind == "textarea") && at.as_ref().is_some_and(|w| w["enabled"] == json!(true)) {
             let w = at.as_ref().unwrap();
-            self.gfx.kit.edit = Some(Edit::new(w["id"].as_str().unwrap_or(""), w["text"].as_str().unwrap_or(""), kind == "textarea"));
+            let id = w["id"].as_str().unwrap_or("").to_string();
+            let same = self.gfx.kit.edit.as_ref().is_some_and(|e| e.id == id);
+            if !same {
+                self.gfx.kit.edit = Some(Edit::new(&id, w["text"].as_str().unwrap_or(""), kind == "textarea"));
+            }
+            let double = same && self.text_click.is_some_and(|(t, p)| t.elapsed().as_millis() < DOUBLE_CLICK_MS && (p.0 - pos.0).abs() <= DOUBLE_CLICK_PX && (p.1 - pos.1).abs() <= DOUBLE_CLICK_PX);
+            self.text_click = if double { None } else { Some((Instant::now(), pos)) };
+            let extend = self.shift && same;
+            if let Some(c) = self.caret_at(pos) {
+                self.edit(|e| {
+                    e.goal_x = None;
+                    if double {
+                        e.select_word(c);
+                    } else {
+                        e.move_to(c, extend);
+                    }
+                });
+            }
+            self.text_press = !double;
             return true;
         }
         self.gfx.kit.edit = None;
@@ -531,6 +616,16 @@ impl<G: Context> Shell<G> {
     /// The mouse moved: a press on a draggable widget becomes a drag once it moved DRAG_START pixels; a slider drag
     /// follows it along the track (the step under its x).
     fn drag_to(&mut self) {
+        if self.text_press {
+            // Selecting in a text field: the caret follows the mouse, the selection from the press.
+            if let Some(c) = self.caret_at(self.mouse) {
+                self.edit(|e| {
+                    e.goal_x = None;
+                    e.move_to(c, true);
+                });
+            }
+            return;
+        }
         if let Some((win, grab, last)) = self.win_drag.clone() {
             if let Some(d) = self.stack.last_mut().unwrap().desk() {
                 d.drag(&win, grab, self.mouse.0 - last.0, self.mouse.1 - last.1);
@@ -572,6 +667,7 @@ impl<G: Context> Shell<G> {
     /// cancelled), a press on a draggable widget that never moved clicks it, a slider drag ends.
     fn release(&mut self) {
         self.drag = None;
+        self.text_press = false;
         if self.win_drag.take().is_some() {
             self.save_desk();
         }
@@ -706,7 +802,8 @@ impl<G: Context> Shell<G> {
                 let cx = &self.cx;
                 let top = self.stack.last().unwrap();
                 json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": [W, H], "mouse": [self.mouse.0, self.mouse.1],
-                    "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets()})
+                    "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
+                    "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))})
             }
             "click" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
@@ -836,13 +933,31 @@ impl<G: Context> Shell<G> {
                     None => json!({"ok": false, "error": format!("no widget '{id}'")}),
                 }
             }
-            "key" => match body.get("key").and_then(Value::as_str).and_then(Key::parse) {
-                Some(k) => {
-                    self.key(k);
-                    json!({"ok": true})
+            "key" => {
+                let name = body.get("key").and_then(Value::as_str).unwrap_or("");
+                // While a text field edits, its editing keys go to it (`shift+left`, `ctrl+c`, `ctrl+z`, `home`...).
+                match (self.gfx.kit.edit.is_some().then(|| EditKey::parse(name)).flatten(), Key::parse(name)) {
+                    (Some((k, ctrl, shift)), _) => {
+                        self.edit_key(k, ctrl, shift);
+                        json!({"ok": true})
+                    }
+                    (None, Some(k)) => {
+                        // As the keyboard does while a field edits: Enter adds a line to a text area; Enter, Esc and Tab
+                        // end the edit and reach the screen (Ctrl+Enter submits and keeps it).
+                        let multiline = self.gfx.kit.edit.as_ref().map(|e| e.multiline);
+                        match (k, multiline) {
+                            (Key::Enter, Some(true)) => self.edit(|e| e.insert("\n")),
+                            (Key::Enter | Key::Esc | Key::Tab | Key::BackTab, Some(_)) => {
+                                self.gfx.kit.edit = None;
+                                self.key(k);
+                            }
+                            _ => self.key(k),
+                        }
+                        json!({"ok": true})
+                    }
+                    (None, None) => json!({"ok": false, "error": "key needs one of up, down, left, right, enter, space, esc, tab, backtab, pageup, pagedown or a character; while a text field edits also home, end, backspace, delete, ctrl+a / c / x / v / z / y with ctrl+ and shift+"}),
                 }
-                None => json!({"ok": false, "error": "key needs one of up, down, left, right, enter, space, esc, tab, backtab, pageup, pagedown or a character"}),
-            },
+            }
             "back" => {
                 self.back();
                 json!({"ok": true})
@@ -913,8 +1028,10 @@ struct App<G> {
     frame_every: Option<Duration>,
     /// Shift is held (Shift+Tab).
     shift: bool,
-    /// Ctrl is held (Ctrl+Enter).
+    /// Ctrl is held (Ctrl+Enter, the text field's Ctrl keys).
     ctrl: bool,
+    /// Alt is held (AltGr reports Ctrl+Alt: the character it types is text, not a Ctrl key).
+    alt: bool,
 }
 
 impl<G: Context> App<G> {
@@ -990,7 +1107,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now() };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -1042,6 +1159,10 @@ impl<G: Context> ApplicationHandler for App<G> {
             WindowEvent::ModifiersChanged(m) => {
                 self.shift = m.state().shift_key();
                 self.ctrl = m.state().control_key();
+                self.alt = m.state().alt_key();
+                if let Some(s) = self.shell.as_mut() {
+                    s.shift = self.shift;
+                }
             }
             WindowEvent::Focused(false) => {
                 // The release may never arrive (alt-tab mid-drag): drop the drag.
@@ -1083,13 +1204,28 @@ impl<G: Context> ApplicationHandler for App<G> {
                     // A text field types: the editing keys and the typed text go to it, not to the screen. Ctrl+Enter
                     // still submits; Enter (one line), Esc and Tab end the edit and reach the screen.
                     let multiline = s.gfx.kit.edit.as_ref().is_some_and(|e| e.multiline);
+                    let ctrl_key = |c: &str| if self.ctrl && !self.alt { EditKey::parse(&format!("ctrl+{}", c.to_lowercase())).map(|k| k.0) } else { None };
+                    let named = match &logical_key {
+                        WKey::Named(NamedKey::Backspace) => Some(EditKey::Backspace),
+                        WKey::Named(NamedKey::Delete) => Some(EditKey::Delete),
+                        WKey::Named(NamedKey::ArrowLeft) => Some(EditKey::Left),
+                        WKey::Named(NamedKey::ArrowRight) => Some(EditKey::Right),
+                        WKey::Named(NamedKey::ArrowUp) => Some(EditKey::Up),
+                        WKey::Named(NamedKey::ArrowDown) => Some(EditKey::Down),
+                        WKey::Named(NamedKey::Home) => Some(EditKey::Home),
+                        WKey::Named(NamedKey::End) => Some(EditKey::End),
+                        WKey::Named(NamedKey::PageUp) => Some(EditKey::PageUp),
+                        WKey::Named(NamedKey::PageDown) => Some(EditKey::PageDown),
+                        // Ctrl+Shift+Z is redo (the letter arrives as itself, Shift aside).
+                        WKey::Character(c) if self.ctrl && self.shift && !self.alt && c.eq_ignore_ascii_case("z") => Some(EditKey::Redo),
+                        WKey::Character(c) => ctrl_key(c),
+                        _ => None,
+                    };
+                    if let Some(k) = named {
+                        s.edit_key(k, self.ctrl, self.shift);
+                        return;
+                    }
                     match logical_key {
-                        WKey::Named(NamedKey::Backspace) => s.edit(Edit::backspace),
-                        WKey::Named(NamedKey::Delete) => s.edit(Edit::delete),
-                        WKey::Named(NamedKey::ArrowLeft) => s.edit(Edit::left),
-                        WKey::Named(NamedKey::ArrowRight) => s.edit(Edit::right),
-                        WKey::Named(NamedKey::Home) => s.edit(Edit::home),
-                        WKey::Named(NamedKey::End) => s.edit(Edit::end),
                         WKey::Named(NamedKey::Enter) if self.ctrl => s.key(Key::CtrlEnter),
                         WKey::Named(NamedKey::Enter) if multiline => s.edit(|e| e.insert("\n")),
                         WKey::Named(named @ (NamedKey::Enter | NamedKey::Escape | NamedKey::Tab)) => {
@@ -1196,7 +1332,7 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
 pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), shift: false, ctrl: false };
+    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), shift: false, ctrl: false, alt: false };
     el.run_app(&mut app)?;
     Ok(())
 }
@@ -1278,7 +1414,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now() };
         s.frame();
         s
     }
@@ -1484,6 +1620,220 @@ mod tests {
         assert_eq!(s.bridge(&json!({"cmd": "key", "key": "ctrl+enter"}))["ok"], json!(true));
         s.frame();
         assert_eq!(s.cx.playtest.current().unwrap().notes[1]["text"], json!("Agent note"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A text area and a one-line field whose values the screen keeps (PLAYUI1-T).
+    struct Pad {
+        w: Vec<Widget<&'static str>>,
+        area: String,
+        line: String,
+    }
+
+    const PAD_AREA: Rect = Rect::new(10, 10, 120, 30);
+
+    impl Pad {
+        fn act(&mut self, cx: &mut Cx, a: &'static str) {
+            cx.app.log.push(a.to_string());
+        }
+    }
+
+    impl Screen<App> for Pad {
+        fn id(&self) -> &'static str {
+            "pad"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            ui.text_field("area", PAD_AREA, &self.area, true, true);
+            ui.text_field("line", Rect::new(10, 80, 100, 14), &self.line, false, true);
+            self.w = ui.widgets;
+        }
+        fn text_changed(&mut self, _cx: &mut Cx, id: &str, text: &str) {
+            match id {
+                "area" => self.area = text.to_string(),
+                _ => self.line = text.to_string(),
+            }
+        }
+        fn state(&self, _cx: &Cx) -> Value {
+            json!({"area": self.area, "line": self.line})
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    const PAD_TEXT: &str = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega";
+
+    fn pad() -> Shell<App> {
+        let mut s = shell();
+        s.stack = vec![Box::new(Pad { w: Vec::new(), area: PAD_TEXT.into(), line: "one line".into() })];
+        s.frame();
+        s
+    }
+
+    /// The canvas point of caret position `pos` in the field being edited (as drawn, scroll included).
+    fn point_of(s: &mut Shell<App>, pos: usize) -> (i32, i32) {
+        let (lay, r, line) = s.edit_geometry().unwrap();
+        let off = s.gfx.kit.scroll.get("area.scroll").copied().unwrap_or(0);
+        let x = r.x as f32 + FIELD_PAD_X + lay.x_of(pos);
+        let y = r.y as f32 + FIELD_PAD_Y + lay.line_of(pos) as f32 * line + line / 2.0 - off as f32;
+        (x.round() as i32, y as i32)
+    }
+
+    #[test]
+    fn a_click_places_the_caret_and_a_drag_or_shift_click_selects() {
+        let mut s = pad();
+        s.mouse = (PAD_AREA.x + 2, PAD_AREA.y + 6);
+        s.click();
+        s.release();
+        s.frame();
+        assert_eq!(s.gfx.kit.edit.as_ref().map(|e| (e.id.as_str(), e.caret)), Some(("area", 0)), "a click at the left of line 1 puts the caret at the start");
+        let (lay, _, _) = s.edit_geometry().unwrap();
+        assert!(lay.lines.len() > 3, "the sample wraps to more lines than the area shows");
+        let (end1, start2) = (lay.last_pos(0), lay.lines[1].start);
+        // A click right of line 1's last word: the end of that line.
+        s.mouse = (PAD_AREA.x + PAD_AREA.w - 4, PAD_AREA.y + 6);
+        s.click();
+        s.release();
+        assert_eq!(s.gfx.kit.edit.as_ref().unwrap().caret, end1);
+        // Press at the start, drag to line 2's start: the selection runs between them.
+        s.mouse = point_of(&mut s, 0);
+        s.click();
+        s.mouse = point_of(&mut s, start2);
+        s.drag_to();
+        s.release();
+        assert_eq!(s.gfx.kit.edit.as_ref().unwrap().selection(), Some((0, start2)));
+        // Shift+click moves the caret and keeps the selection's start.
+        s.shift = true;
+        s.mouse = point_of(&mut s, end1);
+        s.click();
+        s.release();
+        s.shift = false;
+        assert_eq!(s.gfx.kit.edit.as_ref().unwrap().selection(), Some((0, end1)));
+        // A click in the other field edits that one.
+        s.mouse = (60, 87);
+        s.click();
+        s.release();
+        assert_eq!(s.gfx.kit.edit.as_ref().map(|e| e.id.as_str()), Some("line"));
+        s.mouse = (300, 300);
+        s.click();
+        assert!(s.gfx.kit.edit.is_none(), "a click elsewhere ends the edit");
+    }
+
+    #[test]
+    fn editing_keys_over_the_agent_link_select_copy_paste_undo_and_move_by_line() {
+        let mut s = pad();
+        s.mouse = point_of_start();
+        s.click();
+        s.release();
+        s.frame();
+        for k in ["ctrl+a", "ctrl+c", "ctrl+end", "ctrl+v"] {
+            assert_eq!(s.bridge(&json!({"cmd": "key", "key": k}))["ok"], json!(true), "{k}");
+        }
+        assert_eq!(clipboard::get(), PAD_TEXT, "copied to the in-app clipboard (unit tests never touch the system's)");
+        let state = s.stack.last().unwrap().state(&s.cx);
+        assert_eq!(state["area"], json!(format!("{PAD_TEXT}{PAD_TEXT}")), "the paste reached the screen");
+        s.bridge(&json!({"cmd": "key", "key": "ctrl+z"}));
+        assert_eq!(s.stack.last().unwrap().state(&s.cx)["area"], json!(PAD_TEXT), "undone");
+        s.frame();
+        let (lay, _, _) = s.edit_geometry().unwrap();
+        let last = lay.lines.len() - 1;
+        assert_eq!(lay.line_of(s.gfx.kit.edit.as_ref().unwrap().caret), last, "the caret at the end");
+        s.bridge(&json!({"cmd": "key", "key": "up"}));
+        assert_eq!(lay.line_of(s.gfx.kit.edit.as_ref().unwrap().caret), last - 1, "Up goes one visual line up");
+        s.bridge(&json!({"cmd": "key", "key": "shift+home"}));
+        let tree = s.bridge(&json!({"cmd": "ui_tree"}));
+        assert_eq!(tree["edit"]["id"], json!("area"));
+        assert!(tree["edit"]["selected"].as_str().is_some_and(|t| !t.is_empty()), "Shift+Home selected to the line's start: {}", tree["edit"]);
+        // Enter adds a line to a text area; Esc ends the edit, as the keyboard does.
+        s.bridge(&json!({"cmd": "key", "key": "ctrl+end"}));
+        s.bridge(&json!({"cmd": "key", "key": "enter"}));
+        assert!(s.stack.last().unwrap().state(&s.cx)["area"].as_str().is_some_and(|t| t.ends_with('\n')));
+        s.bridge(&json!({"cmd": "key", "key": "esc"}));
+        assert!(s.gfx.kit.edit.is_none(), "Esc ended the edit");
+    }
+
+    fn point_of_start() -> (i32, i32) {
+        (PAD_AREA.x + 2, PAD_AREA.y + 6)
+    }
+
+    #[test]
+    fn the_wheel_scrolls_a_text_area_and_a_caret_move_brings_its_line_back() {
+        let mut s = pad();
+        s.mouse = (PAD_AREA.x + 20, PAD_AREA.y + 20);
+        s.wheel(-1);
+        let off = s.gfx.kit.scroll.get("area.scroll").copied().unwrap_or(0);
+        assert!(off > 0, "the wheel scrolled the text area");
+        s.frame();
+        // A click at the top of the scrolled view lands on the line drawn there, not line 1.
+        s.mouse = (PAD_AREA.x + 2, PAD_AREA.y + 4);
+        s.click();
+        s.release();
+        let (lay, _, _) = s.edit_geometry().unwrap();
+        let caret = s.gfx.kit.edit.as_ref().unwrap().caret;
+        assert!(lay.line_of(caret) > 0, "the click took the scroll into account");
+        s.bridge(&json!({"cmd": "key", "key": "ctrl+home"}));
+        assert_eq!(s.gfx.kit.scroll.get("area.scroll").copied(), Some(0), "the caret's line scrolled back into view");
+        s.bridge(&json!({"cmd": "key", "key": "ctrl+end"}));
+        let max = s.stack.last().unwrap().widgets().iter().find(|w| w["id"] == "area.scroll").and_then(|w| w["text"].as_str().and_then(|t| t.parse::<i32>().ok())).unwrap();
+        assert_eq!(s.gfx.kit.scroll.get("area.scroll").copied(), Some(max), "the end shows");
+    }
+
+    /// PLAYUI1-T: a note's row in the Playtests browser opens it whole; Copy puts its text on the clipboard.
+    #[test]
+    fn the_recordings_browser_shows_a_note_whole_and_copies_it() {
+        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("aegis_shell_note_view_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = shell();
+        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        let text = "The OK button is hard to read.\nSecond line: the gold on navy is too dim at Small.";
+        s.cx.playtest.add_note(json!({"scene": "form", "text": text, "tags": ["ui"]}), None).unwrap();
+        let browser = crate::recordings::Recordings::new(&s.cx, launch, |_| Value::Null, Vec::new());
+        s.stack.push(Box::new(browser));
+        s.frame();
+        let row = s.stack.last().unwrap().widgets().into_iter().find(|w| w["id"] == "recordings.note.0").expect("the note's row");
+        assert!(!row["text"].as_str().unwrap().contains('\n'), "the row shows the note on one line");
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.note.0"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), crate::recordings::NOTE_ID);
+        assert_eq!(s.stack.last().unwrap().state(&s.cx)["text"], json!(text), "the whole text, line breaks kept");
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.note_view.copy"}))["ok"], json!(true));
+        assert_eq!(clipboard::get(), text);
+        press(&mut s, Key::Esc);
+        assert_eq!(s.stack.last().unwrap().id(), crate::recordings::ID, "Esc goes back to the browser");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PLAYUI1-T, TEXTFIT1: the taller note box (its text area at least 160 tall at Normal) and the note view read
+    /// clean at every text size.
+    #[test]
+    fn the_note_box_and_the_note_view_read_clean_at_every_text_size() {
+        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("aegis_shell_note_sizes_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = form(Form::default());
+        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.note();
+        s.frame();
+        s.edit(|e| e.insert("The OK button is hard to read at Small text size; the gold on navy loses contrast.\nSecond paragraph."));
+        s.frame();
+        let area = s.stack.last().unwrap().widgets().into_iter().find(|w| w["id"] == crate::notes::TEXT_ID).map(|w| info_rect(&w)).unwrap();
+        assert!(area.h >= 160, "the note's text area is {} tall", area.h);
+        let clean = |s: &mut Shell<App>| {
+            for (name, scale) in crate::screen::TEXT_SIZES {
+                let audit = s.text_audit(Some(scale as f32), None);
+                assert_eq!(audit["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "{} at {name}: {audit}", audit["screen"]);
+            }
+        };
+        clean(&mut s);
+        s.key(Key::CtrlEnter);
+        s.frame();
+        let browser = crate::recordings::Recordings::new(&s.cx, launch, |_| Value::Null, Vec::new());
+        s.stack.push(Box::new(browser));
+        s.frame();
+        s.bridge(&json!({"cmd": "click", "id": "recordings.note.0"}));
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), crate::recordings::NOTE_ID);
+        clean(&mut s);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -2,18 +2,79 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 0353423 -->
+<!-- last: 6c265bd -->
+
+## 2026-10-23
+
+In the game:
+
+- **Enemy sprites**: goblins (brawler, berserker, skirmisher, scout, archer, shaman), Grakka Ashmaw, the Horde
+  Warchief and the training dummy now animate in battle like the party: idle, walk, attacks, hurt, death and guard.
+  Ash goblins and the named goblins (Skarn, Vex, Nok, Bolg, Gruk) wear their own colours. Enemies now face the party.
+- **NPC sprites**: Brask Toller, Hest the Quartermaster, Wenn and Orsa Tallow have their own bodies.
+- **Save slots**: click anywhere on a slot to save or load. Lock and delete icons sit in the slot's top right; a locked
+  save can't be overwritten or deleted (the autosave can't be locked).
+- **Map top bar**: the region and world maps show the place name top left and gold, supplies and icon buttons top
+  right: Party (P), Journal (J), Stash (I), Help (?) and Menu.
+- **Region map**: the map now fills the screen and the camera stays centred on the party (walls continue past the edge).
+  A foldable "Here" list floats top right with icons for each marker and what an NPC offers (shop, recruits, quests).
+  The latest event shows bottom left; L opens the last 12. Names show when you point at someone (Settings, Gameplay:
+  Map names On hover or Always).
+- **Icons**: new icons for the save slots, the top bar and the map.
+- **For testers**: the F8 note box is taller and edits like a text editor (click to place the caret, select, copy and
+  paste, undo, word jumps). In Playtests, click a note to read it whole and copy it.
+
+Every change that touched the game:
+
+- SPRITE2 (game art + data): Grakka, the Horde Warchief, Brask, Hest, Orsa and Wenn bodies; ash and named-goblin palettes; seeds/sprite2.json points the named goblins at their goblin body with a palette and Orsa at her body; the four old named goblin bodies removed; the worldbook regenerated (57c560d)
+- SPRITE2 (kit art): six goblin bodies (brawler, berserker, skirmisher, scout, archer, shaman) and the training dummy with every clip (96221e4)
+- SPRITE2 (tools): the rig draws goblin variants, the dummy and named bodies (rig scale and girth, goblin and named heads; variants.py; export_units writes kit and game bodies, palettes and review sheets); gen_art writes no bodies (4f5cbd5)
+- SPRITE2 (engine + game): foes face the party: Art::played and body_outline take flip (mirrored frames cached apart, body_clip_flipped); the battle draws a foe's token and its outline mirrored (d5a333d)
+- PLAYUI1-M (game): the region map full width under the HUD bar, a camera centred on the party with walls drawn past the edge, a floating foldable legend with marker and NPC service icons (explore::npc_services), the event log ticker (L), the map_names setting (On hover / Always); the HUD bar moves to hud.rs (9b16e65)
+- PROPS1-A1 (game data): 63 Ashlands props on the four map templates through seeds/props1_ashlands.json; the other templates gain props [] (ecc9d64)
+- PROPS1-T (tools): prop sheet prompts (PROPS1_PROMPTS.md: props_kit, props_buildings, props_ashlands; each sheet needs the user's yes) and the `sheets.py props` cut to the layer paths; no API call (b40590d)
+- PLAYUI1-H (game): one HUD bar on the region and world maps: the place name top left; gold, supplies and icon buttons Party (P), Journal (J), Stash (I), Help (?) and Menu top right, off during a conversation, shop, turn-in or lore page; the Controls tab lists P, J, I, ? (720a1cb)
+- PROPS1-L1 (game): a props list on map templates (stored after paths, default []), checks P1-P12 refuse a bad upsert, prop art folders along the lineage, asset warnings A7-A10 (ee5cb4c)
+- PROPS1-E (engine): DepthList (feet-sorted draw list), Image::mirrored and Art::image_mirrored, Art::size_of, Art::varied and Art::pick (tile_in wraps varied) (aab3a09)
+- PLAYUI1-S (engine + game): save slots: a row click saves or loads; lock and delete icons top right; engine slot locks in locks.json (write and delete refuse a locked slot, the autosave never locks); a disabled kit icon button swallows its click (6cfeb72)
+- PLAYUI1-I (engine + kit art, tools): the 22 UI icons from one image-API sheet (user 2026-10-22: one image), cut by sheets.py ui (5x5, magenta key, 32x32, 16 colours, outlined); toolkit glyphs in engine/assets/ui, HUD, marker and service icons in kits/rpg/assets/ui; the layout test knows the new paths (f83e656)
+
+Under the hood:
+
+- Planner: SPRITE2 done (spec status, STRUCTURE tools row, handover note, task archive) (d74f5a3)
+- Planner: PLAYUI1-I in the task archive (238cec5)
+- Planner: PLAYUI1-I done; MARKERS1 idea row (two marker icon sets); known issue: a piped lint check hides its failure (f5bcfef)
+- Planner: PROPS1 status lint fix (a blank line before Goal) (a47519c)
+- Planner: PROPS1 approved (user 2026-10-22: walls only, no prop interaction, three API sheets asked each, the party outline behind roofs); rows PROPS1-E, L1, L2, T, A1, A2 (5b851d7)
 
 ## 2026-10-22
 
 In the game:
 
+- **Battle sprites**: the six party classes animate in battle: idle, walk, their attacks (by skill and weapon), hurt,
+  death and guard. Each unit stands on a coloured ellipse (blue party, red enemies); the selected hero has a gold
+  outline and a hovered unit a faint white one. The animation speed and skip settings apply.
+- **Settings**: the music no longer plays garbled while a volume slider is at zero.
 - **Art and sound files**: everything moved into three layers: the game's own files, a shared RPG kit (class bodies,
   common portraits, item and status icons, map markers, combat sounds, mood music) and the engine's baseline (the
   common tile set, interface sounds). Nothing should look or sound different; report any missing or changed art.
 
 Every change that touched the game:
 
+- PHASEFOLD-A (game data): the shipped reinforcement waves as arrival phases through seeds/phasefold.json; no wave_* key left in shipped data (691f2ee)
+- PROPS1-S (design): props layer spec (proposed; the user answers section 10); HISTORY row for the options not adopted (cbb8231)
+- PLAYUI1-T (engine): the kit text editor (aegis_ui::edit: visual-line moves, click caret, selection, word moves, undo, clipboard over arboard with an in-app fallback), a taller F8 note box, the Playtests note view with Copy (cd9d07f)
+- PLAYUI1-K (engine): kit icon button (image or drawn glyph, hover card, focus, toggled, disabled) and collapsible section header, on the Kit widgets page (63695f1)
+- PHASEFOLD (game tests): the golden of 72 fights and the fold, check, writer, win-rule and morale tests; rewards.rs authors an arrival phase (b2b1806)
+- PHASEFOLD (game): the single reinforcement wave becomes an arrival phase (trigger {kind: arrival, round, block}, first in phases, never reserved); legacy wave_* rows fold on load, write and check; battles unchanged (d8352b7)
+- SPRITE1-U (game): battle units play their clips; a foot ellipse in the side colour, a gold outline on the selected sprite, a white one on hover (user 2026-10-22) (83545f0)
+- SPRITE1-L (engine): clip playback from body sheets (Clip::frame_at, Clips::resolve, ClipPlayer, Art::played), cached silhouette outlines, body checks, Painter::ellipse (e386c1a)
+- SPRITE1-A2 (tools): export_units writes every clip by default; READMEs (7682a09)
+- SPRITE1-A2 (kit art): the six class bodies carry every clip (48 px frames, 8-11 clips each, per-frame ms, loops); the priest shows the B3 mace (e889140)
+- REWARD1-B (balance): rewards report on main 18f3893; seven design issues flagged (23e6575)
+- ASSETORG2-T (tools): gen_art, export_units and gen_music write the layered tree (--layer, --root, --overwrite, --compare); the assets READMEs (b41954f)
+- Music volume: the settings popup no longer flips the music between the saved and draft levels each frame (engine) (e695e37)
+- Music volume: the settings popup no longer flips the music between the saved and draft levels each frame (engine) (4e5c8a8)
 - ASSETORG2-K/B (game): the layout and music tests walk the game, kit and engine layers; asset READMEs (2eeaafa)
 - ASSETORG2-K (kit): kits/rpg with kit.json; the shared bodies, portraits, icons, markers, chips, combat sounds and mood music move to the kit; game.json names it (a6ae779)
 - ASSETORG2-B (engine): engine/assets holds the common tile set and the interface sounds; Audio::offline_layered (9061075)
@@ -25,6 +86,15 @@ Every change that touched the game:
 
 Under the hood:
 
+- Planner: PHASEFOLD-A done (task archive) (4a21258)
+- Planner: PLAYUI1-K and -T done (engine README kit, editor and agent link; STRUCTURE edit.rs; PORT_NOTES; task archive) (df3dc3f)
+- Planner: PHASEFOLD done (HISTORY row naming the two partial retirements, GAME_BRIEF reinforcements, PORT_NOTES, BOSS1 pointer, STRUCTURE, task archive) (a7249cf)
+- Planner: SPRITE1-L and -U done (spec status, roadmap, task archive) (5982e55)
+- Planner: SPRITE1-A2 done (task archive) (b728ab3)
+- Planner: PLAYUI1 and PHASEFOLD specs approved (user 2026-10-22, all answers); PLAYUI1-K/T/S/H/M/D/P/I/R, PROPS1-S, PHASEFOLD-A rows; HISTORY rows for the replaced UI choices; REWARD1-B report separate (e05cd3b)
+- Planner: ASSETORG2-T done (spec 8b, STRUCTURE, handover note, SPRITE1 A2 pointer, task archive) (d92385f)
+- Planner: SPRITE1-U highlight (user 2026-10-22: foot ellipse in the side colour, gold outline on the selected sprite; battle first) (8dd7d8c)
+- PATCH-NOTES: REWARD1-L, REWARD1-A, REWARD1-S, ASSETORG2-E/G/D/K/B (2026-10-21 and 2026-10-22) (2416656)
 - Planner: user decisions 2026-10-22 (ASSETORG2-T acceptance by paths and sizes, PHASEFOLD-S spec first, REWARDXW1 stays an idea); playtest 20261021-193519 to the inbox (5 UI notes) (0353423)
 - Planner: SPRITE1-S2 done (task archive) (52f01bb)
 - Planner: ASSETORG2-K and -B done (STRUCTURE, README, task archive, agent map); SPRITE1 S2 sheet layout; known issue: staged renames ride along (86e96fe)
