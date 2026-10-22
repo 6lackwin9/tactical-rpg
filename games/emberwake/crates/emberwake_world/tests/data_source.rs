@@ -18,10 +18,11 @@ fn data_dir() -> PathBuf {
 }
 
 /// Retired parity: fields added after the Godot freeze, by (schema section, kind, key). They are taken off the engine's
-/// side (catalog rows, world entries, schema rows) before comparing; each is named in docs/HISTORY.md. REWARD1
+/// side (catalog rows, world entries, game data rows, schema rows) before comparing; each is named in docs/HISTORY.md. REWARD1
 /// (2026-10-21): the unit loot table and a world encounter's key loot and objective reward. ASSETORG2 (2026-10-22): a
-/// unit's and a character's palette and portrait tier.
-const AFTER_GODOT: [(&str, &str, &str); 7] = [
+/// unit's and a character's palette and portrait tier. PROPS1 (2026-10-23): a map template's props (section "game": the
+/// game data beside the catalogs; Godot's MapCatalog had no such field).
+const AFTER_GODOT: [(&str, &str, &str); 8] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -29,6 +30,7 @@ const AFTER_GODOT: [(&str, &str, &str); 7] = [
     ("content", "units", "portrait_tier"),
     ("world", "characters", "palette"),
     ("world", "characters", "portrait_tier"),
+    ("game", "maps", "props"),
 ];
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
@@ -163,6 +165,7 @@ fn engine_loader_matches_godot_catalogs() {
     assert!(src.errors.is_empty(), "load errors: {:?}", src.errors);
     strip_after_godot(&mut src.catalog, "content");
     strip_after_godot(&mut src.worlds, "world");
+    strip_after_godot(&mut src.game, "game");
     let mut worlds = read("worlds.json").unwrap();
     source::fold_legacy_waves(&mut catalog, &mut worlds);
     let mut problems = Vec::new();

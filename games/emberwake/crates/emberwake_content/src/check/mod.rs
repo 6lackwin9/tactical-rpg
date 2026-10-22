@@ -325,8 +325,9 @@ pub const KINDS: [&str; 8] = ["skills", "items", "item_families", "passives", "c
 /// A whole-catalog report: {"kind:id" (or "kind:required", "skills:fold", "terrain:missing", "load"): [messages]}.
 pub type Report = IndexMap<String, Vec<String>>;
 
-/// ContentCatalog.validate_all: every entry's errors, then the rules across entries (required skills, one family per
-/// gear token, skill families that fold, a row per terrain type) and the load problems.
+/// ContentCatalog.validate_all: every entry's errors, the map templates' prop checks (PROPS1, `maps:<id>`), then the
+/// rules across entries (required skills, one family per gear token, skill families that fold, a row per terrain
+/// type) and the load problems.
 pub fn validate_all(v: &View) -> Report {
     let mut problems = Report::new();
     for kind in KINDS {
@@ -336,6 +337,13 @@ pub fn validate_all(v: &View) -> Report {
             if !errors.is_empty() {
                 problems.insert(format!("{kind}:{id}"), errors);
             }
+        }
+    }
+    // PROPS1 2: the map templates' prop checks (engine-only; Godot's MapCatalog had no props)
+    for t in v.entries("maps") {
+        let errors = map::prop_errors(t);
+        if !errors.is_empty() {
+            problems.insert(format!("maps:{}", json::s(t, "id")), errors);
         }
     }
     let mut add = |key: &str, list: Vec<String>| {

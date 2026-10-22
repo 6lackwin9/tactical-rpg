@@ -1,11 +1,14 @@
 //! Map rules of the world checks (MapRules): a location's map position, zone bindings and markers against its map
-//! template, the [encounter, weight] pair lists (also used by routes) and the soft location warnings.
+//! template, the [encounter, weight] pair lists (also used by routes) and the soft location warnings. PROPS1: the
+//! map template's own prop checks P1-P12 (`prop_errors`, engine-only: Godot's MapCatalog had no props).
 
 use super::quest::flag_list_errors;
 use super::world::{qid, ref_errors};
 use super::View;
+use crate::source::{prop_full, PROP_KEYS};
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
+use std::collections::HashMap;
 
 const SPAWN: &str = "spawn";
 const WORLD_MAP: &str = "world_map";
@@ -26,6 +29,13 @@ const LABEL_MAX: usize = 32;
 const NOTE_MAX: usize = 160;
 const FLAG_KEYS: [&str; 3] = ["requires_flags", "unless_flags", "sets_flags"];
 const TRIGGERS: [&str; 2] = ["touch", "proximity"];
+/// PROPS1 1: props per map, the longest footprint side, the highest explicit variant.
+pub const PROPS_MAX: usize = 128;
+pub const PROP_SIDE_MAX: i64 = 16;
+pub const PROP_VARIANT_MAX: i64 = 15;
+const PROP_LAYERS: [&str; 2] = ["sort", "ground"];
+const PROP_ID_MAX: usize = 24;
+const PROP_ART_MAX: usize = 32;
 
 /// MapRules.MARKER_KINDS: kind -> its own keys with defaults.
 fn marker_kind(kind: &str) -> Option<Dict> {
@@ -436,4 +446,100 @@ pub fn warnings(v: &View, w: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// A prop's id or art name: lowercase [a-z0-9_], 2 to `max` characters.
+fn prop_name_ok(v: Option<&Value>, max: usize) -> bool {
+    v.and_then(Value::as_str).is_some_and(|s| json::id_ok(s) && (2..=max).contains(&s.chars().count()))
+}
+
+/// The template's rows as a grid of tiles when they are text rows of one non-zero width (None: no usable grid).
+fn grid(t: &Dict) -> Option<Vec<Vec<char>>> {
+    let rows = json::aget(t, "rows");
+    if rows.is_empty() || !rows.iter().all(Value::is_string) {
+        return None;
+    }
+    let g: Vec<Vec<char>> = rows.iter().map(|r| gstr(r).chars().collect()).collect();
+    let w = g[0].len();
+    (w > 0 && g.iter().all(|r| r.len() == w)).then_some(g)
+}
+
+/// PROPS1 2, checks P1-P12 of a map template's `props` in the order they run: the list, its size, then per prop the
+/// keys, id, art, footprint numbers, footprint in the map, standing props on walls and not sharing a tile, layer,
+/// variant and flip. P8-P10 need a usable grid and P7 passed; P9 and P10 only for props inside the map.
+pub fn prop_errors(t: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let list = match t.get("props") {
+        None => return errors,
+        Some(Value::Array(l)) if l.iter().all(Value::is_object) => l,
+        Some(_) => {
+            errors.push("Props must be a list of objects.".into());
+            return errors;
+        }
+    };
+    if list.len() > PROPS_MAX {
+        errors.push(format!("At most {PROPS_MAX} props per map (got {}).", list.len()));
+    }
+    let grid = grid(t);
+    let mut ids: Vec<String> = Vec::new();
+    // tile -> the standing prop on it
+    let mut standing: HashMap<(i64, i64), String> = HashMap::new();
+    for (i, raw) in list.iter().enumerate() {
+        let p = prop_full(json::dict(raw));
+        let id = json::s(&p, "id");
+        for k in p.keys().filter(|k| !PROP_KEYS.contains(&k.as_str())) {
+            errors.push(format!("Prop '{id}': unknown field '{k}'."));
+        }
+        if !prop_name_ok(p.get("id"), PROP_ID_MAX) {
+            errors.push(format!("Prop {i}: id '{id}' must be lowercase [a-z0-9_], 2-{PROP_ID_MAX} characters."));
+            continue;
+        }
+        if ids.contains(&id) {
+            errors.push(format!("Prop id '{id}' is used twice."));
+        }
+        ids.push(id.clone());
+        if !prop_name_ok(p.get("art"), PROP_ART_MAX) {
+            errors.push(format!("Prop '{id}': art '{}' must be lowercase [a-z0-9_], 2-{PROP_ART_MAX} characters.", json::s(&p, "art")));
+        }
+        let whole = |k: &str| p.get(k).is_some_and(json::is_int);
+        let side = |k: &str| p.get(k).is_some_and(|v| json::is_int(v) && (1..=PROP_SIDE_MAX).contains(&json::to_int(v)));
+        let shape_ok = whole("x") && whole("y") && side("w") && side("h");
+        if !shape_ok {
+            errors.push(format!("Prop '{id}': x and y are whole numbers; w and h are 1-{PROP_SIDE_MAX}."));
+        }
+        let layer = json::get(&p, "layer").as_str().unwrap_or_default();
+        if let (true, Some(g)) = (shape_ok, &grid) {
+            let (x, y, w, h) = (json::i(&p, "x", 0), json::i(&p, "y", 0), json::i(&p, "w", 1), json::i(&p, "h", 1));
+            let (mw, mh) = (g[0].len() as i64, g.len() as i64);
+            if x < 0 || y < 0 || x + w > mw || y + h > mh {
+                errors.push(format!("Prop '{id}': its footprint ({x}..{}, {y}..{}) leaves the map ({mw} x {mh}).", x + w - 1, y + h - 1));
+            } else if layer == "sort" {
+                let tiles: Vec<(i64, i64)> = (y..y + h).flat_map(|ty| (x..x + w).map(move |tx| (tx, ty))).collect();
+                if let Some(&(tx, ty)) = tiles.iter().find(|(tx, ty)| g[*ty as usize][*tx as usize] != '#') {
+                    errors.push(format!("Prop '{id}': a standing prop needs wall tiles under its whole footprint; ({tx}, {ty}) is '{}'.", g[ty as usize][tx as usize]));
+                }
+                let mut met: Vec<String> = Vec::new();
+                for &(tx, ty) in &tiles {
+                    match standing.get(&(tx, ty)) {
+                        Some(other) if !met.contains(other) => {
+                            errors.push(format!("Props '{other}' and '{id}' stand on the same tile ({tx}, {ty})."));
+                            met.push(other.clone());
+                        }
+                        Some(_) => {}
+                        None => {
+                            standing.insert((tx, ty), id.clone());
+                        }
+                    }
+                }
+            }
+        }
+        if !PROP_LAYERS.contains(&layer) {
+            errors.push(format!("Prop '{id}': layer must be sort or ground."));
+        }
+        let variant_ok = p.get("variant").is_some_and(|v| json::is_int(v) && (-1..=PROP_VARIANT_MAX).contains(&json::to_int(v)));
+        if !variant_ok || !p.get("flip").is_some_and(Value::is_boolean) {
+            errors.push(format!("Prop '{id}': variant is -1 (by position) or 0-{PROP_VARIANT_MAX}; flip is true or false."));
+        }
+    }
+    errors
 }

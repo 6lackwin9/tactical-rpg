@@ -663,7 +663,7 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
 }
 
 /// WorldCatalog.world_warnings: the map, route, dialogue, gone-NPC, quest link and reward, reputation key and
-/// encounter lints of one world.
+/// encounter lints of one world; the character asset checks and the map prop asset checks (PROPS1 A7-A10).
 pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     let mut out = map::warnings(v, w);
     out.extend(travel::warnings(v, w));
@@ -674,6 +674,7 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(quest::rep_key_warnings(v, w));
     out.extend(encounter_warnings(v, w));
     out.extend(character_asset_warnings(v, w));
+    out.extend(super::assets::prop_warnings(v, w));
     out
 }
 

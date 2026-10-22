@@ -1,11 +1,13 @@
 //! The asset checks A1-A6 (ASSETORG2 section 6) over the asset layers of the checked data folder's game
 //! (`View::assets`): bodies that are not there or do not load, item icons not in their folder, unique portraits and
-//! common portraits missing, palettes that do not fit their body.
+//! common portraits missing, palettes that do not fit their body; PROPS1 3.3: the map prop checks A7-A10 (art missing
+//! along the world's chain, a PNG of the wrong size, an explicit variant past the files, art hiding an anchor or path).
 
 use super::View;
 use crate::art;
 use aegis_core::assets::{self, Clips};
 use aegis_core::json::{self, Dict};
+use serde_json::Value;
 
 /// A PNG's size from its header (None: not a PNG).
 fn png_size(path: &std::path::Path) -> Option<(u32, u32)> {
@@ -99,6 +101,109 @@ pub fn portrait_and_palette_warnings(v: &View, character: &Dict, unit: &Dict) ->
         };
         if !problem.is_empty() {
             out.push(format!("Palette '{palette}' of {name}: {}.", problem.trim_end_matches('.')));
+        }
+    }
+    out
+}
+
+/// A prop's footprint (x, y, w, h) when its numbers are well formed (P7), else None (the errors name it).
+fn prop_footprint(p: &Dict) -> Option<(i64, i64, i64, i64)> {
+    let int = |k: &str| p.get(k).filter(|v| json::is_int(v)).map(json::to_int);
+    let (x, y, w, h) = (int("x")?, int("y")?, int("w")?, int("h")?);
+    ((1..=super::map::PROP_SIDE_MAX).contains(&w) && (1..=super::map::PROP_SIDE_MAX).contains(&h)).then_some((x, y, w, h))
+}
+
+/// The wanted pixel size of a w x h prop on `layer` as text ("64-96 x 64-192 px", "64 x 64 px").
+fn range_text(w: i64, h: i64, layer: &str) -> String {
+    let ((w0, w1), (h0, h1)) = art::prop_png_range(w, h, layer);
+    let side = |a: i64, b: i64| if a == b { a.to_string() } else { format!("{a}-{b}") };
+    format!("{} x {} px", side(w0, w1), side(h0, h1))
+}
+
+/// Whether the drawn rect of a standing prop (PROPS1 4.3: `pw` x `ph` art px at 32 per tile, bottom on the
+/// footprint's bottom edge, centred across it) covers the centre of tile (tx, ty). In half art px, so the centring
+/// stays exact.
+fn covers(fp: (i64, i64, i64, i64), size: (i64, i64), tx: i64, ty: i64) -> bool {
+    let ((x, y, w, h), (pw, ph)) = (fp, size);
+    let (left, bottom) = (64 * x + 32 * w - pw, 64 * (y + h));
+    let (cx, cy) = (64 * tx + 32, 64 * ty + 32);
+    cx >= left && cx < left + 2 * pw && cy >= bottom - 2 * ph && cy < bottom
+}
+
+/// A7-A10 (PROPS1 3.3) of world `w`: the props of every map its locations use (its own and inherited ones), looked up
+/// along its chain (`art::prop_dirs`), one line per finding. Warnings, never blocking; skipped without asset layers.
+pub fn prop_warnings(v: &View, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if v.assets.roots.is_empty() {
+        return out;
+    }
+    let mut lineage = v.worlds.lineage(w);
+    lineage.reverse();
+    let mut maps: Vec<String> = Vec::new();
+    for e in v.worlds.merged_entries(w, "locations") {
+        let m = json::s(e, "map");
+        if !m.is_empty() && !maps.contains(&m) {
+            maps.push(m);
+        }
+    }
+    let mut push = |line: String| {
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    };
+    for map_id in maps {
+        let t = v.get("maps", &map_id);
+        let Some(Value::Array(props)) = t.get("props") else { continue };
+        for p in props.iter().filter_map(Value::as_object) {
+            let (id, art_name, layer) = (json::s(p, "id"), json::s(p, "art"), json::s(p, "layer"));
+            let Some(fp) = prop_footprint(p) else { continue };
+            if art_name.is_empty() {
+                continue;
+            }
+            let dirs = art::prop_dirs(&lineage, &art_name);
+            let Some((dir, n)) = dirs.iter().map(|d| (d.clone(), v.assets.variants(d) as i64)).find(|(_, n)| *n > 0) else {
+                // A7; A10 with the footprint alone never fires (a standing footprint lies on walls, P9)
+                let sets = art::region_sets(&lineage).join(",");
+                push(format!("Map '{map_id}' prop art '{art_name}': no file props/{{{sets}}}/{art_name}/v0.png for world '{w}'; it draws its shape."));
+                continue;
+            };
+            let size_of = |k: i64| v.assets.find(&format!("{dir}/v{k}.png")).and_then(|path| png_size(&path)).map(|(a, b)| (a as i64, b as i64));
+            // A8: every file of the run
+            let ((w0, w1), (h0, h1)) = art::prop_png_range(fp.2, fp.3, &layer);
+            for k in 0..n {
+                if let Some((pw, ph)) = size_of(k) {
+                    if pw < w0 || pw > w1 || ph < h0 || ph > h1 {
+                        push(format!("Prop art '{dir}/v{k}.png' is {pw}x{ph} px; a {} x {} {layer} prop wants {}.", fp.2, fp.3, range_text(fp.2, fp.3, &layer)));
+                    }
+                }
+            }
+            // A9
+            let variant = json::i(p, "variant", -1);
+            if variant >= n {
+                push(format!("Map '{map_id}' prop '{id}': variant {variant}, but '{art_name}' has {n} files; it shows v0."));
+            }
+            // A10: the file it shows (3.2), its size or the footprint's
+            if layer != "sort" {
+                continue;
+            }
+            let pick = match variant {
+                v if v >= n => 0,
+                v if v >= 0 => v,
+                _ => (fp.0 * 7 + fp.1 * 13).rem_euclid(n),
+            };
+            let size = size_of(pick).unwrap_or((32 * fp.2, 32 * fp.3));
+            for a in json::aget(t, "anchors").iter().map(json::dict) {
+                let (ax, ay) = (json::i(a, "x", -1), json::i(a, "y", -1));
+                if covers(fp, size, ax, ay) {
+                    push(format!("Map '{map_id}' prop '{id}' hides '{}' at ({ax}, {ay}) behind its art.", json::s(a, "id")));
+                }
+            }
+            for (path, points) in json::dget(t, "paths") {
+                let hit = json::arr(points).iter().map(json::arr).find(|xy| xy.len() == 2 && covers(fp, size, json::to_int(&xy[0]), json::to_int(&xy[1])));
+                if let Some(xy) = hit {
+                    push(format!("Map '{map_id}' prop '{id}' hides '{path}' at ({}, {}) behind its art.", json::to_int(&xy[0]), json::to_int(&xy[1])));
+                }
+            }
         }
     }
     out
