@@ -8,6 +8,7 @@
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
+use crate::props::{Item, PropDraw, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
 use crate::shop::{ShopAct, ShopPane};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
@@ -563,11 +564,23 @@ impl Screen<GameCx> for RegionMap {
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
             }
+            // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
+            // are art only: no widget, and walking still comes from `rows`
+            let props = crate::props::layout(t, &lineage, (ox, oy), ts, map_area, |dirs, variant, x, y| {
+                let rel = cx.art.pick(dirs, variant, x, y)?;
+                let size = cx.art.size_of(&rel)?;
+                Some((rel, size))
+            });
+            for p in props.iter().filter(|p| p.ground) {
+                draw_prop(&mut ui, cx, p);
+            }
             let steps = gs.explore_int("loc_steps");
             let ahead = (gs.position.0 + self.facing.0, gs.position.1 + self.facing.1);
             let legend_hover = self.legend_hover(live);
             // (marker, name, the name sits over a badge)
             let mut labels: Vec<(Rect, String, bool)> = Vec::new();
+            // the markers to draw in the sorted pass (their widgets and names are taken here)
+            let mut marks: Vec<MarkDraw> = Vec::new();
             for raw in json::aget(loc, "markers") {
                 let m = explore::marker_full(json::dict(raw));
                 let view = explore::marker_view(&d, &gs, loc, &m);
@@ -587,39 +600,16 @@ impl Screen<GameCx> for RegionMap {
                 let kind = s(&m, "kind");
                 let id = s(&m, "id");
                 let label = s(&view, "label");
-                let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
                 let mut services = Vec::new();
+                let mut npc = None;
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
                     services = explore::npc_services(&d, &gs, &s(who, "_qid"));
                     let (body, palette, _) = crate::screens::character_art(&d, who);
-                    let (col, _) = Self::marker_style(&kind, &state);
-                    ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
-                    let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
-                    match cx.art.first_token(&emberwake_content::art::body_chain(&body), &palette, tok.w) {
-                        Some(img) => ui.p.image(img, tok),
-                        None => ui.p.text_center(cx_, cy_ - 4.0, &s(who, "name").chars().next().unwrap_or('?').to_string(), BODY, rgb(20, 20, 20)),
-                    }
-                    // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
-                    if let Some(first) = services.first() {
-                        let br = Rect::new(r.x + ts - 5, r.y - 5, 9, 9);
-                        let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
-                        match cx.art.image(&service_icon(first), px, px) {
-                            Some(img) => ui.p.image(img, br),
-                            None => service_glyph(&mut ui, first, br),
-                        }
-                    }
-                } else {
-                    let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
-                    match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
-                        Some(img) => ui.p.image(img, r),
-                        None => {
-                            let (col, glyph) = Self::marker_style(&kind, &state);
-                            ui.p.panel(r.inset(ts / 5), col, rgba(255, 255, 255, 90), 2.0);
-                            ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
-                        }
-                    }
+                    npc = Some((body, palette, s(who, "name").chars().next().unwrap_or('?').to_string()));
                 }
+                // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
+                marks.push(MarkDraw { r, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
                 // 2.3: names always (people and exits, MAPREAD1), or on hover: the marker or its legend row under the
                 // pointer, or the marker the party faces
                 let named = if names_always { kind == "npc" || kind == "exit" } else { (!modal && ui.hover(r)) || legend_hover.as_deref() == Some(id.as_str()) || at == ahead };
@@ -634,11 +624,34 @@ impl Screen<GameCx> for RegionMap {
                     ui.push(format!("marker.{id}"), "marker", label.clone(), r, true, false, Some(RAct::Marker(id)), t);
                 }
             }
-            // the party
+            // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet
             let pr = Rect::new(ox + gs.position.0 as i32 * ts, oy + gs.position.1 as i32 * ts, ts, ts);
             let (pcx, pcy) = (pr.x as f32 + ts as f32 / 2.0, pr.y as f32 + ts as f32 / 2.0);
-            ui.p.circle(pcx, pcy, ts as f32 * 0.3, rgb(250, 214, 60));
-            ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
+            let order = crate::props::sorted(&props, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), pr);
+            for item in &order {
+                match *item {
+                    Item::Prop(i) => draw_prop(&mut ui, cx, &props[i]),
+                    Item::Marker(i) => draw_marker(&mut ui, cx, &marks[i], ts),
+                    Item::Party => {
+                        ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
+                        ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
+                    }
+                }
+            }
+            // 4.5: a standing prop drawn over the party: its outline over the props
+            if crate::props::party_hidden(&props, &order, pr) {
+                ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
+            }
+            // overlays, never covered by a prop: the service badges, then the names
+            for m in &marks {
+                let Some(first) = m.badge else { continue };
+                let br = Rect::new(m.r.x + ts - 5, m.r.y - 5, 9, 9);
+                let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
+                match cx.art.image(&service_icon(first), px, px) {
+                    Some(img) => ui.p.image(img, br),
+                    None => service_glyph(&mut ui, first, br),
+                }
+            }
             ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, None, Vec::new());
             // the names over everything on the map, kept inside the map area
             for (r, label, badge) in labels {
@@ -980,6 +993,67 @@ impl RegionMap {
     }
 }
 
+/// A marker for the sorted pass (PROPS1 4.4): its tile, kind and state; for a person (body, palette, initial); the
+/// first service's badge (drawn with the overlays).
+struct MarkDraw {
+    r: Rect,
+    kind: String,
+    state: String,
+    npc: Option<(String, String, String)>,
+    badge: Option<&'static str>,
+}
+
+/// A marker on its tile: a person's ring and token (or initial), else the marker icon (or its drawn stand-in).
+fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32) {
+    let r = m.r;
+    let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
+    if let Some((body, palette, initial)) = &m.npc {
+        let (col, _) = RegionMap::marker_style(&m.kind, &m.state);
+        ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
+        let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
+        match cx.art.first_token(&emberwake_content::art::body_chain(body), palette, tok.w) {
+            Some(img) => ui.p.image(img, tok),
+            None => ui.p.text_center(cx_, cy_ - 4.0, initial, BODY, rgb(20, 20, 20)),
+        }
+        return;
+    }
+    let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
+    match cx.art.image(&emberwake_content::art::marker(marker_icon(&m.kind, &m.state)), px, px) {
+        Some(img) => ui.p.image(img, r),
+        None => {
+            let (col, glyph) = RegionMap::marker_style(&m.kind, &m.state);
+            ui.p.panel(r.inset(ts / 5), col, rgba(255, 255, 255, 90), 2.0);
+            ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
+        }
+    }
+}
+
+/// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
+/// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge) and a
+/// ground prop is nothing.
+fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw) {
+    let (w, h) = ((p.rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (p.rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
+    let img = match &p.file {
+        Some(f) if p.flip => cx.art.image_mirrored(f, w, h),
+        Some(f) => cx.art.image(f, w, h),
+        None => None,
+    };
+    if let Some(img) = img {
+        ui.p.image(img, p.rect);
+        return;
+    }
+    if p.ground {
+        return;
+    }
+    let r = p.rect;
+    ui.p.fill(r, BOX_FILL);
+    let face = (r.h / 4).clamp(1, BOX_FACE_H);
+    ui.p.fill(Rect::new(r.x, r.y + r.h - face, r.w, face), BOX_FACE);
+    for edge in [Rect::new(r.x, r.y, r.w, 1), Rect::new(r.x, r.y + r.h - 1, r.w, 1), Rect::new(r.x, r.y, 1, r.h), Rect::new(r.x + r.w - 1, r.y, 1, r.h)] {
+        ui.p.fill(edge, BOX_EDGE);
+    }
+}
+
 /// The legend pane's and the ticker's fill.
 const PANE: Rgba = rgba(12, 18, 28, 235);
 /// The legend's widest at text size Normal (spec PLAYUI1 2.1 A), and the ticker's.
@@ -1268,8 +1342,20 @@ mod tests {
         stray
     }
 
+    /// PROPS1 3.1: map prop art is `props/<set>/<art>/v<n>.png` (a variant run, as tile sets); anything else under
+    /// `props/` is a stray.
+    #[test]
+    fn prop_art_follows_the_variant_pattern() {
+        for ok in ["props/common/tent/v0.png", "props/ashlands/keep_hall/v12.png"] {
+            assert!(layout_ok(ok), "{ok}");
+        }
+        for stray in ["props/common/tent/tent.png", "props/common/tent/v0.jpg", "props/tent/v0.png", "props/common/tent/v0/a.png", "props/common/tent/vx.png"] {
+            assert!(!layout_ok(stray), "{stray}");
+        }
+    }
+
     /// One path of the section 3 tree (game, kit or engine root), plus the PLAYUI1 section 6 icons: toolkit glyphs
-    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders.
+    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, and PROPS1's `props/<set>/<art>/`.
     fn layout_ok(rel: &str) -> bool {
         let p: Vec<&str> = rel.split('/').collect();
         let png = |s: &str| s.ends_with(".png");
@@ -1284,7 +1370,7 @@ mod tests {
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
-            ["tilesets", _, _, f] => v(f),
+            ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
             ["backgrounds", "menu" | "title" | "world_map" | "location", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
