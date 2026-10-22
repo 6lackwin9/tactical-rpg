@@ -2,6 +2,10 @@
 
 Status update (2026-10-20): SPRITE1-L, SPRITE1-U and SPRITE1-A2 approved (user 2026-10-20). The status line below is the original.
 
+Status update (2026-10-23): FACE1 done: units face their target or their step instead of their side (`Tokens::catch_up`,
+`UnitAnim` in `battle.rs`); this replaces SPRITE2's "foes face the party" mirroring. A battle still starts with the party
+facing right and the foes left; with the enemy tells hidden, enemies keep their facing while the party plans.
+
 Status update (2026-10-23): SPRITE2 done: goblin variants of each class body, the dummy, Grakka, the Horde Warchief and
 the NPC bodies on the rig with every clip; ash and named goblins as palette files (seed `sprite2.json`). Foes face the
 party: a foe's token frame and its outline are drawn mirrored (the sheets face right); allies as drawn (`token_frame` in
