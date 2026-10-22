@@ -241,6 +241,15 @@ pub trait Screen<G> {
     fn auto_focus(&self) -> bool {
         false
     }
+    /// The widget the opening focus lands on (`auto_focus`) when it is not the first one (ASKNO2).
+    fn focus_first(&self) -> Option<&str> {
+        None
+    }
+    /// A widget the windowed shell moves the OS mouse pointer onto as this screen opens (ASKNO2: a question's safe
+    /// answer). Only for a person playing: never in tests, headless runs, agent-link commands or an unfocused window.
+    fn pointer_to(&self) -> Option<&str> {
+        None
+    }
     /// Right click (and Esc unless `escape` says otherwise).
     fn back(&mut self, cx: &mut Cx<G>) {
         cx.nav.push(Nav::Pop);
@@ -325,9 +334,9 @@ macro_rules! widget_plumbing {
 
 // ---- Ask: the yes / no question (router.ask) -----------------------------------------------------------------
 
-/// The yes / no question (`Cx::ask`, `Cx::ask_no`). Esc, right click and `n` answer No, `y` answers Yes; Enter
-/// answers the default: Yes, or No for a destructive question (`no_default`, which also opens with the keyboard focus
-/// showing on No).
+/// The yes / no question (`Cx::ask`, `Cx::ask_no`): Yes then No, left to right. Esc, right click and `n` answer No,
+/// `y` answers Yes; Enter answers the default: Yes, or No for a destructive question (`no_default`, which also opens
+/// with the keyboard focus showing on No and asks the windowed shell to move the mouse pointer onto No).
 pub struct Ask<G> {
     question: String,
     yes: Option<Box<dyn FnOnce(&mut Cx<G>)>>,
@@ -368,13 +377,18 @@ impl<G> Screen<G> for Ask<G> {
             ui.p.text(r.x as f32 + 10.0, y, l, BODY, TEXT);
             y += 10.0;
         }
-        ui.button("ask.no", Rect::new(r.x + r.w - 120, r.y + r.h - 22, 50, 15), "No", false, true);
-        ui.button("ask.yes", Rect::new(r.x + r.w - 62, r.y + r.h - 22, 50, 15), "Yes", true, true);
+        ui.button("ask.yes", Rect::new(r.x + r.w - 120, r.y + r.h - 22, 50, 15), "Yes", true, true);
+        ui.button("ask.no", Rect::new(r.x + r.w - 62, r.y + r.h - 22, 50, 15), "No", false, true);
         self.w = ui.widgets;
     }
     fn auto_focus(&self) -> bool {
-        // "ask.no" is the first widget, so the opening focus lands on No.
         self.no_default
+    }
+    fn focus_first(&self) -> Option<&str> {
+        self.no_default.then_some("ask.no")
+    }
+    fn pointer_to(&self) -> Option<&str> {
+        self.no_default.then_some("ask.no")
     }
     fn key(&mut self, cx: &mut Cx<G>, k: Key) {
         match k {

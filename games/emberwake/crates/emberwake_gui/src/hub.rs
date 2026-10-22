@@ -101,7 +101,7 @@ impl Hub {
                     cx.nav.push(Nav::Reset(Box::new(crate::menus::MainMenu::default())));
                 };
                 if cx.is_dirty() {
-                    cx.ask("Quit to the main menu without saving? Progress since your last save is lost.", go);
+                    cx.ask_no("Quit to the main menu without saving? Progress since your last save is lost.", go);
                 } else {
                     go(cx);
                 }

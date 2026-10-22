@@ -1,6 +1,7 @@
-//! ASKNO1: the kit's yes / no question (`Cx::ask_tag`, `Cx::ask_tag_no`). The default question answers Yes on Enter
-//! and opens without a visible focus; the destructive form answers No on Enter and opens with the focus on No. Both
-//! answer Yes on `y` and No on `n`, Esc and right click, with the same widget ids.
+//! ASKNO1, ASKNO2: the kit's yes / no question (`Cx::ask_tag`, `Cx::ask_tag_no`). The default question answers Yes on
+//! Enter and opens without a visible focus; the destructive form answers No on Enter, opens with the focus on No and
+//! asks for the mouse pointer on No. Both lay out Yes then No, left to right, and answer Yes on `y` and No on `n`, Esc
+//! and right click, with the same widget ids.
 
 use aegis_ui::art::Art;
 use aegis_ui::audio::Audio;
@@ -85,6 +86,7 @@ fn the_default_question_answers_yes_on_enter() {
     let (mut cx, mut g) = (cx(), gfx());
     let s = asked(&mut cx, &mut g, false);
     assert!(!s.auto_focus(), "no focus shown as it opens");
+    assert_eq!(s.pointer_to(), None, "the pointer stays where it is");
     assert_eq!(s.state(&cx)["default"], "yes");
 }
 
@@ -98,7 +100,10 @@ fn the_destructive_question_answers_no_on_enter() {
     let (mut cx, mut g) = (cx(), gfx());
     let mut s = asked(&mut cx, &mut g, true);
     assert!(s.auto_focus(), "the focus shows as it opens");
-    assert_eq!(focus::step(&s.widgets(), None, focus::Move::Next, false).as_deref(), Some("ask.no"), "the opening focus is No");
+    let first = s.focus_first().map(String::from);
+    assert_eq!(first.as_deref(), Some("ask.no"), "the opening focus is No");
+    assert!(focus::live(&s.widgets(), first.as_deref(), false).is_some(), "No can take the focus");
+    assert_eq!(s.pointer_to(), Some("ask.no"), "the pointer is asked onto No");
     assert_eq!(s.state(&cx)["default"], "no");
     // right click is No too; the buttons still answer what they say
     s.back(&mut cx);
@@ -117,4 +122,15 @@ fn both_forms_keep_the_same_widget_ids() {
     assert_eq!(ids(old.as_ref()), ids(new.as_ref()));
     assert!(ids(new.as_ref()).iter().any(|i| i == "ask.no") && ids(new.as_ref()).iter().any(|i| i == "ask.yes"));
     assert_eq!(old.id(), new.id());
+}
+
+#[test]
+fn both_forms_lay_out_yes_then_no() {
+    for no_default in [false, true] {
+        let (mut cx, mut g) = (cx(), gfx());
+        let s = asked(&mut cx, &mut g, no_default);
+        let (yes, no) = (s.widget_rect("ask.yes").unwrap().0, s.widget_rect("ask.no").unwrap().0);
+        assert!(yes.x + yes.w <= no.x && yes.y == no.y, "Yes left of No on one row ({no_default})");
+        assert_eq!(ids(s.as_ref()), ["ask.yes", "ask.no"], "ui_tree order ({no_default})");
+    }
 }

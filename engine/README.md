@@ -19,9 +19,12 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   arrows move to the nearest one that way (a screen that walks or steers with the arrows says `Screen::arrow_focus`
   false: the region map, the journal), Enter or Space presses the focused one (a choice field opens its list and the
   arrows pick in it; Left / Right step a slider). A white ring shows the focus after a key moved it; a click hides it.
-  `Screen::auto_focus` starts a keyboard menu focused (the main menu) and a destructive question (`Cx::ask_no` /
-  `ask_tag_no`, ASKNO1: No focused as it opens, Enter = No, `y` = Yes; `Cx::ask` / `ask_tag` keep Enter = Yes and open
-  without a ring; the `ask` screen's state reports `default`). The agent link's `ui_tree` reports `focus` and
+  `Screen::auto_focus` starts a keyboard menu focused (the main menu) on its first widget, or on
+  `Screen::focus_first` when set. A question shows Yes then No, left to right, in both forms. A destructive question
+  (`Cx::ask_no` / `ask_tag_no`, ASKNO1 and ASKNO2) opens with No focused, Enter = No and `y` = Yes, and through
+  `Screen::pointer_to` asks the windowed shell to move the OS pointer onto No (only in a focused window, never for a
+  screen an agent-link command opened, never in tests); `Cx::ask` / `ask_tag` keep Enter = Yes and open without a
+  ring; the `ask` screen's state reports `default`. The agent link's `ui_tree` reports `focus` and
   `focus_visible`; `key` takes `backtab`; the link's `click` hides the ring like a mouse click. The focus starts over
   hidden on every new screen (a screen's own Enter / Space keep working); widgets under a popup or window take none;
   window title bars and toolbars take none yet, and a focused row is not scrolled into view.
