@@ -1,6 +1,7 @@
 //! The playtest note box (PLAYTEST1 F8 notes): the shell captures the screen, then opens this box over it. The text
-//! field types right away; four tags (mechanic, ui, ux, bug); Save (Ctrl+Enter) writes the note and its screenshot
-//! into the run's recording, Cancel (Esc) drops it. The screen under it gets no input while it is open, and does not
+//! field (the kit's text editor, PLAYUI1-T: selection, clipboard, undo) types right away and fills the box; four tags
+//! (mechanic, ui, ux, bug); Save (Ctrl+Enter) writes the note and its screenshot into the run's recording, Cancel
+//! (Esc) drops it. The screen under it gets no input while it is open, and does not
 //! tick (a battle's auto-play pauses).
 
 use crate::canvas::Rect;
@@ -73,14 +74,18 @@ impl<G> Screen<G> for NoteBox {
     }
     fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<Act> = Ui::new(g, mouse, live);
-        let r = Rect::new(W / 2 - 160, H / 2 - 90, 320, 180);
+        // PLAYUI1-T: the text area fills the box (at least 160 tall at Normal); the tags, the hint and the buttons sit
+        // under it.
+        let r = Rect::new(W / 2 - 190, 24, 380, H - 48);
         ui.frame(r, "Playtest note", false);
-        ui.text_field(TEXT_ID, Rect::new(r.x + 10, r.y + 22, r.w - 20, 96), &self.text, true, true);
+        let foot = 66;
+        ui.text_field(TEXT_ID, Rect::new(r.x + 10, r.y + 22, r.w - 20, r.h - 22 - foot), &self.text, true, true);
+        let tags_y = r.y + r.h - foot + 8;
         for (i, tag) in TAGS.iter().enumerate() {
-            ui.checkbox(&format!("note.tag.{tag}"), r.x + 10 + i as i32 * 62, r.y + 126, tag, self.tags[i], Act::Tag(i), true);
+            ui.checkbox(&format!("note.tag.{tag}"), r.x + 10 + i as i32 * 62, tags_y, tag, self.tags[i], Act::Tag(i), true);
         }
-        let hint = if self.message.is_empty() { "Ctrl+Enter saves, Esc cancels." } else { self.message.as_str() };
-        ui.p.text(r.x as f32 + 10.0, r.y as f32 + 146.0, hint, BODY, if self.message.is_empty() { DIM } else { TEXT });
+        let hint = if self.message.is_empty() { "Ctrl+Enter saves, Esc cancels; Ctrl+C, X, V copy, cut, paste; Ctrl+Z undoes." } else { self.message.as_str() };
+        ui.p.text_fit(r.x as f32 + 10.0, (tags_y + 18) as f32, hint, BODY, (r.w - 20) as f32, if self.message.is_empty() { DIM } else { TEXT });
         ui.button("note.cancel", Rect::new(r.x + r.w - 124, r.y + r.h - 22, 54, 15), "Cancel", Act::Cancel, true);
         ui.button("note.save", Rect::new(r.x + r.w - 64, r.y + r.h - 22, 54, 15), "Save", Act::Save, true);
         self.w = ui.widgets;
