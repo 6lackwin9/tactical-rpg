@@ -22,3 +22,6 @@ aegis_save = { path = "../../../../engine/crates/aegis_save" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+png = "0.17.13"

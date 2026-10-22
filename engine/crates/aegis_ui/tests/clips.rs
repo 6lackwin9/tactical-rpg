@@ -1,6 +1,7 @@
 //! SPRITE1-L: body clips played by time (`aegis_core::assets::{Clip, Clips, ClipPlayer}`), sliced from a scratch sheet
 //! (`aegis_ui::art::Art::played`), the silhouette outline (`Image::outline`, `Art::body_outline`), the frame-by-frame
-//! body check (`Art::body_problems`) and the foot ellipse (`Painter::ellipse`). Expectations follow from the clips.json
+//! body check (`Art::body_problems`), mirrored frames (`flip`: a sheet facing right drawn facing left) and the foot
+//! ellipse (`Painter::ellipse`). Expectations follow from the clips.json
 //! rules (ASSETORG2 4.1) and the fixture's own durations.
 
 use aegis_core::assets::{Clip, ClipPlayer, Clips, Layers};
@@ -130,16 +131,50 @@ fn art_slices_the_frame_a_player_shows_from_the_sheet() {
     let mut p = ClipPlayer::default();
     p.play("attack", 0);
     for (t, n) in [(0u64, 0u32), (50, 1), (110, 2)] {
-        let (f, img) = art.played("hero", "", &p, t, F as i32).unwrap();
+        let (f, img) = art.played("hero", "", &p, t, F as i32, false).unwrap();
         assert_eq!((f.row, f.frame), (1, n));
         assert_eq!(at(img, 3, 3), colour(1, n), "attack frame {n} at {t} ms");
         assert_eq!(at(img, 0, 0)[3], 0, "the frame's own transparency");
     }
     p.play("hurt", 0);
-    let (f, img) = art.played("hero", "", &p, 120, F as i32).unwrap();
+    let (f, img) = art.played("hero", "", &p, 120, F as i32, false).unwrap();
     assert_eq!((f.clip.as_str(), at(img, 3, 3)), ("idle", colour(0, 1)), "no hurt clip: idle at its own time");
-    assert!(art.played("nobody", "", &p, 0, F as i32).is_none(), "no body: the caller's fallback");
+    assert!(art.played("nobody", "", &p, 0, F as i32, false).is_none(), "no body: the caller's fallback");
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_flipped_frame_and_its_outline_are_the_sheet_frame_mirrored() {
+    // A one-clip body whose frame is lopsided: a 3-pixel bar on the left (x 1..3) and one pixel on the right (x 6).
+    let root = std::env::temp_dir().join(format!("aegis_ui_clips_flip_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let mut px = vec![0u8; (F * F * 4) as usize];
+    for x in [1u32, 2, 3, 6] {
+        let i = ((3 * F + x) * 4) as usize;
+        px[i..i + 4].copy_from_slice(&[200, 40, 40, 255]);
+    }
+    write_png(&root.join("units/arrow/base/sheet.png"), F, F, &px);
+    let clips = json!({"frame": [F, F], "clips": [{"id": "idle", "frames": 1, "ms": [100], "loop": true}]});
+    std::fs::write(root.join("units/arrow/base/clips.json"), clips.to_string()).unwrap();
+    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let p = ClipPlayer::default();
+    let size = F as i32 * 3;
+    let plain = art.played("arrow", "", &p, 0, size, false).unwrap().1.clone();
+    let (f, flipped) = art.played("arrow", "", &p, 0, size, true).map(|(f, i)| (f, i.clone())).unwrap();
+    let flipped = &flipped;
+    assert_eq!(f.clip, "idle");
+    assert_eq!(*flipped, plain.mirrored(), "the drawn frame is the sheet frame mirrored");
+    assert_ne!(*flipped, plain, "the fixture is lopsided, so mirroring shows");
+    let sheet = art.body_frame("arrow", "", "idle", 0).unwrap();
+    assert_eq!(at(&plain, 3 * 3 + 1, 3 * 3 + 1), at(&sheet, 3, 3), "unflipped: the sheet as it is (scaled by 3)");
+    assert_eq!(at(flipped, size - 1 - (3 * 3 + 1), 3 * 3 + 1), at(&sheet, 3, 3), "flipped: the same pixel from the other side");
+    let gold: Rgba = [244, 198, 84, 255];
+    let o_plain = art.body_outline("arrow", "", "idle", 0, size, gold, false).unwrap().clone();
+    let o_flip = art.body_outline("arrow", "", "idle", 0, size, gold, true).unwrap().clone();
+    assert_eq!(o_flip, plain.mirrored().outline(gold), "the outline rings the mirrored frame");
+    assert_eq!(o_flip, o_plain.mirrored(), "and is the plain outline mirrored");
+    std::fs::remove_dir_all(&root).unwrap();
+    assert!(art.played("arrow", "", &p, 0, size, true).is_some(), "cached apart: the files are gone");
 }
 
 #[test]
@@ -162,12 +197,12 @@ fn an_outline_rings_the_solid_pixels_and_is_cached() {
     assert!(lit.iter().all(|(x, y)| (1..=5).contains(x) && (1..=5).contains(y) && !((2..=4).contains(x) && (2..=4).contains(y))));
     let root = body_root("outline", None);
     let mut art = Art::layered(Layers::of(vec![root.clone()]));
-    let o = art.body_outline("hero", "", "idle", 0, F as i32, gold).unwrap().clone();
+    let o = art.body_outline("hero", "", "idle", 0, F as i32, gold, false).unwrap().clone();
     // The 4x4 figure at 2..6 of the 8x8 frame: its ring at 1..=6 of the frame, 2..=7 of the outline.
     let lit = (0..10).flat_map(|y| (0..10).map(move |x| (x, y))).filter(|(x, y)| at(&o, *x, *y) == gold).count();
     assert_eq!((o.w, lit), (10, 6 * 6 - 4 * 4));
     std::fs::remove_dir_all(&root).unwrap();
-    assert!(art.body_outline("hero", "", "idle", 0, F as i32, gold).is_some(), "cached: the files are gone");
+    assert!(art.body_outline("hero", "", "idle", 0, F as i32, gold, false).is_some(), "cached: the files are gone");
 }
 
 #[test]

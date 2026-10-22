@@ -1,1 +1,1 @@
-{"frame": [104, 104], "clips": [{"id": "idle", "frames": 1, "ms": [1000]}]}
+{"frame": [48, 48], "palette": {"burlap": "#c8ac78", "burlap_lo": "#9e8458", "straw": "#e8cc70", "straw_lo": "#bea04c", "wood": "#8a623a", "wood_lo": "#604228", "rope": "#6e5434", "target": "#b2342a"}, "clips": [{"id": "idle", "frames": 6, "ms": [220, 220, 220, 220, 220, 220], "loop": true}, {"id": "hurt", "frames": 5, "ms": [60, 110, 100, 90, 90], "loop": false}, {"id": "death", "frames": 5, "ms": [60, 140, 110, 110, 600], "loop": false}]}

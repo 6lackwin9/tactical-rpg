@@ -40,7 +40,7 @@ impl Rect {
 pub const OUTLINE_ALPHA: u8 = 128;
 
 /// An RGBA image (sprites, tiles).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Image {
     pub w: i32,
     pub h: i32,

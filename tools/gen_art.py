@@ -10,14 +10,17 @@
 # Ashlands tiles, backgrounds). DIR is a workspace root (default: this repository); the three asset roots sit under it.
 # An existing file is kept (printed "kept"): the committed art includes ART2 portraits and icons made from art_src/
 # by tools/portraits/, which these placeholders must not replace; --overwrite rewrites them.
-# The six class bodies (units/<class>/base/) belong to the sprite rig (tools/sprites/export_units.py) and are never
-# written here. Bodies are a one-frame sheet.png (the 104 px figure) plus clips.json; portraits go to portraits/.
+# The six class bodies (units/<class>/base/) and every body of tools/sprites/variants.py (SPRITE2: the goblin variants,
+# the dummy, Grakka, the Warchief, the NPCs) belong to the sprite rig (tools/sprites/export_units.py) and are never
+# written here; a body drawn here (none since SPRITE2) is a one-frame sheet.png (the 104 px figure) plus clips.json.
+# Portraits go to portraits/ (every portrait, rig body or not).
 # --compare DIR checks a regeneration (this tool and export_units.py run with --root DIR into an empty folder): the
 # same PNG paths and pixel sizes as the committed files, every body with its clips.json; --spot OUT writes committed |
 # regenerated pictures of a few bodies side by side. Pixels may drift with numpy and Pillow versions.
 # Needs Pillow and numpy. Output is deterministic (seeded noise). Prints "wrote <layer>:<path>" per file.
 import argparse
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -355,9 +358,9 @@ RIG_CLASSES = ("warrior", "ranger", "brawler", "priest", "rogue", "mage")
 # kit variant bodies: drawing key -> body (<class>/<variant>); their portraits are portraits/common/<class>_<variant>.png
 VARIANT_BODIES = {"goblin_brawler": "brawler/goblin", "skirmisher": "rogue/goblin", "archer": "ranger/goblin", "shaman": "priest/goblin",
                   "berserker": "brawler/goblin_berserker", "scout": "rogue/goblin_scout", "dummy": "dummy/base"}
-# the game's named bodies: character -> class (body <class>/<character>)
-NAMED_BODIES = {"hest_the_quartermaster": "warrior", "brask_toller": "warrior", "wenn_tallow": "ranger", "skarn_ironjaw": "brawler",
-                "vex_cutpurse": "rogue", "nok_flamebow": "ranger", "bolg_redhand": "brawler", "ash_warchief": "brawler",
+# the game's named bodies: character -> class (body <class>/<character>); all on the rig since SPRITE2 (the named goblins
+# Skarn, Vex, Nok and Bolg wear their goblin body with a palette and have no body of their own)
+NAMED_BODIES = {"hest_the_quartermaster": "warrior", "brask_toller": "warrior", "wenn_tallow": "ranger", "ash_warchief": "brawler",
                 "grakka_ashmaw": "warrior"}
 # the game's unique portraits: character -> portraits/<folder>/<character>.png
 PORTRAIT_FOLDER = {"mara_voss": "heroes", "bryn_hale": "heroes", "tev_quill": "heroes", "sella_marsh": "heroes", "kit_vane": "heroes",
@@ -390,12 +393,20 @@ def check_figure_tables() -> None:
             sys.exit("gen_art: no ASSETORG2 place for the drawing '%s' (add it to the tables above figure())" % key)
 
 
+def rig_bodies() -> set:
+    # SPRITE2: the bodies the sprite rig writes (tools/sprites/variants.py), never written here
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprites"))
+    variants = importlib.import_module("variants")  # the rig's body list (tools/sprites/; needs Pillow like this tool)
+    return set(variants.all_bodies())
+
+
 def g_bodies(out: Out) -> None:
     check_figure_tables()
+    rig = rig_bodies()
     for key, spec in drawings():
-        if key in VARIANT_BODIES:
+        if key in VARIANT_BODIES and VARIANT_BODIES[key] not in rig:
             save_body(draw_figure(spec, 104), "kit", VARIANT_BODIES[key], out)
-        elif key in NAMED_BODIES:
+        elif key in NAMED_BODIES and "%s/%s" % (NAMED_BODIES[key], key) not in rig:
             save_body(draw_figure(spec, 104), "game", "%s/%s" % (NAMED_BODIES[key], key), out)
 
 
